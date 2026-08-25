@@ -17,7 +17,9 @@
                indent 2, one blank line between blocks
   templates/ = the artifact grammars — reference to write from; never copy
   sessions/  = one folder per unit of work (private, gitignored)
-  rhythms/   = your workflow patterns (private, gitignored)
+  rhythms/   = workflow patterns (private, gitignored); the human invokes
+               one or the agent proposes one as it sees fit — like skills,
+               never recorded in state
   archive/   = retired material
 
 @record
@@ -52,7 +54,9 @@
              "continues A<N-1>" = joint, "(done, disjoint)" = dead);
              the map decides which ranges are live — dead anchors' items
              never load. cluster = grep "ANCHOR: A<N>" (the live ranges).
-  knowledge: load open findings + findings referenced by live-range REFs.
+  knowledge: load open findings + findings referenced by live-range REFs;
+             a finding resolves via journal CLOSES (no successor) or via
+             SUPERSEDES (a successor finding).
   three classes decide loading within the loaded set:
     open        -> load fully      (the attention set)
     superseded  -> one-liner only  (grep -E "SUPERSEDES:|CLOSES:" targets;
@@ -67,7 +71,7 @@
      (A<N> = next value after current_anchor)
   4. read plan.md; run @query over journal.md + knowledge.md:
      anchor map -> live range -> open items
-  5. continue from next_action per the selected rhythm (state.md rhythm)
+  5. continue from next_action, following the human-invoked rhythm
   6. none active? ask which unit to start
 
 @interact
