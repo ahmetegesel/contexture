@@ -85,7 +85,7 @@ This section governs every subagent dispatch.
   harness supports it, aborting gracefully where it does not.
 - The report lands no matter how the lane ended, so a re-dispatch resumes
   from the report instead of rebuilding context from nothing.
-- A lane's "passed" is never the gate: the orchestrator re-verifies
+- A lane's "passed" is never the gate: the dispatching agent re-verifies
   load-bearing claims itself.
 
 ## Period end and unit close
