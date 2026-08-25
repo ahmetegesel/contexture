@@ -18,10 +18,11 @@
   no done without evidence; re-read files, confirm consistency at close
 
 @layout
-  AGENTS.md = interaction defaults + navigation
-  sessions/ = one folder per unit of work (private, gitignored)
-  rhythms/  = your workflow patterns (private, gitignored)
-  archive/  = retired material
+  AGENTS.md   = interaction defaults + navigation
+  templates/  = artifact grammars (reference to write from; never copy)
+  sessions/   = one folder per unit of work (private, gitignored)
+  rhythms/    = your workflow patterns (private, gitignored)
+  archive/    = retired material
 
 @anatomy
   session folder = unit of work; outlives working periods; dies with unit
