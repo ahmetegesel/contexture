@@ -1,3 +1,16 @@
 # recipe grammar
 
-one file per dispatch; must name the report path — nothing else contractual
+@context: "one-liner — what this lane is"
+
+MISSION
+  GOAL: "..."
+
+GROUND_AND_REFS
+  SOURCE_OF_TRUTH: <path>
+  REFS: [...]
+  drift: stop + report — never improvise
+  [READ_ONLY: <paths the lane must not modify>]
+
+REPORT
+  PATH: <path>
+  RETURN: summary only — verdicts + residual risks
