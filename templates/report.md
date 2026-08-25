@@ -14,7 +14,7 @@ beyond this minimum, write what the lane needs — in these shapes.
   [MARK: VERIFIED | INFERRED | ABSENT]
   BODY: |
     the actual content — analysis, walkthroughs, two-sided evidence,
-    anything the claim needs; indented, free in length
+    anything the claim needs; indented; free in length and subsections
 
 @risks
   what the lane did NOT verify — the honest handoff: where the report's
