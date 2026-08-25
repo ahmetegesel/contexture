@@ -49,11 +49,13 @@
 @query
   anchor map: grep "^@anchor" — a one-liner per working period;
     "continues A<N-1>" edges mark joint ranges, "(done, disjoint)" marks
-    dead ones. the map decides which ranges to load — never bodies first.
-  open items: grep "STATUS: open" within the live range — the attention set.
-  closure edges: grep -E "SUPERSEDES:|CLOSES:" — targets are the one-liner
-    class (the reason travels in the fresh entry); born-closed entries are
-    excluded.
+    dead ones. the map decides which ranges are live — never bodies first.
+  within the live range, three classes decide loading:
+    open        -> load fully      (grep "STATUS: open" — the attention set)
+    superseded  -> one-liner only  (grep -E "SUPERSEDES:|CLOSES:" targets;
+                   the reason travels in the fresh entry)
+    born-closed -> never load
+  open items outside the live ranges are dead weight — skip.
 
 @boot
   1. locate: grep -rl "status: ACTIVE" sessions/
