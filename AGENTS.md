@@ -47,12 +47,14 @@
                  audit trail.
 
 @query
-  anchor map: grep "^@anchor" — a one-liner per working period;
+  surfaces: journal.md + knowledge.md — both carry the status system.
+  anchor map: grep "^@anchor" journal.md — a one-liner per working period;
     "continues A<N-1>" edges mark joint ranges, "(done, disjoint)" marks
     dead ones. the map decides which ranges are live — never bodies first.
   within the live range, three classes decide loading:
     open        -> load fully      (grep "STATUS: open" — the attention set)
     superseded  -> one-liner only  (grep -E "SUPERSEDES:|CLOSES:" targets;
+                   one-liner = the WHAT line / first SUMMARY line;
                    the reason travels in the fresh entry)
     born-closed -> never load
   open items outside the live ranges are dead weight — skip.
@@ -62,7 +64,8 @@
   2. >1 active? list, ask (default: last-touched)
   3. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
      (A<N> = next value after current_anchor)
-  4. read plan.md; run @query: anchor map -> live range -> open items
+  4. read plan.md; run @query over journal.md + knowledge.md:
+     anchor map -> live range -> open items
   5. continue from next_action per the selected rhythm (state.md rhythm)
   6. none active? ask which unit to start
 
@@ -85,6 +88,7 @@
     from the report, never rebuilds from nothing
   - a lane's "passed" is NEVER the gate; the dispatching agent re-verifies
     load-bearing claims itself
+  - journal every dispatch: an entry carrying brief path + report path
 
 @close
   period end (a turn ends; the unit continues):
@@ -93,8 +97,9 @@
     3. the folder stays ACTIVE
   unit close (the plan completes, or the human ends the unit):
     1. append closing events + the next-move decision to journal.md
-    2. promote durable knowledge at the human's direction
-    3. mark CLOSED; stays private — nothing is committed
+    2. re-read the files; confirm consistency (law 6)
+    3. promote durable knowledge at the human's direction
+    4. mark CLOSED; stays private — nothing is committed
 
 @git
   git tracks the convention ONLY — this file, templates/, and other
