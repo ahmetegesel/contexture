@@ -106,6 +106,17 @@
     3. promote durable knowledge at the human's direction
     4. mark CLOSED; stays private — nothing is committed
 
+@handoff
+  when compaction or clearing is near, or at any uncertain boundary:
+    1. append events still in the conversation to journal.md
+    2. add findings that crystallized
+    3. refresh next_action in state.md — one terse pointer, overwritten,
+       never prepended; the WHY rebuilds from journal open items + plan
+       GROUNDED IN + live findings, never pre-serialized into state
+    4. verify the boot greps resolve — a fresh boot must reconstruct
+       the position from files alone
+  the handoff writes the record, not working memory.
+
 @git
   git tracks the convention ONLY — this file, templates/, and other
   tracked material. session work is private, never committed.
