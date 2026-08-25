@@ -75,9 +75,7 @@ Each folder holds four files, each with its own mutation profile:
 
 ## Subagents
 
-This section governs any subagent dispatch — the contract that holds no
-matter which rhythm drives the work. Orchestrating (lanes, steering,
-parallel work) is a rhythm the human chooses, not a default state.
+This section governs every subagent dispatch.
 
 - Every dispatch is session-persisted: the brief is a file under `recipes/`,
   naming where the report lands; the report lands under `reports/`; the
