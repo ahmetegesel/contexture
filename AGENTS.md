@@ -1,6 +1,6 @@
 @laws
   1. session files = ONLY source of truth; never conversation.
-     files survive compaction | tool change | break; conversation doesn't.
+     files survive compaction, tool change, or break; conversation doesn't.
   2. load only what you need: the active session's live surfaces;
      closed sessions untouched unless the task needs them.
   3. process is free: rhythms human-chosen, never imposed;
@@ -21,11 +21,11 @@
 
 @record
   a session folder is a unit of work; it outlives working periods and
-  dies with the unit. shapes live in templates/ — match them exactly.
+  dies with the unit. shapes live in templates/ — match them exactly;
+  this section carries semantics only, never a second copy of a shape.
   note: state.md keys are lowercase (status: ACTIVE); entry fields are
-  UPPERCASE (STATUS: open|closed). spellings are contractual.
-  state.md     = the live pointer — the only file edited freely:
-                 status | current_anchor | next_action | objective | repos | rhythm
+  UPPERCASE (STATUS: open | closed). spellings are contractual.
+  state.md     = the live pointer — the only file edited freely;
                  refreshed at period ends; read WHOLE at boot; kept tiny
                  (detail lives behind refs, never inside).
   plan.md      = the current declaration: goal + steps + exit criteria.
@@ -36,13 +36,10 @@
                  same breath; grounded in the record.
                  a completed plan is replaced in place; completion +
                  next-move land in the journal.
-  journal.md   = append-only events + @anchor declarations.
-                 entries born STATUS open|closed, never edited; closure by
-                 reference — a fresh entry carries
-                 SUPERSEDES | CLOSES: <ref> — reason.
-  knowledge.md = findings born STATUS open|closed, carrying REF + SUMMARY;
-                 written at decision/discovery moments; no REF = hypothesis,
-                 never plan on it.
+  journal.md   = append-only events + @anchor declarations;
+                 closure by reference, never edited.
+  knowledge.md = findings written at decision/discovery moments;
+                 no REF = hypothesis, never plan on it.
   recipes/     = dispatch briefs (one per subagent dispatch; names the
                  report path).
   reports/     = lane evidence reports; the dispatch's persistence is the
@@ -50,35 +47,36 @@
 
 @query
   anchor map: grep "^@anchor" — a one-liner per working period;
-    "continues A<N>" edges mark joint ranges, "(done, disjoint)" marks dead
-    ones. the map decides which ranges to load — never load bodies first.
+    "continues A<N-1>" edges mark joint ranges, "(done, disjoint)" marks
+    dead ones. the map decides which ranges to load — never bodies first.
   open items: grep "STATUS: open" within the live range — the attention set.
-  closure edges: grep "SUPERSEDES:" | grep "CLOSES:" — targets are the
-    one-liner class (the reason travels in the fresh entry);
-    born-closed entries are excluded.
+  closure edges: grep -E "SUPERSEDES:|CLOSES:" — targets are the one-liner
+    class (the reason travels in the fresh entry); born-closed entries are
+    excluded.
 
 @boot
   1. locate: grep -rl "status: ACTIVE" sessions/
   2. >1 active? list, ask (default: last-touched)
-  3. read state.md WHOLE; append @anchor A<next> — "one-liner" to journal.md
+  3. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
+     (A<N> = next value after current_anchor)
   4. read plan.md; run @query: anchor map -> live range -> open items
   5. continue from next_action per the selected rhythm (state.md rhythm)
   6. none active? ask which unit to start
 
 @interact
   - one design question per turn; ground BEFORE asking:
-    what it is | what it looks like now | why ask
+    what it is, what it looks like now, why ask
   - discuss before significant decisions; the human may interrupt anytime
   - never claim verification you did not perform
   - name artifacts by what they are, never by session shorthand
   - queued message mid-act: COMPLETE the act first, then address;
-    halt ONLY on an explicit stop | hold | redirect
+    halt ONLY on an explicit stop, hold, or redirect
 
 @subagents
   every dispatch:
   - brief = a file in recipes/, names the report path;
     report -> reports/; return = summary ONLY
-  - drift: a lane NEVER improvises — stop, report found | standing | drifted;
+  - drift: a lane NEVER improvises — stop, report found, standing, drifted;
     pause-ask where possible, abort gracefully where not
   - report lands NO MATTER HOW the lane ended -> a re-dispatch resumes
     from the report, never rebuilds from nothing
