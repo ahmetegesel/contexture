@@ -39,8 +39,8 @@
                  next-move land in the journal.
   journal.md   = append-only events + @anchor declarations; entries
                  stamped ANCHOR: A<N>; closure by reference, never edited.
-  knowledge.md = findings stamped ANCHOR: A<N>, written at decision/
-                 discovery moments; no REF = hypothesis, never plan on it.
+  knowledge.md = findings written at decision/discovery moments; linked to
+                 events via REF; no REF = hypothesis, never plan on it.
   recipes/     = dispatch briefs (one per subagent dispatch; names the
                  report path).
   reports/     = lane evidence reports; the dispatch's persistence is the
@@ -48,16 +48,16 @@
 
 @query
   surfaces: journal.md + knowledge.md — both carry the status system.
-  anchor map: grep "^@anchor" journal.md — a one-liner per working period;
-    "continues A<N-1>" edges mark joint ranges, "(done, disjoint)" marks
-    dead ones. the map decides which ranges are live; dead anchors' items
-    never load.
-  cluster: grep "ANCHOR: A<N>" — the live ranges' items.
-  within the cluster, three classes decide loading:
-    open        -> load fully      (grep "STATUS: open" — the attention set)
+  journal:   map = grep "^@anchor" (a one-liner per working period;
+             "continues A<N-1>" = joint, "(done, disjoint)" = dead);
+             the map decides which ranges are live — dead anchors' items
+             never load. cluster = grep "ANCHOR: A<N>" (the live ranges).
+  knowledge: load open findings + findings referenced by live-range REFs.
+  three classes decide loading within the loaded set:
+    open        -> load fully      (the attention set)
     superseded  -> one-liner only  (grep -E "SUPERSEDES:|CLOSES:" targets;
-                   one-liner = the WHAT line / first SUMMARY line;
-                   the reason travels in the fresh entry)
+                   one-liner = WHAT line / first SUMMARY line; the reason
+                   travels in the fresh entry)
     born-closed -> never load
 
 @boot
