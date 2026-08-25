@@ -49,9 +49,12 @@ Each folder holds four files, each with its own mutation profile:
   the unit.
 - `journal.md`   — append-only events + `@anchor` declarations (one-liner per
   working period). The record; the boot's query surface.
-- `knowledge.md` — findings with fixed taxonomy (KIND/CONFIDENCE/CLASS/
-  EVIDENCE_REF), superseded by stamp, never edited. The raw material for
+- `knowledge.md` — findings born with STATUS open|closed, carrying REF and
+  SUMMARY; closure by reference, never edited. The raw material for
   grounded compositions.
+- `recipes/` — dispatch briefs (one file per subagent dispatch, naming where
+  the report lands). `reports/` — the lanes' evidence reports. The
+  dispatch's persistence is the audit trail.
 
 ## Boot sequence
 
@@ -69,6 +72,22 @@ Each folder holds four files, each with its own mutation profile:
 - Discuss before significant decisions; the human may interrupt anytime.
 - Never claim verification you did not perform.
 - Name artifacts by what they are, not by session shorthand.
+
+## Subagents
+
+The main agent is an orchestrator by default — session artifacts plus this
+section are the baseline; rhythms only shape it to the user's needs.
+
+- Every dispatch is session-persisted: the brief is a file under `recipes/`,
+  naming where the report lands; the report lands under `reports/`; the
+  returned message is a summary only.
+- On drift, a lane never improvises: it stops and reports what it found,
+  where it stands, and what drifted — pausing to ask for steering where the
+  harness supports it, aborting gracefully where it does not.
+- The report lands no matter how the lane ended, so a re-dispatch resumes
+  from the report instead of rebuilding context from nothing.
+- A lane's "passed" is never the gate: the orchestrator re-verifies
+  load-bearing claims itself.
 
 ## Period end and unit close
 
