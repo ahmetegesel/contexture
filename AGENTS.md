@@ -4,9 +4,10 @@
 
 A vendor-neutral convention for AI-assisted, multi-session work: lean prose in
 this file, a `sessions/` folder that persists work state, a `rhythms/` folder of
-human-chosen workflow patterns, and git as the audit/recovery substrate.
-Everything here runs on tools every harness already provides — bash, grep,
-read — and nothing else.
+human-chosen workflow patterns, and git as the audit/recovery substrate for the
+convention itself. Sessions and rhythms are private to you — gitignored, never
+committed. Everything here runs on tools every harness already provides — bash,
+grep, read — and nothing else.
 
 ## Golden rules
 
@@ -27,9 +28,11 @@ read — and nothing else.
 ## Layout
 
 - `AGENTS.md` — this file: interaction defaults + navigation
-- `sessions/` — one folder per session; the active session is the working set
-- `rhythms/`  — human-chosen workflow patterns (markdown), picked per task
-- `archive/`  — closed sessions and retired material
+- `sessions/` — one folder per session (private, gitignored); the active
+  session is the working set
+- `rhythms/`  — your personal workflow patterns (private, gitignored);
+  pre-defined ones come from team sharing, never shipped in this workspace
+- `archive/`  — retired material
 
 ## Boot sequence
 
@@ -50,10 +53,13 @@ read — and nothing else.
 
 1. Append events to the journal; persist `next_action` and durable knowledge.
 2. Re-read the session files and confirm consistency.
-3. Mark the session closed and commit — commits are checkpoints.
-4. The human reviews the diff; that review is the gate for the next session.
+3. Mark the session closed. Sessions stay private — nothing is committed.
+4. The human reviews the close summary and journal; that review is the gate
+   for the next session.
 
 ## Git discipline
 
-Commit at every session boundary. `git diff` is the audit trail; `git revert`
-is the recovery path. Never push without explicit instruction.
+Git tracks the convention — this file and other tracked material. Session work
+is private and never committed: the audit trail for work is the session journal
+and close summary; `git revert` is the recovery path for the convention.
+Never push without explicit instruction.

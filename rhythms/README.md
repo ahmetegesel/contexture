@@ -1,4 +1,4 @@
 # rhythms/
 
-Human-chosen workflow patterns (markdown). Pick one per task; never imposed.
-Structure to be defined.
+Your personal workflow patterns (markdown), picked per task — never imposed.
+Pre-defined rhythms are shared with teams separately, not shipped here.
