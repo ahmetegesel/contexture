@@ -93,6 +93,8 @@
     from the report, never rebuilds from nothing
   - a lane's "passed" is NEVER the gate; the dispatching agent re-verifies
     load-bearing claims itself
+  - read the lane's report WHOLE — no exception; an unread part wears
+    the look of review
   - journal every dispatch: an entry carrying brief path + report path
 
 @close
