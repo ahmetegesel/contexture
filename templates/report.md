@@ -1,9 +1,21 @@
 # report grammar
 
-a floor, not a ceiling — write what the lane needs beyond the minimum.
-the recipe names the deliverables; the report serves them, freely.
+blocks at column 0; fields indent 2; BODY continuation indent 4;
+one blank line between blocks.
+beyond this minimum, write what the lane needs — in these shapes.
 
-@orientation                         # one-line verdicts + sections to read first
-per claim: VERDICT + EVIDENCE (file:line or ref — "verbatim")
-           [inline marker: VERIFIED | INFERRED | ABSENT]
-RESIDUAL_RISKS                       # what was not verified
+@orientation
+  VERDICTS: one line per deliverable
+  READ_FIRST: the load-bearing claims
+
+@claim <name>
+  VERDICT: "one line"
+  EVIDENCE: <file:line or ref> — "verbatim"
+  [MARK: VERIFIED | INFERRED | ABSENT]
+  BODY: |
+    the actual content — analysis, walkthroughs, two-sided evidence,
+    anything the claim needs; indented, free in length
+
+@risks
+  what the lane did NOT verify — the honest handoff: where the report's
+  confidence is thin
