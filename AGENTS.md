@@ -44,8 +44,9 @@ Each folder holds four files, each with its own mutation profile:
 - `state.md`     — the live pointer: status, current anchor, next_action,
   objective, repos. Refreshed at period ends; read whole at boot.
 - `plan.md`      — the current declaration: goal + steps + exit criteria.
-  Rewritten whole only at re-plan moments (conversational), grounded in the
-  record; dies with the unit.
+  Edited only at re-plan moments (conversational): touch only what the
+  re-plan changes, replace in place; grounded in the record; dies with
+  the unit.
 - `journal.md`   — append-only events + `@anchor` declarations (one-liner per
   working period). The record; the boot's query surface.
 - `knowledge.md` — findings with fixed taxonomy (KIND/CONFIDENCE/CLASS/
