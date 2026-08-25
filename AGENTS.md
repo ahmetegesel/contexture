@@ -13,7 +13,8 @@
      re-read the files, confirm consistency at close.
 
 @layout
-  AGENTS.md  = laws + navigation (this file)
+  AGENTS.md  = laws + navigation (this file); blocks at column 0, bodies
+               indent 2, one blank line between blocks
   templates/ = the artifact grammars — reference to write from; never copy
   sessions/  = one folder per unit of work (private, gitignored)
   rhythms/   = your workflow patterns (private, gitignored)

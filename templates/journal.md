@@ -1,5 +1,7 @@
 # journal grammar
 
+blocks at column 0; fields indent 2; one blank line between blocks.
+
 @entry <date>-<slug>
   STATUS: open | closed                  # born; never edited
   WHAT: "..."
