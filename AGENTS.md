@@ -1,91 +1,101 @@
-@law State_Is_Truth
-  session files = ONLY source of truth; never conversation
-  files survive compaction | tool change | break; conversation doesn't
-
-@law Load_Only_Needed
-  read active session's live surfaces; closed sessions untouched unless task needs
-
-@law Process_Free
-  rhythms human-chosen, NEVER imposed; govern OUTPUT not process
-
-@law Mitigate_Not_Solve
-  nudge default; mechanic earns place only if: failure costly/frequent + check cheap + nudge unreliable
-
-@law Compose_From_Record
-  rewrites grounded in journal/knowledge — only sources surviving compaction
-
-@law Verify_Before_Close
-  no done without evidence; re-read files, confirm consistency at close
+@laws
+  1. session files = ONLY source of truth; never conversation.
+     files survive compaction | tool change | break; conversation doesn't.
+  2. load only what you need: the active session's live surfaces;
+     closed sessions untouched unless the task needs them.
+  3. process is free: rhythms human-chosen, never imposed;
+     govern OUTPUT, not process.
+  4. mitigate, don't solve: nudge is the default; a mechanic earns its
+     place only if costly/frequent + cheap check + nudge-unreliable.
+  5. compose from the record, never from conversation: rewrites grounded
+     in journal/knowledge — the only sources that survive compaction.
+  6. verify before close: no done without evidence;
+     re-read the files, confirm consistency at close.
 
 @layout
-  AGENTS.md   = interaction defaults + navigation
-  templates/  = artifact grammars (reference to write from; never copy)
-  sessions/   = one folder per unit of work (private, gitignored)
-  rhythms/    = your workflow patterns (private, gitignored)
-  archive/    = retired material
+  AGENTS.md  = laws + navigation (this file)
+  templates/ = the artifact grammars — reference to write from; never copy
+  sessions/  = one folder per unit of work (private, gitignored)
+  rhythms/   = your workflow patterns (private, gitignored)
+  archive/   = retired material
 
-@anatomy
-  session folder = unit of work; outlives working periods; dies with unit
-  state.md     = live pointer: status | current anchor | next_action | objective | repos
-                 refreshed at period ends; read WHOLE at boot; kept tiny — detail lives behind refs
-  plan.md      = current declaration: goal + steps + exit criteria
-                 progress NEVER touches it; step completion = journal event "slug/step-N: DONE"
-                 edit ONLY at re-plan (conversational): touch only what changed, replace in place
-                 re-plan = REPLAN journal entry + edit, same breath; grounded in record
-                 completed plan replaced in place; completion + next-move -> journal
-                 between plans: planning phase legal (next_action = "plan the next move")
-  journal.md   = append-only events + @anchor declarations
-                 entries BORN STATUS open|closed, NEVER edited
-                 closure by reference: fresh entry carries SUPERSEDES/CLOSES: <ref> — reason
-  knowledge.md = findings BORN open|closed, carry REF + SUMMARY; closure by reference
-                 written at decision/discovery moments; REF = evidence marker (no REF = hypothesis, never plan on it)
-  recipes/     = dispatch briefs, one per subagent dispatch; names report path
-  reports/     = lane evidence reports; dispatch's persistence = audit trail
+@record
+  a session folder is a unit of work; it outlives working periods and
+  dies with the unit. shapes live in templates/ — match them exactly.
+  note: state.md keys are lowercase (status: ACTIVE); entry fields are
+  UPPERCASE (STATUS: open|closed). spellings are contractual.
+  state.md     = the live pointer — the only file edited freely:
+                 status | current_anchor | next_action | objective | repos | rhythm
+                 refreshed at period ends; read WHOLE at boot; kept tiny
+                 (detail lives behind refs, never inside).
+  plan.md      = the current declaration: goal + steps + exit criteria.
+                 progress NEVER touches it — step completion is a journal
+                 event "slug/step-N: DONE".
+                 edited ONLY at re-plan (conversational): touch only what
+                 changed, replace in place; REPLAN journal entry in the
+                 same breath; grounded in the record.
+                 a completed plan is replaced in place; completion +
+                 next-move land in the journal.
+  journal.md   = append-only events + @anchor declarations.
+                 entries born STATUS open|closed, never edited; closure by
+                 reference — a fresh entry carries
+                 SUPERSEDES | CLOSES: <ref> — reason.
+  knowledge.md = findings born STATUS open|closed, carrying REF + SUMMARY;
+                 written at decision/discovery moments; no REF = hypothesis,
+                 never plan on it.
+  recipes/     = dispatch briefs (one per subagent dispatch; names the
+                 report path).
+  reports/     = lane evidence reports; the dispatch's persistence is the
+                 audit trail.
 
-@anchors
-  @anchor A<N> — "one-liner" appended at boot; stamped on entries
-  one-liner = semantic fuel: after compaction, map says which anchors join (continues) / skip (done)
-  map query: grep "^@anchor"
-
-@status
-  open       = attention set — include fully
-  closed     = born-closed history — excluded
-  superseded = DERIVED: target of a SUPERSEDES stamp -> one-liner only (reason travels in fresh entry)
-  queries: grep "STATUS: open" | grep "SUPERSEDES:" | grep "CLOSES:"
+@query
+  anchor map: grep "^@anchor" — a one-liner per working period;
+    "continues A<N>" edges mark joint ranges, "(done, disjoint)" marks dead
+    ones. the map decides which ranges to load — never load bodies first.
+  open items: grep "STATUS: open" within the live range — the attention set.
+  closure edges: grep "SUPERSEDES:" | grep "CLOSES:" — targets are the
+    one-liner class (the reason travels in the fresh entry);
+    born-closed entries are excluded.
 
 @boot
   1. locate: grep -rl "status: ACTIVE" sessions/
-  2. >1 active? list, ask (default last-touched)
-  3. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
-  4. read plan.md; grep journal: ^@anchor | STATUS: open
-  5. continue from next_action per human-chosen rhythm
+  2. >1 active? list, ask (default: last-touched)
+  3. read state.md WHOLE; append @anchor A<next> — "one-liner" to journal.md
+  4. read plan.md; run @query: anchor map -> live range -> open items
+  5. continue from next_action per the selected rhythm (state.md rhythm)
   6. none active? ask which unit to start
 
 @interact
-  - one design question per turn; ground BEFORE asking: what it is | what it looks like now | why ask
-  - discuss before significant decisions; human may interrupt anytime
-  - never claim verification not performed
-  - name artifacts by what they are
-  - queued message mid-act: COMPLETE act first, then address; halt ONLY on explicit stop|hold|redirect
+  - one design question per turn; ground BEFORE asking:
+    what it is | what it looks like now | why ask
+  - discuss before significant decisions; the human may interrupt anytime
+  - never claim verification you did not perform
+  - name artifacts by what they are, never by session shorthand
+  - queued message mid-act: COMPLETE the act first, then address;
+    halt ONLY on an explicit stop | hold | redirect
 
 @subagents
   every dispatch:
-  - brief = file in recipes/, names report path; report -> reports/; return = summary ONLY
-  - drift: lane NEVER improvises — stop, report found | standing | drifted;
+  - brief = a file in recipes/, names the report path;
+    report -> reports/; return = summary ONLY
+  - drift: a lane NEVER improvises — stop, report found | standing | drifted;
     pause-ask where possible, abort gracefully where not
-  - report lands NO MATTER HOW lane ended -> re-dispatch resumes from report, never rebuilds
-  - lane's "passed" NEVER the gate; dispatcher re-verifies load-bearing claims
+  - report lands NO MATTER HOW the lane ended -> a re-dispatch resumes
+    from the report, never rebuilds from nothing
+  - a lane's "passed" is NEVER the gate; the dispatching agent re-verifies
+    load-bearing claims itself
 
 @close
-  period end (turn ends; unit continues):
-    1. append events to journal; refresh next_action in state
-    2. add findings as they crystallize
-    3. stays ACTIVE
-  unit close (plan complete OR human ends):
-    1. append closing events + next-move decision to journal
-    2. promote durable knowledge at human's direction
-    3. mark CLOSED; stays private — never committed
+  period end (a turn ends; the unit continues):
+    1. append events to journal.md; refresh next_action in state.md
+    2. add findings to knowledge.md as they crystallize
+    3. the folder stays ACTIVE
+  unit close (the plan completes, or the human ends the unit):
+    1. append closing events + the next-move decision to journal.md
+    2. promote durable knowledge at the human's direction
+    3. mark CLOSED; stays private — nothing is committed
 
 @git
-  git tracks the convention ONLY; session work private, never committed
-  never push without explicit instruction
+  git tracks the convention ONLY — this file, templates/, and other
+  tracked material. session work is private, never committed.
+  never push without explicit instruction.
