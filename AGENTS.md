@@ -97,7 +97,10 @@
 
 @close
   period end (a turn ends; the unit continues):
-    1. append events to journal.md; refresh next_action in state.md
+    1. append events to journal.md; refresh next_action in state.md —
+       one terse pointer, overwritten never prepended; the WHY rebuilds
+       from journal open items + plan GROUNDED IN + live findings, never
+       pre-serialized into state
     2. add findings to knowledge.md as they crystallize
     3. the folder stays ACTIVE
   unit close (the plan completes, or the human ends the unit):
@@ -107,13 +110,9 @@
     4. mark CLOSED; stays private — nothing is committed
 
 @handoff
-  when compaction or clearing is near, or at any uncertain boundary:
-    1. append events still in the conversation to journal.md
-    2. add findings that crystallized
-    3. refresh next_action in state.md — one terse pointer, overwritten,
-       never prepended; the WHY rebuilds from journal open items + plan
-       GROUNDED IN + live findings, never pre-serialized into state
-    4. verify the boot greps resolve — a fresh boot must reconstruct
+  when compaction or clearing is near (any moment, mid-period):
+    1. run the period-end writes if not already done
+    2. verify the boot greps resolve — a fresh boot must reconstruct
        the position from files alone
   the handoff writes the record, not working memory.
 
