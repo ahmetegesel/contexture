@@ -36,8 +36,8 @@ The workspace in one map:
 
 **Then it runs itself:**
 
-- **Boot** — name the move from the message, verify against the folder,
-  stamp an anchor, run the query:
+- **Boot** — read your amendments, name the move from the message,
+  verify against the folder, stamp an anchor, run the query:
   open items fully, superseded as one-liners, born-closed never (Part I §2)
 - **Work** — events append to the journal, findings land in knowledge
   with a REF, plans edit surgically at re-plan only (§2, §3)
@@ -183,7 +183,8 @@ close, handoff.
    new work collides with a live unit — is asked about before anything
    else loads.
 4. **More than one candidate?** The message may name one; otherwise list
-   the ACTIVE units and ask (default: the last-touched).
+   the ACTIVE units (`grep -rl "status: ACTIVE" sessions/*/state.md`)
+   and ask (default: the last-touched).
 5. **Read state, stamp the anchor.** Read `state.md` whole — it is small by
    law, and detail lives behind refs, never inside it. Append to
    `journal.md`:
@@ -214,29 +215,41 @@ close, handoff.
    `current_anchor: A0`, and `next_action: "plan the first move"` — then
    continues at step 5, and the first boot stamps A1.
 
-A boot, concretely — the amendments load first, the message names the
-move, the folder verifies it, and only then does anything else load (the
-unit here is any unit):
+A boot, concretely — all eight steps, amendments first (the unit here is
+any unit):
 
 ```
-> "let's continue the example unit"
+1. read AGENTS.local.md            # absent — nothing to amend, proceed
 
-$ grep -l "status: ACTIVE" sessions/example-unit/state.md
-sessions/example-unit/state.md                    # the named unit is live
+2. the message names the move:
+   > "let's continue the example unit"
 
-$ grep "^@anchor" sessions/example-unit/journal.md
-@anchor A1 — "inventory and design"               # the map: A1..A2 live
-@anchor A2 — "first migration (continues A1)"
+3. verify against the folder:
+   $ grep -l "status: ACTIVE" sessions/example-unit/state.md
+   sessions/example-unit/state.md  # the named unit is live
 
-$ grep "ANCHOR: A2" sessions/example-unit/journal.md
-# every entry stamped A2 — the live range, concretely
+4. one candidate — no ask needed
 
-$ grep "STATUS: open" sessions/example-unit/journal.md sessions/example-unit/knowledge.md
-sessions/example-unit/journal.md:14:  STATUS: open   # the attention set
+5. read state.md WHOLE, then stamp:
+   @anchor A2 — "second period on the example unit"
+   refresh current_anchor to A2
 
-$ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
-sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
-                                                  # that open entry? closed by reference
+6. the query:
+   $ grep "^@anchor" sessions/example-unit/journal.md
+   @anchor A1 — "inventory and design"             # the map: A1..A2 live
+   @anchor A2 — "second period on the example unit"
+
+   $ grep "ANCHOR: A2" sessions/example-unit/journal.md
+   # every entry stamped A2 — the live range, concretely
+
+   $ grep "STATUS: open" sessions/example-unit/journal.md sessions/example-unit/knowledge.md
+   sessions/example-unit/journal.md:14:  STATUS: open   # the attention set
+
+   $ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
+   sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
+                                                # that open entry? closed by reference
+
+7. continue from next_action, following the human-invoked rhythm
 ```
 
 **Work** — three movements, each with one home:
@@ -370,9 +383,9 @@ never copy them.
    richest possible workload for testing it. Journal every break; harvest
    the lessons into findings; let the design end when use teaches more
    than refinement.
-5. Let the first boot run. The agent names the move from your message,
-   verifies it against the folder, stamps the anchor, reads the plan,
-   and continues from `next_action`.
+5. Let the first boot run. The agent reads your amendments, names the
+   move from your message, verifies it against the folder, stamps the
+   anchor, reads the plan, and continues from `next_action`.
 
 Extending it, without breaking it:
 
