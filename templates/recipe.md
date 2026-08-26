@@ -13,4 +13,5 @@ GROUND_AND_REFS
 
 REPORT
   PATH: <path>
+  SHAPE: templates/report.md        # the report grammar — follow its blocks
   RETURN: summary only — verdicts + residual risks
