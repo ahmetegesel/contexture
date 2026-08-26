@@ -73,14 +73,15 @@
     touched a repo; objective has no query — human-facing only
 
 @boot
-  1. read the opening message and name the move: continuing a unit, or
-     new work — the message is the primary signal; nothing loads before
-     the move is named
-  2. verify the move against the folder: grep -l "status: ACTIVE"
+  1. read AGENTS.local.md if present — your amendments, kept tiny;
+     the local file may amend the boot order itself
+  2. read the opening message and name the move: continuing a unit, or
+     new work — the message is the primary signal; nothing else loads
+     before the move is named
+  3. verify the move against the folder: grep -l "status: ACTIVE"
      sessions/<unit>/state.md — agreement proceeds; disagreement (unit
      absent or not ACTIVE, new work colliding with a live unit) asks the
      human before anything else loads
-  3. read AGENTS.local.md if present — your amendments, kept tiny
   4. >1 ACTIVE candidate for the move? the message may name one;
      otherwise grep -rl "status: ACTIVE" sessions/*/state.md, list, ask
      (default: last-touched)

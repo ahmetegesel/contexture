@@ -172,15 +172,16 @@ close, handoff.
 
 **Boot** — the first thing the agent does each working period, mechanically:
 
-1. **Name the move.** Read the human's opening message and decide what it
+1. **Read amendments.** Read `AGENTS.local.md` if present — it's tiny, and
+   it may amend the boot order itself.
+2. **Name the move.** Read the human's opening message and decide what it
    is: continuing a unit, or new work. The message is the primary signal
-   — nothing loads before the move is named.
-2. **Verify the move against the folder.** One targeted grep:
+   — nothing else loads before the move is named.
+3. **Verify the move against the folder.** One targeted grep:
    `grep -l "status: ACTIVE" sessions/<unit>/state.md`. Agreement
    proceeds. Disagreement — the named unit is absent or not ACTIVE, or
    new work collides with a live unit — is asked about before anything
    else loads.
-3. **Read amendments.** Read `AGENTS.local.md` if present. It's tiny.
 4. **More than one candidate?** The message may name one; otherwise list
    the ACTIVE units and ask (default: the last-touched).
 5. **Read state, stamp the anchor.** Read `state.md` whole — it is small by
@@ -213,8 +214,9 @@ close, handoff.
    `current_anchor: A0`, and `next_action: "plan the first move"` — then
    continues at step 5, and the first boot stamps A1.
 
-A boot, concretely — the message names the move, the folder verifies it,
-and only then does anything load (the unit here is any unit):
+A boot, concretely — the amendments load first, the message names the
+move, the folder verifies it, and only then does anything else load (the
+unit here is any unit):
 
 ```
 > "let's continue the example unit"
