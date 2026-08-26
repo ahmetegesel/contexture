@@ -2,7 +2,7 @@
 
 blocks at column 0; fields indent 2; BODY continuation indent 4;
 one blank line between blocks.
-beyond this minimum, write what the lane needs — in these shapes.
+beyond this minimum, write what the lane needs - in these shapes.
 
 @orientation
   VERDICTS: one line per deliverable
@@ -10,15 +10,15 @@ beyond this minimum, write what the lane needs — in these shapes.
 
 @claim <name>
   VERDICT: "one line"
-  EVIDENCE: <file:line or ref> — "verbatim"
+  EVIDENCE: <file:line or ref> - "verbatim"
   [MARK: VERIFIED | INFERRED | ABSENT]   # ABSENT = the highest burden:
                                          # -a, case-insensitive, every
                                          # separator spelling, one place
                                          # it would live
   BODY ::
-    the actual content — analysis, walkthroughs, two-sided evidence,
+    the actual content - analysis, walkthroughs, two-sided evidence,
     anything the claim needs; indented; free in length and subsections
 
 @risks
-  what the lane did NOT verify — the honest handoff: where the report's
+  what the lane did NOT verify - the honest handoff: where the report's
   confidence is thin

@@ -9,4 +9,4 @@ one blank line between blocks.
     continuation text
   [REF: "..."]                            # claims require REF; no REF = hypothesis;
                                         # repeatable, one per source
-  [SUPERSEDES: <ref> — reason]
+  [SUPERSEDES: <ref> - reason]
