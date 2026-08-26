@@ -5,7 +5,7 @@ one blank line between blocks.
 
 @finding NAME
   STATUS: open | closed                   # born; never edited
-  SUMMARY: |
+  SUMMARY ::
     continuation text
   [REF: "..."]                            # claims require REF; no REF = hypothesis;
                                         # repeatable, one per source

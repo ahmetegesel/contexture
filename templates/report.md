@@ -11,8 +11,11 @@ beyond this minimum, write what the lane needs — in these shapes.
 @claim <name>
   VERDICT: "one line"
   EVIDENCE: <file:line or ref> — "verbatim"
-  [MARK: VERIFIED | INFERRED | ABSENT]
-  BODY: |
+  [MARK: VERIFIED | INFERRED | ABSENT]   # ABSENT = the highest burden:
+                                         # -a, case-insensitive, every
+                                         # separator spelling, one place
+                                         # it would live
+  BODY ::
     the actual content — analysis, walkthroughs, two-sided evidence,
     anything the claim needs; indented; free in length and subsections
 

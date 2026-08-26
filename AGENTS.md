@@ -67,6 +67,8 @@
                    one-liner = WHAT line / first SUMMARY line; the reason
                    travels in the fresh entry)
     born-closed -> never load
+  cross-repo: grep -l "repos:.*<name>" sessions/*/state.md — which units
+    touched a repo; objective has no query — human-facing only
 
 @boot
   1. locate: grep -rl "status: ACTIVE" sessions/

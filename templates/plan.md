@@ -8,7 +8,7 @@ STEPS:
   1. step-name — one-line intent
      exit: "checkable done-condition"
      [exit: "another condition"]         # several allowed, one per line
-     [note: |                            # optional detail — assumptions,
+     [note ::                            # optional detail — assumptions,
         indented]                        # risks, context
 
 GROUNDED IN: journal@A<N>, knowledge@name — the sources the plan was
