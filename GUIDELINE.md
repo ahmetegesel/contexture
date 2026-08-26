@@ -36,7 +36,8 @@ The workspace in one map:
 
 **Then it runs itself:**
 
-- **Boot** — locate the ACTIVE unit, stamp an anchor, run the query:
+- **Boot** — name the move from the message, verify against the folder,
+  stamp an anchor, run the query:
   open items fully, superseded as one-liners, born-closed never (Part I §2)
 - **Work** — events append to the journal, findings land in knowledge
   with a REF, plans edit surgically at re-plan only (§2, §3)
@@ -171,14 +172,18 @@ close, handoff.
 
 **Boot** — the first thing the agent does each working period, mechanically:
 
-1. **Locate.** `grep -rl "status: ACTIVE" sessions/*/state.md`
-   The human's opening message decides: it either continues a unit or
-   names new work — new work is a new unit, never a continuation of an
-   old one.
-2. **Read amendments.** Read `AGENTS.local.md` if present. It's tiny.
-3. **More than one active?** List them, ask the human (default: the
-   last-touched).
-4. **Read state, stamp the anchor.** Read `state.md` whole — it is small by
+1. **Name the move.** Read the human's opening message and decide what it
+   is: continuing a unit, or new work. The message is the primary signal
+   — nothing loads before the move is named.
+2. **Verify the move against the folder.** One targeted grep:
+   `grep -l "status: ACTIVE" sessions/<unit>/state.md`. Agreement
+   proceeds. Disagreement — the named unit is absent or not ACTIVE, or
+   new work collides with a live unit — is asked about before anything
+   else loads.
+3. **Read amendments.** Read `AGENTS.local.md` if present. It's tiny.
+4. **More than one candidate?** The message may name one; otherwise list
+   the ACTIVE units and ask (default: the last-touched).
+5. **Read state, stamp the anchor.** Read `state.md` whole — it is small by
    law, and detail lives behind refs, never inside it. Append to
    `journal.md`:
    ```
@@ -187,7 +192,7 @@ close, handoff.
    `<N>` is `current_anchor` + 1, and the map of these one-liners is the
    seam between working periods: it decides which ranges of the journal are
    live. Then refresh `current_anchor` in `state.md` to the new value.
-5. **Read the plan, run the query.** Read `plan.md`. Then decide what to
+6. **Read the plan, run the query.** Read `plan.md`. Then decide what to
    load from the journal and knowledge — never by reading bodies first, but
    by the map and the classes:
    - the anchor map: `grep "^@anchor" journal.md`
@@ -200,20 +205,22 @@ close, handoff.
    - knowledge loads open findings **plus findings referenced by live-range
      REFs**; a finding resolves via a journal `CLOSES:` (no successor) or
      via a `SUPERSEDES:` (a successor finding)
-6. **Continue.** From `next_action`, following the rhythm the human invoked
+7. **Continue.** From `next_action`, following the rhythm the human invoked
    (or propose one). If `next_action` says "plan the next move", the
    planning phase starts.
-7. **None active?** New work bootstraps a unit: the agent creates
+8. **New work bootstraps a unit.** The agent creates
    `sessions/<slug>/state.md` with `status: ACTIVE`,
    `current_anchor: A0`, and `next_action: "plan the first move"` — then
-   continues at step 4, and the first boot stamps A1.
+   continues at step 5, and the first boot stamps A1.
 
-A boot, concretely — the five greps and what they answer (the unit named
-here is any unit):
+A boot, concretely — the message names the move, the folder verifies it,
+and only then does anything load (the unit here is any unit):
 
 ```
-$ grep -rl "status: ACTIVE" sessions/*/state.md
-sessions/example-unit/state.md                    # the unit
+> "let's continue the example unit"
+
+$ grep -l "status: ACTIVE" sessions/example-unit/state.md
+sessions/example-unit/state.md                    # the named unit is live
 
 $ grep "^@anchor" sessions/example-unit/journal.md
 @anchor A1 — "inventory and design"               # the map: A1..A2 live
@@ -259,7 +266,7 @@ sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
 **Handoff** — the proof before context death. When a context is about to
 die (compaction, tool change, long break): run the period-end writes, then
 verify the boot greps resolve — a fresh boot must reconstruct the entire
-position from files alone. A locate that matches the wrong files, an anchor
+position from files alone. A folder that contradicts the move, an anchor
 map that doesn't resolve the live range, a `next_action` that points at
 finished work — each is a handoff failure, and catching one before context
 death is exactly what the ritual is for.
@@ -361,8 +368,9 @@ never copy them.
    richest possible workload for testing it. Journal every break; harvest
    the lessons into findings; let the design end when use teaches more
    than refinement.
-5. Let the first boot run. The agent locates the active unit, reads the
-   state, stamps the anchor, and continues from `next_action`.
+5. Let the first boot run. The agent names the move from your message,
+   verifies it against the folder, stamps the anchor, reads the plan,
+   and continues from `next_action`.
 
 Extending it, without breaking it:
 

@@ -73,21 +73,26 @@
     touched a repo; objective has no query — human-facing only
 
 @boot
-  1. locate: grep -rl "status: ACTIVE" sessions/*/state.md
-     the human's opening message decides: continuing a unit, or naming
-     new work — new work is a new unit, never a continuation
-  2. read AGENTS.local.md if present — your amendments, kept tiny
-  3. >1 active? the opening message may name the unit; otherwise list,
-     ask (default: last-touched)
-  4. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
+  1. read the opening message and name the move: continuing a unit, or
+     new work — the message is the primary signal; nothing loads before
+     the move is named
+  2. verify the move against the folder: grep -l "status: ACTIVE"
+     sessions/<unit>/state.md — agreement proceeds; disagreement (unit
+     absent or not ACTIVE, new work colliding with a live unit) asks the
+     human before anything else loads
+  3. read AGENTS.local.md if present — your amendments, kept tiny
+  4. >1 ACTIVE candidate for the move? the message may name one;
+     otherwise grep -rl "status: ACTIVE" sessions/*/state.md, list, ask
+     (default: last-touched)
+  5. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
      (A<N> = next value after current_anchor); refresh current_anchor in
      state.md to the new value
-  5. read plan.md; run @query over journal.md + knowledge.md:
+  6. read plan.md; run @query over journal.md + knowledge.md:
      anchor map -> live range -> open items + live findings
-  6. continue from next_action, following the human-invoked rhythm
-  7. none active? new work bootstraps a unit: sessions/<slug>/state.md
+  7. continue from next_action, following the human-invoked rhythm
+  8. new work: the agent bootstraps the unit — sessions/<slug>/state.md
      with status: ACTIVE, current_anchor: A0, next_action: "plan the
-     first move"; then continue at step 4
+     first move" — then continues at step 5
 
 @interact
   - one design question per turn; ground BEFORE asking:
