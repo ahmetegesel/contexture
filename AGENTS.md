@@ -91,6 +91,9 @@
   every dispatch:
   - brief = a file in recipes/, names the report path;
     report -> reports/; return = summary ONLY
+  - dispatches run in the background: the turn ends at the launch; the
+    conversation never blocks on a lane — act on the result when it
+    arrives, never hold the turn open waiting for it
   - drift: a lane NEVER improvises — stop, report found, standing, drifted;
     pause-ask where possible, abort gracefully where not
   - report lands NO MATTER HOW the lane ended -> a re-dispatch resumes
