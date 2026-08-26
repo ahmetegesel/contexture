@@ -4,6 +4,39 @@ A guideline for teams: how to use this workspace, and why it works.
 
 ---
 
+## TL;DR
+
+Multi-session agent work dies when the conversation dies — unless it's
+written down. This workspace is the write-down: one governance file, six
+grammars, one folder per unit of work. bash and grep are the whole engine.
+
+**Adopt in five minutes:**
+
+1. Copy `AGENTS.md`, `templates/`, and this guideline into your repo.
+2. Add `sessions/`, `rhythms/`, `AGENTS.local.md` to `.gitignore`.
+3. Write `AGENTS.local.md` with your amendments — amend, never contradict.
+4. Start the first unit: create `sessions/<your-unit>/state.md` with
+   `status: ACTIVE`.
+5. Let the first boot run — the agent locates, stamps an anchor, and
+   continues.
+
+**Then it runs itself:**
+
+- **Boot** — locate the active unit, stamp an anchor, load what the work
+  touches (details: Part I §2)
+- **Work** — events to the journal, findings to knowledge, plans edited
+  only at re-plan (§2, §3)
+- **Close** — refresh the pointer at period end; mark CLOSED when the
+  unit ends (§2)
+- **Handoff** — before context death, run the writes, then verify the boot
+  greps (§2)
+
+Five premises carry the whole design: files over conversation, govern
+output not process, mitigate don't solve, compose from the record, no
+machinery. Part I teaches use; Part II shows why.
+
+---
+
 ## The problem
 
 Agent-assisted work spans conversations. A unit of real work — a feature, a
