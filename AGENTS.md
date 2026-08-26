@@ -15,6 +15,9 @@
 @layout
   AGENTS.md  = laws + navigation (this file); blocks at column 0, bodies
                indent 2, one blank line between blocks
+  AGENTS.local.md = your amendments — user-specific rules, preferences,
+               personal rhythm defaults (private, gitignored); amend,
+               never contradict: the laws stand
   templates/ = the artifact grammars — reference to write from; never copy
   sessions/  = one folder per unit of work (private, gitignored)
   rhythms/   = workflow patterns (private, gitignored); the human invokes
@@ -72,13 +75,14 @@
 
 @boot
   1. locate: grep -rl "status: ACTIVE" sessions/
-  2. >1 active? list, ask (default: last-touched)
-  3. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
+  2. read AGENTS.local.md if present — your amendments, kept tiny
+  3. >1 active? list, ask (default: last-touched)
+  4. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
      (A<N> = next value after current_anchor)
-  4. read plan.md; run @query over journal.md + knowledge.md:
+  5. read plan.md; run @query over journal.md + knowledge.md:
      anchor map -> live range -> open items + live findings
-  5. continue from next_action, following the human-invoked rhythm
-  6. none active? ask which unit to start
+  6. continue from next_action, following the human-invoked rhythm
+  7. none active? ask which unit to start
 
 @interact
   - one design question per turn; ground BEFORE asking:
