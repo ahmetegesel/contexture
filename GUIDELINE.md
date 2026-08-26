@@ -115,8 +115,7 @@ rule feels arbitrary — it never is.
 
 ### 1. The workspace in one read
 
-The workspace has two live layers, plus a retired shelf. The line between
-them is contractual:
+The workspace has two layers. The line between them is contractual:
 
 | File | Tracked? | Role | Read when |
 |---|---|---|---|
@@ -126,7 +125,6 @@ them is contractual:
 | `AGENTS.local.md` | no — private | your amendments | at boot |
 | `sessions/` | no — private | one folder per unit of work | the active unit's files |
 | `rhythms/` | no — private | workflow patterns, invoked not imposed | when a rhythm is called |
-| `archive/` | yes — retired | retired material — never a live surface | never, for live work |
 
 The division is contractual: **the convention is shared, the working state
 is private.** `AGENTS.md`, `GUIDELINE.md`, and `templates/` are copied

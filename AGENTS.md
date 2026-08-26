@@ -23,7 +23,6 @@
   rhythms/   = workflow patterns (private, gitignored); the human invokes
                one or the agent proposes one as it sees fit — like skills,
                never recorded in state
-  archive/   = retired material
 
 @record
   a session folder is a unit of work; it outlives working periods and
