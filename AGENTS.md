@@ -74,7 +74,7 @@
     touched a repo; objective has no query — human-facing only
 
 @boot
-  1. locate: grep -rl "status: ACTIVE" sessions/
+  1. locate: grep -rl "status: ACTIVE" sessions/*/state.md
   2. read AGENTS.local.md if present — your amendments, kept tiny
   3. >1 active? list, ask (default: last-touched)
   4. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
