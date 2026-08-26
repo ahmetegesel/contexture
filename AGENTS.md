@@ -28,6 +28,8 @@
   this section carries semantics only, never a second copy of a shape.
   note: state.md keys are lowercase (status: ACTIVE); entry fields are
   UPPERCASE (STATUS: open | closed). spellings are contractual.
+  folder status = the unit's lifecycle; entry status = an item's
+  relevance class. two statuses, one word, distinct meanings.
   state.md     = the live pointer — the only file edited freely;
                  refreshed at period ends; read WHOLE at boot; kept tiny
                  (detail lives behind refs, never inside).
@@ -40,9 +42,11 @@
                  a completed plan is replaced in place; completion +
                  next-move land in the journal.
   journal.md   = append-only events + @anchor declarations; entries
-                 stamped ANCHOR: A<N>; closure by reference, never edited.
-  knowledge.md = findings written at decision/discovery moments; linked to
-                 events via REF; no REF = hypothesis, never plan on it.
+                 stamped ANCHOR: A<N>, born open (attention items) or
+                 closed (events), never edited; closure by reference.
+  knowledge.md = findings written at decision/discovery moments, born
+                 open (live claims) or closed (settled); linked to events
+                 via REF; no REF = hypothesis, never plan on it.
   recipes/     = dispatch briefs (one per subagent dispatch; names the
                  report path).
   reports/     = lane evidence reports; the dispatch's persistence is the
@@ -70,7 +74,7 @@
   3. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
      (A<N> = next value after current_anchor)
   4. read plan.md; run @query over journal.md + knowledge.md:
-     anchor map -> live range -> open items
+     anchor map -> live range -> open items + live findings
   5. continue from next_action, following the human-invoked rhythm
   6. none active? ask which unit to start
 
