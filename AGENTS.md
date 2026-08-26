@@ -104,6 +104,8 @@
     pause-ask where possible, abort gracefully where not
   - report lands NO MATTER HOW the lane ended -> a re-dispatch resumes
     from the report, never rebuilds from nothing
+  - a lane that cannot write its report returns the artifact verbatim —
+    nothing before, nothing after; the dispatcher persists byte-clean
   - a lane's "passed" is NEVER the gate; the dispatching agent re-verifies
     load-bearing claims itself
   - read the lane's report WHOLE — no exception; an unread part wears
