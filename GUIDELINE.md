@@ -7,29 +7,43 @@ A guideline for teams: how to use this workspace, and why it works.
 ## TL;DR
 
 Multi-session agent work dies when the conversation dies — unless it's
-written down. This workspace is the write-down: one governance file, six
-grammars, one folder per unit of work. bash and grep are the whole engine.
+written down. This workspace is the write-down, and it buys three things:
+continuity (a unit of work survives every conversation that touches it),
+cheap attention (the agent loads only what the work touches), and freedom
+from vendors (bash + grep are the whole engine — any harness, any agent).
+
+The workspace in one map:
+
+- `AGENTS.md` — laws + navigation, auto-delivered every turn
+- `templates/` — six grammars pinning the shape of every artifact
+- `sessions/<unit>/` — one folder per unit of work: `state.md` (the
+  pointer), `plan.md` (the intent), `journal.md` (the memory),
+  `knowledge.md` (the mind)
+- `AGENTS.local.md` — your amendments; amend, never contradict
+- `rhythms/` — workflow patterns, invoked never imposed
 
 **Adopt in five minutes:**
 
 1. Copy `AGENTS.md`, `templates/`, and this guideline into your repo.
 2. Add `sessions/`, `rhythms/`, `AGENTS.local.md` to `.gitignore`.
 3. Write `AGENTS.local.md` with your amendments — amend, never contradict.
-4. Start the first unit by telling the agent what the unit is — the
-   agent bootstraps `sessions/<unit>/` itself.
-5. Let the first boot run — the agent locates, stamps an anchor, and
-   continues.
+4. Tell the agent what the first unit is — it bootstraps
+   `sessions/<unit>/` itself. The best first unit is this convention:
+   adopting and tweaking it is the richest test it can get.
+5. Let the first boot run. The agent stamps the anchor, reads the plan,
+   loads what's live, and continues — the same ritual every period from
+   then on.
 
 **Then it runs itself:**
 
-- **Boot** — locate the active unit, stamp an anchor, load what the work
-  touches (details: Part I §2)
-- **Work** — events to the journal, findings to knowledge, plans edited
-  only at re-plan (§2, §3)
-- **Close** — refresh the pointer at period end; mark CLOSED when the
-  unit ends (§2)
-- **Handoff** — before context death, run the writes, then verify the boot
-  greps (§2)
+- **Boot** — locate the ACTIVE unit, stamp an anchor, run the query:
+  open items fully, superseded as one-liners, born-closed never (Part I §2)
+- **Work** — events append to the journal, findings land in knowledge
+  with a REF, plans edit surgically at re-plan only (§2, §3)
+- **Close** — period end refreshes the pointer; unit end marks CLOSED
+  and journals the next move (§2)
+- **Handoff** — before context death, run the writes, verify the boot
+  greps resolve (§2)
 
 Five premises carry the whole design: files over conversation, govern
 output not process, mitigate don't solve, compose from the record, no
