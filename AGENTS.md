@@ -75,15 +75,20 @@
 
 @boot
   1. locate: grep -rl "status: ACTIVE" sessions/*/state.md
+     the human's opening message decides: continuing a unit, or naming
+     new work — new work is a new unit, never a continuation
   2. read AGENTS.local.md if present — your amendments, kept tiny
-  3. >1 active? list, ask (default: last-touched)
+  3. >1 active? the opening message may name the unit; otherwise list,
+     ask (default: last-touched)
   4. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
      (A<N> = next value after current_anchor); refresh current_anchor in
      state.md to the new value
   5. read plan.md; run @query over journal.md + knowledge.md:
      anchor map -> live range -> open items + live findings
   6. continue from next_action, following the human-invoked rhythm
-  7. none active? ask which unit to start
+  7. none active? new work bootstraps a unit: sessions/<slug>/state.md
+     with status: ACTIVE, current_anchor: A0, next_action: "plan the
+     first move"; then continue at step 4
 
 @interact
   - one design question per turn; ground BEFORE asking:

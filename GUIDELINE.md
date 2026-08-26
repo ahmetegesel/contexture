@@ -15,8 +15,8 @@ grammars, one folder per unit of work. bash and grep are the whole engine.
 1. Copy `AGENTS.md`, `templates/`, and this guideline into your repo.
 2. Add `sessions/`, `rhythms/`, `AGENTS.local.md` to `.gitignore`.
 3. Write `AGENTS.local.md` with your amendments — amend, never contradict.
-4. Start the first unit: create `sessions/<your-unit>/state.md` with
-   `status: ACTIVE`.
+4. Start the first unit by telling the agent what the unit is — the
+   agent bootstraps `sessions/<unit>/` itself.
 5. Let the first boot run — the agent locates, stamps an anchor, and
    continues.
 
@@ -160,7 +160,9 @@ close, handoff.
 **Boot** — the first thing the agent does each working period, mechanically:
 
 1. **Locate.** `grep -rl "status: ACTIVE" sessions/*/state.md`
-   Exactly one file should answer.
+   The human's opening message decides: it either continues a unit or
+   names new work — new work is a new unit, never a continuation of an
+   old one.
 2. **Read amendments.** Read `AGENTS.local.md` if present. It's tiny.
 3. **More than one active?** List them, ask the human (default: the
    last-touched).
@@ -189,7 +191,10 @@ close, handoff.
 6. **Continue.** From `next_action`, following the rhythm the human invoked
    (or propose one). If `next_action` says "plan the next move", the
    planning phase starts.
-7. **None active?** Ask which unit to start.
+7. **None active?** New work bootstraps a unit: the agent creates
+   `sessions/<slug>/state.md` with `status: ACTIVE`,
+   `current_anchor: A0`, and `next_action: "plan the first move"` — then
+   continues at step 4, and the first boot stamps A1.
 
 A boot, concretely — the five greps and what they answer (the unit named
 here is any unit):
@@ -338,11 +343,12 @@ never copy them.
 2. Add `sessions/`, `rhythms/`, and `AGENTS.local.md` to `.gitignore`.
 3. Carve `AGENTS.local.md` with your amendments — preferences, personal
    rules, rhythm defaults. Amend, never contradict: the laws stand.
-4. Create `sessions/` and start the first unit. The best first unit is the
-   convention itself: adopting, tweaking, and living with it is the richest
-   possible workload for testing it. Journal every break; harvest the
-   lessons into findings; let the design end when use teaches more than
-   refinement.
+4. Create `sessions/`, then tell the agent the first unit's name and
+   goal — the agent bootstraps the folder itself. The best first unit is
+   the convention itself: adopting, tweaking, and living with it is the
+   richest possible workload for testing it. Journal every break; harvest
+   the lessons into findings; let the design end when use teaches more
+   than refinement.
 5. Let the first boot run. The agent locates the active unit, reads the
    state, stamps the anchor, and continues from `next_action`.
 
