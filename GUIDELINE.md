@@ -455,8 +455,12 @@ both offers, not laws.
 And when something does graduate to the governed layer, it earns the
 place: the failure is costly and frequent, a cheap check exists, and
 nudges have proven unreliable. Nudge is the default; machinery is the
-exception. The balance - neither rigid workflow nor full freedom - falls
-out of construction: process open, output closed.
+exception. One distinction draws the line: the careless majority is
+instrumented - born-state status, closure by reference, derived lookups -
+while the deliberate minority is not fought; mechanics earn their place
+only where instrumented nudges fail. The balance - neither rigid
+workflow nor full freedom - falls out of construction: process open,
+output closed.
 
 ### 3. The journal is the memory
 
@@ -527,36 +531,40 @@ unenforced.
 
 ### 6. The loop that verifies
 
-Nothing is believed because someone said so. Every claim earns trust
-through fresh evidence:
+The five mechanisms before this one all assume their own operator fails.
+The agent forgets, the lane overstates, the check passes vacuously. This
+workspace does not try to make that impossible - it makes it caught. The
+single principle: no claim is believed on trust; every claim earns trust
+through fresh evidence. From that principle the whole loop follows.
 
-- **Dispatch is a contract.** The brief lives on disk and names the
-  report's path, shape, and return. The report lands no matter how the
-  lane ends - a lane that stops, fails, or drifts still writes what it
-  found, and a re-dispatch resumes from the report rather than rebuilding
-  from nothing.
+- **Write it, then read it.** A dispatch begins as a brief on disk and
+  ends as a report on disk, no matter how the lane ended - a stopped or
+  drifted lane still writes what it found, so the next dispatch resumes
+  from the report, never from nothing. Part I §4 carries the mechanics;
+  here is the why: the artifact is the only thing that survives to be
+  checked.
 - **The dispatcher re-verifies.** A lane's "passed" is never the gate;
-  load-bearing claims are checked by the dispatching agent itself - trust
-  is earned with fresh evidence, never borrowed from a subordinate's word.
-- **A check that can't discriminate isn't evidence.** A check that returns
-  the same answer whether or not the thing it sought existed proves
-  nothing - its result is not a finding.
-- **Absence is the highest burden.** "Nothing calls X" is the most
-  dangerous claim, because false presence dies the moment someone opens
-  the file while false absence lives forever. An ABSENT verdict requires
-  the harder search: every flag, case-insensitive, every separator
+  load-bearing claims are checked by the dispatching agent itself. Trust
+  is earned with fresh evidence, never borrowed from a subordinate's
+  word.
+- **Evidence has grades.** A check that returns the same answer whether
+  or not the thing it sought existed proves nothing - its result is not
+  a finding. And absence is the highest burden: "nothing calls X" is the
+  most dangerous claim, because false presence dies the moment someone
+  opens the file while false absence lives forever. An ABSENT verdict
+  earns the harder search: every flag, case-insensitive, every separator
   spelling, in every place the thing would live.
-- **Instrument the careless, don't fight the insubordinate.** The careless
-  majority is instrumented - born-state status, closure by reference,
-  derived lookups. Mechanics earn their place only where instrumented
-  nudges fail; the deliberate minority is never worth the machinery.
-- **The convention audits itself.** After any build, sweep every design
-  decision against the surfaces - a missed connection means more are
-  missed. And the last word belongs to use, not design: live with it and
-  see what breaks. The design ends when use teaches more than refinement.
-  The handoff ritual closes the loop on the writer side: before context
-  death, the writes run and the boot greps are verified - boot is the
-  reader, handoff is the writer-side proof.
+- **The loop feeds itself.** After any build, sweep the design decisions
+  against the surfaces - a missed connection means more are missed. Then
+  live with it and see what breaks; the design ends when use teaches more
+  than refinement. And before a context dies, the handoff runs the writes
+  and verifies the boot greps - boot is the reader, handoff is the
+  writer-side proof.
+
+This is the same loop the teams adopt: use it, break it, journal the
+break, and let the next boot be smarter. The three failures from the
+opening - re-grounding from scratch, loading everything, harness
+machinery - are exactly what the loop catches, one period at a time.
 
 That is the whole loop: a workspace that builds from observed failure,
 writes down what survives, verifies through independent lanes, and
