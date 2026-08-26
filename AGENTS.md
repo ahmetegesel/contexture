@@ -78,7 +78,8 @@
   2. read AGENTS.local.md if present — your amendments, kept tiny
   3. >1 active? list, ask (default: last-touched)
   4. read state.md WHOLE; append @anchor A<N> — "one-liner" to journal.md
-     (A<N> = next value after current_anchor)
+     (A<N> = next value after current_anchor); refresh current_anchor in
+     state.md to the new value
   5. read plan.md; run @query over journal.md + knowledge.md:
      anchor map -> live range -> open items + live findings
   6. continue from next_action, following the human-invoked rhythm

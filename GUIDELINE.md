@@ -43,9 +43,9 @@ Five premises carry the entire design. Everything else follows.
    moment it happens.
 2. **Govern the output, not the process.** With human teams, nobody ever
    dictated how people worked — only what the work must produce: reviews,
-   CI, docs, tests. Agents follow instructions literally, which tempts us
-   to dictate process. Resist it. Govern artifacts; leave process free, and
-   offer rhythms as choices humans can invoke.
+   CI, docs, tests. Agents follow instructions literally, which tempts
+   teams to dictate process. Resist it. Govern artifacts; leave process
+   free, and offer rhythms as choices humans can invoke.
 3. **Mitigate, don't solve.** Agent failure cannot be solved; it can be
    nudged down. A nudge is the default. A mechanic earns its place only
    when the failure is costly and frequent, a cheap check exists, and
@@ -58,9 +58,9 @@ Five premises carry the entire design. Everything else follows.
    ever enters the convention.
 
 These five premises produce the two halves that follow: Part I teaches the
-workspace's use; Part II explains, mechanism by mechanism, why each rule
-exists. Read Part I to adopt. Read Part II when a rule feels arbitrary — it
-never is.
+workspace's use; Part II makes the mechanisms visible — why each rule
+exists, and what it pays for. Read Part I to adopt. Read Part II when a
+rule feels arbitrary — it never is.
 
 ---
 
@@ -68,20 +68,24 @@ never is.
 
 ### 1. The workspace in one read
 
-The workspace has two layers, and the line between them is contractual:
+The workspace has two live layers, plus a retired shelf. The line between
+them is contractual:
 
 | File | Tracked? | Role | Read when |
 |---|---|---|---|
 | `AGENTS.md` | yes — shared | laws + navigation | every turn (auto-delivered) |
+| `GUIDELINE.md` | yes — shared | this document — adoption + the why | once, to adopt |
 | `templates/` | yes — shared | the grammars, one per artifact | write-time reference |
 | `AGENTS.local.md` | no — private | your amendments | at boot |
 | `sessions/` | no — private | one folder per unit of work | the active unit's files |
 | `rhythms/` | no — private | workflow patterns, invoked not imposed | when a rhythm is called |
+| `archive/` | yes — retired | retired material — never a live surface | never, for live work |
 
 The division is contractual: **the convention is shared, the working state
-is private.** `AGENTS.md` and `templates/` are copied between teams and
-committed. Everything in `sessions/` and `rhythms/` is gitignored and stays
-with its owner. Nothing in `sessions/` is ever committed.
+is private.** `AGENTS.md`, `GUIDELINE.md`, and `templates/` are copied
+between teams and committed. Everything in `sessions/` and `rhythms/` is
+gitignored and stays with its owner. Nothing in `sessions/` is ever
+committed.
 
 **`AGENTS.md`** has exactly two jobs: govern and navigate. Its blocks are a
 tour of the convention:
@@ -90,7 +94,7 @@ tour of the convention:
 - `@layout` — where every file lives and what it's for
 - `@record` — the four session files and their semantics
 - `@query` — how the agent decides what to load
-- `@boot` — the five-step start of every working period
+- `@boot` — the boot sequence that starts every working period
 - `@interact` — how the agent treats the human
 - `@subagents` — how dispatches run
 - `@close` — period end and unit close
@@ -123,10 +127,11 @@ close, handoff.
 **Boot** — the first thing the agent does each working period, mechanically:
 
 1. **Locate.** `grep -rl "status: ACTIVE" sessions/*/state.md`
-   Exactly one file should answer. More than one: list them, ask the human
-   (default: the last-touched). None: ask which unit to start.
+   Exactly one file should answer.
 2. **Read amendments.** Read `AGENTS.local.md` if present. It's tiny.
-3. **Read state, stamp the anchor.** Read `state.md` whole — it is small by
+3. **More than one active?** List them, ask the human (default: the
+   last-touched).
+4. **Read state, stamp the anchor.** Read `state.md` whole — it is small by
    law, and detail lives behind refs, never inside it. Append to
    `journal.md`:
    ```
@@ -134,35 +139,44 @@ close, handoff.
    ```
    `<N>` is `current_anchor` + 1, and the map of these one-liners is the
    seam between working periods: it decides which ranges of the journal are
-   live. Refresh `current_anchor` in `state.md` to the new value.
-4. **Read the plan, run the query.** Read `plan.md`. Then decide what to
+   live. Then refresh `current_anchor` in `state.md` to the new value.
+5. **Read the plan, run the query.** Read `plan.md`. Then decide what to
    load from the journal and knowledge — never by reading bodies first, but
    by the map and the classes:
    - the anchor map: `grep "^@anchor" journal.md`
+   - the live ranges: `grep "ANCHOR: A<N>" journal.md`
    - open items: `grep "STATUS: open" journal.md knowledge.md`
    - superseded items: `grep -E "SUPERSEDES:|CLOSES:" journal.md knowledge.md`
      — load these as one-liners only; the reason travels in the fresh entry
    - born-closed items: never load
-   Open items outside the live ranges are dead weight — skip them.
-5. **Continue.** From `next_action`, following the rhythm the human invoked
+   - open items outside the live ranges are dead weight — skip them
+   - knowledge loads open findings **plus findings referenced by live-range
+     REFs**; a finding resolves via a journal `CLOSES:` (no successor) or
+     via a `SUPERSEDES:` (a successor finding)
+6. **Continue.** From `next_action`, following the rhythm the human invoked
    (or propose one). If `next_action` says "plan the next move", the
    planning phase starts.
+7. **None active?** Ask which unit to start.
 
-A boot, concretely — the five greps and what they answer:
+A boot, concretely — the five greps and what they answer (the unit named
+here is any unit):
 
 ```
 $ grep -rl "status: ACTIVE" sessions/*/state.md
-sessions/migration/state.md                       # the unit
+sessions/example-unit/state.md                    # the unit
 
-$ grep "^@anchor" sessions/migration/journal.md
+$ grep "^@anchor" sessions/example-unit/journal.md
 @anchor A1 — "inventory and design"               # the map: A1..A2 live
 @anchor A2 — "first migration (continues A1)"
 
-$ grep "STATUS: open" sessions/migration/journal.md sessions/migration/knowledge.md
-sessions/migration/journal.md:14:  STATUS: open   # the attention set
+$ grep "ANCHOR: A2" sessions/example-unit/journal.md
+# every entry stamped A2 — the live range, concretely
 
-$ grep -E "SUPERSEDES:|CLOSES:" sessions/migration/journal.md
-sessions/migration/journal.md:19:  CLOSES: 2026-07-30-migration-dispatches
+$ grep "STATUS: open" sessions/example-unit/journal.md sessions/example-unit/knowledge.md
+sessions/example-unit/journal.md:14:  STATUS: open   # the attention set
+
+$ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
+sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
                                                   # that open entry? closed by reference
 ```
 
@@ -181,12 +195,16 @@ sessions/migration/journal.md:19:  CLOSES: 2026-07-30-migration-dispatches
 **Close** — two distinct ends:
 
 - **Period end** (a turn ends; the unit continues): append events to the
-  journal, refresh `next_action` in `state.md`, add findings as they
-  crystallize. The folder stays ACTIVE.
+  journal, refresh `next_action` in `state.md` — one terse pointer,
+  overwritten never prepended; the WHY rebuilds from journal open items,
+  the plan's GROUNDED IN refs, and live findings, never pre-serialized
+  into state — and add findings as they crystallize. The folder stays
+  ACTIVE.
 - **Unit close** (the plan completes, or the human ends the unit): append
   the closing events *and the next-move decision* to the journal, promote
-  durable knowledge at the human's direction, mark the unit CLOSED. It
-  stays private forever.
+  durable knowledge at the human's direction, re-read the files and
+  confirm consistency, then mark the unit CLOSED. It stays private
+  forever.
 
 **Handoff** — the proof before context death. When a context is about to
 die (compaction, tool change, long break): run the period-end writes, then
@@ -207,8 +225,8 @@ never goes where:
 | `plan.md` | the current declaration | GOAL, STEPS with exit criteria, GROUNDED IN | progress — completion is a journal event |
 | `journal.md` | the memory | append-only `@entry` events, `@anchor` declarations | edits — closure is by reference, never revision |
 | `knowledge.md` | the mind | `@finding` blocks: NAME, STATUS, REF, SUMMARY | anchors — knowledge is a-temporal; the journal owns time |
-| `recipe.md` | the dispatch brief | WHAT to check, REPORT: PATH + SHAPE + RETURN | improvisation — lanes never drift from the brief |
-| `report.md` | the lane's evidence | `@orientation`, per-claim verdicts + evidence, `@risks` | commentary — the artifact is returned verbatim |
+| `recipe.md` | the dispatch brief | `@context`, MISSION, REPORT: PATH + SHAPE + RETURN | improvisation — lanes never drift from the brief |
+| `report.md` | the lane's evidence | `@orientation`, per-claim verdicts + evidence + marks, `@risks` | commentary — the artifact is returned verbatim |
 
 The semantics that make each artifact work — the rules beyond the shape:
 
@@ -226,6 +244,10 @@ The semantics that make each artifact work — the rules beyond the shape:
   grammar not followed: the recipe's REPORT names PATH (where the report
   lands), SHAPE (which grammar it follows), RETURN (what comes back to the
   dispatcher — a summary only).
+- **Evidence carries a mark.** A report's claims are marked `VERIFIED`
+  (checked), `INFERRED` (reasoned, not checked), or `ABSENT` (the thing
+  is nowhere — the highest burden). Never claim verification that was not
+  performed.
 
 **The dialect.** The grammars share a strict pseudo-language, written to
 spend tokens on substance:
@@ -247,7 +269,7 @@ never copy them.
 
 - **Compose from the record.** Every rewrite, plan, and summary grounds in
   the journal and knowledge — never in the conversation. A plan rewrite
-  reads its GROUNDED IN refs first; a claim without a REF is a hypothesis.
+  reads its GROUNDED IN refs first.
 - **One design question per turn, grounded before asking.** State what the
   decision is, what it looks like now, and why it's being asked. Discuss
   before significant decisions; the human may interrupt anytime.
@@ -255,25 +277,31 @@ never copy them.
   Complete the act in flight, then address the message. Halt only on an
   explicit stop, hold, or redirect.
 - **Dispatch is a contract.** Every subagent dispatch:
-  1. gets a brief on disk — a recipe naming WHAT to check, and the report's
+  1. gets a brief on disk — a recipe naming what to check, and the report's
      PATH, SHAPE, and RETURN. A message-brief dies at compaction; a recipe
      on disk survives.
-  2. runs against the recipe, never improvising. On drift, the lane stops
+  2. runs in the background — the turn ends at the launch; the conversation
+     never blocks on a lane.
+  3. runs against the recipe, never improvising. On drift, the lane stops
      and reports what it found, where it stands, and where it drifted —
      pause-and-ask where possible, abort gracefully where not.
-  3. lands its report no matter how the lane ends — even stopped or
+  4. lands its report no matter how the lane ends — even stopped or
      failed. A re-dispatch resumes from the report, never rebuilds from
      nothing.
-  4. returns the artifact verbatim if it cannot write the file itself:
+  5. returns the artifact verbatim if it cannot write the file itself:
      nothing before, nothing after. The dispatcher persists it byte-clean.
-  5. is never believed on its own word. The lane's "passed" is never the
+  6. is read WHOLE by the dispatcher — no exception; an unread part wears
+     the look of review.
+  7. is never believed on its own word. The lane's "passed" is never the
      gate — the dispatching agent re-verifies the load-bearing claims
      itself.
+  And every dispatch is journaled: an entry carrying the brief's path and
+  the report's path.
 
 ### 5. Adopting it
 
-1. Copy `AGENTS.md` and `templates/` into your repository. That's the
-   convention.
+1. Copy `AGENTS.md`, `templates/`, and this guideline into your repository.
+   That's the convention.
 2. Add `sessions/`, `rhythms/`, and `AGENTS.local.md` to `.gitignore`.
 3. Carve `AGENTS.local.md` with your amendments — preferences, personal
    rules, rhythm defaults. Amend, never contradict: the laws stand.
@@ -300,6 +328,8 @@ Extending it, without breaking it:
 - **Keep the law readable.** `AGENTS.md` must fit one read; a file the
   agent cannot read at boot is a file the law cannot enforce. Detail lives
   behind refs, never inside.
+- **The bar is vanishing weight.** The lightest ruleset that still prevents
+  the known breaks — always lighter, never heavier.
 
 And keep two habits: after any change to a surface, run the boot greps to
 confirm they still resolve; after any build, sweep the design decisions
@@ -332,22 +362,27 @@ moment it appears, it's written down.
 
 ### 2. Govern output, not process
 
-Human software collaboration never dictated process — nobody told engineers
-to discuss before designing, or design before coding. What was governed was
-always the output: reviews, CI, docs, tests, style. Agents follow
-instructions literally, which tempts us to dictate process — and that is
-the category error this convention refuses. Process gates written for
-agents ("HALT if a step was skipped") are the sound of process governance
-resisting reality; what worked in human teams — review gates, artifact
-deltas — is all output-level.
+Human software collaboration never dictates process — nobody tells
+engineers to discuss before designing, or design before coding. What is
+governed is always the output: reviews, CI, docs, tests, style. Agents
+follow instructions literally, which tempts teams to dictate process — and
+that is the category error this convention refuses. Process gates written
+for agents ("HALT if a step was skipped") are the sound of process
+governance resisting reality; what works in human teams — review gates,
+artifact deltas — is all output-level.
 
 The boundary rule that makes it operational: *a step belongs to the
 governed layer iff it produces a checkable artifact.* Everything else is
 rhythm — free, human-chosen, offered in a folder, invoked like a skill,
 never imposed, never recorded in state. Interaction rhythms (how to handle
 a queued message) and work rhythms (how to progress through a task) are
-both offers, not laws. The balance — neither rigid workflow nor full
-freedom — falls out of construction: process open, output closed.
+both offers, not laws.
+
+And when something does graduate to the governed layer, it earns the
+place: the failure is costly and frequent, a cheap check exists, and
+nudges have proven unreliable. Nudge is the default; machinery is the
+exception. The balance — neither rigid workflow nor full freedom — falls
+out of construction: process open, output closed.
 
 ### 3. The journal is the memory
 
@@ -380,22 +415,32 @@ relevant line it doesn't. The workspace spends attention deliberately:
   Open items outside the live ranges are dead weight and are skipped. A
   file that outgrows one read has outgrown the law it serves: decompose it
   — index at boot, bodies on relevance.
+- **The layout itself is the context mechanism.** One folder per unit
+  bounds the boot load structurally: the agent reads the active unit's
+  files, and nothing else. The layout does the bounding — no rule has to
+  spend a token on it.
 - **Derive, don't maintain.** Any artifact kept in sync with another goes
   stale silently. The active session is located by grep, not maintained in
-  a pointer. Every field must have a query that consumes it — a vocabulary
-  grows only when a query earns it.
+  a pointer.
 - **Relevance over taxonomy.** Findings are classified at creation (open
   or closed), never by category. Ref pointers relocate bloat rather than
-  kill it — so refs point to bodies that stay small.
+  kill it — the discipline is the ref itself: the live surface carries one
+  terse line, and detail lives behind the ref, never inside it.
 
 ### 5. The machine-free method
 
 The convention runs on bash, grep, and read — tools every harness
 provides. Prose is the query language; the shell is the retrieval tool.
-Scripts are traps wearing convenience. Only one surface gets guaranteed
-per-turn delivery: `AGENTS.md` — a convention every harness honors, not a
-feature. Everything else is deliberately nudge-grade, and the design knows
-it: the boot reads it, and the handoff verifies it.
+Scripts are traps wearing convenience. Harness features — hooks, plugins,
+skills — bring convenience, not capability: the power is the model's
+judgment, and what happens after a skill loads is the model's decision.
+The prose never names tools the agent doesn't hold — naming a missing tool
+manufactures the affordance it denies.
+
+Only one surface gets guaranteed per-turn delivery: `AGENTS.md` — a
+convention every harness honors, not a feature. Everything else is
+deliberately nudge-grade, and the design knows it: the boot reads it, and
+the handoff verifies it.
 
 The grammars earn their density. Typed blocks, reserved symbols, and
 indentation as syntax carry the same meaning in fewer tokens, so context
@@ -403,8 +448,8 @@ windows are spent on substance. Newlines and indents are load-bearing —
 blocks start at column 0 because line-anchored greps (`^@anchor`,
 `^@entry`) are the retrieval mechanism; an indented block start is a
 silent miss. Contract strings — `status:`, `STATUS:`, `@anchor`, `REF` —
-have exactly one home each and one spelling, because a grep that can't be
-relied on is a law that can't be enforced.
+have exactly one home each and one spelling, because a miss is a law
+unenforced.
 
 ### 6. The loop that verifies
 
@@ -416,8 +461,9 @@ through fresh evidence:
   lane ends — a lane that stops, fails, or drifts still writes what it
   found, and a re-dispatch resumes from the report rather than rebuilding
   from nothing.
-- **The dispatcher re-verifies.** A lane's "passed" is never the gate.
-  Load-bearing claims are checked by the dispatching agent itself.
+- **The dispatcher re-verifies.** A lane's "passed" is never the gate;
+  load-bearing claims are checked by the dispatching agent itself — trust
+  is earned with fresh evidence, never borrowed from a subordinate's word.
 - **A check that can't discriminate isn't evidence.** A check that returns
   the same answer whether or not the thing it sought existed proves
   nothing — its result is not a finding.
@@ -426,6 +472,10 @@ through fresh evidence:
   the file while false absence lives forever. An ABSENT verdict requires
   the harder search: every flag, case-insensitive, every separator
   spelling, in every place the thing would live.
+- **Instrument the careless, don't fight the insubordinate.** The careless
+  majority is instrumented — born-state status, closure by reference,
+  derived lookups. Mechanics earn their place only where instrumented
+  nudges fail; the deliberate minority is never worth the machinery.
 - **The convention audits itself.** After any build, sweep every design
   decision against the surfaces — a missed connection means more are
   missed. And the last word belongs to use, not design: live with it and
@@ -434,8 +484,8 @@ through fresh evidence:
   death, the writes run and the boot greps are verified — boot is the
   reader, handoff is the writer-side proof.
 
-This is the whole loop: a workspace built from observed failure, written
-down in files that survive, verified by independent lanes, and corrected
-until no drift remains. That's what it asks of the teams that adopt it
-too — use it, break it, journal the break, and let the next boot be
+That is the whole loop: a workspace that builds from observed failure,
+writes down what survives, verifies through independent lanes, and
+corrects until no drift remains. It asks the same of the teams that adopt
+it — use it, break it, journal the break, and let the next boot be
 smarter.

@@ -2,3 +2,5 @@ sessions/
 rhythms/
 AGENTS.local.md
 context.md
+archive/__pycache__/
+.DS_Store
