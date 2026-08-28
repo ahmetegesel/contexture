@@ -196,16 +196,18 @@ mechanically:
    seam between working periods: it decides which ranges of the journal are
    live. Then refresh `current_anchor` in `state.md` to the new value.
 6. **Read the plan, run the query.** Read `plan.md`. Then decide what to
-   load from the journal and knowledge, never by reading bodies first, but
-   by the map and the classes:
-   - the anchor map: `grep "^@anchor" journal.md`
-   - the live ranges: `grep "ANCHOR: A<N>" journal.md`
-   - open items: `grep "STATUS: open" journal.md knowledge.md`
-   - superseded items: `grep -E "SUPERSEDES:|CLOSES:" journal.md knowledge.md`;
-     load these as one-liners only, because the reason travels in the fresh
-     entry
-   - born-closed items: never load
-   - open items outside the live ranges are dead weight; skip them
+   load from the journal and knowledge. Four greps, in this order, and
+   one subtraction at the end:
+   - the anchor map: `grep "^@anchor" journal.md` (labels each period)
+   - the live ranges: `grep "ANCHOR: A<N>" journal.md` (labels every
+     entry by its period)
+   - the closure stamps: `grep -E "SUPERSEDES:|CLOSES:" journal.md
+     knowledge.md` (what they target)
+   - the open items: `grep "STATUS: open" journal.md knowledge.md`
+   - then subtract: an open item targeted by a closure stamp is
+     superseded, not open; it loads as a one-liner (its WHAT line), and
+     the reason travels in the fresh entry. Open items outside the live
+     ranges are dead weight; skip them. Born-closed items never load.
    - knowledge loads open findings **plus findings referenced by live-range
      REFs**; a finding resolves via a journal `CLOSES:` (no successor) or
      via a `SUPERSEDES:` (a successor finding)
@@ -236,20 +238,28 @@ any unit):
    @anchor A2 ("second period on the example unit")
    refresh current_anchor to A2
 
-6. the query:
+6. the query: four greps in order, then the subtraction.
+
+   map first (labels each period):
    $ grep "^@anchor" sessions/example-unit/journal.md
    @anchor A1 ("inventory and design")              # the map: A1..A2 live
    @anchor A2 ("second period on the example unit")
 
+   cluster (labels every entry by its period):
    $ grep "ANCHOR: A2" sessions/example-unit/journal.md
    # every entry stamped A2: the live range, concretely
 
-   $ grep "STATUS: open" sessions/example-unit/journal.md sessions/example-unit/knowledge.md
-   sessions/example-unit/journal.md:14:  STATUS: open   # the attention set
-
+   closure stamps (what they target):
    $ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
    sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
-                                                # that open entry? closed by reference
+
+   open items:
+   $ grep "STATUS: open" sessions/example-unit/journal.md sessions/example-unit/knowledge.md
+   sessions/example-unit/journal.md:14:  STATUS: open
+
+   the subtraction: line 19's CLOSES targets the entry that line 14
+   shows open. That entry loads as a one-liner, not fully; the reason
+   travels in the fresh entry. The attention set is empty today.
 
 7. continue from next_action, following the human-invoked rhythm
 ```

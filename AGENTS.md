@@ -27,9 +27,9 @@
   surfaces: journal.md + knowledge.md (both carry the status system).
   journal:   map = grep "^@anchor" (a one-liner per working period; "continues A<N-1>" = joint, "(done, disjoint)" = dead); the map decides which ranges are live; dead anchors' items never load. cluster = grep "ANCHOR: A<N>" (the live ranges).
   knowledge: load open findings + findings referenced by live-range REFs; a finding resolves via journal CLOSES (no successor) or via SUPERSEDES (a successor finding).
-  three classes decide loading within the loaded set:
-    open        -> load fully      (the attention set)
-    superseded  -> one-liner only  (grep -E "SUPERSEDES:|CLOSES:" targets; one-liner = WHAT line / first SUMMARY line; the reason travels in the fresh entry)
+  three classes decide loading within the loaded set; the class is derived by subtraction, never by trusting one grep:
+    open minus closure targets -> load fully (the attention set); an item with STATUS: open that a CLOSES:/SUPERSEDES: stamp targets is superseded, not open
+    closure targets -> one-liner only (one-liner = WHAT line / first SUMMARY line; the reason travels in the fresh entry)
     born-closed -> never load
   cross-repo: grep -l "repos:.*<name>" sessions/*/state.md: which units touched a repo; objective has no query (human-facing only)
 
@@ -39,7 +39,7 @@
   3. verify the move against the folder: grep -l "status: ACTIVE" sessions/<unit>/state.md; agreement proceeds; disagreement (unit absent or not ACTIVE, new work colliding with a live unit) asks the human before anything else loads
   4. >1 ACTIVE candidate for the move? the message may name one; otherwise grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
   5. read state.md WHOLE; append @anchor A<N> ("one-liner") to journal.md (A<N> = next value after current_anchor); refresh current_anchor in state.md to the new value
-  6. read plan.md; run @query over journal.md + knowledge.md: anchor map -> live range -> open items + live findings
+  6. read plan.md; run @query over journal.md + knowledge.md in this order: anchor map, cluster, closure stamps, open items; then derive the classes by subtraction: open items minus closure targets load fully, closure targets load as one-liners, born-closed never
   7. continue from next_action, following the human-invoked rhythm
   8. new work: the agent bootstraps the unit: sessions/<slug>/state.md with status: ACTIVE, current_anchor: A0, next_action: "plan the first move"; then continues at step 5
 
