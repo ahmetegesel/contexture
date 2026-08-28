@@ -24,8 +24,7 @@ The workspace in one map:
 
 **Adopt in five minutes:**
 
-1. Copy `AGENTS.md` and `templates/` into your repo. This guideline is
-   for the humans; read it, don't copy it.
+1. Copy `AGENTS.md` and `templates/` into your repo.
 2. Add `sessions/`, `rhythms/`, `AGENTS.local.md` to `.gitignore`.
 3. Write `AGENTS.local.md` with your amendments; amend, never contradict.
 4. Tell the agent what the first unit is; it bootstraps
@@ -137,7 +136,7 @@ committed.
 **`AGENTS.md`** has exactly two jobs: govern and navigate. Its blocks are a
 tour of the convention:
 
-- `@laws`: the six laws that bind everything
+- `@laws`: the five laws that bind everything
 - `@layout`: where every file lives and what it's for
 - `@record`: the four session files and their semantics
 - `@query`: how the agent decides what to load
