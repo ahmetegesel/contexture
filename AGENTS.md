@@ -2,7 +2,7 @@
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, or break; conversation doesn't.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
   3. process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
-  4. mitigate, don't solve: nudge is the default; a mechanic earns its place only if costly/frequent + cheap check + nudge-unreliable.
+  4. mitigate, don't solve: fix the break with the smallest change that holds; a new rule or script earns its place only if the failure is costly or frequent, the check is cheap, and simpler fixes have failed.
   5. compose from the record, never from conversation: rewrites grounded in journal/knowledge, the only sources that survive compaction.
   6. verify before close: no done without evidence; re-read the files, confirm consistency at close.
 
