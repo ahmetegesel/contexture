@@ -89,11 +89,13 @@ Five premises carry the entire design. Everything else follows.
    conversation is a scratchpad; the files are the memory. Every rule,
    every finding, every piece of state that matters is written down at the
    moment it happens.
-2. **Govern the output, not the process.** With human teams, nobody ever
-   dictated how people worked; only what the work must produce: reviews,
-   CI, docs, tests. Agents follow instructions literally, which tempts
-   teams to dictate process. Resist it. Govern artifacts; leave process
-   free, and offer rhythms as choices humans can invoke.
+2. **Govern the output, not the process.** Engineers do discuss before
+   designing and design before coding; they follow the process because it
+   works, not because a rule mandates it. What human teams govern is the
+   output: reviews, CI, docs, tests. Agents follow instructions literally,
+   which tempts teams to govern the process itself. Resist it. Govern
+   artifacts; leave process free, and offer rhythms as choices humans can
+   invoke.
 3. **Mitigate, don't solve.** Agent failure cannot be solved; it can be
    nudged down. A nudge is the default. A mechanic earns its place only
    when the failure is costly and frequent, a cheap check exists, and
@@ -154,11 +156,11 @@ stamped A0 or A3 don't.
 
 ### 2. Govern output, not process
 
-Human software collaboration never dictates process; nobody tells
-engineers to discuss before designing, or design before coding. What is
-governed is always the output: reviews, CI, docs, tests, style. Agents
-follow instructions literally, which tempts teams to dictate process,
-and that is the category error this convention refuses. Process gates
+Engineers do discuss before designing and design before coding; they
+follow the process because it works, not because a rule mandates it.
+What is governed is always the output: reviews, CI, docs, tests, style.
+Agents follow instructions literally, which tempts teams to govern the
+process itself, and that is the category error this convention refuses. Process gates
 written for agents ("HALT if a step was skipped") are the sound of
 process governance resisting reality; what works in human teams (review
 gates, artifact deltas) is all output-level.
