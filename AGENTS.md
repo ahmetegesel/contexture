@@ -6,7 +6,7 @@
   5. verify before close: no done without evidence; re-read the files, confirm consistency at close.
 
 @layout
-  AGENTS.md  = laws + navigation (this file); blocks at column 0, bodies indent 2, one blank line between blocks
+  AGENTS.md  = laws + navigation (this file)
   AGENTS.local.md = your amendments: user-specific rules, preferences, personal rhythm defaults (private, gitignored); amend, never contradict: the laws stand
   templates/ = the artifact grammars: reference to write from, never copy
   sessions/  = one folder per unit of work (private, gitignored)
