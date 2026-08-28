@@ -89,13 +89,17 @@ Five premises carry the entire design. Everything else follows.
    conversation is a scratchpad; the files are the memory. Every rule,
    every finding, every piece of state that matters is written down at the
    moment it happens.
-2. **Govern the output, not the process.** Engineers do discuss before
-   designing and design before coding; they follow the process because it
-   works, not because a rule mandates it. What human teams govern is the
-   output: reviews, CI, docs, tests. Agents follow instructions literally,
-   which tempts teams to govern the process itself. Resist it. Govern
-   artifacts; leave process free, and offer rhythms as choices humans can
-   invoke.
+2. **Govern the output, not the process.** Human teams run on shared
+   structure: SDLC, Agile, conventions, standards. It is legitimate;
+   it solves human collaboration flaws, coordination and communication.
+   Agent flaws are entirely different: memory dies, attention is finite,
+   rules are followed literally, cross-checks get skipped. Human-shaped
+   routines solve none of those. Forcing them on an agent throttles it,
+   and putting agent governance in shared files makes every team
+   member's agent run identically, dictating how each person uses their
+   own agent. The separation: a thin shared layer that guarantees the
+   quality of the output, and a personal layer where process stays
+   free.
 3. **Mitigate, don't solve.** Agent failure cannot be solved; it can be
    nudged down. A nudge is the default. A mechanic earns its place only
    when the failure is costly and frequent, a cheap check exists, and
