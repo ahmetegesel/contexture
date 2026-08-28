@@ -121,15 +121,15 @@ The workspace has two layers. The line between them is contractual:
 | File | Tracked? | Role | Read when |
 |---|---|---|---|
 | `AGENTS.md` | yes - shared | laws + navigation | every turn (auto-delivered) |
-| `GUIDELINE.md` | yes - shared | this document - adoption + the why | once, to adopt |
 | `templates/` | yes - shared | the grammars, one per artifact | write-time reference |
 | `AGENTS.local.md` | no - private | your amendments | at boot |
 | `sessions/` | no - private | one folder per unit of work | the active unit's files |
 | `rhythms/` | no - private | workflow patterns, invoked not imposed | when a rhythm is called |
 
 The division is contractual: **the convention is shared, the working state
-is private.** `AGENTS.md`, `GUIDELINE.md`, and `templates/` are copied
-between teams and committed. Everything in `sessions/` and `rhythms/` is
+is private.** `AGENTS.md` and `templates/` are copied between teams and
+committed. This guideline is the human's companion - read it once, keep
+it out of the repo. Everything in `sessions/` and `rhythms/` is
 gitignored and stays with its owner. Nothing in `sessions/` is ever
 committed.
 
@@ -434,6 +434,13 @@ maintained field is a drift point, while a stamp at creation is free.
 Nothing valuable is ever allowed to exist only in the conversation; the
 moment it appears, it's written down.
 
+*In practice:* a conversation compacts mid-decision. The unit's journal
+still holds yesterday's entries and their anchors; the knowledge file
+still holds the finding with its REF. The next boot reads the map and
+reconstructs the position - the decision survives because it never lived
+in the chat. And "live" is concrete: entries stamped A1-A2 load; entries
+stamped A0 or A3 don't.
+
 ### 2. Govern output, not process
 
 Human software collaboration never dictates process - nobody tells
@@ -462,6 +469,13 @@ only where instrumented nudges fail. The balance - neither rigid
 workflow nor full freedom - falls out of construction: process open,
 output closed.
 
+*In practice:* a rhythm says "discuss, then decide, then capture." A
+contract says "the recipe names the report's PATH, SHAPE, and RETURN."
+The first is an offer - a team takes it or leaves it. The second is
+enforced - a report with no named shape comes back. That difference is
+the whole boundary, and it is why the workspace feels light while
+staying safe.
+
 ### 3. The journal is the memory
 
 The journal is where reality lives: append-only events, stamped with
@@ -480,6 +494,14 @@ earns trust only through fresh evidence - no REF means hypothesis, and
 nobody plans on a hypothesis. Compose from the record, never from the
 conversation - that law is enforceable precisely because the record is
 complete.
+
+*In practice:* step 3 of the plan finishes. The plan file does not
+change; the journal gains one line, "slug/step-3: DONE." A week later
+the plan still reads exactly as composed - intent - while the journal
+holds what actually happened. And a finding about agents reads "agents
+skip cross-checks" - a hypothesis, good for questions, never for plans;
+the same finding with a REF pointing at the correction that produced it
+is a fact.
 
 ### 4. Attention is the budget
 
@@ -505,6 +527,12 @@ relevant line it doesn't. The workspace spends attention deliberately:
   kill it - the discipline is the ref itself: the live surface carries one
   terse line, and detail lives behind the ref, never inside it.
 
+*In practice:* a boot for a unit with sixty journal entries reads one
+small state.md, the anchor map, and the class greps. Superseded entries
+surface as one-liners, born-closed entries stay unread, open ones load
+fully. Thousands of lines of reports sit in the folder; the boot touches
+none of them - the attention went to the work, not the archive.
+
 ### 5. The machine-free method
 
 The convention runs on bash, grep, and read - tools every harness
@@ -528,6 +556,11 @@ blocks start at column 0 because line-anchored greps (`^@anchor`,
 silent miss. Contract strings - `status:`, `STATUS:`, `@anchor`, `REF` -
 have exactly one home each and one spelling, because a miss is a law
 unenforced.
+
+*In practice:* the same five greps answer on any harness, any operating
+system, any agent. Nothing calls a hook, a plugin, or a custom command.
+A team moves from one harness to another by re-pointing the tool, and
+the convention does not notice.
 
 ### 6. The loop that verifies
 
@@ -565,6 +598,12 @@ This is the same loop the teams adopt: use it, break it, journal the
 break, and let the next boot be smarter. The three failures from the
 opening - re-grounding from scratch, loading everything, harness
 machinery - are exactly what the loop catches, one period at a time.
+
+*In practice:* a lane reports "nothing calls this field." The dispatcher
+re-runs the search case-insensitively, with every separator spelling,
+and finds "status : ACTIVE" in one report. The ABSENT verdict dies and
+the false absence is caught. The lane's word was never the gate - the
+fresh grep was.
 
 That is the whole loop: a workspace that builds from observed failure,
 writes down what survives, verifies through independent lanes, and
