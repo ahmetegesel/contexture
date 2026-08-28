@@ -156,14 +156,20 @@ stamped A0 or A3 don't.
 
 ### 2. Govern output, not process
 
-Engineers do discuss before designing and design before coding; they
-follow the process because it works, not because a rule mandates it.
-What is governed is always the output: reviews, CI, docs, tests, style.
-Agents follow instructions literally, which tempts teams to govern the
-process itself, and that is the category error this convention refuses. Process gates
-written for agents ("HALT if a step was skipped") are the sound of
-process governance resisting reality; what works in human teams (review
-gates, artifact deltas) is all output-level.
+Human teams run on shared structure: SDLC, Agile, conventions,
+standards. The structure is real and legitimate; it solves the flaws
+humans actually have, coordination and communication at scale. Agent
+flaws are entirely different: memory dies, attention is a budget, rules
+are followed literally, cross-checks get skipped. Human-shaped routines
+solve none of these, and two traps follow. Importing human-shaped
+process into agent governance throttles the agent: it walks routines
+that solve problems it does not have, while its real flaws stay
+ungoverned; a gate that says "HALT if a step was skipped" is the sound
+of that trap. And putting agent governance in shared files makes every
+team member's agent run identically, which quietly dictates how each
+person interacts with their own agent. The workspace answers with a
+separation: one thin shared layer that guarantees the quality of the
+output, and a personal layer where process stays free.
 
 The boundary rule that makes it operational: *a step belongs to the
 governed layer iff it produces a checkable artifact.* Everything else is
