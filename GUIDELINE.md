@@ -501,7 +501,8 @@ Extending it, without breaking it:
   is a workflow pattern that replaces what skills and other machinery
   used to do: when invoked, it tells the agent the shape of a piece of
   work. It names the order and the outcomes, and it references the
-  workspace's artifacts by name; it never re-specifies their grammars.
+  workspace's artifacts by name; it never re-specifies their grammars
+  or prescribes their content.
   The recipe's fields, the journal's entries, the status card's keys:
   those belong to their owners. And it is written in the same dialect
   as the artifacts: typed blocks, column 0, indent 2, contract words
