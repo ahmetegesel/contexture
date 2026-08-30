@@ -505,8 +505,9 @@ Extending it, without breaking it:
   The recipe's fields, the journal's entries, the status card's keys:
   those belong to their owners. And it is written in the same dialect
   as the artifacts: typed blocks, column 0, indent 2, contract words
-  spelled once. Token-efficient, not short: a rhythm may carry as much
-  as a skill would, but structured and denser than prose. That is the
+  spelled once. One line per step, the form `N. GATE: outcome`, no
+  per-step sub-blocks. Token-efficient, not short: a rhythm may carry as
+  much as a skill would, but structured and denser than prose. That is the
   whole point of the dialect: structure is what LLMs parse best, typed
   blocks carry meaning per token, and prose is where misreadings live.
   An example:
