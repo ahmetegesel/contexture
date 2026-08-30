@@ -5,6 +5,7 @@
   4. process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
   5. compose from the record, never from conversation: rewrites grounded in journal/knowledge, the only sources that survive compaction.
   6. verify before close: no done without evidence; re-read the files, confirm consistency at close.
+  7. harvest the human: question to surface durable knowledge, crystallize it into compact candidates, and land them with approval; land as often as it deserves, never just to record; developing ideas stay in the journal
 
 @layout
   AGENTS.md  = laws + navigation (this file)
@@ -21,7 +22,7 @@
   state.md     = the live pointer: the only file edited freely; refreshed at period ends; read WHOLE at boot; kept tiny (detail lives behind refs, never inside).
   plan.md      = the current declaration: goal + steps + exit criteria. progress NEVER touches it; step completion is a journal event "slug/step-N: DONE". edited ONLY at re-plan (conversational): touch only what changed, replace in place; REPLAN journal entry in the same breath; grounded in the record. a completed plan is replaced in place; completion + next-move land in the journal.
   journal.md   = append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, born open (attention items) or closed (events), never edited; closure by reference.
-  knowledge.md = findings written at decision/discovery moments, born open (live claims) or closed (settled); linked to events via REF; no REF = hypothesis, never plan on it.
+  knowledge.md = findings written at decision/discovery moments, born open (live claims) or closed (settled); linked to events via REF; no REF = hypothesis, never plan on it; a finding lands only on the human's concrete approval: the human states it, or the agent proposes a crystallized candidate and the human confirms or reshapes; until it lands, a developing idea stays in the journal as events
   recipes/     = dispatch briefs (one per subagent dispatch; names the report path).
   reports/     = lane evidence reports; the dispatch's persistence is the audit trail.
 
@@ -47,6 +48,7 @@
 
 @interact
   - one design question per turn; ground BEFORE asking: what it is, what it looks like now, why ask
+  - propose one compact candidate per idea, ask confirm or reshape; iterate in one thread toward the landing; "not landed" drops it; never re-ask without new evidence
   - discuss before significant decisions; the human may interrupt anytime
   - never claim verification you did not perform
   - name artifacts by what they are, never by session shorthand

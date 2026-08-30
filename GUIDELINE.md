@@ -163,7 +163,7 @@ produces something checkable.*
 **`AGENTS.md`** has exactly two jobs: govern and navigate. Its blocks are
 a tour of the convention:
 
-- `@laws`: the six laws that bind everything
+- `@laws`: the seven laws that bind everything
 - `@layout`: where every file lives and what it's for
 - `@record`: the four session files and their semantics
 - `@query`: how the agent decides what to load
@@ -248,8 +248,11 @@ finding is a NAME, a STATUS, a SUMMARY, and a REF: a link to where it
 came from. A claim without a REF is a hypothesis; useful for questions,
 never a base for plans. Findings are born open or closed and never
 edited, because the state of a fact at its discovery moment is itself a
-fact. Knowledge carries no timeline; the journal owns time, and the
-REFs are the seam between the two.
+fact. A finding lands only on the human's concrete approval: the human
+states it, or the agent proposes a compact candidate and the human
+confirms or reshapes. Until it lands, a developing idea stays in the
+journal as events. Knowledge carries no timeline; the journal owns time,
+and the REFs are the seam between the two.
 
 *In practice:* a finding that reads "agents skip cross-checks" is a
 hypothesis. The same finding with a REF pointing at the correction that
@@ -451,6 +454,9 @@ context death is exactly what the ritual is for.
 - **One design question per turn, grounded before asking.** State what the
   decision is, what it looks like now, and why it's being asked. Discuss
   before significant decisions; the human may interrupt anytime.
+- **Knowledge lands with approval.** When an idea looks durable, propose
+  one compact candidate and ask confirm or reshape; "not landed" drops
+  it; never re-ask without new evidence.
 - **The human may interrupt; a queued message doesn't kill the act.**
   Complete the act in flight, then address the message. Halt only on an
   explicit stop, hold, or redirect.
