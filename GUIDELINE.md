@@ -287,6 +287,8 @@ indent two, `::` opens an indented block value, `|` means alternation
 only, `[ ]` wraps optional parts, `->` means flow, `#` starts a
 comment. `status:` is lowercase on the status card; `STATUS:` is
 uppercase on entries. Spellings are contractual, not stylistic.
+Rhythms are written in this same dialect; "Adopting it" explains the
+reason.
 
 The spellings matter because they are the query language. The workspace
 runs on plain search and plain reading, tools every harness provides,
@@ -495,12 +497,19 @@ context death is exactly what the ritual is for.
 
 Extending it, without breaking it:
 
-- **Rhythms name order and outcomes, nothing else.** A rhythm tells the
-  agent the shape of a piece of work: what to do, in what order, and
-  where each outcome lands. It references the workspace's artifacts by
-  name; it never re-specifies their grammars. The recipe's fields, the
-  journal's entries, the status card's keys: those belong to their
-  owners. A rhythm is short and free-form. An example:
+- **Rhythms: the skill replacement, in the artifact dialect.** A rhythm
+  is a workflow pattern that replaces what skills and other machinery
+  used to do: when invoked, it tells the agent the shape of a piece of
+  work. It names the order and the outcomes, and it references the
+  workspace's artifacts by name; it never re-specifies their grammars.
+  The recipe's fields, the journal's entries, the status card's keys:
+  those belong to their owners. And it is written in the same dialect
+  as the artifacts: typed blocks, column 0, indent 2, contract words
+  spelled once. Token-efficient, not short: a rhythm may carry as much
+  as a skill would, but structured and denser than prose. That is the
+  whole point of the dialect: structure is what LLMs parse best, typed
+  blocks carry meaning per token, and prose is where misreadings live.
+  An example:
 
   ```
   @rhythm ship-pack
