@@ -10,7 +10,7 @@
   AGENTS.local.md = your amendments: user-specific rules, preferences, personal rhythm defaults (private, gitignored); amend, never contradict: the laws stand
   templates/ = the artifact grammars: reference to write from, never copy
   sessions/  = one folder per unit of work (private, gitignored)
-  rhythms/   = workflow patterns (private, gitignored); the human invokes one or the agent proposes one as it sees fit, like skills; never recorded in state
+  rhythms/   = workflow patterns (private, gitignored); the human invokes one or the agent proposes one as it sees fit, like skills; never recorded in state; a rhythm names the order and the outcomes and references the workspace's artifacts by name, never re-specifying their grammars
 
 @record
   a session folder is a unit of work; it outlives working periods and dies with the unit. shapes live in templates/; match them exactly; this section carries semantics only, never a second copy of a shape.

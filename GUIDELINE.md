@@ -495,10 +495,28 @@ context death is exactly what the ritual is for.
 
 Extending it, without breaking it:
 
-- **Rhythms are shared with teams separately.** Predefined workflow
-  patterns ship as their own folder to teams that want them, never inside
-  the workspace itself. The workspace offers the mechanism; teams choose
-  their own process.
+- **Rhythms name order and outcomes, nothing else.** A rhythm tells the
+  agent the shape of a piece of work: what to do, in what order, and
+  where each outcome lands. It references the workspace's artifacts by
+  name; it never re-specifies their grammars. The recipe's fields, the
+  journal's entries, the status card's keys: those belong to their
+  owners. A rhythm is short and free-form. An example:
+
+  ```
+  @rhythm ship-pack
+    1. CODE: the change lands with its own tests
+    2. GUARDS: suite + lint + typecheck, always, mechanical, before any review
+    3. REVIEW: dispatch a review recipe, fresh context, independent;
+       its findings are the hardening checklist
+    4. HARDEN: dispatch a hardening recipe driven by those findings;
+       the docs delta rides inside it
+    5. MERGE: one merge after all phases, gate green, human sign-off first
+    ground: the standards live in knowledge.md, banked before the first pack
+  ```
+
+  Predefined workflow patterns ship to teams separately, as their own
+  folder, never inside the workspace itself. The workspace offers the
+  mechanism; teams choose their own process.
 - **Product-specific laws stay out.** The governance file carries generic
   workflow laws only; a product's own rules belong in that product's own
   governance. Mixing them confuses both audiences.
