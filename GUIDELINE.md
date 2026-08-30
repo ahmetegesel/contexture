@@ -260,9 +260,7 @@ custom agentic workflows, which bring determinism to parts of a
 pipeline; that is a different topic, outside this workspace's scope.)
 Because the harnesses all share the same shape, the workspace builds on
 that common denominator and nothing else: its thin shared layers exist
-to mitigate what the models and the harnesses cause together. The prose
-never names tools the agent doesn't hold; naming a missing tool
-manufactures the affordance it denies.
+to mitigate what the models and the harnesses cause together.
 
 Only one file gets guaranteed delivery every turn: the governance file,
 a convention every harness honors. Everything else is deliberately a
