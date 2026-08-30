@@ -57,7 +57,11 @@ machinery. Part I explains the approach; Part II shows it in execution.
 Agent-assisted work spans conversations. A unit of real work, like a
 feature, a migration, or a decision, runs through many conversations,
 compactions, tool changes, and breaks. The conversation dies at each
-seam, and everything not in a file dies with it.
+seam, and everything not in a file dies with it. The death is built in:
+when a conversation outgrows the context window, it gets compacted, and
+compaction is a summarization task, one of the hardest an LLM faces.
+The longer the context grows, the lossier the summary becomes, and what
+the summary drops is gone for good.
 
 Teams compensate badly, in three recurring ways:
 
@@ -100,10 +104,9 @@ Five premises carry the entire design. Everything else follows.
    own agent. The separation: a thin shared layer that guarantees the
    quality of the output, and a personal layer where process stays
    free.
-3. **Mitigate, don't solve.** Agent failure cannot be solved; it can be
-   nudged down. A nudge is the default. A mechanic earns its place only
-   when the failure is costly and frequent, a cheap check exists, and
-   nudges prove unreliable.
+3. **Mitigate, don't solve.** Agent failures are permanent; they cannot
+   be eliminated, only caught and corrected. Expect them, and make every
+   correction as light as it can be.
 4. **Compose from the record.** The agent never reconstructs from memory of
    the conversation. Rewrites and plans ground in the journal and the
    knowledge base, the only sources that survive compaction.
@@ -117,46 +120,48 @@ like in execution. Read Part I to understand, Part II to operate.
 
 ---
 
----
-
----
-
 ## Part I: The approach
 
-Six mechanisms answer the three failure modes from the problem. Files
-that survive answer re-grounding; a deliberate attention budget answers
-loading everything; machine-free plain tools answer harness machinery;
-and around those three, output governance, a journal for memory, and a
-verification loop keep the whole thing honest. Each section below
-states its mechanism in simple terms; Part II shows how each one looks
-when it runs.
+Before the how, the why, in plain words. The workspace rests on a
+handful of plain files and a few habits. Here are the players, so the
+rest of this part can use their names:
+
+- the unit: one folder per piece of work; it outlives every conversation
+  that works on it
+- the journal: the unit's running record; it only ever gains lines
+- the notebook: the unit's findings, each carrying a link to its evidence
+- the status card (state.md): a tiny file saying where the unit stands
+- the intent (plan.md): what the unit aims to do, written once, edited
+  rarely
+- the stamps: one line per working period, marking time in the journal
+- the boot: the small routine that starts each working period
+
+Part II shows each of these running; this part explains why each exists.
 
 ### 1. Files survive, conversation doesn't
-Every mechanism in the workspace exists because of this single fact: the
-conversation is the least durable thing in the system. The session folder
-exists so the unit of work outlives every conversation that works on it.
-The journal is append-only because memory must never be revised in place;
-what happened is closed by reference from a fresh entry, so the record is
-never rewritten. Anchors exist because time itself must be recorded: each
-working period stamps a one-liner, and the map of stamps is what makes
-"what's live now" answerable with one grep. Knowledge findings carry a
-born state, open or closed at creation, never edited, because a fact's
-status at its discovery moment is itself a fact.
 
-The design also respects the different mutation profiles of the files
-rather than fighting them: state mutates freely because it's a pointer;
-the journal only appends because it's a record; knowledge only grows
-because it's a mind. Each file gets the mutation it can sustain. A
-maintained field is a drift point, while a stamp at creation is free.
-Nothing valuable is ever allowed to exist only in the conversation; the
-moment it appears, it's written down.
+Every rule in the workspace exists because of one fact: the conversation
+is the least durable thing in the system. Compaction is a summarization
+task, one of the hardest an LLM faces, and the longer the context, the
+lossier the summary; whatever the summary drops is gone for good. The
+workspace therefore never lets anything valuable live only in the
+conversation. The moment something happens or is decided, it is written
+into a file that survives: an event into the journal, a discovery into
+the notebook, a decision into the intent.
 
-*In practice:* a conversation compacts mid-decision. The unit's journal
-still holds yesterday's entries and their anchors; the knowledge file
-still holds the finding with its REF. The next boot reads the map and
-reconstructs the position; the decision survives because it never lived
-in the chat. And "live" is concrete: entries stamped A1-A2 load; entries
-stamped A0 or A3 don't.
+The files are designed around how they change, not against it. The
+status card gets rewritten freely, because it only points at what is
+true right now. The journal only grows, because a record that gets
+revised is no longer a record; what is over is closed by a fresh line
+that says so, never by editing the old one. The notebook only gains
+findings, each born open or closed, never edited, because the state of
+a fact at the moment it was discovered is itself a fact.
+
+*In practice:* a conversation compacts mid-decision. The journal still
+holds yesterday's entries with their stamps; the notebook still holds
+the finding with its evidence link. The next working period starts by
+reading the stamps and reconstructs the position. The decision survives
+because it never lived in the chat.
 
 ### 2. Govern output, not process
 
@@ -176,122 +181,107 @@ separation: one thin shared layer that guarantees the quality of the
 output, and a personal layer where process stays free.
 
 The boundary rule that makes it operational: *a step belongs to the
-governed layer iff it produces a checkable artifact.* Everything else is
-rhythm: free, human-chosen, offered in a folder, invoked like a skill,
-never imposed, never recorded in state. Interaction rhythms (how to
-handle a queued message) and work rhythms (how to progress through a
-task) are both offers, not laws.
-
-And when something does graduate to the governed layer, it earns the
-place: the failure is costly and frequent, a cheap check exists, and
-nudges have proven unreliable. Nudge is the default; machinery is the
-exception. One distinction draws the line: the careless majority is
-instrumented (born-state status, closure by reference, derived lookups),
-while the deliberate minority is not fought; mechanics earn their place
-only where instrumented nudges fail. The balance, neither rigid workflow
-nor full freedom, falls out of construction: process open, output
-closed.
+shared layer only if it produces something checkable.* Everything else
+is a rhythm: a pattern anyone may follow or skip, offered in a folder,
+never imposed. The balance, neither rigid workflow nor full freedom,
+falls out of construction: process open, output closed.
 
 *In practice:* a rhythm says "discuss, then decide, then capture." A
-contract says "the recipe names the report's PATH, SHAPE, and RETURN."
-The first is an offer; a team takes it or leaves it. The second is
-enforced; a report with no named shape comes back. That difference is
-the whole boundary, and it is why the workspace feels light while
-staying safe.
+contract says "the report must name where it lands, what shape it takes,
+and what comes back." The first is an offer; a team takes it or leaves
+it. The second is enforced; a report with no named shape comes back.
+That difference is the whole boundary, and it is why the workspace feels
+light while staying safe.
 
 ### 3. The journal is the memory
 
-The journal is where reality lives: append-only events, stamped with
-anchors, closed by reference. The plan is only a snapshot of intent. It
-is allowed to stale, because progress never touches it; step completion
-is a journal event, and the plan is refreshed only when intent changes
-in conversation. When a plan completes, it's replaced in place and its
-traces, completion and the next move, land in the journal. Surgical
-edits protect the stable spine: touching only what a re-plan changes
-keeps unchanged steps byte-identical, where a whole rewrite recomposes
-everything under model variance.
+The journal is where reality lives. It only gains lines, each one
+stamped with the working period it happened in. The intent file is only
+a snapshot of what the unit aims to do. It is allowed to go stale;
+progress never touches it. When a step completes, the journal gains one
+line saying so; the intent stays as composed until the human
+deliberately changes it. When the intent changes, only the changed part
+is rewritten; the rest stays untouched, because a whole rewrite drifts
+every time a different model touches it.
 
-The knowledge base is the mind: findings arrive at decision and discovery
-moments, in a shape meant to be composed from, never plan-shaped. A claim
-earns trust only through fresh evidence; no REF means hypothesis, and
-nobody plans on a hypothesis. Compose from the record, never from the
-conversation; that law is enforceable precisely because the record is
-complete.
+The notebook is where the unit's mind lives. Findings land there at the
+moment of a decision or a discovery, and each finding carries a link to
+where it came from. A claim without such a link is a hypothesis; useful
+for questions, never a base for plans. This is why the agent is told to
+compose from the record: the record is complete, so grounding in it is
+always possible.
 
-*In practice:* step 3 of the plan finishes. The plan file does not
+*In practice:* step 3 of the intent finishes. The intent file does not
 change; the journal gains one line, "slug/step-3: DONE." A week later
-the plan still reads exactly as composed, intent, while the journal
-holds what actually happened. And a finding about agents reads "agents
-skip cross-checks": a hypothesis, good for questions, never for plans;
-the same finding with a REF pointing at the correction that produced it
-is a fact.
+the intent still reads exactly as composed, while the journal holds what
+actually happened. And a finding that reads "agents skip cross-checks"
+is a hypothesis; the same finding with a link to the correction that
+produced it is a fact.
 
 ### 4. Attention is the budget
 
 An agent's attention is finite; every irrelevant line it reads is a
 relevant line it doesn't. The workspace spends attention deliberately:
 
-- **Load what the work touches.** The boot reads one tiny file whole,
-  `state.md`, and derives everything else: the anchor map decides which
-  journal ranges are live, and three classes decide what loads, open
-  items fully, superseded items as one-liners, born-closed items never.
-  Open items outside the live ranges are dead weight and are skipped. A
-  file that outgrows one read has outgrown the law it serves: decompose
-  it, index at boot, bodies on relevance.
-- **The layout itself is the context mechanism.** One folder per unit
-  bounds the boot load structurally: the agent reads the active unit's
-  files, and nothing else. The layout does the bounding; no rule has to
-  spend a token on it.
-- **Derive, don't maintain.** Any artifact kept in sync with another goes
-  stale silently. The active session is located by grep, not maintained in
-  a pointer.
-- **Relevance over taxonomy.** Findings are classified at creation (open
-  or closed), never by category. Ref pointers relocate bloat rather than
-  kill it; the discipline is the ref itself: the live surface carries one
-  terse line, and detail lives behind the ref, never inside it.
+- **Load what the work touches.** Each working period starts by reading
+  one tiny file, the status card, and a handful of short search results.
+  The stamps decide which stretch of the journal is live, and three
+  classes decide how deep to go: what is still open is read fully, what
+  has been closed is read as a single line, and what was settled from
+  the start is skipped. A file that outgrows one read has outgrown its
+  purpose: split it, and keep a small index where the boot looks.
+- **The folder layout itself is the context mechanism.** One folder per
+  unit means the boot reads that unit's files and nothing else. No rule
+  has to say "don't read the rest"; the layout already bounds it.
+- **Derive, don't maintain.** Anything kept in sync with something else
+  goes stale silently. Which unit is active is found by a search each
+  time, never stored in a pointer that can rot.
+- **Relevance over taxonomy.** Findings are labeled open or closed at
+  birth, never sorted into categories. Detail lives behind pointers; the
+  pointer carries one short line, and the body stays wherever it is.
 
 *In practice:* a boot for a unit with sixty journal entries reads one
-small state.md, the anchor map, and the class greps. Superseded entries
-surface as one-liners, born-closed entries stay unread, open ones load
-fully. Thousands of lines of reports sit in the folder; the boot touches
-none of them. The attention went to the work, not the archive.
+tiny status card and a few short search results. Closed entries surface
+as a single line each, settled entries stay unread, open ones load
+fully. Thousands of lines of past reports sit in the folder; the boot
+touches none of them. The attention went to the work, not the archive.
 
 ### 5. The machine-free method
 
-The convention runs on bash, grep, and read, tools every harness
-provides. Prose is the query language; the shell is the retrieval tool.
-Scripts are traps wearing convenience. Harness features like hooks,
-plugins, and skills bring convenience, not capability: the power is the
-model's judgment, and what happens after a skill loads is the model's
-decision. The prose never names tools the agent doesn't hold; naming a
-missing tool manufactures the affordance it denies.
+The workspace runs on plain search and plain reading, tools every
+harness provides. Prose is the query language; the shell is the
+retrieval tool. Scripts are traps wearing convenience. Harness features
+like hooks, plugins, and skills bring convenience, not capability: the
+power is the model's judgment, and what happens after a skill loads is
+the model's decision. The prose never names tools the agent doesn't
+hold; naming a missing tool manufactures the affordance it denies.
 
-Only one surface gets guaranteed per-turn delivery: `AGENTS.md`, a
-convention every harness honors, not a feature. Everything else is
-deliberately nudge-grade, and the design knows it: the boot reads it, and
-the handoff verifies it.
+Only one file gets guaranteed delivery every turn: the governance file,
+a convention every harness honors. Everything else is deliberately a
+nudge, and the design knows it: the boot reads it, and a closing ritual
+verifies it.
 
 The grammars earn their density. Typed blocks, reserved symbols, and
 indentation as syntax carry the same meaning in fewer tokens, so context
 windows are spent on substance. Newlines and indents are load-bearing:
-blocks start at column 0 because line-anchored greps (`^@anchor`,
-`^@entry`) are the retrieval mechanism; an indented block start is a
-silent miss. Contract strings (`status:`, `STATUS:`, `@anchor`, `REF`)
-have exactly one home each and one spelling, because a miss is a law
-unenforced.
+blocks start at column 0 because line-anchored searches are the
+retrieval mechanism; an indented block start is a silent miss. The
+shared vocabulary words have exactly one spelling each, because a miss
+is a rule unenforced.
 
-*In practice:* the same plain text searches answer on any harness, any operating
-system, any agent. Nothing calls a hook, a plugin, or a custom command.
-A team moves from one harness to another by re-pointing the tool, and
-the convention does not notice.
+*In practice:* the same plain searches answer on any harness, any
+operating system, any agent. Nothing calls a hook, a plugin, or a custom
+command. A team moves from one harness to another by re-pointing the
+tool, and the workspace does not notice.
 
 ### 6. The loop that verifies
 
 The five mechanisms before this one all assume their own operator fails.
-The agent forgets, the helper overstates, the check passes vacuously. This
-workspace does not try to make that impossible; it makes it caught. The
-single principle: no claim is believed on trust; every claim earns trust
-through fresh evidence. From that principle the whole loop follows.
+The agent forgets, the helper overstates, the check passes vacuously.
+The workspace does not try to make that impossible; it makes it caught.
+The single principle: no claim is believed on trust; every claim earns
+trust through fresh evidence. From that principle the whole loop
+follows.
 
 - **Write it, then read it.** Handed work begins as a written brief and
   ends as a written report, no matter how it ended. A stopped or drifted
@@ -304,17 +294,18 @@ through fresh evidence. From that principle the whole loop follows.
   subordinate's word.
 - **Evidence has grades.** A check that returns the same answer whether
   or not the thing it sought existed proves nothing; its result is not
-  a finding. And absence is the highest burden: "nothing calls X" is the
-  most dangerous claim, because false presence dies the moment someone
-  opens the file while false absence lives forever. An ABSENT verdict
-  earns the harder search: every flag, case-insensitive, every separator
-  spelling, in every place the thing would live.
+  a finding. And absence is the highest burden: a claim that something
+  appears nowhere is the most dangerous claim, because a false "it
+  exists" dies the moment someone opens the file, while a false "it is
+  nowhere" lives forever. An absence claim earns the harder search:
+  every spelling, every separator, case-insensitive, in every place the
+  thing would live.
 - **The loop feeds itself.** After any build, sweep the design decisions
   against the surfaces, because a missed connection means more are
-  missed. Then live with it and see what breaks; the design ends when use
-  teaches more than refinement. And before a context dies, the handoff
-  runs the writes and verifies the boot greps: boot is the reader,
-  handoff is the writer-side proof.
+  missed. Then live with it and see what breaks; the design ends when
+  use teaches more than refinement. And before a context dies, the
+  closing ritual runs the writes and verifies the searches resolve: the
+  boot is the reader, the ritual is the writer-side proof.
 
 This is the same loop the teams adopt: use it, break it, journal the
 break, and let the next boot be smarter. The three failures from the
