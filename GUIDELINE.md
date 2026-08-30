@@ -249,12 +249,20 @@ touches none of them. The attention went to the work, not the archive.
 ### 5. The machine-free method
 
 The workspace runs on plain search and plain reading, tools every
-harness provides. Prose is the query language; the shell is the
-retrieval tool. Scripts are traps wearing convenience. Harness features
-like hooks, plugins, and skills bring convenience, not capability: the
-power is the model's judgment, and what happens after a skill loads is
-the model's decision. The prose never names tools the agent doesn't
-hold; naming a missing tool manufactures the affordance it denies.
+harness provides, and it does so because every coding harness works the
+same way underneath: the model drives, the tools serve, and the
+judgment stays with the model. Harness extras like hooks, plugins, and
+skills mostly package convenience: what they offer is usually reachable
+through plain prose, a direct prompt or a line in the governance file.
+Their machinery can be bent toward real capability, but the outcome
+still lands in the model's judgment in the end. (The one exception is
+custom agentic workflows, which bring determinism to parts of a
+pipeline; that is a different topic, outside this workspace's scope.)
+Because the harnesses all share the same shape, the workspace builds on
+that common denominator and nothing else: its thin shared layers exist
+to mitigate what the models and the harnesses cause together. The prose
+never names tools the agent doesn't hold; naming a missing tool
+manufactures the affordance it denies.
 
 Only one file gets guaranteed delivery every turn: the governance file,
 a convention every harness honors. Everything else is deliberately a
