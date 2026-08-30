@@ -24,7 +24,8 @@ The workspace in one map:
 
 **Adopt in five minutes:**
 
-1. Copy `AGENTS.md` and `templates/` into your repo.
+1. Copy `AGENTS.md` and `templates/` into your repo. This guideline is
+   for the humans; read it, don't copy it.
 2. Add `sessions/`, `rhythms/`, `AGENTS.local.md` to `.gitignore`.
 3. Write `AGENTS.local.md` with your amendments; amend, never contradict.
 4. Tell the agent what the first unit is; it bootstraps
@@ -38,17 +39,18 @@ The workspace in one map:
 
 - **Boot:** read your amendments, name the move from the message,
   verify against the folder, stamp an anchor, run the query:
-  open items fully, superseded as one-liners, born-closed never (Part II §2)
+  open items fully, superseded as one-liners, born-closed never
 - **Work:** events append to the journal, findings land in knowledge
-  with a REF, plans edit surgically at re-plan only (§2, §3)
+  with a REF, plans edit surgically at re-plan only
 - **Close:** period end refreshes the pointer; unit end marks CLOSED
-  and journals the next move (§2)
+  and journals the next move
 - **Handoff:** before context death, run the writes, verify the boot
-  greps resolve (§2)
+  greps resolve
 
 Five premises carry the whole design: files over conversation, govern
 output not process, mitigate don't solve, compose from the record, no
-machinery. Part I explains the approach; Part II shows it in execution.
+machinery. The rest of this guide walks the workspace itself, file by
+file, then a session running through it.
 
 ---
 
@@ -114,228 +116,18 @@ Five premises carry the entire design. Everything else follows.
    query language; the shell is the retrieval tool. Nothing harness-specific
    ever enters the convention.
 
-These five premises produce the two parts that follow. Part I explains
-the approach in simple terms, why it works; Part II shows what it looks
-like in execution. Read Part I to understand, Part II to operate.
+These five premises produce everything that follows: first the workspace
+itself, file by file, each with its reason; then a session running
+through it; then how to take it home.
 
 ---
 
-## Part I: The approach
+## The workspace, artifact by artifact
 
-Before the how, the why, in plain words. The workspace rests on a
-handful of plain files and a few habits. Here are the players, so the
-rest of this part can use their names:
+### The two layers
 
-- the unit: one folder per piece of work; it outlives every conversation
-  that works on it
-- the journal: the unit's running record; it only ever gains lines
-- the notebook: the unit's findings, each carrying a link to its evidence
-- the status card (state.md): a tiny file saying where the unit stands
-- the intent (plan.md): what the unit aims to do, written once, edited
-  rarely
-- the stamps: one line per working period, marking time in the journal
-- the boot: the small routine that starts each working period
-
-Part II shows each of these running; this part explains why each exists.
-
-### 1. Files survive, conversation doesn't
-
-Every rule in the workspace exists because of one fact: the conversation
-is the least durable thing in the system. Compaction is a summarization
-task, one of the hardest an LLM faces, and the longer the context, the
-lossier the summary; whatever the summary drops is gone for good. The
-workspace therefore never lets anything valuable live only in the
-conversation. The moment something happens or is decided, it is written
-into a file that survives: an event into the journal, a discovery into
-the notebook, a decision into the intent.
-
-The files are designed around how they change, not against it. The
-status card gets rewritten freely, because it only points at what is
-true right now. The journal only grows, because a record that gets
-revised is no longer a record; what is over is closed by a fresh line
-that says so, never by editing the old one. The notebook only gains
-findings, each born open or closed, never edited, because the state of
-a fact at the moment it was discovered is itself a fact.
-
-*In practice:* a conversation compacts mid-decision. The journal still
-holds yesterday's entries with their stamps; the notebook still holds
-the finding with its evidence link. The next working period starts by
-reading the stamps and reconstructs the position. The decision survives
-because it never lived in the chat.
-
-### 2. Govern output, not process
-
-Human teams run on shared structure: SDLC, Agile, conventions,
-standards. The structure is real and legitimate; it solves the flaws
-humans actually have, coordination and communication at scale. Agent
-flaws are entirely different: memory dies, attention is a budget, rules
-are followed literally, cross-checks get skipped. Human-shaped routines
-solve none of these, and two traps follow. Importing human-shaped
-process into agent governance throttles the agent: it walks routines
-that solve problems it does not have, while its real flaws stay
-ungoverned; a gate that says "HALT if a step was skipped" is the sound
-of that trap. And putting agent governance in shared files makes every
-team member's agent run identically, which quietly dictates how each
-person interacts with their own agent. The workspace answers with a
-separation: one thin shared layer that guarantees the quality of the
-output, and a personal layer where process stays free.
-
-The boundary rule that makes it operational: *a step belongs to the
-shared layer only if it produces something checkable.* Everything else
-is a rhythm: a pattern anyone may follow or skip, offered in a folder,
-never imposed. The balance, neither rigid workflow nor full freedom,
-falls out of construction: process open, output closed.
-
-*In practice:* a rhythm says "discuss, then decide, then capture." A
-contract says "the report must name where it lands, what shape it takes,
-and what comes back." The first is an offer; a team takes it or leaves
-it. The second is enforced; a report with no named shape comes back.
-That difference is the whole boundary, and it is why the workspace feels
-light while staying safe.
-
-### 3. The journal is the memory
-
-The journal is where reality lives. It only gains lines, each one
-stamped with the working period it happened in. The intent file is only
-a snapshot of what the unit aims to do. It is allowed to go stale;
-progress never touches it. When a step completes, the journal gains one
-line saying so; the intent stays as composed until the human
-deliberately changes it. When the intent changes, only the changed part
-is rewritten; the rest stays untouched, because a whole rewrite drifts
-every time a different model touches it.
-
-The notebook is where the unit's mind lives. Findings land there at the
-moment of a decision or a discovery, and each finding carries a link to
-where it came from. A claim without such a link is a hypothesis; useful
-for questions, never a base for plans. This is why the agent is told to
-compose from the record: the record is complete, so grounding in it is
-always possible.
-
-*In practice:* step 3 of the intent finishes. The intent file does not
-change; the journal gains one line, "slug/step-3: DONE." A week later
-the intent still reads exactly as composed, while the journal holds what
-actually happened. And a finding that reads "agents skip cross-checks"
-is a hypothesis; the same finding with a link to the correction that
-produced it is a fact.
-
-### 4. Attention is the budget
-
-An agent's attention is finite; every irrelevant line it reads is a
-relevant line it doesn't. The workspace spends attention deliberately:
-
-- **Load what the work touches.** Each working period starts by reading
-  one tiny file, the status card, and a handful of short search results.
-  The stamps decide which stretch of the journal is live, and three
-  classes decide how deep to go: what is still open is read fully, what
-  has been closed is read as a single line, and what was settled from
-  the start is skipped. A file that outgrows one read has outgrown its
-  purpose: split it, and keep a small index where the boot looks.
-- **The folder layout itself is the context mechanism.** One folder per
-  unit means the boot reads that unit's files and nothing else. No rule
-  has to say "don't read the rest"; the layout already bounds it.
-- **Derive, don't maintain.** Anything kept in sync with something else
-  goes stale silently. Which unit is active is found by a search each
-  time, never stored in a pointer that can rot.
-- **Relevance over taxonomy.** Findings are labeled open or closed at
-  birth, never sorted into categories. Detail lives behind pointers; the
-  pointer carries one short line, and the body stays wherever it is.
-
-*In practice:* a boot for a unit with sixty journal entries reads one
-tiny status card and a few short search results. Closed entries surface
-as a single line each, settled entries stay unread, open ones load
-fully. Thousands of lines of past reports sit in the folder; the boot
-touches none of them. The attention went to the work, not the archive.
-
-### 5. The machine-free method
-
-The workspace runs on plain search and plain reading, tools every
-harness provides, and it does so because every coding harness works the
-same way underneath: the model drives, the tools serve, and the
-judgment stays with the model. Harness extras like hooks, plugins, and
-skills mostly package convenience: what they offer is usually reachable
-through plain prose, a direct prompt or a line in the governance file.
-Their machinery can be bent toward real capability, but the outcome
-still lands in the model's judgment in the end. (The one exception is
-custom agentic workflows, which bring determinism to parts of a
-pipeline; that is a different topic, outside this workspace's scope.)
-Because the harnesses all share the same shape, the workspace builds on
-that common denominator and nothing else: its thin shared layers exist
-to mitigate what the models and the harnesses cause together.
-
-Only one file gets guaranteed delivery every turn: the governance file,
-a convention every harness honors. Everything else is deliberately a
-nudge, and the design knows it: the boot reads it, and a closing ritual
-verifies it.
-
-The grammars earn their density. Typed blocks, reserved symbols, and
-indentation as syntax carry the same meaning in fewer tokens, so context
-windows are spent on substance. Newlines and indents are load-bearing:
-blocks start at column 0 because line-anchored searches are the
-retrieval mechanism; an indented block start is a silent miss. The
-shared vocabulary words have exactly one spelling each, because a miss
-is a rule unenforced.
-
-*In practice:* the same plain searches answer on any harness, any
-operating system, any agent. Nothing calls a hook, a plugin, or a custom
-command. A team moves from one harness to another by re-pointing the
-tool, and the workspace does not notice.
-
-### 6. The loop that verifies
-
-The five mechanisms before this one all assume their own operator fails.
-The agent forgets, the helper overstates, the check passes vacuously.
-The workspace does not try to make that impossible; it makes it caught.
-The single principle: no claim is believed on trust; every claim earns
-trust through fresh evidence. From that principle the whole loop
-follows. The helper here is a second agent, a subagent, that the first
-agent hands work to; Part II §4 shows the mechanics, this section shows
-the why.
-
-- **Write it, then read it.** Work handed to a second agent begins as a
-  written brief and ends as a written report, no matter how it ended.
-  A stopped or drifted helper still writes what it found, so the next
-  try resumes from the report, never from nothing. Part II §4 carries
-  the mechanics; here is the why: the artifact is the only thing that
-  survives to be checked.
-- **The giver re-checks.** A helper's "passed" is never the gate; the
-  agent that handed out the work checks the load-bearing claims itself.
-  Trust is earned with fresh evidence, never borrowed from a
-  subordinate's word.
-- **Evidence has grades.** A check that returns the same answer whether
-  or not the thing it sought existed proves nothing; its result is not
-  a finding. And absence is the highest burden: a claim that something
-  appears nowhere is the most dangerous claim, because a false "it
-  exists" dies the moment someone opens the file, while a false "it is
-  nowhere" lives forever. An absence claim earns the harder search:
-  every spelling, every separator, case-insensitive, in every place the
-  thing would live.
-- **The loop feeds itself.** After any build, sweep the design decisions
-  against the surfaces, because a missed connection means more are
-  missed. Then live with it and see what breaks; the design ends when
-  use teaches more than refinement. And before a context dies, the
-  closing ritual runs the writes and verifies the searches resolve: the
-  boot is the reader, the ritual is the writer-side proof.
-
-This is the same loop the teams adopt: use it, break it, journal the
-break, and let the next boot be smarter. The three failures from the
-opening (re-grounding from scratch, loading everything, harness
-machinery) are exactly what the loop catches, one period at a time.
-
-*In practice:* a helper reports "nothing calls this field." The giver
-re-runs the search itself, case-insensitively, with every separator
-spelling, and finds "status : ACTIVE" in one file. The absence claim
-dies; the false absence is caught. The helper's word was never the
-gate; the fresh search was.
-
----
-
-## Part II: In execution
-
-What the approach looks like when it runs: the files, the boot, the
-grammars, the day to day.
-
-### 1. The workspace in one read
-The workspace has two layers. The line between them is contractual:
+Every workspace has two layers, and the line between them is
+contractual.
 
 | File | Tracked? | Role | Read when |
 |---|---|---|---|
@@ -345,15 +137,27 @@ The workspace has two layers. The line between them is contractual:
 | `sessions/` | private | one folder per unit of work | the active unit's files |
 | `rhythms/` | private | workflow patterns, invoked not imposed | when a rhythm is called |
 
-The division is contractual: **the convention is shared, the working state
-is private.** `AGENTS.md` and `templates/` are copied between teams and
-committed. This guideline is the human's companion; read it once, keep
-it out of the repo. Everything in `sessions/` and `rhythms/` is
-gitignored and stays with its owner. Nothing in `sessions/` is ever
-committed.
+The shared layer is copied between teams and committed: `AGENTS.md` and
+`templates/`. This guideline is the human's companion; read it once,
+keep it out of the repo. The private layer is gitignored and stays with
+its owner: `sessions/`, `rhythms/`, `AGENTS.local.md`. Nothing in
+`sessions/` is ever committed.
 
-**`AGENTS.md`** has exactly two jobs: govern and navigate. Its blocks are a
-tour of the convention:
+The split is the whole of "govern output, not process", made concrete.
+Human teams run on shared structure (SDLC, Agile, conventions) because
+that structure solves human collaboration flaws. Agent flaws are
+entirely different, and two traps follow when you mix the two: importing
+human-shaped process into agent governance throttles the agent, and
+putting agent governance in shared files dictates how each person
+interacts with their own agent. So the shared layer governs exactly one
+thing: the output, meaning the artifacts, their shapes, and their
+evidence. Everything about how each human drives their agent stays
+personal: rhythms are offered, never imposed; amendments are personal.
+The boundary rule: *a step belongs to the shared layer only if it
+produces something checkable.*
+
+**`AGENTS.md`** has exactly two jobs: govern and navigate. Its blocks are
+a tour of the convention:
 
 - `@laws`: the five laws that bind everything
 - `@layout`: where every file lives and what it's for
@@ -369,28 +173,136 @@ tour of the convention:
 It carries no schemas (those live in `templates/`), no provenance (that
 lives in the journal), and no rhythm names (those live in `rhythms/`).
 
-**`templates/`** pins six grammars, one per artifact: `state.md`,
-`plan.md`, `journal.md`, `knowledge.md`, `recipe.md`, `report.md`. Each is
-written to be read *from*, never copied wholesale. Section 3 tours them.
-
-**`sessions/`** holds one folder per unit of work. A unit outlives every
-conversation that works on it and dies when the work is done, not when a
-chat ends. Each folder carries the four record files (state, plan, journal,
-knowledge) plus `recipes/` (dispatch briefs) and `reports/` (lane
-evidence).
-
 **`AGENTS.local.md`** is the one governance file the human owns: personal
 rules, preferences, rhythm defaults. It is read at boot and kept tiny.
 Its one hard rule: **amend, never contradict: the laws stand.** A local
 "skip verification" is a contradiction, not an amendment.
 
-### 2. The life of a session
+**`templates/`** pins six grammars, one per artifact, each written to be
+read *from*, never copied wholesale. The four record files get their own
+sections below; the dispatch pair follows them.
 
-A session folder is a unit of work. Its life has four phases: boot, work,
-close, handoff.
+### The unit
 
-**Boot** is the first thing the agent does each working period,
-mechanically:
+`sessions/<unit>/` is one folder per piece of work. It outlives every
+conversation that works on it, and it dies when the work is done, not
+when a chat ends. Inside: the four record files (state, plan, journal,
+knowledge) plus `recipes/` (dispatch briefs) and `reports/` (dispatch
+evidence). The folder itself is the context boundary: when the agent
+works on this unit, it reads this unit's files and nothing else. The
+layout does the bounding, so no rule has to say "don't read the rest."
+
+### state.md: the status card
+
+The tiniest file, and the only one edited freely. It says where the
+unit stands: `status` (ACTIVE or CLOSED), `current_anchor`, one terse
+`next_action`, the unit's `objective`, and the repos it touches. Nothing
+else; detail lives behind refs, never inside.
+
+Why it stays tiny is the whole attention game. An agent's attention is
+finite: every irrelevant line it reads is a relevant line it doesn't.
+So each working period starts by reading exactly this one small file,
+whole, and derives everything else from it. A file that outgrows one
+read has outgrown its purpose; split it, and keep a small index where
+the boot looks. The card also stays honest because it is a pointer, not
+a log: it gets overwritten, never appended to, so it can never become
+history in disguise.
+
+### plan.md: the intent
+
+What the unit aims to do, written as GOAL, STEPS with exit criteria,
+and the sources the plan was composed from (GROUNDED IN).
+
+The intent is a snapshot, and it is allowed to go stale. Progress never
+touches it; when a step completes, the journal gains one line saying so.
+The plan changes only when the human deliberately changes the intent,
+and then surgically: touch only what changed, replace it in place, and
+journal the change in the same breath. Unchanged steps stay
+byte-identical, because a whole rewrite recomposes everything in
+whatever model's voice touched it last. A completed plan is replaced in
+place; its traces, completion and the next move, land in the journal.
+
+### journal.md: the memory
+
+The unit's running record. It only ever gains lines. An entry is born
+with its period stamp (ANCHOR), its STATUS (open or closed), and its
+WHAT line, and it is never edited afterward. What is over is closed by
+a fresh entry that points at the old one and carries the reason; the old
+line stays exactly as it was.
+
+Why it works this way: the conversation is the least durable thing in
+the system, and compaction, a lossy summarization, is where it dies. A
+record that gets revised is no longer a record; a record that only grows
+survives every compaction intact. The period stamps are how time itself
+is recorded: one line per working period, and the map of those lines
+decides which stretch of the journal is live right now.
+
+### knowledge.md: the mind
+
+Findings, written at the moment of a decision or a discovery. Each
+finding is a NAME, a STATUS, a SUMMARY, and a REF: a link to where it
+came from. A claim without a REF is a hypothesis; useful for questions,
+never a base for plans. Findings are born open or closed and never
+edited, because the state of a fact at its discovery moment is itself a
+fact. Knowledge carries no timeline; the journal owns time, and the
+REFs are the seam between the two.
+
+*In practice:* a finding that reads "agents skip cross-checks" is a
+hypothesis. The same finding with a REF pointing at the correction that
+produced it is a fact.
+
+### recipes and reports: the dispatch pair
+
+When the agent hands work to a second agent, a subagent, two artifacts
+frame the handoff. The recipe is the brief: what to check, and the
+report's PATH, SHAPE, and RETURN. The report is the evidence: verdicts
+per claim, each marked VERIFIED (checked), INFERRED (reasoned, not
+checked), or ABSENT (the thing appears nowhere; the highest burden),
+plus an honest risks section.
+
+The pair exists because nothing is believed on trust. The brief lives
+on disk, not in the conversation, because a message-brief dies at
+compaction and a file survives. The report lands no matter how the
+handed work ended; a stopped or drifted helper still writes what it
+found, so the next try resumes from the report, never from nothing. And
+the agent that handed out the work reads the report whole and re-checks
+the load-bearing claims itself: a helper's "passed" is never the gate.
+The full dispatch contract is in "Working with the agent" below.
+
+*In practice:* a helper reports "nothing calls this field." The giver
+re-runs the search itself, case-insensitively, with every separator
+spelling, and finds "status : ACTIVE" in one file. The absence claim
+dies; the false absence is caught. The helper's word was never the
+gate; the fresh search was.
+
+### How the files are written
+
+The grammars share one strict pseudo-language, written to spend tokens
+on substance: blocks start at column 0 (`@entry`, `@finding`), bodies
+indent two, `::` opens an indented block value, `|` means alternation
+only, `[ ]` wraps optional parts, `->` means flow, `#` starts a
+comment. `status:` is lowercase on the status card; `STATUS:` is
+uppercase on entries. Spellings are contractual, not stylistic.
+
+The spellings matter because they are the query language. The workspace
+runs on plain search and plain reading, tools every harness provides,
+and every coding harness works the same way underneath: the model
+drives, the tools serve, the judgment stays with the model. Harness
+extras mostly package convenience that plain prose already reaches; the
+workspace builds on the common denominator and nothing else. A
+vocabulary word with two spellings is a search that silently misses,
+and a search that can't be relied on is a rule that can't be enforced.
+When in doubt, the templates are the authority.
+
+---
+
+## A session's life
+
+A unit of work lives through four phases: boot, work, close, handoff.
+
+### Boot
+
+The first thing the agent does each working period, mechanically:
 
 1. **Read amendments.** Read `AGENTS.local.md` if present. It's tiny, and
    it may amend the boot order itself.
@@ -483,19 +395,23 @@ any unit):
 7. continue from next_action, following the human-invoked rhythm
 ```
 
-**Work** is three movements, each with one home:
+### Work
+
+Three movements, each with one home:
 
 - **Events** land in the journal as they happen, appended, never revised.
   An entry is born with its `ANCHOR`, `STATUS: open|closed`, and `WHAT`;
   it dies by reference, never by edit.
 - **Findings** land in the knowledge base at decision and discovery
-  moments. A `REF` (the evidence source) turns a claim into a fact;
-  no REF means hypothesis, and nobody plans on a hypothesis.
+  moments. A `REF` turns a claim into a fact; no REF means hypothesis,
+  and nobody plans on a hypothesis.
 - **Re-plans** touch only what changed. The plan is edited surgically at
   re-plan moments; unchanged steps stay byte-identical; and the change
   is journaled in the same breath.
 
-**Close** has two distinct ends:
+### Close
+
+Two distinct ends:
 
 - **Period end** (a turn ends; the unit continues): append events to the
   journal, refresh `next_action` in `state.md` (one terse pointer,
@@ -509,66 +425,19 @@ any unit):
   confirm consistency, then mark the unit CLOSED. It stays private
   forever.
 
-**Handoff** is the proof before context death. When a context is about to
-die (compaction, tool change, long break): run the period-end writes, then
+### Handoff
+
+The proof before context death. When a context is about to die
+(compaction, tool change, long break): run the period-end writes, then
 verify the boot greps resolve. A fresh boot must reconstruct the entire
 position from files alone. A folder that contradicts the move, an anchor
 map that doesn't resolve the live range, a `next_action` that points at
-finished work: each is a handoff failure, and catching one before context
-death is exactly what the ritual is for.
+finished work: each is a handoff failure, and catching one before
+context death is exactly what the ritual is for.
 
-### 3. The grammars
+---
 
-Six artifacts, six grammars in `templates/`. What lives where, and what
-never goes where:
-
-| Artifact | It is | It holds | Never in it |
-|---|---|---|---|
-| `state.md` | the live pointer | `status`, `current_anchor`, `next_action`, `objective`, `repos` | detail, decisions, history |
-| `plan.md` | the current declaration | GOAL, STEPS with exit criteria, GROUNDED IN | progress; completion is a journal event |
-| `journal.md` | the memory | append-only `@entry` events, `@anchor` declarations | edits; closure is by reference, never revision |
-| `knowledge.md` | the mind | `@finding` blocks: NAME, STATUS, REF, SUMMARY | anchors; knowledge is a-temporal, the journal owns time |
-| `recipe.md` | the dispatch brief | `@context`, MISSION, REPORT: PATH + SHAPE + RETURN | improvisation; lanes never drift from the brief |
-| `report.md` | the lane's evidence | `@orientation`, per-claim verdicts + evidence + marks, `@risks` | commentary; the artifact is returned verbatim |
-
-The semantics that make each artifact work, the rules beyond the shape:
-
-- **`state.md` is edited freely; the plan is edited surgically.** State is
-  a pointer, tiny, refreshed at period ends. The plan is a snapshot of
-  intent: composed at re-plan moments, replaced in place when complete.
-  Progress never touches it.
-- **`journal.md` is append-only.** What happened is never rewritten. An
-  entry closes by a fresh entry stamping `CLOSES:` (or `SUPERSEDES:`) with
-  the reason; relevance is derived, not maintained.
-- **`knowledge.md` is a-temporal.** Findings are born open or closed at
-  creation and never edited. The journal owns the timeline; findings own
-  the ideas, and REFs are the seam between them.
-- **The recipe names the shape.** A grammar not named in the brief is a
-  grammar not followed: the recipe's REPORT names PATH (where the report
-  lands), SHAPE (which grammar it follows), RETURN (what comes back to the
-  dispatcher, a summary only).
-- **Evidence carries a mark.** A report's claims are marked `VERIFIED`
-  (checked), `INFERRED` (reasoned, not checked), or `ABSENT` (the thing
-  is nowhere; the highest burden). Never claim verification that was not
-  performed.
-
-**The dialect.** The grammars share a strict pseudo-language, written to
-spend tokens on substance:
-
-- blocks start at column 0 (`@entry`, `@finding`), bodies indent two
-- `::` opens a block scalar, an indented value that continues
-- `|` means alternation only; `[ ]` wraps optional parts; `->` means flow;
-  `#` starts a comment
-- `status:` is lowercase on `state.md`; `STATUS:` is uppercase on entries;
-  spellings are contractual, not stylistic
-
-Spellings are contractual everywhere: `status: ACTIVE`, `STATUS: open`,
-`REF`, `@anchor`, `CLOSES:`. Every surface writes the same tokens, or greps
-silently miss. And a grep that can't be relied on is a law that can't be
-enforced. When in doubt, the templates are the authority; write from them,
-never copy them.
-
-### 4. Working with the agent
+## Working with the agent
 
 - **Compose from the record.** Every rewrite, plan, and summary grounds in
   the journal and knowledge, never in the conversation. A plan rewrite
@@ -601,7 +470,9 @@ never copy them.
   And every dispatch is journaled: an entry carrying the brief's path and
   the report's path.
 
-### 5. Adopting it
+---
+
+## Adopting it
 
 1. Copy `AGENTS.md` and `templates/` into your repository. That's the
    convention. This guideline stays out of it; it's the human's read.
@@ -639,5 +510,3 @@ Extending it, without breaking it:
 And keep two habits: after any change to a surface, run the boot greps to
 confirm they still resolve; after any build, sweep the design decisions
 against the surfaces, because a missed connection means more are missed.
-
----
