@@ -10,10 +10,11 @@
   AGENTS.local.md = your amendments: user-specific rules, preferences, personal rhythm defaults (private, gitignored); amend, never contradict: the laws stand
   templates/ = the artifact grammars: reference to write from, never copy
   sessions/  = one folder per unit of work (private, gitignored)
-  rhythms/   = workflow patterns (private, gitignored); the human invokes one or the agent proposes one as it sees fit, like skills; never recorded in state; a rhythm names the order and the outcomes and references the workspace's artifacts by name, never re-specifying their grammars; written in the artifact dialect: typed blocks, column 0, indent 2; token-efficient and structural, never prose
+  rhythms/   = workflow patterns (private, gitignored); the human invokes one or the agent proposes one as it sees fit, like skills; never recorded in state; a rhythm names the order and the outcomes and references the workspace's artifacts by name, never re-specifying their grammars; written in the artifact dialect; token-efficient and structural, never prose
 
 @record
   a session folder is a unit of work; it outlives working periods and dies with the unit. shapes live in templates/; match them exactly; this section carries semantics only, never a second copy of a shape.
+  dialect: every grammar and rhythm shares one pseudo-language: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment; status: lowercase on state.md, STATUS: uppercase on entries; spellings are contractual
   note: state.md keys are lowercase (status: ACTIVE); entry fields are UPPERCASE (STATUS: open | closed). spellings are contractual.
   folder status = the unit's lifecycle; entry status = an item's relevance class. two statuses, one word, distinct meanings.
   state.md     = the live pointer: the only file edited freely; refreshed at period ends; read WHOLE at boot; kept tiny (detail lives behind refs, never inside).
