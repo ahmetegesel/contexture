@@ -129,19 +129,23 @@ through it; then how to take it home.
 Every workspace has two layers, and the line between them is
 contractual.
 
-| File | Tracked? | Role | Read when |
+**The shared layer is the convention itself**: `AGENTS.md`, the laws and
+navigation, and `templates/`, the grammars. These are copied between
+teams and committed. This guideline is the human's companion; read it
+once, keep it out of the repo.
+
+**The private layer is the working state**: `sessions/`, one folder per
+unit of work; `rhythms/`, personal workflow patterns, invoked not
+imposed; and `AGENTS.local.md`, personal amendments. All gitignored,
+per-user, never committed. Nothing in `sessions/` is ever committed.
+
+| File | Layer | Role | Read when |
 |---|---|---|---|
 | `AGENTS.md` | shared | laws + navigation | every turn (auto-delivered) |
 | `templates/` | shared | the grammars, one per artifact | write-time reference |
 | `AGENTS.local.md` | private | your amendments | at boot |
 | `sessions/` | private | one folder per unit of work | the active unit's files |
-| `rhythms/` | private | workflow patterns, invoked not imposed | when a rhythm is called |
-
-The shared layer is copied between teams and committed: `AGENTS.md` and
-`templates/`. This guideline is the human's companion; read it once,
-keep it out of the repo. The private layer is gitignored and stays with
-its owner: `sessions/`, `rhythms/`, `AGENTS.local.md`. Nothing in
-`sessions/` is ever committed.
+| `rhythms/` | private | workflow patterns | when a rhythm is called |
 
 The split is the whole of "govern output, not process", made concrete.
 Human teams run on shared structure (SDLC, Agile, conventions) because
