@@ -163,7 +163,7 @@ produces something checkable.*
 **`AGENTS.md`** has exactly two jobs: govern and navigate. Its blocks are
 a tour of the convention:
 
-- `@laws`: the five laws that bind everything
+- `@laws`: the six laws that bind everything
 - `@layout`: where every file lives and what it's for
 - `@record`: the four session files and their semantics
 - `@query`: how the agent decides what to load

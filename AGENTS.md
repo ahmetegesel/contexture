@@ -1,9 +1,10 @@
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, or break; conversation doesn't.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
-  3. process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
-  4. compose from the record, never from conversation: rewrites grounded in journal/knowledge, the only sources that survive compaction.
-  5. verify before close: no done without evidence; re-read the files, confirm consistency at close.
+  3. write token-efficient: dense and structural, never prose padding; one statement per line; the artifact dialect's typed blocks over prose, always.
+  4. process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
+  5. compose from the record, never from conversation: rewrites grounded in journal/knowledge, the only sources that survive compaction.
+  6. verify before close: no done without evidence; re-read the files, confirm consistency at close.
 
 @layout
   AGENTS.md  = laws + navigation (this file)
@@ -69,7 +70,7 @@
     3. the folder stays ACTIVE
   unit close (the plan completes, or the human ends the unit):
     1. append closing events + the next-move decision to journal.md
-    2. re-read the files; confirm consistency (law 5)
+    2. re-read the files; confirm consistency (law 6)
     3. promote durable knowledge at the human's direction
     4. mark CLOSED; stays private; nothing is committed
 
