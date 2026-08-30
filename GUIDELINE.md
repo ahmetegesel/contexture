@@ -287,13 +287,16 @@ The agent forgets, the helper overstates, the check passes vacuously.
 The workspace does not try to make that impossible; it makes it caught.
 The single principle: no claim is believed on trust; every claim earns
 trust through fresh evidence. From that principle the whole loop
-follows.
+follows. The helper here is a second agent, a subagent, that the first
+agent hands work to; Part II §4 shows the mechanics, this section shows
+the why.
 
-- **Write it, then read it.** Handed work begins as a written brief and
-  ends as a written report, no matter how it ended. A stopped or drifted
-  helper still writes what it found, so the next try resumes from the
-  report, never from nothing. Part II §4 carries the mechanics; here is
-  the why: the artifact is the only thing that survives to be checked.
+- **Write it, then read it.** Work handed to a second agent begins as a
+  written brief and ends as a written report, no matter how it ended.
+  A stopped or drifted helper still writes what it found, so the next
+  try resumes from the report, never from nothing. Part II §4 carries
+  the mechanics; here is the why: the artifact is the only thing that
+  survives to be checked.
 - **The giver re-checks.** A helper's "passed" is never the gate; the
   agent that handed out the work checks the load-bearing claims itself.
   Trust is earned with fresh evidence, never borrowed from a
