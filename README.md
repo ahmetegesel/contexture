@@ -1,6 +1,8 @@
-# The Workspace Convention
+# contexture
 
-A guideline for teams: how to use this workspace, and why it works.
+The workspace convention for people who treat context as the asset. This
+document is the guideline for teams: how to use the workspace, and why it
+works.
 
 ---
 
