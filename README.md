@@ -75,10 +75,7 @@ Teams compensate badly, in three recurring ways:
 - **Loading everything.** The agent is told to read everything, every time.
   Attention is a budget, and spending it on irrelevant material means the
   relevant material doesn't get read.
-- **Harness machinery.** Hooks, plugins, skills, custom commands: features
-  that pin the workflow to one vendor, add machinery the work doesn't need,
-  and bring convenience rather than capability. The power is the model's
-  judgment, and the harness cannot guarantee execution of anything.
+- **Harness machinery.** Hooks, plugins, custom commands, and script-carrying skills: features that pin the workflow to one vendor and add machinery the work doesn't need. Instruction-only skills, plain files that describe how to do a task, are not this; they are portable the same way this workspace is.
 
 The result is the same in all three: what the agent remembers diverges from
 what happened, rules contradict themselves across surfaces, and continuity
