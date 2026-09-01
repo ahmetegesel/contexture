@@ -450,12 +450,13 @@ context death is exactly what the ritual is for.
 - **Compose from the record.** Every rewrite, plan, and summary grounds in
   the journal and knowledge, never in the conversation. A plan rewrite
   reads its GROUNDED IN refs first.
-- **One design question per turn, grounded before asking.** State what the
-  decision is, what it looks like now, and why it's being asked. Discuss
-  before significant decisions; the human may interrupt anytime.
+- **Understand before acting.** The agent asks one grounded question at a
+  time: what the decision is, how things look now, why it's asked. Each
+  answer opens the next question, until the agent restates the goal in
+  its own words and the human confirms it. Only then does work start.
 - **Knowledge lands with approval.** When an idea looks durable, propose
   one compact candidate and ask confirm or reshape; "not landed" drops
-  it; never re-ask without new evidence.
+  it; never re-ask an answered question.
 - **The human may interrupt; a queued message doesn't kill the act.**
   Complete the act in flight, then address the message. Halt only on an
   explicit stop, hold, or redirect.
