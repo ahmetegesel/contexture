@@ -1,5 +1,7 @@
 # recipe grammar
 
+# shape authority: write from this grammar alone; never copy or seek a filled sample from other sessions
+
 @context: "one-liner: what this lane is"
 
 MISSION

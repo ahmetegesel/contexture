@@ -1,5 +1,7 @@
 # plan grammar
 
+# shape authority: write from this grammar alone; never copy or seek a filled sample from other sessions
+
 flat keys at column 0; steps indent 2; step lines indent 4.
 
 GOAL: "one line: what the unit achieves"

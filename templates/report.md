@@ -1,5 +1,7 @@
 # report grammar
 
+# shape authority: write from this grammar alone; never copy or seek a filled sample from other sessions
+
 blocks at column 0; fields indent 2; BODY continuation indent 4;
 one blank line between blocks.
 beyond this minimum, write what the lane needs, in these shapes.

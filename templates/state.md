@@ -1,5 +1,7 @@
 # state grammar
 
+# shape authority: write from this grammar alone; never copy or seek a filled sample from other sessions
+
 flat keys at column 0, no indent. the only file edited freely.
 
 status: ACTIVE | CLOSED                  # ACTIVE = the unit is in flight

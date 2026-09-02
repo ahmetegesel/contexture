@@ -141,7 +141,7 @@ per-user, never committed. Nothing in `sessions/` is ever committed.
 | File | Layer | Role | Read when |
 |---|---|---|---|
 | `AGENTS.md` | shared | laws + navigation | every turn (auto-delivered) |
-| `templates/` | shared | the grammars, one per artifact | write-time reference |
+| `templates/` | shared | the grammars, one per artifact | write-time authority |
 | `AGENTS.local.md` | private | your amendments | at boot |
 | `sessions/` | private | one folder per unit of work | the active unit's files |
 | `rhythms/` | private | workflow patterns | when a rhythm is called |
