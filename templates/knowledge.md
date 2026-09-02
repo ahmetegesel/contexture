@@ -1,7 +1,5 @@
 # knowledge grammar
 
-# shape authority: write from this grammar alone; never copy or seek a filled sample from other sessions
-
 blocks at column 0; fields indent 2; SUMMARY continuation indent 4;
 one blank line between blocks.
 
@@ -14,3 +12,10 @@ one blank line between blocks.
                                         # never a dynamic file; no REF -> the SUMMARY
                                         # carries the whole story
   [SUPERSEDES: <ref> (reason)]
+
+# filled sample
+@finding <NAME>
+  STATUS: open | closed
+  SUMMARY ::
+    <the claim, or the whole story when no REF follows>
+  REF: "<path#symbol>"

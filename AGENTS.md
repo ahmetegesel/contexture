@@ -10,12 +10,12 @@
 @layout
   AGENTS.md       = laws + navigation (this file)
   AGENTS.local.md = your amendments, private, gitignored; amend, never contradict: the laws stand
-  templates/      = artifact grammars: reference to write from, never copy
+  templates/      = artifact grammars: the shapes to fill at write time
   sessions/       = one folder per unit of work (private, gitignored)
   rhythms/        = workflow patterns (private, gitignored); human-invoked or agent-proposed, like skills; never in state; name order + outcomes; reference artifacts by name, never re-specify grammars, never prescribe content; dialect; one line per step `N. GATE: outcome`, no sub-blocks
 
 @record
-  unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; match exactly; this section: semantics only, never a second copy.
+  unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: semantics only, never a second copy.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE), UPPERCASE fields on findings (STATUS: open | closed); spellings are contractual.
   folder status = unit lifecycle; finding status = claim liveness. two statuses, one word, distinct meanings; journal entries carry no status: closure by reference only.
   state.md     = live pointer: only file edited freely; refreshed at period ends; read WHOLE at boot; kept tiny, detail behind refs.
