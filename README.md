@@ -412,7 +412,9 @@ Three movements, each with one home:
   and a `KNOWLEDGE: true` flag when it is knowledge-worthy; it dies by
   reference, never by edit, and has no status of its own.
 - **Findings** land in the knowledge base at decision and discovery
-  moments. A `REF` turns a claim into a fact; no REF means hypothesis,
+  moments. A `REF` points at the full version in the journal or reports,
+  never at a file that changes; with no stable full version, the finding
+  carries the whole story itself; a claim with neither is a hypothesis,
   and nobody plans on a hypothesis.
 - **Re-plans** touch only what changed. The plan is edited surgically at
   re-plan moments; unchanged steps stay byte-identical; and the change

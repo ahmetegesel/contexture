@@ -7,6 +7,7 @@ one blank line between blocks.
   STATUS: open | closed                   # born; never edited
   SUMMARY ::
     continuation text
-  [REF: "..."]                            # claims require REF; no REF = hypothesis;
-                                        # repeatable, one per source
+  [REF: "..."]                            # the full version in append-only artifacts
+                                        # (journal, reports), never a dynamic file;
+                                        # no REF -> the SUMMARY carries the whole story
   [SUPERSEDES: <ref> (reason)]

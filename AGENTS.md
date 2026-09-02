@@ -21,7 +21,7 @@
   state.md     = live pointer: only file edited freely; refreshed at period ends; read WHOLE at boot; kept tiny, detail behind refs.
   plan.md      = current declaration: goal + steps + exit criteria. progress NEVER touches it; step DONE = journal event "slug/step-N: DONE". edited ONLY at re-plan: touch what changed, replace in place; REPLAN entry same breath; grounded in the record. completed plan replaced in place; completion + next-move in the journal.
   journal.md   = the single recording surface: append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input.
-  knowledge.md = findings at decision/discovery moments, born open (live claims) or closed (settled); linked to events via REF; no REF = hypothesis, never plan on it. claims outlive their anchors, unlike journal entries. every finding lands via the harvest of a KNOWLEDGE: true entry, confirmed or reshaped; developing ideas stay journal events.
+  knowledge.md = findings at decision/discovery moments, born open (live claims) or closed (settled); linked to events via REF. REF -> the full version in append-only artifacts (journal, reports), never a dynamic file; no stable full version -> the finding carries the whole story. no REF, no story = hypothesis, never plan on it. claims outlive their anchors, unlike journal entries. every finding lands via the harvest of a KNOWLEDGE: true entry, confirmed or reshaped; developing ideas stay journal events.
   recipes/     = dispatch briefs, one per dispatch; names the report path.
   reports/     = lane evidence reports; the dispatch's audit trail.
 
@@ -69,7 +69,7 @@
 @close
   period end (turn ends; unit continues):
     1. append journal events, closing the period's done events by reference; refresh next_action: one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings
-    2. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md, the entry closes by reference; "not landed" drops
+    2. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md (REF to the full version, or the whole story carried), the entry closes by reference; "not landed" drops
     3. folder stays ACTIVE
   unit close (plan completes, or the human ends the unit):
     1. append closing events + next-move decision
