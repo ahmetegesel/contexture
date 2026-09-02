@@ -16,7 +16,7 @@
 
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; match exactly; this section: semantics only, never a second copy.
-  dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE), UPPERCASE fields on entries (STATUS: open | closed); spellings are contractual.
+  dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE), UPPERCASE fields on findings (STATUS: open | closed); spellings are contractual.
   folder status = unit lifecycle; finding status = claim liveness. two statuses, one word, distinct meanings; journal entries carry no status: closure by reference only.
   state.md     = live pointer: only file edited freely; refreshed at period ends; read WHOLE at boot; kept tiny, detail behind refs.
   plan.md      = current declaration: goal + steps + exit criteria. progress NEVER touches it; step DONE = journal event "slug/step-N: DONE". edited ONLY at re-plan: touch what changed, replace in place; REPLAN entry same breath; grounded in the record. completed plan replaced in place; completion + next-move in the journal.
