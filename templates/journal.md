@@ -10,4 +10,4 @@ blocks at column 0; fields indent 2; one blank line between blocks.
   [GROUP: <token>]                        # agent-chosen thread, stable within the unit
   [KNOWLEDGE: true]                       # knowledge-worthy; the harvest's input
   [CLOSES | SUPERSEDES: <ref> (reason)]   # the ONLY closure; no closer = still open
-  [REF: "..."]                            # grounding
+  [REF: "path#symbol"]                    # grounding, same format as knowledge REFs

@@ -412,7 +412,8 @@ Three movements, each with one home:
   and a `KNOWLEDGE: true` flag when it is knowledge-worthy; it dies by
   reference, never by edit, and has no status of its own.
 - **Findings** land in the knowledge base at decision and discovery
-  moments. A `REF` points at the full version in the journal or reports,
+  moments. A `REF` points at the full version in the journal or a
+  report as a path and symbol, `journal.md#entry` or `reports/x.md#claim`,
   never at a file that changes; with no stable full version, the finding
   carries the whole story itself; a claim with neither is a hypothesis,
   and nobody plans on a hypothesis.

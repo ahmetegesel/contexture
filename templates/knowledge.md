@@ -7,7 +7,8 @@ one blank line between blocks.
   STATUS: open | closed                   # born; never edited
   SUMMARY ::
     continuation text
-  [REF: "..."]                            # the full version in append-only artifacts
-                                        # (journal, reports), never a dynamic file;
-                                        # no REF -> the SUMMARY carries the whole story
+  [REF: "path#symbol"]                    # the full version in append-only artifacts
+                                        # (journal.md#entry, reports/x.md#claim),
+                                        # never a dynamic file; no REF -> the SUMMARY
+                                        # carries the whole story
   [SUPERSEDES: <ref> (reason)]
