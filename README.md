@@ -408,8 +408,9 @@ any unit):
 Three movements, each with one home:
 
 - **Events** land in the journal as they happen, appended, never revised.
-  An entry is born with its `ANCHOR`, `STATUS: open|closed`, and `WHAT`;
-  it dies by reference, never by edit.
+  An entry carries its `ANCHOR` and `WHAT`, an agent-chosen `GROUP` thread,
+  and a `KNOWLEDGE: true` flag when it is knowledge-worthy; it dies by
+  reference, never by edit, and has no status of its own.
 - **Findings** land in the knowledge base at decision and discovery
   moments. A `REF` turns a claim into a fact; no REF means hypothesis,
   and nobody plans on a hypothesis.
@@ -454,9 +455,11 @@ context death is exactly what the ritual is for.
   time: what the decision is, how things look now, why it's asked. Each
   answer opens the next question, until the agent restates the goal in
   its own words and the human confirms it. Only then does work start.
-- **Knowledge lands with approval.** When an idea looks durable, propose
-  one compact candidate and ask confirm or reshape; "not landed" drops
-  it; never re-ask an answered question.
+- **Knowledge lands with approval.** A human verdict, decision, or rule
+  is the signal to propose one compact candidate and ask confirm or
+  reshape; "not landed" drops it; never re-ask an answered question.
+  Journal entries carry a GROUP thread and a KNOWLEDGE flag; the flagged
+  entries feed the close harvest.
 - **The human may interrupt; a queued message doesn't kill the act.**
   Complete the act in flight, then address the message. Halt only on an
   explicit stop, hold, or redirect.

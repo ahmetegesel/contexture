@@ -17,23 +17,23 @@
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; match exactly; this section: semantics only, never a second copy.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE), UPPERCASE fields on entries (STATUS: open | closed); spellings are contractual.
-  folder status = unit lifecycle; entry status = relevance class. two statuses, one word, distinct meanings.
+  folder status = unit lifecycle; finding status = claim liveness. two statuses, one word, distinct meanings; journal entries carry no status: closure by reference only.
   state.md     = live pointer: only file edited freely; refreshed at period ends; read WHOLE at boot; kept tiny, detail behind refs.
   plan.md      = current declaration: goal + steps + exit criteria. progress NEVER touches it; step DONE = journal event "slug/step-N: DONE". edited ONLY at re-plan: touch what changed, replace in place; REPLAN entry same breath; grounded in the record. completed plan replaced in place; completion + next-move in the journal.
-  journal.md   = append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, born open (attention items) or closed (events), never edited; closure by reference.
+  journal.md   = append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input.
   knowledge.md = findings at decision/discovery moments, born open (live claims) or closed (settled); linked to events via REF; no REF = hypothesis, never plan on it. lands only on the human's approval: human states it, or candidate proposed + confirmed/reshaped; developing ideas stay journal events.
   recipes/     = dispatch briefs, one per dispatch; names the report path.
   reports/     = lane evidence reports; the dispatch's audit trail.
 
 @query
-  surfaces: journal.md + knowledge.md (both carry statuses).
+  surfaces: journal.md + knowledge.md.
   journal:   map = grep "^@anchor" (one-liner per period; "continues A<N-1>" = joint, "(done, disjoint)" = dead); map decides live ranges; dead anchors' items never load. cluster = grep "ANCHOR: A<N>" (live ranges).
   knowledge: load open findings + findings referenced by live-range REFs; resolved via journal CLOSES (no successor) or SUPERSEDES (successor).
   classes by subtraction, never one grep:
-    open minus closure targets -> load fully (attention set); a CLOSES:/SUPERSEDES: target is superseded, not open
-    closure targets -> one-liner (WHAT / first SUMMARY line; the reason travels in the fresh entry)
-    born-closed -> never load
+    live-range entries minus closure targets -> load fully (the attention set); a CLOSES:/SUPERSEDES: target is closed, not open
+    closure targets -> one-liner (WHAT; the reason travels in the fresh entry)
   cross-repo: grep -l "repos:.*<name>" sessions/*/state.md: units touching a repo; objective is human-facing only.
+  group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed.
 
 @boot
   1. read AGENTS.local.md if present (tiny amendments); may amend this order
@@ -52,7 +52,7 @@
   confirm:  human: go | ask; may interrupt anytime
   act:      work; mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect
   surface:  durable output, named by what it is
-  land:     one candidate; confirm | reshape; "not landed" drops; no re-ask
+  land:     human verdict | decision | rule -> propose KNOWLEDGE: true on the journal entry; confirm | reshape; "not landed" drops; no re-ask
   land ->   ask
 
 @subagents
@@ -68,8 +68,8 @@
 
 @close
   period end (turn ends; unit continues):
-    1. append journal events; refresh next_action: one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings
-    2. add findings as they crystallize
+    1. append journal events, closing the period's done events by reference; refresh next_action: one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings
+    2. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirm | reshape; "not landed" drops
     3. folder stays ACTIVE
   unit close (plan completes, or the human ends the unit):
     1. append closing events + next-move decision

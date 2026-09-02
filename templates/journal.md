@@ -6,7 +6,8 @@ blocks at column 0; fields indent 2; one blank line between blocks.
 
 @entry <date>-<slug>
   ANCHOR: A<N>                            # current anchor at write time
-  STATUS: open | closed                   # born; never edited
   WHAT: "..."
-  [SUPERSEDES | CLOSES: <ref> (reason)]   # closure by reference; reason travels
+  [GROUP: <token>]                        # agent-chosen thread, stable within the unit
+  [KNOWLEDGE: true]                       # knowledge-worthy; the harvest's input
+  [CLOSES | SUPERSEDES: <ref> (reason)]   # the ONLY closure; no closer = still open
   [REF: "..."]                            # grounding
