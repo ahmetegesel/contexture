@@ -168,13 +168,15 @@ a tour of the convention:
 - `@query`: how the agent decides what to load
 - `@boot`: the boot sequence that starts every working period
 - `@interact`: how the agent treats the human
+- `@rhythms`: the rhythm contract and the fallback design loop
 - `@subagents`: how dispatches run
 - `@close`: period end and unit close
 - `@handoff`: the proof before context death
 - `@git`: what's committed and what never is
 
 It carries no schemas (those live in `templates/`), no provenance (that
-lives in the journal), and no rhythm names (those live in `rhythms/`).
+lives in the journal), and exactly one rhythm: the fallback design
+loop, which any personal rhythm replaces.
 
 **`AGENTS.local.md`** is the one governance file the human owns: personal
 rules, preferences, rhythm defaults. It is read at boot and kept tiny.

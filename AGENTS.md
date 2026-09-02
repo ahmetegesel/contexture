@@ -12,13 +12,13 @@
   AGENTS.local.md = your amendments, private, gitignored; amend, never contradict: the laws stand
   templates/      = artifact grammars: the shapes to fill at write time
   sessions/       = one folder per unit of work (private, gitignored)
-  rhythms/        = workflow patterns (private, gitignored); human-invoked or agent-proposed, like skills; never in state; name order + outcomes; reference artifacts by name, never re-specify grammars, never prescribe content; dialect; one line per step `N. GATE: outcome`, no sub-blocks
+  rhythms/        = workflow patterns (private, gitignored); the contract and the fallback live in @rhythms
 
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: semantics only, never a second copy.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE), UPPERCASE fields on findings (STATUS: open | closed); spellings are contractual.
   folder status = unit lifecycle; finding status = claim liveness. two statuses, one word, distinct meanings; journal entries carry no status: closure by reference only.
-  state.md     = live pointer: only file edited freely; refreshed at period ends; read WHOLE at boot; kept tiny, detail behind refs.
+  state.md     = live pointer: only file edited freely; refreshed as the work moves: every plan update and step landing moves next_action, also at period ends; read WHOLE at boot; kept tiny, detail behind refs.
   plan.md      = current declaration: goal + steps + exit criteria. progress NEVER touches it; step DONE = journal event "slug/step-N: DONE". edited ONLY at re-plan: touch what changed, replace in place; REPLAN entry same breath; grounded in the record. completed plan replaced in place; completion + next-move in the journal.
   journal.md   = the single recording surface: append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them; the agent chases every closer: an entry that awaits a verdict, resolution, or finalization closes in the same breath it resolves. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input.
   knowledge.md = findings at decision/discovery moments, born open (live claims) or closed (settled); linked to events via REF. REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, reports/x.md#claim), never a dynamic file; no stable full version -> the finding carries the whole story. no REF, no story = hypothesis, never plan on it. claims outlive their anchors, unlike journal entries. every finding lands via the harvest of a KNOWLEDGE: true entry, confirmed or reshaped; developing ideas stay journal events.
@@ -42,19 +42,28 @@
   4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
   5. read state.md WHOLE; stamp journal @anchor A<N> (N = current_anchor + 1, one-liner); refresh current_anchor
   6. read plan.md; run @query over journal + knowledge: anchor map, cluster, closures, open; derive classes by subtraction
-  7. continue from next_action, following the human-invoked rhythm
+  7. continue from next_action, following the human-invoked rhythm, or the fallback
   8. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
 
 @interact
-  :: ask -> restate -> confirm -> act -> surface -> land -> close -> ask
+  :: ask -> restate -> confirm -> act -> surface -> ask
   ask:      grounded question, one at a time; answer opens next; until resolved
   restate:  goal, your words
   confirm:  human: go | ask; may interrupt anytime
-  act:      work; mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect
+  act:      work the chosen rhythm's steps (fallback: the design loop); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect
   surface:  durable output, named by what it is
-  land:     human verdict | decision | rule -> propose KNOWLEDGE: true on the journal entry; confirm | reshape; "not landed" drops; no re-ask
-  close:    open entries resolved this turn close by reference, same breath; no open entry outlives its resolution
-  close ->  ask
+  surface -> ask
+  each transition journals as it happens; nothing waits for the period end
+
+@rhythms
+  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-proposed; never in state
+  fallback :: the design loop, when no rhythm is invoked; a human rhythm replaces it
+  1. JOURNAL: the event lands as it happens, during the conversation
+  2. VERDICT: a human verdict, decision, or rule settles
+  3. LAND: one knowledge candidate, confirmed or reshaped -> knowledge.md; "not landed" drops; no re-ask
+  4. PLAN: the confirmed direction updates the plan or inserts new steps; next_action points at the first new step; phases allowed
+  5. EXECUTE: work the plan; drift during the work = REPLAN entry, same breath
+  6. JOURNAL: the result lands; next_action advances to the next step; the execution's entry closes or supersedes the earlier plan-phase entries
 
 @subagents
   every dispatch:
