@@ -12,7 +12,7 @@
   AGENTS.local.md = your amendments, private, gitignored; amend, never contradict: the laws stand
   templates/      = artifact grammars: the shapes to fill at write time
   sessions/       = one folder per unit of work (private, gitignored)
-  rhythms/        = workflow patterns (private, gitignored); the contract and the fallback live in @rhythms
+  rhythms/        = workflow patterns (private, gitignored); the contract and the default live in @rhythms
 
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: semantics only, never a second copy.
@@ -42,7 +42,7 @@
   4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
   5. read state.md WHOLE; stamp journal @anchor A<N> (N = current_anchor + 1, one-liner); refresh current_anchor
   6. read plan.md; run @query over journal + knowledge: anchor map, cluster, closures, open; derive classes by subtraction
-  7. continue from next_action, following the human-invoked rhythm, or the fallback
+  7. continue from next_action, following the human-invoked rhythm, or the default
   8. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
 
 @interact
@@ -50,14 +50,14 @@
   ask:      grounded question, one at a time; answer opens next; until resolved
   restate:  goal, your words
   confirm:  human: go | ask; may interrupt anytime
-  act:      work the chosen rhythm's steps (fallback: the design loop); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect
+  act:      work the chosen rhythm's steps (default: the design loop); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect
   surface:  durable output, named by what it is
   surface -> ask
   each transition journals as it happens; nothing waits for the period end
 
 @rhythms
   contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-proposed; never in state
-  fallback :: the design loop, when no rhythm is invoked; a human rhythm replaces it
+  default :: the design loop, when no rhythm is invoked; a human rhythm replaces it
   1. JOURNAL: the event lands as it happens, during the conversation
   2. VERDICT: a human verdict, decision, or rule settles
   3. LAND: one knowledge candidate, confirmed or reshaped -> knowledge.md; "not landed" drops; no re-ask
