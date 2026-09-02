@@ -20,7 +20,7 @@
   folder status = unit lifecycle; finding status = claim liveness. two statuses, one word, distinct meanings; journal entries carry no status: closure by reference only.
   state.md     = live pointer: only file edited freely; refreshed at period ends; read WHOLE at boot; kept tiny, detail behind refs.
   plan.md      = current declaration: goal + steps + exit criteria. progress NEVER touches it; step DONE = journal event "slug/step-N: DONE". edited ONLY at re-plan: touch what changed, replace in place; REPLAN entry same breath; grounded in the record. completed plan replaced in place; completion + next-move in the journal.
-  journal.md   = the single recording surface: append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input.
+  journal.md   = the single recording surface: append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them; the agent chases every closer: an entry that awaits a verdict, resolution, or finalization closes in the same breath it resolves. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input.
   knowledge.md = findings at decision/discovery moments, born open (live claims) or closed (settled); linked to events via REF. REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, reports/x.md#claim), never a dynamic file; no stable full version -> the finding carries the whole story. no REF, no story = hypothesis, never plan on it. claims outlive their anchors, unlike journal entries. every finding lands via the harvest of a KNOWLEDGE: true entry, confirmed or reshaped; developing ideas stay journal events.
   recipes/     = dispatch briefs, one per dispatch; names the report path.
   reports/     = lane evidence reports; the dispatch's audit trail.
@@ -46,14 +46,15 @@
   8. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
 
 @interact
-  :: ask -> restate -> confirm -> act -> surface -> land -> ask
+  :: ask -> restate -> confirm -> act -> surface -> land -> close -> ask
   ask:      grounded question, one at a time; answer opens next; until resolved
   restate:  goal, your words
   confirm:  human: go | ask; may interrupt anytime
   act:      work; mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect
   surface:  durable output, named by what it is
   land:     human verdict | decision | rule -> propose KNOWLEDGE: true on the journal entry; confirm | reshape; "not landed" drops; no re-ask
-  land ->   ask
+  close:    open entries resolved this turn close by reference, same breath; no open entry outlives its resolution
+  close ->  ask
 
 @subagents
   every dispatch:

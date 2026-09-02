@@ -410,7 +410,8 @@ Three movements, each with one home:
 - **Events** land in the journal as they happen, appended, never revised.
   An entry carries its `ANCHOR` and `WHAT`, an agent-chosen `GROUP` thread,
   and a `KNOWLEDGE: true` flag when it is knowledge-worthy; it dies by
-  reference, never by edit, and has no status of its own.
+  reference, never by edit, has no status of its own, and the closer
+  lands the moment it resolves.
 - **Findings** land in the knowledge base at decision and discovery
   moments. A `REF` points at the full version in the journal or a
   report as a path and symbol, `journal.md#entry` or `reports/x.md#claim`,
