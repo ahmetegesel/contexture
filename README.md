@@ -562,12 +562,11 @@ Extending it, without breaking it:
   performance degrades. Prefer @append; re-check replaced sections after
   each sync.
 
-- **Rhythms: the skill replacement, in the artifact dialect.** A rhythm
-  is a workflow pattern that replaces what skills and other machinery
-  used to do: when invoked, it tells the agent the shape of a piece of
-  work. It names the order and the outcomes, and it references the
-  workspace's artifacts by name; it never re-specifies their grammars
-  or prescribes their content.
+- **Rhythms: workflow patterns, in the artifact dialect.** A rhythm
+  tells the agent the shape of a piece of work when invoked. It names
+  the order and the outcomes, and it references the workspace's
+  artifacts by name; it never re-specifies their grammars or prescribes
+  their content.
   The recipe's fields, the journal's entries, the status card's keys:
   those belong to their owners. And it is written in the same dialect
   as the artifacts: typed blocks, column 0, indent 2, contract words
