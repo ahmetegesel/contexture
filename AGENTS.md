@@ -27,23 +27,25 @@
 
 @query
   surfaces: journal.md + knowledge.md.
-  journal:   map = grep "^@anchor" (one-liner per period; "continues A<N-1>" = joint, "(done, disjoint)" = dead); map decides live ranges; dead anchors' items never load. cluster = grep "ANCHOR: A<N>" (live ranges).
+  journal:   map = grep "^@anchor" (one-liner per period: the join form plus the loaded attention set; "(done, disjoint)" = dead); map decides live ranges; dead anchors' items never load. cluster = grep "ANCHOR: A<N>" (live ranges).
   knowledge: loads fully (small; every line a decision): open findings + findings referenced by live-range REFs; resolved via journal CLOSES (no successor) or SUPERSEDES (successor).
   classes by subtraction, never one grep:
     live-range entries minus closure targets -> load fully (the attention set); a CLOSES:/SUPERSEDES: target is closed, not open
     closure targets -> one-liner (WHAT; the reason travels in the fresh entry)
   cross-repo: grep -l "repos:.*<name>" sessions/*/state.md: units touching a repo; objective is human-facing only.
   group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed.
+  artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot
   1. read AGENTS.local.md if present (tiny amendments); may amend this order
   2. opening message names the move: continuing a unit, or new work; primary signal; nothing loads before
   3. verify: grep -l "status: ACTIVE" sessions/<unit>/state.md; agree -> proceed; disagree -> ask before anything loads
   4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
-  5. read state.md WHOLE; stamp journal @anchor A<N> (N = current_anchor + 1, one-liner); refresh current_anchor
-  6. read plan.md; run @query over journal + knowledge: anchor map, cluster, closures, open; derive classes by subtraction
-  7. continue from next_action, following the human-invoked rhythm, or the default
-  8. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
+  5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1)
+  6. read plan.md; run @query over journal + knowledge: anchor map, cluster, closures, open; derive classes by subtraction; NAME the attention set and load each entry FULLY; closure targets stay one-liners
+  7. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the named set>); the stamp is the load receipt: grep "^@anchor" reconstructs map + load
+  8. continue from next_action, following the human-invoked rhythm, or the default
+  9. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask

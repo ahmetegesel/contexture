@@ -2,7 +2,7 @@
 
 blocks at column 0; fields indent 2; one blank line between blocks.
 
-@anchor A<N> ("one-liner")                # "(continues A<N-1>)" | "(done, disjoint)"
+@anchor A<N> ("one-liner")                # "(continues A<N-1>)" | "(done, disjoint)", the loaded attention set named
 
 @entry <date>-<slug>
   ANCHOR: A<N>                            # current anchor at write time
@@ -13,7 +13,7 @@ blocks at column 0; fields indent 2; one blank line between blocks.
   [REF: "path#symbol"]                    # grounding, same format as knowledge REFs
 
 # filled sample
-@anchor A<N> ("<one-liner (continues A<N-1>)>")
+@anchor A<N> ("<continues A<N-1>, attention: the named set>")
 
 @entry <date>-<slug>
   ANCHOR: A<N>
