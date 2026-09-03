@@ -11,10 +11,10 @@
 @layout
   AGENTS.md       = laws + navigation (this file)
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
-  AGENTS.local.md = your amendments, private, gitignored; amend, never contradict: the laws stand; survives every sync untouched
+  AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   templates/      = artifact grammars: the shapes to fill at write time
-  sessions/       = one folder per unit of work (private, gitignored)
-  rhythms/        = workflow patterns (private, gitignored); the contract and the default live in @rhythms
+  sessions/       = one folder per unit of work
+  rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: semantics only, never a second copy.
@@ -89,7 +89,7 @@
     1. append closing events + next-move decision
     2. re-read; confirm consistency (law 6)
     3. promote durable knowledge at the human's direction
-    4. mark CLOSED; stays private; nothing committed
+    4. mark CLOSED
 
 @handoff
   compaction or clearing near (any moment, mid-period):
@@ -98,5 +98,5 @@
   the handoff writes the record, not working memory.
 
 @git
-  git tracks the convention ONLY: this file, templates/, tracked material. the gitignore denies by default: shared files whitelist explicitly. session work is private, never committed.
+  git tracks the convention ONLY: this file, templates/, tracked material. the gitignore denies by default: shared files whitelist explicitly.
   never push without explicit instruction.

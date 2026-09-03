@@ -30,8 +30,10 @@ The workspace in one map:
 1. Copy `AGENTS.md` and `templates/` into your repo. This guideline is
    for the humans; read it, don't copy it.
 2. Make `.gitignore` deny by default: ignore everything, whitelist the
-   shared files with `!` lines. Anything new to share gets an explicit
-   `!` line; everything else stays private forever.
+   shared files with `!` lines; for example, `!sessions/` plus
+   `!sessions/**` if you want your session history in git. Anything new
+   to share gets an explicit `!` line; everything else stays private
+   forever.
 3. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md`
    (your amendments); both amend, never contradict.
 4. Tell the agent what the first unit is; it bootstraps
@@ -148,8 +150,7 @@ once, keep it out of the repo.
 
 **The private layer is the working state**: `sessions/`, one folder per
 unit of work; `rhythms/`, personal workflow patterns, invoked not
-imposed; and `AGENTS.local.md`, personal amendments. All gitignored,
-per-user, never committed. Nothing in `sessions/` is ever committed.
+imposed; and `AGENTS.local.md`, personal amendments.
 
 | File | Layer | Role | Read when |
 |---|---|---|---|
@@ -471,8 +472,7 @@ Two distinct ends:
 - **Unit close** (the plan completes, or the human ends the unit): append
   the closing events *and the next-move decision* to the journal, promote
   durable knowledge at the human's direction, re-read the files and
-  confirm consistency, then mark the unit CLOSED. It stays private
-  forever.
+  confirm consistency, then mark the unit CLOSED.
 
 ### Handoff
 
@@ -537,8 +537,10 @@ context death is exactly what the ritual is for.
    new `AGENTS.md` and `templates/` again - your overlay and local files
    survive untouched; check MAJOR bumps against your overlay.
 2. Make `.gitignore` deny by default: ignore everything, whitelist the
-   shared files with `!` lines. Anything new to share gets an explicit
-   `!` line; everything else stays private forever.
+   shared files with `!` lines; for example, `!sessions/` plus
+   `!sessions/**` if you want your session history in git. Anything new
+   to share gets an explicit `!` line; everything else stays private
+   forever.
 3. Carve `AGENTS.local.md` with your amendments: preferences, personal
    rules, rhythm defaults. Amend, never contradict: the laws stand.
 4. Create `sessions/`, then tell the agent the first unit's name and
