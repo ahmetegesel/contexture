@@ -497,6 +497,9 @@ context death is exactly what the ritual is for.
 
 1. Copy `AGENTS.md` and `templates/` into your repository. That's the
    convention. This guideline stays out of it; it's the human's read.
+   The copy carries a version line; when upstream evolves, copy the new
+   `AGENTS.md` and `templates/` again - your overlay and local files
+   survive untouched.
 2. Add `sessions/`, `rhythms/`, and `AGENTS.local.md` to `.gitignore`.
 3. Carve `AGENTS.local.md` with your amendments: preferences, personal
    rules, rhythm defaults. Amend, never contradict: the laws stand.
@@ -511,6 +514,14 @@ context death is exactly what the ritual is for.
    anchor, reads the plan, and continues from `next_action`.
 
 Extending it, without breaking it:
+
+- **Workspace overlay: shared adaptation, not fork.** `AGENTS.workspace.md`
+  is the workspace's tracked overlay: @replace or @append per section,
+  grammar in `templates/overlay.md`. It survives every sync untouched.
+  @replace is a last resort: the replaced base text still loads, so the
+  agent holds two versions of one section and may follow either;
+  performance degrades. Prefer @append; re-check replaced sections after
+  each sync.
 
 - **Rhythms: the skill replacement, in the artifact dialect.** A rhythm
   is a workflow pattern that replaces what skills and other machinery

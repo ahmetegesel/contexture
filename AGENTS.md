@@ -1,3 +1,4 @@
+# contexture v1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -10,6 +11,7 @@
 @layout
   AGENTS.md       = laws + navigation (this file)
   AGENTS.local.md = your amendments, private, gitignored; amend, never contradict: the laws stand
+  AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched
   templates/      = artifact grammars: the shapes to fill at write time
   sessions/       = one folder per unit of work (private, gitignored)
   rhythms/        = workflow patterns (private, gitignored); the contract and the default live in @rhythms
@@ -37,7 +39,7 @@
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot
-  1. read AGENTS.local.md if present (tiny amendments); may amend this order
+  1. read AGENTS.local.md (tiny personal amendments) and AGENTS.workspace.md (the shared overlay) if present; may amend this order; an overlay address names a base section: replaced or appended
   2. opening message names the move: continuing a unit, or new work; primary signal; nothing loads before
   3. verify: grep -l "status: ACTIVE" sessions/<unit>/state.md; agree -> proceed; disagree -> ask before anything loads
   4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
