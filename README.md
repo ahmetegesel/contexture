@@ -17,7 +17,7 @@ from vendors (bash + grep are the whole engine; any harness, any agent).
 The workspace in one map:
 
 - `AGENTS.md`: laws + navigation, auto-delivered every turn
-- `templates/`: six grammars pinning the shape of every artifact
+- `templates/`: seven grammars: six artifacts plus the workspace overlay
 - `sessions/<unit>/`: one folder per unit of work: `state.md` (the
   pointer), `plan.md` (the intent), `journal.md` (the memory),
   `knowledge.md` (the mind)
@@ -29,8 +29,11 @@ The workspace in one map:
 
 1. Copy `AGENTS.md` and `templates/` into your repo. This guideline is
    for the humans; read it, don't copy it.
-2. Add `sessions/`, `rhythms/`, `AGENTS.local.md` to `.gitignore`.
-3. Write `AGENTS.local.md` with your amendments; amend, never contradict.
+2. Make `.gitignore` deny by default: ignore everything, whitelist the
+   shared files with `!` lines. Anything new to share gets an explicit
+   `!` line; everything else stays private forever.
+3. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md`
+   (your amendments); both amend, never contradict.
 4. Tell the agent what the first unit is; it bootstraps
    `sessions/<unit>/` itself. The best first unit is this convention:
    adopting and tweaking it is the richest test it can get.
@@ -40,19 +43,21 @@ The workspace in one map:
 
 **Then it runs itself:**
 
-- **Boot:** read your amendments, name the move from the message,
-  verify against the folder, stamp an anchor, run the query:
-  open items fully, superseded as one-liners, born-closed never
+- **Boot:** read the overlay and your amendments, name the move from the
+  message, verify against the folder, run the query: live-range entries
+  minus closure targets fully, closure targets as one-liners, dead
+  anchors never; the anchor stamp names the loaded set
 - **Work:** events append to the journal, findings land in knowledge
   with a REF, plans edit surgically at re-plan only
-- **Close:** period end refreshes the pointer; unit end marks CLOSED
-  and journals the next move
+- **Close:** period end refreshes the pointer and harvests the flagged
+  entries; unit end marks CLOSED and journals the next move
 - **Handoff:** before context death, run the writes, verify the boot
   greps resolve
 
-Five premises carry the whole design: files over conversation, govern
-output not process, mitigate don't solve, compose from the record, no
-machinery. The rest of this guide walks the workspace itself, file by
+The seven laws carry the whole design: files over conversation, load
+only what the work touches, dense structural writing, govern output not
+process, compose from the record, verify before close, harvest the
+human. The rest of this guide walks the workspace itself, file by
 file, then a session running through it.
 
 ---
@@ -89,13 +94,19 @@ And the whole convention runs on any vendor, any harness, any agent.
 
 ## The philosophy behind it
 
-Five premises carry the entire design. Everything else follows.
+The seven laws carry the entire design. Everything else follows.
 
 1. **Files are the source of truth, never the conversation.** The
    conversation is a scratchpad; the files are the memory. Every rule,
-   every finding, every piece of state that matters is written down at the
-   moment it happens.
-2. **Govern the output, not the process.** Human teams run on shared
+   every finding, every piece of state that matters is written down at
+   the moment it happens.
+2. **Load only what the work touches.** Attention is a budget. The agent
+   loads the active session's live surfaces and nothing else; closed
+   sessions stay untouched unless the task needs them.
+3. **Dense and structural.** One statement per line, typed blocks over
+   prose, tokens spent on substance. Structure is what LLMs parse best;
+   prose is where misreadings live.
+4. **Govern the output, not the process.** Human teams run on shared
    structure: SDLC, Agile, conventions, standards. It is legitimate;
    it solves human collaboration flaws, coordination and communication.
    Agent flaws are entirely different: memory dies, attention is finite,
@@ -106,17 +117,18 @@ Five premises carry the entire design. Everything else follows.
    own agent. The separation: a thin shared layer that guarantees the
    quality of the output, and a personal layer where process stays
    free.
-3. **Mitigate, don't solve.** Agent failures are permanent; they cannot
-   be eliminated, only caught and corrected. Expect them, and make every
-   correction as light as it can be.
-4. **Compose from the record.** The agent never reconstructs from memory of
+5. **Compose from the record.** The agent never reconstructs from memory of
    the conversation. Rewrites and plans ground in the journal and the
    knowledge base, the only sources that survive compaction.
-5. **No machinery.** bash, grep, and read exist everywhere. Prose is the
-   query language; the shell is the retrieval tool. Nothing harness-specific
-   ever enters the convention.
+6. **Verify before close.** Nothing is done without evidence; no claim of
+   verification the agent did not perform; the files are re-read and
+   confirmed consistent before anything closes.
+7. **Harvest the human.** Questions surface durable knowledge, which
+   crystallizes into compact candidates and lands with approval. Land
+   when a verdict deserves it, never just to record; developing ideas
+   stay in the journal.
 
-These five premises produce everything that follows: first the workspace
+These seven laws produce everything that follows: first the workspace
 itself, file by file, each with its reason; then a session running
 through it; then how to take it home.
 
@@ -190,9 +202,11 @@ rules, preferences, rhythm defaults. It is read at boot and kept tiny.
 Its one hard rule: **amend, never contradict: the laws stand.** A local
 "skip verification" is a contradiction, not an amendment.
 
-**`templates/`** pins six grammars, one per artifact, each written to be
-read *from*, never copied wholesale. The four record files get their own
-sections below; the dispatch pair follows them.
+**`templates/`** pins seven grammars: six artifacts, each written to be
+read *from*, never copied wholesale, and the overlay grammar for
+`AGENTS.workspace.md`. Every grammar carries a filled sample in template
+syntax at its foot. The four record files get their own sections below;
+the dispatch pair follows them.
 
 ### The unit
 
@@ -237,34 +251,40 @@ place; its traces, completion and the next move, land in the journal.
 ### journal.md: the memory
 
 The unit's running record. It only ever gains lines. An entry is born
-with its period stamp (ANCHOR), its STATUS (open or closed), and its
-WHAT line, and it is never edited afterward. What is over is closed by
-a fresh entry that points at the old one and carries the reason; the old
-line stays exactly as it was.
+with its period stamp (ANCHOR) and its WHAT line, and it is never edited
+afterward. It has no status of its own: it is closed only when a later
+entry's CLOSES or SUPERSEDES targets it, and the closer lands in the
+same breath the entry resolves. Entries may carry a GROUP thread (one
+word, stable within the unit) and a KNOWLEDGE: true flag when they are
+knowledge-worthy.
 
 Why it works this way: the conversation is the least durable thing in
 the system, and compaction, a lossy summarization, is where it dies. A
 record that gets revised is no longer a record; a record that only grows
 survives every compaction intact. The period stamps are how time itself
-is recorded: one line per working period, and the map of those lines
-decides which stretch of the journal is live right now.
+is recorded: one line per working period, naming the period and the
+loaded attention set, and the map of those lines decides which stretch
+of the journal is live right now.
 
 ### knowledge.md: the mind
 
 Findings, written at the moment of a decision or a discovery. Each
-finding is a NAME, a STATUS, a SUMMARY, and a REF: a link to where it
-came from. A claim without a REF is a hypothesis; useful for questions,
-never a base for plans. Findings are born open or closed and never
-edited, because the state of a fact at its discovery moment is itself a
-fact. A finding lands only on the human's concrete approval: the human
-states it, or the agent proposes a compact candidate and the human
-confirms or reshapes. Until it lands, a developing idea stays in the
-journal as events. Knowledge carries no timeline; the journal owns time,
-and the REFs are the seam between the two.
+finding is a NAME, a STATUS (open or closed, born and never edited),
+a SUMMARY, and a REF. The REF points at the full version in an
+append-only artifact, as a path and a symbol: `journal.md#entry` or
+`reports/x.md#claim`. A dynamic file, the BIOS included, may never be
+the reference of record. Where no stable full version exists, the
+finding carries the whole story itself; a claim with no REF and no
+story is a hypothesis: useful for questions, never a base for plans.
+A finding lands only via the harvest of a KNOWLEDGE: true entry: the
+agent proposes one compact candidate, the human confirms or reshapes,
+and the entry closes by reference. Until it lands, a developing idea
+stays in the journal as events. Knowledge carries no timeline; the
+journal owns time, and the REFs are the seam between the two.
 
 *In practice:* a finding that reads "agents skip cross-checks" is a
-hypothesis. The same finding with a REF pointing at the correction that
-produced it is a fact.
+hypothesis. The same finding with a REF pointing at the journal entry
+that produced it is a fact.
 
 ### recipes and reports: the dispatch pair
 
@@ -297,7 +317,7 @@ on substance: blocks start at column 0 (`@entry`, `@finding`), bodies
 indent two, `::` opens an indented block value, `|` means alternation
 only, `[ ]` wraps optional parts, `->` means flow, `#` starts a
 comment. `status:` is lowercase on the status card; `STATUS:` is
-uppercase on entries. Spellings are contractual, not stylistic.
+uppercase on findings. Spellings are contractual, not stylistic.
 Rhythms are written in this same dialect; "Adopting it" explains the
 reason.
 
@@ -321,10 +341,10 @@ A unit of work lives through four phases: boot, work, close, handoff.
 
 The first thing the agent does each working period, mechanically:
 
-1. **Read amendments.** Read `AGENTS.workspace.md` (the shared overlay)
-   then `AGENTS.local.md` (personal amendments) if present. Both are
-   tiny, and the local file may amend the boot order itself; where
-   workspace and local conflict, the workspace wins.
+1. **Read the overlay and amendments.** Read `AGENTS.workspace.md` (the
+   shared overlay) then `AGENTS.local.md` (personal amendments) if
+   present. Both are tiny, and the local file may amend the boot order
+   itself; where workspace and local conflict, the workspace wins.
 2. **Name the move.** Read the human's opening message and decide what it
    is: continuing a unit, or new work. The message is the primary signal;
    nothing else loads before the move is named.
@@ -336,41 +356,43 @@ The first thing the agent does each working period, mechanically:
 4. **More than one candidate?** The message may name one; otherwise list
    the ACTIVE units (`grep -rl "status: ACTIVE" sessions/*/state.md`)
    and ask (default: the last-touched).
-5. **Read state, stamp the anchor.** Read `state.md` whole. It is small by
-   law, and detail lives behind refs, never inside it. Append to
-   `journal.md`:
-   ```
-   @anchor A<N> ("one-liner: what this working period is")
-   ```
-   `<N>` is `current_anchor` + 1, and the map of these one-liners is the
-   seam between working periods: it decides which ranges of the journal are
-   live. Then refresh `current_anchor` in `state.md` to the new value.
-6. **Read the plan, run the query.** Read `plan.md`. Then decide what to
-   load from the journal and knowledge. Four greps, in this order, and
-   one subtraction at the end:
-   - the anchor map: `grep "^@anchor" journal.md` (labels each period)
+5. **Read state, refresh the anchor counter.** Read `state.md` whole. It
+   is small by law, and detail lives behind refs, never inside it.
+   Refresh `current_anchor` to the next value (`N = previous + 1`).
+6. **Read the plan, run the query, and load.** Read `plan.md`. Then decide
+   what to load from the journal and knowledge. Four greps, in this order,
+   one subtraction, and one named load:
+   - the anchor map: `grep "^@anchor" journal.md` (labels each period,
+     including its loaded attention set)
    - the live ranges: `grep "ANCHOR: A<N>" journal.md` (labels every
      entry by its period)
    - the closure stamps: `grep -E "SUPERSEDES:|CLOSES:" journal.md
      knowledge.md` (what they target)
-   - the open items: `grep "STATUS: open" journal.md knowledge.md`
-   - then subtract: an open item targeted by a closure stamp is
-     superseded, not open; it loads as a one-liner (its WHAT line), and
-     the reason travels in the fresh entry. Open items outside the live
-     ranges are dead weight; skip them. Born-closed items never load.
-   - knowledge loads open findings **plus findings referenced by live-range
-     REFs**; a finding resolves via a journal `CLOSES:` (no successor) or
-     via a `SUPERSEDES:` (a successor finding)
-7. **Continue.** From `next_action`, following the rhythm the human invoked
-   (or propose one). If `next_action` says "plan the next move", the
-   planning phase starts.
-8. **New work bootstraps a unit.** The agent creates
+   - subtract: a live-range entry targeted by a closure stamp is closed,
+     not open; it loads as a one-liner (its WHAT line), and the reason
+     travels in the fresh entry. Live-range entries with no closer are
+     the attention set: NAME them and load each entry FULLY before
+     continuing. Dead anchors' items never load.
+   - knowledge loads fully (small, every line a decision): open findings
+     plus findings referenced by live-range REFs; a finding resolves via
+     a journal `CLOSES:` (no successor) or via a `SUPERSEDES:` (a
+     successor finding)
+7. **Stamp the load receipt.** Append to `journal.md`:
+   ```
+   @anchor A<N> ("continues A<N-1>", attention: <the named set>)
+   ```
+   The stamp names what was loaded, so `grep "^@anchor"` reconstructs
+   both the map and the load.
+8. **Continue.** From `next_action`, following the human-invoked rhythm,
+   or the default design loop. If `next_action` says "plan the next
+   move", the planning phase starts.
+9. **New work bootstraps a unit.** The agent creates
    `sessions/<slug>/state.md` with `status: ACTIVE`,
    `current_anchor: A0`, and `next_action: "plan the first move"`, then
    continues at step 5, and the first boot stamps A1.
 
-A boot, concretely. All eight steps, amendments first (the unit here is
-any unit):
+A boot, concretely. All nine steps, overlay and amendments first (the
+unit here is any unit):
 
 ```
 1. read AGENTS.workspace.md        # absent: nothing to overlay, proceed
@@ -385,16 +407,14 @@ any unit):
 
 4. one candidate: no ask needed
 
-5. read state.md WHOLE, then stamp:
-   @anchor A2 ("second period on the example unit")
-   refresh current_anchor to A2
+5. read state.md WHOLE; refresh current_anchor to A2
 
-6. the query: four greps in order, then the subtraction.
+6. the query: four greps in order, then the subtraction and the load.
 
-   map first (labels each period):
+   map first (labels each period and its loaded set):
    $ grep "^@anchor" sessions/example-unit/journal.md
    @anchor A1 ("inventory and design")              # the map: A1..A2 live
-   @anchor A2 ("second period on the example unit")
+   @anchor A2 ("continues A1", attention: <named>)  # A2 names its load
 
    cluster (labels every entry by its period):
    $ grep "ANCHOR: A2" sessions/example-unit/journal.md
@@ -404,15 +424,16 @@ any unit):
    $ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
    sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
 
-   open items:
-   $ grep "STATUS: open" sessions/example-unit/journal.md sessions/example-unit/knowledge.md
-   sessions/example-unit/journal.md:14:  STATUS: open
+   the subtraction: line 19's CLOSES targets an entry in the live
+   range. That entry loads as a one-liner, not fully; the reason
+   travels in the fresh entry. The remaining live-range entries are
+   the attention set: named and loaded fully, then stamped at step 7.
 
-   the subtraction: line 19's CLOSES targets the entry that line 14
-   shows open. That entry loads as a one-liner, not fully; the reason
-   travels in the fresh entry. The attention set is empty today.
+7. stamp:
+   @anchor A2 ("continues A1", attention: <the named set>)
 
-7. continue from next_action, following the human-invoked rhythm
+8. continue from next_action, following the invoked rhythm or the
+   default design loop
 ```
 
 ### Work
@@ -439,10 +460,13 @@ Three movements, each with one home:
 Two distinct ends:
 
 - **Period end** (a turn ends; the unit continues): append events to the
-  journal, refresh `next_action` in `state.md` (one terse pointer,
-  overwritten never prepended; the WHY rebuilds from journal open items,
-  the plan's GROUNDED IN refs, and live findings, never pre-serialized
-  into state), and add findings as they crystallize. The folder stays
+  journal, closing the period's done events by reference; refresh
+  `next_action` in `state.md` (one terse pointer, overwritten never
+  prepended; the WHY rebuilds from journal open items, the plan's
+  GROUNDED IN refs, and live findings, never pre-serialized into
+  state); then harvest: grep the period's KNOWLEDGE: true entries,
+  propose one candidate per entry, and each confirmed candidate lands
+  in knowledge.md while its entry closes by reference. The folder stays
   ACTIVE.
 - **Unit close** (the plan completes, or the human ends the unit): append
   the closing events *and the next-move decision* to the journal, promote
