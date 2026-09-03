@@ -519,7 +519,8 @@ Extending it, without breaking it:
 
 - **Workspace overlay: shared adaptation, not fork.** `AGENTS.workspace.md`
   is the workspace's tracked overlay: @replace or @append per section,
-  grammar in `templates/overlay.md`. It survives every sync untouched.
+  grammar in `templates/overlay.md`. It survives every sync untouched,
+  and it wins over personal amendments.
   @replace is a last resort: the replaced base text still loads, so the
   agent holds two versions of one section and may follow either;
   performance degrades. Prefer @append; re-check replaced sections after
