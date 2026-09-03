@@ -1,3 +1,7 @@
-sessions/
-rhythms/
-AGENTS.local.md
+# deny by default: nothing shares unless whitelisted below
+*
+!.gitignore
+!AGENTS.md
+!README.md
+!templates/
+!templates/**

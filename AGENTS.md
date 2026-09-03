@@ -98,5 +98,5 @@
   the handoff writes the record, not working memory.
 
 @git
-  git tracks the convention ONLY: this file, templates/, tracked material. session work is private, never committed.
+  git tracks the convention ONLY: this file, templates/, tracked material. the gitignore denies by default: shared files whitelist explicitly. session work is private, never committed.
   never push without explicit instruction.

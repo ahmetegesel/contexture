@@ -512,7 +512,9 @@ context death is exactly what the ritual is for.
    features, PATCH = fixes and wording. When upstream evolves, copy the
    new `AGENTS.md` and `templates/` again - your overlay and local files
    survive untouched; check MAJOR bumps against your overlay.
-2. Add `sessions/`, `rhythms/`, and `AGENTS.local.md` to `.gitignore`.
+2. Make `.gitignore` deny by default: ignore everything, whitelist the
+   shared files with `!` lines. Anything new to share gets an explicit
+   `!` line; everything else stays private forever.
 3. Carve `AGENTS.local.md` with your amendments: preferences, personal
    rules, rhythm defaults. Amend, never contradict: the laws stand.
 4. Create `sessions/`, then tell the agent the first unit's name and
