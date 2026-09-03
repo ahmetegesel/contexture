@@ -21,6 +21,7 @@ The workspace in one map:
 - `sessions/<unit>/`: one folder per unit of work: `state.md` (the
   pointer), `plan.md` (the intent), `journal.md` (the memory),
   `knowledge.md` (the mind)
+- `AGENTS.workspace.md`: the workspace's shared overlay, replace or append per section; wins over local
 - `AGENTS.local.md`: your amendments; amend, never contradict
 - `rhythms/`: workflow patterns, invoked never imposed
 
@@ -141,6 +142,7 @@ per-user, never committed. Nothing in `sessions/` is ever committed.
 | File | Layer | Role | Read when |
 |---|---|---|---|
 | `AGENTS.md` | shared | laws + navigation | every turn (auto-delivered) |
+| `AGENTS.workspace.md` | shared | the workspace overlay, replace or append per section | at boot, before local |
 | `templates/` | shared | the grammars, one per artifact, each with its filled sample | write-time reference |
 | `AGENTS.local.md` | private | your amendments | at boot |
 | `sessions/` | private | one folder per unit of work | the active unit's files |
@@ -177,6 +179,11 @@ a tour of the convention:
 It carries no schemas (those live in `templates/`), no provenance (that
 lives in the journal), and exactly one rhythm: the default design
 loop, which any personal rhythm replaces.
+
+**`AGENTS.workspace.md`** is the workspace's shared overlay, tracked with
+the repo: @replace or @append per section, grammar in
+`templates/overlay.md`. It survives every sync untouched and wins over
+personal amendments.
 
 **`AGENTS.local.md`** is the one governance file the human owns: personal
 rules, preferences, rhythm defaults. It is read at boot and kept tiny.
@@ -314,8 +321,10 @@ A unit of work lives through four phases: boot, work, close, handoff.
 
 The first thing the agent does each working period, mechanically:
 
-1. **Read amendments.** Read `AGENTS.local.md` if present. It's tiny, and
-   it may amend the boot order itself.
+1. **Read amendments.** Read `AGENTS.workspace.md` (the shared overlay)
+   then `AGENTS.local.md` (personal amendments) if present. Both are
+   tiny, and the local file may amend the boot order itself; where
+   workspace and local conflict, the workspace wins.
 2. **Name the move.** Read the human's opening message and decide what it
    is: continuing a unit, or new work. The message is the primary signal;
    nothing else loads before the move is named.
@@ -364,7 +373,8 @@ A boot, concretely. All eight steps, amendments first (the unit here is
 any unit):
 
 ```
-1. read AGENTS.local.md            # absent: nothing to amend, proceed
+1. read AGENTS.workspace.md        # absent: nothing to overlay, proceed
+   read AGENTS.local.md            # absent: nothing to amend, proceed
 
 2. the message names the move:
    > "let's continue the example unit"
