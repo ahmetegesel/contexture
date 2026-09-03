@@ -2,6 +2,7 @@
 *
 !.gitignore
 !AGENTS.md
+!AGENTS.workspace.md
 !README.md
 !templates/
 !templates/**
