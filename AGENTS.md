@@ -11,7 +11,7 @@
 @layout
   AGENTS.md       = laws + navigation (this file)
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
-  AGENTS.local.md = your amendments, private, gitignored; amend, never contradict: the laws stand
+  AGENTS.local.md = your amendments, private, gitignored; amend, never contradict: the laws stand; survives every sync untouched
   templates/      = artifact grammars: the shapes to fill at write time
   sessions/       = one folder per unit of work (private, gitignored)
   rhythms/        = workflow patterns (private, gitignored); the contract and the default live in @rhythms
