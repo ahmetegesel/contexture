@@ -1,4 +1,4 @@
-# contexture v0.1.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.1.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
