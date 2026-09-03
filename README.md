@@ -497,9 +497,11 @@ context death is exactly what the ritual is for.
 
 1. Copy `AGENTS.md` and `templates/` into your repository. That's the
    convention. This guideline stays out of it; it's the human's read.
-   The copy carries a version line; when upstream evolves, copy the new
-   `AGENTS.md` and `templates/` again - your overlay and local files
-   survive untouched.
+   The copy carries a semantic version. MAJOR = breaking for existing
+   artifacts (fields removed, shapes changed), MINOR = new sections and
+   features, PATCH = fixes and wording. When upstream evolves, copy the
+   new `AGENTS.md` and `templates/` again - your overlay and local files
+   survive untouched; check MAJOR bumps against your overlay.
 2. Add `sessions/`, `rhythms/`, and `AGENTS.local.md` to `.gitignore`.
 3. Carve `AGENTS.local.md` with your amendments: preferences, personal
    rules, rhythm defaults. Amend, never contradict: the laws stand.
