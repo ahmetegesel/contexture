@@ -370,16 +370,24 @@ The first thing the agent does each working period, mechanically:
    every journal entry whose slug no `CLOSES:` or `SUPERSEDES:` names,
    whole file, all anchors. Anchors are period ordering and load
    receipts, never liveness; no entry loads or skips by its anchor.
-   Load each listed entry fully, one read per entry bounded by the next
-   entry or anchor line - never a range spanning neighbors. The command
+   The command extracts and dumps each active entry's full body directly
+   bounded by the next entry or anchor line - one bash call loads all live
+   entries into context with zero `Read` tool loops and no spanning reads
    (temp files, not process substitution, which dies silently under
    `grep` wrappers):
 
    ```bash
    J=sessions/<unit>/journal.md
-   grep "^@entry" $J > /tmp/e.txt
+   grep -n "^@anchor\|^@entry" $J > /tmp/markers.txt
    grep -E "CLOSES:|SUPERSEDES:" $J | sed -E 's/^.*(CLOSES|SUPERSEDES): //; s/ - .*$//; s/ \(.*$//' | grep -o -E "[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+[a-z0-9]" | sort -u > /tmp/c.txt
-   grep -v -F -f /tmp/c.txt /tmp/e.txt
+   grep "^@entry" $J | grep -v -F -f /tmp/c.txt | while read -r line; do
+     slug=$(echo "$line" | awk '{print $2}')
+     start=$(grep -n "^@entry $slug" $J | cut -d: -f1)
+     end=$(awk -F: -v s=$start '$1 > s {print $1 - 1; exit}' /tmp/markers.txt)
+     [ -z "$end" ] && end=$(wc -l < $J)
+     sed -n "${start},${end}p" $J
+     echo
+   done
    ```
 
    The closure extraction parses the target field only - a slug
@@ -430,20 +438,27 @@ unit here is any unit):
    $ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
    sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
 
-   the load list (entries minus closure targets, whole file; the
-   closure side parses targets only, never reason prose):
-   $ grep "^@entry" sessions/example-unit/journal.md > /tmp/e.txt
-   $ grep -E "CLOSES:|SUPERSEDES:" sessions/example-unit/journal.md \
+   the load dump (active bodies printed directly; the closure side
+   parses targets only, never reason prose):
+   $ J=sessions/example-unit/journal.md
+   $ grep -n "^@anchor\|^@entry" $J > /tmp/markers.txt
+   $ grep -E "CLOSES:|SUPERSEDES:" $J \
      | sed -E 's/^.*(CLOSES|SUPERSEDES): //; s/ - .*$//; s/ \(.*$//' \
      | grep -o -E "[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+[a-z0-9]" | sort -u > /tmp/c.txt
-   $ grep -v -F -f /tmp/c.txt /tmp/e.txt
-   5:@entry <date>-schema-verdict
-   9:@entry <date>-open-question          # the loaded set, concretely
+   $ grep "^@entry" $J | grep -v -F -f /tmp/c.txt | while read -r line; do
+       slug=$(echo "$line" | awk '{print $2}')
+       start=$(grep -n "^@entry $slug" $J | cut -d: -f1)
+       end=$(awk -F: -v s=$start '$1 > s {print $1 - 1; exit}' /tmp/markers.txt)
+       [ -z "$end" ] && end=$(wc -l < $J)
+       sed -n "${start},${end}p" $J
+       echo
+     done
+   # prints each active entry and body in full; zero Read tool calls
 
-   line 19's target is closed: it does not load, and its resolution
-   travels in the closer's WHAT. Everything else loads fully, one
-   per-entry read each, then stamped at step 7. A settled entry still
-   in the list is a missing closer: visible debt, closed at period end.
+   line 19's target is closed: it does not dump, and its resolution
+   travels in the closer's WHAT. Everything else dumps in full, then
+   stamped at step 7. A settled entry still in the dump is a missing
+   closer: visible debt, closed at period end.
 
 7. stamp:
    @anchor A2 ("continues A1", attention: <the loaded set>)
