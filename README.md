@@ -46,9 +46,9 @@ The workspace in one map:
 **Then it runs itself:**
 
 - **Boot:** read the overlay and your amendments, name the move from the
-  message, verify against the folder, run the query: live-range entries
-  minus closure targets fully, closure targets as one-liners, dead
-  anchors never; the anchor stamp names the loaded set
+  message, verify against the folder, run the query: entries minus
+  closure targets load fully, all anchors; the anchor stamp receipts
+  the loaded set
 - **Work:** events append to the journal, findings land in knowledge
   with a REF, plans edit surgically at re-plan only
 - **Close:** period end refreshes the pointer and harvests the flagged
@@ -255,17 +255,22 @@ The unit's running record. It only ever gains lines. An entry is born
 with its period stamp (ANCHOR) and its WHAT line, and it is never edited
 afterward. It has no status of its own: it is closed only when a later
 entry's CLOSES or SUPERSEDES targets it, and the closer lands in the
-same breath the entry resolves. Entries may carry a GROUP thread (one
-word, stable within the unit) and a KNOWLEDGE: true flag when they are
+same breath the entry resolves. A closure carries a verdict word -
+done, superseded, dropped, or folded - and the closer's WHAT carries
+the resolution; a close without a statement is a lie. A thread that
+pauses simply stays open: the open tail in the boot load is the
+reminder it exists, and a resume is fresh entries plus a `next_action`
+ref, never a fake close. Entries may carry a GROUP thread (one word,
+stable within the unit) and a KNOWLEDGE: true flag when they are
 knowledge-worthy.
 
 Why it works this way: the conversation is the least durable thing in
 the system, and compaction, a lossy summarization, is where it dies. A
 record that gets revised is no longer a record; a record that only grows
 survives every compaction intact. The period stamps are how time itself
-is recorded: one line per working period, naming the period and the
-loaded attention set, and the map of those lines decides which stretch
-of the journal is live right now.
+is recorded: one line per working period, naming the period and
+receipting the loaded set. The stamps order the periods; liveness lives
+in the closures alone - what no closure names is live.
 
 ### knowledge.md: the mind
 
@@ -360,30 +365,39 @@ The first thing the agent does each working period, mechanically:
 5. **Read state, refresh the anchor counter.** Read `state.md` whole. It
    is small by law, and detail lives behind refs, never inside it.
    Refresh `current_anchor` to the next value (`N = previous + 1`).
-6. **Read the plan, run the query, and load.** Read `plan.md`. Then decide
-   what to load from the journal and knowledge. Four greps, in this order,
-   one subtraction, and one named load:
-   - the anchor map: `grep "^@anchor" journal.md` (labels each period,
-     including its loaded attention set)
-   - the live ranges: `grep "ANCHOR: A<N>" journal.md` (labels every
-     entry by its period)
-   - the closure stamps: `grep -E "SUPERSEDES:|CLOSES:" journal.md
-     knowledge.md` (what they target)
-   - subtract: a live-range entry targeted by a closure stamp is closed,
-     not open; it loads as a one-liner (its WHAT line), and the reason
-     travels in the fresh entry. Live-range entries with no closer are
-     the attention set: NAME them and load each entry FULLY before
-     continuing. Dead anchors' items never load.
-   - knowledge loads fully (small, every line a decision): open findings
-     plus findings referenced by live-range REFs; a finding resolves via
-     a journal `CLOSES:` (no successor) or via a `SUPERSEDES:` (a
-     successor finding)
+6. **Read the plan, run the query, and load.** Read `plan.md`. Then the
+   load rule, one subtraction: **live = not closed.** The load list is
+   every journal entry whose slug no `CLOSES:` or `SUPERSEDES:` names,
+   whole file, all anchors. Anchors are period ordering and load
+   receipts, never liveness; no entry loads or skips by its anchor.
+   Load each listed entry fully, one read per entry bounded by the next
+   entry or anchor line - never a range spanning neighbors. The command
+   (temp files, not process substitution, which dies silently under
+   `grep` wrappers):
+
+   ```bash
+   J=sessions/<unit>/journal.md
+   grep "^@entry" $J > /tmp/e.txt
+   grep -E "CLOSES:|SUPERSEDES:" $J | sed -E 's/^.*(CLOSES|SUPERSEDES): //; s/ - .*$//; s/ \(.*$//' | grep -o -E "[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+[a-z0-9]" | sort -u > /tmp/c.txt
+   grep -v -F -f /tmp/c.txt /tmp/e.txt
+   ```
+
+   The closure extraction parses the target field only - a slug
+   mentioned in the reason prose must never close anything.
+
+   The output is the set; no hand-picking. A settled entry still in it
+   is a missing closer - visible debt the period end settles. Knowledge
+   loads fully (small, every line a decision): open findings plus
+   findings referenced by the loaded entries; a finding resolves via a
+   journal `CLOSES:` (no successor) or via a `SUPERSEDES:` (a successor
+   finding).
 7. **Stamp the load receipt.** Append to `journal.md`:
    ```
-   @anchor A<N> ("continues A<N-1>", attention: <the named set>)
+   @anchor A<N> ("continues A<N-1>", attention: <the loaded set>)
    ```
    The stamp names what was loaded, so `grep "^@anchor"` reconstructs
-   both the map and the load.
+   both the map and the receipts. Receipts inform; they never feed the
+   next boot's load - the subtraction does.
 8. **Continue.** From `next_action`, following the human-invoked rhythm,
    or the default design loop. If `next_action` says "plan the next
    move", the planning phase starts.
@@ -410,28 +424,29 @@ unit here is any unit):
 
 5. read state.md WHOLE; refresh current_anchor to A2
 
-6. the query: four greps in order, then the subtraction and the load.
-
-   map first (labels each period and its loaded set):
-   $ grep "^@anchor" sessions/example-unit/journal.md
-   @anchor A1 ("inventory and design")              # the map: A1..A2 live
-   @anchor A2 ("continues A1", attention: <named>)  # A2 names its load
-
-   cluster (labels every entry by its period):
-   $ grep "ANCHOR: A2" sessions/example-unit/journal.md
-   # every entry stamped A2: the live range, concretely
+6. the query: live = not closed, one subtraction.
 
    closure stamps (what they target):
    $ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
    sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
 
-   the subtraction: line 19's CLOSES targets an entry in the live
-   range. That entry loads as a one-liner, not fully; the reason
-   travels in the fresh entry. The remaining live-range entries are
-   the attention set: named and loaded fully, then stamped at step 7.
+   the load list (entries minus closure targets, whole file; the
+   closure side parses targets only, never reason prose):
+   $ grep "^@entry" sessions/example-unit/journal.md > /tmp/e.txt
+   $ grep -E "CLOSES:|SUPERSEDES:" sessions/example-unit/journal.md \
+     | sed -E 's/^.*(CLOSES|SUPERSEDES): //; s/ - .*$//; s/ \(.*$//' \
+     | grep -o -E "[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+[a-z0-9]" | sort -u > /tmp/c.txt
+   $ grep -v -F -f /tmp/c.txt /tmp/e.txt
+   5:@entry <date>-schema-verdict
+   9:@entry <date>-open-question          # the loaded set, concretely
+
+   line 19's target is closed: it does not load, and its resolution
+   travels in the closer's WHAT. Everything else loads fully, one
+   per-entry read each, then stamped at step 7. A settled entry still
+   in the list is a missing closer: visible debt, closed at period end.
 
 7. stamp:
-   @anchor A2 ("continues A1", attention: <the named set>)
+   @anchor A2 ("continues A1", attention: <the loaded set>)
 
 8. continue from next_action, following the invoked rhythm or the
    default design loop
@@ -465,10 +480,14 @@ Two distinct ends:
   `next_action` in `state.md` (one terse pointer, overwritten never
   prepended; the WHY rebuilds from journal open items, the plan's
   GROUNDED IN refs, and live findings, never pre-serialized into
-  state); then harvest: grep the period's KNOWLEDGE: true entries,
-  propose one candidate per entry, and each confirmed candidate lands
-  in knowledge.md while its entry closes by reference. The folder stays
-  ACTIVE.
+  state); then the stray audit - the load list is the audit, and every
+  listed entry that resolved this period closes now, verdict word and
+  resolution in the WHAT; then the dangling check - every closure slug
+  must name a real entry, a typoed closer is fixed before the period
+  ends, never noted; then harvest: grep the period's KNOWLEDGE: true
+  entries, propose one candidate per entry, and each confirmed candidate
+  lands in knowledge.md while its entry closes by reference. The folder
+  stays ACTIVE.
 - **Unit close** (the plan completes, or the human ends the unit): append
   the closing events *and the next-move decision* to the journal, promote
   durable knowledge at the human's direction, re-read the files and
@@ -479,8 +498,9 @@ Two distinct ends:
 The proof before context death. When a context is about to die
 (compaction, tool change, long break): run the period-end writes, then
 verify the boot greps resolve. A fresh boot must reconstruct the entire
-position from files alone. A folder that contradicts the move, an anchor
-map that doesn't resolve the live range, a `next_action` that points at
+position from files alone. A folder that contradicts the move, a load
+command that will not run clean (a closure naming no entry), a
+`next_action` that points at
 finished work: each is a handoff failure, and catching one before
 context death is exactly what the ritual is for.
 

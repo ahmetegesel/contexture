@@ -1,4 +1,4 @@
-# contexture v0.1.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.2.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -22,20 +22,22 @@
   folder status = unit lifecycle; finding status = claim liveness. two statuses, one word, distinct meanings; journal entries carry no status: closure by reference only.
   state.md     = live pointer: only file edited freely; refreshed as the work moves: every plan update and step landing moves next_action, also at period ends; read WHOLE at boot; kept tiny, detail behind refs.
   plan.md      = current declaration: goal + steps + exit criteria. progress NEVER touches it; step DONE = journal event "slug/step-N: DONE". edited ONLY at re-plan: touch what changed, replace in place; REPLAN entry same breath; grounded in the record. completed plan replaced in place; completion + next-move in the journal.
-  journal.md   = the single recording surface: append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them; the agent chases every closer: an entry that awaits a verdict, resolution, or finalization closes in the same breath it resolves. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input.
+  journal.md   = the single recording surface: append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them; the agent chases every closer: an entry that awaits a verdict, resolution, or finalization closes in the same breath it resolves. every CLOSES/SUPERSEDES carries a verdict word - done | superseded | dropped | folded - then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie. @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor. a thread paused stays open - an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input.
   knowledge.md = findings at decision/discovery moments, born open (live claims) or closed (settled); linked to events via REF. REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, reports/x.md#claim), never a dynamic file; no stable full version -> the finding carries the whole story. no REF, no story = hypothesis, never plan on it. claims outlive their anchors, unlike journal entries. every finding lands via the harvest of a KNOWLEDGE: true entry, confirmed or reshaped; developing ideas stay journal events.
   recipes/     = dispatch briefs, one per dispatch; names the report path.
   reports/     = lane evidence reports; the dispatch's audit trail.
 
 @query
   surfaces: journal.md + knowledge.md.
-  journal:   map = grep "^@anchor" (one-liner per period: the join form plus the loaded attention set; "(done, disjoint)" = dead); map decides live ranges; dead anchors' items never load. cluster = grep "ANCHOR: A<N>" (live ranges).
-  knowledge: loads fully (small; every line a decision): open findings + findings referenced by live-range REFs; resolved via journal CLOSES (no successor) or SUPERSEDES (successor).
-  classes by subtraction, never one grep:
-    live-range entries minus closure targets -> load fully (the attention set); a CLOSES:/SUPERSEDES: target is closed, not open
-    closure targets -> one-liner (WHAT; the reason travels in the fresh entry)
+  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. per-entry reads only, each bounded by the next entry/anchor line - never a range spanning neighbors; the list IS the set, no hand-picking; temp files over process substitution (<(...) dies silently under grep wrappers).
+    command (the target field only: a slug in the reason prose must never close):
+      J=sessions/<unit>/journal.md
+      grep "^@entry" $J > /tmp/e.txt
+      grep -E "CLOSES:|SUPERSEDES:" $J | sed -E 's/^.*(CLOSES|SUPERSEDES): //; s/ - .*$//; s/ \(.*$//' | grep -o -E "[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+[a-z0-9]" | sort -u > /tmp/c.txt
+      grep -v -F -f /tmp/c.txt /tmp/e.txt
+  knowledge: loads fully (small; every line a decision): open findings + findings referenced by loaded REFs; resolved via journal CLOSES (no successor) or SUPERSEDES (successor).
   cross-repo: grep -l "repos:.*<name>" sessions/*/state.md: units touching a repo; objective is human-facing only.
-  group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed.
+  group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot
@@ -44,8 +46,8 @@
   3. verify: grep -l "status: ACTIVE" sessions/<unit>/state.md; agree -> proceed; disagree -> ask before anything loads
   4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
   5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1)
-  6. read plan.md; run @query over journal + knowledge: anchor map, cluster, closures, open; derive classes by subtraction; NAME the attention set and load each entry FULLY; closure targets stay one-liners
-  7. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the named set>); the stamp is the load receipt: grep "^@anchor" reconstructs map + load
+  6. read plan.md; run @query: the journal load list is the command's output - load each listed entry FULLY, per-entry bounded reads; knowledge loads fully
+  7. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
   8. continue from next_action, following the human-invoked rhythm, or the default
   9. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
 
@@ -83,8 +85,10 @@
 @close
   period end (turn ends; unit continues):
     1. append journal events, closing the period's done events by reference; refresh next_action: one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings
-    2. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md (REF to the full version, or the whole story carried), the entry closes by reference; "not landed" drops
-    3. folder stays ACTIVE
+    2. stray audit: the load list IS the audit - every listed entry that resolved this period closes now, same breath, verdict word + resolution in the WHAT
+    3. dangling check: every CLOSES/SUPERSEDES slug resolves to an @entry; a dangling or typoed closer is fixed before the period ends, never a note
+    4. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md (REF to the full version, or the whole story carried), the entry closes by reference; "not landed" drops
+    5. folder stays ACTIVE
   unit close (plan completes, or the human ends the unit):
     1. append closing events + next-move decision
     2. re-read; confirm consistency (law 6)
@@ -94,7 +98,7 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes if not done
-    2. verify boot greps resolve: a fresh boot reconstructs the position from files alone
+    2. verify: boot greps resolve (a fresh boot reconstructs the position from files alone) AND the load command runs clean - every closure slug matches an entry; a dangling closer = handoff failure
   the handoff writes the record, not working memory.
 
 @git
