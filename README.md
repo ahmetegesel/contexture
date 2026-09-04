@@ -18,6 +18,7 @@ The workspace in one map:
 
 - `AGENTS.md`: laws + navigation, auto-delivered every turn
 - `templates/`: seven grammars: six artifacts plus the workspace overlay
+- `scripts/`: cross-platform awk queries (active entry extraction, closure audit)
 - `sessions/<unit>/`: one folder per unit of work: `state.md` (the
   pointer), `plan.md` (the intent), `journal.md` (the memory),
   `knowledge.md` (the mind)
@@ -27,7 +28,7 @@ The workspace in one map:
 
 **Adopt in five minutes:**
 
-1. Copy `AGENTS.md` and `templates/` into your repo. This guideline is
+1. Copy `AGENTS.md`, `templates/`, and `scripts/` into your repo. This guideline is
    for the humans; read it, don't copy it.
 2. Make `.gitignore` deny by default: ignore everything, whitelist the
    shared files with `!` lines; for example, `!sessions/` plus
@@ -157,6 +158,7 @@ imposed; and `AGENTS.local.md`, personal amendments.
 | `AGENTS.md` | shared | laws + navigation | every turn (auto-delivered) |
 | `AGENTS.workspace.md` | shared | the workspace overlay, replace or append per section | at boot, before local |
 | `templates/` | shared | the grammars, one per artifact, each with its filled sample | write-time reference |
+| `scripts/` | shared | cross-platform awk queries (journal extraction, audit) | at boot, close, handoff |
 | `AGENTS.local.md` | private | your amendments | at boot |
 | `sessions/` | private | one folder per unit of work | the active unit's files |
 | `rhythms/` | private | workflow patterns | when a rhythm is called |
@@ -370,24 +372,12 @@ The first thing the agent does each working period, mechanically:
    every journal entry whose slug no `CLOSES:` or `SUPERSEDES:` names,
    whole file, all anchors. Anchors are period ordering and load
    receipts, never liveness; no entry loads or skips by its anchor.
-   The command extracts and dumps each active entry's full body directly
-   bounded by the next entry or anchor line - one bash call loads all live
-   entries into context with zero `Read` tool loops and no spanning reads
-   (temp files, not process substitution, which dies silently under
-   `grep` wrappers):
+   `scripts/journal-active.awk` extracts and streams each active entry's
+   full body directly bounded by the next entry or anchor line in one
+   shot, with zero `Read` tool loops and no spanning reads:
 
    ```bash
-   J=sessions/<unit>/journal.md
-   grep -n "^@anchor\|^@entry" $J > /tmp/markers.txt
-   grep -E "CLOSES:|SUPERSEDES:" $J | sed -E 's/^.*(CLOSES|SUPERSEDES): //; s/ - .*$//; s/ \(.*$//' | grep -o -E "[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+[a-z0-9]" | sort -u > /tmp/c.txt
-   grep "^@entry" $J | grep -v -F -f /tmp/c.txt | while read -r line; do
-     slug=$(echo "$line" | awk '{print $2}')
-     start=$(grep -n "^@entry $slug" $J | cut -d: -f1)
-     end=$(awk -F: -v s=$start '$1 > s {print $1 - 1; exit}' /tmp/markers.txt)
-     [ -z "$end" ] && end=$(wc -l < $J)
-     sed -n "${start},${end}p" $J
-     echo
-   done
+   awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md
    ```
 
    The closure extraction parses the target field only - a slug
@@ -438,22 +428,11 @@ unit here is any unit):
    $ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
    sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
 
-   the load dump (active bodies printed directly; the closure side
+   the load dump (active bodies streamed directly; the closure side
    parses targets only, never reason prose):
-   $ J=sessions/example-unit/journal.md
-   $ grep -n "^@anchor\|^@entry" $J > /tmp/markers.txt
-   $ grep -E "CLOSES:|SUPERSEDES:" $J \
-     | sed -E 's/^.*(CLOSES|SUPERSEDES): //; s/ - .*$//; s/ \(.*$//' \
-     | grep -o -E "[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+[a-z0-9]" | sort -u > /tmp/c.txt
-   $ grep "^@entry" $J | grep -v -F -f /tmp/c.txt | while read -r line; do
-       slug=$(echo "$line" | awk '{print $2}')
-       start=$(grep -n "^@entry $slug" $J | cut -d: -f1)
-       end=$(awk -F: -v s=$start '$1 > s {print $1 - 1; exit}' /tmp/markers.txt)
-       [ -z "$end" ] && end=$(wc -l < $J)
-       sed -n "${start},${end}p" $J
-       echo
-     done
-   # prints each active entry and body in full; zero Read tool calls
+   $ awk -f scripts/journal-active.awk \
+     sessions/example-unit/journal.md sessions/example-unit/journal.md
+   # streams each active entry and body in full; zero Read tool calls
 
    line 19's target is closed: it does not dump, and its resolution
    travels in the closer's WHAT. Everything else dumps in full, then
@@ -497,10 +476,11 @@ Two distinct ends:
   GROUNDED IN refs, and live findings, never pre-serialized into
   state); then the stray audit - the load list is the audit, and every
   listed entry that resolved this period closes now, verdict word and
-  resolution in the WHAT; then the dangling check - every closure slug
-  must name a real entry, a typoed closer is fixed before the period
-  ends, never noted; then harvest: grep the period's KNOWLEDGE: true
-  entries, propose one candidate per entry, and each confirmed candidate
+  resolution in the WHAT; then the dangling check -
+  `awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md` must
+  exit 0; every closure slug must name a real entry, a typoed closer is
+  fixed before the period ends, never noted; then harvest: grep the
+  period's KNOWLEDGE: true entries, propose one candidate per entry, and each confirmed candidate
   lands in knowledge.md while its entry closes by reference. The folder
   stays ACTIVE.
 - **Unit close** (the plan completes, or the human ends the unit): append

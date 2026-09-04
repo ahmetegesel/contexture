@@ -1,4 +1,4 @@
-# contexture v0.2.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.3.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -13,6 +13,7 @@
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   templates/      = artifact grammars: the shapes to fill at write time
+  scripts/        = cross-platform awk queries (journal extraction, dangling audit)
   sessions/       = one folder per unit of work
   rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
@@ -29,19 +30,9 @@
 
 @query
   surfaces: journal.md + knowledge.md.
-  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. the query command extracts and prints each active entry's full body bounded by the next entry/anchor line - one bash call loads all live entries into context; no per-entry Read tool loops, no range spanning; temp files over process substitution (<(...) dies silently under grep wrappers).
-    command (the target field only: a slug in the reason prose must never close):
-      J=sessions/<unit>/journal.md
-      grep -n "^@anchor\|^@entry" $J > /tmp/markers.txt
-      grep -E "CLOSES:|SUPERSEDES:" $J | sed -E 's/^.*(CLOSES|SUPERSEDES): //; s/ - .*$//; s/ \(.*$//' | grep -o -E "[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-z0-9-]+[a-z0-9]" | sort -u > /tmp/c.txt
-      grep "^@entry" $J | grep -v -F -f /tmp/c.txt | while read -r line; do
-        slug=$(echo "$line" | awk '{print $2}')
-        start=$(grep -n "^@entry $slug" $J | cut -d: -f1)
-        end=$(awk -F: -v s=$start '$1 > s {print $1 - 1; exit}' /tmp/markers.txt)
-        [ -z "$end" ] && end=$(wc -l < $J)
-        sed -n "${start},${end}p" $J
-        echo
-      done
+  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. scripts/journal-active.awk streams active entries with complete bodies in one shot; no per-entry Read tool loops, no range spanning.
+    command:
+      awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md
   knowledge: loads fully (small; every line a decision): open findings + findings referenced by loaded REFs; resolved via journal CLOSES (no successor) or SUPERSEDES (successor).
   cross-repo: grep -l "repos:.*<name>" sessions/*/state.md: units touching a repo; objective is human-facing only.
   group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
@@ -53,7 +44,7 @@
   3. verify: grep -l "status: ACTIVE" sessions/<unit>/state.md; agree -> proceed; disagree -> ask before anything loads
   4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
   5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1)
-  6. read plan.md; run @query: the journal load command prints all active entry bodies directly - stdout is the live attention set; knowledge loads fully
+  6. read plan.md; run @query: awk -f scripts/journal-active.awk streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
   7. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
   8. continue from next_action, following the human-invoked rhythm, or the default
   9. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
@@ -93,7 +84,7 @@
   period end (turn ends; unit continues):
     1. append journal events, closing the period's done events by reference; refresh next_action: one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings
     2. stray audit: the load list IS the audit - every listed entry that resolved this period closes now, same breath, verdict word + resolution in the WHAT
-    3. dangling check: every CLOSES/SUPERSEDES slug resolves to an @entry; a dangling or typoed closer is fixed before the period ends, never a note
+    3. dangling check: awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md must exit 0; every closer slug resolves to an @entry; a dangling or typoed closer is fixed before the period ends, never a note
     4. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md (REF to the full version, or the whole story carried), the entry closes by reference; "not landed" drops
     5. folder stays ACTIVE
   unit close (plan completes, or the human ends the unit):
@@ -105,9 +96,9 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes if not done
-    2. verify: boot greps resolve (a fresh boot reconstructs the position from files alone) AND the load command runs clean - every closure slug matches an entry; a dangling closer = handoff failure
+    2. verify: boot greps resolve (a fresh boot reconstructs the position from files alone) AND awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md exits 0; a dangling closer = handoff failure
   the handoff writes the record, not working memory.
 
 @git
-  git tracks the convention ONLY: this file, templates/, tracked material. the gitignore denies by default: shared files whitelist explicitly.
+  the gitignore denies by default: shared files whitelist explicitly (AGENTS.md, AGENTS.workspace.md, README.md, scripts/, templates/).
   never push without explicit instruction.

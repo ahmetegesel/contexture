@@ -6,5 +6,7 @@
 !GEMINI.md
 !AGENTS.workspace.md
 !README.md
+!scripts/
+!scripts/**
 !templates/
 !templates/**
