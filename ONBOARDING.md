@@ -25,7 +25,7 @@
 
 @configure
   base assets:
-    copy AGENTS.md, templates/, and scripts/ into repo root
+    copy AGENTS.md, ONBOARDING.md, templates/, and scripts/ into repo root
     set script permissions: `chmod +x scripts/*.awk`
   gitignore:
     standalone repo:
@@ -37,6 +37,17 @@
       if team opts to track session history: whitelist !sessions/ and !sessions/**
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
+      whitelist shared files explicitly:
+        !.gitignore
+        !AGENTS.md
+        !AGENTS.workspace.md
+        !ONBOARDING.md
+        !README.md
+        !scripts/
+        !scripts/**
+        !templates/
+        !templates/**
+        (and active harness symlinks: !CLAUDE.md, !GEMINI.md)
   migration:
     if existing AGENTS.md, CLAUDE.md, or other instruction files exist:
       extract project-specific guidelines (architecture, test/build commands, code style)
@@ -53,7 +64,9 @@
 
 @verify
   1. create sessions/ directory
-  2. bootstrap initial session (e.g. sessions/adopt-contexture/state.md) with status: ACTIVE, current_anchor: A0, next_action: "verify onboarding"
+  2. bootstrap initial session:
+     write sessions/adopt-contexture/state.md: status: ACTIVE, current_anchor: A0, next_action: "verify onboarding"
+     initialize sessions/adopt-contexture/journal.md with `@anchor A0 ("initial bootstrap", attention: none)`
   3. run boot query: `awk -f scripts/journal-active.awk sessions/adopt-contexture/journal.md sessions/adopt-contexture/journal.md`
   4. run audit: `awk -f scripts/journal-dangling.awk sessions/adopt-contexture/journal.md` (must exit 0)
   5. review diff with human: `git status`, `git diff`; present for review and PR merge

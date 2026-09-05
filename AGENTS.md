@@ -1,4 +1,4 @@
-# contexture v0.5.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.6.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -25,9 +25,8 @@
   state.md     = live pointer: only file edited freely; refreshed as the work moves: every plan update and step landing moves next_action, also at period ends; read WHOLE at boot; kept tiny, detail behind refs.
   plan.md      = current declaration: goal + steps + exit criteria. progress NEVER touches it; step DONE = journal event "slug/step-N: DONE". edited ONLY at re-plan: touch what changed, replace in place; REPLAN entry same breath; grounded in the record. completed plan replaced in place; completion + next-move in the journal.
   journal.md   = the single recording surface: append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them; the agent chases every closer: an entry that awaits a verdict, resolution, or finalization closes in the same breath it resolves. every CLOSES/SUPERSEDES carries a verdict word - done | superseded | dropped | folded - then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie. @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor. a thread paused stays open - an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input.
-  knowledge.md = findings at decision/discovery moments, statusless (all findings are settled decisions); linked to events via REF. REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, reports/x.md#claim), never a dynamic file; no stable full version -> the finding carries the whole story. no REF, no story = hypothesis, never plan on it. claims outlive their anchors, unlike journal entries. every finding lands via the harvest of a KNOWLEDGE: true entry, confirmed or reshaped; developing ideas stay journal events.
-  recipes/     = dispatch briefs, one per dispatch; names the report path.
-  reports/     = lane evidence reports; the dispatch's audit trail.
+  knowledge.md = findings at decision/discovery moments, statusless (all findings are settled decisions); linked to events via REF. REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no stable full version -> the finding carries the whole story. no REF, no story = hypothesis, never plan on it. claims outlive their anchors, unlike journal entries. every finding lands via the harvest of a KNOWLEDGE: true entry, confirmed or reshaped; developing ideas stay journal events.
+  lanes/       = dispatch units, one folder per lane: recipe.md (brief) + journal.md (incremental trace) + report.md (evidence); re-dispatch resumes from the folder.
 
 @query
   surfaces: journal.md + knowledge.md.
@@ -71,14 +70,15 @@
 
 @subagents
   every dispatch:
-  - brief = recipe in recipes/, names the report path; report -> reports/; return = summary ONLY
+  - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden
+  - lane journals execution in journal.md; report -> report.md; return = summary ONLY
   - background: the turn ends at launch; never block the conversation on a lane
   - drift: a lane NEVER improvises; stop, report found | standing | drifted; pause-ask where possible, abort gracefully where not
-  - report lands NO MATTER the outcome -> re-dispatch resumes from it, never rebuilds
+  - report and journal land NO MATTER the outcome -> re-dispatch resumes from the lane folder, never rebuilds
   - a lane that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
   - a lane's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
   - read the report WHOLE, no exception; an unread part wears the look of review
-  - journal every dispatch: brief path + report path
+  - journal every dispatch: lane folder path
 
 @close
   period end (turn ends; unit continues):

@@ -22,7 +22,7 @@ The workspace in one map:
 - `scripts/`: cross-platform awk queries (active entry extraction, closure audit)
 - `sessions/<unit>/`: one folder per unit of work: `state.md` (the
   pointer), `plan.md` (the intent), `journal.md` (the memory),
-  `knowledge.md` (the mind)
+  `knowledge.md` (the mind), and `lanes/` (dispatch units)
 - `AGENTS.workspace.md`: the workspace's shared overlay, replace or append per section; wins over local
 - `AGENTS.local.md`: your amendments; amend, never contradict
 - `rhythms/`: workflow patterns, invoked never imposed
@@ -30,7 +30,7 @@ The workspace in one map:
 **Adopt in five minutes:**
 
 1. For an agent adopting contexture, point it to `ONBOARDING.md`. It executes branch isolation, topology assessment, safe gitignore setup, instruction migration, and harness symlinking.
-2. For manual adoption: start on a dedicated branch; copy `AGENTS.md`, `templates/`, and `scripts/` into your repo, and set script permissions (`chmod +x scripts/*.awk`).
+2. For manual adoption: start on a dedicated branch; copy `AGENTS.md`, `ONBOARDING.md`, `templates/`, and `scripts/` into your repo, and set script permissions (`chmod +x scripts/*.awk`).
 3. Configure `.gitignore` for your topology: in standalone repos, append private paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); in parent workspaces, whitelist as appropriate.
 4. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md` (your amendments); both amend, never contradict. Wire harness symlinks (`CLAUDE.md`, `GEMINI.md`) to `AGENTS.md`.
 5. Tell the agent what the first unit is; it bootstraps `sessions/<unit>/` itself. Let the first boot run.
@@ -203,17 +203,17 @@ Its one hard rule: **amend, never contradict: the laws stand.** A local
 read *from*, never copied wholesale, and the overlay grammar for
 `AGENTS.workspace.md`. Every grammar carries a filled sample in template
 syntax at its foot. The four record files get their own sections below;
-the dispatch pair follows them.
+the dispatch unit follows them.
 
 ### The unit
 
 `sessions/<unit>/` is one folder per piece of work. It outlives every
 conversation that works on it, and it dies when the work is done, not
 when a chat ends. Inside: the four record files (state, plan, journal,
-knowledge) plus `recipes/` (dispatch briefs) and `reports/` (dispatch
-evidence). The folder itself is the context boundary: when the agent
-works on this unit, it reads this unit's files and nothing else. The
-layout does the bounding, so no rule has to say "don't read the rest."
+knowledge) plus `lanes/` (dispatch units, one folder per lane). The
+folder itself is the context boundary: when the agent works on this
+unit, it reads this unit's files and nothing else. The layout does the
+bounding, so no rule has to say "don't read the rest."
 
 ### state.md: the status card
 
@@ -277,7 +277,7 @@ earlier finding and reason when superseded), and an optional REF.
 Findings are statusless: developing ideas stay in the journal, so every
 finding that lands is an established decision or discovery. The REF
 points at the full version in an append-only artifact, as a path and
-a symbol: `journal.md#entry` or `reports/x.md#claim`. A dynamic file
+a symbol: `journal.md#entry` or `lanes/x/report.md#claim`. A dynamic file
 may never be the reference of record. Where no stable full version exists,
 the finding carries the whole story itself; a claim with no REF and no
 story is a hypothesis: useful for questions, never a base for plans.
@@ -291,23 +291,33 @@ journal owns time, and the REFs are the seam between the two.
 hypothesis. The same finding with a REF pointing at the journal entry
 that produced it is a fact.
 
-### recipes and reports: the dispatch pair
+### lanes: the dispatch unit
 
-When the agent hands work to a second agent, a subagent, two artifacts
-frame the handoff. The recipe is the brief: what to check, and the
-report's PATH, SHAPE, and RETURN. The report is the evidence: an
-`@orientation` block with deliverable VERDICTS and load-bearing
-READ_FIRST claims, followed by `@claim` blocks marked VERIFIED
-(checked), INFERRED (reasoned, not checked), or ABSENT (the thing
-appears nowhere; the highest burden), plus an honest `@risks` section.
+When the agent hands work to a second agent, a subagent, the dispatch
+is encapsulated in its own unit folder: `lanes/<slug>/`. Inside:
+`recipe.md` (the brief), `journal.md` (the incremental execution trace),
+and `report.md` (the evidence).
 
-The pair exists because nothing is believed on trust. The brief lives
-on disk, not in the conversation, because a message-brief dies at
-compaction and a file survives. The report lands no matter how the
-handed work ended; a stopped or drifted helper still writes what it
-found, so the next try resumes from the report, never from nothing. And
-the agent that handed out the work reads the report whole and re-checks
-the load-bearing claims itself: a helper's "passed" is never the gate.
+The recipe is the brief: it slices the parent's attention into exact
+symbols, entry slugs, line ranges, and isolated FACTS (one per line);
+broad folder dumps are forbidden. It specifies sequenced TASKS with
+exit conditions and fences writes to `WRITE_SCOPE`. The lane writes
+its execution trace incrementally to `journal.md` before taking actions.
+The report is the evidence: an `@orientation` block that directly
+mirrors recipe TASKS with proven exit conditions and flags LOAD_BEARING
+claims for parent re-verification; followed by `@claim` blocks with
+mandatory epistemic MARK (VERIFIED, INFERRED, or ABSENT), concise
+verbatim EVIDENCE, and structural DETAILS (one statement per line, zero
+storytelling); ending with typed `@risks` (UNVERIFIED and THIN).
+
+The dispatch unit exists because nothing is believed on trust and
+agents can terminate at any moment. The brief lives on disk, not in
+conversation, because a message-brief dies at compaction. If a lane
+crashes or terminates mid-flight, `journal.md` preserves the exact
+resume point: re-dispatch resumes directly from the lane folder,
+continuing from the last uncompleted task rather than rebuilding from
+scratch. And the dispatcher reads `report.md` whole and re-checks
+load-bearing claims itself: a helper's "passed" is never the gate.
 The full dispatch contract is in "Working with the agent" below.
 
 *In practice:* a helper reports "nothing calls this field." The giver
@@ -384,10 +394,8 @@ The first thing the agent does each working period, mechanically:
 
    The output is the set; no hand-picking. A settled entry still in it
    is a missing closer - visible debt the period end settles. Knowledge
-   loads fully (small, every line a decision): open findings plus
-   findings referenced by the loaded entries; a finding resolves via a
-   journal `CLOSES:` (no successor) or via a `SUPERSEDES:` (a successor
-   finding).
+   loads fully (small, every line a settled decision); supersession
+   operates via a successor finding's `SUPERSEDES:` line.
 7. **Stamp the load receipt.** Append to `journal.md`:
    ```
    @anchor A<N> ("continues A<N-1>", attention: <the loaded set>)
@@ -455,7 +463,7 @@ Three movements, each with one home:
   lands the moment it resolves.
 - **Findings** land in the knowledge base at decision and discovery
   moments. A `REF` points at the full version in the journal or a
-  report as a path and symbol, `journal.md#entry` or `reports/x.md#claim`,
+  report as a path and symbol, `journal.md#entry` or `lanes/x/report.md#claim`,
   never at a file that changes; with no stable full version, the finding
   carries the whole story itself; a claim with neither is a hypothesis,
   and nobody plans on a hypothesis.
@@ -472,15 +480,16 @@ Two distinct ends:
   `next_action` in `state.md` (one terse pointer, overwritten never
   prepended; the WHY rebuilds from journal open items, the plan's
   GROUNDED IN refs, and live findings, never pre-serialized into
-  state); then the stray audit - the load list is the audit, and every
+  state); run the stray audit (the load list is the audit, and every
   listed entry that resolved this period closes now, verdict word and
-  resolution in the WHAT; then the dangling check -
-  `awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md` must
-  exit 0; every closure slug must name a real entry, a typoed closer is
-  fixed before the period ends, never noted; then harvest: grep the
-  period's KNOWLEDGE: true entries, propose one candidate per entry, and each confirmed candidate
-  lands in knowledge.md while its entry closes by reference. The folder
-  stays ACTIVE.
+  resolution in the WHAT); run the dangling check
+  (`awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md` must
+  exit 0; every closure slug must name a real entry, and a typoed closer
+  is fixed before the period ends, never noted); then harvest: grep the
+  period's KNOWLEDGE: true entries, propose one candidate per entry;
+  confirmed candidates land in `knowledge.md` while their entries close
+  by reference; unconfirmed candidates drop ("not landed" drops). The
+  folder stays ACTIVE.
 - **Unit close** (the plan completes, or the human ends the unit): append
   the closing events *and the next-move decision* to the journal, re-read
   the files and confirm consistency (law 6), promote durable knowledge at
@@ -517,26 +526,31 @@ exactly what the ritual is for.
   Complete the act in flight, then address the message. Halt only on an
   explicit stop, hold, or redirect.
 - **Dispatch is a contract.** Every subagent dispatch:
-  1. gets a brief on disk, a recipe naming what to check, and the report's
-     PATH, SHAPE, and RETURN. A message-brief dies at compaction; a recipe
-     on disk survives.
-  2. runs in the background; the turn ends at the launch; the conversation
+  1. gets its own unit folder (`lanes/<slug>/`) with a brief on disk
+     (`recipe.md`) that slices parent context (exact refs, FACTS one per
+     line; broad dumps forbidden), sequences TASKS with exit conditions,
+     and fences writes (`WRITE_SCOPE`). A message-brief dies at compaction;
+     a file survives.
+  2. writes its execution trace incrementally to `journal.md` as tasks
+     progress. If a lane is interrupted or terminates, the journal preserves
+     the exact resume point.
+  3. runs in the background; the turn ends at launch; the conversation
      never blocks on a lane.
-  3. runs against the recipe, never improvising. On drift, the lane stops
+  4. runs against the recipe, never improvising. On drift, the lane stops
      and reports what it found, where it stands, and where it drifted;
      pause-and-ask where possible, abort gracefully where not.
-  4. lands its report no matter how the lane ends, even stopped or
-     failed. A re-dispatch resumes from the report, never rebuilds from
-     nothing.
-  5. returns the artifact verbatim if it cannot write the file itself:
+  5. lands both `journal.md` and `report.md` no matter how the lane ends.
+     A re-dispatch resumes directly from the lane folder, continuing from
+     the last uncompleted task, never rebuilding from scratch.
+  6. returns the artifact verbatim if it cannot write the file itself:
      nothing before, nothing after. The dispatcher persists it byte-clean.
-  6. is read WHOLE by the dispatcher, no exception; an unread part wears
+  7. is read WHOLE by the dispatcher, no exception; an unread part wears
      the look of review.
-  7. is never believed on its own word. The lane's "passed" is never the
+  8. is never believed on its own word. The lane's "passed" is never the
      gate; the dispatching agent re-verifies the load-bearing claims
      itself.
-  And every dispatch is journaled: an entry carrying the brief's path and
-  the report's path.
+  And every dispatch is journaled in the session journal: an entry
+  carrying the lane folder path.
 
 ---
 
@@ -547,14 +561,15 @@ For agents adopting contexture into a repository, see `ONBOARDING.md`.
 For manual adoption:
 
 1. Start on a dedicated branch (e.g. `adopt-contexture`). Copy `AGENTS.md`,
-   `templates/`, and `scripts/` into your repository, and set script
-   permissions (`chmod +x scripts/*.awk`). That's the convention. This
-   guideline stays out of it; it's the human's read.
+   `ONBOARDING.md`, `templates/`, and `scripts/` into your repository, and
+   set script permissions (`chmod +x scripts/*.awk`). That's the convention.
+   This guideline stays out of it; it's the human's read.
    The copy carries a semantic version. MAJOR = breaking for existing
    artifacts (fields removed, shapes changed), MINOR = new sections and
    features, PATCH = fixes and wording. When upstream evolves, copy the
-   new `AGENTS.md`, `templates/`, and `scripts/` again - your overlay and
-   local files survive untouched; check MAJOR bumps against your overlay.
+   new `AGENTS.md`, `ONBOARDING.md`, `templates/`, and `scripts/` again - your
+   overlay and local files survive untouched; check MAJOR bumps against your
+   overlay.
 2. Configure `.gitignore` for your repository topology: in standalone
    repositories containing application code, append contexture private
    paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); never deny by
@@ -591,11 +606,18 @@ Extending it, without breaking it:
   their content. A rhythm replaces task progression only; artifact
   invariants (`@record`, `@laws`: journaling transitions, advancing
   `next_action`, harvesting verdicts) hold across every rhythm.
-  The recipe's fields, the journal's entries, the status card's keys:
-  those belong to their owners. And it is written in the same dialect
-  as the artifacts: typed blocks, column 0, indent 2, contract words
-  spelled once. One line per step, the form `N. GATE: outcome`, no
-  per-step sub-blocks. Token-efficient, not short: a rhythm may carry as
+
+  When no rhythm is invoked, the agent runs the default design loop:
+  1. `DISCUSS`: explore problem space; grounded questions resolve intent
+  2. `DECIDE`: human verdict settles; triggers harvest candidate
+  3. `PLAN`: intent updates `plan.md`; `next_action` points to first step
+  4. `EXECUTE`: work active step; drift journals `REPLAN` in same breath
+  5. `VERIFY`: step exit criteria proven; journal records completion, `next_action` advances
+
+  A human rhythm replaces progression. Custom rhythms are written in
+  the same dialect as the artifacts: typed blocks, column 0, indent 2,
+  contract words spelled once. One line per step, the form `N. GATE: outcome`,
+  no per-step sub-blocks. Token-efficient, not short: a rhythm may carry as
   much as a skill would, but structured and denser than prose. That is the
   whole point of the dialect: structure is what LLMs parse best, typed
   blocks carry meaning per token, and prose is where misreadings live.
@@ -605,9 +627,9 @@ Extending it, without breaking it:
   @rhythm ship-pack
     1. CODE: the change lands with its own tests
     2. GUARDS: suite + lint + typecheck, always, mechanical, before any review
-    3. REVIEW: dispatch a review recipe, fresh context, independent;
+    3. REVIEW: dispatch a review lane, fresh context, independent;
        its findings are the hardening checklist
-    4. HARDEN: dispatch a hardening recipe driven by those findings;
+    4. HARDEN: dispatch a hardening lane driven by those findings;
        the docs delta rides inside it
     5. MERGE: one merge after all phases, gate green, human sign-off first
     ground: the standards live in knowledge.md, banked before the first pack
