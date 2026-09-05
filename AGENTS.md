@@ -101,4 +101,4 @@
   the handoff writes the record, not working memory.
 
 @git
-  the gitignore denies by default: shared files whitelist explicitly (AGENTS.md, AGENTS.workspace.md, ONBOARDING.md, README.md, scripts/, templates/).
+  the gitignore denies by default for parent workspaces (shared files whitelist explicitly: AGENTS.md, AGENTS.workspace.md, ONBOARDING.md, README.md, scripts/, templates/); standalone repos append private paths (sessions/, rhythms/, AGENTS.local.md).

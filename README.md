@@ -12,7 +12,7 @@ Multi-session agent work dies when the conversation dies, unless it is
 written down. This workspace is the write-down, and it buys three things:
 continuity (a unit of work survives every conversation that touches it),
 cheap attention (the agent loads only what the work touches), and freedom
-from vendors (bash + grep are the whole engine; any harness, any agent).
+from vendors (bash, awk, and grep are the whole engine; any harness, any agent).
 
 The workspace in one map:
 
@@ -30,7 +30,7 @@ The workspace in one map:
 **Adopt in five minutes:**
 
 1. For an agent adopting contexture, point it to `ONBOARDING.md`. It executes branch isolation, topology assessment, safe gitignore setup, instruction migration, and harness symlinking.
-2. For manual adoption: start on a dedicated branch; copy `AGENTS.md`, `templates/`, and `scripts/` into your repo.
+2. For manual adoption: start on a dedicated branch; copy `AGENTS.md`, `templates/`, and `scripts/` into your repo, and set script permissions (`chmod +x scripts/*.awk`).
 3. Configure `.gitignore` for your topology: in standalone repos, append private paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); in parent workspaces, whitelist as appropriate.
 4. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md` (your amendments); both amend, never contradict. Wire harness symlinks (`CLAUDE.md`, `GEMINI.md`) to `AGENTS.md`.
 5. Tell the agent what the first unit is; it bootstraps `sessions/<unit>/` itself. Let the first boot run.
@@ -46,7 +46,8 @@ The workspace in one map:
 - **Close:** period end refreshes the pointer and harvests the flagged
   entries; unit end marks CLOSED and journals the next move
 - **Handoff:** before context death, run the writes, verify the boot
-  greps resolve
+  greps resolve and `awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md`
+  exits 0
 
 The seven laws carry the whole design: files over conversation, load
 only what the work touches, dense structural writing, govern output not
@@ -81,8 +82,8 @@ The result is the same in all three: what the agent remembers diverges from
 what happened, rules contradict themselves across surfaces, and continuity
 depends on luck.
 
-This workspace answers with a small set of plain files and two tools every
-agent has: grep and read. Memory survives because it lives on disk.
+This workspace answers with a small set of plain files and tools every
+agent has: bash, awk, grep, and read. Memory survives because it lives on disk.
 Attention stays cheap because the agent loads only what the work touches.
 And the whole convention runs on any vendor, any harness, any agent.
 
@@ -136,9 +137,10 @@ Every workspace has two layers, and the line between them is
 contractual.
 
 **The shared layer is the convention itself**: `AGENTS.md`, the laws and
-navigation, and `templates/`, the grammars. These are copied between
-teams and committed. This guideline is the human's companion; read it
-once, keep it out of the repo.
+navigation; `ONBOARDING.md`, the adoption guideline; `templates/`, the
+grammars; `scripts/`, the query tools; and `AGENTS.workspace.md`, the
+shared overlay. These are copied between teams and committed. This
+guideline is the human's companion; read it once, keep it out of the repo.
 
 **The private layer is the working state**: `sessions/`, one folder per
 unit of work; `rhythms/`, personal workflow patterns, invoked not
@@ -147,6 +149,7 @@ imposed; and `AGENTS.local.md`, personal amendments.
 | File | Layer | Role | Read when |
 |---|---|---|---|
 | `AGENTS.md` | shared | laws + navigation | every turn (auto-delivered) |
+| `ONBOARDING.md` | shared | agentic adoption guideline | during onboarding |
 | `AGENTS.workspace.md` | shared | the workspace overlay, replace or append per section | at boot, before local |
 | `templates/` | shared | the grammars, one per artifact, each with its filled sample | write-time reference |
 | `scripts/` | shared | cross-platform awk queries (journal extraction, audit) | at boot, close, handoff |
@@ -254,7 +257,8 @@ the resolution; a close without a statement is a lie. A thread that
 pauses simply stays open: the open tail in the boot load is the
 reminder it exists, and a resume is fresh entries plus a `next_action`
 ref, never a fake close. Entries may carry a GROUP thread (one word,
-stable within the unit) and a KNOWLEDGE: true flag when they are
+stable within the unit), a REF pointing to an artifact symbol
+(`path#symbol`) for grounding, and a KNOWLEDGE: true flag when they are
 knowledge-worthy.
 
 Why it works this way: the conversation is the least durable thing in
@@ -269,9 +273,10 @@ in the closures alone - what no closure names is live.
 
 Findings, written at the moment of a decision or a discovery. Each
 finding is a NAME, a STATUS (open or closed, born and never edited),
-a SUMMARY, and a REF. The REF points at the full version in an
-append-only artifact, as a path and a symbol: `journal.md#entry` or
-`reports/x.md#claim`. A dynamic file, the BIOS included, may never be
+a SUMMARY, an optional SUPERSEDES ref (naming an earlier finding and
+reason when superseded), and a REF. The REF points at the full
+version in an append-only artifact, as a path and a symbol:
+`journal.md#entry` or `reports/x.md#claim`. A dynamic file may never be
 the reference of record. Where no stable full version exists, the
 finding carries the whole story itself; a claim with no REF and no
 story is a hypothesis: useful for questions, never a base for plans.
@@ -289,10 +294,11 @@ that produced it is a fact.
 
 When the agent hands work to a second agent, a subagent, two artifacts
 frame the handoff. The recipe is the brief: what to check, and the
-report's PATH, SHAPE, and RETURN. The report is the evidence: verdicts
-per claim, each marked VERIFIED (checked), INFERRED (reasoned, not
-checked), or ABSENT (the thing appears nowhere; the highest burden),
-plus an honest risks section.
+report's PATH, SHAPE, and RETURN. The report is the evidence: an
+`@orientation` block with deliverable VERDICTS and load-bearing
+READ_FIRST claims, followed by `@claim` blocks marked VERIFIED
+(checked), INFERRED (reasoned, not checked), or ABSENT (the thing
+appears nowhere; the highest burden), plus an honest `@risks` section.
 
 The pair exists because nothing is believed on trust. The brief lives
 on disk, not in the conversation, because a message-brief dies at
@@ -395,7 +401,7 @@ The first thing the agent does each working period, mechanically:
    `current_anchor: A0`, and `next_action: "plan the first move"`, then
    continues at step 5, and the first boot stamps A1.
 
-A boot, concretely. All nine steps, overlay and amendments first (the
+A boot, concretely. The eight active steps, overlay and amendments first (the
 unit here is any unit):
 
 ```
@@ -415,9 +421,8 @@ unit here is any unit):
 
 6. the query: live = not closed, one subtraction.
 
-   closure stamps (what they target):
-   $ grep -E "SUPERSEDES:|CLOSES:" sessions/example-unit/journal.md
-   sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches
+   closure stamp in the journal (what pass 1 collects):
+   sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches (done: migration completed)
 
    the load dump (active bodies streamed directly; the closure side
    parses targets only, never reason prose):
@@ -475,20 +480,20 @@ Two distinct ends:
   lands in knowledge.md while its entry closes by reference. The folder
   stays ACTIVE.
 - **Unit close** (the plan completes, or the human ends the unit): append
-  the closing events *and the next-move decision* to the journal, promote
-  durable knowledge at the human's direction, re-read the files and
-  confirm consistency, then mark the unit CLOSED.
+  the closing events *and the next-move decision* to the journal, re-read
+  the files and confirm consistency (law 6), promote durable knowledge at
+  the human's direction, then mark the unit CLOSED.
 
 ### Handoff
 
 The proof before context death. When a context is about to die
 (compaction, tool change, long break): run the period-end writes, then
-verify the boot greps resolve. A fresh boot must reconstruct the entire
-position from files alone. A folder that contradicts the move, a load
-command that will not run clean (a closure naming no entry), a
-`next_action` that points at
-finished work: each is a handoff failure, and catching one before
-context death is exactly what the ritual is for.
+verify the boot greps resolve and `awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md`
+exits 0. A fresh boot must reconstruct the entire position from files
+alone. A folder that contradicts the move, a dangling closer (failing
+`journal-dangling.awk`), a `next_action` that points at finished work:
+each is a handoff failure, and catching one before context death is
+exactly what the ritual is for.
 
 ---
 
@@ -540,13 +545,14 @@ For agents adopting contexture into a repository, see `ONBOARDING.md`.
 For manual adoption:
 
 1. Start on a dedicated branch (e.g. `adopt-contexture`). Copy `AGENTS.md`,
-   `templates/`, and `scripts/` into your repository. That's the
-   convention. This guideline stays out of it; it's the human's read.
+   `templates/`, and `scripts/` into your repository, and set script
+   permissions (`chmod +x scripts/*.awk`). That's the convention. This
+   guideline stays out of it; it's the human's read.
    The copy carries a semantic version. MAJOR = breaking for existing
    artifacts (fields removed, shapes changed), MINOR = new sections and
    features, PATCH = fixes and wording. When upstream evolves, copy the
-   new `AGENTS.md` and `templates/` again - your overlay and local files
-   survive untouched; check MAJOR bumps against your overlay.
+   new `AGENTS.md`, `templates/`, and `scripts/` again - your overlay and
+   local files survive untouched; check MAJOR bumps against your overlay.
 2. Configure `.gitignore` for your repository topology: in standalone
    repositories containing application code, append contexture private
    paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); never deny by
