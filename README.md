@@ -586,7 +586,9 @@ Extending it, without breaking it:
   tells the agent the shape of a piece of work when invoked. It names
   the order and the outcomes, and it references the workspace's
   artifacts by name; it never re-specifies their grammars or prescribes
-  their content.
+  their content. A rhythm replaces task progression only; artifact
+  invariants (`@record`, `@laws`: journaling transitions, advancing
+  `next_action`, harvesting verdicts) hold across every rhythm.
   The recipe's fields, the journal's entries, the status card's keys:
   those belong to their owners. And it is written in the same dialect
   as the artifacts: typed blocks, column 0, indent 2, contract words

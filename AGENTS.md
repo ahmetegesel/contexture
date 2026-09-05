@@ -1,4 +1,4 @@
-# contexture v0.4.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.4.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -61,14 +61,13 @@
   each transition journals as it happens; nothing waits for the period end
 
 @rhythms
-  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-proposed; never in state
-  default :: the design loop, when no rhythm is invoked; a human rhythm replaces it
-  1. JOURNAL: the event lands as it happens, during the conversation
-  2. VERDICT: a human verdict, decision, or rule settles
-  3. LAND: one knowledge candidate, confirmed or reshaped -> knowledge.md; "not landed" drops; no re-ask
-  4. PLAN: the confirmed direction updates the plan or inserts new steps; next_action points at the first new step; phases allowed
-  5. EXECUTE: work the plan; drift during the work = REPLAN entry, same breath
-  6. JOURNAL: the result lands; next_action advances to the next step; the execution's entry closes or supersedes the earlier plan-phase entries
+  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-proposed; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm.
+  default :: the design loop, when no rhythm is invoked; human rhythm replaces progression
+  1. DISCUSS: explore problem space; grounded questions resolve intent
+  2. DECIDE: human verdict settles; triggers harvest candidate
+  3. PLAN: intent updates plan.md; next_action points to first step
+  4. EXECUTE: work active step; drift journals REPLAN in same breath
+  5. VERIFY: step exit criteria proven; journal records completion, next_action advances
 
 @subagents
   every dispatch:
