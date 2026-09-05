@@ -1,4 +1,4 @@
-# contexture v0.3.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.4.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -12,6 +12,7 @@
   AGENTS.md       = laws + navigation (this file)
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
+  ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository
   templates/      = artifact grammars: the shapes to fill at write time
   scripts/        = cross-platform awk queries (journal extraction, dangling audit)
   sessions/       = one folder per unit of work
@@ -100,4 +101,4 @@
   the handoff writes the record, not working memory.
 
 @git
-  the gitignore denies by default: shared files whitelist explicitly (AGENTS.md, AGENTS.workspace.md, README.md, scripts/, templates/).
+  the gitignore denies by default: shared files whitelist explicitly (AGENTS.md, AGENTS.workspace.md, ONBOARDING.md, README.md, scripts/, templates/).

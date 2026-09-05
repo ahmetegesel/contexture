@@ -17,6 +17,7 @@ from vendors (bash + grep are the whole engine; any harness, any agent).
 The workspace in one map:
 
 - `AGENTS.md`: laws + navigation, auto-delivered every turn
+- `ONBOARDING.md`: agentic adoption guideline; instructions for agents installing contexture into a repository
 - `templates/`: seven grammars: six artifacts plus the workspace overlay
 - `scripts/`: cross-platform awk queries (active entry extraction, closure audit)
 - `sessions/<unit>/`: one folder per unit of work: `state.md` (the
@@ -28,21 +29,11 @@ The workspace in one map:
 
 **Adopt in five minutes:**
 
-1. Copy `AGENTS.md`, `templates/`, and `scripts/` into your repo. This guideline is
-   for the humans; read it, don't copy it.
-2. Make `.gitignore` deny by default: ignore everything, whitelist the
-   shared files with `!` lines; for example, `!sessions/` plus
-   `!sessions/**` if you want your session history in git. Anything new
-   to share gets an explicit `!` line; everything else stays private
-   forever.
-3. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md`
-   (your amendments); both amend, never contradict.
-4. Tell the agent what the first unit is; it bootstraps
-   `sessions/<unit>/` itself. The best first unit is this convention:
-   adopting and tweaking it is the richest test it can get.
-5. Let the first boot run. The agent stamps the anchor, reads the plan,
-   loads what's live, and continues. The same ritual runs every period
-   from then on.
+1. For an agent adopting contexture, point it to `ONBOARDING.md`. It executes branch isolation, topology assessment, safe gitignore setup, instruction migration, and harness symlinking.
+2. For manual adoption: start on a dedicated branch; copy `AGENTS.md`, `templates/`, and `scripts/` into your repo.
+3. Configure `.gitignore` for your topology: in standalone repos, append private paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); in parent workspaces, whitelist as appropriate.
+4. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md` (your amendments); both amend, never contradict. Wire harness symlinks (`CLAUDE.md`, `GEMINI.md`) to `AGENTS.md`.
+5. Tell the agent what the first unit is; it bootstraps `sessions/<unit>/` itself. Let the first boot run.
 
 **Then it runs itself:**
 
@@ -544,20 +535,26 @@ context death is exactly what the ritual is for.
 
 ## Adopting it
 
-1. Copy `AGENTS.md` and `templates/` into your repository. That's the
+For agents adopting contexture into a repository, see `ONBOARDING.md`.
+
+For manual adoption:
+
+1. Start on a dedicated branch (e.g. `adopt-contexture`). Copy `AGENTS.md`,
+   `templates/`, and `scripts/` into your repository. That's the
    convention. This guideline stays out of it; it's the human's read.
    The copy carries a semantic version. MAJOR = breaking for existing
    artifacts (fields removed, shapes changed), MINOR = new sections and
    features, PATCH = fixes and wording. When upstream evolves, copy the
    new `AGENTS.md` and `templates/` again - your overlay and local files
    survive untouched; check MAJOR bumps against your overlay.
-2. Make `.gitignore` deny by default: ignore everything, whitelist the
-   shared files with `!` lines; for example, `!sessions/` plus
-   `!sessions/**` if you want your session history in git. Anything new
-   to share gets an explicit `!` line; everything else stays private
-   forever.
-3. Carve `AGENTS.local.md` with your amendments: preferences, personal
-   rules, rhythm defaults. Amend, never contradict: the laws stand.
+2. Configure `.gitignore` for your repository topology: in standalone
+   repositories containing application code, append contexture private
+   paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); never deny by
+   default across an existing codebase. In parent meta-workspaces,
+   whitelist explicitly if tracking convention configuration alone.
+3. Carve `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md`
+   (personal amendments). Wire active harness entry points (`CLAUDE.md`,
+   `GEMINI.md`) as symlinks to `AGENTS.md`.
 4. Create `sessions/`, then tell the agent the first unit's name and
    goal; the agent bootstraps the folder itself. The best first unit is
    the convention itself: adopting, tweaking, and living with it is the
