@@ -272,13 +272,14 @@ in the closures alone - what no closure names is live.
 ### knowledge.md: the mind
 
 Findings, written at the moment of a decision or a discovery. Each
-finding is a NAME, a STATUS (open or closed, born and never edited),
-a SUMMARY, an optional SUPERSEDES ref (naming an earlier finding and
-reason when superseded), and a REF. The REF points at the full
-version in an append-only artifact, as a path and a symbol:
-`journal.md#entry` or `reports/x.md#claim`. A dynamic file may never be
-the reference of record. Where no stable full version exists, the
-finding carries the whole story itself; a claim with no REF and no
+finding is a NAME, a SUMMARY, an optional SUPERSEDES ref (naming an
+earlier finding and reason when superseded), and an optional REF.
+Findings are statusless: developing ideas stay in the journal, so every
+finding that lands is an established decision or discovery. The REF
+points at the full version in an append-only artifact, as a path and
+a symbol: `journal.md#entry` or `reports/x.md#claim`. A dynamic file
+may never be the reference of record. Where no stable full version exists,
+the finding carries the whole story itself; a claim with no REF and no
 story is a hypothesis: useful for questions, never a base for plans.
 A finding lands only via the harvest of a KNOWLEDGE: true entry: the
 agent proposes one compact candidate, the human confirms or reshapes,
@@ -321,8 +322,9 @@ The grammars share one strict pseudo-language, written to spend tokens
 on substance: blocks start at column 0 (`@entry`, `@finding`), bodies
 indent two, `::` opens an indented block value, `|` means alternation
 only, `[ ]` wraps optional parts, `->` means flow, `#` starts a
-comment. `status:` is lowercase on the status card; `STATUS:` is
-uppercase on findings. Spellings are contractual, not stylistic.
+comment. `status:` on the status card (`status: ACTIVE | CLOSED`)
+is the only status field in the convention; journal entries and
+findings are statusless. Spellings are contractual, not stylistic.
 Rhythms are written in this same dialect; "Adopting it" explains the
 reason.
 
