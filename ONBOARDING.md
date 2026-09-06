@@ -5,9 +5,9 @@
 
 @phases
   1. ISOLATE: create a dedicated branch; never onboard on main
-  2. ASSESS: identify repository topology and existing instruction surfaces
-  3. CONFIGURE: install base assets, migrate existing instructions, adapt .gitignore
-  4. SYMLINK: wire active harness entry points to AGENTS.md
+  2. ASSESS: inventory topology, instruction surfaces, and harnesses; derive the installation plan
+  3. PROPOSE: present the derived plan; the human confirms, amends, or discusses; no write before the verdict
+  4. EXECUTE: configure, migrate, and symlink strictly per the confirmed plan; drift halts and re-confirms
   5. VERIFY: bootstrap initial session, execute query scripts, confirm clean boot
 
 @isolate
@@ -22,8 +22,14 @@
   instructions:
     check for existing instruction files: AGENTS.md, CLAUDE.md, GEMINI.md, .cursorrules, COPILOT.md, etc.
     never overwrite existing project instructions; extract and preserve them during configuration
+  derive, never ask: everything detectable from the repository is assumed from evidence; ask the human only what evidence cannot answer
+
+@propose
+  present the derived installation plan: what copies, what migrates where, what symlinks, the gitignore strategy
+  the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
 
 @configure
+  strictly per the confirmed plan; drift halts and re-confirms
   base assets:
     copy AGENTS.md, ONBOARDING.md, templates/, and scripts/ into repo root
     set script permissions: `chmod +x scripts/*.awk`
@@ -56,6 +62,7 @@
     initialize AGENTS.local.md with local preferences (plain hyphens, etc.)
 
 @symlink
+  strictly per the confirmed plan
   wire harness entry points to base AGENTS.md:
     for each existing harness file identified during assessment, or active harnesses in use (e.g. CLAUDE.md, GEMINI.md):
       replace or point entry file with symlink: `ln -s AGENTS.md <harness-file>`

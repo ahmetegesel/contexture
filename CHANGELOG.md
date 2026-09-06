@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.13.0] - 2026-09-06
+
+### Added
+
+- The PROPOSE phase in the onboarding flow. The onboarding agent derives everything detectable from the repository on its own - topology, instruction surfaces, harnesses - presents the derived installation plan, and writes nothing before the human's verdict; ambiguity surfaces at the proposal, never mid-execution. Execution is strictly bound to the confirmed plan: drift halts and re-confirms.
+
+### Changed
+
+- The onboarding phases restructured from a linear execution script into the convention's own design loop: ISOLATE, ASSESS, PROPOSE, EXECUTE, VERIFY - the human sees the plan before the writes, not only the diff after them.
+
 ## [0.12.0] - 2026-09-06
 
 ### Added
