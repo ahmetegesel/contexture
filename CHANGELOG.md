@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.12.0] - 2026-09-06
+
+### Added
+
+- The update nudge, frozen into the base. AGENTS.md gained a standalone `@update` section, one line that will not change: the base evolves upstream, and the upgrade guidance lives in this README's Updating section, fetched fresh from upstream at every update. The layering is the design: the nudge points at the README, the README carries the guidance and directs to the CHANGELOG, so the update strategy can evolve without downstream bases ever changing.
+- The Updating guidance: updates are judgment, not a script. The agent reads the CHANGELOG between its installed version and the target, reads its own workspace (overlay @replace blocks, live sessions, in-flight artifacts), decides - adopt, migrate, or wait - and verifies with the workspace's own instruments. The copy commands are means in the agent's hands, never a prescribed pipeline.
+
+### Changed
+
+- The README's adoption step now carries the Updating guidance instead of a one-sentence copy instruction.
+
 ## [0.11.0] - 2026-09-06
 
 ### Added

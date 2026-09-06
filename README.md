@@ -591,10 +591,25 @@ For manual adoption:
    This guideline stays out of it; it's the human's read.
    The copy carries a semantic version. MAJOR = breaking for existing
    artifacts (fields removed, shapes changed), MINOR = new sections and
-   features, PATCH = fixes and wording. When upstream evolves, copy the
-   new `AGENTS.md`, `ONBOARDING.md`, `templates/`, and `scripts/` again - your
-   overlay and local files survive untouched; check MAJOR bumps against your
-   overlay.
+   features, PATCH = fixes and wording.
+
+   **Updating.** This base evolves upstream, and updates are judgment,
+   not a script: its changes are semantic - grammars, laws, boot,
+   dispatch - and every workspace differs. The installed version is the
+   header line of the base's AGENTS.md. The path: fetch the upstream
+   tags (`git fetch https://github.com/ahmetegesel/contexture.git --tags`),
+   read the CHANGELOG from your installed version to the target - what
+   changed and why; read your own workspace - the overlay's @replace
+   blocks, live sessions, in-flight artifacts; then decide: adopt now,
+   migrate first, or wait. When adopting, the shared set (AGENTS.md,
+   ONBOARDING.md, templates/, scripts/) copies from the tag
+   (`git checkout <tag> -- <paths>`); overlays and sessions/ are never
+   in that path; `git diff --staged` shows the human the changed base;
+   the workspace's instruments verify the result (boot query, dangling
+   audit, ground check); MAJOR tags demand the overlay's review. This
+   guidance is kept current in the README at every tag - follow it fresh
+   each time; the decision is always the agent's, weighed against the
+   workspace's situation.
 2. Configure `.gitignore` for your repository topology: in standalone
    repositories containing application code, append contexture private
    paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); never deny by

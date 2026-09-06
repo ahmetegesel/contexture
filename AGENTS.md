@@ -1,4 +1,4 @@
-# contexture v0.11.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.12.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -105,3 +105,6 @@
 
 @git
   the gitignore denies by default for parent workspaces (shared files whitelist explicitly: AGENTS.md, AGENTS.workspace.md, ONBOARDING.md, README.md, scripts/, templates/); standalone repos append private paths (sessions/, rhythms/, AGENTS.local.md).
+
+@update
+  the base evolves upstream: fetch https://github.com/ahmetegesel/contexture.git and follow its README's update guidance
