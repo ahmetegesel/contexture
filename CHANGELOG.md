@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.16.5] - 2026-09-07
+
+### Added
+
+- The onboarding record lifecycle: the adoption session bootstraps at phase 1 and every phase journals as it happens - the record carries the whole history: findings, proposals, verdicts, changes. A field test caught the session bootstrapped empty at the last phase, the entire adoption story left unrecorded.
+- The default rhythm runs the execution: at the verdict, the confirmed plan lands in plan.md, next_action points at the first step, every step's completion journals and advances next_action, drift REPLANs in the same breath - the adoption is the convention's first customer and its first demonstration.
+
+### Changed
+
+- @verify slims to the live record: the queries run against the journal that has existed since phase 1, and the review covers the adoption record alongside the diff.
+
 ## [0.16.4] - 2026-09-06
 
 ### Changed

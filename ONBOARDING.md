@@ -4,16 +4,21 @@
   instructions for an agent onboarding contexture into any repository (greenfield or existing).
 
 @phases
-  1. ISOLATE: create a dedicated branch; never onboard on main
+  the adoption session bootstraps at phase 1 and every phase journals as it happens - the record carries the whole history: findings, proposals, verdicts, changes
+  1. ISOLATE: create a dedicated branch; never onboard on main; bootstrap the adoption session
   2. ASSESS: inventory topology, instruction surfaces, and harnesses; derive the installation plan
-  3. PROPOSE: present the derived plan; the human confirms, amends, or discusses; no write before the verdict
-  4. EXECUTE: configure, migrate, and symlink strictly per the confirmed plan; drift halts and re-confirms
-  5. VERIFY: bootstrap initial session, execute query scripts, confirm clean boot
+  3. PROPOSE: present the derived plan; the human confirms, amends, or discusses; no workspace write before the verdict
+  4. EXECUTE: configure, migrate, and symlink strictly per the confirmed plan, running the default rhythm; drift halts and re-confirms
+  5. VERIFY: run the queries against the live record, confirm clean boot
 
 @isolate
   1. inspect git: `git status -s`; halt if uncommitted changes exist
   2. branch: `git checkout -b adopt-contexture` (or team branch convention)
   3. never execute onboarding directly on main/master/production branches
+  4. bootstrap the adoption session:
+     write sessions/adopt-contexture/state.md: status: ACTIVE, current_anchor: A0, next_action: "assess the workspace"
+     initialize journal.md with `@anchor A0 ("onboarding starts", attention: none)`
+  5. journal the phase: the branch and the starting git state
 
 @assess
   topology:
@@ -27,7 +32,7 @@
   ask freely: derive what evidence answers, and ask the human what only they know - resolutions, history, intent; a wrong assumption costs more than a question
 
 @propose
-  the flow runs in two segments; each ends at a gate that hands control to the human and waits - ask in chat and end the turn; the gate is the loop's exit, never skipped, never merged
+  the flow runs in two segments; each ends at a gate that hands control to the human and waits - ask in chat and end the turn; the gate is the loop's exit, never skipped, never merged; every gate and verdict journals into the adoption record
 
   segment one - the ground:
     1. fill the assessment and the brief in the proposal shape; the filled grammar is the working copy, tmp holds it
@@ -60,7 +65,7 @@
     <every open question beside the plan: resolutions, history, intent the evidence cannot answer; none states none>
 
 @configure
-  strictly per the confirmed plan; drift halts and re-confirms
+  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed plan lands in plan.md, next_action points at the first step, every step's completion journals and advances next_action, drift REPLANs in the same breath
   base assets:
     copy AGENTS.md, ONBOARDING.md, templates/, and scripts/ into repo root
     set script permissions: `chmod +x scripts/*.awk`
@@ -101,10 +106,6 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. create sessions/ directory
-  2. bootstrap initial session:
-     write sessions/adopt-contexture/state.md: status: ACTIVE, current_anchor: A0, next_action: "verify onboarding"
-     initialize sessions/adopt-contexture/journal.md with `@anchor A0 ("initial bootstrap", attention: none)`
-  3. run boot query: `awk -f scripts/journal-active.awk sessions/adopt-contexture/journal.md sessions/adopt-contexture/journal.md`
-  4. run audit: `awk -f scripts/journal-dangling.awk sessions/adopt-contexture/journal.md` (must exit 0)
-  5. review diff with human: `git status`, `git diff`; present for review and PR merge
+  1. run boot query: `awk -f scripts/journal-active.awk sessions/adopt-contexture/journal.md sessions/adopt-contexture/journal.md`
+  2. run audit: `awk -f scripts/journal-dangling.awk sessions/adopt-contexture/journal.md` (must exit 0)
+  3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
