@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.16.1] - 2026-09-06
+
+### Changed
+
+- The proposal's two audiences split. The filled grammar is the working copy - tmp holds it; the human reads proper prose, the same content organized by the shape's sections, never the raw dialect.
+- The open questions forward through the harness's question tool when one exists, so the human answers in place; free text when the harness has none.
+
 ## [0.16.0] - 2026-09-06
 
 ### Added

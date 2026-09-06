@@ -28,7 +28,9 @@
 
 @propose
   fill the proposal shape below whole: every field answered, none states none; a surface absent from the proposal is an unresolved conflict
-  present the filled proposal; no write before the verdict; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
+  the filled grammar is the working copy - tmp holds it; the human reads prose: present the same content as readable prose organized by the shape's sections, never the raw dialect
+  forward the open questions through the harness's question tool when it has one - the human answers in place; free text when it does not
+  no write before the verdict; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
 
 @proposal
   @assessment
