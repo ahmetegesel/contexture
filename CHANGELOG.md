@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.14.1] - 2026-09-06
+
+### Changed
+
+- The anchor bump is defined at the boot step where it happens: a boot is a fresh context load (compaction, session restart), never a turn boundary - turns inside one working context journal under the standing anchor. Twenty anchors stamped inside a single continuous context revealed the ambiguity between the boot-side bump and the close-side period.
+
 ## [0.14.0] - 2026-09-06
 
 ### Added

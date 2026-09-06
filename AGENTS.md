@@ -1,4 +1,4 @@
-# contexture v0.14.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.14.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -44,7 +44,7 @@
   2. opening message names the move: continuing a unit, or new work; primary signal; nothing loads before
   3. verify: grep -l "status: ACTIVE" sessions/<unit>/state.md; agree -> proceed; disagree -> ask before anything loads
   4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
-  5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1)
+  5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1; a boot is a fresh context load - compaction, session restart - never a turn boundary; turns inside one working context journal under the standing anchor)
   6. read plan.md; run @query: awk -f scripts/journal-active.awk streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
