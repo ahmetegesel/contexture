@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.13.1] - 2026-09-06
+
+### Changed
+
+- The onboarding assessment grounds in the workspace's self-description: the existing AGENTS.md and its derivations are read first and whole as the guide to the workspace's rules, and the sweep covers only what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions). The assessment maps every rule surface against the incoming convention - contradicting, overlapping, or complementing - and the plan must carry a resolution for each: migrated, superseded, coexisting, or flagged for the human. The agent asks freely what only the human knows - resolutions, history, intent - and presents the open questions beside the plan, never burying assumptions.
+
 ## [0.13.0] - 2026-09-06
 
 ### Added

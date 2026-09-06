@@ -19,13 +19,15 @@
   topology:
     standalone repo: contains application code (src/, package.json, Cargo.toml, pyproject.toml, etc.)
     parent workspace: contains multiple independent repositories as subdirectories
-  instructions:
-    check for existing instruction files: AGENTS.md, CLAUDE.md, GEMINI.md, .cursorrules, COPILOT.md, etc.
-    never overwrite existing project instructions; extract and preserve them during configuration
-  derive, never ask: everything detectable from the repository is assumed from evidence; ask the human only what evidence cannot answer
+  instruction stack first: the existing AGENTS.md and its derivations (CLAUDE.md, GEMINI.md, harness files) are the workspace's self-description - read them first and whole; they name the rules that matter and often where the rest live
+  governance: map every rule surface against the incoming convention - each contradicts, overlaps, or complements it, and the plan must resolve each one; the stack guides the sweep, the sweep covers what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions)
+  reading budget: rule-bearing surfaces read whole, they are small and dense; structure is derived by listing, never by reading; application code is out of scope
+  ask freely: derive what evidence answers, and ask the human what only they know - resolutions, history, intent; a wrong assumption costs more than a question
 
 @propose
   present the derived installation plan: what copies, what migrates where, what symlinks, the gitignore strategy
+  every discovered surface appears in the plan with its resolution: migrated, superseded, coexisting, or flagged for the human - a surface absent from the plan is an unresolved conflict
+  present the open questions beside the plan: the resolutions the human should settle, never assumptions the agent buried
   the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
 
 @configure
