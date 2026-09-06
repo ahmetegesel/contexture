@@ -259,7 +259,12 @@ reminder it exists, and a resume is fresh entries plus a `next_action`
 ref, never a fake close. Entries may carry a GROUP thread (one word,
 stable within the unit), a REF pointing to an artifact symbol
 (`path#symbol`) for grounding, and a KNOWLEDGE: true flag when they are
-knowledge-worthy.
+knowledge-worthy. An entry that awaits something (a verdict, an
+execution, a report, the harvest) stamps THREAD: true at birth and
+closes the moment the awaited thing arrives; unmarked entries are
+receipts, the final word on a completed fact: they take no closer and
+stay open as the boot's context trail, folding only when the human
+calls a chapter turn or the unit closes.
 
 Why it works this way: the conversation is the least durable thing in
 the system, and compaction, a lossy summarization, is where it dies. A
@@ -480,9 +485,11 @@ Two distinct ends:
   `next_action` in `state.md` (one terse pointer, overwritten never
   prepended; the WHY rebuilds from journal open items, the plan's
   GROUNDED IN refs, and live findings, never pre-serialized into
-  state); run the stray audit (the load list is the audit, and every
-  listed entry that resolved this period closes now, verdict word and
-  resolution in the WHAT); run the dangling check
+  state); run the stray audit (the thread tail printed by the dangling
+  check is the audit, and every open THREAD that resolved this period
+  closes now, verdict word and resolution in the WHAT; receipts never
+  close at period end, they fold only at a human-called chapter turn or
+  at unit close); run the dangling check
   (`awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md` must
   exit 0; every closure slug must name a real entry, and a typoed closer
   is fixed before the period ends, never noted); then harvest: grep the
@@ -500,7 +507,11 @@ Two distinct ends:
 The proof before context death. When a context is about to die
 (compaction, tool change, long break): run the period-end writes, then
 verify the boot greps resolve and `awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md`
-exits 0. A fresh boot must reconstruct the entire position from files
+exits 0. The handoff check also sweeps the whole open list: every open
+entry is confirmed as a live thread or a legitimate receipt, and a
+resolved thread hiding without its marker closes here, the net that
+catches a forgotten stamp. A fresh boot must reconstruct the entire
+position from files
 alone. A folder that contradicts the move, a dangling closer (failing
 `journal-dangling.awk`), a `next_action` that points at finished work:
 each is a handoff failure, and catching one before context death is

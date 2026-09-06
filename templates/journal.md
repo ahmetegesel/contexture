@@ -9,6 +9,7 @@ blocks at column 0; fields indent 2; one blank line between blocks.
   WHAT: "..."                             # a closer carries the resolution here
   [GROUP: <token>]                        # agent-chosen thread, stable within the unit
   [KNOWLEDGE: true]                       # knowledge-worthy; the harvest's input
+  [THREAD: true]                          # awaits resolution: verdict | execution | report | harvest; stamped at birth, never flipped; closes same-breath at resolution; no marker = receipt: final word on a completed fact, no closer obligation
   [CLOSES | SUPERSEDES: <slug> (<verdict>: reason)]  # verdict = done | superseded | dropped | folded; the ONLY closure; no closer = still open
   [REF: "path#symbol"]                    # grounding, same format as knowledge REFs
 
