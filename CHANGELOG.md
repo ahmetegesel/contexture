@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.14.0] - 2026-09-06
+
+### Added
+
+- The onboarding agent now knows the convention whole before mapping: it reads the base AGENTS.md and the upstream README completely - ONBOARDING.md is the procedure, not the convention - and the README carries the philosophy behind every judgment the mapping makes.
+- The destination-driven mapping. The agent walks the convention's sections one by one against the workspace's material - for each capability, what feeds it, what conflicts with it, what belongs there - instead of scanning a file list. Migration follows the destination: a step-by-step workflow living in a workspace's AGENTS.md surfaces as a rhythm candidate because the agent walked the rhythms section knowing what rhythms are for.
+
 ## [0.13.2] - 2026-09-06
 
 ### Removed
