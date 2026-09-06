@@ -645,7 +645,14 @@ Extending it, without breaking it:
   artifacts by name; it never re-specifies their grammars or prescribes
   their content. A rhythm replaces task progression only; artifact
   invariants (`@record`, `@laws`: journaling transitions, advancing
-  `next_action`, harvesting verdicts) hold across every rhythm.
+  `next_action`, harvesting verdicts) hold across every rhythm. Work
+  patterns never live in the per-turn surfaces: interaction rules need
+  every-turn delivery, work patterns need per-boot delivery in
+  rhythms/ - a workflow written into an AGENTS.md taxes every single
+  turn forever. That delivery split is also the onboarding move: the
+  step-by-step workflows found in a workspace's instruction stack are
+  the first rhythm candidates, proposed for extraction when the
+  installation plan is presented.
 
   When no rhythm is invoked, the agent runs the default design loop:
   1. `DISCUSS`: explore problem space; grounded questions resolve intent

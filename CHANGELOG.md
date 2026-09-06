@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.15.0] - 2026-09-06
+
+### Added
+
+- The rhythm placement principle, declared in the base. The per-turn surfaces carry interaction rules only; work patterns are rhythm material - extracted from the instruction stack at onboarding, proposed as they emerge. Until now the principle lived only in contexture's own session knowledge and never shipped, which is why onboardings kept missing workflow extractions.
+- The destination buckets in the onboarding plan. The installation plan organizes the moves by destination home and answers each explicitly - overlay material, rhythm extractions, deletions, untouched - an empty home states none. The question can no longer be skipped silently: the extractions answer is on the page for the human to challenge.
+
+### Changed
+
+- The README's rhythms section carries the delivery split and the onboarding move: interaction rules need every-turn delivery, work patterns need per-boot delivery in rhythms/, so workflows found in a workspace's instruction stack are the first rhythm candidates.
+
 ## [0.14.1] - 2026-09-06
 
 ### Changed

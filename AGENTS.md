@@ -1,4 +1,4 @@
-# contexture v0.14.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.15.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -63,6 +63,7 @@
 
 @rhythms
   contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-proposed; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm.
+  placement :: the per-turn surfaces carry interaction rules only; work patterns are rhythm material - extracted from the instruction stack at onboarding, proposed as they emerge
   default :: the design loop, when no rhythm is invoked; human rhythm replaces progression
   1. DISCUSS: explore problem space; grounded questions resolve intent
   2. DECIDE: human verdict settles; triggers harvest candidate

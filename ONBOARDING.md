@@ -29,6 +29,7 @@
 @propose
   present the derived installation plan: what copies, what migrates where, what symlinks, the gitignore strategy
   every discovered surface appears in the plan with its resolution: migrated, superseded, coexisting, or flagged for the human - a surface absent from the plan is an unresolved conflict
+  the plan organizes the moves by destination home and answers each explicitly: overlay material, rhythm extractions, deletions, untouched - an empty home states none
   present the open questions beside the plan: the resolutions the human should settle, never assumptions the agent buried
   the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
 
