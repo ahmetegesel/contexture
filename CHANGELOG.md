@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.13.2] - 2026-09-06
+
+### Removed
+
+- `templates/changelog.md`. The changelog's shape is the external Keep a Changelog standard, stated in this file's own header, and its contexture-specific rules - the ship-breath timing and the tag-range completeness - live in the workspace overlay's git section. The template was a second home waiting to drift, not a grammar to pin.
+
 ## [0.13.1] - 2026-09-06
 
 ### Changed
