@@ -404,22 +404,28 @@ The first thing the agent does each working period, mechanically:
    is a missing closer - visible debt the period end settles. Knowledge
    loads fully (small, every line a settled decision); supersession
    operates via a successor finding's `SUPERSEDES:` line.
-7. **Stamp the load receipt.** Append to `journal.md`:
+7. **Ground check.** Run `git status -sb`. The working tree and the
+   upstream delta are facts the record must carry: uncommitted changes
+   and unpushed commits reconcile against the bookkeeping before work
+   continues, and git wins over the record - the session files are
+   claims, the tree is evidence. A mismatch journals as work (receipts
+   for the unrecorded changes), never as a note.
+8. **Stamp the load receipt.** Append to `journal.md`:
    ```
    @anchor A<N> ("continues A<N-1>", attention: <the loaded set>)
    ```
    The stamp names what was loaded, so `grep "^@anchor"` reconstructs
    both the map and the receipts. Receipts inform; they never feed the
    next boot's load - the subtraction does.
-8. **Continue.** From `next_action`, following the human-invoked rhythm,
+9. **Continue.** From `next_action`, following the human-invoked rhythm,
    or the default design loop. If `next_action` says "plan the next
    move", the planning phase starts.
-9. **New work bootstraps a unit.** The agent creates
+10. **New work bootstraps a unit.** The agent creates
    `sessions/<slug>/state.md` with `status: ACTIVE`,
    `current_anchor: A0`, and `next_action: "plan the first move"`, then
    continues at step 5, and the first boot stamps A1.
 
-A boot, concretely. The eight active steps, overlay and amendments first (the
+A boot, concretely. The nine active steps, overlay and amendments first (the
 unit here is any unit):
 
 ```
@@ -450,13 +456,18 @@ unit here is any unit):
 
    line 19's target is closed: it does not dump, and its resolution
    travels in the closer's WHAT. Everything else dumps in full, then
-   stamped at step 7. A settled entry still in the dump is a missing
+   stamped at step 8. A settled entry still in the dump is a missing
    closer: visible debt, closed at period end.
 
-7. stamp:
-   @anchor A2 ("continues A1", attention: <the loaded set>)
+7. ground check:
+   $ git status -sb
+   ## main...origin/main  # synchronized, tree clean; the record's
+                          # claims match the evidence
 
-8. continue from next_action, following the invoked rhythm or the
+8. stamp:
+   @anchor A2 ("continues A1", attention: <the loaded set + the git state>)
+
+9. continue from next_action, following the invoked rhythm or the
    default design loop
 ```
 

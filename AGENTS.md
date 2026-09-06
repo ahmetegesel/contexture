@@ -1,4 +1,4 @@
-# contexture v0.8.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.9.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -46,9 +46,10 @@
   4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
   5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1)
   6. read plan.md; run @query: awk -f scripts/journal-active.awk streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
-  7. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
-  8. continue from next_action, following the human-invoked rhythm, or the default
-  9. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
+  7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
+  8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
+  9. continue from next_action, following the human-invoked rhythm, or the default
+  10. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask
