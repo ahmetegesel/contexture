@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.16.3] - 2026-09-06
+
+### Added
+
+- The brief as the proposal's opening field: what contexture is, what it promises, what it tries to solve, what it provides, and what this workspace gains against its current setup - written for a human who knows nothing about the repo and grounded in the assessment's findings. The proposal file opens with it.
+
+### Changed
+
+- The pre-plan and the final plan land as a file: onboarding-proposal.md at the repo root, prose only, every question naming the path, the verdict question repeating it and summarizing the changes, the file removed after the verdict. Six field tests proved the channel split: files and the question tool always arrived; chat prose mid-execution never did.
+
 ## [0.16.2] - 2026-09-06
 
 ### Changed
