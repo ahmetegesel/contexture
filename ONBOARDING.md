@@ -27,11 +27,17 @@
   ask freely: derive what evidence answers, and ask the human what only they know - resolutions, history, intent; a wrong assumption costs more than a question
 
 @propose
-  1. fill the proposal shape below whole: every field answered, none states none; the filled grammar is the working copy, tmp holds it
-  2. write the prose pre-plan to onboarding-proposal.md at the repo root: it opens with the brief, then readable prose organized by the shape's sections, never the raw dialect; a plan that lives only in chat or only in dialect was never presented
-  3. forward the open questions through the harness's question tool when it has one - every question names the proposal file; free text when the harness has none
-  4. update onboarding-proposal.md per the answers; the verdict question repeats the file path and summarizes what changed: never an approval ask for an unseen or stale plan
-  5. request the final verdict on the updated plan only: no write before it; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
+  the flow runs in two segments; each ends at a gate that hands control to the human and waits - ask in chat and end the turn; the gate is the loop's exit, never skipped, never merged
+
+  segment one - the ground:
+    1. fill the assessment and the brief in the proposal shape; the filled grammar is the working copy, tmp holds it
+    2. gate: present the brief and the assessment findings and ask the human to approve the plan preparation; on approve, run segment two; on discuss, answer and re-gate
+
+  segment two - the plan:
+    3. write the pre-plan into the proposal grammar: readable prose per the shape's plan fields, never the raw dialect
+    4. forward the open questions through the harness's question tool when it has one - each question carries the plan context it touches; free text when it does not
+    5. update the proposal per the answers: never an approval ask for an unseen or stale plan
+    6. gate: present the final plan and request the verdict on it only - no write before it; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
 
 @proposal
   @brief
@@ -102,4 +108,3 @@
   3. run boot query: `awk -f scripts/journal-active.awk sessions/adopt-contexture/journal.md sessions/adopt-contexture/journal.md`
   4. run audit: `awk -f scripts/journal-dangling.awk sessions/adopt-contexture/journal.md` (must exit 0)
   5. review diff with human: `git status`, `git diff`; present for review and PR merge
-  6. remove onboarding-proposal.md after the verdict lands

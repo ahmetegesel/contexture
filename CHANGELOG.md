@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.16.4] - 2026-09-06
+
+### Changed
+
+- @propose runs in two segments, each ending at a gate that hands control to the human and waits - ask in chat and end the turn; the gate is the tool loop's exit, never skipped, never merged. Segment one presents the brief and the findings and gates the plan preparation; segment two pre-plans, forwards the open questions through the harness's question tool when it has one, and gates the final verdict on the updated plan. A field test caught the loop running through the whole proposal to the approval ask - the gate is the exit the loop was missing.
+
+### Removed
+
+- The proposal file and its cleanup step: the presentation rides in the gate questions and the question bodies, and nothing needs persisting.
+
 ## [0.16.3] - 2026-09-06
 
 ### Added
