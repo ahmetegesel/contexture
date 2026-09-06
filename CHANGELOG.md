@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.16.0] - 2026-09-06
+
+### Added
+
+- The onboarding proposal grammar, inline in ONBOARDING.md. The PROPOSE phase fills a fixed shape whose fields are contexture's features - copy set, overlay material, local preferences, rhythm extractions, sessions handling, symlinks, gitignore strategy, deletions, untouched, and the open questions - every field answered, none stating none. Four field reports showed prose coverage is stochastic: features became fields, and filling the shape walks them all deterministically. The shape lives in ONBOARDING.md itself - a one-shot artifact, not a recurring template.
+
+### Changed
+
+- @propose slimmed to the gate: no write before the verdict, the completeness rule, ambiguity at the proposal - the structure delegated to the @proposal grammar.
+
 ## [0.15.0] - 2026-09-06
 
 ### Added

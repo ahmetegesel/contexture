@@ -27,11 +27,26 @@
   ask freely: derive what evidence answers, and ask the human what only they know - resolutions, history, intent; a wrong assumption costs more than a question
 
 @propose
-  present the derived installation plan: what copies, what migrates where, what symlinks, the gitignore strategy
-  every discovered surface appears in the plan with its resolution: migrated, superseded, coexisting, or flagged for the human - a surface absent from the plan is an unresolved conflict
-  the plan organizes the moves by destination home and answers each explicitly: overlay material, rhythm extractions, deletions, untouched - an empty home states none
-  present the open questions beside the plan: the resolutions the human should settle, never assumptions the agent buried
-  the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
+  fill the proposal shape below whole: every field answered, none states none; a surface absent from the proposal is an unresolved conflict
+  present the filled proposal; no write before the verdict; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
+
+@proposal
+  @assessment
+    topology: <standalone | parent workspace> - <the evidence>
+    instruction stack: <the files read whole>
+    rule surfaces: <every surface found, one per line; each contradicts, overlaps, or complements the convention>
+  @plan
+    copy: <the shared set; always AGENTS.md, ONBOARDING.md, templates/, scripts/>
+    overlay: <AGENTS.workspace.md @append blocks - which existing rules migrate where; none states none>
+    local: <AGENTS.local.md preferences; none states none>
+    rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; none states none>
+    sessions: <existing session folders - adopted, archived, or left; none states none>
+    symlinks: <harness entry points to wire; none states none>
+    gitignore: <the strategy per topology>
+    deletions: <existing rules superseded by the convention; none states none>
+    untouched: <what deliberately stays outside contexture>
+  @questions
+    <every open question beside the plan: resolutions, history, intent the evidence cannot answer; none states none>
 
 @configure
   strictly per the confirmed plan; drift halts and re-confirms
