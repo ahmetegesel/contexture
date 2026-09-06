@@ -1,4 +1,4 @@
-# contexture v0.10.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.11.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -73,7 +73,9 @@
 @subagents
   every dispatch:
   - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden
-  - lane journals execution in journal.md; report -> report.md; return = summary ONLY
+  - lane journals at action granularity in journal.md: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as one WHAT line carrying action + result + why-next; task receipts batch at task completion; the journal is the audit trail and the resumption surface
+  - report -> report.md; return = summary ONLY
+  - the dispatcher reads the report, never the lane journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
   - background: the turn ends at launch; never block the conversation on a lane
   - drift: a lane NEVER improvises; stop, report found | standing | drifted; pause-ask where possible, abort gracefully where not
   - report and journal land NO MATTER the outcome -> re-dispatch resumes from the lane folder, never rebuilds

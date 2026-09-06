@@ -21,8 +21,8 @@ GROUND_AND_REFS
   drift: stop + report; never improvise
 
 OUTPUTS
-  JOURNAL: journal.md               # execution trace; templates/journal.md
-  REPORT: report.md                 # claims and evidence; templates/report.md
+  JOURNAL: journal.md               # action trace + resumption surface: one WHAT line per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; the dispatcher never reads it
+  REPORT: report.md                 # the dispatcher's only window: self-sufficient claims and evidence; templates/report.md
   RETURN: summary only: verdicts + residual risks
   RESUME: read recipe.md + journal.md; continue from last uncompleted task
 
@@ -50,3 +50,8 @@ OUTPUTS
   REPORT: report.md
   RETURN: summary only: verdicts + residual risks
   RESUME: read recipe.md + journal.md; continue from last uncompleted task
+
+# the journal grammar: one WHAT line per state-changing action (file written,
+# command with a non-obvious result), claim formed, decision point, drift
+# notice; action + result + why-next; task receipts batch at completion;
+# the dispatcher reads the report, never the journal

@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.11.0] - 2026-09-06
+
+### Added
+
+- The subagent journalism contract. Lane journals now record one line per state-changing action: a file written, a command whose result was not the obvious one, a claim formed, a decision point, a drift notice, each carrying the action, the result, and why the next step followed. Task receipts batch at completion. The journal is the audit trail and the resumption surface, and the reasoning shows in the action lines without a separate reflection field.
+- The dispatcher's one-window rule. The dispatcher reads the lane's report, never its journal: the report must be self-sufficient, and a thin report triggers re-dispatch rather than journal-mining. Both clauses live in the base subagent section and the recipe template's outputs grammar.
+
+### Changed
+
+- Five changelog sections (v0.1.0, v0.3.0, v0.3.1, v0.4.0, v0.4.1) were enriched from git history: the record's narratives stayed the spine and the tag ranges supplied the detail the record lacked. The first enrichment lane crashed to a harness concurrency limit mid-task, and the resumed instance continued from the action journal without rebuilding, which made the crash-to-resume seam the contract's first live proof.
+
 ## [0.10.0] - 2026-09-06
 
 ### Added
@@ -75,36 +86,36 @@ Nothing recorded yet. The next release section is written at ship time, in the s
 
 ### Changed
 
-- Artifact maintenance is decoupled from rhythms. The rhythm contract now states that a rhythm replaces task progression only, while artifact invariants hold across every rhythm. The default rhythm was reframed around the task milestones: discuss, decide, plan, execute, verify.
-- README and base consistency fixes landed from an audit lane: topology-aware git guidance, the dangling check named at handoff, and stale references removed.
+- Artifact maintenance is decoupled from rhythms. The rhythm contract now states that a rhythm replaces task progression only, while the artifact invariants (@record, @laws: journaling transitions, advancing `next_action`, harvesting verdicts) hold across every rhythm. The default rhythm was reframed from a six-step loop that braided journaling, verdicts, and knowledge landing into plan execution, to the task milestones: discuss, decide, plan, execute, verify.
+- README and base consistency fixes landed from an audit lane: the git guidance became topology-aware (parent workspaces deny by default, standalone repositories append the private paths), the handoff section names `scripts/journal-dangling.awk` and its exit-0 check, the phantom grep example in the boot walkthrough was replaced by the closure stamp the load pass actually collects, the boot step count was corrected to the eight active steps, the engine reads bash, awk, and grep, manual adoption gained the script permission step, and the stale references, the BIOS mention among them, are gone.
 
 ## [0.4.0] - 2026-09-05
 
 ### Added
 
-- ONBOARDING.md, a five-phase agentic onboarding flow: isolate, assess, configure, symlink, verify. It carries the topology-aware gitignore guidance and the instruction migration steps for adopting the convention into an existing repository.
+- ONBOARDING.md, a five-phase agentic onboarding flow: isolate, assess, configure, symlink, verify, each phase a concrete procedure. Isolate starts from a dedicated branch, never from main; assess reads the repository topology and the existing instruction surfaces; configure installs the base assets, migrates standing instructions into the overlay and the personal amendments, and adapts the gitignore; symlink wires the harness entry points to `AGENTS.md`; verify proves the install with a bootstrap session, the query scripts, and a clean boot. It carries the topology-aware gitignore guidance and the instruction migration steps for adopting the convention into an existing repository.
 
 ### Changed
 
-- The README was trimmed of the deny-by-default gitignore detail, which moved to onboarding where the repository topology is decided, and the base layout and git sections were updated to match.
+- The README's adoption guidance was rebuilt around topology: the deny-by-default gitignore detail moved to onboarding where the repository topology is assessed, an adopting agent is pointed at `ONBOARDING.md` as the executed path, manual adoption starts on a dedicated branch, and wiring the harness symlinks entered the adoption steps. The base layout gained the ONBOARDING.md line, and the gitignore whitelist named ONBOARDING.md alongside the other shared roots.
 
 ## [0.3.1] - 2026-09-05
 
 ### Removed
 
-- The opinionated rule that pushed only on explicit instruction was removed from the base git section. Workflow restrictions of this kind belong to team overlays, not to the shared base.
+- The opinionated rule that pushed only on explicit instruction was removed from the base git section: a one-line removal plus the version bump, shipped as the standing versioning law's patch case, wording not shape. Workflow restrictions of this kind belong to team overlays, not to the shared base.
 
 ## [0.3.0] - 2026-09-05
 
 ### Added
 
-- Cross-platform query scripts. `scripts/journal-active.awk` streams the active journal entries with complete bodies in a single command, tolerant of uppercase slugs, with no temp files, subshells, or process substitution. `scripts/journal-dangling.awk` audits closure references and exits nonzero with line numbers on dangling closers. Both were tested against two journals, and the audit caught two date-typoed closers in the wild, proving its teeth.
+- Cross-platform query scripts. `scripts/journal-active.awk` streams the active journal entries with complete bodies in a single command: the first pass memorizes every closure target, the second streams the bodies no closure names. Slug matching is uppercase-tolerant because testing exposed that the inline pipeline's lowercase-only regex had been silently missing uppercase slugs. The script runs as a single awk process, with no temp files, subshells, or process substitution, so it behaves identically on macOS, Linux, and Git Bash. `scripts/journal-dangling.awk` audits closure references in a single pass and exits nonzero with line numbers on dangling closers. Both were tested against two journals, and the audit caught two date-typoed closers in a second workspace's journal, proving its teeth.
 - Harness entry symlinks. `CLAUDE.md` and `GEMINI.md` were created as symlinks to `AGENTS.md`, so every harness resolves the same base file, and the gitignore whitelists both links.
-- The scripts directory is whitelisted in the gitignore, and the base and README query surfaces reference the scripts.
+- The scripts directory is whitelisted in the gitignore, and the base and README query surfaces were reworked to reference the scripts.
 
 ### Changed
 
-- The boot load command was upgraded from a slug listing to a full dump that loads all active entry bodies through a single command instead of one read per entry.
+- The boot load moved in two steps, both inside this release: a full dump first replaced the per-entry reads by embedding the load loop in the query surfaces, then the embedded loop was replaced wholesale by `scripts/journal-active.awk` once testing showed the inline pipeline carried the same lowercase-only slug defect.
 
 ## [0.2.0] - 2026-09-05
 
@@ -126,11 +137,16 @@ Nothing recorded yet. The next release section is written at ship time, in the s
 
 ## [0.1.0] - 2026-09-02
 
-First versioned release of the convention.
+First versioned release of the convention. It was not written in one pass: the convention was carved out of working practice, beginning with the archive of a legacy project and a freshly scoped `AGENTS.md`, and matured across roughly a hundred pre-versioning commits before the human declared the first stable version.
 
 ### Added
 
 - The workspace overlay contract. `AGENTS.workspace.md` replaces or appends per base section, survives every sync untouched, and wins over personal amendments. The overlay template ships the grammar, and boot reads the workspace overlay before local amendments.
 - Semantic versioning, with the version line opening `AGENTS.md` and the README teaching the policy and the major-bump check against overlays.
 - The deny-by-default gitignore. Everything is ignored unless whitelisted, so an incomplete ignore list can no longer leak a session, with the convention's own files as the explicit list.
-- The statusless journal. Entries close by reference only, agent-chosen group threads organize topics, the knowledge flag feeds the close harvest, and findings load in full at boot.
+- The statusless journal. Entries close by reference only, agent-chosen group threads organize topics, the knowledge flag feeds the close harvest, and findings load in full at boot. The close state chases every closer in the same breath an entry resolves, and findings link to events through references of the form path#symbol into append-only artifacts, so nothing load-bearing lives in a dynamic file.
+- The artifact grammars in `templates/`, seven of them at this release: session state, plan, journal, knowledge, recipe, report, and overlay. Every grammar carries a filled sample, and the templates are the shape authority: an artifact is written by filling its grammar, never by copying another session's prose.
+- The dispatch contract for subagents. Recipe and report grammars define the brief and the evidence, a lane that cannot write its report returns the artifact verbatim for the dispatcher to persist byte-clean, and a dispatch never blocks the conversation: the turn ends at launch.
+- The message-first boot. The opening message names the move before anything loads, the active session is verified with one targeted grep, and new units bootstrap from the boot itself. Local amendments are read first because they may amend the boot order.
+- The design loop as the default rhythm, alongside the laws that shape the work: write token-efficient, and harvest the human, meaning knowledge lands only on approval while developing ideas stay in the journal.
+- The README as the repo homepage, rebuilt from an earlier team guideline and swept into coherence before the tag: its TL;DR, philosophy, journal, knowledge, boot, and close sections all match the shipped convention.
