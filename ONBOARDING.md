@@ -1,7 +1,7 @@
 # contexture agentic onboarding guideline
 
 @purpose
-  instructions for an agent onboarding contexture into any repository (greenfield or existing).
+  instructions for an agent onboarding contexture into any repository (greenfield or existing), and updating the base afterwards.
 
 @phases
   1. ISOLATE: create a dedicated branch; never onboard on main
@@ -70,3 +70,12 @@
   3. run boot query: `awk -f scripts/journal-active.awk sessions/adopt-contexture/journal.md sessions/adopt-contexture/journal.md`
   4. run audit: `awk -f scripts/journal-dangling.awk sessions/adopt-contexture/journal.md` (must exit 0)
   5. review diff with human: `git status`, `git diff`; present for review and PR merge
+
+@update
+  this section travels with the base: after adoption it is the workspace's standing update procedure
+  version check: the AGENTS.md header line says what the workspace runs; `git ls-remote --tags contexture` says what upstream released
+  one-time: `git remote add contexture <upstream-url>`
+  update: `git fetch contexture && git checkout <new-tag> -- AGENTS.md ONBOARDING.md templates scripts`
+  the checkout stages the copy; `git diff --staged` shows the human exactly what changed in the base
+  AGENTS.workspace.md, AGENTS.local.md, and sessions/ survive untouched
+  check MAJOR tags against the workspace overlay before adopting them
