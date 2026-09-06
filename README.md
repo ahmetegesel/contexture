@@ -242,8 +242,11 @@ The plan changes only when the human deliberately changes the intent,
 and then surgically: touch only what changed, replace it in place, and
 journal the change in the same breath. Unchanged steps stay
 byte-identical, because a whole rewrite recomposes everything in
-whatever model's voice touched it last. A completed plan is replaced in
-place; its traces, completion and the next move, land in the journal.
+whatever model's voice touched it last. When the plan lands, the same
+breath stamps `COMPLETED: true` on it, once, never flipped: a booting
+agent reads the dead plan as dead without reconciling it against the
+journal. Absent means executing. The next plan replaces the file whole;
+its traces, completion and the next move, land in the journal.
 
 ### journal.md: the memory
 

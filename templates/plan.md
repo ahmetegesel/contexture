@@ -4,6 +4,8 @@ flat keys at column 0; steps indent 2; step lines indent 4.
 
 GOAL: "one line: what the unit achieves"
 
+[COMPLETED: true]                        # stamped once at the landing breath; absent = executing; never flipped; the next REPLAN replaces the file whole
+
 STEPS:
   1. step-name: one-line intent
      exit: "checkable done-condition"
