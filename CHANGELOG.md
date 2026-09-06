@@ -8,16 +8,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
-## [0.12.0] - 2026-09-06
-
-### Added
-
-- The update procedure, carried by the base itself. ONBOARDING.md gained an `@update` section: the workspace's running version is read from the AGENTS.md header line, upstream releases are checked against the git tags, and one `git fetch` plus `git checkout` from the new tag copies the shared set whole while the overlays and sessions survive untouched. Because the section travels inside ONBOARDING.md, the procedure is present in every adopting workspace after adoption - the README, which is not carried, only points at it.
-
-### Changed
-
-- The README's adoption step defers the update procedure to ONBOARDING.md instead of restating it.
-
 ## [0.11.0] - 2026-09-06
 
 ### Added

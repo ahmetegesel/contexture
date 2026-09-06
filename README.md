@@ -591,10 +591,9 @@ For manual adoption:
    This guideline stays out of it; it's the human's read.
    The copy carries a semantic version. MAJOR = breaking for existing
    artifacts (fields removed, shapes changed), MINOR = new sections and
-   features, PATCH = fixes and wording. When upstream evolves, follow
-   ONBOARDING.md's `@update` section - the procedure travels with the
-   base, so it is always in the workspace after adoption; your overlay
-   and local files survive untouched; check MAJOR bumps against your
+   features, PATCH = fixes and wording. When upstream evolves, copy the
+   new `AGENTS.md`, `ONBOARDING.md`, `templates/`, and `scripts/` again - your
+   overlay and local files survive untouched; check MAJOR bumps against your
    overlay.
 2. Configure `.gitignore` for your repository topology: in standalone
    repositories containing application code, append contexture private
