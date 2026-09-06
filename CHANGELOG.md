@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.16.2] - 2026-09-06
+
+### Changed
+
+- @propose became an ordered sequence: the pre-plan presents in prose first, the open questions go against the plan the human just read, the plan updates per the answers with the changes presented, and the final verdict lands on the updated plan only. A field test caught an agent requesting approval for a plan it never presented - parallel rule lists carry no order, and order-sensitive procedures need numbered sequences.
+
 ## [0.16.1] - 2026-09-06
 
 ### Changed

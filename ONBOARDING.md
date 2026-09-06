@@ -27,10 +27,11 @@
   ask freely: derive what evidence answers, and ask the human what only they know - resolutions, history, intent; a wrong assumption costs more than a question
 
 @propose
-  fill the proposal shape below whole: every field answered, none states none; a surface absent from the proposal is an unresolved conflict
-  the filled grammar is the working copy - tmp holds it; the human reads prose: present the same content as readable prose organized by the shape's sections, never the raw dialect
-  forward the open questions through the harness's question tool when it has one - the human answers in place; free text when it does not
-  no write before the verdict; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
+  1. fill the proposal shape below whole: every field answered, none states none; a surface absent from the proposal is an unresolved conflict; the filled grammar is the working copy, tmp holds it
+  2. present the pre-plan as proper prose, organized by the shape's sections: the human reads the plan draft before anything is asked; never the raw dialect
+  3. forward the open questions through the harness's question tool when it has one - the human answers in place, against the plan they just read; free text when the harness has none
+  4. update the plan per the answers and present what changed: never an approval ask for an unseen or stale plan
+  5. request the final verdict on the updated plan only: no write before it; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
 
 @proposal
   @assessment
