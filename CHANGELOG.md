@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.16.6] - 2026-09-07
+
+### Changed
+
+- The dangling audit sees the grammar. It now flags three malformation classes it was blind to - dateless entry slugs, inline `[THREAD:` / `[KNOWLEDGE:` markers on @entry lines, and closers with no valid date-slug target - each with its line number, and exits 1 on any of them. A field sample proved the old audit passed a journal full of broken entries vacuously: its green was noise. The fix flow is agent-driven: the audit reveals, the agent executes the refit, the re-audit verifies clean.
+
 ## [0.16.5] - 2026-09-07
 
 ### Added

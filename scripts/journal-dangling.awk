@@ -1,14 +1,23 @@
 #!/usr/bin/awk -f
-# journal-dangling.awk: Audit closures and print the open thread tail
+# journal-dangling.awk: Audit closures, entry grammar, and print the open thread tail
 # Usage: awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md
 # Or:    ./scripts/journal-dangling.awk sessions/<unit>/journal.md
-# Dangling closers (a CLOSES/SUPERSEDES slug naming no @entry) exit 1.
+# Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
+# markers on @entry lines - each flagged with its line number.
 # Open threads (THREAD: true entries with no closer) print beside the audit;
 # the tail is a display, never an enforcement: a thread paused stays open.
 
 /^@entry / {
   entries[$2] = 1
   last_entry = $2
+  if ($2 !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-zA-Z0-9_-]+[a-zA-Z0-9]$/) {
+    print "DATELESS SLUG at line " NR ": " $2
+    bad++
+  }
+  if ($0 ~ /\[(THREAD|KNOWLEDGE):/) {
+    print "INLINE MARKER at line " NR ": " $2
+    bad++
+  }
 }
 
 /^  THREAD: true[ \t]*$/ {
@@ -21,11 +30,17 @@ $1 == "CLOSES:" || $1 == "SUPERSEDES:" {
   sub(/[ \t]+-[ \t]+.*$/, "", line)
   sub(/[ \t]+\(.*$/, "", line)
   n = split(line, words, /[ \t]+/)
+  found = 0
   for (i = 1; i <= n; i++) {
     if (words[i] ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-zA-Z0-9_-]+[a-zA-Z0-9]$/) {
       targets[words[i]] = NR
       closed[words[i]] = 1
+      found = 1
     }
+  }
+  if (found == 0) {
+    print "SLUGLESS CLOSER at line " NR ": no valid date-slug target"
+    bad++
   }
 }
 
@@ -37,7 +52,7 @@ END {
       dangling_count++
     }
   }
-  if (dangling_count > 0) {
+  if (bad > 0 || dangling_count > 0) {
     exit 1
   }
   tail = 0
