@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.17.0] - 2026-09-07
+
+### Changed
+
+- The boot trigger is positional, not semantic: the first message of a fresh context is a boot by definition, whatever its shape - a boot request, a dumped task, a question. The boot reads the message as the move signal, fields the active units with one grep, matches the message against them, and proposes the move - continue the close match or bootstrap a new unit - waiting for the answer before anything works. A field test caught an agent jumping straight to work on a dumped message and skipping the boot entirely: semantic triggers have a base rate; positional ones do not.
+
 ## [0.16.6] - 2026-09-07
 
 ### Changed

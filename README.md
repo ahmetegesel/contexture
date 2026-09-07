@@ -370,17 +370,18 @@ The first thing the agent does each working period, mechanically:
    shared overlay) then `AGENTS.local.md` (personal amendments) if
    present. Both are tiny, and the local file may amend the boot order
    itself; where workspace and local conflict, the workspace wins.
-2. **Name the move.** Read the human's opening message and decide what it
-   is: continuing a unit, or new work. The message is the primary signal;
-   nothing else loads before the move is named.
-3. **Verify the move against the folder.** One targeted grep:
-   `grep -l "status: ACTIVE" sessions/<unit>/state.md`. Agreement
-   proceeds. Disagreement (the named unit is absent or not ACTIVE, or new
-   work collides with a live unit) is asked about before anything else
-   loads.
-4. **More than one candidate?** The message may name one; otherwise list
-   the ACTIVE units (`grep -rl "status: ACTIVE" sessions/*/state.md`)
-   and ask (default: the last-touched).
+2. **Boot unconditionally.** The first message of a fresh context is a
+   boot by definition, whatever its shape: a boot request, a dumped
+   task, a question. The message is the move signal, and nothing loads
+   and nothing works before the boot reads it.
+3. **Get the field and match.** One grep lists the candidates:
+   `grep -rl "status: ACTIVE" sessions/*/state.md`. Read the message
+   against them: a close match proposes continuing that unit; no match
+   proposes bootstrapping a new one.
+4. **Propose the move and wait.** The proposal goes to the human before
+   anything works - even a message naming its unit explicitly gets the
+   proposal stated as a confirmation. The reply settles the unit:
+   an active unit continues at step 5; a new unit bootstraps at step 10.
 5. **Read state, refresh the anchor counter.** Read `state.md` whole. It
    is small by law, and detail lives behind refs, never inside it.
    Refresh `current_anchor` to the next value (`N = previous + 1`).
@@ -432,14 +433,19 @@ unit here is any unit):
 1. read AGENTS.workspace.md        # absent: nothing to overlay, proceed
    read AGENTS.local.md            # absent: nothing to amend, proceed
 
-2. the message names the move:
+2. boot unconditionally - the first message is the move signal whatever
+   its shape:
    > "let's continue the example unit"
 
-3. verify against the folder:
-   $ grep -l "status: ACTIVE" sessions/example-unit/state.md
-   sessions/example-unit/state.md  # the named unit is live
+3. get the field and match:
+   $ grep -rl "status: ACTIVE" sessions/*/state.md
+   sessions/example-unit/state.md  # one active unit; the message
+                                   # matches it closely
 
-4. one candidate: no ask needed
+4. propose the move and wait:
+   "this reads as continuing the example unit - proceeding"  # a clear
+   message gets a stated confirmation; a dumped task gets the proposal
+   and the question
 
 5. read state.md WHOLE; refresh current_anchor to A2
 

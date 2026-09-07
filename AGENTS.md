@@ -1,4 +1,4 @@
-# contexture v0.16.6 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.17.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -41,9 +41,9 @@
 
 @boot
   1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
-  2. opening message names the move: continuing a unit, or new work; primary signal; nothing loads before
-  3. verify: grep -l "status: ACTIVE" sessions/<unit>/state.md; agree -> proceed; disagree -> ask before anything loads
-  4. >1 ACTIVE candidate? message may name one; else grep -rl "status: ACTIVE" sessions/*/state.md, list, ask (default: last-touched)
+  2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape - a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
+  3. get the field: grep -rl "status: ACTIVE" sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
+  4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit - an active unit continues at 5, a new unit bootstraps at 10
   5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1; a boot is a fresh context load - compaction, session restart - never a turn boundary; turns inside one working context journal under the standing anchor)
   6. read plan.md; run @query: awk -f scripts/journal-active.awk streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
