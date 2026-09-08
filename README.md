@@ -45,15 +45,15 @@ The workspace in one map:
   with a REF, plans edit surgically at re-plan only
 - **Close:** period end refreshes the pointer and harvests the flagged
   entries; unit end marks CLOSED and journals the next move
-- **Handoff:** before context death, run the writes, verify the boot
-  greps resolve and `awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md`
-  exits 0
+- **Handoff:** before context death, run the writes, cold-read the
+  active stream as a fresh boot would, and verify
+  `awk -f scripts/journal-audit.awk sessions/<unit>/journal.md` exits 0
 
 The seven laws carry the whole design: files over conversation, load
-only what the work touches, dense structural writing, govern output not
-process, compose from the record, verify before close, harvest the
-human. The rest of this guide walks the workspace itself, file by
-file, then a session running through it.
+only what the work touches, the schema holds the shape and the writer
+holds the volume, govern output not process, compose from the record,
+verify before close, harvest the human. The rest of this guide walks
+the workspace itself, file by file, then a session running through it.
 
 ---
 
@@ -233,8 +233,21 @@ history in disguise.
 
 ### plan.md: the intent
 
-What the unit aims to do, written as GOAL, STEPS with exit criteria,
-and the sources the plan was composed from (GROUNDED IN).
+What the unit aims to do, written as GOAL, STEPS with checkable exit
+criteria, and the sources the plan was composed from (GROUNDED IN).
+The schema guides those elements only; the rest is freestyle. The plan
+is replaced in place at every re-plan, so no append-only discipline
+economizes here; the nudge is the generic one - record comprehensively.
+
+GROUNDED IN references the persisted surfaces only: journal items
+(`journal.md#slug`), lane reports (`lanes/x/report.md#claim`), and
+knowledge findings (`knowledge.md#NAME`) - never a volatile file. It
+is the same rule the knowledge REF obeys: a persisted fact, not a
+drifting pointer, so the plan reads with the full picture no matter
+when the agent looks. And the plan composes from the record: material
+living only in the conversation lands in the record first, then the
+plan cites it. A plan that cannot resolve its grounds is telling you
+the record has a hole.
 
 The intent is a snapshot, and it is allowed to go stale. Progress never
 touches it; when a step completes, the journal gains one line saying so.
@@ -268,6 +281,19 @@ closes the moment the awaited thing arrives; unmarked entries are
 receipts, the final word on a completed fact: they take no closer and
 stay open as the boot's context trail, folding only when the human
 calls a chapter turn or the unit closes.
+
+Why the journal exists: it rebuilds the working context from scratch. A
+fresh boot loads the active entries - what no closure names - and
+nothing else, and holds the position without the conversation.
+Understanding that reader is understanding what to record: whatever the
+reconstruction needs. No list substitutes for that understanding, and a
+list would only confine the record to the list. So events land at
+formation, never batched at period end: the interaction beats journal
+as they happen, and the work beats never wait for them. An entry
+carries its substance - what happened, the result, why the next step
+follows - and the dialect exists to make that cheap: the token-efficient
+form preserves the context window while minimizing info loss. Record
+fully, without worry; the compression serves the pour, never caps it.
 
 Why it works this way: the conversation is the least durable thing in
 the system, and compaction, a lossy summarization, is where it dies. A
@@ -314,9 +340,10 @@ its execution trace incrementally to `journal.md` before taking actions.
 The report is the evidence: an `@orientation` block that directly
 mirrors recipe TASKS with proven exit conditions and flags LOAD_BEARING
 claims for parent re-verification; followed by `@claim` blocks with
-mandatory epistemic MARK (VERIFIED, INFERRED, or ABSENT), concise
-verbatim EVIDENCE, and structural DETAILS (one statement per line, zero
-storytelling); ending with typed `@risks` (UNVERIFIED and THIN).
+mandatory epistemic MARK (VERIFIED, INFERRED, or ABSENT),
+verbatim EVIDENCE, and structural DETAILS (what the dispatcher needs
+to re-verify and decide; omit ornament, never substance); ending with
+typed `@risks` (UNVERIFIED and THIN).
 
 The dispatch unit exists because nothing is believed on trust and
 agents can terminate at any moment. The brief lives on disk, not in
@@ -340,7 +367,11 @@ The grammars share one strict pseudo-language, written to spend tokens
 on substance: blocks start at column 0 (`@entry`, `@finding`), bodies
 indent two, `::` opens an indented block value, `|` means alternation
 only, `[ ]` wraps optional parts, `->` means flow, `#` starts a
-comment. `status:` on the status card (`status: ACTIVE | CLOSED`)
+comment. The dialect governs form, never volume: it compresses how
+things are written, never how much gets written - the schema holds the
+shape, the writer holds the volume. The grammars name the elements an
+artifact must carry; the rest is freestyle, nudged by one generic rule:
+record comprehensively. `status:` on the status card (`status: ACTIVE | CLOSED`)
 is the only status field in the convention; journal entries and
 findings are statusless. Spellings are contractual, not stylistic.
 Rhythms are written in this same dialect; "Adopting it" explains the
@@ -482,10 +513,13 @@ unit here is any unit):
 Three movements, each with one home:
 
 - **Events** land in the journal as they happen, appended, never revised.
-  An entry carries its `ANCHOR` and `WHAT`, an agent-chosen `GROUP` thread,
-  and a `KNOWLEDGE: true` flag when it is knowledge-worthy; it dies by
-  reference, never by edit, has no status of its own, and the closer
-  lands the moment it resolves.
+  An entry carries its substance - what happened, the result, why the
+  next step follows - with its `ANCHOR` and `WHAT`, an agent-chosen
+  `GROUP` thread, and a `KNOWLEDGE: true` flag when it is
+  knowledge-worthy; it dies by reference, never by edit, has no status
+  of its own, and the closer lands the moment it resolves. The
+  interaction beats journal as they happen; the work beats never wait
+  for an interaction beat.
 - **Findings** land in the knowledge base at decision and discovery
   moments. A `REF` points at the full version in the journal or a
   report as a path and symbol, `journal.md#entry` or `lanes/x/report.md#claim`,
@@ -505,14 +539,16 @@ Two distinct ends:
   `next_action` in `state.md` (one terse pointer, overwritten never
   prepended; the WHY rebuilds from journal open items, the plan's
   GROUNDED IN refs, and live findings, never pre-serialized into
-  state); run the stray audit (the thread tail printed by the dangling
-  check is the audit, and every open THREAD that resolved this period
+  state); run the stray audit (the thread tail printed by the journal
+  audit is the checklist, and every open THREAD that resolved this period
   closes now, verdict word and resolution in the WHAT; receipts never
   close at period end, they fold only at a human-called chapter turn or
-  at unit close); run the dangling check
-  (`awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md` must
-  exit 0; every closure slug must name a real entry, and a typoed closer
-  is fixed before the period ends, never noted); then harvest: grep the
+  at unit close); run the journal audit
+  (`awk -f scripts/journal-audit.awk sessions/<unit>/journal.md` must
+  exit 0; it flags the broken entries - dangling or slugless closers,
+  dateless slugs, inline markers - with line numbers; the audit is a
+  repair instrument: fix what it flags and fill what is missing before
+  the period ends, never noted); then harvest: grep the
   period's KNOWLEDGE: true entries, propose one candidate per entry;
   confirmed candidates land in `knowledge.md` while their entries close
   by reference; unconfirmed candidates drop ("not landed" drops). The
@@ -525,17 +561,20 @@ Two distinct ends:
 ### Handoff
 
 The proof before context death. When a context is about to die
-(compaction, tool change, long break): run the period-end writes, then
-verify the boot greps resolve and `awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md`
+(compaction, tool change, long break): run the period-end writes if
+they are not done, then verify with the cold read: run
+`awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md`
+and read the stream as a fresh boot would - the record must reconstruct
+the position without the conversation. While the context is still full,
+improve the quality and fix what was missed; the gaps close now, never
+after compaction. And `awk -f scripts/journal-audit.awk sessions/<unit>/journal.md`
 exits 0. The handoff check also sweeps the whole open list: every open
 entry is confirmed as a live thread or a legitimate receipt, and a
 resolved thread hiding without its marker closes here, the net that
-catches a forgotten stamp. A fresh boot must reconstruct the entire
-position from files
-alone. A folder that contradicts the move, a dangling closer (failing
-`journal-dangling.awk`), a `next_action` that points at finished work:
-each is a handoff failure, and catching one before context death is
-exactly what the ritual is for.
+catches a forgotten stamp. A folder that contradicts the move, a
+dangling closer (failing `journal-audit.awk`), a `next_action` that
+points at finished work: each is a handoff failure, and catching one
+before context death is exactly what the ritual is for.
 
 ---
 
@@ -543,7 +582,9 @@ exactly what the ritual is for.
 
 - **Compose from the record.** Every rewrite, plan, and summary grounds in
   the journal and knowledge, never in the conversation. A plan rewrite
-  reads its GROUNDED IN refs first.
+  reads its GROUNDED IN refs first; the refs name the persisted surfaces
+  only - journal items, lane reports, knowledge findings, never a
+  volatile file.
 - **Understand before acting.** The agent asks one grounded question at a
   time: what the decision is, how things look now, why it's asked. Each
   answer opens the next question, until the agent restates the goal in

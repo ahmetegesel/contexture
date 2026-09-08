@@ -1,8 +1,8 @@
-# contexture v0.17.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.18.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
-  3. write token-efficient: dense, structural; one statement per line; typed blocks over prose.
+  3. the schema holds the shape, the writer holds the volume: guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance.
   4. process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
   5. compose from the record, never from conversation: rewrites grounded in journal/knowledge.
   6. verify before close: no done without evidence; never claim verification you did not perform; re-read the files, confirm consistency.
@@ -14,26 +14,43 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository
   templates/      = artifact grammars: the shapes to fill at write time
-  scripts/        = cross-platform awk queries (journal extraction, dangling audit)
+  scripts/        = cross-platform awk queries (journal extraction, journal audit)
   sessions/       = one folder per unit of work
   rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
 @record
-  unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: semantics only, never a second copy.
+  unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map - what each artifact records and why; the workflows live in their sections.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual.
   folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
-  state.md     = live pointer: only file edited freely; refreshed as the work moves: every plan update and step landing moves next_action, also at period ends; read WHOLE at boot; kept tiny, detail behind refs.
-  plan.md      = current declaration: goal + steps + exit criteria. progress NEVER touches it; step DONE = journal event "slug/step-N: DONE". edited ONLY at re-plan: touch what changed, replace in place; REPLAN entry same breath; grounded in the record. completion stamps COMPLETED: true once, at the landing breath (the same breath as the landing entry closing the REPLAN); absent = executing; the stamp is the plan's last edit, the journal entry remains the record. completed plan replaced in place at the next re-plan; completion + next-move in the journal.
-  journal.md   = the single recording surface: append-only events + @anchor declarations; entries stamped ANCHOR: A<N>, never edited; closed only when a later entry's CLOSES/SUPERSEDES targets them; the agent chases every closer: an entry that awaits a verdict, resolution, or finalization closes in the same breath it resolves. every CLOSES/SUPERSEDES carries a verdict word - done | superseded | dropped | folded - then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie. @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor. a thread paused stays open - an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close. [GROUP: <token>] = the agent's topic thread, chosen in the conversation, stable within the unit. [KNOWLEDGE: true] = knowledge-worthy; the harvest's input. [THREAD: true] = the entry awaits resolution: a verdict, an execution, a dispatch report, the harvest; stamped at birth, never flipped; closes same-breath at resolution; unmarked entries are receipts, final words on completed facts: no closer obligation, folded only at a human-called chapter turn or at unit close.
-  knowledge.md = findings at decision/discovery moments, statusless (all findings are settled decisions); linked to events via REF. REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no stable full version -> the finding carries the whole story. no REF, no story = hypothesis, never plan on it. claims outlive their anchors, unlike journal entries. every finding lands via the harvest of a KNOWLEDGE: true entry, confirmed or reshaped; developing ideas stay journal events.
-  lanes/       = dispatch units, one folder per lane: recipe.md (brief) + journal.md (incremental trace) + report.md (evidence); re-dispatch resumes from the folder.
+  state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design - the map, not the content: detail lives behind refs; refreshed as the work moves (every plan update, step landing, period end).
+  plan.md      = the current declaration: goal + steps + exit criteria; the workflow in @plan.
+  journal.md   = the single recording surface: append-only events + @anchor declarations; the workflow in @journal.
+  knowledge.md = settled findings at decision/discovery moments, statusless; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never plan on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@close 4); developing ideas stay journal events.
+  lanes/       = dispatch units, one folder per lane: recipe.md (brief) + journal.md (incremental trace) + report.md (evidence); re-dispatch resumes from the folder; the contract in @subagents.
+
+@journal
+  why :: the journal rebuilds the working context from scratch: a fresh boot loads the active entries (live = not closed) and nothing else; what that reconstruction needs is what deserves an entry; the importance bar is the reader who comes back with only the files
+  dialect :: the token-efficient form preserves the context window while minimizing info loss; the compression makes completeness cheap; record fully, without worry; the dialect serves the pour, never caps it
+  formation :: an event lands when it happens, never batched at period end; interaction beats journal as they happen (@interact); work beats never wait for an interaction beat
+  substance :: an entry carries what happened, the result, and why the next step follows
+  liveness :: entries are append-only, never edited; an entry closes only when a later CLOSES/SUPERSEDES names it; every closer carries a verdict word - done | superseded | dropped | folded - then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie; chase every closer in the same breath it resolves
+  markings :: [THREAD: true] awaits resolution - a verdict, an execution, a dispatch report, the harvest; stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. [KNOWLEDGE: true] = the harvest's input. [GROUP: token] = the agent's topic thread, chosen in the conversation, stable within the unit. [REF: path#symbol] = grounding.
+  anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open - an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
+
+@plan
+  the plan is the current declaration, written to be executed from no matter when the agent looks; replace-in-place style: no append-only discipline
+  the schema guides the certain things only: GOAL, STEPS with checkable exits, GROUNDED IN, the COMPLETED stamp; the rest is freestyle; the nudge is the generic one: record comprehensively
+  GROUNDED IN references the persisted surfaces only: journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME); never a volatile file; the full picture no matter when the plan is read
+  compose from the record (law 5): material living only in the conversation lands in the record first, then the plan grounds in it
+  progress NEVER touches the plan: step DONE = journal event "slug/step-N: DONE"; the plan changes only at re-plan: touch what changed, replace in place, the REPLAN entry in the same breath
+  completion stamps COMPLETED: true once, at the landing breath (the same breath as the landing entry closing the REPLAN); absent = executing; the stamp is the plan's last edit, the journal entry remains the record; a completed plan is replaced in place at the next re-plan; completion + the next move land in the journal
 
 @query
   surfaces: journal.md + knowledge.md.
   journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. scripts/journal-active.awk streams active entries with complete bodies in one shot; no per-entry Read tool loops, no range spanning.
     command:
       awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md
-  thread tail: journal-dangling.awk prints open THREAD entries beside the dangling audit; the frequent stray check; receipts never enter it.
+  thread tail: journal-audit.awk prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
   cross-repo: grep -l "repos:.*<name>" sessions/*/state.md: units touching a repo; objective is human-facing only.
   group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
@@ -74,7 +91,7 @@
 @subagents
   every dispatch:
   - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden
-  - lane journals at action granularity in journal.md: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as one WHAT line carrying action + result + why-next; task receipts batch at task completion; the journal is the audit trail and the resumption surface
+  - lane journals at action granularity in journal.md: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; task receipts batch at task completion; the journal is the audit trail and the resumption surface
   - report -> report.md; return = summary ONLY
   - the dispatcher reads the report, never the lane journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
   - background: the turn ends at launch; never block the conversation on a lane
@@ -88,8 +105,8 @@
 @close
   period end (turn ends; unit continues):
     1. append journal events, closing the period's done events by reference; refresh next_action: one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings
-    2. stray audit: the thread tail printed by journal-dangling.awk is the checklist - every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. dangling check: awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md must exit 0; every closer slug resolves to an @entry; a dangling or typoed closer is fixed before the period ends, never a note
+    2. stray audit: the thread tail printed by journal-audit.awk is the checklist - every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
+    3. journal audit: awk -f scripts/journal-audit.awk sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md (REF to the full version, or the whole story carried), the entry closes by reference; "not landed" drops
     5. folder stays ACTIVE
   unit close (plan completes, or the human ends the unit):
@@ -101,7 +118,7 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes if not done
-    2. verify: boot greps resolve (a fresh boot reconstructs the position from files alone) AND awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here - the net for a forgotten stamp
+    2. verify with the cold read: run awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md and read the stream as a fresh boot would - the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND awk -f scripts/journal-audit.awk sessions/<unit>/journal.md exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here - the net for a forgotten stamp
   the handoff writes the record, not working memory.
 
 @git

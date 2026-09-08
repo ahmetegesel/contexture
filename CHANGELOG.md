@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.18.0] - 2026-09-08
+
+### Added
+
+- Two new workflow sections in the base. @journal teaches the mechanism instead of a record-type list: the journal rebuilds the working context from scratch (a fresh boot loads the active entries and nothing else), events land at formation (work beats never wait for interaction beats), an entry carries its substance (what happened, the result, why the next step follows), and the dialect's why (the token-efficient form preserves the context window while minimizing info loss, so completeness is cheap - record fully, without worry). @plan carries the composition workflow: the plan composes from the record, and GROUNDED IN references the persisted surfaces only - journal items, lane reports, knowledge findings, never a volatile file - so the plan reads with the full picture no matter when it is read.
+- The handoff gains the cold read: run journal-active.awk and read the stream as a fresh boot would - the record must reconstruct the position without the conversation; while the context is still full, improve the quality and fix what was missed. The gaps close now, never after compaction.
+
+### Changed
+
+- Law 3 reworded to the generic principle: the schema holds the shape, the writer holds the volume; guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance. A field report drove the release: an agent investigated a workspace thoroughly but wrote a thin plan and an empty journal while the comprehensive design lived only in chat prose; compaction killed the prose and the session was unrecoverable. The convention's terseness invitations had been restricting content, not form.
+- @record slimmed to the map: what each artifact records and why, one line each, with pointers to the workflow sections; the poured details moved to @journal and @plan.
+- scripts/journal-dangling.awk renamed scripts/journal-audit.awk: the role outgrew the name (four malformation classes plus the open-thread tail). The close step reframes it as a repair instrument: fix what it flags and fill what is missing before the period ends.
+- The templates swept of volume prescriptions and given importance guidance instead: the plan grammar guides its elements and leaves the rest freestyle under the generic nudge (record comprehensively), the journal WHAT carries the event's substance, report DETAILS omit ornament but never substance, and state.md's terseness is declared as design (the map, not the content). No surface the agent fills mentions thickness: naming the dimension creates a decision point, and any mention biases.
+- The README and ONBOARDING align: the plan and journal sections carry the composition and reconstruction stories, and the files-written section states the shape/volume split.
+
 ## [0.17.0] - 2026-09-07
 
 ### Changed

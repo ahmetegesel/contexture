@@ -1,12 +1,16 @@
 # journal grammar
 
 blocks at column 0; fields indent 2; one blank line between blocks.
+the dialect compresses form, never content: an entry carries its
+substance - what happened, the result, why the next step follows;
+would a fresh boot reconstructing the position need it? then it
+records.
 
 @anchor A<N> ("continues A<N-1>", attention: <the loaded set>)   # period ordering + load receipt; never liveness
 
 @entry <date>-<slug>
   ANCHOR: A<N>                            # current anchor at write time
-  WHAT: "..."                             # a closer carries the resolution here
+  WHAT: "..."                             # the event's substance; a closer carries the verdict + the resolution here
   [GROUP: <token>]                        # agent-chosen thread, stable within the unit
   [KNOWLEDGE: true]                       # knowledge-worthy; the harvest's input
   [THREAD: true]                          # awaits resolution: verdict | execution | report | harvest; stamped at birth, never flipped; closes same-breath at resolution; no marker = receipt: final word on a completed fact, no closer obligation
@@ -18,7 +22,7 @@ blocks at column 0; fields indent 2; one blank line between blocks.
 
 @entry <date>-<slug>
   ANCHOR: A<N>
-  WHAT: "<what happened, one line>"
+  WHAT: "<the event's substance: what happened, the result, why next>"
   GROUP: <token>
   KNOWLEDGE: true
   CLOSES: <date>-<slug> (done: <the resolution>)

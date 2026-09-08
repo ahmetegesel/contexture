@@ -1,6 +1,8 @@
 # report grammar
 blocks at column 0; fields indent 2; details indent 4;
-typed blocks over prose; one statement per line; token-efficient.
+typed blocks over prose; the dialect compresses form, never content:
+the report is the dispatcher's only window - self-sufficient claims
+and evidence, what the dispatcher needs to re-verify and decide.
 
 @orientation
   STATUS: COMPLETE | PARTIAL | DRIFTED
@@ -10,13 +12,13 @@ typed blocks over prose; one statement per line; token-efficient.
   LOAD_BEARING: [<claim-name>, ...]   # claims the dispatcher must re-verify
 
 @claim <name>
-  VERDICT: "one-line conclusion"
+  VERDICT: "the claim's conclusion"
   EVIDENCE: <file:line or ref> ("exact verbatim quote or exit code")
   MARK: VERIFIED | INFERRED | ABSENT  # mandatory; ABSENT = case-insensitive,
                                       # all spellings, checked place it lives
   [DETAILS ::
-    dense structural observations; one statement per line;
-    code diffs, exact outputs, or ref comparisons; zero storytelling]
+    structural observations the dispatcher needs to re-verify and decide:
+    code diffs, exact outputs, ref comparisons; omit ornament, never substance]
 
 @risks
   UNVERIFIED: <what was skipped or unprovable; one line per condition>
@@ -27,7 +29,7 @@ typed blocks over prose; one statement per line; token-efficient.
   STATUS: COMPLETE
   TASKS:
     1. git-topology: DONE (exit: "AGENTS.md:104 distinguishes parent from standalone")
-    2. handoff-audit: DONE (exit: "README.md:484-491 names journal-dangling.awk")
+    2. handoff-audit: DONE (exit: "README.md:484-491 names journal-audit.awk")
   LOAD_BEARING: [base-git-topology, handoff-audit-placement]
 
 @claim base-git-topology
@@ -40,8 +42,8 @@ typed blocks over prose; one statement per line; token-efficient.
     check-ignore verified on private paths
 
 @claim handoff-audit-placement
-  VERDICT: "scripts/journal-dangling.awk added to README handoff verification."
-  EVIDENCE: README.md:488 ("AND awk -f scripts/journal-dangling.awk exits 0")
+  VERDICT: "scripts/journal-audit.awk added to README handoff verification."
+  EVIDENCE: README.md:488 ("AND awk -f scripts/journal-audit.awk exits 0")
   MARK: VERIFIED
 
 @risks

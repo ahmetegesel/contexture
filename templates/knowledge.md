@@ -2,6 +2,9 @@
 
 blocks at column 0; fields indent 2; SUMMARY continuation indent 4;
 one blank line between blocks.
+a finding is a settled decision: it carries what a later decision will
+need; where no stable full version exists, the SUMMARY carries the
+whole story.
 
 @finding NAME
   [SUPERSEDES: <ref> (reason)]

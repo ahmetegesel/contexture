@@ -1,26 +1,29 @@
 # plan grammar
 
 flat keys at column 0; steps indent 2; step lines indent 4.
+the schema guides these elements; the rest is freestyle; the generic
+nudge is the only rule: record comprehensively.
 
-GOAL: "one line: what the unit achieves"
+GOAL: "what the unit achieves"
 
 [COMPLETED: true]                        # stamped once at the landing breath; absent = executing; never flipped; the next REPLAN replaces the file whole
 
 STEPS:
-  1. step-name: one-line intent
+  1. step-name: the step's intent
      exit: "checkable done-condition"
      [exit: "another condition"]         # several allowed, one per line
-     [note ::                            # optional detail: assumptions,
-        indented]                        # risks, context
+     [note ::                            # anything the executor needs:
+         free-form]                      # assumptions, risks, context, detail
 
-GROUNDED IN: journal@A<N>, knowledge@name; the sources the plan was
-  composed from; a rewrite reads these first
+GROUNDED IN: journal.md#slug, lanes/x/report.md#claim, knowledge.md#NAME;
+  the persisted surfaces only, never a volatile file; the sources the
+  plan composed from - the full picture no matter when the plan is read
 
 # filled sample
-GOAL: "<one line: what the unit achieves>"
+GOAL: "<what the unit achieves>"
 
 STEPS:
-  1. <step-name>: <one-line intent>
+  1. <step-name>: <the step's intent>
      exit: "<checkable done-condition>"
 
-GROUNDED IN: journal@A<N>, knowledge@<name>
+GROUNDED IN: journal.md#<slug>, knowledge.md#<NAME>

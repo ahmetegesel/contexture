@@ -1,7 +1,8 @@
 #!/usr/bin/awk -f
-# journal-dangling.awk: Audit closures, entry grammar, and print the open thread tail
-# Usage: awk -f scripts/journal-dangling.awk sessions/<unit>/journal.md
-# Or:    ./scripts/journal-dangling.awk sessions/<unit>/journal.md
+# journal-audit.awk: Audit closures and entry grammar, print the open thread tail
+# Usage: awk -f scripts/journal-audit.awk sessions/<unit>/journal.md
+# Or:    ./scripts/journal-audit.awk sessions/<unit>/journal.md
+# The repair instrument: fix what it flags, fill what is missing.
 # Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
 # markers on @entry lines - each flagged with its line number.
 # Open threads (THREAD: true entries with no closer) print beside the audit;
