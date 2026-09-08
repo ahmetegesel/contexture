@@ -65,7 +65,7 @@
     <every open question beside the plan: resolutions, history, intent the evidence cannot answer; none states none>
 
 @configure
-  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed plan lands in plan.md, next_action points at the first step, every step's completion journals and advances next_action, drift REPLANs in the same breath
+  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in backlog.md, next_action points at the active task, every task's completion journals and advances next_action, drift updates the backlog in the same breath
   base assets:
     copy AGENTS.md, ONBOARDING.md, templates/, and scripts/ into repo root
     set script permissions: `chmod +x scripts/*.awk`

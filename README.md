@@ -21,7 +21,7 @@ The workspace in one map:
 - `templates/`: seven grammars: six artifacts plus the workspace overlay
 - `scripts/`: cross-platform awk queries (active entry extraction, closure audit)
 - `sessions/<unit>/`: one folder per unit of work: `state.md` (the
-  pointer), `plan.md` (the intent), `journal.md` (the memory),
+  pointer), `backlog.md` (the intent), `journal.md` (the memory),
   `knowledge.md` (the mind), and `lanes/` (dispatch units)
 - `AGENTS.workspace.md`: the workspace's shared overlay, replace or append per section; wins over local
 - `AGENTS.local.md`: your amendments; amend, never contradict
@@ -42,7 +42,7 @@ The workspace in one map:
   closure targets load fully, all anchors; the anchor stamp receipts
   the loaded set
 - **Work:** events append to the journal, findings land in knowledge
-  with a REF, plans edit surgically at re-plan only
+  with a REF, backlogs evolve non-destructively as work moves
 - **Close:** period end refreshes the pointer and harvests the flagged
   entries; unit end marks CLOSED and journals the next move
 - **Handoff:** before context death, run the writes, cold-read the
@@ -113,7 +113,7 @@ The seven laws carry the entire design. Everything else follows.
    quality of the output, and a personal layer where process stays
    free.
 5. **Compose from the record.** The agent never reconstructs from memory of
-   the conversation. Rewrites and plans ground in the journal and the
+   the conversation. Rewrites and task definitions ground in the journal and the
    knowledge base, the only sources that survive compaction.
 6. **Verify before close.** Nothing is done without evidence; no claim of
    verification the agent did not perform; the files are re-read and
@@ -209,7 +209,7 @@ the dispatch unit follows them.
 
 `sessions/<unit>/` is one folder per piece of work. It outlives every
 conversation that works on it, and it dies when the work is done, not
-when a chat ends. Inside: the four record files (state, plan, journal,
+when a chat ends. Inside: the four record files (state, backlog, journal,
 knowledge) plus `lanes/` (dispatch units, one folder per lane). The
 folder itself is the context boundary: when the agent works on this
 unit, it reads this unit's files and nothing else. The layout does the
@@ -231,35 +231,37 @@ the boot looks. The card also stays honest because it is a pointer, not
 a log: it gets overwritten, never appended to, so it can never become
 history in disguise.
 
-### plan.md: the intent
+### backlog.md: the intent
 
-What the unit aims to do, written as GOAL, STEPS with checkable exit
-criteria, and the sources the plan was composed from (GROUNDED IN).
-The schema guides those elements only; the rest is freestyle. The plan
-is replaced in place at every re-plan, so no append-only discipline
-economizes here; the nudge is the generic one - record comprehensively.
+The unit's actionable tasks, structured as a living queue of `@task <slug>`
+blocks with STATUS (`TODO | IN_PROGRESS | DONE`), OBJECTIVE, REFS, and
+dedicated containers for substantive technical detail: DESCRIPTION,
+ACCEPTANCE CRITERIA, and IMPLEMENTATION DETAILS. The unit's overarching
+objective lives in `state.md`; `backlog.md` carries the actionable work.
 
-GROUNDED IN references the persisted surfaces only: journal items
+The schema holds the shape, the writer holds the volume: DESCRIPTION
+carries the problem statement, user intent, and scope; ACCEPTANCE
+CRITERIA sets the verifiable gates; IMPLEMENTATION DETAILS holds the
+technical blueprint (file paths, schemas, logic, edge cases). Dedicated
+containers give technical substance a natural home without resorting to
+unnatural exit criteria multiplication.
+
+REFS references the persisted surfaces only: journal items
 (`journal.md#slug`), lane reports (`lanes/x/report.md#claim`), and
 knowledge findings (`knowledge.md#NAME`) - never a volatile file. It
 is the same rule the knowledge REF obeys: a persisted fact, not a
-drifting pointer, so the plan reads with the full picture no matter
-when the agent looks. And the plan composes from the record: material
+drifting pointer, so each task reads with the full picture no matter
+when the agent looks. Tasks compose from the record (Law 5): material
 living only in the conversation lands in the record first, then the
-plan cites it. A plan that cannot resolve its grounds is telling you
-the record has a hole.
+task cites it.
 
-The intent is a snapshot, and it is allowed to go stale. Progress never
-touches it; when a step completes, the journal gains one line saying so.
-The plan changes only when the human deliberately changes the intent,
-and then surgically: touch only what changed, replace it in place, and
-journal the change in the same breath. Unchanged steps stay
-byte-identical, because a whole rewrite recomposes everything in
-whatever model's voice touched it last. When the plan lands, the same
-breath stamps `COMPLETED: true` on it, once, never flipped: a booting
-agent reads the dead plan as dead without reconciling it against the
-journal. Absent means executing. The next plan replaces the file whole;
-its traces, completion and the next move, land in the journal.
+Unlike a rigid sequential waterfall, the backlog evolves non-destructively:
+mid-stride pivots, ad-hoc bug fixes, or new tasks simply insert or append
+as fresh `@task` blocks without destroying or rewriting uncompleted tasks.
+Active work transitions to `STATUS: IN_PROGRESS`; when a task completes, its
+status flips to `DONE` and the journal gains one line ("backlog/<slug>: DONE").
+When all tasks reach `STATUS: DONE` and the unit exit criteria are met, the
+unit is ready to close or move to the next chapter.
 
 ### journal.md: the memory
 
@@ -314,7 +316,7 @@ points at the full version in an append-only artifact, as a path and
 a symbol: `journal.md#entry` or `lanes/x/report.md#claim`. A dynamic file
 may never be the reference of record. Where no stable full version exists,
 the finding carries the whole story itself; a claim with no REF and no
-story is a hypothesis: useful for questions, never a base for plans.
+story is a hypothesis: useful for questions, never a base for tasks.
 A finding lands only via the harvest of a KNOWLEDGE: true entry: the
 agent proposes one compact candidate, the human confirms or reshapes,
 and the entry closes by reference. Until it lands, a developing idea
@@ -416,7 +418,7 @@ The first thing the agent does each working period, mechanically:
 5. **Read state, refresh the anchor counter.** Read `state.md` whole. It
    is small by law, and detail lives behind refs, never inside it.
    Refresh `current_anchor` to the next value (`N = previous + 1`).
-6. **Read the plan, run the query, and load.** Read `plan.md`. Then the
+6. **Read the backlog, run the query, and load.** Read `backlog.md`. Then the
    load rule, one subtraction: **live = not closed.** The load list is
    every journal entry whose slug no `CLOSES:` or `SUPERSEDES:` names,
    whole file, all anchors. Anchors are period ordering and load
@@ -450,11 +452,11 @@ The first thing the agent does each working period, mechanically:
    both the map and the receipts. Receipts inform; they never feed the
    next boot's load - the subtraction does.
 9. **Continue.** From `next_action`, following the human-invoked rhythm,
-   or the default design loop. If `next_action` says "plan the next
-   move", the planning phase starts.
+   or the default design loop. If `next_action` says "backlog the next
+   task", the backlog phase starts.
 10. **New work bootstraps a unit.** The agent creates
    `sessions/<slug>/state.md` with `status: ACTIVE`,
-   `current_anchor: A0`, and `next_action: "plan the first move"`, then
+   `current_anchor: A0`, and `next_action: "backlog the first task"`, then
    continues at step 5, and the first boot stamps A1.
 
 A boot, concretely. The nine active steps, overlay and amendments first (the
@@ -525,10 +527,10 @@ Three movements, each with one home:
   report as a path and symbol, `journal.md#entry` or `lanes/x/report.md#claim`,
   never at a file that changes; with no stable full version, the finding
   carries the whole story itself; a claim with neither is a hypothesis,
-  and nobody plans on a hypothesis.
-- **Re-plans** touch only what changed. The plan is edited surgically at
-  re-plan moments; unchanged steps stay byte-identical; and the change
-  is journaled in the same breath.
+  and nobody tasks on a hypothesis.
+- **Backlog evolution** is non-destructive. Newly discovered work inserts
+  or appends as a fresh @task; existing tasks keep their status; and the
+  update is journaled in the same breath.
 
 ### Close
 
@@ -537,8 +539,8 @@ Two distinct ends:
 - **Period end** (a turn ends; the unit continues): append events to the
   journal, closing the period's done events by reference; refresh
   `next_action` in `state.md` (one terse pointer, overwritten never
-  prepended; the WHY rebuilds from journal open items, the plan's
-  GROUNDED IN refs, and live findings, never pre-serialized into
+  prepended; the WHY rebuilds from journal open items, the backlog's
+  active tasks, and live findings, never pre-serialized into
   state); run the stray audit (the thread tail printed by the journal
   audit is the checklist, and every open THREAD that resolved this period
   closes now, verdict word and resolution in the WHAT; receipts never
@@ -553,7 +555,7 @@ Two distinct ends:
   confirmed candidates land in `knowledge.md` while their entries close
   by reference; unconfirmed candidates drop ("not landed" drops). The
   folder stays ACTIVE.
-- **Unit close** (the plan completes, or the human ends the unit): append
+- **Unit close** (the backlog completes, or the human ends the unit): append
   the closing events *and the next-move decision* to the journal, re-read
   the files and confirm consistency (law 6), promote durable knowledge at
   the human's direction, then mark the unit CLOSED.
@@ -580,9 +582,9 @@ before context death is exactly what the ritual is for.
 
 ## Working with the agent
 
-- **Compose from the record.** Every rewrite, plan, and summary grounds in
-  the journal and knowledge, never in the conversation. A plan rewrite
-  reads its GROUNDED IN refs first; the refs name the persisted surfaces
+- **Compose from the record.** Every rewrite, task, and summary grounds in
+  the journal and knowledge, never in the conversation. A task definition
+  reads its REFS first; the refs name the persisted surfaces
   only - journal items, lane reports, knowledge findings, never a
   volatile file.
 - **Understand before acting.** The agent asks one grounded question at a
@@ -673,7 +675,7 @@ For manual adoption:
    than refinement.
 5. Let the first boot run. The agent reads your amendments, names the
    move from your message, verifies it against the folder, stamps the
-   anchor, reads the plan, and continues from `next_action`.
+   anchor, reads the backlog, and continues from `next_action`.
 
 Extending it, without breaking it:
 
@@ -704,9 +706,9 @@ Extending it, without breaking it:
   When no rhythm is invoked, the agent runs the default design loop:
   1. `DISCUSS`: explore problem space; grounded questions resolve intent
   2. `DECIDE`: human verdict settles; triggers harvest candidate
-  3. `PLAN`: intent updates `plan.md`; `next_action` points to first step
-  4. `EXECUTE`: work active step; drift journals `REPLAN` in same breath
-  5. `VERIFY`: step exit criteria proven; journal records completion, `next_action` advances
+  3. `BACKLOG`: intent updates `backlog.md`; `next_action` points to active task
+  4. `EXECUTE`: work active task; drift updates `backlog.md` in same breath
+  5. `VERIFY`: task acceptance criteria proven; journal records completion, `next_action` advances
 
   A human rhythm replaces progression. Custom rhythms are written in
   the same dialect as the artifacts: typed blocks, column 0, indent 2,

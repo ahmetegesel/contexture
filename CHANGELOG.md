@@ -8,6 +8,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.19.0] - 2026-09-08
+
+### Added
+
+- `backlog.md` replaces `plan.md` across contexture as the unit's actionable work declaration. Structured as a living queue of `@task <slug>` blocks with STATUS (`TODO | IN_PROGRESS | DONE`), OBJECTIVE, REFS, and dedicated containers for substantive technical detail: DESCRIPTION :: (problem statement, scope, context), ACCEPTANCE CRITERIA :: (verifiable done conditions), and IMPLEMENTATION DETAILS :: (technical blueprint, code locations, schemas, logic, edge cases).
+- New `@backlog` section in AGENTS.md establishes the living task queue doctrine: non-destructive task evolution (mid-stride pivots, ad-hoc bug fixes, and new work insert or append as fresh `@task` blocks without destroying or recomposing uncompleted tasks), explicit containers for technical depth, grounding in persisted surfaces via REFS, and progress tracking.
+
+### Changed
+
+- Base layout and record maps: `plan.md` retired; `backlog.md` declared as the task backlog surface.
+- `@boot` step 6 loads `backlog.md`; step 10 bootstrap next_action becomes "backlog the first task".
+- Default design loop rhythm updated: step 3 becomes `BACKLOG` (intent updates `backlog.md`; next_action points to active task); step 4 executes active task; step 5 verifies task acceptance criteria.
+- Unit close triggered when backlog completes (`STATUS: DONE` across tasks and unit exit criteria met).
+- Templates: `templates/backlog.md` authored with official grammar and filled sample; `templates/plan.md` removed.
+- README.md and ONBOARDING.md aligned: Plan sections replaced with Backlog sections, detailing the backlog mental model, `@task` grammar, non-destructive evolution, and dedicated containers.
+
 ## [0.18.0] - 2026-09-08
 
 ### Added

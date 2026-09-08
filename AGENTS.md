@@ -1,4 +1,4 @@
-# contexture v0.18.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.19.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -22,10 +22,10 @@
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map - what each artifact records and why; the workflows live in their sections.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual.
   folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
-  state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design - the map, not the content: detail lives behind refs; refreshed as the work moves (every plan update, step landing, period end).
-  plan.md      = the current declaration: goal + steps + exit criteria; the workflow in @plan.
+  state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design - the map, not the content: detail lives behind refs; refreshed as the work moves (every backlog update, task landing, period end).
+  backlog.md   = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog.
   journal.md   = the single recording surface: append-only events + @anchor declarations; the workflow in @journal.
-  knowledge.md = settled findings at decision/discovery moments, statusless; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never plan on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@close 4); developing ideas stay journal events.
+  knowledge.md = settled findings at decision/discovery moments, statusless; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@close 4); developing ideas stay journal events.
   lanes/       = dispatch units, one folder per lane: recipe.md (brief) + journal.md (incremental trace) + report.md (evidence); re-dispatch resumes from the folder; the contract in @subagents.
 
 @journal
@@ -37,13 +37,15 @@
   markings :: [THREAD: true] awaits resolution - a verdict, an execution, a dispatch report, the harvest; stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. [KNOWLEDGE: true] = the harvest's input. [GROUP: token] = the agent's topic thread, chosen in the conversation, stable within the unit. [REF: path#symbol] = grounding.
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open - an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
-@plan
-  the plan is the current declaration, written to be executed from no matter when the agent looks; replace-in-place style: no append-only discipline
-  the schema guides the certain things only: GOAL, STEPS with checkable exits, GROUNDED IN, the COMPLETED stamp; the rest is freestyle; the nudge is the generic one: record comprehensively
-  GROUNDED IN references the persisted surfaces only: journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME); never a volatile file; the full picture no matter when the plan is read
-  compose from the record (law 5): material living only in the conversation lands in the record first, then the plan grounds in it
-  progress NEVER touches the plan: step DONE = journal event "slug/step-N: DONE"; the plan changes only at re-plan: touch what changed, replace in place, the REPLAN entry in the same breath
-  completion stamps COMPLETED: true once, at the landing breath (the same breath as the landing entry closing the REPLAN); absent = executing; the stamp is the plan's last edit, the journal entry remains the record; a completed plan is replaced in place at the next re-plan; completion + the next move land in the journal
+@backlog
+  the backlog is the current declaration of work, written to be executed from no matter when the agent looks; living task queue
+  the schema guides the task shape: @task <slug> with STATUS (TODO | IN_PROGRESS | DONE), OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::; the writer holds the volume
+  non-destructive evolution: tasks can be added, updated, or reordered; mid-stride pivots insert a new task without destroying existing tasks
+  dedicated containers: DESCRIPTION carries context and scope, ACCEPTANCE CRITERIA carries checkable done-conditions, IMPLEMENTATION DETAILS carries the technical blueprint (files, schemas, logic); omit ornament, never substance
+  REFS references the persisted surfaces only: journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME); never a volatile file
+  compose from the record (law 5): material living only in the conversation lands in the record first, then the task references it
+  task progress: active work marks STATUS: IN_PROGRESS; completion marks STATUS: DONE and lands a journal event "backlog/<slug>: DONE"; the backlog updates in place as tasks move; newly discovered work appends or inserts as a fresh @task
+  unit completion: all tasks reach STATUS: DONE and unit exit criteria are met; completion + the next move land in the journal
 
 @query
   surfaces: journal.md + knowledge.md.
@@ -62,11 +64,11 @@
   3. get the field: grep -rl "status: ACTIVE" sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit - an active unit continues at 5, a new unit bootstraps at 10
   5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1; a boot is a fresh context load - compaction, session restart - never a turn boundary; turns inside one working context journal under the standing anchor)
-  6. read plan.md; run @query: awk -f scripts/journal-active.awk streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
+  6. read backlog.md; run @query: awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
   9. continue from next_action, following the human-invoked rhythm, or the default
-  10. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "plan the first move"; continue at 5
+  10. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "backlog the first task"; continue at 5
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask
@@ -84,9 +86,9 @@
   default :: the design loop, when no rhythm is invoked; human rhythm replaces progression
   1. DISCUSS: explore problem space; grounded questions resolve intent
   2. DECIDE: human verdict settles; triggers harvest candidate
-  3. PLAN: intent updates plan.md; next_action points to first step
-  4. EXECUTE: work active step; drift journals REPLAN in same breath
-  5. VERIFY: step exit criteria proven; journal records completion, next_action advances
+  3. BACKLOG: intent updates backlog.md; next_action points to active task
+  4. EXECUTE: work active task; drift updates backlog in same breath
+  5. VERIFY: task acceptance criteria proven; journal records completion, next_action advances
 
 @subagents
   every dispatch:
@@ -109,7 +111,7 @@
     3. journal audit: awk -f scripts/journal-audit.awk sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md (REF to the full version, or the whole story carried), the entry closes by reference; "not landed" drops
     5. folder stays ACTIVE
-  unit close (plan completes, or the human ends the unit):
+  unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
     2. re-read; confirm consistency (law 6)
     3. promote durable knowledge at the human's direction
