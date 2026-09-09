@@ -33,13 +33,13 @@ and evidence, what the dispatcher needs to re-verify and decide.
   LOAD_BEARING: [base-git-topology, handoff-audit-placement]
 
 @claim base-git-topology
-  VERDICT: "Base @git updated to declare parent deny-by-default vs standalone private append."
-  EVIDENCE: AGENTS.md:104 ("the gitignore denies by default for parent workspaces...")
+  VERDICT: "Base @git updated to decouple gitignore strategy per topology and team choice."
+  EVIDENCE: AGENTS.md:126 ("the gitignore strategy is decided per topology and team choice at onboarding...")
   MARK: VERIFIED
   DETAILS ::
-    standalone rules moved to separate sentence;
-    matches ONBOARDING.md:30-39 topology guidance;
-    check-ignore verified on private paths
+    parent workspace whitelist preserved;
+    matches ONBOARDING.md topology guidance;
+    check-ignore verified cleanly
 
 @claim handoff-audit-placement
   VERDICT: "scripts/journal-audit.awk added to README handoff verification."

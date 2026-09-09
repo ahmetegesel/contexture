@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.19.1] - 2026-09-09
+
+### Changed
+
+- Base @git decoupled from gitignore policy: removed the mandatory private paths prescription (sessions/, rhythms/, AGENTS.local.md) for standalone repositories. The gitignore strategy is decided per topology and team choice at onboarding (whether to track or ignore sessions/rhythms is left to the user), eliminating the contradiction between base @git and ONBOARDING.md.
+- README.md and ONBOARDING.md aligned to reflect team choice on tracking or ignoring sessions/rhythms rather than prescribing a mandatory ignore list.
+
 ## [0.19.0] - 2026-09-08
 
 ### Added

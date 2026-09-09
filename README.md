@@ -31,7 +31,7 @@ The workspace in one map:
 
 1. For an agent adopting contexture, point it to `ONBOARDING.md`. It executes branch isolation, topology assessment, safe gitignore setup, instruction migration, and harness symlinking.
 2. For manual adoption: start on a dedicated branch; copy `AGENTS.md`, `ONBOARDING.md`, `templates/`, and `scripts/` into your repo, and set script permissions (`chmod +x scripts/*.awk`).
-3. Configure `.gitignore` for your topology: in standalone repos, append private paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); in parent workspaces, whitelist as appropriate.
+3. Configure `.gitignore` for your topology: in standalone repos, ignore personal amendments (`AGENTS.local.md`) and choose whether to track or ignore sessions and rhythms; in parent workspaces, whitelist as appropriate.
 4. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md` (your amendments); both amend, never contradict. Wire harness symlinks (`CLAUDE.md`, `GEMINI.md`) to `AGENTS.md`.
 5. Tell the agent what the first unit is; it bootstraps `sessions/<unit>/` itself. Let the first boot run.
 
@@ -660,10 +660,11 @@ For manual adoption:
    each time; the decision is always the agent's, weighed against the
    workspace's situation.
 2. Configure `.gitignore` for your repository topology: in standalone
-   repositories containing application code, append contexture private
-   paths (`sessions/`, `rhythms/`, `AGENTS.local.md`); never deny by
-   default across an existing codebase. In parent meta-workspaces,
-   whitelist explicitly if tracking convention configuration alone.
+   repositories containing application code, never deny by default across
+   an existing codebase; append personal amendments (`AGENTS.local.md`) and
+   decide with the team whether to track or ignore `sessions/` and `rhythms/`.
+   In parent meta-workspaces, whitelist explicitly if tracking convention
+   configuration alone.
 3. Carve `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md`
    (personal amendments). Wire active harness entry points (`CLAUDE.md`,
    `GEMINI.md`) as symlinks to `AGENTS.md`.

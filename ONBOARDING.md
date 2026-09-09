@@ -72,11 +72,8 @@
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
-      append private contexture paths to existing .gitignore:
-        sessions/
-        rhythms/
-        AGENTS.local.md
-      if team opts to track session history: whitelist !sessions/ and !sessions/**
+      append personal amendments to existing .gitignore (AGENTS.local.md)
+      per confirmed plan: ignore or track sessions/ and rhythms/ based on team choice
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
       whitelist shared files explicitly:
