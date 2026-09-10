@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.21.0] - 2026-09-10
+
+### Added
+
+- `@refresh`: the artifact sweep factored out of `@close` and shared by rhythm boundaries - the events journaled, the backlog statuses advanced, `next_action` refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), settled verdicts flagged; the journal audit run, what it flags fixed; nothing closes there. `@close` step 1 calls it, then closes the period's done events by reference.
+
+### Changed
+
+- README aligned: the Close section names the refresh first, and the boot walkthrough's step 9 matches the base - the invoked rhythm, the matching rhythm on its trigger, or the default.
+
 ## [0.20.1] - 2026-09-10
 
 ### Added

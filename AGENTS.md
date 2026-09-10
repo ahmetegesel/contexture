@@ -1,4 +1,4 @@
-# contexture v0.20.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.21.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -111,9 +111,12 @@
   - read the report WHOLE, no exception; an unread part wears the look of review
   - journal every dispatch: lane folder path
 
+@refresh
+  the artifact sweep, shared by rhythm boundaries and @close: the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), settled verdicts flagged; journal-audit run, what it flags fixed; nothing closes here
+
 @close
   period end (turn ends; unit continues):
-    1. append journal events, closing the period's done events by reference; refresh next_action: one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings
+    1. refresh (@refresh), then close the period's done events by reference
     2. stray audit: the thread tail printed by journal-audit.awk is the checklist - every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
     3. journal audit: awk -f scripts/journal-audit.awk sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md (REF to the full version, or the whole story carried), the entry closes by reference; "not landed" drops

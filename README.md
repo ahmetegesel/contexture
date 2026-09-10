@@ -508,8 +508,8 @@ unit here is any unit):
 8. stamp:
    @anchor A2 ("continues A1", attention: <the loaded set + the git state>)
 
-9. continue from next_action, following the invoked rhythm or the
-   default design loop
+9. continue from next_action, following the invoked rhythm, the
+   matching rhythm on its trigger, or the default
 ```
 
 ### Work
@@ -538,12 +538,13 @@ Three movements, each with one home:
 
 Two distinct ends:
 
-- **Period end** (a turn ends; the unit continues): append events to the
-  journal, closing the period's done events by reference; refresh
-  `next_action` in `state.md` (one terse pointer, overwritten never
-  prepended; the WHY rebuilds from journal open items, the backlog's
-  active tasks, and live findings, never pre-serialized into
-  state); run the stray audit (the thread tail printed by the journal
+- **Period end** (a turn ends; the unit continues): first run `@refresh` -
+  the events journaled, the backlog statuses advanced, `next_action`
+  refreshed in `state.md` (one terse pointer, overwritten never prepended;
+  the WHY rebuilds from journal open items, the backlog's active tasks,
+  and live findings, never pre-serialized into state), settled verdicts
+  flagged, the journal audit run; then close the period's done events by
+  reference; run the stray audit (the thread tail printed by the journal
   audit is the checklist, and every open THREAD that resolved this period
   closes now, verdict word and resolution in the WHAT; receipts never
   close at period end, they fold only at a human-called chapter turn or
