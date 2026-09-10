@@ -242,7 +242,8 @@ objective lives in `state.md`; `backlog.md` carries the actionable work.
 The schema holds the shape, the writer holds the volume: DESCRIPTION
 carries the problem statement, user intent, and scope; ACCEPTANCE
 CRITERIA sets the verifiable gates; IMPLEMENTATION DETAILS holds the
-technical blueprint (file paths, schemas, logic, edge cases). Dedicated
+specification and the execution blueprint - the requirements and decisions
+the change must honor, and how it lands. Dedicated
 containers give technical substance a natural home without resorting to
 unnatural exit criteria multiplication.
 

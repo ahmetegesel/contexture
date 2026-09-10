@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.22.1] - 2026-09-10
+
+### Changed
+
+- @backlog's container charge reworked: IMPLEMENTATION DETAILS carries the specification and the execution blueprint - the requirements and decisions the change must honor, and how it lands. The abstract enumeration is gone; the readiness bar and the no-placeholder rule still enforce executability. README aligned.
+
 ## [0.22.0] - 2026-09-10
 
 ### Changed
