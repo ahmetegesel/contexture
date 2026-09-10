@@ -713,6 +713,7 @@ Extending it, without breaking it:
   3. `BACKLOG`: intent updates `backlog.md`; `next_action` points to active task
   4. `EXECUTE`: work active task; drift updates `backlog.md` in same breath
   5. `VERIFY`: task acceptance criteria proven; journal records completion, `next_action` advances
+  6. `REFRESH`: run `@refresh`
 
   A human rhythm replaces progression. A rhythm declares its match and
   its ask up front: `use when:` carries triggers only - never a workflow

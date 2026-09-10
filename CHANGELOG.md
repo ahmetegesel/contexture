@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.22.0] - 2026-09-10
+
+### Changed
+
+- The default design loop runs `@refresh` explicitly as its final step: when no rhythm is invoked, the loop is DISCUSS -> DECIDE -> BACKLOG -> EXECUTE -> VERIFY -> REFRESH. README aligned.
+
 ## [0.21.0] - 2026-09-10
 
 ### Added

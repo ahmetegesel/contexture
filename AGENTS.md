@@ -1,4 +1,4 @@
-# contexture v0.21.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.22.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -94,6 +94,7 @@
   3. BACKLOG: intent updates backlog.md; next_action points to active task
   4. EXECUTE: work active task; drift updates backlog in same breath
   5. VERIFY: task acceptance criteria proven; journal records completion, next_action advances
+  6. REFRESH: run @refresh
 
 @subagents
   every dispatch:
