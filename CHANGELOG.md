@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.24.2] - 2026-09-10
+
+### Changed
+
+- The references practice applied to the handoff chain: @handoff step 1 names its target (@close 1-3), and @refresh's caller list reads "shared by rhythm boundaries, @close, and @handoff" - the handoff runs the refresh (and the harvest) through the close path.
+
 ## [0.24.1] - 2026-09-10
 
 ### Changed

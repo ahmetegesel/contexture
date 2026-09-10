@@ -1,4 +1,4 @@
-# contexture v0.24.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.24.2 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -114,7 +114,7 @@
   - journal every dispatch: lane folder path
 
 @refresh
-  the artifact sweep, shared by rhythm boundaries and @close: the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run - every open flag, one candidate each; confirmed candidates land in knowledge.md (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; journal-audit run, what it flags fixed; beyond the harvest, nothing closes here
+  the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run - every open flag, one candidate each; confirmed candidates land in knowledge.md (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; journal-audit run, what it flags fixed; beyond the harvest, nothing closes here
 
 @close
   period end (turn ends; unit continues):
@@ -130,7 +130,7 @@
 
 @handoff
   compaction or clearing near (any moment, mid-period):
-    1. run the period-end writes if not done
+    1. run the period-end writes (@close 1-3) if not done
     2. verify with the cold read: run awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md and read the stream as a fresh boot would - the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here - the net for a forgotten stamp
   the handoff writes the record, not working memory.
 
