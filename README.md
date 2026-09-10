@@ -152,7 +152,7 @@ imposed; and `AGENTS.local.md`, personal amendments.
 | `ONBOARDING.md` | shared | agentic adoption guideline | during onboarding |
 | `AGENTS.workspace.md` | shared | the workspace overlay, replace or append per section | at boot, before local |
 | `templates/` | shared | the grammars, one per artifact, each with its filled sample | write-time reference |
-| `scripts/` | shared | cross-platform awk queries (journal extraction, audit) | at boot, close, handoff |
+| `scripts/` | shared | cross-platform awk queries (journal extraction, audit, rhythm index) | at boot, close, handoff |
 | `AGENTS.local.md` | private | your amendments | at boot |
 | `sessions/` | private | one folder per unit of work | the active unit's files |
 | `rhythms/` | private | workflow patterns | when a rhythm is called |
@@ -418,8 +418,10 @@ The first thing the agent does each working period, mechanically:
 5. **Read state, refresh the anchor counter.** Read `state.md` whole. It
    is small by law, and detail lives behind refs, never inside it.
    Refresh `current_anchor` to the next value (`N = previous + 1`).
-6. **Read the backlog, run the query, and load.** Read `backlog.md`. Then the
-   load rule, one subtraction: **live = not closed.** The load list is
+6. **Read the backlog, run the query, and load.** Read `backlog.md`, then the
+   rhythm index - `awk -f scripts/rhythms-index.awk rhythms/*.md` prints one
+   line per rhythm (name, path, `use when:`, activation); bodies load only
+   on selection. Then the load rule, one subtraction: **live = not closed.** The load list is
    every journal entry whose slug no `CLOSES:` or `SUPERSEDES:` names,
    whole file, all anchors. Anchors are period ordering and load
    receipts, never liveness; no entry loads or skips by its anchor.
@@ -698,7 +700,7 @@ Extending it, without breaking it:
   `next_action`, harvesting verdicts) hold across every rhythm. Work
   patterns never live in the per-turn surfaces: interaction rules need
   every-turn delivery, work patterns need per-boot delivery in
-  rhythms/ - a workflow written into an AGENTS.md taxes every single
+  rhythms/ (their trigger index loads at boot; the bodies load on selection) - a workflow written into an AGENTS.md taxes every single
   turn forever. That delivery split is also the onboarding move: the
   step-by-step workflows found in a workspace's instruction stack are
   the first rhythm candidates, proposed for extraction when the

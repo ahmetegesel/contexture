@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.20.1] - 2026-09-10
+
+### Added
+
+- `scripts/rhythms-index.awk`: the rhythm selection index - one line per rhythm (name, path, `use when:`, activation), grammar-aware, defaulting a missing activation to propose.
+
+### Changed
+
+- The boot loads the rhythm index (@boot step 6): the trigger lines are the selection index, and rhythm bodies load only on selection; @boot step 9 continues on the invoked rhythm, the matching rhythm on its trigger, or the default. This completes v0.20.0's trigger/activation feature with its load side.
+- README aligned: boot step 6, the files table, and the rhythms section note the index.
+
 ## [0.20.0] - 2026-09-10
 
 ### Added

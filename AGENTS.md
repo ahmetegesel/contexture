@@ -1,4 +1,4 @@
-# contexture v0.20.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.20.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -67,10 +67,10 @@
   3. get the field: grep -rl "status: ACTIVE" sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit - an active unit continues at 5, a new unit bootstraps at 10
   5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1; a boot is a fresh context load - compaction, session restart - never a turn boundary; turns inside one working context journal under the standing anchor)
-  6. read backlog.md; run @query: awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
+  6. read backlog.md; read the rhythm index: awk -f scripts/rhythms-index.awk rhythms/*.md - one line per rhythm (name, path, use when, activation); run @query: awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
-  9. continue from next_action, following the human-invoked rhythm, or the default
+  9. continue from next_action, following the invoked rhythm, the matching rhythm on its trigger, or the default
   10. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "backlog the first task"; continue at 5
 
 @interact
