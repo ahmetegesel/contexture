@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.24.1] - 2026-09-10
+
+### Changed
+
+- The sync procedure is derived, never listed: adoption and updates copy what the upstream tag tracks (`git archive <tag> AGENTS.md .contexture/`), verified with `git ls-tree` plus a cmp per file. No manifest to maintain; the tag's tracked set is the synced set, and the drawer holds what the convention uses - the synced set plus the workspace's sessions and rhythms - nothing else. README and ONBOARDING aligned.
+
 ## [0.24.0] - 2026-09-10
 
 ### Changed

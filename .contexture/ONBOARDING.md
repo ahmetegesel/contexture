@@ -52,7 +52,7 @@
     instruction stack: <the files read whole>
     rule surfaces: <every surface found, one per line; each contradicts, overlaps, or complements the convention>
   @plan
-    copy: <the shared set; always AGENTS.md and .contexture/>
+    copy: <the synced set, derived from the tag: git archive <tag> AGENTS.md .contexture/; never a hand-kept list>
     overlay: <AGENTS.workspace.md @append blocks - which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
     rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; none states none>
@@ -67,7 +67,7 @@
 @configure
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in backlog.md, next_action points at the active task, every task's completion journals and advances next_action, drift updates the backlog in the same breath
   base assets:
-    copy AGENTS.md into the repo root and .contexture/ alongside it
+    copy what the tag tracks: `git archive <tag> AGENTS.md .contexture/ | tar -x -C <target>` - AGENTS.md lands at the root, the drawer alongside it
     set script permissions: `chmod +x .contexture/scripts/*.awk`
   gitignore:
     standalone repo:

@@ -30,7 +30,7 @@ The workspace in one map:
 **Adopt in five minutes:**
 
 1. For an agent adopting contexture, point it to `.contexture/ONBOARDING.md`. It executes branch isolation, topology assessment, safe gitignore setup, instruction migration, and harness symlinking.
-2. For manual adoption: start on a dedicated branch; copy `AGENTS.md` and `.contexture/` into your repo, and set script permissions (`chmod +x .contexture/scripts/*.awk`).
+2. For manual adoption: start on a dedicated branch; copy what the tag tracks - `git archive <tag> AGENTS.md .contexture/ | tar -x -C <your-repo>` - and set script permissions (`chmod +x .contexture/scripts/*.awk`).
 3. Configure `.gitignore` for your topology: in standalone repos, ignore personal amendments (`AGENTS.local.md`) and choose whether to track or ignore `.contexture/sessions/` and `.contexture/rhythms/`; in parent workspaces, whitelist as appropriate.
 4. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md` (your amendments); both amend, never contradict. Wire harness symlinks (`CLAUDE.md`, `GEMINI.md`) to `AGENTS.md`.
 5. Tell the agent what the first unit is; it bootstraps `.contexture/sessions/<unit>/` itself. Let the first boot run.
@@ -657,10 +657,14 @@ For manual adoption:
    read the CHANGELOG from your installed version to the target - what
    changed and why; read your own workspace - the overlay's @replace
    blocks, live sessions, in-flight artifacts; then decide: adopt now,
-   migrate first, or wait. When adopting, the shared set (AGENTS.md,
-   .contexture/) copies from the tag
-   (`git checkout <tag> -- <paths>`); overlays and .contexture/sessions/ are never
-   in that path; `git diff --staged` shows the human the changed base;
+   migrate first, or wait. When adopting, the synced set is derived, never
+   listed: copy what the tag tracks -
+   `git archive <tag> AGENTS.md .contexture/ | tar -x -C <target>` - and
+   verify with `git ls-tree -r --name-only <tag> -- AGENTS.md .contexture/`
+   plus a cmp per file; the drawer holds what the convention uses - the
+   synced set plus the workspace's sessions and rhythms - and nothing else;
+   overlays are never in that path; `git diff` shows the human the changed
+   base;
    the workspace's instruments verify the result (boot query, dangling
    audit, ground check); MAJOR tags demand the overlay's review. This
    guidance is kept current in the README at every tag - follow it fresh
