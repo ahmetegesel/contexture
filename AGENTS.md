@@ -1,4 +1,4 @@
-# contexture v0.22.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.23.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -21,6 +21,7 @@
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map - what each artifact records and why; the workflows live in their sections.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual.
+  references: a pointer names its target exactly - the section and step (@close 4), or path#symbol (journal.md#slug); a vague prose mention is a defect
   folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
   state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design - the map, not the content: detail lives behind refs; refreshed as the work moves (every backlog update, task landing, period end).
   backlog.md   = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog.

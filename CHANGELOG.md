@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.23.0] - 2026-09-10
+
+### Added
+
+- The references practice in @record: a pointer names its target exactly - the section and step (@close 4), or path#symbol (journal.md#slug); a vague prose mention is a defect. README's dialect section aligned.
+
 ## [0.22.1] - 2026-09-10
 
 ### Changed

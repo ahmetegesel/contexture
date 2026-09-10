@@ -376,8 +376,10 @@ shape, the writer holds the volume. The grammars name the elements an
 artifact must carry; the rest is freestyle, nudged by one generic rule:
 record comprehensively. `status:` on the status card (`status: ACTIVE | CLOSED`)
 is the only status field in the convention; journal entries and
-findings are statusless. Spellings are contractual, not stylistic.
-Rhythms are written in this same dialect; "Adopting it" explains the
+findings are statusless. Spellings are contractual, not stylistic:
+a pointer names its target exactly - the section and step (`@close 4`)
+or `path#symbol` - and a vague prose mention is a defect. Rhythms are
+written in this same dialect; "Adopting it" explains the
 reason.
 
 The spellings matter because they are the query language. The workspace
