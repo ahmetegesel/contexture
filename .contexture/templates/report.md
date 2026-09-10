@@ -38,12 +38,12 @@ and evidence, what the dispatcher needs to re-verify and decide.
   MARK: VERIFIED
   DETAILS ::
     parent workspace whitelist preserved;
-    matches ONBOARDING.md topology guidance;
+    matches .contexture/ONBOARDING.md topology guidance;
     check-ignore verified cleanly
 
 @claim handoff-audit-placement
-  VERDICT: "scripts/journal-audit.awk added to README handoff verification."
-  EVIDENCE: README.md:488 ("AND awk -f scripts/journal-audit.awk exits 0")
+  VERDICT: ".contexture/scripts/journal-audit.awk added to README handoff verification."
+  EVIDENCE: README.md:488 ("AND awk -f .contexture/scripts/journal-audit.awk exits 0")
   MARK: VERIFIED
 
 @risks

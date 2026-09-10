@@ -1,4 +1,4 @@
-# contexture v0.23.2 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.24.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -12,14 +12,14 @@
   AGENTS.md       = laws + navigation (this file)
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
-  ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
-  templates/      = artifact grammars: the shapes to fill at write time
-  scripts/        = cross-platform awk queries (journal extraction, journal audit)
-  sessions/       = one folder per unit of work
-  rhythms/        = workflow patterns; the contract and the default live in @rhythms
+  .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
+  .contexture/templates/      = artifact grammars: the shapes to fill at write time
+  .contexture/scripts/        = cross-platform awk queries (journal extraction, journal audit)
+  .contexture/sessions/       = one folder per unit of work
+  .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
 @record
-  unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map - what each artifact records and why; the workflows live in their sections.
+  unit of work = session folder; outlives working periods, dies with the unit. shapes live in .contexture/templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map - what each artifact records and why; the workflows live in their sections.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual.
   references: a pointer names its target exactly - the section and step (@refresh), or path#symbol (journal.md#slug); a vague prose mention is a defect
   folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
@@ -53,26 +53,26 @@
 
 @query
   surfaces: journal.md + knowledge.md.
-  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. scripts/journal-active.awk streams active entries with complete bodies in one shot; no per-entry Read tool loops, no range spanning.
+  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/scripts/journal-active.awk streams active entries with complete bodies in one shot; no per-entry Read tool loops, no range spanning.
     command:
-      awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md
+      awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md
   thread tail: journal-audit.awk prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
-  cross-repo: grep -l "repos:.*<name>" sessions/*/state.md: units touching a repo; objective is human-facing only.
+  cross-repo: grep -l "repos:.*<name>" .contexture/sessions/*/state.md: units touching a repo; objective is human-facing only.
   group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot
   1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape - a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
-  3. get the field: grep -rl "status: ACTIVE" sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
+  3. get the field: grep -rl "status: ACTIVE" .contexture/sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit - an active unit continues at 5, a new unit bootstraps at 10
   5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1; a boot is a fresh context load - compaction, session restart - never a turn boundary; turns inside one working context journal under the standing anchor)
-  6. read backlog.md; read the rhythm index: awk -f scripts/rhythms-index.awk rhythms/*.md - one line per rhythm (name, path, use when, activation); run @query: awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
+  6. read backlog.md; read the rhythm index: awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md - one line per rhythm (name, path, use when, activation); run @query: awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
   9. continue from next_action, following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
-  10. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "backlog the first task"; continue at 5
+  10. new work: bootstrap .contexture/sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "backlog the first task"; continue at 5
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask
@@ -82,7 +82,7 @@
   act:      work the chosen rhythm's steps (default: the design loop, @rhythms); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
   surface:  durable output, named by what it is
   surface -> ask
-  artifacts: stay current in the same breath as the work - journal at the event (see @journal), backlog as tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record/templates/
+  artifacts: stay current in the same breath as the work - journal at the event (see @journal), backlog as tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record and .contexture/templates/
 
 @rhythms
   contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm.
@@ -120,7 +120,7 @@
   period end (turn ends; unit continues):
     1. refresh (@refresh) - the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by journal-audit.awk is the checklist - every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. journal audit: awk -f scripts/journal-audit.awk sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
+    3. journal audit: awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. folder stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
@@ -131,11 +131,11 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes if not done
-    2. verify with the cold read: run awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md and read the stream as a fresh boot would - the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND awk -f scripts/journal-audit.awk sessions/<unit>/journal.md exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here - the net for a forgotten stamp
+    2. verify with the cold read: run awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md and read the stream as a fresh boot would - the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here - the net for a forgotten stamp
   the handoff writes the record, not working memory.
 
 @git
-  the gitignore strategy is decided per topology and team choice at onboarding; parent workspaces deny by default and whitelist shared files explicitly (AGENTS.md, AGENTS.workspace.md, ONBOARDING.md, README.md, scripts/, templates/).
+  the gitignore strategy is decided per topology and team choice at onboarding; parent workspaces deny by default and whitelist shared files explicitly (AGENTS.md, AGENTS.workspace.md, README.md, .contexture/).
 
 @update
   the base evolves upstream: fetch https://github.com/ahmetegesel/contexture.git and follow its README's update guidance

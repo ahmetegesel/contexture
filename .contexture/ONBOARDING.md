@@ -16,7 +16,7 @@
   2. branch: `git checkout -b adopt-contexture` (or team branch convention)
   3. never execute onboarding directly on main/master/production branches
   4. bootstrap the adoption session:
-     write sessions/adopt-contexture/state.md: status: ACTIVE, current_anchor: A0, next_action: "assess the workspace"
+     write .contexture/sessions/adopt-contexture/state.md: status: ACTIVE, current_anchor: A0, next_action: "assess the workspace"
      initialize journal.md with `@anchor A0 ("onboarding starts", attention: none)`
   5. journal the phase: the branch and the starting git state
 
@@ -52,7 +52,7 @@
     instruction stack: <the files read whole>
     rule surfaces: <every surface found, one per line; each contradicts, overlaps, or complements the convention>
   @plan
-    copy: <the shared set; always AGENTS.md, ONBOARDING.md, templates/, scripts/>
+    copy: <the shared set; always AGENTS.md and .contexture/>
     overlay: <AGENTS.workspace.md @append blocks - which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
     rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; none states none>
@@ -67,25 +67,22 @@
 @configure
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in backlog.md, next_action points at the active task, every task's completion journals and advances next_action, drift updates the backlog in the same breath
   base assets:
-    copy AGENTS.md, ONBOARDING.md, templates/, and scripts/ into repo root
-    set script permissions: `chmod +x scripts/*.awk`
+    copy AGENTS.md into the repo root and .contexture/ alongside it
+    set script permissions: `chmod +x .contexture/scripts/*.awk`
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
       append personal amendments to existing .gitignore (AGENTS.local.md)
-      per confirmed plan: ignore or track sessions/ and rhythms/ based on team choice
+      per confirmed plan: ignore or track .contexture/sessions/ and .contexture/rhythms/ based on team choice
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
       whitelist shared files explicitly:
         !.gitignore
         !AGENTS.md
         !AGENTS.workspace.md
-        !ONBOARDING.md
         !README.md
-        !scripts/
-        !scripts/**
-        !templates/
-        !templates/**
+        !.contexture/
+        !.contexture/**
         (and active harness symlinks: !CLAUDE.md, !GEMINI.md)
   migration:
     if existing AGENTS.md, CLAUDE.md, or other instruction files exist:
@@ -103,9 +100,9 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. run boot query: `awk -f scripts/journal-active.awk sessions/adopt-contexture/journal.md sessions/adopt-contexture/journal.md`
-  2. run audit: `awk -f scripts/journal-audit.awk sessions/adopt-contexture/journal.md` (must exit 0)
+  1. run boot query: `awk -f .contexture/scripts/journal-active.awk .contexture/sessions/adopt-contexture/journal.md .contexture/sessions/adopt-contexture/journal.md`
+  2. run audit: `awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/adopt-contexture/journal.md` (must exit 0)
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close
-  delete ONBOARDING.md once the adoption closes - it is the procedure, not the convention; remove its gitignore whitelist line with it
+  delete .contexture/ONBOARDING.md once the adoption closes - it is the procedure, not the convention; remove its gitignore whitelist line with it

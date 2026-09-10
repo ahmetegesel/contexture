@@ -1,7 +1,7 @@
 #!/usr/bin/awk -f
 # journal-audit.awk: Audit closures and entry grammar, print the open thread tail
-# Usage: awk -f scripts/journal-audit.awk sessions/<unit>/journal.md
-# Or:    ./scripts/journal-audit.awk sessions/<unit>/journal.md
+# Usage: awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md
+# Or:    ./.contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md
 # The repair instrument: fix what it flags, fill what is missing.
 # Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
 # markers on @entry lines - each flagged with its line number.

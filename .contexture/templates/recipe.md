@@ -24,7 +24,7 @@ GROUND_AND_REFS
 
 OUTPUTS
   JOURNAL: journal.md               # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; the dispatcher never reads it
-  REPORT: report.md                 # the dispatcher's only window: self-sufficient claims and evidence; templates/report.md
+  REPORT: report.md                 # the dispatcher's only window: self-sufficient claims and evidence; .contexture/templates/report.md
   RETURN: summary only: verdicts + residual risks
   RESUME: read recipe.md + journal.md; continue from last uncompleted task
 
@@ -35,13 +35,13 @@ MISSION
   GOAL: "Apply targeted byte-clean fixes across README.md and AGENTS.md"
   TASKS:
     1. git-topology: align AGENTS.md line 104 with standalone vs parent workspace rules; exit: "diff clean"
-    2. handoff-audit: add scripts/journal-audit.awk to README handoff step; exit: "awk clean"
+    2. handoff-audit: add .contexture/scripts/journal-audit.awk to README handoff step; exit: "awk clean"
 
 GROUND_AND_REFS
   SOURCE_OF_TRUTH: reports/2026-09-05-readme-consistency-audit.md#claim-1
   REFS: [AGENTS.md#L104, README.md#L484-491, knowledge.md#TOPOLOGY_AWARE_ADOPTION]
   FACTS ::
-    standalone repos ignore only sessions/, rhythms/, AGENTS.local.md;
+    standalone repos ignore only .contexture/sessions/, .contexture/rhythms/, AGENTS.local.md;
     deny-by-default (*) belongs strictly to parent workspaces;
     zero em-dashes in any edit
   WRITE_SCOPE: [., README.md, AGENTS.md]

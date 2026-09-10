@@ -1,5 +1,5 @@
 # rhythms-index.awk - the rhythm selection index
-# usage: awk -f scripts/rhythms-index.awk rhythms/*.md
+# usage: awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md
 function emit() {
   if (name != "")
     printf "%s (%s) | use when: %s | activation: %s\n",

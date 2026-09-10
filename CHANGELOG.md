@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.24.0] - 2026-09-10
+
+### Changed
+
+- The convention's files move into a `.contexture/` drawer: `templates/`, `scripts/`, `ONBOARDING.md`, `rhythms/`, and `sessions/` live there; `AGENTS*.md` stay at the root for harness loading and point into the drawer for the rest. Workspace-owned files keep their root layout. In the source, the drawer is whitelisted while `.contexture/rhythms/` and `.contexture/sessions/` stay untracked; each adoption decides its own tracking. Every base pointer (AGENTS.md, README.md, ONBOARDING.md, the grammars, the script usage comments) reads the drawer spelling.
+
 ## [0.23.2] - 2026-09-10
 
 ### Changed

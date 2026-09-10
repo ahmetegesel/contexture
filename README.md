@@ -17,23 +17,23 @@ from vendors (bash, awk, and grep are the whole engine; any harness, any agent).
 The workspace in one map:
 
 - `AGENTS.md`: laws + navigation, auto-delivered every turn
-- `ONBOARDING.md`: agentic adoption guideline; instructions for agents installing contexture into a repository
-- `templates/`: seven grammars: six artifacts plus the workspace overlay
-- `scripts/`: cross-platform awk queries (active entry extraction, closure audit)
-- `sessions/<unit>/`: one folder per unit of work: `state.md` (the
+- `.contexture/ONBOARDING.md`: agentic adoption guideline; instructions for agents installing contexture into a repository
+- `.contexture/templates/`: seven grammars: six artifacts plus the workspace overlay
+- `.contexture/scripts/`: cross-platform awk queries (active entry extraction, closure audit)
+- `.contexture/sessions/<unit>/`: one folder per unit of work: `state.md` (the
   pointer), `backlog.md` (the intent), `journal.md` (the memory),
   `knowledge.md` (the mind), and `lanes/` (dispatch units)
 - `AGENTS.workspace.md`: the workspace's shared overlay, replace or append per section; wins over local
 - `AGENTS.local.md`: your amendments; amend, never contradict
-- `rhythms/`: workflow patterns, invoked never imposed
+- `.contexture/rhythms/`: workflow patterns, invoked never imposed
 
 **Adopt in five minutes:**
 
-1. For an agent adopting contexture, point it to `ONBOARDING.md`. It executes branch isolation, topology assessment, safe gitignore setup, instruction migration, and harness symlinking.
-2. For manual adoption: start on a dedicated branch; copy `AGENTS.md`, `ONBOARDING.md`, `templates/`, and `scripts/` into your repo, and set script permissions (`chmod +x scripts/*.awk`).
-3. Configure `.gitignore` for your topology: in standalone repos, ignore personal amendments (`AGENTS.local.md`) and choose whether to track or ignore sessions and rhythms; in parent workspaces, whitelist as appropriate.
+1. For an agent adopting contexture, point it to `.contexture/ONBOARDING.md`. It executes branch isolation, topology assessment, safe gitignore setup, instruction migration, and harness symlinking.
+2. For manual adoption: start on a dedicated branch; copy `AGENTS.md` and `.contexture/` into your repo, and set script permissions (`chmod +x .contexture/scripts/*.awk`).
+3. Configure `.gitignore` for your topology: in standalone repos, ignore personal amendments (`AGENTS.local.md`) and choose whether to track or ignore `.contexture/sessions/` and `.contexture/rhythms/`; in parent workspaces, whitelist as appropriate.
 4. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md` (your amendments); both amend, never contradict. Wire harness symlinks (`CLAUDE.md`, `GEMINI.md`) to `AGENTS.md`.
-5. Tell the agent what the first unit is; it bootstraps `sessions/<unit>/` itself. Let the first boot run.
+5. Tell the agent what the first unit is; it bootstraps `.contexture/sessions/<unit>/` itself. Let the first boot run.
 
 **Then it runs itself:**
 
@@ -50,7 +50,7 @@ The workspace in one map:
   events; unit end marks CLOSED and journals the next move
 - **Handoff:** before context death, run the writes, cold-read the
   active stream as a fresh boot would, and verify
-  `awk -f scripts/journal-audit.awk sessions/<unit>/journal.md` exits 0
+  `awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md` exits 0
 
 The seven laws carry the whole design: files over conversation, load
 only what the work touches, the schema holds the shape and the writer
@@ -140,25 +140,25 @@ Every workspace has two layers, and the line between them is
 contractual.
 
 **The shared layer is the convention itself**: `AGENTS.md`, the laws and
-navigation; `ONBOARDING.md`, the adoption guideline; `templates/`, the
-grammars; `scripts/`, the query tools; and `AGENTS.workspace.md`, the
+navigation; `.contexture/ONBOARDING.md`, the adoption guideline; `.contexture/templates/`, the
+grammars; `.contexture/scripts/`, the query tools; and `AGENTS.workspace.md`, the
 shared overlay. These are copied between teams and committed. This
 guideline is the human's companion; read it once, keep it out of the repo.
 
-**The private layer is the working state**: `sessions/`, one folder per
-unit of work; `rhythms/`, personal workflow patterns, invoked not
+**The private layer is the working state**: `.contexture/sessions/`, one folder per
+unit of work; `.contexture/rhythms/`, personal workflow patterns, invoked not
 imposed; and `AGENTS.local.md`, personal amendments.
 
 | File | Layer | Role | Read when |
 |---|---|---|---|
 | `AGENTS.md` | shared | laws + navigation | every turn (auto-delivered) |
-| `ONBOARDING.md` | shared | agentic adoption guideline | during onboarding |
+| `.contexture/ONBOARDING.md` | shared | agentic adoption guideline | during onboarding |
 | `AGENTS.workspace.md` | shared | the workspace overlay, replace or append per section | at boot, before local |
-| `templates/` | shared | the grammars, one per artifact, each with its filled sample | write-time reference |
-| `scripts/` | shared | cross-platform awk queries (journal extraction, audit, rhythm index) | at boot, close, handoff |
+| `.contexture/templates/` | shared | the grammars, one per artifact, each with its filled sample | write-time reference |
+| `.contexture/scripts/` | shared | cross-platform awk queries (journal extraction, audit, rhythm index) | at boot, close, handoff |
 | `AGENTS.local.md` | private | your amendments | at boot |
-| `sessions/` | private | one folder per unit of work | the active unit's files |
-| `rhythms/` | private | workflow patterns | when a rhythm is called |
+| `.contexture/sessions/` | private | one folder per unit of work | the active unit's files |
+| `.contexture/rhythms/` | private | workflow patterns | when a rhythm is called |
 
 The split is the whole of "govern output, not process", made concrete.
 Human teams run on shared structure (SDLC, Agile, conventions) because
@@ -188,13 +188,13 @@ a tour of the convention:
 - `@handoff`: the proof before context death
 - `@git`: what's committed and what never is
 
-It carries no schemas (those live in `templates/`), no provenance (that
+It carries no schemas (those live in `.contexture/templates/`), no provenance (that
 lives in the journal), and exactly one rhythm: the default design
 loop, which any personal rhythm replaces.
 
 **`AGENTS.workspace.md`** is the workspace's shared overlay, tracked with
 the repo: @replace or @append per section, grammar in
-`templates/overlay.md`. It survives every sync untouched and wins over
+`.contexture/templates/overlay.md`. It survives every sync untouched and wins over
 personal amendments.
 
 **`AGENTS.local.md`** is the one governance file the human owns: personal
@@ -202,7 +202,7 @@ rules, preferences, rhythm defaults. It is read at boot and kept tiny.
 Its one hard rule: **amend, never contradict: the laws stand.** A local
 "skip verification" is a contradiction, not an amendment.
 
-**`templates/`** pins seven grammars: six artifacts, each written to be
+**`.contexture/templates/`** pins seven grammars: six artifacts, each written to be
 read *from*, never copied wholesale, and the overlay grammar for
 `AGENTS.workspace.md`. Every grammar carries a filled sample in template
 syntax at its foot. The four record files - state, backlog, journal,
@@ -210,7 +210,7 @@ knowledge - get their own sections below; the dispatch unit follows them.
 
 ### The unit
 
-`sessions/<unit>/` is one folder per piece of work. It outlives every
+`.contexture/sessions/<unit>/` is one folder per piece of work. It outlives every
 conversation that works on it, and it dies when the work is done, not
 when a chat ends. Inside: the four record files (state, backlog, journal,
 knowledge) plus `lanes/` (dispatch units, one folder per lane). The
@@ -414,7 +414,7 @@ The first thing the agent does each working period, mechanically:
    task, a question. The message is the move signal, and nothing loads
    and nothing works before the boot reads it.
 3. **Get the field and match.** One grep lists the candidates:
-   `grep -rl "status: ACTIVE" sessions/*/state.md`. Read the message
+   `grep -rl "status: ACTIVE" .contexture/sessions/*/state.md`. Read the message
    against them: a close match proposes continuing that unit; no match
    proposes bootstrapping a new one.
 4. **Propose the move and wait.** The proposal goes to the human before
@@ -425,18 +425,18 @@ The first thing the agent does each working period, mechanically:
    is small by law, and detail lives behind refs, never inside it.
    Refresh `current_anchor` to the next value (`N = previous + 1`).
 6. **Read the backlog, run the query, and load.** Read `backlog.md`, then the
-   rhythm index - `awk -f scripts/rhythms-index.awk rhythms/*.md` prints one
+   rhythm index - `awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md` prints one
    line per rhythm (name, path, `use when:`, activation); bodies load only
    on selection. Then the load rule, one subtraction: **live = not closed.** The load list is
    every journal entry whose slug no `CLOSES:` or `SUPERSEDES:` names,
    whole file, all anchors. Anchors are period ordering and load
    receipts, never liveness; no entry loads or skips by its anchor.
-   `scripts/journal-active.awk` extracts and streams each active entry's
+   `.contexture/scripts/journal-active.awk` extracts and streams each active entry's
    full body directly bounded by the next entry or anchor line in one
    shot, with zero `Read` tool loops and no spanning reads:
 
    ```bash
-   awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md
+   awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md
    ```
 
    The closure extraction parses the target field only - a slug
@@ -463,7 +463,7 @@ The first thing the agent does each working period, mechanically:
    or the default design loop. If `next_action` says "backlog the next
    task", the backlog phase starts.
 10. **New work bootstraps a unit.** The agent creates
-   `sessions/<slug>/state.md` with `status: ACTIVE`,
+   `.contexture/sessions/<slug>/state.md` with `status: ACTIVE`,
    `current_anchor: A0`, and `next_action: "backlog the first task"`, then
    continues at step 5, and the first boot stamps A1.
 
@@ -479,8 +479,8 @@ unit here is any unit):
    > "let's continue the example unit"
 
 3. get the field and match:
-   $ grep -rl "status: ACTIVE" sessions/*/state.md
-   sessions/example-unit/state.md  # one active unit; the message
+   $ grep -rl "status: ACTIVE" .contexture/sessions/*/state.md
+   .contexture/sessions/example-unit/state.md  # one active unit; the message
                                    # matches it closely
 
 4. propose the move and wait:
@@ -493,12 +493,12 @@ unit here is any unit):
 6. the query: live = not closed, one subtraction.
 
    closure stamp in the journal (what pass 1 collects):
-   sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches (done: migration completed)
+   .contexture/sessions/example-unit/journal.md:19:  CLOSES: <date>-migration-dispatches (done: migration completed)
 
    the load dump (active bodies streamed directly; the closure side
    parses targets only, never reason prose):
-   $ awk -f scripts/journal-active.awk \
-     sessions/example-unit/journal.md sessions/example-unit/journal.md
+   $ awk -f .contexture/scripts/journal-active.awk \
+     .contexture/sessions/example-unit/journal.md .contexture/sessions/example-unit/journal.md
    # streams each active entry and body in full; zero Read tool calls
 
    line 19's target is closed: it does not dump, and its resolution
@@ -557,7 +557,7 @@ Two distinct ends:
   this period closes now, verdict word and resolution in the WHAT;
   receipts never close at period end, they fold only at a human-called
   chapter turn or at unit close); run the journal audit
-  (`awk -f scripts/journal-audit.awk sessions/<unit>/journal.md` must
+  (`awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md` must
   exit 0; it flags the broken entries - dangling or slugless closers,
   dateless slugs, inline markers - with line numbers; the audit is a
   repair instrument: fix what it flags and fill what is missing before
@@ -572,11 +572,11 @@ Two distinct ends:
 The proof before context death. When a context is about to die
 (compaction, tool change, long break): run the period-end writes if
 they are not done, then verify with the cold read: run
-`awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md`
+`awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md`
 and read the stream as a fresh boot would - the record must reconstruct
 the position without the conversation. While the context is still full,
 improve the quality and fix what was missed; the gaps close now, never
-after compaction. And `awk -f scripts/journal-audit.awk sessions/<unit>/journal.md`
+after compaction. And `awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md`
 exits 0. The handoff check also sweeps the whole open list: every open
 entry is confirmed as a live thread or a legitimate receipt, and a
 resolved thread hiding without its marker closes here, the net that
@@ -637,13 +637,13 @@ before context death is exactly what the ritual is for.
 
 ## Adopting it
 
-For agents adopting contexture into a repository, see `ONBOARDING.md`.
+For agents adopting contexture into a repository, see `.contexture/ONBOARDING.md`.
 
 For manual adoption:
 
-1. Start on a dedicated branch (e.g. `adopt-contexture`). Copy `AGENTS.md`,
-   `ONBOARDING.md`, `templates/`, and `scripts/` into your repository, and
-   set script permissions (`chmod +x scripts/*.awk`). That's the convention.
+1. Start on a dedicated branch (e.g. `adopt-contexture`). Copy `AGENTS.md` and
+   `.contexture/` into your repository, and set script permissions
+   (`chmod +x .contexture/scripts/*.awk`). That's the convention.
    This guideline stays out of it; it's the human's read.
    The copy carries a semantic version. MAJOR = breaking for existing
    artifacts (fields removed, shapes changed), MINOR = new sections and
@@ -658,8 +658,8 @@ For manual adoption:
    changed and why; read your own workspace - the overlay's @replace
    blocks, live sessions, in-flight artifacts; then decide: adopt now,
    migrate first, or wait. When adopting, the shared set (AGENTS.md,
-   ONBOARDING.md, templates/, scripts/) copies from the tag
-   (`git checkout <tag> -- <paths>`); overlays and sessions/ are never
+   .contexture/) copies from the tag
+   (`git checkout <tag> -- <paths>`); overlays and .contexture/sessions/ are never
    in that path; `git diff --staged` shows the human the changed base;
    the workspace's instruments verify the result (boot query, dangling
    audit, ground check); MAJOR tags demand the overlay's review. This
@@ -669,13 +669,13 @@ For manual adoption:
 2. Configure `.gitignore` for your repository topology: in standalone
    repositories containing application code, never deny by default across
    an existing codebase; append personal amendments (`AGENTS.local.md`) and
-   decide with the team whether to track or ignore `sessions/` and `rhythms/`.
+   decide with the team whether to track or ignore `.contexture/sessions/` and `.contexture/rhythms/`.
    In parent meta-workspaces, whitelist explicitly if tracking convention
    configuration alone.
 3. Carve `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md`
    (personal amendments). Wire active harness entry points (`CLAUDE.md`,
    `GEMINI.md`) as symlinks to `AGENTS.md`.
-4. Create `sessions/`, then tell the agent the first unit's name and
+4. Create `.contexture/sessions/`, then tell the agent the first unit's name and
    goal; the agent bootstraps the folder itself. The best first unit is
    the convention itself: adopting, tweaking, and living with it is the
    richest possible workload for testing it. Journal every break; harvest
@@ -689,7 +689,7 @@ Extending it, without breaking it:
 
 - **Workspace overlay: shared adaptation, not fork.** `AGENTS.workspace.md`
   is the workspace's tracked overlay: @replace or @append per section,
-  grammar in `templates/overlay.md`. It survives every sync untouched,
+  grammar in `.contexture/templates/overlay.md`. It survives every sync untouched,
   and it wins over personal amendments.
   @replace is a last resort: the replaced base text still loads, so the
   agent holds two versions of one section and may follow either;
@@ -705,7 +705,7 @@ Extending it, without breaking it:
   `next_action`, harvesting verdicts) hold across every rhythm. Work
   patterns never live in the per-turn surfaces: interaction rules need
   every-turn delivery, work patterns need per-boot delivery in
-  rhythms/ (their trigger index loads at boot; the bodies load on selection) - a workflow written into an AGENTS.md taxes every single
+  .contexture/rhythms/ (their trigger index loads at boot; the bodies load on selection) - a workflow written into an AGENTS.md taxes every single
   turn forever. That delivery split is also the onboarding move: the
   step-by-step workflows found in a workspace's instruction stack are
   the first rhythm candidates, proposed for extraction when the

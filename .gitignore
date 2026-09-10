@@ -5,10 +5,11 @@
 !CLAUDE.md
 !GEMINI.md
 !AGENTS.workspace.md
-!ONBOARDING.md
 !README.md
 !CHANGELOG.md
-!scripts/
-!scripts/**
-!templates/
-!templates/**
+# the contexture drawer
+!.contexture/
+!.contexture/**
+# per-workspace content stays untracked in the source
+/.contexture/rhythms/
+/.contexture/sessions/

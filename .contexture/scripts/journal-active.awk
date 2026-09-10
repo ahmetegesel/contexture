@@ -1,7 +1,7 @@
 #!/usr/bin/awk -f
 # journal-active.awk: Stream unclosed journal entries with complete bodies
-# Usage: awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md
-# Or:    ./scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md
+# Usage: awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md
+# Or:    ./.contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md
 
 # PASS 1: collect closed and superseded slugs
 NR == FNR {
