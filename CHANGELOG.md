@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.20.0] - 2026-09-10
+
+### Added
+
+- @rhythms gains two contract fields: `use when:` carries triggers only - a workflow summary becomes the shortcut agents follow instead of the steps; `activation: propose | auto` decides whether the agent proposes the matching rhythm before applying it (the default) or applies it on trigger after the team opts in, the @interact gates still holding.
+- @backlog gains the readiness bar, the activation scan, and the no-placeholder rule: a task marked IN_PROGRESS is executable as written; before activation the executor scans the task (placeholders, checkable criteria, resolving REFs); a failing task returns, never execute around a gap.
+- @subagents gains the lane boot and the load receipt: lanes read the overlays, state, backlog, knowledge, the recipe, and every REF it names (read-only; session surfaces are never lane-written); the first journal entry lists the refs loaded, and an unresolved REF is a brief defect - pause-ask or stop and report, never work around the gap.
+- @interact carries the recording invariant for all session artifacts - journal at the event, backlog as tasks move, state as position changes, knowledge verdicts flagged as they settle - with see-pointers to their sections and shapes in @record/templates/.
+- ONBOARDING.md gains the @close phase: delete it once the adoption closes - it is the procedure, not the convention; the @layout line annotates the file as deleted when the adoption closes.
+
+### Changed
+
+- @interact revised: the dialogue resolves intent, constraints, and approach; the restate carries the intended approach and its tradeoffs; the confirm gate is never skipped, however small; a discovery that outgrew the confirmed intent halts back to confirm.
+- @subagents drift redefined: a decision within the brief is the lane's; a wall or a decision beyond it is drift - pause and ask for steering where the harness supports it, abort the fallback; the action trace is the exact stopping point, so a steer continues live and a re-dispatch resumes from the folder. Journals land as things happen, never batched; only task receipts batch. Parallel lanes only for independent domains - shared state or ordering means sequential.
+- @rhythms contract adjusted: human-invoked or agent-selected on its trigger.
+- README.md rhythm section aligned with the trigger and activation fields.
+
 ## [0.19.1] - 2026-09-09
 
 ### Changed

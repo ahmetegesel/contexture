@@ -711,7 +711,14 @@ Extending it, without breaking it:
   4. `EXECUTE`: work active task; drift updates `backlog.md` in same breath
   5. `VERIFY`: task acceptance criteria proven; journal records completion, `next_action` advances
 
-  A human rhythm replaces progression. Custom rhythms are written in
+  A human rhythm replaces progression. A rhythm declares its match and
+  its ask up front: `use when:` carries triggers only - never a workflow
+  summary, which becomes the shortcut an agent follows instead of the
+  steps; `activation: propose | auto` decides whether the agent proposes
+  the rhythm before applying it (the default) or applies it on trigger
+  after the team opts in.
+
+  Custom rhythms are written in
   the same dialect as the artifacts: typed blocks, column 0, indent 2,
   contract words spelled once. One line per step, the form `N. GATE: outcome`,
   no per-step sub-blocks. Token-efficient, not short: a rhythm may carry as
@@ -722,6 +729,8 @@ Extending it, without breaking it:
 
   ```
   @rhythm ship-pack
+    use when: a change is tested and ready to land through review
+    activation: propose
     1. CODE: the change lands with its own tests
     2. GUARDS: suite + lint + typecheck, always, mechanical, before any review
     3. REVIEW: dispatch a review lane, fresh context, independent;

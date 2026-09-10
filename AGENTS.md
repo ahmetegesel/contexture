@@ -1,4 +1,4 @@
-# contexture v0.19.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.20.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -12,7 +12,7 @@
   AGENTS.md       = laws + navigation (this file)
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
-  ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository
+  ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   templates/      = artifact grammars: the shapes to fill at write time
   scripts/        = cross-platform awk queries (journal extraction, journal audit)
   sessions/       = one folder per unit of work
@@ -44,6 +44,9 @@
   dedicated containers: DESCRIPTION carries context and scope, ACCEPTANCE CRITERIA carries checkable done-conditions, IMPLEMENTATION DETAILS carries the technical blueprint (files, schemas, logic); omit ornament, never substance
   REFS references the persisted surfaces only: journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME); never a volatile file
   compose from the record (law 5): material living only in the conversation lands in the record first, then the task references it
+  readiness: a task marked IN_PROGRESS is executable as written; every needed decision lives in the task or behind a REF
+  activation: before IN_PROGRESS, the executor scans the task - placeholders, checkable criteria, resolving REFs; a failing task returns, never execute around a gap
+  no placeholders: TBD, "similar to <task>", "as appropriate" mean the task is not ready
   task progress: active work marks STATUS: IN_PROGRESS; completion marks STATUS: DONE and lands a journal event "backlog/<slug>: DONE"; the backlog updates in place as tasks move; newly discovered work appends or inserts as a fresh @task
   unit completion: all tasks reach STATUS: DONE and unit exit criteria are met; completion + the next move land in the journal
 
@@ -72,16 +75,18 @@
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask
-  ask:      grounded question, one at a time; answer opens next; until resolved
-  restate:  goal, your words
-  confirm:  human: go | ask; may interrupt anytime
-  act:      work the chosen rhythm's steps (default: the design loop); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect
+  ask:      grounded question, one at a time; answer opens next; until intent, constraints, and approach are settled
+  restate:  goal + intended approach, your words; where approaches diverge, name the tradeoff
+  confirm:  human: go | ask; may interrupt anytime; never skipped, however small
+  act:      work the chosen rhythm's steps (default: the design loop); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
   surface:  durable output, named by what it is
   surface -> ask
-  each transition journals as it happens; nothing waits for the period end
+  artifacts: stay current in the same breath as the work - journal at the event (see @journal), backlog as tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @close 4); nothing waits for the period end; shapes live in @record/templates/
 
 @rhythms
-  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-proposed; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm.
+  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm.
+  trigger :: a rhythm opens with `use when: <the situations it serves>` - triggers only, never a workflow summary: a summary becomes the shortcut agents follow instead of the steps
+  activation :: `activation: propose | auto`; propose is the default - the agent proposes the matching rhythm before applying it and the human confirms; auto is the team's explicit opt-in - the agent applies the rhythm on trigger without a separate ask; the acts still pass the @interact gates
   placement :: the per-turn surfaces carry interaction rules only; work patterns are rhythm material - extracted from the instruction stack at onboarding, proposed as they emerge
   default :: the design loop, when no rhythm is invoked; human rhythm replaces progression
   1. DISCUSS: explore problem space; grounded questions resolve intent
@@ -93,12 +98,14 @@
 @subagents
   every dispatch:
   - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden
-  - lane journals at action granularity in journal.md: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; task receipts batch at task completion; the journal is the audit trail and the resumption surface
+  - lane boot, read-only, before any work: the overlays, state.md, backlog.md, knowledge.md, the recipe, and every REF it names; session surfaces are never lane-written
+  - the lane's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect - pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
+  - lane journals at action granularity in journal.md as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; the journal is the audit trail and the resumption surface
   - report -> report.md; return = summary ONLY
   - the dispatcher reads the report, never the lane journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
-  - background: the turn ends at launch; never block the conversation on a lane
-  - drift: a lane NEVER improvises; stop, report found | standing | drifted; pause-ask where possible, abort gracefully where not
-  - report and journal land NO MATTER the outcome -> re-dispatch resumes from the lane folder, never rebuilds
+  - background: the turn ends at launch; never block the conversation on a lane; parallel lanes only for independent domains - shared state or ordering means sequential
+  - drift: a decision within the brief is the lane's - it decides and journals it; a wall or a decision beyond the brief is drift, never improvised past; pause and ask for steering where the harness supports it, else stop, report found | standing | drifted, abort gracefully
+  - report and journal land NO MATTER the outcome: the action trace is the exact stopping point, so a steer continues live and a re-dispatch resumes from the folder, never rebuilds
   - a lane that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
   - a lane's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
   - read the report WHOLE, no exception; an unread part wears the look of review

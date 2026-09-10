@@ -106,3 +106,6 @@
   1. run boot query: `awk -f scripts/journal-active.awk sessions/adopt-contexture/journal.md sessions/adopt-contexture/journal.md`
   2. run audit: `awk -f scripts/journal-audit.awk sessions/adopt-contexture/journal.md` (must exit 0)
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
+
+@close
+  delete ONBOARDING.md once the adoption closes - it is the procedure, not the convention; remove its gitignore whitelist line with it
