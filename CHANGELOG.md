@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.23.2] - 2026-09-10
+
+### Changed
+
+- The harvest moves into @refresh: it runs at every rhythm boundary and inside @close - every open flag proposed as one candidate, landed with approval, closed by reference; frequent small harvests replace the rare batch. @close's step 4 is gone (its period-scoped grep was the hole that let older flags hide); @close now reads refresh, stray audit, journal audit, stays ACTIVE. Every "(@close 4)" reference in the base now reads "(@refresh)"; README aligned.
+
 ## [0.23.1] - 2026-09-10
 
 ### Changed

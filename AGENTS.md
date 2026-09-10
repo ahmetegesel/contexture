@@ -1,4 +1,4 @@
-# contexture v0.23.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.23.2 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -21,12 +21,12 @@
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map - what each artifact records and why; the workflows live in their sections.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual.
-  references: a pointer names its target exactly - the section and step (@close 4), or path#symbol (journal.md#slug); a vague prose mention is a defect
+  references: a pointer names its target exactly - the section and step (@refresh), or path#symbol (journal.md#slug); a vague prose mention is a defect
   folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
   state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design - the map, not the content: detail lives behind refs; refreshed as the work moves (every backlog update, task landing, period end).
   backlog.md   = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog.
   journal.md   = the single recording surface: append-only events + @anchor declarations; the workflow in @journal.
-  knowledge.md = settled findings at decision/discovery moments, statusless; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@close 4); developing ideas stay journal events.
+  knowledge.md = settled findings at decision/discovery moments, statusless; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh); developing ideas stay journal events.
   lanes/       = dispatch units, one folder per lane: recipe.md (brief) + journal.md (incremental trace) + report.md (evidence); re-dispatch resumes from the folder; the contract in @subagents.
 
 @journal
@@ -35,7 +35,7 @@
   formation :: an event lands when it happens, never batched at period end; interaction beats journal as they happen (@interact); work beats never wait for an interaction beat
   substance :: an entry carries what happened, the result, and why the next step follows
   liveness :: entries are append-only, never edited; an entry closes only when a later CLOSES/SUPERSEDES names it; every closer carries a verdict word - done | superseded | dropped | folded - then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie; chase every closer in the same breath it resolves
-  markings :: [THREAD: true] awaits resolution - a verdict, an execution, a dispatch report, the harvest (@close 4); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. [KNOWLEDGE: true] = the harvest's input. [GROUP: token] = the agent's topic thread, chosen in the conversation, stable within the unit. [REF: path#symbol] = grounding.
+  markings :: [THREAD: true] awaits resolution - a verdict, an execution, a dispatch report, the harvest (@refresh); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. [KNOWLEDGE: true] = the harvest's input. [GROUP: token] = the agent's topic thread, chosen in the conversation, stable within the unit. [REF: path#symbol] = grounding.
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open - an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
 @backlog
@@ -82,7 +82,7 @@
   act:      work the chosen rhythm's steps (default: the design loop, @rhythms); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
   surface:  durable output, named by what it is
   surface -> ask
-  artifacts: stay current in the same breath as the work - journal at the event (see @journal), backlog as tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @close 4); nothing waits for the period end; shapes live in @record/templates/
+  artifacts: stay current in the same breath as the work - journal at the event (see @journal), backlog as tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record/templates/
 
 @rhythms
   contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm.
@@ -114,15 +114,14 @@
   - journal every dispatch: lane folder path
 
 @refresh
-  the artifact sweep, shared by rhythm boundaries and @close: the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), settled verdicts flagged; journal-audit run, what it flags fixed; nothing closes here
+  the artifact sweep, shared by rhythm boundaries and @close: the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run - every open flag, one candidate each; confirmed candidates land in knowledge.md (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; journal-audit run, what it flags fixed; beyond the harvest, nothing closes here
 
 @close
   period end (turn ends; unit continues):
-    1. refresh (@refresh), then close the period's done events by reference
+    1. refresh (@refresh) - the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by journal-audit.awk is the checklist - every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
     3. journal audit: awk -f scripts/journal-audit.awk sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
-    4. harvest: grep the period's KNOWLEDGE: true entries; propose one candidate per entry; confirmed -> lands in knowledge.md (REF to the full version, or the whole story carried), the entry closes by reference; "not landed" drops
-    5. folder stays ACTIVE
+    4. folder stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
     2. re-read; confirm consistency (law 6)

@@ -43,8 +43,11 @@ The workspace in one map:
   the loaded set
 - **Work:** events append to the journal, findings land in knowledge
   with a REF, backlogs evolve non-destructively as work moves
-- **Close:** period end refreshes the pointer and harvests the flagged
-  entries; unit end marks CLOSED and journals the next move
+- **Refresh:** the artifact sweep at rhythm boundaries and close -
+  pointer, statuses, and the harvest: flagged entries land in
+  knowledge or drop
+- **Close:** period end refreshes (the harvest inside), closes the done
+  events; unit end marks CLOSED and journals the next move
 - **Handoff:** before context death, run the writes, cold-read the
   active stream as a fresh boot would, and verify
   `awk -f scripts/journal-audit.awk sessions/<unit>/journal.md` exits 0
@@ -377,7 +380,7 @@ artifact must carry; the rest is freestyle, nudged by one generic rule:
 record comprehensively. `status:` on the status card (`status: ACTIVE | CLOSED`)
 is the only status field in the convention; journal entries and
 findings are statusless. Spellings are contractual, not stylistic:
-a pointer names its target exactly - the section and step (`@close 4`)
+a pointer names its target exactly - the section and step (`@refresh`)
 or `path#symbol` - and a vague prose mention is a defect. Rhythms are
 written in this same dialect; "Adopting it" explains the
 reason.
@@ -545,22 +548,20 @@ Two distinct ends:
   the events journaled, the backlog statuses advanced, `next_action`
   refreshed in `state.md` (one terse pointer, overwritten never prepended;
   the WHY rebuilds from journal open items, the backlog's active tasks,
-  and live findings, never pre-serialized into state), settled verdicts
-  flagged, the journal audit run; then close the period's done events by
-  reference; run the stray audit (the thread tail printed by the journal
-  audit is the checklist, and every open THREAD that resolved this period
-  closes now, verdict word and resolution in the WHAT; receipts never
-  close at period end, they fold only at a human-called chapter turn or
-  at unit close); run the journal audit
+  and live findings, never pre-serialized into state), the harvest run
+  (every open flag: one candidate each; confirmed candidates land in
+  `knowledge.md` while their entries close by reference; unconfirmed
+  candidates drop), the journal audit run; then close the period's done
+  events by reference; run the stray audit (the thread tail printed by
+  the journal audit is the checklist, and every open THREAD that resolved
+  this period closes now, verdict word and resolution in the WHAT;
+  receipts never close at period end, they fold only at a human-called
+  chapter turn or at unit close); run the journal audit
   (`awk -f scripts/journal-audit.awk sessions/<unit>/journal.md` must
   exit 0; it flags the broken entries - dangling or slugless closers,
   dateless slugs, inline markers - with line numbers; the audit is a
   repair instrument: fix what it flags and fill what is missing before
-  the period ends, never noted); then harvest: grep the
-  period's KNOWLEDGE: true entries, propose one candidate per entry;
-  confirmed candidates land in `knowledge.md` while their entries close
-  by reference; unconfirmed candidates drop ("not landed" drops). The
-  folder stays ACTIVE.
+  the period ends, never noted). The folder stays ACTIVE.
 - **Unit close** (the backlog completes, or the human ends the unit): append
   the closing events *and the next-move decision* to the journal, re-read
   the files and confirm consistency (law 6), promote durable knowledge at
@@ -601,7 +602,7 @@ before context death is exactly what the ritual is for.
   is the signal to propose one compact candidate and ask confirm or
   reshape; "not landed" drops it; never re-ask an answered question.
   Journal entries carry a GROUP thread and a KNOWLEDGE flag; the flagged
-  entries feed the close harvest.
+  entries feed the refresh harvest.
 - **The human may interrupt; a queued message doesn't kill the act.**
   Complete the act in flight, then address the message. Halt only on an
   explicit stop, hold, or redirect.
