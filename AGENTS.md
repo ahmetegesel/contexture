@@ -1,4 +1,4 @@
-# contexture v0.23.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.23.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -35,7 +35,7 @@
   formation :: an event lands when it happens, never batched at period end; interaction beats journal as they happen (@interact); work beats never wait for an interaction beat
   substance :: an entry carries what happened, the result, and why the next step follows
   liveness :: entries are append-only, never edited; an entry closes only when a later CLOSES/SUPERSEDES names it; every closer carries a verdict word - done | superseded | dropped | folded - then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie; chase every closer in the same breath it resolves
-  markings :: [THREAD: true] awaits resolution - a verdict, an execution, a dispatch report, the harvest; stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. [KNOWLEDGE: true] = the harvest's input. [GROUP: token] = the agent's topic thread, chosen in the conversation, stable within the unit. [REF: path#symbol] = grounding.
+  markings :: [THREAD: true] awaits resolution - a verdict, an execution, a dispatch report, the harvest (@close 4); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. [KNOWLEDGE: true] = the harvest's input. [GROUP: token] = the agent's topic thread, chosen in the conversation, stable within the unit. [REF: path#symbol] = grounding.
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open - an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
 @backlog
@@ -71,7 +71,7 @@
   6. read backlog.md; read the rhythm index: awk -f scripts/rhythms-index.awk rhythms/*.md - one line per rhythm (name, path, use when, activation); run @query: awk -f scripts/journal-active.awk sessions/<unit>/journal.md sessions/<unit>/journal.md streams all active entry bodies directly - stdout is the live attention set; knowledge loads fully
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
-  9. continue from next_action, following the invoked rhythm, the matching rhythm on its trigger, or the default
+  9. continue from next_action, following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
   10. new work: bootstrap sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "backlog the first task"; continue at 5
 
 @interact
@@ -79,7 +79,7 @@
   ask:      grounded question, one at a time; answer opens next; until intent, constraints, and approach are settled
   restate:  goal + intended approach, your words; where approaches diverge, name the tradeoff
   confirm:  human: go | ask; may interrupt anytime; never skipped, however small
-  act:      work the chosen rhythm's steps (default: the design loop); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
+  act:      work the chosen rhythm's steps (default: the design loop, @rhythms); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
   surface:  durable output, named by what it is
   surface -> ask
   artifacts: stay current in the same breath as the work - journal at the event (see @journal), backlog as tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @close 4); nothing waits for the period end; shapes live in @record/templates/

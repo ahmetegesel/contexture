@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.23.1] - 2026-09-10
+
+### Changed
+
+- Reference sweep applied to the base: "the harvest" cites (@close 4), the default-loop mentions cite @rhythms (@boot step 9, @interact), and README names the four record files it points at.
+
 ## [0.23.0] - 2026-09-10
 
 ### Added

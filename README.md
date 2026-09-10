@@ -202,8 +202,8 @@ Its one hard rule: **amend, never contradict: the laws stand.** A local
 **`templates/`** pins seven grammars: six artifacts, each written to be
 read *from*, never copied wholesale, and the overlay grammar for
 `AGENTS.workspace.md`. Every grammar carries a filled sample in template
-syntax at its foot. The four record files get their own sections below;
-the dispatch unit follows them.
+syntax at its foot. The four record files - state, backlog, journal,
+knowledge - get their own sections below; the dispatch unit follows them.
 
 ### The unit
 
