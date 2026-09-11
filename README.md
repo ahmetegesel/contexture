@@ -30,7 +30,7 @@ The workspace in one map:
 **Adopt in five minutes:**
 
 1. For an agent adopting contexture, point it to `.contexture/ONBOARDING.md`. It executes branch isolation, topology assessment, safe gitignore setup, instruction migration, and harness symlinking.
-2. For manual adoption: start on a dedicated branch; copy what the tag tracks - `git archive <tag> AGENTS.md .contexture/ | tar -x -C <your-repo>` - and set script permissions (`chmod +x .contexture/scripts/*.awk`).
+2. For manual adoption: start on a dedicated branch; copy the adoption set - `git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <your-repo>` - and set script permissions (`chmod +x .contexture/scripts/*.awk`).
 3. Configure `.gitignore` for your topology: in standalone repos, ignore personal amendments (`AGENTS.local.md`) and choose whether to track or ignore `.contexture/sessions/` and `.contexture/rhythms/`; in parent workspaces, whitelist as appropriate.
 4. Write `AGENTS.workspace.md` (shared overlay) and `AGENTS.local.md` (your amendments); both amend, never contradict. Wire harness symlinks (`CLAUDE.md`, `GEMINI.md`) to `AGENTS.md`.
 5. Tell the agent what the first unit is; it bootstraps `.contexture/sessions/<unit>/` itself. Let the first boot run.
@@ -659,12 +659,14 @@ For manual adoption:
    read the CHANGELOG from your installed version to the target - what
    changed and why; read your own workspace - the overlay's @replace
    blocks, live sessions, in-flight artifacts; then decide: adopt now,
-   migrate first, or wait. When adopting, the synced set is derived, never
-   listed: copy what the tag tracks -
-   `git archive <tag> AGENTS.md .contexture/ | tar -x -C <target>` - and
-   verify with `git ls-tree -r --name-only <tag> -- AGENTS.md .contexture/`
-   plus a cmp per file; the drawer holds what the convention uses - the
-   synced set plus the workspace's sessions and rhythms - and nothing else;
+   migrate first, or wait. The update payload is derived, never
+   listed: what the tag tracks under `AGENTS.md`,
+   `.contexture/templates/`, and `.contexture/scripts/` - copy it with
+   `git archive <tag> AGENTS.md .contexture/templates/ .contexture/scripts/ | tar -x -C <target>` -
+   and verify with `git ls-tree -r --name-only <tag> -- AGENTS.md .contexture/templates/ .contexture/scripts/`
+   plus a cmp per file; adoption material (`.contexture/ONBOARDING.md`,
+   `examples/`) is used once at adoption and never re-synced; the
+   workspace's `sessions/` and `rhythms/` are never touched;
    overlays are never in that path; `git diff` shows the human the changed
    base;
    the workspace's instruments verify the result (boot query, dangling

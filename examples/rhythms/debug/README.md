@@ -44,7 +44,8 @@ the suite.
 - Gates close by their artifacts, never by memory.
 - The record - state, backlog, journal, knowledge - is the source of truth,
   never the conversation.
-- Onboarding offers this example when a team has no rhythm of its own; once
-  copied, it is the team's to edit.
+- Onboarding offers this example when a team has no rhythm of its own; the
+  accepted copy lands in `.contexture/rhythms/` as the team's to edit, and
+  the examples folder is removed with ONBOARDING at adoption close.
 - This file is an illustrative snapshot. Your team's live rhythms belong in
   `.contexture/rhythms/`.

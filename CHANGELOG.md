@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.27.1] - 2026-09-11
+
+### Fixed
+
+- The example rhythms moved from `.contexture/examples/` to the root `examples/` - reference material belongs outside the drawer, so updates never propose syncing it into adopted workspaces.
+- The update payload is now explicit: `AGENTS.md` + `.contexture/templates/` + `.contexture/scripts/`; adoption material (`.contexture/ONBOARDING.md`, `examples/`) is used once at adoption and never re-synced; workspace-owned `.contexture/sessions/` and `.contexture/rhythms/` are never touched (README, ONBOARDING, and the sync guidance aligned).
+
 ## [0.27.0] - 2026-09-11
 
 ### Added

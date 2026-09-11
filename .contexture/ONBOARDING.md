@@ -52,7 +52,7 @@
     instruction stack: <the files read whole>
     rule surfaces: <every surface found, one per line; each contradicts, overlaps, or complements the convention>
   @plan
-    copy: <the synced set, derived from the tag: git archive <tag> AGENTS.md .contexture/; never a hand-kept list>
+    copy: <the adoption set, derived from the tag: git archive <tag> AGENTS.md .contexture/ examples/; never a hand-kept list>
     overlay: <AGENTS.workspace.md @append blocks - which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
     rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; when none emerged by the plan's end, the example rhythms (.contexture/examples/rhythms/) are offered as the starting set; none states none>
@@ -67,9 +67,9 @@
 @configure
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in backlog.md, next_action points at the active task, every task's completion journals and advances next_action, drift updates the backlog in the same breath
   base assets:
-    copy what the tag tracks: `git archive <tag> AGENTS.md .contexture/ | tar -x -C <target>` - AGENTS.md lands at the root, the drawer alongside it
+    copy the adoption set: `git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <target>` - AGENTS.md lands at the root, the drawer alongside it, the examples at the root as reference
     set script permissions: `chmod +x .contexture/scripts/*.awk`
-    starting rhythms: when the confirmed plan carries no team rhythm, copy the offered examples - `cp -R .contexture/examples/rhythms/* .contexture/rhythms/` - the copies are the team's to edit
+    starting rhythms: when the confirmed plan carries no team rhythm, copy the offered examples - `cp -R examples/rhythms/* .contexture/rhythms/` - the copies are the team's to edit
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
@@ -106,4 +106,4 @@
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close
-  delete .contexture/ONBOARDING.md once the adoption closes - it is the procedure, not the convention; remove its gitignore whitelist line with it
+  delete .contexture/ONBOARDING.md and the examples/ folder once the adoption closes - adoption material, not the convention; remove the ONBOARDING gitignore whitelist line with it
