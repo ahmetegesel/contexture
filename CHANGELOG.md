@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.26.0] - 2026-09-11
+
+### Added
+
+- The session audit: `journal-audit.awk` now also flags unharvested KNOWLEDGE flags, DONE tasks without their `backlog/<slug>: DONE` event, and IN_PROGRESS tasks absent from `state.md` - siblings derived from the journal path, single-arg invocation unchanged, any finding exits nonzero (the `@close`/`@refresh`/`@handoff` gate).
+
+### Changed
+
+- `@rhythms`: a gate closes by its artifact - DECIDE by the backlog, VERIFY/LAND by the completion receipt carrying its evidence, REFRESH by the harvest; a gate closed by memory is debt.
+- `@backlog`: the completion event carries its evidence - the command run and its observed result.
+- The audit's defect classes are named at `@close` and in README (unharvested KNOWLEDGE, DONE-without-event, IN_PROGRESS-absent-from-state).
+
 ## [0.25.0] - 2026-09-11
 
 ### Added

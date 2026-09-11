@@ -559,7 +559,9 @@ Two distinct ends:
   chapter turn or at unit close); run the journal audit
   (`awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md` must
   exit 0; it flags the broken entries - dangling or slugless closers,
-  dateless slugs, inline markers - with line numbers; the audit is a
+  dateless slugs, inline markers, unharvested KNOWLEDGE flags, DONE
+  tasks without their backlog/<slug>: DONE event, IN_PROGRESS tasks
+  absent from state.md - with line numbers; the audit is a
   repair instrument: fix what it flags and fill what is missing before
   the period ends, never noted). The folder stays ACTIVE.
 - **Unit close** (the backlog completes, or the human ends the unit): append

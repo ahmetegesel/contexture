@@ -1,4 +1,4 @@
-# contexture v0.25.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.26.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -49,7 +49,7 @@
   readiness: a task marked IN_PROGRESS is executable as written; every needed decision lives in the task or behind a REF
   activation: before IN_PROGRESS, the executor scans the task - placeholders, checkable criteria, resolving REFs; a failing task returns, never execute around a gap
   no placeholders: TBD, "similar to <task>", "as appropriate" mean the task is not ready
-  task progress: active work marks STATUS: IN_PROGRESS; completion marks STATUS: DONE and lands a journal event "backlog/<slug>: DONE"; the backlog updates in place as tasks move; newly discovered work appends or inserts as a fresh @task
+  task progress: active work marks STATUS: IN_PROGRESS; completion marks STATUS: DONE and lands a journal event "backlog/<slug>: DONE" carrying its evidence - the command run and its observed result; the backlog updates in place as tasks move; newly discovered work appends or inserts as a fresh @task
   unit completion: all tasks reach STATUS: DONE and unit exit criteria are met; completion + the next move land in the journal
 
 @query
@@ -86,7 +86,7 @@
   artifacts: stay current in the same breath as the work - journal at the event (see @journal), backlog as tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record and .contexture/templates/
 
 @rhythms
-  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm.
+  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm. a gate closes by its artifact - DECIDE by the backlog, VERIFY/LAND by the completion receipt carrying its evidence, REFRESH by the harvest; a gate closed by memory is debt.
   trigger :: a rhythm opens with `use when: <the situations it serves>` - triggers only, never a workflow summary: a summary becomes the shortcut agents follow instead of the steps
   activation :: `activation: propose | auto`; propose is the default - the agent proposes the matching rhythm before applying it and the human confirms; auto is the team's explicit opt-in - the agent applies the rhythm on trigger without a separate ask; the acts still pass the @interact gates
   placement :: the per-turn surfaces carry interaction rules only; work patterns are rhythm material - extracted from the instruction stack at onboarding, proposed as they emerge
@@ -121,7 +121,7 @@
   period end (turn ends; unit continues):
     1. refresh (@refresh) - the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by journal-audit.awk is the checklist - every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. journal audit: awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
+    3. journal audit: awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from state.md) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. folder stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
