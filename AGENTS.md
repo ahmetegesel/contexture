@@ -1,4 +1,4 @@
-# contexture v0.27.1 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.27.2 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -44,7 +44,7 @@
   the schema guides the task shape: @task <slug> with STATUS (TODO | IN_PROGRESS | DONE), OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::; the writer holds the volume
   non-destructive evolution: tasks can be added, updated, or reordered; mid-stride pivots insert a new task without destroying existing tasks
   dedicated containers: DESCRIPTION carries context and scope, ACCEPTANCE CRITERIA carries checkable done-conditions, IMPLEMENTATION DETAILS carries the specification and the execution blueprint - the requirements and decisions the change must honor, and how it lands; omit ornament, never substance
-  REFS references the persisted surfaces only: journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME); never a volatile file
+  REFS names its targets exactly (path#symbol): journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME), or an artifact (file#symbol); the spec stands alone - a ref navigates, it never substitutes for the meaning
   compose from the record (@laws#compose-from-record): material living only in the conversation lands in the record first, then the task references it
   readiness: a task marked IN_PROGRESS is executable as written; every needed decision lives in the task or behind a REF
   activation: before IN_PROGRESS, the executor scans the task - placeholders, checkable criteria, resolving REFs; a failing task returns, never execute around a gap

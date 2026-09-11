@@ -250,12 +250,11 @@ the change must honor, and how it lands. Dedicated
 containers give technical substance a natural home without resorting to
 unnatural exit criteria multiplication.
 
-REFS references the persisted surfaces only: journal items
-(`journal.md#slug`), lane reports (`lanes/x/report.md#claim`), and
-knowledge findings (`knowledge.md#NAME`) - never a volatile file. It
-is the same rule the knowledge REF obeys: a persisted fact, not a
-drifting pointer, so each task reads with the full picture no matter
-when the agent looks. Tasks compose from the record (Law 5): material
+REFS names its targets exactly: journal items
+(`journal.md#slug`), lane reports (`lanes/x/report.md#claim`), knowledge
+findings (`knowledge.md#NAME`), or an artifact (`file#symbol`). The spec
+stands alone - a ref navigates, it never substitutes for the meaning, so
+each task reads with the full picture no matter when the agent looks. Tasks compose from the record (Law 5): material
 living only in the conversation lands in the record first, then the
 task cites it.
 
@@ -593,9 +592,9 @@ before context death is exactly what the ritual is for.
 
 - **Compose from the record.** Every rewrite, task, and summary grounds in
   the journal and knowledge, never in the conversation. A task definition
-  reads its REFS first; the refs name the persisted surfaces
-  only - journal items, lane reports, knowledge findings, never a
-  volatile file.
+  reads its REFS first; the refs name their targets exactly - journal items,
+  lane reports, knowledge findings, or an artifact - and the spec stands
+  alone.
 - **Understand before acting.** The agent asks one grounded question at a
   time: what the decision is, how things look now, why it's asked. Each
   answer opens the next question, until the agent restates the goal in

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.27.2] - 2026-09-12
+
+### Fixed
+
+- The backlog REFS restriction lifted: `REFS` may name any artifact exactly (`file#symbol`), matching the backlog and recipe templates that already allowed it; the spec-stands-alone rule remains (a ref navigates, never substitutes for the meaning). The knowledge REF rule is unchanged (append-only surfaces only). AGENTS.md and README aligned.
+
 ## [0.27.1] - 2026-09-11
 
 ### Fixed
