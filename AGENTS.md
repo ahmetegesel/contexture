@@ -1,12 +1,13 @@
-# contexture v0.24.2 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.25.0 - the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
-  1. session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
-  2. load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
-  3. the schema holds the shape, the writer holds the volume: guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance.
-  4. process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
-  5. compose from the record, never from conversation: rewrites grounded in journal/knowledge.
-  6. verify before close: no done without evidence; never claim verification you did not perform; re-read the files, confirm consistency.
-  7. harvest the human: question to surface durable knowledge; crystallize into compact candidates; land with approval; land when deserved, never just to record; developing ideas stay in the journal.
+  source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
+  load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
+  writer-holds-volume: the schema holds the shape, the writer holds the volume: guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance.
+  process-free: process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
+  compose-from-record: compose from the record, never from conversation: rewrites grounded in journal/knowledge.
+  verify-before-close: verify before close: no done without evidence; never claim verification you did not perform; re-read the files, confirm consistency.
+  harvest-the-human: harvest the human: question to surface durable knowledge; crystallize into compact candidates; land with approval; land when deserved, never just to record; developing ideas stay in the journal.
+  workspace-confinement: the current workspace (the repo/worktree the agent was started in) is the boundary; never read, write, search, or otherwise reach outside it unless the human specifically asks for that act; an apparent outside need stops and asks - the agent never roams.
 
 @layout
   AGENTS.md       = laws + navigation (this file)
@@ -20,7 +21,7 @@
 
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in .contexture/templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map - what each artifact records and why; the workflows live in their sections.
-  dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual.
+  dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual; laws are slug-addressed: `slug: statement`, referenced @laws#<slug>; slugs are unique across the merged base + overlays.
   references: a pointer names its target exactly - the section and step (@refresh), or path#symbol (journal.md#slug); a vague prose mention is a defect
   folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
   state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design - the map, not the content: detail lives behind refs; refreshed as the work moves (every backlog update, task landing, period end).
@@ -44,7 +45,7 @@
   non-destructive evolution: tasks can be added, updated, or reordered; mid-stride pivots insert a new task without destroying existing tasks
   dedicated containers: DESCRIPTION carries context and scope, ACCEPTANCE CRITERIA carries checkable done-conditions, IMPLEMENTATION DETAILS carries the specification and the execution blueprint - the requirements and decisions the change must honor, and how it lands; omit ornament, never substance
   REFS references the persisted surfaces only: journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME); never a volatile file
-  compose from the record (law 5): material living only in the conversation lands in the record first, then the task references it
+  compose from the record (@laws#compose-from-record): material living only in the conversation lands in the record first, then the task references it
   readiness: a task marked IN_PROGRESS is executable as written; every needed decision lives in the task or behind a REF
   activation: before IN_PROGRESS, the executor scans the task - placeholders, checkable criteria, resolving REFs; a failing task returns, never execute around a gap
   no placeholders: TBD, "similar to <task>", "as appropriate" mean the task is not ready
@@ -124,7 +125,7 @@
     4. folder stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
-    2. re-read; confirm consistency (law 6)
+    2. re-read; confirm consistency (@laws#verify-before-close)
     3. promote durable knowledge at the human's direction
     4. mark CLOSED
 

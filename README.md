@@ -176,7 +176,7 @@ produces something checkable.*
 **`AGENTS.md`** has exactly two jobs: govern and navigate. Its blocks are
 a tour of the convention:
 
-- `@laws`: the seven laws that bind everything
+- `@laws`: the slug-addressed laws that bind everything
 - `@layout`: where every file lives and what it's for
 - `@record`: the four session files and their semantics
 - `@query`: how the agent decides what to load
@@ -564,7 +564,7 @@ Two distinct ends:
   the period ends, never noted). The folder stays ACTIVE.
 - **Unit close** (the backlog completes, or the human ends the unit): append
   the closing events *and the next-move decision* to the journal, re-read
-  the files and confirm consistency (law 6), promote durable knowledge at
+  the files and confirm consistency (@laws#verify-before-close), promote durable knowledge at
   the human's direction, then mark the unit CLOSED.
 
 ### Handoff

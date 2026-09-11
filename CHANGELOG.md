@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.25.0] - 2026-09-11
+
+### Added
+
+- Law `@laws#workspace-confinement`: the current workspace (the repo/worktree the agent was started in) is the boundary; never read, write, search, or otherwise reach outside it unless the human specifically asks for that act; an apparent outside need stops and asks - the agent never roams.
+
+### Changed
+
+- The laws are slug-addressed: ordinals dropped, each law reads `slug: statement` (`source-of-truth`, `load-only-needed`, `writer-holds-volume`, `process-free`, `compose-from-record`, `verify-before-close`, `harvest-the-human`); a law is referenced as `@laws#<slug>`; slugs are unique across the merged base + overlays; overlays append freely with no renumbering (the overlay laws keep their texts minus the ordinals). The live references were swept (AGENTS.md, README.md).
+
 ## [0.24.2] - 2026-09-10
 
 ### Changed
