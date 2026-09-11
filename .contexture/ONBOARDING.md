@@ -55,7 +55,7 @@
     copy: <the synced set, derived from the tag: git archive <tag> AGENTS.md .contexture/; never a hand-kept list>
     overlay: <AGENTS.workspace.md @append blocks - which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
-    rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; none states none>
+    rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; when none emerged by the plan's end, the example rhythms (.contexture/examples/rhythms/) are offered as the starting set; none states none>
     sessions: <existing session folders - adopted, archived, or left; none states none>
     symlinks: <harness entry points to wire; none states none>
     gitignore: <the strategy per topology>
@@ -69,6 +69,7 @@
   base assets:
     copy what the tag tracks: `git archive <tag> AGENTS.md .contexture/ | tar -x -C <target>` - AGENTS.md lands at the root, the drawer alongside it
     set script permissions: `chmod +x .contexture/scripts/*.awk`
+    starting rhythms: when the confirmed plan carries no team rhythm, copy the offered examples - `cp -R .contexture/examples/rhythms/* .contexture/rhythms/` - the copies are the team's to edit
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking

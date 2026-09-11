@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.27.0] - 2026-09-11
+
+### Added
+
+- `.contexture/examples/rhythms/{work,debug}/` - example rhythms with per-folder READMEs explaining them in plain terms; the work README states its token-heavy, multi-lane nature and its fit for cheaper, decent models (structured flow and redundancy closing the gap to frontier models).
+- ONBOARDING: when no team rhythm emerged by the plan's end, the example rhythms are offered as the starting set; on confirmation they are copied into `.contexture/rhythms/`.
+
 ## [0.26.0] - 2026-09-11
 
 ### Added
