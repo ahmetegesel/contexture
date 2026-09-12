@@ -2,7 +2,7 @@
 blocks at column 0; fields indent 2; tasks indent 4;
 typed blocks over prose; the dialect compresses form, never content:
 the brief carries what the lane needs to act without the parent
-context - exactness is the brief's job.
+context: exactness is the brief's job.
 
 @context: "what this lane is"
 

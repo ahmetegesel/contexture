@@ -2,7 +2,7 @@
 
 blocks at column 0; fields indent 2; one blank line between blocks.
 the dialect compresses form, never content: an entry carries its
-substance - what happened, the result, why the next step follows;
+substance: what happened, the result, why the next step follows;
 would a fresh boot reconstructing the position need it? then it
 records.
 

@@ -3,7 +3,7 @@
   activation: auto
   1. GATHER: the user's intent, constraints, and pointers, plus a recon lane's facts and open questions (the record first, the repo for what the record lacked)
   2. DISCUSS: the dialogue; revealed facts, constraints, and decisions journal as they surface
-  3. DECIDE: the human verdict; the backlog lands comprehensively - the specification and the execution blueprint
+  3. DECIDE: the human verdict; the backlog lands comprehensively: the specification and the execution blueprint
   4. GROUND: ground lanes verify the plan against the record and the repo; per-task corrections return
   5. AMEND: corrections land in place; material changes return to the human
   6. EXECUTE: one lane per task (small same-shape tasks batch); parallel on independence; the change lands with its own checks, the docs delta riding it

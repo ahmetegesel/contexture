@@ -4,7 +4,7 @@
   instructions for an agent onboarding contexture into any repository (greenfield or existing).
 
 @phases
-  the adoption session bootstraps at phase 1 and every phase journals as it happens - the record carries the whole history: findings, proposals, verdicts, changes
+  the adoption session bootstraps at phase 1 and every phase journals as it happens; the record carries the whole history: findings, proposals, verdicts, changes
   1. ISOLATE: create a dedicated branch; never onboard on main; bootstrap the adoption session
   2. ASSESS: inventory topology, instruction surfaces, and harnesses; derive the installation plan
   3. PROPOSE: present the derived plan; the human confirms, amends, or discusses; no workspace write before the verdict
@@ -24,39 +24,39 @@
   topology:
     standalone repo: contains application code (src/, package.json, Cargo.toml, pyproject.toml, etc.)
     parent workspace: contains multiple independent repositories as subdirectories
-  instruction stack first: the existing AGENTS.md and its derivations (CLAUDE.md, GEMINI.md, harness files) are the workspace's self-description - read them first and whole; they name the rules that matter and often where the rest live
-  know the convention whole: ONBOARDING is the procedure, not the convention - read the base AGENTS.md and the upstream README completely before mapping; fetch upstream, the URL lives in the base AGENTS.md's @update section, and the README carries the philosophy behind every judgment the mapping makes
-  map from the destination: walk the convention's sections one by one against the workspace's material - for each capability, what feeds it, what conflicts with it, what belongs there; migration follows the destination, never the file list
-  governance: map every rule surface against the incoming convention - each contradicts, overlaps, or complements it, and the plan must resolve each one; the stack guides the sweep, the sweep covers what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions)
+  instruction stack first: the existing AGENTS.md and its derivations (CLAUDE.md, GEMINI.md, harness files) are the workspace's self-description: read them first and whole; they name the rules that matter and often where the rest live
+  know the convention whole: ONBOARDING is the procedure, not the convention: read the base AGENTS.md and the upstream README completely before mapping; fetch upstream, the URL lives in the base AGENTS.md's @update section, and the README carries the philosophy behind every judgment the mapping makes
+  map from the destination: walk the convention's sections one by one against the workspace's material: for each capability, what feeds it, what conflicts with it, what belongs there; migration follows the destination, never the file list
+  governance: map every rule surface against the incoming convention; each contradicts, overlaps, or complements it, and the plan must resolve each one; the stack guides the sweep, the sweep covers what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions)
   reading budget: rule-bearing surfaces read whole, they are small and dense; structure is derived by listing, never by reading; application code is out of scope
-  ask freely: derive what evidence answers, and ask the human what only they know - resolutions, history, intent; a wrong assumption costs more than a question
+  ask freely: derive what evidence answers, and ask the human what only they know: resolutions, history, intent; a wrong assumption costs more than a question
 
 @propose
-  the flow runs in two segments; each ends at a gate that hands control to the human and waits - ask in chat and end the turn; the gate is the loop's exit, never skipped, never merged; every gate and verdict journals into the adoption record
+  the flow runs in two segments; each ends at a gate that hands control to the human and waits: ask in chat and end the turn; the gate is the loop's exit, never skipped, never merged; every gate and verdict journals into the adoption record
 
-  segment one - the ground:
+  segment one, the ground:
     1. fill the assessment and the brief in the proposal shape; the filled grammar is the working copy, tmp holds it
     2. gate: present the brief and the assessment findings and ask the human to approve the plan preparation; on approve, run segment two; on discuss, answer and re-gate
 
-  segment two - the plan:
+  segment two, the plan:
     3. write the pre-plan into the proposal grammar: readable prose per the shape's plan fields, never the raw dialect
-    4. forward the open questions through the harness's question tool when it has one - each question carries the plan context it touches; free text when it does not
+    4. forward the open questions through the harness's question tool when it has one; each question carries the plan context it touches; free text when it does not
     5. update the proposal per the answers: never an approval ask for an unseen or stale plan
-    6. gate: present the final plan and request the verdict on it only - no write before it; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
+    6. gate: present the final plan and request the verdict on it only: no write before it; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
 
 @proposal
   @brief
-    <what contexture is, what it promises, what it tries to solve, what it provides, and what this workspace gains against its current setup - written for a human who knows nothing about the repo, grounded in the assessment's findings>
+    <what contexture is, what it promises, what it tries to solve, what it provides, and what this workspace gains against its current setup, written for a human who knows nothing about the repo, grounded in the assessment's findings>
   @assessment
-    topology: <standalone | parent workspace> - <the evidence>
+    topology: <standalone | parent workspace>, <the evidence>
     instruction stack: <the files read whole>
     rule surfaces: <every surface found, one per line; each contradicts, overlaps, or complements the convention>
   @plan
     copy: <the adoption set, derived from the tag: git archive <tag> AGENTS.md .contexture/ examples/; never a hand-kept list>
-    overlay: <AGENTS.workspace.md @append blocks - which existing rules migrate where; none states none>
+    overlay: <AGENTS.workspace.md @append blocks, which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
-    rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; when none emerged by the plan's end, the example rhythms (examples/rhythms/) are offered as the starting set; none states none>
-    sessions: <existing session folders - adopted, archived, or left; none states none>
+    rhythms: <work patterns found in the stack: each becomes a rhythm file proposal; when none emerged by the plan's end, the example rhythms (examples/rhythms/) are offered as the starting set; none states none>
+    sessions: <existing session folders: adopted, archived, or left; none states none>
     symlinks: <harness entry points to wire; none states none>
     gitignore: <the strategy per topology>
     deletions: <existing rules superseded by the convention; none states none>
@@ -67,9 +67,9 @@
 @configure
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in backlog.md, next_action points at the active task, every task's completion journals and advances next_action, drift updates the backlog in the same breath
   base assets:
-    copy the adoption set: `git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <target>` - AGENTS.md lands at the root, the drawer alongside it, the examples at the root as reference
+    copy the adoption set: `git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <target>`; AGENTS.md lands at the root, the drawer alongside it, the examples at the root as reference
     set script permissions: `chmod +x .contexture/scripts/*.awk`
-    starting rhythms: when the confirmed plan carries no team rhythm, copy the offered examples - `cp -R examples/rhythms/* .contexture/rhythms/` - the copies are the team's to edit
+    starting rhythms: when the confirmed plan carries no team rhythm, copy the offered examples (`cp -R examples/rhythms/* .contexture/rhythms/`); the copies are the team's to edit
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
@@ -106,4 +106,4 @@
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close
-  delete .contexture/ONBOARDING.md and the examples/ folder once the adoption closes - adoption material, not the convention; remove the ONBOARDING gitignore whitelist line with it
+  delete .contexture/ONBOARDING.md and the examples/ folder once the adoption closes: adoption material, not the convention; remove the ONBOARDING gitignore whitelist line with it

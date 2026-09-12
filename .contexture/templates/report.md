@@ -1,7 +1,7 @@
 # report grammar
 blocks at column 0; fields indent 2; details indent 4;
 typed blocks over prose; the dialect compresses form, never content:
-the report is the dispatcher's only window - self-sufficient claims
+the report is the dispatcher's only window: self-sufficient claims
 and evidence, what the dispatcher needs to re-verify and decide.
 
 @orientation

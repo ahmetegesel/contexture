@@ -1,7 +1,7 @@
 # state grammar
 
 flat keys at column 0, no indent. the only file edited freely.
-the map, not the content: terse by design - detail lives behind refs;
+the map, not the content: terse by design: detail lives behind refs;
 the record carries the substance.
 
 status: ACTIVE | CLOSED                  # ACTIVE = the unit is in flight

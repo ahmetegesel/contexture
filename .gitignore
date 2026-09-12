@@ -11,6 +11,9 @@
 # the detailed docs
 !docs/
 !docs/**
+# the example rhythms (tracked source material)
+!examples/
+!examples/**
 # the contexture drawer
 !.contexture/
 !.contexture/**
