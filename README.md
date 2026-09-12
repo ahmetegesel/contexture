@@ -143,22 +143,34 @@ chmod +x .contexture/scripts/*.awk
 
 Either way, finish the same way: tell the agent what the first unit of work is. It bootstraps the folder, and the record starts.
 
+## Updating it
+
+The base evolves upstream, and updating is judgment, not a script. Your installed version is the header line of `AGENTS.md`: MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections and features, PATCH fixes wording. Fetch the tags, read the CHANGELOG from your version to the target, and read your own workspace (the overlay's `@replace` blocks, live sessions, in-flight work) before deciding: adopt now, migrate first, or wait.
+
+The payload is derived, never listed: `AGENTS.md` plus `.contexture/templates/` and `.contexture/scripts/`, whatever the tag tracks under them.
+
+```
+git fetch https://github.com/ahmetegesel/contexture.git --tags
+git archive <tag> AGENTS.md .contexture/templates/ .contexture/scripts/ | tar -x -C <your-repo>
+git ls-tree -r --name-only <tag> -- AGENTS.md .contexture/templates/ .contexture/scripts/
+```
+
+Verify the copy with a `cmp` per file, then review the staged diff before committing. `git diff` shows you the changed base, and your instruments verify the result. Adoption material (`ONBOARDING.md`, `examples/`) is used once and never re-synced; your sessions and rhythms are never touched; overlays are never in the path. After a MAJOR tag, review the overlay: its rules were written against the old shape. `docs/adoption.md` carries the full procedure.
+
 ## Docs
 
-- The record: artifacts, liveness, closure
-- The engine: AGENTS.md, the grammars, the scripts
-- Units and lanes: the folder, its life, delegated work
-- Rhythms: the grammar, activation, the default loop
-- Overlays: the amendment grammar, precedence
-- Adoption: the onboarding flow, topology choices
-- Examples: a work loop and a debug loop to copy
-
-<!-- docs links land here -->
+- [The record](docs/the-record.md): artifacts, liveness, closure
+- [The engine](docs/the-engine.md): AGENTS.md, the grammars, the scripts
+- [Units and lanes](docs/units-and-lanes.md): the folder, its life, delegated work
+- [Rhythms](docs/rhythms.md): the grammar, activation, the default loop
+- [Overlays](docs/overlays.md): the amendment grammar, precedence
+- [Adoption](docs/adoption.md): the onboarding flow, topology choices, updating
+- [Examples](examples/rhythms/): a work loop and a debug loop to copy
 
 For the instruments behind it all:
 
 | script | what it returns |
 |---|---|
-| journal-active.awk | every live entry, bodies whole, in one pass |
+| journal-active.awk | every live entry, bodies whole, in one command, one stream |
 | journal-audit.awk | the record's defects (malformed entries, dangling closures, unharvested flags, tasks done without their event) and the open-thread tail; exits nonzero on any |
 | rhythms-index.awk | one line per rhythm: name, path, use when, activation |

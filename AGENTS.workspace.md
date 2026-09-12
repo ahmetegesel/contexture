@@ -1,6 +1,6 @@
 # contexture's workspace overlay; wins over AGENTS.local.md
 @append @laws
-  installs: no install without the human's explicit go at the act, no matter what - a spec, plan, rhythm, or README naming the setup is never the go; a lane that finds an install needed asks the main agent for steering where the harness supports a channel, else stops gracefully and reports, never installs
+  installs: no install without the human's explicit go at the act, no matter what: a spec, plan, rhythm, or README naming the setup is never the go; a lane that finds an install needed asks the main agent for steering where the harness supports a channel, else stops gracefully and reports, never installs
 
 @append @git
   version: MAJOR = breaking (fields removed, shapes changed); MINOR = new sections, features; PATCH = fixes, wording

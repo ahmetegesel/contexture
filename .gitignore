@@ -8,6 +8,9 @@
 !README.md
 !CHANGELOG.md
 !LICENSE
+# the detailed docs
+!docs/
+!docs/**
 # the contexture drawer
 !.contexture/
 !.contexture/**

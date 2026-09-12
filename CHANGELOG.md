@@ -8,6 +8,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.0] - 2026-09-12
+
+### Added
+
+- `docs/`: the detailed manual, one page per area, composed from the grounded record by parallel lanes: the record, the engine, units and lanes, rhythms, overlays, and adoption. The README's Docs index links them.
+- The README's "Updating it" section: the update procedure `AGENTS.md` @update points at (the version header, tags, the CHANGELOG read, the workspace read, the derived payload, verification with `ls-tree` plus a `cmp` per file, the MAJOR overlay review).
+
+### Fixed
+
+- `ONBOARDING.md` now names the example rhythms at their real home, `examples/rhythms/` (moved there in v0.27.1).
+- The README's instrument table reads "in one command, one stream" for `journal-active.awk` (it runs two internal passes).
+- Two spaced hyphens removed per the dashes rule: `AGENTS.workspace.md` (the installs law) and `.contexture/templates/overlay.md` (the @replace note).
+- `.gitignore` whitelists `docs/`.
+
 ## [0.28.0] - 2026-09-12
 
 ### Changed

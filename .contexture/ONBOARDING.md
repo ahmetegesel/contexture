@@ -55,7 +55,7 @@
     copy: <the adoption set, derived from the tag: git archive <tag> AGENTS.md .contexture/ examples/; never a hand-kept list>
     overlay: <AGENTS.workspace.md @append blocks - which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
-    rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; when none emerged by the plan's end, the example rhythms (.contexture/examples/rhythms/) are offered as the starting set; none states none>
+    rhythms: <work patterns found in the stack - each becomes a rhythm file proposal; when none emerged by the plan's end, the example rhythms (examples/rhythms/) are offered as the starting set; none states none>
     sessions: <existing session folders - adopted, archived, or left; none states none>
     symlinks: <harness entry points to wire; none states none>
     gitignore: <the strategy per topology>
