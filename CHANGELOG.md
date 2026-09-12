@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.3] - 2026-09-12
+
+### Fixed
+
+- The bracketed-marker trap: AGENTS.md @journal and the journal, backlog, and knowledge templates now spell optional fields bare, with "optional" in the comments, and the dialect line states that brackets wrap optional values, never field names. Agents had copied the bracketed field list literally while the audit recognized only the bare form, so real threads vanished from the open-thread tail with rc=0.
+- journal-audit.awk adds a BRACKETED FIELD defect class (a "  [FIELD: ..." line) with the line number and a nonzero exit, so the malformed copy can no longer hide; null-checked with the planted form, and the bare form keeps the tail intact.
+- Two comment dashes in the scripts removed per the dashes rule.
+
 ## [0.29.2] - 2026-09-12
 
 ### Fixed

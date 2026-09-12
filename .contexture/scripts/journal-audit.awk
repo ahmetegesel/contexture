@@ -4,11 +4,12 @@
 # Or:    ./.contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md
 # The repair instrument: fix what it flags, fill what is missing.
 # Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
-# markers on @entry lines, unharvested KNOWLEDGE flags (with line), DONE tasks
-# without their backlog/<slug>: DONE event, IN_PROGRESS tasks absent from
-# state.md - each flagged by slug (the knowledge flag also by line).
+# markers on @entry lines, bracketed field lines (the [FIELD: literal-copy
+# form), unharvested KNOWLEDGE flags (with line), DONE tasks without their
+# backlog/<slug>: DONE event, IN_PROGRESS tasks absent from state.md; each
+# flagged by slug (the knowledge flag and the bracketed field also by line).
 # Session checks: backlog.md and state.md are derived from the journal's folder;
-# a sibling that cannot be read skips its check quietly - lane journals are
+# a sibling that cannot be read skips its check quietly: lane journals are
 # unaffected. Open threads (THREAD: true entries with no closer) print beside
 # the audit; the tail is a display, never an enforcement: a thread paused stays
 # open.
@@ -33,6 +34,11 @@ BEGIN {
     print "INLINE MARKER at line " NR ": " $2
     bad++
   }
+}
+
+/^  \[(THREAD|KNOWLEDGE|GROUP|REF|CLOSES|SUPERSEDES):/ {
+  print "BRACKETED FIELD at line " NR ": " substr($0, 3)
+  bad++
 }
 
 /^  THREAD: true[ \t]*$/ {

@@ -9,13 +9,13 @@ the unit's objective lives in state.md; backlog.md carries the actionable tasks.
 @task <slug>
   STATUS: TODO | IN_PROGRESS | DONE
   OBJECTIVE: "clear statement of intent"
-  [REFS: <journal#entry, knowledge#finding, file#symbol>]
-  [DESCRIPTION ::
-    free-form context, problem statement, and scope]
-  [ACCEPTANCE CRITERIA ::
-    checkable conditions, exit gates, and verification targets]
-  [IMPLEMENTATION DETAILS ::
-    technical blueprint, files to touch, data shapes, logic, edge cases]
+  REFS: [journal#entry, knowledge#finding, file#symbol]   # optional
+  DESCRIPTION ::                          # optional
+    free-form context, problem statement, and scope
+  ACCEPTANCE CRITERIA ::                  # optional
+    checkable conditions, exit gates, and verification targets
+  IMPLEMENTATION DETAILS ::               # optional
+    technical blueprint, files to touch, data shapes, logic, edge cases
 
 # filled sample
 @task pdm-cdk-stream-export

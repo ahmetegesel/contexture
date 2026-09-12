@@ -1,4 +1,4 @@
-# rhythms-index.awk - the rhythm selection index
+# rhythms-index.awk: the rhythm selection index
 # usage: awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md
 function emit() {
   if (name != "")

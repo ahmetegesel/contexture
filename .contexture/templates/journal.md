@@ -1,6 +1,7 @@
 # journal grammar
 
 blocks at column 0; fields indent 2; one blank line between blocks.
+fields are written bare; unused fields are omitted.
 the dialect compresses form, never content: an entry carries its
 substance: what happened, the result, why the next step follows;
 would a fresh boot reconstructing the position need it? then it
@@ -11,11 +12,12 @@ records.
 @entry <date>-<slug>
   ANCHOR: A<N>                            # current anchor at write time
   WHAT: "..."                             # the event's substance; a closer carries the verdict + the resolution here
-  [GROUP: <token>]                        # agent-chosen thread, stable within the unit
-  [KNOWLEDGE: true]                       # knowledge-worthy; the harvest's input
-  [THREAD: true]                          # awaits resolution: verdict | execution | report | harvest; stamped at birth, never flipped; closes same-breath at resolution; no marker = receipt: final word on a completed fact, no closer obligation
-  [CLOSES | SUPERSEDES: <slug> (<verdict>: reason)]  # verdict = done | superseded | dropped | folded; the ONLY closure; no closer = still open
-  [REF: "path#symbol"]                    # grounding, same format as knowledge REFs
+  GROUP: <token>                          # optional; agent-chosen thread, stable within the unit
+  KNOWLEDGE: true                         # optional; knowledge-worthy, the harvest's input
+  THREAD: true                            # optional; awaits resolution: verdict | execution | report | harvest; stamped at birth, never flipped; closes same-breath at resolution; no marker = receipt: final word on a completed fact, no closer obligation
+  CLOSES: <slug> (<verdict>: reason)      # optional; verdict = done | superseded | dropped | folded; the ONLY closure; no closer = still open
+  SUPERSEDES: <slug> (<verdict>: reason)  # optional; closes by replacement, never a rewrite
+  REF: "path#symbol"                      # optional; grounding, same format as knowledge REFs
 
 # filled sample
 @anchor A<N> ("continues A<N-1>", attention: <the loaded set>)

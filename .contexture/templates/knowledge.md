@@ -7,8 +7,8 @@ need; where no stable full version exists, the SUMMARY carries the
 whole story.
 
 @finding NAME
-  [SUPERSEDES: <ref> (reason)]
-  [REF: "path#symbol"]                    # the full version in append-only artifacts
+  SUPERSEDES: <ref> (reason)              # optional; closes by replacement, never a rewrite
+  REF: "path#symbol"                      # optional; the full version in append-only artifacts
                                           # (journal.md#entry, reports/x.md#claim),
                                           # never a dynamic file; no REF -> the SUMMARY
                                           # carries the whole story

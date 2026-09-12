@@ -1,4 +1,4 @@
-# contexture v0.29.2: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.29.3: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -21,7 +21,7 @@
 
 @record
   unit of work = session folder; outlives working periods, dies with the unit. shapes live in .contexture/templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map: what each artifact records and why; the workflows live in their sections.
-  dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual; laws are slug-addressed: `slug: statement`, referenced @laws#<slug>; slugs are unique across the merged base + overlays.
+  dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts in value examples, never around field names; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual; laws are slug-addressed: `slug: statement`, referenced @laws#<slug>; slugs are unique across the merged base + overlays.
   references: a pointer names its target exactly: the section and step (@refresh), or path#symbol (journal.md#slug); a vague prose mention is a defect
   folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
   state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design, the map, not the content: detail lives behind refs; refreshed as the work moves (every backlog update, task landing, period end).
@@ -36,7 +36,7 @@
   formation :: an event lands when it happens, never batched at period end; interaction beats journal as they happen (@interact); work beats never wait for an interaction beat
   substance :: an entry carries what happened, the result, and why the next step follows
   liveness :: entries are append-only, never edited; an entry closes only when a later CLOSES/SUPERSEDES names it; every closer carries a verdict word: done | superseded | dropped | folded, then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie; chase every closer in the same breath it resolves
-  markings :: [THREAD: true] awaits resolution: a verdict, an execution, a dispatch report, the harvest (@refresh); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. [KNOWLEDGE: true] = the harvest's input. [GROUP: token] = the agent's topic thread, chosen in the conversation, stable within the unit. [REF: path#symbol] = grounding.
+  markings :: THREAD: true awaits resolution: a verdict, an execution, a dispatch report, the harvest (@refresh); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. KNOWLEDGE: true = the harvest's input. GROUP: <token> = the agent's topic thread, chosen in the conversation, stable within the unit. REF: "path#symbol" = grounding. an entry uses the fields it needs; unused fields are omitted, never bracketed.
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open: an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
 @backlog
