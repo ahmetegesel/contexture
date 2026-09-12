@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.1] - 2026-09-12
+
+### Changed
+
+- The README states the design's three properties out loud: the first screen's footer carries "lightweight, abstracted, extensible", and a section after "Why it works" unpacks each (lightweight by construction, abstracted by design, extensible without forks).
+
 ## [0.29.0] - 2026-09-12
 
 ### Added

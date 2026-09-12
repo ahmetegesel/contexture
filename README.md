@@ -24,7 +24,7 @@ What survives is what the agent wrote down as it worked:
 
 Structured on purpose: exact fields and references survive, and plain scripts can pull just the relevant slice, so a fresh session loads a little, exactly, instead of a summary of everything.
 
-contexture is a convention, not a tool: any harness, one commit, no dependencies.
+contexture is a convention, not a tool: lightweight, abstracted, extensible. Plain files, any harness, one commit, no dependencies.
 
 ## What your agent sees
 
@@ -121,6 +121,16 @@ Nothing here is novel: keeping records is how every long project survives. What 
 The parts reinforce each other. Append-only makes one recurring action enough; the schema makes that write exact; the scripts make gaps visible; the laws keep the whole thing in front of the agent every turn. Nothing depends on the model remembering to be disciplined: the machinery holds the line, and that is also why smaller models keep up. Their attention stays on the work.
 
 The laws are the spine: a short, slug-addressed set that rides with the agent every turn. They live in AGENTS.md; overlays add their own where a workspace needs them.
+
+## Lightweight, abstracted, extensible
+
+Three properties hold the whole thing up.
+
+Lightweight by construction: plain files and plain awk, no service, no database, no runtime, no dependencies. Adoption is a file copy; updating is a copy over it.
+
+Abstracted by design: the schema holds the shape, the laws hold the mechanisms, and neither holds your policies. The core carries no opinion your workspace can carry in an overlay.
+
+Extensible without forks: rhythms add process, overlays amend rules, lanes delegate work, examples seed it. Every extension lives beside the core, and the core never grows to hold it.
 
 ## What it is not, and who it is for
 
