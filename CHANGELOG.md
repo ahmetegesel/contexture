@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.28.0] - 2026-09-12
+
+### Changed
+
+- The README is rewritten as the public face: a skimmable tour that opens on the compaction collision (a faithful summary against the surviving record), then moves through the agent's return, the human workflow and its token economy, the unit of work, delegated work, rhythms, the engine, overlays, why it works, what it is not and who it is for, adoption, and the docs index. The guide it replaces stays in git history and seeds the docs pages.
+- The AGENTS.md version header names v0.28.0 (its separator reads a colon now, per the dashes rule).
+- `.gitignore` whitelists `LICENSE`.
+
+### Added
+
+- `LICENSE` (MIT) at the root; the README deliberately carries no license text and no status line, so the file is the canonical place.
+- The documented direction for `docs/`: one page per system area, linked from the README's index as they land.
+
 ## [0.27.2] - 2026-09-12
 
 ### Fixed
