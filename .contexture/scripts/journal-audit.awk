@@ -1,7 +1,7 @@
 #!/usr/bin/awk -f
 # journal-audit.awk: Audit closures and entry grammar, print the open thread tail
-# Usage: awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md
-# Or:    ./.contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md
+# Usage: awk -f .contexture/scripts/journal-audit.awk <session-slug-or-journal-path>
+# Or:    ./.contexture/scripts/journal-audit.awk <session-slug-or-journal-path>
 # The repair instrument: fix what it flags, fill what is missing.
 # Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
 # markers on @entry lines, bracketed field lines (the [FIELD: literal-copy
@@ -15,9 +15,37 @@
 # open.
 
 BEGIN {
-  n = split(ARGV[1], parts, "/")
-  dir = ""
-  for (i = 1; i < n; i++) dir = dir parts[i] "/"
+  if (ARGC < 2) {
+    print "Usage: journal-audit.awk <session-slug-or-journal-path>" > "/dev/stderr"
+    exit 1
+  }
+  arg = ARGV[1]
+  sub(/^\.\//, "", arg)
+  sub(/\/+$/, "", arg)
+
+  if (arg ~ /\.md$/) {
+    journal_file = arg
+    n = split(arg, parts, "/")
+    dir = ""
+    for (i = 1; i < n; i++) dir = dir parts[i] "/"
+  } else {
+    if (arg ~ /^\.contexture\/sessions\//) {
+      dir = arg "/"
+    } else {
+      dir = ".contexture/sessions/" arg "/"
+    }
+    journal_file = dir "journal.md"
+  }
+
+  test_line = ""
+  test_ret = (getline test_line < journal_file)
+  if (test_ret < 0) {
+    print "ERROR: journal file not found: " journal_file > "/dev/stderr"
+    exit 1
+  }
+  close(journal_file)
+
+  ARGV[1] = journal_file
   backlogs = dir "backlog.md"
   states = dir "state.md"
 }

@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.30.0] - 2026-09-14
+
+### Added
+
+- Sessions support linking read-only reference context via the optional `ref_sessions` field in `state.md`. Boot loads knowledge from referenced sessions fully and streams active journal entries, preserving read-only isolation while providing grounding across sessions.
+- `journal-active.awk` supports multi-session reference streaming via `-v refs=1` and `-v refs_only=1`, automatically resolving `ref_sessions` declared in `state.md` and printing a clear read-only delimiter reminder banner.
+- `tools/` ignored by default in `.gitignore` for workspace-local utilities.
+
+### Changed
+
+- Script ergonomics: `journal-active.awk` and `journal-audit.awk` accept session slugs directly without requiring full file paths or legacy double paths.
+
 ## [0.29.9] - 2026-09-13
 
 ### Changed

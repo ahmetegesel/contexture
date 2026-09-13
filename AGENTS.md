@@ -1,4 +1,4 @@
-# contexture v0.29.9: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.30.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -24,7 +24,7 @@
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts in value examples, never around field names; -> means flow; # starts a comment. lowercase keys on state.md (status: ACTIVE); spellings are contractual; laws are slug-addressed: `slug: statement`, referenced @laws#<slug>; slugs are unique across the merged base + overlays.
   references: a pointer names its target exactly: the section and step (@refresh), or path#symbol (journal.md#slug); a vague prose mention is a defect
   folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
-  state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design, the map, not the content: detail lives behind refs; refreshed as the work moves (every backlog update, task landing, period end).
+  state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design, the map, not the content: detail lives behind refs; optional ref_sessions declares read-only sessions mounted at boot; refreshed as the work moves (every backlog update, task landing, period end).
   backlog.md   = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog.
   journal.md   = the single recording surface: append-only events + @anchor declarations; the workflow in @journal.
   knowledge.md = settled findings at decision/discovery moments, statusless; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh); developing ideas stay journal events.
@@ -56,10 +56,12 @@
   surfaces: journal.md + knowledge.md.
   journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/scripts/journal-active.awk streams active entries with complete bodies in one shot; no per-entry Read tool loops, no range spanning.
     command:
-      awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md
+      awk -f .contexture/scripts/journal-active.awk <unit>
+  ref-stream: awk -f .contexture/scripts/journal-active.awk -v refs_only=1 <unit> streams declared ref sessions on demand; or awk -f .contexture/scripts/journal-active.awk <ref-unit> streams a specific ref.
   thread tail: journal-audit.awk prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
   cross-repo: grep -l "repos:.*<name>" .contexture/sessions/*/state.md: units touching a repo; objective is human-facing only.
+  cross-session: grep -l "ref_sessions:.*<name>" .contexture/sessions/*/state.md: units referencing a session.
   group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
@@ -69,9 +71,9 @@
   3. get the field: grep -rl "status: ACTIVE" .contexture/sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
   5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1; a boot is a fresh context load (compaction, session restart), never a turn boundary; turns inside one working context journal under the standing anchor)
-  6. read backlog.md; read the rhythm index: awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md: one line per rhythm (name, path, use when, activation); run @query: awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md streams all active entry bodies directly: stdout is the live attention set; knowledge loads fully
+  6. read backlog.md; read the rhythm index: awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md: one line per rhythm (name, path, use when, activation); run @query: awk -f .contexture/scripts/journal-active.awk <unit> streams all active entry bodies directly: stdout is the live attention set; knowledge loads fully; if state.md declares ref_sessions: for each referenced unit, load its knowledge.md fully and stream its active entries via journal-active.awk (or run awk -f .contexture/scripts/journal-active.awk -v refs=1 <unit> to stream both in one pass; read-only reference context; never write to a ref session)
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
-  8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
+  8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + ref_sessions + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
   9. continue from next_action, following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
   10. new work: bootstrap .contexture/sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "backlog the first task"; continue at 5
 
@@ -132,7 +134,7 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes (@close 1-3) if not done
-    2. verify with the cold read: run awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md and read the stream as a fresh boot would: the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
+    2. verify with the cold read: run awk -f .contexture/scripts/journal-active.awk <unit> and read the stream as a fresh boot would: the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND awk -f .contexture/scripts/journal-audit.awk <unit> exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
   the handoff writes the record, not working memory.
 
 @git

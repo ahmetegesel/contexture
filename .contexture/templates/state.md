@@ -15,6 +15,8 @@ next_action: "one terse pointer:        # the ONLY next step; overwritten,
                                          # planning phase: "plan the next move"
 objective: "what the unit is for"
 repos: [a, b]                            # affected repos, any count
+ref_sessions: [c, d]                     # optional read-only reference sessions, any count;
+                                         # boot loads their knowledge and active journal
 
 # filled sample
 status: ACTIVE
@@ -22,3 +24,4 @@ current_anchor: A<N>
 next_action: "<one terse pointer: what to do next>"
 objective: "<what the unit is for>"
 repos: [<repo>]
+ref_sessions: [<session>]
