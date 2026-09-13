@@ -12,6 +12,8 @@ contexture is a zero-dependency workspace convention that gives AI coding agents
 
 contexture is a convention, not a tool: lightweight, abstracted, extensible. Plain files, any harness, one commit, no dependencies.
 
+[Architecture](#architecture) • [Core concepts](#core-concepts) • [Why contexture](#why-contexture) • [Installation](#installation) • [Docs](#docs)
+
 ## Architecture
 
 The workspace couples root governance with a dedicated convention drawer:
@@ -65,7 +67,7 @@ An overlay is a root configuration file (`AGENTS.workspace.md` for the team, `AG
 - **Abstracted by design**: The schema governs shapes and the laws govern mechanisms, carrying zero workflow policies your workspace cannot override.
 - **Extensible without forks**: Add custom rhythms, amend rules through overlays, and delegate work through subagent lanes while the core stays untouched.
 
-## Quickstart
+## Installation
 
 Adopt contexture into an existing git repository in three steps:
 

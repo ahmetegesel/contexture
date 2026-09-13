@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.5] - 2026-09-13
+
+### Changed
+
+- The README gains a single-line horizontal in-page navigation bar right after the opening triad line, allowing readers to jump directly to Architecture, Core concepts, Why contexture, Installation, or Docs without scrolling.
+- The "Quickstart" section heading in the README is renamed to "Installation" to match standard developer scanning and search conventions on GitHub.
+
 ## [0.29.4] - 2026-09-13
 
 ### Changed
