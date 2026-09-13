@@ -83,12 +83,17 @@ The workspace couples root governance with a dedicated convention drawer:
 
 ## Core concepts
 
-| Concept | What it is | What it gives you | Deep dive |
-|:---|:---|:---|:---|
-| **Units** | A folder for your task (`.contexture/sessions/<name>/`) | Persistent memory. When chat resets, the agent picks up where it left off. | [The record](docs/the-record.md) |
-| **Lanes** | A subagent sandbox (`lanes/<name>/`) | Background execution. Heavy subagent tool logs stay out of your main chat window. | [Units and lanes](docs/units-and-lanes.md) |
-| **Rhythms** | A workflow checklist (`.contexture/rhythms/`) | Process control. Forces the agent to discuss, test, and verify before claiming done. | [Rhythms](docs/rhythms.md) |
-| **Overlays** | Custom workspace rule files (`AGENTS.workspace.md`) | Custom rules. Add repository policies or git rules without touching contexture's base. | [Overlays](docs/overlays.md) |
+### Units
+A dedicated folder for your task (`.contexture/sessions/<name>/`). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
+
+### Lanes
+An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Deep dive: [Units and lanes](docs/units-and-lanes.md).
+
+### Rhythms
+A plain text workflow checklist in `.contexture/rhythms/`. Enforces process discipline, requiring the agent to discuss, test, and verify before claiming work is done. Deep dive: [Rhythms](docs/rhythms.md).
+
+### Overlays
+Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` for local machine). Lets you add repository policies or git rules without modifying contexture's base. Deep dive: [Overlays](docs/overlays.md).
 
 ## Docs
 

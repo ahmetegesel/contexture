@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.9] - 2026-09-13
+
+### Changed
+
+- The Core concepts section in the README reformatted from a markdown table into clean, lean sub-headings, improving mobile readability and eliminating table wrapping friction while keeping plain-language definitions.
+
 ## [0.29.8] - 2026-09-13
 
 ### Added
