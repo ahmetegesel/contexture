@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.4] - 2026-09-13
+
+### Changed
+
+- The README is refactored into a fast, visual storefront based on reader feedback: opens on a blunt two-sentence value proposition passing the 5-second test, visualizes traditional compaction against contexture memory across five dimensions, consolidates root governance and the drawer into a unified architecture tree, introduces scannable concept cards with concrete functional definitions linked to docs/, condenses the architectural triad, and provides an unambiguous 60-second quickstart while pruning 32 lines of redundant narrative prose.
+
+### Added
+
+- `AGENTS.workspace.md` gains the `background-subagents` law under `@laws`: subagents and lanes run strictly in the background; the turn ends immediately at launch and never blocks the conversation or polls for completion.
+
 ## [0.29.3] - 2026-09-12
 
 ### Fixed
