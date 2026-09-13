@@ -12,7 +12,11 @@ contexture is a zero-dependency workspace convention that gives AI coding agents
 
 contexture is a convention, not a tool: lightweight, abstracted, extensible. Plain files, any harness, one commit, no dependencies.
 
-[Architecture](#architecture) • [Core concepts](#core-concepts) • [Why contexture](#why-contexture) • [Installation](#installation) • [Docs](#docs)
+- [Architecture](#architecture)
+- [Core concepts](#core-concepts)
+- [Why contexture](#why-contexture)
+- [Installation](#installation)
+- [Docs](#docs)
 
 ## Architecture
 

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.6] - 2026-09-13
+
+### Changed
+
+- The README in-page navigation bar switched from an inline horizontal row to a compact vertical bullet list for cleaner mobile and desktop rendering.
+
 ## [0.29.5] - 2026-09-13
 
 ### Changed
