@@ -12,11 +12,47 @@ contexture is a zero-dependency workspace convention that gives AI coding agents
 
 contexture is a convention, not a tool: lightweight, abstracted, extensible. Plain files, any harness, one commit, no dependencies.
 
-- [Architecture](#architecture)
-- [Core concepts](#core-concepts)
 - [Why contexture](#why-contexture)
 - [Installation](#installation)
+- [Architecture](#architecture)
+- [Core concepts](#core-concepts)
 - [Docs](#docs)
+
+## Why contexture
+
+- **Lightweight by construction**: Plain files and POSIX awk, no background services, no databases, no external dependencies.
+- **Abstracted by design**: The schema governs shapes and the laws govern mechanisms, carrying zero workflow policies your workspace cannot override.
+- **Extensible without forks**: Add custom rhythms, amend rules through overlays, and delegate work through subagent lanes while the core stays untouched.
+
+## Installation
+
+Adopt contexture into an existing git repository in three steps:
+
+### 1. Fetch the files
+
+Run in your repository root:
+
+```bash
+git fetch https://github.com/ahmetegesel/contexture.git --tags
+git archive v0.29.3 AGENTS.md .contexture/ examples/ | tar -x
+chmod +x .contexture/scripts/*.awk
+```
+
+### 2. Run the onboarding wizard
+
+Prompt your AI agent:
+
+> "Read `.contexture/ONBOARDING.md` and prepare the adoption proposal."
+
+The agent inspects your workspace topology, drafts gitignore rules and harness symlinks, and pauses for your confirmation before writing changes.
+
+### 3. Start your first session
+
+Once confirmed, start your first unit of work:
+
+> "Bootstrap a new unit of work to <your goal>."
+
+For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
 
 ## Architecture
 
@@ -64,42 +100,6 @@ An overlay is a root configuration file (`AGENTS.workspace.md` for the team, `AG
 * **Location:** `AGENTS.workspace.md` (shared, tracked) and `AGENTS.local.md` (personal, local)
 * **Key benefit:** Adapts laws, git rules, or boot behavior using `@append` or `@replace` while keeping upstream syncs clean.
 * **Deep dive:** [Overlays](docs/overlays.md)
-
-## Why contexture
-
-- **Lightweight by construction**: Plain files and POSIX awk, no background services, no databases, no external dependencies.
-- **Abstracted by design**: The schema governs shapes and the laws govern mechanisms, carrying zero workflow policies your workspace cannot override.
-- **Extensible without forks**: Add custom rhythms, amend rules through overlays, and delegate work through subagent lanes while the core stays untouched.
-
-## Installation
-
-Adopt contexture into an existing git repository in three steps:
-
-### 1. Fetch the files
-
-Run in your repository root:
-
-```bash
-git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.29.3 AGENTS.md .contexture/ examples/ | tar -x
-chmod +x .contexture/scripts/*.awk
-```
-
-### 2. Run the onboarding wizard
-
-Prompt your AI agent:
-
-> "Read `.contexture/ONBOARDING.md` and prepare the adoption proposal."
-
-The agent inspects your workspace topology, drafts gitignore rules and harness symlinks, and pauses for your confirmation before writing changes.
-
-### 3. Start your first session
-
-Once confirmed, start your first unit of work:
-
-> "Bootstrap a new unit of work to <your goal>."
-
-For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
 
 ## Docs
 

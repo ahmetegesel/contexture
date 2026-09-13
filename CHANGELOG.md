@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.7] - 2026-09-13
+
+### Changed
+
+- The README sections and in-page navigation list reordered to prioritize motivation and adoption: Why contexture leads first, followed immediately by Installation, Architecture, Core concepts, and Docs.
+
 ## [0.29.6] - 2026-09-13
 
 ### Changed
