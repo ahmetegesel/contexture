@@ -52,6 +52,12 @@ Once confirmed, start your first unit of work:
 
 > "Bootstrap a new unit of work to <your goal>."
 
+### What happens next?
+
+1. **The agent creates the unit:** It creates `.contexture/sessions/<your-task>/` with your active tasks (`backlog.md`) and an append-only event log (`journal.md`).
+2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates its tasks, logs test proofs, and records decisions in its files. You never manage the files manually.
+3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs a fast awk script, reads only the unclosed tasks and active decisions, and immediately resumes work without repeating ruled-out ideas.
+
 For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
 
 ## Architecture
@@ -77,29 +83,12 @@ The workspace couples root governance with a dedicated convention drawer:
 
 ## Core concepts
 
-### Units: Persistent Work Containers
-A unit is an isolated folder (`.contexture/sessions/<slug>/`) that encapsulates an initiative's state, backlog, journal, and knowledge, giving the agent persistent memory across chat sessions and compactions.
-* **Location:** `.contexture/sessions/<unit>/` (`state.md`, `backlog.md`, `journal.md`, `knowledge.md`)
-* **Key benefit:** Bounds active context to one objective; closed units stop loading and never pollute active memory.
-* **Deep dive:** [The record](docs/the-record.md) and [Units and lanes](docs/units-and-lanes.md)
-
-### Lanes: Isolated Subagent Delegation
-A lane is an isolated subagent directory (`lanes/<slug>/`) that wraps a delegated task in a brief recipe, action journal, and structured report, keeping the dispatcher's context lean while enabling instant resumption if a subagent stalls.
-* **Location:** `.contexture/sessions/<unit>/lanes/<lane>/` (`recipe.md`, `journal.md`, `report.md`)
-* **Key benefit:** Memory is physical on disk; if a subagent fails or times out, re-dispatch resumes without lost work.
-* **Deep dive:** [Units and lanes](docs/units-and-lanes.md#lanes-the-delegated-unit)
-
-### Rhythms: Team Workflow Gates
-A rhythm is a plain text file in `.contexture/rhythms/` that defines an ordered sequence of quality gates and required outcomes, ensuring the agent follows your team's workflow instead of guessing next steps.
-* **Location:** `.contexture/rhythms/<name>.md` (for example, `work.md`, `debug.md`)
-* **Key benefit:** Enforces strict execution order (DISCUSS, DECIDE, BACKLOG, EXECUTE, VERIFY, REFRESH) without bloating per-turn prompts.
-* **Deep dive:** [Rhythms](docs/rhythms.md)
-
-### Overlays: Repository-Specific Customization
-An overlay is a root configuration file (`AGENTS.workspace.md` for the team, `AGENTS.local.md` for personal rules) that appends or amends agent behavior for your specific repository without modifying the upstream base.
-* **Location:** `AGENTS.workspace.md` (shared, tracked) and `AGENTS.local.md` (personal, local)
-* **Key benefit:** Adapts laws, git rules, or boot behavior using `@append` or `@replace` while keeping upstream syncs clean.
-* **Deep dive:** [Overlays](docs/overlays.md)
+| Concept | What it is | What it gives you | Deep dive |
+|:---|:---|:---|:---|
+| **Units** | A folder for your task (`.contexture/sessions/<name>/`) | Persistent memory. When chat resets, the agent picks up where it left off. | [The record](docs/the-record.md) |
+| **Lanes** | A subagent sandbox (`lanes/<name>/`) | Background execution. Heavy subagent tool logs stay out of your main chat window. | [Units and lanes](docs/units-and-lanes.md) |
+| **Rhythms** | A workflow checklist (`.contexture/rhythms/`) | Process control. Forces the agent to discuss, test, and verify before claiming done. | [Rhythms](docs/rhythms.md) |
+| **Overlays** | Custom workspace rule files (`AGENTS.workspace.md`) | Custom rules. Add repository policies or git rules without touching contexture's base. | [Overlays](docs/overlays.md) |
 
 ## Docs
 

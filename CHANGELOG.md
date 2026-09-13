@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.29.8] - 2026-09-13
+
+### Added
+
+- The Installation section in the README gains a "What happens next?" lifecycle walkthrough explaining the 3-step sequence after the bootstrap prompt: automated unit folder creation, natural language interaction, and millisecond cold-boot recovery on context compaction.
+
+### Changed
+
+- The Core concepts section replaced its verbose cards with an intuitive 4-row plain-language table, eliminating academic vocabulary and presenting immediate concrete utility for Units, Lanes, Rhythms, and Overlays.
+
 ## [0.29.7] - 2026-09-13
 
 ### Changed
