@@ -23,6 +23,7 @@ current_anchor: A12
 next_action: "one terse pointer: what to do next"
 objective: "what the unit is for"
 repos: [app, docs]
+ref_sessions: [design-notes]
 ```
 
 - `status:` is `ACTIVE` or `CLOSED`. It is the only status field in the convention: journal entries and findings carry none.
@@ -30,6 +31,7 @@ repos: [app, docs]
 - `next_action:` is one terse pointer, overwritten never prepended. The why behind it rebuilds from the record, so it is never serialized here; when the unit sits between plans, it reads "plan the next move".
 - `objective:` is what the unit is for. It lives here, not in the backlog.
 - `repos:` lists the affected repos, any count.
+- `ref_sessions:` lists optional read-only reference sessions mounted at boot; boot loads their knowledge and active journal.
 
 The card mutates often and freely: it is refreshed as the work moves, at every backlog update, task landing, and period end. It is a pointer, not a log: if it grew history, it would stop being a pointer. A file meant to be read whole stays within one read, and a card that outgrows its purpose is split, with a small index left where the reader looks.
 

@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.30.1] - 2026-09-14
+
+### Added
+
+- Added `docs-sync` law and `docs sync` requirement to ship breath in `AGENTS.workspace.md`, ensuring all changes to base mechanics, scripts, templates, or governance audit and update README.md and relevant docs/ before release.
+
+### Changed
+
+- Documentation updated across `docs/the-record.md`, `docs/the-engine.md`, `docs/units-and-lanes.md`, and `README.md` to document `ref_sessions` in `state.md`, multi-session reference streaming in `journal-active.awk`, and session slug support across scripts.
+
 ## [0.30.0] - 2026-09-14
 
 ### Added

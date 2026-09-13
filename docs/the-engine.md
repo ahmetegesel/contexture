@@ -83,25 +83,29 @@ Three instruments ship in `.contexture/scripts/`, and they are the engine's mach
 
 ### journal-active.awk: the stream
 
-Returns every live entry with its body whole. Live means unclosed: the set is the journal entries that no closure names. One command, one stream:
+Returns every live entry with its body whole. Live means unclosed: the set is the journal entries that no closure names. Accepts a session slug, a single journal path, or the legacy double path:
 
 ```bash
-awk -f .contexture/scripts/journal-active.awk .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md
+awk -f .contexture/scripts/journal-active.awk <unit>
 ```
 
-The file is passed twice in the same execution: the first read collects the closure targets, the second streams the bodies. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads.
+The script collects closure targets and streams live bodies in one shot. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads.
+
+Optional reference session flags:
+- `-v refs=1`: streams the active session plus any read-only `ref_sessions` declared in `state.md`, each separated by a visual delimiter banner and read-only reminder nudge.
+- `-v refs_only=1`: streams declared reference sessions alone.
 
 The command runs at boot, where it is the load, and at handoff, where it is the cold read: the stream read exactly as a fresh boot would read it.
 
 ### journal-audit.awk: the repair instrument
 
-Returns the record's defects, each flagged with a line or a slug, and exits nonzero when any fires:
+Returns the record's defects, each flagged with a line or a slug, and exits nonzero when any fires. Accepts a session slug or a direct journal path:
 
 ```bash
-awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md
+awk -f .contexture/scripts/journal-audit.awk <unit>
 ```
 
-One argument. The script derives `backlog.md` and `state.md` from the journal's folder and checks the session alongside the journal; a lane journal has no siblings, so those checks skip quietly there. When the run is clean the script also prints the open-thread tail: the entries stamped `THREAD: true` that no closure names. The tail is a display, never an enforcement: a thread that pauses stays open, and its line in the tail is the reminder it exists.
+The script derives `backlog.md` and `state.md` from the journal's folder and checks the session alongside the journal; a lane journal has no siblings, so those checks skip quietly there. When the run is clean the script also prints the open-thread tail: the entries stamped `THREAD: true` that no closure names. The tail is a display, never an enforcement: a thread that pauses stays open, and its line in the tail is the reminder it exists.
 
 The classes, and what each one asks for:
 

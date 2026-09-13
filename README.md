@@ -74,7 +74,7 @@ The workspace couples root governance with a dedicated convention drawer:
     ├── scripts/          Deterministic awk tools streaming active context and auditing defects
     ├── templates/        Shape grammars ensuring structured writes without guesswork
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
-        ├── state.md      Live pointer: status, current anchor, and next immediate action
+        ├── state.md      Live pointer: status, current anchor, next action, and refs
         ├── backlog.md    Living task queue with acceptance criteria and execution blueprints
         ├── journal.md    Append-only event stream rebuilding working context from scratch
         ├── knowledge.md  Settled decisions and durable findings, grounded by exact references
@@ -107,6 +107,6 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 
 | script | what it returns |
 |---|---|
-| journal-active.awk | Every live entry, bodies whole, in one command and one stream |
+| journal-active.awk | Every live entry, bodies whole, in one command and one stream (supports -v refs=1) |
 | journal-audit.awk | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event) and the open-thread tail; exits nonzero on any defect |
 | rhythms-index.awk | One line per rhythm: name, path, use when, activation |

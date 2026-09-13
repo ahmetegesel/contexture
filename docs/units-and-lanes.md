@@ -25,7 +25,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
   lanes/         dispatched work, one folder per lane
 ```
 
-`state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the one next action, the objective, and the repos it touches. Nothing else; detail lives behind references. It is a pointer, not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
+`state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the one next action, the objective, the repos it touches, and optional reference sessions (`ref_sessions`). Nothing else; detail lives behind references. It is a pointer, not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
 
 `backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves non-destructively: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what is uncompleted. A task completes with its evidence, and the completion lands in the journal in the same breath.
 
@@ -58,14 +58,13 @@ The first thing the agent does in a fresh context, mechanically:
 5. Read `state.md` whole and bump the anchor counter. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor.
 6. Read the backlog, run the rhythm index, and load the live journal. The load is one subtraction: live means not closed. Anchors order periods and receipt loads; they never decide liveness. The script streams the live entries' bodies whole in one shot:
 
-   ```
-   awk -f .contexture/scripts/journal-active.awk \
-     .contexture/sessions/<unit>/journal.md .contexture/sessions/<unit>/journal.md
+   ```bash
+   awk -f .contexture/scripts/journal-active.awk <unit>
    ```
 
-   Knowledge loads fully; it is small, and every line is a settled decision.
+   Knowledge loads fully; it is small, and every line is a settled decision. If `state.md` declares `ref_sessions`, boot loads each referenced session's `knowledge.md` fully and streams its active entries via `awk -f .contexture/scripts/journal-active.awk -v refs=1 <unit>` as read-only context.
 7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the session files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
-8. Stamp the load receipt: an anchor line naming the loaded set and the git state. `grep "^@anchor"` reconstructs the map of periods and their receipts.
+8. Stamp the load receipt: an anchor line naming the loaded set, any `ref_sessions`, and the git state. `grep "^@anchor"` reconstructs the map of periods and their receipts.
 9. Continue from `next_action`, following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
 
 New work bootstraps a unit instead of joining one: the agent creates `state.md` with `status: ACTIVE`, `current_anchor: A0`, and `next_action: "backlog the first task"`, then continues at step 5; the first boot stamps A1.
