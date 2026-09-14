@@ -106,13 +106,13 @@ Where symlinks are not possible, duplicate `AGENTS.md` or reference it.
 Three checks before the branch merges:
 
 ```
-awk -f .contexture/scripts/journal-active.awk .contexture/sessions/adopt-contexture/journal.md .contexture/sessions/adopt-contexture/journal.md
-awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/adopt-contexture/journal.md
+.contexture/scripts/session-load.awk adopt-contexture
+.contexture/scripts/journal-audit.awk adopt-contexture
 git status
 git diff
 ```
 
-The first streams the live record from the adoption session, bodies whole; the second must exit 0; the last two are the review surface you read alongside the adoption record.
+The first loads the adoption session: the map plus every page; the second must exit 0; the last two are the review surface you read alongside the adoption record.
 
 Then the adoption material goes away. Delete `.contexture/ONBOARDING.md` and the `examples/` folder: they are the procedure, used once, not the convention. If your gitignore block names `ONBOARDING.md` explicitly, remove that line with it.
 

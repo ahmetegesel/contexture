@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.31.0] - 2026-09-14
+
+### Added
+
+- `session-load.awk` is the boot load as a script-side pager: every invocation prints the map (the sections with their line ranges and page spans) plus one page, and the last line carries the next call while pages remain. The sections are state, backlog, knowledge, the live journal, and any `ref_sessions` (knowledge and stream under read-only banners), ending with the write-scope trailer. Pages cut only at block starts near 500 lines, so a body never splits; small units end at one page with no nudge.
+- `session-stamp.awk` writes the load receipt: it derives the next anchor from `state.md`, rewrites `current_anchor`, and appends the anchor line with the attention verbatim, refusing empty, whitespace-only, or newline attention, malformed anchors, and non-ACTIVE state with no partial write.
+
+### Changed
+
+- `journal-active.awk` and `journal-audit.awk` accept only the session slug; a path, the legacy double path, extra arguments, and the refs flags all fail loud with a usage line and rc=1. `journal-active.awk` stays as the updated board.
+- `rhythms-index.awk` gains its shebang and defaults to `.contexture/rhythms/` with no arguments; arguments and a missing directory fail loud.
+- The BIOS call sites and the documentation read the executable form, `.contexture/scripts/<name>.awk <slug>`: `@boot` steps 5, 6, and 8, `@query`, `@close 3`, and `@handoff 2` in `AGENTS.md`; the README instrument table (five instruments, one form each); `docs/the-engine.md`, `docs/units-and-lanes.md`, `docs/adoption.md`, and `docs/rhythms.md`; the ONBOARDING verify block; the report template's sample.
+
+### Fixed
+
+- The silent-empty class (the v0.29.3 trap): a wrong invocation produced an empty stream at rc=0, a failure shaped like success. Every script now fails loud on a wrong invocation; `session-load.awk` surfaces the composed helper's exit status, so a broken helper fails the load instead of printing the success-shaped `(no active entries)`; dash-leading slugs are refused across the scripts.
+
 ## [0.30.1] - 2026-09-14
 
 ### Added

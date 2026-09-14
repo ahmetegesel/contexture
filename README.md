@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.29.3 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.31.0 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk
 ```
 
@@ -56,7 +56,7 @@ Once confirmed, start your first unit of work:
 
 1. **The agent creates the unit:** It creates `.contexture/sessions/<your-task>/` with your active tasks (`backlog.md`) and an append-only event log (`journal.md`).
 2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates its tasks, logs test proofs, and records decisions in its files. You never manage the files manually.
-3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs a fast awk script, reads only the unclosed tasks and active decisions, and immediately resumes work without repeating ruled-out ideas.
+3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `session-load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
 
 For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
 
@@ -107,6 +107,8 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 
 | script | what it returns |
 |---|---|
-| journal-active.awk | Every live entry, bodies whole, in one command and one stream (supports -v refs=1) |
+| session-load.awk | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); pages cut at block boundaries |
+| session-stamp.awk | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
+| journal-active.awk | Every live entry, bodies whole, in one command and one stream (the updated board) |
 | journal-audit.awk | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event) and the open-thread tail; exits nonzero on any defect |
 | rhythms-index.awk | One line per rhythm: name, path, use when, activation |

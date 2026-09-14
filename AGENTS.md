@@ -1,4 +1,4 @@
-# contexture v0.30.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.31.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -15,7 +15,7 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   .contexture/templates/      = artifact grammars: the shapes to fill at write time
-  .contexture/scripts/        = cross-platform awk queries (journal extraction, journal audit)
+  .contexture/scripts/        = cross-platform awk instruments (the load, the stamp, the stream, the audit, the index)
   .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
@@ -56,8 +56,7 @@
   surfaces: journal.md + knowledge.md.
   journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/scripts/journal-active.awk streams active entries with complete bodies in one shot; no per-entry Read tool loops, no range spanning.
     command:
-      awk -f .contexture/scripts/journal-active.awk <unit>
-  ref-stream: awk -f .contexture/scripts/journal-active.awk -v refs_only=1 <unit> streams declared ref sessions on demand; or awk -f .contexture/scripts/journal-active.awk <ref-unit> streams a specific ref.
+      .contexture/scripts/journal-active.awk <unit>
   thread tail: journal-audit.awk prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
   cross-repo: grep -l "repos:.*<name>" .contexture/sessions/*/state.md: units touching a repo; objective is human-facing only.
@@ -70,10 +69,10 @@
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
   3. get the field: grep -rl "status: ACTIVE" .contexture/sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
-  5. read state.md WHOLE; refresh current_anchor in state.md (N = previous + 1; a boot is a fresh context load (compaction, session restart), never a turn boundary; turns inside one working context journal under the standing anchor)
-  6. read backlog.md; read the rhythm index: awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md: one line per rhythm (name, path, use when, activation); run @query: awk -f .contexture/scripts/journal-active.awk <unit> streams all active entry bodies directly: stdout is the live attention set; knowledge loads fully; if state.md declares ref_sessions: for each referenced unit, load its knowledge.md fully and stream its active entries via journal-active.awk (or run awk -f .contexture/scripts/journal-active.awk -v refs=1 <unit> to stream both in one pass; read-only reference context; never write to a ref session)
+  5. run .contexture/scripts/session-load.awk <unit>; read every page the map reports (state, backlog, knowledge, the live journal, ref sessions read-only)
+  6. read the rhythm index: .contexture/scripts/rhythms-index.awk
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
-  8. stamp journal @anchor A<N> ("continues A<N-1>", attention: <the loaded set + ref_sessions + the git state>); the stamp is the load receipt: grep "^@anchor" reconstructs map + receipts; receipts inform, never feed the next boot's load
+  8. stamp the load receipt: .contexture/scripts/session-stamp.awk <unit> "<the loaded set + ref_sessions + the git state>" (a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
   9. continue from next_action, following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
   10. new work: bootstrap .contexture/sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "backlog the first task"; continue at 5
 
@@ -123,7 +122,7 @@
   period end (turn ends; unit continues):
     1. refresh (@refresh): the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by journal-audit.awk is the checklist: every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. journal audit: awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/<unit>/journal.md must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from state.md) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
+    3. journal audit: .contexture/scripts/journal-audit.awk <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from state.md) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. folder stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
@@ -134,7 +133,7 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes (@close 1-3) if not done
-    2. verify with the cold read: run awk -f .contexture/scripts/journal-active.awk <unit> and read the stream as a fresh boot would: the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND awk -f .contexture/scripts/journal-audit.awk <unit> exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
+    2. verify with the cold read: run .contexture/scripts/session-load.awk <unit> and read every page as a fresh boot would: the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND .contexture/scripts/journal-audit.awk <unit> exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
   the handoff writes the record, not working memory.
 
 @git

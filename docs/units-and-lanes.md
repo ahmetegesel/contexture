@@ -55,16 +55,20 @@ The first thing the agent does in a fresh context, mechanically:
 
    A close match proposes continuing that unit; no match proposes a new one.
 4. Propose the move and wait. Even a message that names its unit explicitly gets the proposal stated as a confirmation. The human's reply settles the unit before anything loads.
-5. Read `state.md` whole and bump the anchor counter. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor.
-6. Read the backlog, run the rhythm index, and load the live journal. The load is one subtraction: live means not closed. Anchors order periods and receipt loads; they never decide liveness. The script streams the live entries' bodies whole in one shot:
+5. Run the load and read every page the map reports:
 
    ```bash
-   awk -f .contexture/scripts/journal-active.awk <unit>
+   .contexture/scripts/session-load.awk <unit>
    ```
 
-   Knowledge loads fully; it is small, and every line is a settled decision. If `state.md` declares `ref_sessions`, boot loads each referenced session's `knowledge.md` fully and streams its active entries via `awk -f .contexture/scripts/journal-active.awk -v refs=1 <unit>` as read-only context.
+   The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The load is one subtraction: live means not closed; anchors order periods and receipt loads, never liveness. Knowledge loads fully; it is small, and every line is a settled decision.
+6. Run the rhythm index: one line per rhythm, its trigger, and its activation policy.
 7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the session files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
-8. Stamp the load receipt: an anchor line naming the loaded set, any `ref_sessions`, and the git state. `grep "^@anchor"` reconstructs the map of periods and their receipts.
+8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `grep "^@anchor"` reconstructs the map of periods and their receipts:
+
+   ```bash
+   .contexture/scripts/session-stamp.awk <unit> "<the loaded set + ref_sessions + the git state>"
+   ```
 9. Continue from `next_action`, following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
 
 New work bootstraps a unit instead of joining one: the agent creates `state.md` with `status: ACTIVE`, `current_anchor: A0`, and `next_action: "backlog the first task"`, then continues at step 5; the first boot stamps A1.
@@ -82,7 +86,7 @@ Two distinct ends:
 
 ### Handoff
 
-The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the cold read. Run the active stream and read it as a fresh boot would; the record must reconstruct the position without the conversation. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
+The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the cold read. Run `session-load.awk` and read every page as a fresh boot would; the record must reconstruct the position without the conversation. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
 
 Boot is the reader; handoff is the writer's proof. Both run against the same record, from opposite sides of the context boundary.
 

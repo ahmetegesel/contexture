@@ -35,7 +35,7 @@ Keep the text minimal. A rhythm may carry as much as a skill would, but structur
 The index is how a workspace's rhythms become discoverable. At boot the agent runs:
 
 ```
-awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md
+.contexture/scripts/rhythms-index.awk
 ```
 
 One line per rhythm comes back, carrying what selection needs:

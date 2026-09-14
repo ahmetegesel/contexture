@@ -43,7 +43,7 @@ and evidence, what the dispatcher needs to re-verify and decide.
 
 @claim handoff-audit-placement
   VERDICT: ".contexture/scripts/journal-audit.awk added to README handoff verification."
-  EVIDENCE: README.md:488 ("AND awk -f .contexture/scripts/journal-audit.awk exits 0")
+  EVIDENCE: README.md:488 ("AND .contexture/scripts/journal-audit.awk <unit> exits 0")
   MARK: VERIFIED
 
 @risks

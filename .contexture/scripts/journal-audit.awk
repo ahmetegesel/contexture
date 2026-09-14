@@ -1,46 +1,36 @@
 #!/usr/bin/awk -f
 # journal-audit.awk: Audit closures and entry grammar, print the open thread tail
-# Usage: awk -f .contexture/scripts/journal-audit.awk <session-slug-or-journal-path>
-# Or:    ./.contexture/scripts/journal-audit.awk <session-slug-or-journal-path>
+# Usage: .contexture/scripts/journal-audit.awk <session-slug>
 # The repair instrument: fix what it flags, fill what is missing.
 # Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
 # markers on @entry lines, bracketed field lines (the [FIELD: literal-copy
 # form), unharvested KNOWLEDGE flags (with line), DONE tasks without their
 # backlog/<slug>: DONE event, IN_PROGRESS tasks absent from state.md; each
 # flagged by slug (the knowledge flag and the bracketed field also by line).
-# Session checks: backlog.md and state.md are derived from the journal's folder;
-# a sibling that cannot be read skips its check quietly: lane journals are
-# unaffected. Open threads (THREAD: true entries with no closer) print beside
-# the audit; the tail is a display, never an enforcement: a thread paused stays
-# open.
+# Session checks: backlog.md and state.md are derived from the session
+# folder; a sibling that cannot be read skips its check quietly. Open
+# threads (THREAD: true entries with no closer)
+# print beside the audit; the tail is a display, never an enforcement: a
+# thread paused stays open.
+
+function usage() {
+  print "Usage: journal-audit.awk <session-slug>" > "/dev/stderr"
+  fatal = 1
+  exit 1
+}
 
 BEGIN {
-  if (ARGC < 2) {
-    print "Usage: journal-audit.awk <session-slug-or-journal-path>" > "/dev/stderr"
-    exit 1
-  }
-  arg = ARGV[1]
-  sub(/^\.\//, "", arg)
-  sub(/\/+$/, "", arg)
-
-  if (arg ~ /\.md$/) {
-    journal_file = arg
-    n = split(arg, parts, "/")
-    dir = ""
-    for (i = 1; i < n; i++) dir = dir parts[i] "/"
-  } else {
-    if (arg ~ /^\.contexture\/sessions\//) {
-      dir = arg "/"
-    } else {
-      dir = ".contexture/sessions/" arg "/"
-    }
-    journal_file = dir "journal.md"
-  }
+  if (ARGC != 2 || refs != "" || refs_only != "") usage()
+  slug = ARGV[1]
+  if (slug !~ /^[A-Za-z0-9][A-Za-z0-9_-]*$/) usage()
+  dir = ".contexture/sessions/" slug "/"
+  journal_file = dir "journal.md"
 
   test_line = ""
   test_ret = (getline test_line < journal_file)
   if (test_ret < 0) {
     print "ERROR: journal file not found: " journal_file > "/dev/stderr"
+    fatal = 1
     exit 1
   }
   close(journal_file)
@@ -100,6 +90,7 @@ $1 == "CLOSES:" || $1 == "SUPERSEDES:" {
 { jtext = jtext "\n" $0 }
 
 END {
+  if (fatal) exit 1
   dangling_count = 0
   for (t in targets) {
     if (!(t in entries)) {

@@ -1,13 +1,48 @@
+#!/usr/bin/awk -f
 # rhythms-index.awk: the rhythm selection index
-# usage: awk -f .contexture/scripts/rhythms-index.awk .contexture/rhythms/*.md
+# Usage: .contexture/scripts/rhythms-index.awk
+# No arguments: reads .contexture/rhythms/*.md; arguments are refused rc=1.
+
+function usage() {
+  print "Usage: rhythms-index.awk" > "/dev/stderr"
+  exit 1
+}
+
 function emit() {
   if (name != "")
     printf "%s (%s) | use when: %s | activation: %s\n",
            name, src, (use == "" ? "(missing)" : use),
            (act == "" ? "propose" : act)
 }
-FNR == 1 { emit(); name=""; use=""; act=""; src=FILENAME }
-/^@rhythm / { name=$0; sub(/^@rhythm[[:space:]]+/, "", name); src=FILENAME }
-/^  use when:/ { use=$0; sub(/^  use when:[[:space:]]*/, "", use) }
-/^  activation:/ { act=$0; sub(/^  activation:[[:space:]]*/, "", act) }
-END { emit() }
+
+function process(path,   line) {
+  name = ""; use = ""; act = ""; src = path
+  while ((getline line < path) > 0) {
+    if (line ~ /^@rhythm /) {
+      name = line
+      sub(/^@rhythm[[:space:]]+/, "", name)
+    } else if (line ~ /^  use when:/) {
+      use = line
+      sub(/^  use when:[[:space:]]*/, "", use)
+    } else if (line ~ /^  activation:/) {
+      act = line
+      sub(/^  activation:[[:space:]]*/, "", act)
+    }
+  }
+  close(path)
+  emit()
+}
+
+BEGIN {
+  if (ARGC > 1) usage()
+  if (system("test -d .contexture/rhythms") != 0) {
+    print "ERROR: missing rhythms directory: .contexture/rhythms" > "/dev/stderr"
+    exit 1
+  }
+  cmd = "ls .contexture/rhythms/*.md 2>/dev/null"
+  while ((cmd | getline fname) > 0) {
+    process(fname)
+  }
+  close(cmd)
+  exit 0
+}

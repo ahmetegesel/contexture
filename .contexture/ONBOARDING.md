@@ -101,8 +101,8 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. run boot query: `awk -f .contexture/scripts/journal-active.awk .contexture/sessions/adopt-contexture/journal.md .contexture/sessions/adopt-contexture/journal.md`
-  2. run audit: `awk -f .contexture/scripts/journal-audit.awk .contexture/sessions/adopt-contexture/journal.md` (must exit 0)
+  1. run boot load: `.contexture/scripts/session-load.awk adopt-contexture` (read every page the map reports)
+  2. run audit: `.contexture/scripts/journal-audit.awk adopt-contexture` (must exit 0)
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close
