@@ -120,7 +120,7 @@ What makes lanes portable between agents is a contract: the lane's own obligatio
 
 ### The recipe, and the lane's boot
 
-The recipe is the brief on disk. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch or worktree the lane works on, so the lane knows where to edit and commit; a worktree path, when one is used, appears in the write scope. A message-brief dies at compaction; a recipe on disk survives, and that persistence is the audit trail.
+The recipe is the brief on disk. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch/worktree the lane works on, so the lane knows where to edit and commit; its working root sits in the write scope. A message-brief dies at compaction; a recipe on disk survives, and that persistence is the audit trail.
 
 Before any work, the lane boots read-only: the overlays, the unit's state, backlog, and knowledge, the recipe, and every reference the recipe names. Its first journal entry is the load receipt: the refs loaded, one per line. An unresolved reference is a defect in the brief; the lane stops and reports it, never working around the gap.
 

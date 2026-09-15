@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.34.1] - 2026-09-15
+
+### Fixed
+
+- The base keeps `branch/worktree` together and never says `worktree` alone: `templates/recipe.md`'s `BRANCH` comment drops to `# required`, and `docs/units-and-lanes.md`'s recipe paragraph reads the active `branch/worktree` with the working root in the write scope. A bare mention would read as an endorsement of the mechanism. The workspace overlay is untouched: there the choice is explicit by design.
+
 ## [0.34.0] - 2026-09-15
 
 ### Added

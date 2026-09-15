@@ -15,7 +15,7 @@ MISSION
 GROUND_AND_REFS
   # sliced context: exact symbols/lines; broad folder dumps forbidden
   SOURCE_OF_TRUTH: <file#symbol-or-lines>
-  BRANCH: <the active branch the lane works on>  # required; the worktree path, when one is used, sits in WRITE_SCOPE
+  BRANCH: <the active branch the lane works on>  # required
   REFS: [<file#symbol>, <journal#entry>, <knowledge#finding>]
   [FACTS ::
     exact isolated constraints from parent attention; one statement per line;
