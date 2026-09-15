@@ -102,7 +102,7 @@
 
 @verify
   1. run boot load: `.contexture/scripts/session-load.awk adopt-contexture` (read every page the map reports)
-  2. run audit: `.contexture/scripts/journal-audit.awk adopt-contexture` (must exit 0)
+  2. run audit: `.contexture/scripts/session-audit.awk adopt-contexture` (must exit 0)
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close

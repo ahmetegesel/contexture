@@ -1,6 +1,7 @@
 #!/usr/bin/awk -f
-# journal-audit.awk: Audit closures and entry grammar, print the open thread tail
-# Usage: .contexture/scripts/journal-audit.awk <session-slug>
+# session-audit.awk: the session audit: closures, entry grammar, the backlog
+# and state cross-checks; prints the open thread tail
+# Usage: .contexture/scripts/session-audit.awk <session-slug>
 # The repair instrument: fix what it flags, fill what is missing.
 # Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
 # markers on @entry lines, bracketed field lines (the [FIELD: literal-copy
@@ -14,7 +15,7 @@
 # thread paused stays open.
 
 function usage() {
-  print "Usage: journal-audit.awk <session-slug>" > "/dev/stderr"
+  print "Usage: session-audit.awk <session-slug>" > "/dev/stderr"
   fatal = 1
   exit 1
 }

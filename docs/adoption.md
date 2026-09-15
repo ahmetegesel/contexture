@@ -107,7 +107,7 @@ Three checks before the branch merges:
 
 ```
 .contexture/scripts/session-load.awk adopt-contexture
-.contexture/scripts/journal-audit.awk adopt-contexture
+.contexture/scripts/session-audit.awk adopt-contexture
 git status
 git diff
 ```

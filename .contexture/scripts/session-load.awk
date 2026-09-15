@@ -2,7 +2,7 @@
 # session-load.awk: print the load map and one page of the session load
 # Usage: .contexture/scripts/session-load.awk <session-slug> [<page>]
 # Sections in BIOS order: state, backlog, knowledge, the live journal
-# (composed from journal-active.awk, one extraction home), declared
+# (composed from session-board.awk, one extraction home), declared
 # ref_sessions read-only, then the write-scope trailer. Pages cut at
 # block starts around 500 lines, never mid-body; read every page the
 # map reports. Missing state is fatal rc=1 with zero stdout; missing
@@ -50,7 +50,7 @@ function read_whole(path, sec, empty_note,   line, n) {
 }
 
 function compose_stream(slug_arg, sec,   helper, tag, cmd, line, n, rc) {
-  helper = ".contexture/scripts/journal-active.awk"
+  helper = ".contexture/scripts/session-board.awk"
   tag = "session-load-helper-rc"
   cmd = helper " " slug_arg "; echo \"" tag "=$?\""
   n = 0

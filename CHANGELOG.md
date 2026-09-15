@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.32.0] - 2026-09-15
+
+### Added
+
+- `session-board.awk` opens with the board counts (`board <slug>: N live entries, M open tasks`), streams every live entry with its body whole, and closes with the open task slugs under their nudge line, `the entries say what happened; these say what remains`. A missing backlog is loud on stderr and nonfatal, reading `no backlog` in the opener with no tail; a missing journal remains fatal with zero stdout.
+- `@backlog` gains the declaration line: the task is where intent survives the conversation; a worthless one costs a line, a missing one is unrecoverable; when unsure, declare. The `@interact` artifacts clause now reads `backlog as work is declared and tasks move`.
+
+### Changed
+
+- `journal-active.awk` renamed to `session-board.awk` and `journal-audit.awk` renamed to `session-audit.awk`; the BIOS call sites, the README instrument table, `docs/the-engine.md`, `docs/adoption.md`, the ONBOARDING verify block, and the report and recipe template samples read the new names.
+- `@refresh` reads the board first, its open-task list the status checklist, and calls `session-audit`; `@close 3` and `@handoff 2` read `session-audit.awk`.
+
 ## [0.31.0] - 2026-09-14
 
 ### Added

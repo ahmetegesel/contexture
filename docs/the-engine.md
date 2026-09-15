@@ -79,7 +79,7 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 ## The scripts
 
-Five instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one loads the session, one stamps the load receipt, one streams what is live, one audits the record's defects, one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. Each runs as its own executable command (`.contexture/scripts/<name>.awk`), so nothing needs installing.
+Five instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one loads the session, one stamps the load receipt, one renders the live board, one audits the session, one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. Each runs as its own executable command (`.contexture/scripts/<name>.awk`), so nothing needs installing.
 
 ### session-load.awk: the load
 
@@ -89,7 +89,7 @@ Returns the map plus one page of the load: state, backlog, knowledge, the live j
 .contexture/scripts/session-load.awk <unit>
 ```
 
-Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes `journal-active.awk`'s stream, so the extraction has one home.
+Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes `session-board.awk`'s board, so the extraction has one home.
 
 ### session-stamp.awk: the receipt
 
@@ -101,24 +101,24 @@ Derives the next anchor from `state.md`, rewrites `current_anchor`, and appends 
 
 `grep "^@anchor"` reconstructs the map of periods and their receipts.
 
-### journal-active.awk: the stream
+### session-board.awk: the board
 
-Returns every live entry with its body whole, the updated board. Live means unclosed: the set is the journal entries that no closure names. Takes one form, a session slug:
+Returns the live board: every unclosed entry with its body whole, then the open task slugs under their nudge line. Live means unclosed: the set is the journal entries that no closure names. Takes one form, a session slug:
 
 ```bash
-.contexture/scripts/journal-active.awk <unit>
+.contexture/scripts/session-board.awk <unit>
 ```
 
-The script collects closure targets and streams live bodies in one shot. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation, a journal path, the legacy double path, an extra argument, or a flag, fails loudly.
+The script collects closure targets and streams live bodies in one shot, then lists the backlog slugs whose status is not DONE under the closing nudge; the opener names the counts, and a missing backlog is loud on stderr with no tail. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation, a journal path, the legacy double path, an extra argument, or a flag, fails loudly.
 
-`session-load` composes this stream for the load's journal section; run directly, it is the updated board, the open set in one stream.
+`session-load` composes this board for the load's journal section; run directly, it is the updated board: the open entries and the open tasks in one stream.
 
-### journal-audit.awk: the repair instrument
+### session-audit.awk: the repair instrument
 
 Returns the record's defects, each flagged with a line or a slug, and exits nonzero when any fires. Takes one form, a session slug:
 
 ```bash
-.contexture/scripts/journal-audit.awk <unit>
+.contexture/scripts/session-audit.awk <unit>
 ```
 
 The script derives `backlog.md` and `state.md` from the session folder; a sibling that cannot be read skips its check quietly. When the run is clean the script also prints the open-thread tail: the entries stamped `THREAD: true` that no closure names. The tail is a display, never an enforcement: a thread that pauses stays open, and its line in the tail is the reminder it exists.
