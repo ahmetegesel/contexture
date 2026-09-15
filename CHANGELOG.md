@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.34.0] - 2026-09-15
+
+### Added
+
+- The recipe grammar requires `BRANCH`: every recipe names the active branch the lane works on, with the worktree path, when one is used, sitting in `WRITE_SCOPE`. The fact is held to at write time by the template shape and the `@subagents` wording; it deliberately carries no worktree policy, so a dispatcher can give a lane the unit's branch or one of its own.
+
+### Changed
+
+- `docs/units-and-lanes.md`'s recipe paragraph is aligned.
+
 ## [0.33.0] - 2026-09-15
 
 ### Added

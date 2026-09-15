@@ -1,4 +1,4 @@
-# contexture v0.33.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.34.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -102,7 +102,7 @@
 
 @subagents
   every dispatch:
-  - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden
+  - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden; names the active branch/worktree
   - lane boot, read-only, before any work: the overlays, state.md, backlog.md, knowledge.md, the recipe, and every REF it names; session surfaces are never lane-written
   - the lane's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
   - lane journals at action granularity in journal.md as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; the journal is the audit trail and the resumption surface

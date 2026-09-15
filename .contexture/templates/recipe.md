@@ -15,6 +15,7 @@ MISSION
 GROUND_AND_REFS
   # sliced context: exact symbols/lines; broad folder dumps forbidden
   SOURCE_OF_TRUTH: <file#symbol-or-lines>
+  BRANCH: <the active branch the lane works on>  # required; the worktree path, when one is used, sits in WRITE_SCOPE
   REFS: [<file#symbol>, <journal#entry>, <knowledge#finding>]
   [FACTS ::
     exact isolated constraints from parent attention; one statement per line;
@@ -39,6 +40,7 @@ MISSION
 
 GROUND_AND_REFS
   SOURCE_OF_TRUTH: reports/2026-09-05-readme-consistency-audit.md#claim-1
+  BRANCH: main
   REFS: [AGENTS.md#L104, README.md#L484-491, knowledge.md#TOPOLOGY_AWARE_ADOPTION]
   FACTS ::
     standalone repos ignore only .contexture/sessions/, .contexture/rhythms/, AGENTS.local.md;
