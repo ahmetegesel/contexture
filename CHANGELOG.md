@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.36.1] - 2026-09-15
+
+### Added
+
+- The first setup bundle ships: `examples/setups/lane-isolation/` carries the on-demand worktree setup (the two overlay blocks verbatim from the workspace's own overlay, the `.worktrees/.gitignore` guard, and a plain-language README), and the README's docs index lists it beside the example rhythms. Per the human's call it ships unexercised: the setup reflects the configuration in force, its README marks it young, and the first real use still verifies the pattern.
+
 ## [0.36.0] - 2026-09-15
 
 ### Added
