@@ -1,20 +1,28 @@
 #!/usr/bin/awk -f
 # session-load.awk: print the load map and one page of the session load
 # Usage: session.sh load <session-slug> [<page>]
+#        session.sh load refs <ref_1> ... <ref_N> [<page>]
 # Sections in BIOS order: state, backlog, knowledge, the live journal
 # (composed from session-board.awk, one extraction home), declared
 # ref_sessions read-only, then the write-scope trailer. Pages cut at
 # block starts around 500 lines, never mid-body. Every call opens with
 # the LOAD INCOMPLETE banner until the last page, which opens LOAD
 # COMPLETE and hands off to the receipt stamp; keep calling until a page
-# reads complete. Missing state is fatal rc=1 with zero stdout; missing
-# backlog, knowledge, or journal is nonfatal: a WARNING on stderr and a
-# placeholder line in its section.
+# reads complete. The refs form streams the named sessions alone, read
+# only, with its own banner, map line, trailer, and tail. Missing state
+# is fatal rc=1 with zero stdout; missing backlog, knowledge, or journal
+# is nonfatal: a WARNING on stderr and a placeholder line in its section.
 
 function usage() {
   print "Usage: session.sh load <session-slug> [<page>]" > "/dev/stderr"
+  print "       session.sh load refs <ref_1> ... <ref_N> [<page>]" > "/dev/stderr"
   print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
   exit 1
+}
+
+function ref_hint() {
+  print "to read a reference session: session.sh load refs <ref-slug>" > "/dev/stderr"
+  usage()
 }
 
 function fail(msg) {
@@ -36,10 +44,8 @@ function add(line, sec,   first) {
   B[total] = (first || line ~ /^@(entry|finding|task|anchor) /) ? 1 : 0
 }
 
-function exists(path,   t, r) {
-  r = (getline t < path)
-  if (r >= 0) close(path)
-  return (r >= 0)
+function exists(path) {
+  return (system("test -f \"" path "\"") == 0)
 }
 
 function read_whole(path, sec, empty_note,   line, n) {
@@ -76,13 +82,146 @@ function warn_missing(artifact, path) {
   print "WARNING: missing " artifact ": " path > "/dev/stderr"
 }
 
+function compose_ref(rslug,   sec, rdir, rk, rj) {
+  sec = "ref " rslug
+  rdir = ".contexture/sessions/" rslug "/"
+  add("# === REF SESSION: " rslug " (READ-ONLY) ===", sec)
+  add("# NOTICE: Read-only reference context. Do not edit, resolve, or append entries here.", sec)
+  add("# All new tasks, active events, and state changes belong exclusively to the active session.", sec)
+  add("# --- ref knowledge.md ---", sec)
+  rk = rdir "knowledge.md"
+  if (!exists(rk)) {
+    warn_missing("knowledge", rk)
+    add("(no knowledge yet)", sec)
+  } else {
+    read_whole(rk, sec, "(empty knowledge)")
+  }
+  add("# --- ref live journal ---", sec)
+  rj = rdir "journal.md"
+  if (!exists(rj)) {
+    warn_missing("journal", rj)
+    add("(no journal yet)", sec)
+  } else {
+    compose_stream(rslug, sec)
+  }
+}
+
+function compute_pages(   start, end, j) {
+  npages = 0
+  start = 1
+  while (start <= total) {
+    npages++
+    end = total
+    for (j = start + 1; j <= total; j++) {
+      if (S[j] != S[start]) {
+        end = j - 1
+        break
+      }
+    }
+    for (j = start + 1; j <= end; j++) {
+      if (j - start >= 500 && B[j]) {
+        end = j - 1
+        break
+      }
+    }
+    pstart[npages] = start
+    pend[npages] = end
+    psec[npages] = S[start]
+    start = end + 1
+  }
+}
+
+function print_map(   si, s, pf, pl, pi, span) {
+  for (si = 1; si <= nsec; si++) {
+    s = seclist[si]
+    pf = 0
+    pl = 0
+    for (pi = 1; pi <= npages; pi++) {
+      if (psec[pi] == s) {
+        if (pf == 0) pf = pi
+        pl = pi
+      }
+    }
+    span = (pf == pl) ? ("page " pf) : ("pages " pf "-" pl)
+    printf "  %s: lines %d-%d | %s\n", s, secstart[s], secend[s], span
+  }
+}
+
+function page_header(form, page,   ps, label, w) {
+  ps = pstart[page]
+  label = S[ps]
+  if (ps != secstart[label]) {
+    split(L[ps], w, /[ \t]+/)
+    label = w[1] " " w[2]
+  }
+  printf "[load %s | %s | page %d/%d | from %s]\n", form, psec[page], page, npages, label
+}
+
+function page_body(page,   i) {
+  for (i = pstart[page]; i <= pend[page]; i++) print L[i]
+}
+
 BEGIN {
-  if (ARGC < 2 || ARGC > 3) usage()
+  if (ARGC < 2) usage()
+
+  if (ARGV[1] == "refs") {
+    if (ARGC < 3) usage()
+    page = 1
+    ntok = ARGC - 2
+    if (ARGV[ARGC - 1] ~ /^[0-9]+$/) {
+      if (ARGV[ARGC - 1] + 0 < 1) usage()
+      page = ARGV[ARGC - 1] + 0
+      ntok--
+    }
+    if (ntok < 1) usage()
+    nref = 0
+    refstr = ""
+    for (i = 2; i <= 1 + ntok; i++) {
+      if (ARGV[i] !~ /^[A-Za-z0-9][A-Za-z0-9_-]*$/) usage()
+      if (ARGV[i] ~ /^[0-9]+$/) usage()
+      nref++
+      reflist[nref] = ARGV[i]
+      refstr = (nref == 1) ? ARGV[i] : refstr " " ARGV[i]
+    }
+    for (ri = 1; ri <= nref; ri++) {
+      if (!exists(".contexture/sessions/" reflist[ri] "/state.md")) {
+        fail("ERROR: no such session: " reflist[ri])
+      }
+    }
+    for (ri = 1; ri <= nref; ri++) compose_ref(reflist[ri])
+
+    compute_pages()
+    if (page > npages) {
+      fail("ERROR: page out of range: " page " (1-" npages ")")
+    }
+
+    if (page < npages) {
+      printf "REF LOAD INCOMPLETE (page %d of %d): keep reading the ref\n", page, npages
+    } else {
+      printf "REF LOAD COMPLETE: pages %d/%d\n", npages, npages
+    }
+    printf "session-load refs %s: %d lines, %d pages\n", refstr, total, npages
+    print_map()
+    printf "WRITE SCOPE: none; ref sessions READ-ONLY\n"
+    print ""
+
+    page_header("refs", page)
+    page_body(page)
+    if (page < npages) {
+      printf "keep reading: session.sh load refs %s %d (%d pages remain)\n", refstr, page + 1, npages - page
+    } else {
+      printf "ref load complete: pages %d/%d\n", npages, npages
+    }
+    exit 0
+  }
+
+  if (ARGC > 3) usage()
   slug = ARGV[1]
   if (slug !~ /^[A-Za-z0-9][A-Za-z0-9_-]*$/) usage()
   page = 1
   if (ARGC == 3) {
-    if (ARGV[2] !~ /^[0-9]+$/ || ARGV[2] + 0 < 1) usage()
+    if (ARGV[2] !~ /^[0-9]+$/) ref_hint()
+    if (ARGV[2] + 0 < 1) usage()
     page = ARGV[2] + 0
   }
 
@@ -146,53 +285,9 @@ BEGIN {
     compose_stream(slug, "journal")
   }
 
-  for (ri = 1; ri <= nref; ri++) {
-    rslug = reflist[ri]
-    sec = "ref " rslug
-    rdir = ".contexture/sessions/" rslug "/"
-    add("# === REF SESSION: " rslug " (READ-ONLY) ===", sec)
-    add("# NOTICE: Read-only reference context. Do not edit, resolve, or append entries here.", sec)
-    add("# All new tasks, active events, and state changes belong exclusively to the active session.", sec)
-    add("# --- ref knowledge.md ---", sec)
-    rk = rdir "knowledge.md"
-    if (!exists(rk)) {
-      warn_missing("knowledge", rk)
-      add("(no knowledge yet)", sec)
-    } else {
-      read_whole(rk, sec, "(empty knowledge)")
-    }
-    add("# --- ref live journal ---", sec)
-    rj = rdir "journal.md"
-    if (!exists(rj)) {
-      warn_missing("journal", rj)
-      add("(no journal yet)", sec)
-    } else {
-      compose_stream(rslug, sec)
-    }
-  }
+  for (ri = 1; ri <= nref; ri++) compose_ref(reflist[ri])
 
-  npages = 0
-  start = 1
-  while (start <= total) {
-    npages++
-    end = total
-    for (j = start + 1; j <= total; j++) {
-      if (S[j] != S[start]) {
-        end = j - 1
-        break
-      }
-    }
-    for (j = start + 1; j <= end; j++) {
-      if (j - start >= 500 && B[j]) {
-        end = j - 1
-        break
-      }
-    }
-    pstart[npages] = start
-    pend[npages] = end
-    psec[npages] = S[start]
-    start = end + 1
-  }
+  compute_pages()
 
   if (page > npages) {
     fail("ERROR: page out of range: " page " (1-" npages ")")
@@ -204,30 +299,12 @@ BEGIN {
     printf "LOAD COMPLETE: pages %d/%d; stamp the receipt: session.sh stamp %s \"<the loaded set + ref_sessions + the git state>\"\n", npages, npages, slug
   }
   printf "session-load %s: %d lines, %d pages\n", slug, total, npages
-  for (si = 1; si <= nsec; si++) {
-    s = seclist[si]
-    pf = 0
-    pl = 0
-    for (pi = 1; pi <= npages; pi++) {
-      if (psec[pi] == s) {
-        if (pf == 0) pf = pi
-        pl = pi
-      }
-    }
-    span = (pf == pl) ? ("page " pf) : ("pages " pf "-" pl)
-    printf "  %s: lines %d-%d | %s\n", s, secstart[s], secend[s], span
-  }
+  print_map()
   printf "WRITE SCOPE: .contexture/sessions/%s/ + repos: [%s]; ref sessions READ-ONLY\n", slug, repos
   print ""
 
-  ps = pstart[page]
-  label = S[ps]
-  if (ps != secstart[label]) {
-    split(L[ps], w, /[ \t]+/)
-    label = w[1] " " w[2]
-  }
-  printf "[load %s | %s | page %d/%d | from %s]\n", slug, psec[page], page, npages, label
-  for (i = ps; i <= pend[page]; i++) print L[i]
+  page_header(slug, page)
+  page_body(page)
   if (page < npages) {
     printf "keep reading: session.sh load %s %d (%d pages remain)\n", slug, page + 1, npages - page
   } else {

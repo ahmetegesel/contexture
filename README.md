@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.35.0 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.36.0 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh
 ```
 
@@ -111,6 +111,7 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 | session.sh active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
 | session.sh bootstrap <slug> "<objective>" [<repos>] | A new unit: the folder, state at A0, the three empty artifacts, and the folded A1 receipt; prints the state and the next move |
 | session.sh load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
+| session.sh load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
 | session.sh stamp <unit> "<attention>" | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
 | session.sh board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
 | session.sh audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |

@@ -81,15 +81,18 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 Seven instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one renders the live board, one audits the session, one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses flags outright. Nothing needs installing.
 
-### session.sh load: the load
+### session.sh load: the load and the refs form
 
 Returns the map plus one page of the load: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The map names each section with its line count and pages, then the write-scope trailer; pages cut at block boundaries, never mid-body. An incomplete call opens with `LOAD INCOMPLETE` and instructs the next call in its last line; the final page opens with `LOAD COMPLETE` and hands off to the receipt stamp.
 
 ```bash
 .contexture/scripts/session.sh load <unit>
+.contexture/scripts/session.sh load refs <ref_1> ... <ref_N> [<page>]
 ```
 
 Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes the board (`session.sh board`), so the extraction has one home.
+
+The refs form is the on-demand consult: it streams the named sessions alone, each composed exactly as the unit load composes a reference, and pages them locally with its own map, banner, and tail, so a large reference never truncates. A missing ref is fatal; zero refs, or a numeric token in a ref position, prints the usage at rc 1; a session named `refs` stays reachable through the escape hatch `session.sh load refs refs`.
 
 ### session.sh stamp: the receipt
 
@@ -111,7 +114,7 @@ Returns the live board: every unclosed entry with its body whole, then the open 
 
 The script collects closure targets and streams live bodies in one shot, then lists the backlog slugs whose status is not DONE under the closing nudge; the opener names the counts, and a missing backlog is loud on stderr with no tail. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation of `session.sh board` fails loudly: a path, the legacy double path, an extra argument, or a flag.
 
-`session.sh load` composes this board for the load's journal section; run directly, `session.sh board` is the updated board: the open entries and the open tasks in one stream.
+`session.sh load` composes this board for the load's journal section; run directly, `session.sh board` is the updated board: the open entries and the open tasks in one stream. The refs form composes the board per reference session, so a consulted session streams its live entries too.
 
 ### session.sh audit: the repair instrument
 

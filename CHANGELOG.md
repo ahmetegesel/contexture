@@ -8,6 +8,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.36.0] - 2026-09-15
+
+### Added
+
+- The refs form on the load: `session.sh load refs <ref_1> ... <ref_N> [<page>]` streams those sessions read-only, each composed exactly as the unit load composes a reference (the notice, the knowledge, the live journal), in its own local pages with its own map, banner, and tail. The boot's declared `ref_sessions` composition is unchanged; this is the on-demand consult. Any existing session is nameable, a missing one refuses at rc 1, zero refs prints the usage, and a trailing numeric argument is the page. A session named `refs` stays reachable through the escape hatch `load refs refs`.
+
+### Changed
+
+- The unit load's ref composition and page loop are extracted into shared functions, so the refs form's bytes come from the same home as the unit load's and cannot drift. A non-numeric second argument on the unit form now refuses with the hint pointing at the refs form.
+- The README's instrument table, `docs/the-engine.md`, and `docs/units-and-lanes.md` name the form.
+
+### Fixed
+
+- A `state.md` that is a directory, or otherwise not a regular file, now refuses cleanly in both readers: the unit load reports the missing state, the refs form reports no such session, and the field warns and still counts it, instead of a raw interpreter error.
+
 ## [0.35.0] - 2026-09-15
 
 ### Added

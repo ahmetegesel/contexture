@@ -59,9 +59,10 @@ The first thing the agent does in a fresh context, mechanically:
 
    ```bash
    .contexture/scripts/session.sh load <unit>
+   .contexture/scripts/session.sh load refs <ref_1> ... <ref_N> [<page>]
    ```
 
-   The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The load is one subtraction: live means not closed; anchors order periods and receipt loads, never liveness. Knowledge loads fully; it is small, and every line is a settled decision.
+   The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The load is one subtraction: live means not closed; anchors order periods and receipt loads, never liveness. Knowledge loads fully; it is small, and every line is a settled decision. Reference sessions are consulted on demand with `load refs <ref_1> ... <ref_N>`: they stream read-only under their own banner, map, and tail, apart from the unit load.
 6. Run the rhythm index: one line per rhythm, its trigger, and its activation policy.
 7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the session files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
 8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `grep "^@anchor"` reconstructs the map of periods and their receipts:
@@ -86,7 +87,7 @@ Two distinct ends:
 
 ### Handoff
 
-The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the cold read. Run `session.sh load` and read every page as a fresh boot would; the record must reconstruct the position without the conversation. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
+The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the cold read. Run `session.sh load <unit>` and read every page as a fresh boot would; the record must reconstruct the position without the conversation. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
 
 Boot is the reader; handoff is the writer's proof. Both run against the same record, from opposite sides of the context boundary.
 

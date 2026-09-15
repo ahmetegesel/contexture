@@ -27,6 +27,7 @@ usage:
   session.sh active
   session.sh bootstrap <slug> "<objective>" [<repos>]
   session.sh load <slug> [<page>]
+  session.sh load refs <ref_1> ... <ref_N> [<page>]
   session.sh stamp <slug> "<attention>"
   session.sh board <slug>
   session.sh audit <slug>
@@ -39,6 +40,7 @@ commands:
   active     no arguments: every ACTIVE unit (slug, current_anchor, next_action, objective verbatim) then the closed count; a missing sessions directory prints "no sessions yet" rc=0; an argument refuses rc=1
   bootstrap  <slug> "<objective>" [<repos>]: create the unit folder, state at A0 folded to A1, the three artifacts; prints the state and "next: declare the first task"; refusals rc=1 with zero partial writes (existing slug, malformed slug, empty objective, embedded newline, extra arguments)
   load       <slug> [<page>]: the load map plus one page; keep calling until a page reads complete; missing state is fatal rc=1; a missing backlog, knowledge, or journal warns on stderr and prints a placeholder
+  load refs  <ref_1> ... <ref_N> [<page>]: the refs load: those sessions read-only (the notice, the knowledge, the live journal), locally paged; a missing ref is fatal rc=1; a session named refs reads via load refs refs
   stamp      <slug> "<attention>": bump current_anchor to A<N+1> and append the anchor receipt to journal.md; malformed state or attention refuses rc=1 with no partial write
   board      <slug>: the live board: unclosed journal entries with complete bodies, then the open task slugs; missing journal is fatal rc=1; a missing backlog warns on stderr
   audit      <slug>: the session audit: dangling and slugless closers, entry grammar, the backlog and state cross-checks; rc=1 on any finding; prints the open thread tail

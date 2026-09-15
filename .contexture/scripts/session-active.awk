@@ -34,6 +34,10 @@ BEGIN {
     nl = 0
     ol = 0
     cur = ""
+    if (system("test -f \"" state "\"") != 0) {
+      print "WARNING: unreadable state: " state > "/dev/stderr"
+      continue
+    }
     while ((r = (getline line < state)) > 0) {
       if (line ~ /^[ \t]*$/) {
         cur = ""
