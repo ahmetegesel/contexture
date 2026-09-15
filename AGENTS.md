@@ -1,4 +1,4 @@
-# contexture v0.32.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.32.2: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -27,7 +27,7 @@
   state.md     = live pointer: where the unit stands and what happens next; the only file edited freely; read WHOLE at boot; terse by design, the map, not the content: detail lives behind refs; optional ref_sessions declares read-only sessions mounted at boot; refreshed as the work moves (every backlog update, task landing, period end).
   backlog.md   = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog.
   journal.md   = the single recording surface: append-only events + @anchor declarations; the workflow in @journal.
-  knowledge.md = settled findings at decision/discovery moments, statusless; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh); developing ideas stay journal events.
+  knowledge.md = settled findings: what is true, what was decided and why, what was ruled out; an intent to act takes the @task shape in backlog.md, a developing idea stays a journal event; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
   lanes/       = dispatch units, one folder per lane: recipe.md (brief) + journal.md (incremental trace) + report.md (evidence); re-dispatch resumes from the folder; the contract in @subagents.
 
 @journal
@@ -40,10 +40,10 @@
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open: an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
 @backlog
-  the backlog is the current declaration of work, written to be executed from no matter when the agent looks; living task queue
-  declaration: the task is where intent survives the conversation; a worthless one costs a line, a missing one is unrecoverable. when unsure, declare
+  the backlog is the current declaration of work, written to be executed from no matter when the agent looks; a living queue: tasks advance, update, and drop as the work teaches; the journal holds the history
+  declaration: the task is where intent survives the conversation; an intent to act is a task even when rough (readiness comes at activation); a worthless one costs a line, a missing one is unrecoverable. when unsure, declare; when the need dissolves, drop it
   the schema guides the task shape: @task <slug> with STATUS (TODO | IN_PROGRESS | DONE), OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::; the writer holds the volume
-  non-destructive evolution: tasks can be added, updated, or reordered; mid-stride pivots insert a new task without destroying existing tasks
+  evolution: tasks can be added, updated, reordered, or dropped; mid-stride pivots insert a new task without rewriting the standing ones
   dedicated containers: DESCRIPTION carries context and scope, ACCEPTANCE CRITERIA carries checkable done-conditions, IMPLEMENTATION DETAILS carries the specification and the execution blueprint: the requirements and decisions the change must honor, and how it lands; omit ornament, never substance
   REFS names its targets exactly (path#symbol): journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME), or an artifact (file#symbol); the spec stands alone: a ref navigates, it never substitutes for the meaning
   compose from the record (@laws#compose-from-record): material living only in the conversation lands in the record first, then the task references it

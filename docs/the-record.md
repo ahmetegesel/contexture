@@ -37,7 +37,7 @@ The card mutates often and freely: it is refreshed as the work moves, at every b
 
 ## backlog.md, the declaration
 
-The unit's actionable tasks as a living queue: the current declaration of work, written to be executed from no matter when the agent looks. The unit's overarching objective lives in `state.md`; the backlog carries the tasks.
+The unit's actionable tasks as a living queue: the current declaration of work, written to be executed from no matter when the agent looks. Tasks advance, update, and drop as the work teaches; the journal holds the history; the unit's overarching objective lives in `state.md`.
 
 ```text
 @task auth-cookie-sessions
@@ -63,7 +63,7 @@ The dedicated containers are the point: technical substance gets a natural home 
 
 `REFS` names its targets exactly, as `path#symbol`: a journal entry (`journal.md#slug`), a lane report (`lanes/x/report.md#claim`), a knowledge finding (`knowledge.md#NAME`), or any artifact (`file#symbol`). The ref navigates; it never substitutes for the meaning. The task must read alone, with the full picture, no matter when the agent looks at it: material living only in the conversation lands in the record first, then the task cites it.
 
-The backlog mutates non-destructively and in place. A mid-stride pivot inserts a fresh `@task` block without destroying or rewriting the uncompleted ones. Statuses advance as work moves: active work marks `IN_PROGRESS`; completion marks `DONE` and lands one journal line, `backlog/<slug>: DONE`, carrying its evidence, the command run and its observed result.
+The backlog mutates in place as the work teaches. A mid-stride pivot inserts a fresh `@task` block without rewriting the standing ones; a task that turned out wrong or unneeded is dropped. Statuses advance as work moves: active work marks `IN_PROGRESS`; completion marks `DONE` and lands one journal line, `backlog/<slug>: DONE`, carrying its evidence, the command run and its observed result.
 
 A task marked `IN_PROGRESS` is executable as written: every needed decision lives in the task or behind a ref. Placeholders (`TBD`, "similar to <task>", "as appropriate") mean the task is not ready, and the readiness check happens before execution, never around it.
 
@@ -102,7 +102,7 @@ Append-only is the file's identity. An edit would rewrite what was true then; en
 
 ## knowledge.md, the mind
 
-Knowledge holds what the unit settled, each finding written at the moment of a decision or a discovery. Findings are statusless: developing ideas stay in the journal, so everything that lands here is already established.
+Knowledge holds what the unit settled, each finding written at the moment of a decision or a discovery. A finding states what is true, what was decided and why, or what was ruled out; an intent to act takes the task shape in the backlog, and developing ideas stay in the journal.
 
 ```text
 @finding SESSION_TOKEN_SHAPE

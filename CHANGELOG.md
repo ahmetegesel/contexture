@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.32.2] - 2026-09-15
+
+### Changed
+
+- The knowledge map line states the boundary positively: findings are what is true, what was decided and why, or what was ruled out; intent to act takes the `@task` shape in `backlog.md`; developing ideas stay journal events. `statusless` is dropped: the schema states it by omission, and naming the dimension invites it.
+- The backlog is a living queue: the declaration invitation gains its counterweight (`when unsure, declare; when the need dissolves, drop it`), the opening line names advance, update, and drop with the journal holding the history, and the evolution line loses its anti-drop read (`tasks can be added, updated, reordered, or dropped`).
+- `templates/knowledge.md`, `docs/the-record.md`, and `docs/units-and-lanes.md` are aligned with both halves.
+
 ## [0.32.1] - 2026-09-15
 
 ### Fixed
