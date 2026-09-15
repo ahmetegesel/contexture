@@ -1,13 +1,14 @@
 #!/usr/bin/awk -f
 # session-stamp.awk: bump the session anchor and append the load receipt
-# Usage: .contexture/scripts/session-stamp.awk <session-slug> "<attention>"
+# Usage: session.sh stamp <session-slug> "<attention>"
 # Derives A<N> from state.md, rewrites current_anchor to A<N+1> through a
 # same-directory temp plus mv, appends the anchor line to journal.md, and
 # prints the transition. Malformed state, an empty, whitespace-only, or
 # newline-carrying attention refuses loudly rc=1 with no partial write.
 
 function usage() {
-  print "Usage: session-stamp.awk <session-slug> \"<attention>\"" > "/dev/stderr"
+  print "Usage: session.sh stamp <session-slug> \"<attention>\"" > "/dev/stderr"
+  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
   exit 1
 }
 

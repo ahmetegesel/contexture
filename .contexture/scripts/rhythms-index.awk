@@ -1,10 +1,11 @@
 #!/usr/bin/awk -f
 # rhythms-index.awk: the rhythm selection index
-# Usage: .contexture/scripts/rhythms-index.awk
+# Usage: session.sh index
 # No arguments: reads .contexture/rhythms/*.md; arguments are refused rc=1.
 
 function usage() {
-  print "Usage: rhythms-index.awk" > "/dev/stderr"
+  print "Usage: session.sh index" > "/dev/stderr"
+  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
   exit 1
 }
 

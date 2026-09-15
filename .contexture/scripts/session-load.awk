@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 # session-load.awk: print the load map and one page of the session load
-# Usage: .contexture/scripts/session-load.awk <session-slug> [<page>]
+# Usage: session.sh load <session-slug> [<page>]
 # Sections in BIOS order: state, backlog, knowledge, the live journal
 # (composed from session-board.awk, one extraction home), declared
 # ref_sessions read-only, then the write-scope trailer. Pages cut at
@@ -12,7 +12,8 @@
 # placeholder line in its section.
 
 function usage() {
-  print "Usage: session-load.awk <session-slug> [<page>]" > "/dev/stderr"
+  print "Usage: session.sh load <session-slug> [<page>]" > "/dev/stderr"
+  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
   exit 1
 }
 
@@ -200,7 +201,7 @@ BEGIN {
   if (page < npages) {
     printf "LOAD INCOMPLETE (page %d of %d): keep calling until a page reads complete; do not start work from a partial record\n", page, npages
   } else {
-    printf "LOAD COMPLETE: pages %d/%d; stamp the receipt: session-stamp.awk %s \"<the loaded set + ref_sessions + the git state>\"\n", npages, npages, slug
+    printf "LOAD COMPLETE: pages %d/%d; stamp the receipt: session.sh stamp %s \"<the loaded set + ref_sessions + the git state>\"\n", npages, npages, slug
   }
   printf "session-load %s: %d lines, %d pages\n", slug, total, npages
   for (si = 1; si <= nsec; si++) {
@@ -228,7 +229,7 @@ BEGIN {
   printf "[load %s | %s | page %d/%d | from %s]\n", slug, psec[page], page, npages, label
   for (i = ps; i <= pend[page]; i++) print L[i]
   if (page < npages) {
-    printf "keep reading: session-load.awk %s %d (%d pages remain)\n", slug, page + 1, npages - page
+    printf "keep reading: session.sh load %s %d (%d pages remain)\n", slug, page + 1, npages - page
   } else {
     printf "load complete: pages %d/%d\n", npages, npages
   }

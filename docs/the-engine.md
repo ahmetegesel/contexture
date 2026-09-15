@@ -79,46 +79,46 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 ## The scripts
 
-Five instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one loads the session, one stamps the load receipt, one renders the live board, one audits the session, one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. Each runs as its own executable command (`.contexture/scripts/<name>.awk`), so nothing needs installing.
+Seven instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one renders the live board, one audits the session, one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses flags outright. Nothing needs installing.
 
-### session-load.awk: the load
+### session.sh load: the load
 
 Returns the map plus one page of the load: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The map names each section with its line count and pages, then the write-scope trailer; pages cut at block boundaries, never mid-body. An incomplete call opens with `LOAD INCOMPLETE` and instructs the next call in its last line; the final page opens with `LOAD COMPLETE` and hands off to the receipt stamp.
 
 ```bash
-.contexture/scripts/session-load.awk <unit>
+.contexture/scripts/session.sh load <unit>
 ```
 
-Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes `session-board.awk`'s board, so the extraction has one home.
+Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes the board (`session.sh board`), so the extraction has one home.
 
-### session-stamp.awk: the receipt
+### session.sh stamp: the receipt
 
 Derives the next anchor from `state.md`, rewrites `current_anchor`, and appends the anchor line with the attention verbatim, printing the transition. A malformed state file or a missing attention fails loudly, with no partial write.
 
 ```bash
-.contexture/scripts/session-stamp.awk <unit> "<the loaded set + ref_sessions + the git state>"
+.contexture/scripts/session.sh stamp <unit> "<attention>"
 ```
 
 `grep "^@anchor"` reconstructs the map of periods and their receipts.
 
-### session-board.awk: the board
+### session.sh board: the board
 
 Returns the live board: every unclosed entry with its body whole, then the open task slugs under their nudge line. Live means unclosed: the set is the journal entries that no closure names. Takes one form, a session slug:
 
 ```bash
-.contexture/scripts/session-board.awk <unit>
+.contexture/scripts/session.sh board <unit>
 ```
 
-The script collects closure targets and streams live bodies in one shot, then lists the backlog slugs whose status is not DONE under the closing nudge; the opener names the counts, and a missing backlog is loud on stderr with no tail. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation, a journal path, the legacy double path, an extra argument, or a flag, fails loudly.
+The script collects closure targets and streams live bodies in one shot, then lists the backlog slugs whose status is not DONE under the closing nudge; the opener names the counts, and a missing backlog is loud on stderr with no tail. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation of `session.sh board` fails loudly: a path, the legacy double path, an extra argument, or a flag.
 
-`session-load` composes this board for the load's journal section; run directly, it is the updated board: the open entries and the open tasks in one stream.
+`session.sh load` composes this board for the load's journal section; run directly, `session.sh board` is the updated board: the open entries and the open tasks in one stream.
 
-### session-audit.awk: the repair instrument
+### session.sh audit: the repair instrument
 
 Returns the record's defects, each flagged with a line or a slug, and exits nonzero when any fires. Takes one form, a session slug:
 
 ```bash
-.contexture/scripts/session-audit.awk <unit>
+.contexture/scripts/session.sh audit <unit>
 ```
 
 The script derives `backlog.md` and `state.md` from the session folder; a sibling that cannot be read skips its check quietly. When the run is clean the script also prints the open-thread tail: the entries stamped `THREAD: true` that no closure names. The tail is a display, never an enforcement: a thread that pauses stays open, and its line in the tail is the reminder it exists.
@@ -137,29 +137,29 @@ The classes, and what each one asks for:
 
 The audit is a repair instrument: fix what it flags and fill what is missing before the period ends; a note about a flag is not a repair. It runs at refresh, close, and handoff, and close and handoff expect exit 0.
 
-### rhythms-index.awk: the selection index
+### session.sh index: the selection index
 
 Returns one line per rhythm: the name, the path, its trigger, and its activation policy. It takes no arguments; it reads `.contexture/rhythms/`.
 
 ```bash
-.contexture/scripts/rhythms-index.awk
+.contexture/scripts/session.sh index
 ```
 
 The boot loads this index to discover what rhythms exist; a rhythm's body loads only when it is selected. A file with no `use when:` line prints `(missing)`, and an activation the file does not state defaults to `propose`: the agent proposes the rhythm on its trigger and the human confirms. `auto` is the explicit opt-in, where the agent applies the rhythm without a separate ask.
 
 ### One audit per grammar
 
-The five scripts are payload instruments, shipped with the convention and identical everywhere. A session can also carry an audit of its own for a grammar the payload does not know yet; the session's bank audit is the precedent. It stays session-local until its grammar proves generic, then it can promote to the payload as a sibling. The separation is deliberate: no experimental checks inside a shipped script, and each audit derives its siblings rather than being handed their paths. Refresh and handoff run every audit in play, and the receipt carries the results.
+The scripts are payload instruments, shipped with the convention and identical everywhere. A session can also carry an audit of its own for a grammar the payload does not know yet; the session's bank audit is the precedent. It stays session-local until its grammar proves generic, then it can promote to the payload as a sibling. The separation is deliberate: no experimental checks inside a shipped script, and each audit derives its siblings rather than being handed their paths. Refresh and handoff run every audit in play, and the receipt carries the results.
 
 ## The completeness loop
 
 The loop is what the machinery does with the record: it makes gaps visible at fixed points and demands repair instead of notes. Taking the stations in the order a unit meets them:
 
-- **Boot** runs `session-load` and the rhythm index. The load is the subtraction, not a judgment call, so the agent pays for what is open and nothing else.
+- **Boot** runs `session.sh load` and `session.sh index`. The load is the subtraction, not a judgment call, so the agent pays for what is open and nothing else.
 - **Work** journals events as they happen and flags knowledge-worthy entries where they land. The flag is the harvest's input; nothing needs to be collected later.
 - **Refresh** runs at every rhythm boundary and inside close. It sweeps the artifacts: events journaled, backlog statuses advanced, `next_action` refreshed. It runs the harvest: every open flag, one candidate each; a confirmed candidate lands in knowledge and its entry closes by reference, and a candidate that is not landed drops. Then it runs the audit, and what it flags is fixed.
 - **Close** closes the period's done events by reference and requires the audit to exit 0.
-- **Handoff** runs before context death, whether that is a compaction, a tool change, or a long break. The period-end writes run if they are not done, then the cold read: run `session-load.awk` and read every page as a fresh boot would. While the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction. The audit exits 0.
+- **Handoff** runs before context death, whether that is a compaction, a tool change, or a long break. The period-end writes run if they are not done, then the cold read: run `session.sh load` and read every page as a fresh boot would. While the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction. `session.sh audit` exits 0.
 
 Why this holds together:
 
@@ -179,7 +179,7 @@ examples/            example rhythms, copied at adoption
 .contexture/
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
   templates/         the grammars every artifact fills
-  scripts/           the queries and audits
+  scripts/           the session.sh entry point and its workers
   rhythms/           your process patterns
   sessions/          the units of work
 ```

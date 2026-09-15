@@ -29,7 +29,7 @@ and evidence, what the dispatcher needs to re-verify and decide.
   STATUS: COMPLETE
   TASKS:
     1. git-topology: DONE (exit: "AGENTS.md:104 distinguishes parent from standalone")
-    2. handoff-audit: DONE (exit: "README.md:484-491 names session-audit.awk")
+    2. handoff-audit: DONE (exit: "README.md:484-491 names session.sh audit")
   LOAD_BEARING: [base-git-topology, handoff-audit-placement]
 
 @claim base-git-topology
@@ -42,8 +42,8 @@ and evidence, what the dispatcher needs to re-verify and decide.
     check-ignore verified cleanly
 
 @claim handoff-audit-placement
-  VERDICT: ".contexture/scripts/session-audit.awk added to README handoff verification."
-  EVIDENCE: README.md:488 ("AND .contexture/scripts/session-audit.awk <unit> exits 0")
+  VERDICT: ".contexture/scripts/session.sh audit added to README handoff verification."
+  EVIDENCE: README.md:488 ("AND .contexture/scripts/session.sh audit <unit> exits 0")
   MARK: VERIFIED
 
 @risks

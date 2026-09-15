@@ -47,10 +47,10 @@ The first thing the agent does in a fresh context, mechanically:
 
 1. Read the overlays: the workspace overlay, then the local amendments. Both are tiny; where they disagree, the workspace wins.
 2. Boot unconditionally. The first message of a fresh context is the move signal whatever its shape, a question as much as a task.
-3. Get the field and match. One grep lists the candidates, and the message is read against them:
+3. Get the field and match. One command lists the candidates, and the message is read against them:
 
    ```
-   grep -rl "status: ACTIVE" .contexture/sessions/*/state.md
+   .contexture/scripts/session.sh active
    ```
 
    A close match proposes continuing that unit; no match proposes a new one.
@@ -58,7 +58,7 @@ The first thing the agent does in a fresh context, mechanically:
 5. Run the load and keep calling until a page reads complete (read every page the map reports):
 
    ```bash
-   .contexture/scripts/session-load.awk <unit>
+   .contexture/scripts/session.sh load <unit>
    ```
 
    The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The load is one subtraction: live means not closed; anchors order periods and receipt loads, never liveness. Knowledge loads fully; it is small, and every line is a settled decision.
@@ -67,11 +67,11 @@ The first thing the agent does in a fresh context, mechanically:
 8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `grep "^@anchor"` reconstructs the map of periods and their receipts:
 
    ```bash
-   .contexture/scripts/session-stamp.awk <unit> "<the loaded set + ref_sessions + the git state>"
+   .contexture/scripts/session.sh stamp <unit> "<the loaded set + ref_sessions + the git state>"
    ```
 9. Continue from `next_action`, following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
 
-New work bootstraps a unit instead of joining one: the agent creates `state.md` with `status: ACTIVE`, `current_anchor: A0`, and `next_action: "backlog the first task"`, then continues at step 5; the first boot stamps A1.
+New work bootstraps a unit instead of joining one: run `.contexture/scripts/session.sh bootstrap <slug> "<objective>" [<repos>]`; it creates the folder, the state pointer at A0, and the folded A1 receipt, printing the next move; then continue at step 5.
 
 ### Refresh
 
@@ -86,7 +86,7 @@ Two distinct ends:
 
 ### Handoff
 
-The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the cold read. Run `session-load.awk` and read every page as a fresh boot would; the record must reconstruct the position without the conversation. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
+The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the cold read. Run `session.sh load` and read every page as a fresh boot would; the record must reconstruct the position without the conversation. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
 
 Boot is the reader; handoff is the writer's proof. Both run against the same record, from opposite sides of the context boundary.
 

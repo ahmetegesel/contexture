@@ -15,9 +15,7 @@
   1. inspect git: `git status -s`; halt if uncommitted changes exist
   2. branch: `git checkout -b adopt-contexture` (or team branch convention)
   3. never execute onboarding directly on main/master/production branches
-  4. bootstrap the adoption session:
-     write .contexture/sessions/adopt-contexture/state.md: status: ACTIVE, current_anchor: A0, next_action: "assess the workspace"
-     initialize journal.md with `@anchor A0 ("onboarding starts", attention: none)`
+  4. bootstrap the adoption session: `.contexture/scripts/session.sh bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
   5. journal the phase: the branch and the starting git state
 
 @assess
@@ -68,7 +66,7 @@
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in backlog.md, next_action points at the active task, every task's completion journals and advances next_action, drift updates the backlog in the same breath
   base assets:
     copy the adoption set: `git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <target>`; AGENTS.md lands at the root, the drawer alongside it, the examples at the root as reference
-    set script permissions: `chmod +x .contexture/scripts/*.awk`
+    set script permissions: `chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh`
     starting rhythms: when the confirmed plan carries no team rhythm, copy the offered examples (`cp -R examples/rhythms/* .contexture/rhythms/`); the copies are the team's to edit
   gitignore:
     standalone repo:
@@ -101,8 +99,8 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. run boot load: `.contexture/scripts/session-load.awk adopt-contexture` (read every page the map reports)
-  2. run audit: `.contexture/scripts/session-audit.awk adopt-contexture` (must exit 0)
+  1. run boot load: `.contexture/scripts/session.sh load adopt-contexture` (read every page the map reports)
+  2. run audit: `.contexture/scripts/session.sh audit adopt-contexture` (must exit 0)
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close

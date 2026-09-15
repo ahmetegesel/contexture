@@ -36,7 +36,7 @@ MISSION
   GOAL: "Apply targeted byte-clean fixes across README.md and AGENTS.md"
   TASKS:
     1. git-topology: align AGENTS.md line 104 with standalone vs parent workspace rules; exit: "diff clean"
-    2. handoff-audit: add .contexture/scripts/session-audit.awk to README handoff step; exit: "awk clean"
+    2. handoff-audit: add .contexture/scripts/session.sh audit to README handoff step; exit: "awk clean"
 
 GROUND_AND_REFS
   SOURCE_OF_TRUTH: reports/2026-09-05-readme-consistency-audit.md#claim-1

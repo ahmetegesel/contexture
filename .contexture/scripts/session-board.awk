@@ -1,7 +1,7 @@
 #!/usr/bin/awk -f
 # session-board.awk: the live board: unclosed journal entries with complete
 # bodies, then the open task slugs with their closing nudge
-# Usage: .contexture/scripts/session-board.awk <session-slug>
+# Usage: session.sh board <session-slug>
 # One form: the slug resolves .contexture/sessions/<slug>/{journal,backlog}.md.
 # A path, extra arguments, and the retired refs flags are refused rc=1
 # with a usage line. Missing journal is fatal rc=1 with zero stdout;
@@ -9,7 +9,8 @@
 # "no backlog" and no tail prints.
 
 function usage() {
-  print "Usage: session-board.awk <session-slug>" > "/dev/stderr"
+  print "Usage: session.sh board <session-slug>" > "/dev/stderr"
+  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
   exit 1
 }
 

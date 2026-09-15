@@ -8,6 +8,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.35.0] - 2026-09-15
+
+### Added
+
+- The session toolbox: one entry point. `.contexture/scripts/session.sh` fronts the workers with a strict command table (`help`, `active`, `bootstrap`, `load`, `stamp`, `board`, `audit`, `index`); `session.sh help` prints every command's contract, so no one reads a script to learn one; the boot runs it after the overlays, and every worker's misuse output points at it.
+- `session-active.awk`: the field in one call. Each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count. A missing sessions directory prints `no sessions yet` at rc 0, a valid adoption start; a state matching neither status spelling, or unreadable, warns on stderr and still counts.
+- `session-bootstrap.awk`: a fresh unit in one call. The folder, the state at `A0`, the three empty artifacts, and the folded `A1` receipt (fresh unit, objective, workspace git state); for new units the boot's load and stamp steps fold away.
+
+### Changed
+
+- The BIOS reads the wrapper form: `session.sh active` replaces the field grep; steps 5, 6, and 8 read `session.sh load`, `index`, and `stamp`; step 10 reads `session.sh bootstrap` and continues at the index; `@query` reads `session.sh board`; `@close` and `@handoff` read `session.sh audit`; `@layout` names the entry point and its help.
+- The README instrument table, `docs/the-engine.md`, `docs/units-and-lanes.md`, `docs/adoption.md`, `docs/rhythms.md`, the ONBOARDING verify block, and the template samples read the wrapper forms; the ONBOARDING bootstrap procedure uses `session.sh bootstrap` with the folded receipt.
+
+### Fixed
+
+- The guard rails: any dash-leading argument, in any position, refuses at the entry point (the refusal table to stderr, rc 1, zero stdout), so awk's option parser never sees a flag; the wrapper anchors every command at the workspace root; `session-bootstrap` refuses brackets and quotes in `repos` and quotes in the objective, all with zero partial writes. The fresh review found the dash and working-directory classes (silent rc 0 reads, silent writes, and a silent `no sessions yet` from a subdirectory) and the harden pass closed them, covered by the suite.
+
 ## [0.34.1] - 2026-09-15
 
 ### Fixed

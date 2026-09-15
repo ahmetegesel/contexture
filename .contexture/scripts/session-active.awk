@@ -1,0 +1,99 @@
+#!/usr/bin/awk -f
+# session-active.awk: every ACTIVE unit at a glance
+# Usage: session.sh active
+# No arguments. Scans .contexture/sessions/*/state.md in ls order; for
+# each ACTIVE unit prints the slug, current_anchor, next_action, and
+# objective verbatim (quotes kept, continuation lines included), then the
+# closed count, derived as the total state.md count minus the ACTIVE
+# count. A state whose status is neither exact ACTIVE nor CLOSED, or an
+# unreadable state, warns on stderr and counts as closed, so nothing
+# vanishes silently. A missing sessions directory prints "no sessions yet"
+# rc=0; an argument refuses rc=1 with zero stdout.
+
+function usage() {
+  print "Usage: session.sh active" > "/dev/stderr"
+  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  exit 1
+}
+
+BEGIN {
+  if (ARGC > 1) usage()
+  if (system("test -d .contexture/sessions") != 0) {
+    print "no sessions yet"
+    exit 0
+  }
+
+  cmd = "ls .contexture/sessions/*/state.md 2>/dev/null"
+  nactive = 0
+  ntotal = 0
+  first = 1
+  while ((cmd | getline state) > 0) {
+    ntotal++
+    status = ""
+    anchor = ""
+    nl = 0
+    ol = 0
+    cur = ""
+    while ((r = (getline line < state)) > 0) {
+      if (line ~ /^[ \t]*$/) {
+        cur = ""
+        continue
+      }
+      if (line ~ /^[ \t]/) {
+        if (cur == "next_action") {
+          nl++
+          nxt[nl] = line
+        } else if (cur == "objective") {
+          ol++
+          obj[ol] = line
+        }
+        continue
+      }
+      if (line ~ /^status:[ \t]*/) {
+        status = line
+        sub(/^status:[ \t]*/, "", status)
+        sub(/[ \t\r]+$/, "", status)
+        cur = "status"
+      } else if (line ~ /^current_anchor:[ \t]*/) {
+        anchor = line
+        cur = "current_anchor"
+      } else if (line ~ /^next_action:[ \t]*/) {
+        nl = 1
+        nxt[nl] = line
+        cur = "next_action"
+      } else if (line ~ /^objective:[ \t]*/) {
+        ol = 1
+        obj[ol] = line
+        cur = "objective"
+      } else {
+        cur = ""
+      }
+    }
+    close(state)
+
+    if (r < 0) {
+      print "WARNING: unreadable state: " state > "/dev/stderr"
+      continue
+    }
+
+    if (status == "ACTIVE") {
+      slug = state
+      sub(/\/state\.md$/, "", slug)
+      sub(/^.*\//, "", slug)
+      if (first == 0) print ""
+      first = 0
+      nactive++
+      print slug
+      if (anchor != "") print "  " anchor
+      for (i = 1; i <= nl; i++) print "  " nxt[i]
+      for (i = 1; i <= ol; i++) print "  " obj[i]
+    } else if (status != "CLOSED") {
+      print "WARNING: unrecognized status in " state ": [" status "]" > "/dev/stderr"
+    }
+  }
+  close(cmd)
+
+  if (nactive == 0) print "no active sessions"
+  print "closed: " (ntotal - nactive)
+  exit 0
+}

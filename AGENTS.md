@@ -1,4 +1,4 @@
-# contexture v0.34.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.35.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -15,7 +15,7 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   .contexture/templates/      = artifact grammars: the shapes to fill at write time
-  .contexture/scripts/        = cross-platform awk instruments (the load, the stamp, the board, the audit, the index)
+  .contexture/scripts/        = the session.sh entry point (run session.sh help) over the awk workers (active, bootstrap, load, stamp, board, audit, index)
   .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
@@ -55,10 +55,10 @@
 
 @query
   surfaces: journal.md + knowledge.md.
-  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/scripts/session-board.awk streams active entries with complete bodies in one shot, then the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
+  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/scripts/session.sh board streams active entries with complete bodies in one shot, then the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
     command:
-      .contexture/scripts/session-board.awk <unit>
-  thread tail: session-audit.awk prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
+      .contexture/scripts/session.sh board <unit>
+  thread tail: session.sh audit prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
   cross-repo: grep -l "repos:.*<name>" .contexture/sessions/*/state.md: units touching a repo; objective is human-facing only.
   cross-session: grep -l "ref_sessions:.*<name>" .contexture/sessions/*/state.md: units referencing a session.
@@ -66,16 +66,16 @@
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot
-  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
+  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; then run .contexture/scripts/session.sh help (the command contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
-  3. get the field: grep -rl "status: ACTIVE" .contexture/sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
+  3. get the field: .contexture/scripts/session.sh active; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
-  5. run .contexture/scripts/session-load.awk <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, ref sessions read-only)
-  6. read the rhythm index: .contexture/scripts/rhythms-index.awk
+  5. run .contexture/scripts/session.sh load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, ref sessions read-only)
+  6. read the rhythm index: .contexture/scripts/session.sh index
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
-  8. stamp the load receipt: .contexture/scripts/session-stamp.awk <unit> "<the loaded set + ref_sessions + the git state>" (a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
+  8. stamp the load receipt: .contexture/scripts/session.sh stamp <unit> "<the loaded set + ref_sessions + the git state>" (a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
   9. continue from next_action, following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
-  10. new work: bootstrap .contexture/sessions/<slug>/state.md: ACTIVE, current_anchor: A0, next_action "backlog the first task"; continue at 5
+  10. new work: run .contexture/scripts/session.sh bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask
@@ -117,13 +117,13 @@
   - journal every dispatch: lane folder path
 
 @refresh
-  the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the board read (its open-task list is the status checklist), the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run: every open flag, one candidate each; confirmed candidates land in knowledge.md (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; session-audit run, what it flags fixed; beyond the harvest, nothing closes here
+  the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the board read (its open-task list is the status checklist), the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run: every open flag, one candidate each; confirmed candidates land in knowledge.md (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; session.sh audit run, what it flags fixed; beyond the harvest, nothing closes here
 
 @close
   period end (turn ends; unit continues):
     1. refresh (@refresh): the harvest runs inside it; then close the period's done events by reference
-    2. stray audit: the thread tail printed by session-audit.awk is the checklist: every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. session audit: .contexture/scripts/session-audit.awk <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from state.md) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
+    2. stray audit: the thread tail printed by session.sh audit is the checklist: every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
+    3. session audit: .contexture/scripts/session.sh audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from state.md) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. folder stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
@@ -134,7 +134,7 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes (@close 1-3) if not done
-    2. verify with the cold read: run .contexture/scripts/session-load.awk <unit> and read every page as a fresh boot would: the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND .contexture/scripts/session-audit.awk <unit> exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
+    2. verify with the cold read: run .contexture/scripts/session.sh load <unit> and read every page as a fresh boot would: the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND .contexture/scripts/session.sh audit <unit> exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
   the handoff writes the record, not working memory.
 
 @git

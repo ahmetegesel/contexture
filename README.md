@@ -34,8 +34,8 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.34.1 AGENTS.md .contexture/ examples/ | tar -x
-chmod +x .contexture/scripts/*.awk
+git archive v0.35.0 AGENTS.md .contexture/ examples/ | tar -x
+chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh
 ```
 
 ### 2. Run the onboarding wizard
@@ -56,7 +56,7 @@ Once confirmed, start your first unit of work:
 
 1. **The agent creates the unit:** It creates `.contexture/sessions/<your-task>/` with your active tasks (`backlog.md`) and an append-only event log (`journal.md`).
 2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates its tasks, logs test proofs, and records decisions in its files. You never manage the files manually.
-3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `session-load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
+3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `session.sh load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
 
 For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
 
@@ -71,7 +71,7 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── rhythms/          Reusable workflow patterns governing task progression
-    ├── scripts/          Deterministic awk tools streaming active context and auditing defects
+    ├── scripts/          The session.sh entry point over its awk workers: load, stamp, board, audit, index
     ├── templates/        Shape grammars ensuring structured writes without guesswork
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
         ├── state.md      Live pointer: status, current anchor, next action, and refs
@@ -105,10 +105,13 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 - [Adoption](docs/adoption.md): Onboarding flows, topology choices, and upgrading
 - [Examples](examples/rhythms/): Pre-built work and debug loops
 
-| script | what it returns |
+| command | what it returns |
 |---|---|
-| session-load.awk | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
-| session-stamp.awk | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
-| session-board.awk | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
-| session-audit.awk | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
-| rhythms-index.awk | One line per rhythm: name, path, use when, activation |
+| session.sh help | The full command table: every contract, printed to stdout; no flags: a dash-leading argument refuses at the entry point |
+| session.sh active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
+| session.sh bootstrap <slug> "<objective>" [<repos>] | A new unit: the folder, state at A0, the three empty artifacts, and the folded A1 receipt; prints the state and the next move |
+| session.sh load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
+| session.sh stamp <unit> "<attention>" | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
+| session.sh board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
+| session.sh audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
+| session.sh index | One line per rhythm: name, path, use when, activation |
