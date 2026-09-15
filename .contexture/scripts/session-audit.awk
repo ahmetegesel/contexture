@@ -49,13 +49,13 @@ BEGIN {
     print "DATELESS SLUG at line " NR ": " $2
     bad++
   }
-  if ($0 ~ /\[(THREAD|KNOWLEDGE):/) {
+  if ($0 ~ /\[(THREAD|KNOWLEDGE|RHYTHM):/) {
     print "INLINE MARKER at line " NR ": " $2
     bad++
   }
 }
 
-/^  \[(THREAD|KNOWLEDGE|GROUP|REF|CLOSES|SUPERSEDES):/ {
+/^  \[(THREAD|KNOWLEDGE|GROUP|RHYTHM|REF|CLOSES|SUPERSEDES):/ {
   print "BRACKETED FIELD at line " NR ": " substr($0, 3)
   bad++
 }

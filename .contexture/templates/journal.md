@@ -13,6 +13,7 @@ records.
   ANCHOR: A<N>                            # current anchor at write time
   WHAT: "..."                             # the event's substance; a closer carries the verdict + the resolution here
   GROUP: <token>                          # optional; agent-chosen thread, stable within the unit
+  RHYTHM: <name> <N> <GATE>               # optional; the process in force, on the entries that advance the rhythm
   KNOWLEDGE: true                         # optional; knowledge-worthy, the harvest's input
   THREAD: true                            # optional; awaits resolution: verdict | execution | report | harvest; stamped at birth, never flipped; closes same-breath at resolution; no marker = receipt: final word on a completed fact, no closer obligation
   CLOSES: <slug> (<verdict>: reason)      # optional; verdict = done | superseded | dropped | folded; the ONLY closure; no closer = still open
@@ -26,6 +27,7 @@ records.
   ANCHOR: A<N>
   WHAT: "<the event's substance: what happened, the result, why next>"
   GROUP: <token>
+  RHYTHM: work 6 EXECUTE
   KNOWLEDGE: true
   CLOSES: <date>-<slug> (done: <the resolution>)
   REF: "<path#symbol>"

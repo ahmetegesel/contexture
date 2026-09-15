@@ -48,7 +48,7 @@ A rhythm with no `use when:` line prints `(missing)`; a rhythm with no `activati
 
 ## The invariant boundary
 
-A rhythm replaces task progression only. The artifact invariants hold across every rhythm: entries land as events happen, findings settle as decisions, tasks move in the backlog, the pointer advances, the harvest runs at boundaries. The record is not a rhythm's business: a rhythm never restates what the core already records, and extra recording rules belong to an overlay.
+A rhythm replaces task progression only. The artifact invariants hold across every rhythm: entries land as events happen, findings settle as decisions, tasks move in the backlog, the pointer advances, the harvest runs at boundaries. The record is not a rhythm's business: a rhythm never restates what the core already records, and extra recording rules belong to an overlay. The rhythm's own mark is one stamp: the entries that advance it carry `RHYTHM: <name> <N> <GATE>`, a label of the process in force, never a maintained field.
 
 Gate closures follow the same discipline. DECIDE closes by the backlog, VERIFY and LAND close by the completion receipt carrying its evidence, and REFRESH closes by the harvest. A gate closed by memory is debt.
 

@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.33.0] - 2026-09-15
+
+### Added
+
+- The journal grammar gains the rhythm stamp: entries that advance a rhythm carry `RHYTHM: <name> <N> <GATE>`, a label of the process in force at the write (`RHYTHM: work 6 EXECUTE`). It is a born-state stamp, never updated, omitted by entries that do not advance the rhythm; the position rides the record's streams with nothing in state to maintain.
+
+### Changed
+
+- `@rhythms`'s contract carries the counterpart clause (its presence stamped on the advancing entries, never maintained), and `session-audit.awk`'s bracketed-field and inline-marker lists include `RHYTHM` so the `[RHYTHM: ...]` literal-copy fires. `templates/journal.md`, `docs/the-record.md`, and `docs/rhythms.md` are aligned.
+
 ## [0.32.2] - 2026-09-15
 
 ### Changed

@@ -80,6 +80,7 @@ The journal is the unit's running record and the single recording surface: event
   ANCHOR: A12
   WHAT: "backlog/auth-cookie-sessions: DONE. Token cache retired; the rejected refresh-token reuse is recorded with its why; suite green (42/42)"
   GROUP: auth
+  RHYTHM: work 6 EXECUTE
   KNOWLEDGE: true
   CLOSES: 2026-09-05-token-cache-introduced (done: replaced by cookie sessions)
   REF: "lanes/auth-refresh/report.md#claim"
@@ -91,6 +92,7 @@ An entry uses the fields it needs; the sample shows them together. In full:
 - `ANCHOR:` is the anchor current at write time, the period the entry belongs to.
 - `WHAT:` carries the event's substance: what happened, the result, why the next step follows. A closer carries its verdict and resolution here.
 - `GROUP:` is the agent's topic thread, stable within the unit.
+- `RHYTHM: <name> <N> <GATE>` is the process in force, stamped on the entries that advance the rhythm; a stamp, never updated.
 - `KNOWLEDGE: true` marks the entry knowledge-worthy; it is the harvest's input.
 - `THREAD: true` marks an entry that awaits resolution (a verdict, an execution, a dispatch report, the harvest). It is stamped at birth, never flipped, and closes the moment the awaited thing arrives.
 - `CLOSES:` or `SUPERSEDES:` is the only closure: it names an earlier slug, carries a verdict word and a reason, and leaves the target untouched. The liveness section has the mechanics.

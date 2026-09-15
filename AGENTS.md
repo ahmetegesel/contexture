@@ -1,4 +1,4 @@
-# contexture v0.32.2: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.33.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -36,7 +36,7 @@
   formation :: an event lands when it happens, never batched at period end; interaction beats journal as they happen (@interact); work beats never wait for an interaction beat
   substance :: an entry carries what happened, the result, and why the next step follows
   liveness :: entries are append-only, never edited; an entry closes only when a later CLOSES/SUPERSEDES names it; every closer carries a verdict word: done | superseded | dropped | folded, then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie; chase every closer in the same breath it resolves
-  markings :: THREAD: true awaits resolution: a verdict, an execution, a dispatch report, the harvest (@refresh); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. KNOWLEDGE: true = the harvest's input. GROUP: <token> = the agent's topic thread, chosen in the conversation, stable within the unit. REF: "path#symbol" = grounding. an entry uses the fields it needs; unused fields are omitted, never bracketed.
+  markings :: THREAD: true awaits resolution: a verdict, an execution, a dispatch report, the harvest (@refresh); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. KNOWLEDGE: true = the harvest's input. GROUP: <token> = the agent's topic thread, chosen in the conversation, stable within the unit. RHYTHM: <name> <N> <GATE> = the process in force, stamped on the entries that advance the rhythm; a stamp, never updated. REF: "path#symbol" = grounding. an entry uses the fields it needs; unused fields are omitted, never bracketed.
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open: an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
 @backlog
@@ -88,7 +88,7 @@
   artifacts: stay current in the same breath as the work: journal at the event (see @journal), backlog as work is declared and tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record and .contexture/templates/
 
 @rhythms
-  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm. a gate closes by its artifact: DECIDE by the backlog, VERIFY/LAND by the completion receipt carrying its evidence, REFRESH by the harvest; a gate closed by memory is debt.
+  contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state, its presence stamped on the advancing entries, never maintained; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm. a gate closes by its artifact: DECIDE by the backlog, VERIFY/LAND by the completion receipt carrying its evidence, REFRESH by the harvest; a gate closed by memory is debt.
   trigger :: a rhythm opens with `use when: <the situations it serves>`: triggers only, never a workflow summary: a summary becomes the shortcut agents follow instead of the steps
   activation :: `activation: propose | auto`; propose is the default: the agent proposes the matching rhythm before applying it and the human confirms; auto is the team's explicit opt-in: the agent applies the rhythm on trigger without a separate ask; the acts still pass the @interact gates
   placement :: the per-turn surfaces carry interaction rules only; work patterns are rhythm material: extracted from the instruction stack at onboarding, proposed as they emerge
