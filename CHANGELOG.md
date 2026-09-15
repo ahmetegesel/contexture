@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.32.1] - 2026-09-15
+
+### Fixed
+
+- The boot load's continuation signal now survives multi-tool-call batching and tail truncation: every incomplete call opens with `LOAD INCOMPLETE (page N of M): keep calling until a page reads complete; do not start work from a partial record` and closes with `keep reading: session-load.awk <slug> <N+1> (K pages remain)`; the final page opens with `LOAD COMPLETE` plus the receipt stamp command and closes with `load complete: pages M/M`. `@boot` step 5 reads "keep calling until a page reads complete"; `docs/the-engine.md`, `docs/units-and-lanes.md`, and the README instrument table are synced.
+
 ## [0.32.0] - 2026-09-15
 
 ### Added

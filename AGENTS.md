@@ -1,4 +1,4 @@
-# contexture v0.32.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.32.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -70,7 +70,7 @@
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
   3. get the field: grep -rl "status: ACTIVE" .contexture/sessions/*/state.md; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
-  5. run .contexture/scripts/session-load.awk <unit>; read every page the map reports (state, backlog, knowledge, the live journal, ref sessions read-only)
+  5. run .contexture/scripts/session-load.awk <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, ref sessions read-only)
   6. read the rhythm index: .contexture/scripts/rhythms-index.awk
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp the load receipt: .contexture/scripts/session-stamp.awk <unit> "<the loaded set + ref_sessions + the git state>" (a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)

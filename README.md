@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.32.0 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.32.1 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk
 ```
 
@@ -107,7 +107,7 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 
 | script | what it returns |
 |---|---|
-| session-load.awk | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); pages cut at block boundaries |
+| session-load.awk | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
 | session-stamp.awk | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
 | session-board.awk | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
 | session-audit.awk | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |

@@ -4,8 +4,10 @@
 # Sections in BIOS order: state, backlog, knowledge, the live journal
 # (composed from session-board.awk, one extraction home), declared
 # ref_sessions read-only, then the write-scope trailer. Pages cut at
-# block starts around 500 lines, never mid-body; read every page the
-# map reports. Missing state is fatal rc=1 with zero stdout; missing
+# block starts around 500 lines, never mid-body. Every call opens with
+# the LOAD INCOMPLETE banner until the last page, which opens LOAD
+# COMPLETE and hands off to the receipt stamp; keep calling until a page
+# reads complete. Missing state is fatal rc=1 with zero stdout; missing
 # backlog, knowledge, or journal is nonfatal: a WARNING on stderr and a
 # placeholder line in its section.
 
@@ -195,6 +197,11 @@ BEGIN {
     fail("ERROR: page out of range: " page " (1-" npages ")")
   }
 
+  if (page < npages) {
+    printf "LOAD INCOMPLETE (page %d of %d): keep calling until a page reads complete; do not start work from a partial record\n", page, npages
+  } else {
+    printf "LOAD COMPLETE: pages %d/%d; stamp the receipt: session-stamp.awk %s \"<the loaded set + ref_sessions + the git state>\"\n", npages, npages, slug
+  }
   printf "session-load %s: %d lines, %d pages\n", slug, total, npages
   for (si = 1; si <= nsec; si++) {
     s = seclist[si]
@@ -221,9 +228,9 @@ BEGIN {
   printf "[load %s | %s | page %d/%d | from %s]\n", slug, psec[page], page, npages, label
   for (i = ps; i <= pend[page]; i++) print L[i]
   if (page < npages) {
-    printf "next: session-load.awk %s %d\n", slug, page + 1
+    printf "keep reading: session-load.awk %s %d (%d pages remain)\n", slug, page + 1, npages - page
   } else {
-    printf "pages %d/%d; complete\n", npages, npages
+    printf "load complete: pages %d/%d\n", npages, npages
   }
   exit 0
 }

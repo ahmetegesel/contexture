@@ -55,7 +55,7 @@ The first thing the agent does in a fresh context, mechanically:
 
    A close match proposes continuing that unit; no match proposes a new one.
 4. Propose the move and wait. Even a message that names its unit explicitly gets the proposal stated as a confirmation. The human's reply settles the unit before anything loads.
-5. Run the load and read every page the map reports:
+5. Run the load and keep calling until a page reads complete (read every page the map reports):
 
    ```bash
    .contexture/scripts/session-load.awk <unit>
