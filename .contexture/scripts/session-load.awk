@@ -9,9 +9,13 @@
 # the LOAD INCOMPLETE banner until the last page, which opens LOAD
 # COMPLETE and hands off to the receipt stamp; keep calling until a page
 # reads complete. The refs form streams the named sessions alone, read
-# only, with its own banner, map line, trailer, and tail. Missing state
-# is fatal rc=1 with zero stdout; missing backlog, knowledge, or journal
-# is nonfatal: a WARNING on stderr and a placeholder line in its section.
+# only, with its own banner, map line, trailer, and tail. The backlog
+# section composes: a DONE task block renders compactly (the @task line,
+# STATUS, OBJECTIVE, DESCRIPTION; REFS, ACCEPTANCE CRITERIA, and
+# IMPLEMENTATION DETAILS drop), open and statusless blocks render whole,
+# and the backlog file itself is never edited. Missing state is fatal
+# rc=1 with zero stdout; missing backlog, knowledge, or journal is
+# nonfatal: a WARNING on stderr and a placeholder line in its section.
 
 function usage() {
   print "Usage: session.sh load <session-slug> [<page>]" > "/dev/stderr"
@@ -55,6 +59,68 @@ function read_whole(path, sec, empty_note,   line, n) {
     n++
   }
   close(path)
+  if (n == 0) add(empty_note, sec)
+}
+
+# The backlog render: a span runs from ^@task to the line before the
+# next column-0 ^@[A-Za-z] line or EOF; the first STATUS line decides.
+# A DONE span keeps the @task line, that STATUS line, OBJECTIVE with
+# its continuation lines, and DESCRIPTION with its body; its trailing
+# blank run stays. Open and statusless spans and out-of-span text
+# render verbatim. The parse mirrors the board's, so CRLF renders whole.
+function flush_backlog(sec,   i, endc, st, mode, line, firststat) {
+  endc = nb
+  while (endc >= 1 && bb[endc] == "") endc--
+  st = ""
+  for (i = 2; i <= endc; i++) {
+    if (bb[i] ~ /^  STATUS:[ \t]/) {
+      st = bb[i]
+      sub(/^  STATUS:[ \t]+/, "", st)
+      sub(/[ \t]+.*$/, "", st)
+      break
+    }
+  }
+  if (st == "DONE") {
+    firststat = 0
+    mode = ""
+    for (i = 1; i <= endc; i++) {
+      line = bb[i]
+      if (i == 1) { add(line, sec); continue }
+      if (line ~ /^  STATUS:[ \t]/) {
+        if (!firststat) { firststat = 1; add(line, sec) }
+        mode = ""
+        continue
+      }
+      if (line ~ /^  OBJECTIVE:/) { add(line, sec); mode = "obj"; continue }
+      if (line ~ /^  DESCRIPTION[ \t]*::/) { add(line, sec); mode = "desc"; continue }
+      if (line ~ /^  [A-Z]/) { mode = ""; continue }
+      # An unrecognized in-span line (a column-0 note included) falls with the dropped fields for a DONE span when no kept body is open; an open span keeps it.
+      if (mode == "obj" || mode == "desc") add(line, sec)
+    }
+  } else {
+    for (i = 1; i <= nb; i++) add(bb[i], sec)
+    return
+  }
+  for (i = endc + 1; i <= nb; i++) add(bb[i], sec)
+}
+
+function compose_backlog(path, sec, empty_note,   line, n) {
+  n = 0
+  nb = 0
+  inblock = 0
+  while ((getline line < path) > 0) {
+    n++
+    if (line ~ /^@[A-Za-z]/) {
+      if (inblock) { flush_backlog(sec); inblock = 0; nb = 0 }
+      if (line ~ /^@task[ \t]/) { inblock = 1; nb = 1; bb[1] = line; continue }
+      add(line, sec)
+      continue
+    }
+    if (inblock) { nb++; bb[nb] = line; continue }
+    add(line, sec)
+  }
+  close(path)
+  if (inblock) flush_backlog(sec)
   if (n == 0) add(empty_note, sec)
 }
 
@@ -266,7 +332,7 @@ BEGIN {
     warn_missing("backlog", backlog)
     add("(no backlog yet)", "backlog")
   } else {
-    read_whole(backlog, "backlog", "(empty backlog)")
+    compose_backlog(backlog, "backlog", "(empty backlog)")
   }
 
   knowledge = dir "knowledge.md"

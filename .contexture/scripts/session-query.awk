@@ -9,7 +9,7 @@
 #        session.sh query closure <unit> <slug>
 #        session.sh query units <repo>
 #        session.sh query refs-to <session>
-#        session.sh query resolve <unit> <ref>
+#        session.sh query resolve <unit> <ref>  (journal.md#slug, knowledge.md#NAME, backlog.md#slug, lanes/<lane>/report.md#section)
 #        session.sh query lane <unit> <lane>
 #        session.sh query search <unit> <term>
 # One kind per call, no flags. Every miss is loud: rc=1, zero stdout, a
@@ -34,7 +34,7 @@ function usage() {
   print "       session.sh query closure <unit> <slug>" > "/dev/stderr"
   print "       session.sh query units <repo>" > "/dev/stderr"
   print "       session.sh query refs-to <session>" > "/dev/stderr"
-  print "       session.sh query resolve <unit> <ref>" > "/dev/stderr"
+  print "       session.sh query resolve <unit> <ref>  (journal.md#slug, knowledge.md#NAME, backlog.md#slug, lanes/<lane>/report.md#section)" > "/dev/stderr"
   print "       session.sh query lane <unit> <lane>" > "/dev/stderr"
   print "       session.sh query search <unit> <term>" > "/dev/stderr"
   print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
@@ -484,6 +484,11 @@ function resolve_parse(ref,   rest, p) {
     if (!name_ok(rest)) unsupported(ref)
     RKIND = "finding"
     RARG = rest
+  } else if (ref ~ /^backlog\.md#/) {
+    rest = substr(ref, 12)
+    if (!slug_ok(rest)) unsupported(ref)
+    RKIND = "task"
+    RARG = rest
   } else if (ref ~ /^lanes\//) {
     rest = substr(ref, 7)
     p = index(rest, "/report.md#")
@@ -498,7 +503,7 @@ function resolve_parse(ref,   rest, p) {
 }
 
 function unsupported(ref) {
-  fail("ERROR: unsupported ref form: " ref " (supported: journal.md#slug, knowledge.md#NAME, lanes/<lane>/report.md#section; code file#symbol is out of scope)")
+  fail("ERROR: unsupported ref form: " ref " (supported: journal.md#slug, knowledge.md#NAME, backlog.md#slug, lanes/<lane>/report.md#section; code file#symbol is out of scope)")
 }
 
 function do_resolve(unit, ref,   path, i, e, found, sec) {
@@ -520,6 +525,18 @@ function do_resolve(unit, ref,   path, i, e, found, sec) {
     load_file(path)
     found = find_finding_block(RARG)
     if (found == 0) fail("ERROR: no such finding: " RARG)
+  } else if (RKIND == "task") {
+    path = ".contexture/sessions/" unit "/backlog.md"
+    if (!exists(path)) fail("ERROR: missing backlog: " path)
+    load_file(path)
+    found = 0
+    for (i = 1; i <= NFILE; i++) {
+      if (LF[i] ~ /^@task[ \t]/ && field2(LF[i]) == RARG) {
+        found = i
+        break
+      }
+    }
+    if (found == 0) fail("ERROR: no such task: " RARG)
   } else {
     path = ".contexture/sessions/" unit "/lanes/" RLANE "/report.md"
     if (!exists(path)) fail("ERROR: no such section: " RSEC " in " path)

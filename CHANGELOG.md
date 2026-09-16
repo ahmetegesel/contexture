@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.38.0] - 2026-09-16
+
+### Added
+
+- The load renders DONE task blocks compactly: the backlog section prints each completed block as its task line, `STATUS`, `OBJECTIVE`, and `DESCRIPTION`; open and statusless blocks render whole, and the backlog file itself is never edited, so the full body stays one resolve away. On the live record the section shrinks by roughly half while every reference keeps resolving.
+- `resolve` accepts `backlog.md#<slug>`: one line prints the whole task block verbatim (past the load's compact render, since it reads the file), with the loud miss `ERROR: no such task`, malformed symbols refused through the supported set, and a missing backlog named.
+
+### Changed
+
+- The suite pins the new behaviors (the compact render and its drop set, the in-span note rule, the CRLF direction, the empty-present placeholder, the real-render field-count invariant, and the resolve backlog cases).
+- The wrapper's help rows and the engine, load, and record docs carry both behaviors.
+
 ## [0.37.0] - 2026-09-16
 
 ### Added

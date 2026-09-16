@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.37.0 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.38.0 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh
 ```
 
@@ -112,7 +112,7 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 | session.sh help | The full command table: every contract, printed to stdout; no flags: a dash-leading argument refuses at the entry point |
 | session.sh active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
 | session.sh bootstrap <slug> "<objective>" [<repos>] | A new unit: the folder, state at A0, the three empty artifacts, and the folded A1 receipt; prints the state and the next move |
-| session.sh load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
+| session.sh load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
 | session.sh load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
 | session.sh stamp <unit> "<attention>" | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
 | session.sh board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
@@ -125,7 +125,7 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 | session.sh query closure <unit> <slug> | Open, or the closers with their verdicts and lines |
 | session.sh query units <repo> | Each unit touching the repo: slug, status, anchor, next action |
 | session.sh query refs-to <session> | Each unit referencing the session |
-| session.sh query resolve <unit> <ref> | The block behind a journal, knowledge, or lane-report reference |
+| session.sh query resolve <unit> <ref> | The block behind a journal, knowledge, backlog, or lane-report reference |
 | session.sh query lane <unit> <lane> | Lane file presence with line and byte counts, the journal's last line, the report's first |
 | session.sh query search <unit> <term> | Bounded match lines across the unit's artifacts (state, backlog, knowledge, journal, the lane journals and reports), each with its locator |
 

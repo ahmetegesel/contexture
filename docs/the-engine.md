@@ -83,7 +83,7 @@ Eight instruments ship in `.contexture/scripts/`, and they are the engine's mach
 
 ### session.sh load: the load and the refs form
 
-Returns the map plus one page of the load: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The map names each section with its line count and pages, then the write-scope trailer; pages cut at block boundaries, never mid-body. An incomplete call opens with `LOAD INCOMPLETE` and instructs the next call in its last line; the final page opens with `LOAD COMPLETE` and hands off to the receipt stamp.
+Returns the map plus one page of the load: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The map names each section with its line count and pages, then the write-scope trailer; pages cut at block boundaries, never mid-body. The backlog section renders its DONE task blocks compactly, keeping only the task line, `STATUS`, `OBJECTIVE`, and `DESCRIPTION`; open and statusless blocks render whole, and the backlog file itself is never edited, so the full body stays one `resolve` away. An incomplete call opens with `LOAD INCOMPLETE` and instructs the next call in its last line; the final page opens with `LOAD COMPLETE` and hands off to the receipt stamp.
 
 ```bash
 .contexture/scripts/session.sh load <unit>
@@ -136,7 +136,7 @@ Answers the foreseeable questions over the record in bounded form, so no one imp
 | `closure` | `<unit> <slug>` | open, or the closers with their verdicts and lines |
 | `units` | `<repo>` | each unit touching the repo: slug, status, anchor, next action |
 | `refs-to` | `<session>` | each unit referencing the session |
-| `resolve` | `<unit> <ref>` | the block behind `journal.md#slug`, `knowledge.md#NAME`, or `lanes/<lane>/report.md#section` |
+| `resolve` | `<unit> <ref>` | the block behind `journal.md#slug`, `knowledge.md#NAME`, `backlog.md#slug`, or `lanes/<lane>/report.md#section` |
 | `lane` | `<unit> <lane>` | file presence with line and byte counts, the journal's last line, the report's first |
 | `search` | `<unit> <term>` | bounded match lines across state, backlog, knowledge, journal, and the lane journals and reports, each with its locator |
 
