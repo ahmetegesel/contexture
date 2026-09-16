@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.36.1 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.36.2 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh
 ```
 
@@ -105,6 +105,7 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 - [Adoption](docs/adoption.md): Onboarding flows, topology choices, and upgrading
 - [Examples](examples/rhythms/): Pre-built work and debug loops
 - [Setups](examples/setups/lane-isolation/): An optional setup: on-demand worktree isolation for lanes
+- [Setups](examples/setups/docs-discipline/): An optional setup: a corpus-first documentation discipline
 
 | command | what it returns |
 |---|---|

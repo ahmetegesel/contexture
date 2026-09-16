@@ -1,0 +1,128 @@
+#!/bin/sh
+# docs-query: CLI wrapper for .contexture/scripts/docs-query.awk
+# Usage:
+#   .contexture/scripts/docs-query <repo> <slug> [--section <name>]
+#   .contexture/scripts/docs-query <repo> --file <path>
+#   .contexture/scripts/docs-query <repo> --search <term>
+#   .contexture/scripts/docs-query <repo> --rules [category]
+#   .contexture/scripts/docs-query <repo> --pitfalls [--severity <level>]
+#   .contexture/scripts/docs-query --edge <channel>
+#   .contexture/scripts/docs-query --index [repo]   # the full overview, never truncated (no head/tail); ends with an entry count
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+# the workspace root: two levels up from the drawer's scripts/ (one level up
+# when scripts/ sits at the root); override with DOCS_WORKSPACE_ROOT
+SCRIPTS_PARENT="$(cd "$SCRIPT_DIR/.." && pwd)"
+case "$(basename "$SCRIPTS_PARENT")" in
+  .contexture) ROOT_DIR="$(cd "$SCRIPTS_PARENT/.." && pwd)" ;;
+  *) ROOT_DIR="$SCRIPTS_PARENT" ;;
+esac
+ROOT_DIR="${DOCS_WORKSPACE_ROOT:-$ROOT_DIR}"
+AWK_SCRIPT="$SCRIPT_DIR/docs-query.awk"
+
+if [ $# -eq 0 ]; then
+  echo "Usage: docs-query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index"
+  exit 1
+fi
+
+MODE=""
+REPO=""
+SLUG=""
+SECTION=""
+FILE=""
+SEARCH=""
+CATEGORY=""
+SEVERITY=""
+CHANNEL=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --index)
+      MODE="index"
+      shift
+      ;;
+    --file)
+      [ $# -ge 2 ] || { echo "docs-query: --file needs a value" >&2; exit 1; }
+      MODE="file"
+      FILE="$2"
+      shift 2
+      ;;
+    --search)
+      [ $# -ge 2 ] || { echo "docs-query: --search needs a value" >&2; exit 1; }
+      MODE="search"
+      SEARCH="$2"
+      shift 2
+      ;;
+    --rules)
+      MODE="rules"
+      shift
+      if [ $# -gt 0 ] && [ "$(echo "$1" | cut -c 1-2)" != "--" ]; then
+        CATEGORY="$1"
+        shift
+      fi
+      ;;
+    --pitfalls)
+      MODE="pitfalls"
+      shift
+      ;;
+    --severity)
+      [ $# -ge 2 ] || { echo "docs-query: --severity needs a value" >&2; exit 1; }
+      SEVERITY="$2"
+      shift 2
+      ;;
+    --section)
+      [ $# -ge 2 ] || { echo "docs-query: --section needs a value" >&2; exit 1; }
+      SECTION="$2"
+      shift 2
+      ;;
+    --edge|--edges)
+      [ $# -ge 2 ] || { echo "docs-query: --edge needs a value" >&2; exit 1; }
+      MODE="edge"
+      CHANNEL="$2"
+      shift 2
+      ;;
+    *)
+      if [ "${1#--}" != "$1" ]; then
+        echo "docs-query: unknown option: $1" >&2
+        exit 1
+      fi
+      if [ -z "$REPO" ]; then
+        REPO="$1"
+      elif [ -z "$SLUG" ]; then
+        SLUG="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+DOC_FILES=""
+if [ -n "$REPO" ] && [ ! -d "$ROOT_DIR/docs/$REPO" ]; then
+  echo "docs-query: no such repo: $REPO" >&2
+  exit 1
+fi
+if [ -n "$REPO" ] && [ -d "$ROOT_DIR/docs/$REPO" ]; then
+  DOC_FILES="$ROOT_DIR/docs/$REPO/*.md"
+elif [ -d "$ROOT_DIR/docs" ]; then
+  DOC_FILES="$ROOT_DIR/docs/*/*.md"
+else
+  DOC_FILES="$SCRIPT_DIR/fixtures/*.md"
+fi
+
+QUERY_OUT=$(awk -v mode="$MODE" \
+    -v repo="$REPO" \
+    -v slug="$SLUG" \
+    -v section="$SECTION" \
+    -v file="$FILE" \
+    -v search="$SEARCH" \
+    -v category="$CATEGORY" \
+    -v severity="$SEVERITY" \
+    -v channel="$CHANNEL" \
+    -f "$AWK_SCRIPT" $DOC_FILES)
+AWK_RC=$?
+if [ -z "$QUERY_OUT" ] && [ -z "$MODE" ] && [ -n "$REPO" ] && [ -n "$SLUG" ]; then
+  echo "docs-query: no doc matches $REPO/$SLUG" >&2
+  exit 1
+fi
+[ -n "$QUERY_OUT" ] && printf '%s\n' "$QUERY_OUT"
+exit $AWK_RC

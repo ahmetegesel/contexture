@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.36.2] - 2026-09-16
+
+### Added
+
+- The docs-discipline setup bundle ships: `examples/setups/docs-discipline/` carries a corpus-first documentation discipline: a typed-block corpus grammar, six POSIX instruments (the audit, the query engine and its CLI, the coverage and drift check, the nudge, and the close gate with a self-planted matrix), the authoring and drift rules, three rhythms (the workspace's work rhythm with the docs discipline, the authoring and drift procedures), a fictional two-repo sample, and an onboarding README. The bundle ships adoption-tested on a real single-repo corpus; the adaptations live in that record.
+
+### Changed
+
+- The bundle's README carries the calibration stance (the pack ships reference mechanics; the adoption reads the repo's structure and makes the structural remedies on the spot, recording the local deltas), the lane markings on the heavy steps, the SYNC preflights, the one-homed widened coverage filter, and the eight-scenario matrix.
+- The seed's `section-refs` example re-points to a real unit doc.
+- The workspace overlay pins the changelog naming discipline: no adopter, project, or personal names in the changelog's text; those live in the record.
+
 ## [0.36.1] - 2026-09-15
 
 ### Added

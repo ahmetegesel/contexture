@@ -13,4 +13,5 @@
   version: MAJOR = breaking (fields removed, shapes changed); MINOR = new sections, features; PATCH = fixes, wording
   bumps: agent applies PATCH + MINOR at ship, no ask; MAJOR = human verdict alone, agent proposes only
   ship breath: docs sync + commit + push + annotated tag vX.Y.Z + the CHANGELOG.md section, one act; every commit in the tag range appears in the section
+  changelog: no adopter, project, or personal names; the changelog speaks the convention's vocabulary, the record carries the names
   branch/worktree on demand: create .worktrees/<unit> on branch unit/<slug> when isolation helps; push -u origin unit/<slug> when a PR is wanted; the branch merges per the workspace's flow and the worktree prunes after; cleanup order: git worktree remove .worktrees/<unit>, then git branch -d unit/<slug>; git worktree prune clears stale metadata
