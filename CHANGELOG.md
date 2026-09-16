@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.37.0] - 2026-09-16
+
+### Added
+
+- The session query family: `session.sh query` answers the ten foreseeable looks over session artifacts with one named form each (entry, group, anchors, finding, closure, units, refs-to, resolve, lane, search). Group and search snippets cut at 90 bytes, search stops at 50 lines with a trailing count, and every miss is loud: rc 1, zero stdout, a named error, never a plausible empty. A group thread renders deliberately uncapped, one line per entry, so a large thread streams whole.
+- `session-query.awk` is the single engine behind the forms: BSD-safe awk, no dependencies, one argument shape per kind with validation before any output.
+- The suite extends the canonical copy with the query cases, the fixtures, and the control mutation; a discrimination run against the pre-fix engine pins each guard to its case.
+
+### Changed
+
+- The BIOS and the manuals stop prescribing grep: `@query` carries `query units <repo>`, `query refs-to <session>`, and `query group <unit> <token>`; the anchor map grep in the manuals becomes `query anchors <unit>`.
+- The wrapper's help table lists the query rows, and the README, the engine docs, and the record docs carry the family and its bounds.
+
 ## [0.36.2] - 2026-09-16
 
 ### Added

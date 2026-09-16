@@ -1,4 +1,4 @@
-# contexture v0.36.2: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.37.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -15,7 +15,7 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   .contexture/templates/      = artifact grammars: the shapes to fill at write time
-  .contexture/scripts/        = the session.sh entry point (run session.sh help) over the awk workers (active, bootstrap, load, stamp, board, audit, index)
+  .contexture/scripts/        = the session.sh entry point (run session.sh help) over the awk workers (active, bootstrap, load, stamp, board, audit, index, query)
   .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
@@ -60,9 +60,10 @@
       .contexture/scripts/session.sh board <unit>
   thread tail: session.sh audit prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
-  cross-repo: grep -l "repos:.*<name>" .contexture/sessions/*/state.md: units touching a repo; objective is human-facing only.
-  cross-session: grep -l "ref_sessions:.*<name>" .contexture/sessions/*/state.md: units referencing a session.
-  group: grep "GROUP: <token>" journal.md = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
+  queries: the named looks over the record; never an improvised grep: .contexture/scripts/session.sh query <kind> ... (the kinds and forms in session.sh help); a miss is rc=1 with a named error, never an empty success.
+  cross-repo: .contexture/scripts/session.sh query units <repo>: units touching a repo; objective is human-facing only.
+  cross-session: .contexture/scripts/session.sh query refs-to <session>: units referencing a session.
+  group: .contexture/scripts/session.sh query group <unit> <token> = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot

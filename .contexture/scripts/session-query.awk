@@ -1,0 +1,732 @@
+#!/usr/bin/awk -f
+# session-query.awk: the record's named queries: ten bounded looks over
+# session artifacts, so no agent improvises a grep
+# Usage: session.sh query <kind> [args]
+#        session.sh query entry <unit> <slug>
+#        session.sh query group <unit> <token>
+#        session.sh query anchors <unit>
+#        session.sh query finding <unit> <NAME>
+#        session.sh query closure <unit> <slug>
+#        session.sh query units <repo>
+#        session.sh query refs-to <session>
+#        session.sh query resolve <unit> <ref>
+#        session.sh query lane <unit> <lane>
+#        session.sh query search <unit> <term>
+# One kind per call, no flags. Every miss is loud: rc=1, zero stdout, a
+# named error, never a plausible empty. Outputs are bounded by
+# construction: group and search snippets cut at 90 bytes on word
+# boundaries, search at 50 lines with a trailing count; entry, finding,
+# and resolved blocks render verbatim; closure renders the closer lines
+# verbatim. A group's row count is deliberately uncapped: one line per
+# matching entry, with the count in its opener, so a large thread
+# streams whole (the accepted exposure; the per-row snippet stays
+# capped). Names match exactly and shapes are validated before any
+# output or read: a block starts at a column-0 ^@[A-Za-z] line and ends
+# at the line before the next block start or EOF. The wrapper's dash
+# guard covers the family.
+
+function usage() {
+  print "Usage: session.sh query <kind> [args]" > "/dev/stderr"
+  print "       session.sh query entry <unit> <slug>" > "/dev/stderr"
+  print "       session.sh query group <unit> <token>" > "/dev/stderr"
+  print "       session.sh query anchors <unit>" > "/dev/stderr"
+  print "       session.sh query finding <unit> <NAME>" > "/dev/stderr"
+  print "       session.sh query closure <unit> <slug>" > "/dev/stderr"
+  print "       session.sh query units <repo>" > "/dev/stderr"
+  print "       session.sh query refs-to <session>" > "/dev/stderr"
+  print "       session.sh query resolve <unit> <ref>" > "/dev/stderr"
+  print "       session.sh query lane <unit> <lane>" > "/dev/stderr"
+  print "       session.sh query search <unit> <term>" > "/dev/stderr"
+  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  exit 1
+}
+
+function fail(msg) {
+  print msg > "/dev/stderr"
+  exit 1
+}
+
+function exists(path) {
+  return (system("test -f \"" path "\"") == 0)
+}
+
+function exists_dir(path) {
+  return (system("test -d \"" path "\"") == 0)
+}
+
+function slug_ok(s) {
+  return (s ~ /^[A-Za-z0-9][A-Za-z0-9_-]*$/)
+}
+
+function name_ok(s) {
+  return (s ~ /^[A-Za-z_][A-Za-z0-9_]*$/)
+}
+
+function dateslug_ok(s) {
+  return (s ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-zA-Z0-9_-]+[a-zA-Z0-9]$/)
+}
+
+function trim(s) {
+  sub(/^[ \t\r]+/, "", s)
+  sub(/[ \t\r]+$/, "", s)
+  return s
+}
+
+function value_after(line, key,   v) {
+  v = line
+  sub("^[ \\t]*" key ":[ \\t]*", "", v)
+  return trim(v)
+}
+
+function cut(s, max,   n, i) {
+  if (length(s) <= max) return s
+  n = 0
+  for (i = max; i >= 1; i--) {
+    if (substr(s, i, 1) == " ") { n = i - 1; break }
+  }
+  if (n <= 0) n = max
+  while (n > 0 && index(ASCII, substr(s, n, 1)) == 0) n--
+  return substr(s, 1, n) "..."
+}
+
+function field2(line,   w) {
+  split(trim(line), w, /[ \t]+/)
+  return w[2]
+}
+
+function load_file(path,   line, n) {
+  n = 0
+  while ((getline line < path) > 0) {
+    n++
+    LF[n] = line
+  }
+  close(path)
+  NFILE = n
+}
+
+function block_end(i,   j) {
+  j = i + 1
+  while (j <= NFILE && LF[j] !~ /^@[A-Za-z]/) j++
+  return j - 1
+}
+
+function require_session(unit,   p) {
+  p = ".contexture/sessions/" unit "/state.md"
+  if (!exists(p)) fail("ERROR: no such session: " unit)
+}
+
+function require_journal(unit,   p) {
+  p = ".contexture/sessions/" unit "/journal.md"
+  if (!exists(p)) fail("ERROR: missing journal: " p)
+}
+
+function do_entry(unit, slug,   path, i, e, k, n) {
+  path = ".contexture/sessions/" unit "/journal.md"
+  load_file(path)
+  n = 0
+  for (i = 1; i <= NFILE; i++) {
+    if (LF[i] ~ /^@entry / && field2(LF[i]) == slug) {
+      e = block_end(i)
+      n += e - i + 1
+    }
+  }
+  if (n == 0) fail("ERROR: no such entry: " slug)
+  printf "entry %s %s: %d lines\n\n", unit, slug, n
+  for (i = 1; i <= NFILE; i++) {
+    if (LF[i] ~ /^@entry / && field2(LF[i]) == slug) {
+      e = block_end(i)
+      for (k = i; k <= e; k++) print LF[k]
+    }
+  }
+}
+
+function do_group(unit, token,   path, i, j, e, n, a, s, w) {
+  path = ".contexture/sessions/" unit "/journal.md"
+  load_file(path)
+  n = 0
+  for (i = 1; i <= NFILE; i++) {
+    if (LF[i] ~ /^@entry /) {
+      e = block_end(i)
+      w = ""
+      for (j = i + 1; j <= e; j++) {
+        if (LF[j] ~ /^[ \t]*GROUP:/) {
+          w = value_after(LF[j], "GROUP")
+          break
+        }
+      }
+      if (w == token) {
+        a = ""
+        for (j = i + 1; j <= e; j++) {
+          if (LF[j] ~ /^[ \t]*ANCHOR:/) {
+            a = value_after(LF[j], "ANCHOR")
+            break
+          }
+        }
+        s = ""
+        for (j = i + 1; j <= e; j++) {
+          if (LF[j] ~ /^[ \t]*WHAT:/) {
+            s = value_after(LF[j], "WHAT")
+            break
+          }
+        }
+        n++
+        ga[n] = a
+        gs[n] = field2(LF[i])
+        gw[n] = cut(s, 90)
+      }
+    }
+  }
+  if (n == 0) fail("ERROR: no entries with group: " token)
+  printf "group %s %s: %d entries\n\n", unit, token, n
+  for (j = 1; j <= n; j++) printf "%s  %s: %s\n", ga[j], gs[j], gw[j]
+}
+
+function do_anchors(unit,   path, i, n) {
+  path = ".contexture/sessions/" unit "/journal.md"
+  load_file(path)
+  n = 0
+  for (i = 1; i <= NFILE; i++) {
+    if (LF[i] ~ /^@anchor /) n++
+  }
+  printf "anchors %s: %d anchors\n", unit, n
+  if (n > 0) {
+    print ""
+    for (i = 1; i <= NFILE; i++) {
+      if (LF[i] ~ /^@anchor /) print LF[i]
+    }
+  }
+}
+
+function find_finding_block(name,   i) {
+  for (i = 1; i <= NFILE; i++) {
+    if (LF[i] ~ /^@finding / && field2(LF[i]) == name) return i
+  }
+  return 0
+}
+
+function successor_of(cur,   i, j, e, rest, w, nw) {
+  for (i = 1; i <= NFILE; i++) {
+    if (LF[i] ~ /^@finding /) {
+      e = block_end(i)
+      for (j = i + 1; j <= e; j++) {
+        if (LF[j] ~ /^[ \t]*SUPERSEDES:/) {
+          rest = LF[j]
+          sub(/^[ \t]*SUPERSEDES:[ \t]*/, "", rest)
+          sub(/[ \t]+-[ \t]+.*$/, "", rest)
+          sub(/[ \t]+\(.*$/, "", rest)
+          rest = trim(rest)
+          nw = split(rest, w, /[ \t]+/)
+          if (nw >= 1 && w[1] == cur) return field2(LF[i])
+        }
+      }
+    }
+  }
+  return ""
+}
+
+function do_finding(unit, name,   path, head, cn, cyc, nxt, k, i, e, cur) {
+  path = ".contexture/sessions/" unit "/knowledge.md"
+  if (!exists(path)) fail("ERROR: no such finding: " name)
+  load_file(path)
+  head = find_finding_block(name)
+  if (head == 0) fail("ERROR: no such finding: " name)
+  cn = 1
+  cidx[1] = head
+  cname[1] = name
+  seen[name] = 1
+  cyc = ""
+  cur = name
+  while (1) {
+    nxt = successor_of(cur)
+    if (nxt == "") break
+    if (nxt in seen) {
+      cyc = nxt
+      break
+    }
+    seen[nxt] = 1
+    cn++
+    cname[cn] = nxt
+    cidx[cn] = find_finding_block(nxt)
+    cur = nxt
+  }
+  if (cn == 1 && cyc == "") {
+    printf "finding %s %s: current\n\n", unit, name
+  } else {
+    printf "finding %s %s: chain %d, ends %s\n\n", unit, name, cn, cname[cn]
+  }
+  for (k = 1; k <= cn; k++) {
+    if (k > 1) print "# superseded by " cname[k]
+    e = block_end(cidx[k])
+    for (i = cidx[k]; i <= e; i++) print LF[i]
+  }
+  if (cyc != "") print "# CYCLE: " cyc " already in the chain"
+}
+
+function verdict_of(line,   p, q, inner, c, h) {
+  p = index(line, "(")
+  if (p == 0) return ""
+  h = match(line, /[ \t]+-[ \t]+/)
+  if (h > 0 && h < p) return ""
+  inner = substr(line, p + 1)
+  q = index(inner, ")")
+  if (q > 0) inner = substr(inner, 1, q - 1)
+  c = index(inner, ":")
+  if (c == 0) return ""
+  return trim(substr(inner, 1, c - 1))
+}
+
+function do_closure(unit, slug,   path, i, k, e, rest, w, nw, hit, n, cur_slug, cur_anchor, v) {
+  path = ".contexture/sessions/" unit "/journal.md"
+  load_file(path)
+  hit = 0
+  for (i = 1; i <= NFILE; i++) {
+    if (LF[i] ~ /^@entry / && field2(LF[i]) == slug) {
+      hit = 1
+      break
+    }
+  }
+  if (!hit) fail("ERROR: no such entry: " slug)
+  n = 0
+  cur_slug = ""
+  cur_anchor = ""
+  for (i = 1; i <= NFILE; i++) {
+    if (LF[i] ~ /^@entry /) {
+      cur_slug = field2(LF[i])
+      cur_anchor = ""
+      continue
+    }
+    if (cur_slug != "" && LF[i] ~ /^[ \t]*ANCHOR:/) {
+      cur_anchor = value_after(LF[i], "ANCHOR")
+    }
+    if (LF[i] ~ /^[ \t]*(CLOSES|SUPERSEDES):/) {
+      rest = LF[i]
+      sub(/^[ \t]*(CLOSES|SUPERSEDES):[ \t]*/, "", rest)
+      sub(/[ \t]+-[ \t]+.*$/, "", rest)
+      sub(/[ \t]+\(.*$/, "", rest)
+      rest = trim(rest)
+      nw = split(rest, w, /[ \t]+/)
+      hit = 0
+      for (k = 1; k <= nw; k++) {
+        if (dateslug_ok(w[k]) && w[k] == slug) hit = 1
+      }
+      if (hit) {
+        n++
+        cn_slug[n] = cur_slug
+        cn_anchor[n] = cur_anchor
+        cn_line[n] = i
+        cn_verb[n] = LF[i]
+        cn_verdict[n] = verdict_of(LF[i])
+      }
+    }
+  }
+  if (n == 0) {
+    printf "closure %s %s: open\n", unit, slug
+    return
+  }
+  v = cn_verdict[1]
+  if (v != "") printf "closure %s %s: closed (%s)\n", unit, slug, v
+  else printf "closure %s %s: closed\n", unit, slug
+  for (k = 1; k <= n; k++) {
+    print ""
+    printf "closer %s (%s, line %d)\n", cn_slug[k], cn_anchor[k], cn_line[k]
+    print cn_verb[k]
+  }
+}
+
+function do_units(repo,   cmd, state, line, i, k, nknown, nparts, parts, status, aline, nl, nxt, r, p, matched, nunits, label, list, key, j, gr, rows) {
+  cmd = "ls .contexture/sessions/*/state.md 2>/dev/null"
+  nunits = 0
+  nknown = 0
+  rows = 0
+  while ((cmd | getline state) > 0) {
+    rows++
+    status = ""
+    aline = ""
+    nl = 0
+    matched = 0
+    gr = 1
+    while ((gr = (getline line < state)) > 0) {
+      if (line ~ /^[ \t]*$/) {
+        cur = ""
+        continue
+      }
+      if (line ~ /^[ \t]/) {
+        if (cur == "next_action") {
+          nl++
+          nxt[nl] = line
+        }
+        continue
+      }
+      if (line ~ /^status:[ \t]/) {
+        status = value_after(line, "status")
+        cur = "status"
+      } else if (line ~ /^current_anchor:[ \t]/) {
+        aline = line
+        cur = "current_anchor"
+      } else if (line ~ /^next_action:[ \t]/) {
+        nl = 1
+        nxt[nl] = line
+        cur = "next_action"
+      } else if (line ~ /^repos:[ \t]*/) {
+        r = line
+        sub(/^repos:[ \t]*/, "", r)
+        sub(/^\[/, "", r)
+        sub(/\].*$/, "", r)
+        nparts = split(r, parts, /[ \t]*,[ \t]*/)
+        for (k = 1; k <= nparts; k++) {
+          p = trim(parts[k])
+          if (p == "") continue
+          if (!(p in knownmap)) {
+            nknown++
+            known[nknown] = p
+            knownmap[p] = 1
+          }
+          if (p == repo) matched = 1
+        }
+        cur = "repos"
+      } else {
+        cur = ""
+      }
+    }
+    close(state)
+    if (gr < 0) {
+      print "WARNING: unreadable state: " state > "/dev/stderr"
+      continue
+    }
+    if (matched) {
+      nunits++
+      uslug[nunits] = state
+      sub(/\/state\.md$/, "", uslug[nunits])
+      sub(/^.*\//, "", uslug[nunits])
+      ustat[nunits] = status
+      uanchor[nunits] = aline
+      ucount[nunits] = nl
+      for (k = 1; k <= nl; k++) unxt[nunits, k] = nxt[k]
+    }
+  }
+  close(cmd)
+  if (rows == 0 && exists_dir(".contexture/sessions")) print "WARNING: no state files listed: .contexture/sessions" > "/dev/stderr"
+  if (nunits == 0) {
+    for (i = 2; i <= nknown; i++) {
+      key = known[i]
+      j = i - 1
+      while (j >= 1 && known[j] > key) {
+        known[j + 1] = known[j]
+        j--
+      }
+      known[j + 1] = key
+    }
+    list = ""
+    for (i = 1; i <= nknown; i++) list = (i == 1) ? known[i] : list ", " known[i]
+    fail("ERROR: no unit touches repo: " repo " (known: " list ")")
+  }
+  printf "units %s: %d units\n\n", repo, nunits
+  for (i = 1; i <= nunits; i++) {
+    if (i > 1) print ""
+    label = (ustat[i] == "ACTIVE") ? "[ACTIVE]" : "[CLOSED]"
+    printf "%s %s\n", uslug[i], label
+    if (uanchor[i] != "") print "  " uanchor[i]
+    for (k = 1; k <= ucount[i]; k++) print "  " unxt[i, k]
+  }
+}
+
+function do_refs_to(session,   cmd, state, line, r, n, nparts, parts, k, p, matched, gr, rows) {
+  cmd = "ls .contexture/sessions/*/state.md 2>/dev/null"
+  n = 0
+  rows = 0
+  while ((cmd | getline state) > 0) {
+    rows++
+    matched = 0
+    gr = 1
+    while ((gr = (getline line < state)) > 0) {
+      if (line ~ /^ref_sessions:[ \t]*\[/) {
+        r = line
+        sub(/^ref_sessions:[ \t]*\[/, "", r)
+        sub(/\].*$/, "", r)
+        nparts = split(r, parts, /[ \t]*,[ \t]*/)
+        for (k = 1; k <= nparts; k++) {
+          p = trim(parts[k])
+          if (p == session) matched = 1
+        }
+      }
+    }
+    close(state)
+    if (gr < 0) {
+      print "WARNING: unreadable state: " state > "/dev/stderr"
+      continue
+    }
+    if (matched) {
+      n++
+      rslug[n] = state
+      sub(/\/state\.md$/, "", rslug[n])
+      sub(/^.*\//, "", rslug[n])
+    }
+  }
+  close(cmd)
+  if (rows == 0 && exists_dir(".contexture/sessions")) print "WARNING: no state files listed: .contexture/sessions" > "/dev/stderr"
+  if (n == 0) fail("ERROR: no unit references session: " session)
+  printf "refs-to %s: %d units\n\n", session, n
+  for (k = 1; k <= n; k++) print "  " rslug[k]
+}
+
+function resolve_parse(ref,   rest, p) {
+  RKIND = ""
+  RARG = ""
+  RLANE = ""
+  RSEC = ""
+  if (ref ~ /^journal\.md#/) {
+    rest = substr(ref, 12)
+    if (!dateslug_ok(rest)) unsupported(ref)
+    RKIND = "entry"
+    RARG = rest
+  } else if (ref ~ /^knowledge\.md#/) {
+    rest = substr(ref, 14)
+    if (!name_ok(rest)) unsupported(ref)
+    RKIND = "finding"
+    RARG = rest
+  } else if (ref ~ /^lanes\//) {
+    rest = substr(ref, 7)
+    p = index(rest, "/report.md#")
+    if (p == 0) unsupported(ref)
+    RLANE = substr(rest, 1, p - 1)
+    RSEC = substr(rest, p + 11)
+    if (!slug_ok(RLANE) || RSEC !~ /^[A-Za-z][A-Za-z0-9_-]*$/) unsupported(ref)
+    RKIND = "claim"
+  } else {
+    unsupported(ref)
+  }
+}
+
+function unsupported(ref) {
+  fail("ERROR: unsupported ref form: " ref " (supported: journal.md#slug, knowledge.md#NAME, lanes/<lane>/report.md#section; code file#symbol is out of scope)")
+}
+
+function do_resolve(unit, ref,   path, i, e, found, sec) {
+  if (RKIND == "entry") {
+    path = ".contexture/sessions/" unit "/journal.md"
+    if (!exists(path)) fail("ERROR: missing journal: " path)
+    load_file(path)
+    found = 0
+    for (i = 1; i <= NFILE; i++) {
+      if (LF[i] ~ /^@entry / && field2(LF[i]) == RARG) {
+        found = i
+        break
+      }
+    }
+    if (found == 0) fail("ERROR: no such entry: " RARG)
+  } else if (RKIND == "finding") {
+    path = ".contexture/sessions/" unit "/knowledge.md"
+    if (!exists(path)) fail("ERROR: no such finding: " RARG)
+    load_file(path)
+    found = find_finding_block(RARG)
+    if (found == 0) fail("ERROR: no such finding: " RARG)
+  } else {
+    path = ".contexture/sessions/" unit "/lanes/" RLANE "/report.md"
+    if (!exists(path)) fail("ERROR: no such section: " RSEC " in " path)
+    load_file(path)
+    found = 0
+    sec = RSEC
+    for (i = 1; i <= NFILE; i++) {
+      if ((sec == "orientation" || sec == "risks") && trim(LF[i]) == "@" sec) {
+        found = i
+        break
+      } else if (LF[i] ~ /^@claim / && field2(LF[i]) == sec) {
+        found = i
+        break
+      }
+    }
+    if (found == 0) fail("ERROR: no such section: " sec " in " path)
+  }
+  printf "resolve %s %s: %s\n\n", unit, ref, RKIND
+  e = block_end(found)
+  for (i = found; i <= e; i++) print LF[i]
+}
+
+function file_stats(path,   cmd, line, w, n) {
+  cmd = "LC_ALL=C wc -l -c < \"" path "\""
+  FLINES = 0
+  FBYTES = 0
+  n = 0
+  if ((cmd | getline line) > 0) {
+    n = split(trim(line), w, /[ \t]+/)
+    if (n >= 1) FLINES = w[1] + 0
+    if (n >= 2) FBYTES = w[2] + 0
+  }
+  close(cmd)
+  if (n == 0) print "WARNING: wc produced no figures: " path > "/dev/stderr"
+}
+
+function do_lane(unit, lane,   ld, p, i, art, last) {
+  ld = ".contexture/sessions/" unit "/lanes/" lane "/"
+  if (!exists_dir(ld)) fail("ERROR: no such lane: " lane " (in " unit ")")
+  print "lane " unit " " lane
+  for (i = 1; i <= 3; i++) {
+    art = (i == 1) ? "recipe.md" : ((i == 2) ? "journal.md" : "report.md")
+    p = ld art
+    if (exists(p)) {
+      file_stats(p)
+      printf "  %s: present (%d lines, %d bytes)\n", art, FLINES, FBYTES
+    } else {
+      printf "  %s: absent\n", art
+    }
+  }
+  last = "none"
+  p = ld "journal.md"
+  if (exists(p)) {
+    load_file(p)
+    for (i = NFILE; i >= 1; i--) {
+      if (trim(LF[i]) != "") {
+        last = LF[i]
+        break
+      }
+    }
+  }
+  print "  journal last: " last
+  p = ld "report.md"
+  if (exists(p)) {
+    load_file(p)
+    print "  report first: " ((NFILE >= 1) ? LF[1] : "")
+  }
+}
+
+function scan_file(path, artifact, mode,   line, n, loc) {
+  n = 0
+  loc = ""
+  while ((getline line < path) > 0) {
+    n++
+    if (mode == "state") {
+      if (line ~ /^[a-z][a-z_]*:/) {
+        loc = line
+        sub(/:.*$/, "", loc)
+      }
+    } else if (mode == "backlog") {
+      if (line ~ /^@task /) loc = "#" field2(line)
+    } else if (mode == "knowledge") {
+      if (line ~ /^@finding /) loc = "@finding " field2(line)
+      else if (line ~ /^@[A-Za-z]/) loc = ""
+    } else if (mode == "journal") {
+      if (line ~ /^@entry /) loc = "#" field2(line)
+      else if (line ~ /^@[A-Za-z]/) loc = ""
+    } else if (mode == "report") {
+      if (line ~ /^@claim /) loc = "@claim " field2(line)
+      else if (line ~ /^@[A-Za-z]/) loc = ""
+    }
+    if (index(tolower(line), searchterm) > 0) {
+      nm++
+      sm_art[nm] = artifact
+      sm_loc[nm] = (loc == "") ? ("line " n) : loc
+      sm_snip[nm] = cut(trim(line), 90)
+    }
+  }
+  close(path)
+}
+
+function do_search(unit, term,   d, p, lane, cmd, k, shown) {
+  d = ".contexture/sessions/" unit "/"
+  scan_file(d "state.md", "state.md", "state")
+  p = d "backlog.md"
+  if (!exists(p)) print "WARNING: missing backlog: " p > "/dev/stderr"
+  scan_file(p, "backlog.md", "backlog")
+  p = d "knowledge.md"
+  if (!exists(p)) print "WARNING: missing knowledge: " p > "/dev/stderr"
+  scan_file(p, "knowledge.md", "knowledge")
+  scan_file(d "journal.md", "journal.md", "journal")
+  cmd = "ls -d " d "lanes/*/ 2>/dev/null"
+  while ((cmd | getline lane) > 0) {
+    sub(/\/$/, "", lane)
+    sub(/^.*\//, "", lane)
+    scan_file(d "lanes/" lane "/journal.md", "lanes/" lane "/journal.md", "journal")
+    scan_file(d "lanes/" lane "/report.md", "lanes/" lane "/report.md", "report")
+  }
+  close(cmd)
+  if (nm == 0) fail("ERROR: no matches: " term)
+  printf "search %s %s: %d matches\n\n", unit, term, nm
+  shown = (nm > 50) ? 50 : nm
+  for (k = 1; k <= shown; k++) printf "%s %s: %s\n", sm_art[k], sm_loc[k], sm_snip[k]
+  if (nm > 50) printf "... and %d more matches (refine the term)\n", nm - 50
+}
+
+BEGIN {
+  for (i = 1; i <= 127; i++) ASCII = ASCII sprintf("%c", i)
+  if (ARGC < 2) usage()
+  kind = ARGV[1]
+
+  if (kind == "entry") {
+    if (ARGC != 4) usage()
+    unit = ARGV[2]
+    arg = ARGV[3]
+    if (!slug_ok(unit) || !dateslug_ok(arg)) usage()
+    require_session(unit)
+    require_journal(unit)
+    do_entry(unit, arg)
+  } else if (kind == "group") {
+    if (ARGC != 4) usage()
+    unit = ARGV[2]
+    arg = ARGV[3]
+    if (!slug_ok(unit) || !slug_ok(arg)) usage()
+    require_session(unit)
+    require_journal(unit)
+    do_group(unit, arg)
+  } else if (kind == "anchors") {
+    if (ARGC != 3) usage()
+    unit = ARGV[2]
+    if (!slug_ok(unit)) usage()
+    require_session(unit)
+    require_journal(unit)
+    do_anchors(unit)
+  } else if (kind == "finding") {
+    if (ARGC != 4) usage()
+    unit = ARGV[2]
+    arg = ARGV[3]
+    if (!slug_ok(unit) || !name_ok(arg)) usage()
+    require_session(unit)
+    do_finding(unit, arg)
+  } else if (kind == "closure") {
+    if (ARGC != 4) usage()
+    unit = ARGV[2]
+    arg = ARGV[3]
+    if (!slug_ok(unit) || !dateslug_ok(arg)) usage()
+    require_session(unit)
+    require_journal(unit)
+    do_closure(unit, arg)
+  } else if (kind == "units") {
+    if (ARGC != 3) usage()
+    arg = ARGV[2]
+    if (!slug_ok(arg)) usage()
+    do_units(arg)
+  } else if (kind == "refs-to") {
+    if (ARGC != 3) usage()
+    arg = ARGV[2]
+    if (!slug_ok(arg)) usage()
+    do_refs_to(arg)
+  } else if (kind == "resolve") {
+    if (ARGC != 4) usage()
+    unit = ARGV[2]
+    arg = ARGV[3]
+    if (!slug_ok(unit)) usage()
+    resolve_parse(arg)
+    require_session(unit)
+    do_resolve(unit, arg)
+  } else if (kind == "lane") {
+    if (ARGC != 4) usage()
+    unit = ARGV[2]
+    arg = ARGV[3]
+    if (!slug_ok(unit) || !slug_ok(arg)) usage()
+    require_session(unit)
+    do_lane(unit, arg)
+  } else if (kind == "search") {
+    if (ARGC != 4) usage()
+    unit = ARGV[2]
+    arg = ARGV[3]
+    if (!slug_ok(unit)) usage()
+    if (arg == "") fail("ERROR: empty term")
+    require_session(unit)
+    require_journal(unit)
+    searchterm = tolower(arg)
+    do_search(unit, arg)
+  } else {
+    print "ERROR: unknown query kind: " kind > "/dev/stderr"
+    exit 1
+  }
+  exit 0
+}

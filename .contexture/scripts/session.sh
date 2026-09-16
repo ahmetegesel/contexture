@@ -1,7 +1,7 @@
 #!/bin/sh
 # session.sh: the session entry point: one doorway over the awk workers
 # Usage: .contexture/scripts/session.sh <command> [args]
-# Commands: active, bootstrap, load, stamp, board, audit, index, help.
+# Commands: active, bootstrap, load, stamp, board, audit, index, query, help.
 # The help carries every command contract; the workers are the
 # implementation. help prints the table to stdout rc=0; no argument, an
 # unknown command, or extra help arguments print the table to stderr rc=1
@@ -32,6 +32,16 @@ usage:
   session.sh board <slug>
   session.sh audit <slug>
   session.sh index
+  session.sh query entry <unit> <slug>
+  session.sh query group <unit> <token>
+  session.sh query anchors <unit>
+  session.sh query finding <unit> <NAME>
+  session.sh query closure <unit> <slug>
+  session.sh query units <repo>
+  session.sh query refs-to <session>
+  session.sh query resolve <unit> <ref>
+  session.sh query lane <unit> <lane>
+  session.sh query search <unit> <term>
 
 no flags: any argument beginning with a dash, in any position, refuses rc=1 with this table on stderr and zero stdout
 
@@ -45,6 +55,7 @@ commands:
   board      <slug>: the live board: unclosed journal entries with complete bodies, then the open task slugs; missing journal is fatal rc=1; a missing backlog warns on stderr
   audit      <slug>: the session audit: dangling and slugless closers, entry grammar, the backlog and state cross-checks; rc=1 on any finding; prints the open thread tail
   index      no arguments: the rhythm index from .contexture/rhythms/ as name (path) | use when | activation; an argument refuses rc=1
+  query      <kind> [args]: the record's named queries (the forms above): bounded looks over session artifacts, so no one improvises a grep; a miss is rc=1 with a named error, never an empty success
 
 workers: .contexture/scripts/session-<command>.awk, cross-platform POSIX awk (index is rhythms-index.awk)
 EOF
@@ -100,6 +111,10 @@ case "$1" in
   index)
     shift
     exec "$dir/rhythms-index.awk" "$@"
+    ;;
+  query)
+    shift
+    exec "$dir/session-query.awk" "$@"
     ;;
   *)
     usage_error

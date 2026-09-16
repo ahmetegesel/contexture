@@ -79,7 +79,7 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 ## The scripts
 
-Seven instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one renders the live board, one audits the session, one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses flags outright. Nothing needs installing.
+Eight instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one renders the live board, one answers the record's named queries, one audits the session, one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses flags outright. Nothing needs installing.
 
 ### session.sh load: the load and the refs form
 
@@ -102,7 +102,7 @@ Derives the next anchor from `state.md`, rewrites `current_anchor`, and appends 
 .contexture/scripts/session.sh stamp <unit> "<attention>"
 ```
 
-`grep "^@anchor"` reconstructs the map of periods and their receipts.
+`.contexture/scripts/session.sh query anchors <unit>` reconstructs the map of periods and their receipts.
 
 ### session.sh board: the board
 
@@ -115,6 +115,32 @@ Returns the live board: every unclosed entry with its body whole, then the open 
 The script collects closure targets and streams live bodies in one shot, then lists the backlog slugs whose status is not DONE under the closing nudge; the opener names the counts, and a missing backlog is loud on stderr with no tail. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation of `session.sh board` fails loudly: a path, the legacy double path, an extra argument, or a flag.
 
 `session.sh load` composes this board for the load's journal section; run directly, `session.sh board` is the updated board: the open entries and the open tasks in one stream. The refs form composes the board per reference session, so a consulted session streams its live entries too.
+
+### session.sh query: the named looks
+
+Answers the foreseeable questions over the record in bounded form, so no one improvises a grep that over-reads. Every kind is a named form, never a flag:
+
+```bash
+.contexture/scripts/session.sh query <kind> [args]
+.contexture/scripts/session.sh query units <repo>
+.contexture/scripts/session.sh query anchors <unit>
+.contexture/scripts/session.sh query search <unit> <term>
+```
+
+| kind | args | what it returns |
+|---|---|---|
+| `entry` | `<unit> <slug>` | the entry block verbatim; duplicates render every match |
+| `group` | `<unit> <token>` | one short line per entry: anchor, slug, the `WHAT` opening |
+| `anchors` | `<unit>` | the `@anchor` lines verbatim, with the count |
+| `finding` | `<unit> <NAME>` | the finding block plus its supersession chain, cycles marked |
+| `closure` | `<unit> <slug>` | open, or the closers with their verdicts and lines |
+| `units` | `<repo>` | each unit touching the repo: slug, status, anchor, next action |
+| `refs-to` | `<session>` | each unit referencing the session |
+| `resolve` | `<unit> <ref>` | the block behind `journal.md#slug`, `knowledge.md#NAME`, or `lanes/<lane>/report.md#section` |
+| `lane` | `<unit> <lane>` | file presence with line and byte counts, the journal's last line, the report's first |
+| `search` | `<unit> <term>` | bounded match lines across state, backlog, knowledge, journal, and the lane journals and reports, each with its locator |
+
+Every miss is loud: rc 1, zero stdout, a named error, never a plausible empty. Outputs are bounded by construction: group and search snippets cut at 90 bytes on word boundaries, search stops at 50 lines with a trailing count, and entry, finding, closure, and resolve render verbatim. One bound is deliberately absent: `group` renders one line per matching entry, with its count in the opener, and no cap. A large thread streams whole, because the thread itself is what the caller came to read; the per-row snippet is the part that stays capped. Target lookups miss loudly; a listing without a target carries its count, so a zero-anchor journal prints `0 anchors`. Names match exactly and shapes are validated before any output; a wrong invocation refuses with the kind's usage.
 
 ### session.sh audit: the repair instrument
 

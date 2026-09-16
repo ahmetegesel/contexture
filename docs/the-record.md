@@ -160,7 +160,7 @@ A fresh unit starts at `A0`; its first boot stamps `A1`; each later stamp is the
 
 Anchors have exactly two jobs: period ordering and load receipts. They are never liveness. No entry loads or skips by its anchor, and age never closes anything: an entry stays live until a closure names it.
 
-Entries carry the anchor that was current when they were written, which clusters them into periods by a plain grep; the clustering survives any reordering of the file. Knowledge carries no anchor: the temporal axis belongs to the journal, and refs are the seam between the axes. `state.md` carries only the counter's current value.
+Entries carry the anchor that was current when they were written, which clusters them into periods by `session.sh query anchors <unit>`; the clustering survives any reordering of the file. Knowledge carries no anchor: the temporal axis belongs to the journal, and refs are the seam between the axes. `state.md` carries only the counter's current value.
 
 ## Supersession
 
