@@ -37,24 +37,29 @@ cross-references: an entry by its id; a block by #<block> in-doc or <slug>.md#<b
   - "statement of business logic delegation"]
 
 [@contract
+  # Checkable business invariants, state schemas (addressing keys and lifecycles), calculation formulas, validation sets, and ordering/uniqueness guarantees:
   - rule: "rule statement"
     evidence: "greppable code symbol or config key"
     [detail ::
-      continuation detail explaining the invariant and edge conditions]
+      continuation detail explaining the invariant, state key schemas, calculation equations,
+      allowed value sets/enums, single-writer invariants, and edge conditions]
     [absence_scope: [<path-glob>, ...]]]
 
 [@dependencies
+  # Inbound and outbound dependencies, including external legacy scripts, cross-boundary parameter/secret exports, and cloud resources:
   - target: <target-unit-or-package>
     nature: internal | external
-    why: "why this dependency is permitted and used"]
+    why: "why this dependency is permitted and used, including payload schema or secret structure if external"]
 
 [@edges
+  # Active communication boundaries (requests and event streams); verify that declared edges reflect live wire reality rather than dead/unused client imports:
   - direction: exposes | consumes
-    via: http | graphql | amqp | grpc | ftp | ws
+    via: http | graphql | amqp | grpc | ftp | ws | events | streams
     key: "route, query name, queue, or topic"
-    detail: "protocol details, caching, and serialization"]
+    detail: "protocol details, serialization, and wire status (active vs dormant/dead code)"]
 
 [@pitfalls
+  # Failure modes, silent truncations, cache staleness, batch failure routing (e.g. lack of partial batch reporting), and hardcoded fallback landmines:
   - id: <slug>-p<N>
     summary: "short pitfall statement"
     class: bug | tech-debt | gotcha | drift-risk
@@ -108,13 +113,23 @@ cross-references: an entry by its id; a block by #<block> in-doc or <slug>.md#<b
   [anti: "code snippet showing violation"]
   [good: "code snippet showing compliant implementation"]
 
-# --- 3. REFLECTIVE ARCHITECTURE SHAPE (architecture.md) ---
+# --- 3. REFLECTIVE ARCHITECTURE / SYSTEM MAP SHAPE ---
+# For a single repository / internal code: architecture.md (@layers, @stages, @deployables, @data_flow, @dependency_rules)
+# For a workspace / multi-component map: system-map.md (@components, @stages, @data_flow, @dependency_rules)
 
-@doc architecture architecture
+@doc architecture <architecture|system-map>
   repo: workspace | <repo-name>
-  description: "architectural structure, layers, and data flows"
+  description: "architectural structure, components, layers, and data flows"
 
-@layers
+[@components
+  - name: "component or repo name"
+    repo: <repo-name> | workspace
+    kind: <component-kind>
+    stack: "runtime and framework summary"
+    responsibilities: "summary of component domain and ownership"
+    [sources: [<glob-pattern>, ...]]]
+
+[@layers
   - name: "layer name"
     order: <N>
     responsibilities: "layer responsibility summary"
@@ -129,8 +144,8 @@ cross-references: an entry by its id; a block by #<block> in-doc or <slug>.md#<b
 
 @deployables
   - name: "deployable name"
-    type: "Web API | Worker Service | Static Site | Nuxt App"
-    runtime: "ASP.NET 10.0 Alpine | Node 20 | etc."
+    type: "Web API | Worker Service | Static Site | Web App"
+    runtime: "<runtime stack and version>"
     entrypoint: "entrypoint file or container CMD"
     evidence: "pipeline or dockerfile symbol"
     detail ::
@@ -159,7 +174,8 @@ cross-references: an entry by its id; a block by #<block> in-doc or <slug>.md#<b
   - step: "short step name"
     evidence: "greppable code symbol or config key"
     detail ::
-      the command line, its prerequisites, ports, or environment notes
+      the command line, its prerequisites, ports, environment notes,
+      and any operational hazards / downstream overload risks with required throttling mitigations
 
 @build
   - step: "short step name"

@@ -6,10 +6,13 @@
 # Layout: lives at <workspace>/.contexture/scripts/docs-gate. The workspace root
 # defaults two levels up from the script (one level up when scripts/ sits at the
 # root); override with DOCS_WORKSPACE_ROOT. Product repositories live under
-# DOCS_PRODUCT_REPOS_DIR (default: projects/); docs-check.awk maps their docs
-# through the same projects/ prefix, so change both together or keep the default.
+# DOCS_PRODUCT_REPOS_DIR (default: projects/); when it is absent the workspace
+# root's child repositories are scanned directly, and the workspace root itself
+# when it is a repository. docs-check.awk maps the projects/<repo>/ prefix and
+# the flat <repo>/ form alike.
 #
 # Usage: docs-gate                  (audit plus check over the live git delta)
+#        docs-gate --drift          (audit plus check over remote git delta vs origin/main)
 #        docs-gate --stdin          (audit plus check over a piped name-status list)
 #        docs-gate --test-matrix    (self-planted fixture scenarios)
 
@@ -41,10 +44,19 @@ aggregate_git_changes() {
         done
     )
 
-    # 2. Product repositories changes ($PRODUCT_REPOS_DIR/*)
-    for pdir in "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*; do
-        if [ -d "$pdir/.git" ]; then
+    # 2. Product repositories changes ($PRODUCT_REPOS_DIR/* or workspace root child repos)
+    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
+        prefix_base="$PRODUCT_REPOS_DIR"
+    else
+        scan_dirs="$WORKSPACE_ROOT"/*
+        prefix_base=""
+    fi
+
+    for pdir in $scan_dirs; do
+        if [ -d "$pdir/.git" ] && [ "$pdir" != "$WORKSPACE_ROOT" ]; then
             repo_name="${pdir##*/}"
+            pfx="${prefix_base:+$prefix_base/}$repo_name"
             (
                 cd "$pdir"
                 {
@@ -63,22 +75,123 @@ aggregate_git_changes() {
                             old_f="${rest%%[[:space:]]*}"
                             new_f="${rest#*[[:space:]]}"
                             new_f="${new_f#"${new_f%%[! ]*}"}"
-                            printf "%s\t%s/%s/%s\t%s/%s/%s\n" "$stat" "$PRODUCT_REPOS_DIR" "$repo_name" "$old_f" "$PRODUCT_REPOS_DIR" "$repo_name" "$new_f"
+                            printf "%s\t%s/%s\t%s/%s\n" "$stat" "$pfx" "$old_f" "$pfx" "$new_f"
                             ;;
                         [A-Z\?]*[[:space:]]*)
                             stat="${line%%[[:space:]]*}"
                             f="${line#*[[:space:]]}"
                             f="${f#"${f%%[! ]*}"}"
-                            printf "%s\t%s/%s/%s\n" "$stat" "$PRODUCT_REPOS_DIR" "$repo_name" "$f"
+                            printf "%s\t%s/%s\n" "$stat" "$pfx" "$f"
                             ;;
                         *)
-                            printf "M\t%s/%s/%s\n" "$PRODUCT_REPOS_DIR" "$repo_name" "$line"
+                            printf "M\t%s/%s\n" "$pfx" "$line"
                             ;;
                     esac
                 done
             )
         fi
     done
+}
+
+# Function to aggregate remote drift changes (HEAD...origin/main, the
+# merge-base incoming delta) across product repos
+aggregate_remote_drift_changes() {
+    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
+        prefix_base="$PRODUCT_REPOS_DIR"
+    else
+        scan_dirs="$WORKSPACE_ROOT"/*
+        prefix_base=""
+        # The flat topologies (single repository, standalone, monorepo) carry
+        # the product repository at the workspace root itself: scan it too.
+        if [ -e "$WORKSPACE_ROOT/.git" ]; then
+            scan_dirs="$WORKSPACE_ROOT $scan_dirs"
+        fi
+    fi
+
+    for pdir in $scan_dirs; do
+        if [ "$pdir" = "$WORKSPACE_ROOT" ]; then
+            repo_name="${pdir##*/}"
+            pfx=""
+        elif [ -d "$pdir/.git" ]; then
+            repo_name="${pdir##*/}"
+            pfx="${prefix_base:+$prefix_base/}$repo_name"
+        else
+            continue
+        fi
+        (
+            cd "$pdir"
+            remote_ref="origin/main"
+            if ! git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+                remote_ref="origin/master"
+            fi
+            if git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+                git diff --name-status "HEAD...$remote_ref" 2>/dev/null || true
+            fi
+        ) | while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            case "$line" in
+                R[0-9]*[[:space:]]*)
+                    stat="${line%%[[:space:]]*}"
+                    rest="${line#*[[:space:]]}"
+                    rest="${rest#"${rest%%[! ]*}"}"
+                    old_f="${rest%%[[:space:]]*}"
+                    new_f="${rest#*[[:space:]]}"
+                    new_f="${new_f#"${new_f%%[! ]*}"}"
+                    printf "%s\t%s\t%s\n" "$stat" "${pfx:+$pfx/}$old_f" "${pfx:+$pfx/}$new_f"
+                    ;;
+                [A-Z\?]*[[:space:]]*)
+                    stat="${line%%[[:space:]]*}"
+                    f="${line#*[[:space:]]}"
+                    f="${f#"${f%%[! ]*}"}"
+                    printf "%s\t%s\n" "$stat" "${pfx:+$pfx/}$f"
+                    ;;
+                *)
+                    printf "M\t%s\n" "${pfx:+$pfx/}$line"
+                    ;;
+            esac
+        done
+    done
+}
+
+# Function to check and print branch and remote drift warnings to stderr
+check_drift_warnings() {
+    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
+    else
+        scan_dirs="$WORKSPACE_ROOT"/*
+        # The flat topologies carry the product repository at the workspace
+        # root itself: warn about it too.
+        if [ -e "$WORKSPACE_ROOT/.git" ]; then
+            scan_dirs="$WORKSPACE_ROOT $scan_dirs"
+        fi
+    fi
+
+    drift_found=0
+    for pdir in $scan_dirs; do
+        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.git" ]; then
+            repo_name="${pdir##*/}"
+            branch=$(git -C "$pdir" branch --show-current 2>/dev/null || echo "")
+            if [ -n "$branch" ] && [ "$branch" != "main" ] && [ "$branch" != "master" ]; then
+                printf "[DRIFT WARNING] %s is on branch '%s' (not main)\n" "$repo_name" "$branch" >&2
+                drift_found=1
+            fi
+            remote_ref="origin/main"
+            if ! git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+                remote_ref="origin/master"
+            fi
+            if git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+                behind=$(git -C "$pdir" rev-list --count "HEAD..$remote_ref" 2>/dev/null || echo 0)
+                if [ "$behind" -gt 0 ]; then
+                    printf "[DRIFT WARNING] %s is %s commit(s) behind %s\n" "$repo_name" "$behind" "$remote_ref" >&2
+                    drift_found=1
+                fi
+            fi
+        fi
+    done
+    if [ "$drift_found" -eq 1 ]; then
+        printf "[DRIFT NOTICE] Run 'docs-gate --drift' to evaluate remote incoming changes against docs.\n\n" >&2
+    fi
 }
 
 # Run syntax/integrity audit across all typed documentation
@@ -183,11 +296,15 @@ if [ "$1" = "-" ] || [ "$1" = "--stdin" ]; then
     fi
     run_audit
     run_gate_check
+elif [ "$1" = "--drift" ]; then
+    run_audit
+    aggregate_remote_drift_changes | sort -u | run_gate_check
 elif [ -z "$1" ]; then
     run_audit
+    check_drift_warnings
     aggregate_git_changes | sort -u | run_gate_check
 else
     echo "docs-gate: unknown argument: $1" >&2
-    echo "Usage: docs-gate [--stdin | --test-matrix]" >&2
+    echo "Usage: docs-gate [--drift | --stdin | --test-matrix]" >&2
     exit 1
 fi

@@ -1,19 +1,21 @@
 @doc architecture system-map
   repo: workspace
-  description: "The demo workspace map: two fictional product repos, their layers, request stages, deployables, and data flow"
-  keywords: [workspace map, demo, layers, deployables, data flow]
+  description: "The demo workspace map: two fictional product repos, their components, request stages, and data flow"
+  keywords: [workspace map, demo, components, stages, data flow]
 
-@layers
-  - name: "Storefront"
-    order: 1
-    responsibilities: "Cart interaction and checkout handoff in the browser"
-    allowed_dependencies: [Order Service]
-    path_patterns: [projects/demo-web/src/**]
-  - name: "Order Service"
-    order: 2
+@components
+  - name: "demo-web"
+    repo: demo-web
+    kind: capability
+    stack: "TypeScript, browser runtime"
+    responsibilities: "Storefront cart interaction and checkout handoff"
+    sources: [projects/demo-web/src/**]
+  - name: "demo-orders"
+    repo: demo-orders
+    kind: capability
+    stack: "TypeScript, Node 20"
     responsibilities: "Cart validation, pricing, and order persistence"
-    allowed_dependencies: [Database]
-    path_patterns: [projects/demo-orders/src/**]
+    sources: [projects/demo-orders/src/**]
 
 @stages
   - stage: "Cart assembly"
@@ -28,22 +30,6 @@
     order: 3
     description: "The accepted order is stored and published downstream"
     evidence: "saveOrder"
-
-@deployables
-  - name: "demo-web"
-    type: "Static Site"
-    runtime: "Node 20"
-    entrypoint: "projects/demo-web/src/main.ts"
-    evidence: "buildStorefront"
-    detail ::
-      Ships the storefront bundle to the static host.
-  - name: "demo-orders"
-    type: "Web API"
-    runtime: "Node 20"
-    entrypoint: "projects/demo-orders/src/server.ts"
-    evidence: "createOrderServer"
-    detail ::
-      Runs the order API beside the primary database.
 
 @data_flow
   - from: "demo-web"

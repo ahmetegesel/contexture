@@ -8,6 +8,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.42.0] - 2026-09-17
+
+### Added
+
+- The docs-discipline bundle's architecture shape gains the system map: an `@components` block for workspace-level maps beside the per-repository shape, registered in the audit; the template comments carry the interrogation method (datastore geometry, wire reality, domain equations, failure physics).
+- The authoring rhythm runs eleven steps (adding the backlog declaration, the interrogation pass, the reconcile depth gate, and the cross-repository trace with signposts and bilateral links); the drift rhythm gains its backlog declaration.
+- The gate warns on branch and commit lag by default and gains `--drift`, which evaluates the incoming remote delta (merge-base form) so locally ahead commits never read as incoming deletions; the scans cover nested, flat, and root-repository topologies.
+- The check and query engines normalize quoted source globs and dual topology prefixes.
+
+### Changed
+
+- The authoring rhythm conforms to the one-line step form with the method one-homed in the template comments; the bundle's flavor is neutralized; the sample map teaches the system-map shape; the README documents the drift modes, the warnings, and the team semantics: only the un-reflected incoming changes are marked, a riding doc being the workflow's mark, the co-change test the mechanical net.
+
 ## [0.41.0] - 2026-09-17
 
 ### Added

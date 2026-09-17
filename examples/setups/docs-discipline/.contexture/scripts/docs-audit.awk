@@ -25,6 +25,7 @@ BEGIN {
     valid_blocks["@see_also"] = 1
     valid_blocks["@members"] = 1
     valid_blocks["@member_source"] = 1
+    valid_blocks["@components"] = 1
     valid_blocks["@layers"] = 1
     valid_blocks["@stages"] = 1
     valid_blocks["@deployables"] = 1

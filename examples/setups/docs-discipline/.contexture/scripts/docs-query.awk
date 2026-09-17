@@ -71,14 +71,14 @@ function split_sources(str, arr,    len, i, ch, depth, current, count) {
             depth--
             current = current ch
         } else if (ch == "," && depth == 0) {
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", current)
+            gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", current)
             if (current != "") arr[++count] = current
             current = ""
         } else {
             current = current ch
         }
     }
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", current)
+    gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", current)
     if (current != "") arr[++count] = current
     return count
 }
@@ -106,9 +106,12 @@ mode == "file" {
         n = split_sources(curr_sources, src_globs)
         matched = 0
         norm_file = file
-        repo_prefix = "projects/" curr_repo "/"
-        if (index(norm_file, repo_prefix) == 1) {
-            norm_file = substr(norm_file, length(repo_prefix) + 1)
+        p_prefix = "projects/" curr_repo "/"
+        r_prefix = curr_repo "/"
+        if (index(norm_file, p_prefix) == 1) {
+            norm_file = substr(norm_file, length(p_prefix) + 1)
+        } else if (index(norm_file, r_prefix) == 1) {
+            norm_file = substr(norm_file, length(r_prefix) + 1)
         }
         for (i = 1; i <= n; i++) {
             g = src_globs[i]

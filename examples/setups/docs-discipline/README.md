@@ -25,7 +25,7 @@ repo's run, build, and test targets.
 | `.contexture/scripts/docs-audit.awk` | grammar and integrity audit: header, blocks, indentation, rule fields, symbol-only evidence, duplicate ids | copy |
 | `.contexture/scripts/docs-query.awk` + `.contexture/scripts/docs-query` | the retrieval engine and its CLI: index, projection, section slice, file owner, search, rules, pitfalls, edges | copy |
 | `.contexture/scripts/docs-check.awk` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | copy |
-| `.contexture/scripts/docs-gate` | the close gate: audit then check over the aggregated delta, plus a self-planted seven-scenario matrix | copy |
+| `.contexture/scripts/docs-gate` | the close gate: audit then check over the aggregated delta (or the incoming remote delta with `--drift`), plus a self-planted eight-scenario matrix | copy |
 | `.contexture/scripts/docs-nudge.awk` | the task nudge: matched docs, top pitfalls, forced setup targets | copy |
 | `.contexture/templates/doc.md` | the corpus grammar: eight kinds, the block shapes, the block scalar rules | copy |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed |
@@ -50,6 +50,14 @@ them).
 | single-repo workspace | one repository at the workspace root | `docs/workspace/` (the repo's unit docs included) | `repo: workspace` with root-relative sources (`src/...`); a corpus with named namespaces (for example `repo: app` at the root) calibrates the check's mapping on the spot | the reference check maps `repo: workspace` docs against the workspace root, non-workspace docs through the prefix; no `projects/` aggregation |
 | monorepo | one repository, many packages | `docs/workspace/` | `repo: workspace` with package-scoped globs (`packages/<name>/**`) | map each package as a unit; same mechanics as single-repo |
 | standalone repository | the repository is its own root | `docs/workspace/` | `repo: workspace`, root-relative sources | the drawer ships inside the repository; same mapping as single-repo |
+
+The gate's scanners follow the shape: product repositories under `projects/`
+are scanned through the `projects/<repo>/` prefix; when `projects/` is absent
+the workspace root's child repositories are scanned directly (flat); and when
+the workspace root itself is a repository (single-repo, monorepo, standalone)
+it is scanned as one, its paths root-relative so `repo: workspace` docs claim
+them. The default run warns about drift in these repositories on stderr;
+`--drift` evaluates their incoming remote delta.
 
 ## Assess
 
@@ -144,6 +152,7 @@ From the workspace root (seed at least one doc first: the `docs/*/*.md` glob mus
 .contexture/scripts/docs-query --index                 # ends: index complete: N entries
 printf 'M\tprojects/<repo>/src/example.ts\n' | .contexture/scripts/docs-check.awk docs/*/*.md   # substitute repo and path; red (UNCOVERED) until a doc claims it
 .contexture/scripts/docs-gate                          # in a git workspace: audit plus the aggregated delta check
+.contexture/scripts/docs-gate --drift                  # in a git workspace: audit plus the incoming remote delta check
 .contexture/scripts/docs-gate --test-matrix            # ALL 8 SCENARIOS PASSED
 ```
 
@@ -163,14 +172,19 @@ it walk below runs every one of these.
 - Lookup: query line, then owning doc, then section; read code only for what
   the doc lacked. `docs-query` answers owner lookups and the rules and
   pitfalls dimensions.
-- Authoring: the `docs-authoring` rhythm: map units, draft per the template,
-  audit, check coverage, project the result.
+- Authoring: the `docs-authoring` rhythm: the 11-step progression (sync,
+  map, backlog, draft, interrogate, audit, coverage, reconcile, project,
+  trace and accumulate, refresh); the method detail lives in the template's
+  comments.
 - Drift: the `docs-drift` rhythm: sync the checkout to the current base first
-  (fetch; a branch comes up to date with main), pipe the status-prefixed git
-  delta through the check, update each affected doc in the same change,
-  re-verify.
+  (fetch; a branch comes up to date with main), declare the affected units as
+  `@task` entries in `backlog.md`, pipe the status-prefixed git delta through
+  the check, update each affected doc in the same change, re-verify.
 - Close: `docs-gate` must pass cleanly. The gate verifies change, never
-  truth.
+  truth. A default run also warns on stderr when a scanned repository is on a
+  non-main branch or behind its last-fetched origin; `docs-gate --drift`
+  evaluates the incoming remote delta (the merge-base form) instead of the
+  local one.
 - Setup tasks: run `docs-nudge.awk` on the active backlog when a task names
   setup verbs; it prints the owning operational doc's run, build, and test
   targets plus the top pitfalls.
@@ -197,11 +211,29 @@ it walk below runs every one of these.
   the corpus today is complete, so the blindness is latent, not violated.
 - The gate verifies change, never truth: passing it means the touched code
   has fresh docs, not that the corpus is correct.
+- The default run's drift warnings read the last-fetched remote refs, not the
+  live remote: fetch first for current ones. They print to stderr only, and
+  stdout and the exit code stay as the check left them. `docs-gate --drift`
+  aggregates the incoming remote delta (the merge-base form) instead of the
+  local delta, so commits made locally ahead of the remote never read as
+  incoming deletions. In a team flow only the un-reflected incoming changes
+  surface: a code change whose covering doc rode the same commits reads fresh,
+  and only the changes whose docs did not ride are marked for reconciliation.
+  A riding doc is the workflow's mark on the commit, since a workspace running
+  the discipline does not hand-maintain its docs; so the flagged set also maps
+  where the discipline is not yet in play.
+  The test operates at co-change level; whether a doc that rode reflects the
+  substance is the reconcile step's judgment, never the gate's.
 - The check's satisfiers are generous by design: a touched unit reads fresh
   when any claimant unit doc, the repository's architecture doc, or a
   workspace doc rides the delta; coverage counts only the listed extensions;
   deleting a unit doc does not red the check. The gate stays scoped to the
   change delta, never the corpus's truth.
+- The authoring and drift rhythms declare their work as `@task` entries in
+  `backlog.md` (the base convention's task grammar) before drafting or
+  reconciling; `sample/backlog.md` shows the shape the demo uses. A workspace
+  without the base's backlog treats the declaration step as its own
+  convention's.
 - The setup is young. The walk below exercises every instrument against the
   sample; adoption itself is the real test.
 
@@ -243,7 +275,7 @@ demo-orders               operational                  operational              
 demo-orders               order-flow                   capability                      Cart validation, pricing, and order persistence for the demo
 demo-web                  cart-ui                      capability                      Storefront cart interaction: add, remove, quantity edits, an
 workspace                 conventions                  conventions                     Universal workspace conventions: documentation discipline, g
-workspace                 system-map                   architecture                    The demo workspace map: two fictional product repos, their l
+workspace                 system-map                   architecture                    The demo workspace map: two fictional product repos, their c
 index complete: 5 entries
 ```
 
@@ -373,7 +405,7 @@ CLEAN: all touched code files are covered by sources globs.
 FRESH: demo-orders > order-flow (doc updated in change delta)
 CLEAN: all affected code files have corresponding doc updates.
 
-docs-check: CLEAN - all touched code files are covered and fresh.
+docs-check: CLEAN: all touched code files are covered and fresh.
 ```
 
 ```sh
@@ -381,7 +413,7 @@ printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | .contexture/scripts/d
 ```
 
 ```text
-docs-check: FAILED - 1 code file(s) are stale (code changed without doc update).
+docs-check: FAILED: 1 code file(s) are stale (code changed without doc update).
 ...
 STALE DOC: demo-orders/order-flow (code modified without doc update)
   file: projects/demo-orders/src/order/validate.ts
@@ -392,7 +424,7 @@ printf 'A\tprojects/demo-orders/src/tools/report.ts\n' | .contexture/scripts/doc
 ```
 
 ```text
-docs-check: FAILED - 1 code file(s) are uncovered by any documentation.
+docs-check: FAILED: 1 code file(s) are uncovered by any documentation.
 ...
 UNCOVERED: projects/demo-orders/src/tools/report.ts
 ```
@@ -406,7 +438,7 @@ printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/demo-orders/order-fl
 ```text
 --- TOUCHED DOCUMENTATION ---
 ...
-docs-check: CLEAN - all touched code files are covered and fresh.
+docs-check: CLEAN: all touched code files are covered and fresh.
 ```
 
 ```sh
@@ -460,7 +492,7 @@ counted extension (an uncovered Python file).
 | `.contexture/scripts/docs-gate` | neutralized from the source gate: comment header, one workspace root variable (`DOCS_WORKSPACE_ROOT`, script-dir default), the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, and an unknown-argument refusal |
 | `.contexture/templates/doc.md` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII |
 | `.contexture/rhythms/work.md` | authored as the workspace's work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW |
-| `.contexture/rhythms/docs-authoring.md` | authored from the source authoring procedure; the method lives in `@rule docs/authoring` |
+| `.contexture/rhythms/docs-authoring.md` | authored from the source authoring procedure; the steps name outcomes, the method detail lives in the template's comments |
 | `.contexture/rhythms/docs-drift.md` | authored from the source drift procedure; the method lives in `@rule docs/drift` |
 | `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; two evidence fields repaired to artifacts that exist in this pack |
 | `sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |

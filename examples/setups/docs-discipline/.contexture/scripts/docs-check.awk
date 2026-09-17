@@ -76,14 +76,14 @@ function split_sources(str, arr,    len, i, ch, depth, current, count) {
             depth--
             current = current ch
         } else if (ch == "," && depth == 0) {
-            gsub(/^[[:space:]]+|[[:space:]]+$/, "", current)
+            gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", current)
             if (current != "") arr[++count] = current
             current = ""
         } else {
             current = current ch
         }
     }
-    gsub(/^[[:space:]]+|[[:space:]]+$/, "", current)
+    gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", current)
     if (current != "") arr[++count] = current
     return count
 }
@@ -114,9 +114,15 @@ function process_doc_sources() {
         if (curr_repo == "workspace") {
             norm_file = t_file
         } else {
-            repo_prefix = "projects/" curr_repo "/"
-            if (index(t_file, repo_prefix) != 1) continue
-            norm_file = substr(t_file, length(repo_prefix) + 1)
+            p_prefix = "projects/" curr_repo "/"
+            r_prefix = curr_repo "/"
+            if (index(t_file, p_prefix) == 1) {
+                norm_file = substr(t_file, length(p_prefix) + 1)
+            } else if (index(t_file, r_prefix) == 1) {
+                norm_file = substr(t_file, length(r_prefix) + 1)
+            } else {
+                continue
+            }
         }
 
         matched = 0
@@ -269,17 +275,17 @@ END {
     # Final Verdict
     if (uncovered_count > 0 || stale_count > 0 || num_dead_sources > 0) {
         if (uncovered_count > 0) {
-            print "docs-check: FAILED - " uncovered_count " code file(s) are uncovered by any documentation." > "/dev/stderr"
+            print "docs-check: FAILED: " uncovered_count " code file(s) are uncovered by any documentation." > "/dev/stderr"
         }
         if (stale_count > 0) {
-            print "docs-check: FAILED - " stale_count " code file(s) are stale (code changed without doc update)." > "/dev/stderr"
+            print "docs-check: FAILED: " stale_count " code file(s) are stale (code changed without doc update)." > "/dev/stderr"
         }
         if (num_dead_sources > 0) {
-            print "docs-check: FAILED - " num_dead_sources " deleted code file(s) still explicitly listed in doc sources." > "/dev/stderr"
+            print "docs-check: FAILED: " num_dead_sources " deleted code file(s) still explicitly listed in doc sources." > "/dev/stderr"
         }
         exit 1
     } else {
-        print "docs-check: CLEAN - all touched code files are covered and fresh."
+        print "docs-check: CLEAN: all touched code files are covered and fresh."
         exit 0
     }
 }
