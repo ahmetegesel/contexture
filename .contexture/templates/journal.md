@@ -7,6 +7,12 @@ substance: what happened, the result, why the next step follows;
 would a fresh boot reconstructing the position need it? then it
 records.
 
+a folded digest is an @entry like any other: its WHAT carries its chapter's
+synthesis and its decision sets whole for a reader with no prior context, and
+its CLOSES fold the originals by reference and stand as the fetch map; folded
+entries leave the load, never the file, and a reader fetches an original by
+its slug when the summary leaves a question open.
+
 @anchor A<N> ("continues A<N-1>", attention: <the loaded set>)   # period ordering + load receipt; never liveness
 
 @entry <date>-<slug>

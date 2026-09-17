@@ -73,6 +73,8 @@ Why a queue and not a numbered plan: a sequential plan assumes one fixed track, 
 
 The journal is the unit's running record and the single recording surface: events land as they happen, and the file only ever gains lines. It exists to do one thing: rebuild the working context from scratch. A fresh session loads the live entries and nothing else, and holds the position without the conversation. That reader decides what deserves an entry: whatever the reconstruction needs.
 
+Entries can fold. At a human-called chapter turn, a generation of entries may close into one comprehensive digest: a single entry carrying the chapter's synthesis and its decision sets whole, written for a reader with no prior context, whose `CLOSES` fold the originals by reference and stand as the fetch map. Folded entries leave the load, never the file. And every summary, digest included, is an entry point, never the whole story: the detail stays in the entries behind their refs, and a reader who needs it fetches the original by its slug with `session.sh query entry <unit> <slug>`. Fetching is judgement, one line away.
+
 ```text
 @anchor A12 ("continues A11", attention: <the loaded set>)
 

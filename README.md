@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.38.0 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.38.1 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh
 ```
 

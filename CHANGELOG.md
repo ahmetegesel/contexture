@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.38.1] - 2026-09-17
+
+### Added
+
+- The journal's folding practice: at a human-called chapter turn, entries may fold into a comprehensive digest carrying the chapter's synthesis and its decision sets whole; the digest's `CLOSES` fold the originals by reference and stand as the fetch map; folded entries leave the load, never the file.
+- The reading path: a summary or a digest is an entry point, never the whole story; a reader who needs the detail fetches the original by its slug, one command away.
+
+### Changed
+
+- The journal grammar template and the record docs carry the same two ideas. The clauses ride a proving-ground run: a folded copy answered a twelve-question reconstruction set against the live record, ten of twelve at the skeleton bar, the rest supplied by the documented fetch path.
+
 ## [0.38.0] - 2026-09-16
 
 ### Added

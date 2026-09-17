@@ -1,4 +1,4 @@
-# contexture v0.38.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.38.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -35,7 +35,9 @@
   dialect :: the token-efficient form preserves the context window while minimizing info loss; the compression makes completeness cheap; record fully, without worry; the dialect serves the pour, never caps it
   formation :: an event lands when it happens, never batched at period end; interaction beats journal as they happen (@interact); work beats never wait for an interaction beat
   substance :: an entry carries what happened, the result, and why the next step follows
+  folding :: entries may fold into a comprehensive digest at a human-called chapter turn: one entry carrying its chapter's synthesis and its decision sets whole, written for a reader with no prior context; the digest's CLOSES fold the originals by reference and stand as the fetch map; folded entries leave the load, never the file
   liveness :: entries are append-only, never edited; an entry closes only when a later CLOSES/SUPERSEDES names it; every closer carries a verdict word: done | superseded | dropped | folded, then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie; chase every closer in the same breath it resolves
+  reading :: a summary or a folded digest is an entry point, never the whole story: the refs and closers name the detail, and the entries behind them stay in the file; when a summary leaves a question open, fetch the original by its slug (session.sh query entry <unit> <slug>): fetching is the reader's judgement, one line away
   markings :: THREAD: true awaits resolution: a verdict, an execution, a dispatch report, the harvest (@refresh); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. KNOWLEDGE: true = the harvest's input. GROUP: <token> = the agent's topic thread, chosen in the conversation, stable within the unit. RHYTHM: <name> <N> <GATE> = the process in force, stamped on the entries that advance the rhythm; a stamp, never updated. REF: "path#symbol" = grounding. an entry uses the fields it needs; unused fields are omitted, never bracketed.
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open: an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
