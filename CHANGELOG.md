@@ -8,6 +8,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.41.0] - 2026-09-17
+
+### Added
+
+- The `THREAD` field is required on every session entry: `THREAD: <what it awaits>` names the act outside the unit's own flow that must resolve the entry (the human's response, a dispatched lane's report, another unit's act), and `THREAD: none` marks a receipt. The recording doorway refuses a missing line, an empty value, a duplicate line, and the boolean spellings.
+- The audit flags a missing `THREAD` from 2026-09-18 forward and prints the open threads with their targets; the board and the load tail render the open threads beside the open tasks; the lane journals carry the field when the lane awaits.
+
+### Changed
+
+- The marker's doctrine is rewritten: born at the write, never flipped, closed in the same breath by the resolving entry; the agent's own executions (the state and the board carry them) and the harvest (the audit's knowledge check carries it) are no longer threads.
+
 ## [0.40.0] - 2026-09-17
 
 ### Added

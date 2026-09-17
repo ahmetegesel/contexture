@@ -90,7 +90,7 @@ Returns the map plus one page of the load: state, backlog, knowledge, the live j
 .contexture/scripts/session.sh load refs <ref_1> ... <ref_N> [<page>]
 ```
 
-Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes the board (`session.sh board`), so the extraction has one home.
+Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes the board (`session.sh board`), so the extraction has one home; the board's open threads and open tasks ride that section unchanged.
 
 The cut is budgeted twice, about 500 lines or about 40KB, whichever binds first, so a page stays under the harness's output cap in practice; the one residual is a single block that exceeds the budget alone, and it renders whole on its own page. If a harness still truncates such a page, it prints a notice naming its saved copy of the command's output: that copy is the command's own output, and reading it is sanctioned by `@laws#workspace-confinement`, read-only, that named file alone. Routing the same content through temp files stays unsanctioned. The in-workspace fallbacks need nothing outside: every section is composed from the session files, so `session.sh board` or a direct read of the record recovers the same content.
 
@@ -108,7 +108,7 @@ Derives the next anchor from `state.md`, rewrites `current_anchor`, and appends 
 
 ### session.sh board: the board
 
-Returns the live board: every unclosed entry with its body whole, then the open task slugs under their nudge line. Live means unclosed: the set is the journal entries that no closure names. Takes one form, a session slug:
+Returns the live board: every unclosed entry with its body whole, then the open task slugs and the open threads with their targets, each list under its nudge line; an empty list prints nothing. Live means unclosed: the set is the journal entries that no closure names. Takes one form, a session slug:
 
 ```bash
 .contexture/scripts/session.sh board <unit>
@@ -116,7 +116,7 @@ Returns the live board: every unclosed entry with its body whole, then the open 
 
 The script collects closure targets and streams live bodies in one shot, then lists the backlog slugs whose status is not DONE under the closing nudge; the opener names the counts, and a missing backlog is loud on stderr with no tail. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation of `session.sh board` fails loudly: a path, the legacy double path, an extra argument, or a flag.
 
-`session.sh load` composes this board for the load's journal section; run directly, `session.sh board` is the updated board: the open entries and the open tasks in one stream. The refs form composes the board per reference session, so a consulted session streams its live entries too.
+`session.sh load` composes this board for the load's journal section; run directly, `session.sh board` is the updated board: the open entries, the open threads, and the open tasks in one stream. The refs form composes the board per reference session, so a consulted session streams its live entries too.
 
 ### session.sh query: the named looks
 
@@ -158,7 +158,7 @@ The write side, one command per act. Every artifact write rides it:
 .contexture/scripts/session.sh close <unit>
 ```
 
-`append` reads one or more blocks on stdin, and each block's first line decides where it lands: `@entry` in the journal, `@finding` in knowledge, `@task` in the backlog. The shapes are the templates (`.contexture/templates/`); write by filling one, and the command derives the anchor, normalizes the form, and appends it with the standard separator. `amend` replaces task fields in place, and the rest of the task stays byte-identical. `flip` moves a status: `progress` refuses until the state already names the slug, and `done` lands the receipt first, one entry whose `WHAT` carries each slug's `backlog/<slug>: DONE` with the evidence. `drop` removes the tasks a record entry names, and the record stays. `next` overwrites the pointer. `refs` sets the read-only mounts; zero sessions clears them. `close` marks the unit `CLOSED`, warning on open tasks and audit findings rather than refusing.
+`append` reads one or more blocks on stdin, and each block's first line decides where it lands: `@entry` in the journal, `@finding` in knowledge, `@task` in the backlog. The shapes are the templates (`.contexture/templates/`); write by filling one, and the command derives the anchor, normalizes the form, and appends it with the standard separator. An `@entry` must carry its `THREAD` line: the act outside the unit's own flow that must resolve it, or `none`; a missing line, an empty value, a duplicate, or `true` and `false` refuse. `amend` replaces task fields in place, and the rest of the task stays byte-identical. `flip` moves a status: `progress` refuses until the state already names the slug, and `done` lands the receipt first, one entry whose `WHAT` carries each slug's `backlog/<slug>: DONE` with the evidence. `drop` removes the tasks a record entry names, and the record stays. `next` overwrites the pointer. `refs` sets the read-only mounts; zero sessions clears them. `close` marks the unit `CLOSED`, warning on open tasks and audit findings rather than refusing.
 
 Every form validates all inputs before any write: a refusal is loud, rc 1 with zero partial writes, and a landing prints what it wrote. The acts repeat, so one call carries several blocks or several slugs.
 
@@ -170,7 +170,7 @@ Returns the record's defects, each flagged with a line or a slug, and exits nonz
 .contexture/scripts/session.sh audit <unit>
 ```
 
-The script derives `backlog.md` and `state.md` from the session folder; a sibling that cannot be read skips its check quietly. When the run is clean the script also prints the open-thread tail: the entries stamped `THREAD: true` that no closure names. The tail is a display, never an enforcement: a thread that pauses stays open, and its line in the tail is the reminder it exists.
+The script derives `backlog.md` and `state.md` from the session folder; a sibling that cannot be read skips its check quietly. When the run is clean the script also prints the open-thread tail: the entries whose `THREAD` names an act outside the unit and that no closure names, each with its target. The tail is a display, never an enforcement: a thread that pauses stays open, and its line in the tail is the reminder it exists. The audit parses the valued form, and the presence check runs from the enforcement era: an entry dated at or after `2026-09-18` that carries no `THREAD` line flags `MISSING THREAD`; the constant (`ENF_FROM`) lives in the script's BEGIN block, so pre-era records stay quiet.
 
 The classes, and what each one asks for:
 
@@ -180,6 +180,7 @@ The classes, and what each one asks for:
 | slugless closer | a closer carries no valid date-slug target | point it at real entries |
 | dateless entry slug | an entry name does not match the date-slug grammar | fix the entry's slug to the date-slug grammar |
 | inline marker | `THREAD:` or `KNOWLEDGE:` sits on the `@entry` line | move it to its own field line |
+| missing thread | a post-era `@entry` with no `THREAD` line | declare the `THREAD` line: what it awaits, or `none` |
 | unharvested knowledge | a `KNOWLEDGE: true` entry that no closer names | harvest it at the next refresh; the entry then closes by reference |
 | done without event | a `STATUS: DONE` task with no `backlog/<slug>: DONE` line in the journal | record the completion event |
 | in-progress absent from state | a `STATUS: IN_PROGRESS` task the state pointer does not name | refresh `next_action` in state.md |

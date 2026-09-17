@@ -86,6 +86,7 @@ Entries can fold. At a human-called chapter turn, a generation of entries may cl
   GROUP: auth
   RHYTHM: work 6 EXECUTE
   KNOWLEDGE: true
+  THREAD: none
   CLOSES: 2026-09-05-token-cache-introduced (done: replaced by cookie sessions)
   REF: "lanes/auth-refresh/report.md#claim"
 ```
@@ -98,7 +99,7 @@ An entry uses the fields it needs; the sample shows them together. In full:
 - `GROUP:` is the agent's topic thread, stable within the unit.
 - `RHYTHM: <name> <N> <GATE>` is the process in force, stamped on the entries that advance the rhythm; a stamp, never updated.
 - `KNOWLEDGE: true` marks the entry knowledge-worthy; it is the harvest's input.
-- `THREAD: true` marks an entry that awaits resolution (a verdict, an execution, a dispatch report, the harvest). It is stamped at birth, never flipped, and closes the moment the awaited thing arrives.
+- `THREAD: <what it awaits>` names the act outside the unit's own flow that must resolve the entry: the human's response, a dispatched lane's report, another unit's act. It is required on every entry and reads `none` when nothing outside acts; it is stamped at birth, never flipped, and the resolving entry closes it in the same breath. `none` is a receipt: the final word on a completed fact, no closer obligation. The agent's own executions and the harvest are not threads.
 - `CLOSES:` or `SUPERSEDES:` is the only closure: it names an earlier slug, carries a verdict word and a reason, and leaves the target untouched. The liveness section has the mechanics.
 - `REF: "path#symbol"` grounds the entry in an artifact.
 
@@ -136,8 +137,8 @@ Closure is a later entry naming its target. The target is never touched. The clo
 
 Two kinds of open entries, and only two:
 
-- A `THREAD: true` entry awaits something and closes the moment it arrives. A paused thread stays open: the open tail in the load is the reminder it exists, and a resume is fresh entries plus a `next_action` ref, never a fake close.
-- An unmarked entry is a receipt: the final word on a completed fact. It takes no closer. It stays open as the boot's context trail and folds only at a human-called chapter turn or at unit close. Receipts never close at period end.
+- An entry whose `THREAD` names a target awaits an act outside the unit's own flow and closes the moment it arrives. A paused thread stays open: the open tail in the load is the reminder it exists, and a resume is fresh entries plus a `next_action` ref, never a fake close.
+- A `THREAD: none` entry is a receipt: the final word on a completed fact. It takes no closer. It stays open as the boot's context trail and folds only at a human-called chapter turn or at unit close. Receipts never close at period end.
 
 The failure direction is deliberate, and it has a name: default-live. An entry loads unless a mechanical fact excludes it. Prose failures (a reworded label, a missing mark, a typo in a name) can over-load a few entries; they never drop a live one. Over-loading costs tokens; dropping loses memory, and only the second is irrecoverable. A settled entry still sitting in the load is visible debt: a missing closer, settled when the period ends.
 

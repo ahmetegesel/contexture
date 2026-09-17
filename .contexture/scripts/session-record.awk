@@ -14,8 +14,9 @@
 # templates: @entry, @finding, and @task blocks for append; labeled field
 # blocks for amend; the receipt entry for flip done; the record entry for
 # drop. ANCHOR is derived from state.md; an entry slug's date prefix must be
-# today; CLOSES and an entry's SUPERSEDES resolve to journal entries, a
-# finding's SUPERSEDES to a knowledge finding; REF targets stay unchecked
+# today; every @entry declares THREAD: <what it awaits> | none; CLOSES and
+# an entry's SUPERSEDES resolve to journal entries, a finding's SUPERSEDES
+# to a knowledge finding; REF targets stay unchecked
 # (format only); CRLF refuses; duplicate slugs and names refuse; flip done
 # requires the backlog/<slug>: DONE literal with its evidence per slug; flip
 # progress and next hold the audit's state cross-check; drop requires the
@@ -335,6 +336,7 @@ function parse_entry(k,   i, line, label, val, v) {
   ERH[k] = ""
   EKN[k] = 0
   ETH[k] = 0
+  ETHV[k] = ""
   ECN[k] = 0
   ESN[k] = 0
   ERN[k] = 0
@@ -369,8 +371,9 @@ function parse_entry(k,   i, line, label, val, v) {
       if (EKN[k]) fail("ERROR: block " k ": duplicate KNOWLEDGE line")
       EKN[k] = 1
     } else if (label == "THREAD") {
-      if (v != "true") fail("ERROR: block " k ": THREAD must read true (got: " v ")")
+      if (v == "" || v == "true" || v == "false") fail("ERROR: block " k ": THREAD must name what it awaits or none (got: " v ")")
       if (ETH[k]) fail("ERROR: block " k ": duplicate THREAD line")
+      ETHV[k] = v
       ETH[k] = 1
     } else if (label == "CLOSES") {
       ECN[k]++
@@ -385,6 +388,7 @@ function parse_entry(k,   i, line, label, val, v) {
     }
   }
   if (!EWSET[k]) fail("ERROR: block " k ": WHAT missing (one quoted WHAT line is required)")
+  if (!ETH[k]) fail("ERROR: block " k ": THREAD missing (declare THREAD: <what it awaits> | none)")
   if (EW[k] !~ /^"[^"]*"$/) fail("ERROR: block " k ": WHAT must be one quoted line with no embedded double quote")
   if (trim(substr(EW[k], 2, length(EW[k]) - 2)) == "") fail("ERROR: block " k ": WHAT empty")
 }
@@ -629,7 +633,7 @@ function render_entry(k,   j) {
   if (EG[k] != "") rl_add(k, "  GROUP: " EG[k])
   if (ERH[k] != "") rl_add(k, "  RHYTHM: " ERH[k])
   if (EKN[k]) rl_add(k, "  KNOWLEDGE: true")
-  if (ETH[k]) rl_add(k, "  THREAD: true")
+  if (ETH[k]) rl_add(k, "  THREAD: " ETHV[k])
   for (j = 1; j <= ECN[k]; j++) rl_add(k, "  CLOSES: " EC[k, j])
   for (j = 1; j <= ESN[k]; j++) rl_add(k, "  SUPERSEDES: " ES[k, j])
   for (j = 1; j <= ERN[k]; j++) rl_add(k, "  REF: " ERF[k, j])

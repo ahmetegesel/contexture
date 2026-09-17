@@ -1,4 +1,4 @@
-# contexture v0.40.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.41.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -38,7 +38,7 @@
   folding :: entries may fold into a comprehensive digest at a human-called chapter turn: one entry carrying its chapter's synthesis and its decision sets whole, written for a reader with no prior context; the digest's CLOSES fold the originals by reference and stand as the fetch map; folded entries leave the load, never the file
   liveness :: entries are append-only, never edited; an entry closes only when a later CLOSES/SUPERSEDES names it; every closer carries a verdict word: done | superseded | dropped | folded, then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie; chase every closer in the same breath it resolves
   reading :: a summary or a folded digest is an entry point, never the whole story: the refs and closers name the detail, and the entries behind them stay in the file; when a summary leaves a question open, fetch the original by its slug (session.sh query entry <unit> <slug>): fetching is the reader's judgement, one line away
-  markings :: THREAD: true awaits resolution: a verdict, an execution, a dispatch report, the harvest (@refresh); stamped at birth, never flipped; closes same-breath at resolution. unmarked = receipt: the final word on a completed fact, no closer obligation, folded only at a human-called chapter turn or at unit close. KNOWLEDGE: true = the harvest's input. GROUP: <token> = the agent's topic thread, chosen in the conversation, stable within the unit. RHYTHM: <name> <N> <GATE> = the process in force, stamped on the entries that advance the rhythm; a stamp, never updated. REF: "path#symbol" = grounding. an entry uses the fields it needs; unused fields are omitted, never bracketed.
+  markings :: THREAD: <what it awaits> = the unit awaits an act outside its own flow (the human's response, a dispatched lane's report, another unit's act); required on every session entry, none when nothing outside acts; stamped at birth, never flipped; the resolving entry closes it same-breath. THREAD: none = receipt: the final word on a completed fact, no closer obligation; the agent's own executions (the state and the board carry them) and the harvest (the audit's KNOWLEDGE check carries it) are not threads. KNOWLEDGE: true = the harvest's input. GROUP: <token> = the agent's topic thread, chosen in the conversation, stable within the unit. RHYTHM: <name> <N> <GATE> = the process in force, stamped on the entries that advance the rhythm; a stamp, never updated. REF: "path#symbol" = grounding. an entry uses the fields it needs; unused fields are omitted, never bracketed.
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open: an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
 @backlog
@@ -57,7 +57,7 @@
 
 @query
   surfaces: the journal + knowledge.
-  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/scripts/session.sh board streams active entries with complete bodies in one shot, then the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
+  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/scripts/session.sh board streams active entries with complete bodies in one shot, then the open threads with their targets and the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
     command:
       .contexture/scripts/session.sh board <unit>
   thread tail: session.sh audit prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
@@ -108,7 +108,7 @@
   - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden; names the active branch/worktree
   - lane boot, read-only, before any work: the overlays, state.md, backlog.md, knowledge.md, the recipe, and every REF it names; session surfaces are never lane-written
   - the lane's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
-  - lane journals at action granularity in journal.md as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; the journal is the audit trail and the resumption surface
+  - lane journals at action granularity in journal.md as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the lane (the dispatcher's read, the human, another lane) carries THREAD: <what it awaits>; the journal is the audit trail and the resumption surface
   - report -> report.md; return = summary ONLY
   - the dispatcher reads the report, never the lane journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
   - background: the turn ends at launch; never block the conversation on a lane; parallel lanes only for independent domains: shared state or ordering means sequential
@@ -120,7 +120,7 @@
   - journal every dispatch: lane folder path
 
 @refresh
-  the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the board read (its open-task list is the status checklist), the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run: every open flag, one candidate each; confirmed candidates land in knowledge via session.sh append (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; session.sh audit run, what it flags fixed; beyond the harvest, nothing closes here
+  the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the board read (its open-thread and open-task lists are the status checklist), the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run: every open flag, one candidate each; confirmed candidates land in knowledge via session.sh append (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; session.sh audit run, what it flags fixed; beyond the harvest, nothing closes here
 
 @close
   period end (turn ends; unit continues):

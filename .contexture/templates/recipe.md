@@ -24,7 +24,7 @@ GROUND_AND_REFS
   drift: stop + report; never improvise
 
 OUTPUTS
-  JOURNAL: journal.md               # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; the dispatcher never reads it
+  JOURNAL: journal.md               # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; an entry awaiting an act outside the lane (the dispatcher's read, the human, another lane) carries THREAD: <what it awaits>; the dispatcher never reads it
   REPORT: report.md                 # the dispatcher's only window: self-sufficient claims and evidence; .contexture/templates/report.md
   RETURN: summary only: verdicts + residual risks
   RESUME: read recipe.md + journal.md; continue from last uncompleted task

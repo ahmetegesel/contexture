@@ -1,6 +1,7 @@
 #!/usr/bin/awk -f
 # session-board.awk: the live board: unclosed journal entries with complete
-# bodies, then the open task slugs with their closing nudge
+# bodies, then the open task slugs with their nudge and the open threads
+# (each <slug> (A<n>): <target>); each tail is silent when empty
 # Usage: session.sh board <session-slug>
 # One form: the slug resolves .contexture/sessions/<slug>/{journal,backlog}.md.
 # A path, extra arguments, and the retired refs flags are refused rc=1
@@ -14,7 +15,7 @@ function usage() {
   exit 1
 }
 
-function process_journal(journal_path,   test_line, test_ret, line, words, n, i, closed, printing, slug) {
+function process_journal(journal_path,   test_line, test_ret, line, words, n, i, closed, printing, slug, cur_anchor, v) {
   test_line = ""
   test_ret = (getline test_line < journal_path)
   if (test_ret < 0) {
@@ -39,13 +40,17 @@ function process_journal(journal_path,   test_line, test_ret, line, words, n, i,
   }
   close(journal_path)
 
-  # Pass 2: buffer the unclosed entry bodies and count them
+  # Pass 2: buffer the unclosed entry bodies, count them, and capture the
+  # live entries' ANCHOR and THREAD values (a THREAD other than none is an
+  # open thread: the value is its target)
   printing = 0
+  cur_anchor = ""
   while ((getline line < journal_path) > 0) {
     if (line ~ /^@entry /) {
       n = split(line, words, /[ \t]+/)
       slug = words[2]
       printing = !(slug in closed)
+      cur_anchor = ""
       if (printing) live++
     } else if (line ~ /^@anchor /) {
       printing = 0
@@ -53,6 +58,21 @@ function process_journal(journal_path,   test_line, test_ret, line, words, n, i,
     if (printing) {
       nbuf++
       buf[nbuf] = line
+      if (line ~ /^  ANCHOR: /) {
+        cur_anchor = line
+        sub(/^  ANCHOR: /, "", cur_anchor)
+        sub(/[ \t\r]+$/, "", cur_anchor)
+      } else if (line ~ /^  THREAD: /) {
+        v = line
+        sub(/^  THREAD: /, "", v)
+        sub(/[ \t\r]+$/, "", v)
+        if (v != "none") {
+          nth++
+          thslug[nth] = slug
+          thanchor[nth] = cur_anchor
+          thtarget[nth] = v
+        }
+      }
     }
   }
   close(journal_path)
@@ -126,6 +146,13 @@ BEGIN {
     print "OPEN TASKS"
     for (i = 1; i <= nopen; i++) print "  " openslug[i]
     print "the entries say what happened; these say what remains"
+  }
+
+  if (nth > 0) {
+    print ""
+    print "OPEN THREADS (awaiting outside the unit)"
+    for (i = 1; i <= nth; i++) print "  " thslug[i] " (" thanchor[i] "): " thtarget[i]
+    print "these await someone outside: resolve or re-ask"
   }
   exit 0
 }

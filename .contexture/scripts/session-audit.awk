@@ -6,11 +6,12 @@
 # Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
 # markers on @entry lines, bracketed field lines (the [FIELD: literal-copy
 # form), unharvested KNOWLEDGE flags (with line), DONE tasks without their
-# backlog/<slug>: DONE event, IN_PROGRESS tasks absent from state.md; each
-# flagged by slug (the knowledge flag and the bracketed field also by line).
-# Session checks: backlog.md and state.md are derived from the session
+# backlog/<slug>: DONE event, IN_PROGRESS tasks absent from state.md, entries
+# dated at or after ENF_FROM missing THREAD (with line); each flagged by slug
+# (the knowledge flag, the bracketed field, and the missing THREAD also by
+# line). Session checks: backlog.md and state.md are derived from the session
 # folder; a sibling that cannot be read skips its check quietly. Open
-# threads (THREAD: true entries with no closer)
+# threads (entries whose THREAD names what they await, no closer yet)
 # print beside the audit; the tail is a display, never an enforcement: a
 # thread paused stays open.
 
@@ -40,6 +41,7 @@ BEGIN {
   ARGV[1] = journal_file
   backlogs = dir "backlog.md"
   states = dir "state.md"
+  ENF_FROM = "2026-09-18"
 }
 
 /^@entry / {
@@ -61,8 +63,15 @@ BEGIN {
   bad++
 }
 
-/^  THREAD: true[ \t]*$/ {
-  threaded[NR] = last_entry
+/^  THREAD: / {
+  v = $0
+  sub(/^  THREAD: /, "", v)
+  sub(/[ \t\r]+$/, "", v)
+  hasthread[last_entry] = 1
+  if (v != "none") {
+    threaded[NR] = last_entry
+    thtarget[NR] = v
+  }
 }
 
 /^  KNOWLEDGE: true[ \t]*$/ {
@@ -152,6 +161,13 @@ END {
     }
   }
 
+  for (e in entries) {
+    if (e ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-zA-Z0-9_-]+[a-zA-Z0-9]$/ && substr(e, 1, 10) >= ENF_FROM && !(e in hasthread)) {
+      print "MISSING THREAD at line " entry_line[e] ": " e " (declare THREAD: <what it awaits> | none)"
+      bad++
+    }
+  }
+
   if (bad > 0 || dangling_count > 0) {
     exit 1
   }
@@ -161,7 +177,7 @@ END {
       if (tail == 0) {
         print "OPEN THREADS (awaiting resolution):"
       }
-      print "  line " l ": " threaded[l]
+      print "  line " l ": " threaded[l] " (" thtarget[l] ")"
       tail++
     }
   }
