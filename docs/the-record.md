@@ -13,6 +13,8 @@ One unit of work, one folder, four files, each with a single job:
 
 The files are the system, and they are agent-facing: the agent maintains them as it works, and the human reads prose rendered from them on request, never the artifacts themselves.
 
+One command family carries every write: the recording acts on `session.sh`. `append` lands journal entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. The shapes ride the templates, and every form validates before it writes, so a refusal is loud and leaves nothing partial.
+
 ## state.md, the pointer
 
 The smallest file, the only one edited freely, and the first thing a working period reads. It is the map, not the content: detail lives behind refs, never inside it.

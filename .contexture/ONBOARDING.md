@@ -16,7 +16,7 @@
   2. branch: `git checkout -b adopt-contexture` (or team branch convention)
   3. never execute onboarding directly on main/master/production branches
   4. bootstrap the adoption session: `.contexture/scripts/session.sh bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
-  5. journal the phase: the branch and the starting git state
+  5. journal the phase (`.contexture/scripts/session.sh append`): the branch and the starting git state
 
 @assess
   topology:
@@ -63,7 +63,7 @@
     <every open question beside the plan: resolutions, history, intent the evidence cannot answer; none states none>
 
 @configure
-  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in backlog.md, next_action points at the active task, every task's completion journals and advances next_action, drift updates the backlog in the same breath
+  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/scripts/session.sh append`; the pointer moves via `.contexture/scripts/session.sh next`; every task's completion journals (`.contexture/scripts/session.sh flip done`) and advances the pointer (`.contexture/scripts/session.sh next`); drift updates the backlog in the same breath via `.contexture/scripts/session.sh amend`
   base assets:
     copy the adoption set: `git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <target>`; AGENTS.md lands at the root, the drawer alongside it, the examples at the root as reference
     set script permissions: `chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh`

@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.38.1 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.39.0 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh
 ```
 
@@ -128,5 +128,14 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 | session.sh query resolve <unit> <ref> | The block behind a journal, knowledge, backlog, or lane-report reference |
 | session.sh query lane <unit> <lane> | Lane file presence with line and byte counts, the journal's last line, the report's first |
 | session.sh query search <unit> <term> | Bounded match lines across the unit's artifacts (state, backlog, knowledge, journal, the lane journals and reports), each with its locator |
+| session.sh append <unit> | The write side: one or more blocks on stdin; each block's first line decides `@entry` (journal), `@finding` (knowledge), or `@task` (backlog); the command adds the anchor and refuses loudly, never partially |
+| session.sh amend <unit> <slug> | Replace task fields in place from the labeled field blocks on stdin; the rest of the task stays byte-identical |
+| session.sh flip <unit> <verb> <slug> [<slug> ...] | Move task status: `todo` reopens, `progress` activates (the state must already name the slug), `done` lands the receipt entry from stdin, one `backlog/<slug>: DONE` literal with its evidence per slug; several slugs ride one call |
+| session.sh drop <unit> <slug> [<slug> ...] | Remove tasks: the record entry naming each lands from stdin first, then the blocks go |
+| session.sh next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
+| session.sh refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
+| session.sh close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
 
 The query family answers the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
+
+The recording family is the write side of the toolbox: `append` lands entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a task's status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. Every form validates all inputs before any write, refuses loudly with zero partial writes, and the batch forms carry several blocks or slugs in one call. Shapes come from `.contexture/templates/`; the help names each form's target, stdin, and template.

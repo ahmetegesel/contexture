@@ -1,7 +1,8 @@
 #!/bin/sh
 # session.sh: the session entry point: one doorway over the awk workers
 # Usage: .contexture/scripts/session.sh <command> [args]
-# Commands: active, bootstrap, load, stamp, board, audit, index, query, help.
+# Commands: active, bootstrap, load, stamp, board, audit, index, query,
+# append, amend, flip, drop, next, refs, close, help.
 # The help carries every command contract; the workers are the
 # implementation. help prints the table to stdout rc=0; no argument, an
 # unknown command, or extra help arguments print the table to stderr rc=1
@@ -42,6 +43,13 @@ usage:
   session.sh query resolve <unit> <ref>  (journal.md#slug, knowledge.md#NAME, backlog.md#slug, lanes/<lane>/report.md#section)
   session.sh query lane <unit> <lane>
   session.sh query search <unit> <term>
+  session.sh append <slug>  (stdin: one or more blocks)
+  session.sh amend <slug> <task-slug>  (stdin: one or more field blocks)
+  session.sh flip <slug> <todo | progress | done> <task-slug> [<task-slug> ...]
+  session.sh drop <slug> <task-slug> [<task-slug> ...]  (stdin: the record block)
+  session.sh next <slug> "<pointer>"
+  session.sh refs <slug> [<session> ...]
+  session.sh close <slug>
 
 no flags: any argument beginning with a dash, in any position, refuses rc=1 with this table on stderr and zero stdout
 
@@ -56,8 +64,15 @@ commands:
   audit      <slug>: the session audit: dangling and slugless closers, entry grammar, the backlog and state cross-checks; rc=1 on any finding; prints the open thread tail
   index      no arguments: the rhythm index from .contexture/rhythms/ as name (path) | use when | activation; an argument refuses rc=1
   query      <kind> [args]: the record's named queries (the forms above): bounded looks over session artifacts, so no one improvises a grep; a miss is rc=1 with a named error, never an empty success
+  append     append one or more blocks to the session; the block's first line decides: @entry <date>-<slug> (templates/journal.md), @finding <NAME> (templates/knowledge.md), @task <slug> (templates/backlog.md); pipe the blocks on stdin; ANCHOR is derived from the state; every input validates before any write; a refusal names the field at fault and the fix
+  amend      replace task fields in place: <task-slug> names the task; pipe one or more labeled field blocks (OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::); the rest of the task stays byte-identical
+  flip       move a task's STATUS: todo reopens (TODO); progress activates (IN_PROGRESS; the state must already name the slug, run next first); done completes (pipe the receipt @entry; its WHAT carries "backlog/<task-slug>: DONE" and the evidence per slug); one call takes many slugs
+  drop       remove task blocks: pipe the record @entry; its WHAT names every <task-slug>; the record lands, then the blocks go; an IN_PROGRESS task the state still names refuses (run next first)
+  next       overwrite next_action with the pointer; refuses when an IN_PROGRESS task would go unnamed
+  refs       set the read-only reference sessions (templates/state.md); zero sessions clears; every named session must exist and differ from the unit
+  close      mark the unit CLOSED; warns on open tasks and audit findings, never refuses for them
 
-workers: .contexture/scripts/session-<command>.awk, cross-platform POSIX awk (index is rhythms-index.awk)
+workers: .contexture/scripts/session-<command>.awk, cross-platform POSIX awk (the record acts live in session-record.awk; index is rhythms-index.awk)
 EOF
 }
 
@@ -115,6 +130,11 @@ case "$1" in
   query)
     shift
     exec "$dir/session-query.awk" "$@"
+    ;;
+  append|amend|flip|drop|next|refs|close)
+    _act=$1
+    shift
+    exec "$dir/session-record.awk" "$_act" "$@"
     ;;
   *)
     usage_error

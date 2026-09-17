@@ -79,7 +79,7 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 ## The scripts
 
-Eight instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one renders the live board, one answers the record's named queries, one audits the session, one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses flags outright. Nothing needs installing.
+Nine instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one records the write acts, one renders the live board, one answers the record's named queries, one audits the session, and one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses flags outright. Nothing needs installing.
 
 ### session.sh load: the load and the refs form
 
@@ -141,6 +141,24 @@ Answers the foreseeable questions over the record in bounded form, so no one imp
 | `search` | `<unit> <term>` | bounded match lines across state, backlog, knowledge, journal, and the lane journals and reports, each with its locator |
 
 Every miss is loud: rc 1, zero stdout, a named error, never a plausible empty. Outputs are bounded by construction: group and search snippets cut at 90 bytes on word boundaries, search stops at 50 lines with a trailing count, and entry, finding, closure, and resolve render verbatim. One bound is deliberately absent: `group` renders one line per matching entry, with its count in the opener, and no cap. A large thread streams whole, because the thread itself is what the caller came to read; the per-row snippet is the part that stays capped. Target lookups miss loudly; a listing without a target carries its count, so a zero-anchor journal prints `0 anchors`. Names match exactly and shapes are validated before any output; a wrong invocation refuses with the kind's usage.
+
+### The write acts: append, amend, flip, drop, next, refs, close
+
+The write side, one command per act. Every artifact write rides it:
+
+```bash
+.contexture/scripts/session.sh append <unit>
+.contexture/scripts/session.sh amend <unit> <slug>
+.contexture/scripts/session.sh flip <unit> <verb> <slug> [<slug> ...]
+.contexture/scripts/session.sh drop <unit> <slug> [<slug> ...]
+.contexture/scripts/session.sh next <unit> "<pointer>"
+.contexture/scripts/session.sh refs <unit> [<session> ...]
+.contexture/scripts/session.sh close <unit>
+```
+
+`append` reads one or more blocks on stdin, and each block's first line decides where it lands: `@entry` in the journal, `@finding` in knowledge, `@task` in the backlog. The shapes are the templates (`.contexture/templates/`); write by filling one, and the command derives the anchor, normalizes the form, and appends it with the standard separator. `amend` replaces task fields in place, and the rest of the task stays byte-identical. `flip` moves a status: `progress` refuses until the state already names the slug, and `done` lands the receipt first, one entry whose `WHAT` carries each slug's `backlog/<slug>: DONE` with the evidence. `drop` removes the tasks a record entry names, and the record stays. `next` overwrites the pointer. `refs` sets the read-only mounts; zero sessions clears them. `close` marks the unit `CLOSED`, warning on open tasks and audit findings rather than refusing.
+
+Every form validates all inputs before any write: a refusal is loud, rc 1 with zero partial writes, and a landing prints what it wrote. The acts repeat, so one call carries several blocks or several slugs.
 
 ### session.sh audit: the repair instrument
 

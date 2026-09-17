@@ -27,7 +27,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 `state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the one next action, the objective, the repos it touches, and optional reference sessions (`ref_sessions`). Nothing else; detail lives behind references. It is a pointer, not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
 
-`backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence, and the completion lands in the journal in the same breath.
+`backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence (`session.sh flip done`), and the completion lands in the journal in the same breath.
 
 `journal.md` is the memory: the running record of what happened. Entries land as things happen, never batched at the end, and they are never edited afterward; a revision supersedes its predecessor by reference. Each entry carries what happened, the result, and why the next step follows. The journal exists to rebuild the working context from scratch: a fresh boot loads the live entries and nothing else, and holds the position without the conversation.
 
@@ -35,7 +35,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 `lanes/` holds delegated work, one folder per dispatch; its own section follows.
 
-The record files share one design rule: each is written as a creation act, never as a maintenance sweep. `state.md` is the pointer, rewritten as the work moves; `backlog.md` evolves in place as tasks move; `journal.md` and `knowledge.md` only grow, which is why they survive every compaction intact.
+The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command. `state.md` is the pointer, refreshed as the work moves (`session.sh stamp`, `next`, `refs`, `close`); `backlog.md` evolves in place as tasks move (`session.sh append`, `amend`, `flip`, `drop`); `journal.md` and `knowledge.md` only grow (`session.sh append`), which is why they survive every compaction intact.
 
 ## The unit's life
 
@@ -83,7 +83,7 @@ The artifact sweep, shared by rhythm boundaries, close, and handoff: the events 
 Two distinct ends:
 
 - Period end (a turn ends; the unit continues): run the refresh, then close the period's resolved threads by reference. The stray audit's checklist is the open-thread tail the journal audit prints: every thread that resolved this period closes now. The journal audit must exit 0; it is a repair instrument, and what it flags is fixed before the period ends, never noted. The folder stays ACTIVE.
-- Unit close (the backlog completes, or the human ends the unit): append the closing events and the next-move decision, re-read the files and confirm consistency, promote durable knowledge at the human's direction, then mark the unit CLOSED.
+- Unit close (the backlog completes, or the human ends the unit): append the closing events and the next-move decision, re-read the files and confirm consistency, promote durable knowledge at the human's direction, then mark the unit CLOSED (`session.sh close`).
 
 ### Handoff
 

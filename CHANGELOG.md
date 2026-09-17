@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.39.0] - 2026-09-17
+
+### Added
+
+- The recording commands: `session.sh append` takes one or more typed blocks in a single call and dispatches each by its first line (an entry to the journal, a finding to knowledge, a task to the backlog); `amend` replaces task fields; `flip` moves status across one or many slugs, with a done call landing one receipt that carries each slug's event and evidence; `drop` removes tasks with one record naming each; `next`, `refs`, and `close` cover the state's moves.
+- One worker carries the acts: every form validates all inputs before any write, refuses loudly with the fix named, and re-emits the canonical block shape; the help rows name each form, its template, and its stdin.
+
+### Changed
+
+- The BIOS names the commands and the artifact terms, never the session files; the REFs stay pointer data.
+- The lane files, the authorized surgeries, and the state's identity fields stay outside the command set by named decision; the audit remains the reveal instrument behind the commands.
+
 ## [0.38.1] - 2026-09-17
 
 ### Added
