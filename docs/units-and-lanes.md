@@ -87,7 +87,7 @@ Two distinct ends:
 
 ### Handoff
 
-The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the cold read. Run `session.sh load <unit>` and read every page as a fresh boot would; the record must reconstruct the position without the conversation. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
+The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the bounded cold read. Run `session.sh load <unit>` and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; the full-body pass belongs to the next boot, a fresh context. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
 
 Boot is the reader; handoff is the writer's proof. Both run against the same record, from opposite sides of the context boundary.
 

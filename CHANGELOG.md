@@ -8,6 +8,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.40.0] - 2026-09-17
+
+### Added
+
+- The load's pages are budgeted twice: about 500 lines or about 40 KB, whichever binds first, ending each page before the block that would cross it, so a page stays under common harness output caps; the flow is unchanged (numbered pages, the map, the banners, the completion), the content identical, only the cut points move. A single block larger than the budget renders whole on its own page.
+- The confinement law's sanctioned recovery: the harness's saved copy of a command's own truncated output is the agent's own output, sanctioned to read, read-only, the named file alone; the temp-file routing stays unsanctioned.
+- The handoff's cold read is bounded: the map and the state page, the backlog section with its open tasks whole, the journal's tail, the knowledge tail when this period landed findings, and the audit; the full-body pass belongs to the next boot, a fresh context.
+
+### Changed
+
+- The docs carry the budgeted cut and the bounded handoff; the load dispatch pins a byte-oriented locale so the budget holds on every awk.
+
 ## [0.39.0] - 2026-09-17
 
 ### Added

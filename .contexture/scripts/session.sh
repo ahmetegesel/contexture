@@ -109,7 +109,9 @@ case "$1" in
     ;;
   load)
     shift
-    exec "$dir/session-load.awk" "$@"
+    # LC_ALL=C keeps length() byte-oriented (the page byte budget) on every
+    # awk, gawk and mawk included, not only on the byte-counting BWK awk.
+    LC_ALL=C exec "$dir/session-load.awk" "$@"
     ;;
   stamp)
     shift

@@ -4,8 +4,10 @@
 #        session.sh load refs <ref_1> ... <ref_N> [<page>]
 # Sections in BIOS order: state, backlog, knowledge, the live journal
 # (composed from session-board.awk, one extraction home), declared
-# ref_sessions read-only, then the write-scope trailer. Pages cut at
-# block starts around 500 lines, never mid-body. Every call opens with
+# ref_sessions read-only, then the write-scope trailer. A page ends
+# before the block that would pass the line target (about 500) or the
+# byte budget (about 40KB), never mid-body; a single over-budget block
+# renders whole on its own page. Every call opens with
 # the LOAD INCOMPLETE banner until the last page, which opens LOAD
 # COMPLETE and hands off to the receipt stamp; keep calling until a page
 # reads complete. The refs form streams the named sessions alone, read
@@ -172,7 +174,15 @@ function compose_ref(rslug,   sec, rdir, rk, rj) {
   }
 }
 
-function compute_pages(   start, end, j) {
+# The page cut: a page never spans sections; within a section it ends
+# before the block whose addition would pass LINE_TARGET lines or
+# BYTE_BUDGET bytes, whichever comes first. A page always holds its
+# first block whole, so a single over-budget block renders whole on its
+# own page, never split. The cut lands on block boundaries only, so the
+# pages concatenate to the full render and the map's spans stay true.
+function compute_pages(   start, end, j, k, pl, pb, bl, bblk) {
+  cum[0] = 0
+  for (j = 1; j <= total; j++) cum[j] = cum[j - 1] + length(L[j]) + 1
   npages = 0
   start = 1
   while (start <= total) {
@@ -185,7 +195,14 @@ function compute_pages(   start, end, j) {
       }
     }
     for (j = start + 1; j <= end; j++) {
-      if (j - start >= 500 && B[j]) {
+      if (!B[j]) continue
+      pl = j - start
+      pb = cum[j - 1] - cum[start - 1]
+      k = j + 1
+      while (k <= end && !B[k]) k++
+      bl = k - j
+      bblk = cum[k - 1] - cum[j - 1]
+      if (pl + bl > LINE_TARGET || pb + bblk > BYTE_BUDGET) {
         end = j - 1
         break
       }
@@ -228,6 +245,9 @@ function page_body(page,   i) {
 }
 
 BEGIN {
+  LINE_TARGET = 500
+  BYTE_BUDGET = 40960
+
   if (ARGC < 2) usage()
 
   if (ARGV[1] == "refs") {

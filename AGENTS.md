@@ -1,4 +1,4 @@
-# contexture v0.39.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.40.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -7,7 +7,7 @@
   compose-from-record: compose from the record, never from conversation: rewrites grounded in journal/knowledge.
   verify-before-close: verify before close: no done without evidence; never claim verification you did not perform; re-read the files, confirm consistency.
   harvest-the-human: harvest the human: question to surface durable knowledge; crystallize into compact candidates; land with approval; land when deserved, never just to record; developing ideas stay in the journal.
-  workspace-confinement: the current workspace (the repo/worktree the agent was started in) is the boundary; never read, write, search, or otherwise reach outside it unless the human specifically asks for that act; an apparent outside need stops and asks: the agent never roams.
+  workspace-confinement: the current workspace (the repo/worktree the agent was started in) is the boundary; never read, write, search, or otherwise reach outside it unless the human specifically asks for that act; an apparent outside need stops and asks: the agent never roams; the harness's saved copy of a command's own truncated output is the agent's own output, sanctioned to read, read-only, the named file alone; the temp-file routing stays unsanctioned.
 
 @layout
   AGENTS.md       = laws + navigation (this file)
@@ -137,7 +137,7 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes (@close 1-3) if not done
-    2. verify with the cold read: run .contexture/scripts/session.sh load <unit> and read every page as a fresh boot would: the record reconstructs the position without the conversation; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; AND .contexture/scripts/session.sh audit <unit> exits 0; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
+    2. verify with the bounded cold read: run .contexture/scripts/session.sh load <unit> and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; then .contexture/scripts/session.sh audit <unit> exits 0; the full-body pass belongs to the next boot, a fresh context, never the edge; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
   the handoff writes the record, not working memory.
 
 @git
