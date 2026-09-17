@@ -3,8 +3,8 @@
 # file whole where none exists; see README.md beside it
 
 @append @subagents
-  branch/worktree: the recipe names the branch/worktree the lane works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every lane of the unit works there; the lane's journal and report stay in the session folder
-  landing: the dispatcher owns it: review the branch (or its PR), merge, remove the worktree, delete the branch; a lane never merges or prunes
+  branch/worktree: the recipe names the branch/worktree the subagent works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every subagent of the unit works there; the subagent's journal and report stay in the session folder
+  landing: the dispatcher owns it: review the branch (or its PR), merge, remove the worktree, delete the branch; a subagent never merges or prunes
   drift: an edit outside the declared roots, or a code change without its journal line, is drift
 
 @append @git

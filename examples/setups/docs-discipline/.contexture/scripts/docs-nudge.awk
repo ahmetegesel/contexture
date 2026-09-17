@@ -1,5 +1,7 @@
 #!/usr/bin/awk -f
 # docs-nudge.awk: task context and pitfall extractor for the workspace docs
+# Usage: .contexture/scripts/docs-nudge backlog.md docs/<repo>/*.md
+# Help: .contexture/scripts/docs-nudge help (also --help and -h)
 # Pure POSIX awk; extracts active task intent, matches relevant documentation and pitfalls,
 # and forces the owning operational doc's @run/@build/@test targets on setup verbs.
 

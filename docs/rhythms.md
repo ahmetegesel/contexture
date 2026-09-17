@@ -77,7 +77,7 @@ This is the fallback, not the frame: a human rhythm replaces the progression whe
 
 Two examples ship at `examples/rhythms/`, each with a plain-language README beside it.
 
-`work` applies when a work request arrives and no other rhythm matches, with `activation: auto`. It is token-heavy by design: one unit of work moves through several lanes (recon, grounding, execution, review), and each lane is a fresh context reading the record instead of dragging the history along. That buys context management and redundancy, and it is strongly recommended for cheaper, decent models: the structured flow and the independent verification close much of the gap to frontier models. Frontier models run it as discipline rather than necessity.
+`work` applies when a work request arrives and no other rhythm matches, with `activation: auto`. It is token-heavy by design: one unit of work moves through several subagents (recon, grounding, execution, review), and each subagent is a fresh context reading the record instead of dragging the history along. That buys context management and redundancy, and it is strongly recommended for cheaper, decent models: the structured flow and the independent verification close much of the gap to frontier models. Frontier models run it as discipline rather than necessity.
 
 `debug` applies when a failure needs a root cause (a bug, a flaky test, unexpected behavior), with `activation: propose`. It is a light, single-context loop: one focused agent, one gate at a time. Its first gate requires a red reproduction, recorded with a reference, before any fix.
 

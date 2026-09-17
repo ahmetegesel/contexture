@@ -1,6 +1,7 @@
 #!/usr/bin/awk -f
 # docs-query.awk: retrieval projection engine for the workspace docs
-# Usage: awk -v repo=<repo> -v slug=<slug> -f .contexture/scripts/docs-query.awk docs/<repo>/*.md
+# Usage: .contexture/scripts/docs-query <repo> <slug> [--section <name>] | <repo> --file <path> | --index (the full table: docs-query help)
+# Help: .contexture/scripts/docs-query help (also --help and -h)
 # Supports: projection, section slicing, rules query, pitfall scan, file owner lookup, corpus search, edges, index.
 
 # Per-file metadata extraction

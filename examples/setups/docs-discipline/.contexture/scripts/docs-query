@@ -8,6 +8,7 @@
 #   .contexture/scripts/docs-query <repo> --pitfalls [--severity <level>]
 #   .contexture/scripts/docs-query --edge <channel>
 #   .contexture/scripts/docs-query --index [repo]   # the full overview, never truncated (no head/tail); ends with an entry count
+#   .contexture/scripts/docs-query help | --help | -h   # the full explanation
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 # the workspace root: two levels up from the drawer's scripts/ (one level up
@@ -20,8 +21,50 @@ esac
 ROOT_DIR="${DOCS_WORKSPACE_ROOT:-$ROOT_DIR}"
 AWK_SCRIPT="$SCRIPT_DIR/docs-query.awk"
 
+show_help() {
+  cat <<'EOF'
+docs-query: the corpus retrieval CLI
+
+usage:
+  .contexture/scripts/docs-query <repo> <slug> [--section <name>]        the projection, or one section slice
+  .contexture/scripts/docs-query <repo> --file <path>                    the doc that owns a code path
+  .contexture/scripts/docs-query <repo> --search <term>                  a bounded corpus search
+  .contexture/scripts/docs-query <repo> --rules [category]               the rule views
+  .contexture/scripts/docs-query <repo> --pitfalls [--severity <level>]  the pitfall views
+  .contexture/scripts/docs-query --edge <channel>                        the cross-repo edges
+  .contexture/scripts/docs-query --index [repo]                          the full overview, never truncated
+  .contexture/scripts/docs-query help | --help | -h                      this text
+
+what it does: projects the typed-block corpus down to one answer, so no
+one reads the corpus to find it: the index, a doc projection, a section,
+the owner of a code path, a search, the rules, the pitfalls, or the
+edges.
+
+exit codes:
+  0  with an answer
+  1  no match, a missing repo, or a bad option
+  2  unreadable input (the awk engine's own failure)
+
+example:
+  .contexture/scripts/docs-query --index    # ends: index complete: N entries
+EOF
+}
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "docs-query: help takes no further arguments" >&2
+      echo "Usage: docs-query help | --help | -h" >&2
+      exit 1
+    fi
+    show_help
+    exit 0
+    ;;
+esac
+
 if [ $# -eq 0 ]; then
-  echo "Usage: docs-query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index"
+  echo "Usage: docs-query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index" >&2
+  echo "help: .contexture/scripts/docs-query help" >&2
   exit 1
 fi
 

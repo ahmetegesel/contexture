@@ -4,11 +4,12 @@
 # Commands: active, bootstrap, load, stamp, board, audit, index, query,
 # append, amend, flip, drop, next, refs, close, help.
 # The help carries every command contract; the workers are the
-# implementation. help prints the table to stdout rc=0; no argument, an
-# unknown command, or extra help arguments print the table to stderr rc=1
-# with zero stdout. Any argument beginning with a dash, in any position,
-# refuses before dispatch: the table to stderr rc=1 with zero stdout (the
-# awk option parser would consume it before the workers' guards run). The
+# implementation. help, --help, and -h print the table to stdout rc=0 and
+# take no further arguments; no argument, an unknown command, or extra
+# arguments print the table to stderr rc=1 with zero stdout. Any other
+# argument beginning with a dash, in any position, refuses before dispatch:
+# the table to stderr rc=1 with zero stdout (the awk option parser would
+# consume it before the workers' guards run). The
 # wrapper chdirs to the workspace root, its directory over two, so every
 # worker's relative paths resolve from the root wherever the caller stands.
 # Each command forwards its arguments to its worker and exits with the
@@ -21,10 +22,10 @@ root=$(CDPATH= cd -- "$dir/../.." && pwd)
 
 show_help() {
   cat <<'EOF'
-session.sh: the session entry point over the awk workers
+session.sh: the session entry point over the awk workers; help, --help, and -h print this table to stdout rc=0
 
 usage:
-  session.sh help
+  session.sh help | --help | -h
   session.sh active
   session.sh bootstrap <slug> "<objective>" [<repos>]
   session.sh load <slug> [<page>]
@@ -51,10 +52,10 @@ usage:
   session.sh refs <slug> [<session> ...]
   session.sh close <slug>
 
-no flags: any argument beginning with a dash, in any position, refuses rc=1 with this table on stderr and zero stdout
+no flags: help, --help, and -h (each alone) print this table to stdout rc=0; any other argument beginning with a dash, in any position, refuses rc=1 with this table on stderr and zero stdout
 
 commands:
-  help       print this table; stdout rc=0. no argument, an unknown command, or extra help arguments print the table to stderr rc=1 with zero stdout
+  help       print this table; stdout rc=0. --help and -h are the same form; the three take no further arguments. no argument, an unknown command, or extra arguments print the table to stderr rc=1 with zero stdout
   active     no arguments: every ACTIVE unit (slug, current_anchor, next_action, objective verbatim) then the closed count; a missing sessions directory prints "no sessions yet" rc=0; an argument refuses rc=1
   bootstrap  <slug> "<objective>" [<repos>]: create the unit folder, state at A0 folded to A1, the three artifacts; prints the state and "next: declare the first task"; refusals rc=1 with zero partial writes (existing slug, malformed slug, empty objective, embedded newline, extra arguments)
   load       <slug> [<page>]: the load map plus one page; keep calling until a page reads complete; the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); missing state is fatal rc=1; a missing backlog, knowledge, or journal warns on stderr and prints a placeholder
@@ -80,6 +81,14 @@ usage_error() {
   show_help >&2
   exit 1
 }
+
+case "$1" in
+  --help|-h)
+    if [ "$#" -ne 1 ]; then usage_error; fi
+    show_help
+    exit 0
+    ;;
+esac
 
 for arg in "$@"; do
   case "$arg" in

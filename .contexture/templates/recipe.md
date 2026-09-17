@@ -1,10 +1,10 @@
 # recipe grammar
 blocks at column 0; fields indent 2; tasks indent 4;
 typed blocks over prose; the dialect compresses form, never content:
-the brief carries what the lane needs to act without the parent
+the brief carries what the subagent needs to act without the parent
 context: exactness is the brief's job.
 
-@context: "what this lane is"
+@context: "what this subagent is"
 
 MISSION
   GOAL: "the deliverable or decision"
@@ -15,7 +15,7 @@ MISSION
 GROUND_AND_REFS
   # sliced context: exact symbols/lines; broad folder dumps forbidden
   SOURCE_OF_TRUTH: <file#symbol-or-lines>
-  BRANCH: <the active branch the lane works on>  # required
+  BRANCH: <the active branch the subagent works on>  # required
   REFS: [<file#symbol>, <journal#entry>, <knowledge#finding>]
   [FACTS ::
     exact isolated constraints from parent attention; one statement per line;
@@ -24,7 +24,7 @@ GROUND_AND_REFS
   drift: stop + report; never improvise
 
 OUTPUTS
-  JOURNAL: journal.md               # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; an entry awaiting an act outside the lane (the dispatcher's read, the human, another lane) carries THREAD: <what it awaits>; the dispatcher never reads it
+  JOURNAL: journal.md               # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the dispatcher never reads it
   REPORT: report.md                 # the dispatcher's only window: self-sufficient claims and evidence; .contexture/templates/report.md
   RETURN: summary only: verdicts + residual risks
   RESUME: read recipe.md + journal.md; continue from last uncompleted task

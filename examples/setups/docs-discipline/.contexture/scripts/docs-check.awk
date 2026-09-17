@@ -1,6 +1,7 @@
 #!/usr/bin/awk -f
 # docs-check.awk: completeness and freshness gate for the workspace docs
-# Usage: git diff --name-status | .contexture/scripts/docs-check.awk docs/*/*.md
+# Usage: git diff --name-status | .contexture/scripts/docs-check docs/*/*.md
+# Help: .contexture/scripts/docs-check help (also --help and -h)
 # Exits 0 on clean; exits 1 on completeness, freshness, or dead sources violation.
 
 BEGIN {

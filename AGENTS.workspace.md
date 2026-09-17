@@ -1,12 +1,12 @@
 # contexture's workspace overlay; wins over AGENTS.local.md
 @append @laws
-  installs: no install without the human's explicit go at the act, no matter what: a spec, plan, rhythm, or README naming the setup is never the go; a lane that finds an install needed asks the main agent for steering where the harness supports a channel, else stops gracefully and reports, never installs
-  background-subagents: subagents and lanes run strictly in the background; the turn ends immediately at launch and never blocks the conversation, sleeps, or polls for completion; work continues or the turn yields so the harness wakes reactively on message delivery.
+  installs: no install without the human's explicit go at the act, no matter what: a spec, plan, rhythm, or README naming the setup is never the go; a subagent that finds an install needed asks the main agent for steering where the harness supports a channel, else stops gracefully and reports, never installs
+  background-subagents: subagents run strictly in the background; the turn ends immediately at launch and never blocks the conversation, sleeps, or polls for completion; work continues or the turn yields so the harness wakes reactively on message delivery.
   docs-sync: every change to base mechanics, scripts, templates, or governance audits and updates README.md and relevant docs/ before ship; no release ships without its documentation updated in the same breath.
 
 @append @subagents
-  branch/worktree: the recipe names the branch/worktree the lane works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every lane of the unit works there; the lane's journal and report stay in the session folder
-  landing: the dispatcher owns it: review the branch (or its PR), merge, remove the worktree, delete the branch; a lane never merges or prunes
+  branch/worktree: the recipe names the branch/worktree the subagent works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every subagent of the unit works there; the subagent's journal and report stay in the session folder
+  landing: the dispatcher owns it: review the branch (or its PR), merge, remove the worktree, delete the branch; a subagent never merges or prunes
   drift: an edit outside the declared roots, or a code change without its journal line, is drift
 
 @append @git

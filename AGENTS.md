@@ -1,4 +1,4 @@
-# contexture v0.42.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.43.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -15,7 +15,7 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   .contexture/templates/      = artifact grammars: the shapes to fill at write time
-  .contexture/scripts/        = the session.sh entry point (run session.sh help) over the awk workers (active, bootstrap, load, stamp, record, board, audit, index, query)
+  .contexture/scripts/        = the session.sh entry point (run .contexture/scripts/session.sh help; --help and -h are the same table) over the awk workers (active, bootstrap, load, stamp, record, board, audit, index, query)
   .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
@@ -28,7 +28,7 @@
   the backlog  = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog; written via session.sh append, amend, flip, drop.
   the journal  = the single recording surface: append-only events + @anchor declarations; the workflow in @journal; written via session.sh append, stamp.
   knowledge    = settled findings: what is true, what was decided and why, what was ruled out; an intent to act takes the @task shape in the backlog (session.sh append), a developing idea stays a journal event; REF -> the full version in append-only artifacts: relative path#symbol (journal.md#entry, lanes/x/report.md#claim), never a dynamic file; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
-  lanes/       = dispatch units, one folder per lane: recipe.md (brief) + journal.md (incremental trace) + report.md (evidence); re-dispatch resumes from the folder; the contract in @subagents.
+  lanes/       = dispatch units, one folder per subagent (the record's older name for it is lane: the folder keeps that name): recipe.md (brief) + journal.md (incremental trace) + report.md (evidence); re-dispatch resumes from the folder; the contract in @subagents.
 
 @journal
   why :: the journal rebuilds the working context from scratch: a fresh boot loads the active entries (live = not closed) and nothing else; what that reconstruction needs is what deserves an entry; the importance bar is the reader who comes back with only the files
@@ -38,7 +38,7 @@
   folding :: entries may fold into a comprehensive digest at a human-called chapter turn: one entry carrying its chapter's synthesis and its decision sets whole, written for a reader with no prior context; the digest's CLOSES fold the originals by reference and stand as the fetch map; folded entries leave the load, never the file
   liveness :: entries are append-only, never edited; an entry closes only when a later CLOSES/SUPERSEDES names it; every closer carries a verdict word: done | superseded | dropped | folded, then the reason; the closer's WHAT carries the resolution: a close without a statement is a lie; chase every closer in the same breath it resolves
   reading :: a summary or a folded digest is an entry point, never the whole story: the refs and closers name the detail, and the entries behind them stay in the file; when a summary leaves a question open, fetch the original by its slug (session.sh query entry <unit> <slug>): fetching is the reader's judgement, one line away
-  markings :: THREAD: <what it awaits> = the unit awaits an act outside its own flow (the human's response, a dispatched lane's report, another unit's act); required on every session entry, none when nothing outside acts; stamped at birth, never flipped; the resolving entry closes it same-breath. THREAD: none = receipt: the final word on a completed fact, no closer obligation; the agent's own executions (the state and the board carry them) and the harvest (the audit's KNOWLEDGE check carries it) are not threads. KNOWLEDGE: true = the harvest's input. GROUP: <token> = the agent's topic thread, chosen in the conversation, stable within the unit. RHYTHM: <name> <N> <GATE> = the process in force, stamped on the entries that advance the rhythm; a stamp, never updated. REF: "path#symbol" = grounding. an entry uses the fields it needs; unused fields are omitted, never bracketed.
+  markings :: THREAD: <what it awaits> = the unit awaits an act outside its own flow (the human's response, a dispatched subagent's report, another unit's act); required on every session entry, none when nothing outside acts; stamped at birth, never flipped; the resolving entry closes it same-breath. THREAD: none = receipt: the final word on a completed fact, no closer obligation; the agent's own executions (the state and the board carry them) and the harvest (the audit's KNOWLEDGE check carries it) are not threads. KNOWLEDGE: true = the harvest's input. GROUP: <token> = the agent's topic thread, chosen in the conversation, stable within the unit. RHYTHM: <name> <N> <GATE> = the process in force, stamped on the entries that advance the rhythm; a stamp, never updated. REF: "path#symbol" = grounding. an entry uses the fields it needs; unused fields are omitted, never bracketed.
   anchors :: @anchor lines are period ordering + load receipts, never liveness: no entry loads or skips by its anchor; a thread paused stays open: an open tail in the boot load is the reminder; resume = fresh entries + a next_action ref, never a fake close
 
 @backlog
@@ -47,7 +47,7 @@
   the schema guides the task shape: @task <slug> with STATUS (TODO | IN_PROGRESS | DONE), OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::; the writer holds the volume
   evolution: tasks can be added, updated, reordered, or dropped; mid-stride pivots insert a new task without rewriting the standing ones
   dedicated containers: DESCRIPTION carries context and scope, ACCEPTANCE CRITERIA carries checkable done-conditions, IMPLEMENTATION DETAILS carries the specification and the execution blueprint: the requirements and decisions the change must honor, and how it lands; omit ornament, never substance
-  REFS names its targets exactly (path#symbol): journal items (journal.md#slug), lane reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME), or an artifact (file#symbol); the spec stands alone: a ref navigates, it never substitutes for the meaning
+  REFS names its targets exactly (path#symbol): journal items (journal.md#slug), subagent reports (lanes/x/report.md#claim), knowledge findings (knowledge.md#NAME), or an artifact (file#symbol); the spec stands alone: a ref navigates, it never substitutes for the meaning
   compose from the record (@laws#compose-from-record): material living only in the conversation lands in the record first, then the task references it
   readiness: a task marked IN_PROGRESS is executable as written; every needed decision lives in the task or behind a REF
   activation: before IN_PROGRESS, the executor scans the task: placeholders, checkable criteria, resolving REFs; a failing task returns, never execute around a gap
@@ -62,14 +62,14 @@
       .contexture/scripts/session.sh board <unit>
   thread tail: session.sh audit prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
-  queries: the named looks over the record; never an improvised grep: .contexture/scripts/session.sh query <kind> ... (the kinds and forms in session.sh help); a miss is rc=1 with a named error, never an empty success.
+  queries: the named looks over the record; never an improvised grep: .contexture/scripts/session.sh query <kind> ... (the kinds and forms in .contexture/scripts/session.sh help; --help and -h are the same table); a miss is rc=1 with a named error, never an empty success.
   cross-repo: .contexture/scripts/session.sh query units <repo>: units touching a repo; objective is human-facing only.
   cross-session: .contexture/scripts/session.sh query refs-to <session>: units referencing a session.
   group: .contexture/scripts/session.sh query group <unit> <token> = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot
-  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; then run .contexture/scripts/session.sh help (the command contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
+  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; then run .contexture/scripts/session.sh help (--help and -h are the same table: the command contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
   3. get the field: .contexture/scripts/session.sh active; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
@@ -104,20 +104,21 @@
   6. REFRESH: run @refresh
 
 @subagents
+  dispatch: a step that names a subagent runs as a dispatched subagent: its own context, its own folder, its own report
   every dispatch:
   - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden; names the active branch/worktree
-  - lane boot, read-only, before any work: the overlays, state.md, backlog.md, knowledge.md, the recipe, and every REF it names; session surfaces are never lane-written
-  - the lane's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
-  - lane journals at action granularity in journal.md as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the lane (the dispatcher's read, the human, another lane) carries THREAD: <what it awaits>; the journal is the audit trail and the resumption surface
+  - subagent boot, read-only, before any work: the overlays, state.md, backlog.md, knowledge.md, the recipe, and every REF it names; session surfaces are never subagent-written
+  - the subagent's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
+  - subagent journals at action granularity in journal.md as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the journal is the audit trail and the resumption surface
   - report -> report.md; return = summary ONLY
-  - the dispatcher reads the report, never the lane journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
-  - background: the turn ends at launch; never block the conversation on a lane; parallel lanes only for independent domains: shared state or ordering means sequential
-  - drift: a decision within the brief is the lane's; it decides and journals it; a wall or a decision beyond the brief is drift, never improvised past; pause and ask for steering where the harness supports it, else stop, report found | standing | drifted, abort gracefully
+  - the dispatcher reads the report, never the subagent journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
+  - background: the turn ends at launch; never block the conversation on a subagent; parallel subagents only for independent domains: shared state or ordering means sequential
+  - drift: a decision within the brief is the subagent's; it decides and journals it; a wall or a decision beyond the brief is drift, never improvised past; pause and ask for steering where the harness supports it, else stop, report found | standing | drifted, abort gracefully
   - report and journal land NO MATTER the outcome: the action trace is the exact stopping point, so a steer continues live and a re-dispatch resumes from the folder, never rebuilds
-  - a lane that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
-  - a lane's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
+  - a subagent that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
+  - a subagent's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
   - read the report WHOLE, no exception; an unread part wears the look of review
-  - journal every dispatch: lane folder path
+  - journal every dispatch: the subagent's folder path
 
 @refresh
   the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the board read (its open-thread and open-task lists are the status checklist), the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run: every open flag, one candidate each; confirmed candidates land in knowledge via session.sh append (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; session.sh audit run, what it flags fixed; beyond the harvest, nothing closes here

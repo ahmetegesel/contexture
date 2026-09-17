@@ -15,6 +15,7 @@
 #        docs-gate --drift          (audit plus check over remote git delta vs origin/main)
 #        docs-gate --stdin          (audit plus check over a piped name-status list)
 #        docs-gate --test-matrix    (self-planted fixture scenarios)
+#        docs-gate help | --help | -h   (the full explanation and the instrument family)
 
 set -e
 
@@ -283,7 +284,55 @@ docs/demo/widgets.md"
     fi
 }
 
+show_help() {
+    cat <<'EOF'
+docs-gate: the close gate over the documentation corpus
+
+usage:
+  .contexture/scripts/docs-gate                      audit plus check over the live git delta
+  .contexture/scripts/docs-gate --drift              audit plus check over the incoming remote delta (the merge-base form)
+  .contexture/scripts/docs-gate --stdin              audit plus check over a piped name-status list
+  .contexture/scripts/docs-gate --test-matrix        the self-planted eight-scenario matrix
+  .contexture/scripts/docs-gate help | --help | -h   this text
+
+what it does: runs docs-audit.awk over docs/*/*.md, then feeds the
+aggregated status-prefixed delta to docs-check.awk; it fails when either
+does. The default run also warns on stderr when a scanned repository is
+on a non-main branch or behind its last-fetched origin.
+
+exit codes:
+  0  the audit and the check are clean
+  1  a violation, or a bad argument
+  2  unreadable input (an awk engine's own failure)
+
+example:
+  .contexture/scripts/docs-gate --test-matrix    # ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED
+
+the instrument family, all under .contexture/scripts/
+  docs-audit   the corpus grammar and integrity audit
+  docs-query   the retrieval CLI: index, projection, section, owner, search, rules, pitfalls, edges
+  docs-check   the coverage, freshness, and dead-sources check over a delta
+  docs-nudge   the task nudge: matched docs, top pitfalls, forced setup targets
+  docs-gate    this close gate: audit plus check as one pass
+
+each instrument's help form (help, --help, or -h) prints its full
+explanation; this one is the family's entry point.
+EOF
+}
+
 # Main dispatch
+case "$1" in
+    help|--help|-h)
+        if [ "$#" -ne 1 ]; then
+            echo "docs-gate: help takes no further arguments" >&2
+            echo "Usage: docs-gate [help | --help | -h | --drift | --stdin | --test-matrix]" >&2
+            exit 1
+        fi
+        show_help
+        exit 0
+        ;;
+esac
+
 if [ "$1" = "--test-matrix" ] || [ "$1" = "--test-all" ]; then
     run_test_matrix
     exit $?
@@ -305,6 +354,6 @@ elif [ -z "$1" ]; then
     aggregate_git_changes | sort -u | run_gate_check
 else
     echo "docs-gate: unknown argument: $1" >&2
-    echo "Usage: docs-gate [--drift | --stdin | --test-matrix]" >&2
+    echo "Usage: docs-gate [help | --help | -h | --drift | --stdin | --test-matrix]" >&2
     exit 1
 fi

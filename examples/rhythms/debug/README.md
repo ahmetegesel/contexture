@@ -13,7 +13,7 @@ unexpected behavior. Its activation is `propose`: the agent recognizes the
 trigger and proposes the rhythm before applying it; the human confirms.
 
 It is a light, single-context loop: unlike the work rhythm, it does not need
-several lanes: one focused agent, one gate at a time, is the shape.
+several subagents: one focused agent, one gate at a time, is the shape.
 
 ## The gates, in plain words
 

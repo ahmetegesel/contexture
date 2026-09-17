@@ -22,7 +22,7 @@ contexture is a convention, not a tool: lightweight, abstracted, extensible. Pla
 
 - **Lightweight by construction**: Plain files and POSIX awk, no background services, no databases, no external dependencies.
 - **Abstracted by design**: The schema governs shapes and the laws govern mechanisms, carrying zero workflow policies your workspace cannot override.
-- **Extensible without forks**: Add custom rhythms, amend rules through overlays, and delegate work through subagent lanes while the core stays untouched.
+- **Extensible without forks**: Add custom rhythms, amend rules through overlays, and delegate work through subagents while the core stays untouched.
 
 ## Installation
 
@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.42.0 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.43.0 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh
 ```
 
@@ -86,8 +86,8 @@ The workspace couples root governance with a dedicated convention drawer:
 ### Units
 A dedicated folder for your task (`.contexture/sessions/<name>/`). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
 
-### Lanes
-An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Deep dive: [Units and lanes](docs/units-and-lanes.md).
+### Subagents
+An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Deep dive: [Units and subagents](docs/units-and-lanes.md).
 
 ### Rhythms
 A plain text workflow checklist in `.contexture/rhythms/`. Enforces process discipline, requiring the agent to discuss, test, and verify before claiming work is done. Deep dive: [Rhythms](docs/rhythms.md).
@@ -99,17 +99,17 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 
 - [The record](docs/the-record.md): Artifacts, liveness, and closure
 - [The engine](docs/the-engine.md): AGENTS.md, shape grammars, and awk scripts
-- [Units and lanes](docs/units-and-lanes.md): Folder lifecycles and delegated subagent work
+- [Units and subagents](docs/units-and-lanes.md): Folder lifecycles and delegated subagent work
 - [Rhythms](docs/rhythms.md): Procedure grammar, activation, and the default loop
 - [Overlays](docs/overlays.md): Amendment grammar and precedence rules
 - [Adoption](docs/adoption.md): Onboarding flows, topology choices, and upgrading
 - [Examples](examples/rhythms/): Pre-built work and debug loops
-- [Setups](examples/setups/lane-isolation/): An optional setup: on-demand worktree isolation for lanes
+- [Setups](examples/setups/lane-isolation/): An optional setup: on-demand worktree isolation for subagents
 - [Setups](examples/setups/docs-discipline/): An optional setup: a corpus-first documentation discipline
 
 | command | what it returns |
 |---|---|
-| session.sh help | The full command table: every contract, printed to stdout; no flags: a dash-leading argument refuses at the entry point |
+| session.sh help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
 | session.sh active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
 | session.sh bootstrap <slug> "<objective>" [<repos>] | A new unit: the folder, state at A0, the three empty artifacts, and the folded A1 receipt; prints the state and the next move |
 | session.sh load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
@@ -125,9 +125,9 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 | session.sh query closure <unit> <slug> | Open, or the closers with their verdicts and lines |
 | session.sh query units <repo> | Each unit touching the repo: slug, status, anchor, next action |
 | session.sh query refs-to <session> | Each unit referencing the session |
-| session.sh query resolve <unit> <ref> | The block behind a journal, knowledge, backlog, or lane-report reference |
-| session.sh query lane <unit> <lane> | Lane file presence with line and byte counts, the journal's last line, the report's first |
-| session.sh query search <unit> <term> | Bounded match lines across the unit's artifacts (state, backlog, knowledge, journal, the lane journals and reports), each with its locator |
+| session.sh query resolve <unit> <ref> | The block behind a journal, knowledge, backlog, or subagent-report reference |
+| session.sh query lane <unit> <lane> | Subagent file presence with line and byte counts, the journal's last line, the report's first |
+| session.sh query search <unit> <term> | Bounded match lines across the unit's artifacts (state, backlog, knowledge, journal, the subagent journals and reports), each with its locator |
 | session.sh append <unit> | The write side: one or more blocks on stdin; each block's first line decides `@entry` (journal), `@finding` (knowledge), or `@task` (backlog); the command adds the anchor and refuses loudly, never partially |
 | session.sh amend <unit> <slug> | Replace task fields in place from the labeled field blocks on stdin; the rest of the task stays byte-identical |
 | session.sh flip <unit> <verb> <slug> [<slug> ...] | Move task status: `todo` reopens, `progress` activates (the state must already name the slug), `done` lands the receipt entry from stdin, one `backlog/<slug>: DONE` literal with its evidence per slug; several slugs ride one call |

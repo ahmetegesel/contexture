@@ -2,10 +2,10 @@
 
 This folder holds an optional workspace setup and a plain-language
 explanation of it. The convention ships no standing requirement for
-worktrees: by default every lane works in the workspace checkout on its
+worktrees: by default every subagent works in the workspace checkout on its
 current branch. This setup exists for the units where isolation earns
 its keep: parallel work that risks collisions, a tree that should stay
-stable while a lane experiments, or a branch that should land through its
+stable while a subagent experiments, or a branch that should land through its
 own review. Adopt it when that need appears, not before.
 
 ## What it is
@@ -30,7 +30,7 @@ checkout.
 ## Using it, once
 
 When a unit warrants isolation, the dispatcher gives it
-`.worktrees/<unit>` on branch `unit/<slug>` and every lane of the unit
+`.worktrees/<unit>` on branch `unit/<slug>` and every subagent of the unit
 works there. Landing stays the dispatcher's: review the branch (or its
 PR), merge, remove the worktree, delete the branch. Cleanup order:
 `git worktree remove .worktrees/<unit>`, then

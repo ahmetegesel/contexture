@@ -63,7 +63,7 @@ Three fields carry the task's identity: `STATUS` (`TODO`, `IN_PROGRESS`, `DONE`)
 
 The dedicated containers are the point: technical substance gets a natural home instead of being packed into forced exit conditions or dropped for brevity.
 
-`REFS` names its targets exactly, as `path#symbol`: a journal entry (`journal.md#slug`), a lane report (`lanes/x/report.md#claim`), a knowledge finding (`knowledge.md#NAME`), or any artifact (`file#symbol`). The ref navigates; it never substitutes for the meaning. The task must read alone, with the full picture, no matter when the agent looks at it: material living only in the conversation lands in the record first, then the task cites it.
+`REFS` names its targets exactly, as `path#symbol`: a journal entry (`journal.md#slug`), a subagent report (`lanes/x/report.md#claim`), a knowledge finding (`knowledge.md#NAME`), or any artifact (`file#symbol`). The ref navigates; it never substitutes for the meaning. The task must read alone, with the full picture, no matter when the agent looks at it: material living only in the conversation lands in the record first, then the task cites it.
 
 The backlog mutates in place as the work teaches. A mid-stride pivot inserts a fresh `@task` block without rewriting the standing ones; a task that turned out wrong or unneeded is dropped. Statuses advance as work moves: active work marks `IN_PROGRESS`; completion marks `DONE` and lands one journal line, `backlog/<slug>: DONE`, carrying its evidence, the command run and its observed result.
 
@@ -99,7 +99,7 @@ An entry uses the fields it needs; the sample shows them together. In full:
 - `GROUP:` is the agent's topic thread, stable within the unit.
 - `RHYTHM: <name> <N> <GATE>` is the process in force, stamped on the entries that advance the rhythm; a stamp, never updated.
 - `KNOWLEDGE: true` marks the entry knowledge-worthy; it is the harvest's input.
-- `THREAD: <what it awaits>` names the act outside the unit's own flow that must resolve the entry: the human's response, a dispatched lane's report, another unit's act. It is required on every entry and reads `none` when nothing outside acts; it is stamped at birth, never flipped, and the resolving entry closes it in the same breath. `none` is a receipt: the final word on a completed fact, no closer obligation. The agent's own executions and the harvest are not threads.
+- `THREAD: <what it awaits>` names the act outside the unit's own flow that must resolve the entry: the human's response, a dispatched subagent's report, another unit's act. It is required on every entry and reads `none` when nothing outside acts; it is stamped at birth, never flipped, and the resolving entry closes it in the same breath. `none` is a receipt: the final word on a completed fact, no closer obligation. The agent's own executions and the harvest are not threads.
 - `CLOSES:` or `SUPERSEDES:` is the only closure: it names an earlier slug, carries a verdict word and a reason, and leaves the target untouched. The liveness section has the mechanics.
 - `REF: "path#symbol"` grounds the entry in an artifact.
 

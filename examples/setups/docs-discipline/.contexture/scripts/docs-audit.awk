@@ -1,6 +1,7 @@
 #!/usr/bin/awk -f
 # docs-audit.awk: audits typed-block markdown documents
-# Usage: .contexture/scripts/docs-audit.awk docs/<repo>/*.md
+# Usage: .contexture/scripts/docs-audit docs/<repo>/*.md
+# Help: .contexture/scripts/docs-audit help (also --help and -h)
 # Exits 0 on clean; exits 1 on errors with line numbers.
 
 BEGIN {

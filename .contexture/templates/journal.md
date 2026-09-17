@@ -21,7 +21,7 @@ its slug when the summary leaves a question open.
   GROUP: <token>                          # optional; agent-chosen thread, stable within the unit
   RHYTHM: <name> <N> <GATE>               # optional; the process in force, on the entries that advance the rhythm
   KNOWLEDGE: true                         # optional; knowledge-worthy, the harvest's input
-  THREAD: <what it awaits>                # required; the act outside the unit's flow that must resolve this: the human's response | a dispatched lane's report | another unit's act; none when nothing outside acts; born at the write, never flipped; the resolving entry carries CLOSES same-breath; none = receipt: final word on a completed fact, no closer obligation
+  THREAD: <what it awaits>                # required; the act outside the unit's flow that must resolve this: the human's response | a dispatched subagent's report | another unit's act; none when nothing outside acts; born at the write, never flipped; the resolving entry carries CLOSES same-breath; none = receipt: final word on a completed fact, no closer obligation
   CLOSES: <slug> (<verdict>: reason)      # optional; verdict = done | superseded | dropped | folded; the ONLY closure; no closer = still open
   SUPERSEDES: <slug> (<verdict>: reason)  # optional; closes by replacement, never a rewrite
   REF: "path#symbol"                      # optional; grounding, same format as knowledge REFs

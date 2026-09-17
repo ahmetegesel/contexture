@@ -1,0 +1,50 @@
+#!/bin/sh
+# docs-audit: CLI wrapper for .contexture/scripts/docs-audit.awk
+# Usage: .contexture/scripts/docs-audit docs/<repo>/*.md
+# Help: .contexture/scripts/docs-audit help (also --help and -h)
+# Every other invocation is delegated to the engine byte-faithfully.
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+AWK_SCRIPT="$SCRIPT_DIR/docs-audit.awk"
+
+show_help() {
+  cat <<'EOF'
+docs-audit: the corpus grammar and integrity audit
+
+usage:
+  .contexture/scripts/docs-audit docs/<repo>/*.md
+
+what it does: reads the typed-block corpus and reports grammar and
+integrity defects with file:line positions: the doc header, the block
+vocabulary, the indentation rule, the rule fields, symbol-only evidence,
+and duplicate ids.
+
+exit codes:
+  0  the corpus is clean
+  1  defects found
+  2  unreadable input (the awk engine's own failure)
+
+example:
+  .contexture/scripts/docs-audit docs/*/*.md    # silence on a clean corpus
+EOF
+}
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "docs-audit: help takes no further arguments" >&2
+      echo "help: .contexture/scripts/docs-audit help" >&2
+      exit 1
+    fi
+    show_help
+    exit 0
+    ;;
+esac
+
+if [ "$#" -eq 0 ]; then
+  echo "Usage: .contexture/scripts/docs-audit docs/<repo>/*.md" >&2
+  echo "help: .contexture/scripts/docs-audit help" >&2
+  exit 1
+fi
+
+exec "$AWK_SCRIPT" "$@"

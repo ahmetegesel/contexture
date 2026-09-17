@@ -61,8 +61,8 @@ The grammars live in `.contexture/templates/`, one per artifact:
 | `backlog.md` | the unit's tasks |
 | `journal.md` | the events |
 | `knowledge.md` | the settled findings |
-| `recipe.md` | a lane's brief |
-| `report.md` | a lane's report |
+| `recipe.md` | a subagent's brief |
+| `report.md` | a subagent's report |
 | `overlay.md` | AGENTS.workspace.md and AGENTS.local.md |
 
 Writing is filling, never inventing: an artifact is written by filling its grammar directly, with the template in hand as the complete shape. Each grammar carries every valid variation and a filled sample at its foot, written in template syntax with angle-bracket placeholders, so the shape can be read without concrete content to copy.
@@ -79,7 +79,7 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 ## The scripts
 
-Nine instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one records the write acts, one renders the live board, one answers the record's named queries, one audits the session, and one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses flags outright. Nothing needs installing.
+Nine instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one records the write acts, one renders the live board, one answers the record's named queries, one audits the session, and one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` (or `--help`, or `-h`) prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses every other dash-leading argument. Nothing needs installing.
 
 ### session.sh load: the load and the refs form
 
@@ -140,7 +140,7 @@ Answers the foreseeable questions over the record in bounded form, so no one imp
 | `refs-to` | `<session>` | each unit referencing the session |
 | `resolve` | `<unit> <ref>` | the block behind `journal.md#slug`, `knowledge.md#NAME`, `backlog.md#slug`, or `lanes/<lane>/report.md#section` |
 | `lane` | `<unit> <lane>` | file presence with line and byte counts, the journal's last line, the report's first |
-| `search` | `<unit> <term>` | bounded match lines across state, backlog, knowledge, journal, and the lane journals and reports, each with its locator |
+| `search` | `<unit> <term>` | bounded match lines across state, backlog, knowledge, journal, and the subagent journals and reports, each with its locator |
 
 Every miss is loud: rc 1, zero stdout, a named error, never a plausible empty. Outputs are bounded by construction: group and search snippets cut at 90 bytes on word boundaries, search stops at 50 lines with a trailing count, and entry, finding, closure, and resolve render verbatim. One bound is deliberately absent: `group` renders one line per matching entry, with its count in the opener, and no cap. A large thread streams whole, because the thread itself is what the caller came to read; the per-row snippet is the part that stays capped. Target lookups miss loudly; a listing without a target carries its count, so a zero-anchor journal prints `0 anchors`. Names match exactly and shapes are validated before any output; a wrong invocation refuses with the kind's usage.
 
@@ -256,4 +256,4 @@ There is no manifest. The tracked set under a release tag is the declaration: `g
 
 The drawer is also the context mechanism, and the reason is structural. When the agent works a unit, it reads `.contexture/sessions/<unit>/` and the convention's files it needs, never a global blob of everything. The filesystem is the index, and the folder is the boundary: no rule has to say "do not read the rest", because the layout has already said it.
 
-The record page covers what the artifacts hold and how liveness works; units and lanes covers the container and the dispatch; rhythms covers the process layer; overlays covers the amendment grammar; adoption covers the install.
+The record page covers what the artifacts hold and how liveness works; units and subagents covers the container and the dispatch; rhythms covers the process layer; overlays covers the amendment grammar; adoption covers the install.

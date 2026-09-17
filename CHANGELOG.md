@@ -8,6 +8,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.43.0] - 2026-09-17
+
+### Added
+
+- The help forms: `help`, `--help`, and `-h` print the same text on the session entry point and on every docs-discipline instrument; the session table gains its orientation line; the bundle's `docs-audit`, `docs-check`, and `docs-nudge` wrappers join (the `docs-query` precedent), each answering the forms with what it does, its exact invocation, its exit codes, and an example, and delegating every other invocation byte-faithfully to its engine; `docs-gate`'s help lists the whole instrument family; every engine's usage head names its wrapper.
+
+### Changed
+
+- The dispatch vocabulary: one prose mapping (a subagent, the record's older name noted once at the folder's line) and `subagent` in every other surface, so the common term is what agents keep reading; `@subagents` opens with the dispatch definition (a step that names a subagent runs as a dispatched subagent: its own context, its own folder, its own report); the boot names the exact help command with its accepted forms; the kept paths and names (`lanes/`, the page filename, the setup name, the query kind) resolve unchanged.
+
 ## [0.42.0] - 2026-09-17
 
 ### Added

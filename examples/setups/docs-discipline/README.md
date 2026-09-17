@@ -22,11 +22,11 @@ repo's run, build, and test targets.
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/scripts/docs-audit.awk` | grammar and integrity audit: header, blocks, indentation, rule fields, symbol-only evidence, duplicate ids | copy |
-| `.contexture/scripts/docs-query.awk` + `.contexture/scripts/docs-query` | the retrieval engine and its CLI: index, projection, section slice, file owner, search, rules, pitfalls, edges | copy |
-| `.contexture/scripts/docs-check.awk` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | copy |
+| `.contexture/scripts/docs-audit` | the grammar and integrity audit: header, blocks, indentation, rule fields, symbol-only evidence, duplicate ids (engine: `docs-audit.awk`) | copy |
+| `.contexture/scripts/docs-query` | the retrieval CLI: index, projection, section slice, file owner, search, rules, pitfalls, edges (engine: `docs-query.awk`) | copy |
+| `.contexture/scripts/docs-check` | the change check: coverage, freshness, and dead sources over a status-prefixed delta (engine: `docs-check.awk`) | copy |
 | `.contexture/scripts/docs-gate` | the close gate: audit then check over the aggregated delta (or the incoming remote delta with `--drift`), plus a self-planted eight-scenario matrix | copy |
-| `.contexture/scripts/docs-nudge.awk` | the task nudge: matched docs, top pitfalls, forced setup targets | copy |
+| `.contexture/scripts/docs-nudge` | the task nudge: matched docs, top pitfalls, forced setup targets (engine: `docs-nudge.awk`) | copy |
 | `.contexture/templates/doc.md` | the corpus grammar: eight kinds, the block shapes, the block scalar rules | copy |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed |
 | `AGENTS.workspace.md` | the overlay blocks: five docs laws, layout, boot, close | merge |
@@ -34,6 +34,11 @@ repo's run, build, and test targets.
 | `gitignore.fragment` | the allowlist lines for a workspace that denies by default | merge |
 | `sample/` | the fictional two-repo demo corpus plus a demo backlog | reference |
 | `README.md` | this onboarding document | reference |
+
+Every instrument answers `help`, `--help`, and `-h` with its full explanation
+(what it does, the exact invocation, the exit codes, an example); `docs-gate
+help` also lists the whole instrument family as the entry point. The wrapper
+names above are the invocations the rest of this document uses.
 
 ## Common shapes (reference rows)
 
@@ -148,12 +153,13 @@ into an existing file; `seed` means it is starting content to adapt; and
 From the workspace root (seed at least one doc first: the `docs/*/*.md` glob must expand):
 
 ```sh
-.contexture/scripts/docs-audit.awk docs/*/*.md        # silence, exit 0
+.contexture/scripts/docs-audit docs/*/*.md        # silence, exit 0
 .contexture/scripts/docs-query --index                 # ends: index complete: N entries
-printf 'M\tprojects/<repo>/src/example.ts\n' | .contexture/scripts/docs-check.awk docs/*/*.md   # substitute repo and path; red (UNCOVERED) until a doc claims it
+printf 'M\tprojects/<repo>/src/example.ts\n' | .contexture/scripts/docs-check docs/*/*.md   # substitute repo and path; red (UNCOVERED) until a doc claims it
 .contexture/scripts/docs-gate                          # in a git workspace: audit plus the aggregated delta check
 .contexture/scripts/docs-gate --drift                  # in a git workspace: audit plus the incoming remote delta check
 .contexture/scripts/docs-gate --test-matrix            # ALL 8 SCENARIOS PASSED
+.contexture/scripts/docs-gate help                     # the full explanation and the instrument family
 ```
 
 Expected: the audit prints nothing; the index ends with its entry count; the
@@ -185,7 +191,7 @@ it walk below runs every one of these.
   non-main branch or behind its last-fetched origin; `docs-gate --drift`
   evaluates the incoming remote delta (the merge-base form) instead of the
   local one.
-- Setup tasks: run `docs-nudge.awk` on the active backlog when a task names
+- Setup tasks: run `docs-nudge` on the active backlog when a task names
   setup verbs; it prints the owning operational doc's run, build, and test
   targets plus the top pitfalls.
 
@@ -194,9 +200,13 @@ it walk below runs every one of these.
 - Harness-free by design: nothing fires automatically. The close gate and the
   nudge are invoked at their moments (boot, close, a setup task), or wired
   into the adopter's own trigger surface. This pack ships no trigger.
-- The direct-run commands use `/usr/bin/awk` (the same launcher form the base
-  scripts use); a system whose awk lives elsewhere invokes the engines via
-  `awk -f <path>` instead.
+- The commands use the wrapper names; the three delegating wrappers exec their
+  engines directly, and the engines' shebang names `/usr/bin/awk` (the same
+  launcher form the base scripts use). A system whose awk lives elsewhere
+  invokes the engines via `awk -f <path>` instead.
+- The wrappers refuse a bare invocation (no arguments) loudly instead of
+  reading standard input as an empty corpus: the corpus files are the
+  invocation. A wrong invocation never returns a plausible-but-empty result.
 - The sample corpus is fictional and reference-only; the adopter's corpus is
   the real subject.
 - The gate's matrix is self-planted: it builds its fixtures with `mktemp`,
@@ -257,7 +267,7 @@ cd "$scratch"
 The audit over the corpus:
 
 ```sh
-.contexture/scripts/docs-audit.awk docs/*/*.md
+.contexture/scripts/docs-audit docs/*/*.md
 ```
 
 ```text
@@ -372,7 +382,7 @@ The edge view:
 The nudge over the demo backlog:
 
 ```sh
-.contexture/scripts/docs-nudge.awk backlog.md docs/*/*.md
+.contexture/scripts/docs-nudge backlog.md docs/*/*.md
 ```
 
 ```text
@@ -390,7 +400,7 @@ The check over a delta: clean when the doc rides the change, red when it does
 not, red when a new file no doc claims:
 
 ```sh
-printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/demo-orders/order-flow.md\n' | .contexture/scripts/docs-check.awk docs/*/*.md
+printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/demo-orders/order-flow.md\n' | .contexture/scripts/docs-check docs/*/*.md
 ```
 
 ```text
@@ -409,7 +419,7 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 ```
 
 ```sh
-printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | .contexture/scripts/docs-check.awk docs/*/*.md
+printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | .contexture/scripts/docs-check docs/*/*.md
 ```
 
 ```text
@@ -420,7 +430,7 @@ STALE DOC: demo-orders/order-flow (code modified without doc update)
 ```
 
 ```sh
-printf 'A\tprojects/demo-orders/src/tools/report.ts\n' | .contexture/scripts/docs-check.awk docs/*/*.md
+printf 'A\tprojects/demo-orders/src/tools/report.ts\n' | .contexture/scripts/docs-check docs/*/*.md
 ```
 
 ```text
@@ -477,6 +487,47 @@ changes, a valid edit, an uncovered file, a stale file, a multi-claimant doc
 update, a deletion with its doc update, a deletion without one, and a newly
 counted extension (an uncovered Python file).
 
+Every instrument answers the help forms; `docs-gate help` is the family's
+entry point:
+
+```sh
+.contexture/scripts/docs-gate help
+```
+
+```text
+docs-gate: the close gate over the documentation corpus
+
+usage:
+  .contexture/scripts/docs-gate                      audit plus check over the live git delta
+  .contexture/scripts/docs-gate --drift              audit plus check over the incoming remote delta (the merge-base form)
+  .contexture/scripts/docs-gate --stdin              audit plus check over a piped name-status list
+  .contexture/scripts/docs-gate --test-matrix        the self-planted eight-scenario matrix
+  .contexture/scripts/docs-gate help | --help | -h   this text
+
+what it does: runs docs-audit.awk over docs/*/*.md, then feeds the
+aggregated status-prefixed delta to docs-check.awk; it fails when either
+does. The default run also warns on stderr when a scanned repository is
+on a non-main branch or behind its last-fetched origin.
+
+exit codes:
+  0  the audit and the check are clean
+  1  a violation, or a bad argument
+  2  unreadable input (an awk engine's own failure)
+
+example:
+  .contexture/scripts/docs-gate --test-matrix    # ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED
+
+the instrument family, all under .contexture/scripts/
+  docs-audit   the corpus grammar and integrity audit
+  docs-query   the retrieval CLI: index, projection, section, owner, search, rules, pitfalls, edges
+  docs-check   the coverage, freshness, and dead-sources check over a delta
+  docs-nudge   the task nudge: matched docs, top pitfalls, forced setup targets
+  docs-gate    this close gate: audit plus check as one pass
+
+each instrument's help form (help, --help, or -h) prints its full
+explanation; this one is the family's entry point.
+```
+
 ## Files in this bundle (provenance)
 
 | file | provenance |
@@ -484,12 +535,15 @@ counted extension (an uncovered Python file).
 | `README.md` | authored fresh for this pack (reference only) |
 | `AGENTS.workspace.md` | neutralized from the workspace overlay this setup was extracted from: the five docs laws, the trimmed layout, boot and close at the drawer paths; no names, no unrelated laws |
 | `gitignore.fragment` | authored fresh |
-| `.contexture/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage line |
-| `.contexture/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage line |
-| `.contexture/scripts/docs-query` | verbatim from the source CLI except the workspace root derivation (drawer-aware, `DOCS_WORKSPACE_ROOT` override), the usage block paths, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, and a no-match note on an empty projection |
-| `.contexture/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage line; the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE` |
-| `.contexture/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang and the line-2 comment |
-| `.contexture/scripts/docs-gate` | neutralized from the source gate: comment header, one workspace root variable (`DOCS_WORKSPACE_ROOT`, script-dir default), the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, and an unknown-argument refusal |
+| `.contexture/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines |
+| `.contexture/scripts/docs-audit` | authored fresh from the docs-query precedent: the help forms (help, --help, -h) with the full explanation, the zero-argument refusal, and byte-faithful delegation to `docs-audit.awk` |
+| `.contexture/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines |
+| `.contexture/scripts/docs-query` | verbatim from the source CLI except the workspace root derivation (drawer-aware, `DOCS_WORKSPACE_ROOT` override), the usage block paths, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, a no-match note on an empty projection, and the help forms (help, --help, -h) with the no-argument help pointer |
+| `.contexture/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines; the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE` |
+| `.contexture/scripts/docs-check` | authored fresh from the docs-query precedent: the help forms (help, --help, -h) with the full explanation, the zero-argument refusal, and byte-faithful delegation to `docs-check.awk` |
+| `.contexture/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines |
+| `.contexture/scripts/docs-nudge` | authored fresh from the docs-query precedent: the help forms (help, --help, -h) with the full explanation, the zero-argument refusal, and byte-faithful delegation to `docs-nudge.awk` |
+| `.contexture/scripts/docs-gate` | neutralized from the source gate: comment header, one workspace root variable (`DOCS_WORKSPACE_ROOT`, script-dir default), the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, and the help forms with the instrument family list |
 | `.contexture/templates/doc.md` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII |
 | `.contexture/rhythms/work.md` | authored as the workspace's work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW |
 | `.contexture/rhythms/docs-authoring.md` | authored from the source authoring procedure; the steps name outcomes, the method detail lives in the template's comments |

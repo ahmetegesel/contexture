@@ -1,6 +1,6 @@
-# Units and lanes
+# Units and subagents
 
-Work does not live in the conversation. It lives in a unit of work: a folder that opens when the work starts, closes when it ends, and outlives every working period and compaction that touches it. When work is handed to a subagent, the same shape repeats one level down, as a lane.
+Work does not live in the conversation. It lives in a unit of work: a folder that opens when the work starts, closes when it ends, and outlives every working period and compaction that touches it. When work is handed to a subagent, the same shape repeats one level down, as a dispatch.
 
 This page covers the container and the flow: what a unit is, what its folder holds, how its life is spent, how a boot finds it among several, and how delegated work is dispatched, traced, reported, and resumed. The artifact contracts themselves (the grammars, entry liveness, closure) belong to the record page; this page cares about how the folder is used.
 
@@ -22,7 +22,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
   journal.md     the memory: what happened, append-only
   knowledge.md   what was settled, each with a reference
   backlog.md     the work declared ahead
-  lanes/         dispatched work, one folder per lane
+  lanes/         dispatched work, one folder per subagent
 ```
 
 `state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the one next action, the objective, the repos it touches, and optional reference sessions (`ref_sessions`). Nothing else; detail lives behind references. It is a pointer, not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
@@ -101,39 +101,39 @@ When no unit matches, the agent bootstraps one and says so. The bootstrap is min
 
 Units stay independent. Each keeps its own record; cross-references between units never merge their records, and a period that closes on one unit does not touch another. A later period simply boots on whichever unit the work points to.
 
-## Lanes, the delegated unit
+## Subagents, the delegated unit
 
-When the agent hands work to a subagent, the dispatch gets its own unit folder: a lane at `lanes/<slug>/`, inside the unit the work belongs to. Inside are the three files the dispatch needs to be self-contained: `recipe.md` (the brief it received), `journal.md` (the trace of what it did), and `report.md` (the evidence it leaves).
+When the agent hands work to a subagent, the dispatch gets its own unit folder at `lanes/<slug>/`, inside the unit the work belongs to. Inside are the three files the dispatch needs to be self-contained: `recipe.md` (the brief it received), `journal.md` (the trace of what it did), and `report.md` (the evidence it leaves).
 
 Delegation is first-class; an orchestrating agent is the clearest example, not a special citizen: it learns from every report while its own context stays lean, and the detail never enters its window.
 
-The memory is physical, so nothing depends on the subagent surviving. If a lane stalls or dies, its folder still holds the brief, the trace, and the report so far; a re-dispatch resumes from the folder, continuing from the last uncompleted task, never rebuilding from scratch. A crash costs the dispatch, not the work.
+The memory is physical, so nothing depends on the subagent surviving. If a subagent stalls or dies, its folder still holds the brief, the trace, and the report so far; a re-dispatch resumes from the folder, continuing from the last uncompleted task, never rebuilding from scratch. A crash costs the dispatch, not the work.
 
-One writer per surface: the session journal records the dispatch (the lane folder path), and the lane records the execution. The lane never writes session surfaces; the dispatcher never mines the lane journal for what the report should carry.
+One writer per surface: the session journal records the dispatch (the subagent's folder path), and the subagent records the execution. The subagent never writes session surfaces; the dispatcher never mines the subagent journal for what the report should carry.
 
-The lane's folder layout does the containment work. It is a derived structure: write isolation, auditability, and crash resumption fall out of the folder itself, and the standard journal grammar applies inside. Nothing extra needs remembering, and `AGENTS.md` stays lean.
+The subagent's folder layout does the containment work. It is a derived structure: write isolation, auditability, and crash resumption fall out of the folder itself, and the standard journal grammar applies inside. Nothing extra needs remembering, and `AGENTS.md` stays lean.
 
-*In practice:* an enrichment lane hit a harness concurrency limit and died mid-edit. A fresh instance read the action trace, verified the unjournaled edit against git, and continued without rebuilding. The seam held because the folder, not the conversation, carried the state.
+*In practice:* an enrichment subagent hit a harness concurrency limit and died mid-edit. A fresh instance read the action trace, verified the unjournaled edit against git, and continued without rebuilding. The seam held because the folder, not the conversation, carried the state.
 
-## The lane contracts
+## The subagent contracts
 
-What makes lanes portable between agents is a contract: the lane's own obligations, and what the dispatcher owes back.
+What makes subagents portable between agents is a contract: the subagent's own obligations, and what the dispatcher owes back.
 
-### The recipe, and the lane's boot
+### The recipe, and the subagent's boot
 
-The recipe is the brief on disk. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch/worktree the lane works on, so the lane knows where to edit and commit; its working root sits in the write scope. A message-brief dies at compaction; a recipe on disk survives, and that persistence is the audit trail.
+The recipe is the brief on disk. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch/worktree the subagent works on, so the subagent knows where to edit and commit; its working root sits in the write scope. A message-brief dies at compaction; a recipe on disk survives, and that persistence is the audit trail.
 
-Before any work, the lane boots read-only: the overlays, the unit's state, backlog, and knowledge, the recipe, and every reference the recipe names. Its first journal entry is the load receipt: the refs loaded, one per line. An unresolved reference is a defect in the brief; the lane stops and reports it, never working around the gap.
+Before any work, the subagent boots read-only: the overlays, the unit's state, backlog, and knowledge, the recipe, and every reference the recipe names. Its first journal entry is the load receipt: the refs loaded, one per line. An unresolved reference is a defect in the brief; the subagent stops and reports it, never working around the gap.
 
-### The lane journal
+### The subagent journal
 
-The lane journals at action granularity as things happen, never batched to the end: every state-changing action (a file written, a command with a non-obvious result), every claim formed, every decision point taken, every drift notice. Each entry carries the action, its result, and why the next step follows. Only task receipts batch, at task completion.
+The subagent journals at action granularity as things happen, never batched to the end: every state-changing action (a file written, a command with a non-obvious result), every claim formed, every decision point taken, every drift notice. Each entry carries the action, its result, and why the next step follows. Only task receipts batch, at task completion.
 
 The journal is the audit trail and the resumption surface. It says where the work stopped and why the next step followed, which is exactly what a fresh instance needs to continue.
 
 ### Drift and steering
 
-A decision inside the brief is the lane's to make, and it journals it. A wall, or a decision beyond the brief, is drift; it is never improvised past. The lane stops and reports what it found, where it stands, and where it drifted. Where the harness supports a steering channel, the lane pauses and asks; where it does not, it stops gracefully. Either way the report and the journal land, so a steer continues a live lane and a re-dispatch resumes a dead one.
+A decision inside the brief is the subagent's to make, and it journals it. A wall, or a decision beyond the brief, is drift; it is never improvised past. The subagent stops and reports what it found, where it stands, and where it drifted. Where the harness supports a steering channel, the subagent pauses and asks; where it does not, it stops gracefully. Either way the report and the journal land, so a steer continues a live subagent and a re-dispatch resumes a dead one.
 
 The contract names no channel: steering is a harness capability, and plain files are the portable part. What the convention owes is the stop, the report, and the resumable folder.
 
@@ -141,13 +141,13 @@ The contract names no channel: steering is a harness capability, and plain files
 
 The report is the dispatcher's only window into the dispatch. It must be self-sufficient: an orientation block that mirrors the recipe's tasks with their proven exit conditions, claims each carrying an epistemic mark (VERIFIED, INFERRED, or ABSENT), verbatim evidence, and the structural detail the dispatcher needs to re-verify and decide, and typed risks naming what was skipped and what rests on inference. The dispatcher reads it whole, no exception; an unread part wears the look of review.
 
-A lane that cannot write its report returns the artifact verbatim: nothing before it, nothing after it, and the dispatcher persists it byte-clean.
+A subagent that cannot write its report returns the artifact verbatim: nothing before it, nothing after it, and the dispatcher persists it byte-clean.
 
 ### Dispatch discipline
 
-- The dispatcher reads the report, never the lane journal. A thin report triggers a re-dispatch, never journal-mining.
-- A lane's "passed" is never the gate. The dispatcher re-verifies the load-bearing claims itself. *In practice:* a lane reports that nothing uses a field; the dispatcher re-runs the search, case-insensitively, with every separator spelling, and finds the field in use. The absence claim dies; the fresh search was the gate.
-- Lanes run in the background: the turn ends at launch, and the conversation never blocks on a lane.
-- Parallel lanes are only for independent domains. Shared state or ordering means sequential, however tempting the fan-out.
+- The dispatcher reads the report, never the subagent journal. A thin report triggers a re-dispatch, never journal-mining.
+- A subagent's "passed" is never the gate. The dispatcher re-verifies the load-bearing claims itself. *In practice:* a subagent reports that nothing uses a field; the dispatcher re-runs the search, case-insensitively, with every separator spelling, and finds the field in use. The absence claim dies; the fresh search was the gate.
+- Subagents run in the background: the turn ends at launch, and the conversation never blocks on a subagent.
+- Parallel subagents are only for independent domains. Shared state or ordering means sequential, however tempting the fan-out.
 
-And every dispatch is journaled in the session journal: an entry carrying the lane folder path.
+And every dispatch is journaled in the session journal: an entry carrying the subagent's folder path.
