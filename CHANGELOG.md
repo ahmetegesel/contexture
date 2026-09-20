@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.45.1] - 2026-09-21
+
+### Added
+
+- Stream compaction law and subagent piping rule: `@laws#compact-streams` mandates piping verbose command outputs (Git diffs, test runners, build cascades, repetitive logs) through `.contexture/scripts/compact.sh` to prevent context flooding; `@subagents` and `.contexture/templates/recipe.md` reinforce the piping rule across subagent dispatches; `README.md` introduces Stream compaction under Core concepts.
+
+
 ## [0.45.0] - 2026-09-21
 
 ### Added

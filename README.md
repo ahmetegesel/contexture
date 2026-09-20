@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.45.0 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.45.1 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh .contexture/filters/*.awk
 ```
 
@@ -95,6 +95,9 @@ A plain text workflow checklist in `.contexture/rhythms/`. Enforces process disc
 
 ### Overlays
 Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` for local machine). Lets you add repository policies or git rules without modifying contexture's base. Deep dive: [Overlays](docs/overlays.md).
+
+### Stream compaction
+A zero-parameter stream reduction filter (`.contexture/scripts/compact.sh`). Piping verbose tool outputs into it collapses unchanged Git diff context lines, passing test runs, and repetitive logs by 40 to 90 percent without external dependencies or diagnostic loss. It automatically discovers modular filters in `.contexture/filters/` with strict fail-safe fallback to raw output. Example: `git diff | .contexture/scripts/compact.sh`. Deep dive: [The engine](docs/the-engine.md).
 
 ## Docs
 

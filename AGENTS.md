@@ -1,7 +1,8 @@
-# contexture v0.45.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.45.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
+  compact-streams: verbose command outputs (Git diffs, test runners, build cascades, repetitive logs) pipe through .contexture/scripts/compact.sh; never flood the context window with raw streams when compact.sh is present.
   writer-holds-volume: the schema holds the shape, the writer holds the volume: guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance.
   process-free: process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
   compose-from-record: compose from the record, never from conversation: rewrites grounded in journal/knowledge.
@@ -15,7 +16,8 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   .contexture/templates/      = artifact grammars: the shapes to fill at write time
-  .contexture/scripts/        = the session.sh entry point (run .contexture/scripts/session.sh help; --help and -h are the same table) over the awk workers (active, bootstrap, load, stamp, record, board, audit, index, query)
+  .contexture/filters/        = modular stream filters over the runner (diff, log, workspace additions)
+  .contexture/scripts/        = the session.sh entry point (run .contexture/scripts/session.sh help; --help and -h are the same table) over the awk workers (active, bootstrap, load, stamp, record, board, audit, index, query) and the compact.sh stream runner
   .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
@@ -118,6 +120,7 @@
   - a subagent that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
   - a subagent's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
   - read the report WHOLE, no exception; an unread part wears the look of review
+  - command streams: subagents pipe verbose inspections (git diff, test runs, build logs) through .contexture/scripts/compact.sh to preserve context window capacity
   - journal every dispatch: the subagent's folder path
 
 @refresh
