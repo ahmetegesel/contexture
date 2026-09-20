@@ -29,7 +29,7 @@ For adopting by hand, start on a branch and copy the set:
 ```
 git checkout -b adopt-contexture
 git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <your-repo>
-chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh
+chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh .contexture/filters/*.awk
 ```
 
 `AGENTS.md` lands at the root, the drawer alongside it, and the examples at the root as reference. The copy carries a semantic version: MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections or features, PATCH fixes wording. The installed version is the header line of `AGENTS.md`.
@@ -122,7 +122,7 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 | class | paths | fate |
 |---|---|---|
-| update payload | AGENTS.md, .contexture/templates/, .contexture/scripts/ | synced from tags |
+| update payload | AGENTS.md, .contexture/templates/, .contexture/scripts/, .contexture/filters/ | synced from tags |
 | adoption material | .contexture/ONBOARDING.md, examples/ | used once, never re-synced, deleted at adoption close |
 | workspace-owned | .contexture/sessions/, .contexture/rhythms/ | never touched |
 
@@ -137,8 +137,8 @@ The base evolves upstream, and updating is judgment, not a script: the changes a
 3. Read the CHANGELOG from your installed version to the target: what changed and why.
 4. Read your workspace: the overlay's `@replace` blocks, live sessions, in-flight artifacts.
 5. Decide: adopt now, migrate first, or wait.
-6. Copy the payload: `git archive <tag> AGENTS.md .contexture/templates/ .contexture/scripts/ | tar -x -C <your-repo>`.
-7. Verify it: `git ls-tree -r --name-only <tag> -- AGENTS.md .contexture/templates/ .contexture/scripts/` plus a `cmp` per file.
+6. Copy the payload: `git archive <tag> AGENTS.md .contexture/templates/ .contexture/scripts/ .contexture/filters/ | tar -x -C <your-repo>`.
+7. Verify it: `git ls-tree -r --name-only <tag> -- AGENTS.md .contexture/templates/ .contexture/scripts/ .contexture/filters/` plus a `cmp` per file.
 8. Review the staged diff before committing; it shows you the changed base.
 9. Run your instruments against the result: the boot query, the audit, the ground check. After a MAJOR tag, review the overlay: its rules were written against the old shape.
 

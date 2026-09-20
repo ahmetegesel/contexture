@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.45.0] - 2026-09-21
+
+### Added
+
+- Discoverable stream filter architecture: `.contexture/filters/` establishes a modular drawer for stream reduction filters; each filter self-declares its match signature (`# match: <regex>`) or default status (`# default`); `.contexture/scripts/compact.sh` samples incoming streams and automatically selects the matching filter with zero CLI flags; core ships with `.contexture/filters/diff.awk` (unified diff reduction) and `.contexture/filters/log.awk` (generic log deduplication).
+- Unified tool filters setup: `examples/setups/tool-filters/` provides adoptable ecosystem filters (`cargo-test.awk`, `pytest.awk`, `vitest.awk`, `go-test.awk`, `compiler-errors.awk`) that workspaces can copy into `.contexture/filters/` for automatic test runner and compiler compaction without adding maintenance overhead to core.
+
+
 ## [0.44.0] - 2026-09-21
 
 ### Added

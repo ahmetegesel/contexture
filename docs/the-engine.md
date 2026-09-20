@@ -81,7 +81,7 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 Nine instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one records the write acts, one renders the live board, one answers the record's named queries, one audits the session, and one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` (or `--help`, or `-h`) prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses every other dash-leading argument. Nothing needs installing.
 
-Alongside the session engine, `.contexture/scripts/compact.sh` and its filter worker `compact-filter.awk` provide turnkey stream compaction. They collapse Git unified diffs (stripping index headers, collapsing context runs, preserving additions and deletions) and deduplicate consecutive log lines, with strict fail-safe fallback to raw output if compression fails.
+Alongside the session engine, `.contexture/scripts/compact.sh` provides zero-parameter discoverable stream compaction. It auto-discovers and executes modular stream filters placed in `.contexture/filters/*.awk` based on their `# match: <regex>` signature headers. Core Contexture ships low-risk filters for Git unified diffs (`diff.awk`) and generic log deduplication (`log.awk`), with strict fail-safe fallback to raw output if compression fails or produces empty output.
 
 ### session.sh load: the load and the refs form
 
@@ -231,6 +231,7 @@ examples/            example rhythms, copied at adoption
 .contexture/
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
   templates/         the grammars every artifact fills
+  filters/           modular stream filters (diff.awk, log.awk, and workspace additions)
   scripts/           the session.sh entry point, the compact.sh filter, and their workers
   rhythms/           your process patterns
   sessions/          the units of work
@@ -244,7 +245,7 @@ Placement follows the class of the file, never convenience:
 
 | class | files | on an update |
 |---|---|---|
-| update payload | AGENTS.md, `.contexture/templates/`, `.contexture/scripts/` | replaced from the new tag, byte for byte |
+| update payload | AGENTS.md, `.contexture/templates/`, `.contexture/scripts/`, `.contexture/filters/` | replaced from the new tag, byte for byte |
 | adoption material | `.contexture/ONBOARDING.md`, `examples/` | delivered once; never re-synced; the guideline is removed when the adoption closes |
 | workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/` | never touched |
 

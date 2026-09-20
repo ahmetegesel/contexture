@@ -34,8 +34,8 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.44.0 AGENTS.md .contexture/ examples/ | tar -x
-chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh
+git archive v0.45.0 AGENTS.md .contexture/ examples/ | tar -x
+chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh .contexture/filters/*.awk
 ```
 
 ### 2. Run the onboarding wizard
@@ -70,8 +70,9 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.workspace.md   Shared workspace overlay, tracked in git for team-wide rules
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
 └── .contexture/          The convention drawer, isolating machinery from project code
+    ├── filters/          Modular stream filters: diff.awk, log.awk, and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
-    ├── scripts/          The session.sh entry point over its awk workers, and compact.sh stream filter
+    ├── scripts/          The session.sh entry point and compact.sh stream runner
     ├── templates/        Shape grammars ensuring structured writes without guesswork
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
         ├── state.md      Live pointer: status, current anchor, next action, and refs
@@ -106,6 +107,7 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 - [Examples](examples/rhythms/): Pre-built work and debug loops
 - [Setups](examples/setups/lane-isolation/): An optional setup: on-demand worktree isolation for subagents
 - [Setups](examples/setups/docs-discipline/): An optional setup: a corpus-first documentation discipline
+- [Setups](examples/setups/tool-filters/): An optional setup: ecosystem filters for test runners and compilers
 
 | command | what it returns |
 |---|---|
@@ -135,7 +137,7 @@ Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` 
 | session.sh next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
 | session.sh refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
 | session.sh close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
-| compact.sh | Stream compaction filter: pipe diffs or logs (`git diff \| .contexture/scripts/compact.sh`) to collapse unchanged context runs and deduplicate repetitive lines with strict fail-safe fallback |
+| compact.sh | Zero-parameter discoverable stream compaction: automatically selects matching filter from .contexture/filters/ to collapse diffs, test passes, or logs with fail-safe fallback |
 
 The query family answers the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
 
