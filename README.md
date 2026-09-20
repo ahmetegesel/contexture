@@ -111,6 +111,7 @@ A zero-parameter stream reduction filter (`.contexture/scripts/compact.sh`). Pip
 - [Setups](examples/setups/lane-isolation/): An optional setup: on-demand worktree isolation for subagents
 - [Setups](examples/setups/docs-discipline/): An optional setup: a corpus-first documentation discipline
 - [Setups](examples/setups/tool-filters/): An optional setup: ecosystem filters for test runners and compilers
+- [Setups](examples/setups/ast-doc-graph/): An optional setup: AST symbol graph linked with centralized documentation
 
 | command | what it returns |
 |---|---|

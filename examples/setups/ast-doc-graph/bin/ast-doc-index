@@ -1,0 +1,253 @@
+#!/usr/bin/env bash
+# AST and Documentation Graph Pipeline Driver
+# Unified one-shot indexing driver for TypeScript and Markdown documentation.
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SETUP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# Fallback setup directory resolution if copied into scripts or tools directory
+if [[ ! -f "$SETUP_DIR/extractors/ts/extract-ts.sh" ]]; then
+  if [[ -d "$SCRIPT_DIR/../setups/ast-doc-graph" ]]; then
+    SETUP_DIR="$(cd "$SCRIPT_DIR/../setups/ast-doc-graph" && pwd)"
+  elif [[ -d "$SCRIPT_DIR/../examples/setups/ast-doc-graph" ]]; then
+    SETUP_DIR="$(cd "$SCRIPT_DIR/../examples/setups/ast-doc-graph" && pwd)"
+  fi
+fi
+
+EXTRACT_TS="$SETUP_DIR/extractors/ts/extract-ts.sh"
+EXTRACT_DOCS="$SETUP_DIR/extractors/docs/extract-docs.sh"
+INDEX_GRAPH="$SETUP_DIR/loader/index-graph.sh"
+SCHEMA_SQL="$SETUP_DIR/schema.sql"
+
+for component in "$EXTRACT_TS" "$EXTRACT_DOCS" "$INDEX_GRAPH" "$SCHEMA_SQL"; do
+  if [[ ! -e "$component" ]]; then
+    echo "Error: required setup component not found: $component" >&2
+    exit 1
+  fi
+done
+
+print_help() {
+  cat << 'EOF'
+ast-doc-index: repository indexing pipeline driver
+Unified extraction and graph compilation for TypeScript codebases and docs.
+
+Usage:
+  ast-doc-index [options]
+  ast-doc-index help
+
+Options:
+  --repo-root <path>   Repository root directory (default: current directory)
+  --db <path>          Output SQLite database path (default: $GRAPH_DB or <repo-root>/graph.db)
+  --src-dir <path>     Source directory relative to repo root (default: src, backend, or root)
+  --cache-dir <path>   Intermediate JSONL cache directory
+  --clean              Clean intermediate cache and recreate database
+  --help, -h           Display this help manual
+
+Pipeline steps:
+  1. Discovery: scans TypeScript sources (.ts, .tsx) and documentation (.md)
+  2. AST extraction: runs extract-ts.sh to emit symbols.jsonl and edges.jsonl
+  3. Doc extraction: runs extract-docs.sh to emit docs.jsonl, rules.jsonl, pitfalls.jsonl
+  4. Graph compilation: runs index-graph.sh to populate relational tables and FTS5 indexes
+EOF
+}
+
+# Default configurations
+REPO_ROOT=""
+DB_PATH="${GRAPH_DB:-}"
+SRC_DIR=""
+CACHE_DIR=""
+CLEAN=false
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo-root)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --repo-root requires a directory argument" >&2
+        exit 1
+      fi
+      REPO_ROOT="$2"
+      shift 2
+      ;;
+    --repo-root=*)
+      REPO_ROOT="${1#--repo-root=}"
+      shift
+      ;;
+    --db)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --db requires a path argument" >&2
+        exit 1
+      fi
+      DB_PATH="$2"
+      shift 2
+      ;;
+    --db=*)
+      DB_PATH="${1#--db=}"
+      shift
+      ;;
+    --src-dir)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --src-dir requires a directory argument" >&2
+        exit 1
+      fi
+      SRC_DIR="$2"
+      shift 2
+      ;;
+    --src-dir=*)
+      SRC_DIR="${1#--src-dir=}"
+      shift
+      ;;
+    --cache-dir)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --cache-dir requires a directory argument" >&2
+        exit 1
+      fi
+      CACHE_DIR="$2"
+      shift 2
+      ;;
+    --cache-dir=*)
+      CACHE_DIR="${1#--cache-dir=}"
+      shift
+      ;;
+    --clean)
+      CLEAN=true
+      shift
+      ;;
+    help|--help|-h)
+      print_help
+      exit 0
+      ;;
+    *)
+      echo "Error: unrecognized argument: $1" >&2
+      print_help >&2
+      exit 1
+      ;;
+  esac
+done
+
+# Resolve repository root
+if [[ -z "$REPO_ROOT" ]]; then
+  REPO_ROOT="$PWD"
+fi
+REPO_ROOT="$(cd "$REPO_ROOT" && pwd)"
+
+if [[ ! -d "$REPO_ROOT" ]]; then
+  echo "Error: repository root directory does not exist: $REPO_ROOT" >&2
+  exit 1
+fi
+
+# Resolve database destination
+if [[ -z "$DB_PATH" ]]; then
+  DB_PATH="$REPO_ROOT/graph.db"
+fi
+DB_DIR="$(dirname "$DB_PATH")"
+mkdir -p "$DB_DIR"
+DB_PATH="$(cd "$DB_DIR" && pwd)/$(basename "$DB_PATH")"
+
+# Resolve cache directory for intermediate JSONL files
+if [[ -z "$CACHE_DIR" ]]; then
+  if [[ -d "$REPO_ROOT/.contexture" ]]; then
+    CACHE_DIR="$REPO_ROOT/.contexture/cache/ast-doc-graph"
+  else
+    CACHE_DIR="/tmp/ast-doc-graph-$(basename "$REPO_ROOT")"
+  fi
+fi
+
+if [[ "$CLEAN" == true ]]; then
+  rm -rf "$CACHE_DIR"
+fi
+mkdir -p "$CACHE_DIR"
+
+# Resolve source scanning directory
+SCAN_DIR=""
+if [[ -n "$SRC_DIR" ]]; then
+  if [[ -d "$REPO_ROOT/$SRC_DIR" ]]; then
+    SCAN_DIR="$REPO_ROOT/$SRC_DIR"
+  elif [[ -d "$SRC_DIR" ]]; then
+    SCAN_DIR="$(cd "$SRC_DIR" && pwd)"
+  else
+    echo "Error: specified source directory not found: $SRC_DIR" >&2
+    exit 1
+  fi
+elif [[ -d "$REPO_ROOT/src" ]]; then
+  SCAN_DIR="$REPO_ROOT/src"
+elif [[ -d "$REPO_ROOT/backend" ]]; then
+  SCAN_DIR="$REPO_ROOT/backend"
+else
+  SCAN_DIR="$REPO_ROOT"
+fi
+
+# Resolve documentation directory
+DOCS_SCAN_DIR=""
+if [[ -d "$REPO_ROOT/docs" ]]; then
+  DOCS_SCAN_DIR="$REPO_ROOT/docs"
+else
+  DOCS_SCAN_DIR="$REPO_ROOT"
+fi
+
+# Step 1: Discover TypeScript source files
+TS_FILE_LIST="$CACHE_DIR/ts_files.txt"
+find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
+  ! -name "*.d.ts" \
+  ! -path "*/node_modules/*" \
+  ! -path "*/dist/*" \
+  ! -path "*/build/*" \
+  ! -path "*/archive/*" \
+  ! -path "*/.git/*" \
+  ! -path "*/.contexture/*" \
+  ! -path "*/.work/*" \
+  ! -path "*/.idea/*" \
+  ! -path "*/tests/*" \
+  ! -path "*/test/*" \
+  ! -name "*.test.ts" \
+  ! -name "*.test.tsx" \
+  ! -name "*.spec.ts" \
+  ! -name "*.spec.tsx" \
+  | sort > "$TS_FILE_LIST"
+
+TS_COUNT="$(wc -l < "$TS_FILE_LIST" | tr -d ' ')"
+
+# Step 2: Extract AST symbols and call graph edges
+SYMBOLS_JSONL="$CACHE_DIR/symbols.jsonl"
+EDGES_JSONL="$CACHE_DIR/edges.jsonl"
+
+if [[ "$TS_COUNT" -gt 0 ]]; then
+  "$EXTRACT_TS" \
+    --project-root "$REPO_ROOT" \
+    --out-symbols "$SYMBOLS_JSONL" \
+    --out-edges "$EDGES_JSONL" \
+    "-" < "$TS_FILE_LIST"
+else
+  : > "$SYMBOLS_JSONL"
+  : > "$EDGES_JSONL"
+fi
+
+# Step 3: Extract documentation units, contract rules, and pitfalls
+DOCS_JSONL="$CACHE_DIR/docs.jsonl"
+RULES_JSONL="$CACHE_DIR/rules.jsonl"
+PITFALLS_JSONL="$CACHE_DIR/pitfalls.jsonl"
+
+"$EXTRACT_DOCS" \
+  --project-root "$REPO_ROOT" \
+  --out-docs "$DOCS_JSONL" \
+  --out-rules "$RULES_JSONL" \
+  --out-pitfalls "$PITFALLS_JSONL" \
+  "$DOCS_SCAN_DIR"
+
+# Step 4: Ingest intermediate streams into SQLite graph database
+LOADER_FLAGS=(
+  --db "$DB_PATH"
+  --symbols "$SYMBOLS_JSONL"
+  --edges "$EDGES_JSONL"
+  --docs "$DOCS_JSONL"
+  --rules "$RULES_JSONL"
+  --pitfalls "$PITFALLS_JSONL"
+  --project-root "$REPO_ROOT"
+  --schema "$SCHEMA_SQL"
+)
+
+if [[ "$CLEAN" == true ]]; then
+  LOADER_FLAGS+=(--clean)
+fi
+
+"$INDEX_GRAPH" "${LOADER_FLAGS[@]}"

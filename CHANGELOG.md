@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.46.0] - 2026-09-21
+
+### Added
+
+- AST and documentation graph setup: `examples/setups/ast-doc-graph/` links code symbols and call graph hierarchies to centralized documentation rules and pitfalls; intermediate JSONL data contracts (`symbols`, `edges`, `docs`, `doc_rules`, `doc_pitfalls`) decouple AST extraction from storage; SQLite relational schema with dual FTS5 virtual tables (`fts_symbols` with trigram tokenizer, `fts_docs` with unicode61 BM25 ranking) and cycle-safe recursive CTE queries; zero-dependency retrieval CLI `graph-query` wrapping system `/usr/bin/sqlite3` for sub-millisecond execution; unified single-shot repository indexing driver `bin/ast-doc-index`; automated pilot verification test runner `verify-pilot.sh`.
+
+
 ## [0.45.1] - 2026-09-21
 
 ### Added
