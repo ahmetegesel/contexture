@@ -81,6 +81,8 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 Nine instruments ship in `.contexture/scripts/`, and they are the engine's machinery: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one records the write acts, one renders the live board, one answers the record's named queries, one audits the session, and one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts them: `.contexture/scripts/session.sh`, whose `help` (or `--help`, or `-h`) prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses every other dash-leading argument. Nothing needs installing.
 
+Alongside the session engine, `.contexture/scripts/compact.sh` and its filter worker `compact-filter.awk` provide turnkey stream compaction. They collapse Git unified diffs (stripping index headers, collapsing context runs, preserving additions and deletions) and deduplicate consecutive log lines, with strict fail-safe fallback to raw output if compression fails.
+
 ### session.sh load: the load and the refs form
 
 Returns the map plus one page of the load: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The map names each section with its line count and pages, then the write-scope trailer; pages cut at block boundaries, never mid-body: a page ends before the block that would pass about 500 lines or about 40KB, whichever binds first, and a single block larger than the budget renders whole on its own page. The backlog section renders its DONE task blocks compactly, keeping only the task line, `STATUS`, `OBJECTIVE`, and `DESCRIPTION`; open and statusless blocks render whole, and the backlog file itself is never edited, so the full body stays one `resolve` away. An incomplete call opens with `LOAD INCOMPLETE` and instructs the next call in its last line; the final page opens with `LOAD COMPLETE` and hands off to the receipt stamp.
@@ -229,7 +231,7 @@ examples/            example rhythms, copied at adoption
 .contexture/
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
   templates/         the grammars every artifact fills
-  scripts/           the session.sh entry point and its workers
+  scripts/           the session.sh entry point, the compact.sh filter, and their workers
   rhythms/           your process patterns
   sessions/          the units of work
 ```

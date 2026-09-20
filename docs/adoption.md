@@ -29,7 +29,7 @@ For adopting by hand, start on a branch and copy the set:
 ```
 git checkout -b adopt-contexture
 git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <your-repo>
-chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh
+chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh
 ```
 
 `AGENTS.md` lands at the root, the drawer alongside it, and the examples at the root as reference. The copy carries a semantic version: MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections or features, PATCH fixes wording. The installed version is the header line of `AGENTS.md`.

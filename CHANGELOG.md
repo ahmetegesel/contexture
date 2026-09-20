@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.44.0] - 2026-09-21
+
+### Added
+
+- The stream compaction filter: `.contexture/scripts/compact.sh` and `.contexture/scripts/compact-filter.awk` provide zero-dependency token reduction for unified diffs and repetitive logs; piping into `compact.sh` collapses runs of unchanged context lines in Git unified diffs and deduplicates consecutive log entries with timestamp normalization; built-in fail-safe protection streams raw output unaltered if input is incompressible or if compaction produces empty or expanded output; command wrapper mode preserves the wrapped process's exit status.
+
+
 ## [0.43.0] - 2026-09-17
 
 ### Added
