@@ -1,6 +1,8 @@
 #!/usr/bin/awk -f
 # diff.awk: unified diff context reduction filter
 # match: ^(diff --git |index [0-9a-fA-F]+\.\.|@@ -)
+# command: ^git (diff|show)( |$)
+# format-only: header metadata and layout; diff content preserved
 
 BEGIN {
   if (max_context == "") max_context = 1
@@ -14,6 +16,7 @@ BEGIN {
   is_deleted_file = 0
   rename_from = ""
   rename_to = ""
+  seen_hunk = 0
 }
 
 {
@@ -49,6 +52,13 @@ function flush_diff_header() {
 
 function flush_diff_context(   k, threshold, elided) {
   if (diff_ctx_len == 0) return
+  if (!seen_hunk) {
+    for (k = 1; k <= diff_ctx_len; k++) {
+      emit(diff_ctx_buf[k])
+    }
+    diff_ctx_len = 0
+    return
+  }
   threshold = (2 * max_context) + 1
   if (diff_ctx_len <= threshold) {
     for (k = 1; k <= diff_ctx_len; k++) {
@@ -59,7 +69,7 @@ function flush_diff_context(   k, threshold, elided) {
       emit(diff_ctx_buf[k])
     }
     elided = diff_ctx_len - (2 * max_context)
-    emit(sprintf("  ... (%d context lines collapsed)", elided))
+    emit(sprintf("  ... (%d context lines collapsed; COMPACT_DISABLE=1 for the raw stream)", elided))
     for (k = diff_ctx_len - max_context + 1; k <= diff_ctx_len; k++) {
       emit(diff_ctx_buf[k])
     }
@@ -101,6 +111,7 @@ function process_diff_line(line,   fname) {
   }
   if (line ~ /^similarity index /) return
   if (line ~ /^@@ /) {
+    if (line ~ /^@@ -/) seen_hunk = 1
     flush_diff_header()
     flush_diff_context()
     emit(line)
@@ -140,6 +151,15 @@ END {
   for (i = 1; i <= raw_count; i++) {
     process_diff_line(raw_lines[i])
   }
+
+  # A stream with no hunk header is not a diff: pass it verbatim
+  if (!seen_hunk) {
+    for (i = 1; i <= raw_count; i++) {
+      print raw_lines[i]
+    }
+    exit 0
+  }
+
   flush_diff_context()
   flush_diff_header()
 

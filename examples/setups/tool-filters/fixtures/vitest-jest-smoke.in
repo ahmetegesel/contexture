@@ -1,0 +1,15 @@
+npm warn Unknown project config "always-auth". This will stop working in the next major version of npm. See `npm help npmrc` for supported config options.
+Browserslist: browsers data (caniuse-lite) is 22 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+PASS tests/unit/helpers/createLinkName.spec.js
+  createLinkName
+    ✓ should be linkName only name if the full name consists of one word (1 ms)
+    ✓ should be linkName name.lastName if the full name consists of two word
+    ✓ should be linkName name.lastName if the full name consists of three word (1 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       3 passed, 3 total
+Snapshots:   0 total
+Time:        0.487 s
+Ran all test suites matching /tests\/unit\/helpers\/createLinkName.spec.js/i.

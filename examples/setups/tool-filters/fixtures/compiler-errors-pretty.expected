@@ -1,0 +1,24 @@
+.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts:18:7 - error TS2322: Type 'string' is not assignable to type 'number'.
+
+18 const count: number = "not-a-number";
+         ~~~~~
+
+.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts:19:7 - error TS2322: Type 'number' is not assignable to type 'string'.
+
+19 const label: string = 42;
+         ~~~~~
+
+.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts:20:7 - error TS2322: Type 'string' is not assignable to type 'boolean'.
+
+20 const flag: boolean = "yes";
+         ~~~~
+
+.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts:22:23 - error TS2322: Type 'string' is not assignable to type 'number'.
+
+22 const first: User = { id: "u-1", name: 7 };
+                         ~~
+
+  .contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts:6:12
+    6   readonly id: number;
+                 ~~
+    The expected type comes from property 'id' which is declared here on type 'User'

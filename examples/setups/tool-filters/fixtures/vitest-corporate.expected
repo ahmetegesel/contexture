@@ -1,0 +1,9 @@
+
+ RUN  v3.2.4 /Users/ahmetegesel/Projects/pirimedya/piri-workspace/projects/Piri.Yenisafak.UI.ReactRouter/libs/ui
+
+
+[passed tests collapsed: 17]
+ Test Files  17 passed (17)
+      Tests  no tests
+   Start at  20:38:04
+   Duration  1.00s (transform 89ms, setup 0ms, collect 191ms, tests 21ms, environment 5.24s, prepare 894ms)

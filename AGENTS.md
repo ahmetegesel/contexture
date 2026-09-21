@@ -1,4 +1,4 @@
-# contexture v0.48.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.49.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -17,7 +17,7 @@
   .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   .contexture/templates/      = artifact grammars: the shapes to fill at write time
   .contexture/filters/        = modular stream filters over the runner (diff, log, workspace additions)
-  .contexture/scripts/        = the session.sh entry point (run .contexture/scripts/session.sh help; --help and -h are the same table) over the awk workers (active, bootstrap, load, stamp, record, board, audit, index, query) and the compact.sh stream runner
+  .contexture/scripts/        = the session.sh entry point (run .contexture/scripts/session.sh help; --help and -h are the same table) over the awk workers (active, bootstrap, load, stamp, record, board, audit, index, query), the compact.sh stream runner, and the filter-tests.sh fixture harness
   .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 

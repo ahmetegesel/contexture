@@ -1,0 +1,24 @@
+[96m.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts[0m:[93m18[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType 'string' is not assignable to type 'number'.
+
+[7m18[0m const count: number = "not-a-number";
+[7m  [0m [91m      ~~~~~[0m
+
+[96m.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts[0m:[93m19[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType 'number' is not assignable to type 'string'.
+
+[7m19[0m const label: string = 42;
+[7m  [0m [91m      ~~~~~[0m
+
+[96m.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts[0m:[93m20[0m:[93m7[0m - [91merror[0m[90m TS2322: [0mType 'string' is not assignable to type 'boolean'.
+
+[7m20[0m const flag: boolean = "yes";
+[7m  [0m [91m      ~~~~[0m
+
+[96m.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts[0m:[93m22[0m:[93m23[0m - [91merror[0m[90m TS2322: [0mType 'string' is not assignable to type 'number'.
+
+[7m22[0m const first: User = { id: "u-1", name: 7 };
+[7m  [0m [91m                      ~~[0m
+
+  [96m.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-tsc/poc.ts[0m:[93m6[0m:[93m12[0m
+    [7m6[0m   readonly id: number;
+    [7m [0m [96m           ~~[0m
+    The expected type comes from property 'id' which is declared here on type 'User'

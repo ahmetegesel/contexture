@@ -1,6 +1,8 @@
 #!/usr/bin/awk -f
 # cargo-test.awk: collapses passing cargo test outputs, isolates failures
 # match: ^running [0-9]+ test
+# command: ^cargo test( |$)
+# stream: merged
 
 BEGIN {
   raw_count = 0

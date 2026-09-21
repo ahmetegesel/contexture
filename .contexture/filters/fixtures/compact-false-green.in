@@ -1,0 +1,2 @@
+TypeError: Cannot read properties of undefined (reading 'emit')
+    at Compiler.emit (/app/node_modules/typescript/lib/tsc.js:1234:7)

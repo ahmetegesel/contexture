@@ -1,0 +1,80 @@
+commit 521faee78789713311b9ad3fd0e52ab920385c6f
+Author: Ahmet Egesel <ahmet.egesel@albil.com.tr>
+Date:   Mon Sep 21 15:09:27 2026 +0300
+
+    docs(corpus): reconcile seven repositories against their real drift windows
+    
+    The windows were measured from each clone's own pre-fetch HEAD, not from
+    a date: the previous reconciliation ran against checkouts that were
+    already nine days stale, which understated every window by roughly 3x
+    (V3 read 5 files where 36 were real; ReactRouter 120 where 309 were).
+    
+    Piri.Pho.V3 (36 files): search sorting is opt-in, so the doc's "defaults
+    to publish date" was false; cache telemetry, the reference map and its
+    tripwire; one fixed pitfall retired.
+    
+    piri-pho-graphql (40): sport data now reads from Piri.Pho.V3's REST API
+    for the internal app only - a moved repository boundary. The count cap
+    means two different things on Mongo and Elasticsearch, so reading it as
+    a performance control is right for a list and wrong for a search.
+    
+    Piri.Pho.Jurnal (47) plus a new unit, seo-metadata-management: the SEO
+    module shares three letters with seo-content-catalog and nothing else -
+    different domain object, zero mechanism overlap, and the catalog's own
+    member regex structurally cannot match it.
+    
+    Piri.Yenisafak.UI.Nuxt: no window at all. Its code has not moved since
+    before the corpus baseline, so this is a verification pass; two claims
+    were wrong as written and corrected.
+    
+    Piri.Yenisafak.UI.ReactRouter (309): identity calls left the component
+    package entirely and became props, now lint-enforced; the corpus said
+    React Router v7 at five sites while the code runs v8.
+    
+    Piri.TVNET.Astro (679, one idea): packages/ui became a base skeleton and
+    the brands carry the look. The standing claim that a missing brand key
+    "retains the base skeleton look" was backwards - base emits ~800 classes
+    it defines nowhere, so a decline renders unstyled, not skeletal.
+    
+    piriAppWebviewFlutter: already current.
+    
+    Also: 20 cross-references added where a doc pinned its own invariant to a
+    neighbour's file - widening those globs would dissolve the unit
+    boundaries, so the fix is navigational. Corpus-wide, 1430 refs now
+    resolve with none dead.
+
+diff --git a/docs/Piri.Pho.Jurnal/app-shell-and-layout.md b/docs/Piri.Pho.Jurnal/app-shell-and-layout.md
+index cc0b1f7..3e85d0e 100644
+--- a/docs/Piri.Pho.Jurnal/app-shell-and-layout.md
++++ b/docs/Piri.Pho.Jurnal/app-shell-and-layout.md
+@@ -2,13 +2,13 @@
+   repo: Piri.Pho.Jurnal
+   role: layout
+   description: "Route-driven page chrome: five layout components (Base, Default, SideMenu, Empty, Error) select the shell a page renders in, plus the persistent header/sidebar chrome shared across sections."
+-  sources: [src/layouts/**, src/templates/**, src/components/layout/**, src/components/AppHeader.vue, src/components/AppSidebar.vue, src/components/AppSidebarBackup.vue, src/components/PhoBreadcrumbs.vue, src/components/index.js, src/components/constants.js, src/components/add-content/**, src/components/editors-handbook/**]
++  sources: [src/layouts/**, src/templates/**, src/components/layout/**, src/components/AppHeader.vue, src/components/AppSidebar.vue, src/components/AppSidebarBackup.vue, src/components/PhoBreadcrumbs.vue, src/components/index.js, src/components/constants.js, src/components/add-content/**, src/components/editors-handbook/**, src/modules/settings/menu/useMenu.js]
+   keywords: [app shell, sayfa iskeleti, üst menü, yan menü, nav rail, mini-variant drawer, hamburger menu, responsive sidebar, sticky sidebar, layout picker, shell wrapper, ekmek kırıntısı, kullanıcı menüsü, marka değiştirici, eski sidebar, yetkisiz erişim sayfası, sayfa bulunamadı, dark mode toggle, collapse to dialog, vuetify application bar]
+ 
+ @responsibilities
+   - "Select which shell wraps a route: Base (full chrome), Default (bare card), SideMenu (side-nav plus content), Empty (no chrome), or Error (dialog for failures)."
+   - "Host the persistent app-wide header and icon-rail sidebar inside Base, so every route gets the same top bar and site-switcher regardless of its section layout."
+-  - "Build and filter the per-section side navigation from the route tree, respecting visibility flags, then hand off to a shared presentational menu-list component."
++  - "Build and filter the per-section side navigation from the route tree through the shared menu builder, applying the show-in-menu, permission and role gates, then hand off to a shared presentational menu-list component."
+   - "Own the imperative global dialog handles wired onto the app root from inside Base so any descendant can trigger a confirm/alert/toast without prop drilling."
+   - "Render route-derived breadcrumbs inside the header, keyed off the matched route chain."
+   - "Collapse the persistent side-menu column into a floating-button-triggered dialog on small viewports."
+@@ -52,6 +52,14 @@
+     evidence: "AddContent.vue (contentTypeRoutes)"
+     detail ::
+       It wraps the content-type routes in a synthetic menu parent with the show-in-menu flag forced on, runs them through the shared menu builder so permission and visibility filtering apply, and renders one icon per surviving route. Adding a content-type route therefore adds its icon here without a further edit.
++  - rule: "The shared menu builder lives under the site-menu settings module despite belonging to this unit."
++    evidence: "useMenu.js (mapChildren, isVisible); AppSidebar.vue (useMenu); SideMenu.vue (useMenu); SideMenuContainer.vue (useMenu); AddContent.vue (useMenu)"
++    detail ::
++      src/modules/settings/menu/useMenu.js is the ONE builder every nav surface here imports - the icon rail, the section side menu, its collapsed container, and the header quick-add strip. Its directory belongs to the public-site menu editor capability and its name collides with that capability's vocabulary, but nothing in that capability imports it; it is this unit's code sitting in the wrong folder (see site-menu-builder.md#pitfalls). It is named in this unit's sources for that reason.
++  - rule: "A menu entry is visible only when its permission AND its role gate both pass."
++    evidence: "useMenu.js (isVisible, hasRequiredRole, isActive)"
++    detail ::
++      The builder composes two independent checks per entry. The permission check treats an absent meta.permission as visible and otherwise requires the grant on the active site. The role check treats an absent meta.roles as visible and otherwise requires the user to hold one of the listed role ids, compared as strings. Both apply at group level and at leaf level, and a group whose children all fail is dropped rather than rendered empty. The role half deliberately mirrors the router guard's own gate (see routing-and-access-control.md#contract) - they are two separate implementations of one rule, and a route gated in one place but not the other either offers a page that bounces or hides a page the user may open.
+   - rule: "The editors' handbook is a non-dismissable dialog whose acceptance is remembered per browser, not per user."
+     evidence: "EditorsHandbook.vue (editorsHandbookAcceptedKey)"
+     detail ::

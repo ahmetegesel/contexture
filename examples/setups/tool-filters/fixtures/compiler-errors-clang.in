@@ -1,0 +1,91 @@
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:7:13: error: use of undeclared identifier 'missing_01'
+    7 |   int v01 = missing_01;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:8:13: error: use of undeclared identifier 'missing_02'
+    8 |   int v02 = missing_02;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:9:13: error: use of undeclared identifier 'missing_03'
+    9 |   int v03 = missing_03;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:10:13: error: use of undeclared identifier 'missing_04'
+   10 |   int v04 = missing_04;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:11:13: error: use of undeclared identifier 'missing_05'
+   11 |   int v05 = missing_05;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:12:13: error: use of undeclared identifier 'missing_06'
+   12 |   int v06 = missing_06;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:13:13: error: use of undeclared identifier 'missing_07'
+   13 |   int v07 = missing_07;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:14:13: error: use of undeclared identifier 'missing_08'
+   14 |   int v08 = missing_08;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:15:13: error: use of undeclared identifier 'missing_09'
+   15 |   int v09 = missing_09;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:16:13: error: use of undeclared identifier 'missing_10'
+   16 |   int v10 = missing_10;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:17:13: error: use of undeclared identifier 'missing_11'
+   17 |   int v11 = missing_11;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:18:13: error: use of undeclared identifier 'missing_12'
+   18 |   int v12 = missing_12;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:19:13: error: use of undeclared identifier 'missing_13'
+   19 |   int v13 = missing_13;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:20:13: error: use of undeclared identifier 'missing_14'
+   20 |   int v14 = missing_14;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:21:13: error: use of undeclared identifier 'missing_15'
+   21 |   int v15 = missing_15;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:22:13: error: use of undeclared identifier 'missing_16'
+   22 |   int v16 = missing_16;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:23:13: error: use of undeclared identifier 'missing_17'
+   23 |   int v17 = missing_17;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:24:13: error: use of undeclared identifier 'missing_18'
+   24 |   int v18 = missing_18;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:25:13: error: use of undeclared identifier 'missing_19'
+   25 |   int v19 = missing_19;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:26:13: error: use of undeclared identifier 'missing_20'
+   26 |   int v20 = missing_20;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:27:13: error: use of undeclared identifier 'missing_21'
+   27 |   int v21 = missing_21;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:28:13: error: use of undeclared identifier 'missing_22'
+   28 |   int v22 = missing_22;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:29:13: error: use of undeclared identifier 'missing_23'
+   29 |   int v23 = missing_23;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:30:13: error: use of undeclared identifier 'missing_24'
+   30 |   int v24 = missing_24;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:31:13: error: use of undeclared identifier 'missing_25'
+   31 |   int v25 = missing_25;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:32:13: error: use of undeclared identifier 'missing_26'
+   32 |   int v26 = missing_26;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:33:13: error: use of undeclared identifier 'missing_27'
+   33 |   int v27 = missing_27;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:34:13: error: use of undeclared identifier 'missing_28'
+   34 |   int v28 = missing_28;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:35:13: error: use of undeclared identifier 'missing_29'
+   35 |   int v29 = missing_29;
+      |             ^
+/Users/ahmetegesel/Projects/contexture/.contexture/sessions/piri-compaction-setup/lanes/gather-build-lint-streams/poc-clang/cascade.c:36:13: error: use of undeclared identifier 'missing_30'
+   36 |   int v30 = missing_30;
+      |             ^
+30 errors generated.

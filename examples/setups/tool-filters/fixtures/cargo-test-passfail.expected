@@ -1,0 +1,22 @@
+   Compiling piri v0.1.0 (/tmp/piri)
+    Finished test [unoptimized] target(s) in 0.42s
+     Running unittests src/lib.rs (target/debug/deps/piri-abc123)
+
+running 4 tests
+[passed tests collapsed: 2]
+test tests::rejects_bad_input ... FAILED
+
+[passed tests collapsed: 1]
+failures:
+
+---- tests::rejects_bad_input stdout ----
+thread 'tests::rejects_bad_input' panicked at src/lib.rs:42:5:
+assertion `left == right` failed
+  left: 0
+ right: 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+failures:
+    tests::rejects_bad_input
+
+test result: FAILED. 3 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s

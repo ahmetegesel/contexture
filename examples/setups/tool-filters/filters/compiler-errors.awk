@@ -1,6 +1,8 @@
 #!/usr/bin/awk -f
 # compiler-errors.awk: caps compiler diagnostic cascades at 20 errors
-# match: (:[0-9]+:[0-9]+: (fatal )?error:|^error(\[[A-Za-z0-9_-]+\])?:)
+# match: ([(][0-9]+,[0-9]+[)]: (error|warning) TS[0-9]+:|:[0-9]+:[0-9]+ - (error|warning) TS[0-9]+:|^(error|warning) TS[0-9]+:|:[0-9]+:[0-9]+: (fatal )?error:|^error)
+# command: ^(tsc|gcc|clang)( |$)
+# stream: merged
 
 BEGIN {
   if (max_errors == "") max_errors = 20
@@ -28,6 +30,9 @@ function emit(line) {
 function is_error_start(line) {
   if (line ~ /^error(\[[A-Za-z0-9_-]+\])?:/ && line !~ /^error: could not compile/) return 1
   if (line ~ /:[0-9]+:[0-9]+: (fatal )?error:/) return 1
+  if (line ~ /\([0-9]+,[0-9]+\): (error|warning) TS[0-9]+:/) return 1
+  if (line ~ /:[0-9]+:[0-9]+ - (error|warning) TS[0-9]+:/) return 1
+  if (line ~ /^(error|warning) TS[0-9]+:/) return 1
   return 0
 }
 
@@ -67,6 +72,14 @@ END {
 
   if (err_suppressed > 0) {
     emit(sprintf("[... elided %d additional errors; capped at %d]", err_suppressed, max_errors))
+  }
+
+  # False-green guard: a non-zero exit with no parsed diagnostic start means
+  # a failing command produced nothing this filter understands; surface the
+  # notice alone so the failure never reads as a clean run
+  if (COMPACT_EXIT + 0 != 0 && err_count == 0) {
+    print "[compact: compiler-errors.awk: exit " COMPACT_EXIT " with no parsed diagnostics; COMPACT_DISABLE=1 for the raw stream]"
+    exit 0
   }
 
   if (out_count == 0 || out_bytes > raw_bytes) {

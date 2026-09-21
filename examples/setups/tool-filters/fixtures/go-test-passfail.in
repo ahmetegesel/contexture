@@ -1,0 +1,12 @@
+=== RUN   TestAdd
+--- PASS: TestAdd (0.00s)
+=== RUN   TestSubtract
+--- PASS: TestSubtract (0.00s)
+=== RUN   TestReject
+    reject_test.go:14: got 0, want 1
+--- FAIL: TestReject (0.00s)
+=== RUN   TestEmpty
+--- PASS: TestEmpty (0.00s)
+FAIL
+exit status 1
+FAIL	piri/tools 0.012s

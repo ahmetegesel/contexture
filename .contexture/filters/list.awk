@@ -1,6 +1,8 @@
 #!/usr/bin/awk -f
 # list.awk: directory listing compaction filter
 # match: ^(total [0-9]+|[-dcbpls][-rwxStTsST]{9}[@+]?[ \t]+[0-9]+)
+# command: ^ls( |$)
+# format-only: entry fields reformatted; listing content preserved
 
 BEGIN {
   if (max_entries == "") max_entries = 40

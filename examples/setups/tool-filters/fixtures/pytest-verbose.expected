@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.12.13, pytest-9.0.2, pluggy-1.6.0
+rootdir: /Users/ahmetegesel/Projects/pirimedya/piri-workspace/projects/Piri.Pho.V3/tools/es-migrate
+configfile: pytest.ini
+collected 32 items
+
+[passed tests collapsed: 16]
+tests/test_catchup.py::test_catchup_window FAILED                        [ 53%]
+
+[passed tests collapsed: 15]
+=================================== FAILURES ===================================
+_____________________________ test_catchup_window ______________________________
+
+    def test_catchup_window():
+        started = "2026-07-14T16:30:00Z"
+        since = datetime.fromisoformat(started) - timedelta(seconds=10)
+
+>       assert since.second == 50
+E       AssertionError: assert 50 == 60
+
+tests/test_catchup.py:27: AssertionError
+=========================== short test summary info ============================
+FAILED tests/test_catchup.py::test_catchup_window - AssertionError: assert 50 == 60
+========================= 31 passed, 1 failed in 1.42s ==========================

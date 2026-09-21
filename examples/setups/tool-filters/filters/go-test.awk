@@ -1,6 +1,7 @@
 #!/usr/bin/awk -f
 # go-test.awk: collapses passing go test outputs, isolates failures
 # match: ^=== RUN 
+# command: ^go test( |$)
 
 BEGIN {
   raw_count = 0

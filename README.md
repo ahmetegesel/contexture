@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.45.1 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.49.0 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh .contexture/filters/*.awk
 ```
 
@@ -70,9 +70,9 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.workspace.md   Shared workspace overlay, tracked in git for team-wide rules
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
 └── .contexture/          The convention drawer, isolating machinery from project code
-    ├── filters/          Modular stream filters: diff.awk, log.awk, and workspace additions
+    ├── filters/          Modular stream filters: diff.awk, list.awk, log.awk, and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
-    ├── scripts/          The session.sh entry point and compact.sh stream runner
+    ├── scripts/          The session.sh entry point, compact.sh, and the filter fixture harness
     ├── templates/        Shape grammars ensuring structured writes without guesswork
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
         ├── state.md      Live pointer: status, current anchor, next action, and refs
@@ -97,7 +97,7 @@ A plain text workflow checklist in `.contexture/rhythms/`. Enforces process disc
 Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` for local machine). Lets you add repository policies or git rules without modifying contexture's base. Deep dive: [Overlays](docs/overlays.md).
 
 ### Stream compaction
-Universal stream reduction runner and filter (`.contexture/scripts/compact.sh`). All shell commands execute through it (runner mode prefix: `.contexture/scripts/compact.sh <cmd>`) or pipe into it (`<cmd> | .contexture/scripts/compact.sh`). It collapses unchanged Git diff context lines (`diff.awk`), verbose directory listings (`list.awk`), passing test runs, and repetitive logs (`log.awk`) by 40 to 90 percent without external dependencies or diagnostic loss. Preserves exact exit codes and automatically falls back to raw output via universal fail-safe. Deep dive: [The engine](docs/the-engine.md).
+Universal stream reduction runner and filter (`.contexture/scripts/compact.sh`). All shell commands execute through it (runner mode prefix: `.contexture/scripts/compact.sh <cmd>`) or pipe into it (`<cmd> | .contexture/scripts/compact.sh`). Runner mode selects the filter by the wrapped command's identity and stdin mode by the stream signature, strips ANSI escape sequences before matching, and collapses unchanged Git diff context lines (`diff.awk`), verbose directory listings (`list.awk`), passing test runs, and repetitive logs (`log.awk`) by 40 to 90 percent without installs or diagnostic loss. Preserves exact exit codes, keeps command stderr visible (whole on failure or empty stdout, tail-capped with its own notice otherwise), falls back to raw when a shrinking filter carries no notice, and honors `COMPACT_DISABLE=1` (bypass) and `COMPACT_DEBUG=1` (selection report). Deep dive: [The engine](docs/the-engine.md).
 
 ## Docs
 
@@ -141,7 +141,7 @@ Universal stream reduction runner and filter (`.contexture/scripts/compact.sh`).
 | session.sh next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
 | session.sh refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
 | session.sh close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
-| compact.sh | Universal discoverable stream compaction: direct runner prefix (.contexture/scripts/compact.sh <cmd>) or pipe; auto-selects matching filter from .contexture/filters/ to collapse diffs, directory listings, test passes, or logs with fail-safe fallback |
+| compact.sh | Universal discoverable stream compaction: direct runner prefix (.contexture/scripts/compact.sh <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw |
 
 The query family answers the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
 

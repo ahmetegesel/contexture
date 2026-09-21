@@ -1,0 +1,26 @@
+
+ RUN  v3.2.4 /Users/ahmetegesel/Projects/pirimedya/piri-workspace/projects/Piri.Yenisafak.UI.ReactRouter/libs/ui
+
+ ✓ src/components/Corporate/YsPersonalData/YsPersonalData.test.tsx (0 test) 1ms
+ ✓ src/components/Corporate/YsCookiePolicy/YsCookiePolicy.test.tsx (0 test) 2ms
+ ✓ src/components/Corporate/YsContactForm/YsContactForm.test.tsx (0 test) 1ms
+ ✓ src/components/Corporate/YsHumanResources/YsHumanResources.test.tsx (0 test) 0ms
+ ✓ src/components/Corporate/YsMobileApplications/YsMobileApplications.test.tsx (0 test) 2ms
+ ✓ src/components/Corporate/YsPublishingStandards/YsPublishingStandards.test.tsx (0 test) 0ms
+ ✓ src/components/Corporate/YsPressRoom/YsPressRoom.test.tsx (0 test) 0ms
+ ✓ src/components/Corporate/YsContact/YsContact.test.tsx (0 test) 0ms
+ ✓ src/components/Corporate/YsConditionsOfUse/YsConditionsOfUse.test.tsx (0 test) 0ms
+ ✓ src/components/Corporate/YsAdvert/YsAdvert.test.tsx (0 test) 0ms
+ ✓ src/components/Corporate/YsAboutUs/YsAboutUs.test.tsx (0 test) 1ms
+ ✓ src/components/Corporate/YsSocialMedia/YsSocialMedia.test.tsx (0 test) 1ms
+ ✓ src/components/Corporate/YsDisclaimerCorrection/YsDisclaimerCorrection.test.tsx (0 test) 9ms
+ ✓ src/components/Corporate/YsPrivacyPolicy/YsPrivacyPolicy.test.tsx (0 test) 1ms
+ ✓ src/components/Corporate/YsMastheadNewspaper/YsMastheadNewspaper.test.tsx (0 test) 1ms
+ ✓ src/components/Corporate/YsInformationSocietyServices/YsInformationSocietyServices.test.tsx (0 test) 0ms
+ ✓ src/components/Corporate/YsMastheadInternet/YsMastheadInternet.test.tsx (0 test) 0ms
+
+ Test Files  17 passed (17)
+      Tests  no tests
+   Start at  20:38:04
+   Duration  1.00s (transform 89ms, setup 0ms, collect 191ms, tests 21ms, environment 5.24s, prepare 894ms)
+

@@ -1,0 +1,10 @@
+
+ RUN  v3.2.4 /Users/ahmetegesel/Projects/pirimedya/piri-workspace/projects/Piri.Yenisafak.UI.ReactRouter/libs/ui
+
+ ✓ src/utils/player/playerControl.util.test.ts (6 tests) 7ms
+
+ Test Files  1 passed (1)
+      Tests  6 passed (6)
+   Start at  20:37:43
+   Duration  486ms (transform 16ms, setup 0ms, collect 15ms, tests 7ms, environment 256ms, prepare 43ms)
+

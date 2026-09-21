@@ -1,0 +1,7 @@
+    reject_test.go:14: got 0, want 1
+[passed tests collapsed: 2]
+--- FAIL: TestReject (0.00s)
+[passed tests collapsed: 1]
+FAIL
+exit status 1
+FAIL	piri/tools 0.012s

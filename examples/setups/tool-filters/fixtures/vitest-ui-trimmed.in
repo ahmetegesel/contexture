@@ -1,0 +1,76 @@
+
+ RUN  v3.2.4 /Users/ahmetegesel/Projects/pirimedya/piri-workspace/projects/Piri.Yenisafak.UI.ReactRouter/libs/ui
+
+ ❯ src/components/Lokma/YsRecipeFilterWidget/YsRecipeFilterWidget.test.tsx (1 test | 1 failed) 12ms
+   × YsRecipeFilterWidget > renders filter groups 11ms
+     → @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+ ❯ src/components/Lokma/YsRecipeBookLayout/YsRecipeBookLayout.test.tsx (1 test | 1 failed) 10ms
+   × YsRecipeBookLayout > renders title and cards 10ms
+     → @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+(node:26248) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ src/components/Layout/YsEconomyDataLayout/YsEconomyDataLayout.test.tsx (1 test | 1 failed) 169ms
+   × YsEconomyDataLayout > renders submenu and stocks widget slots 168ms
+     → 
+ ❯ src/components/Lokma/YsIngredientPill/YsIngredientPill.test.tsx (1 test | 1 failed) 158ms
+   × YsIngredientPill > renders label 156ms
+     → @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+ ❯ src/components/Lokma/YsRecipeBookToolbar/YsRecipeBookToolbar.test.tsx (1 test | 1 failed) 160ms
+   × YsRecipeBookToolbar > renders categories and search 158ms
+     → @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+ ❯ src/components/Lokma/YsCupboardLayout/YsCupboardLayout.test.tsx (1 test | 1 failed) 143ms
+   × YsCupboardLayout > renders title 139ms
+     → @mantine/core: MantineProvider was not found in component tree, make sure you have it in your app
+stderr | src/components/Table/YsImsakiyeTable/YsImsakiyeTable.test.tsx > YsImsakiyeTable > renders column headers and one row per day
+Encountered two children with the same key, ``. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, ``. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, ``. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, ``. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, ``. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, ``. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted — the behavior is unsupported and could change in a future version.
+
+(node:26249) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:26247) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ src/components/Table/YsImsakiyeTable/YsImsakiyeTable.test.tsx (2 tests | 2 failed) 79ms
+   × YsImsakiyeTable > renders column headers and one row per day 72ms
+     → 
+   × YsImsakiyeTable > renders nothing when there are no days 5ms
+     → 
+ ❯ src/components/Table/YsReligiousDaysTable/YsReligiousDaysTable.test.tsx (2 tests | 2 failed) 70ms
+   × YsReligiousDaysTable > renders one row per religious day 63ms
+     → 
+   × YsReligiousDaysTable > renders nothing when there are no days 5ms
+     → 
+(node:26246) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ❯ src/components/Widget/YsCurrencyConverterWidget/YsCurrencyConverterWidget.test.tsx (1 test | 1 failed) 84ms
+   × YsCurrencyConverterWidget > renders title and currency values 81ms
+     → 
+ ✓ src/components/Player/YsVideojsPlayer/YsVideojsPlayer.test.tsx (10 tests) 757ms
+ ✓ src/components/Widget/YsTvnetLiveVideo/YsTvnetLiveVideo.test.tsx (3 tests) 886ms
+   ✓ YsTvnetLiveVideo > hides the video and sets the cookie when closed  699ms
+ ✓ src/components/Input/YsAuthorSearchInput/YsAuthorSearchInput.test.tsx (7 tests) 837ms
+ ✓ src/components/Location/YsLocationSelectMenu/YsLocationSelectMenu.test.tsx (5 tests) 914ms
+(node:26287) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:26290) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/components/Player/YsEmbedPlayer/YsEmbedPlayer.test.tsx (4 tests) 187ms
+(node:26292) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/components/Lokma/YsRecipeServingsControl/YsRecipeServingsControl.test.tsx (6 tests) 604ms
+ ✓ src/components/Section/YsNewsletterHub/YsNewsletterHub.test.tsx (11 tests) 1541ms
+(node:26289) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:26288) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/components/Widget/YsGroupStandingsWidget/YsGroupStandingsWidget.test.tsx (3 tests) 319ms
+(node:26298) ExperimentalWarning: localStorage is not available because --localstorage-file was not provided.
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ src/components/Card/YsNewsletterCard/YsNewsletterCard.test.tsx (4 tests) 387ms
+ Test Files  16 failed | 291 passed (307)
+      Tests  27 failed | 174 passed (201)
+   Start at  20:39:57
+   Duration  29.65s (transform 4.31s, setup 0ms, collect 89.97s, tests 13.17s, environment 217.41s, prepare 34.68s)

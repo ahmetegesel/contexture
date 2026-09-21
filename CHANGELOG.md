@@ -8,6 +8,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.49.0] - 2026-09-22
+
+### Added
+
+- Command-identity filter selection in runner mode: `compact.sh` tests the wrapped command line against anchored `# command:` directives before the signature scan, so streams whose first signature sits past the 40-line sample window still select (a long-message `git show` selects the diff filter); a shadow warning names filters claiming one command.
+- ANSI escape stripping pre-pass: escape sequences are removed before the signature scan and before the selected filter runs, while raw bytes stay for the fail-safe comparison and the passthrough.
+- Recovery and safety guards: a shrinking filter whose output carries no recognized notice falls back to raw; notice-only output passes through; a false-green guard surfaces a non-zero exit with zero parsed diagnostics; per-filter `# stream: merged` keeps stderr in the filtered stream for compiler-style tools, while default stderr is whole on failure or empty stdout and tail-capped with its own notice otherwise.
+- Selection transparency: `COMPACT_DISABLE=1` bypasses compaction with the exit code intact, `COMPACT_DEBUG=1` reports the selected filter and the matched line on stderr.
+- Static fixture harness: `.contexture/scripts/filter-tests.sh` runs input and expected-output pairs through the filters, byte-compares, checks that every filter carries a fixture, and pins the runner mechanics (ANSI strip, command identity, notice-only false-green, recovery fallback).
+
+### Changed
+
+- Directive patterns reach awk through the environment, so backslash escapes in a `# match:` signature survive verbatim; directive values are whitespace-trimmed.
+- The pytest filter collapses verbose summary counters, quiet progress runs, and surfaces XPASS and XFAIL.
+- The vitest and jest filter matches the real reporter markers (pass, fail file, fail case, skip, and the colonless summary forms) with a failure-detail state; the byte-level multibyte bracket branches are replaced by literal alternation.
+- The compiler filter matches the tsc terse, pretty, and standalone shapes alongside gcc, clang, and rustc, and adds the false-green guard; the diff filter collapses only after a hunk header, so blob shows and stat output pass verbatim, and its collapse marker names the recovery.
+- The tool-filters setup reads as a menu: investigate the workspace's command streams before adopting, and carry the fixture pairs with the adopted filter.
+
+### Fixed
+
+- The wrapped command's exit status survives commands whose output lacks a trailing newline (direct status capture replaces the marker-based ingest).
+- The raw fallbacks print no spurious newline for stderr-only commands.
+
 ## [0.48.1] - 2026-09-21
 
 ### Fixed
