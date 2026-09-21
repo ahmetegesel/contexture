@@ -97,7 +97,7 @@ A plain text workflow checklist in `.contexture/rhythms/`. Enforces process disc
 Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` for local machine). Lets you add repository policies or git rules without modifying contexture's base. Deep dive: [Overlays](docs/overlays.md).
 
 ### Stream compaction
-A zero-parameter stream reduction filter (`.contexture/scripts/compact.sh`). Piping verbose tool outputs into it collapses unchanged Git diff context lines, passing test runs, and repetitive logs by 40 to 90 percent without external dependencies or diagnostic loss. It automatically discovers modular filters in `.contexture/filters/` with strict fail-safe fallback to raw output. Example: `git diff | .contexture/scripts/compact.sh`. Deep dive: [The engine](docs/the-engine.md).
+Universal stream reduction runner and filter (`.contexture/scripts/compact.sh`). All shell commands execute through it (runner mode prefix: `.contexture/scripts/compact.sh <cmd>`) or pipe into it (`<cmd> | .contexture/scripts/compact.sh`). It collapses unchanged Git diff context lines (`diff.awk`), verbose directory listings (`list.awk`), passing test runs, and repetitive logs (`log.awk`) by 40 to 90 percent without external dependencies or diagnostic loss. Preserves exact exit codes and automatically falls back to raw output via universal fail-safe. Deep dive: [The engine](docs/the-engine.md).
 
 ## Docs
 
@@ -141,7 +141,7 @@ A zero-parameter stream reduction filter (`.contexture/scripts/compact.sh`). Pip
 | session.sh next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
 | session.sh refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
 | session.sh close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
-| compact.sh | Zero-parameter discoverable stream compaction: automatically selects matching filter from .contexture/filters/ to collapse diffs, test passes, or logs with fail-safe fallback |
+| compact.sh | Universal discoverable stream compaction: direct runner prefix (.contexture/scripts/compact.sh <cmd>) or pipe; auto-selects matching filter from .contexture/filters/ to collapse diffs, directory listings, test passes, or logs with fail-safe fallback |
 
 The query family answers the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
 

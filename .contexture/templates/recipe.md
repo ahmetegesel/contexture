@@ -22,7 +22,7 @@ GROUND_AND_REFS
     verbatim quotes or conditions; never conversational prose]
   WRITE_SCOPE: [., <explicit target files or dirs>]
   drift: stop + report; never improvise
-  # pipe verbose inspections (git diff, test runs, logs) through .contexture/scripts/compact.sh
+  COMMAND_POLICY: execute all shell commands through .contexture/scripts/compact.sh <cmd>
 
 OUTPUTS
   JOURNAL: journal.md               # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the dispatcher never reads it
@@ -49,6 +49,7 @@ GROUND_AND_REFS
     zero em-dashes in any edit
   WRITE_SCOPE: [., README.md, AGENTS.md]
   drift: stop + report; never improvise
+  COMMAND_POLICY: execute all shell commands through .contexture/scripts/compact.sh <cmd>
 
 OUTPUTS
   JOURNAL: journal.md

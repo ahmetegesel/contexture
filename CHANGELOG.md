@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.47.0] - 2026-09-21
+
+### Added
+
+- Directory listing compaction filter: `.contexture/filters/list.awk` provides zero-dependency discoverable compaction for POSIX `ls -l` and `ls -la` outputs; matches `total [0-9]+` and standard file permission signatures; strips redundant column overhead (permissions, owner, group, link counts) and condenses entries to clean `[dir]`, `[file]`, `[link]`, and `[dev]` indicators; collapses large directory listings (>40 items) into an elided summary preserving total file and directory counts; passes fail-safe checks with zero distortion on small listings.
+- Universal command compaction standard: `@laws#compact-streams` elevates stream compaction to an unconditional invariant for all shell command executions; establishes direct call runner mode prefix (`.contexture/scripts/compact.sh <cmd>`) as the canonical pattern to preserve command exit codes and merge stderr automatically; `@interact` act step mandates the runner prefix for every command execution; `.contexture/templates/recipe.md` promotes `COMMAND_POLICY` to a mandatory instruction under `GROUND_AND_REFS`; `AGENTS.workspace.md` codifies raw command execution without `compact.sh` as drift.
+
+
 ## [0.46.0] - 2026-09-21
 
 ### Added

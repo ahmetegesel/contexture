@@ -1,8 +1,8 @@
-# contexture v0.46.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.47.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
-  compact-streams: verbose command outputs (Git diffs, test runners, build cascades, repetitive logs) pipe through .contexture/scripts/compact.sh; never flood the context window with raw streams when compact.sh is present.
+  compact-streams: all shell commands execute through .contexture/scripts/compact.sh (runner mode prefix: .contexture/scripts/compact.sh <cmd>); never run raw commands without compaction when compact.sh is present; preserve context window capacity unconditionally.
   writer-holds-volume: the schema holds the shape, the writer holds the volume: guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance.
   process-free: process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
   compose-from-record: compose from the record, never from conversation: rewrites grounded in journal/knowledge.
@@ -87,7 +87,7 @@
   ask:      grounded question, one at a time; answer opens next; until intent, constraints, and approach are settled
   restate:  goal + intended approach, your words; where approaches diverge, name the tradeoff
   confirm:  human: go | ask; may interrupt anytime; never skipped, however small
-  act:      work the chosen rhythm's steps (default: the design loop, @rhythms); mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
+  act:      work the chosen rhythm's steps (default: the design loop, @rhythms); execute all commands through .contexture/scripts/compact.sh <cmd>; mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
   surface:  durable output, named by what it is
   surface -> ask
   artifacts: stay current in the same breath as the work: journal at the event (see @journal), backlog as work is declared and tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record and .contexture/templates/
@@ -120,7 +120,7 @@
   - a subagent that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
   - a subagent's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
   - read the report WHOLE, no exception; an unread part wears the look of review
-  - command streams: subagents pipe verbose inspections (git diff, test runs, build logs) through .contexture/scripts/compact.sh to preserve context window capacity
+  - command streams: subagents execute all commands through .contexture/scripts/compact.sh <cmd> (runner mode prefix) or pipe through it to preserve context window capacity; raw execution is forbidden
   - journal every dispatch: the subagent's folder path
 
 @refresh
