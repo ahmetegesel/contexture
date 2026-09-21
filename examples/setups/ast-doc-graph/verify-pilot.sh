@@ -216,8 +216,129 @@ if ! echo "$T7_OUTPUT" | grep -q "PITFALLS: 69"; then
 fi
 echo "[PASS] Test 7 passed: aggregate statistics verified."
 
+# Step 10: Setup sandbox environment for delta and JIT verification
+echo ""
+echo "--- STEP 10: Preparing isolated pilot sandbox for delta and JIT tests ---"
+PILOT_SANDBOX="$(mktemp -d /tmp/bilingo-pilot-delta-XXXXXX)"
+trap 'rm -rf "$PILOT_SANDBOX"' EXIT INT TERM
+
+if [[ -f "$REPO_ROOT/package.json" ]]; then
+  cp "$REPO_ROOT/package.json" "$PILOT_SANDBOX/package.json"
+fi
+
+if [[ -d "$REPO_ROOT/node_modules" ]]; then
+  ln -s "$REPO_ROOT/node_modules" "$PILOT_SANDBOX/node_modules"
+fi
+
+cp -R "$REPO_ROOT/backend" "$PILOT_SANDBOX/backend"
+cp -R "$REPO_ROOT/docs" "$PILOT_SANDBOX/docs"
+
+SANDBOX_DB="$PILOT_SANDBOX/graph.db"
+cp "$TEST_DB" "$SANDBOX_DB"
+sleep 1
+touch "$SANDBOX_DB"
+echo "[PASS] Sandbox prepared at $PILOT_SANDBOX with database cloned."
+
+# Step 11: Test 8 (ast-doc-index --delta on a single modified file)
+echo ""
+echo "--- TEST 8: ast-doc-index --delta on single modified file ---"
+sleep 1
+cat << 'EOF' >> "$PILOT_SANDBOX/backend/core/cascadeCore.ts"
+
+export const PilotDeltaVerification = {
+  verifyDeltaSync: (code: string): boolean => {
+    return code.length > 0;
+  },
+};
+EOF
+
+"$INDEX_DRIVER" \
+  --repo-root "$PILOT_SANDBOX" \
+  --src-dir backend \
+  --db "$SANDBOX_DB" \
+  --delta "$PILOT_SANDBOX/backend/core/cascadeCore.ts"
+
+T8_OUTPUT="$("$GRAPH_QUERY" symbol PilotDeltaVerification.verifyDeltaSync --db "$SANDBOX_DB")"
+echo "$T8_OUTPUT"
+
+if ! echo "$T8_OUTPUT" | grep -q "LOCATION: backend/core/cascadeCore.ts"; then
+  echo "[FAIL] Test 8: missing definition location in delta index" >&2
+  exit 1
+fi
+if ! echo "$T8_OUTPUT" | grep -q "PilotDeltaVerification.verifyDeltaSync"; then
+  echo "[FAIL] Test 8: missing symbol name in delta index" >&2
+  exit 1
+fi
+
+# Confirm unrelated symbols remain present
+T8_UNRELATED="$("$GRAPH_QUERY" symbol SessionService.startSession --db "$SANDBOX_DB")"
+if ! echo "$T8_UNRELATED" | grep -q "LOCATION: backend/services/sessionService.ts"; then
+  echo "[FAIL] Test 8: delta update pruned unrelated symbol SessionService.startSession" >&2
+  exit 1
+fi
+
+T8_INDEXED="$("$SQLITE_BIN" "$SANDBOX_DB" "SELECT count(*) FROM indexed_files WHERE file = 'backend/core/cascadeCore.ts';")"
+if [[ "$T8_INDEXED" -ne 1 ]]; then
+  echo "[FAIL] Test 8: indexed_files record missing for backend/core/cascadeCore.ts" >&2
+  exit 1
+fi
+echo "[PASS] Test 8 passed: delta indexing updated single modified file and preserved database integrity."
+
+# Step 12: Test 9 (JIT micro-sync in graph-query on single modified file)
+echo ""
+echo "--- TEST 9: graph-query JIT micro-sync on single modified file ---"
+sleep 1
+cat << 'EOF' >> "$PILOT_SANDBOX/backend/services/sessionService.ts"
+
+export const PilotJitVerification = {
+  verifyJitFreshness: (id: string, active: boolean): string => {
+    return active ? id : "inactive";
+  },
+};
+EOF
+
+T9_BEFORE="$("$SQLITE_BIN" "$SANDBOX_DB" "SELECT count(*) FROM symbols WHERE qname = 'PilotJitVerification.verifyJitFreshness';")"
+if [[ "$T9_BEFORE" -ne 0 ]]; then
+  echo "[FAIL] Test 9: symbol unexpectedly existed prior to JIT sync" >&2
+  exit 1
+fi
+
+T9_OUTPUT="$("$GRAPH_QUERY" symbol PilotJitVerification.verifyJitFreshness --db "$SANDBOX_DB")"
+echo "$T9_OUTPUT"
+
+if ! echo "$T9_OUTPUT" | grep -q "LOCATION: backend/services/sessionService.ts"; then
+  echo "[FAIL] Test 9: JIT sync did not index PilotJitVerification.verifyJitFreshness" >&2
+  exit 1
+fi
+echo "[PASS] Test 9 passed: graph-query performed inline JIT micro-sync on dirty file."
+
+# Step 13: Test 10 (JIT non-blocking advisory notice when 3+ files are dirty)
+echo ""
+echo "--- TEST 10: graph-query JIT advisory notice on 3+ dirty files ---"
+sleep 1
+echo "// dirty marker 1" >> "$PILOT_SANDBOX/backend/core/cascadeCore.ts"
+echo "// dirty marker 2" >> "$PILOT_SANDBOX/backend/services/sessionService.ts"
+echo "// dirty marker 3" >> "$PILOT_SANDBOX/docs/toisto/cascade-protocol.md"
+
+T10_STDERR="$PILOT_SANDBOX/jit_advisory_stderr.log"
+T10_OUTPUT="$("$GRAPH_QUERY" symbol CascadeCore.startSession --db "$SANDBOX_DB" 2> "$T10_STDERR")"
+
+if ! echo "$T10_OUTPUT" | grep -q "CascadeCore.startSession"; then
+  echo "[FAIL] Test 10: query failed while evaluating advisory condition" >&2
+  exit 1
+fi
+
+T10_STDERR_CONTENT="$(cat "$T10_STDERR")"
+echo "Observed stderr: $T10_STDERR_CONTENT"
+
+if ! echo "$T10_STDERR_CONTENT" | grep -q "3 files modified since last index. Run ast-doc-index --delta to refresh"; then
+  echo "[FAIL] Test 10: advisory notice missing or malformed: $T10_STDERR_CONTENT" >&2
+  exit 1
+fi
+echo "[PASS] Test 10 passed: graph-query emitted non-blocking advisory notice for 3 dirty files."
+
 echo ""
 echo "================================================================="
-echo "VERDICT: ALL 7 VERIFICATION TESTS PASSED (exit code 0)"
+echo "VERDICT: ALL 10 VERIFICATION TESTS PASSED (exit code 0)"
 echo "================================================================="
 exit 0

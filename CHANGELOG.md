@@ -8,6 +8,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.48.0] - 2026-09-21
+
+### Added
+
+- Incremental delta indexing for AST and documentation graphs: `examples/setups/ast-doc-graph/loader/index-graph.ts` supports `--delta` mode, opening existing databases without recreation; performs atomic cascaded deletions of old symbols, edges, and documentation records; re-links semantic `GOVERNS`, `WARNS`, and `COVERS` edges across standing database entities; updates file metadata in new `indexed_files` tracking table.
+- Zero-daemon Just-In-Time (JIT) micro-sync: `bin/graph-query` checks filesystem freshness before query dispatch using system `find -newer` against `graph.db`; 0 dirty files executes directly with 0ms overhead; 1 to 2 dirty files triggers inline micro-sync via `ast-doc-index --delta` in ~300ms; 3 or more dirty files emits a non-blocking advisory notice to stderr while immediately executing the query; `--no-sync` flag bypasses freshness checks.
+- SQLite Write-Ahead Logging and concurrency hardening: `schema.sql` and `graph-query` enforce `PRAGMA journal_mode = WAL` and `PRAGMA busy_timeout = 5000`, eliminating `SQLITE_BUSY` locking collisions between concurrent readers and micro-sync writers; explicit triggers (`trg_symbols_del_edges`, `trg_docs_del_edges`, `trg_rules_del_edges`, `trg_pitfalls_del_edges`) prevent orphan rows in polymorphic `edges` table.
+- Multi-directory repository root discovery: `bin/ast-doc-index` automatically scans repository roots across all code directories (`components/`, `pages/`, `backend/`, `services/`, `hooks/`, `stores/`) when `--src-dir` is omitted, adhering to standard directory exclusions (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.work`, `tests`, `__tests__`, `.worktrees`).
+
 ## [0.47.0] - 2026-09-21
 
 ### Added

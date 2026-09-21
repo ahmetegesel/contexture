@@ -3,6 +3,7 @@
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
+PRAGMA busy_timeout = 5000;
 
 /* ========================================================================= */
 /* 1. Relational Tables                                                      */
@@ -77,6 +78,15 @@ CREATE TABLE IF NOT EXISTS pitfalls (
 CREATE INDEX IF NOT EXISTS idx_pitfalls_doc_id ON pitfalls(doc_id);
 CREATE INDEX IF NOT EXISTS idx_pitfalls_severity ON pitfalls(severity);
 
+CREATE TABLE IF NOT EXISTS indexed_files (
+    file TEXT PRIMARY KEY,
+    mtime REAL NOT NULL,
+    hash TEXT NOT NULL,
+    indexed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_indexed_files_mtime ON indexed_files(mtime);
+
 /* ========================================================================= */
 /* 2. Full-Text Search (FTS5) Virtual Tables                                 */
 /* ========================================================================= */
@@ -144,4 +154,24 @@ END;
 
 CREATE TRIGGER IF NOT EXISTS trg_pitfalls_ad AFTER DELETE ON pitfalls BEGIN
     DELETE FROM fts_docs WHERE entity_id = old.id;
+END;
+
+/* ========================================================================= */
+/* 4. Cascading Edge Deletion Triggers                                      */
+/* ========================================================================= */
+
+CREATE TRIGGER IF NOT EXISTS trg_symbols_del_edges AFTER DELETE ON symbols BEGIN
+    DELETE FROM edges WHERE source = old.id OR target = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_docs_del_edges AFTER DELETE ON docs BEGIN
+    DELETE FROM edges WHERE source = old.id OR target = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_rules_del_edges AFTER DELETE ON rules BEGIN
+    DELETE FROM edges WHERE source = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_pitfalls_del_edges AFTER DELETE ON pitfalls BEGIN
+    DELETE FROM edges WHERE source = old.id;
 END;

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # AST and Documentation Graph Pipeline Driver
-# Unified one-shot indexing driver for TypeScript and Markdown documentation.
+# Unified indexing driver for TypeScript codebases and Markdown documentation.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -33,14 +33,16 @@ ast-doc-index: repository indexing pipeline driver
 Unified extraction and graph compilation for TypeScript codebases and docs.
 
 Usage:
-  ast-doc-index [options]
+  ast-doc-index [options] [files...]
   ast-doc-index help
 
 Options:
   --repo-root <path>   Repository root directory (default: current directory)
   --db <path>          Output SQLite database path (default: $GRAPH_DB or <repo-root>/graph.db)
-  --src-dir <path>     Source directory relative to repo root (default: src, backend, or root)
+  --src-dir <path>     Source directory relative to repo root (default: scan whole repo root)
   --cache-dir <path>   Intermediate JSONL cache directory
+  --delta              Incremental update for modified files only
+  --file <path>        Target file to update in delta mode (can be repeated)
   --clean              Clean intermediate cache and recreate database
   --help, -h           Display this help manual
 
@@ -58,6 +60,8 @@ DB_PATH="${GRAPH_DB:-}"
 SRC_DIR=""
 CACHE_DIR=""
 CLEAN=false
+DELTA=false
+EXPLICIT_FILES=()
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -109,6 +113,22 @@ while [[ $# -gt 0 ]]; do
       CACHE_DIR="${1#--cache-dir=}"
       shift
       ;;
+    --delta)
+      DELTA=true
+      shift
+      ;;
+    --file)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --file requires a file argument" >&2
+        exit 1
+      fi
+      EXPLICIT_FILES+=("$2")
+      shift 2
+      ;;
+    --file=*)
+      EXPLICIT_FILES+=("${1#--file=}")
+      shift
+      ;;
     --clean)
       CLEAN=true
       shift
@@ -118,12 +138,22 @@ while [[ $# -gt 0 ]]; do
       exit 0
       ;;
     *)
-      echo "Error: unrecognized argument: $1" >&2
-      print_help >&2
-      exit 1
+      if [[ ! "$1" =~ ^-- ]]; then
+        EXPLICIT_FILES+=("$1")
+      else
+        echo "Error: unrecognized argument: $1" >&2
+        print_help >&2
+        exit 1
+      fi
+      shift
       ;;
   esac
 done
+
+if [[ "$CLEAN" == true && "$DELTA" == true ]]; then
+  echo "Error: --clean and --delta cannot be used together." >&2
+  exit 1
+fi
 
 # Resolve repository root
 if [[ -z "$REPO_ROOT" ]]; then
@@ -169,10 +199,6 @@ if [[ -n "$SRC_DIR" ]]; then
     echo "Error: specified source directory not found: $SRC_DIR" >&2
     exit 1
   fi
-elif [[ -d "$REPO_ROOT/src" ]]; then
-  SCAN_DIR="$REPO_ROOT/src"
-elif [[ -d "$REPO_ROOT/backend" ]]; then
-  SCAN_DIR="$REPO_ROOT/backend"
 else
   SCAN_DIR="$REPO_ROOT"
 fi
@@ -185,6 +211,163 @@ else
   DOCS_SCAN_DIR="$REPO_ROOT"
 fi
 
+SYMBOLS_JSONL="$CACHE_DIR/symbols.jsonl"
+EDGES_JSONL="$CACHE_DIR/edges.jsonl"
+DOCS_JSONL="$CACHE_DIR/docs.jsonl"
+RULES_JSONL="$CACHE_DIR/rules.jsonl"
+PITFALLS_JSONL="$CACHE_DIR/pitfalls.jsonl"
+
+# Delta indexing mode
+if [[ "$DELTA" == true ]]; then
+  if [[ ! -f "$DB_PATH" ]]; then
+    echo "Error: database file does not exist at $DB_PATH for delta indexing." >&2
+    exit 1
+  fi
+
+  DIRTY_TS=()
+  DIRTY_DOCS=()
+
+  if [[ ${#EXPLICIT_FILES[@]} -gt 0 ]]; then
+    for raw_f in "${EXPLICIT_FILES[@]}"; do
+      target_f=""
+      if [[ -f "$raw_f" ]]; then
+        target_f="$raw_f"
+      elif [[ -f "$REPO_ROOT/$raw_f" ]]; then
+        target_f="$REPO_ROOT/$raw_f"
+      fi
+
+      if [[ -z "$target_f" ]]; then
+        echo "Warning: target file not found, skipping: $raw_f" >&2
+        continue
+      fi
+
+      target_abs="$(cd "$(dirname "$target_f")" && pwd)/$(basename "$target_f")"
+      if [[ "$target_abs" == "$REPO_ROOT/"* ]]; then
+        rel_f="${target_abs#$REPO_ROOT/}"
+      else
+        rel_f="$raw_f"
+      fi
+
+      if [[ "$target_abs" =~ \.(ts|tsx)$ && ! "$target_abs" =~ \.d\.ts$ ]]; then
+        DIRTY_TS+=("$rel_f")
+      elif [[ "$target_abs" =~ \.md$ ]]; then
+        DIRTY_DOCS+=("$rel_f")
+      fi
+    done
+  else
+    # Discover dirty files modified newer than DB_PATH with standard excludes
+    while IFS= read -r f; do
+      if [[ -n "$f" ]]; then
+        rel_f="${f#$REPO_ROOT/}"
+        rel_f="${rel_f#./}"
+        DIRTY_TS+=("$rel_f")
+      fi
+    done < <(find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
+      ! -name "*.d.ts" \
+      ! -path "*/node_modules/*" \
+      ! -path "*/dist/*" \
+      ! -path "*/build/*" \
+      ! -path "*/archive/*" \
+      ! -path "*/.git/*" \
+      ! -path "*/.contexture/*" \
+      ! -path "*/.work/*" \
+      ! -path "*/.idea/*" \
+      ! -path "*/tests/*" \
+      ! -path "*/test/*" \
+      ! -path "*/__tests__/*" \
+      ! -path "*/.worktrees/*" \
+      ! -name "*.test.ts" \
+      ! -name "*.test.tsx" \
+      ! -name "*.spec.ts" \
+      ! -name "*.spec.tsx" \
+      -newer "$DB_PATH" 2>/dev/null || true)
+
+    while IFS= read -r f; do
+      if [[ -n "$f" ]]; then
+        rel_f="${f#$REPO_ROOT/}"
+        rel_f="${rel_f#./}"
+        DIRTY_DOCS+=("$rel_f")
+      fi
+    done < <(find "$DOCS_SCAN_DIR" -type f -name "*.md" \
+      ! -path "*/node_modules/*" \
+      ! -path "*/dist/*" \
+      ! -path "*/build/*" \
+      ! -path "*/archive/*" \
+      ! -path "*/.git/*" \
+      ! -path "*/.contexture/*" \
+      ! -path "*/.work/*" \
+      ! -path "*/.idea/*" \
+      ! -path "*/tests/*" \
+      ! -path "*/test/*" \
+      ! -path "*/__tests__/*" \
+      ! -path "*/.worktrees/*" \
+      -newer "$DB_PATH" 2>/dev/null || true)
+  fi
+
+  DIRTY_COUNT=$(( ${#DIRTY_TS[@]} + ${#DIRTY_DOCS[@]} ))
+  if [[ "$DIRTY_COUNT" -eq 0 ]]; then
+    exit 0
+  fi
+
+  # Extract dirty TypeScript files
+  if [[ ${#DIRTY_TS[@]} -gt 0 ]]; then
+    TS_DELTA_LIST="$CACHE_DIR/ts_delta_files.txt"
+    printf '%s\n' "${DIRTY_TS[@]/#/$REPO_ROOT/}" > "$TS_DELTA_LIST"
+    "$EXTRACT_TS" \
+      --project-root "$REPO_ROOT" \
+      --out-symbols "$SYMBOLS_JSONL" \
+      --out-edges "$EDGES_JSONL" \
+      "-" < "$TS_DELTA_LIST"
+  else
+    : > "$SYMBOLS_JSONL"
+    : > "$EDGES_JSONL"
+  fi
+
+  # Extract dirty Markdown documentation files
+  if [[ ${#DIRTY_DOCS[@]} -gt 0 ]]; then
+    DOCS_DELTA_LIST="$CACHE_DIR/docs_delta_files.txt"
+    printf '%s\n' "${DIRTY_DOCS[@]/#/$REPO_ROOT/}" > "$DOCS_DELTA_LIST"
+    "$EXTRACT_DOCS" \
+      --project-root "$REPO_ROOT" \
+      --out-docs "$DOCS_JSONL" \
+      --out-rules "$RULES_JSONL" \
+      --out-pitfalls "$PITFALLS_JSONL" \
+      "-" < "$DOCS_DELTA_LIST"
+  else
+    : > "$DOCS_JSONL"
+    : > "$RULES_JSONL"
+    : > "$PITFALLS_JSONL"
+  fi
+
+  # Ingest delta into SQLite database
+  LOADER_FLAGS=(
+    --db "$DB_PATH"
+    --symbols "$SYMBOLS_JSONL"
+    --edges "$EDGES_JSONL"
+    --docs "$DOCS_JSONL"
+    --rules "$RULES_JSONL"
+    --pitfalls "$PITFALLS_JSONL"
+    --project-root "$REPO_ROOT"
+    --schema "$SCHEMA_SQL"
+    --delta
+  )
+  if [[ ${#DIRTY_TS[@]} -gt 0 ]]; then
+    for f in "${DIRTY_TS[@]}"; do
+      LOADER_FLAGS+=(--file "$f")
+    done
+  fi
+  if [[ ${#DIRTY_DOCS[@]} -gt 0 ]]; then
+    for f in "${DIRTY_DOCS[@]}"; do
+      LOADER_FLAGS+=(--file "$f")
+    done
+  fi
+
+  "$INDEX_GRAPH" "${LOADER_FLAGS[@]}"
+  touch "$DB_PATH"
+  exit 0
+fi
+
+# Full indexing mode
 # Step 1: Discover TypeScript source files
 TS_FILE_LIST="$CACHE_DIR/ts_files.txt"
 find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
@@ -199,6 +382,8 @@ find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
   ! -path "*/.idea/*" \
   ! -path "*/tests/*" \
   ! -path "*/test/*" \
+  ! -path "*/__tests__/*" \
+  ! -path "*/.worktrees/*" \
   ! -name "*.test.ts" \
   ! -name "*.test.tsx" \
   ! -name "*.spec.ts" \
@@ -208,9 +393,6 @@ find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
 TS_COUNT="$(wc -l < "$TS_FILE_LIST" | tr -d ' ')"
 
 # Step 2: Extract AST symbols and call graph edges
-SYMBOLS_JSONL="$CACHE_DIR/symbols.jsonl"
-EDGES_JSONL="$CACHE_DIR/edges.jsonl"
-
 if [[ "$TS_COUNT" -gt 0 ]]; then
   "$EXTRACT_TS" \
     --project-root "$REPO_ROOT" \
@@ -223,10 +405,6 @@ else
 fi
 
 # Step 3: Extract documentation units, contract rules, and pitfalls
-DOCS_JSONL="$CACHE_DIR/docs.jsonl"
-RULES_JSONL="$CACHE_DIR/rules.jsonl"
-PITFALLS_JSONL="$CACHE_DIR/pitfalls.jsonl"
-
 "$EXTRACT_DOCS" \
   --project-root "$REPO_ROOT" \
   --out-docs "$DOCS_JSONL" \
@@ -251,3 +429,4 @@ if [[ "$CLEAN" == true ]]; then
 fi
 
 "$INDEX_GRAPH" "${LOADER_FLAGS[@]}"
+touch "$DB_PATH"

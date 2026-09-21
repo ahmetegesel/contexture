@@ -140,6 +140,7 @@ The SQLite database uses normalized relational tables, secondary lookup indexes,
 PRAGMA foreign_keys = ON;
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
+PRAGMA busy_timeout = 5000;
 
 /* ========================================================================= */
 /* 1. Relational Tables                                                      */
@@ -214,6 +215,15 @@ CREATE TABLE IF NOT EXISTS pitfalls (
 CREATE INDEX IF NOT EXISTS idx_pitfalls_doc_id ON pitfalls(doc_id);
 CREATE INDEX IF NOT EXISTS idx_pitfalls_severity ON pitfalls(severity);
 
+CREATE TABLE IF NOT EXISTS indexed_files (
+    file TEXT PRIMARY KEY,
+    mtime REAL NOT NULL,
+    hash TEXT NOT NULL,
+    indexed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_indexed_files_mtime ON indexed_files(mtime);
+
 /* ========================================================================= */
 /* 2. Full-Text Search (FTS5) Virtual Tables                                 */
 /* ========================================================================= */
@@ -284,7 +294,41 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_pitfalls_ad AFTER DELETE ON pitfalls BEGIN
     DELETE FROM fts_docs WHERE entity_id = old.id;
 END;
+
+/* ========================================================================= */
+/* 4. Cascading Edge Deletion Triggers                                      */
+/* ========================================================================= */
+
+CREATE TRIGGER IF NOT EXISTS trg_symbols_del_edges AFTER DELETE ON symbols BEGIN
+    DELETE FROM edges WHERE source = old.id OR target = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_docs_del_edges AFTER DELETE ON docs BEGIN
+    DELETE FROM edges WHERE source = old.id OR target = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_rules_del_edges AFTER DELETE ON rules BEGIN
+    DELETE FROM edges WHERE source = old.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_pitfalls_del_edges AFTER DELETE ON pitfalls BEGIN
+    DELETE FROM edges WHERE source = old.id;
+END;
 ```
+
+### 3.1 File Tracking Schema (indexed_files)
+The `indexed_files` table tracks modification times and cryptographic hashes of indexed source and documentation files:
+* `file` (string, primary key): Repository-relative file path (example: `backend/core/cascadeCore.ts`).
+* `mtime` (real, required): File modification timestamp in seconds since unix epoch with fractional second precision.
+* `hash` (string, required): SHA-256 hexadecimal content hash for content drift verification.
+* `indexed_at` (datetime, required): Timestamp when the file was processed into the database.
+
+### 3.2 Cascading Edge Deletion Triggers
+When files are updated incrementally, old symbols, docs, rules, and pitfalls are purged. Because SQLite foreign key constraints only apply to parent-child table relationships (`rules.doc_id` and `pitfalls.doc_id` referencing `docs.id`), graph edges (`edges` table) store arbitrary polymorphic entity identifiers. To guarantee zero orphan edges during delta updates:
+* `trg_symbols_del_edges`: Purges edges where `source` or `target` matches deleted symbol id.
+* `trg_docs_del_edges`: Purges edges where `source` or `target` matches deleted doc id.
+* `trg_rules_del_edges`: Purges edges where `source` matches deleted rule id.
+* `trg_pitfalls_del_edges`: Purges edges where `source` matches deleted pitfall id.
 
 ---
 
@@ -493,3 +537,66 @@ LEFT JOIN docs d ON e.source = d.id AND e.kind = 'COVERS'
 WHERE e.target = :symbol_id
   AND e.kind IN ('GOVERNS', 'WARNS', 'COVERS');
 ```
+
+---
+
+## 7. Incremental Delta Indexing and Loader Mechanics
+
+Full repository rebuilds provide a reliable clean baseline, but re-parsing every source and documentation file on every minor change introduces unnecessary latency. The delta indexing pipeline provides sub-second incremental updates for modified files.
+
+### 7.1 Pipeline Flow in Delta Mode
+1. Change Detection:
+   * Explicit file targets: Provided via `--file <path>` arguments or positional file arguments.
+   * Timestamp comparison: When explicit targets are omitted, `ast-doc-index --delta` compares source files against the modification timestamp of `graph.db` using system `find -newer`. Standard non-source directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.worktrees`, tests) are excluded.
+   * Early exit: If zero files are dirty, the driver exits immediately with code 0 in under 10ms.
+2. Targeted Extraction:
+   * Dirty TypeScript source files are piped directly to `extract-ts.sh` via standard input, avoiding whole-tree discovery.
+   * Dirty Markdown documentation files are piped directly to `extract-docs.sh`.
+   * Unchanged files are omitted from extractor execution, minimizing AST parser overhead.
+3. Ingestion and Atomic Transaction:
+   * The loader begins an exclusive database transaction.
+   * Previous entities belonging to modified files are removed: `DELETE FROM symbols WHERE file = ?` and `DELETE FROM docs WHERE id = ?`.
+   * Cascading triggers automatically purge corresponding edges and FTS5 index entries.
+   * Fresh symbols, docs, rules, pitfalls, and syntactic edges are inserted.
+4. Edge Re-linking:
+   * In delta mode, incoming rules and pitfalls are re-linked against existing code symbols in the database.
+   * Incoming code symbols are checked against standing contract rules and pitfalls, establishing `GOVERNS` and `WARNS` edges without requiring a full documentation re-parse.
+   * `COVERS` edges are recomputed for modified source files and documents.
+5. Tracking Table Update:
+   * `indexed_files` records for modified files are upserted with fresh `mtime` and SHA-256 hash values.
+   * Deleted files are removed from `indexed_files`.
+   * The database file modification time is touched upon completion.
+
+---
+
+## 8. Zero-Daemon Just-In-Time (JIT) Freshness Lifecycle
+
+To eliminate the operational complexity, memory footprint, and potential flakiness of persistent file watcher daemons, `ast-doc-graph` employs a lazy, zero-daemon Just-In-Time (JIT) freshness strategy inside `graph-query`.
+
+### 8.1 Pre-Query Freshness Check
+Every invocation of `graph-query` executes `check_and_sync_freshness` before evaluating the requested query:
+1. Repository Root Resolution: Discovers repository root by inspecting database directory ancestry (`.git`, `package.json`, `backend`, `docs`, `src`) or git toplevel.
+2. Fast Filesystem Scan: Executes system `find` comparing `.ts`, `.tsx`, and `.md` files against `graph.db` using `-newer`. The scan filters out standard build and artifact directories. On modern filesystems, this check completes in 1 to 5ms.
+
+### 8.2 Lifecycle Threshold Bands
+The query CLI applies three threshold behaviors based on the count of dirty files discovered:
+
+| Dirty File Count | Action | Latency Profile | Description |
+|---|---|---|---|
+| `0` dirty files | Direct Query Execution | Sub-millisecond (0ms overhead) | Database is fully fresh. The CLI directly executes prepared SQLite statements. |
+| `1` to `2` dirty files | Automatic Inline Micro-Sync | ~300ms total | The CLI invokes `ast-doc-index --delta` inline for dirty files before running query. Fresh symbols and rules are returned immediately. |
+| `3` or more dirty files | Non-Blocking Advisory Notice | Sub-millisecond (0ms overhead) | Large refactor or branch switch detected. The CLI prints a single advisory notice to stderr and executes query immediately without blocking. |
+
+Advisory notice format on stderr:
+```text
+[ast-doc-graph: N files modified since last index. Run ast-doc-index --delta to refresh]
+```
+
+### 8.3 Bypass Flag (--no-sync)
+In latency-critical loops, batch processing, or CI scripts where freshness checks are redundant, passing `--no-sync` instructs `graph-query` to bypass the `find -newer` check entirely and proceed immediately to query execution.
+
+### 8.4 Concurrency and Locking Invariants
+Because multiple agent subprocesses or developers may run queries concurrently while an inline delta sync writes to SQLite:
+* Write-Ahead Logging (`PRAGMA journal_mode = WAL;`): Permits concurrent readers while a single writer updates the database.
+* Busy Timeout Configuration (`PRAGMA busy_timeout = 5000;`): Enforced on all SQLite connections (via `-cmd ".timeout 5000"` in `graph-query` and schema pragmas). Readers and writers wait up to 5000ms for busy table locks to release, preventing `SQLITE_BUSY` contention failures.
+

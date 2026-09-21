@@ -12,6 +12,11 @@ if [ -z "$SQLITE_BIN" ]; then
   exit 1
 fi
 
+# PRAGMA busy_timeout = 5000 configured on all queries via SQLite .timeout 5000
+sqlite_exec() {
+  "$SQLITE_BIN" -cmd ".timeout 5000" "$@"
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SEP=$'\x1f'
 
@@ -23,13 +28,13 @@ ast-doc-graph: graph-query retrieval CLI
 Zero-dependency SQLite search and graph navigation
 
 Usage:
-  graph-query symbol <name> [--depth N] [--db <path>]
-  graph-query search "<query>" [--db <path>]
-  graph-query callers <name> [--depth N] [--db <path>]
-  graph-query callees <name> [--depth N] [--db <path>]
-  graph-query rules <name> [--db <path>]
-  graph-query pitfalls <name> [--db <path>]
-  graph-query stats [--db <path>]
+  graph-query symbol <name> [--depth N] [--db <path>] [--no-sync]
+  graph-query search "<query>" [--db <path>] [--no-sync]
+  graph-query callers <name> [--depth N] [--db <path>] [--no-sync]
+  graph-query callees <name> [--depth N] [--db <path>] [--no-sync]
+  graph-query rules <name> [--db <path>] [--no-sync]
+  graph-query pitfalls <name> [--db <path>] [--no-sync]
+  graph-query stats [--db <path>] [--no-sync]
   graph-query help
 
 Subcommands:
@@ -45,6 +50,7 @@ Subcommands:
 Options:
   --db <path>    Path to SQLite database (default: $GRAPH_DB or ./graph.db)
   --depth N      Traversal depth limit for recursive queries (default: 5)
+  --no-sync      Bypass JIT freshness check and delta sync
 EOF
 }
 
@@ -52,6 +58,7 @@ EOF
 
 DB_PATH="${GRAPH_DB:-}"
 DEPTH="5"
+NO_SYNC=false
 COMMAND=""
 TARGET=""
 
@@ -87,6 +94,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --depth=*)
       DEPTH="${1#--depth=}"
+      shift
+      ;;
+    --no-sync)
+      NO_SYNC=true
       shift
       ;;
     *)
@@ -134,6 +145,81 @@ sql_escape() {
   printf '%s' "$1" | sed "s/'/''/g"
 }
 
+# --- JIT FRESHNESS MICRO-SYNC ---
+
+check_and_sync_freshness() {
+  if [[ "$NO_SYNC" == true ]]; then
+    return 0
+  fi
+
+  # Resolve repository root
+  local repo_root=""
+  if [[ -f "$DB_PATH" ]]; then
+    local db_dir
+    db_dir="$(cd "$(dirname "$DB_PATH")" && pwd)"
+    if [[ -d "$db_dir/.git" || -f "$db_dir/package.json" || -d "$db_dir/backend" || -d "$db_dir/docs" || -d "$db_dir/src" ]]; then
+      repo_root="$db_dir"
+    fi
+  fi
+  if [[ -z "$repo_root" ]] && git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1; then
+    repo_root="$(git -C "$PWD" rev-parse --show-toplevel)"
+  fi
+  if [[ -z "$repo_root" ]]; then
+    repo_root="$PWD"
+  fi
+
+  # Resolve index driver
+  local index_driver=""
+  if [[ -x "$SCRIPT_DIR/ast-doc-index" ]]; then
+    index_driver="$SCRIPT_DIR/ast-doc-index"
+  elif [[ -x "$SCRIPT_DIR/../bin/ast-doc-index" ]]; then
+    index_driver="$SCRIPT_DIR/../bin/ast-doc-index"
+  elif [[ -x "$SCRIPT_DIR/../setups/ast-doc-graph/bin/ast-doc-index" ]]; then
+    index_driver="$SCRIPT_DIR/../setups/ast-doc-graph/bin/ast-doc-index"
+  elif [[ -x "$SCRIPT_DIR/../examples/setups/ast-doc-graph/bin/ast-doc-index" ]]; then
+    index_driver="$SCRIPT_DIR/../examples/setups/ast-doc-graph/bin/ast-doc-index"
+  elif command -v ast-doc-index >/dev/null 2>&1; then
+    index_driver="$(command -v ast-doc-index)"
+  fi
+
+  # Discover files newer than DB_PATH with standard excludes
+  local dirty_files=()
+  while IFS= read -r f; do
+    if [[ -n "$f" ]]; then
+      dirty_files+=("$f")
+    fi
+  done < <(find "$repo_root" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.md" \) \
+    ! -name "*.d.ts" \
+    ! -path "*/node_modules/*" \
+    ! -path "*/dist/*" \
+    ! -path "*/build/*" \
+    ! -path "*/archive/*" \
+    ! -path "*/.git/*" \
+    ! -path "*/.contexture/*" \
+    ! -path "*/.work/*" \
+    ! -path "*/.idea/*" \
+    ! -path "*/tests/*" \
+    ! -path "*/test/*" \
+    ! -path "*/__tests__/*" \
+    ! -path "*/.worktrees/*" \
+    ! -name "*.test.ts" \
+    ! -name "*.test.tsx" \
+    ! -name "*.spec.ts" \
+    ! -name "*.spec.tsx" \
+    -newer "$DB_PATH" 2>/dev/null || true)
+
+  local dirty_count=${#dirty_files[@]}
+  if [[ "$dirty_count" -eq 0 ]]; then
+    return 0
+  elif [[ "$dirty_count" -le 2 ]]; then
+    if [[ -n "$index_driver" && -x "$index_driver" ]]; then
+      "$index_driver" --repo-root "$repo_root" --db "$DB_PATH" --delta "${dirty_files[@]}" >/dev/null 2>&1 || true
+    fi
+  else
+    echo "[ast-doc-graph: $dirty_count files modified since last index. Run ast-doc-index --delta to refresh]" >&2
+  fi
+}
+
 # --- SUBCOMMAND IMPLEMENTATIONS ---
 
 # 1. symbol <target>
@@ -150,7 +236,7 @@ cmd_symbol() {
 
   # Lookup symbol record
   local sym_row
-  sym_row=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT
       id,
       name,
@@ -204,7 +290,7 @@ cmd_symbol() {
   # Callers
   echo "@callers (depth: $depth)"
   local callers_output
-  callers_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  callers_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     WITH RECURSIVE upstream_callers(id, qname, depth, path) AS (
       SELECT
         s.id,
@@ -253,7 +339,7 @@ cmd_symbol() {
   # Callees
   echo "@callees (depth: $depth)"
   local callees_output
-  callees_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  callees_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     WITH RECURSIVE downstream_callees(id, qname, depth, path) AS (
       SELECT
         s.id,
@@ -302,7 +388,7 @@ cmd_symbol() {
   # Governing Docs
   echo "@governing_docs"
   local docs_output
-  docs_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  docs_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT DISTINCT
       d.id,
       d.kind,
@@ -328,7 +414,7 @@ cmd_symbol() {
   # Governing Contract Rules
   echo "@governing_rules"
   local rules_output
-  rules_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  rules_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT DISTINCT
       r.id,
       r.doc_id,
@@ -365,7 +451,7 @@ cmd_symbol() {
   # Associated Pitfalls
   echo "@associated_pitfalls"
   local pitfalls_output
-  pitfalls_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  pitfalls_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT DISTINCT
       p.id,
       p.doc_id,
@@ -405,7 +491,7 @@ cmd_callers() {
   target_esc=$(sql_escape "$target")
 
   local sym_row
-  sym_row=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT id, qname FROM symbols
     WHERE qname = '${target_esc}' OR id = '${target_esc}' OR name = '${target_esc}'
     LIMIT 1;
@@ -422,7 +508,7 @@ cmd_callers() {
 
   echo "@callers $s_qname (depth: $depth)"
   local callers_output
-  callers_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  callers_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     WITH RECURSIVE upstream_callers(id, qname, depth, path) AS (
       SELECT
         '${s_id_esc}',
@@ -480,7 +566,7 @@ cmd_callees() {
   target_esc=$(sql_escape "$target")
 
   local sym_row
-  sym_row=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT id, qname FROM symbols
     WHERE qname = '${target_esc}' OR id = '${target_esc}' OR name = '${target_esc}'
     LIMIT 1;
@@ -497,7 +583,7 @@ cmd_callees() {
 
   echo "@callees $s_qname (depth: $depth)"
   local callees_output
-  callees_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  callees_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     WITH RECURSIVE downstream_callees(id, qname, depth, path) AS (
       SELECT
         '${s_id_esc}',
@@ -554,7 +640,7 @@ cmd_rules() {
   target_esc=$(sql_escape "$target")
 
   local sym_row
-  sym_row=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT id, qname FROM symbols
     WHERE qname = '${target_esc}' OR id = '${target_esc}' OR name = '${target_esc}'
     LIMIT 1;
@@ -571,7 +657,7 @@ cmd_rules() {
 
   echo "@rules $s_qname"
   local rules_output
-  rules_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  rules_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT DISTINCT
       r.id,
       r.doc_id,
@@ -616,7 +702,7 @@ cmd_pitfalls() {
   target_esc=$(sql_escape "$target")
 
   local sym_row
-  sym_row=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT id, qname FROM symbols
     WHERE qname = '${target_esc}' OR id = '${target_esc}' OR name = '${target_esc}'
     LIMIT 1;
@@ -633,7 +719,7 @@ cmd_pitfalls() {
 
   echo "@pitfalls $s_qname"
   local pitfalls_output
-  pitfalls_output=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  pitfalls_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT DISTINCT
       p.id,
       p.doc_id,
@@ -691,7 +777,7 @@ cmd_search() {
 
   # Query fts_docs
   local docs_matches
-  docs_matches=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  docs_matches=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT
       doc_id,
       entity_id,
@@ -709,7 +795,7 @@ cmd_search() {
   if [[ -z "$docs_matches" ]]; then
     local phrase_query
     phrase_query="\"$(printf '%s' "$query" | sed 's/"/""/g')\""
-    docs_matches=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+    docs_matches=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
       SELECT
         doc_id,
         entity_id,
@@ -735,7 +821,7 @@ cmd_search() {
 
       # Find linked symbols
       local linked_symbols
-      linked_symbols=$("$SQLITE_BIN" "$DB_PATH" "
+      linked_symbols=$(sqlite_exec "$DB_PATH" "
         SELECT group_concat(coalesce(s.qname, s.name, e.target), ', ')
         FROM edges e
         LEFT JOIN symbols s ON e.target = s.id
@@ -768,7 +854,7 @@ cmd_search() {
   if [[ ${#sym_terms[@]} -gt 0 ]]; then
     local sym_query_and
     sym_query_and=$(IFS=" AND "; echo "${sym_terms[*]}")
-    sym_matches=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+    sym_matches=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
       SELECT
         s.id,
         s.name,
@@ -788,7 +874,7 @@ cmd_search() {
     if [[ -z "$sym_matches" && ${#sym_terms[@]} -gt 1 ]]; then
       local sym_query_or
       sym_query_or=$(IFS=" OR "; echo "${sym_terms[*]}")
-      sym_matches=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+      sym_matches=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
         SELECT
           s.id,
           s.name,
@@ -818,7 +904,7 @@ cmd_search() {
 
       # Find governing rules or warnings
       local gov_rules
-      gov_rules=$("$SQLITE_BIN" "$DB_PATH" "
+      gov_rules=$(sqlite_exec "$DB_PATH" "
         SELECT group_concat(e.source, ', ')
         FROM edges e
         WHERE e.target IN ('${y_id_esc}', '${y_qname_esc}') AND e.kind IN ('GOVERNS', 'WARNS');
@@ -838,11 +924,11 @@ cmd_search() {
 # 7. stats
 cmd_stats() {
   local num_symbols num_edges num_docs num_rules num_pitfalls
-  num_symbols=$("$SQLITE_BIN" "$DB_PATH" "SELECT count(*) FROM symbols;")
-  num_edges=$("$SQLITE_BIN" "$DB_PATH" "SELECT count(*) FROM edges;")
-  num_docs=$("$SQLITE_BIN" "$DB_PATH" "SELECT count(*) FROM docs;")
-  num_rules=$("$SQLITE_BIN" "$DB_PATH" "SELECT count(*) FROM rules;")
-  num_pitfalls=$("$SQLITE_BIN" "$DB_PATH" "SELECT count(*) FROM pitfalls;")
+  num_symbols=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM symbols;")
+  num_edges=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM edges;")
+  num_docs=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM docs;")
+  num_rules=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM rules;")
+  num_pitfalls=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM pitfalls;")
 
   echo "@graph_stats"
   echo "  DATABASE: $DB_PATH"
@@ -850,7 +936,7 @@ cmd_stats() {
   echo "  EDGES: $num_edges"
 
   local edge_breakdown
-  edge_breakdown=$("$SQLITE_BIN" -separator "$SEP" "$DB_PATH" "
+  edge_breakdown=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
     SELECT kind, count(*) FROM edges GROUP BY kind ORDER BY kind ASC;
   ")
   if [[ -n "$edge_breakdown" ]]; then
@@ -864,6 +950,9 @@ cmd_stats() {
   echo "  RULES: $num_rules"
   echo "  PITFALLS: $num_pitfalls"
 }
+
+# Check database freshness and perform JIT micro-sync if necessary
+check_and_sync_freshness
 
 # --- DISPATCH SUBCOMMAND ---
 

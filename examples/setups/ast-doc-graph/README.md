@@ -21,8 +21,8 @@ instant, token-efficient context directly to agents and developers.
 
 | piece | what it is | lands as |
 |---|---|---|
-| `bin/ast-doc-index` | the unified pipeline driver: discovers sources and docs, runs extractors, compiles SQLite database | copy or run in place |
-| `bin/graph-query` | the retrieval CLI: symbol definitions, callers, callees, dual FTS5 search, rules, pitfalls, stats | copy to `.contexture/scripts/` or `bin/` |
+| `bin/ast-doc-index` | the unified pipeline driver: multi-directory discovery, full and --delta incremental indexing, SQLite compilation | copy or run in place |
+| `bin/graph-query` | the retrieval CLI: zero-daemon JIT micro-sync, symbols, callers, callees, dual FTS5 search, rules, pitfalls, stats | copy to `.contexture/scripts/` or `bin/` |
 | `extractors/ts/extract-ts.sh` | the TypeScript AST extractor launcher: dynamically locates `tsx` or `node`, executes parser | copy |
 | `extractors/ts/extract-ts.ts` | the TypeScript Compiler API parser: extracts symbols, object methods, call expressions, definitions | copy |
 | `extractors/docs/extract-docs.sh` | the docs extractor launcher: locates runner, executes markdown corpus parser | copy |
@@ -36,13 +36,14 @@ instant, token-efficient context directly to agents and developers.
 
 ## Architecture and invariants
 
-The architecture is built around five non-negotiable invariants:
+The architecture is built around six non-negotiable invariants:
 
 * Zero dependency in Contexture core: Setup files live strictly under `examples/setups/ast-doc-graph/`. No dependencies or node modules are installed in the Contexture root repository.
 * Decoupled intermediate streams: Extractors emit standard line-delimited JSON (JSONL). The ingestion loader consumes intermediate JSONL streams without knowing or caring what language extractor produced them.
 * Instant retrieval: Retrieval queries execute directly against system `/usr/bin/sqlite3` using prepared queries and Common Table Expressions (CTEs), eliminating Node.js or Python process startup latency.
 * Cycle safety: Recursive call graph traversals enforce depth boundaries and string path tracking (`INSTR(d.path, e.target) > 0`) to guarantee termination across recursive or mutually recursive functions.
 * Dual full-text search: Documentation rules and summaries are indexed with the `unicode61` tokenizer for natural language matching, while code symbols and signatures are indexed with the `trigram` tokenizer for substring and token matching.
+* Zero-daemon Just-In-Time (JIT) freshness: Automatic lazy micro-sync detects edited files in 1 to 5ms via system `find -newer`, triggering inline delta updates for 1 to 2 dirty files in ~300ms without background watcher daemons or memory overhead.
 
 ```
 +---------------------------+     +----------------------------+
@@ -90,6 +91,10 @@ edges:
 1. `GOVERNS`: Established between a contract rule and a code symbol when the rule evidence references the symbol's qualified name (`qname`), or bare name disambiguated by the parent document's `sources` globs.
 2. `WARNS`: Established between a documented pitfall and a code symbol when the pitfall evidence references the symbol, alerting agents to known failure modes during edits.
 3. `COVERS`: Established between a documentation unit and both the source files and the code symbols matching the unit's `sources` globs.
+
+### Concurrency and Transactional Integrity
+
+The SQLite database operates in Write-Ahead Logging (WAL) mode (`PRAGMA journal_mode = WAL;`) and enforces a 5000ms busy timeout (`PRAGMA busy_timeout = 5000;`) on all connections. This permits concurrent reader queries while inline delta syncs write to the database, preventing `SQLITE_BUSY` locking errors across parallel agent subprocesses.
 
 ## Assess
 
@@ -154,6 +159,22 @@ Execute the unified driver to index the codebase in one pass:
 The driver discovers TypeScript files and documentation units, runs the extractors,
 and compiles `graph.db` in the repository root.
 
+#### Multi-Directory Repository Root Discovery
+When `--src-dir` is omitted, `ast-doc-index` automatically scans the entire repository root, discovering TypeScript source code across `components/`, `pages/`, `services/`, `backend/`, and any other source directories in the project. The scanner enforces standard exclusion directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.work`, `.idea`, `tests`, `__tests__`, `.worktrees`) so generated bundles and test fixtures never contaminate the graph.
+
+#### Incremental Delta Indexing (--delta)
+To update the database after code or documentation edits without running a full rebuild:
+
+```sh
+# Automatically detect and re-index only modified files
+<repo-root>/.contexture/scripts/ast-doc-index --repo-root . --delta
+
+# Explicitly target specific modified files
+<repo-root>/.contexture/scripts/ast-doc-index --repo-root . --delta backend/core/cascadeCore.ts docs/protocol.md
+```
+
+Delta mode detects modified files by comparing file mtimes against `graph.db`, purges previous records for edited files via cascading triggers, extracts fresh symbols and rules, re-links governance edges, and updates `indexed_files`.
+
 ## Verify
 
 Verify the generated database using `graph-query`:
@@ -177,6 +198,16 @@ Expected output: `stats` displays non-zero counts for symbols, edges, docs, and 
 ranks matching doc rules and symbols with highlighted match snippets.
 
 ## Daily use
+
+### Zero-Daemon Just-In-Time (JIT) Workflow
+
+`graph-query` operates without background daemons, persistent file watchers, or background memory overhead. Freshness is verified automatically at query invocation:
+
+* Sub-millisecond clean baseline: If no files have been modified since the last index (`0` dirty files), `graph-query` directly evaluates prepared SQLite queries with 0ms sync overhead.
+* Automatic inline micro-sync: If `1` or `2` files have been modified, `graph-query` triggers `ast-doc-index --delta` inline before running the query. The updated symbols and rules are returned in ~300ms without manual intervention.
+* Non-blocking advisory notice: If `3` or more files are modified (for instance after pulling a branch or executing a large refactor), `graph-query` prints an advisory notice to stderr (`[ast-doc-graph: N files modified since last index. Run ast-doc-index --delta to refresh]`) and immediately executes the query against the current database without blocking.
+* Fast bypass flag (`--no-sync`): Pass `--no-sync` in tight loops or automated test pipelines to skip the filesystem freshness scan entirely.
+* Concurrency protection: All queries execute with `PRAGMA busy_timeout = 5000` via `sqlite_exec`, ensuring multiple concurrent agents and editors can query the database safely even while an inline delta sync writes to SQLite WAL.
 
 `graph-query` provides seven primary subcommands designed for compact agent inspection:
 
@@ -325,7 +356,7 @@ graph-query stats
 * Static call graph approximation: The AST extractor identifies direct invocations, method calls on identifiers, and property access calls. Dynamic calls (`obj[fnName]()`), indirect callback dispatches, and heavily polymorphic reflection are not statically resolvable.
 * TypeScript Compiler API resolution: The extractor dynamically searches for `typescript` in target project `node_modules` or parent directories. If `typescript` is absent, the launcher attempts execution via Node 22+ with `--experimental-strip-types`.
 * Documentation grammar compliance: The docs extractor parses documents adhering to `.contexture/templates/doc.md`. Documents lacking typed headers (`@doc <kind> <id>`) are skipped during rule extraction.
-* Rebuild lifecycle: The setup currently operates as a full-rebuild batch indexer. Incremental single-file delta indexing is planned for future iterations.
+* Incremental delta lifecycle: Single-file and partial-batch delta updates are fully supported via ast-doc-index --delta and lazy JIT micro-sync in graph-query. Re-parsing is scoped strictly to modified files with automatic cascading edge purging and dynamic governance re-linking.
 * Zero em-dash and zero spaced hyphen compliance: In accordance with Contexture repository typography laws, all authored tools, scripts, and documentation strictly avoid em-dashes and spaced hyphens.
 
 ## Try it
