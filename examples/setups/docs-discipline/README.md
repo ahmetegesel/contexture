@@ -236,9 +236,16 @@ it walk below runs every one of these.
   substance is the reconcile step's judgment, never the gate's.
 - The check's satisfiers are generous by design: a touched unit reads fresh
   when any claimant unit doc, the repository's architecture doc, or a
-  workspace doc rides the delta; coverage counts only the listed extensions;
-  deleting a unit doc does not red the check. The gate stays scoped to the
-  change delta, never the corpus's truth.
+  workspace doc rides the delta; the latter two are a repo-wide blanket, so
+  the check reports it (`FRESH (BLANKET)` plus an `ARCH-COVERED` count of the
+  files no riding claimant covered) instead of folding it silently into a
+  clean verdict; coverage counts only the listed extensions; deleting a unit
+  doc does not red the check. The gate stays scoped to the change delta,
+  never the corpus's truth.
+- The excluded set is path-shaped: the generated and test families
+  (`.spec.`, `.Test`, `.min.`, `.generated.`) plus any path segment named
+  `spec` (including a top-level `spec/`), so a repository or directory
+  literally named `spec` is invisible to coverage and freshness.
 - The authoring and drift rhythms declare their work as `@task` entries in
   `backlog.md` (the base convention's task grammar) before drafting or
   reconciling; `sample/backlog.md` shows the shape the demo uses. A workspace
@@ -346,10 +353,10 @@ DOC: <scratch>/docs/demo-orders/order-flow.md
 
 ```text
 MUST docs/drift (universal, workspace)
-  Drift is reconciled from the change delta, never from memory: the status-prefixed git delta feeds docs-check, every affected doc is updated in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands.
+  Drift is reconciled from the change delta, never from memory: the status-prefixed git delta feeds docs-check with BOTH halves in one stream (the repository's code delta and the workspace's own docs/<repo>/ delta); every affected doc is updated in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands.
   evidence: .contexture/scripts/docs-check.awk
-  anti: Shipping a code change and deferring its doc update to a later commit
-  good: The same-change doc update, verified by docs-gate before close
+  anti: Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds docs-check the code delta alone, which cannot exit 0 by construction
+  good: Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, docs-gate already aggregates both halves and needs no pipeline
 ```
 
 ```sh
@@ -438,6 +445,36 @@ docs-check: FAILED: 1 code file(s) are uncovered by any documentation.
 ...
 UNCOVERED: projects/demo-orders/src/tools/report.ts
 ```
+
+An architecture, overview, or workspace doc riding a change marks every file
+in the repo fresh wholesale. That is a blanket, not evidence: the check
+reports it instead of folding it into the clean verdict, and counts the files
+that no riding claimant covered.
+
+```sh
+printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/workspace/system-map.md\n' | .contexture/scripts/docs-check docs/*/*.md
+```
+
+```text
+--- FRESHNESS AUDIT ---
+FRESH (BLANKET): demo-orders > order-flow (counted fresh only because an architecture/overview/workspace doc was touched)
+ARCH-COVERED: 1 file(s) counted fresh ONLY because an architecture/overview/workspace doc was touched, not because their own claiming doc rode the change.
+  This is a blanket, not evidence. Verify those docs directly before reading the verdict as clean.
+CLEAN: all affected code files have corresponding doc updates.
+
+docs-check: CLEAN: all touched code files are covered and fresh.
+```
+
+**The two-sided delta.** A pushed range needs both halves in one stream, the
+repository's code delta and the workspace's own docs delta, records split so a
+rename's old path surfaces as a dead source:
+
+```sh
+{ git -C projects/<repo> diff --name-status --no-renames <base>..origin/<branch> | awk -F'\t' -v p=projects/<repo>/ '{ print $1 "\t" p $2 }'; git status --porcelain docs/<repo>/ | sed 's|^ *\([A-Z?]\)[A-Z? ] *|\1\t|'; } | .contexture/scripts/docs-check docs/<repo>/*.md
+```
+
+For an uncommitted working tree, `docs-gate` already aggregates both halves
+and needs no pipeline.
 
 The gate: clean over the same delta, then red on a planted syntax defect.
 
@@ -539,7 +576,7 @@ explanation; this one is the family's entry point.
 | `.contexture/scripts/docs-audit` | authored fresh from the docs-query precedent: the help forms (help, --help, -h) with the full explanation, the zero-argument refusal, and byte-faithful delegation to `docs-audit.awk` |
 | `.contexture/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines |
 | `.contexture/scripts/docs-query` | verbatim from the source CLI except the workspace root derivation (drawer-aware, `DOCS_WORKSPACE_ROOT` override), the usage block paths, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, a no-match note on an empty projection, and the help forms (help, --help, -h) with the no-argument help pointer |
-| `.contexture/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines; the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE` |
+| `.contexture/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines; the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict |
 | `.contexture/scripts/docs-check` | authored fresh from the docs-query precedent: the help forms (help, --help, -h) with the full explanation, the zero-argument refusal, and byte-faithful delegation to `docs-check.awk` |
 | `.contexture/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines |
 | `.contexture/scripts/docs-nudge` | authored fresh from the docs-query precedent: the help forms (help, --help, -h) with the full explanation, the zero-argument refusal, and byte-faithful delegation to `docs-nudge.awk` |

@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.48.1] - 2026-09-21
+
+### Fixed
+
+- The docs-discipline pack's drift gate closes three blind spots: the exclusion pattern's bare `spec` was unanchored and also swallowed `aspect`, `special`, and `specific` (now `[.]spec[.]`, `/spec/`, and `^spec/`); an architecture, overview, or workspace doc riding a change silently marked every file in the repo fresh (now reported as `FRESH (BLANKET)` plus an `ARCH-COVERED` count of the files no riding claimant covered); and the one-sided pipeline could never pass, because freshness registers only when a doc path appears in the same stdin stream. `@rule docs/drift` and the drift rhythm now require the two-sided delta, and the pack README carries the working command.
+
 ## [0.48.0] - 2026-09-21
 
 ### Added

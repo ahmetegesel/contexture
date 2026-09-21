@@ -6,7 +6,7 @@
   3. BACKLOG: affected units from delta declared as @task entries in backlog.md before reconciliation begins
   4. RECONCILE: heavy deltas run as subagents, one per affected area, parallel on independence; single-doc delta reconciles in place; each affected doc updated where behavior, contracts, or pitfalls moved
   5. COVERAGE: uncovered paths widen a unit's sources or insert a new @task into the backlog
-  6. VERIFY: docs-audit and docs-check clean over corpus and delta
+  6. VERIFY: docs-audit and docs-check clean over corpus and the two-sided delta, code plus docs in one stream (the two failure modes live in the ground rule; the working command in the README's two-sided delta paragraph)
   7. LAND: doc change lands in workspace repository, cross-referenced from code change
   8. REFRESH: run @refresh
   ground: the procedure lives in docs/workspace/conventions.md @rule docs/drift

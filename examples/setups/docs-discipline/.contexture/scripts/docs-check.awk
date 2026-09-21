@@ -6,7 +6,7 @@
 
 BEGIN {
     CODE_EXT_RE = "\\.(cs|js|cjs|mjs|jsx|ts|tsx|vue|svelte|astro|dart|py|rb|php|java|kt|kts|go|rs|swift|c|h|cc|cpp|hpp|sh|bash|zsh|sql|proto|graphql|gql|html|css|scss|sass|less|lua|pl|r|ex|exs|erl|hs|cshtml)$"
-    EXCLUDE_RE = "(spec|\\.Test|\\.Tests|\\.min\\.|\\.generated\\.)"
+    EXCLUDE_RE = "([.]spec[.]|/spec/|^spec/|\\.Test|\\.Tests|\\.min\\.|\\.generated\\.)"
     touched_count = 0
     num_affected = 0
     uncovered_count = 0
@@ -153,10 +153,20 @@ function process_doc_sources() {
             }
             doc_matched_files[curr_slug] = (doc_matched_files[curr_slug] ? doc_matched_files[curr_slug] ", " : "") norm_file
 
-            # Check if this claiming doc or arch doc was touched
-            if (touched_doc[curr_repo, curr_slug] || arch_touched[curr_repo] || arch_touched["workspace"]) {
+            # Freshness signal. The claiming doc itself riding the change is real evidence.
+            # An architecture/overview doc (or any workspace doc) marks every file in the repo
+            # fresh wholesale: that is a blanket, not evidence, so it is recorded separately and
+            # reported, never folded silently into a clean verdict.
+            if (touched_doc[curr_repo, curr_slug]) {
                 file_has_fresh_doc[t_file] = 1
                 doc_is_fresh[curr_slug] = 1
+                file_real_fresh[t_file] = 1
+                doc_real_fresh[curr_slug] = 1
+            } else if (arch_touched[curr_repo] || arch_touched["workspace"]) {
+                file_has_fresh_doc[t_file] = 1
+                doc_is_fresh[curr_slug] = 1
+                arch_only[t_file] = 1
+                arch_only_doc[curr_slug] = 1
             }
 
             # If file was deleted but doc still explicitly names it in sources, flag as dead source
@@ -252,9 +262,20 @@ END {
         for (i = 0; i < num_affected; i++) {
             s = affected_slugs[i]
             if (doc_is_fresh[s]) {
-                print "FRESH: " slug_repo[s] " > " s " (doc updated in change delta)"
+                if (arch_only_doc[s] && !doc_real_fresh[s]) {
+                    print "FRESH (BLANKET): " slug_repo[s] " > " s " (counted fresh only because an architecture/overview/workspace doc was touched)"
+                } else {
+                    print "FRESH: " slug_repo[s] " > " s " (doc updated in change delta)"
+                }
             }
         }
+    }
+    for (af in arch_only) {
+        if (!file_real_fresh[af]) arch_only_count++
+    }
+    if (arch_only_count > 0) {
+        print "ARCH-COVERED: " arch_only_count " file(s) counted fresh ONLY because an architecture/overview/workspace doc was touched, not because their own claiming doc rode the change."
+        print "  This is a blanket, not evidence. Verify those docs directly before reading the verdict as clean."
     }
     if (stale_count == 0 && num_affected > 0) {
         print "CLEAN: all affected code files have corresponding doc updates."

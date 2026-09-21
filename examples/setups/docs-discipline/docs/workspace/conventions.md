@@ -94,16 +94,17 @@
 
 @rule docs/drift
   directive: must
-  statement: "Drift is reconciled from the change delta, never from memory: the status-prefixed git delta feeds docs-check, every affected doc is updated in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands."
+  statement: "Drift is reconciled from the change delta, never from memory: the status-prefixed git delta feeds docs-check with BOTH halves in one stream (the repository's code delta and the workspace's own docs/<repo>/ delta); every affected doc is updated in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands."
   status: followed
   prevalence: universal
   layer: workspace
   provenance: ratified
   scope: "Any code change inside a documented repository."
   evidence: ".contexture/scripts/docs-check.awk"
-  caution: "A name-only delta carries no deletion marker: deleted files read as uncovered."
-  anti: "Shipping a code change and deferring its doc update to a later commit"
-  good: "The same-change doc update, verified by docs-gate before close"
+  enforced_at: [.contexture/scripts/docs-check.awk, .contexture/scripts/docs-gate, .contexture/rhythms/docs-drift.md]
+  caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: docs-check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered."
+  anti: "Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds docs-check the code delta alone, which cannot exit 0 by construction"
+  good: "Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, docs-gate already aggregates both halves and needs no pipeline"
 
 @rule docs/greppable-evidence
   directive: must
