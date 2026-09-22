@@ -8,6 +8,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
 
+## [0.49.1] - 2026-09-22
+
+### Changed
+
+- The filter test material leaves the shipped payload: the core fixture pairs and the harness move to the repository's `tests/` folder, navigated from the root README, and the setup's pairs to `examples/setups/tool-filters/tests/`. Adopting workspaces carry no test material; the upstream tests pin the shipped filters and the byte-identical adopted copies.
+
 ## [0.49.0] - 2026-09-22
 
 ### Added

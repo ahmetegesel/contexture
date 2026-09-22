@@ -3,12 +3,14 @@
 # Zero-install: POSIX /bin/sh, awk, and core OS utilities (cmp, mktemp)
 #
 # Usage:
-#   .contexture/scripts/filter-tests.sh
+#   tests/filter-tests.sh
 #
-# Fixtures live beside the filter directories, one pair per case, named
+# The tests live upstream, never in an adopting workspace. Core pairs live in
+# this folder; setup pairs live under the setup, one pair per case, named
 # <filter>-<case>.in and <filter>-<case>.expected:
-#   .contexture/filters/fixtures/            the core filters
-#   examples/setups/tool-filters/fixtures/   the setup filters
+#   tests/                                 the core filters
+#   examples/setups/tool-filters/tests/    the setup filters
+# Read tests/README.md before maintaining the filters or the pairs.
 # A pair is piped through compact.sh --filter=<filter> and byte-compared
 # against the expected file. Core fixtures run through the base compact.sh
 # in place; setup fixtures run through a staged sandbox (a copy of
@@ -19,7 +21,7 @@
 # and fails when one carries no fixture pair; the counts are derived from
 # the directories, never hardcoded.
 #
-# Mechanics cases live in the core fixtures directory as compact-*.in
+# Mechanics cases live in this folder as compact-*.in
 # pairs and are driven here: the ANSI strip (an ANSI-bearing input through
 # the compiler filter), command identity (a git shim selecting diff.awk in
 # runner mode), the notice-only false-green output, and the recovery
@@ -30,12 +32,12 @@
 set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
-ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../.." && pwd)
+ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 COMPACT="$ROOT/.contexture/scripts/compact.sh"
 CORE_FILTERS="$ROOT/.contexture/filters"
-CORE_FIXTURES="$CORE_FILTERS/fixtures"
+CORE_FIXTURES="$ROOT/tests"
 SETUP_FILTERS="$ROOT/examples/setups/tool-filters/filters"
-SETUP_FIXTURES="$ROOT/examples/setups/tool-filters/fixtures"
+SETUP_FIXTURES="$ROOT/examples/setups/tool-filters/tests"
 
 export LC_ALL=C
 

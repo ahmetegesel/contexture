@@ -61,31 +61,26 @@ cp examples/setups/tool-filters/filters/compiler-errors.awk .contexture/filters/
 chmod +x .contexture/filters/*.awk
 ```
 
-Carry each adopted filter's fixture pairs too. The harness pairs a filter with the `fixtures/` directory beside the one it was discovered in, so a filter copied into `.contexture/filters/` belongs with its pairs in `.contexture/filters/fixtures/`, or the presence check flags it:
-
-```sh
-# The fixture pairs follow the filter:
-cp examples/setups/tool-filters/fixtures/vitest-*.in examples/setups/tool-filters/fixtures/vitest-*.expected .contexture/filters/fixtures/
-```
+The filters' test material stays upstream, under `examples/setups/tool-filters/tests/`: the upstream harness pins the setup's filters, and the adopted copies are byte-identical, so they are pinned too. A workspace carries no test material.
 
 Do not copy the whole directory by reflex. Each adopted filter joins the discovery scan and can claim a command identity, so the bulk copy is the one adoption path this setup advises against.
 
-## Fixtures
+## Tests
 
-Every filter carries input and expected-output pairs beside its filter directory, in `fixtures/`:
+Every filter carries input and expected-output pairs upstream, in a `tests/` folder (its README carries the why, the roots, and the maintenance contract):
 
 ```text
-.contexture/filters/fixtures/            the core filters
-examples/setups/tool-filters/fixtures/   the setup filters
+tests/                                 the core filters
+examples/setups/tool-filters/tests/    the setup filters
 ```
 
-A pair is named `<filter>-<case>.in` and `<filter>-<case>.expected`. Run the harness:
+A pair is named `<filter>-<case>.in` and `<filter>-<case>.expected`. Run the harness from the repository root:
 
 ```sh
-.contexture/scripts/filter-tests.sh
+tests/filter-tests.sh
 ```
 
-It pipes each input through `compact.sh --filter=<filter>` and byte-compares the output with the expected file. Core cases run through the base `compact.sh`; setup cases run through a staged sandbox because the base discovery resolves only `.contexture/filters/`. Once the examples folder goes away at adoption close, the setup cases are skipped and the adopted filters are pinned by the pairs carried into `.contexture/filters/fixtures/`. The presence check fails when a filter carries no fixture pair, so a new filter is not done until it has one. Mechanics cases pin the runner itself: the ANSI strip, command identity in runner mode, the notice-only false-green output, and the recovery fallback to raw.
+It pipes each input through `compact.sh --filter=<filter>` and byte-compares the output with the expected file. Core cases run through the base `compact.sh`; setup cases run through a staged sandbox because the base discovery resolves only `.contexture/filters/`. The presence check fails when a filter carries no fixture pair, so a new filter is not done until it has one. Mechanics cases pin the runner itself: the ANSI strip, command identity in runner mode, the notice-only false-green output, and the recovery fallback to raw.
 
 ## Writing Custom Filters
 
@@ -95,7 +90,7 @@ It pipes each input through `compact.sh --filter=<filter>` and byte-compares the
 4. Buffer lines and process them in the `END` block.
 5. Keep the fail-safe fallback: if output is empty or larger than raw input, print the raw lines.
 6. Emit a notice when truncating: a marker line carrying one of `collapsed`, `elided`, `repeated`, `capped`, or a `COMPACT_DISABLE` recovery pointer; a shrink with no notice falls back to raw.
-7. Add a fixture pair under the filter's `fixtures/` directory and run the harness.
+7. Add a fixture pair under the matching tests folder (`tests/` for a core filter, `examples/setups/tool-filters/tests/` for a setup filter) and run the harness.
 
 ### Authoring Gotchas
 

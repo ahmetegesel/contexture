@@ -34,7 +34,7 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.49.0 AGENTS.md .contexture/ examples/ | tar -x
+git archive v0.49.1 AGENTS.md .contexture/ examples/ | tar -x
 chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh .contexture/filters/*.awk
 ```
 
@@ -72,7 +72,7 @@ The workspace couples root governance with a dedicated convention drawer:
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── filters/          Modular stream filters: diff.awk, list.awk, log.awk, and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
-    ├── scripts/          The session.sh entry point, compact.sh, and the filter fixture harness
+    ├── scripts/          The session.sh entry point and compact.sh
     ├── templates/        Shape grammars ensuring structured writes without guesswork
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
         ├── state.md      Live pointer: status, current anchor, next action, and refs
@@ -112,6 +112,7 @@ Universal stream reduction runner and filter (`.contexture/scripts/compact.sh`).
 - [Setups](examples/setups/docs-discipline/): An optional setup: a corpus-first documentation discipline
 - [Setups](examples/setups/tool-filters/): An optional setup: ecosystem filters for test runners and compilers
 - [Setups](examples/setups/ast-doc-graph/): An optional setup: AST symbol graph linked with centralized documentation
+- [Tests](tests/): The filter test material, upstream only; see [tests/README.md](tests/README.md)
 
 | command | what it returns |
 |---|---|
