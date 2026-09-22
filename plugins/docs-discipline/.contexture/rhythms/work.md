@@ -7,8 +7,8 @@
   4. GROUND: ground subagents verify the plan against the docs and the repo; per-task corrections return
   5. AMEND: corrections land in place; material changes return to the human
   6. EXECUTE: one subagent per task (small same-shape tasks batch); parallel on independence; the doc change lands with its code change (docs-are-code)
-  7. GUARDS: the mechanical checks green before any review (docs-audit over the corpus, docs-check over the delta; the change's own checks)
-  8. REVIEW+HARDEN+VERIFY: one fresh subagent; independent review, findings hardened, the docs gate re-proven (docs-audit, docs-check, docs-gate)
+  7. GUARDS: the mechanical checks green before any review (ctx docs audit over the corpus, ctx docs check over the delta; the change's own checks)
+  8. REVIEW+HARDEN+VERIFY: one fresh subagent; independent review, findings hardened, the docs gate re-proven (ctx docs audit, ctx docs check, ctx docs gate)
   9. LAND: one act after the gates green, the human's sign-off first (the shape lives in @git)
   10. REFRESH: run @refresh
   ground: the rules live in docs/workspace/conventions.md; the grammar in .contexture/templates/doc.md

@@ -4,6 +4,12 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.51.1] - 2026-09-23
+
+### Fixed
+
+- The docs-discipline rhythms teach the module verbs: the work, authoring, and drift rhythms name `ctx docs audit`, `ctx docs check`, `ctx docs query`, and `ctx docs gate` instead of the retired instrument short names.
+
 ## [0.51.0] - 2026-09-23
 
 ### Added

@@ -64,3 +64,10 @@
   WHY :: Lanes edit their files raw today: no grammar validation, no unique-temp save, no audit coverage; the append-only discipline and the report shape rest on convention alone.
   REF: "AGENTS.md#subagents"
   STATUS: OPEN
+
+@idea docs-check-extension-gap
+  DUMPED: 2026-09-23
+  WHAT :: The docs instruments coverage check is blind to .awk and extension-less deltas: CODE_EXT_RE (docs-check.awk:8) counts a fixed extension set, so a change touching only the engine files exits CLEAN with no doc update, while the same change on a .sh file reports STALE. Widen the predicate (or add an explicit engine-file class) so the shipped engine coverage guarantee holds.
+  WHY :: Surfaced by the plugin-arc review (F3): the corpus claims base/.contexture/ctx and the module scripts, but the check can never red on them; the gap stays latent until a lagging doc on an engine-only change passes silently.
+  REF: "plugins/docs-discipline/.contexture/modules/docs/scripts/docs-check.awk"
+  STATUS: OPEN
