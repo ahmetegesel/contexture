@@ -35,7 +35,7 @@ Keep the text minimal. A rhythm may carry as much as a skill would, but structur
 The index is how a workspace's rhythms become discoverable. At boot the agent runs:
 
 ```
-.contexture/scripts/session.sh index
+.contexture/scripts/ctx session index
 ```
 
 One line per rhythm comes back, carrying what selection needs:

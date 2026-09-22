@@ -1,0 +1,180 @@
+#!/bin/sh
+# ctx-family: session
+# summary: the session record engine: state, backlog, journal, knowledge, and their write acts
+# ctx-subcommands: help active bootstrap load stamp board audit index query append amend flip drop next refs close refresh
+# Usage: ctx session <verb> [args]
+# The session family: one doorway over the awk workers beside this entry. The
+# binder chdirs to the workspace root before dispatch; this entry anchors there
+# too, exports its own directory for sibling helper resolution, and execs the
+# verb's worker with the remaining argv and the worker's exit code. help,
+# --help, and -h print the table to stdout rc=0 and take no further arguments;
+# no argument, an unknown verb, or extra arguments print the table to stderr
+# rc=1 with zero stdout. Any other argument beginning with a dash, in any
+# position, refuses before dispatch (the awk option parser would consume it
+# before the workers' guards run).
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$dir/../../.." && pwd)
+
+CTX_SESSION_DIR="$dir"
+export CTX_SESSION_DIR
+
+CTX_BIN="$root/.contexture/scripts/ctx"
+export CTX_BIN
+
+show_help() {
+  cat <<'EOF'
+ctx session: the session record engine: state, backlog, journal, knowledge, and their write acts; help, --help, and -h print this table to stdout rc=0
+
+usage:
+  ctx session help | --help | -h
+  ctx session active
+  ctx session bootstrap <slug> "<objective>" [<repos>]
+  ctx session load <slug> [<page>]
+  ctx session load refs <ref_1> ... <ref_N> [<page>]
+  ctx session stamp <slug> "<attention>"
+  ctx session board <slug>
+  ctx session audit <slug>
+  ctx session index
+  ctx session query entry <unit> <slug>
+  ctx session query group <unit> <token>
+  ctx session query anchors <unit>
+  ctx session query finding <unit> <NAME>
+  ctx session query closure <unit> <slug>
+  ctx session query units <repo>
+  ctx session query refs-to <session>
+  ctx session query resolve <unit> <ref>  (journal.md#slug, knowledge.md#NAME, backlog.md#slug, lanes/<lane>/report.md#section)
+  ctx session query lane <unit> <lane>
+  ctx session query search <unit> <term>
+  ctx session append <slug>  (stdin: one or more blocks)
+  ctx session amend <slug> <task-slug>  (stdin: one or more field blocks)
+  ctx session flip <slug> <todo | progress | done> <task-slug> [<task-slug> ...]
+  ctx session drop <slug> <task-slug> [<task-slug> ...]  (stdin: the record block)
+  ctx session next <slug> "<pointer>"
+  ctx session refs <slug> [<session> ...]
+  ctx session close <slug>
+  ctx session refresh <slug>
+
+no flags: help, --help, and -h (each alone) print this table to stdout rc=0; any other argument beginning with a dash, in any position, refuses rc=1 with this table on stderr and zero stdout
+
+commands:
+  help       print this table; stdout rc=0. --help and -h are the same form; the three take no further arguments. no argument, an unknown command, or extra arguments print the table to stderr rc=1 with zero stdout
+  active     no arguments: every ACTIVE unit (slug, current_anchor, next_action, objective verbatim) then the closed count; a missing sessions directory prints "no sessions yet" rc=0; an argument refuses rc=1
+  bootstrap  <slug> "<objective>" [<repos>]: create the unit folder, state at A0 folded to A1, the three artifacts; prints the state and "next: declare the first task"; refusals rc=1 with zero partial writes (existing slug, malformed slug, empty objective, embedded newline, extra arguments)
+  load       <slug> [<page>]: the load map plus one page; keep calling until a page reads complete; the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); missing state is fatal rc=1; a missing backlog, knowledge, or journal warns on stderr and prints a placeholder
+  load refs  <ref_1> ... <ref_N> [<page>]: the refs load: those sessions read-only (the notice, the knowledge, the live journal), locally paged; a missing ref is fatal rc=1; a session named refs reads via load refs refs
+  stamp      <slug> "<attention>": bump current_anchor to A<N+1> and append the anchor receipt to journal.md; malformed state or attention refuses rc=1 with no partial write
+  board      <slug>: the live board: unclosed journal entries with complete bodies, then the open tasks and the open threads (slug (anchor): target); missing journal is fatal rc=1; a missing backlog warns on stderr
+  audit      <slug>: the session audit: dangling and slugless closers, entry grammar, missing THREAD on entries dated at or after 2026-09-18, the backlog and state cross-checks; rc=1 on any finding; when the run is clean, also prints the open thread tail with its targets
+  index      no arguments: the rhythm index from .contexture/rhythms/ as name (path) | use when | activation; an argument refuses rc=1
+  query      <kind> [args]: the record's named queries (the forms above): bounded looks over session artifacts, so no one improvises a grep; a miss is rc=1 with a named error, never an empty success
+  append     append one or more blocks to the session; the block's first line decides: @entry <date>-<slug> (templates/journal.md), @finding <NAME> (templates/knowledge.md), @task <slug> (templates/backlog.md); every @entry declares THREAD: <what it awaits> | none; pipe the blocks on stdin; ANCHOR is derived from the state; every input validates before any write; a refusal names the field at fault and the fix
+  amend      replace task fields in place: <task-slug> names the task; pipe one or more labeled field blocks (OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::); the rest of the task stays byte-identical
+  flip       move a task's STATUS: todo reopens (TODO); progress activates (IN_PROGRESS; the state must already name the slug, run next first); done completes (pipe the receipt @entry; its WHAT carries "backlog/<task-slug>: DONE" and the evidence per slug); one call takes many slugs
+  drop       remove task blocks: pipe the record @entry; its WHAT names every <task-slug>; the record lands, then the blocks go; an IN_PROGRESS task the state still names refuses (run next first)
+  next       overwrite next_action with the pointer; refuses when an IN_PROGRESS task would go unnamed
+  refs       set the read-only reference sessions (templates/state.md); zero sessions clears; every named session must exist and differ from the unit
+  close      mark the unit CLOSED; warns on open tasks and audit findings, never refuses for them
+  refresh    <slug>: the refresh core: the live board, then the audit (its rc is the verb's rc), then the refresh hooks
+
+the session family is the base-shipped record engine: the verbs above are its whole public surface
+EOF
+}
+
+usage_error() {
+  show_help >&2
+  exit 1
+}
+
+case "$1" in
+  --help|-h)
+    if [ "$#" -ne 1 ]; then usage_error; fi
+    show_help
+    exit 0
+    ;;
+esac
+
+for arg in "$@"; do
+  case "$arg" in
+    -*) usage_error ;;
+  esac
+done
+
+if ! cd "$root"; then
+  echo "ERROR: cannot enter workspace root: $root" >&2
+  exit 1
+fi
+
+case "$1" in
+  help)
+    shift
+    if [ "$#" -ne 0 ]; then usage_error; fi
+    show_help
+    exit 0
+    ;;
+  active)
+    shift
+    exec "$dir/session-active.awk" "$@"
+    ;;
+  bootstrap)
+    shift
+    exec "$dir/session-bootstrap.awk" "$@"
+    ;;
+  load)
+    shift
+    # LC_ALL=C keeps length() byte-oriented (the page byte budget) on every
+    # awk, gawk and mawk included, not only on the byte-counting BWK awk.
+    LC_ALL=C exec "$dir/session-load.awk" "$@"
+    ;;
+  stamp)
+    shift
+    exec "$dir/session-stamp.awk" "$@"
+    ;;
+  board)
+    shift
+    exec "$dir/session-board.awk" "$@"
+    ;;
+  audit)
+    shift
+    exec "$dir/session-audit.awk" "$@"
+    ;;
+  index)
+    shift
+    exec "$dir/rhythms-index.awk" "$@"
+    ;;
+  query)
+    shift
+    exec "$dir/session-query.awk" "$@"
+    ;;
+  refresh)
+    shift
+    if [ "$#" -ne 1 ]; then usage_error; fi
+    _runit=$1
+    case "$_runit" in
+      [A-Za-z0-9]*) ;;
+      *) usage_error ;;
+    esac
+    case "$_runit" in
+      *[!A-Za-z0-9_-]*) usage_error ;;
+    esac
+    "$dir/session-board.awk" "$_runit" || true
+    _rrc=0
+    "$dir/session-audit.awk" "$_runit" || _rrc=$?
+    if [ -x "${CTX_BIN:-}" ]; then
+      if "$CTX_BIN" _hooks refresh CTX_UNIT "$_runit"; then
+        :
+      elif [ "$_rrc" -eq 0 ]; then
+        _rrc=1
+      fi
+    fi
+    exit "$_rrc"
+    ;;
+  append|amend|flip|drop|next|refs|close)
+    _act=$1
+    shift
+    exec "$dir/session-record.awk" "$_act" "$@"
+    ;;
+  *)
+    usage_error
+    ;;
+esac

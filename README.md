@@ -35,7 +35,7 @@ Run in your repository root:
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
 git archive v0.49.1 AGENTS.md .contexture/ examples/ | tar -x
-chmod +x .contexture/scripts/*.awk .contexture/scripts/*.sh .contexture/filters/*.awk
+chmod +x .contexture/scripts/ctx .contexture/scripts/*.sh .contexture/ctx/*/entry .contexture/ctx/session/*.awk .contexture/filters/*.awk
 ```
 
 ### 2. Run the onboarding wizard
@@ -56,7 +56,7 @@ Once confirmed, start your first unit of work:
 
 1. **The agent creates the unit:** It creates `.contexture/sessions/<your-task>/` with your active tasks (`backlog.md`) and an append-only event log (`journal.md`).
 2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates its tasks, logs test proofs, and records decisions in its files. You never manage the files manually.
-3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `session.sh load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
+3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `ctx session load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
 
 For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
 
@@ -71,8 +71,9 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── filters/          Modular stream filters: diff.awk, list.awk, log.awk, and workspace additions
+    ├── ctx/              Command families: the base session family and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
-    ├── scripts/          The session.sh entry point and compact.sh
+    ├── scripts/          The ctx entry point (binder and run built-in) with the compat shims
     ├── templates/        Shape grammars ensuring structured writes without guesswork
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
         ├── state.md      Live pointer: status, current anchor, next action, and refs
@@ -97,7 +98,7 @@ A plain text workflow checklist in `.contexture/rhythms/`. Enforces process disc
 Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` for local machine). Lets you add repository policies or git rules without modifying contexture's base. Deep dive: [Overlays](docs/overlays.md).
 
 ### Stream compaction
-Universal stream reduction runner and filter (`.contexture/scripts/compact.sh`). All shell commands execute through it (runner mode prefix: `.contexture/scripts/compact.sh <cmd>`) or pipe into it (`<cmd> | .contexture/scripts/compact.sh`). Runner mode selects the filter by the wrapped command's identity and stdin mode by the stream signature, strips ANSI escape sequences before matching, and collapses unchanged Git diff context lines (`diff.awk`), verbose directory listings (`list.awk`), passing test runs, and repetitive logs (`log.awk`) by 40 to 90 percent without installs or diagnostic loss. Preserves exact exit codes, keeps command stderr visible (whole on failure or empty stdout, tail-capped with its own notice otherwise), falls back to raw when a shrinking filter carries no notice, and honors `COMPACT_DISABLE=1` (bypass) and `COMPACT_DEBUG=1` (selection report). Deep dive: [The engine](docs/the-engine.md).
+Universal stream reduction runner and filter (`ctx run`). All shell commands execute through it (runner mode prefix: `.contexture/scripts/ctx run <cmd>`) or pipe into it (`<cmd> | .contexture/scripts/ctx run`). Runner mode selects the filter by the wrapped command's identity and stdin mode by the stream signature, strips ANSI escape sequences before matching, and collapses unchanged Git diff context lines (`diff.awk`), verbose directory listings (`list.awk`), passing test runs, and repetitive logs (`log.awk`) by 40 to 90 percent without installs or diagnostic loss. Preserves exact exit codes, keeps command stderr visible (whole on failure or empty stdout, tail-capped with its own notice otherwise), falls back to raw when a shrinking filter carries no notice, and honors `COMPACT_DISABLE=1` (bypass) and `COMPACT_DEBUG=1` (selection report). Capture scratch prefers the workspace's gitignored `.contexture/tmp/` drawer. Deep dive: [The engine](docs/the-engine.md).
 
 ## Docs
 
@@ -116,33 +117,34 @@ Universal stream reduction runner and filter (`.contexture/scripts/compact.sh`).
 
 | command | what it returns |
 |---|---|
-| session.sh help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
-| session.sh active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
-| session.sh bootstrap <slug> "<objective>" [<repos>] | A new unit: the folder, state at A0, the three empty artifacts, and the folded A1 receipt; prints the state and the next move |
-| session.sh load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
-| session.sh load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
-| session.sh stamp <unit> "<attention>" | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
-| session.sh board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
-| session.sh audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
-| session.sh index | One line per rhythm: name, path, use when, activation |
-| session.sh query entry <unit> <slug> | The entry block verbatim; duplicates render every match |
-| session.sh query group <unit> <token> | The group thread: one short line per entry (anchor, slug, opening) |
-| session.sh query anchors <unit> | The anchor lines verbatim, with the count; zero prints `0 anchors` |
-| session.sh query finding <unit> <NAME> | The finding block plus its supersession chain, cycles marked |
-| session.sh query closure <unit> <slug> | Open, or the closers with their verdicts and lines |
-| session.sh query units <repo> | Each unit touching the repo: slug, status, anchor, next action |
-| session.sh query refs-to <session> | Each unit referencing the session |
-| session.sh query resolve <unit> <ref> | The block behind a journal, knowledge, backlog, or subagent-report reference |
-| session.sh query lane <unit> <lane> | Subagent file presence with line and byte counts, the journal's last line, the report's first |
-| session.sh query search <unit> <term> | Bounded match lines across the unit's artifacts (state, backlog, knowledge, journal, the subagent journals and reports), each with its locator |
-| session.sh append <unit> | The write side: one or more blocks on stdin; each block's first line decides `@entry` (journal), `@finding` (knowledge), or `@task` (backlog); the command adds the anchor and refuses loudly, never partially |
-| session.sh amend <unit> <slug> | Replace task fields in place from the labeled field blocks on stdin; the rest of the task stays byte-identical |
-| session.sh flip <unit> <verb> <slug> [<slug> ...] | Move task status: `todo` reopens, `progress` activates (the state must already name the slug), `done` lands the receipt entry from stdin, one `backlog/<slug>: DONE` literal with its evidence per slug; several slugs ride one call |
-| session.sh drop <unit> <slug> [<slug> ...] | Remove tasks: the record entry naming each lands from stdin first, then the blocks go |
-| session.sh next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
-| session.sh refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
-| session.sh close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
-| compact.sh | Universal discoverable stream compaction: direct runner prefix (.contexture/scripts/compact.sh <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw |
+| ctx help | The binder summary: `ctx run`, `ctx session` with its verbs, and every discovered family with the verbs it carries |
+| ctx session help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
+| ctx session active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
+| ctx session bootstrap <slug> "<objective>" [<repos>] | A new unit: the folder, state at A0, the three empty artifacts, and the folded A1 receipt; prints the state and the next move |
+| ctx session load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
+| ctx session load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
+| ctx session stamp <unit> "<attention>" | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
+| ctx session board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
+| ctx session audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
+| ctx session index | One line per rhythm: name, path, use when, activation |
+| ctx session query entry <unit> <slug> | The entry block verbatim; duplicates render every match |
+| ctx session query group <unit> <token> | The group thread: one short line per entry (anchor, slug, opening) |
+| ctx session query anchors <unit> | The anchor lines verbatim, with the count; zero prints `0 anchors` |
+| ctx session query finding <unit> <NAME> | The finding block plus its supersession chain, cycles marked |
+| ctx session query closure <unit> <slug> | Open, or the closers with their verdicts and lines |
+| ctx session query units <repo> | Each unit touching the repo: slug, status, anchor, next action |
+| ctx session query refs-to <session> | Each unit referencing the session |
+| ctx session query resolve <unit> <ref> | The block behind a journal, knowledge, backlog, or subagent-report reference |
+| ctx session query lane <unit> <lane> | Subagent file presence with line and byte counts, the journal's last line, the report's first |
+| ctx session query search <unit> <term> | Bounded match lines across the unit's artifacts (state, backlog, knowledge, journal, the subagent journals and reports), each with its locator |
+| ctx session append <unit> | The write side: one or more blocks on stdin; each block's first line decides `@entry` (journal), `@finding` (knowledge), or `@task` (backlog); the command adds the anchor and refuses loudly, never partially |
+| ctx session amend <unit> <slug> | Replace task fields in place from the labeled field blocks on stdin; the rest of the task stays byte-identical |
+| ctx session flip <unit> <verb> <slug> [<slug> ...] | Move task status: `todo` reopens, `progress` activates (the state must already name the slug), `done` lands the receipt entry from stdin, one `backlog/<slug>: DONE` literal with its evidence per slug; several slugs ride one call |
+| ctx session drop <unit> <slug> [<slug> ...] | Remove tasks: the record entry naming each lands from stdin first, then the blocks go |
+| ctx session next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
+| ctx session refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
+| ctx session close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
+| ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/scripts/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw |
 
 The query family answers the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
 

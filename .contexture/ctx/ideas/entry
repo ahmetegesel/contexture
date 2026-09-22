@@ -1,0 +1,206 @@
+#!/bin/sh
+# ctx-family: ideas
+# summary: the upstream idea dump: list, show, add, pick, drop
+# ctx-subcommands: list show add pick drop help
+
+set -u
+
+prog="ctx ideas"
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$dir/../../.." && pwd)
+ideas=${IDEAS_FILE:-"$root/IDEAS.md"}
+
+tmp=""
+cleanup() {
+  if [ -n "$tmp" ] && [ -f "$tmp" ]; then
+    rm -f "$tmp"
+  fi
+}
+trap cleanup EXIT HUP INT TERM
+
+die() {
+  printf '%s: %s\n' "$prog" "$*" >&2
+  exit 1
+}
+
+usage() {
+  cat <<'EOF'
+usage: ctx ideas <verb> [args]
+
+the upstream idea dump: list, show, add, pick, drop
+
+verbs:
+  list [open|picked|dropped|all]  list ideas by status (default: open)
+  show <slug>                     print one idea block
+  add                             append an idea block from stdin (STATUS: OPEN)
+  pick <slug> <unit>              mark an idea PICKED by a unit
+  drop <slug> <why>               mark an idea DROPPED with a reason
+  help                            this help
+EOF
+}
+
+need_dump() {
+  [ -f "$ideas" ] || die "idea dump not found"
+}
+
+has_slug() {
+  awk -v want="$1" '
+    /^@idea([[:space:]]|$)/ {
+      n = split($0, a, /[[:space:]]+/)
+      if (n >= 2 && a[2] == want) found = 1
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$ideas"
+}
+
+cmd_list() {
+  mode=${1:-open}
+  case "$mode" in
+    open|picked|dropped|all) ;;
+    *) die "unknown list filter: $mode (open|picked|dropped|all)" ;;
+  esac
+  need_dump
+  awk -v mode="$mode" '
+    function wanted() {
+      if (mode == "all") return 1
+      if (mode == "open") return st ~ /^OPEN([[:space:]]|$)/
+      if (mode == "picked") return st ~ /^PICKED([[:space:]]|$)/
+      return st ~ /^DROPPED([[:space:]]|$)/
+    }
+    function flush() {
+      if (slug != "" && wanted()) print slug
+    }
+    /^@idea([[:space:]]|$)/ {
+      flush()
+      n = split($0, a, /[[:space:]]+/)
+      slug = (n >= 2) ? a[2] : ""
+      st = ""
+      next
+    }
+    slug != "" && /^[[:space:]]*STATUS:[[:space:]]/ {
+      st = $0
+      sub(/^[[:space:]]*STATUS:[[:space:]]*/, "", st)
+      sub(/[[:space:]]+$/, "", st)
+    }
+    END { flush() }
+  ' "$ideas"
+}
+
+cmd_show() {
+  [ $# -ge 1 ] || die "usage: ctx ideas show <slug>"
+  need_dump
+  awk -v want="$1" '
+    /^@idea([[:space:]]|$)/ {
+      if (printing) exit
+      n = split($0, a, /[[:space:]]+/)
+      if (n >= 2 && a[2] == want) { printing = 1; found = 1 }
+    }
+    printing { print }
+    END { if (!found) exit 1 }
+  ' "$ideas" || die "unknown idea: $1"
+}
+
+cmd_add() {
+  need_dump
+  buf=$(cat)
+  [ -n "$buf" ] || die "empty idea block on stdin"
+  slug=$(printf '%s\n' "$buf" | awk 'NF { if ($1 != "@idea") exit 1; if (NF < 2) exit 2; print $2; exit 0 }')
+  rc=$?
+  if [ "$rc" -ne 0 ]; then
+    die "invalid idea block: first line must be @idea <slug>"
+  fi
+  case "$slug" in
+    *[!A-Za-z0-9._-]*) die "invalid slug: $slug" ;;
+  esac
+  if has_slug "$slug"; then
+    die "idea already exists: $slug"
+  fi
+  dirf=$(dirname -- "$ideas")
+  tmp="$dirf/.ideas.ctx.$$"
+  ends_nl=0
+  [ -z "$(tail -c 1 "$ideas")" ] && ends_nl=1
+  last_line=$(awk 'END { print }' "$ideas")
+  {
+    cat "$ideas"
+    if [ "$ends_nl" -eq 0 ]; then printf '\n'; fi
+    if [ -n "$last_line" ]; then printf '\n'; fi
+    printf '%s\n' "$buf" | awk '
+      /^[[:space:]]*STATUS:[[:space:]]/ { next }
+      {
+        if (!started) {
+          if ($0 ~ /^[[:space:]]*$/) next
+          started = 1
+        }
+        print
+      }
+    '
+    printf '  STATUS: OPEN\n'
+  } > "$tmp" || die "write failed"
+  mv "$tmp" "$ideas" || die "write failed"
+  printf '%s: added %s (STATUS: OPEN)\n' "$prog" "$slug"
+}
+
+cmd_flip() {
+  verb=$1
+  slug=$2
+  newst=$3
+  need_dump
+  has_slug "$slug" || die "unknown idea: $slug"
+  dirf=$(dirname -- "$ideas")
+  tmp="$dirf/.ideas.ctx.$$"
+  awk -v want="$slug" -v newst="$newst" '
+    /^@idea([[:space:]]|$)/ {
+      if (inside && !done) { print "  STATUS: " newst; done = 1 }
+      n = split($0, a, /[[:space:]]+/)
+      inside = (n >= 2 && a[2] == want)
+      print
+      next
+    }
+    inside && !done && /^[[:space:]]*STATUS:[[:space:]]/ {
+      print "  STATUS: " newst
+      done = 1
+      next
+    }
+    { print }
+    END { if (inside && !done) print "  STATUS: " newst }
+  ' "$ideas" > "$tmp" || die "write failed"
+  mv "$tmp" "$ideas" || die "write failed"
+  printf '%s: %s %s\n' "$prog" "$verb" "$slug"
+}
+
+cmd_pick() {
+  [ $# -ge 2 ] || die "usage: ctx ideas pick <slug> <unit>"
+  slug=$1
+  shift
+  unit=$(printf '%s' "$*" | tr '\n\r' '  ')
+  case "$unit" in
+    *[![:space:]]*) ;;
+    *) die "empty unit" ;;
+  esac
+  cmd_flip pick "$slug" "PICKED $unit"
+}
+
+cmd_drop() {
+  [ $# -ge 2 ] || die "usage: ctx ideas drop <slug> <why>"
+  slug=$1
+  shift
+  why=$(printf '%s' "$*" | tr '\n\r' '  ')
+  case "$why" in
+    *[![:space:]]*) ;;
+    *) die "empty why" ;;
+  esac
+  cmd_flip drop "$slug" "DROPPED $why"
+}
+
+[ $# -ge 1 ] || { usage; exit 0; }
+verb=$1
+shift
+case "$verb" in
+  list) cmd_list "$@" ;;
+  show) cmd_show "$@" ;;
+  add) cmd_add "$@" ;;
+  pick) cmd_pick "$@" ;;
+  drop) cmd_drop "$@" ;;
+  help|--help|-h) usage ;;
+  *) usage >&2; exit 1 ;;
+esac

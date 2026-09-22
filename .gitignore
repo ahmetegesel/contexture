@@ -24,4 +24,5 @@
 # per-workspace content stays untracked in the source
 /.contexture/rhythms/
 /.contexture/sessions/
+/.contexture/tmp/
 /tools/

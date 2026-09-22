@@ -22,7 +22,7 @@
 function usage() {
   print "Usage: session.sh load <session-slug> [<page>]" > "/dev/stderr"
   print "       session.sh load refs <ref_1> ... <ref_N> [<page>]" > "/dev/stderr"
-  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
 
@@ -52,6 +52,19 @@ function add(line, sec,   first) {
 
 function exists(path) {
   return (system("test -f \"" path "\"") == 0)
+}
+
+function hooks_ready(   bin) {
+  if (!("CTX_BIN" in ENVIRON)) return 0
+  bin = ENVIRON["CTX_BIN"]
+  if (bin == "") return 0
+  return (system("test -x \"" bin "\"") == 0)
+}
+
+function fire_hooks(point, args,   bin) {
+  if (!hooks_ready()) return 0
+  bin = ENVIRON["CTX_BIN"]
+  return system("\"" bin "\" _hooks " point args)
 }
 
 function read_whole(path, sec, empty_note,   line, n) {
@@ -127,7 +140,7 @@ function compose_backlog(path, sec, empty_note,   line, n) {
 }
 
 function compose_stream(slug_arg, sec,   helper, tag, cmd, line, n, rc) {
-  helper = ".contexture/scripts/session-board.awk"
+  helper = (("CTX_SESSION_DIR" in ENVIRON) ? ENVIRON["CTX_SESSION_DIR"] : ".contexture/ctx/session") "/session-board.awk"
   tag = "session-load-helper-rc"
   cmd = helper " " slug_arg "; echo \"" tag "=$?\""
   n = 0
@@ -379,11 +392,18 @@ BEGIN {
     fail("ERROR: page out of range: " page " (1-" npages ")")
   }
 
+  fflush()
+  if (fire_hooks("load-pre", " CTX_UNIT \"" slug "\" CTX_LOAD_FORM main CTX_LOAD_PAGE " page) != 0)
+    fail("ERROR: load-pre point failed (block hook)")
+
   if (page < npages) {
     printf "LOAD INCOMPLETE (page %d of %d): keep calling until a page reads complete; do not start work from a partial record\n", page, npages
   } else {
     printf "LOAD COMPLETE: pages %d/%d; stamp the receipt: session.sh stamp %s \"<the loaded set + ref_sessions + the git state>\"\n", npages, npages, slug
   }
+  fflush()
+  if (fire_hooks("load-post", " CTX_UNIT \"" slug "\" CTX_LOAD_FORM main CTX_LOAD_PAGE " page) != 0)
+    fail("ERROR: load-post point failed (block hook)")
   printf "session-load %s: %d lines, %d pages\n", slug, total, npages
   print_map()
   printf "WRITE SCOPE: .contexture/sessions/%s/ + repos: [%s]; ref sessions READ-ONLY\n", slug, repos

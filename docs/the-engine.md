@@ -79,58 +79,58 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 ## The scripts
 
-Nine instruments ship in `.contexture/scripts/`: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one records the write acts, one renders the live board, one answers the record's named queries, one audits the session, and one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts the nine: `.contexture/scripts/session.sh`, whose `help` (or `--help`, or `-h`) prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses every other dash-leading argument. Nothing needs installing.
+Nine instruments ship as the base session family under `.contexture/ctx/session/`: one reports the field, one bootstraps a unit, one loads the session, one stamps the load receipt, one records the write acts, one renders the live board, one answers the record's named queries, one audits the session, and one indexes the rhythms. They are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. One entry point fronts the nine: `ctx session`, whose `help` (or `--help`, or `-h`) prints the full contract table, so no one reads a script to learn one; it anchors every command at the workspace root and refuses every other dash-leading argument. Nothing needs installing.
 
-Alongside the session engine, `.contexture/scripts/compact.sh` provides zero-parameter discoverable stream compaction and command execution. It operates both as a direct runner prefix (`.contexture/scripts/compact.sh <cmd>`) preserving exact exit codes, and as a standard Unix pipe (`cmd | .contexture/scripts/compact.sh`). Runner mode selects the filter by the wrapped command's identity, read from the `# command: <regex>` header, and falls back to the signature scan when no command claims the line; stdin mode selects by the stream signature (`# match: <regex>`), sampled from the first 40 lines. The directive text reaches awk through the environment, so backslash escapes in a signature survive verbatim. ANSI escape sequences are stripped before selection and filtering, while the raw bytes stay untouched for the fail-safe comparison.
+Alongside the session engine, `ctx run` provides zero-parameter discoverable stream compaction and command execution. It operates both as a direct runner prefix (`ctx run <cmd>`, full path `.contexture/scripts/ctx run <cmd>`) preserving exact exit codes, and as a standard Unix pipe (`cmd | ctx run`). Runner mode selects the filter by the wrapped command's identity, read from the `# command: <regex>` header, and falls back to the signature scan when no command claims the line; stdin mode selects by the stream signature (`# match: <regex>`), sampled from the first 40 lines. The directive text reaches awk through the environment, so backslash escapes in a signature survive verbatim. ANSI escape sequences are stripped before selection and filtering, while the raw bytes stay untouched for the fail-safe comparison. Capture files for runner mode prefer the workspace's gitignored `.contexture/tmp/` when it is writable, and fall back to the caller's TMPDIR only when the drawer cannot hold them.
 
 Filters live in `.contexture/filters/*.awk`, and their headers are the contract: `# match:` for the stream signature, `# command:` for the command identity, `# default` for the fallback, `# stream: merged` for filters that need the command's stderr inside the filtered stream, and `# format-only:` for filters whose marker-less reductions are layout rather than lost content. Core Contexture ships low-risk filters for Git unified diffs (`diff.awk`), directory listings (`list.awk`), and generic log deduplication (`log.awk`). The guards are strict: empty or grown output falls back to raw, a shrinking filter without a notice line falls back to raw unless it declares `# format-only`, a notice-only output passes through so a false-green signal is never hidden, and command stderr stays visible, whole on failure or empty stdout and tail-capped with its own notice otherwise. `COMPACT_DISABLE=1` bypasses compaction entirely; `COMPACT_DEBUG=1` reports the selection on stderr.
 
-### session.sh load: the load and the refs form
+### ctx session load: the load and the refs form
 
 Returns the map plus one page of the load: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The map names each section with its line count and pages, then the write-scope trailer; pages cut at block boundaries, never mid-body: a page ends before the block that would pass about 500 lines or about 40KB, whichever binds first, and a single block larger than the budget renders whole on its own page. The backlog section renders its DONE task blocks compactly, keeping only the task line, `STATUS`, `OBJECTIVE`, and `DESCRIPTION`; open and statusless blocks render whole, and the backlog file itself is never edited, so the full body stays one `resolve` away. An incomplete call opens with `LOAD INCOMPLETE` and instructs the next call in its last line; the final page opens with `LOAD COMPLETE` and hands off to the receipt stamp.
 
 ```bash
-.contexture/scripts/session.sh load <unit>
-.contexture/scripts/session.sh load refs <ref_1> ... <ref_N> [<page>]
+.contexture/scripts/ctx session load <unit>
+.contexture/scripts/ctx session load refs <ref_1> ... <ref_N> [<page>]
 ```
 
-Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes the board (`session.sh board`), so the extraction has one home; the board's open threads and open tasks ride that section unchanged.
+Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes the board (`ctx session board`), so the extraction has one home; the board's open threads and open tasks ride that section unchanged.
 
-The cut is budgeted twice, about 500 lines or about 40KB, whichever binds first, so a page stays under the harness's output cap in practice; the one residual is a single block that exceeds the budget alone, and it renders whole on its own page. If a harness still truncates such a page, it prints a notice naming its saved copy of the command's output: that copy is the command's own output, and reading it is sanctioned by `@laws#workspace-confinement`, read-only, that named file alone. Routing the same content through temp files stays unsanctioned. The in-workspace fallbacks need nothing outside: every section is composed from the session files, so `session.sh board` or a direct read of the record recovers the same content.
+The cut is budgeted twice, about 500 lines or about 40KB, whichever binds first, so a page stays under the harness's output cap in practice; the one residual is a single block that exceeds the budget alone, and it renders whole on its own page. If a harness still truncates such a page, it prints a notice naming its saved copy of the command's output: that copy is the command's own output, and reading it is sanctioned by `@laws#workspace-confinement`, read-only, that named file alone. Routing the same content through temp files stays unsanctioned. The in-workspace fallbacks need nothing outside: every section is composed from the session files, so `ctx session board` or a direct read of the record recovers the same content.
 
-The refs form is the on-demand consult: it streams the named sessions alone, each composed exactly as the unit load composes a reference, and pages them locally with its own map, banner, and tail, so a large reference never truncates. A missing ref is fatal; zero refs, or a numeric token in a ref position, prints the usage at rc 1; a session named `refs` stays reachable through the escape hatch `session.sh load refs refs`.
+The refs form is the on-demand consult: it streams the named sessions alone, each composed exactly as the unit load composes a reference, and pages them locally with its own map, banner, and tail, so a large reference never truncates. A missing ref is fatal; zero refs, or a numeric token in a ref position, prints the usage at rc 1; a session named `refs` stays reachable through the escape hatch `ctx session load refs refs`.
 
-### session.sh stamp: the receipt
+### ctx session stamp: the receipt
 
 Derives the next anchor from `state.md`, rewrites `current_anchor`, and appends the anchor line with the attention verbatim, printing the transition. A malformed state file or a missing attention fails loudly, with no partial write.
 
 ```bash
-.contexture/scripts/session.sh stamp <unit> "<attention>"
+.contexture/scripts/ctx session stamp <unit> "<attention>"
 ```
 
-`.contexture/scripts/session.sh query anchors <unit>` reconstructs the map of periods and their receipts.
+`.contexture/scripts/ctx session query anchors <unit>` reconstructs the map of periods and their receipts.
 
-### session.sh board: the board
+### ctx session board: the board
 
 Returns the live board: every unclosed entry with its body whole, then the open task slugs and the open threads with their targets, each list under its nudge line; an empty list prints nothing. Live means unclosed: the set is the journal entries that no closure names. Takes one form, a session slug:
 
 ```bash
-.contexture/scripts/session.sh board <unit>
+.contexture/scripts/ctx session board <unit>
 ```
 
-The script collects closure targets and streams live bodies in one shot, then lists the backlog slugs whose status is not DONE under the closing nudge; the opener names the counts, and a missing backlog is loud on stderr with no tail. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation of `session.sh board` fails loudly: a path, the legacy double path, an extra argument, or a flag.
+The script collects closure targets and streams live bodies in one shot, then lists the backlog slugs whose status is not DONE under the closing nudge; the opener names the counts, and a missing backlog is loud on stderr with no tail. The closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation of `ctx session board` fails loudly: a path, the legacy double path, an extra argument, or a flag.
 
-`session.sh load` composes this board for the load's journal section; run directly, `session.sh board` is the updated board: the open entries, the open threads, and the open tasks in one stream. The refs form composes the board per reference session, so a consulted session streams its live entries too.
+`ctx session load` composes this board for the load's journal section; run directly, `ctx session board` is the updated board: the open entries, the open threads, and the open tasks in one stream. The refs form composes the board per reference session, so a consulted session streams its live entries too.
 
-### session.sh query: the named looks
+### ctx session query: the named looks
 
 Answers the foreseeable questions over the record in bounded form, so no one improvises a grep that over-reads. Every kind is a named form, never a flag:
 
 ```bash
-.contexture/scripts/session.sh query <kind> [args]
-.contexture/scripts/session.sh query units <repo>
-.contexture/scripts/session.sh query anchors <unit>
-.contexture/scripts/session.sh query search <unit> <term>
+.contexture/scripts/ctx session query <kind> [args]
+.contexture/scripts/ctx session query units <repo>
+.contexture/scripts/ctx session query anchors <unit>
+.contexture/scripts/ctx session query search <unit> <term>
 ```
 
 | kind | args | what it returns |
@@ -153,25 +153,25 @@ Every miss is loud: rc 1, zero stdout, a named error, never a plausible empty. O
 The write side, one command per act. Every artifact write rides it:
 
 ```bash
-.contexture/scripts/session.sh append <unit>
-.contexture/scripts/session.sh amend <unit> <slug>
-.contexture/scripts/session.sh flip <unit> <verb> <slug> [<slug> ...]
-.contexture/scripts/session.sh drop <unit> <slug> [<slug> ...]
-.contexture/scripts/session.sh next <unit> "<pointer>"
-.contexture/scripts/session.sh refs <unit> [<session> ...]
-.contexture/scripts/session.sh close <unit>
+.contexture/scripts/ctx session append <unit>
+.contexture/scripts/ctx session amend <unit> <slug>
+.contexture/scripts/ctx session flip <unit> <verb> <slug> [<slug> ...]
+.contexture/scripts/ctx session drop <unit> <slug> [<slug> ...]
+.contexture/scripts/ctx session next <unit> "<pointer>"
+.contexture/scripts/ctx session refs <unit> [<session> ...]
+.contexture/scripts/ctx session close <unit>
 ```
 
 `append` reads one or more blocks on stdin, and each block's first line decides where it lands: `@entry` in the journal, `@finding` in knowledge, `@task` in the backlog. The shapes are the templates (`.contexture/templates/`); write by filling one, and the command derives the anchor, normalizes the form, and appends it with the standard separator. An `@entry` must carry its `THREAD` line: the act outside the unit's own flow that must resolve it, or `none`; a missing line, an empty value, a duplicate, or `true` and `false` refuse. `amend` replaces task fields in place, and the rest of the task stays byte-identical. `flip` moves a status: `progress` refuses until the state already names the slug, and `done` lands the receipt first, one entry whose `WHAT` carries each slug's `backlog/<slug>: DONE` with the evidence. `drop` removes the tasks a record entry names, and the record stays. `next` overwrites the pointer. `refs` sets the read-only mounts; zero sessions clears them. `close` marks the unit `CLOSED`, warning on open tasks and audit findings rather than refusing.
 
 Every form validates all inputs before any write: a refusal is loud, rc 1 with zero partial writes, and a landing prints what it wrote. The acts repeat, so one call carries several blocks or several slugs.
 
-### session.sh audit: the repair instrument
+### ctx session audit: the repair instrument
 
 Returns the record's defects, each flagged with a line or a slug, and exits nonzero when any fires. Takes one form, a session slug:
 
 ```bash
-.contexture/scripts/session.sh audit <unit>
+.contexture/scripts/ctx session audit <unit>
 ```
 
 The script derives `backlog.md` and `state.md` from the session folder; a sibling that cannot be read skips its check quietly. When the run is clean the script also prints the open-thread tail: the entries whose `THREAD` names an act outside the unit and that no closure names, each with its target. The tail is a display, never an enforcement: a thread that pauses stays open, and its line in the tail is the reminder it exists. The audit parses the valued form, and the presence check runs from the enforcement era: an entry dated at or after `2026-09-18` that carries no `THREAD` line flags `MISSING THREAD`; the constant (`ENF_FROM`) lives in the script's BEGIN block, so pre-era records stay quiet.
@@ -191,12 +191,12 @@ The classes, and what each one asks for:
 
 The audit is a repair instrument: fix what it flags and fill what is missing before the period ends; a note about a flag is not a repair. It runs at refresh, close, and handoff, and close and handoff expect exit 0.
 
-### session.sh index: the selection index
+### ctx session index: the selection index
 
 Returns one line per rhythm: the name, the path, its trigger, and its activation policy. It takes no arguments; it reads `.contexture/rhythms/`.
 
 ```bash
-.contexture/scripts/session.sh index
+.contexture/scripts/ctx session index
 ```
 
 The boot loads this index to discover what rhythms exist; a rhythm's body loads only when it is selected. A file with no `use when:` line prints `(missing)`, and an activation the file does not state defaults to `propose`: the agent proposes the rhythm on its trigger and the human confirms. `auto` is the explicit opt-in, where the agent applies the rhythm without a separate ask.
@@ -209,11 +209,11 @@ The scripts are payload instruments, shipped with the convention and identical e
 
 The loop is what the machinery does with the record: it makes gaps visible at fixed points and demands repair instead of notes. Taking the stations in the order a unit meets them:
 
-- **Boot** runs `session.sh load` and `session.sh index`. The load is the subtraction, not a judgment call, so the agent pays for what is open and nothing else.
+- **Boot** runs `ctx session load` and `ctx session index`. The load is the subtraction, not a judgment call, so the agent pays for what is open and nothing else.
 - **Work** journals events as they happen and flags knowledge-worthy entries where they land. The flag is the harvest's input; nothing needs to be collected later.
 - **Refresh** runs at every rhythm boundary and inside close. It sweeps the artifacts: events journaled, backlog statuses advanced, `next_action` refreshed. It runs the harvest: every open flag, one candidate each; a confirmed candidate lands in knowledge and its entry closes by reference, and a candidate that is not landed drops. Then it runs the audit, and what it flags is fixed.
 - **Close** closes the period's done events by reference and requires the audit to exit 0.
-- **Handoff** runs before context death, whether that is a compaction, a tool change, or a long break. The period-end writes run if they are not done, then the bounded cold read: run `session.sh load` and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; the full-body pass belongs to the next boot, a fresh context. While the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction. `session.sh audit` exits 0.
+- **Handoff** runs before context death, whether that is a compaction, a tool change, or a long break. The period-end writes run if they are not done, then the bounded cold read: run `ctx session load` and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; the full-body pass belongs to the next boot, a fresh context. While the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction. `ctx session audit` exits 0.
 
 Why this holds together:
 
@@ -234,9 +234,11 @@ examples/            example rhythms, copied at adoption
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
   templates/         the grammars every artifact fills
   filters/           modular stream filters (diff.awk, list.awk, log.awk, and workspace additions)
-  scripts/           the session.sh entry point, the compact.sh filter, the fixture harness, and their workers
+  scripts/           the ctx entry point (binder and run built-in) with the compat shims
+  ctx/               the command families: session (the record engine), ideas, and workspace additions
   rhythms/           your process patterns
   sessions/          the units of work
+  tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand)
 ```
 
 The root belongs to the harness: AGENTS.md has to sit where the harness looks for repository instructions, and the overlays sit beside it. Everything else lives in the drawer. An adopting workspace keeps its own files at the root, freely; the drawer's contents are the convention's, and the two never mix.
@@ -247,9 +249,9 @@ Placement follows the class of the file, never convenience:
 
 | class | files | on an update |
 |---|---|---|
-| update payload | AGENTS.md, `.contexture/templates/`, `.contexture/scripts/`, `.contexture/filters/` | replaced from the new tag, byte for byte |
+| update payload | AGENTS.md, `.contexture/templates/`, `.contexture/scripts/`, `.contexture/ctx/session/`, `.contexture/filters/` | replaced from the new tag, byte for byte |
 | adoption material | `.contexture/ONBOARDING.md`, `examples/` | delivered once; never re-synced; the guideline is removed when the adoption closes |
-| workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/` | never touched |
+| workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/`, workspace-added families under `.contexture/ctx/` | never touched |
 
 The classes exist because the files have different lives. The payload evolves with the convention and must stay identical across every workspace. Adoption material is used once and then belongs to the past: the guideline has served its purpose by close, and the examples are reference material a workspace copies when it wants them. Sessions and rhythms are the workspace's own state, and no update may touch them.
 

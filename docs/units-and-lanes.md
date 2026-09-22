@@ -27,7 +27,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 `state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the one next action, the objective, the repos it touches, and optional reference sessions (`ref_sessions`). Nothing else; detail lives behind references. It is a pointer, not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
 
-`backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence (`session.sh flip done`), and the completion lands in the journal in the same breath.
+`backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence (`ctx session flip done`), and the completion lands in the journal in the same breath.
 
 `journal.md` is the memory: the running record of what happened. Entries land as things happen, never batched at the end, and they are never edited afterward; a revision supersedes its predecessor by reference. Each entry carries what happened, the result, and why the next step follows. The journal exists to rebuild the working context from scratch: a fresh boot loads the live entries and nothing else, and holds the position without the conversation.
 
@@ -35,7 +35,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 `lanes/` holds delegated work, one folder per dispatch; its own section follows.
 
-The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command. `state.md` is the pointer, refreshed as the work moves (`session.sh stamp`, `next`, `refs`, `close`); `backlog.md` evolves in place as tasks move (`session.sh append`, `amend`, `flip`, `drop`); `journal.md` and `knowledge.md` only grow (`session.sh append`), which is why they survive every compaction intact.
+The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command. `state.md` is the pointer, refreshed as the work moves (`ctx session stamp`, `next`, `refs`, `close`); `backlog.md` evolves in place as tasks move (`ctx session append`, `amend`, `flip`, `drop`); `journal.md` and `knowledge.md` only grow (`ctx session append`), which is why they survive every compaction intact.
 
 ## The unit's life
 
@@ -50,7 +50,7 @@ The first thing the agent does in a fresh context, mechanically:
 3. Get the field and match. One command lists the candidates, and the message is read against them:
 
    ```
-   .contexture/scripts/session.sh active
+   .contexture/scripts/ctx session active
    ```
 
    A close match proposes continuing that unit; no match proposes a new one.
@@ -58,21 +58,21 @@ The first thing the agent does in a fresh context, mechanically:
 5. Run the load and keep calling until a page reads complete (read every page the map reports):
 
    ```bash
-   .contexture/scripts/session.sh load <unit>
-   .contexture/scripts/session.sh load refs <ref_1> ... <ref_N> [<page>]
+   .contexture/scripts/ctx session load <unit>
+   .contexture/scripts/ctx session load refs <ref_1> ... <ref_N> [<page>]
    ```
 
    The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The backlog section renders its DONE task blocks compactly (the task line, status, objective, description); open and statusless blocks render whole, and the file itself is never edited. The load is one subtraction: live means not closed; anchors order periods and receipt loads, never liveness. Knowledge loads fully; it is small, and every line is a settled decision. Reference sessions are consulted on demand with `load refs <ref_1> ... <ref_N>`: they stream read-only under their own banner, map, and tail, apart from the unit load.
 6. Run the rhythm index: one line per rhythm, its trigger, and its activation policy.
 7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the session files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
-8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `.contexture/scripts/session.sh query anchors <unit>` reconstructs the map of periods and their receipts:
+8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `.contexture/scripts/ctx session query anchors <unit>` reconstructs the map of periods and their receipts:
 
    ```bash
-   .contexture/scripts/session.sh stamp <unit> "<the loaded set + ref_sessions + the git state>"
+   .contexture/scripts/ctx session stamp <unit> "<the loaded set + ref_sessions + the git state>"
    ```
 9. Continue from `next_action`, following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
 
-New work bootstraps a unit instead of joining one: run `.contexture/scripts/session.sh bootstrap <slug> "<objective>" [<repos>]`; it creates the folder, the state pointer at A0, and the folded A1 receipt, printing the next move; then continue at step 5.
+New work bootstraps a unit instead of joining one: run `.contexture/scripts/ctx session bootstrap <slug> "<objective>" [<repos>]`; it creates the folder, the state pointer at A0, and the folded A1 receipt, printing the next move; then continue at step 5.
 
 ### Refresh
 
@@ -83,11 +83,11 @@ The artifact sweep, shared by rhythm boundaries, close, and handoff: the events 
 Two distinct ends:
 
 - Period end (a turn ends; the unit continues): run the refresh, then close the period's resolved threads by reference. The stray audit's checklist is the open-thread tail the journal audit prints: every thread that resolved this period closes now. The journal audit must exit 0; it is a repair instrument, and what it flags is fixed before the period ends, never noted. The folder stays ACTIVE.
-- Unit close (the backlog completes, or the human ends the unit): append the closing events and the next-move decision, re-read the files and confirm consistency, promote durable knowledge at the human's direction, then mark the unit CLOSED (`session.sh close`).
+- Unit close (the backlog completes, or the human ends the unit): append the closing events and the next-move decision, re-read the files and confirm consistency, promote durable knowledge at the human's direction, then mark the unit CLOSED (`ctx session close`).
 
 ### Handoff
 
-The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the bounded cold read. Run `session.sh load <unit>` and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; the full-body pass belongs to the next boot, a fresh context. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
+The proof before context death. When a context is about to die (compaction, tool change, a long break): run the period-end writes if they are not done, then verify with the bounded cold read. Run `ctx session load <unit>` and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; the full-body pass belongs to the next boot, a fresh context. The audit exits 0. The sweep reads the whole open list: every entry is confirmed as a live thread or a legitimate receipt, and a resolved thread missing its stamp closes here. Gaps close while the context is still full, never after compaction.
 
 Boot is the reader; handoff is the writer's proof. Both run against the same record, from opposite sides of the context boundary.
 

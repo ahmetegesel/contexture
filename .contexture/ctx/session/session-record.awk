@@ -32,7 +32,7 @@ function usage_all() {
   print "       session.sh next <session-slug> \"<pointer>\"" > "/dev/stderr"
   print "       session.sh refs <session-slug> [<session> ...]" > "/dev/stderr"
   print "       session.sh close <session-slug>" > "/dev/stderr"
-  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
 
@@ -45,7 +45,7 @@ function usage() {
   else if (act == "refs") print "Usage: session.sh refs <session-slug> [<session> ...]" > "/dev/stderr"
   else if (act == "close") print "Usage: session.sh close <session-slug>" > "/dev/stderr"
   else usage_all()
-  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
 
@@ -754,6 +754,10 @@ function do_append(   k, j, i, path, kind) {
     else path = backlog_path
     append_block(k, path)
   }
+  ACT_SLUGS = ""
+  for (k = 1; k <= NBLK; k++) {
+    if (BK[k] == "task") ACT_SLUGS = (ACT_SLUGS == "") ? TSLUG[k] : ACT_SLUGS ", " TSLUG[k]
+  }
   for (k = 1; k <= NBLK; k++) {
     if (BK[k] == "entry") printf "appended: @entry %s (journal.md %d-%d)\n", ESLUG[k], APSK[k], APEK[k]
     else if (BK[k] == "finding") printf "appended: @finding %s (knowledge.md %d-%d)\n", FSLUG[k], APSK[k], APEK[k]
@@ -997,6 +1001,8 @@ function do_flip(   i, j, k, verb, lit, idx, what, path, start, end) {
       fail("ERROR: the state must already name " TARG[i] " to activate it (run: session.sh next " unit " \"<a pointer naming " TARG[i] ">\")")
     }
   }
+  ACT_SLUGS = ""
+  for (i = 1; i <= nsl; i++) ACT_SLUGS = (ACT_SLUGS == "") ? TARG[i] : ACT_SLUGS ", " TARG[i]
   if (verb == "done") {
     read_stdin()
     split_blocks()
@@ -1081,6 +1087,8 @@ function do_drop(   i, j, k) {
       fail("ERROR: " TARG[i] " is IN_PROGRESS and the state still names it (park it first: session.sh flip " unit " todo " TARG[i] ", then: session.sh drop " unit " " TARG[i] ")")
     }
   }
+  ACT_SLUGS = ""
+  for (i = 1; i <= nsl; i++) ACT_SLUGS = (ACT_SLUGS == "") ? TARG[i] : ACT_SLUGS ", " TARG[i]
   read_stdin()
   split_blocks()
   if (NBLK != 1) fail("ERROR: drop needs one record block on stdin")
@@ -1153,6 +1161,7 @@ function do_next(   i, j, candidate, missing, n, nimp, slug, nnal) {
   for (i = 1; i <= ON; i++) candidate = candidate " " OB[i]
   nimp = 0
   missing = ""
+  ACT_SLUGS = ""
   for (i = 1; i <= NB; i++) {
     if (BL[i] ~ /^@task[ \t]/) {
       slug = field2(BL[i])
@@ -1161,6 +1170,7 @@ function do_next(   i, j, candidate, missing, n, nimp, slug, nnal) {
       st = block_status(i, j - 1)
       if (st == "IN_PROGRESS") {
         nimp++
+        ACT_SLUGS = (ACT_SLUGS == "") ? slug : ACT_SLUGS ", " slug
         if (index(candidate, slug) == 0) missing = (missing == "") ? slug : missing ", " slug
       }
       i = j - 1
@@ -1219,11 +1229,12 @@ function do_refs(   i, s, list, p, replaced, inserted) {
   printf "ref_sessions: [%s]\n", list
 }
 
-function run_audit(   cmd, tag, line, i) {
+function run_audit(   cmd, tag, line, i, adir) {
   AUDN = 0
   arc = ""
   tag = "session-record-audit-rc"
-  cmd = ".contexture/scripts/session-audit.awk " unit "; echo \"" tag "=$?\""
+  adir = (("CTX_SESSION_DIR" in ENVIRON) ? ENVIRON["CTX_SESSION_DIR"] : ".contexture/ctx/session")
+  cmd = adir "/session-audit.awk " unit "; echo \"" tag "=$?\""
   while ((cmd | getline line) > 0) {
     if (line ~ ("^" tag "=[0-9]+$")) {
       arc = substr(line, length(tag) + 2)
@@ -1234,6 +1245,19 @@ function run_audit(   cmd, tag, line, i) {
   }
   close(cmd)
   if (arc == "") fail("ERROR: could not determine the audit exit status")
+}
+
+function hooks_ready(   bin) {
+  if (!("CTX_BIN" in ENVIRON)) return 0
+  bin = ENVIRON["CTX_BIN"]
+  if (bin == "") return 0
+  return (system("test -x \"" bin "\"") == 0)
+}
+
+function fire_hooks(point, args,   bin) {
+  if (!hooks_ready()) return 0
+  bin = ENVIRON["CTX_BIN"]
+  return system("\"" bin "\" _hooks " point args)
 }
 
 function do_close(   i, j, s, open, st) {
@@ -1270,6 +1294,8 @@ function do_close(   i, j, s, open, st) {
   }
   save(state_path)
   print "CLOSED: " unit
+  if (fire_hooks("close", " CTX_UNIT \"" unit "\"") != 0)
+    fail("ERROR: close point failed (block hook)")
 }
 
 BEGIN {
@@ -1291,6 +1317,10 @@ BEGIN {
   else {
     print "ERROR: unknown record act: " act > "/dev/stderr"
     usage_all()
+  }
+  if (act == "append" || act == "flip" || act == "drop" || act == "next") {
+    if (fire_hooks("task-landing", " CTX_UNIT \"" unit "\" CTX_ACT " act " CTX_SLUGS \"" ACT_SLUGS "\"") != 0)
+      fail("ERROR: task-landing point failed (block hook)")
   }
   exit 0
 }

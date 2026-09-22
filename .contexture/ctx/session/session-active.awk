@@ -12,7 +12,7 @@
 
 function usage() {
   print "Usage: session.sh active" > "/dev/stderr"
-  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
 

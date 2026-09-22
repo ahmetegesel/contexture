@@ -13,7 +13,7 @@ One unit of work, one folder, four files, each with a single job:
 
 The files are the system, and they are agent-facing: the agent maintains them as it works, and the human reads prose rendered from them on request, never the artifacts themselves.
 
-One command family carries every write: the recording acts on `session.sh`. `append` lands journal entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. The shapes ride the templates, and every form validates before it writes, so a refusal is loud and leaves nothing partial.
+One command family carries every write: the recording acts on `ctx session`. `append` lands journal entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. The shapes ride the templates, and every form validates before it writes, so a refusal is loud and leaves nothing partial.
 
 ## state.md, the pointer
 
@@ -75,7 +75,7 @@ Why a queue and not a numbered plan: a sequential plan assumes one fixed track, 
 
 The journal is the unit's running record and the single recording surface: events land as they happen, and the file only ever gains lines. It exists to do one thing: rebuild the working context from scratch. A fresh session loads the live entries and nothing else, and holds the position without the conversation. That reader decides what deserves an entry: whatever the reconstruction needs.
 
-Entries can fold. At a human-called chapter turn, a generation of entries may close into one comprehensive digest: a single entry carrying the chapter's synthesis and its decision sets whole, written for a reader with no prior context, whose `CLOSES` fold the originals by reference and stand as the fetch map. Folded entries leave the load, never the file. And every summary, digest included, is an entry point, never the whole story: the detail stays in the entries behind their refs, and a reader who needs it fetches the original by its slug with `session.sh query entry <unit> <slug>`. Fetching is judgement, one line away.
+Entries can fold. At a human-called chapter turn, a generation of entries may close into one comprehensive digest: a single entry carrying the chapter's synthesis and its decision sets whole, written for a reader with no prior context, whose `CLOSES` fold the originals by reference and stand as the fetch map. Folded entries leave the load, never the file. And every summary, digest included, is an entry point, never the whole story: the detail stays in the entries behind their refs, and a reader who needs it fetches the original by its slug with `ctx session query entry <unit> <slug>`. Fetching is judgement, one line away.
 
 ```text
 @anchor A12 ("continues A11", attention: <the loaded set>)
@@ -165,7 +165,7 @@ A fresh unit starts at `A0`; its first boot stamps `A1`; each later stamp is the
 
 Anchors have exactly two jobs: period ordering and load receipts. They are never liveness. No entry loads or skips by its anchor, and age never closes anything: an entry stays live until a closure names it.
 
-Entries carry the anchor that was current when they were written, which clusters them into periods by `session.sh query anchors <unit>`; the clustering survives any reordering of the file. Knowledge carries no anchor: the temporal axis belongs to the journal, and refs are the seam between the axes. `state.md` carries only the counter's current value.
+Entries carry the anchor that was current when they were written, which clusters them into periods by `ctx session query anchors <unit>`; the clustering survives any reordering of the file. Knowledge carries no anchor: the temporal axis belongs to the journal, and refs are the seam between the axes. `state.md` carries only the counter's current value.
 
 ## Supersession
 

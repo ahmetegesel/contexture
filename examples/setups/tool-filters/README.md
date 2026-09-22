@@ -16,22 +16,22 @@ The investigation that produced this menu is the worked example: a multi-project
 
 ## How Discovery Works
 
-`.contexture/scripts/compact.sh` discovers every filter placed in `.contexture/filters/*.awk`.
+`ctx run` discovers every filter placed in `.contexture/filters/*.awk`.
 
-- Runner mode (`compact.sh <cmd>`) selects by command identity: the `# command: <regex>` header is matched against the reconstructed command line (the basename of the command plus its arguments). First match wins, and two filters claiming one command raise a shadow warning.
-- Stdin mode (`<cmd> | compact.sh`) selects by stream signature: the `# match: <regex>` header is tested against a sample of the first 40 lines. `# default` marks the fallback, `log.awk`.
+- Runner mode (`ctx run <cmd>`) selects by command identity: the `# command: <regex>` header is matched against the reconstructed command line (the basename of the command plus its arguments). First match wins, and two filters claiming one command raise a shadow warning.
+- Stdin mode (`<cmd> | ctx run`) selects by stream signature: the `# match: <regex>` header is tested against a sample of the first 40 lines. `# default` marks the fallback, `log.awk`.
 - ANSI escape sequences are stripped before selection and filtering, so colored output matches its plain shapes; the raw bytes stay untouched for the fail-safe comparison.
 - Guards: empty or grown output falls back to raw; a shrinking filter with no notice line falls back to raw unless it declares `# format-only`; a notice-only output passes through so a false-green signal is never hidden; command stderr stays visible, whole on failure or empty stdout and tail-capped with its own notice otherwise.
 - `COMPACT_DISABLE=1` bypasses compaction and passes the stream through raw; `COMPACT_DEBUG=1` reports the selection, the filter name and the match line, on stderr.
 
 ```sh
-cargo test | .contexture/scripts/compact.sh
-pytest | .contexture/scripts/compact.sh
-npx vitest run | .contexture/scripts/compact.sh
-go test ./... | .contexture/scripts/compact.sh
+cargo test | .contexture/scripts/ctx run
+pytest | .contexture/scripts/ctx run
+npx vitest run | .contexture/scripts/ctx run
+go test ./... | .contexture/scripts/ctx run
 ```
 
-When no specialized filter matches, `compact.sh` falls back to `log.awk` or passes raw output through unaltered.
+When no specialized filter matches, `ctx run` falls back to `log.awk` or passes raw output through unaltered.
 
 ## The Filter Menu
 
@@ -80,7 +80,7 @@ A pair is named `<filter>-<case>.in` and `<filter>-<case>.expected`. Run the har
 tests/filter-tests.sh
 ```
 
-It pipes each input through `compact.sh --filter=<filter>` and byte-compares the output with the expected file. Core cases run through the base `compact.sh`; setup cases run through a staged sandbox because the base discovery resolves only `.contexture/filters/`. The presence check fails when a filter carries no fixture pair, so a new filter is not done until it has one. Mechanics cases pin the runner itself: the ANSI strip, command identity in runner mode, the notice-only false-green output, and the recovery fallback to raw.
+It pipes each input through the runner (`ctx run --filter=<filter>`) and byte-compares the output with the expected file. Core cases run through the base runner; setup cases run through a staged sandbox because the base discovery resolves only `.contexture/filters/`. The presence check fails when a filter carries no fixture pair, so a new filter is not done until it has one. Mechanics cases pin the runner itself: the ANSI strip, command identity in runner mode, the notice-only false-green output, and the recovery fallback to raw.
 
 ## Writing Custom Filters
 
@@ -95,4 +95,4 @@ It pipes each input through `compact.sh --filter=<filter>` and byte-compares the
 ### Authoring Gotchas
 
 - **Multibyte markers need literal alternation.** On macOS one-true-awk a bracket class holding multibyte characters matches one byte per member, so `[✓❯×↓]` can never complete and a required trailing space after the class can never match. Write `(✓|❯|×|↓)` instead. The vitest filter's marker branches were dead for exactly this reason before the adaptation.
-- **Directive regexes travel verbatim.** `compact.sh` reads a header directive with `sed` and passes it to awk through the environment, so backslash escapes (`\(`, `\[`) reach the regex intact. Keep each directive on a single line: the header read takes the first matching line only.
+- **Directive regexes travel verbatim.** The runner reads a header directive with `sed` and passes it to awk through the environment, so backslash escapes (`\(`, `\[`) reach the regex intact. Keep each directive on a single line: the header read takes the first matching line only.

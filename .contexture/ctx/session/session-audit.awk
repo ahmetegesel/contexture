@@ -17,7 +17,7 @@
 
 function usage() {
   print "Usage: session.sh audit <session-slug>" > "/dev/stderr"
-  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  print "help: ctx session help" > "/dev/stderr"
   fatal = 1
   exit 1
 }

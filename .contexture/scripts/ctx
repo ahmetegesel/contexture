@@ -1,0 +1,781 @@
+#!/bin/sh
+# ctx: the workspace binder: one public entry over builtins and families
+# Zero-install: POSIX /bin/sh, awk, and core OS utilities only.
+#
+# Usage: ctx help | ctx run <cmd> [args...] | ctx <family> [args...]
+# The help output is the contract surface; this header never prints.
+#
+# Maintainer note (off-path, never taught by help or top docs):
+# discovery reads .contexture/ctx/<family>/entry, an executable carrying the
+# three header lines "# ctx-family: <name>", "# summary: <line>", and
+# "# ctx-subcommands: <list>". The directory name is the family name and must
+# equal the # ctx-family value; a mismatch or any missing line is a malformed
+# header: the family skips with a stderr warning and never blocks core verbs.
+# Reserved names are the session verb set (read from the session family entry
+# header) plus refresh, run, and hooks; a reserved directory refuses with a
+# shadow warning at discovery, session being the one allowed exception. ctx
+# chdirs to the workspace root before dispatching a family; the entry then
+# owns argv, streams, and rc through exec. The built-in run owns the
+# compaction selection body (filters under .contexture/filters plus family
+# .contexture/ctx/<family>/filters merged after base); .contexture/scripts/
+# compact.sh is a one-way shim into it and sets CONTEXTURE_COMPACT_SHIM=1 so
+# the legacy message labels stay byte-identical through the shim.
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$dir/../.." && pwd)
+ctx_root="$root/.contexture/ctx"
+
+ctx_err() {
+  printf 'ctx: %s\n' "$*" >&2
+}
+
+# ---------------------------------------------------------------------------
+# session verbs for reserved-name checks: read from the session family entry
+# header when present (the family owns its verb set), literal fallback
+session_verbs=""
+session_verbs_loaded=0
+
+load_session_verbs() {
+  if [ "$session_verbs_loaded" -eq 1 ]; then
+    return 0
+  fi
+  session_verbs_loaded=1
+  if [ -x "$ctx_root/session/entry" ]; then
+    session_verbs=$(header_field "$ctx_root/session/entry" ctx-subcommands)
+  fi
+  if [ -z "$session_verbs" ]; then
+    session_verbs="active amend append audit board bootstrap close drop flip help index load next query refs stamp"
+  fi
+}
+
+is_reserved() {
+  case "$1" in
+    refresh|run|hooks)
+      return 0
+      ;;
+  esac
+  case " $session_verbs " in
+    *" $1 "*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
+header_field() {
+  # first value of a family header line, trimmed of surrounding whitespace
+  sed -n "s/^# $2: //p" "$1" | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+# Print valid family names, one per line, name-sorted (LC_ALL=C). Reserved or
+# malformed candidates warn on stderr and stay absent; a directory without an
+# entry file is simply not a family.
+list_families() {
+  [ -d "$ctx_root" ] || return 0
+  load_session_verbs
+  found=""
+  for d in "$ctx_root"/*/; do
+    [ -d "$d" ] || continue
+    n=${d%/}
+    n=${n##*/}
+    case "$n" in
+      ""|*[[:space:]]*)
+        continue
+        ;;
+    esac
+    if is_reserved "$n" && [ "$n" != "session" ]; then
+      ctx_err "reserved name refused (shadow): $n"
+      continue
+    fi
+    entry="$d"entry
+    if [ ! -f "$entry" ]; then
+      continue
+    fi
+    if [ ! -x "$entry" ]; then
+      ctx_err "skipping family $n: entry is not executable"
+      continue
+    fi
+    fam=$(header_field "$entry" ctx-family)
+    sum=$(header_field "$entry" summary)
+    subs=$(header_field "$entry" ctx-subcommands)
+    if [ -z "$fam" ] || [ -z "$sum" ] || [ -z "$subs" ] || [ "$fam" != "$n" ]; then
+      ctx_err "skipping family $n: malformed header"
+      continue
+    fi
+    found="$found$n
+"
+  done
+  if [ -n "$found" ]; then
+    printf '%s' "$found" | LC_ALL=C sort -u
+  fi
+  return 0
+}
+
+show_top_help() {
+  cat <<'EOF'
+ctx: the workspace command binder
+
+usage:
+  ctx                              this summary
+  ctx help [--all]                 this summary; --all also runs each family's own help block
+  ctx run <cmd> [args...]          run a command through stream compaction; the command's exit code is preserved
+  cmd | ctx run                    pipe form: compact a stream
+  ctx <family> [args...]           dispatch to a family: arguments, streams, and exit code pass through
+  ctx session <verb> [args...]     the session record verbs
+EOF
+  load_session_verbs
+  printf '\nsession verbs:\n  %s\n' "$session_verbs"
+  printf '\nfamilies:\n'
+  fams=$(list_families)
+  if [ -z "$fams" ]; then
+    printf '  (none discovered)\n'
+    return 0
+  fi
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    entry="$ctx_root/$n/entry"
+    sum=$(header_field "$entry" summary)
+    subs=$(header_field "$entry" ctx-subcommands)
+    printf '  %s    %s (%s)\n' "$n" "$sum" "$subs"
+  done <<EOF
+$fams
+EOF
+  return 0
+}
+
+show_family_help_blocks() {
+  fams=$(list_families)
+  [ -n "$fams" ] || return 0
+  if ! cd "$root"; then
+    ctx_err "cannot enter workspace root: $root"
+    return 1
+  fi
+  while IFS= read -r n; do
+    [ -n "$n" ] || continue
+    entry="$ctx_root/$n/entry"
+    printf '\nfamily %s:\n' "$n"
+    "$entry" help || ctx_err "family $n: help exited nonzero"
+  done <<EOF
+$fams
+EOF
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# built-in run: the selection body (one home; compact.sh shims into this).
+# Labels keep the legacy identity through the shim; direct ctx run teaches
+# ctx forms. Bracketed operational notices stay [compact: ...] everywhere so
+# the COMPACT_DISABLE/DEBUG contracts and the notice vocabulary never drift.
+run_body() {
+  set -e
+  if [ "${CONTEXTURE_COMPACT_SHIM:-0}" = "1" ]; then
+    run_label="compact.sh"
+    run_usage_line="usage: compact.sh [--filter=NAME] [--stats] [cmd [args...]]"
+  else
+    run_label="ctx run"
+    run_usage_line="usage: ctx run [--filter=NAME] [--stats] [cmd [args...]]"
+  fi
+  unset CONTEXTURE_COMPACT_SHIM
+
+  SCRIPT_DIR="$dir"
+  FILTERS_DIR="$SCRIPT_DIR/../filters"
+  FAMILIES_DIR="$SCRIPT_DIR/../ctx"
+
+  if [ ! -d "$FILTERS_DIR" ]; then
+    if [ -d "./.contexture/filters" ]; then
+      FILTERS_DIR="./.contexture/filters"
+    elif [ -d "$SCRIPT_DIR/filters" ]; then
+      FILTERS_DIR="$SCRIPT_DIR/filters"
+    fi
+  fi
+
+  explicit_filter=""
+  stats=0
+  debug=0
+  if [ "${COMPACT_DEBUG:-0}" = "1" ]; then
+    debug=1
+  fi
+
+  # Emit the captured command stderr: whole on failure or empty stdout,
+  # tail-capped with its own notice otherwise
+  emit_stderr() {
+    if [ -z "$stderr_input" ]; then
+      return 0
+    fi
+    if [ "$cmd_status" -ne 0 ] || [ -z "$raw_input" ]; then
+      printf "%s\n" "$stderr_input" >&2
+      return 0
+    fi
+    stderr_lines=$(printf "%s\n" "$stderr_input" | wc -l | tr -d ' ')
+    if [ "$stderr_lines" -le 10 ]; then
+      printf "%s\n" "$stderr_input" >&2
+    else
+      printf "[compact: stderr capped: showing the last 10 of %s lines; COMPACT_DISABLE=1 for the full stream]\n" "$stderr_lines" >&2
+      printf "%s\n" "$stderr_input" | tail -n 10 >&2
+    fi
+  }
+
+  # Read the first value of a filter header directive, trimmed of surrounding
+  # whitespace so an invisible blank never silently disables it
+  directive_value() {
+    sed -n "s/^# $1: //p" "$2" | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+  }
+
+  # Name-sorted family directories carrying a filters/ folder; whitespace
+  # names never form (list discipline matches the binder)
+  family_names() {
+    [ -d "$FAMILIES_DIR" ] || return 0
+    for fd in "$FAMILIES_DIR"/*/; do
+      [ -d "$fd" ] || continue
+      bn=${fd%/}
+      bn=${bn##*/}
+      case "$bn" in
+        ""|*[[:space:]]*)
+          continue
+          ;;
+      esac
+      printf '%s\n' "$bn"
+    done | LC_ALL=C sort
+    return 0
+  }
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --help|-h)
+        printf '%s\n' "$run_usage_line"
+        printf 'env: COMPACT_DISABLE=1 bypasses compaction; COMPACT_DEBUG=1 reports the selection\n'
+        exit 0
+        ;;
+      --stats)
+        stats=1
+        shift
+        ;;
+      --filter=*)
+        explicit_filter="${1#--filter=}"
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        printf '%s: unrecognized option: %s\n' "$run_label" "$1" >&2
+        exit 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  # Explicit bypass: raw execution, command exit code intact
+  if [ "${COMPACT_DISABLE:-0}" = "1" ]; then
+    if [ "$debug" -eq 1 ]; then
+      printf "[compact: debug: bypassed (COMPACT_DISABLE=1)]\n" >&2
+    fi
+    if [ $# -gt 0 ]; then
+      rc=0
+      "$@" || rc=$?
+      exit "$rc"
+    fi
+    cat
+    exit 0
+  fi
+
+  # Step 1: Ingest input (from command execution or standard input)
+  cmd_status=0
+  stderr_input=""
+  stdout_tmp=""
+  stderr_tmp=""
+
+  # Sanctioned scratch: workspace .contexture/tmp when writable, else TMPDIR
+  compact_tmpdir="${TMPDIR:-/tmp}"
+  ctx_root_tmp="$root/.contexture/tmp"
+  if [ -d "$root/.contexture" ] && mkdir -p "$ctx_root_tmp" 2>/dev/null && [ -d "$ctx_root_tmp" ] && [ -w "$ctx_root_tmp" ]; then
+    compact_tmpdir="$ctx_root_tmp"
+  fi
+
+  cleanup() {
+    if [ -n "$stdout_tmp" ]; then
+      rm -f "$stdout_tmp"
+    fi
+    if [ -n "$stderr_tmp" ]; then
+      rm -f "$stderr_tmp"
+    fi
+  }
+
+  if [ $# -gt 0 ]; then
+    # Command wrapper mode: stdout and stderr captured separately, exit code kept
+    trap cleanup EXIT
+    stdout_tmp=$(mktemp "$compact_tmpdir/compact-stdout.XXXXXX")
+    stderr_tmp=$(mktemp "$compact_tmpdir/compact-stderr.XXXXXX")
+    rc=0
+    ( "$@" >"$stdout_tmp" 2>"$stderr_tmp" ) || rc=$?
+    cmd_status=$rc
+    raw_input=$(cat "$stdout_tmp")
+    stderr_input=$(cat "$stderr_tmp")
+    rm -f "$stdout_tmp" "$stderr_tmp"
+    stdout_tmp=""
+    stderr_tmp=""
+  else
+    # Stdin pipe mode
+    raw_input=$(cat)
+  fi
+
+  # If both streams are empty, exit cleanly preserving command exit code
+  if [ -z "$raw_input" ] && [ -z "$stderr_input" ]; then
+    exit "$cmd_status"
+  fi
+
+  # Step 1b: Strip ANSI escape sequences before selection and filtering;
+  # raw bytes stay untouched for the fail-safe comparison
+  esc=$(printf '\033')
+  clean_input="$raw_input"
+  case "$raw_input" in
+    *"$esc"*)
+      clean_input=$(printf "%s\n" "$raw_input" | awk '{gsub(/\033\[[0-9;]*[a-zA-Z]/, ""); print}')
+      ;;
+  esac
+
+  # Step 2: Discover and select filter
+  selected_filter=""
+  default_filter=""
+
+  if [ -n "$explicit_filter" ]; then
+    candidate="$FILTERS_DIR/${explicit_filter}.awk"
+    if [ -f "$candidate" ]; then
+      selected_filter="$candidate"
+    elif [ -f "$FILTERS_DIR/$explicit_filter" ]; then
+      selected_filter="$FILTERS_DIR/$explicit_filter"
+    else
+      printf '%s: filter not found: %s in %s\n' "$run_label" "$explicit_filter" "$FILTERS_DIR" >&2
+      if [ -n "$raw_input" ]; then
+        printf "%s\n" "$raw_input"
+      fi
+      emit_stderr
+      exit "$cmd_status"
+    fi
+    if [ "$debug" -eq 1 ]; then
+      printf "[compact: debug: selected %s (explicit)]\n" "$(basename "$selected_filter")" >&2
+    fi
+  else
+    # Runner mode selects by command identity first: the wrapped command line
+    # is the signal, never the output sample
+    if [ $# -gt 0 ]; then
+      cmd_line=""
+      cmd_first=1
+      for arg in "$@"; do
+        if [ "$cmd_first" -eq 1 ]; then
+          arg=$(basename "$arg")
+          cmd_first=0
+        fi
+        cmd_line="$cmd_line $arg"
+      done
+      cmd_line=${cmd_line# }
+
+      if [ -d "$FILTERS_DIR" ]; then
+        for f in "$FILTERS_DIR"/*.awk; do
+          [ -f "$f" ] || continue
+          pat=$(directive_value command "$f")
+          [ -n "$pat" ] || continue
+          if printf "%s\n" "$cmd_line" | COMPACT_PAT="$pat" awk '$0 ~ ENVIRON["COMPACT_PAT"] {found=1; exit} END{exit !found}' 2>/dev/null; then
+            if [ -z "$selected_filter" ]; then
+              selected_filter="$f"
+              if [ "$debug" -eq 1 ]; then
+                printf "[compact: debug: selected %s (command match: %s)]\n" "$(basename "$f")" "$cmd_line" >&2
+              fi
+            else
+              printf "[compact: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$(basename "$f")" "$cmd_line" >&2
+            fi
+          fi
+        done
+      fi
+
+      # Family filters merge after base (name-sorted families): first match
+      # wins; a later family match warns as shadow unless its header carries
+      # "# ctx-filter-priority: over", which replaces the selection
+      if [ -d "$FAMILIES_DIR" ]; then
+        for bn in $(family_names); do
+          for f in "$FAMILIES_DIR/$bn/filters"/*.awk; do
+            [ -f "$f" ] || continue
+            pat=$(directive_value command "$f")
+            [ -n "$pat" ] || continue
+            if printf "%s\n" "$cmd_line" | COMPACT_PAT="$pat" awk '$0 ~ ENVIRON["COMPACT_PAT"] {found=1; exit} END{exit !found}' 2>/dev/null; then
+              prio=$(directive_value ctx-filter-priority "$f")
+              rel="$bn/$(basename "$f")"
+              if [ "$prio" = "over" ]; then
+                selected_filter="$f"
+                if [ "$debug" -eq 1 ]; then
+                  printf "[compact: debug: selected %s (command match: %s, priority over)]\n" "$rel" "$cmd_line" >&2
+                fi
+              elif [ -z "$selected_filter" ]; then
+                selected_filter="$f"
+                if [ "$debug" -eq 1 ]; then
+                  printf "[compact: debug: selected %s (command match: %s)]\n" "$rel" "$cmd_line" >&2
+                fi
+              else
+                printf "[compact: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$rel" "$cmd_line" >&2
+              fi
+            fi
+          done
+        done
+      fi
+    fi
+
+    if [ -z "$selected_filter" ]; then
+      # Zero-parameter auto-discovery: sample stream head and check signatures
+      sample=$(printf "%s\n" "$clean_input" | sed 40q)
+
+      if [ -d "$FILTERS_DIR" ]; then
+        for f in "$FILTERS_DIR"/*.awk; do
+          [ -f "$f" ] || continue
+          pat=$(directive_value match "$f")
+          if [ -n "$pat" ]; then
+            if printf "%s\n" "$sample" | COMPACT_PAT="$pat" awk 'BEGIN{rc=1} $0 ~ ENVIRON["COMPACT_PAT"] {rc=0; exit} END{exit rc}' 2>/dev/null; then
+              selected_filter="$f"
+              if [ "$debug" -eq 1 ]; then
+                printf "[compact: debug: selected %s (signature match: %s)]\n" "$(basename "$f")" "$pat" >&2
+                match_line=$(printf "%s\n" "$sample" | COMPACT_PAT="$pat" awk '$0 ~ ENVIRON["COMPACT_PAT"] {print; exit}' 2>/dev/null)
+                if [ -n "$match_line" ]; then
+                  printf "[compact: debug: matched line: %s]\n" "$match_line" >&2
+                fi
+              fi
+              break
+            fi
+          elif grep -q '^# default' "$f" 2>/dev/null; then
+            default_filter="$f"
+          fi
+        done
+      fi
+
+      # Family signature merge after base: same first-match, shadow, and
+      # priority rules as the command loop
+      if [ -d "$FAMILIES_DIR" ]; then
+        for bn in $(family_names); do
+          for f in "$FAMILIES_DIR/$bn/filters"/*.awk; do
+            [ -f "$f" ] || continue
+            pat=$(directive_value match "$f")
+            [ -n "$pat" ] || continue
+            if printf "%s\n" "$sample" | COMPACT_PAT="$pat" awk 'BEGIN{rc=1} $0 ~ ENVIRON["COMPACT_PAT"] {rc=0; exit} END{exit rc}' 2>/dev/null; then
+              prio=$(directive_value ctx-filter-priority "$f")
+              rel="$bn/$(basename "$f")"
+              if [ "$prio" = "over" ]; then
+                selected_filter="$f"
+                if [ "$debug" -eq 1 ]; then
+                  printf "[compact: debug: selected %s (signature match: %s, priority over)]\n" "$rel" "$pat" >&2
+                fi
+              elif [ -z "$selected_filter" ]; then
+                selected_filter="$f"
+                if [ "$debug" -eq 1 ]; then
+                  printf "[compact: debug: selected %s (signature match: %s)]\n" "$rel" "$pat" >&2
+                fi
+              else
+                printf "[compact: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$rel" "$pat" >&2
+              fi
+            fi
+          done
+        done
+      fi
+
+      if [ -z "$selected_filter" ]; then
+        selected_filter="$default_filter"
+        if [ "$debug" -eq 1 ] && [ -n "$selected_filter" ]; then
+          printf "[compact: debug: selected %s (default)]\n" "$(basename "$selected_filter")" >&2
+        fi
+      fi
+
+      # Family default fallback: fills an empty selection only; defaults
+      # never shadow a match, so priority does not apply here
+      if [ -z "$selected_filter" ] && [ -d "$FAMILIES_DIR" ]; then
+        for bn in $(family_names); do
+          for f in "$FAMILIES_DIR/$bn/filters"/*.awk; do
+            [ -f "$f" ] || continue
+            if grep -q '^# default' "$f" 2>/dev/null; then
+              selected_filter="$f"
+              if [ "$debug" -eq 1 ]; then
+                printf "[compact: debug: selected %s (family default)]\n" "$bn/$(basename "$f")" >&2
+              fi
+              break 2
+            fi
+          done
+        done
+      fi
+    fi
+  fi
+
+  # Merge stderr for filters that declare it (compiler-style tools)
+  stream_mode=""
+  if [ -n "$selected_filter" ] && [ -f "$selected_filter" ]; then
+    stream_mode=$(directive_value stream "$selected_filter")
+  fi
+  if [ "$stream_mode" = "merged" ] && [ -n "$stderr_input" ]; then
+    if [ -n "$raw_input" ]; then
+      raw_input=$(printf "%s\n%s" "$raw_input" "$stderr_input")
+    else
+      raw_input="$stderr_input"
+    fi
+    stderr_input=""
+    clean_input="$raw_input"
+    case "$raw_input" in
+      *"$esc"*)
+        clean_input=$(printf "%s\n" "$raw_input" | awk '{gsub(/\033\[[0-9;]*[a-zA-Z]/, ""); print}')
+        ;;
+    esac
+  fi
+
+  # If still no filter found, fallback to raw input
+  if [ -z "$selected_filter" ] || [ ! -f "$selected_filter" ]; then
+    if [ -n "$raw_input" ]; then
+      printf "%s\n" "$raw_input"
+    fi
+    emit_stderr
+    exit "$cmd_status"
+  fi
+
+  # Empty stdout with no merged filter: stderr is the whole output
+  if [ -z "$raw_input" ]; then
+    emit_stderr
+    exit "$cmd_status"
+  fi
+
+  # Step 3: Execute filter and apply fail-safe and recovery guards
+  filtered_output=$(printf "%s\n" "$clean_input" | awk -v COMPACT_EXIT="$cmd_status" -f "$selected_filter" 2>/dev/null) || true
+
+  raw_bytes=$(printf "%s\n" "$raw_input" | wc -c | tr -d ' ')
+  clean_bytes=$(printf "%s\n" "$clean_input" | wc -c | tr -d ' ')
+  out_bytes=$(printf "%s\n" "$filtered_output" | wc -c | tr -d ' ')
+  filter_name=$(basename "$selected_filter")
+
+  # A notice is a marker line: an elision, collapse, or recovery pointer; the
+  # marker vocabulary keeps bracketed data lines from reading as notices
+  notice_state=$(printf "%s\n" "$filtered_output" | awk '
+    /^[ \t]*\.\.\. \(/ { notice = 1; next }
+    /^[ \t]*\[[^]]*(collapsed|elided|repeated|capped|COMPACT_DISABLE)[^]]*\]/ { notice = 1; next }
+    /^[ \t]*$/ { next }
+    { other = 1 }
+    END { printf "%d %d\n", notice + 0, (other ? 0 : 1) }
+  ')
+  has_notice=${notice_state% *}
+  notice_only=${notice_state#* }
+
+  # A format-only filter declares that its marker-less reductions are layout,
+  # never lost content
+  format_only=""
+  if [ -f "$selected_filter" ]; then
+    format_only=$(directive_value format-only "$selected_filter")
+  fi
+
+  # Universal fail-safe: pass raw input if the filter produced empty output
+  if [ -z "$filtered_output" ]; then
+    printf "%s\n" "$raw_input"
+    if [ "$stats" -eq 1 ]; then
+      printf "[compact: %s (fail-safe passthrough: %d bytes)]\n" "$filter_name" "$raw_bytes" >&2
+    fi
+    emit_stderr
+    exit "$cmd_status"
+  fi
+
+  # Notice-only output: the filter is signaling (a false-green guard, for
+  # example); pass it through, never revert the signal to raw
+  if [ "$notice_only" -eq 1 ]; then
+    printf "%s\n" "$filtered_output"
+    if [ "$stats" -eq 1 ]; then
+      printf "[compact: %s (notice-only output passed through)]\n" "$filter_name" >&2
+    fi
+    emit_stderr
+    exit "$cmd_status"
+  fi
+
+  # Byte fail-safe: pass raw input if the filter grew the stream
+  if [ "$out_bytes" -gt "$raw_bytes" ]; then
+    printf "%s\n" "$raw_input"
+    if [ "$stats" -eq 1 ]; then
+      printf "[compact: %s (fail-safe passthrough: %d bytes)]\n" "$filter_name" "$raw_bytes" >&2
+    fi
+    emit_stderr
+    exit "$cmd_status"
+  fi
+
+  # Recovery: a shrinking filter without a notice either truncated silently or
+  # only reformatted; format-only filters declare that, everything else goes raw
+  if [ "$out_bytes" -lt "$clean_bytes" ] && [ "$has_notice" -eq 0 ] && [ -z "$format_only" ]; then
+    printf "%s\n" "$raw_input"
+    if [ "$stats" -eq 1 ]; then
+      printf "[compact: %s (recovery fallback: %d -> %d bytes, no notice)]\n" "$filter_name" "$clean_bytes" "$out_bytes" >&2
+    fi
+    emit_stderr
+    exit "$cmd_status"
+  fi
+
+  printf "%s\n" "$filtered_output"
+
+  if [ "$stats" -eq 1 ]; then
+    pct=0
+    if [ "$raw_bytes" -gt 0 ]; then
+      pct=$(( (raw_bytes - out_bytes) * 100 / raw_bytes ))
+    fi
+    printf "[compact: %s, %d -> %d bytes (%d%% reduction)]\n" "$filter_name" "$raw_bytes" "$out_bytes" "$pct" >&2
+  fi
+
+  emit_stderr
+  exit "$cmd_status"
+}
+
+# ---------------------------------------------------------------------------
+# internal hook engine: ctx _hooks <point> [<ENVNAME> <value>]...
+# Hidden and unlisted; families declare "# ctx-hooks: <point> <command>"
+# header lines (command relative to the family dir) and optionally
+# "# ctx-hook-mode: block". Discovery reuses the family list (name-sorted,
+# LC_ALL=C); declarations run in file order. CWD is the workspace root; each
+# hook gets CTX_HOOK_POINT and the passed context exported. Default mode
+# warns on a non-zero hook and continues (point rc unaffected); block mode
+# stops the point at the first failing hook and fails rc=1. Zero hooks for
+# the point = silent rc=0.
+run_hooks() {
+  if [ $# -lt 1 ]; then
+    ctx_err "_hooks: missing point"
+    exit 1
+  fi
+  point=$1
+  shift
+  while [ $# -gt 0 ]; do
+    name=$1
+    if [ $# -lt 2 ]; then
+      ctx_err "_hooks: context name without value: $name"
+      exit 1
+    fi
+    case "$name" in
+      [A-Za-z_]*)
+        case "$name" in
+          *[!A-Za-z0-9_]*)
+            ctx_err "_hooks: malformed context name: $name"
+            exit 1
+            ;;
+        esac
+        ;;
+      *)
+        ctx_err "_hooks: malformed context name: $name"
+        exit 1
+        ;;
+    esac
+    export "$name=$2"
+    shift 2
+  done
+  CTX_HOOK_POINT=$point
+  export CTX_HOOK_POINT
+
+  if ! cd "$root"; then
+    ctx_err "cannot enter workspace root: $root"
+    exit 1
+  fi
+
+  for n in $(list_families); do
+    [ -n "$n" ] || continue
+    entry="$ctx_root/$n/entry"
+    mode=$(header_field "$entry" ctx-hook-mode)
+    cmds=$(sed -n "s/^# ctx-hooks: $point[[:space:]][[:space:]]*//p" "$entry")
+    [ -n "$cmds" ] || continue
+    while IFS= read -r hcmd; do
+      [ -n "$hcmd" ] || continue
+      hw=${hcmd%%[[:space:]]*}
+      hrest=${hcmd#"$hw"}
+      if [ ! -f "$ctx_root/$n/$hw" ]; then
+        ctx_err "hook missing at $point: $n: $hcmd"
+        if [ "$mode" = "block" ]; then
+          exit 1
+        fi
+        continue
+      fi
+      hrc=0
+      if [ -x "$ctx_root/$n/$hw" ]; then
+        "$ctx_root/$n/$hw" $hrest || hrc=$?
+      else
+        sh "$ctx_root/$n/$hw" $hrest || hrc=$?
+      fi
+      if [ "$hrc" -ne 0 ]; then
+        if [ "$mode" = "block" ]; then
+          ctx_err "hook blocked the point at $point: $n: $hcmd (rc=$hrc)"
+          exit 1
+        fi
+        ctx_err "hook failed at $point: $n: $hcmd (rc=$hrc); continuing"
+      fi
+    done <<EOF
+$cmds
+EOF
+  done
+  return 0
+}
+
+# ---------------------------------------------------------------------------
+# top-level dispatch
+
+if [ $# -eq 0 ]; then
+  show_top_help
+  exit 0
+fi
+
+case "$1" in
+  --help|-h)
+    if [ $# -ne 1 ]; then
+      ctx_err "unknown command: $1"
+      exit 1
+    fi
+    show_top_help
+    exit 0
+    ;;
+  help)
+    shift
+    if [ $# -eq 0 ]; then
+      show_top_help
+      exit 0
+    fi
+    if [ $# -eq 1 ] && [ "$1" = "--all" ]; then
+      show_top_help
+      if ! show_family_help_blocks; then
+        exit 1
+      fi
+      exit 0
+    fi
+    ctx_err "help accepts only --all as an extra argument"
+    exit 1
+    ;;
+  run)
+    shift
+    run_body "$@"
+    ;;
+  _hooks)
+    shift
+    run_hooks "$@"
+    exit 0
+    ;;
+esac
+
+target=$1
+shift
+
+# discovery warnings (reserved, malformed) surface on every dispatch attempt
+fams=$(list_families)
+
+# ctx adopts the workspace root before dispatch (the binder contract)
+if ! cd "$root"; then
+  ctx_err "cannot enter workspace root: $root"
+  exit 1
+fi
+
+found_target=""
+while IFS= read -r n; do
+  [ -n "$n" ] || continue
+  if [ "$n" = "$target" ]; then
+    found_target=$n
+    break
+  fi
+done <<EOF
+$fams
+EOF
+
+if [ -n "$found_target" ]; then
+  exec "$ctx_root/$found_target/entry" "$@"
+fi
+
+ctx_err "unknown command: $target"
+exit 1

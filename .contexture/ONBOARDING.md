@@ -15,8 +15,8 @@
   1. inspect git: `git status -s`; halt if uncommitted changes exist
   2. branch: `git checkout -b adopt-contexture` (or team branch convention)
   3. never execute onboarding directly on main/master/production branches
-  4. bootstrap the adoption session: `.contexture/scripts/session.sh bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
-  5. journal the phase (`.contexture/scripts/session.sh append`): the branch and the starting git state
+  4. bootstrap the adoption session: `.contexture/scripts/ctx session bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
+  5. journal the phase (`.contexture/scripts/ctx session append`): the branch and the starting git state
 
 @assess
   topology:
@@ -63,10 +63,10 @@
     <every open question beside the plan: resolutions, history, intent the evidence cannot answer; none states none>
 
 @configure
-  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/scripts/session.sh append`; the pointer moves via `.contexture/scripts/session.sh next`; every task's completion journals (`.contexture/scripts/session.sh flip done`) and advances the pointer (`.contexture/scripts/session.sh next`); drift updates the backlog in the same breath via `.contexture/scripts/session.sh amend`
+  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/scripts/ctx session append`; the pointer moves via `.contexture/scripts/ctx session next`; every task's completion journals (`.contexture/scripts/ctx session flip done`) and advances the pointer (`.contexture/scripts/ctx session next`); drift updates the backlog in the same breath via `.contexture/scripts/ctx session amend`
   base assets:
     copy the adoption set: `git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <target>`; AGENTS.md lands at the root, the drawer alongside it, the examples at the root as reference
-    set script permissions: `chmod +x .contexture/scripts/*.awk .contexture/scripts/session.sh`
+    set script permissions: `chmod +x .contexture/scripts/ctx .contexture/scripts/*.sh .contexture/ctx/*/entry .contexture/ctx/session/*.awk .contexture/filters/*.awk`
     starting rhythms: when the confirmed plan carries no team rhythm, copy the offered examples (`cp -R examples/rhythms/* .contexture/rhythms/`); the copies are the team's to edit
   gitignore:
     standalone repo:
@@ -99,8 +99,8 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. run boot load: `.contexture/scripts/session.sh load adopt-contexture` (read every page the map reports)
-  2. run audit: `.contexture/scripts/session.sh audit adopt-contexture` (must exit 0)
+  1. run boot load: `.contexture/scripts/ctx session load adopt-contexture` (read every page the map reports)
+  2. run audit: `.contexture/scripts/ctx session audit adopt-contexture` (must exit 0)
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close

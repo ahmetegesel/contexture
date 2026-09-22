@@ -8,7 +8,7 @@
 
 function usage() {
   print "Usage: session.sh stamp <session-slug> \"<attention>\"" > "/dev/stderr"
-  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
 
@@ -21,6 +21,19 @@ function exists(path,   t, r) {
   r = (getline t < path)
   if (r >= 0) close(path)
   return (r >= 0)
+}
+
+function hooks_ready(   bin) {
+  if (!("CTX_BIN" in ENVIRON)) return 0
+  bin = ENVIRON["CTX_BIN"]
+  if (bin == "") return 0
+  return (system("test -x \"" bin "\"") == 0)
+}
+
+function fire_hooks(point, args,   bin) {
+  if (!hooks_ready()) return 0
+  bin = ENVIRON["CTX_BIN"]
+  return system("\"" bin "\" _hooks " point args)
 }
 
 BEGIN {
@@ -74,6 +87,8 @@ BEGIN {
 
   print "@anchor A" (N + 1) " (\"continues A" N "\", attention: " attention ")" >> journal
   close(journal)
+  if (fire_hooks("stamp", " CTX_UNIT \"" slug "\" CTX_ANCHOR \"A" (N + 1) "\"") != 0)
+    fail("ERROR: stamp point failed (block hook)")
   print "transition: A" N " -> A" (N + 1)
   exit 0
 }

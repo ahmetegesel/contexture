@@ -34,6 +34,7 @@ set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 COMPACT="$ROOT/.contexture/scripts/compact.sh"
+CTX="$ROOT/.contexture/scripts/ctx"
 CORE_FILTERS="$ROOT/.contexture/filters"
 CORE_FIXTURES="$ROOT/tests"
 SETUP_FILTERS="$ROOT/examples/setups/tool-filters/filters"
@@ -48,12 +49,22 @@ if [ ! -f "$COMPACT" ]; then
   echo "filter-tests.sh: compact.sh not found at $COMPACT" >&2
   exit 1
 fi
+# compact.sh shims into ctx run, so the sandbox stages ctx beside it
+if [ ! -f "$CTX" ]; then
+  echo "filter-tests.sh: ctx not found at $CTX" >&2
+  exit 1
+fi
 if [ ! -d "$CORE_FIXTURES" ]; then
   echo "filter-tests.sh: core fixtures not found at $CORE_FIXTURES" >&2
   exit 1
 fi
 
-SANDBOX=$(mktemp -d "${TMPDIR:-/tmp}/filter-tests.XXXXXX") || exit 1
+# Prefer the workspace scratch drawer when present; else TMPDIR, else /tmp
+tmp_root="${TMPDIR:-/tmp}"
+if mkdir -p "$ROOT/.contexture/tmp" 2>/dev/null && [ -d "$ROOT/.contexture/tmp" ] && [ -w "$ROOT/.contexture/tmp" ]; then
+  tmp_root="$ROOT/.contexture/tmp"
+fi
+SANDBOX=$(mktemp -d "$tmp_root/filter-tests.XXXXXX") || exit 1
 cleanup() {
   rm -rf "$SANDBOX"
 }
@@ -61,6 +72,7 @@ trap cleanup EXIT
 
 mkdir -p "$SANDBOX/scripts" "$SANDBOX/filters" "$SANDBOX/bin"
 cp "$COMPACT" "$SANDBOX/scripts/compact.sh"
+cp "$CTX" "$SANDBOX/scripts/ctx"
 for f in "$CORE_FILTERS"/*.awk; do
   [ -f "$f" ] || continue
   cp "$f" "$SANDBOX/filters/"

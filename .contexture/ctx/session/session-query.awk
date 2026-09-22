@@ -37,7 +37,7 @@ function usage() {
   print "       session.sh query resolve <unit> <ref>  (journal.md#slug, knowledge.md#NAME, backlog.md#slug, lanes/<lane>/report.md#section)" > "/dev/stderr"
   print "       session.sh query lane <unit> <lane>" > "/dev/stderr"
   print "       session.sh query search <unit> <term>" > "/dev/stderr"
-  print "help: .contexture/scripts/session.sh help" > "/dev/stderr"
+  print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
 

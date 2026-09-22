@@ -22,7 +22,7 @@ GROUND_AND_REFS
     verbatim quotes or conditions; never conversational prose]
   WRITE_SCOPE: [., <explicit target files or dirs>]
   drift: stop + report; never improvise
-  COMMAND_POLICY: execute all shell commands through .contexture/scripts/compact.sh <cmd>
+  COMMAND_POLICY: execute all shell commands through .contexture/scripts/ctx run <cmd>
 
 OUTPUTS
   JOURNAL: journal.md               # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the dispatcher never reads it
@@ -37,7 +37,7 @@ MISSION
   GOAL: "Apply targeted byte-clean fixes across README.md and AGENTS.md"
   TASKS:
     1. git-topology: align AGENTS.md line 104 with standalone vs parent workspace rules; exit: "diff clean"
-    2. handoff-audit: add .contexture/scripts/session.sh audit to README handoff step; exit: "awk clean"
+    2. handoff-audit: add .contexture/scripts/ctx session audit to README handoff step; exit: "awk clean"
 
 GROUND_AND_REFS
   SOURCE_OF_TRUTH: reports/2026-09-05-readme-consistency-audit.md#claim-1
@@ -49,7 +49,7 @@ GROUND_AND_REFS
     zero em-dashes in any edit
   WRITE_SCOPE: [., README.md, AGENTS.md]
   drift: stop + report; never improvise
-  COMMAND_POLICY: execute all shell commands through .contexture/scripts/compact.sh <cmd>
+  COMMAND_POLICY: execute all shell commands through .contexture/scripts/ctx run <cmd>
 
 OUTPUTS
   JOURNAL: journal.md
