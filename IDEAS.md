@@ -1,4 +1,4 @@
-# the upstream general backlog: ideas and needs, picked up from here
+# the upstream idea and need dump: picked up from here
 # entries are light: @idea <slug>, DUMPED, WHAT, optional WHY and REF, STATUS.
 # STATUS: OPEN | PICKED <unit> | DROPPED <why>; entries are never deleted.
 # picking up = bootstrap the unit, flip the entry, and let the unit's backlog carry the executable tasks.
