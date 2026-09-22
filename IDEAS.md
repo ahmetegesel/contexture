@@ -8,7 +8,7 @@
   DUMPED: 2026-09-22
   WHAT :: Promote the upstream backlog arrangement to a base feature (a shipped @backlog section, a template, adopters' own dumps) if the upstream use earns it.
   WHY :: The need is generic; upstream-only is the proving ground.
-  STATUS: OPEN
+  STATUS: DROPPED (never agreed; agent-seeded, removed per the human)
 
 @idea hook-system-at-scale
   DUMPED: 2026-09-22
