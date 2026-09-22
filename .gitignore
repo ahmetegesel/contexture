@@ -8,9 +8,13 @@
 !README.md
 !CHANGELOG.md
 !LICENSE
+!BACKLOG.md
 # the detailed docs
 !docs/
 !docs/**
+# the filter test material (upstream only)
+!tests/
+!tests/**
 # the example rhythms (tracked source material)
 !examples/
 !examples/**
