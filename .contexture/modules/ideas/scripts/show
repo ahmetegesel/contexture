@@ -1,6 +1,0 @@
-#!/bin/sh
-# summary: print one idea block
-# usage: ctx ideas show <slug>
-# help: prints from @idea through the line before the next column-0 @idea; an unknown slug is rc=1
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/ideas" show "$@"

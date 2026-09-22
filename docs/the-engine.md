@@ -231,7 +231,7 @@ Everything the convention installs or uses lives under `.contexture/`, except th
 AGENTS.md            the laws, delivered every turn
 AGENTS.workspace.md  the shared overlay
 AGENTS.local.md      your amendments
-examples/            example rhythms, copied at adoption
+plugins/             the tracked catalog of packaged overlays: copied into a workspace when wanted
 .contexture/
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
   templates/         the grammars every artifact fills
@@ -242,23 +242,23 @@ examples/            example rhythms, copied at adoption
   tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand)
 ```
 
-The root belongs to the harness: AGENTS.md has to sit where the harness looks for repository instructions, and the overlays sit beside it. Everything else lives in the drawer. An adopting workspace keeps its own files at the root, freely; the drawer's contents are the convention's, and the two never mix.
+The root belongs to the harness: AGENTS.md has to sit where the harness looks for repository instructions, and the overlays sit beside it. Everything else lives in the drawer. An adopting workspace keeps its own files at the root, freely; the drawer's contents are the convention's, and the two never mix. The repository that builds the convention tracks this layout mirrored under `base/` (`base/AGENTS.md`, `base/.contexture/`); its own installation at the root is untracked working state.
 
 ### One home, three classes
 
 Placement follows the class of the file, never convenience:
 
-| class | files | on an update |
+| class | paths | fate |
 |---|---|---|
-| update payload | AGENTS.md, `.contexture/templates/`, `.contexture/ctx`, `.contexture/modules/session/`, `.contexture/modules/run/` | replaced from the new tag, byte for byte |
-| adoption material | `.contexture/ONBOARDING.md`, `examples/` | delivered once; never re-synced; the guideline is removed when the adoption closes |
-| workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/` | never touched |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
+| live workspace | the untracked root: `AGENTS.md`, `.contexture/` (sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 
-The classes exist because the files have different lives. The payload evolves with the convention and must stay identical across every workspace. Adoption material is used once and then belongs to the past: the guideline has served its purpose by close, and the examples are reference material a workspace copies when it wants them. Sessions and rhythms are the workspace's own state, and no update may touch them.
+The classes exist because the files have different lives. The payload evolves with the convention and must stay identical across every workspace: it is tracked in one mirrored tree and applied onto the live root as-is, so what the tag tracks under `base/` is exactly what lands. The catalog holds the optional overlays: a workspace installs one when it wants it, and the folder is no longer deleted at adoption close. Sessions, rhythms, tmp, and workspace-added modules are the workspace's own state, and no update may touch them. `.contexture/ONBOARDING.md` rides the payload as adoption material; it is used once and removed when the adoption closes.
 
 ### The sync derives from the tag
 
-There is no manifest. The tracked set under a release tag is the declaration: `git archive <tag> AGENTS.md .contexture/` copies it, `git ls-tree` enumerates it, and a comparison per file verifies it. Whatever the tag tracks is the set; a file cannot silently join or leave the payload without changing the tag.
+There is no manifest. `base/` is the payload: `git archive <tag> base/` copies it, `git ls-tree` enumerates it, and a comparison per file verifies it. Whatever the tag tracks under `base/` is the set; a file cannot silently join or leave the payload without changing the tag.
 
 ### The layout bounds the load
 

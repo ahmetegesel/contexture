@@ -1,0 +1,143 @@
+#!/bin/sh
+# summary: the corpus retrieval CLI: index, projection, section, owner, search, rules, pitfalls, and edges
+# usage: ctx docs query <repo> <slug> [--section <name>]
+# usage: ctx docs query <repo> --file <path>
+# usage: ctx docs query <repo> --search <term>
+# usage: ctx docs query <repo> --rules [category]
+# usage: ctx docs query <repo> --pitfalls [--severity <level>]
+# usage: ctx docs query --edge <channel>
+# usage: ctx docs query --index [repo]
+# help: projects the typed-block corpus down to one answer, so no one reads the corpus to find it: the index, a doc projection, a section, the owner of a code path, a search, the rules, the pitfalls, or the edges
+# help: exit codes: 0 with an answer; 1 no match, a missing repo, or a bad option; 2 unreadable input (the awk engine's own failure)
+# help: example: ctx docs query --index (the full overview, never truncated (no head/tail); ends with an entry count)
+# help: the "index complete" marker proves the read was whole; a missing marker means the read was truncated, re-read it whole
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs query: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help query" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$#" -eq 0 ]; then
+  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index" >&2
+  echo "help: ctx docs help query" >&2
+  exit 1
+fi
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# the workspace root: the engine exports CTX_ROOT; DOCS_WORKSPACE_ROOT overrides;
+# standalone, walk up from the script to the .contexture drawer's parent
+root=""
+p=$dir
+while [ "$p" != "/" ] && [ "${p##*/}" != ".contexture" ]; do p=${p%/*}; done
+[ "${p##*/}" = ".contexture" ] && root=${p%/*}
+[ -n "$root" ] || root=$(CDPATH= cd -- "$dir/../../.." && pwd)
+ROOT_DIR="${DOCS_WORKSPACE_ROOT:-${CTX_ROOT:-$root}}"
+AWK_SCRIPT="$dir/docs-query.awk"
+
+MODE=""
+REPO=""
+SLUG=""
+SECTION=""
+FILE=""
+SEARCH=""
+CATEGORY=""
+SEVERITY=""
+CHANNEL=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --index)
+      MODE="index"
+      shift
+      ;;
+    --file)
+      [ $# -ge 2 ] || { echo "ctx docs query: --file needs a value" >&2; exit 1; }
+      MODE="file"
+      FILE="$2"
+      shift 2
+      ;;
+    --search)
+      [ $# -ge 2 ] || { echo "ctx docs query: --search needs a value" >&2; exit 1; }
+      MODE="search"
+      SEARCH="$2"
+      shift 2
+      ;;
+    --rules)
+      MODE="rules"
+      shift
+      if [ $# -gt 0 ] && [ "$(echo "$1" | cut -c 1-2)" != "--" ]; then
+        CATEGORY="$1"
+        shift
+      fi
+      ;;
+    --pitfalls)
+      MODE="pitfalls"
+      shift
+      ;;
+    --severity)
+      [ $# -ge 2 ] || { echo "ctx docs query: --severity needs a value" >&2; exit 1; }
+      SEVERITY="$2"
+      shift 2
+      ;;
+    --section)
+      [ $# -ge 2 ] || { echo "ctx docs query: --section needs a value" >&2; exit 1; }
+      SECTION="$2"
+      shift 2
+      ;;
+    --edge|--edges)
+      [ $# -ge 2 ] || { echo "ctx docs query: --edge needs a value" >&2; exit 1; }
+      MODE="edge"
+      CHANNEL="$2"
+      shift 2
+      ;;
+    *)
+      if [ "${1#--}" != "$1" ]; then
+        echo "ctx docs query: unknown option: $1" >&2
+        exit 1
+      fi
+      if [ -z "$REPO" ]; then
+        REPO="$1"
+      elif [ -z "$SLUG" ]; then
+        SLUG="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+DOC_FILES=""
+if [ -n "$REPO" ] && [ ! -d "$ROOT_DIR/docs/$REPO" ]; then
+  echo "ctx docs query: no such repo: $REPO" >&2
+  exit 1
+fi
+if [ -n "$REPO" ] && [ -d "$ROOT_DIR/docs/$REPO" ]; then
+  DOC_FILES="$ROOT_DIR/docs/$REPO/*.md"
+elif [ -d "$ROOT_DIR/docs" ]; then
+  DOC_FILES="$ROOT_DIR/docs/*/*.md"
+else
+  DOC_FILES="$dir/fixtures/*.md"
+fi
+
+QUERY_OUT=$(awk -v mode="$MODE" \
+    -v repo="$REPO" \
+    -v slug="$SLUG" \
+    -v section="$SECTION" \
+    -v file="$FILE" \
+    -v search="$SEARCH" \
+    -v category="$CATEGORY" \
+    -v severity="$SEVERITY" \
+    -v channel="$CHANNEL" \
+    -f "$AWK_SCRIPT" $DOC_FILES)
+AWK_RC=$?
+if [ -z "$QUERY_OUT" ] && [ -z "$MODE" ] && [ -n "$REPO" ] && [ -n "$SLUG" ]; then
+  echo "ctx docs query: no doc matches $REPO/$SLUG" >&2
+  exit 1
+fi
+[ -n "$QUERY_OUT" ] && printf '%s\n' "$QUERY_OUT"
+exit $AWK_RC

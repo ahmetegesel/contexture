@@ -1,0 +1,26 @@
+#!/bin/sh
+# summary: the task nudge over the active backlog and the corpus
+# usage: ctx docs nudge backlog.md docs/<repo>/*.md
+# help: reads the active task from the backlog and prints the matched docs, the top pitfalls, and (when the task names setup verbs) the owning operational doc's run, build, and test targets with its toolchain note
+# help: exit codes: 0 the nudge printed (matched docs may be none); 2 unreadable input (the awk engine's own failure)
+# help: example: ctx docs nudge backlog.md docs/*/*.md
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs nudge: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help nudge" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$#" -eq 0 ]; then
+  echo "Usage: ctx docs nudge backlog.md docs/<repo>/*.md" >&2
+  echo "help: ctx docs help nudge" >&2
+  exit 1
+fi
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/docs-nudge.awk" "$@"

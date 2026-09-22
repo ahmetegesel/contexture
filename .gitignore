@@ -1,10 +1,9 @@
 # deny by default: nothing shares unless whitelisted below
 *
 !.gitignore
-!AGENTS.md
+!AGENTS.workspace.md
 !CLAUDE.md
 !GEMINI.md
-!AGENTS.workspace.md
 !README.md
 !CHANGELOG.md
 !LICENSE
@@ -12,17 +11,19 @@
 # the detailed docs
 !docs/
 !docs/**
-# the filter test material (upstream only)
+# the test material (upstream only)
 !tests/
 !tests/**
-# the example rhythms (tracked source material)
-!examples/
-!examples/**
-# the contexture drawer
-!.contexture/
-!.contexture/**
-# per-workspace content stays untracked in the source
-/.contexture/rhythms/
-/.contexture/sessions/
-/.contexture/tmp/
+# the plugins (tracked catalog: overlays installable into an existing setup)
+!plugins/
+!plugins/**
+# the live workspace state stays untracked in the source: the root drawer and AGENTS.md
+/.contexture/
+/AGENTS.md
+# the base tree: the tracked payload (edit base/, ship, apply to the live drawer)
+!base/
+!base/**
+# the base engine's scratch drawer stays untracked like the live one
+base/.contexture/tmp/
+# local tooling stays untracked
 /tools/

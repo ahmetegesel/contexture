@@ -17,6 +17,7 @@ contexture is a convention, not a tool: lightweight, abstracted, extensible. Pla
 - [Architecture](#architecture)
 - [Core concepts](#core-concepts)
 - [Docs](#docs)
+- [Maintaining contexture](#maintaining-contexture)
 
 ## Why contexture
 
@@ -30,13 +31,19 @@ Adopt contexture into an existing git repository in three steps:
 
 ### 1. Fetch the files
 
-Run in your repository root:
+Run in your repository root (`<tag>` is the latest release tag; the fetch lists them with `git tag -l`):
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.50.0 AGENTS.md .contexture/ examples/ | tar -x
+mkdir .adopt-contexture
+git archive <tag> base/ plugins/ | tar -x -C .adopt-contexture
+cp -R .adopt-contexture/base/. .
+cp -R .adopt-contexture/plugins .
+rm -rf .adopt-contexture
 chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk
 ```
+
+`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it. `plugins/` lands at the root as the catalog to install from.
 
 ### 2. Run the onboarding wizard
 
@@ -104,16 +111,18 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [The record](docs/the-record.md): Artifacts, liveness, and closure
 - [The engine](docs/the-engine.md): AGENTS.md, shape grammars, and awk scripts
 - [Modules](docs/modules.md): The module contract: anatomy, declarations, hooks, and filters
+- [Plugins](docs/plugins.md): Packaging, adoption, and the plugin test convention
 - [Units and subagents](docs/units-and-lanes.md): Folder lifecycles and delegated subagent work
 - [Rhythms](docs/rhythms.md): Procedure grammar, activation, and the default loop
 - [Overlays](docs/overlays.md): Amendment grammar and precedence rules
 - [Adoption](docs/adoption.md): Onboarding flows, topology choices, and upgrading
-- [Examples](examples/rhythms/): Pre-built work and debug loops
-- [Setups](examples/setups/lane-isolation/): An optional setup: on-demand worktree isolation for subagents
-- [Setups](examples/setups/docs-discipline/): An optional setup: a corpus-first documentation discipline
-- [Setups](examples/setups/tool-filters/): An optional setup: ecosystem filters for test runners and compilers
-- [Setups](examples/setups/ast-doc-graph/): An optional setup: AST symbol graph linked with centralized documentation
+- [Starter rhythms](plugins/starter-rhythms/): The work and debug rhythms to start from
+- [Toolchain filters](plugins/toolchain-filters/): Test runner and compiler filters
+- [Lane isolation](plugins/lane-isolation/): On-demand worktree isolation for subagents
+- [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
+- [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
 - [Tests](tests/): The filter test material, upstream only; see [tests/README.md](tests/README.md)
+- [Maintaining contexture](#maintaining-contexture): The `base/` dev loop: edit, ship, apply
 
 | command | what it returns |
 |---|---|
@@ -149,3 +158,16 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 The query forms answer the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
 
 The recording forms are the write side of the toolbox: `append` lands entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a task's status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. Every form validates all inputs before any write, refuses loudly with zero partial writes, and the batch forms carry several blocks or slugs in one call. Shapes come from `.contexture/templates/`; the help names each form's target, stdin, and template.
+
+## Maintaining contexture
+
+This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) is untracked working state, this repository's own running installation, and it keeps working through every change.
+
+The dev loop:
+
+1. Edit `base/` directly: it is the shipping copy.
+2. Run the test pipeline (it stages the base runtime): `tests/run.sh`.
+3. Ship: docs sync, commit, push, and the annotated tag in one breath.
+4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched.
+
+`plugins/` is the tracked catalog of packaged overlays, installed into a workspace when wanted (see [docs/plugins.md](docs/plugins.md)); `docs/adoption.md` carries the same loop beside the adopter's view.

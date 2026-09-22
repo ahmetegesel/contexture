@@ -1,6 +1,0 @@
-#!/bin/sh
-# summary: append an idea block from stdin (STATUS: OPEN)
-# usage: ctx ideas add
-# help: refuses a duplicate slug; entries are never deleted
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/ideas" add "$@"

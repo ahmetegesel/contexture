@@ -1,0 +1,325 @@
+#!/bin/sh
+# summary: the close gate: the corpus audit plus the coverage and freshness check as one pass
+# usage: ctx docs gate
+# usage: ctx docs gate --drift
+# usage: ctx docs gate --stdin
+# usage: ctx docs gate --test-matrix
+# help: runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
+# help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
+# help: example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
+#
+# Layout: lives at <workspace>/.contexture/modules/docs/scripts/gate. The
+# workspace root resolves from CTX_ROOT (the engine's dispatch environment) or
+# the DOCS_WORKSPACE_ROOT override; run standalone it walks up from the script
+# to the .contexture drawer's parent. Product repositories live under
+# DOCS_PRODUCT_REPOS_DIR (default: projects/); when it is absent the workspace
+# root's child repositories are scanned directly, and the workspace root itself
+# when it is a repository. The check maps the projects/<repo>/ prefix and the
+# flat <repo>/ form alike.
+#
+# Pure POSIX sh with zero Python dependencies.
+
+set -e
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs gate: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help gate" >&2
+    exit 1
+    ;;
+esac
+
+case "$0" in
+    */*) dir="$(cd "${0%/*}" && pwd)" ;;
+    *) dir="$(pwd)" ;;
+esac
+AWK_AUDIT="$dir/docs-audit.awk"
+AWK_CHECK="$dir/docs-check.awk"
+root=""
+p=$dir
+while [ "$p" != "/" ] && [ "${p##*/}" != ".contexture" ]; do p=${p%/*}; done
+[ "${p##*/}" = ".contexture" ] && root=${p%/*}
+[ -n "$root" ] || root=$(cd "$dir/../../.." && pwd)
+WORKSPACE_ROOT="${DOCS_WORKSPACE_ROOT:-${CTX_ROOT:-$root}}"
+PRODUCT_REPOS_DIR="${DOCS_PRODUCT_REPOS_DIR:-projects}"
+
+# Function to aggregate git changes across workspace and product repos
+aggregate_git_changes() {
+    # 1. Parent workspace root changes
+    (
+        cd "$WORKSPACE_ROOT"
+        git diff --name-status 2>/dev/null || true
+        git diff --name-status --cached 2>/dev/null || true
+        git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
+            [ -n "$f" ] && printf "A\t%s\n" "$f"
+        done
+    )
+
+    # 2. Product repositories changes ($PRODUCT_REPOS_DIR/* or workspace root child repos)
+    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
+        prefix_base="$PRODUCT_REPOS_DIR"
+    else
+        scan_dirs="$WORKSPACE_ROOT"/*
+        prefix_base=""
+    fi
+
+    for pdir in $scan_dirs; do
+        if [ -d "$pdir/.git" ] && [ "$pdir" != "$WORKSPACE_ROOT" ]; then
+            repo_name="${pdir##*/}"
+            pfx="${prefix_base:+$prefix_base/}$repo_name"
+            (
+                cd "$pdir"
+                {
+                    git diff --name-status 2>/dev/null || true
+                    git diff --name-status --cached 2>/dev/null || true
+                    git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
+                        [ -n "$f" ] && printf "A\t%s\n" "$f"
+                    done
+                } | while IFS= read -r line; do
+                    [ -z "$line" ] && continue
+                    case "$line" in
+                        R[0-9]*[[:space:]]*)
+                            stat="${line%%[[:space:]]*}"
+                            rest="${line#*[[:space:]]}"
+                            rest="${rest#"${rest%%[! ]*}"}"
+                            old_f="${rest%%[[:space:]]*}"
+                            new_f="${rest#*[[:space:]]}"
+                            new_f="${new_f#"${new_f%%[! ]*}"}"
+                            printf "%s\t%s/%s\t%s/%s\n" "$stat" "$pfx" "$old_f" "$pfx" "$new_f"
+                            ;;
+                        [A-Z\?]*[[:space:]]*)
+                            stat="${line%%[[:space:]]*}"
+                            f="${line#*[[:space:]]}"
+                            f="${f#"${f%%[! ]*}"}"
+                            printf "%s\t%s/%s\n" "$stat" "$pfx" "$f"
+                            ;;
+                        *)
+                            printf "M\t%s/%s\n" "$pfx" "$line"
+                            ;;
+                    esac
+                done
+            )
+        fi
+    done
+}
+
+# Function to aggregate remote drift changes (HEAD...origin/main, the
+# merge-base incoming delta) across product repos
+aggregate_remote_drift_changes() {
+    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
+        prefix_base="$PRODUCT_REPOS_DIR"
+    else
+        scan_dirs="$WORKSPACE_ROOT"/*
+        prefix_base=""
+        # The flat topologies (single repository, standalone, monorepo) carry
+        # the product repository at the workspace root itself: scan it too.
+        if [ -e "$WORKSPACE_ROOT/.git" ]; then
+            scan_dirs="$WORKSPACE_ROOT $scan_dirs"
+        fi
+    fi
+
+    for pdir in $scan_dirs; do
+        if [ "$pdir" = "$WORKSPACE_ROOT" ]; then
+            repo_name="${pdir##*/}"
+            pfx=""
+        elif [ -d "$pdir/.git" ]; then
+            repo_name="${pdir##*/}"
+            pfx="${prefix_base:+$prefix_base/}$repo_name"
+        else
+            continue
+        fi
+        (
+            cd "$pdir"
+            remote_ref="origin/main"
+            if ! git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+                remote_ref="origin/master"
+            fi
+            if git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+                git diff --name-status "HEAD...$remote_ref" 2>/dev/null || true
+            fi
+        ) | while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            case "$line" in
+                R[0-9]*[[:space:]]*)
+                    stat="${line%%[[:space:]]*}"
+                    rest="${line#*[[:space:]]}"
+                    rest="${rest#"${rest%%[! ]*}"}"
+                    old_f="${rest%%[[:space:]]*}"
+                    new_f="${rest#*[[:space:]]}"
+                    new_f="${new_f#"${new_f%%[! ]*}"}"
+                    printf "%s\t%s\t%s\n" "$stat" "${pfx:+$pfx/}$old_f" "${pfx:+$pfx/}$new_f"
+                    ;;
+                [A-Z\?]*[[:space:]]*)
+                    stat="${line%%[[:space:]]*}"
+                    f="${line#*[[:space:]]}"
+                    f="${f#"${f%%[! ]*}"}"
+                    printf "%s\t%s\n" "$stat" "${pfx:+$pfx/}$f"
+                    ;;
+                *)
+                    printf "M\t%s\n" "${pfx:+$pfx/}$line"
+                    ;;
+            esac
+        done
+    done
+}
+
+# Function to check and print branch and remote drift warnings to stderr
+check_drift_warnings() {
+    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
+    else
+        scan_dirs="$WORKSPACE_ROOT"/*
+        # The flat topologies carry the product repository at the workspace
+        # root itself: warn about it too.
+        if [ -e "$WORKSPACE_ROOT/.git" ]; then
+            scan_dirs="$WORKSPACE_ROOT $scan_dirs"
+        fi
+    fi
+
+    drift_found=0
+    for pdir in $scan_dirs; do
+        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.git" ]; then
+            repo_name="${pdir##*/}"
+            branch=$(git -C "$pdir" branch --show-current 2>/dev/null || echo "")
+            if [ -n "$branch" ] && [ "$branch" != "main" ] && [ "$branch" != "master" ]; then
+                printf "[DRIFT WARNING] %s is on branch '%s' (not main)\n" "$repo_name" "$branch" >&2
+                drift_found=1
+            fi
+            remote_ref="origin/main"
+            if ! git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+                remote_ref="origin/master"
+            fi
+            if git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+                behind=$(git -C "$pdir" rev-list --count "HEAD..$remote_ref" 2>/dev/null || echo 0)
+                if [ "$behind" -gt 0 ]; then
+                    printf "[DRIFT WARNING] %s is %s commit(s) behind %s\n" "$repo_name" "$behind" "$remote_ref" >&2
+                    drift_found=1
+                fi
+            fi
+        fi
+    done
+    if [ "$drift_found" -eq 1 ]; then
+        printf "[DRIFT NOTICE] Run 'ctx docs gate --drift' to evaluate remote incoming changes against docs.\n\n" >&2
+    fi
+}
+
+# Run syntax/integrity audit across all typed documentation
+run_audit_for() {
+    awk -f "$AWK_AUDIT" "$1"/docs/*/*.md
+}
+
+# Run coverage, freshness, and dead sources check on streamed diff
+run_gate_check_for() {
+    awk -f "$AWK_CHECK" "$1"/docs/*/*.md
+}
+
+run_audit() { run_audit_for "$WORKSPACE_ROOT"; }
+run_gate_check() { run_gate_check_for "$WORKSPACE_ROOT"; }
+
+# Self-planted test matrix: builds its own fixture corpus with mktemp, then
+# exercises the check over the eight scenarios. No external paths, no writes
+# outside the fixture directory.
+run_test_matrix() {
+    FIXTURE_DIR="$(mktemp -d)" || { echo "ctx docs gate: mktemp -d failed" >&2; return 1; }
+    trap 'rm -rf "$FIXTURE_DIR"' EXIT INT TERM
+    mkdir -p "$FIXTURE_DIR/docs/demo"
+
+    cat > "$FIXTURE_DIR/docs/demo/widgets.md" <<'FIXTURE'
+@doc capability widgets
+  repo: demo
+  description: "Widget catalog and rendering."
+  sources: [src/widgets/*.cs]
+FIXTURE
+
+    cat > "$FIXTURE_DIR/docs/demo/platform.md" <<'FIXTURE'
+@doc structural platform
+  repo: demo
+  description: "Shared platform services."
+  sources: [src/widgets/Widget.cs]
+FIXTURE
+
+    echo "================================================================="
+    echo "  CLOSE GATE TEST MATRIX: 8 SCENARIOS (self-planted fixtures)"
+    echo "================================================================="
+    ALL_PASSED=1
+
+    run_case() {
+        name="$1"
+        expected="$2"
+        input="$3"
+        code=0
+        out="$(printf '%s' "$input" | run_gate_check_for "$FIXTURE_DIR" 2>&1)" || code=$?
+        echo ""
+        echo "[$name]"
+        echo "$out"
+        if [ "$code" -eq "$expected" ]; then
+            echo "--> RESULT: PASS (exit code $code, matches expected $expected)"
+        else
+            echo "--> RESULT: FAIL (exit code $code, expected $expected)"
+            ALL_PASSED=0
+        fi
+    }
+
+    run_case "SCENARIO 1: Clean tree / no changes" 0 ""
+
+    run_case "SCENARIO 2: Valid edit (code changed and its doc updated)" 0 "M	projects/demo/src/widgets/Widget.cs
+docs/demo/widgets.md"
+
+    run_case "SCENARIO 3: Completeness violation (uncovered code file created)" 1 "A	projects/demo/src/loose/Unknown.cs"
+
+    run_case "SCENARIO 4: Freshness violation (code modified without doc update)" 1 "M	projects/demo/src/widgets/Widget.cs"
+
+    run_case "SCENARIO 5: Multi-claimant doc update (claimed by 2 docs, one updated)" 0 "M	projects/demo/src/widgets/Widget.cs
+docs/demo/platform.md"
+
+    run_case "SCENARIO 6: Deleted code file with doc update (cleaned sources)" 0 "D	projects/demo/src/widgets/OldWidget.cs
+docs/demo/widgets.md"
+
+    run_case "SCENARIO 7: Deleted code file without doc update" 1 "D	projects/demo/src/widgets/Widget.cs"
+
+    run_case "SCENARIO 8: Newly counted extension (an uncovered Python file)" 1 "A	projects/demo/src/tools/report.py"
+
+    echo ""
+    echo "================================================================="
+    if [ "$ALL_PASSED" -eq 1 ]; then
+        echo "  TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED"
+        echo "================================================================="
+        return 0
+    else
+        echo "  TEST MATRIX VERDICT: SOME SCENARIOS FAILED"
+        echo "================================================================="
+        return 1
+    fi
+}
+
+# Main dispatch
+if [ "$1" = "--test-matrix" ] || [ "$1" = "--test-all" ]; then
+    run_test_matrix
+    exit $?
+fi
+
+if [ "$1" = "-" ] || [ "$1" = "--stdin" ]; then
+    if [ -t 0 ]; then
+        echo "ctx docs gate: --stdin specified but standard input is a terminal (no piped input)." >&2
+        exit 1
+    fi
+    run_audit
+    run_gate_check
+elif [ "$1" = "--drift" ]; then
+    run_audit
+    aggregate_remote_drift_changes | sort -u | run_gate_check
+elif [ -z "$1" ]; then
+    run_audit
+    check_drift_warnings
+    aggregate_git_changes | sort -u | run_gate_check
+else
+    echo "ctx docs gate: unknown argument: $1" >&2
+    echo "Usage: ctx docs gate [--drift | --stdin | --test-matrix]" >&2
+    echo "help: ctx docs help gate" >&2
+    exit 1
+fi

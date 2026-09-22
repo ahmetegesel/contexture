@@ -1,0 +1,986 @@
+#!/usr/bin/env bash
+# AST and Documentation Graph Query CLI
+# Zero-dependency shell wrapper around SQLite.
+set -euo pipefail
+
+SQLITE_BIN="/usr/bin/sqlite3"
+if [ ! -x "$SQLITE_BIN" ]; then
+  SQLITE_BIN="$(command -v sqlite3 || true)"
+fi
+if [ -z "$SQLITE_BIN" ]; then
+  echo "Error: sqlite3 binary not found." >&2
+  exit 1
+fi
+
+# PRAGMA busy_timeout = 5000 configured on all queries via SQLite .timeout 5000
+sqlite_exec() {
+  "$SQLITE_BIN" -cmd ".timeout 5000" "$@"
+}
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SEP=$'\x1f'
+
+# --- HELP DISPLAY ---
+
+print_help() {
+  cat << 'EOF'
+ast-doc-graph: graph-query retrieval CLI
+Zero-dependency SQLite search and graph navigation
+
+Usage:
+  graph-query symbol <name> [--depth N] [--db <path>] [--no-sync]
+  graph-query search "<query>" [--db <path>] [--no-sync]
+  graph-query callers <name> [--depth N] [--db <path>] [--no-sync]
+  graph-query callees <name> [--depth N] [--db <path>] [--no-sync]
+  graph-query rules <name> [--db <path>] [--no-sync]
+  graph-query pitfalls <name> [--db <path>] [--no-sync]
+  graph-query stats [--db <path>] [--no-sync]
+  graph-query help
+
+Subcommands:
+  symbol    Display symbol definition, callers, callees, docs, rules, and pitfalls
+  search    Dual FTS5 search across documentation rules and code symbols
+  callers   Recursive upstream call graph query up to depth N
+  callees   Recursive downstream call graph query up to depth N
+  rules     Display contract rules governing the symbol
+  pitfalls  Display documented pitfalls and anti-patterns for the symbol
+  stats     Display aggregate database entity and relationship counts
+  help      Display this usage manual
+
+Options:
+  --db <path>    Path to SQLite database (default: $GRAPH_DB or ./graph.db)
+  --depth N      Traversal depth limit for recursive queries (default: 5)
+  --no-sync      Bypass JIT freshness check and delta sync
+EOF
+}
+
+# --- ARGUMENT PARSING ---
+
+DB_PATH="${GRAPH_DB:-}"
+DEPTH="5"
+NO_SYNC=false
+COMMAND=""
+TARGET=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    symbol|search|callers|callees|rules|pitfalls|stats|help|--help|-h)
+      if [[ -z "$COMMAND" ]]; then
+        COMMAND="$1"
+      else
+        TARGET="$1"
+      fi
+      shift
+      ;;
+    --db)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --db requires a path argument" >&2
+        exit 1
+      fi
+      DB_PATH="$2"
+      shift 2
+      ;;
+    --db=*)
+      DB_PATH="${1#--db=}"
+      shift
+      ;;
+    --depth)
+      if [[ $# -lt 2 ]]; then
+        echo "Error: --depth requires an integer argument" >&2
+        exit 1
+      fi
+      DEPTH="$2"
+      shift 2
+      ;;
+    --depth=*)
+      DEPTH="${1#--depth=}"
+      shift
+      ;;
+    --no-sync)
+      NO_SYNC=true
+      shift
+      ;;
+    *)
+      if [[ -z "$TARGET" ]]; then
+        TARGET="$1"
+      fi
+      shift
+      ;;
+  esac
+done
+
+if ! [[ "$DEPTH" =~ ^[1-9][0-9]*$ ]]; then
+  echo "Error: --depth must be a positive integer." >&2
+  exit 1
+fi
+
+if [[ -z "$COMMAND" || "$COMMAND" == "help" || "$COMMAND" == "--help" || "$COMMAND" == "-h" ]]; then
+  print_help
+  exit 0
+fi
+
+# Locate database file if not specified
+if [[ -z "$DB_PATH" ]]; then
+  if [[ -f "./graph.db" ]]; then
+    DB_PATH="./graph.db"
+  elif [[ -f "./ast-doc-graph.db" ]]; then
+    DB_PATH="./ast-doc-graph.db"
+  elif [[ -f "$SCRIPT_DIR/../graph.db" ]]; then
+    DB_PATH="$SCRIPT_DIR/../graph.db"
+  elif [[ -f "$SCRIPT_DIR/../ast-doc-graph.db" ]]; then
+    DB_PATH="$SCRIPT_DIR/../ast-doc-graph.db"
+  else
+    echo "Error: database file not found. Specify --db <path> or set GRAPH_DB." >&2
+    exit 1
+  fi
+fi
+
+if [[ ! -f "$DB_PATH" ]]; then
+  echo "Error: database file does not exist at: $DB_PATH" >&2
+  exit 1
+fi
+
+# SQL escape helper
+sql_escape() {
+  printf '%s' "$1" | sed "s/'/''/g"
+}
+
+# --- JIT FRESHNESS MICRO-SYNC ---
+
+check_and_sync_freshness() {
+  if [[ "$NO_SYNC" == true ]]; then
+    return 0
+  fi
+
+  # Resolve repository root
+  local repo_root=""
+  if [[ -f "$DB_PATH" ]]; then
+    local db_dir
+    db_dir="$(cd "$(dirname "$DB_PATH")" && pwd)"
+    if [[ -d "$db_dir/.git" || -f "$db_dir/package.json" || -d "$db_dir/backend" || -d "$db_dir/docs" || -d "$db_dir/src" ]]; then
+      repo_root="$db_dir"
+    fi
+  fi
+  if [[ -z "$repo_root" ]] && git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1; then
+    repo_root="$(git -C "$PWD" rev-parse --show-toplevel)"
+  fi
+  if [[ -z "$repo_root" ]]; then
+    repo_root="$PWD"
+  fi
+
+  # Resolve index driver
+  local index_driver=""
+  if [[ -x "$SCRIPT_DIR/ast-doc-index" ]]; then
+    index_driver="$SCRIPT_DIR/ast-doc-index"
+  elif [[ -x "$SCRIPT_DIR/../bin/ast-doc-index" ]]; then
+    index_driver="$SCRIPT_DIR/../bin/ast-doc-index"
+  elif [[ -x "$SCRIPT_DIR/../setups/ast-doc-graph/bin/ast-doc-index" ]]; then
+    index_driver="$SCRIPT_DIR/../setups/ast-doc-graph/bin/ast-doc-index"
+  elif [[ -x "$SCRIPT_DIR/../plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/bin/ast-doc-index" ]]; then
+    index_driver="$SCRIPT_DIR/../plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/bin/ast-doc-index"
+  elif command -v ast-doc-index >/dev/null 2>&1; then
+    index_driver="$(command -v ast-doc-index)"
+  fi
+
+  # Discover files newer than DB_PATH with standard excludes
+  local dirty_files=()
+  while IFS= read -r f; do
+    if [[ -n "$f" ]]; then
+      dirty_files+=("$f")
+    fi
+  done < <(find "$repo_root" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.md" \) \
+    ! -name "*.d.ts" \
+    ! -path "*/node_modules/*" \
+    ! -path "*/dist/*" \
+    ! -path "*/build/*" \
+    ! -path "*/archive/*" \
+    ! -path "*/.git/*" \
+    ! -path "*/.contexture/*" \
+    ! -path "*/.work/*" \
+    ! -path "*/.idea/*" \
+    ! -path "*/tests/*" \
+    ! -path "*/test/*" \
+    ! -path "*/__tests__/*" \
+    ! -path "*/.worktrees/*" \
+    ! -name "*.test.ts" \
+    ! -name "*.test.tsx" \
+    ! -name "*.spec.ts" \
+    ! -name "*.spec.tsx" \
+    -newer "$DB_PATH" 2>/dev/null || true)
+
+  local dirty_count=${#dirty_files[@]}
+  if [[ "$dirty_count" -eq 0 ]]; then
+    return 0
+  elif [[ "$dirty_count" -le 2 ]]; then
+    if [[ -n "$index_driver" && -x "$index_driver" ]]; then
+      "$index_driver" --repo-root "$repo_root" --db "$DB_PATH" --delta "${dirty_files[@]}" >/dev/null 2>&1 || true
+    fi
+  else
+    echo "[ast-doc-graph: $dirty_count files modified since last index. Run ast-doc-index --delta to refresh]" >&2
+  fi
+}
+
+# --- SUBCOMMAND IMPLEMENTATIONS ---
+
+# 1. symbol <target>
+cmd_symbol() {
+  local target="$1"
+  local depth="$2"
+  if [[ -z "$target" ]]; then
+    echo "Error: symbol requires a target symbol name or qname." >&2
+    exit 1
+  fi
+
+  local target_esc
+  target_esc=$(sql_escape "$target")
+
+  # Lookup symbol record
+  local sym_row
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT
+      id,
+      name,
+      qname,
+      kind,
+      file,
+      line_start,
+      line_end,
+      coalesce(signature, ''),
+      coalesce(docstring, '')
+    FROM symbols
+    WHERE qname = '${target_esc}'
+       OR id = '${target_esc}'
+       OR name = '${target_esc}'
+    ORDER BY
+      CASE
+        WHEN qname = '${target_esc}' THEN 1
+        WHEN id = '${target_esc}' THEN 2
+        WHEN name = '${target_esc}' THEN 3
+        ELSE 4
+      END ASC
+    LIMIT 1;
+  ")
+
+  if [[ -z "$sym_row" ]]; then
+    echo "@symbol $target"
+    echo "  status: NOT_FOUND"
+    exit 1
+  fi
+
+  local s_id s_name s_qname s_kind s_file s_start s_end s_sig s_doc
+  IFS="$SEP" read -r s_id s_name s_qname s_kind s_file s_start s_end s_sig s_doc <<< "$sym_row"
+
+  local s_id_esc s_qname_esc s_file_esc
+  s_id_esc=$(sql_escape "$s_id")
+  s_qname_esc=$(sql_escape "$s_qname")
+  s_file_esc=$(sql_escape "$s_file")
+
+  echo "@symbol $s_qname"
+  echo "  ID: $s_id"
+  echo "  KIND: $s_kind"
+  echo "  LOCATION: ${s_file}:${s_start}-${s_end}"
+  if [[ -n "$s_sig" ]]; then
+    echo "  SIGNATURE: $s_sig"
+  fi
+  if [[ -n "$s_doc" ]]; then
+    echo "  DOCSTRING: $s_doc"
+  fi
+  echo ""
+
+  # Callers
+  echo "@callers (depth: $depth)"
+  local callers_output
+  callers_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    WITH RECURSIVE upstream_callers(id, qname, depth, path) AS (
+      SELECT
+        s.id,
+        s.qname,
+        0,
+        '/' || s.id || '/'
+      FROM symbols s
+      WHERE s.id = '${s_id_esc}'
+      UNION ALL
+      SELECT
+        coalesce(src_s.id, e.source),
+        coalesce(src_s.qname, e.source),
+        uc.depth + 1,
+        uc.path || coalesce(src_s.id, e.source) || '/'
+      FROM upstream_callers uc
+      JOIN edges e ON (e.target = uc.id OR e.target = uc.qname) AND e.kind = 'CALLS'
+      LEFT JOIN symbols src_s ON src_s.id = e.source OR src_s.qname = e.source
+      WHERE uc.depth < ${depth}
+        AND INSTR(uc.path, '/' || coalesce(src_s.id, e.source) || '/') == 0
+    )
+    SELECT DISTINCT
+      uc.depth,
+      uc.qname,
+      coalesce(s.file, ''),
+      coalesce(s.line_start, '')
+    FROM upstream_callers uc
+    LEFT JOIN symbols s ON uc.id = s.id
+    WHERE uc.depth > 0
+    ORDER BY uc.depth ASC, uc.qname ASC;
+  ")
+
+  if [[ -z "$callers_output" ]]; then
+    echo "  none"
+  else
+    local c_depth c_name c_file c_line
+    while IFS="$SEP" read -r c_depth c_name c_file c_line; do
+      if [[ -n "$c_file" && -n "$c_line" && "$c_line" != "0" ]]; then
+        echo "  [${c_depth}] ${c_name} (${c_file}:${c_line})"
+      else
+        echo "  [${c_depth}] ${c_name}"
+      fi
+    done <<< "$callers_output"
+  fi
+  echo ""
+
+  # Callees
+  echo "@callees (depth: $depth)"
+  local callees_output
+  callees_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    WITH RECURSIVE downstream_callees(id, qname, depth, path) AS (
+      SELECT
+        s.id,
+        s.qname,
+        0,
+        '/' || s.id || '/'
+      FROM symbols s
+      WHERE s.id = '${s_id_esc}'
+      UNION ALL
+      SELECT
+        coalesce(tgt_s.id, e.target),
+        coalesce(tgt_s.qname, e.target),
+        dc.depth + 1,
+        dc.path || coalesce(tgt_s.id, e.target) || '/'
+      FROM downstream_callees dc
+      JOIN edges e ON (e.source = dc.id OR e.source = dc.qname) AND e.kind = 'CALLS'
+      LEFT JOIN symbols tgt_s ON tgt_s.id = e.target OR tgt_s.qname = e.target
+      WHERE dc.depth < ${depth}
+        AND INSTR(dc.path, '/' || coalesce(tgt_s.id, e.target) || '/') == 0
+    )
+    SELECT DISTINCT
+      dc.depth,
+      dc.qname,
+      coalesce(s.file, ''),
+      coalesce(s.line_start, '')
+    FROM downstream_callees dc
+    LEFT JOIN symbols s ON dc.id = s.id
+    WHERE dc.depth > 0
+    ORDER BY dc.depth ASC, dc.qname ASC;
+  ")
+
+  if [[ -z "$callees_output" ]]; then
+    echo "  none"
+  else
+    local d_depth d_name d_file d_line
+    while IFS="$SEP" read -r d_depth d_name d_file d_line; do
+      if [[ -n "$d_file" && -n "$d_line" && "$d_line" != "0" ]]; then
+        echo "  [${d_depth}] ${d_name} (${d_file}:${d_line})"
+      else
+        echo "  [${d_depth}] ${d_name}"
+      fi
+    done <<< "$callees_output"
+  fi
+  echo ""
+
+  # Governing Docs
+  echo "@governing_docs"
+  local docs_output
+  docs_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT DISTINCT
+      d.id,
+      d.kind,
+      d.repo,
+      replace(replace(d.summary, char(10), ' '), char(9), ' ')
+    FROM docs d
+    JOIN edges e ON d.id = e.source AND e.kind = 'COVERS'
+    WHERE e.target IN ('${s_id_esc}', '${s_qname_esc}', '${s_file_esc}')
+    ORDER BY d.id ASC;
+  ")
+
+  if [[ -z "$docs_output" ]]; then
+    echo "  none"
+  else
+    local g_id g_kind g_repo g_sum
+    while IFS="$SEP" read -r g_id g_kind g_repo g_sum; do
+      echo "  doc: ${g_id} (${g_kind}, repo: ${g_repo})"
+      echo "    SUMMARY: ${g_sum}"
+    done <<< "$docs_output"
+  fi
+  echo ""
+
+  # Governing Contract Rules
+  echo "@governing_rules"
+  local rules_output
+  rules_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT DISTINCT
+      r.id,
+      r.doc_id,
+      replace(replace(r.statement, char(10), ' '), char(9), ' '),
+      coalesce(replace(replace(r.detail, char(10), ' '), char(9), ' '), ''),
+      coalesce(replace(replace(r.anti, char(10), ' '), char(9), ' '), ''),
+      coalesce(replace(replace(r.good, char(10), ' '), char(9), ' '), '')
+    FROM rules r
+    JOIN edges e ON r.id = e.source AND e.kind = 'GOVERNS'
+    WHERE e.target IN ('${s_id_esc}', '${s_qname_esc}')
+    ORDER BY r.id ASC;
+  ")
+
+  if [[ -z "$rules_output" ]]; then
+    echo "  none"
+  else
+    local r_id r_doc r_stmt r_detail r_anti r_good
+    while IFS="$SEP" read -r r_id r_doc r_stmt r_detail r_anti r_good; do
+      echo "  rule: ${r_id} (doc: ${r_doc})"
+      echo "    STATEMENT: ${r_stmt}"
+      if [[ -n "$r_detail" ]]; then
+        echo "    DETAIL: ${r_detail}"
+      fi
+      if [[ -n "$r_anti" ]]; then
+        echo "    ANTI: ${r_anti}"
+      fi
+      if [[ -n "$r_good" ]]; then
+        echo "    GOOD: ${r_good}"
+      fi
+    done <<< "$rules_output"
+  fi
+  echo ""
+
+  # Associated Pitfalls
+  echo "@associated_pitfalls"
+  local pitfalls_output
+  pitfalls_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT DISTINCT
+      p.id,
+      p.doc_id,
+      p.severity,
+      p.type,
+      replace(replace(p.statement, char(10), ' '), char(9), ' '),
+      coalesce(replace(replace(p.trigger, char(10), ' '), char(9), ' '), '')
+    FROM pitfalls p
+    JOIN edges e ON p.id = e.source AND e.kind = 'WARNS'
+    WHERE e.target IN ('${s_id_esc}', '${s_qname_esc}')
+    ORDER BY p.id ASC;
+  ")
+
+  if [[ -z "$pitfalls_output" ]]; then
+    echo "  none"
+  else
+    local p_id p_doc p_sev p_type p_stmt p_trig
+    while IFS="$SEP" read -r p_id p_doc p_sev p_type p_stmt p_trig; do
+      echo "  pitfall: ${p_id} [severity: ${p_sev}, type: ${p_type}] (doc: ${p_doc})"
+      echo "    STATEMENT: ${p_stmt}"
+      if [[ -n "$p_trig" ]]; then
+        echo "    TRIGGER: ${p_trig}"
+      fi
+    done <<< "$pitfalls_output"
+  fi
+}
+
+# 2. callers <target>
+cmd_callers() {
+  local target="$1"
+  local depth="$2"
+  if [[ -z "$target" ]]; then
+    echo "Error: callers requires a target symbol name or qname." >&2
+    exit 1
+  fi
+  local target_esc
+  target_esc=$(sql_escape "$target")
+
+  local sym_row
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT id, qname FROM symbols
+    WHERE qname = '${target_esc}' OR id = '${target_esc}' OR name = '${target_esc}'
+    LIMIT 1;
+  ")
+
+  local s_id="$target" s_qname="$target"
+  if [[ -n "$sym_row" ]]; then
+    IFS="$SEP" read -r s_id s_qname <<< "$sym_row"
+  fi
+
+  local s_id_esc s_qname_esc
+  s_id_esc=$(sql_escape "$s_id")
+  s_qname_esc=$(sql_escape "$s_qname")
+
+  echo "@callers $s_qname (depth: $depth)"
+  local callers_output
+  callers_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    WITH RECURSIVE upstream_callers(id, qname, depth, path) AS (
+      SELECT
+        '${s_id_esc}',
+        '${s_qname_esc}',
+        0,
+        '/' || '${s_id_esc}' || '/'
+      FROM symbols s
+      WHERE s.id = '${s_id_esc}'
+      UNION ALL
+      SELECT
+        coalesce(src_s.id, e.source),
+        coalesce(src_s.qname, e.source),
+        uc.depth + 1,
+        uc.path || coalesce(src_s.id, e.source) || '/'
+      FROM upstream_callers uc
+      JOIN edges e ON (e.target = uc.id OR e.target = uc.qname) AND e.kind = 'CALLS'
+      LEFT JOIN symbols src_s ON src_s.id = e.source OR src_s.qname = e.source
+      WHERE uc.depth < ${depth}
+        AND INSTR(uc.path, '/' || coalesce(src_s.id, e.source) || '/') == 0
+    )
+    SELECT DISTINCT
+      uc.depth,
+      uc.qname,
+      coalesce(s.file, ''),
+      coalesce(s.line_start, '')
+    FROM upstream_callers uc
+    LEFT JOIN symbols s ON uc.id = s.id
+    WHERE uc.depth > 0
+    ORDER BY uc.depth ASC, uc.qname ASC;
+  ")
+
+  if [[ -z "$callers_output" ]]; then
+    echo "  none"
+  else
+    local c_depth c_name c_file c_line
+    while IFS="$SEP" read -r c_depth c_name c_file c_line; do
+      if [[ -n "$c_file" && -n "$c_line" && "$c_line" != "0" ]]; then
+        echo "  [${c_depth}] ${c_name} (${c_file}:${c_line})"
+      else
+        echo "  [${c_depth}] ${c_name}"
+      fi
+    done <<< "$callers_output"
+  fi
+}
+
+# 3. callees <target>
+cmd_callees() {
+  local target="$1"
+  local depth="$2"
+  if [[ -z "$target" ]]; then
+    echo "Error: callees requires a target symbol name or qname." >&2
+    exit 1
+  fi
+  local target_esc
+  target_esc=$(sql_escape "$target")
+
+  local sym_row
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT id, qname FROM symbols
+    WHERE qname = '${target_esc}' OR id = '${target_esc}' OR name = '${target_esc}'
+    LIMIT 1;
+  ")
+
+  local s_id="$target" s_qname="$target"
+  if [[ -n "$sym_row" ]]; then
+    IFS="$SEP" read -r s_id s_qname <<< "$sym_row"
+  fi
+
+  local s_id_esc s_qname_esc
+  s_id_esc=$(sql_escape "$s_id")
+  s_qname_esc=$(sql_escape "$s_qname")
+
+  echo "@callees $s_qname (depth: $depth)"
+  local callees_output
+  callees_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    WITH RECURSIVE downstream_callees(id, qname, depth, path) AS (
+      SELECT
+        '${s_id_esc}',
+        '${s_qname_esc}',
+        0,
+        '/' || '${s_id_esc}' || '/'
+      FROM symbols s
+      WHERE s.id = '${s_id_esc}'
+      UNION ALL
+      SELECT
+        coalesce(tgt_s.id, e.target),
+        coalesce(tgt_s.qname, e.target),
+        dc.depth + 1,
+        dc.path || coalesce(tgt_s.id, e.target) || '/'
+      FROM downstream_callees dc
+      JOIN edges e ON (e.source = dc.id OR e.source = dc.qname) AND e.kind = 'CALLS'
+      LEFT JOIN symbols tgt_s ON tgt_s.id = e.target OR tgt_s.qname = e.target
+      WHERE dc.depth < ${depth}
+        AND INSTR(dc.path, '/' || coalesce(tgt_s.id, e.target) || '/') == 0
+    )
+    SELECT DISTINCT
+      dc.depth,
+      dc.qname,
+      coalesce(s.file, ''),
+      coalesce(s.line_start, '')
+    FROM downstream_callees dc
+    LEFT JOIN symbols s ON dc.id = s.id
+    WHERE dc.depth > 0
+    ORDER BY dc.depth ASC, dc.qname ASC;
+  ")
+
+  if [[ -z "$callees_output" ]]; then
+    echo "  none"
+  else
+    local d_depth d_name d_file d_line
+    while IFS="$SEP" read -r d_depth d_name d_file d_line; do
+      if [[ -n "$d_file" && -n "$d_line" && "$d_line" != "0" ]]; then
+        echo "  [${d_depth}] ${d_name} (${d_file}:${d_line})"
+      else
+        echo "  [${d_depth}] ${d_name}"
+      fi
+    done <<< "$callees_output"
+  fi
+}
+
+# 4. rules <target>
+cmd_rules() {
+  local target="$1"
+  if [[ -z "$target" ]]; then
+    echo "Error: rules requires a target symbol name or qname." >&2
+    exit 1
+  fi
+  local target_esc
+  target_esc=$(sql_escape "$target")
+
+  local sym_row
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT id, qname FROM symbols
+    WHERE qname = '${target_esc}' OR id = '${target_esc}' OR name = '${target_esc}'
+    LIMIT 1;
+  ")
+
+  local s_id="$target" s_qname="$target"
+  if [[ -n "$sym_row" ]]; then
+    IFS="$SEP" read -r s_id s_qname <<< "$sym_row"
+  fi
+
+  local s_id_esc s_qname_esc
+  s_id_esc=$(sql_escape "$s_id")
+  s_qname_esc=$(sql_escape "$s_qname")
+
+  echo "@rules $s_qname"
+  local rules_output
+  rules_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT DISTINCT
+      r.id,
+      r.doc_id,
+      replace(replace(r.statement, char(10), ' '), char(9), ' '),
+      coalesce(replace(replace(r.detail, char(10), ' '), char(9), ' '), ''),
+      coalesce(replace(replace(r.anti, char(10), ' '), char(9), ' '), ''),
+      coalesce(replace(replace(r.good, char(10), ' '), char(9), ' '), '')
+    FROM rules r
+    JOIN edges e ON r.id = e.source AND e.kind = 'GOVERNS'
+    WHERE e.target IN ('${s_id_esc}', '${s_qname_esc}')
+    ORDER BY r.id ASC;
+  ")
+
+  if [[ -z "$rules_output" ]]; then
+    echo "  none"
+  else
+    local r_id r_doc r_stmt r_detail r_anti r_good
+    while IFS="$SEP" read -r r_id r_doc r_stmt r_detail r_anti r_good; do
+      echo "  rule: ${r_id} (doc: ${r_doc})"
+      echo "    STATEMENT: ${r_stmt}"
+      if [[ -n "$r_detail" ]]; then
+        echo "    DETAIL: ${r_detail}"
+      fi
+      if [[ -n "$r_anti" ]]; then
+        echo "    ANTI: ${r_anti}"
+      fi
+      if [[ -n "$r_good" ]]; then
+        echo "    GOOD: ${r_good}"
+      fi
+    done <<< "$rules_output"
+  fi
+}
+
+# 5. pitfalls <target>
+cmd_pitfalls() {
+  local target="$1"
+  if [[ -z "$target" ]]; then
+    echo "Error: pitfalls requires a target symbol name or qname." >&2
+    exit 1
+  fi
+  local target_esc
+  target_esc=$(sql_escape "$target")
+
+  local sym_row
+  sym_row=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT id, qname FROM symbols
+    WHERE qname = '${target_esc}' OR id = '${target_esc}' OR name = '${target_esc}'
+    LIMIT 1;
+  ")
+
+  local s_id="$target" s_qname="$target"
+  if [[ -n "$sym_row" ]]; then
+    IFS="$SEP" read -r s_id s_qname <<< "$sym_row"
+  fi
+
+  local s_id_esc s_qname_esc
+  s_id_esc=$(sql_escape "$s_id")
+  s_qname_esc=$(sql_escape "$s_qname")
+
+  echo "@pitfalls $s_qname"
+  local pitfalls_output
+  pitfalls_output=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT DISTINCT
+      p.id,
+      p.doc_id,
+      p.severity,
+      p.type,
+      replace(replace(p.statement, char(10), ' '), char(9), ' '),
+      coalesce(replace(replace(p.trigger, char(10), ' '), char(9), ' '), '')
+    FROM pitfalls p
+    JOIN edges e ON p.id = e.source AND e.kind = 'WARNS'
+    WHERE e.target IN ('${s_id_esc}', '${s_qname_esc}')
+    ORDER BY p.id ASC;
+  ")
+
+  if [[ -z "$pitfalls_output" ]]; then
+    echo "  none"
+  else
+    local p_id p_doc p_sev p_type p_stmt p_trig
+    while IFS="$SEP" read -r p_id p_doc p_sev p_type p_stmt p_trig; do
+      echo "  pitfall: ${p_id} [severity: ${p_sev}, type: ${p_type}] (doc: ${p_doc})"
+      echo "    STATEMENT: ${p_stmt}"
+      if [[ -n "$p_trig" ]]; then
+        echo "    TRIGGER: ${p_trig}"
+      fi
+    done <<< "$pitfalls_output"
+  fi
+}
+
+# 6. search "<query>"
+cmd_search() {
+  local query="$1"
+  if [[ -z "$query" ]]; then
+    echo "Error: search requires a query string." >&2
+    exit 1
+  fi
+
+  echo "@search_results (query: \"$query\")"
+  echo ""
+
+  # Build FTS terms for prose docs: prefix terms for each token
+  local doc_terms=()
+  for term in $query; do
+    local clean_term
+    clean_term=$(echo "$term" | tr -cd '[:alnum:]_')
+    if [[ -n "$clean_term" ]]; then
+      doc_terms+=("${clean_term}*")
+    fi
+  done
+
+  local doc_query
+  if [[ ${#doc_terms[@]} -gt 0 ]]; then
+    doc_query="${doc_terms[*]}"
+  else
+    doc_query=$(sql_escape "$query")
+  fi
+
+  # Query fts_docs
+  local docs_matches
+  docs_matches=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT
+      doc_id,
+      entity_id,
+      entity_type,
+      replace(replace(title, char(10), ' '), char(9), ' '),
+      replace(replace(snippet(fts_docs, -1, '<<', '>>', '...', 12), char(10), ' '), char(9), ' '),
+      round(bm25(fts_docs), 3) AS score
+    FROM fts_docs
+    WHERE fts_docs MATCH '${doc_query}'
+    ORDER BY score ASC
+    LIMIT 10;
+  " 2>/dev/null || true)
+
+  # If prefix query had 0 results, try phrase query
+  if [[ -z "$docs_matches" ]]; then
+    local phrase_query
+    phrase_query="\"$(printf '%s' "$query" | sed 's/"/""/g')\""
+    docs_matches=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+      SELECT
+        doc_id,
+        entity_id,
+        entity_type,
+        replace(replace(title, char(10), ' '), char(9), ' '),
+        replace(replace(snippet(fts_docs, -1, '<<', '>>', '...', 12), char(10), ' '), char(9), ' '),
+        round(bm25(fts_docs), 3) AS score
+      FROM fts_docs
+      WHERE fts_docs MATCH '${phrase_query}'
+      ORDER BY score ASC
+      LIMIT 10;
+    " 2>/dev/null || true)
+  fi
+
+  echo "@doc_matches"
+  if [[ -z "$docs_matches" ]]; then
+    echo "  none"
+  else
+    local m_doc m_ent m_type m_title m_snip m_score
+    while IFS="$SEP" read -r m_doc m_ent m_type m_title m_snip m_score; do
+      local m_ent_esc
+      m_ent_esc=$(sql_escape "$m_ent")
+
+      # Find linked symbols
+      local linked_symbols
+      linked_symbols=$(sqlite_exec "$DB_PATH" "
+        SELECT group_concat(coalesce(s.qname, s.name, e.target), ', ')
+        FROM edges e
+        LEFT JOIN symbols s ON e.target = s.id
+        WHERE e.source = '${m_ent_esc}' AND e.kind IN ('GOVERNS', 'WARNS');
+      ")
+
+      echo "  [${m_type}] ${m_ent} (doc: ${m_doc}, score: ${m_score})"
+      echo "    TITLE: ${m_title}"
+      if [[ -n "$m_snip" ]]; then
+        echo "    SNIPPET: ${m_snip}"
+      fi
+      if [[ -n "$linked_symbols" ]]; then
+        echo "    LINKED_SYMBOLS: ${linked_symbols}"
+      fi
+    done <<< "$docs_matches"
+  fi
+  echo ""
+
+  # Query fts_symbols (trigram tokenizer)
+  local sym_terms=()
+  for term in $query; do
+    local clean_term
+    clean_term=$(echo "$term" | tr -cd '[:alnum:]_')
+    if [[ ${#clean_term} -ge 3 ]]; then
+      sym_terms+=("\"${clean_term}\"")
+    fi
+  done
+
+  local sym_matches=""
+  if [[ ${#sym_terms[@]} -gt 0 ]]; then
+    local sym_query_and
+    sym_query_and=$(IFS=" AND "; echo "${sym_terms[*]}")
+    sym_matches=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+      SELECT
+        s.id,
+        s.name,
+        s.qname,
+        s.kind,
+        s.file,
+        s.line_start,
+        coalesce(s.signature, '')
+      FROM fts_symbols fts
+      JOIN symbols s ON fts.symbol_id = s.id
+      WHERE fts_symbols MATCH '${sym_query_and}'
+      ORDER BY rank
+      LIMIT 10;
+    " 2>/dev/null || true)
+
+    # If AND had no results and multiple terms, try OR
+    if [[ -z "$sym_matches" && ${#sym_terms[@]} -gt 1 ]]; then
+      local sym_query_or
+      sym_query_or=$(IFS=" OR "; echo "${sym_terms[*]}")
+      sym_matches=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+        SELECT
+          s.id,
+          s.name,
+          s.qname,
+          s.kind,
+          s.file,
+          s.line_start,
+          coalesce(s.signature, '')
+        FROM fts_symbols fts
+        JOIN symbols s ON fts.symbol_id = s.id
+        WHERE fts_symbols MATCH '${sym_query_or}'
+        ORDER BY rank
+        LIMIT 10;
+      " 2>/dev/null || true)
+    fi
+  fi
+
+  echo "@symbol_matches"
+  if [[ -z "$sym_matches" ]]; then
+    echo "  none"
+  else
+    local y_id y_name y_qname y_kind y_file y_line y_sig
+    while IFS="$SEP" read -r y_id y_name y_qname y_kind y_file y_line y_sig; do
+      local y_id_esc y_qname_esc
+      y_id_esc=$(sql_escape "$y_id")
+      y_qname_esc=$(sql_escape "$y_qname")
+
+      # Find governing rules or warnings
+      local gov_rules
+      gov_rules=$(sqlite_exec "$DB_PATH" "
+        SELECT group_concat(e.source, ', ')
+        FROM edges e
+        WHERE e.target IN ('${y_id_esc}', '${y_qname_esc}') AND e.kind IN ('GOVERNS', 'WARNS');
+      ")
+
+      echo "  ${y_qname} (${y_kind}, ${y_file}:${y_line})"
+      if [[ -n "$y_sig" ]]; then
+        echo "    SIGNATURE: ${y_sig}"
+      fi
+      if [[ -n "$gov_rules" ]]; then
+        echo "    GOVERNED_BY: ${gov_rules}"
+      fi
+    done <<< "$sym_matches"
+  fi
+}
+
+# 7. stats
+cmd_stats() {
+  local num_symbols num_edges num_docs num_rules num_pitfalls
+  num_symbols=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM symbols;")
+  num_edges=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM edges;")
+  num_docs=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM docs;")
+  num_rules=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM rules;")
+  num_pitfalls=$(sqlite_exec "$DB_PATH" "SELECT count(*) FROM pitfalls;")
+
+  echo "@graph_stats"
+  echo "  DATABASE: $DB_PATH"
+  echo "  SYMBOLS: $num_symbols"
+  echo "  EDGES: $num_edges"
+
+  local edge_breakdown
+  edge_breakdown=$(sqlite_exec -separator "$SEP" "$DB_PATH" "
+    SELECT kind, count(*) FROM edges GROUP BY kind ORDER BY kind ASC;
+  ")
+  if [[ -n "$edge_breakdown" ]]; then
+    local e_kind e_count
+    while IFS="$SEP" read -r e_kind e_count; do
+      echo "    ${e_kind}: ${e_count}"
+    done <<< "$edge_breakdown"
+  fi
+
+  echo "  DOCS: $num_docs"
+  echo "  RULES: $num_rules"
+  echo "  PITFALLS: $num_pitfalls"
+}
+
+# Check database freshness and perform JIT micro-sync if necessary
+check_and_sync_freshness
+
+# --- DISPATCH SUBCOMMAND ---
+
+case "$COMMAND" in
+  symbol)
+    cmd_symbol "$TARGET" "$DEPTH"
+    ;;
+  search)
+    cmd_search "$TARGET"
+    ;;
+  callers)
+    cmd_callers "$TARGET" "$DEPTH"
+    ;;
+  callees)
+    cmd_callees "$TARGET" "$DEPTH"
+    ;;
+  rules)
+    cmd_rules "$TARGET"
+    ;;
+  pitfalls)
+    cmd_pitfalls "$TARGET"
+    ;;
+  stats)
+    cmd_stats
+    ;;
+  *)
+    echo "Unknown command: $COMMAND" >&2
+    print_help
+    exit 1
+    ;;
+esac

@@ -1,0 +1,10 @@
+#!/bin/sh
+# summary: run the indexing pipeline: full or --delta, over a repository root
+# usage: ctx ast-doc-graph index [--repo-root <path>] [--src-dir <dir>] [--db <path>] [--clean | --delta] [files...]
+# help: discovers TypeScript sources and docs units, runs the extractors, and compiles the SQLite graph; --clean rebuilds the database from scratch, --delta re-indexes changed files (all changed by default, or the named files)
+# help: the extractors need a TypeScript runner reachable from the target repository (a project-local tsx, tsx on PATH, or Node with type stripping); sqlite3 with FTS5 compiles and queries the graph
+# help: example: ctx ast-doc-graph index --repo-root . --clean
+# help: example: ctx ast-doc-graph index --repo-root . --delta backend/core/cascadeCore.ts
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/../bin/ast-doc-index" "$@"

@@ -56,7 +56,7 @@ Gate closures follow the same discipline. DECIDE closes by the backlog, VERIFY a
 
 Write the smallest text that shapes the work. The contract has three clauses, and they converge agents with no examples in context: never re-specify grammars, never prescribe content, one line per step (`N. GATE: outcome`). In the measured series, a prose rhythm lost its gates at 222 tokens; an agent given only the clauses produced the form clean at 130.
 
-Author empirically. State a positive recipe rather than a prohibition, because a prohibition tends to produce the unwanted content it names. Start from the workflows your workspace already runs: the step-by-step patterns found in an instruction stack are the first rhythm candidates, and onboarding proposes them for extraction when it presents the installation plan. When no team rhythm emerges, the examples are offered as the starting set.
+Author empirically. State a positive recipe rather than a prohibition, because a prohibition tends to produce the unwanted content it names. Start from the workflows your workspace already runs: the step-by-step patterns found in an instruction stack are the first rhythm candidates, and onboarding proposes them for extraction when it presents the installation plan. When no team rhythm emerges, the starter-rhythms plugin is offered as the starting set.
 
 ## The default design loop
 
@@ -73,12 +73,12 @@ When no rhythm is invoked, the agent runs the design loop:
 
 This is the fallback, not the frame: a human rhythm replaces the progression when one is invoked.
 
-## The shipped examples
+## The shipped rhythms
 
-Two examples ship at `examples/rhythms/`, each with a plain-language README beside it.
+The starter-rhythms plugin ships two rhythms at `plugins/starter-rhythms/.contexture/rhythms/`, explained in its README.
 
 `work` applies when a work request arrives and no other rhythm matches, with `activation: auto`. It is token-heavy by design: one unit of work moves through several subagents (recon, grounding, execution, review), and each subagent is a fresh context reading the record instead of dragging the history along. That buys context management and redundancy, and it is strongly recommended for cheaper, decent models: the structured flow and the independent verification close much of the gap to frontier models. Frontier models run it as discipline rather than necessity.
 
 `debug` applies when a failure needs a root cause (a bug, a flaky test, unexpected behavior), with `activation: propose`. It is a light, single-context loop: one focused agent, one gate at a time. Its first gate requires a red reproduction, recorded with a reference, before any fix.
 
-The gate glosses in plain words, the cost, and the practice notes live in `examples/rhythms/work/README.md` and `examples/rhythms/debug/README.md`. The examples are snapshots to copy and edit; in this repository the live copy of `work` sits at `.contexture/rhythms/work.md`, and in any workspace the live rhythms belong in its own `.contexture/rhythms/`. Onboarding offers the examples when a team brings no rhythm of its own, and removes both the examples and the onboarding guideline at adoption close.
+The gate glosses in plain words, the cost, and the practice notes live in `plugins/starter-rhythms/README.md`. The shipped rhythms are snapshots to copy and edit; in this repository the live copy of `work` sits at `.contexture/rhythms/work.md`, and in any workspace the live rhythms belong in its own `.contexture/rhythms/`. Onboarding offers the plugin when a team brings no rhythm of its own, and removes both the plugins and the onboarding guideline at adoption close.

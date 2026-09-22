@@ -1,6 +1,0 @@
-#!/bin/sh
-# summary: mark an idea PICKED by a unit
-# usage: ctx ideas pick <slug> <unit>
-# help: requires a non-empty unit; the dashed unit token parses
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/ideas" pick "$@"

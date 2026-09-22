@@ -1,0 +1,26 @@
+#!/bin/sh
+# summary: the corpus grammar and integrity audit
+# usage: ctx docs audit docs/<repo>/*.md
+# help: reads the typed-block corpus and reports grammar and integrity defects with file:line positions: the doc header, the block vocabulary, the indentation rule, the rule fields, symbol-only evidence, and duplicate ids
+# help: exit codes: 0 the corpus is clean; 1 defects found; 2 unreadable input (the awk engine's own failure)
+# help: example: ctx docs audit docs/*/*.md (silence on a clean corpus)
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs audit: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help audit" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$#" -eq 0 ]; then
+  echo "Usage: ctx docs audit docs/<repo>/*.md" >&2
+  echo "help: ctx docs help audit" >&2
+  exit 1
+fi
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/docs-audit.awk" "$@"

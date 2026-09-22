@@ -4,6 +4,33 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.51.0] - 2026-09-23
+
+### Added
+
+- The plugin frame: `plugins/` replaces `examples/` as the tracked catalog of distributable overlays. A plugin mirrors the target tree (only `README.md` and `tests/` are plugin-meta), installs into an existing setup after adoption, and declares its own needs; five plugins ship (`starter-rhythms`, `toolchain-filters`, `lane-isolation`, `docs-discipline`, `ast-doc-graph`), each addressed as "the <name> plugin" and carrying adoption, needs, and contribution sections. `docs/plugins.md` carries the packaging, adoption, naming, and test-convention contract.
+- Plugin suites: `plugins/<name>/tests/run.sh` runs a plugin's own suite; the upstream runner invokes every plugin suite by convention and reports it, and a declared need skips with the need named.
+- The `docs` module from the docs-discipline plugin: `ctx docs query|audit|check|gate|nudge` over a typed-block corpus, with the engines private and the module README carrying the low-level map.
+- The `ast-doc-graph` module: `ctx ast-doc-graph index|query` over the private pipeline (extractors, loader, schema, spec).
+- The base tree: the shippable core is tracked under `base/` (a mirror of the target: `base/AGENTS.md` plus `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`). Its tracked tree is the payload: the archive and the update derive from it structurally, with no path tables to drift.
+- The upstream test pipeline: `tests/run.sh` runs six core suites (filters, ctx, session, hooks, record-audit, governance) staged from the shipped engine, plus every plugin suite by convention; presence checks fail when a shipped surface carries no case; the ship gate states the run green before any commit, tag, or push.
+- The docs-discipline corpus for this repository: `docs/workspace/` (conventions, the map, unit docs) audited clean, with the close gate wired into the close path.
+
+### Changed
+
+- The live root (`AGENTS.md` and `.contexture/`) is untracked working state in this repository: gitignored wholesale and never shipped. The development loop is: edit `base/`, ship, then apply `base/` onto the live drawer class-aware (sessions, rhythms, tmp, and local modules are never touched).
+- The adoption and update commands read `base/`: `git archive <tag> base/ plugins/` then copy the base content into the target; the update strips the base prefix.
+- The payload classes read: payload = `base/`, catalog = `plugins/` (shipped, no longer deleted at adoption close), workspace-owned = the live root paths.
+- The plugin READMEs teach only `ctx` forms; the two bundles' instruments are module verbs now.
+
+### Removed
+
+- The `examples/` tree, superseded by `plugins/`; the plugin-side `.contexture/scripts/` interim paths; the pre-`base/` payload paths as the shipping source.
+
+### Fixed
+
+- The session suite's paging fixture computes the entry date at runtime; the record requires an entry slug's date prefix to be the current day, so the suite no longer breaks at a date roll.
+
 ## [0.50.0] - 2026-09-22
 
 ### Added

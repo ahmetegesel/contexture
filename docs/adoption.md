@@ -4,7 +4,7 @@ contexture is a convention, not a tool: one commit, any harness, no dependencies
 
 ## Adoption in one breath
 
-What lands is a small set of plain files: `AGENTS.md` at the root, the `.contexture/` drawer beside it, and `examples/` as reference. Nothing is installed: no dependency, no service, no runtime. The files are the system.
+What lands is a small set of plain files: `AGENTS.md` at the root, the `.contexture/` drawer beside it, and `plugins/` as reference. Nothing is installed: no dependency, no service, no runtime. The files are the system.
 
 Adoption is a procedure, not the convention. `.contexture/ONBOARDING.md` carries it, an agent runs it, and it is deleted when the adoption closes. What remains is the convention itself: the record and the process.
 
@@ -28,16 +28,20 @@ For adopting by hand, start on a branch and copy the set:
 
 ```
 git checkout -b adopt-contexture
-git archive <tag> AGENTS.md .contexture/ examples/ | tar -x -C <your-repo>
+mkdir .adopt-contexture
+git archive <tag> base/ plugins/ | tar -x -C .adopt-contexture
+cp -R .adopt-contexture/base/. .
+cp -R .adopt-contexture/plugins .
+rm -rf .adopt-contexture
 chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk
 ```
 
-`AGENTS.md` lands at the root, the drawer alongside it, and the examples at the root as reference. The copy carries a semantic version: MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections or features, PATCH fixes wording. The installed version is the header line of `AGENTS.md`.
+`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` lands at the root, the drawer alongside it; `plugins/` lands at the root as the catalog to install from. The copy carries a semantic version: MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections or features, PATCH fixes wording. The installed version is the header line of `AGENTS.md`.
 
-Then configure the choices the agent would have proposed: the gitignore posture for your topology, your overlays, and the harness symlinks. If no team rhythm emerged from your instruction stack, the examples are the starting set: copy them into place and edit the copies freely.
+Then configure the choices the agent would have proposed: the gitignore posture for your topology, your overlays, and the harness symlinks. If no team rhythm emerged from your instruction stack, the starter-rhythms plugin is the starting set: copy its overlay into place and edit the copies freely.
 
 ```
-cp -R examples/rhythms/* .contexture/rhythms/
+cp plugins/starter-rhythms/.contexture/rhythms/*.md .contexture/rhythms/
 ```
 
 Then name the first unit of work; the agent bootstraps its folder and the record starts.
@@ -85,7 +89,7 @@ Parent workspace (multiple repositories, the workspace tracks convention configu
 !GEMINI.md
 ```
 
-The last two stand for the harness entry points you wire; keep only the ones in use. The source repository follows the same shape, then re-ignores `.contexture/rhythms/` and `.contexture/sessions/` so per-workspace content never ships upstream.
+The last two stand for the harness entry points you wire; keep only the ones in use. This repository keeps a stricter shape: its live root (the same `AGENTS.md` and `.contexture/`) is untracked working state, and the shippable core is tracked mirrored under `base/` (see Payload classes and syncing).
 
 ## Migration, overlays, symlinks
 
@@ -114,7 +118,7 @@ git diff
 
 The first loads the adoption session: the map plus every page; the second must exit 0; the last two are the review surface you read alongside the adoption record.
 
-Then the adoption material goes away. Delete `.contexture/ONBOARDING.md` and the `examples/` folder: they are the procedure, used once, not the convention. If your gitignore block names `ONBOARDING.md` explicitly, remove that line with it.
+Then the adoption procedure goes away. Delete `.contexture/ONBOARDING.md`: it is the procedure, used once, not the convention; remove any gitignore whitelist line naming it. The `plugins/` folder stays: it is the tracked catalog, installable into an existing setup whenever the workspace wants one of its overlays.
 
 ## Payload classes and syncing
 
@@ -122,11 +126,18 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 | class | paths | fate |
 |---|---|---|
-| update payload | AGENTS.md, .contexture/templates/, .contexture/ctx, .contexture/modules/session/, .contexture/modules/run/ | synced from tags |
-| adoption material | .contexture/ONBOARDING.md, examples/ | used once, never re-synced, deleted at adoption close |
-| workspace-owned | .contexture/sessions/, .contexture/rhythms/, .contexture/tmp/, workspace-added modules under .contexture/modules/ | never touched |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| catalog | `plugins/` | copied when wanted; shipped with every tag, never deleted at adoption close |
+| workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/` | never touched |
 
-The synced set is derived, never declared: what the tag tracks under the payload paths is the set. `git archive` copies it, `git ls-tree` enumerates it, and a `cmp` per file verifies it. No manifest exists to drift; the tag's index is the declaration. Overlays are never in the path, and they survive every sync untouched.
+The synced set is derived, never declared: `base/` is the payload; `git archive <tag> base/` copies it, `git ls-tree` enumerates it, and a `cmp` per file verifies it. No manifest exists to drift; the tag's index is the declaration. Overlays are never in `base/`, and they survive every sync untouched. `.contexture/ONBOARDING.md` rides the payload as adoption material: used once, deleted at close, redelivered by a later apply and deleted again.
+
+In this repository the live root (`AGENTS.md` and `.contexture/`) is untracked working state; the dev loop edits `base/` directly, ships a tag, and applies the payload onto the live drawer class-aware:
+
+1. Edit `base/` directly: it is the shipping copy.
+2. Ship: docs sync, commit, push, and the annotated tag in one breath.
+3. Apply: `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched.
+4. Verify the live install: the boot load, the audit, and the ground check.
 
 ## Updating
 
@@ -137,9 +148,9 @@ The base evolves upstream, and updating is judgment, not a script: the changes a
 3. Read the CHANGELOG from your installed version to the target: what changed and why.
 4. Read your workspace: the overlay's `@replace` blocks, live sessions, in-flight artifacts.
 5. Decide: adopt now, migrate first, or wait.
-6. Copy the payload: `git archive <tag> AGENTS.md .contexture/templates/ .contexture/ctx .contexture/modules/session/ .contexture/modules/run/ | tar -x -C <your-repo>`.
-7. Verify it: `git ls-tree -r --name-only <tag> -- AGENTS.md .contexture/templates/ .contexture/ctx .contexture/modules/session/ .contexture/modules/run/` plus a `cmp` per file.
+6. Copy the payload: `git archive <tag> base/ | tar -x --strip-components=1 -C <your-repo>`; the archive carries only payload paths, so workspace-owned paths are never touched.
+7. Verify it: `git ls-tree -r --name-only <tag> -- base/` plus a `cmp` per file against the applied paths.
 8. Review the staged diff before committing; it shows you the changed base.
 9. Run your instruments against the result: the boot query, the audit, the ground check. After a MAJOR tag, review the overlay: its rules were written against the old shape.
 
-Adoption material never re-syncs, and your sessions and rhythms are never touched; the classes hold on every update.
+The payload applies cleanly, and your sessions, rhythms, tmp, and workspace modules are never touched; the classes hold on every update.

@@ -243,11 +243,12 @@ The builtin run module, `.contexture/modules/run/`. It has no module file and no
 
 ## Payload
 
-A module you add is workspace-owned: updates never touch it. The builtin `session` and `run` modules ride the update payload and are replaced byte for byte on an update; either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
+A module you add is workspace-owned: updates never touch it. The builtin `session` and `run` modules ride the update payload: the source repository tracks them mirrored under `base/`, and an update applies them onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
 
 ## Where the rest lives
 
 - Engine behavior: run guards, load paging, audit classes, query kinds — `docs/the-engine.md`.
 - The record grammars (state, backlog, journal, knowledge) — `docs/the-record.md`.
 - Drawer layout, the three payload classes, and update mechanics — `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing, Updating).
+- Packaging a module as a plugin for reuse or contribution: `docs/plugins.md`.
 - Session module internals — `.contexture/modules/session/README.md`, off-path.

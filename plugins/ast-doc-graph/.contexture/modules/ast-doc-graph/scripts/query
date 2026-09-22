@@ -1,0 +1,15 @@
+#!/bin/sh
+# summary: query the graph database: symbols, callers, callees, search, rules, pitfalls, and stats
+# usage: ctx ast-doc-graph query symbol <name> [--depth N] [--db <path>] [--no-sync]
+# usage: ctx ast-doc-graph query search "<query>" [--db <path>] [--no-sync]
+# usage: ctx ast-doc-graph query callers <name> [--depth N] [--db <path>] [--no-sync]
+# usage: ctx ast-doc-graph query callees <name> [--depth N] [--db <path>] [--no-sync]
+# usage: ctx ast-doc-graph query rules <name> [--db <path>] [--no-sync]
+# usage: ctx ast-doc-graph query pitfalls <name> [--db <path>] [--no-sync]
+# usage: ctx ast-doc-graph query stats [--db <path>] [--no-sync]
+# help: answers directly from system sqlite3 with a zero-daemon JIT freshness check: one or two dirty files micro-sync inline, three or more print an advisory notice on stderr and the query still answers against the current database; --no-sync bypasses the freshness scan
+# help: the database defaults to $GRAPH_DB or ./graph.db
+# help: example: ctx ast-doc-graph query stats --db ./graph.db
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/../bin/graph-query" "$@"

@@ -1,0 +1,26 @@
+#!/bin/sh
+# summary: the coverage, freshness, and dead-sources check over a change delta
+# usage: git diff --name-status | ctx docs check docs/<repo>/*.md
+# help: reads a status-prefixed change delta on stdin together with the corpus files and reports the touched code files that no doc claims (coverage), the changed code files whose docs did not ride the change (freshness), and the deleted files still listed as doc sources
+# help: exit codes: 0 the delta is covered and fresh; 1 a completeness, freshness, or dead-sources violation; 2 unreadable input (the awk engine's own failure)
+# help: example: printf 'M\tprojects/demo/src/x.ts\ndocs/demo/x.md\n' | ctx docs check docs/*/*.md
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs check: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help check" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$#" -eq 0 ]; then
+  echo "Usage: git diff --name-status | ctx docs check docs/<repo>/*.md" >&2
+  echo "help: ctx docs help check" >&2
+  exit 1
+fi
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/docs-check.awk" "$@"

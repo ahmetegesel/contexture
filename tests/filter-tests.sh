@@ -6,16 +6,17 @@
 #   tests/filter-tests.sh
 #
 # The tests live upstream, never in an adopting workspace. Core pairs live in
-# this folder; setup pairs live under the setup, one pair per case, named
+# this folder; plugin pairs live under the plugin, one pair per case, named
 # <filter>-<case>.in and <filter>-<case>.expected:
-#   tests/                                 the core filters
-#   examples/setups/tool-filters/tests/    the setup filters
+#   tests/                               the core filters
+#   plugins/toolchain-filters/tests/     the plugin filters
 # Read tests/README.md before maintaining the filters or the pairs.
 # A pair is piped through the runner (ctx run --filter=<filter>) and
 # byte-compared against the expected file. Core fixtures run through the
-# base runtime in place; setup fixtures run through a staged sandbox (a copy
-# of the runtime plus the real module layout: modules/run/filters for the
-# core filters and a staged tool-filters module for the setup filters).
+# base runtime in place (the shipped core: base/.contexture/ctx and its run
+# module); plugin fixtures run through a staged sandbox (a copy of the base
+# runtime plus the real module layout: modules/run/filters for the core
+# filters and a staged toolchain-filters module for the plugin filters).
 #
 # The presence check enumerates every top-level *.awk per filter directory
 # and fails when one carries no fixture pair; the counts are derived from
@@ -33,11 +34,11 @@ set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
-CTX="$ROOT/.contexture/ctx"
-CORE_FILTERS="$ROOT/.contexture/modules/run/filters"
+CTX="$ROOT/base/.contexture/ctx"
+CORE_FILTERS="$ROOT/base/.contexture/modules/run/filters"
 CORE_FIXTURES="$ROOT/tests"
-SETUP_FILTERS="$ROOT/examples/setups/tool-filters/filters"
-SETUP_FIXTURES="$ROOT/examples/setups/tool-filters/tests"
+SETUP_FILTERS="$ROOT/plugins/toolchain-filters/.contexture/modules/toolchain-filters/filters"
+SETUP_FIXTURES="$ROOT/plugins/toolchain-filters/tests"
 
 export LC_ALL=C
 
@@ -67,7 +68,7 @@ trap cleanup EXIT
 # The sandbox mirrors the real layout: the runtime at .contexture/ctx, the
 # core filters in the run module, the setup filters as a staged workspace
 # module beside it
-mkdir -p "$SANDBOX/.contexture/modules/run/filters" "$SANDBOX/.contexture/modules/tool-filters/filters" "$SANDBOX/bin"
+mkdir -p "$SANDBOX/.contexture/modules/run/filters" "$SANDBOX/.contexture/modules/toolchain-filters/filters" "$SANDBOX/bin"
 cp "$CTX" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 for f in "$CORE_FILTERS"/*.awk; do
@@ -75,10 +76,10 @@ for f in "$CORE_FILTERS"/*.awk; do
   cp "$f" "$SANDBOX/.contexture/modules/run/filters/"
 done
 if [ -d "$SETUP_FILTERS" ]; then
-  printf '# summary: staged tool-filters module\n' > "$SANDBOX/.contexture/modules/tool-filters/module"
+  printf '# summary: staged toolchain-filters module\n' > "$SANDBOX/.contexture/modules/toolchain-filters/module"
   for f in "$SETUP_FILTERS"/*.awk; do
     [ -f "$f" ] || continue
-    cp "$f" "$SANDBOX/.contexture/modules/tool-filters/filters/"
+    cp "$f" "$SANDBOX/.contexture/modules/toolchain-filters/filters/"
   done
 fi
 
@@ -266,9 +267,9 @@ run_recovery_case() {
 printf "filter-tests: fixture harness at %s\n" "$ROOT"
 run_fixtures "$CORE_FILTERS" "$CORE_FIXTURES" inplace "core filters"
 if [ -d "$SETUP_FILTERS" ] && [ -d "$SETUP_FIXTURES" ]; then
-  run_fixtures "$SETUP_FILTERS" "$SETUP_FIXTURES" sandbox "setup filters"
+  run_fixtures "$SETUP_FILTERS" "$SETUP_FIXTURES" sandbox "plugin filters"
 else
-  printf "setup filters: skipped (examples/setups/tool-filters not present)\n"
+  printf "plugin filters: skipped (plugins/toolchain-filters not present)\n"
 fi
 run_ansi_case
 run_identity_case

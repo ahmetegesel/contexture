@@ -1,0 +1,1 @@
+# summary: the AST and documentation graph: index TypeScript code and docs corpora into SQLite, then query symbols, call graphs, rules, and pitfalls
