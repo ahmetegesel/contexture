@@ -34,8 +34,8 @@ Run in your repository root:
 
 ```bash
 git fetch https://github.com/ahmetegesel/contexture.git --tags
-git archive v0.49.1 AGENTS.md .contexture/ examples/ | tar -x
-chmod +x .contexture/scripts/ctx .contexture/scripts/*.sh .contexture/ctx/*/entry .contexture/ctx/session/*.awk .contexture/filters/*.awk
+git archive v0.50.0 AGENTS.md .contexture/ examples/ | tar -x
+chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk
 ```
 
 ### 2. Run the onboarding wizard
@@ -70,10 +70,9 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.workspace.md   Shared workspace overlay, tracked in git for team-wide rules
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
 └── .contexture/          The convention drawer, isolating machinery from project code
-    ├── filters/          Modular stream filters: diff.awk, list.awk, log.awk, and workspace additions
-    ├── ctx/              Command families: the base session family and workspace additions
+    ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
+    ├── modules/          The modules: session (the record engine), run (stream filters), and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
-    ├── scripts/          The ctx entry point (binder and run built-in) with the compat shims
     ├── templates/        Shape grammars ensuring structured writes without guesswork
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
         ├── state.md      Live pointer: status, current anchor, next action, and refs
@@ -98,12 +97,13 @@ A plain text workflow checklist in `.contexture/rhythms/`. Enforces process disc
 Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` for local machine). Lets you add repository policies or git rules without modifying contexture's base. Deep dive: [Overlays](docs/overlays.md).
 
 ### Stream compaction
-Universal stream reduction runner and filter (`ctx run`). All shell commands execute through it (runner mode prefix: `.contexture/scripts/ctx run <cmd>`) or pipe into it (`<cmd> | .contexture/scripts/ctx run`). Runner mode selects the filter by the wrapped command's identity and stdin mode by the stream signature, strips ANSI escape sequences before matching, and collapses unchanged Git diff context lines (`diff.awk`), verbose directory listings (`list.awk`), passing test runs, and repetitive logs (`log.awk`) by 40 to 90 percent without installs or diagnostic loss. Preserves exact exit codes, keeps command stderr visible (whole on failure or empty stdout, tail-capped with its own notice otherwise), falls back to raw when a shrinking filter carries no notice, and honors `COMPACT_DISABLE=1` (bypass) and `COMPACT_DEBUG=1` (selection report). Capture scratch prefers the workspace's gitignored `.contexture/tmp/` drawer. Deep dive: [The engine](docs/the-engine.md).
+Universal stream reduction runner and filter (`ctx run`). All shell commands execute through it (runner mode prefix: `.contexture/ctx run <cmd>`) or pipe into it (`<cmd> | .contexture/ctx run`). Runner mode selects the filter by the wrapped command's identity and stdin mode by the stream signature, strips ANSI escape sequences before matching, and collapses unchanged Git diff context lines (`diff.awk`), verbose directory listings (`list.awk`), passing test runs, and repetitive logs (`log.awk`) by 40 to 90 percent without installs or diagnostic loss. Preserves exact exit codes, keeps command stderr visible (whole on failure or empty stdout, tail-capped with its own notice otherwise), falls back to raw when a shrinking filter carries no notice, and honors `COMPACT_DISABLE=1` (bypass) and `COMPACT_DEBUG=1` (selection report). Capture scratch prefers the workspace's gitignored `.contexture/tmp/` drawer. Deep dive: [The engine](docs/the-engine.md).
 
 ## Docs
 
 - [The record](docs/the-record.md): Artifacts, liveness, and closure
 - [The engine](docs/the-engine.md): AGENTS.md, shape grammars, and awk scripts
+- [Modules](docs/modules.md): The module contract: anatomy, declarations, hooks, and filters
 - [Units and subagents](docs/units-and-lanes.md): Folder lifecycles and delegated subagent work
 - [Rhythms](docs/rhythms.md): Procedure grammar, activation, and the default loop
 - [Overlays](docs/overlays.md): Amendment grammar and precedence rules
@@ -117,7 +117,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 
 | command | what it returns |
 |---|---|
-| ctx help | The binder summary: `ctx run`, `ctx session` with its verbs, and every discovered family with the verbs it carries |
+| ctx help | The runtime summary: `ctx run`, `ctx session` with its verbs, and every discovered module with the verbs it carries |
 | ctx session help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
 | ctx session active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
 | ctx session bootstrap <slug> "<objective>" [<repos>] | A new unit: the folder, state at A0, the three empty artifacts, and the folded A1 receipt; prints the state and the next move |
@@ -144,8 +144,8 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
 | ctx session refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
 | ctx session close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
-| ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/scripts/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw |
+| ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw |
 
-The query family answers the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
+The query forms answer the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
 
-The recording family is the write side of the toolbox: `append` lands entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a task's status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. Every form validates all inputs before any write, refuses loudly with zero partial writes, and the batch forms carry several blocks or slugs in one call. Shapes come from `.contexture/templates/`; the help names each form's target, stdin, and template.
+The recording forms are the write side of the toolbox: `append` lands entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a task's status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. Every form validates all inputs before any write, refuses loudly with zero partial writes, and the batch forms carry several blocks or slugs in one call. Shapes come from `.contexture/templates/`; the help names each form's target, stdin, and template.

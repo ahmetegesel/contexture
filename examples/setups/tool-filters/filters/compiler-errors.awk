@@ -78,7 +78,7 @@ END {
   # a failing command produced nothing this filter understands; surface the
   # notice alone so the failure never reads as a clean run
   if (COMPACT_EXIT + 0 != 0 && err_count == 0) {
-    print "[compact: compiler-errors.awk: exit " COMPACT_EXIT " with no parsed diagnostics; COMPACT_DISABLE=1 for the raw stream]"
+    print "[ctx: compiler-errors.awk: exit " COMPACT_EXIT " with no parsed diagnostics; COMPACT_DISABLE=1 for the raw stream]"
     exit 0
   }
 

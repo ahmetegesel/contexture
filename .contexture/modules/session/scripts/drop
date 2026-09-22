@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: remove task blocks; the record lands first, then the blocks go
+# usage: ctx session drop <slug> <task-slug> [<task-slug> ...]  (stdin: the record block)
+# help: pipe the record @entry; its WHAT names every <task-slug>; an IN_PROGRESS task the state still names refuses (run next first)
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/record" drop "$@"

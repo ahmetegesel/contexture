@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: overwrite next_action with the pointer
+# usage: ctx session next <slug> "<pointer>"
+# help: refuses when an IN_PROGRESS task would go unnamed
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/record" next "$@"

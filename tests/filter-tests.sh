@@ -11,11 +11,11 @@
 #   tests/                                 the core filters
 #   examples/setups/tool-filters/tests/    the setup filters
 # Read tests/README.md before maintaining the filters or the pairs.
-# A pair is piped through compact.sh --filter=<filter> and byte-compared
-# against the expected file. Core fixtures run through the base compact.sh
-# in place; setup fixtures run through a staged sandbox (a copy of
-# compact.sh plus every filter under test) because the base discovery
-# cannot resolve the setup filters.
+# A pair is piped through the runner (ctx run --filter=<filter>) and
+# byte-compared against the expected file. Core fixtures run through the
+# base runtime in place; setup fixtures run through a staged sandbox (a copy
+# of the runtime plus the real module layout: modules/run/filters for the
+# core filters and a staged tool-filters module for the setup filters).
 #
 # The presence check enumerates every top-level *.awk per filter directory
 # and fails when one carries no fixture pair; the counts are derived from
@@ -33,9 +33,8 @@ set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
-COMPACT="$ROOT/.contexture/scripts/compact.sh"
-CTX="$ROOT/.contexture/scripts/ctx"
-CORE_FILTERS="$ROOT/.contexture/filters"
+CTX="$ROOT/.contexture/ctx"
+CORE_FILTERS="$ROOT/.contexture/modules/run/filters"
 CORE_FIXTURES="$ROOT/tests"
 SETUP_FILTERS="$ROOT/examples/setups/tool-filters/filters"
 SETUP_FIXTURES="$ROOT/examples/setups/tool-filters/tests"
@@ -45,11 +44,6 @@ export LC_ALL=C
 # A caller's bypass or debug env must never disarm the fixtures
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-if [ ! -f "$COMPACT" ]; then
-  echo "filter-tests.sh: compact.sh not found at $COMPACT" >&2
-  exit 1
-fi
-# compact.sh shims into ctx run, so the sandbox stages ctx beside it
 if [ ! -f "$CTX" ]; then
   echo "filter-tests.sh: ctx not found at $CTX" >&2
   exit 1
@@ -70,17 +64,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$SANDBOX/scripts" "$SANDBOX/filters" "$SANDBOX/bin"
-cp "$COMPACT" "$SANDBOX/scripts/compact.sh"
-cp "$CTX" "$SANDBOX/scripts/ctx"
+# The sandbox mirrors the real layout: the runtime at .contexture/ctx, the
+# core filters in the run module, the setup filters as a staged workspace
+# module beside it
+mkdir -p "$SANDBOX/.contexture/modules/run/filters" "$SANDBOX/.contexture/modules/tool-filters/filters" "$SANDBOX/bin"
+cp "$CTX" "$SANDBOX/.contexture/ctx"
+chmod +x "$SANDBOX/.contexture/ctx"
 for f in "$CORE_FILTERS"/*.awk; do
   [ -f "$f" ] || continue
-  cp "$f" "$SANDBOX/filters/"
+  cp "$f" "$SANDBOX/.contexture/modules/run/filters/"
 done
 if [ -d "$SETUP_FILTERS" ]; then
+  printf '# summary: staged tool-filters module\n' > "$SANDBOX/.contexture/modules/tool-filters/module"
   for f in "$SETUP_FILTERS"/*.awk; do
     [ -f "$f" ] || continue
-    cp "$f" "$SANDBOX/filters/"
+    cp "$f" "$SANDBOX/.contexture/modules/tool-filters/filters/"
   done
 fi
 
@@ -154,14 +152,14 @@ run_fixtures() {
       fi
       actual="$SANDBOX/$case_name.actual"
       if [ "$mode" = sandbox ]; then
-        compact="$SANDBOX/scripts/compact.sh"
+        runner="$SANDBOX/.contexture/ctx"
       else
-        compact="$COMPACT"
+        runner="$CTX"
       fi
-      if "$compact" --filter="$name" < "$in_file" > "$actual" 2> "$SANDBOX/$case_name.stderr"; then
+      if "$runner" run --filter="$name" < "$in_file" > "$actual" 2> "$SANDBOX/$case_name.stderr"; then
         compare "$case_name" "$actual" "$expected"
       else
-        bad "$case_name" "compact.sh exited nonzero"
+        bad "$case_name" "ctx run exited nonzero"
       fi
       cases=$((cases + 1))
     done
@@ -184,7 +182,7 @@ run_ansi_case() {
     bad "mechanics:ansi-strip" "fixture pair or compiler filter missing"
     return
   fi
-  if "$SANDBOX/scripts/compact.sh" --filter=compiler-errors < "$in_file" > "$actual" 2> "$SANDBOX/mechanics-ansi.stderr" \
+  if "$SANDBOX/.contexture/ctx" run --filter=compiler-errors < "$in_file" > "$actual" 2> "$SANDBOX/mechanics-ansi.stderr" \
     && ! grep -q "$(printf '\033')" "$actual"; then
     compare "mechanics:ansi-strip" "$actual" "$expected"
   else
@@ -206,7 +204,7 @@ run_identity_case() {
 cat "$FILTER_TESTS_IN"
 SHIM
   chmod +x "$SANDBOX/bin/git"
-  if FILTER_TESTS_IN="$in_file" PATH="$SANDBOX/bin:$PATH" COMPACT_DEBUG=1 "$SANDBOX/scripts/compact.sh" --stats git show HEAD > "$actual" 2> "$stats" \
+  if FILTER_TESTS_IN="$in_file" PATH="$SANDBOX/bin:$PATH" COMPACT_DEBUG=1 "$SANDBOX/.contexture/ctx" run --stats git show HEAD > "$actual" 2> "$stats" \
     && grep -q "selected diff.awk (command match: git show HEAD)" "$stats"; then
     compare "mechanics:command-identity" "$actual" "$expected"
   else
@@ -234,7 +232,7 @@ exit 2
 SHIM
   chmod +x "$SANDBOX/bin/tsc"
   rc=0
-  FILTER_TESTS_IN="$in_file" PATH="$SANDBOX/bin:$PATH" "$SANDBOX/scripts/compact.sh" --stats tsc --noEmit > "$actual" 2> "$stats" || rc=$?
+  FILTER_TESTS_IN="$in_file" PATH="$SANDBOX/bin:$PATH" "$SANDBOX/.contexture/ctx" run --stats tsc --noEmit > "$actual" 2> "$stats" || rc=$?
   if [ "$rc" -ne 2 ]; then
     bad "mechanics:notice-only-false-green" "exit code $rc, expected 2"
     return
@@ -256,8 +254,8 @@ run_recovery_case() {
     bad "mechanics:recovery-fallback" "fixture pair or probe missing"
     return
   fi
-  cp "$probe" "$SANDBOX/filters/compact-recovery.awk"
-  if "$SANDBOX/scripts/compact.sh" --stats --filter=compact-recovery < "$in_file" > "$actual" 2> "$stats" \
+  cp "$probe" "$SANDBOX/.contexture/modules/run/filters/compact-recovery.awk"
+  if "$SANDBOX/.contexture/ctx" run --stats --filter=compact-recovery < "$in_file" > "$actual" 2> "$stats" \
     && grep -q "recovery fallback" "$stats"; then
     compare "mechanics:recovery-fallback" "$actual" "$expected"
   else

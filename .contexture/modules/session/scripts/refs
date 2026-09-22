@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: set the read-only reference sessions (templates/state.md); zero sessions clears
+# usage: ctx session refs <slug> [<session> ...]
+# help: every named session must exist and differ from the unit
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/record" refs "$@"

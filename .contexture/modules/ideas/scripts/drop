@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: mark an idea DROPPED with a reason
+# usage: ctx ideas drop <slug> <why>
+# help: requires a non-empty why; a parenthesized multi-word why parses
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/ideas" drop "$@"

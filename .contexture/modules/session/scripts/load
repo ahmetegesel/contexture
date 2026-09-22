@@ -1,33 +1,18 @@
 #!/usr/bin/awk -f
-# session-load.awk: print the load map and one page of the session load
-# Usage: session.sh load <session-slug> [<page>]
-#        session.sh load refs <ref_1> ... <ref_N> [<page>]
-# Sections in BIOS order: state, backlog, knowledge, the live journal
-# (composed from session-board.awk, one extraction home), declared
-# ref_sessions read-only, then the write-scope trailer. A page ends
-# before the block that would pass the line target (about 500) or the
-# byte budget (about 40KB), never mid-body; a single over-budget block
-# renders whole on its own page. Every call opens with
-# the LOAD INCOMPLETE banner until the last page, which opens LOAD
-# COMPLETE and hands off to the receipt stamp; keep calling until a page
-# reads complete. The refs form streams the named sessions alone, read
-# only, with its own banner, map line, trailer, and tail. The backlog
-# section composes: a DONE task block renders compactly (the @task line,
-# STATUS, OBJECTIVE, DESCRIPTION; REFS, ACCEPTANCE CRITERIA, and
-# IMPLEMENTATION DETAILS drop), open and statusless blocks render whole,
-# and the backlog file itself is never edited. Missing state is fatal
-# rc=1 with zero stdout; missing backlog, knowledge, or journal is
-# nonfatal: a WARNING on stderr and a placeholder line in its section.
+# summary: the load map plus one page; keep calling until a page reads complete
+# usage: ctx session load <slug> [<page>]
+# usage: ctx session load refs <ref_1> ... <ref_N> [<page>]
+# help: sections in BIOS order: state, backlog, knowledge, the live journal (composed from the sibling board, one extraction home), declared ref_sessions read-only, then the write-scope trailer; a page ends before the block that would pass the line target (about 500) or the byte budget (about 40KB), never mid-body; a single over-budget block renders whole on its own page; the backlog section renders DONE task blocks compactly (the @task line, STATUS, OBJECTIVE, DESCRIPTION; REFS, ACCEPTANCE CRITERIA, and IMPLEMENTATION DETAILS drop; the file is never edited); missing state is fatal rc=1 with zero stdout; missing backlog, knowledge, or journal warns on stderr and prints a placeholder; the refs form streams the named sessions alone, read-only, and fires no load hooks
 
 function usage() {
-  print "Usage: session.sh load <session-slug> [<page>]" > "/dev/stderr"
-  print "       session.sh load refs <ref_1> ... <ref_N> [<page>]" > "/dev/stderr"
+  print "Usage: ctx session load <session-slug> [<page>]" > "/dev/stderr"
+  print "       ctx session load refs <ref_1> ... <ref_N> [<page>]" > "/dev/stderr"
   print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
 
 function ref_hint() {
-  print "to read a reference session: session.sh load refs <ref-slug>" > "/dev/stderr"
+  print "to read a reference session: ctx session load refs <ref-slug>" > "/dev/stderr"
   usage()
 }
 
@@ -140,7 +125,7 @@ function compose_backlog(path, sec, empty_note,   line, n) {
 }
 
 function compose_stream(slug_arg, sec,   helper, tag, cmd, line, n, rc) {
-  helper = (("CTX_SESSION_DIR" in ENVIRON) ? ENVIRON["CTX_SESSION_DIR"] : ".contexture/ctx/session") "/session-board.awk"
+  helper = (("CTX_MODULE_DIR" in ENVIRON) ? ENVIRON["CTX_MODULE_DIR"] : ".contexture/modules/session") "/scripts/board"
   tag = "session-load-helper-rc"
   cmd = helper " " slug_arg "; echo \"" tag "=$?\""
   n = 0
@@ -307,7 +292,7 @@ BEGIN {
     page_header("refs", page)
     page_body(page)
     if (page < npages) {
-      printf "keep reading: session.sh load refs %s %d (%d pages remain)\n", refstr, page + 1, npages - page
+      printf "keep reading: ctx session load refs %s %d (%d pages remain)\n", refstr, page + 1, npages - page
     } else {
       printf "ref load complete: pages %d/%d\n", npages, npages
     }
@@ -399,7 +384,7 @@ BEGIN {
   if (page < npages) {
     printf "LOAD INCOMPLETE (page %d of %d): keep calling until a page reads complete; do not start work from a partial record\n", page, npages
   } else {
-    printf "LOAD COMPLETE: pages %d/%d; stamp the receipt: session.sh stamp %s \"<the loaded set + ref_sessions + the git state>\"\n", npages, npages, slug
+    printf "LOAD COMPLETE: pages %d/%d; stamp the receipt: ctx session stamp %s \"<the loaded set + ref_sessions + the git state>\"\n", npages, npages, slug
   }
   fflush()
   if (fire_hooks("load-post", " CTX_UNIT \"" slug "\" CTX_LOAD_FORM main CTX_LOAD_PAGE " page) != 0)
@@ -412,7 +397,7 @@ BEGIN {
   page_header(slug, page)
   page_body(page)
   if (page < npages) {
-    printf "keep reading: session.sh load %s %d (%d pages remain)\n", slug, page + 1, npages - page
+    printf "keep reading: ctx session load %s %d (%d pages remain)\n", slug, page + 1, npages - page
   } else {
     printf "load complete: pages %d/%d\n", npages, npages
   }

@@ -50,7 +50,7 @@ The first thing the agent does in a fresh context, mechanically:
 3. Get the field and match. One command lists the candidates, and the message is read against them:
 
    ```
-   .contexture/scripts/ctx session active
+   .contexture/ctx session active
    ```
 
    A close match proposes continuing that unit; no match proposes a new one.
@@ -58,21 +58,21 @@ The first thing the agent does in a fresh context, mechanically:
 5. Run the load and keep calling until a page reads complete (read every page the map reports):
 
    ```bash
-   .contexture/scripts/ctx session load <unit>
-   .contexture/scripts/ctx session load refs <ref_1> ... <ref_N> [<page>]
+   .contexture/ctx session load <unit>
+   .contexture/ctx session load refs <ref_1> ... <ref_N> [<page>]
    ```
 
    The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The backlog section renders its DONE task blocks compactly (the task line, status, objective, description); open and statusless blocks render whole, and the file itself is never edited. The load is one subtraction: live means not closed; anchors order periods and receipt loads, never liveness. Knowledge loads fully; it is small, and every line is a settled decision. Reference sessions are consulted on demand with `load refs <ref_1> ... <ref_N>`: they stream read-only under their own banner, map, and tail, apart from the unit load.
 6. Run the rhythm index: one line per rhythm, its trigger, and its activation policy.
 7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the session files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
-8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `.contexture/scripts/ctx session query anchors <unit>` reconstructs the map of periods and their receipts:
+8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `.contexture/ctx session query anchors <unit>` reconstructs the map of periods and their receipts:
 
    ```bash
-   .contexture/scripts/ctx session stamp <unit> "<the loaded set + ref_sessions + the git state>"
+   .contexture/ctx session stamp <unit> "<the loaded set + ref_sessions + the git state>"
    ```
 9. Continue from `next_action`, following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
 
-New work bootstraps a unit instead of joining one: run `.contexture/scripts/ctx session bootstrap <slug> "<objective>" [<repos>]`; it creates the folder, the state pointer at A0, and the folded A1 receipt, printing the next move; then continue at step 5.
+New work bootstraps a unit instead of joining one: run `.contexture/ctx session bootstrap <slug> "<objective>" [<repos>]`; it creates the folder, the state pointer at A0, and the folded A1 receipt, printing the next move; then continue at step 5.
 
 ### Refresh
 

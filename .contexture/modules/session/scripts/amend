@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: replace task fields in place; the rest of the task stays byte-identical
+# usage: ctx session amend <slug> <task-slug>  (stdin: one or more field blocks)
+# help: <task-slug> names the task; pipe one or more labeled field blocks (OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::); STATUS is not amendable (run flip)
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/record" amend "$@"

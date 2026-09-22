@@ -1,13 +1,16 @@
 #!/usr/bin/awk -f
-# session-record.awk: the recording commands: the seven write acts over the
-# session artifacts, one engine with the act as ARGV[1] (the query precedent)
-# Usage: session.sh append <session-slug>  (stdin: one or more blocks)
-#        session.sh amend <session-slug> <task-slug>  (stdin: one or more field blocks)
-#        session.sh flip <session-slug> <todo | progress | done> <task-slug> [<task-slug> ...]
-#        session.sh drop <session-slug> <task-slug> [<task-slug> ...]  (stdin: the record block)
-#        session.sh next <session-slug> "<pointer>"
-#        session.sh refs <session-slug> [<session> ...]
-#        session.sh close <session-slug>
+# session record: the seven write acts over the session artifacts, one engine
+# with the act as ARGV[1] (the query precedent). Private worker: no
+# "# summary:" header, never dispatched directly; the wrapper scripts (append,
+# amend, flip, drop, next, refs, close) exec it with the act name.
+#
+# Usage: ctx session append <slug>  (stdin: one or more blocks)
+#        ctx session amend <slug> <task-slug>  (stdin: one or more field blocks)
+#        ctx session flip <slug> <todo | progress | done> <task-slug> [<task-slug> ...]
+#        ctx session drop <slug> <task-slug> [<task-slug> ...]  (stdin: the record block)
+#        ctx session next <slug> "<pointer>"
+#        ctx session refs <slug> [<session> ...]
+#        ctx session close <slug>
 # One act per call, no flags. Every form validates every input before any
 # write: a refusal is rc=1 with zero stdout and zero partial writes, and the
 # message names the field at fault and the fix. The stdin blocks follow the
@@ -22,28 +25,28 @@
 # progress and next hold the audit's state cross-check; drop requires the
 # record to name each slug. Append and the rewrites normalize indentation
 # and field order to the templates' canonical shape. Every artifact read
-# refuses CRLF; every write lands through a same-directory temp plus mv.
+# refuses CRLF; every write lands through a unique same-directory temp plus mv.
 
 function usage_all() {
-  print "Usage: session.sh append <session-slug>  (stdin: one or more blocks)" > "/dev/stderr"
-  print "       session.sh amend <session-slug> <task-slug>  (stdin: one or more field blocks)" > "/dev/stderr"
-  print "       session.sh flip <session-slug> <todo | progress | done> <task-slug> [<task-slug> ...]" > "/dev/stderr"
-  print "       session.sh drop <session-slug> <task-slug> [<task-slug> ...]  (stdin: the record block)" > "/dev/stderr"
-  print "       session.sh next <session-slug> \"<pointer>\"" > "/dev/stderr"
-  print "       session.sh refs <session-slug> [<session> ...]" > "/dev/stderr"
-  print "       session.sh close <session-slug>" > "/dev/stderr"
+  print "Usage: ctx session append <session-slug>  (stdin: one or more blocks)" > "/dev/stderr"
+  print "       ctx session amend <session-slug> <task-slug>  (stdin: one or more field blocks)" > "/dev/stderr"
+  print "       ctx session flip <session-slug> <todo | progress | done> <task-slug> [<task-slug> ...]" > "/dev/stderr"
+  print "       ctx session drop <session-slug> <task-slug> [<task-slug> ...]  (stdin: the record block)" > "/dev/stderr"
+  print "       ctx session next <session-slug> \"<pointer>\"" > "/dev/stderr"
+  print "       ctx session refs <session-slug> [<session> ...]" > "/dev/stderr"
+  print "       ctx session close <session-slug>" > "/dev/stderr"
   print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
 
 function usage() {
-  if (act == "append") print "Usage: session.sh append <session-slug>  (stdin: one or more blocks)" > "/dev/stderr"
-  else if (act == "amend") print "Usage: session.sh amend <session-slug> <task-slug>  (stdin: one or more field blocks)" > "/dev/stderr"
-  else if (act == "flip") print "Usage: session.sh flip <session-slug> <todo | progress | done> <task-slug> [<task-slug> ...]" > "/dev/stderr"
-  else if (act == "drop") print "Usage: session.sh drop <session-slug> <task-slug> [<task-slug> ...]  (stdin: the record block)" > "/dev/stderr"
-  else if (act == "next") print "Usage: session.sh next <session-slug> \"<pointer>\"" > "/dev/stderr"
-  else if (act == "refs") print "Usage: session.sh refs <session-slug> [<session> ...]" > "/dev/stderr"
-  else if (act == "close") print "Usage: session.sh close <session-slug>" > "/dev/stderr"
+  if (act == "append") print "Usage: ctx session append <session-slug>  (stdin: one or more blocks)" > "/dev/stderr"
+  else if (act == "amend") print "Usage: ctx session amend <session-slug> <task-slug>  (stdin: one or more field blocks)" > "/dev/stderr"
+  else if (act == "flip") print "Usage: ctx session flip <session-slug> <todo | progress | done> <task-slug> [<task-slug> ...]" > "/dev/stderr"
+  else if (act == "drop") print "Usage: ctx session drop <session-slug> <task-slug> [<task-slug> ...]  (stdin: the record block)" > "/dev/stderr"
+  else if (act == "next") print "Usage: ctx session next <session-slug> \"<pointer>\"" > "/dev/stderr"
+  else if (act == "refs") print "Usage: ctx session refs <session-slug> [<session> ...]" > "/dev/stderr"
+  else if (act == "close") print "Usage: ctx session close <session-slug>" > "/dev/stderr"
   else usage_all()
   print "help: ctx session help" > "/dev/stderr"
   exit 1
@@ -549,8 +552,8 @@ function parse_task(k,   i, line, s, v, cur, nonblank) {
     fail("ERROR: block " k ": unrecognized task line: " s " (fields indent 2: STATUS, OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::)")
   }
   if (TSTSET[k] && TST[k] != "TODO") {
-    if (TST[k] == "IN_PROGRESS") fail("ERROR: block " k ": STATUS IN_PROGRESS is a flip (run: session.sh flip " unit " progress " TSLUG[k] ")")
-    if (TST[k] == "DONE") fail("ERROR: block " k ": STATUS DONE is a flip (run: session.sh flip " unit " done " TSLUG[k] ")")
+    if (TST[k] == "IN_PROGRESS") fail("ERROR: block " k ": STATUS IN_PROGRESS is a flip (run: ctx session flip " unit " progress " TSLUG[k] ")")
+    if (TST[k] == "DONE") fail("ERROR: block " k ": STATUS DONE is a flip (run: ctx session flip " unit " done " TSLUG[k] ")")
     fail("ERROR: block " k ": STATUS must be TODO when present (got: " TST[k] ")")
   }
   if (!TOBJSET[k]) fail("ERROR: block " k ": OBJECTIVE missing (one quoted OBJECTIVE line is required)")
@@ -594,8 +597,19 @@ function trim_body_tail(A, k, n) {
   return n
 }
 
+function unique_tmp(path,   cmd, tmp) {
+  # a unique same-directory temp: the mv stays on one filesystem (atomic
+  # replace) and concurrent writers never share a temp name
+  tmp = ""
+  cmd = "mktemp \"" path ".XXXXXX\" 2>/dev/null"
+  if ((cmd | getline tmp) <= 0) tmp = ""
+  close(cmd)
+  if (tmp == "") fail("ERROR: cannot create a temp beside " path)
+  return tmp
+}
+
 function save(path,   tmp, rc, i) {
-  tmp = path ".tmp"
+  tmp = unique_tmp(path)
   if (ON == 0) {
     printf "" > tmp
     close(tmp)
@@ -604,7 +618,10 @@ function save(path,   tmp, rc, i) {
     close(tmp)
   }
   rc = system("mv \"" tmp "\" \"" path "\"")
-  if (rc != 0) fail("ERROR: mv failed rc=" rc " for " path)
+  if (rc != 0) {
+    system("rm -f \"" tmp "\"")
+    fail("ERROR: mv failed rc=" rc " for " path)
+  }
 }
 
 function append_block(k, path,   A, n, m, i) {
@@ -791,7 +808,7 @@ function parse_field_blocks(   i, line, ind, s, name, v, cur, nonblank) {
     ind = indent_of(line)
     name = (ind <= 2) ? head_name(line) : ""
     if (name != "") {
-      if (name == "STATUS") fail("ERROR: STATUS is not amendable (run: session.sh flip " unit " todo | progress | done <task-slug>)")
+      if (name == "STATUS") fail("ERROR: STATUS is not amendable (run: ctx session flip " unit " todo | progress | done <task-slug>)")
       NFB++
       cur = NFB
       FFIELD[NFB] = name
@@ -998,7 +1015,7 @@ function do_flip(   i, j, k, verb, lit, idx, what, path, start, end) {
       if (TARG[j] == TARG[i]) fail("ERROR: duplicate task in the call: " TARG[i])
     }
     if (verb == "progress" && index(statetext, TARG[i]) == 0) {
-      fail("ERROR: the state must already name " TARG[i] " to activate it (run: session.sh next " unit " \"<a pointer naming " TARG[i] ">\")")
+      fail("ERROR: the state must already name " TARG[i] " to activate it (run: ctx session next " unit " \"<a pointer naming " TARG[i] ">\")")
     }
   }
   ACT_SLUGS = ""
@@ -1084,7 +1101,7 @@ function do_drop(   i, j, k) {
       if (TARG[j] == TARG[i]) fail("ERROR: duplicate task in the call: " TARG[i])
     }
     if (TSTAT[i] == "IN_PROGRESS" && index(statetext, TARG[i]) > 0) {
-      fail("ERROR: " TARG[i] " is IN_PROGRESS and the state still names it (park it first: session.sh flip " unit " todo " TARG[i] ", then: session.sh drop " unit " " TARG[i] ")")
+      fail("ERROR: " TARG[i] " is IN_PROGRESS and the state still names it (park it first: ctx session flip " unit " todo " TARG[i] ", then: ctx session drop " unit " " TARG[i] ")")
     }
   }
   ACT_SLUGS = ""
@@ -1177,7 +1194,7 @@ function do_next(   i, j, candidate, missing, n, nimp, slug, nnal) {
     }
   }
   if (missing != "") {
-    fail("ERROR: next_action would not name IN_PROGRESS task(s): " missing " (name them in the pointer, or run: session.sh flip " unit " todo <task-slug> to park, session.sh drop " unit " <task-slug> to remove)")
+    fail("ERROR: next_action would not name IN_PROGRESS task(s): " missing " (name them in the pointer, or run: ctx session flip " unit " todo <task-slug> to park, ctx session drop " unit " <task-slug> to remove)")
   }
   save(state_path)
   printf "next_action: \"%s\"\n", pointer
@@ -1233,8 +1250,8 @@ function run_audit(   cmd, tag, line, i, adir) {
   AUDN = 0
   arc = ""
   tag = "session-record-audit-rc"
-  adir = (("CTX_SESSION_DIR" in ENVIRON) ? ENVIRON["CTX_SESSION_DIR"] : ".contexture/ctx/session")
-  cmd = adir "/session-audit.awk " unit "; echo \"" tag "=$?\""
+  adir = (("CTX_MODULE_DIR" in ENVIRON) ? ENVIRON["CTX_MODULE_DIR"] : ".contexture/modules/session")
+  cmd = adir "/scripts/audit " unit "; echo \"" tag "=$?\""
   while ((cmd | getline line) > 0) {
     if (line ~ ("^" tag "=[0-9]+$")) {
       arc = substr(line, length(tag) + 2)
@@ -1269,7 +1286,7 @@ function do_close(   i, j, s, open, st) {
   require_active()
   run_audit()
   if (arc != 0) {
-    if (AUDN == 0) print "WARNING: audit failed rc=" arc " (run: session.sh audit " unit ")" > "/dev/stderr"
+    if (AUDN == 0) print "WARNING: audit failed rc=" arc " (run: ctx session audit " unit ")" > "/dev/stderr"
     for (i = 1; i <= AUDN; i++) print "WARNING: " AUD[i] > "/dev/stderr"
   }
   open = ""

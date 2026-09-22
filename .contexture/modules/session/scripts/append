@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: append one or more blocks to the session; the block's first line decides (@entry, @finding, @task)
+# usage: ctx session append <slug>  (stdin: one or more blocks)
+# help: the block's first line decides: @entry <date>-<slug> (templates/journal.md), @finding <NAME> (templates/knowledge.md), @task <slug> (templates/backlog.md); every @entry declares THREAD: <what it awaits> | none; pipe the blocks on stdin; ANCHOR is derived from the state; every input validates before any write; a refusal names the field at fault and the fix
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/record" append "$@"

@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: list ideas by status (default: open)
+# usage: ctx ideas list [open|picked|dropped|all]
+# help: membership is by the STATUS scan before any print; the bodies of non-matching statuses never reach stdout; a missing STATUS excludes from open, includes in all, never crashes
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/ideas" list "$@"

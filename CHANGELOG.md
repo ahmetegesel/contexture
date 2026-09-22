@@ -4,9 +4,29 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
-## [Unreleased]
+## [0.50.0] - 2026-09-22
 
-Nothing recorded yet. The next release section is written at ship time, in the same breath as its annotated tag.
+### Added
+
+- The `ctx` engine: one public entry over the built-in session verbs, modules, and the `run` builtin; assembled help (`ctx help`, `ctx help --all`, `ctx <module> help [<verb>]`); engine-side verb validation with a uniform unknown-verb refusal.
+- The self-describing module system under `.contexture/modules/`: a module file carrying the summary; verb scripts whose headers declare their summary, usage, and help lines; hook files that declare their point and mode; filter files that declare their match. The engine assembles; modules declare.
+- Implicit hooks at six points (stamp, task-landing, close, load-pre, load-post, refresh): warn-continue by default, a block mode that stops the point, and a hidden runner the help surfaces never show.
+- The `refresh` verb: the live board, the audit (its exit code is the verb's), then the refresh hooks.
+- The `ideas` module: list, show, add, pick, drop over the upstream idea dump, as the first workspace module.
+- `docs/modules.md`: the module authoring contract, from anatomy and declaration vocabulary to the walkthrough and the validation checklist.
+- The workspace scratch drawer: `.contexture/tmp/` is the sanctioned, gitignored scratch root; engines and the test harness prefer it over the system temp.
+- Unique same-directory temp saves in the record writers: concurrent write acts no longer clobber a shared temp name.
+
+### Changed
+
+- The record engine moves under `.contexture/modules/session/` as the base-shipped module; every surface teaches `ctx` forms; the legacy entry paths and their compatibility shims are gone.
+- Stream filters live with the builtin `run` module; module filters merge after the builtin filters (name-sorted, first match wins, shadow warning, a priority-over directive for deliberate replacement).
+- The update payload carries the engine, the builtin modules, the templates, and the run filters; workspace-added modules, rhythms, sessions, and tmp are never touched.
+- The record's reserved-name set and the shim-free migration path are stated once in the module contract; the shell entry refuses nothing it cannot validate.
+
+### Removed
+
+- `.contexture/scripts/`, the legacy `session.sh` and `compact.sh` shims, and the top-level filters drawer: the engine and the modules are the whole surface.
 
 ## [0.49.1] - 2026-09-22
 

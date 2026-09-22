@@ -9,14 +9,14 @@ Contexture's core ships with low-risk filters for Git unified diffs (`diff.awk`)
 This setup is a menu, not a bundle. A filter earns its place only when the workspace actually emits the stream it matches, so inventory first:
 
 1. List the commands the workspace really runs: package scripts, CI jobs, Makefiles, and the rhythms or docs that name test and build commands.
-2. Match each command family against the menu below, by the streams it emits and the stack it serves.
+2. Match each command group against the menu below, by the streams it emits and the stack it serves.
 3. Adopt only the matching subset. A filter for a stream the workspace never emits is dead weight: it joins every discovery scan and claims a command identity in every runner selection.
 
 The investigation that produced this menu is the worked example: a multi-project workspace of Astro, Nuxt, React Router, GraphQL, and Flutter projects kept the core filters plus `pytest`, adapted `vitest` and `compiler-errors` to its real stream shapes, and marked `cargo-test` and `go-test` for retirement because no Rust or Go code existed there, a workspace-local act rather than a base change. The base keeps all eight filters; the adopted subset is each workspace's own verdict.
 
 ## How Discovery Works
 
-`ctx run` discovers every filter placed in `.contexture/filters/*.awk`.
+`ctx run` discovers every filter placed in the builtin run module (`.contexture/modules/run/filters/*.awk`) and in any module's `filters/` directory (e.g. `.contexture/modules/tool-filters/filters/*.awk`); the run module scans first, then the other modules by name.
 
 - Runner mode (`ctx run <cmd>`) selects by command identity: the `# command: <regex>` header is matched against the reconstructed command line (the basename of the command plus its arguments). First match wins, and two filters claiming one command raise a shadow warning.
 - Stdin mode (`<cmd> | ctx run`) selects by stream signature: the `# match: <regex>` header is tested against a sample of the first 40 lines. `# default` marks the fallback, `log.awk`.
@@ -25,10 +25,10 @@ The investigation that produced this menu is the worked example: a multi-project
 - `COMPACT_DISABLE=1` bypasses compaction and passes the stream through raw; `COMPACT_DEBUG=1` reports the selection, the filter name and the match line, on stderr.
 
 ```sh
-cargo test | .contexture/scripts/ctx run
-pytest | .contexture/scripts/ctx run
-npx vitest run | .contexture/scripts/ctx run
-go test ./... | .contexture/scripts/ctx run
+cargo test | .contexture/ctx run
+pytest | .contexture/ctx run
+npx vitest run | .contexture/ctx run
+go test ./... | .contexture/ctx run
 ```
 
 When no specialized filter matches, `ctx run` falls back to `log.awk` or passes raw output through unaltered.
@@ -47,18 +47,18 @@ Each filter's header carries the exact `# match:` and `# command:` regexes; the 
 
 ## Adoption
 
-Copy the filters the inventory matched into `.contexture/filters/`:
+Copy the filters the inventory matched into a workspace module, e.g. `.contexture/modules/tool-filters/filters/`:
 
 ```sh
 # One filter:
-cp examples/setups/tool-filters/filters/vitest.awk .contexture/filters/
+cp examples/setups/tool-filters/filters/vitest.awk .contexture/modules/tool-filters/filters/
 
 # A matched subset, one line per filter:
-cp examples/setups/tool-filters/filters/vitest.awk .contexture/filters/
-cp examples/setups/tool-filters/filters/compiler-errors.awk .contexture/filters/
+cp examples/setups/tool-filters/filters/vitest.awk .contexture/modules/tool-filters/filters/
+cp examples/setups/tool-filters/filters/compiler-errors.awk .contexture/modules/tool-filters/filters/
 
 # Ensure executable permissions:
-chmod +x .contexture/filters/*.awk
+chmod +x .contexture/modules/tool-filters/filters/*.awk
 ```
 
 The filters' test material stays upstream, under `examples/setups/tool-filters/tests/`: the upstream harness pins the setup's filters, and the adopted copies are byte-identical, so they are pinned too. A workspace carries no test material.
@@ -80,11 +80,11 @@ A pair is named `<filter>-<case>.in` and `<filter>-<case>.expected`. Run the har
 tests/filter-tests.sh
 ```
 
-It pipes each input through the runner (`ctx run --filter=<filter>`) and byte-compares the output with the expected file. Core cases run through the base runner; setup cases run through a staged sandbox because the base discovery resolves only `.contexture/filters/`. The presence check fails when a filter carries no fixture pair, so a new filter is not done until it has one. Mechanics cases pin the runner itself: the ANSI strip, command identity in runner mode, the notice-only false-green output, and the recovery fallback to raw.
+It pipes each input through the runner (`ctx run --filter=<filter>`) and byte-compares the output with the expected file. Core cases run through the base runner; setup cases run through a staged sandbox: the runtime discovers filters in the builtin run module and in workspace modules, so the harness stages a `tool-filters` module holding the setup filters rather than installing them into the workspace. The presence check fails when a filter carries no fixture pair, so a new filter is not done until it has one. Mechanics cases pin the runner itself: the ANSI strip, command identity in runner mode, the notice-only false-green output, and the recovery fallback to raw.
 
 ## Writing Custom Filters
 
-1. Create `.contexture/filters/<your-tool>.awk`.
+1. Create `.contexture/modules/tool-filters/filters/<your-tool>.awk`.
 2. Add `# match: <regex>` for the stdin signature and `# command: <regex>` for runner identity.
 3. Add the optional headers: `# default` (the fallback filter), `# stream: merged` (merge the command's stderr into the filtered stream, for compiler-style tools whose diagnostics land on stderr), `# format-only: <why>` (declare marker-less reductions as layout, not lost content).
 4. Buffer lines and process them in the `END` block.

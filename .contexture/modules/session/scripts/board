@@ -1,16 +1,10 @@
 #!/usr/bin/awk -f
-# session-board.awk: the live board: unclosed journal entries with complete
-# bodies, then the open task slugs with their nudge and the open threads
-# (each <slug> (A<n>): <target>); each tail is silent when empty
-# Usage: session.sh board <session-slug>
-# One form: the slug resolves .contexture/sessions/<slug>/{journal,backlog}.md.
-# A path, extra arguments, and the retired refs flags are refused rc=1
-# with a usage line. Missing journal is fatal rc=1 with zero stdout;
-# missing backlog is loud on stderr, nonfatal: the opener reads
-# "no backlog" and no tail prints.
+# summary: the live board: unclosed journal entries with complete bodies, then the open tasks and the open threads
+# usage: ctx session board <slug>
+# help: one form: the slug resolves .contexture/sessions/<slug>/{journal,backlog}.md; each tail is silent when empty; missing journal is fatal rc=1 with zero stdout; missing backlog warns on stderr and prints no tail
 
 function usage() {
-  print "Usage: session.sh board <session-slug>" > "/dev/stderr"
+  print "Usage: ctx session board <session-slug>" > "/dev/stderr"
   print "help: ctx session help" > "/dev/stderr"
   exit 1
 }

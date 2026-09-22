@@ -1,8 +1,8 @@
-# contexture v0.49.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.50.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
-  compact-streams: all shell commands execute through the ctx runner (runner mode prefix: .contexture/scripts/ctx run <cmd>); never run raw commands without compaction when the runner is present; preserve context window capacity unconditionally.
+  compact-streams: all shell commands execute through the ctx runner (runner mode prefix: .contexture/ctx run <cmd>); never run raw commands without compaction when the runner is present; preserve context window capacity unconditionally.
   writer-holds-volume: the schema holds the shape, the writer holds the volume: guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance.
   process-free: process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
   compose-from-record: compose from the record, never from conversation: rewrites grounded in journal/knowledge.
@@ -16,9 +16,9 @@
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   .contexture/templates/      = artifact grammars: the shapes to fill at write time
-  .contexture/filters/        = modular stream filters over the runner (diff, log, workspace additions)
-  .contexture/ctx/            = the command families: the base session family (the record engine) and workspace additions
-  .contexture/scripts/        = the ctx entry point (run .contexture/scripts/ctx help; --help and -h are the same table): ctx session <verb>, ctx run <cmd>, ctx <family>
+  .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx session <verb>, ctx run <cmd>, ctx <module>
+  .contexture/modules/        = the modules: session (the record engine), ideas, and workspace additions
+  .contexture/modules/run/filters/ = the builtin stream filters over the runner (diff, list, log); workspace filters live in their modules
   .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
@@ -60,35 +60,35 @@
 
 @query
   surfaces: the journal + knowledge.
-  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/scripts/ctx session board streams active entries with complete bodies in one shot, then the open threads with their targets and the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
+  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/ctx session board streams active entries with complete bodies in one shot, then the open threads with their targets and the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
     command:
-      .contexture/scripts/ctx session board <unit>
+      .contexture/ctx session board <unit>
   thread tail: ctx session audit prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
-  queries: the named looks over the record; never an improvised grep: .contexture/scripts/ctx session query <kind> ... (the kinds and forms in .contexture/scripts/ctx session help; --help and -h are the same table); a miss is rc=1 with a named error, never an empty success.
-  cross-repo: .contexture/scripts/ctx session query units <repo>: units touching a repo; objective is human-facing only.
-  cross-session: .contexture/scripts/ctx session query refs-to <session>: units referencing a session.
-  group: .contexture/scripts/ctx session query group <unit> <token> = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
+  queries: the named looks over the record; never an improvised grep: .contexture/ctx session query <kind> ... (the kinds and forms in .contexture/ctx session help; --help and -h are the same table); a miss is rc=1 with a named error, never an empty success.
+  cross-repo: .contexture/ctx session query units <repo>: units touching a repo; objective is human-facing only.
+  cross-session: .contexture/ctx session query refs-to <session>: units referencing a session.
+  group: .contexture/ctx session query group <unit> <token> = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot
-  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; then run .contexture/scripts/ctx session help (--help and -h are the same table: the command contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
+  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; then run .contexture/ctx session help (--help and -h are the same table: the command contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
-  3. get the field: .contexture/scripts/ctx session active; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
+  3. get the field: .contexture/ctx session active; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
-  5. run .contexture/scripts/ctx session load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, ref sessions read-only)
-  6. read the rhythm index: .contexture/scripts/ctx session index
+  5. run .contexture/ctx session load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, ref sessions read-only)
+  6. read the rhythm index: .contexture/ctx session index
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
-  8. stamp the load receipt: .contexture/scripts/ctx session stamp <unit> "<the loaded set + ref_sessions + the git state>" (a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
+  8. stamp the load receipt: .contexture/ctx session stamp <unit> "<the loaded set + ref_sessions + the git state>" (a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
   9. continue from next_action, following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
-  10. new work: run .contexture/scripts/ctx session bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
+  10. new work: run .contexture/ctx session bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask
   ask:      grounded question, one at a time; answer opens next; until intent, constraints, and approach are settled
   restate:  goal + intended approach, your words; where approaches diverge, name the tradeoff
   confirm:  human: go | ask; may interrupt anytime; never skipped, however small
-  act:      work the chosen rhythm's steps (default: the design loop, @rhythms); execute all commands through .contexture/scripts/ctx run <cmd>; mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
+  act:      work the chosen rhythm's steps (default: the design loop, @rhythms); execute all commands through .contexture/ctx run <cmd>; mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
   surface:  durable output, named by what it is
   surface -> ask
   artifacts: stay current in the same breath as the work: journal at the event (see @journal), backlog as work is declared and tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record and .contexture/templates/
@@ -121,7 +121,7 @@
   - a subagent that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
   - a subagent's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
   - read the report WHOLE, no exception; an unread part wears the look of review
-  - command streams: subagents execute all commands through .contexture/scripts/ctx run <cmd> (runner mode prefix) or pipe through it to preserve context window capacity; raw execution is forbidden
+  - command streams: subagents execute all commands through .contexture/ctx run <cmd> (runner mode prefix) or pipe through it to preserve context window capacity; raw execution is forbidden
   - journal every dispatch: the subagent's folder path
 
 @refresh
@@ -131,7 +131,7 @@
   period end (turn ends; unit continues):
     1. refresh (@refresh): the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by ctx session audit is the checklist: every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. session audit: .contexture/scripts/ctx session audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from the state) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
+    3. session audit: .contexture/ctx session audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from the state) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. folder stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
@@ -142,7 +142,7 @@
 @handoff
   compaction or clearing near (any moment, mid-period):
     1. run the period-end writes (@close 1-3) if not done
-    2. verify with the bounded cold read: run .contexture/scripts/ctx session load <unit> and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; then .contexture/scripts/ctx session audit <unit> exits 0; the full-body pass belongs to the next boot, a fresh context, never the edge; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
+    2. verify with the bounded cold read: run .contexture/ctx session load <unit> and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; then .contexture/ctx session audit <unit> exits 0; the full-body pass belongs to the next boot, a fresh context, never the edge; while the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction; a dangling closer = handoff failure; the sweep reads the whole open list: every open entry confirmed thread or receipt, a resolved thread hiding unmarked closes here: the net for a forgotten stamp
   the handoff writes the record, not working memory.
 
 @git

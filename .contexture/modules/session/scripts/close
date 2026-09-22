@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: mark the unit CLOSED; warns on open tasks and audit findings, never refuses for them
+# usage: ctx session close <slug>
+# help: the unit lifecycle ends; closure and supersession by reference only
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/record" close "$@"

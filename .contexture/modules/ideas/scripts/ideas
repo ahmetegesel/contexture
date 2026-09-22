@@ -1,13 +1,13 @@
 #!/bin/sh
-# ctx-family: ideas
-# summary: the upstream idea dump: list, show, add, pick, drop
-# ctx-subcommands: list show add pick drop help
+# ideas: the upstream idea dump: list, show, add, pick, drop; private worker
+# (no "# summary:" header), the scripts/{list,show,add,pick,drop} wrappers
+# exec it with the verb as $1.
 
 set -u
 
 prog="ctx ideas"
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root=$(CDPATH= cd -- "$dir/../../.." && pwd)
+root=$(CDPATH= cd -- "$dir/../../../.." && pwd)
 ideas=${IDEAS_FILE:-"$root/IDEAS.md"}
 
 tmp=""

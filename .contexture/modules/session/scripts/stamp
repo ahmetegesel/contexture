@@ -1,13 +1,10 @@
 #!/usr/bin/awk -f
-# session-stamp.awk: bump the session anchor and append the load receipt
-# Usage: session.sh stamp <session-slug> "<attention>"
-# Derives A<N> from state.md, rewrites current_anchor to A<N+1> through a
-# same-directory temp plus mv, appends the anchor line to journal.md, and
-# prints the transition. Malformed state, an empty, whitespace-only, or
-# newline-carrying attention refuses loudly rc=1 with no partial write.
+# summary: bump the session anchor and append the load receipt
+# usage: ctx session stamp <slug> "<attention>"
+# help: derives A<N> from state.md, rewrites current_anchor to A<N+1> through a unique same-directory temp plus mv, appends the anchor receipt to journal.md, and prints the transition; malformed state, an empty, whitespace-only, or newline-carrying attention refuses rc=1 with no partial write
 
 function usage() {
-  print "Usage: session.sh stamp <session-slug> \"<attention>\"" > "/dev/stderr"
+  print "Usage: ctx session stamp <session-slug> \"<attention>\"" > "/dev/stderr"
   print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
@@ -21,6 +18,17 @@ function exists(path,   t, r) {
   r = (getline t < path)
   if (r >= 0) close(path)
   return (r >= 0)
+}
+
+function unique_tmp(path,   cmd, tmp) {
+  # a unique same-directory temp: the mv stays on one filesystem (atomic
+  # replace) and concurrent writers never share a temp name
+  tmp = ""
+  cmd = "mktemp \"" path ".XXXXXX\" 2>/dev/null"
+  if ((cmd | getline tmp) <= 0) tmp = ""
+  close(cmd)
+  if (tmp == "") fail("ERROR: cannot create a temp beside " path)
+  return tmp
 }
 
 function hooks_ready(   bin) {
@@ -73,7 +81,7 @@ BEGIN {
   if (anchor !~ /^A[0-9]+$/) fail("ERROR: malformed current_anchor: [" anchor "]")
   N = substr(anchor, 2) + 0
 
-  tmp = state ".tmp"
+  tmp = unique_tmp(state)
   for (i = 1; i <= n; i++) {
     if (lines[i] ~ /^current_anchor:[ \t]*/) {
       print "current_anchor: A" (N + 1) > tmp
@@ -83,7 +91,10 @@ BEGIN {
   }
   close(tmp)
   rc = system("mv \"" tmp "\" \"" state "\"")
-  if (rc != 0) fail("ERROR: mv failed rc=" rc)
+  if (rc != 0) {
+    system("rm -f \"" tmp "\"")
+    fail("ERROR: mv failed rc=" rc)
+  }
 
   print "@anchor A" (N + 1) " (\"continues A" N "\", attention: " attention ")" >> journal
   close(journal)

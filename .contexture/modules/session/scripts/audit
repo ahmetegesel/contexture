@@ -1,22 +1,10 @@
 #!/usr/bin/awk -f
-# session-audit.awk: the session audit: closures, entry grammar, the backlog
-# and state cross-checks; prints the open thread tail
-# Usage: session.sh audit <session-slug>
-# The repair instrument: fix what it flags, fill what is missing.
-# Exits 1 on: dangling closers, slugless closers, dateless entry slugs, inline
-# markers on @entry lines, bracketed field lines (the [FIELD: literal-copy
-# form), unharvested KNOWLEDGE flags (with line), DONE tasks without their
-# backlog/<slug>: DONE event, IN_PROGRESS tasks absent from state.md, entries
-# dated at or after ENF_FROM missing THREAD (with line); each flagged by slug
-# (the knowledge flag, the bracketed field, and the missing THREAD also by
-# line). Session checks: backlog.md and state.md are derived from the session
-# folder; a sibling that cannot be read skips its check quietly. Open
-# threads (entries whose THREAD names what they await, no closer yet)
-# print beside the audit; the tail is a display, never an enforcement: a
-# thread paused stays open.
+# summary: the session audit: closures, entry grammar, the backlog and state cross-checks; prints the open thread tail
+# usage: ctx session audit <slug>
+# help: the repair instrument: fix what it flags, fill what is missing; rc=1 on dangling or slugless closers, dateless entry slugs, inline markers on @entry lines, bracketed field lines, unharvested KNOWLEDGE flags, DONE tasks without their backlog/<slug>: DONE event, IN_PROGRESS tasks absent from state.md, and entries dated at or after ENF_FROM missing THREAD; each finding is flagged by slug (some also by line); when the run is clean, also prints the open thread tail with its targets; the tail is a display, never an enforcement: a thread paused stays open; an unreadable sibling skips its check quietly
 
 function usage() {
-  print "Usage: session.sh audit <session-slug>" > "/dev/stderr"
+  print "Usage: ctx session audit <session-slug>" > "/dev/stderr"
   print "help: ctx session help" > "/dev/stderr"
   fatal = 1
   exit 1

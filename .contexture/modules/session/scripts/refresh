@@ -1,0 +1,35 @@
+#!/bin/sh
+# summary: the refresh core: the live board, then the audit (its rc is the verb's rc), then the refresh hooks
+# usage: ctx session refresh <slug>
+# help: runs the live board, then the audit (its rc is the verb's rc), then the refresh hooks; a failing block hook fails the verb when the audit was clean
+prog="ctx session refresh"
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$dir/../../../.." && pwd)
+
+usage_error() {
+  printf 'usage: ctx session refresh <slug>\n' >&2
+  exit 1
+}
+
+[ "$#" -eq 1 ] || usage_error
+slug=$1
+case "$slug" in
+  [A-Za-z0-9]*) ;;
+  *) usage_error ;;
+esac
+case "$slug" in
+  *[!A-Za-z0-9_-]*) usage_error ;;
+esac
+
+"$dir/board" "$slug" || true
+rrc=0
+"$dir/audit" "$slug" || rrc=$?
+bin="${CTX_BIN:-$root/.contexture/ctx}"
+if [ -x "$bin" ]; then
+  if "$bin" _hooks refresh CTX_UNIT "$slug"; then
+    :
+  elif [ "$rrc" -eq 0 ]; then
+    rrc=1
+  fi
+fi
+exit "$rrc"

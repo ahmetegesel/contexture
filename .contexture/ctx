@@ -1,37 +1,58 @@
 #!/bin/sh
-# ctx: the workspace binder: one public entry over builtins and families
+# ctx: the workspace module engine: discovery, assembly, dispatch, run, hooks
 # Zero-install: POSIX /bin/sh, awk, and core OS utilities only.
 #
-# Usage: ctx help | ctx run <cmd> [args...] | ctx <family> [args...]
+# Usage: ctx [help [--all]] | ctx run <cmd> [args...] | ctx <module> [args...]
 # The help output is the contract surface; this header never prints.
 #
 # Maintainer note (off-path, never taught by help or top docs):
-# discovery reads .contexture/ctx/<family>/entry, an executable carrying the
-# three header lines "# ctx-family: <name>", "# summary: <line>", and
-# "# ctx-subcommands: <list>". The directory name is the family name and must
-# equal the # ctx-family value; a mismatch or any missing line is a malformed
-# header: the family skips with a stderr warning and never blocks core verbs.
-# Reserved names are the session verb set (read from the session family entry
-# header) plus refresh, run, and hooks; a reserved directory refuses with a
-# shadow warning at discovery, session being the one allowed exception. ctx
-# chdirs to the workspace root before dispatching a family; the entry then
-# owns argv, streams, and rc through exec. The built-in run owns the
-# compaction selection body (filters under .contexture/filters plus family
-# .contexture/ctx/<family>/filters merged after base); .contexture/scripts/
-# compact.sh is a one-way shim into it and sets CONTEXTURE_COMPACT_SHIM=1 so
-# the legacy message labels stay byte-identical through the shim.
+# discovery reads .contexture/modules/<name>/; the directory name is the
+# module name. The module file is literally named "module" and carries
+# "# summary: <line>"; scripts/<verb> files are verbs named by file name,
+# marked by their own "# summary:" header, with repeatable "# usage:" and
+# "# help:" detail lines. A scripts file without a summary is private and
+# ignored. A module file without a summary warns and skips; a scripts/
+# directory without a module file warns and skips; a directory with neither
+# (a filter-only or hook-only module) is legal, silent, and unlisted.
+# Reserved names are the session verb set plus run and hooks; the builtin
+# session and run are allowed. A duplicate verb shadows: first file name
+# wins with a warning. Help is engine-owned (no help script): ctx help,
+# ctx help --all, ctx <module> help, ctx <module> help <verb>, and bare
+# ctx <module> (module table, rc0). Dispatch validates the verb engine-side
+# (unknown rc1, module help on stderr), chdirs to the workspace root, and
+# execs scripts/<verb> with the remaining argv, exporting CTX_ROOT,
+# CTX_MODULE_DIR, CTX_BIN, and LC_ALL=C. Hooks are files under
+# modules/*/hooks/ declaring "# ctx-hook: <point>" and optionally
+# "# ctx-hook-mode: block"; the engine runs them in module-name (LC_ALL=C)
+# then file-name order. Filters live under modules/run/filters/ (scanned
+# first) and modules/*/filters/ (name-sorted after); a later match warns as
+# a shadow unless its header carries "# ctx-filter-priority: over". The
+# built-in run owns the compaction selection body; runner notices read
+# [ctx: ...].
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root=$(CDPATH= cd -- "$dir/../.." && pwd)
-ctx_root="$root/.contexture/ctx"
+root=$(CDPATH= cd -- "$dir/.." && pwd)
+modules_root="$dir/modules"
+ctx_bin="$dir/ctx"
 
 ctx_err() {
   printf 'ctx: %s\n' "$*" >&2
 }
 
+header_field() {
+  # first value of a header line, trimmed of surrounding whitespace
+  sed -n "s/^# $2: //p" "$1" | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+header_values() {
+  # every value of a header line, in file order, trimmed
+  sed -n "s/^# $2: //p" "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
 # ---------------------------------------------------------------------------
-# session verbs for reserved-name checks: read from the session family entry
-# header when present (the family owns its verb set), literal fallback
+# reserved names: the session verb set (its scripts own the list) plus
+# refresh, run, and hooks; the builtin session and run are allowed
+
 session_verbs=""
 session_verbs_loaded=0
 
@@ -40,12 +61,22 @@ load_session_verbs() {
     return 0
   fi
   session_verbs_loaded=1
-  if [ -x "$ctx_root/session/entry" ]; then
-    session_verbs=$(header_field "$ctx_root/session/entry" ctx-subcommands)
+  verbs=""
+  sd="$modules_root/session/scripts"
+  if [ -d "$sd" ]; then
+    for f in "$sd"/*; do
+      [ -f "$f" ] || continue
+      b=${f##*/}
+      case "$b" in
+        ""|.*|*[[:space:]]*)
+          continue
+          ;;
+      esac
+      [ -n "$(header_field "$f" summary)" ] || continue
+      verbs="$verbs $b"
+    done
   fi
-  if [ -z "$session_verbs" ]; then
-    session_verbs="active amend append audit board bootstrap close drop flip help index load next query refs stamp"
-  fi
+  session_verbs="help${verbs}"
 }
 
 is_reserved() {
@@ -62,54 +93,127 @@ is_reserved() {
   return 1
 }
 
-header_field() {
-  # first value of a family header line, trimmed of surrounding whitespace
-  sed -n "s/^# $2: //p" "$1" | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+# ---------------------------------------------------------------------------
+# discovery
+
+scan_module_dirs() {
+  # every module candidate directory, name-sorted; reserved and hidden names
+  # stay out silently (the listing path owns the warnings)
+  [ -d "$modules_root" ] || return 0
+  load_session_verbs
+  for d in "$modules_root"/*/; do
+    [ -d "$d" ] || continue
+    bn=${d%/}
+    bn=${bn##*/}
+    case "$bn" in
+      ""|.*|*[[:space:]]*|_hooks)
+        continue
+        ;;
+    esac
+    if is_reserved "$bn" && [ "$bn" != "session" ] && [ "$bn" != "run" ]; then
+      continue
+    fi
+    printf '%s\n' "$bn"
+  done | LC_ALL=C sort
 }
 
-# Print valid family names, one per line, name-sorted (LC_ALL=C). Reserved or
-# malformed candidates warn on stderr and stay absent; a directory without an
-# entry file is simply not a family.
-list_families() {
-  [ -d "$ctx_root" ] || return 0
+module_names() {
+  # listed modules: a module file with a "# summary:" line; broken shapes
+  # warn and skip, filter-only and hook-only directories stay unlisted
+  [ -d "$modules_root" ] || return 0
   load_session_verbs
-  found=""
-  for d in "$ctx_root"/*/; do
+  for d in "$modules_root"/*/; do
     [ -d "$d" ] || continue
     n=${d%/}
     n=${n##*/}
     case "$n" in
-      ""|*[[:space:]]*)
+      ""|.*|*[[:space:]]*|_hooks)
         continue
         ;;
     esac
-    if is_reserved "$n" && [ "$n" != "session" ]; then
+    if is_reserved "$n" && [ "$n" != "session" ] && [ "$n" != "run" ]; then
       ctx_err "reserved name refused (shadow): $n"
       continue
     fi
-    entry="$d"entry
-    if [ ! -f "$entry" ]; then
+    if [ -f "$d/module" ]; then
+      if [ -z "$(header_field "$d/module" summary)" ]; then
+        ctx_err "skipping module $n: module file has no summary"
+        continue
+      fi
+    elif [ -d "$d/scripts" ]; then
+      ctx_err "skipping module $n: scripts/ without a module file"
+      continue
+    else
       continue
     fi
-    if [ ! -x "$entry" ]; then
-      ctx_err "skipping family $n: entry is not executable"
-      continue
-    fi
-    fam=$(header_field "$entry" ctx-family)
-    sum=$(header_field "$entry" summary)
-    subs=$(header_field "$entry" ctx-subcommands)
-    if [ -z "$fam" ] || [ -z "$sum" ] || [ -z "$subs" ] || [ "$fam" != "$n" ]; then
-      ctx_err "skipping family $n: malformed header"
-      continue
-    fi
-    found="$found$n
-"
-  done
-  if [ -n "$found" ]; then
-    printf '%s' "$found" | LC_ALL=C sort -u
-  fi
-  return 0
+    printf '%s\n' "$n"
+  done | LC_ALL=C sort
 }
+
+verb_names() {
+  # a module's verbs: extension-less scripts carrying a "# summary:" header,
+  # name-sorted (LC_ALL=C); private files are ignored; a duplicate verb
+  # shadows with a warning and the first file name wins; help stays
+  # engine-owned
+  sd="$1/scripts"
+  [ -d "$sd" ] || return 0
+  raw=""
+  for f in "$sd"/*; do
+    [ -f "$f" ] || continue
+    b=${f##*/}
+    case "$b" in
+      ""|.*|*[[:space:]]*)
+        continue
+        ;;
+    esac
+    [ -n "$(header_field "$f" summary)" ] || continue
+    raw="$raw $b"
+  done
+  [ -n "$raw" ] || return 0
+  raw=$(printf '%s\n' ${raw# } | LC_ALL=C sort)
+  out=""
+  seen=""
+  for b in $raw; do
+    case " $seen " in
+      *" $b "*)
+        ctx_err "duplicate verb shadowed: ${1##*/}: $b (first file name wins)"
+        continue
+        ;;
+    esac
+    if [ "$b" = "help" ]; then
+      ctx_err "help is engine-owned; ignoring scripts/help in ${1##*/}"
+      continue
+    fi
+    seen="$seen $b"
+    out="$out $b"
+  done
+  [ -n "$out" ] || return 0
+  printf '%s\n' ${out# }
+}
+
+module_summary() {
+  header_field "$1/module" summary
+}
+
+verb_summary() {
+  header_field "$1/scripts/$2" summary
+}
+
+verb_detail() {
+  header_values "$1/scripts/$2" "$3"
+}
+
+verb_exists() {
+  for v in $(verb_names "$1"); do
+    if [ "$v" = "$2" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# ---------------------------------------------------------------------------
+# assembly: help is engine-owned
 
 show_top_help() {
   cat <<'EOF'
@@ -117,75 +221,101 @@ ctx: the workspace command binder
 
 usage:
   ctx                              this summary
-  ctx help [--all]                 this summary; --all also runs each family's own help block
+  ctx help [--all]                 this summary; --all also prints every module's help block
   ctx run <cmd> [args...]          run a command through stream compaction; the command's exit code is preserved
   cmd | ctx run                    pipe form: compact a stream
-  ctx <family> [args...]           dispatch to a family: arguments, streams, and exit code pass through
-  ctx session <verb> [args...]     the session record verbs
+  ctx <module> [args...]           dispatch to a module: arguments, streams, and exit code pass through
+  ctx <module> help [<verb>]       the module's verb table; one verb's detail with <verb>
 EOF
-  load_session_verbs
-  printf '\nsession verbs:\n  %s\n' "$session_verbs"
-  printf '\nfamilies:\n'
-  fams=$(list_families)
-  if [ -z "$fams" ]; then
+  printf '\nmodules:\n'
+  mods=$(module_names)
+  if [ -z "$mods" ]; then
     printf '  (none discovered)\n'
     return 0
   fi
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    entry="$ctx_root/$n/entry"
-    sum=$(header_field "$entry" summary)
-    subs=$(header_field "$entry" ctx-subcommands)
-    printf '  %s    %s (%s)\n' "$n" "$sum" "$subs"
+    printf '  %-10s %s\n' "$n" "$(module_summary "$modules_root/$n")"
   done <<EOF
-$fams
+$mods
 EOF
   return 0
 }
 
-show_family_help_blocks() {
-  fams=$(list_families)
-  [ -n "$fams" ] || return 0
+show_module_help() {
+  m="$modules_root/$1"
+  printf 'ctx %s: %s\n\n' "$1" "$(module_summary "$m")"
+  printf 'usage:\n'
+  printf '  ctx %s <verb> [args...]\n' "$1"
+  printf '  ctx %s help [<verb>]\n' "$1"
+  verbs=$(verb_names "$m")
+  printf '\nverbs:\n'
+  if [ -z "$verbs" ]; then
+    printf '  (none)\n'
+    return 0
+  fi
+  while IFS= read -r v; do
+    [ -n "$v" ] || continue
+    printf '  %-10s %s\n' "$v" "$(verb_summary "$m" "$v")"
+  done <<EOF
+$verbs
+EOF
+  printf '\ndetail: ctx %s help <verb>\n' "$1"
+  return 0
+}
+
+show_verb_help() {
+  m="$modules_root/$1"
+  printf 'ctx %s %s: %s\n' "$1" "$2" "$(verb_summary "$m" "$2")"
+  usages=$(verb_detail "$m" "$2" usage)
+  if [ -n "$usages" ]; then
+    printf '\nusage:\n'
+    printf '%s\n' "$usages" | while IFS= read -r l; do
+      [ -n "$l" ] && printf '  %s\n' "$l"
+    done
+  fi
+  helps=$(verb_detail "$m" "$2" help)
+  if [ -n "$helps" ]; then
+    printf '\nhelp:\n'
+    printf '%s\n' "$helps" | while IFS= read -r l; do
+      [ -n "$l" ] && printf '  %s\n' "$l"
+    done
+  fi
+  return 0
+}
+
+show_module_help_blocks() {
+  mods=$(module_names)
+  [ -n "$mods" ] || return 0
   if ! cd "$root"; then
     ctx_err "cannot enter workspace root: $root"
     return 1
   fi
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    entry="$ctx_root/$n/entry"
-    printf '\nfamily %s:\n' "$n"
-    "$entry" help || ctx_err "family $n: help exited nonzero"
+    printf '\nmodule %s:\n' "$n"
+    show_module_help "$n"
   done <<EOF
-$fams
+$mods
 EOF
   return 0
 }
 
 # ---------------------------------------------------------------------------
-# built-in run: the selection body (one home; compact.sh shims into this).
-# Labels keep the legacy identity through the shim; direct ctx run teaches
-# ctx forms. Bracketed operational notices stay [compact: ...] everywhere so
-# the COMPACT_DISABLE/DEBUG contracts and the notice vocabulary never drift.
+# built-in run: the selection body (one home). Labels and usage always read
+# ctx run; bracketed operational notices read [ctx: ...]. The
+# COMPACT_DISABLE and COMPACT_DEBUG contracts are unchanged.
 run_body() {
   set -e
-  if [ "${CONTEXTURE_COMPACT_SHIM:-0}" = "1" ]; then
-    run_label="compact.sh"
-    run_usage_line="usage: compact.sh [--filter=NAME] [--stats] [cmd [args...]]"
-  else
-    run_label="ctx run"
-    run_usage_line="usage: ctx run [--filter=NAME] [--stats] [cmd [args...]]"
-  fi
-  unset CONTEXTURE_COMPACT_SHIM
+  run_label="ctx run"
+  run_usage_line="usage: ctx run [--filter=NAME] [--stats] [cmd [args...]]"
 
-  SCRIPT_DIR="$dir"
-  FILTERS_DIR="$SCRIPT_DIR/../filters"
-  FAMILIES_DIR="$SCRIPT_DIR/../ctx"
+  MODULES_DIR="$dir/modules"
+  FILTERS_DIR="$MODULES_DIR/run/filters"
 
   if [ ! -d "$FILTERS_DIR" ]; then
-    if [ -d "./.contexture/filters" ]; then
-      FILTERS_DIR="./.contexture/filters"
-    elif [ -d "$SCRIPT_DIR/filters" ]; then
-      FILTERS_DIR="$SCRIPT_DIR/filters"
+    if [ -d "./.contexture/modules/run/filters" ]; then
+      FILTERS_DIR="./.contexture/modules/run/filters"
     fi
   fi
 
@@ -210,7 +340,7 @@ run_body() {
     if [ "$stderr_lines" -le 10 ]; then
       printf "%s\n" "$stderr_input" >&2
     else
-      printf "[compact: stderr capped: showing the last 10 of %s lines; COMPACT_DISABLE=1 for the full stream]\n" "$stderr_lines" >&2
+      printf "[ctx: stderr capped: showing the last 10 of %s lines; COMPACT_DISABLE=1 for the full stream]\n" "$stderr_lines" >&2
       printf "%s\n" "$stderr_input" | tail -n 10 >&2
     fi
   }
@@ -221,22 +351,52 @@ run_body() {
     sed -n "s/^# $1: //p" "$2" | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
   }
 
-  # Name-sorted family directories carrying a filters/ folder; whitespace
-  # names never form (list discipline matches the binder)
-  family_names() {
-    [ -d "$FAMILIES_DIR" ] || return 0
-    for fd in "$FAMILIES_DIR"/*/; do
+  # Name-sorted module directories (LC_ALL=C) other than run, whose filters/
+  # folders merge after the run module's own; whitespace names never form
+  filter_module_names() {
+    [ -d "$MODULES_DIR" ] || return 0
+    load_session_verbs
+    for fd in "$MODULES_DIR"/*/; do
       [ -d "$fd" ] || continue
       bn=${fd%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|*[[:space:]]*)
+        ""|.*|*[[:space:]]*|run|_hooks)
           continue
           ;;
       esac
+      if is_reserved "$bn"; then
+        continue
+      fi
       printf '%s\n' "$bn"
     done | LC_ALL=C sort
     return 0
+  }
+
+  # The explicit --filter= name resolves over the run module first, then the
+  # modules in name order: the same scan order as command and signature
+  locate_filter() {
+    if [ -d "$FILTERS_DIR" ]; then
+      if [ -f "$FILTERS_DIR/$1.awk" ]; then
+        printf '%s\n' "$FILTERS_DIR/$1.awk"
+        return 0
+      fi
+      if [ -f "$FILTERS_DIR/$1" ]; then
+        printf '%s\n' "$FILTERS_DIR/$1"
+        return 0
+      fi
+    fi
+    for bn in $(filter_module_names); do
+      if [ -f "$MODULES_DIR/$bn/filters/$1.awk" ]; then
+        printf '%s\n' "$MODULES_DIR/$bn/filters/$1.awk"
+        return 0
+      fi
+      if [ -f "$MODULES_DIR/$bn/filters/$1" ]; then
+        printf '%s\n' "$MODULES_DIR/$bn/filters/$1"
+        return 0
+      fi
+    done
+    return 1
   }
 
   while [ $# -gt 0 ]; do
@@ -271,7 +431,7 @@ run_body() {
   # Explicit bypass: raw execution, command exit code intact
   if [ "${COMPACT_DISABLE:-0}" = "1" ]; then
     if [ "$debug" -eq 1 ]; then
-      printf "[compact: debug: bypassed (COMPACT_DISABLE=1)]\n" >&2
+      printf "[ctx: debug: bypassed (COMPACT_DISABLE=1)]\n" >&2
     fi
     if [ $# -gt 0 ]; then
       rc=0
@@ -342,11 +502,9 @@ run_body() {
   default_filter=""
 
   if [ -n "$explicit_filter" ]; then
-    candidate="$FILTERS_DIR/${explicit_filter}.awk"
-    if [ -f "$candidate" ]; then
+    candidate=$(locate_filter "$explicit_filter") || candidate=""
+    if [ -n "$candidate" ]; then
       selected_filter="$candidate"
-    elif [ -f "$FILTERS_DIR/$explicit_filter" ]; then
-      selected_filter="$FILTERS_DIR/$explicit_filter"
     else
       printf '%s: filter not found: %s in %s\n' "$run_label" "$explicit_filter" "$FILTERS_DIR" >&2
       if [ -n "$raw_input" ]; then
@@ -356,7 +514,7 @@ run_body() {
       exit "$cmd_status"
     fi
     if [ "$debug" -eq 1 ]; then
-      printf "[compact: debug: selected %s (explicit)]\n" "$(basename "$selected_filter")" >&2
+      printf "[ctx: debug: selected %s (explicit)]\n" "$(basename "$selected_filter")" >&2
     fi
   else
     # Runner mode selects by command identity first: the wrapped command line
@@ -382,21 +540,22 @@ run_body() {
             if [ -z "$selected_filter" ]; then
               selected_filter="$f"
               if [ "$debug" -eq 1 ]; then
-                printf "[compact: debug: selected %s (command match: %s)]\n" "$(basename "$f")" "$cmd_line" >&2
+                printf "[ctx: debug: selected %s (command match: %s)]\n" "$(basename "$f")" "$cmd_line" >&2
               fi
             else
-              printf "[compact: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$(basename "$f")" "$cmd_line" >&2
+              printf "[ctx: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$(basename "$f")" "$cmd_line" >&2
             fi
           fi
         done
       fi
 
-      # Family filters merge after base (name-sorted families): first match
-      # wins; a later family match warns as shadow unless its header carries
-      # "# ctx-filter-priority: over", which replaces the selection
-      if [ -d "$FAMILIES_DIR" ]; then
-        for bn in $(family_names); do
-          for f in "$FAMILIES_DIR/$bn/filters"/*.awk; do
+      # Module filters merge after the run module's own (name-sorted modules):
+      # first match wins; a later module match warns as shadow unless its
+      # header carries "# ctx-filter-priority: over", which replaces the
+      # selection
+      if [ -d "$MODULES_DIR" ]; then
+        for bn in $(filter_module_names); do
+          for f in "$MODULES_DIR/$bn/filters"/*.awk; do
             [ -f "$f" ] || continue
             pat=$(directive_value command "$f")
             [ -n "$pat" ] || continue
@@ -406,15 +565,15 @@ run_body() {
               if [ "$prio" = "over" ]; then
                 selected_filter="$f"
                 if [ "$debug" -eq 1 ]; then
-                  printf "[compact: debug: selected %s (command match: %s, priority over)]\n" "$rel" "$cmd_line" >&2
+                  printf "[ctx: debug: selected %s (command match: %s, priority over)]\n" "$rel" "$cmd_line" >&2
                 fi
               elif [ -z "$selected_filter" ]; then
                 selected_filter="$f"
                 if [ "$debug" -eq 1 ]; then
-                  printf "[compact: debug: selected %s (command match: %s)]\n" "$rel" "$cmd_line" >&2
+                  printf "[ctx: debug: selected %s (command match: %s)]\n" "$rel" "$cmd_line" >&2
                 fi
               else
-                printf "[compact: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$rel" "$cmd_line" >&2
+                printf "[ctx: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$rel" "$cmd_line" >&2
               fi
             fi
           done
@@ -434,10 +593,10 @@ run_body() {
             if printf "%s\n" "$sample" | COMPACT_PAT="$pat" awk 'BEGIN{rc=1} $0 ~ ENVIRON["COMPACT_PAT"] {rc=0; exit} END{exit rc}' 2>/dev/null; then
               selected_filter="$f"
               if [ "$debug" -eq 1 ]; then
-                printf "[compact: debug: selected %s (signature match: %s)]\n" "$(basename "$f")" "$pat" >&2
+                printf "[ctx: debug: selected %s (signature match: %s)]\n" "$(basename "$f")" "$pat" >&2
                 match_line=$(printf "%s\n" "$sample" | COMPACT_PAT="$pat" awk '$0 ~ ENVIRON["COMPACT_PAT"] {print; exit}' 2>/dev/null)
                 if [ -n "$match_line" ]; then
-                  printf "[compact: debug: matched line: %s]\n" "$match_line" >&2
+                  printf "[ctx: debug: matched line: %s]\n" "$match_line" >&2
                 fi
               fi
               break
@@ -448,11 +607,11 @@ run_body() {
         done
       fi
 
-      # Family signature merge after base: same first-match, shadow, and
-      # priority rules as the command loop
-      if [ -d "$FAMILIES_DIR" ]; then
-        for bn in $(family_names); do
-          for f in "$FAMILIES_DIR/$bn/filters"/*.awk; do
+      # Module signature merge after the run module's own: same first-match,
+      # shadow, and priority rules as the command loop
+      if [ -d "$MODULES_DIR" ]; then
+        for bn in $(filter_module_names); do
+          for f in "$MODULES_DIR/$bn/filters"/*.awk; do
             [ -f "$f" ] || continue
             pat=$(directive_value match "$f")
             [ -n "$pat" ] || continue
@@ -462,15 +621,15 @@ run_body() {
               if [ "$prio" = "over" ]; then
                 selected_filter="$f"
                 if [ "$debug" -eq 1 ]; then
-                  printf "[compact: debug: selected %s (signature match: %s, priority over)]\n" "$rel" "$pat" >&2
+                  printf "[ctx: debug: selected %s (signature match: %s, priority over)]\n" "$rel" "$pat" >&2
                 fi
               elif [ -z "$selected_filter" ]; then
                 selected_filter="$f"
                 if [ "$debug" -eq 1 ]; then
-                  printf "[compact: debug: selected %s (signature match: %s)]\n" "$rel" "$pat" >&2
+                  printf "[ctx: debug: selected %s (signature match: %s)]\n" "$rel" "$pat" >&2
                 fi
               else
-                printf "[compact: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$rel" "$pat" >&2
+                printf "[ctx: shadow warning: %s and %s both claim: %s]\n" "$(basename "$selected_filter")" "$rel" "$pat" >&2
               fi
             fi
           done
@@ -480,20 +639,20 @@ run_body() {
       if [ -z "$selected_filter" ]; then
         selected_filter="$default_filter"
         if [ "$debug" -eq 1 ] && [ -n "$selected_filter" ]; then
-          printf "[compact: debug: selected %s (default)]\n" "$(basename "$selected_filter")" >&2
+          printf "[ctx: debug: selected %s (default)]\n" "$(basename "$selected_filter")" >&2
         fi
       fi
 
-      # Family default fallback: fills an empty selection only; defaults
+      # Module default fallback: fills an empty selection only; defaults
       # never shadow a match, so priority does not apply here
-      if [ -z "$selected_filter" ] && [ -d "$FAMILIES_DIR" ]; then
-        for bn in $(family_names); do
-          for f in "$FAMILIES_DIR/$bn/filters"/*.awk; do
+      if [ -z "$selected_filter" ] && [ -d "$MODULES_DIR" ]; then
+        for bn in $(filter_module_names); do
+          for f in "$MODULES_DIR/$bn/filters"/*.awk; do
             [ -f "$f" ] || continue
             if grep -q '^# default' "$f" 2>/dev/null; then
               selected_filter="$f"
               if [ "$debug" -eq 1 ]; then
-                printf "[compact: debug: selected %s (family default)]\n" "$bn/$(basename "$f")" >&2
+                printf "[ctx: debug: selected %s (module default)]\n" "$bn/$(basename "$f")" >&2
               fi
               break 2
             fi
@@ -569,7 +728,7 @@ run_body() {
   if [ -z "$filtered_output" ]; then
     printf "%s\n" "$raw_input"
     if [ "$stats" -eq 1 ]; then
-      printf "[compact: %s (fail-safe passthrough: %d bytes)]\n" "$filter_name" "$raw_bytes" >&2
+      printf "[ctx: %s (fail-safe passthrough: %d bytes)]\n" "$filter_name" "$raw_bytes" >&2
     fi
     emit_stderr
     exit "$cmd_status"
@@ -580,7 +739,7 @@ run_body() {
   if [ "$notice_only" -eq 1 ]; then
     printf "%s\n" "$filtered_output"
     if [ "$stats" -eq 1 ]; then
-      printf "[compact: %s (notice-only output passed through)]\n" "$filter_name" >&2
+      printf "[ctx: %s (notice-only output passed through)]\n" "$filter_name" >&2
     fi
     emit_stderr
     exit "$cmd_status"
@@ -590,7 +749,7 @@ run_body() {
   if [ "$out_bytes" -gt "$raw_bytes" ]; then
     printf "%s\n" "$raw_input"
     if [ "$stats" -eq 1 ]; then
-      printf "[compact: %s (fail-safe passthrough: %d bytes)]\n" "$filter_name" "$raw_bytes" >&2
+      printf "[ctx: %s (fail-safe passthrough: %d bytes)]\n" "$filter_name" "$raw_bytes" >&2
     fi
     emit_stderr
     exit "$cmd_status"
@@ -601,7 +760,7 @@ run_body() {
   if [ "$out_bytes" -lt "$clean_bytes" ] && [ "$has_notice" -eq 0 ] && [ -z "$format_only" ]; then
     printf "%s\n" "$raw_input"
     if [ "$stats" -eq 1 ]; then
-      printf "[compact: %s (recovery fallback: %d -> %d bytes, no notice)]\n" "$filter_name" "$clean_bytes" "$out_bytes" >&2
+      printf "[ctx: %s (recovery fallback: %d -> %d bytes, no notice)]\n" "$filter_name" "$clean_bytes" "$out_bytes" >&2
     fi
     emit_stderr
     exit "$cmd_status"
@@ -614,7 +773,7 @@ run_body() {
     if [ "$raw_bytes" -gt 0 ]; then
       pct=$(( (raw_bytes - out_bytes) * 100 / raw_bytes ))
     fi
-    printf "[compact: %s, %d -> %d bytes (%d%% reduction)]\n" "$filter_name" "$raw_bytes" "$out_bytes" "$pct" >&2
+    printf "[ctx: %s, %d -> %d bytes (%d%% reduction)]\n" "$filter_name" "$raw_bytes" "$out_bytes" "$pct" >&2
   fi
 
   emit_stderr
@@ -623,14 +782,13 @@ run_body() {
 
 # ---------------------------------------------------------------------------
 # internal hook engine: ctx _hooks <point> [<ENVNAME> <value>]...
-# Hidden and unlisted; families declare "# ctx-hooks: <point> <command>"
-# header lines (command relative to the family dir) and optionally
-# "# ctx-hook-mode: block". Discovery reuses the family list (name-sorted,
-# LC_ALL=C); declarations run in file order. CWD is the workspace root; each
-# hook gets CTX_HOOK_POINT and the passed context exported. Default mode
-# warns on a non-zero hook and continues (point rc unaffected); block mode
-# stops the point at the first failing hook and fails rc=1. Zero hooks for
-# the point = silent rc=0.
+# Hidden and unlisted. Hook files under modules/*/hooks/ declare
+# "# ctx-hook: <point>" and optionally "# ctx-hook-mode: block"; discovery
+# runs in module-name order (LC_ALL=C) then file-name order. CWD is the
+# workspace root; each hook gets CTX_HOOK_POINT and the passed context
+# exported. Default mode warns on a non-zero hook and continues (point rc
+# unaffected); block mode stops the point at the first failing hook and
+# fails rc=1. Zero hooks for the point = silent rc=0.
 run_hooks() {
   if [ $# -lt 1 ]; then
     ctx_err "_hooks: missing point"
@@ -669,41 +827,50 @@ run_hooks() {
     exit 1
   fi
 
-  for n in $(list_families); do
+  for n in $(scan_module_dirs); do
     [ -n "$n" ] || continue
-    entry="$ctx_root/$n/entry"
-    mode=$(header_field "$entry" ctx-hook-mode)
-    cmds=$(sed -n "s/^# ctx-hooks: $point[[:space:]][[:space:]]*//p" "$entry")
-    [ -n "$cmds" ] || continue
-    while IFS= read -r hcmd; do
-      [ -n "$hcmd" ] || continue
-      hw=${hcmd%%[[:space:]]*}
-      hrest=${hcmd#"$hw"}
-      if [ ! -f "$ctx_root/$n/$hw" ]; then
-        ctx_err "hook missing at $point: $n: $hcmd"
-        if [ "$mode" = "block" ]; then
-          exit 1
-        fi
+    hd="$modules_root/$n/hooks"
+    [ -d "$hd" ] || continue
+    for h in $(hook_files "$hd"); do
+      [ -n "$h" ] || continue
+      hp=$(header_field "$h" ctx-hook)
+      [ -n "$hp" ] || continue
+      if [ "$hp" != "$point" ]; then
         continue
       fi
+      hmode=$(header_field "$h" ctx-hook-mode)
       hrc=0
-      if [ -x "$ctx_root/$n/$hw" ]; then
-        "$ctx_root/$n/$hw" $hrest || hrc=$?
+      if [ -x "$h" ]; then
+        "$h" || hrc=$?
       else
-        sh "$ctx_root/$n/$hw" $hrest || hrc=$?
+        sh "$h" || hrc=$?
       fi
       if [ "$hrc" -ne 0 ]; then
-        if [ "$mode" = "block" ]; then
-          ctx_err "hook blocked the point at $point: $n: $hcmd (rc=$hrc)"
+        if [ "$hmode" = "block" ]; then
+          ctx_err "hook blocked the point at $point: $n: ${h##*/} (rc=$hrc)"
           exit 1
         fi
-        ctx_err "hook failed at $point: $n: $hcmd (rc=$hrc); continuing"
+        ctx_err "hook failed at $point: $n: ${h##*/} (rc=$hrc); continuing"
       fi
-    done <<EOF
-$cmds
-EOF
+    done
   done
   return 0
+}
+
+hook_files() {
+  # hook files of one module, file-name sorted (LC_ALL=C); hidden and
+  # whitespace names never form
+  hd=$1
+  for h in "$hd"/*; do
+    [ -f "$h" ] || continue
+    b=${h##*/}
+    case "$b" in
+      ""|.*|*[[:space:]]*)
+        continue
+        ;;
+    esac
+    printf '%s\n' "$h"
+  done | LC_ALL=C sort
 }
 
 # ---------------------------------------------------------------------------
@@ -731,7 +898,7 @@ case "$1" in
     fi
     if [ $# -eq 1 ] && [ "$1" = "--all" ]; then
       show_top_help
-      if ! show_family_help_blocks; then
+      if ! show_module_help_blocks; then
         exit 1
       fi
       exit 0
@@ -753,10 +920,10 @@ esac
 target=$1
 shift
 
-# discovery warnings (reserved, malformed) surface on every dispatch attempt
-fams=$(list_families)
+# discovery warnings (reserved, broken shapes) surface on every dispatch attempt
+mods=$(module_names)
 
-# ctx adopts the workspace root before dispatch (the binder contract)
+# ctx adopts the workspace root before dispatch (the engine contract)
 if ! cd "$root"; then
   ctx_err "cannot enter workspace root: $root"
   exit 1
@@ -770,12 +937,51 @@ while IFS= read -r n; do
     break
   fi
 done <<EOF
-$fams
+$mods
 EOF
 
-if [ -n "$found_target" ]; then
-  exec "$ctx_root/$found_target/entry" "$@"
+if [ -z "$found_target" ]; then
+  ctx_err "unknown command: $target"
+  exit 1
 fi
 
-ctx_err "unknown command: $target"
-exit 1
+md="$modules_root/$found_target"
+
+# bare ctx <module> prints the module help rc0
+if [ $# -eq 0 ]; then
+  show_module_help "$found_target"
+  exit 0
+fi
+
+case "$1" in
+  help|--help|-h)
+    shift
+    if [ $# -eq 0 ]; then
+      show_module_help "$found_target"
+      exit 0
+    fi
+    if [ $# -eq 1 ] && verb_exists "$md" "$1"; then
+      show_verb_help "$found_target" "$1"
+      exit 0
+    fi
+    ctx_err "unknown verb: $1"
+    show_module_help "$found_target" >&2
+    exit 1
+    ;;
+esac
+
+verb=$1
+if ! verb_exists "$md" "$verb"; then
+  ctx_err "unknown verb: $verb"
+  show_module_help "$found_target" >&2
+  exit 1
+fi
+shift
+
+CTX_ROOT="$root"
+CTX_MODULE_DIR="$md"
+CTX_BIN="$ctx_bin"
+export CTX_ROOT CTX_MODULE_DIR CTX_BIN
+LC_ALL=C
+export LC_ALL
+exec "$md/scripts/$verb" "$@"

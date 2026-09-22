@@ -42,8 +42,8 @@ and evidence, what the dispatcher needs to re-verify and decide.
     check-ignore verified cleanly
 
 @claim handoff-audit-placement
-  VERDICT: ".contexture/scripts/ctx session audit added to README handoff verification."
-  EVIDENCE: README.md:488 ("AND .contexture/scripts/ctx session audit <unit> exits 0")
+  VERDICT: ".contexture/ctx session audit added to README handoff verification."
+  EVIDENCE: README.md:488 ("AND .contexture/ctx session audit <unit> exits 0")
   MARK: VERIFIED
 
 @risks

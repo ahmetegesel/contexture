@@ -1,0 +1,6 @@
+#!/bin/sh
+# summary: move a task's STATUS: todo reopens, progress activates, done completes with a receipt
+# usage: ctx session flip <slug> <todo | progress | done> <task-slug> [<task-slug> ...]
+# help: todo reopens (TODO); progress activates (IN_PROGRESS; the state must already name the slug, run next first); done completes (pipe the receipt @entry; its WHAT carries "backlog/<task-slug>: DONE" with the evidence per slug); one call takes many slugs
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/record" flip "$@"

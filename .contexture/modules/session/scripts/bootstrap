@@ -1,17 +1,12 @@
 #!/usr/bin/awk -f
-# session-bootstrap.awk: create a fresh session unit and fold its first anchor
-# Usage: session.sh bootstrap <slug> "<objective>" [<repos>]
-# Validates every argument before any filesystem write; creates
-# .contexture/sessions/<slug>/ with state.md at A0, the three empty
-# artifacts, appends the folded A1 receipt to journal.md, and rewrites
-# current_anchor to A1 through a same-directory temp plus mv. Prints the
-# final state and "next: declare the first task". The state grammar cannot
-# carry brackets or quotes in repos, or quotes in the objective: those
-# values are refused naming the character. Any refusal exits rc=1 with zero
-# partial writes.
+# summary: create the unit folder, state at A0 folded to A1, the three artifacts; prints the state and "next: declare the first task"
+# usage: ctx session bootstrap <slug> "<objective>" [<repos>]
+# help: validates every argument before any filesystem write; refusals rc=1 with zero partial writes (existing slug, malformed slug, empty objective, embedded newline, extra arguments)
+# The state grammar cannot carry brackets or quotes in repos, or quotes in
+# the objective: those values are refused naming the character.
 
 function usage() {
-  print "Usage: session.sh bootstrap <slug> \"<objective>\" [<repos>]" > "/dev/stderr"
+  print "Usage: ctx session bootstrap <slug> \"<objective>\" [<repos>]" > "/dev/stderr"
   print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
@@ -40,15 +35,30 @@ function gitstate(   tag, cmd, line, rc, first) {
   return first
 }
 
-function write_state(path, anchor,   tmp) {
-  tmp = path ".tmp"
+function unique_tmp(path,   cmd, tmp) {
+  # a unique same-directory temp: the mv stays on one filesystem (atomic
+  # replace) and concurrent writers never share a temp name
+  tmp = ""
+  cmd = "mktemp \"" path ".XXXXXX\" 2>/dev/null"
+  if ((cmd | getline tmp) <= 0) tmp = ""
+  close(cmd)
+  if (tmp == "") fail("ERROR: cannot create a temp beside " path)
+  return tmp
+}
+
+function write_state(path, anchor,   tmp, rc) {
+  tmp = unique_tmp(path)
   print "status: ACTIVE" > tmp
   print "current_anchor: " anchor > tmp
   print "next_action: \"backlog the first task\"" > tmp
   print "objective: \"" objective "\"" > tmp
   print "repos: [" repos "]" > tmp
   close(tmp)
-  if (system("mv \"" tmp "\" \"" path "\"") != 0) fail("ERROR: mv failed: " path)
+  rc = system("mv \"" tmp "\" \"" path "\"")
+  if (rc != 0) {
+    system("rm -f \"" tmp "\"")
+    fail("ERROR: mv failed: " path)
+  }
 }
 
 function touch(path) {

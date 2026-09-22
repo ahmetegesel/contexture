@@ -1,7 +1,8 @@
 #!/usr/bin/awk -f
-# session-active.awk: every ACTIVE unit at a glance
-# Usage: session.sh active
-# No arguments. Scans .contexture/sessions/*/state.md in ls order; for
+# summary: every ACTIVE unit at a glance
+# usage: ctx session active
+# help: no arguments: every ACTIVE unit (slug, current_anchor, next_action, objective verbatim) then the closed count; a missing sessions directory prints "no sessions yet" rc=0; an argument refuses rc=1
+# Scans .contexture/sessions/*/state.md in ls order; for
 # each ACTIVE unit prints the slug, current_anchor, next_action, and
 # objective verbatim (quotes kept, continuation lines included), then the
 # closed count, derived as the total state.md count minus the ACTIVE
@@ -11,7 +12,7 @@
 # rc=0; an argument refuses rc=1 with zero stdout.
 
 function usage() {
-  print "Usage: session.sh active" > "/dev/stderr"
+  print "Usage: ctx session active" > "/dev/stderr"
   print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
