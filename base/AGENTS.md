@@ -1,4 +1,4 @@
-# contexture v0.51.2: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.51.3: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: session files = ONLY source of truth; never conversation. files survive compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -17,7 +17,7 @@
   .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
   .contexture/templates/      = artifact grammars: the shapes to fill at write time
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx session <verb>, ctx run <cmd>, ctx <module>
-  .contexture/modules/        = the modules: session (the record engine), ideas, and workspace additions
+  .contexture/modules/        = the modules: discovered dynamically via ctx help, dispatched via ctx <module>
   .contexture/modules/run/filters/ = the builtin stream filters over the runner (diff, list, log); workspace filters live in their modules
   .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
@@ -72,7 +72,7 @@
   artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
 
 @boot
-  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; then run .contexture/ctx session help (--help and -h are the same table: the command contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
+  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
   3. get the field: .contexture/ctx session active; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10

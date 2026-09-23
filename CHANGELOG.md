@@ -4,6 +4,13 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.51.3] - 2026-09-23
+
+### Fixed
+
+- Base layout module discovery: removed the workspace-specific `ideas` module leak from `base/AGENTS.md` and `docs/the-engine.md`, describing `.contexture/modules/` generically as discovered dynamically via `ctx help`.
+- Dynamic module discovery at boot: updated `@boot` step 1 in `base/AGENTS.md` to invoke `.contexture/ctx help --all`, establishing runtime self-discovery as the single source of truth across all workspaces.
+
 ## [0.51.2] - 2026-09-23
 
 ### Fixed

@@ -236,7 +236,7 @@ plugins/             the tracked catalog of packaged overlays: copied into a wor
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
   templates/         the grammars every artifact fills
   ctx                the runtime: discovery, help assembly, dispatch, the run engine, and hooks
-  modules/           session (the record engine), run (stream filters), ideas, and workspace additions
+  modules/           session (the record engine), run (stream filters), and workspace additions
   rhythms/           your process patterns
   sessions/          the units of work
   tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand)
