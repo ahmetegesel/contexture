@@ -104,8 +104,8 @@ Contexture's own overlays are live examples of the grammar in use. The clauses b
 @append @laws
   dashes: never as punctuation in any artifact; the em dash and the spaced hyphen both read as the machine tell. Commas, colons, periods, or parentheses instead; hyphens only inside compound words.
 
-@append @boot
-  dry run: complete boot load, queries, and verifications without writes to state.md, journal.md, or files; report reconstructed position and stamp; cuts writes, never loads.
+@append @query
+  compaction: ./tools/compaction-status.awk [<conversation-id>] reports Antigravity harness compaction status, timestamp, and history for the active or named conversation directly from transcript logs.
 ```
 
 The pattern settles adoption too: an adopting workspace copies the base byte for byte and puts every adaptation in its overlay, so future syncs stay clean. The adoption page carries that story.

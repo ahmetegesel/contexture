@@ -1,8 +1,9 @@
 #!/usr/bin/env sh
 # docs-discipline plugin suite: the named runner for tests/.
 # Drives the audit and the close-gate matrix over tests/sample/ in a staged
-# scratch workspace. Needs: POSIX awk/sh and the base .contexture/ctx runtime
-# (the plugin ships the module, not the engine); git is not needed.
+# scratch workspace. Needs: POSIX awk/sh, the base .contexture/ctx runtime
+# (the plugin ships the module, not the engine), and git for the matrix's
+# tracked-claimant fixture.
 # Scratch stages under the workspace's .contexture/tmp/ when that drawer is
 # writable, the system temp otherwise. Exit: 0 when both checks pass, 1 on a
 # failure, 77 when a need is absent.

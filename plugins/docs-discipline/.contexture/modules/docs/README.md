@@ -19,7 +19,8 @@ the workspace's boot, laws, or help.
   are private files, and they never appear in help.
 - `gate` carries the whole close-gate logic (git aggregation, drift warnings,
   and the self-planted eight-scenario matrix); the other four verbs are thin
-  wrappers that exec their engine with the arguments untouched.
+  wrappers over their engine: audit, check, and nudge exec it with the
+  arguments untouched, and query drives it with parsed options.
 - The verb scripts carry the `# summary:`/`# usage:`/`# help:` declarations;
   `ctx docs help` and `ctx docs help <verb>` render them. Help is
   engine-owned: a sole `help` argument refuses with a pointer, never prints
@@ -55,11 +56,13 @@ product directory.
 workspace's `.contexture/tmp/` when it is writable (the system temp
 otherwise), copies this module and the base `.contexture/ctx`, seeds
 `tests/sample/docs/` plus `docs/`, and drives the audit and the gate matrix.
-Needs: POSIX awk/sh; the gate matrix needs no repository.
+Needs: POSIX awk/sh and git (the gate matrix plants a local repository for
+the claimant trackedness probe).
 
 ## The gate's matrix
 
-`ctx docs gate --test-matrix` builds its fixtures with `mktemp`, writes
+`ctx docs gate --test-matrix` builds its fixtures with `mktemp`, plants a
+local repository inside them for the claimant trackedness probe, writes
 nothing outside them, and exercises the check over eight self-planted
 scenarios. The default gate run aggregates the live git delta (workspace root
 plus every child repository); `--drift` evaluates the incoming remote delta;

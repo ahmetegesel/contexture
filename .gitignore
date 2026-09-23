@@ -11,6 +11,8 @@
 # the detailed docs
 !docs/
 !docs/**
+# the agent-facing corpus stays untracked working state (the guides at docs/*.md stay tracked)
+/docs/workspace/
 # the test material (upstream only)
 !tests/
 !tests/**

@@ -89,7 +89,7 @@ Parent workspace (multiple repositories, the workspace tracks convention configu
 !GEMINI.md
 ```
 
-The last two stand for the harness entry points you wire; keep only the ones in use. This repository keeps a stricter shape: its live root (the same `AGENTS.md` and `.contexture/`) is untracked working state, and the shippable core is tracked mirrored under `base/` (see Payload classes and syncing).
+The last two stand for the harness entry points you wire; keep only the ones in use. This repository keeps a stricter shape: its live root (the same `AGENTS.md` and `.contexture/`) and its agent-facing corpus (`docs/workspace/`) are untracked working state, and the shippable core is tracked mirrored under `base/` (see Payload classes and syncing).
 
 ## Migration, overlays, symlinks
 
@@ -132,7 +132,7 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 The synced set is derived, never declared: `base/` is the payload; `git archive <tag> base/` copies it, `git ls-tree` enumerates it, and a `cmp` per file verifies it. No manifest exists to drift; the tag's index is the declaration. Overlays are never in `base/`, and they survive every sync untouched. `.contexture/ONBOARDING.md` rides the payload as adoption material: used once, deleted at close, redelivered by a later apply and deleted again.
 
-In this repository the live root (`AGENTS.md` and `.contexture/`) is untracked working state; the dev loop edits `base/` directly, ships a tag, and applies the payload onto the live drawer class-aware:
+In this repository the live root (`AGENTS.md` and `.contexture/`) and the agent-facing corpus (`docs/workspace/`) are untracked working state; the dev loop edits `base/` directly, ships a tag, and applies the payload onto the live drawer class-aware:
 
 1. Edit `base/` directly: it is the shipping copy.
 2. Ship: docs sync, commit, push, and the annotated tag in one breath.

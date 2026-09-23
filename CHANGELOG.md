@@ -4,6 +4,19 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.51.2] - 2026-09-23
+
+### Fixed
+
+- The docs check covers the guide pages: a depth-1 `docs/*.md` claimed by a corpus doc is governed, so a guide edit demands its claimant ride the same change; unclaimed markdown stays outside.
+- The untracked-claimant verdict: a governed file whose claimants are all untracked reports `CLEAN (PROCESS-OWNED)` and hands the reconciliation to the process instead of a false `STALE`; one tracked claimant among several restores the delta rule.
+- The close gate's self-planted matrix plants a local repository for the claimant trackedness probe (and fails loudly without git).
+- Guide corrections: the `ctx help` row names the module summaries, the delegating-verbs count is precise (the exec wrappers, the parsed-options query, the self-contained gate), and the overlay sample shows the live local-amendment block.
+
+### Changed
+
+- This repository's agent-facing corpus (`docs/workspace/`) is untracked working state: gitignored, maintained through the overlay laws and the docs rhythms; the guides stay tracked and keep the docs-sync law.
+
 ## [0.51.1] - 2026-09-23
 
 ### Fixed

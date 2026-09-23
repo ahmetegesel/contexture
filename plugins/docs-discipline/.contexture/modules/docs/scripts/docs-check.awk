@@ -3,14 +3,21 @@
 # Usage: git diff --name-status | ctx docs check docs/*/*.md
 # Help: ctx docs help check
 # Exits 0 on clean; exits 1 on completeness, freshness, or dead sources violation.
+# Governed files: the code extensions plus a depth-1 docs/*.md claimed by a corpus doc; a governed
+# file's freshness is its claimant riding the delta. A claimant the repository does not track cannot
+# ride a tracked delta: the check reports the state (UNTRACKED CLAIMANT) and leaves reconciliation
+# to the process (the docs-drift flow), never a false STALE; one tracked claimant among several
+# restores the delta rule.
 
 BEGIN {
     CODE_EXT_RE = "\\.(cs|js|cjs|mjs|jsx|ts|tsx|vue|svelte|astro|dart|py|rb|php|java|kt|kts|go|rs|swift|c|h|cc|cpp|hpp|sh|bash|zsh|sql|proto|graphql|gql|html|css|scss|sass|less|lua|pl|r|ex|exs|erl|hs|cshtml)$"
     EXCLUDE_RE = "([.]spec[.]|/spec/|^spec/|\\.Test|\\.Tests|\\.min\\.|\\.generated\\.)"
+    GUIDE_RE = "^docs/[^/]+\\.md$"
     touched_count = 0
     num_affected = 0
     uncovered_count = 0
     stale_count = 0
+    untracked_claimant_count = 0
     num_dead_sources = 0
 
     input_src = (change_file != "") ? change_file : "-"
@@ -105,6 +112,35 @@ function glob_to_regex(g,    rgx, brace_part) {
     return "^" rgx "$"
 }
 
+function is_governed_guide(t_file) {
+    return (t_file ~ GUIDE_RE && t_file !~ EXCLUDE_RE && claimed[t_file])
+}
+
+# Trackedness signal for the freshness of a governed file: a claimant the repository does not
+# track cannot ride the delta, so it is never counted stale (reconciliation is process-owned).
+# Memoized per path; a non-repository run reads every claimant untracked.
+function claimant_is_tracked(path,   cmd, rc) {
+    if (path in tracked_cache) return tracked_cache[path]
+    cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
+    rc = system(cmd)
+    tracked_cache[path] = (rc == 0) ? 1 : 0
+    return tracked_cache[path]
+}
+
+function any_claimant_tracked(t_file,   n, parts, i) {
+    n = split(claimant_paths[t_file], parts, "\n")
+    for (i = 1; i <= n; i++) {
+        if (parts[i] != "" && claimant_is_tracked(parts[i])) return 1
+    }
+    return 0
+}
+
+function claimant_paths_joined(t_file,   s) {
+    s = claimant_paths[t_file]
+    gsub(/\n/, ", ", s)
+    return s
+}
+
 function process_doc_sources() {
     if (curr_sources == "" || checked_doc[curr_file]) return
     checked_doc[curr_file] = 1
@@ -145,6 +181,7 @@ function process_doc_sources() {
         if (matched) {
             claimed[t_file] = 1
             file_claimants[t_file] = (file_claimants[t_file] ? file_claimants[t_file] ", " : "") curr_repo "/" curr_slug
+            claimant_paths[t_file] = (claimant_paths[t_file] ? claimant_paths[t_file] "\n" : "") curr_file
             if (!doc_affected[curr_slug]++) {
                 affected_slugs[num_affected++] = curr_slug
                 slug_repo[curr_slug] = curr_repo
@@ -249,9 +286,20 @@ END {
     # 2. Freshness Audit
     print "--- FRESHNESS AUDIT ---"
     for (t_file in touched) {
-        if (t_file ~ CODE_EXT_RE && t_file !~ EXCLUDE_RE) {
+        if ((t_file ~ CODE_EXT_RE && t_file !~ EXCLUDE_RE) || is_governed_guide(t_file)) {
             if (claimed[t_file] && !file_has_fresh_doc[t_file]) {
+                if (!any_claimant_tracked(t_file)) {
+                    print "UNTRACKED CLAIMANT: " file_claimants[t_file] " (governed file " t_file " changed; its claimants are untracked and cannot ride a tracked delta)"
+                    print "  file: " t_file
+                    print "  claimant: " claimant_paths_joined(t_file)
+                    print "  reconciliation: process-owned via the docs-drift flow"
+                    untracked_claimant_count++
+                    continue
+                }
                 action_desc = deleted[t_file] ? "code deleted without doc update" : "code modified without doc update"
+                if (is_governed_guide(t_file)) {
+                    action_desc = deleted[t_file] ? "guide deleted without corpus update" : "guide modified without corpus update"
+                }
                 print "STALE DOC: " file_claimants[t_file] " (" action_desc ")"
                 print "  file: " t_file
                 stale_count++
@@ -300,12 +348,15 @@ END {
             print "docs-check: FAILED: " uncovered_count " code file(s) are uncovered by any documentation." > "/dev/stderr"
         }
         if (stale_count > 0) {
-            print "docs-check: FAILED: " stale_count " code file(s) are stale (code changed without doc update)." > "/dev/stderr"
+            print "docs-check: FAILED: " stale_count " file(s) are stale (changed without a doc update)." > "/dev/stderr"
         }
         if (num_dead_sources > 0) {
-            print "docs-check: FAILED: " num_dead_sources " deleted code file(s) still explicitly listed in doc sources." > "/dev/stderr"
+            print "docs-check: FAILED: " num_dead_sources " deleted file(s) still explicitly listed in doc sources." > "/dev/stderr"
         }
         exit 1
+    } else if (untracked_claimant_count > 0) {
+        print "docs-check: CLEAN (PROCESS-OWNED): " untracked_claimant_count " governed file(s) carry untracked claimants; the delta cannot verify them; reconciliation is process-owned via the docs-drift flow."
+        exit 0
     } else {
         print "docs-check: CLEAN: all touched code files are covered and fresh."
         exit 0

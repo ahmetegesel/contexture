@@ -221,7 +221,8 @@ run_gate_check_for() {
 run_audit() { run_audit_for "$WORKSPACE_ROOT"; }
 run_gate_check() { run_gate_check_for "$WORKSPACE_ROOT"; }
 
-# Self-planted test matrix: builds its own fixture corpus with mktemp, then
+# Self-planted test matrix: builds its own fixture corpus with mktemp, plants
+# a local repository inside it for the claimant trackedness probe, then
 # exercises the check over the eight scenarios. No external paths, no writes
 # outside the fixture directory.
 run_test_matrix() {
@@ -243,6 +244,13 @@ FIXTURE
   sources: [src/widgets/Widget.cs]
 FIXTURE
 
+    command -v git >/dev/null 2>&1 || {
+        echo "ctx docs gate: the matrix needs git for the claimant trackedness probe" >&2
+        return 1
+    }
+    git -C "$FIXTURE_DIR" init -q
+    git -C "$FIXTURE_DIR" add docs/demo/widgets.md docs/demo/platform.md
+
     echo "================================================================="
     echo "  CLOSE GATE TEST MATRIX: 8 SCENARIOS (self-planted fixtures)"
     echo "================================================================="
@@ -253,7 +261,7 @@ FIXTURE
         expected="$2"
         input="$3"
         code=0
-        out="$(printf '%s' "$input" | run_gate_check_for "$FIXTURE_DIR" 2>&1)" || code=$?
+        out="$(printf '%s' "$input" | (cd "$FIXTURE_DIR" && awk -f "$AWK_CHECK" docs/demo/*.md) 2>&1)" || code=$?
         echo ""
         echo "[$name]"
         echo "$out"

@@ -126,7 +126,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 
 | command | what it returns |
 |---|---|
-| ctx help | The runtime summary: `ctx run`, `ctx session` with its verbs, and every discovered module with the verbs it carries |
+| ctx help | The runtime summary: `ctx run`, `ctx session` with its verbs, and every discovered module with its summary line |
 | ctx session help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
 | ctx session active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
 | ctx session bootstrap <slug> "<objective>" [<repos>] | A new unit: the folder, state at A0, the three empty artifacts, and the folded A1 receipt; prints the state and the next move |
@@ -161,7 +161,7 @@ The recording forms are the write side of the toolbox: `append` lands entries, f
 
 ## Maintaining contexture
 
-This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) is untracked working state, this repository's own running installation, and it keeps working through every change.
+This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus (`docs/workspace/`) are untracked working state, this repository's own running installation and operational corpus, and they keep working through every change; the guides (`docs/*.md`) stay tracked.
 
 The dev loop:
 

@@ -235,18 +235,20 @@ it walk below runs every one of these.
 - Harness-free by design: nothing fires automatically. The close gate and the
   nudge are invoked at their moments (boot, close, a setup task), or wired
   into the adopter's own trigger surface. This plugin ships no trigger.
-- The five verbs are thin wrappers over the private engines under
-  `.contexture/modules/docs/scripts/`: the three delegating verbs exec their
-  engine directly, and the engines' shebang names `/usr/bin/awk` (the same
-  launcher form the base scripts use). A system whose awk lives elsewhere
-  invokes the engines via `awk -f <path>` instead.
+- The five verbs ride the private engines under
+  `.contexture/modules/docs/scripts/`: audit, check, and nudge exec their
+  engine directly, query drives its engine with parsed options, and gate is
+  self-contained over the audit and check engines. The engines' shebang names
+  `/usr/bin/awk` (the same launcher form the base scripts use). A system whose
+  awk lives elsewhere invokes the engines via `awk -f <path>` instead.
 - The verbs refuse a bare invocation (no arguments) loudly instead of
   reading standard input as an empty corpus: the corpus files are the
   invocation. A wrong invocation never returns a plausible-but-empty result.
 - The sample corpus is fictional and reference-only; the adopter's corpus is
   the real subject.
 - The gate's matrix is self-planted: it builds its fixtures with `mktemp`,
-  writes nothing outside them, and needs no repository.
+  plants a local repository inside them for the claimant trackedness probe,
+  and writes nothing outside the fixture directory.
 - The single-repo mapping is documented, not scripted: the check maps
   non-workspace docs through `projects/<repo>/`. A corpus whose code sits at
   the root marks its docs `repo: workspace`, or the adoption calibrates the
@@ -278,6 +280,19 @@ it walk below runs every one of these.
   clean verdict; coverage counts only the listed extensions; deleting a unit
   doc does not red the check. The gate stays scoped to the change delta,
   never the corpus's truth.
+- The governed guide pages count as governed files: a depth-1 `docs/*.md`
+  claimed by a corpus doc's sources demands its claimant ride the same delta
+  (`STALE DOC` with `guide modified without corpus update` otherwise);
+  unclaimed markdown stays outside, and the corpus itself (`docs/*/*.md`)
+  never enters the governed set. The untracked-claimant verdict covers every
+  governed file, the claimed code extensions included: when all of a file's
+  claimants are untracked, none can ride a tracked delta, so the check
+  reports the state (`UNTRACKED CLAIMANT` plus the claimant paths and the
+  process-owned reconciliation via the docs-drift flow) and exits 0 instead
+  of a false `STALE`; one tracked claimant among several restores the delta
+  rule. The trackedness probe runs `git ls-files` per unique claimant and
+  memoizes it; a non-repository run reads every claimant untracked, which is
+  the honest state there.
 - The excluded set is path-shaped: the generated and test families
   (`.spec.`, `.Test`, `.min.`, `.generated.`) plus any path segment named
   `spec` (including a top-level `spec/`), so a repository or directory
@@ -293,10 +308,12 @@ it walk below runs every one of these.
 ## Needs
 
 POSIX awk/sh, the base `ctx` runtime (the plugin ships the module, not the
-engine), and git for the close gate's delta (the check otherwise runs on
-plain files; the matrix and the audit need no repository). Nothing is
-installed: no runtime, no network. The optional ast-doc-graph plugin pairs
-with this one: its docs extractor reads the corpus grammar.
+engine), and git for the close gate's delta, the check's claimant trackedness
+probe, and the matrix's planted fixture repository (a non-repository run of
+the check reads claimants untracked and reports the process-owned verdict;
+the audit needs no repository). Nothing is installed: no runtime, no network.
+The optional ast-doc-graph plugin pairs with this one: its docs extractor
+reads the corpus grammar.
 
 ## Contributing
 
@@ -488,7 +505,7 @@ printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | ./.contexture/ctx doc
 ```
 
 ```text
-docs-check: FAILED: 1 code file(s) are stale (code changed without doc update).
+docs-check: FAILED: 1 file(s) are stale (changed without a doc update).
 ...
 STALE DOC: demo-orders/order-flow (code modified without doc update)
   file: projects/demo-orders/src/order/validate.ts
@@ -617,7 +634,7 @@ help:
 | `.contexture/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (`DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, and the help moved into the declarations |
 | `.contexture/modules/docs/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/modules/docs/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
-| `.contexture/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict |
+| `.contexture/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`) |
 | `.contexture/modules/docs/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/modules/docs/README.md` | authored fresh: the off-path module map (layout, workspace root, tests) |
 | `.contexture/templates/doc.md` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII |
