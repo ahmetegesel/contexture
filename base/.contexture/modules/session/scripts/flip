@@ -2,5 +2,9 @@
 # summary: move a task's STATUS: todo reopens, progress activates, done completes with a receipt
 # usage: ctx session flip <slug> <todo | progress | done> <task-slug> [<task-slug> ...]
 # help: todo reopens (TODO); progress activates (IN_PROGRESS; the state must already name the slug, run next first); done completes (pipe the receipt @entry; its WHAT carries "backlog/<task-slug>: DONE" with the evidence per slug); one call takes many slugs
+# help: on done, pipe one @entry receipt on stdin; WHAT must contain "backlog/<task-slug>: DONE <evidence>"; ANCHOR is derived from state and must be omitted; entry date must be today; THREAD: none
+# help: exit codes: 0 task status flipped; 1 invalid verb, task not found, state does not name task (for progress), or invalid receipt entry (for done)
+# help: example: ctx session flip my-unit progress task-slug
+# help: example: printf '@entry 2026-09-25-done-task\n  WHAT: "backlog/task-slug: DONE with test passing"\n  THREAD: none\n' | ctx session flip my-unit done task-slug
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/record" flip "$@"

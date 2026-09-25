@@ -2,6 +2,8 @@
 # summary: the session audit: closures, entry grammar, the backlog and state cross-checks; prints the open thread tail
 # usage: ctx session audit <slug>
 # help: the repair instrument: fix what it flags, fill what is missing; rc=1 on dangling or slugless closers, dateless entry slugs, inline markers on @entry lines, bracketed field lines, unharvested KNOWLEDGE flags, DONE tasks without their backlog/<slug>: DONE event, IN_PROGRESS tasks absent from state.md, and entries dated at or after ENF_FROM missing THREAD; each finding is flagged by slug (some also by line); when the run is clean, also prints the open thread tail with its targets; the tail is a display, never an enforcement: a thread paused stays open; an unreadable sibling skips its check quietly
+# help: exit codes: 0 session audit clean (open thread tail printed if any); 1 grammar, closure, or consistency findings detected
+# help: example: ctx session audit my-unit
 
 function usage() {
   print "Usage: ctx session audit <session-slug>" > "/dev/stderr"

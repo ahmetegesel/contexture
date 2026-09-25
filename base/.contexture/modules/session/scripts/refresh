@@ -2,6 +2,8 @@
 # summary: the refresh core: the live board, then the audit (its rc is the verb's rc), then the refresh hooks
 # usage: ctx session refresh <slug>
 # help: runs the live board, then the audit (its rc is the verb's rc), then the refresh hooks; a failing block hook fails the verb when the audit was clean
+# help: exit codes: 0 board and audit clean; 1 audit failure or failing block hook
+# help: example: ctx session refresh my-unit
 prog="ctx session refresh"
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$dir/../../../.." && pwd)

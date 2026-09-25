@@ -4,6 +4,17 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.51.4] - 2026-09-25
+
+### Added
+
+- Added `engine-blackbox` law and mechanical `TEST` to `base/AGENTS.md` and `docs/the-engine.md`, mandating that agents treat `.contexture/` runtime scripts as closed executables, discover contracts strictly through `ctx help` and templates, and rely on CLI error feedback rather than inspecting runtime script implementations.
+
+### Fixed
+
+- Complete CLI help coverage for `session` module: updated all sixteen verbs in `base/.contexture/modules/session/scripts/` to provide exhaustive usage lines, behavior explanations, exit codes, and self-contained copy-pasteable examples. Explicitly documented stdin block requirements for `flip`, `append`, `amend`, and `drop`, and clarified that `ANCHOR` is derived from state and must not be passed.
+- Complete CLI help coverage for `ideas` module: updated `add`, `drop`, `list`, `pick`, and `show` in `.contexture/modules/ideas/scripts/` with usage, exit codes, examples, and the full `@idea` block schema for `ctx ideas add`.
+
 ## [0.51.3] - 2026-09-23
 
 ### Fixed

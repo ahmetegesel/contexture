@@ -16,7 +16,7 @@ The sections are a tour of the convention:
 
 | section | what it carries |
 |---|---|
-| `@laws` | the eight slug-addressed laws |
+| `@laws` | the ten slug-addressed laws |
 | `@layout` | where every file lives and what it is for |
 | `@record` | the artifact map: what each artifact records and why |
 | `@journal` | the event workflow: formation, substance, liveness, markings |
@@ -34,16 +34,18 @@ The sections are a tour of the convention:
 
 ### The laws
 
-The laws are the spine of the whole system, and they ride with the agent every turn. Each law reads `slug: statement`, and a reference addresses the slug, as in `@laws#verify-before-close`. The current eight:
+The laws are the spine of the whole system, and they ride with the agent every turn. Each law reads `slug: statement`, and a reference addresses the slug, as in `@laws#verify-before-close`. The current ten:
 
 - `source-of-truth`: session files are the only source of truth, never the conversation.
 - `load-only-needed`: load only what the work needs; closed sessions stay untouched unless the task calls for them.
+- `compact-streams`: all shell commands execute through the ctx runner to preserve context window capacity.
 - `writer-holds-volume`: the schema holds the shape, the writer holds the volume.
 - `process-free`: process is free and human-chosen; govern the output, not the process.
 - `compose-from-record`: compose from the record, never from the conversation.
 - `verify-before-close`: no done without evidence, and never a claim of verification not performed.
 - `harvest-the-human`: durable knowledge is surfaced by question, crystallized, and landed with approval.
 - `workspace-confinement`: the workspace is the boundary; the agent never roams outside it.
+- `engine-blackbox`: the engine is an execution runtime, never reading material; discover contracts via help and templates, never by inspecting script implementations.
 
 Slug addressing is what lets the set grow and the overlays extend it. A positional name would force every reference to chase every insertion; a slug is stable for life, and an overlay can append its own laws at the end without renumbering anything.
 

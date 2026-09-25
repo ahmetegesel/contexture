@@ -2,5 +2,8 @@
 # summary: remove task blocks; the record lands first, then the blocks go
 # usage: ctx session drop <slug> <task-slug> [<task-slug> ...]  (stdin: the record block)
 # help: pipe the record @entry; its WHAT names every <task-slug>; an IN_PROGRESS task the state still names refuses (run next first)
+# help: stdin requires one @entry block; WHAT must explicitly name each dropped task slug; ANCHOR is derived from state and must be omitted; THREAD: none
+# help: exit codes: 0 tasks dropped; 1 bad argument, missing task, invalid record entry, or state still names IN_PROGRESS task
+# help: example: printf '@entry 2026-09-25-drop-task\n  WHAT: "Dropped task-slug: no longer needed"\n  THREAD: none\n' | ctx session drop my-unit task-slug
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/record" drop "$@"

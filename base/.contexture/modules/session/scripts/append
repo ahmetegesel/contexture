@@ -2,5 +2,9 @@
 # summary: append one or more blocks to the session; the block's first line decides (@entry, @finding, @task)
 # usage: ctx session append <slug>  (stdin: one or more blocks)
 # help: the block's first line decides: @entry <date>-<slug> (templates/journal.md), @finding <NAME> (templates/knowledge.md), @task <slug> (templates/backlog.md); every @entry declares THREAD: <what it awaits> | none; pipe the blocks on stdin; ANCHOR is derived from the state; every input validates before any write; a refusal names the field at fault and the fix
+# help: ANCHOR is derived from state.md and must be omitted; entry dates must match today's date (YYYY-MM-DD); finding NAME must be uppercase alphanumeric/underscore; tasks require STATUS: TODO and one quoted OBJECTIVE line
+# help: exit codes: 0 block(s) appended; 1 validation refusal or missing unit
+# help: example: printf '@entry 2026-09-25-event\n  WHAT: "Event description"\n  THREAD: none\n' | ctx session append my-unit
+# help: example: printf '@task task-slug\n  STATUS: TODO\n  OBJECTIVE: "Task intent"\n' | ctx session append my-unit
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/record" append "$@"

@@ -12,6 +12,11 @@
 # usage: ctx session query lane <unit> <lane>
 # usage: ctx session query search <unit> <term>
 # help: one kind per call, no flags; every miss is rc=1 with a named error, never an empty success; outputs are bounded by construction (group and search snippets cut at 90 bytes on word boundaries; search at 50 lines with a trailing count); entry, finding, and resolved blocks render verbatim; names match exactly and shapes validate before any output or read; a block starts at a column-0 ^@[A-Za-z] line and ends at the line before the next block start or EOF
+# help: exit codes: 0 match found and printed; 1 miss, unknown query kind, or validation failure
+# help: example: ctx session query entry my-unit 2026-09-25-event
+# help: example: ctx session query finding my-unit FINDING_NAME
+# help: example: ctx session query resolve my-unit "knowledge.md#FINDING_NAME"
+# help: example: ctx session query search my-unit keyword
 
 function usage() {
   print "Usage: ctx session query <kind> [args]" > "/dev/stderr"

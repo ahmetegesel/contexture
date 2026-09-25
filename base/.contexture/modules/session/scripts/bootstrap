@@ -2,6 +2,9 @@
 # summary: create the unit folder, state at A0 folded to A1, the three artifacts; prints the state and "next: declare the first task"
 # usage: ctx session bootstrap <slug> "<objective>" [<repos>]
 # help: validates every argument before any filesystem write; refusals rc=1 with zero partial writes (existing slug, malformed slug, empty objective, embedded newline, extra arguments)
+# help: objective must be in double quotes without embedded quotes; optional repos is a comma-separated list of repository names
+# help: exit codes: 0 unit created at A1; 1 unit exists, missing arguments, or malformed input
+# help: example: ctx session bootstrap my-feature "Implement feature X"
 # The state grammar cannot carry brackets or quotes in repos, or quotes in
 # the objective: those values are refused naming the character.
 

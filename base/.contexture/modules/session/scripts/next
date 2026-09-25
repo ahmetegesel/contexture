@@ -1,6 +1,8 @@
 #!/bin/sh
 # summary: overwrite next_action with the pointer
 # usage: ctx session next <slug> "<pointer>"
-# help: refuses when an IN_PROGRESS task would go unnamed
+# help: overwrites next_action in state.md with the given pointer; pointer must be in double quotes and must explicitly name all currently IN_PROGRESS tasks
+# help: exit codes: 0 pointer updated; 1 missing argument or an IN_PROGRESS task would be omitted from pointer
+# help: example: ctx session next my-unit "my-task IN_PROGRESS: implement driver interface"
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/record" next "$@"

@@ -189,4 +189,4 @@
   WHAT :: Make the ctx session CRUD commands first-shot-correct: structured arguments instead of raw block heredocs where possible, validation errors carrying the exact expected shape, and nudges that steer the next attempt (a malformed append teaches its grammar instead of failing tersely); first-attempt success, second at worst, never repeated blind retries.
   WHY :: Agents routinely mis-enter blocks, fields, slugs, and dates (this session's retries: hyphenated finding names, missing REF symbols, an apostrophe in a bootstrap objective); each failure costs a roundtrip and invites improvisation.
   REF: "docs/modules.md"
-  STATUS: OPEN
+  STATUS: PICKED cli-help-and-governance

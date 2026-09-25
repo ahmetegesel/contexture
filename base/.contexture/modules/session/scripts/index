@@ -2,6 +2,8 @@
 # summary: the rhythm index from .contexture/rhythms/ as name (path) | use when | activation
 # usage: ctx session index
 # help: no arguments: reads .contexture/rhythms/*.md; an argument refuses rc=1
+# help: exit codes: 0 rhythm index printed; 1 unexpected argument passed
+# help: example: ctx session index
 
 function usage() {
   print "Usage: ctx session index" > "/dev/stderr"

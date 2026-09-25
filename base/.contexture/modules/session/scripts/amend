@@ -1,6 +1,10 @@
 #!/bin/sh
 # summary: replace task fields in place; the rest of the task stays byte-identical
 # usage: ctx session amend <slug> <task-slug>  (stdin: one or more field blocks)
-# help: <task-slug> names the task; pipe one or more labeled field blocks (OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::); STATUS is not amendable (run flip)
+# help: <task-slug> names the task; pipe one or more labeled field blocks (OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::); STATUS is not amendable (use flip)
+# help: field blocks start with the field label; body lines for block scalars (::) indent 4 spaces; existing omitted fields remain unchanged
+# help: exit codes: 0 task fields amended; 1 invalid argument, unknown unit/task, or malformed field block
+# help: example: printf '  OBJECTIVE: "updated objective"\n' | ctx session amend my-unit my-task
+# help: example: printf '  DESCRIPTION ::\n    Updated description.\n' | ctx session amend my-unit my-task
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/record" amend "$@"

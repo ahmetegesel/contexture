@@ -2,6 +2,8 @@
 # summary: bump the session anchor and append the load receipt
 # usage: ctx session stamp <slug> "<attention>"
 # help: derives A<N> from state.md, rewrites current_anchor to A<N+1> through a unique same-directory temp plus mv, appends the anchor receipt to journal.md, and prints the transition; malformed state, an empty, whitespace-only, or newline-carrying attention refuses rc=1 with no partial write
+# help: exit codes: 0 anchor bumped and transition printed; 1 empty attention or malformed state
+# help: example: ctx session stamp my-unit "loaded state, backlog, knowledge, journal; git clean"
 
 function usage() {
   print "Usage: ctx session stamp <session-slug> \"<attention>\"" > "/dev/stderr"
