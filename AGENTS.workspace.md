@@ -18,7 +18,7 @@
   .contexture/modules/docs/: the corpus module: the verbs ctx docs query, audit, check, gate, nudge (ctx docs help lists them)
 
 @append @backlog
-  ideas: IDEAS.md is the upstream idea and need dump: ideas and needs land as light @idea entries and are picked up from there; dump freely, the agent appends on the human's word and proposes a dump when a discovery would otherwise die in conversation; loaded on demand only, never at boot; picking up = bootstrap the unit and flip the entry to PICKED <unit>; entries are never deleted
+  ideas: the upstream idea and need dump is managed and queried strictly through the ideas module (ctx ideas list, show, add, pick, drop); ideas land as light @idea entries and are picked up from there; dump freely, the agent appends on the human's word and proposes a dump when a discovery would otherwise die in conversation; loaded on demand only via ctx ideas show <slug>, never at boot; picking up = bootstrap the unit and flip the entry to PICKED <unit>; entries are never deleted
 
 @append @subagents
   branch/worktree: the recipe names the branch/worktree the subagent works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every subagent of the unit works there; the subagent's journal and report stay in the session folder

@@ -11,7 +11,7 @@ One unit of work, one folder, four files, each with a single job:
 | `journal.md` | the memory: what happened, as it happened | appended; closed only by later reference |
 | `knowledge.md` | the mind: what was settled | appended; superseded forward by reference |
 
-The files are the system, and they are agent-facing: the agent maintains them as it works, and the human reads prose rendered from them on request, never the artifacts themselves.
+The files are the system, and they are agent-facing: the agent maintains them as it works, and the human reads prose rendered from them on request, never the artifacts themselves. Under @laws#record-blackbox, the CLI is the single doorway: agents interact with the record strictly through ctx session tooling, never reading, editing, or grepping session files directly.
 
 One verb set carries every write: the recording acts on `ctx session`. `append` lands journal entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. The shapes ride the templates, and every form validates before it writes, so a refusal is loud and leaves nothing partial.
 
@@ -45,7 +45,7 @@ The unit's actionable tasks as a living queue: the current declaration of work, 
 @task auth-cookie-sessions
   STATUS: IN_PROGRESS
   OBJECTIVE: "Replace the token cache with cookie sessions"
-  REFS: [journal.md#2026-09-12-auth-cookie-decision, knowledge.md#SESSION_TOKEN_SHAPE, file#src/auth/middleware.ts]
+  REFS: [journal#2026-09-12-auth-cookie-decision, knowledge#SESSION_TOKEN_SHAPE, file#src/auth/middleware.ts]
   DESCRIPTION ::
     context, the problem statement, and the scope
   ACCEPTANCE CRITERIA ::
@@ -63,7 +63,7 @@ Three fields carry the task's identity: `STATUS` (`TODO`, `IN_PROGRESS`, `DONE`)
 
 The dedicated containers are the point: technical substance gets a natural home instead of being packed into forced exit conditions or dropped for brevity.
 
-`REFS` names its targets exactly, as `path#symbol`: a journal entry (`journal.md#slug`), a subagent report (`lanes/x/report.md#claim`), a knowledge finding (`knowledge.md#NAME`), or any artifact (`file#symbol`). The ref navigates; it never substitutes for the meaning. The task must read alone, with the full picture, no matter when the agent looks at it: material living only in the conversation lands in the record first, then the task cites it.
+`REFS` names its targets exactly, as `target#symbol`: a journal entry (`journal#slug`), a subagent report (`lanes/x/report#claim`), a knowledge finding (`knowledge#NAME`), or a code symbol (`file#symbol`). The ref navigates; it never substitutes for the meaning. The task must read alone, with the full picture, no matter when the agent looks at it: material living only in the conversation lands in the record first, then the task cites it.
 
 The backlog mutates in place as the work teaches. A mid-stride pivot inserts a fresh `@task` block without rewriting the standing ones; a task that turned out wrong or unneeded is dropped. Statuses advance as work moves: active work marks `IN_PROGRESS`; completion marks `DONE` and lands one journal line, `backlog/<slug>: DONE`, carrying its evidence, the command run and its observed result.
 
@@ -122,7 +122,7 @@ Knowledge holds what the unit settled, each finding written at the moment of a d
 
 - `@finding NAME` opens a block. The name is the finding's identity, and a later successor targets it.
 - `SUPERSEDES: <ref> (reason)` appears on a revision and names the finding it replaces. Supersession is forward-only: the predecessor is never touched.
-- `REF: "path#symbol"` points at the full version in an append-only artifact: `journal.md#entry` or `lanes/x/report.md#claim`. Never a dynamic file: references of record must survive. Where no stable full version exists, the `SUMMARY` carries the whole story. A finding with no ref and no story is a hypothesis: useful for questions, never a base for tasks.
+- `REF: "target#symbol"` points at the full version in an append-only artifact: `journal#entry` or `lanes/x/report#claim`. Never a dynamic surface: references of record must survive. Where no stable full version exists, the `SUMMARY` carries the whole story. A finding with no ref and no story is a hypothesis: useful for questions, never a base for tasks.
 - `SUMMARY ::` carries the settled claim.
 
 A finding lands only through the harvest of a `KNOWLEDGE: true` entry: the agent proposes one compact candidate, the human confirms or reshapes it, and the entry closes by reference. A candidate that is not confirmed drops; nothing lands just to be recorded.

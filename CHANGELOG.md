@@ -4,6 +4,18 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.51.5] - 2026-09-25
+
+### Added
+
+- Added `record-blackbox` law to `base/AGENTS.md` and `docs/the-record.md`, establishing the record as a conceptual data surface accessed exclusively through `ctx session` tooling rather than raw file viewing or editor tools.
+
+### Changed
+
+- Grounded reference syntax across `base/AGENTS.md`, base templates (`backlog.md`, `journal.md`, `knowledge.md`), and `docs/the-record.md`: standardized on logical `target#symbol` references (such as `journal#slug`, `knowledge#NAME`, `file#symbol`) rather than physical relative filesystem paths (`path#symbol (journal.md#slug)`).
+- Replaced file-centric phrasing in base governance with conceptual record terminology (`the record` as the single source of truth, `the state`, `the backlog`, `knowledge`).
+- Updated `AGENTS.workspace.md` to explicitly teach CLI tooling access for the `ideas` module (`ctx ideas list, show, add, pick, drop`), decoupling workspace idea access from raw file operations.
+
 ## [0.51.4] - 2026-09-25
 
 ### Added

@@ -21,7 +21,7 @@ the unit's objective lives in state.md; backlog.md carries the actionable tasks.
 @task pdm-cdk-stream-export
   STATUS: TODO
   OBJECTIVE: "Export PDM campaignPrices DynamoDB table stream ARN to SSM Parameter Store"
-  REFS: [knowledge.md#Step_1_Grounding, file#lib/stack.ts]
+  REFS: [knowledge#Step_1_Grounding, file#lib/stack.ts]
   DESCRIPTION ::
     Decouple consumer stack internals by exporting table stream ARN to SSM.
     Enables cross-stack stream subscription without CloudFormation export coupling.
