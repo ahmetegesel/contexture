@@ -38,12 +38,11 @@ case "$0" in
 esac
 AWK_AUDIT="$dir/docs-audit.awk"
 AWK_CHECK="$dir/docs-check.awk"
-root=""
-p=$dir
-while [ "$p" != "/" ] && [ "${p##*/}" != ".contexture" ]; do p=${p%/*}; done
-[ "${p##*/}" = ".contexture" ] && root=${p%/*}
-[ -n "$root" ] || root=$(cd "$dir/../../.." && pwd)
-WORKSPACE_ROOT="${DOCS_WORKSPACE_ROOT:-${CTX_ROOT:-$root}}"
+# the workspace root and the corpus (through the configured storage driver) come from the
+# module's IO helper
+. "$dir/docs-io.sh"
+docs_io_init "$dir" gate
+WORKSPACE_ROOT="$DOCS_ROOT"
 PRODUCT_REPOS_DIR="${DOCS_PRODUCT_REPOS_DIR:-projects}"
 
 # Function to aggregate git changes across workspace and product repos
@@ -208,18 +207,35 @@ check_drift_warnings() {
     fi
 }
 
-# Run syntax/integrity audit across all typed documentation
-run_audit_for() {
-    awk -f "$AWK_AUDIT" "$1"/docs/*/*.md
+# The corpus the audit and the check read: the whole corpus mounted once through the
+# configured storage driver before any pipeline (so the scratch and its cleanup stay with
+# this shell); an empty corpus or a driver without one refuses
+prepare_corpus() {
+    if docs_corpus; then
+        return 0
+    else
+        pc_rc=$?
+    fi
+    [ "$DOCS_ERR" = empty ] && echo "ctx docs gate: the corpus is empty" >&2
+    exit "$pc_rc"
 }
+
+# run_engine_over_corpus <engine>: the engine over every mounted doc (display paths as the
+# files driver prints them)
+run_engine_over_corpus() {
+    eng="$1"
+    set --
+    while IFS= read -r doc_path; do
+        set -- "$@" "$doc_path"
+    done < "$DOCS_PATHS"
+    docs_run awk -f "$eng" "$@"
+}
+
+# Run syntax/integrity audit across all typed documentation
+run_audit() { run_engine_over_corpus "$AWK_AUDIT"; }
 
 # Run coverage, freshness, and dead sources check on streamed diff
-run_gate_check_for() {
-    awk -f "$AWK_CHECK" "$1"/docs/*/*.md
-}
-
-run_audit() { run_audit_for "$WORKSPACE_ROOT"; }
-run_gate_check() { run_gate_check_for "$WORKSPACE_ROOT"; }
+run_gate_check() { run_engine_over_corpus "$AWK_CHECK"; }
 
 # Self-planted test matrix: builds its own fixture corpus with mktemp, plants
 # a local repository inside it for the claimant trackedness probe, then
@@ -316,12 +332,15 @@ if [ "$1" = "-" ] || [ "$1" = "--stdin" ]; then
         echo "ctx docs gate: --stdin specified but standard input is a terminal (no piped input)." >&2
         exit 1
     fi
+    prepare_corpus
     run_audit
     run_gate_check
 elif [ "$1" = "--drift" ]; then
+    prepare_corpus
     run_audit
     aggregate_remote_drift_changes | sort -u | run_gate_check
 elif [ -z "$1" ]; then
+    prepare_corpus
     run_audit
     check_drift_warnings
     aggregate_git_changes | sort -u | run_gate_check

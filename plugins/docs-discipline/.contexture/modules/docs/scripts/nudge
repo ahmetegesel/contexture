@@ -1,9 +1,12 @@
 #!/bin/sh
-# summary: the task nudge over the active backlog and the corpus
+# summary: the task nudge over the active task and the corpus
+# usage: ctx docs nudge <unit> [<repo>...]
 # usage: ctx docs nudge backlog.md docs/<repo>/*.md
-# help: reads the active task from the backlog and prints the matched docs, the top pitfalls, and (when the task names setup verbs) the owning operational doc's run, build, and test targets with its toolchain note
-# help: exit codes: 0 the nudge printed (matched docs may be none); 2 unreadable input (the awk engine's own failure)
-# help: example: ctx docs nudge backlog.md docs/*/*.md
+# help: reads the active task (the unit's first IN_PROGRESS task in backlog order, through ctx session task list and ctx session resolve) and prints the matched docs, the top pitfalls, and (when the task names setup verbs) the owning operational doc's run, build, and test targets with its toolchain note
+# help: the corpus comes from the configured storage driver: the whole corpus, or the named repos' docs
+# help: the backlog-file form reads a backlog outside the record (the plugin's demo); a path inside the sessions drawer refuses: a record artifact is read through its unit, never as a file
+# help: exit codes: 0 the nudge printed (matched docs may be none; nothing when the unit has no IN_PROGRESS task); 1 a unit, repo, doc, or backlog path refused; 2 unreadable input (the awk engine's own failure) or a storage driver without a corpus
+# help: example: ctx docs nudge storage
 
 case "$1" in
   help|--help|-h)
@@ -23,4 +26,26 @@ if [ "$#" -eq 0 ]; then
 fi
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/docs-nudge.awk" "$@"
+. "$dir/docs-io.sh"
+docs_io_init "$dir" nudge
+first=$1
+shift
+
+if docs_file_form "$first"; then
+  # the backlog-file form: a record artifact is never read as a file (the single store)
+  if docs_record_file "$first"; then
+    echo "ctx docs nudge: a record artifact is read through its unit, never as a file: ctx docs nudge <unit> [<repo>...]" >&2
+    exit 1
+  fi
+  docs_args 0 1 "$@" || exit $?
+  docs_no_display
+  docs_exec "$dir/docs-nudge.awk" "$first"
+fi
+
+# the unit form: the active task through ctx session (the configured store)
+docs_args 1 1 "$@" || exit $?
+docs_no_display
+docs_active_task "$first" || exit $?
+[ -n "$DOCS_TASK" ] || exit 0
+DOCS_KEEP=1
+docs_exec "$dir/docs-nudge.awk" "$DOCS_TASK"

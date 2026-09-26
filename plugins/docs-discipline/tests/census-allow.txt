@@ -1,0 +1,113 @@
+# census-allow.txt: the classified lines of the docs module's single-door census (tests/census.sh).
+# One entry per flagged line outside docs-io.sh: <class><TAB><file><TAB><the line as written>.
+# Classes: helper-source (a verb sources the one door); helper-output (a verb consumes the
+# paths or runs the engine the helper handed it); usage-text (a refusal message naming a
+# form); delta-read (the check's stdin delta); claimant-probe (the check's git trackedness
+# probe of a claimant doc path, turned off under a store's change log in B4); engine-output
+# (an engine prints); engine-path-logic (an engine reads FILENAME or matches the address
+# shape, no IO); git-delta (the gate's code half from git); topology-probe (the gate's
+# product repository and .git probes, never the corpus); matrix-fixture (the gate's
+# self-planted matrix, files by construction); false-positive (an instrument B pattern
+# inside a word). A new corpus read or path print outside the helper lands here only by an
+# explicit edit, which is the point: it stays visible.
+claimant-probe	docs-check.awk	    cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
+claimant-probe	docs-check.awk	    rc = system(cmd)
+delta-read	docs-check.awk	    while ((getline raw_line < input_src) > 0) {
+engine-output	docs-audit.awk	    print file ":" line ": error: " msg > "/dev/stderr"
+engine-output	docs-audit.awk	        print "docs-audit: FAILED with " errors " error(s)" > "/dev/stderr"
+engine-output	docs-check.awk	            print "AFFECTED: " s " [" slug_repo[s] "] -> " slug_doc[s]
+engine-output	docs-check.awk	                    print "FRESH (BLANKET): " slug_repo[s] " > " s " (counted fresh only because an architecture/overview/workspace doc was touched)"
+engine-output	docs-check.awk	                    print "FRESH: " slug_repo[s] " > " s " (doc updated in change delta)"
+engine-output	docs-check.awk	            print "docs-check: FAILED: " uncovered_count " code file(s) are uncovered by any documentation." > "/dev/stderr"
+engine-output	docs-check.awk	            print "docs-check: FAILED: " stale_count " file(s) are stale (changed without a doc update)." > "/dev/stderr"
+engine-output	docs-check.awk	            print "docs-check: FAILED: " num_dead_sources " deleted file(s) still explicitly listed in doc sources." > "/dev/stderr"
+engine-output	docs-query.awk	                print "[" curr_repo " > " curr_slug " (" curr_kind ")]"
+engine-output	docs-query.awk	                print "[" curr_repo " > " curr_slug "]"
+engine-output	docs-query.awk	    print "! [" sev_tag "] " p_id ": " p_sum " (" curr_slug ".md)"
+engine-output	docs-query.awk	            print "[" curr_slug " > " section "]"
+engine-path-logic	docs-audit.awk	    prev_file = FILENAME
+engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "first line must be @doc <kind> <slug>")
+engine-path-logic	docs-audit.awk	            err(FILENAME, FNR, "invalid doc kind '" kind "'")
+engine-path-logic	docs-audit.awk	            err(FILENAME, FNR, "missing doc slug")
+engine-path-logic	docs-audit.awk	        file_slug = FILENAME
+engine-path-logic	docs-audit.awk	        sub(/\.md$/, "", file_slug)
+engine-path-logic	docs-audit.awk	            err(FILENAME, FNR, "slug '" slug "' does not match filename '" file_slug "'")
+engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "unknown block header '" current_block "'")
+engine-path-logic	docs-audit.awk	            err(FILENAME, FNR, "@rule requires an identifier (e.g. category/rule-slug)")
+engine-path-logic	docs-audit.awk	            err(FILENAME, FNR, "duplicate rule identifier '" rule_id "' in repo '" curr_repo "' (first seen at " seen_rules[scope_rule] ")")
+engine-path-logic	docs-audit.awk	            seen_rules[scope_rule] = FILENAME ":" FNR
+engine-path-logic	docs-audit.awk	    err(FILENAME, FNR, "malformed block header '" $0 "'")
+engine-path-logic	docs-audit.awk	    err(FILENAME, FNR, "line must indent at least 2 spaces: '" $0 "'")
+engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "directive must be 'must', 'should', or 'never', got '" dir "'")
+engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "evidence must be greppable code symbols, never line numbers: '" $0 "'")
+engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "duplicate pitfall id '" pid "' in repo '" curr_repo "' (first seen at " seen_pitfalls[scope_pid] ")")
+engine-path-logic	docs-audit.awk	        seen_pitfalls[scope_pid] = FILENAME ":" FNR
+engine-path-logic	docs-check.awk	    GUIDE_RE = "^docs/[^/]+\\.md$"
+engine-path-logic	docs-check.awk	        if (line ~ /docs\/[^\/]+\/[^\/]+\.md$/) {
+engine-path-logic	docs-check.awk	            match(line, /docs\/[^\/]+\/[^\/]+\.md$/)
+engine-path-logic	docs-check.awk	            sub(/\.md$/, "", d_slug)
+engine-path-logic	docs-check.awk	    curr_file = FILENAME
+engine-path-logic	docs-query.awk	    curr_file = FILENAME
+false-positive	docs-nudge.awk	    num_pitfalls = 0
+false-positive	docs-nudge.awk	    in_pitfalls = 0
+false-positive	docs-nudge.awk	        if (/^@pitfalls/) { in_pitfalls = 1; next }
+false-positive	docs-nudge.awk	                if (num_pitfalls < 3) {
+false-positive	docs-nudge.awk	    if (num_pitfalls > 0) {
+false-positive	nudge	if docs_file_form "$first"; then
+git-delta	gate	        git diff --name-status 2>/dev/null || true
+git-delta	gate	        git diff --name-status --cached 2>/dev/null || true
+git-delta	gate	        git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
+git-delta	gate	                    git diff --name-status 2>/dev/null || true
+git-delta	gate	                    git diff --name-status --cached 2>/dev/null || true
+git-delta	gate	                    git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
+git-delta	gate	            if ! git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+git-delta	gate	            if git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+git-delta	gate	                git diff --name-status "HEAD...$remote_ref" 2>/dev/null || true
+git-delta	gate	            branch=$(git -C "$pdir" branch --show-current 2>/dev/null || echo "")
+git-delta	gate	            if ! git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+git-delta	gate	            if git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+git-delta	gate	                behind=$(git -C "$pdir" rev-list --count "HEAD..$remote_ref" 2>/dev/null || echo 0)
+helper-output	audit	docs_args 1 0 "$@" || exit $?
+helper-output	audit	docs_exec "$dir/docs-audit.awk"
+helper-output	check	docs_args 0 0 "$@" || exit $?
+helper-output	check	docs_exec "$dir/docs-check.awk"
+helper-output	gate	        set -- "$@" "$doc_path"
+helper-output	gate	    done < "$DOCS_PATHS"
+helper-output	gate	    docs_run awk -f "$eng" "$@"
+helper-output	nudge	  docs_args 0 1 "$@" || exit $?
+helper-output	nudge	  docs_exec "$dir/docs-nudge.awk" "$first"
+helper-output	nudge	docs_args 1 1 "$@" || exit $?
+helper-output	nudge	docs_exec "$dir/docs-nudge.awk" "$DOCS_TASK"
+helper-output	query	  set -- "$@" "$DOC_PATH"
+helper-output	query	done < "$DOCS_PATHS"
+helper-output	query	    -f "$AWK_SCRIPT" "$@")
+helper-source	audit	. "$dir/docs-io.sh"
+helper-source	check	. "$dir/docs-io.sh"
+helper-source	gate	. "$dir/docs-io.sh"
+helper-source	nudge	. "$dir/docs-io.sh"
+helper-source	query	. "$dir/docs-io.sh"
+matrix-fixture	gate	    FIXTURE_DIR="$(mktemp -d)" || { echo "ctx docs gate: mktemp -d failed" >&2; return 1; }
+matrix-fixture	gate	    trap 'rm -rf "$FIXTURE_DIR"' EXIT INT TERM
+matrix-fixture	gate	    mkdir -p "$FIXTURE_DIR/docs/demo"
+matrix-fixture	gate	    cat > "$FIXTURE_DIR/docs/demo/widgets.md" <<'FIXTURE'
+matrix-fixture	gate	    cat > "$FIXTURE_DIR/docs/demo/platform.md" <<'FIXTURE'
+matrix-fixture	gate	  description: "Shared platform services."
+matrix-fixture	gate	    command -v git >/dev/null 2>&1 || {
+matrix-fixture	gate	        echo "ctx docs gate: the matrix needs git for the claimant trackedness probe" >&2
+matrix-fixture	gate	    git -C "$FIXTURE_DIR" init -q
+matrix-fixture	gate	    git -C "$FIXTURE_DIR" add docs/demo/widgets.md docs/demo/platform.md
+matrix-fixture	gate	        out="$(printf '%s' "$input" | (cd "$FIXTURE_DIR" && awk -f "$AWK_CHECK" docs/demo/*.md) 2>&1)" || code=$?
+matrix-fixture	gate	docs/demo/widgets.md"
+matrix-fixture	gate	docs/demo/platform.md"
+matrix-fixture	gate	docs/demo/widgets.md"
+topology-probe	gate	    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+topology-probe	gate	        if [ -d "$pdir/.git" ] && [ "$pdir" != "$WORKSPACE_ROOT" ]; then
+topology-probe	gate	    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+topology-probe	gate	        if [ -e "$WORKSPACE_ROOT/.git" ]; then
+topology-probe	gate	        elif [ -d "$pdir/.git" ]; then
+topology-probe	gate	    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
+topology-probe	gate	        if [ -e "$WORKSPACE_ROOT/.git" ]; then
+topology-probe	gate	        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.git" ]; then
+usage-text	check	  echo "Usage: git diff --name-status | ctx docs check docs/<repo>/*.md" >&2
+usage-text	nudge	  echo "Usage: ctx docs nudge backlog.md docs/<repo>/*.md" >&2
+usage-text	query	  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index" >&2

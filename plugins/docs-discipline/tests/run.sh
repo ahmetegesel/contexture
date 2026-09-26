@@ -1,7 +1,11 @@
 #!/usr/bin/env sh
 # docs-discipline plugin suite: the named runner for tests/.
-# Drives the staging check, the audit, the close-gate matrix over tests/sample/, and the
-# grammar agreement check (tests/grammar-agreement.awk, with its two plants) in a staged
+# Drives the staging check; the corpus reads through the storage driver (keyed on the
+# declared corpus.store: the audit and the unit-form nudge against the backlog-file form
+# when declared, every read verb's rc 2 refusal when not); the single-door census
+# (tests/census.sh over tests/census-allow.txt, with its two plants); the close-gate
+# matrix over tests/sample/; and the grammar agreement check
+# (tests/grammar-agreement.awk, with its two plants) in a staged
 # scratch workspace built from the shipped copies only: the runtime and the
 # session and lane modules from base/ (the repository that carries this plugin),
 # the docs module and the grammar template (.contexture/templates/doc.md) from
@@ -89,7 +93,7 @@ cd "$SANDBOX" || exit 1
 unset CTX_DIR CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH CTX_REFERENCE_DRIVER
 export LC_ALL=C
 
-echo "docs-discipline plugin suite: staging, audit, gate matrix, grammar agreement (driver: $DRIVER; staged at $SANDBOX)"
+echo "docs-discipline plugin suite: staging, corpus reads, census, gate matrix, grammar agreement (driver: $DRIVER; staged at $SANDBOX)"
 echo ""
 
 # staging: the runtime is base's copy byte for byte and the resolver answers the
@@ -108,14 +112,100 @@ else
 fi
 echo ""
 
-AUDIT_OUT="$("$SANDBOX/.contexture/ctx" docs audit docs/*/*.md 2>&1)"
-AUDIT_RC=$?
-if [ "$AUDIT_RC" -eq 0 ] && [ -z "$AUDIT_OUT" ]; then
-    echo "[audit] PASS (silent, rc0)"
+# the corpus reads key on the declared capability, never on the driver name: a driver that
+# declares corpus.store serves the full checks; one that does not (fts5 until its corpus
+# store lands) must refuse every read verb rc 2 naming the capability
+if ./.contexture/modules/session/scripts/driver-resolver has corpus.store; then
+    CORPUS_STORE=1
+else
+    CORPUS_STORE=0
+fi
+
+if [ "$CORPUS_STORE" -eq 1 ]; then
+    AUDIT_OUT="$("$SANDBOX/.contexture/ctx" docs audit docs/*/*.md 2>&1)"
+    AUDIT_RC=$?
+    if [ "$AUDIT_RC" -eq 0 ] && [ -z "$AUDIT_OUT" ]; then
+        echo "[audit] PASS (silent, rc0)"
+        PASS=$((PASS + 1))
+    else
+        echo "[audit] FAIL (rc=$AUDIT_RC)"
+        [ -n "$AUDIT_OUT" ] && printf '%s\n' "$AUDIT_OUT"
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # the unit-form nudge: the sample backlog seeded verbatim into a unit (artifact.write,
+    # since a task add would reshape the block), read back through resolve task# with its
+    # REFS, and the nudge through the unit equal to the backlog-file form byte for byte; the
+    # backlog-file form refuses a path inside the sessions drawer rc 1
+    NUDGE_NOTE=""
+    "$SANDBOX/.contexture/ctx" session bootstrap nudge-demo "the sample nudge task" > /dev/null 2>&1 || NUDGE_NOTE="bootstrap failed"
+    ./.contexture/modules/session/scripts/driver-resolver artifact.write nudge-demo backlog < "$PLUGIN_ROOT/tests/sample/backlog.md" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }seed failed"
+    TASK_BLOCK=$("$SANDBOX/.contexture/ctx" session resolve nudge-demo 'task#install-and-run-local' 2>&1)
+    printf '%s\n' "$TASK_BLOCK" | grep -q '^  REFS: \[docs/demo-orders/operational.md\]$' || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }resolve task# carries no REFS"
+    "$SANDBOX/.contexture/ctx" docs nudge nudge-demo > "$SANDBOX/nudge-unit.out" 2>&1
+    NUDGE_U_RC=$?
+    "$SANDBOX/.contexture/ctx" docs nudge backlog.md docs/*/*.md > "$SANDBOX/nudge-file.out" 2>&1
+    NUDGE_F_RC=$?
+    "$SANDBOX/.contexture/ctx" docs nudge .contexture/sessions/nudge-demo/backlog.md docs/*/*.md > "$SANDBOX/nudge-refuse.out" 2>&1
+    NUDGE_R_RC=$?
+    if [ -z "$NUDGE_NOTE" ] && [ "$NUDGE_U_RC" -eq 0 ] && [ "$NUDGE_F_RC" -eq 0 ] \
+        && [ -s "$SANDBOX/nudge-unit.out" ] && cmp -s "$SANDBOX/nudge-unit.out" "$SANDBOX/nudge-file.out" \
+        && grep -q '^Pitfalls: order-flow-p1' "$SANDBOX/nudge-unit.out" \
+        && [ "$NUDGE_R_RC" -eq 1 ] && grep -q 'read through its unit' "$SANDBOX/nudge-refuse.out"; then
+        echo "[nudge-unit] PASS (the unit form equals the backlog-file form; a sessions-drawer path refuses rc1)"
+        PASS=$((PASS + 1))
+    else
+        echo "[nudge-unit] FAIL (${NUDGE_NOTE:-unit rc=$NUDGE_U_RC, file rc=$NUDGE_F_RC, refusal rc=$NUDGE_R_RC})"
+        head -5 "$SANDBOX/nudge-unit.out" "$SANDBOX/nudge-file.out" "$SANDBOX/nudge-refuse.out"
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+else
+    REFUSE_BAD=""
+    for v in "audit" "query --index" "gate" "nudge nudge-demo"; do
+        # shellcheck disable=SC2086
+        R_OUT=$("$SANDBOX/.contexture/ctx" docs $v 2>&1 < /dev/null)
+        R_RC=$?
+        { [ "$R_RC" -eq 2 ] && printf '%s' "$R_OUT" | grep -q 'corpus.store (ERR_CAPABILITY_UNSUPPORTED)'; } || REFUSE_BAD="$REFUSE_BAD [$v rc=$R_RC]"
+    done
+    R_OUT=$(printf 'M\tx.ts\n' | "$SANDBOX/.contexture/ctx" docs check workspace 2>&1)
+    R_RC=$?
+    { [ "$R_RC" -eq 2 ] && printf '%s' "$R_OUT" | grep -q 'corpus.store (ERR_CAPABILITY_UNSUPPORTED)'; } || REFUSE_BAD="$REFUSE_BAD [check rc=$R_RC]"
+    if [ -z "$REFUSE_BAD" ]; then
+        echo "[read-refusal] PASS (no corpus.store: audit, query, check, gate, nudge each refuse rc2 naming the capability)"
+        PASS=$((PASS + 1))
+    else
+        echo "[read-refusal] FAIL:$REFUSE_BAD"
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+fi
+
+# the single-door census (tests/census.sh): every line of the module's verbs and engines
+# that names the corpus or uses an IO primitive sits in docs-io.sh or in the classified
+# allow-list (tests/census-allow.txt), remainder zero; two plants prove it can fail: a cat of
+# a composed corpus path in a verb, and a getline over a computed path in an engine
+S_SCRIPTS="$SANDBOX/.contexture/modules/docs/scripts"
+CENSUS_OUT=$(sh "$SCRIPT_DIR/census.sh" "$S_SCRIPTS" "$SCRIPT_DIR/census-allow.txt" 2>&1)
+CENSUS_RC=$?
+mkdir -p "$SANDBOX/census-plant"
+cp "$S_SCRIPTS"/* "$SANDBOX/census-plant/"
+printf 'cat "$ROOT_DIR/docs/$REPO/x.md" >/dev/null\n' >> "$SANDBOX/census-plant/query"
+PLANT_C1=$(sh "$SCRIPT_DIR/census.sh" "$SANDBOX/census-plant" "$SCRIPT_DIR/census-allow.txt" 2>&1)
+PLANT_C1_RC=$?
+cp "$S_SCRIPTS/query" "$SANDBOX/census-plant/query"
+awk '{ print } /^END \{/ && !d { print "    while ((getline pl < (root \"/do\" \"cs/x/y\" \".m\" \"d\")) > 0) n++"; d = 1 }' "$S_SCRIPTS/docs-check.awk" > "$SANDBOX/census-plant/docs-check.awk"
+PLANT_C2=$(sh "$SCRIPT_DIR/census.sh" "$SANDBOX/census-plant" "$SCRIPT_DIR/census-allow.txt" 2>&1)
+PLANT_C2_RC=$?
+if [ "$CENSUS_RC" -eq 0 ] && printf '%s' "$CENSUS_OUT" | grep -q 'remainder 0$' \
+    && [ "$PLANT_C1_RC" -eq 1 ] && printf '%s' "$PLANT_C1" | grep -q '^REMAINDER query:' \
+    && [ "$PLANT_C2_RC" -eq 1 ] && printf '%s' "$PLANT_C2" | grep -q '^REMAINDER docs-check.awk:'; then
+    echo "[census] PASS ($(printf '%s' "$CENSUS_OUT" | tail -1 | sed 's/^census: //'); both plants read REMAINDER)"
     PASS=$((PASS + 1))
 else
-    echo "[audit] FAIL (rc=$AUDIT_RC)"
-    [ -n "$AUDIT_OUT" ] && printf '%s\n' "$AUDIT_OUT"
+    echo "[census] FAIL (rc=$CENSUS_RC, verb plant rc=$PLANT_C1_RC, engine plant rc=$PLANT_C2_RC)"
+    printf '%s\n%s\n%s\n' "$CENSUS_OUT" "$PLANT_C1" "$PLANT_C2" | grep -e REMAINDER -e '^census' | head -20
     FAIL=$((FAIL + 1))
 fi
 echo ""

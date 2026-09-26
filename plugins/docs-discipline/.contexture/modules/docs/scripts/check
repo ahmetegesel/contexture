@@ -1,9 +1,12 @@
 #!/bin/sh
 # summary: the coverage, freshness, and dead-sources check over a change delta
-# usage: git diff --name-status | ctx docs check docs/<repo>/*.md
-# help: reads a status-prefixed change delta on stdin together with the corpus files and reports the touched code files that no doc claims (coverage), the changed code files whose docs did not ride the change (freshness), and the deleted files still listed as doc sources
-# help: exit codes: 0 the delta is covered and fresh; 1 a completeness, freshness, or dead-sources violation; 2 unreadable input (the awk engine's own failure)
-# help: example: printf 'M\tprojects/demo/src/x.ts\ndocs/demo/x.md\n' | ctx docs check docs/*/*.md
+# usage: git diff --name-status | ctx docs check <repo>...
+# usage: git diff --name-status | ctx docs check docs/<repo>/<slug>.md...
+# help: reads a status-prefixed change delta on stdin together with the corpus and reports the touched code files that no doc claims (coverage), the changed code files whose docs did not ride the change (freshness), and the deleted files still listed as doc sources
+# help: the corpus comes from the configured storage driver: a repo name checks against that repo's docs, a doc path names one doc by its address docs/<repo>/<slug>.md; the corpus argument is required, so the delta on stdin is never read as a corpus
+# help: the glob forms docs/*/*.md and docs/<repo>/*.md are the files-driver form: under a store driver no file matches, and zsh refuses an unmatched glob before the verb runs, so name repos there
+# help: exit codes: 0 the delta is covered and fresh; 1 a completeness, freshness, or dead-sources violation, or an argument naming no doc or repo; 2 unreadable input (the awk engine's own failure) or a storage driver without a corpus
+# help: example: printf 'M\tprojects/demo/src/x.ts\ndocs/demo/x.md\n' | ctx docs check demo workspace
 
 case "$1" in
   help|--help|-h)
@@ -23,4 +26,7 @@ if [ "$#" -eq 0 ]; then
 fi
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/docs-check.awk" "$@"
+. "$dir/docs-io.sh"
+docs_io_init "$dir" check
+docs_args 0 0 "$@" || exit $?
+docs_exec "$dir/docs-check.awk"

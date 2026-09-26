@@ -30,14 +30,11 @@ if [ "$#" -eq 0 ]; then
 fi
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-# the workspace root: the engine exports CTX_ROOT; DOCS_WORKSPACE_ROOT overrides;
-# standalone, walk up from the script to the .contexture drawer's parent
-root=""
-p=$dir
-while [ "$p" != "/" ] && [ "${p##*/}" != ".contexture" ]; do p=${p%/*}; done
-[ "${p##*/}" = ".contexture" ] && root=${p%/*}
-[ -n "$root" ] || root=$(CDPATH= cd -- "$dir/../../.." && pwd)
-ROOT_DIR="${DOCS_WORKSPACE_ROOT:-${CTX_ROOT:-$root}}"
+# the workspace root (the engine exports CTX_ROOT; DOCS_WORKSPACE_ROOT overrides;
+# standalone, the walk up to the .contexture drawer's parent) and the corpus through the
+# configured storage driver: both from the module's IO helper
+. "$dir/docs-io.sh"
+docs_io_init "$dir" query
 AWK_SCRIPT="$dir/docs-query.awk"
 
 MODE=""
@@ -111,20 +108,26 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-DOC_FILES=""
-if [ -n "$REPO" ] && [ ! -d "$ROOT_DIR/docs/$REPO" ]; then
+if [ -n "$REPO" ] && ! docs_key_valid "$REPO"; then
   echo "ctx docs query: no such repo: $REPO" >&2
   exit 1
 fi
-if [ -n "$REPO" ] && [ -d "$ROOT_DIR/docs/$REPO" ]; then
-  DOC_FILES="$ROOT_DIR/docs/$REPO/*.md"
-elif [ -d "$ROOT_DIR/docs" ]; then
-  DOC_FILES="$ROOT_DIR/docs/*/*.md"
+if docs_corpus "$REPO"; then
+  :
 else
-  DOC_FILES="$dir/fixtures/*.md"
+  CORPUS_RC=$?
+  case "$DOCS_ERR" in
+    repo) echo "ctx docs query: no such repo: $REPO" >&2 ;;
+    empty) echo "ctx docs query: the corpus is empty" >&2 ;;
+  esac
+  exit "$CORPUS_RC"
 fi
+set --
+while IFS= read -r DOC_PATH; do
+  set -- "$@" "$DOC_PATH"
+done < "$DOCS_PATHS"
 
-QUERY_OUT=$(awk -v mode="$MODE" \
+QUERY_OUT=$(docs_run awk -v mode="$MODE" \
     -v repo="$REPO" \
     -v slug="$SLUG" \
     -v section="$SECTION" \
@@ -133,7 +136,7 @@ QUERY_OUT=$(awk -v mode="$MODE" \
     -v category="$CATEGORY" \
     -v severity="$SEVERITY" \
     -v channel="$CHANNEL" \
-    -f "$AWK_SCRIPT" $DOC_FILES)
+    -f "$AWK_SCRIPT" "$@")
 AWK_RC=$?
 if [ -z "$QUERY_OUT" ] && [ -z "$MODE" ] && [ -n "$REPO" ] && [ -n "$SLUG" ]; then
   echo "ctx docs query: no doc matches $REPO/$SLUG" >&2

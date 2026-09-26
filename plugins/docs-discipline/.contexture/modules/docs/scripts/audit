@@ -1,9 +1,12 @@
 #!/bin/sh
 # summary: the corpus grammar and integrity audit
-# usage: ctx docs audit docs/<repo>/*.md
+# usage: ctx docs audit [<repo>...]
+# usage: ctx docs audit docs/<repo>/<slug>.md...
 # help: reads the typed-block corpus and reports grammar and integrity defects with file:line positions: the doc header, the block vocabulary, the indentation rule, the rule fields, symbol-only evidence, and duplicate ids
-# help: exit codes: 0 the corpus is clean; 1 defects found; 2 unreadable input (the awk engine's own failure)
-# help: example: ctx docs audit docs/*/*.md (silence on a clean corpus)
+# help: the corpus comes from the configured storage driver: no argument audits the whole corpus, a repo name audits that repo's docs, a doc path names one doc by its address docs/<repo>/<slug>.md
+# help: the glob forms docs/*/*.md and docs/<repo>/*.md are the files-driver form: under a store driver no file matches, and zsh refuses an unmatched glob before the verb runs, so name repos there
+# help: exit codes: 0 the corpus is clean; 1 defects found, or an argument naming no doc or repo; 2 unreadable input (the awk engine's own failure) or a storage driver without a corpus
+# help: example: ctx docs audit (silence on a clean corpus)
 
 case "$1" in
   help|--help|-h)
@@ -16,11 +19,8 @@ case "$1" in
     ;;
 esac
 
-if [ "$#" -eq 0 ]; then
-  echo "Usage: ctx docs audit docs/<repo>/*.md" >&2
-  echo "help: ctx docs help audit" >&2
-  exit 1
-fi
-
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/docs-audit.awk" "$@"
+. "$dir/docs-io.sh"
+docs_io_init "$dir" audit
+docs_args 1 0 "$@" || exit $?
+docs_exec "$dir/docs-audit.awk"

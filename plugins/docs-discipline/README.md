@@ -185,13 +185,14 @@ into an existing file; `seed` means it is starting content to adapt; and
 
 ## Verify
 
-From an adopted workspace root (seed at least one doc first: the `docs/*/*.md`
-glob must expand):
+From an adopted workspace root (seed at least one doc first; the verbs read
+the corpus through the configured storage driver, and the files driver serves
+`docs/<repo>/<slug>.md` in place):
 
 ```sh
-ctx docs audit docs/*/*.md        # silence, exit 0
+ctx docs audit                         # silence, exit 0 (the whole corpus; ctx docs audit <repo> for one repo)
 ctx docs query --index                 # ends: index complete: N entries
-printf 'M\tprojects/<repo>/src/example.ts\n' | ctx docs check docs/*/*.md   # substitute repo and path; red (UNCOVERED) until a doc claims it
+printf 'M\tprojects/<repo>/src/example.ts\n' | ctx docs check <repo>   # substitute repo and path; red (UNCOVERED) until a doc claims it
 ctx docs gate                          # in a git workspace: audit plus the aggregated delta check
 ctx docs gate --drift                  # in a git workspace: audit plus the incoming remote delta check
 ctx docs gate --test-matrix            # ALL 8 SCENARIOS PASSED
@@ -228,9 +229,10 @@ it walk below runs every one of these.
   non-main branch or behind its last-fetched origin; `ctx docs gate --drift`
   evaluates the incoming remote delta (the merge-base form) instead of the
   local one.
-- Setup tasks: run `ctx docs nudge` on the active backlog when a task names
-  setup verbs; it prints the owning operational doc's run, build, and test
-  targets plus the top pitfalls.
+- Setup tasks: run `ctx docs nudge <unit>` when the unit's active task names
+  setup verbs; it reads the first IN_PROGRESS task through `ctx session` (the
+  record's own store, never the backlog as a file) and prints the owning
+  operational doc's run, build, and test targets plus the top pitfalls.
 
 ## Limits and status
 
@@ -238,14 +240,27 @@ it walk below runs every one of these.
   nudge are invoked at their moments (boot, close, a setup task), or wired
   into the adopter's own trigger surface. This plugin ships no trigger.
 - The five verbs ride the private engines under
-  `.contexture/modules/docs/scripts/`: audit, check, and nudge exec their
-  engine directly, query drives its engine with parsed options, and gate is
-  self-contained over the audit and check engines. The engines' shebang names
+  `.contexture/modules/docs/scripts/`: audit, check, and nudge hand their
+  engine the corpus paths the IO helper resolved (and exec it, as before,
+  when the files driver answers in place), query drives its engine with
+  parsed options over the helper's paths, and gate is self-contained over the
+  audit and check engines. The engines' shebang names
   `/usr/bin/awk` (the same launcher form the base scripts use). A system whose
   awk lives elsewhere invokes the engines via `awk -f <path>` instead.
-- The verbs refuse a bare invocation (no arguments) loudly instead of
-  reading standard input as an empty corpus: the corpus files are the
-  invocation. A wrong invocation never returns a plausible-but-empty result.
+- The corpus reaches the verbs only through the storage driver, by one door
+  (`scripts/docs-io.sh`): a bare `ctx docs audit` reads the whole corpus, a
+  repo name reads that repo's docs, and a doc path names a doc by its address
+  `docs/<repo>/<slug>.md`. `ctx docs check` and `ctx docs nudge` refuse a bare
+  invocation loudly instead of reading standard input as an empty corpus, an
+  argument naming no doc or repo refuses rc 1, and an empty corpus refuses
+  rc 1. A wrong invocation never returns a plausible-but-empty result.
+- The glob forms (`docs/*/*.md`, `docs/<repo>/*.md`) are the files-driver
+  form: under a store driver no file matches, so sh and bash hand the verb
+  the literal pattern (which it expands through the driver's list) while zsh
+  refuses an unmatched glob before the verb runs; name repos there. Every doc
+  path a verb prints is the path the files driver prints for the same call.
+- A driver that serves no corpus (without the capability `corpus.store`)
+  makes every read verb refuse rc 2 naming the capability.
 - The sample corpus is fictional and reference-only; the adopter's corpus is
   the real subject.
 - The gate's matrix is self-planted: it builds its fixtures with `mktemp`,
@@ -309,8 +324,12 @@ it walk below runs every one of these.
 
 ## Needs
 
-POSIX awk/sh, the base `ctx` runtime (the plugin ships the module, not the
-engine), and git for the close gate's delta, the check's claimant trackedness
+POSIX awk/sh, the base `ctx` runtime and its session module (the plugin ships
+the module, not the engine; the verbs reach the corpus through the session
+module's `driver-resolver`, and the configured storage driver must serve the
+corpus: the capability `corpus.store`, which the base posix driver declares
+from the release that carries the corpus methods; an older base makes every
+read verb refuse rc 2), and git for the close gate's delta, the check's claimant trackedness
 probe, and the matrix's planted fixture repository (a non-repository run of
 the check reads claimants untracked and reports the process-owned verdict;
 the audit needs no repository). Nothing is installed: no runtime, no network.
@@ -324,7 +343,12 @@ the plugin's test, and `tests/run.sh` drives the audit and the gate matrix as
 the committed suite, staged from the repository's shipped core (`base/`) and
 this plugin's own copies, never an adopted drawer, on the posix driver and
 again with `--driver=fts5` (the storage-fts5 plugin's copy configured; skip 77
-without sqlite3 FTS5). Keep the grammar (`.contexture/templates/doc.md`), its
+without sqlite3 FTS5). The suite also runs the single-door census
+(`tests/census.sh` over `tests/census-allow.txt`): a new corpus read or path
+print outside `scripts/docs-io.sh` fails it until the allow-list names it on
+purpose. `tests/captures.sh` (plan, run, compare) is the capture set of the
+read verbs, the instrument of the byte identity between two module versions
+at one path and of the parity between two drivers. Keep the grammar (`.contexture/templates/doc.md`), its
 machine-readable schema (section 6), and the audit in step: the suite's
 grammar agreement check (`tests/grammar-agreement.awk`) fails on any
 difference among the three; the `tests/sample/` corpus is reference data. Packaging,
@@ -337,7 +361,8 @@ Every command below runs from the plugin root and was run as written; the
 outputs are verbatim from that run (long ones abbreviated with `...` where
 the full output repeats the shown shape; `<scratch>` in an output line stands
 for the temp path the staging step created). The staging builds a scratch
-workspace carrying the base runtime and this plugin's module; the commands
+workspace carrying the base runtime, its session module (the storage driver
+the verbs read the corpus through), and this plugin's module; the commands
 then run through the staged `ctx` (in an adopted workspace the same commands
 run as `ctx docs ...`).
 
@@ -346,6 +371,7 @@ scratch="../../.contexture/tmp/docs-walk"
 rm -rf "$scratch"
 mkdir -p "$scratch/.contexture/modules" "$scratch/docs"
 cp ../../.contexture/ctx "$scratch/.contexture/ctx"
+cp -R ../../.contexture/modules/session "$scratch/.contexture/modules/"
 cp -R .contexture/modules/docs "$scratch/.contexture/modules/"
 cp -R docs/. "$scratch/docs/"
 cp -R tests/sample/docs/. "$scratch/docs/"
@@ -634,11 +660,12 @@ help:
 | `README.md` | authored fresh for this plugin (reference only) |
 | `AGENTS.workspace.md` | neutralized from the workspace overlay this plugin was extracted from: the five docs laws, the trimmed layout, boot and close in ctx docs forms; no names, no unrelated laws |
 | `.contexture/modules/docs/module` | authored fresh: the module summary line |
-| `.contexture/modules/docs/scripts/audit` | authored fresh from the docs-query precedent: the help text moved into the `# summary`/`# usage`/`# help` declarations, the zero-argument refusal, and byte-faithful delegation to `docs-audit.awk` |
-| `.contexture/modules/docs/scripts/query` | reworked from the source CLI: the workspace root derivation reads `CTX_ROOT` (with the `DOCS_WORKSPACE_ROOT` override), the usage strings are ctx forms, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, a no-match note on an empty projection, and the help forms moved into the declarations |
-| `.contexture/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and byte-faithful delegation to `docs-check.awk` |
-| `.contexture/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and byte-faithful delegation to `docs-nudge.awk` |
-| `.contexture/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (`DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, and the help moved into the declarations |
+| `.contexture/modules/docs/scripts/audit` | authored fresh from the docs-query precedent: the help text moved into the `# summary`/`# usage`/`# help` declarations and delegation to `docs-audit.awk` over the corpus the IO helper resolved (a bare call reads the whole corpus) |
+| `.contexture/modules/docs/scripts/query` | reworked from the source CLI: the workspace root and the corpus from the IO helper (`CTX_ROOT`, the `DOCS_WORKSPACE_ROOT` override), the usage strings are ctx forms, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, an empty-corpus refusal, a no-match note on an empty projection, and the help forms moved into the declarations |
+| `.contexture/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and delegation to `docs-check.awk` over the corpus the IO helper resolved |
+| `.contexture/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, the unit form (the active task through `ctx session task list` and `ctx session resolve task#`), the backlog-file form refusing a record path, and delegation to `docs-nudge.awk` over the corpus the IO helper resolved |
+| `.contexture/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (from the IO helper: `DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the corpus mounted once through the IO helper, the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, and the help moved into the declarations |
+| `.contexture/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `corpus.store` requirement, the mount and the list through the configured storage driver, the corpus argument forms, and the display-path rule |
 | `.contexture/modules/docs/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/modules/docs/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`) |
@@ -651,5 +678,7 @@ help:
 | `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the drawer sources glob and evidence fields re-pointed at the module |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
-| `tests/run.sh` | authored fresh: the plugin suite (the staging check, the audit, the gate matrix over `tests/sample/`, and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
+| `tests/run.sh` | authored fresh: the plugin suite (the staging check; the corpus reads keyed on the declared `corpus.store`: the audit and the unit-form nudge against the backlog-file form, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
+| `tests/census.sh`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, the classified allow-list by file and exact line, remainder zero) |
+| `tests/captures.sh` | authored fresh: the capture set of the read verbs (plan, run, compare) |
 | `tests/grammar-agreement.awk` | authored fresh: the agreement check of the `#%` schema, the prose shapes, and the audit's lists, refusing an empty side as a pass |
