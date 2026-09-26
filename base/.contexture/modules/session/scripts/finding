@@ -1,0 +1,424 @@
+#!/bin/sh
+# summary: finding operations (add, show, update, supersede, drop, list)
+# usage: ctx session finding <subcommand> <unit> [args...]
+# help: subcommands:
+# help:   add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]
+# help:   show <unit> <NAME> [--json]
+# help:   update <unit> <NAME> --summary="..." [--ref=...]
+# help:   supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]
+# help:   drop <unit> <NAME>
+# help:   list <unit> [--active-only] [--json]
+# help: stdin fallback: raw @finding block piping supported
+
+set -u
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+resolver="$dir/driver-resolver"
+if [ ! -x "$resolver" ]; then
+  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
+    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
+  fi
+fi
+
+if [ $# -eq 0 ]; then
+  printf 'usage: ctx session finding <subcommand> <unit> [args...]\n' >&2
+  printf 'subcommands: add, show, update, supersede, drop, list\n' >&2
+  exit 1
+fi
+
+case "$1" in
+  --help|-h|help)
+    printf 'usage: ctx session finding <subcommand> <unit> [args...]\n'
+    printf 'subcommands:\n'
+    printf '  add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]\n'
+    printf '  show <unit> <NAME> [--json]\n'
+    printf '  update <unit> <NAME> --summary="..." [--ref=...]\n'
+    printf '  supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]\n'
+    printf '  drop <unit> <NAME>\n'
+    printf '  list <unit> [--active-only] [--json]\n'
+    exit 0
+    ;;
+esac
+
+subcmd="$1"
+shift
+
+get_session_dir() {
+  u="$1"
+  if [ -d ".contexture/sessions/$u" ]; then
+    printf '.contexture/sessions/%s\n' "$u"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -d "$CTX_ROOT/.contexture/sessions/$u" ]; then
+    printf '%s/.contexture/sessions/%s\n' "$CTX_ROOT" "$u"
+  else
+    printf '.contexture/sessions/%s\n' "$u"
+  fi
+}
+
+get_tmp_dir() {
+  if [ -d ".contexture/tmp" ] && [ -w ".contexture/tmp" ]; then
+    printf '.contexture/tmp\n'
+  elif [ -n "${CTX_ROOT:-}" ] && [ -d "$CTX_ROOT/.contexture/tmp" ] && [ -w "$CTX_ROOT/.contexture/tmp" ]; then
+    printf '%s/.contexture/tmp\n' "$CTX_ROOT"
+  else
+    d="${TMPDIR:-/tmp}/contexture-$USER"
+    mkdir -p "$d" 2>/dev/null || true
+    printf '%s\n' "$d"
+  fi
+}
+
+parse_stdin_finding() {
+  awk '
+    BEGIN { in_target = 0; in_sum = 0; name = ""; sum = ""; ref = ""; sup = ""; }
+    /^@finding[ ]+/ {
+      line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
+      name = line; in_target = 1; next;
+    }
+    in_target && /^[ ]{2}REF:[ ]*/ {
+      in_sum = 0; v = $0; sub(/^[ ]{2}REF:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
+      if (substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") v = substr(v, 2, length(v) - 2);
+      ref = v; next;
+    }
+    in_target && /^[ ]{2}SUPERSEDES:[ ]*/ {
+      in_sum = 0; v = $0; sub(/^[ ]{2}SUPERSEDES:[ ]*/, "", v); sub(/[ (].*$/, "", v);
+      sup = v; next;
+    }
+    in_target && /^[ ]{2}SUMMARY ::/ { in_sum = 1; next; }
+    in_target && in_sum && /^[ ]{4}/ {
+      line = substr($0, 5);
+      sum = (sum == "" ? line : sum "\n" line);
+      next;
+    }
+    in_target && /^[ \t]*$/ { in_sum = 0; }
+    END {
+      printf "PARSED_NAME=%s\n", name;
+      printf "PARSED_SUM=%s\n", sum;
+      printf "PARSED_REF=%s\n", ref;
+      printf "PARSED_SUP=%s\n", sup;
+    }
+  '
+}
+
+validate_finding_name() {
+  case "$1" in
+    *[!A-Z0-9_]*|"")
+      printf "finding: error: finding name '%s' must be uppercase alphanumeric and underscores only\n" "$1" >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+case "$subcmd" in
+  add)
+    [ $# -gt 0 ] || { printf 'finding add: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    name=""
+    if [ $# -gt 0 ] && [ "$(printf '%s' "$1" | cut -c1-2)" != "--" ]; then
+      name="$1"; shift
+    fi
+    summary=""
+    ref=""
+    supersedes=""
+    json_out=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --summary=*) summary="${1#--summary=}" ;;
+        -s) shift; [ $# -gt 0 ] && summary="$1" ;;
+        --ref=*) ref="${1#--ref=}" ;;
+        -r) shift; [ $# -gt 0 ] && ref="$1" ;;
+        --supersedes=*) supersedes="${1#--supersedes=}" ;;
+        --json) json_out=1 ;;
+        *) [ -z "$name" ] && name="$1" ;;
+      esac
+      shift
+    done
+    if [ -z "$summary" ] && [ ! -t 0 ]; then
+      stdin_content=$(cat)
+      if [ -n "$stdin_content" ]; then
+        eval "$(printf '%s\n' "$stdin_content" | parse_stdin_finding)"
+        [ -z "$name" ] && name="$PARSED_NAME"
+        [ -z "$summary" ] && summary="$PARSED_SUM"
+        [ -z "$ref" ] && ref="$PARSED_REF"
+        [ -z "$supersedes" ] && supersedes="$PARSED_SUP"
+      fi
+    fi
+    if [ -z "$name" ]; then
+      printf 'finding add: error: missing finding name\n' >&2
+      exit 1
+    fi
+    validate_finding_name "$name" || exit 1
+    if [ -z "$summary" ]; then
+      printf 'finding add: error: missing required --summary parameter\n' >&2
+      exit 1
+    fi
+    out=$("$resolver" finding.add "$unit" "$name" "$summary" "$ref" "$supersedes")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf 'finding added: %s\n' "$name"
+    fi
+    exit 0
+    ;;
+
+  show)
+    [ $# -gt 0 ] || { printf 'finding show: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'finding show: error: missing finding name\n' >&2; exit 1; }
+    name="$1"; shift
+    json_out=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    out=$("$resolver" finding.show "$unit" "$name")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf '%s\n' "$out" | awk '
+        {
+          line = $0
+          match(line, /"name":"[^"]*"/)
+          n = substr(line, RSTART + 8, RLENGTH - 9)
+          printf "@finding %s\n", n
+          if (match(line, /"superseded_by":"[^"]*"/)) {
+            sb = substr(line, RSTART + 17, RLENGTH - 18)
+            if (sb != "") printf "  SUPERSEDED_BY: %s\n", sb
+          }
+          if (match(line, /"ref":"[^"]*"/)) {
+            rf = substr(line, RSTART + 7, RLENGTH - 8)
+            if (rf != "") printf "  REF: \"%s\"\n", rf
+          }
+          if (match(line, /"summary":"[^"]*"/)) {
+            sm = substr(line, RSTART + 11, RLENGTH - 12)
+            if (sm != "") {
+              gsub(/\\n/, "\n    ", sm)
+              printf "  SUMMARY ::\n    %s\n", sm
+            }
+          }
+        }
+      '
+    fi
+    exit 0
+    ;;
+
+  update)
+    [ $# -gt 0 ] || { printf 'finding update: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'finding update: error: missing finding name\n' >&2; exit 1; }
+    name="$1"; shift
+    summary=""
+    ref=""
+    json_out=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --summary=*) summary="${1#--summary=}" ;;
+        -s) shift; [ $# -gt 0 ] && summary="$1" ;;
+        --ref=*) ref="${1#--ref=}" ;;
+        -r) shift; [ $# -gt 0 ] && ref="$1" ;;
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    if [ -z "$summary" ] && [ -z "$ref" ] && [ ! -t 0 ]; then
+      stdin_content=$(cat)
+      if [ -n "$stdin_content" ]; then
+        eval "$(printf '%s\n' "$stdin_content" | parse_stdin_finding)"
+        [ -z "$summary" ] && summary="$PARSED_SUM"
+        [ -z "$ref" ] && ref="$PARSED_REF"
+      fi
+    fi
+    s_dir=$(get_session_dir "$unit")
+    k_file="$s_dir/knowledge.md"
+    if [ ! -f "$k_file" ]; then
+      printf "finding update: error: session '%s' not found or knowledge.md missing\n" "$unit" >&2
+      exit 1
+    fi
+    tmp_d=$(get_tmp_dir)
+    tmp_k=$(mktemp "$tmp_d/knowledge.XXXXXX")
+    awk -v target="$name" -v new_sum="$summary" -v new_ref="$ref" '
+      function indent_lines(text, prefix,    lines, n, i, r) {
+        n = split(text, lines, "\n"); r = "";
+        for (i = 1; i <= n; i++) { r = r prefix lines[i]; if (i < n) r = r "\n"; }
+        return r;
+      }
+      BEGIN { in_target = 0; skip_scalar = 0; found = 0; }
+      /^@finding[ ]+/ {
+        line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
+        if (line == target) {
+          found = 1; in_target = 1;
+          print $0;
+          next;
+        } else in_target = 0;
+      }
+      in_target && /^[ ]{2}SUMMARY ::/ {
+        if (new_sum != "") {
+          printf "  SUMMARY ::\n%s\n", indent_lines(new_sum, "    ");
+          skip_scalar = 1;
+          next;
+        }
+      }
+      in_target && /^[ ]{2}REF:[ ]*/ {
+        if (new_ref != "") {
+          printf "  REF: \"%s\"\n", new_ref;
+          next;
+        }
+      }
+      in_target && skip_scalar && /^[ ]{4}/ { next; }
+      {
+        if ($0 !~ /^[ ]{4}/) skip_scalar = 0;
+        print $0;
+      }
+      END { if (!found) exit 1; }
+    ' "$k_file" > "$tmp_k"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      rm -f "$tmp_k"
+      printf "finding update: error: finding '%s' not found in session '%s'\n" "$name" "$unit" >&2
+      exit 1
+    fi
+    mv -f "$tmp_k" "$k_file"
+    if [ "$json_out" -eq 1 ]; then
+      printf '{"status":"ok","unit":"%s","finding":{"name":"%s"}}\n' "$unit" "$name"
+    else
+      printf 'finding updated: %s\n' "$name"
+    fi
+    exit 0
+    ;;
+
+  supersede)
+    [ $# -gt 0 ] || { printf 'finding supersede: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'finding supersede: error: missing old finding name\n' >&2; exit 1; }
+    old_name="$1"; shift
+    [ $# -gt 0 ] || { printf 'finding supersede: error: missing new finding name\n' >&2; exit 1; }
+    new_name="$1"; shift
+    summary=""
+    ref=""
+    json_out=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --summary=*) summary="${1#--summary=}" ;;
+        -s) shift; [ $# -gt 0 ] && summary="$1" ;;
+        --ref=*) ref="${1#--ref=}" ;;
+        -r) shift; [ $# -gt 0 ] && ref="$1" ;;
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    validate_finding_name "$new_name" || exit 1
+    if [ -z "$summary" ]; then
+      printf 'finding supersede: error: missing required --summary parameter\n' >&2
+      exit 1
+    fi
+    out=$("$resolver" finding.add "$unit" "$new_name" "$summary" "$ref" "$old_name")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf 'finding superseded: %s by %s\n' "$old_name" "$new_name"
+    fi
+    exit 0
+    ;;
+
+  drop)
+    [ $# -gt 0 ] || { printf 'finding drop: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'finding drop: error: missing finding name\n' >&2; exit 1; }
+    name="$1"; shift
+    s_dir=$(get_session_dir "$unit")
+    k_file="$s_dir/knowledge.md"
+    if [ ! -f "$k_file" ]; then
+      printf "finding drop: error: session '%s' not found or knowledge.md missing\n" "$unit" >&2
+      exit 1
+    fi
+    tmp_d=$(get_tmp_dir)
+    tmp_k=$(mktemp "$tmp_d/knowledge.XXXXXX")
+    awk -v target="$name" '
+      BEGIN { in_target = 0; found = 0; }
+      /^@finding[ ]+/ {
+        line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
+        if (line == target) {
+          found = 1; in_target = 1;
+          next;
+        } else in_target = 0;
+      }
+      in_target && /^@[A-Za-z]/ { in_target = 0; }
+      in_target { next; }
+      { print $0; }
+      END { if (!found) exit 1; }
+    ' "$k_file" > "$tmp_k"
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      rm -f "$tmp_k"
+      printf "finding drop: error: finding '%s' not found in session '%s'\n" "$name" "$unit" >&2
+      exit 1
+    fi
+    mv -f "$tmp_k" "$k_file"
+    printf 'finding dropped: %s\n' "$name"
+    exit 0
+    ;;
+
+  list)
+    [ $# -gt 0 ] || { printf 'finding list: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    active_only=""
+    json_out=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --active-only) active_only="active" ;;
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    out=$("$resolver" finding.list "$unit" "$active_only")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf '%s\n' "$out" | awk '
+        {
+          line = $0
+          while (match(line, /\{"name":"[^"]*","summary":"[^"]*","ref":"[^"]*"/)) {
+            item = substr(line, RSTART, RLENGTH)
+            line = substr(line, RSTART + RLENGTH)
+            match(item, /"name":"[^"]*"/)
+            n = substr(item, RSTART + 8, RLENGTH - 9)
+            match(item, /"summary":"[^"]*"/)
+            sm = substr(item, RSTART + 11, RLENGTH - 12)
+            printf "  %s: %s\n", n, sm
+          }
+        }
+      '
+    fi
+    exit 0
+    ;;
+
+  *)
+    unit="$subcmd"
+    if [ $# -eq 0 ]; then
+      exec "$0" list "$unit"
+    else
+      exec "$0" show "$unit" "$@"
+    fi
+    ;;
+esac

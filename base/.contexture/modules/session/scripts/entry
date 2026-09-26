@@ -1,0 +1,142 @@
+#!/bin/sh
+# summary: journal entry operations (show, list)
+# usage: ctx session entry <subcommand> <unit> [args...]
+# help: subcommands:
+# help:   show <unit> <slug> [--json]
+# help:   list <unit> [--anchor=A<N>] [--group=...] [--json]
+
+set -u
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+resolver="$dir/driver-resolver"
+if [ ! -x "$resolver" ]; then
+  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
+    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
+  fi
+fi
+
+if [ $# -eq 0 ]; then
+  printf 'usage: ctx session entry <subcommand> <unit> [args...]\n' >&2
+  printf 'subcommands: show, list\n' >&2
+  exit 1
+fi
+
+case "$1" in
+  --help|-h|help)
+    printf 'usage: ctx session entry <subcommand> <unit> [args...]\n'
+    printf 'subcommands:\n'
+    printf '  show <unit> <slug> [--json]\n'
+    printf '  list <unit> [--anchor=A<N>] [--group=...] [--json]\n'
+    exit 0
+    ;;
+esac
+
+subcmd="$1"
+shift
+
+case "$subcmd" in
+  show)
+    [ $# -gt 0 ] || { printf 'entry show: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'entry show: error: missing entry slug\n' >&2; exit 1; }
+    slug="$1"; shift
+    json_out=0
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    out=$("$resolver" entry.show "$unit" "$slug")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf '%s\n' "$out" | awk '
+        {
+          line = $0
+          match(line, /"slug":"[^"]*"/)
+          s = substr(line, RSTART + 8, RLENGTH - 9)
+          printf "@entry %s\n", s
+          if (match(line, /"anchor":"[^"]*"/)) {
+            anc = substr(line, RSTART + 10, RLENGTH - 11)
+            if (anc != "") printf "  ANCHOR: %s\n", anc
+          }
+          if (match(line, /"what":"[^"]*"/)) {
+            w = substr(line, RSTART + 8, RLENGTH - 9)
+            if (w != "") printf "  WHAT: \"%s\"\n", w
+          }
+          if (match(line, /"group":"[^"]*"/)) {
+            g = substr(line, RSTART + 9, RLENGTH - 10)
+            if (g != "") printf "  GROUP: %s\n", g
+          }
+          if (match(line, /"thread":"[^"]*"/)) {
+            th = substr(line, RSTART + 10, RLENGTH - 11)
+            if (th != "") printf "  THREAD: %s\n", th
+          }
+        }
+      '
+    fi
+    exit 0
+    ;;
+
+  list)
+    [ $# -gt 0 ] || { printf 'entry list: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    json_out=0
+    anchor_filter=""
+    group_filter=""
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --json) json_out=1 ;;
+        --anchor=*) anchor_filter="${1#--anchor=}" ;;
+        --group=*) group_filter="${1#--group=}" ;;
+      esac
+      shift
+    done
+    out=$("$resolver" entry.list "$unit")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf '%s\n' "$out" | awk -v af="$anchor_filter" '
+        {
+          line = $0
+          while (match(line, /\{"slug":"[^"]*","anchor":"[^"]*","what":"[^"]*"\}/)) {
+            item = substr(line, RSTART, RLENGTH)
+            line = substr(line, RSTART + RLENGTH)
+            match(item, /"slug":"[^"]*"/)
+            s = substr(item, RSTART + 8, RLENGTH - 9)
+            match(item, /"anchor":"[^"]*"/)
+            anc = substr(item, RSTART + 10, RLENGTH - 11)
+            match(item, /"what":"[^"]*"/)
+            w = substr(item, RSTART + 8, RLENGTH - 9)
+            if (af == "" || anc == af) {
+              printf "  [%s] %s: %s\n", anc, s, w
+            }
+          }
+        }
+      '
+    fi
+    exit 0
+    ;;
+
+  *)
+    unit="$subcmd"
+    if [ $# -eq 0 ]; then
+      exec "$0" list "$unit"
+    else
+      exec "$0" show "$unit" "$@"
+    fi
+    ;;
+esac

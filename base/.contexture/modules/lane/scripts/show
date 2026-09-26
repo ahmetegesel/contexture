@@ -1,0 +1,79 @@
+#!/bin/sh
+# summary: display subagent lane artifacts (recipe, journal, report)
+# usage: ctx lane show <unit> <lane-slug> [recipe|journal|report] [--json]
+# help: displays specified artifact from subagent lane container (defaults to report)
+# help: arguments:
+# help:   <unit>        session unit slug
+# help:   <lane-slug>   subagent lane slug
+# help:   [artifact]    artifact name: report (default), recipe, or journal
+# help:   --json        output JSON format
+
+set -u
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+resolver="$dir/../../session/scripts/driver-resolver"
+if [ ! -x "$resolver" ]; then
+  if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
+  fi
+fi
+
+if [ $# -lt 2 ]; then
+  if [ $# -gt 0 ]; then
+    case "$1" in
+      --help|-h|help)
+        printf 'usage: ctx lane show <unit> <lane-slug> [recipe|journal|report] [--json]\n'
+        printf 'displays specified artifact from subagent lane container (defaults to report)\n'
+        exit 0
+        ;;
+    esac
+  fi
+  printf 'usage: ctx lane show <unit> <lane-slug> [recipe|journal|report] [--json]\n' >&2
+  exit 1
+fi
+
+unit="$1"
+shift
+lane="$1"
+shift
+
+artifact="report"
+json_out=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json) json_out=1 ;;
+    recipe*|journal*|report*) artifact="$1" ;;
+  esac
+  shift
+done
+
+out=$("$resolver" lane.show "$unit" "$lane" "$artifact")
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  exit "$rc"
+fi
+
+if [ "$json_out" -eq 1 ]; then
+  printf '%s\n' "$out"
+else
+  printf '%s\n' "$out" | awk '
+    {
+      line = $0
+      if (match(line, /"content":"/)) {
+        line = substr(line, RSTART + 11)
+        sub(/"\}$/, "", line)
+        sub(/",.*$/, "", line)
+        gsub(/\\n/, "\n", line)
+        gsub(/\\"/, "\"", line)
+        gsub(/\\\\/, "\\", line)
+        printf "%s\n", line
+      } else {
+        print line
+      }
+    }
+  '
+fi
+exit 0

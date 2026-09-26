@@ -294,6 +294,14 @@ else
   echo "SKIP ideas: live ideas module or fixture not present (workspace-only module)"
 fi
 
+echo "== R run diagnostics =="
+$CTX run --diagnose >/dev/null 2>&1
+a_eq "$?" "0" "run --diagnose rc0"
+run_diag=$($CTX run --diagnose 2>/dev/null)
+a_match "$run_diag" "runner compaction diagnostics" "run --diagnose outputs header"
+a_match "$run_diag" "temp directory:" "run --diagnose reports temp directory"
+a_match "$run_diag" "builtin filters:" "run --diagnose reports builtin filters"
+
 echo "== summary =="
 echo "ctx-tests: pass=$pass fail=$fail"
 [ "$fail" -eq 0 ] || exit 1

@@ -4,6 +4,27 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.52.0] - 2026-09-26
+
+### Added
+
+- Storage Provider Interface (SPI): a normalized driver contract across session, task, entry, finding, resolve, lane, and search subsystems, with a standardized three tier exit code hierarchy (0 success, 1 semantic error, 2 driver error) and deterministic module owned driver discovery at `.contexture/modules/<module>/drivers/<driver name>`.
+- The zero dependency POSIX filesystem driver as the default baseline backend, implementing the full SPI in pure POSIX `sh` and `awk` with atomic single file replacement and multi file transaction locking.
+- The SQLite FTS5 storage driver plugin as the dogfood backend (`plugins/storage-fts5/`): a normalized relational schema, dual FTS5 virtual tables (Porter stemming for prose, trigram tokenization for code identifiers and multilingual text with Turkish diacritics preserved), pure SQL Reciprocal Rank Fusion search returning contextual snippets, full finding CRUD, and a bidirectional migration engine between POSIX markdown and SQLite.
+- The agent semantic command interface: typed CLI flags across `ctx session` (task add, update, start, complete, reopen, drop, list, show; journal record; finding add, show, update, supersede, drop, list) and a dedicated top level `ctx lane` module (record, report, show), replacing raw block piping as the primary interaction surface while preserving it for bulk import.
+- Universal search (`ctx session search`) and reference resolution (`ctx session resolve`) as record surfaces, returning ranked contextual snippets and formatted entity blocks without mode enums.
+- `--diagnose` inspection on `ctx run` and `ctx session`, exposing runner and storage runtime state (workspace root, config, resolved driver, capability handshake, storage health, active units) without manual file inspection.
+
+### Changed
+
+- `base/AGENTS.md` governance consolidated: the `engine-blackbox` and `record-blackbox` laws replaced by a single affirmative `cli-doorway` law naming `.contexture/ctx` as the sole doorway to the runtime and the record; `@layout` pruned of internal implementation paths (`.contexture/modules/`, `.contexture/sessions/`, `.contexture/templates/`, `ONBOARDING.md`) and physical disk assumptions purged across `@record`, `@query`, `@subagents`, and `@close`.
+- `@record` reframed storage agnostic: `the state`, `the backlog`, `the journal`, and `knowledge` are defined as abstract entities addressed through CLI verbs rather than physical files.
+- `docs/the-engine.md`, `docs/the-record.md`, and `docs/plugins.md` updated for the storage abstraction, the SPI, and the FTS5 dogfood plugin.
+
+### Fixed
+
+- Uninitialized receipt variable in the FTS5 driver; missing `ctx session resolve` CLI verb coverage; missing `sqlite-fts5`/`storage-fts5` driver alias resolution; missing `.contexture/config` lookup in the FTS5 driver.
+
 ## [0.51.5] - 2026-09-25
 
 ### Added

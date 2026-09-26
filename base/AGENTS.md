@@ -1,4 +1,4 @@
-# contexture v0.51.5: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.52.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -9,31 +9,26 @@
   verify-before-close: verify before close: no done without evidence; never claim verification you did not perform; re-read the record, confirm consistency.
   harvest-the-human: harvest the human: question to surface durable knowledge; crystallize into compact candidates; land with approval; land when deserved, never just to record; developing ideas stay in the journal.
   workspace-confinement: the current workspace (the repo/worktree the agent was started in) is the boundary; never read, write, search, or otherwise reach outside it unless the human specifically asks for that act; an apparent outside need stops and asks: the agent never roams; the harness's saved copy of a command's own truncated output is the agent's own output, sanctioned to read, read-only, the named file alone; the temp-file routing stays unsanctioned.
-  engine-blackbox: the engine (.contexture/ctx, .contexture/modules/*/scripts/) is an execution runtime, never reading material; treat all engine scripts as compiled binaries; discover contracts strictly through ctx help, ctx <module> help [<verb>], and .contexture/templates/; never inspect runtime script implementations to divine CLI arguments, validation logic, or error conditions; execute and let the CLI validator guide corrections; stderr is the diagnostic, never the script source; TEST: am I opening a script in .contexture/ to see how a command works or why it failed? STOP: use ctx help or the template.
-  record-blackbox: the record is a structured data surface, never reading material; interact with the record strictly through the session tooling (ctx session load, board, query, append, amend, flip, drop, next, refs, stamp, close); discover and resolve references strictly through ctx session query (entry, finding, resolve, group, lane, search); never read, edit, or grep session files directly with raw editor or file-viewing tools; the CLI is the single doorway; TEST: am I opening a session file directly to read past history or resolve a reference? STOP: use ctx session query.
+  cli-doorway: the CLI (.contexture/ctx) is the single doorway to the runtime and the record; discover contracts through ctx help; interact with the record strictly through ctx session and ctx lane; stderr is the diagnostic, augmented by --diagnose on engine subcommands to inspect runtime and storage state.
 
 @layout
   AGENTS.md       = laws + navigation (this file)
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
-  .contexture/ONBOARDING.md   = agentic adoption guideline: instructions for agents onboarding contexture into a repository; deleted when the adoption closes
-  .contexture/templates/      = artifact grammars: the shapes to fill at write time
+  .contexture/config = workspace configuration: module-scoped key: value declarations, loaded alongside overlays at boot
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx session <verb>, ctx run <cmd>, ctx <module>
-  .contexture/modules/        = the modules: discovered dynamically via ctx help, dispatched via ctx <module>
-  .contexture/modules/run/filters/ = the builtin stream filters over the runner (diff, list, log); workspace filters live in their modules
-  .contexture/sessions/       = one folder per unit of work
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
 
 @record
-  unit of work = session folder; outlives working periods, dies with the unit. shapes live in .contexture/templates/; every artifact is written by filling its grammar directly, the template in hand is the complete shape; this section: the map: what each artifact records and why; the workflows live in their sections.
+  unit of work = session unit; outlives working periods, dies with the unit; shapes defined in @record; this section: the map: what each artifact records and why; the workflows live in their sections.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts in value examples, never around field names; -> means flow; # starts a comment. lowercase keys on the state (status: ACTIVE); spellings are contractual; laws are slug-addressed: `slug: statement`, referenced @laws#<slug>; slugs are unique across the merged base + overlays.
   references: a pointer names its target exactly: the section and step (@refresh), or target#symbol (journal#slug, knowledge#finding); a vague prose mention is a defect
-  folder status = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
+  unit status   = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
   the state    = live pointer: where the unit stands and what happens next; the only artifact updated directly; read WHOLE at boot via ctx session load; terse by design, the map, not the content: detail lives behind refs; optional ref_sessions declares read-only sessions mounted at boot; refreshed as the work moves via ctx session stamp, next, refs, close (every backlog update, task landing, period end).
-  the backlog  = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog; written via ctx session append, amend, flip, drop.
-  the journal  = the single recording surface: append-only events + @anchor declarations; the workflow in @journal; written via ctx session append, stamp.
-  knowledge    = settled findings: what is true, what was decided and why, what was ruled out; an intent to act takes the @task shape in the backlog (ctx session append), a developing idea stays a journal event; REF -> the full version in append-only artifacts: target#symbol (journal#entry, lanes/x/report#claim), never a dynamic surface; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
-  lanes/       = dispatch units, one folder per subagent (the record's older name for it is lane: the folder keeps that name): recipe (brief) + journal (incremental trace) + report (evidence); re-dispatch resumes from the folder; the contract in @subagents.
+  the backlog  = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog; written via ctx session task (add, update, start, complete, reopen, drop, list, show) or append, amend, flip, drop.
+  the journal  = the single recording surface: append-only events + @anchor declarations; the workflow in @journal; written via ctx session record, append, stamp.
+  knowledge    = settled findings: what is true, what was decided and why, what was ruled out; full lifecycle CRUD via ctx session finding (add, show, update, supersede, drop, list); an intent to act takes the @task shape in the backlog (ctx session task add), a developing idea stays a journal event; REF -> the full version in append-only artifacts: target#symbol (journal#entry, lanes/x/report#claim), never a dynamic surface; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
+  lanes/       = dispatch units, one lane per subagent: recipe (brief) + journal (incremental trace) + report (evidence); subagents manage artifacts via ctx lane (show, record, report); re-dispatch resumes from the lane; the contract in @subagents.
 
 @journal
   why :: the journal rebuilds the working context from scratch: a fresh boot loads the active entries (live = not closed) and nothing else; what that reconstruction needs is what deserves an entry; the importance bar is the reader who comes back with only the record
@@ -61,20 +56,22 @@
   unit completion: all tasks reach STATUS: DONE and unit exit criteria are met; completion + the next move land in the journal
 
 @query
-  surfaces: the journal + knowledge.
-  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, whole file, all anchors. anchors are period ordering + load receipts, never liveness. .contexture/ctx session board streams active entries with complete bodies in one shot, then the open threads with their targets and the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
+  surfaces: universal search, reference resolution, the journal + knowledge.
+  search: universal search over all session records and artifacts: ctx session search <unit> "<query>" [--limit=N]; returns ranked contextual snippets without mode enums.
+  resolution: ctx session resolve <unit> <ref> resolves abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) directly to formatted blocks.
+  journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, across all anchors. anchors are period ordering + load receipts, never liveness. .contexture/ctx session board streams active entries with complete bodies in one shot, then the open threads with their targets and the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
     command:
       .contexture/ctx session board <unit>
   thread tail: ctx session audit prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
-  queries: the named looks over the record; never an improvised grep or file reader: .contexture/ctx session query <kind> ... (the kinds and forms in .contexture/ctx session help; --help and -h are the same table); a miss is rc=1 with a named error, never an empty success.
+  queries: named looks over the record via .contexture/ctx session query <kind> ... (the kinds and forms in .contexture/ctx session help; --help and -h are the same table); a miss is rc=1 with a named error, never an empty success.
   cross-repo: .contexture/ctx session query units <repo>: units touching a repo; objective is human-facing only.
   cross-session: .contexture/ctx session query refs-to <session>: units referencing a session.
   group: .contexture/ctx session query group <unit> <token> = the agent's topic thread across anchors, open or closed; resume runs through next_action's ref, never through the group alone.
-  artifact-grounding: a report or recipe claimed to ground work needs a REF in the loaded record; ls shows what exists, the record says what grounds the work
+  artifact-grounding: the record is the ground: a report or recipe claimed to ground work needs a REF in the loaded record.
 
 @boot
-  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
+  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) and .contexture/config (workspace configuration) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
   3. get the field: .contexture/ctx session active; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
@@ -93,7 +90,7 @@
   act:      work the chosen rhythm's steps (default: the design loop, @rhythms); execute all commands through .contexture/ctx run <cmd>; mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
   surface:  durable output, named by what it is
   surface -> ask
-  artifacts: stay current in the same breath as the work: journal at the event (see @journal), backlog as work is declared and tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record and .contexture/templates/
+  artifacts: stay current in the same breath as the work: journal at the event (see @journal), backlog as work is declared and tasks move (see @backlog), state as position changes (see @record), knowledge verdicts flagged as they settle (see @refresh); nothing waits for the period end; shapes live in @record
 
 @rhythms
   contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state, its presence stamped on the advancing entries, never maintained; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm. a gate closes by its artifact: DECIDE by the backlog, VERIFY/LAND by the completion receipt carrying its evidence, REFRESH by the harvest; a gate closed by memory is debt.
@@ -103,28 +100,29 @@
   default :: the design loop, when no rhythm is invoked; human rhythm replaces progression
   1. DISCUSS: explore problem space; grounded questions resolve intent
   2. DECIDE: human verdict settles; triggers harvest candidate
-  3. BACKLOG: intent updates the backlog (ctx session append); the pointer moves via ctx session next
+  3. BACKLOG: intent updates the backlog (ctx session task add / append); the pointer moves via ctx session next
   4. EXECUTE: work active task; drift updates backlog in same breath
   5. VERIFY: task acceptance criteria proven; journal records completion, next_action advances
   6. REFRESH: run @refresh
 
 @subagents
-  dispatch: a step that names a subagent runs as a dispatched subagent: its own context, its own folder, its own report
+  dispatch: a step that names a subagent runs as a dispatched subagent: its own context, its own lane, its own report
   every dispatch:
-  - brief = recipe.md in lanes/<slug>/; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad folder dumps forbidden; names the active branch/worktree
-  - subagent boot, read-only, before any work: the overlays, the state, the backlog, knowledge, the recipe, and every REF it names; session surfaces are never subagent-written
+  - brief = the lane recipe; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad dumps forbidden; names the active branch/worktree
+  - subagent boot, read-only, before any work: the overlays, the state, the backlog, knowledge, the lane recipe, and every REF it names; session surfaces are never subagent-written
   - the subagent's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
-  - subagent journals at action granularity in journal.md as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the journal is the audit trail and the resumption surface
-  - report -> report.md; return = summary ONLY
+  - subagent journals at action granularity via ctx lane record as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the lane journal is the audit trail and the resumption surface
+  - report via ctx lane report; return = summary ONLY
   - the dispatcher reads the report, never the subagent journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
   - background: the turn ends at launch; never block the conversation on a subagent; parallel subagents only for independent domains: shared state or ordering means sequential
   - drift: a decision within the brief is the subagent's; it decides and journals it; a wall or a decision beyond the brief is drift, never improvised past; pause and ask for steering where the harness supports it, else stop, report found | standing | drifted, abort gracefully
-  - report and journal land NO MATTER the outcome: the action trace is the exact stopping point, so a steer continues live and a re-dispatch resumes from the folder, never rebuilds
+  - report and journal land NO MATTER the outcome: the action trace is the exact stopping point, so a steer continues live and a re-dispatch resumes from the lane, never rebuilds
   - a subagent that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
   - a subagent's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
   - read the report WHOLE, no exception; an unread part wears the look of review
   - command streams: subagents execute all commands through .contexture/ctx run <cmd> (runner mode prefix) or pipe through it to preserve context window capacity; raw execution is forbidden
-  - journal every dispatch: the subagent's folder path
+  - lane operations execute through top-level ctx lane (ctx lane show, record, report); the recipe specifies the unit and lane name for the subagent
+  - journal every dispatch: the subagent's lane slug
 
 @refresh
   the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the board read (its open-thread and open-task lists are the status checklist), the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run: every open flag, one candidate each; confirmed candidates land in knowledge via ctx session append (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; ctx session audit run, what it flags fixed; beyond the harvest, nothing closes here
@@ -134,7 +132,7 @@
     1. refresh (@refresh): the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by ctx session audit is the checklist: every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
     3. session audit: .contexture/ctx session audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from the state) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
-    4. folder stays ACTIVE
+    4. unit stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
     2. re-read; confirm consistency (@laws#verify-before-close)

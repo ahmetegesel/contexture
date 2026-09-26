@@ -1,0 +1,95 @@
+#!/bin/sh
+# summary: record subagent lane journal events isolated from main session journal
+# usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...]
+# help: appends an append-only event to the subagent lane journal.md
+# help: options:
+# help:   --what="..."         event description
+# help:   --slug=...           override entry slug (default auto-generated with date)
+# help:   --thread=...         what the lane awaits (default: none)
+# help: stdin fallback: raw @entry block piping supported
+
+set -u
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+resolver="$dir/../../session/scripts/driver-resolver"
+if [ ! -x "$resolver" ]; then
+  if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
+  fi
+fi
+
+if [ $# -lt 2 ]; then
+  if [ $# -gt 0 ]; then
+    case "$1" in
+      --help|-h|help)
+        printf 'usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...]\n'
+        printf 'appends an append-only event to the subagent lane journal.md\n'
+        exit 0
+        ;;
+    esac
+  fi
+  printf 'usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...]\n' >&2
+  exit 1
+fi
+
+unit="$1"
+shift
+lane="$1"
+shift
+
+what=""
+slug=""
+thread="none"
+json_out=0
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --what=*) what="${1#--what=}" ;;
+    -w) shift; [ $# -gt 0 ] && what="$1" ;;
+    --slug=*) slug="${1#--slug=}" ;;
+    -s) shift; [ $# -gt 0 ] && slug="$1" ;;
+    --thread=*) thread="${1#--thread=}" ;;
+    -t) shift; [ $# -gt 0 ] && thread="$1" ;;
+    --json) json_out=1 ;;
+    *) [ -z "$what" ] && what="$1" ;;
+  esac
+  shift
+done
+
+if [ -z "$what" ] && [ ! -t 0 ]; then
+  # Try parsing stdin @entry block
+  stdin_content=$(cat)
+  if [ -n "$stdin_content" ]; then
+    parsed_what=$(printf '%s\n' "$stdin_content" | awk -F'"' '/^[ ]{2}WHAT:[ ]*/ { print $2; exit }')
+    parsed_slug=$(printf '%s\n' "$stdin_content" | awk '/^@entry[ ]+/ { print $2; exit }')
+    parsed_thread=$(printf '%s\n' "$stdin_content" | awk '/^[ ]{2}THREAD:[ ]*/ { print $2; exit }')
+    [ -n "$parsed_what" ] && what="$parsed_what"
+    [ -n "$parsed_slug" ] && slug="$parsed_slug"
+    [ -n "$parsed_thread" ] && thread="$parsed_thread"
+  fi
+fi
+
+if [ -z "$what" ]; then
+  printf 'lane record: error: missing required --what parameter\n' >&2
+  exit 1
+fi
+
+if [ -z "$slug" ]; then
+  today=$(date +%Y-%m-%d)
+  slug="$today-event-$(date +%s 2>/dev/null || echo $$)"
+fi
+
+out=$("$resolver" lane.record "$unit" "$lane" "$slug" "$what" "$thread")
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  exit "$rc"
+fi
+
+if [ "$json_out" -eq 1 ]; then
+  printf '%s\n' "$out"
+else
+  printf 'lane entry recorded: %s in %s/%s\n' "$slug" "$unit" "$lane"
+fi
+exit 0

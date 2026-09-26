@@ -308,7 +308,7 @@ EOF
 run_body() {
   set -e
   run_label="ctx run"
-  run_usage_line="usage: ctx run [--filter=NAME] [--stats] [cmd [args...]]"
+  run_usage_line="usage: ctx run [--filter=NAME] [--stats] [--diagnose] [cmd [args...]]"
 
   MODULES_DIR="$dir/modules"
   FILTERS_DIR="$MODULES_DIR/run/filters"
@@ -318,6 +318,54 @@ run_body() {
       FILTERS_DIR="./.contexture/modules/run/filters"
     fi
   fi
+
+  # Sanctioned scratch: workspace .contexture/tmp when writable, else TMPDIR
+  compact_tmpdir="${TMPDIR:-/tmp}"
+  ctx_root_tmp="$root/.contexture/tmp"
+  if [ -d "$root/.contexture" ] && mkdir -p "$ctx_root_tmp" 2>/dev/null && [ -d "$ctx_root_tmp" ] && [ -w "$ctx_root_tmp" ]; then
+    compact_tmpdir="$ctx_root_tmp"
+  fi
+
+  diagnose_run() {
+    printf 'ctx run: runner compaction diagnostics\n'
+    printf '  workspace root:  %s\n' "$root"
+    if [ -w "$compact_tmpdir" ]; then
+      printf '  temp directory:  %s (writable)\n' "$compact_tmpdir"
+    else
+      printf '  temp directory:  %s (not writable)\n' "$compact_tmpdir"
+    fi
+    printf '  bypass config:   COMPACT_DISABLE=%s COMPACT_DEBUG=%s\n' "${COMPACT_DISABLE:-0}" "${COMPACT_DEBUG:-0}"
+    printf '  builtin filters: %s\n' "$FILTERS_DIR"
+    if [ -d "$FILTERS_DIR" ]; then
+      bf=""
+      for f in "$FILTERS_DIR"/*; do
+        [ -f "$f" ] || continue
+        name=$(basename "$f")
+        name=${name%.awk}
+        bf="$bf $name"
+      done
+      printf '    filters:%s\n' "$bf"
+    else
+      printf '    (none)\n'
+    fi
+    mf_count=0
+    for bn in $(filter_module_names); do
+      if [ -d "$MODULES_DIR/$bn/filters" ]; then
+        wf=""
+        for f in "$MODULES_DIR/$bn/filters"/*; do
+          [ -f "$f" ] || continue
+          name=$(basename "$f")
+          name=${name%.awk}
+          wf="$wf $name"
+          mf_count=$((mf_count + 1))
+        done
+        printf '  module filters (%s):%s\n' "$bn" "$wf"
+      fi
+    done
+    if [ "$mf_count" -eq 0 ]; then
+      printf '  module filters:  (none)\n'
+    fi
+  }
 
   explicit_filter=""
   stats=0
@@ -406,6 +454,10 @@ run_body() {
         printf 'env: COMPACT_DISABLE=1 bypasses compaction; COMPACT_DEBUG=1 reports the selection\n'
         exit 0
         ;;
+      --diagnose)
+        diagnose_run
+        exit 0
+        ;;
       --stats)
         stats=1
         shift
@@ -448,12 +500,7 @@ run_body() {
   stdout_tmp=""
   stderr_tmp=""
 
-  # Sanctioned scratch: workspace .contexture/tmp when writable, else TMPDIR
-  compact_tmpdir="${TMPDIR:-/tmp}"
-  ctx_root_tmp="$root/.contexture/tmp"
-  if [ -d "$root/.contexture" ] && mkdir -p "$ctx_root_tmp" 2>/dev/null && [ -d "$ctx_root_tmp" ] && [ -w "$ctx_root_tmp" ]; then
-    compact_tmpdir="$ctx_root_tmp"
-  fi
+
 
   cleanup() {
     if [ -n "$stdout_tmp" ]; then
@@ -966,6 +1013,20 @@ case "$1" in
     fi
     ctx_err "unknown verb: $1"
     show_module_help "$found_target" >&2
+    exit 1
+    ;;
+  --diagnose)
+    shift
+    if verb_exists "$md" "diagnose"; then
+      CTX_ROOT="$root"
+      CTX_MODULE_DIR="$md"
+      CTX_BIN="$ctx_bin"
+      export CTX_ROOT CTX_MODULE_DIR CTX_BIN
+      LC_ALL=C
+      export LC_ALL
+      exec "$md/scripts/diagnose" "$@"
+    fi
+    ctx_err "$found_target does not support --diagnose"
     exit 1
     ;;
 esac

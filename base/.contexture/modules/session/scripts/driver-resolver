@@ -1,0 +1,410 @@
+#!/bin/sh
+# driver-resolver: resolves module-owned storage drivers, validates capability
+# handshakes, and dispatches storage operations across session subsystems.
+#
+# Standardized exit codes:
+#   0: success
+#   1: semantic or validation error (ERR_INVALID_ARGUMENT)
+#   2: storage or driver error (ERR_DRIVER_NOT_FOUND, ERR_CAPABILITY_UNSUPPORTED, ERR_DRIVER_PROTOCOL)
+
+set -u
+
+# Locate .contexture root directory
+find_ctx_dir() {
+  if [ -n "${CTX_DIR:-}" ] && [ -d "$CTX_DIR" ]; then
+    printf '%s\n' "$CTX_DIR"
+    return 0
+  fi
+  if [ -n "${CTX_ROOT:-}" ] && [ -d "$CTX_ROOT/.contexture" ]; then
+    printf '%s/.contexture\n' "$CTX_ROOT"
+    return 0
+  fi
+  curr="$PWD"
+  while [ -n "$curr" ] && [ "$curr" != "/" ]; do
+    if [ -d "$curr/.contexture" ]; then
+      printf '%s/.contexture\n' "$curr"
+      return 0
+    fi
+    curr=$(dirname "$curr")
+  done
+  sdir=$(CDPATH="" cd "$(dirname "$0")" 2>/dev/null && pwd)
+  curr="$sdir"
+  while [ -n "$curr" ] && [ "$curr" != "/" ]; do
+    if [ -d "$curr/.contexture" ]; then
+      printf '%s/.contexture\n' "$curr"
+      return 0
+    elif [ "$(basename "$curr")" = ".contexture" ]; then
+      printf '%s\n' "$curr"
+      return 0
+    fi
+    curr=$(dirname "$curr")
+  done
+  if [ -d ".contexture" ]; then
+    printf '%s/.contexture\n' "$PWD"
+    return 0
+  fi
+  return 1
+}
+
+# Read storage.driver from .contexture/storage.conf
+read_conf_driver() {
+  ctx_dir="$1"
+  # Check unified workspace config first (.contexture/config)
+  conf="$ctx_dir/config"
+  if [ -f "$conf" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        session.storage.driver*=*|session.storage.driver*:*|storage.driver*=*|storage.driver*:*)
+          val=${line#*=}
+          [ "$val" = "$line" ] && val=${line#*:}
+          val=${val%%#*}
+          val=$(printf '%s' "$val" | tr -d ' \t\r\n"')
+          val=$(printf '%s' "$val" | tr -d "'")
+          if [ -n "$val" ]; then
+            printf '%s\n' "$val"
+            return 0
+          fi
+          ;;
+      esac
+    done < "$conf"
+  fi
+  # Fallback to storage.conf if present
+  conf="$ctx_dir/storage.conf"
+  if [ -f "$conf" ]; then
+    while IFS= read -r line || [ -n "$line" ]; do
+      case "$line" in
+        session.storage.driver*=*|session.storage.driver*:*|storage.driver*=*|storage.driver*:*)
+          val=${line#*=}
+          [ "$val" = "$line" ] && val=${line#*:}
+          val=${val%%#*}
+          val=$(printf '%s' "$val" | tr -d ' \t\r\n"')
+          val=$(printf '%s' "$val" | tr -d "'")
+          if [ -n "$val" ]; then
+            printf '%s\n' "$val"
+            return 0
+          fi
+          ;;
+      esac
+    done < "$conf"
+  fi
+  return 1
+}
+
+# Locate driver executable across 3-tier discovery hierarchy
+find_driver_executable() {
+  ctx_dir="$1"
+  driver="$2"
+
+  case "$driver" in
+    */*)
+      if [ -x "$driver" ]; then
+        printf '%s\n' "$driver"
+        return 0
+      fi
+      ;;
+  esac
+
+  # Tier 1: Workspace custom drivers
+  if [ -x "$ctx_dir/drivers/$driver/driver" ]; then
+    printf '%s/drivers/%s/driver\n' "$ctx_dir" "$driver"
+    return 0
+  fi
+  if [ -f "$ctx_dir/drivers/$driver" ] && [ -x "$ctx_dir/drivers/$driver" ]; then
+    printf '%s/drivers/%s\n' "$ctx_dir" "$driver"
+    return 0
+  fi
+
+  # Tier 2: Module-owned drivers
+  if [ -x "$ctx_dir/modules/session/drivers/$driver/driver" ]; then
+    printf '%s/modules/session/drivers/%s/driver\n' "$ctx_dir" "$driver"
+    return 0
+  fi
+  for mod_dir in "$ctx_dir"/modules/*; do
+    [ -d "$mod_dir" ] || continue
+    if [ -x "$mod_dir/drivers/$driver/driver" ]; then
+      printf '%s/drivers/%s/driver\n' "$mod_dir" "$driver"
+      return 0
+    fi
+    if [ -f "$mod_dir/drivers/$driver" ] && [ -x "$mod_dir/drivers/$driver" ]; then
+      printf '%s/drivers/%s\n' "$mod_dir" "$driver"
+      return 0
+    fi
+  done
+
+  # Tier 2b: Base mirror fallback
+  base_ctx="$ctx_dir/../base/.contexture"
+  if [ -d "$base_ctx" ]; then
+    if [ -x "$base_ctx/modules/session/drivers/$driver/driver" ]; then
+      printf '%s/modules/session/drivers/%s/driver\n' "$base_ctx" "$driver"
+      return 0
+    fi
+    for mod_dir in "$base_ctx"/modules/*; do
+      [ -d "$mod_dir" ] || continue
+      if [ -x "$mod_dir/drivers/$driver/driver" ]; then
+        printf '%s/drivers/%s/driver\n' "$mod_dir" "$driver"
+        return 0
+      fi
+      if [ -f "$mod_dir/drivers/$driver" ] && [ -x "$mod_dir/drivers/$driver" ]; then
+        printf '%s/drivers/%s\n' "$mod_dir" "$driver"
+        return 0
+      fi
+    done
+  fi
+
+  # Tier 3: External binary on PATH
+  if command -v "ctx-storage-$driver" >/dev/null 2>&1; then
+    command -v "ctx-storage-$driver"
+    return 0
+  fi
+
+  # Tier 4: Driver aliases fallback
+  alias_driver=""
+  case "$driver" in
+    sqlite-fts5|storage-fts5) alias_driver="fts5" ;;
+  esac
+  if [ -n "$alias_driver" ]; then
+    find_driver_executable "$ctx_dir" "$alias_driver"
+    return $?
+  fi
+
+  return 1
+}
+
+# Determine configured driver name honoring precedence
+determine_driver_name() {
+  ctx_dir="$1"
+  override_driver="${2:-}"
+
+  if [ -n "$override_driver" ]; then
+    printf '%s\n' "$override_driver"
+    return 0
+  fi
+
+  if [ -n "${CTX_STORAGE_DRIVER:-}" ]; then
+    printf '%s\n' "$CTX_STORAGE_DRIVER"
+    return 0
+  fi
+
+  conf_driver=$(read_conf_driver "$ctx_dir" 2>/dev/null) || conf_driver=""
+  if [ -n "$conf_driver" ]; then
+    printf '%s\n' "$conf_driver"
+    return 0
+  fi
+
+  printf 'posix\n'
+  return 0
+}
+
+# Resolve target driver path
+resolve_target_driver() {
+  ctx_dir="$1"
+  target_name="$2"
+
+  resolved_path=$(find_driver_executable "$ctx_dir" "$target_name") || resolved_path=""
+
+  if [ -n "$resolved_path" ] && [ -x "$resolved_path" ]; then
+    printf '%s\n' "$resolved_path"
+    return 0
+  fi
+
+  # Canonical default path for posix baseline driver
+  if [ "$target_name" = "posix" ]; then
+    printf '%s/modules/session/drivers/posix/driver\n' "$ctx_dir"
+    return 0
+  fi
+
+  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' not found in workspace drivers, builtin drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
+  return 2
+}
+
+# Validate capability handshake
+verify_capabilities() {
+  driver_exec="$1"
+  driver_name="$2"
+
+  if [ ! -x "$driver_exec" ]; then
+    printf 'driver-resolver: ERROR: driver executable '\''%s'\'' not found or not executable (ERR_DRIVER_NOT_FOUND)\n' "$driver_exec" >&2
+    return 2
+  fi
+
+  cap_json=$("$driver_exec" capability 2>&1)
+  cap_rc=$?
+
+  if [ "$cap_rc" -ne 0 ]; then
+    printf 'driver-resolver: ERROR: capability handshake failed for driver '\''%s'\'' with exit code %d (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_rc" >&2
+    return 2
+  fi
+
+  check_result=$(printf '%s\n' "$cap_json" | awk '
+    BEGIN {
+      mandatory["session.lifecycle"] = 1
+      mandatory["task.crud"] = 1
+      mandatory["task.atomic_completion"] = 1
+      mandatory["entry.journal"] = 1
+      mandatory["resolve.symbolic"] = 1
+      mandatory["search.keyword"] = 1
+      has_finding = 0
+      has_lane = 0
+      in_caps = 0
+    }
+    /"capabilities"[[:space:]]*:/ { in_caps = 1 }
+    in_caps {
+      line = $0
+      while (match(line, /"[^"]+"/)) {
+        cap = substr(line, RSTART + 1, RLENGTH-2)
+        line = substr(line, RSTART + RLENGTH)
+        found[cap] = 1
+        if (cap == "finding.knowledge" || cap == "finding.crud") has_finding = 1
+        if (cap == "lane.lifecycle" || cap == "lane.artifacts") has_lane = 1
+      }
+      if (/\]/) in_caps = 0
+    }
+    END {
+      missing = ""
+      for (m in mandatory) {
+        if (!found[m]) {
+          missing = missing " " m
+        }
+      }
+      if (!has_finding) {
+        missing = missing " finding.knowledge"
+      }
+      if (!has_lane) {
+        missing = missing " lane.lifecycle"
+      }
+      if (missing != "") {
+        sub(/^ /, "", missing)
+        print "MISSING:" missing
+        exit 1
+      }
+      exit 0
+    }
+  ')
+  check_rc=$?
+
+  if [ "$check_rc" -ne 0 ]; then
+    missing_caps=${check_result#MISSING:}
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' missing mandatory capability: %s (ERR_CAPABILITY_UNSUPPORTED)\n' "$driver_name" "$missing_caps" >&2
+    return 2
+  fi
+
+  printf '%s\n' "$cap_json"
+  return 0
+}
+
+# Main entry point
+CTX_DIR=$(find_ctx_dir) || {
+  printf 'driver-resolver: ERROR: could not locate .contexture root directory\n' >&2
+  exit 2
+}
+
+CLI_DRIVER=""
+COMMAND=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --driver=*)
+      CLI_DRIVER="${1#--driver=}"
+      shift
+      ;;
+    -d)
+      shift
+      [ $# -gt 0 ] || { printf 'driver-resolver: ERROR: -d requires driver name (ERR_INVALID_ARGUMENT)\n' >&2; exit 1; }
+      CLI_DRIVER="$1"
+      shift
+      ;;
+    --help|-h|help)
+      printf 'usage: driver-resolver [options] [command] [args...]\n'
+      printf 'commands:\n'
+      printf '  resolve [name]                    print resolved driver executable path\n'
+      printf '  capability [name]                 validate capability handshake and print capabilities\n'
+      printf '  check [name]                      verify resolution and capabilities\n'
+      printf '  exec <subsystem>.<method> [args]  dispatch call to active driver\n'
+      printf '  <subsystem>.<method> [args]       direct dispatch form\n'
+      printf 'options:\n'
+      printf '  --driver=<name>, -d <name>        explicit driver override\n'
+      exit 0
+      ;;
+    *)
+      COMMAND="$1"
+      shift
+      break
+      ;;
+  esac
+done
+
+TARGET_DRIVER=$(determine_driver_name "$CTX_DIR" "$CLI_DRIVER")
+
+case "$COMMAND" in
+  ""|resolve|--resolve)
+    if [ $# -gt 0 ]; then
+      TARGET_DRIVER="$1"
+    fi
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER")
+    rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf '%s\n' "$DRIVER_PATH"
+      exit 0
+    fi
+    exit "$rc"
+    ;;
+
+  capability|--capability|capabilities|--capabilities)
+    if [ $# -gt 0 ]; then
+      TARGET_DRIVER="$1"
+    fi
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER"
+    exit $?
+    ;;
+
+  check|verify)
+    if [ $# -gt 0 ]; then
+      TARGET_DRIVER="$1"
+    fi
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER" >/dev/null || exit 2
+    printf 'OK: storage driver '\''%s'\'' verified at %s\n' "$TARGET_DRIVER" "$DRIVER_PATH"
+    exit 0
+    ;;
+
+  exec|dispatch)
+    [ $# -gt 0 ] || {
+      printf 'driver-resolver: ERROR: exec requires <subsystem>.<method> argument (ERR_INVALID_ARGUMENT)\n' >&2
+      exit 1
+    }
+    METHOD="$1"
+    shift
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    if [ ! -x "$DRIVER_PATH" ]; then
+      printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
+      exit 2
+    fi
+    exec "$DRIVER_PATH" "$METHOD" "$@"
+    ;;
+
+  *.*)
+    METHOD="$COMMAND"
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    if [ ! -x "$DRIVER_PATH" ]; then
+      printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
+      exit 2
+    fi
+    exec "$DRIVER_PATH" "$METHOD" "$@"
+    ;;
+
+  *)
+    if [ $# -eq 0 ]; then
+      TARGET_DRIVER="$COMMAND"
+      DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER")
+      rc=$?
+      if [ "$rc" -eq 0 ]; then
+        printf '%s\n' "$DRIVER_PATH"
+        exit 0
+      fi
+      exit "$rc"
+    fi
+    printf 'driver-resolver: ERROR: unknown command or invalid method: '\''%s'\'' (ERR_INVALID_ARGUMENT)\n' "$COMMAND" >&2
+    exit 1
+    ;;
+esac

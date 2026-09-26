@@ -1,0 +1,433 @@
+#!/bin/sh
+# summary: task operations (add, update, start, complete, reopen, drop, list, show)
+# usage: ctx session task <subcommand> <unit> [args...]
+# help: subcommands:
+# help:   add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
+# help:   update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."]
+# help:   start <unit> <slug> [--pointer="..."]
+# help:   complete <unit> <slug> --evidence="..."
+# help:   reopen <unit> <slug>
+# help:   drop <unit> <slug> [--reason="..."]
+# help:   list <unit> [--status=todo|progress|done|all] [--json]
+# help:   show <unit> <slug> [--json]
+# help: stdin fallback: raw @task block piping supported
+
+set -u
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+resolver="$dir/driver-resolver"
+if [ ! -x "$resolver" ]; then
+  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
+    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
+  fi
+fi
+
+if [ $# -eq 0 ]; then
+  printf 'usage: ctx session task <subcommand> <unit> [args...]\n' >&2
+  printf 'subcommands: add, update, start, complete, reopen, drop, list, show\n' >&2
+  exit 1
+fi
+
+case "$1" in
+  --help|-h|help)
+    printf 'usage: ctx session task <subcommand> <unit> [args...]\n'
+    printf 'subcommands:\n'
+    printf '  add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
+    printf '  update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."]\n'
+    printf '  start <unit> <slug> [--pointer="..."]\n'
+    printf '  complete <unit> <slug> --evidence="..."\n'
+    printf '  reopen <unit> <slug>\n'
+    printf '  drop <unit> <slug> [--reason="..."]\n'
+    printf '  list <unit> [--status=todo|progress|done|all] [--json]\n'
+    printf '  show <unit> <slug> [--json]\n'
+    exit 0
+    ;;
+esac
+
+subcmd="$1"
+shift
+
+unit=""
+slug=""
+objective=""
+desc=""
+criteria=""
+details=""
+refs=""
+pointer=""
+evidence=""
+reason="task dropped"
+status_filter=""
+json_out=0
+
+# Helper to parse stdin @task block if piped
+parse_stdin_task() {
+  awk '
+    BEGIN { in_target = 0; in_scalar = ""; status = "TODO"; obj = ""; desc = ""; crit = ""; det = ""; r = ""; sl = ""; }
+    /^@task[ ]+/ {
+      line = $0; sub(/^@task[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
+      sl = line; in_target = 1; next;
+    }
+    in_target && /^[ ]{2}STATUS:[ ]*/ {
+      in_scalar = ""; v = $0; sub(/^[ ]{2}STATUS:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
+      status = v; next;
+    }
+    in_target && /^[ ]{2}OBJECTIVE:[ ]*/ {
+      in_scalar = ""; v = $0; sub(/^[ ]{2}OBJECTIVE:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
+      if (substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") v = substr(v, 2, length(v) - 2);
+      obj = v; next;
+    }
+    in_target && /^[ ]{2}REFS:[ ]*/ {
+      in_scalar = ""; v = $0; sub(/^[ ]{2}REFS:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
+      r = v; next;
+    }
+    in_target && /^[ ]{2}DESCRIPTION ::/ { in_scalar = "desc"; next; }
+    in_target && /^[ ]{2}ACCEPTANCE CRITERIA ::/ { in_scalar = "crit"; next; }
+    in_target && /^[ ]{2}IMPLEMENTATION DETAILS ::/ { in_scalar = "det"; next; }
+    in_target && in_scalar != "" && /^[ ]{4}/ {
+      line = substr($0, 5);
+      if (in_scalar == "desc") desc = (desc == "" ? line : desc "\n" line);
+      else if (in_scalar == "crit") crit = (crit == "" ? line : crit "\n" line);
+      else if (in_scalar == "det") det = (det == "" ? line : det "\n" line);
+      next;
+    }
+    in_target && /^[ \t]*$/ { in_scalar = ""; }
+    END {
+      gsub(/\n/, "\\n", desc);
+      gsub(/\n/, "\\n", crit);
+      gsub(/\n/, "\\n", det);
+      print sl "\t" obj "\t" r "\t" desc "\t" crit "\t" det;
+    }
+  '
+}
+
+case "$subcmd" in
+  add)
+    [ $# -gt 0 ] || { printf 'task add: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    if [ $# -gt 0 ] && [ "$(printf '%s' "$1" | cut -c1-2)" != "--" ]; then
+      slug="$1"; shift
+    fi
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --objective=*) objective="${1#--objective=}" ;;
+        -o) shift; [ $# -gt 0 ] && objective="$1" ;;
+        --desc=*|--description=*) desc="${1#*=}" ;;
+        -d) shift; [ $# -gt 0 ] && desc="$1" ;;
+        --criteria=*) criteria="${1#--criteria=}" ;;
+        -c) shift; [ $# -gt 0 ] && criteria="$1" ;;
+        --details=*) details="${1#--details=}" ;;
+        --refs=*) refs="${1#--refs=}" ;;
+        -r) shift; [ $# -gt 0 ] && refs="$1" ;;
+        --json) json_out=1 ;;
+        *)
+          if [ -z "$slug" ]; then
+            slug="$1"
+          fi
+          ;;
+      esac
+      shift
+    done
+    if [ -z "$objective" ] && [ ! -t 0 ]; then
+      stdin_content=$(cat)
+      if [ -n "$stdin_content" ]; then
+        parsed_out=$(printf '%s\n' "$stdin_content" | parse_stdin_task)
+        IFS='	' read -r parsed_slug parsed_obj parsed_refs parsed_desc parsed_crit parsed_det <<EOF
+$parsed_out
+EOF
+        [ -z "$slug" ] && slug="$parsed_slug"
+        [ -z "$objective" ] && objective="$parsed_obj"
+        [ -z "$refs" ] && refs="$parsed_refs"
+        [ -n "$parsed_desc" ] && desc=$(printf '%b' "$parsed_desc")
+        [ -n "$parsed_crit" ] && criteria=$(printf '%b' "$parsed_crit")
+        [ -n "$parsed_det" ] && details=$(printf '%b' "$parsed_det")
+      fi
+    fi
+    if [ -z "$slug" ]; then
+      printf 'task add: error: missing task slug\n' >&2
+      exit 1
+    fi
+    if [ -z "$objective" ]; then
+      printf 'task add: error: missing required --objective parameter\n' >&2
+      exit 1
+    fi
+    out=$("$resolver" task.add "$unit" "$slug" "$objective" "$desc" "$criteria" "$details" "$refs")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf 'task added: %s (TODO)\n' "$slug"
+    fi
+    exit 0
+    ;;
+
+  update)
+    [ $# -gt 0 ] || { printf 'task update: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'task update: error: missing task slug\n' >&2; exit 1; }
+    slug="$1"; shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --objective=*) objective="${1#--objective=}" ;;
+        -o) shift; [ $# -gt 0 ] && objective="$1" ;;
+        --desc=*|--description=*) desc="${1#*=}" ;;
+        -d) shift; [ $# -gt 0 ] && desc="$1" ;;
+        --criteria=*) criteria="${1#--criteria=}" ;;
+        -c) shift; [ $# -gt 0 ] && criteria="$1" ;;
+        --details=*) details="${1#--details=}" ;;
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    if [ -z "$objective" ] && [ -z "$desc" ] && [ -z "$criteria" ] && [ -z "$details" ] && [ ! -t 0 ]; then
+      stdin_content=$(cat)
+      if [ -n "$stdin_content" ]; then
+        parsed_out=$(printf '%s\n' "$stdin_content" | parse_stdin_task)
+        IFS='	' read -r parsed_slug parsed_obj parsed_refs parsed_desc parsed_crit parsed_det <<EOF
+$parsed_out
+EOF
+        [ -z "$objective" ] && objective="$parsed_obj"
+        [ -n "$parsed_desc" ] && desc=$(printf '%b' "$parsed_desc")
+        [ -n "$parsed_crit" ] && criteria=$(printf '%b' "$parsed_crit")
+        [ -n "$parsed_det" ] && details=$(printf '%b' "$parsed_det")
+      fi
+    fi
+    out=$("$resolver" task.update "$unit" "$slug" "$objective" "$desc" "$criteria" "$details")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf 'task updated: %s\n' "$slug"
+    fi
+    exit 0
+    ;;
+
+  start)
+    [ $# -gt 0 ] || { printf 'task start: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'task start: error: missing task slug\n' >&2; exit 1; }
+    slug="$1"; shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --pointer=*) pointer="${1#--pointer=}" ;;
+        -p) shift; [ $# -gt 0 ] && pointer="$1" ;;
+        --json) json_out=1 ;;
+        *) [ -z "$pointer" ] && pointer="$1" ;;
+      esac
+      shift
+    done
+    out=$("$resolver" task.start "$unit" "$slug" "$pointer")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf 'task started: %s (IN_PROGRESS)\n' "$slug"
+    fi
+    exit 0
+    ;;
+
+  complete)
+    [ $# -gt 0 ] || { printf 'task complete: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'task complete: error: missing task slug\n' >&2; exit 1; }
+    slug="$1"; shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --evidence=*) evidence="${1#--evidence=}" ;;
+        -e) shift; [ $# -gt 0 ] && evidence="$1" ;;
+        --json) json_out=1 ;;
+        *) [ -z "$evidence" ] && evidence="$1" ;;
+      esac
+      shift
+    done
+    if [ -z "$evidence" ]; then
+      printf 'task complete: error: missing required --evidence parameter\n' >&2
+      exit 1
+    fi
+    out=$("$resolver" task.complete "$unit" "$slug" "$evidence")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf 'task completed: %s (DONE)\n' "$slug"
+    fi
+    exit 0
+    ;;
+
+  reopen)
+    [ $# -gt 0 ] || { printf 'task reopen: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'task reopen: error: missing task slug\n' >&2; exit 1; }
+    slug="$1"; shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    out=$("$resolver" task.reopen "$unit" "$slug")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf 'task reopened: %s (TODO)\n' "$slug"
+    fi
+    exit 0
+    ;;
+
+  drop)
+    [ $# -gt 0 ] || { printf 'task drop: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'task drop: error: missing task slug\n' >&2; exit 1; }
+    slug="$1"; shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --reason=*) reason="${1#--reason=}" ;;
+        -r) shift; [ $# -gt 0 ] && reason="$1" ;;
+        --json) json_out=1 ;;
+        *) [ -n "$1" ] && reason="$1" ;;
+      esac
+      shift
+    done
+    out=$("$resolver" task.drop "$unit" "$slug" "$reason")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      printf 'task dropped: %s\n' "$slug"
+    fi
+    exit 0
+    ;;
+
+  list)
+    [ $# -gt 0 ] || { printf 'task list: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --status=*) status_filter="${1#--status=}" ;;
+        -s) shift; [ $# -gt 0 ] && status_filter="$1" ;;
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    out=$("$resolver" task.list "$unit" "$status_filter")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      # Format readable task list
+      printf '%s\n' "$out" | awk '
+        BEGIN {
+          # Simple JSON array extractor
+        }
+        {
+          line = $0
+          while (match(line, /\{"slug":"[^"]*","status":"[^"]*","objective":"[^"]*"\}/)) {
+            item = substr(line, RSTART, RLENGTH)
+            line = substr(line, RSTART + RLENGTH)
+            match(item, /"slug":"[^"]*"/)
+            s = substr(item, RSTART + 8, RLENGTH - 9)
+            match(item, /"status":"[^"]*"/)
+            st = substr(item, RSTART + 10, RLENGTH - 11)
+            match(item, /"objective":"[^"]*"/)
+            obj = substr(item, RSTART + 13, RLENGTH - 14)
+            printf "  [%s] %s: %s\n", st, s, obj
+          }
+        }
+      '
+    fi
+    exit 0
+    ;;
+
+  show)
+    [ $# -gt 0 ] || { printf 'task show: error: missing unit argument\n' >&2; exit 1; }
+    unit="$1"; shift
+    [ $# -gt 0 ] || { printf 'task show: error: missing task slug\n' >&2; exit 1; }
+    slug="$1"; shift
+    while [ $# -gt 0 ]; do
+      case "$1" in
+        --json) json_out=1 ;;
+      esac
+      shift
+    done
+    out=$("$resolver" task.show "$unit" "$slug")
+    rc=$?
+    if [ "$rc" -ne 0 ]; then
+      exit "$rc"
+    fi
+    if [ "$json_out" -eq 1 ]; then
+      printf '%s\n' "$out"
+    else
+      # Format readable task definition
+      printf '%s\n' "$out" | awk '
+        {
+          line = $0
+          match(line, /"slug":"[^"]*"/)
+          s = substr(line, RSTART + 8, RLENGTH - 9)
+          match(line, /"status":"[^"]*"/)
+          st = substr(line, RSTART + 10, RLENGTH - 11)
+          match(line, /"objective":"[^"]*"/)
+          obj = substr(line, RSTART + 13, RLENGTH - 14)
+          printf "@task %s\n  STATUS: %s\n  OBJECTIVE: \"%s\"\n", s, st, obj
+          if (match(line, /"description":"[^"]*"/)) {
+            d = substr(line, RSTART + 15, RLENGTH - 16)
+            if (d != "") {
+              gsub(/\\n/, "\n    ", d)
+              printf "  DESCRIPTION ::\n    %s\n", d
+            }
+          }
+          if (match(line, /"criteria":"[^"]*"/)) {
+            c = substr(line, RSTART + 12, RLENGTH - 13)
+            if (c != "") {
+              gsub(/\\n/, "\n    ", c)
+              printf "  ACCEPTANCE CRITERIA ::\n    %s\n", c
+            }
+          }
+          if (match(line, /"details":"[^"]*"/)) {
+            det = substr(line, RSTART + 11, RLENGTH - 12)
+            if (det != "") {
+              gsub(/\\n/, "\n    ", det)
+              printf "  IMPLEMENTATION DETAILS ::\n    %s\n", det
+            }
+          }
+        }
+      '
+    fi
+    exit 0
+    ;;
+
+  *)
+    # Direct fallback: if $subcmd looks like a unit slug, default to list or show
+    unit="$subcmd"
+    if [ $# -eq 0 ]; then
+      exec "$0" list "$unit"
+    else
+      exec "$0" show "$unit" "$@"
+    fi
+    ;;
+esac

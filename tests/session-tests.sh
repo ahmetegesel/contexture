@@ -40,6 +40,8 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/rhythms"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
+[ -d "$ROOT/base/.contexture/modules/lane" ] && cp -R "$ROOT/base/.contexture/modules/lane" "$SANDBOX/.contexture/modules/lane"
+[ -d "$ROOT/.contexture/modules/lane" ] && cp -R "$ROOT/.contexture/modules/lane" "$SANDBOX/.contexture/modules/lane"
 cat > "$SANDBOX/.contexture/rhythms/probe.md" <<'EOF'
 @rhythm probe
   use when: the suite needs an index line
@@ -48,7 +50,7 @@ EOF
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
-chmod +x .contexture/modules/session/scripts/*
+chmod +x .contexture/modules/*/scripts/* 2>/dev/null || true
 
 pass=0
 fail=0
@@ -59,7 +61,7 @@ a_match() { if printf '%s\n' "$1" | grep -q "$2"; then ok "$3"; else bad "$3 (no
 a_not() { if printf '%s\n' "$1" | grep -q "$2"; then bad "$3 (unwanted: $2)"; else ok "$3"; fi; }
 
 echo "== V verb surface and no-arg rc contract =="
-DECLARED="active amend append audit board bootstrap close drop flip index load next query refresh refs stamp"
+DECLARED="active amend append audit board bootstrap close diagnose drop entry finding flip index load next query record refresh refs resolve search stamp task"
 disk=$(for f in .contexture/modules/session/scripts/*; do
   [ -f "$f" ] || continue
   b=${f##*/}
@@ -74,7 +76,7 @@ for v in $DECLARED; do
   $CTX session "$v" >/dev/null 2>&1
   rc=$?
   case "$v" in
-    active|index) want=0 ;;
+    active|diagnose|index) want=0 ;;
     *) want=1 ;;
   esac
   a_eq "$rc" "$want" "verb:$v no-arg rc $want"
@@ -234,6 +236,139 @@ rc=$?
 a_eq "$rc" "0" "standalone board (load helper) rc0"
 a_eq "$(cat board.err)" "" "standalone board silent stderr"
 
+echo "== E agent semantic interface and lane module =="
+$CTX session bootstrap sem-unit "semantic interface test" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: bootstrap sem-unit rc0"
+
+# 1. task add with typed flags
+$CTX session task add sem-unit task-1 --objective="First objective" --desc="Task 1 description" --criteria="Criteria 1" --details="Details 1" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: task add typed flags rc0"
+out=$($CTX session task show sem-unit task-1)
+a_match "$out" "OBJECTIVE: \"First objective\"" "semantic: task show matches objective"
+a_match "$out" "STATUS: TODO" "semantic: task show status TODO"
+
+# 2. task add raw stdin block fallback
+printf '@task task-2\n  STATUS: TODO\n  OBJECTIVE: "Second objective"\n  DESCRIPTION ::\n    Piped task description\n' | $CTX session task add sem-unit >/dev/null 2>&1
+a_eq "$?" "0" "semantic: task add raw stdin fallback rc0"
+out=$($CTX session task show sem-unit task-2)
+a_match "$out" "OBJECTIVE: \"Second objective\"" "semantic: task show piped task objective"
+
+# 3. task update
+$CTX session task update sem-unit task-1 --objective="Updated objective 1" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: task update rc0"
+out=$($CTX session task show sem-unit task-1)
+a_match "$out" "OBJECTIVE: \"Updated objective 1\"" "semantic: task update verified"
+
+# 4. task start (atomic status and state pointer update)
+$CTX session task start sem-unit task-1 --pointer="work on task-1" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: task start rc0"
+out=$($CTX session task show sem-unit task-1)
+a_match "$out" "STATUS: IN_PROGRESS" "semantic: task start updates status to IN_PROGRESS"
+a_match "$(cat .contexture/sessions/sem-unit/state.md)" "next_action: \"work on task-1\"" "semantic: task start atomically updates next_action"
+
+# 5. task complete (atomic status and receipt event)
+$CTX session task complete sem-unit task-1 --evidence="test verified cleanly" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: task complete rc0"
+out=$($CTX session task show sem-unit task-1)
+a_match "$out" "STATUS: DONE" "semantic: task complete updates status to DONE"
+a_match "$(cat .contexture/sessions/sem-unit/journal.md)" "backlog/task-1: DONE (test verified cleanly)" "semantic: task complete appends receipt event"
+
+# 6. task reopen
+$CTX session task reopen sem-unit task-1 >/dev/null 2>&1
+a_eq "$?" "0" "semantic: task reopen rc0"
+out=$($CTX session task show sem-unit task-1)
+a_match "$out" "STATUS: TODO" "semantic: task reopen restores TODO"
+
+# 7. task drop
+$CTX session task drop sem-unit task-2 --reason="task deprecated" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: task drop rc0"
+a_not "$(cat .contexture/sessions/sem-unit/backlog.md)" "task-2" "semantic: task drop removes task block"
+
+# 8. task list
+out=$($CTX session task list sem-unit)
+a_match "$out" "task-1" "semantic: task list contains task-1"
+out_json=$($CTX session task list sem-unit --json)
+a_match "$out_json" "\"slug\":\"task-1\"" "semantic: task list --json outputs valid JSON"
+
+# 9. record with typed flags and auto-injected date/anchor
+$CTX session record sem-unit --what="event recorded via flags" --group="dev" --thread="review" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: record typed flags rc0"
+j_content=$(cat .contexture/sessions/sem-unit/journal.md)
+a_match "$j_content" "WHAT: \"event recorded via flags\"" "semantic: record event content verified"
+a_match "$j_content" "GROUP: dev" "semantic: record group verified"
+a_match "$j_content" "THREAD: review" "semantic: record thread verified"
+a_match "$j_content" "@entry $TODAY" "semantic: record auto-injects date prefix"
+a_match "$j_content" "ANCHOR: A1" "semantic: record auto-injects active anchor"
+
+# 10. record raw stdin block fallback
+printf '@entry %s-piped-event\n  WHAT: "piped event content"\n  THREAD: none\n' "$TODAY" | $CTX session record sem-unit >/dev/null 2>&1
+a_eq "$?" "0" "semantic: record raw stdin fallback rc0"
+a_match "$(cat .contexture/sessions/sem-unit/journal.md)" "piped event content" "semantic: record piped block lands in journal"
+
+# 11. finding CRUD (add, show, update, supersede, drop, list)
+$CTX session finding add sem-unit ARCH_DECISION --summary="Architecture decision 1" --ref="journal.md#event" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: finding add rc0"
+out=$($CTX session finding show sem-unit ARCH_DECISION)
+a_match "$out" "SUMMARY ::" "semantic: finding show renders summary"
+out_json=$($CTX session finding show sem-unit ARCH_DECISION --json)
+a_match "$out_json" "\"name\":\"ARCH_DECISION\"" "semantic: finding show --json outputs valid JSON"
+
+$CTX session finding update sem-unit ARCH_DECISION --summary="Updated architecture decision" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: finding update rc0"
+out=$($CTX session finding show sem-unit ARCH_DECISION)
+a_match "$out" "Updated architecture decision" "semantic: finding update persists"
+
+$CTX session finding supersede sem-unit ARCH_DECISION ARCH_V2 --summary="Architecture decision version 2" >/dev/null 2>&1
+a_eq "$?" "0" "semantic: finding supersede rc0"
+out=$($CTX session finding list sem-unit)
+a_match "$out" "ARCH_V2" "semantic: finding list displays ARCH_V2"
+
+$CTX session finding drop sem-unit ARCH_DECISION >/dev/null 2>&1
+a_eq "$?" "0" "semantic: finding drop rc0"
+a_not "$(cat .contexture/sessions/sem-unit/knowledge.md)" "@finding ARCH_DECISION" "semantic: finding drop removes finding"
+
+# 12. search
+out=$($CTX session search sem-unit "Architecture decision")
+a_match "$out" "ARCH_V2" "semantic: search locates finding query"
+
+# 13. entry show and list
+out=$($CTX session entry list sem-unit)
+a_match "$out" "piped event content" "semantic: entry list contains events"
+out=$($CTX session entry show sem-unit "$TODAY-piped-event")
+a_match "$out" "@entry $TODAY-piped-event" "semantic: entry show renders entry"
+
+# 13b. resolve
+out=$($CTX session resolve sem-unit "knowledge.md#ARCH_V2")
+a_match "$out" "@finding ARCH_V2" "semantic: resolve renders entity block"
+out_json=$($CTX session resolve sem-unit "knowledge.md#ARCH_V2" --json)
+a_match "$out_json" '"entity_type":"finding"' "semantic: resolve outputs json"
+
+# 14. ctx lane operations
+mkdir -p .contexture/sessions/sem-unit/lanes/sub-lane
+cat > .contexture/sessions/sem-unit/lanes/sub-lane/recipe.md <<'EOF'
+# recipe grammar
+blocks at column 0; fields indent 2;
+MISSION
+  GOAL: "lane test subagent"
+EOF
+cat > .contexture/sessions/sem-unit/lanes/sub-lane/journal.md <<'EOF'
+# journal grammar
+blocks at column 0; fields indent 2;
+EOF
+
+out=$($CTX lane show sem-unit sub-lane recipe)
+a_match "$out" "lane test subagent" "lane: show recipe matches"
+
+$CTX lane record sem-unit sub-lane --what="lane event 1" >/dev/null 2>&1
+a_eq "$?" "0" "lane: record event rc0"
+a_match "$(cat .contexture/sessions/sem-unit/lanes/sub-lane/journal.md)" "lane event 1" "lane: record appends to lane journal"
+a_not "$(cat .contexture/sessions/sem-unit/journal.md)" "lane event 1" "lane: record does not contaminate main session journal"
+
+$CTX lane report sem-unit sub-lane --body="lane report summary" >/dev/null 2>&1
+a_eq "$?" "0" "lane: report write rc0"
+out=$($CTX lane show sem-unit sub-lane report)
+a_match "$out" "lane report summary" "lane: show report reads written content"
+
 echo "== L parallel-write probe =="
 today=$(date +%Y-%m-%d)
 p1_pass=0
@@ -292,6 +427,15 @@ a_eq "$p2_rc_bad" "0" "P2 same-target concurrency: every write act rc0"
 a_eq "$p2_residue" "0" "P2 same-target concurrency: no temp residue"
 a_eq "$p2_incomplete" "0" "P2 same-target concurrency: no torn journal block"
 echo "note: P2 same-target both-landed $p2_both/$p2_iters (last-writer-wins is the documented design)"
+
+echo "== D session diagnostics =="
+$CTX session diagnose >/dev/null 2>&1
+a_eq "$?" "0" "session diagnose rc0"
+diag_json=$($CTX session diagnose --json 2>/dev/null)
+a_match "$diag_json" '"workspace_root"' "session diagnose --json carries workspace_root"
+a_match "$diag_json" '"capabilities"' "session diagnose --json carries capabilities"
+$CTX session --diagnose >/dev/null 2>&1
+a_eq "$?" "0" "session --diagnose flag rc0"
 
 echo "== summary =="
 echo "session-tests: pass=$pass fail=$fail"

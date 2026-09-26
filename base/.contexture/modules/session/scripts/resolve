@@ -1,0 +1,106 @@
+#!/bin/sh
+# summary: resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim)
+# usage: ctx session resolve <unit> <ref> [--json]
+# help: resolves domain references and normalizes legacy file-based references
+# help: arguments:
+# help:   <unit>      session unit slug
+# help:   <ref>       abstract entity reference (task#slug, finding#NAME, entry#slug, lane#slug/report#claim)
+# help:   --json      output JSON format
+
+set -u
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+resolver="$dir/driver-resolver"
+if [ ! -x "$resolver" ]; then
+  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
+    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
+  fi
+fi
+
+if [ $# -lt 2 ]; then
+  if [ $# -gt 0 ]; then
+    case "$1" in
+      --help|-h|help)
+        printf 'usage: ctx session resolve <unit> <ref> [--json]\n'
+        printf 'resolves abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim)\n'
+        printf 'options:\n'
+        printf '  --json      output JSON format\n'
+        exit 0
+        ;;
+    esac
+  fi
+  printf 'usage: ctx session resolve <unit> <ref> [--json]\n' >&2
+  exit 1
+fi
+
+unit="$1"
+shift
+ref="$1"
+shift
+
+json_out=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json) json_out=1 ;;
+  esac
+  shift
+done
+
+out=$("$resolver" resolve.ref "$unit" "$ref")
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  exit "$rc"
+fi
+
+if [ "$json_out" -eq 1 ]; then
+  printf '%s\n' "$out"
+else
+  printf '%s\n' "$out" | awk '
+    {
+      line = $0
+      match(line, /"entity_type":"[^"]*"/)
+      etype = substr(line, RSTART + 15, RLENGTH-16)
+      if (etype == "finding") {
+        match(line, /"name":"[^"]*"/)
+        nm = substr(line, RSTART + 8, RLENGTH-9)
+        printf "@finding %s\n", nm
+        if (match(line, /"ref":"[^"]*"/)) {
+          rf = substr(line, RSTART + 7, RLENGTH-8)
+          if (rf != "") printf "  REF: \"%s\"\n", rf
+        }
+        if (match(line, /"summary":"[^"]*"/)) {
+          sm = substr(line, RSTART + 11, RLENGTH-12)
+          gsub(/\\n/, "\n    ", sm)
+          printf "  SUMMARY ::\n    %s\n", sm
+        }
+      } else if (etype == "task") {
+        match(line, /"slug":"[^"]*"/)
+        sl = substr(line, RSTART + 8, RLENGTH-9)
+        printf "@task %s\n", sl
+        if (match(line, /"status":"[^"]*"/)) {
+          st = substr(line, RSTART + 10, RLENGTH-11)
+          if (st != "") printf "  STATUS: %s\n", st
+        }
+        if (match(line, /"objective":"[^"]*"/)) {
+          ob = substr(line, RSTART + 13, RLENGTH-14)
+          if (ob != "") printf "  OBJECTIVE: \"%s\"\n", ob
+        }
+      } else if (etype == "entry") {
+        match(line, /"slug":"[^"]*"/)
+        sl = substr(line, RSTART + 8, RLENGTH-9)
+        printf "@entry %s\n", sl
+        if (match(line, /"what":"[^"]*"/)) {
+          wt = substr(line, RSTART + 8, RLENGTH-9)
+          if (wt != "") printf "  WHAT: \"%s\"\n", wt
+        }
+      } else {
+        printf "%s\n", line
+      }
+    }
+  '
+fi
+exit 0

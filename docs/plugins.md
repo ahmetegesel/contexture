@@ -51,6 +51,7 @@ Upstream contribution and workspace extension are the same story. Build the mech
 - `lane-isolation`: on-demand worktree isolation for subagents.
 - `docs-discipline`: a corpus-first documentation discipline (the `docs` module: `ctx docs query|audit|check|gate|nudge`).
 - `ast-doc-graph`: an AST symbol graph linked with centralized documentation.
+- `storage-fts5`: SQLite FTS5 storage driver with normalized relational schema, dual Porter and Trigram tokenization, pure SQL Reciprocal Rank Fusion (RRF) search, high-density snippet extraction, and bidirectional migration (`ctx storage-fts5 migrate`).
 
 ## Where the rest lives
 

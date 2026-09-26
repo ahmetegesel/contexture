@@ -16,6 +16,8 @@ GROUND_AND_REFS
   # sliced context: exact symbols/lines; broad folder dumps forbidden
   SOURCE_OF_TRUTH: <file#symbol-or-lines>
   BRANCH: <the active branch the subagent works on>  # required
+  [UNIT: <unit-slug>]               # session unit name for ctx lane commands
+  [LANE: <lane-slug>]               # subagent lane name for ctx lane commands
   REFS: [<file#symbol>, <journal#entry>, <knowledge#finding>]
   [FACTS ::
     exact isolated constraints from parent attention; one statement per line;
@@ -42,6 +44,8 @@ MISSION
 GROUND_AND_REFS
   SOURCE_OF_TRUTH: reports/2026-09-05-readme-consistency-audit.md#claim-1
   BRANCH: main
+  UNIT: workspace-record
+  LANE: readme-remediation
   REFS: [AGENTS.md#L104, README.md#L484-491, knowledge.md#TOPOLOGY_AWARE_ADOPTION]
   FACTS ::
     standalone repos ignore only .contexture/sessions/, .contexture/rhythms/, AGENTS.local.md;

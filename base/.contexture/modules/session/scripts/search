@@ -1,0 +1,84 @@
+#!/bin/sh
+# summary: universal search across session records and artifacts
+# usage: ctx session search <unit> "<query>" [options]
+# help: searches session records (tasks, entries, findings, lanes) for query terms
+# help: options:
+# help:   --json              output JSON format
+# help:   --limit=N           maximum number of matches to display
+# help:   --mode=MODE         search mode (exact, hybrid, trigram)
+# help:   --entity=TYPE       filter by entity type (task, entry, finding, lane, all)
+
+set -u
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+resolver="$dir/driver-resolver"
+if [ ! -x "$resolver" ]; then
+  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
+    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
+  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
+    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
+  fi
+fi
+
+if [ $# -eq 0 ]; then
+  printf 'usage: ctx session search <unit> "<query>" [options]\n' >&2
+  printf 'options: --json, --limit=N, --mode=MODE, --entity=TYPE\n' >&2
+  exit 1
+fi
+
+case "$1" in
+  --help|-h|help)
+    printf 'usage: ctx session search <unit> "<query>" [options]\n'
+    printf 'searches session records (tasks, entries, findings, lanes) for query terms\n'
+    printf 'options:\n'
+    printf '  --json              output JSON format\n'
+    printf '  --limit=N           maximum number of matches to display\n'
+    printf '  --mode=MODE         search mode (exact, hybrid, trigram)\n'
+    printf '  --entity=TYPE       filter by entity type (task, entry, finding, lane, all)\n'
+    exit 0
+    ;;
+esac
+
+unit="$1"
+shift
+
+if [ $# -eq 0 ]; then
+  printf 'search: error: query string required\n' >&2
+  exit 1
+fi
+
+query="$1"
+shift
+
+json_out=0
+limit=""
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json) json_out=1 ;;
+    --limit=*) limit="${1#--limit=}" ;;
+    -l) shift; [ $# -gt 0 ] && limit="$1" ;;
+    --mode=*|--entity=*) ;;
+  esac
+  shift
+done
+
+out=$("$resolver" search.query "$unit" "$query")
+rc=$?
+if [ "$rc" -ne 0 ]; then
+  exit "$rc"
+fi
+
+if [ "$json_out" -eq 1 ]; then
+  printf '%s\n' "$out"
+else
+  # Format matches or output text
+  if [ -n "$limit" ]; then
+    printf '%s\n' "$out" | head -n "$limit"
+  else
+    printf '%s\n' "$out"
+  fi
+fi
+exit 0

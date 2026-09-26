@@ -4,11 +4,11 @@ contexture is a zero-dependency workspace convention that gives AI coding agents
 
 | Dimension | Traditional LLM Compaction | contexture Disk Memory |
 |:---|:---|:---|
-| **Storage** | Ephemeral chat window (lost on reset) | Plain markdown files in repo (`.contexture/`) |
+| **Storage** | Ephemeral chat window (lost on reset) | Authoritative storage backend (.contexture/) |
 | **When context fills** | Model writes a lossy prose summary | Append-only event log; zero information loss |
 | **What survives** | Vague intentions ("Refactor auth middleware") | Exact decisions, why alternatives failed, test proof |
 | **Resuming work** | Model acts confidently wrong from missing facts | Fresh agent queries active slice; resumes in seconds |
-| **Dependencies** | Proprietary agent cloud or vector databases | Zero dependencies; uses standard `git` and `awk` |
+| **Dependencies** | Proprietary agent cloud or vector databases | Zero dependencies; uses standard POSIX tools |
 
 contexture is a convention, not a tool: lightweight, abstracted, extensible. Plain files, any harness, one commit, no dependencies.
 
@@ -21,9 +21,9 @@ contexture is a convention, not a tool: lightweight, abstracted, extensible. Pla
 
 ## Why contexture
 
-- **Lightweight by construction**: Plain files and POSIX awk, no background services, no databases, no external dependencies.
+- **Lightweight by construction**: Plain files and POSIX awk baseline, no mandatory background services, no required databases, no external dependencies.
 - **Abstracted by design**: The schema governs shapes and the laws govern mechanisms, carrying zero workflow policies your workspace cannot override.
-- **Extensible without forks**: Add custom rhythms, amend rules through overlays, and delegate work through subagents while the core stays untouched.
+- **Extensible without forks**: Add custom rhythms, amend rules through overlays, configure storage drivers, and delegate work through subagents while the core stays untouched.
 
 ## Installation
 
@@ -61,8 +61,8 @@ Once confirmed, start your first unit of work:
 
 ### What happens next?
 
-1. **The agent creates the unit:** It creates `.contexture/sessions/<your-task>/` with your active tasks (`backlog.md`) and an append-only event log (`journal.md`).
-2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates its tasks, logs test proofs, and records decisions in its files. You never manage the files manually.
+1. **The agent creates the unit:** It initializes `.contexture/sessions/<your-task>/` with active tasks (`backlog.md`) and an append-only event log (`journal.md`).
+2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates tasks, logs test proofs, and records decisions through semantic CLI verbs. You never manage the files manually.
 3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `ctx session load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
 
 For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
@@ -78,6 +78,7 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
+    ├── config            Optional workspace configuration (session.storage.driver: posix)
     ├── modules/          The modules: session (the record engine), run (stream filters), and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
     ├── templates/        Shape grammars ensuring structured writes without guesswork
@@ -92,10 +93,13 @@ The workspace couples root governance with a dedicated convention drawer:
 ## Core concepts
 
 ### Units
-A dedicated folder for your task (`.contexture/sessions/<name>/`). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
+A dedicated scope for your task (`.contexture/sessions/<name>/`). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
 
 ### Subagents
-An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Deep dive: [Units and subagents](docs/units-and-lanes.md).
+An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Managed via the top-level `ctx lane` module. Deep dive: [Units and subagents](docs/units-and-lanes.md).
+
+### Storage abstraction
+Pluggable backend architecture via the Storage Provider Interface (SPI). Decouples agents from physical disk files or database schemas. The zero-dependency baseline POSIX driver manages markdown files, while storage plugins such as `storage-fts5` provide high-performance SQLite storage with dual Porter and Trigram indexing, pure SQL Reciprocal Rank Fusion (RRF) search, and high-density 5 to 12 token snippet extraction. Deep dive: [The record](docs/the-record.md) and [The engine](docs/the-engine.md).
 
 ### Rhythms
 A plain text workflow checklist in `.contexture/rhythms/`. Enforces process discipline, requiring the agent to discuss, test, and verify before claiming work is done. Deep dive: [Rhythms](docs/rhythms.md).
@@ -121,6 +125,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [Lane isolation](plugins/lane-isolation/): On-demand worktree isolation for subagents
 - [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
 - [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
+- [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and migration
 - [Tests](tests/): The filter test material, upstream only; see [tests/README.md](tests/README.md)
 - [Maintaining contexture](#maintaining-contexture): The `base/` dev loop: edit, ship, apply
 
@@ -136,6 +141,14 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
 | ctx session audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
 | ctx session index | One line per rhythm: name, path, use when, activation |
+| ctx session task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags and atomic state updates |
+| ctx session record <unit> --what="..." [--flags] | Append an immutable journal event with auto-injected local date, active anchor, and default receipt thread |
+| ctx session entry <verb> [args] | Journal entry inspection: show, list matching entries |
+| ctx session finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list |
+| ctx session search <unit> "<query>" | Universal search across all entity domains returning high-density 5 to 12 token contextual snippets |
+| ctx session resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) |
+| ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management: show, record, report isolated from parent session journals |
+| ctx storage-fts5 migrate <unit> --from=<posix\|fts5> --to=<posix\|fts5> | Bidirectional lossless migration between POSIX flat files and SQLite database |
 | ctx session query entry <unit> <slug> | The entry block verbatim; duplicates render every match |
 | ctx session query group <unit> <token> | The group thread: one short line per entry (anchor, slug, opening) |
 | ctx session query anchors <unit> | The anchor lines verbatim, with the count; zero prints `0 anchors` |
@@ -146,18 +159,18 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session query resolve <unit> <ref> | The block behind a journal, knowledge, backlog, or subagent-report reference |
 | ctx session query lane <unit> <lane> | Subagent file presence with line and byte counts, the journal's last line, the report's first |
 | ctx session query search <unit> <term> | Bounded match lines across the unit's artifacts (state, backlog, knowledge, journal, the subagent journals and reports), each with its locator |
-| ctx session append <unit> | The write side: one or more blocks on stdin; each block's first line decides `@entry` (journal), `@finding` (knowledge), or `@task` (backlog); the command adds the anchor and refuses loudly, never partially |
-| ctx session amend <unit> <slug> | Replace task fields in place from the labeled field blocks on stdin; the rest of the task stays byte-identical |
-| ctx session flip <unit> <verb> <slug> [<slug> ...] | Move task status: `todo` reopens, `progress` activates (the state must already name the slug), `done` lands the receipt entry from stdin, one `backlog/<slug>: DONE` literal with its evidence per slug; several slugs ride one call |
-| ctx session drop <unit> <slug> [<slug> ...] | Remove tasks: the record entry naming each lands from stdin first, then the blocks go |
+| ctx session append <unit> | Legacy write side: one or more blocks on stdin; each block's first line decides `@entry`, `@finding`, or `@task` |
+| ctx session amend <unit> <slug> | Legacy: replace task fields in place from labeled field blocks on stdin |
+| ctx session flip <unit> <verb> <slug> [<slug> ...] | Legacy: move task status (todo, progress, done with receipt) |
+| ctx session drop <unit> <slug> [<slug> ...] | Legacy: remove tasks while recording receipt |
 | ctx session next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
 | ctx session refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
 | ctx session close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
 | ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw |
 
-The query forms answer the named looks over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
+The query and search forms answer questions over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
 
-The recording forms are the write side of the toolbox: `append` lands entries, findings, and tasks; `amend` replaces a task field in place; `flip` moves a task's status; `drop` removes a task while its record stays; `next` overwrites the pointer; `refs` sets the read-only reference mounts; `close` ends the unit. Every form validates all inputs before any write, refuses loudly with zero partial writes, and the batch forms carry several blocks or slugs in one call. Shapes come from `.contexture/templates/`; the help names each form's target, stdin, and template.
+The primary interaction toolbox provides typed semantic verbs (`task`, `record`, `entry`, `finding`, `search`, `resolve`) and `ctx lane`, ensuring atomic state transitions and eliminating format guessing. Legacy block piping (`append`, `amend`, `flip`, `drop`) is preserved as a fallback for bulk migrations and compatibility.
 
 ## Maintaining contexture
 

@@ -16,7 +16,7 @@ The sections are a tour of the convention:
 
 | section | what it carries |
 |---|---|
-| `@laws` | the ten slug-addressed laws |
+| `@laws` | the slug-addressed laws |
 | `@layout` | where every file lives and what it is for |
 | `@record` | the artifact map: what each artifact records and why |
 | `@journal` | the event workflow: formation, substance, liveness, markings |
@@ -34,9 +34,9 @@ The sections are a tour of the convention:
 
 ### The laws
 
-The laws are the spine of the whole system, and they ride with the agent every turn. Each law reads `slug: statement`, and a reference addresses the slug, as in `@laws#verify-before-close`. The current ten:
+The laws are the spine of the whole system, and they ride with the agent every turn. Each law reads `slug: statement`, and a reference addresses the slug, as in `@laws#verify-before-close`. Core laws include:
 
-- `source-of-truth`: session files are the only source of truth, never the conversation.
+- `source-of-truth`: session records are the only source of truth, never the conversation.
 - `load-only-needed`: load only what the work needs; closed sessions stay untouched unless the task calls for them.
 - `compact-streams`: all shell commands execute through the ctx runner to preserve context window capacity.
 - `writer-holds-volume`: the schema holds the shape, the writer holds the volume.
@@ -46,6 +46,10 @@ The laws are the spine of the whole system, and they ride with the agent every t
 - `harvest-the-human`: durable knowledge is surfaced by question, crystallized, and landed with approval.
 - `workspace-confinement`: the workspace is the boundary; the agent never roams outside it.
 - `engine-blackbox`: the engine is an execution runtime, never reading material; discover contracts via help and templates, never by inspecting script implementations.
+- `storage-backend-authority`: the configured storage backend is the single authoritative source of truth; agents interact through semantic CLI verbs, never assuming physical file paths or database schemas.
+- `semantic-boundary`: the record is an abstract domain surface, accessed strictly through session and lane CLI verbs.
+- `abstract-references`: cross-entity references resolve through domain notation, never raw file paths.
+- `multilingual-search-translation`: translate non-English intent into targeted English search terms, synthesizing responses in the user's language.
 
 Slug addressing is what lets the set grow and the overlays extend it. A positional name would force every reference to chase every insertion; a slug is stable for life, and an overlay can append its own laws at the end without renumbering anything.
 
@@ -75,7 +79,7 @@ That last property is the drift control. Templates in a tracked folder stay exac
 
 All grammars speak one dialect, and it is contractual. Typed blocks start at column 0; bodies indent two; `::` opens an indented block value; `|` means alternation only; `[ ]` wraps optional parts; `->` means flow; `#` starts a comment. Whitespace is load-bearing: a block that starts at the wrong column silently breaks every query written against it.
 
-Spellings are contractual too. A pointer names its target exactly, a section and step (`@refresh`) or a path and symbol (`journal.md#entry`); a vague mention is a defect. The reason is mechanical: the workspace queries with plain search, and a vocabulary word with two spellings is a search that silently misses.
+Spellings are contractual too. A pointer names its target exactly, a section and step (`@refresh`) or a path and symbol (`finding#NAME`); a vague mention is a defect. The reason is mechanical: the workspace queries with plain search, and a vocabulary word with two spellings is a search that silently misses.
 
 The dialect governs form, never volume. It compresses how things are written, never how much: the schema holds the shape, the writer holds the volume. The grammars name the elements an artifact must carry; the rest is freestyle. The artifacts themselves, and the fields they carry, are the record page's material.
 
@@ -89,6 +93,99 @@ Filters live in the run module's `.contexture/modules/run/filters/*.awk` and in 
 
 Building your own verb, hook, or filter? The module contract is in [Modules](modules.md).
 
+### Storage Provider Interface (SPI) and driver architecture
+
+The session engine is decoupled from physical storage formats through the Storage Provider Interface (SPI). The SPI normalizes all backend interactions into 26 domain methods across 7 functional subsystems:
+
+- `session`: `session.init`, `session.load`, `session.stamp`, `session.board`, `session.close`
+- `task`: `task.add`, `task.update`, `task.start`, `task.complete`, `task.reopen`, `task.drop`, `task.list`, `task.show`
+- `entry`: `entry.record`, `entry.show`, `entry.list`
+- `finding`: `finding.add`, `finding.show`, `finding.update`, `finding.supersede`, `finding.drop`, `finding.list`
+- `resolve`: `resolve.ref`
+- `lane`: `lane.create`, `lane.record`, `lane.report`, `lane.status`, `lane.close`
+- `search`: `search.query`
+
+#### Driver discovery hierarchy
+
+The driver resolver discovers storage drivers through a strict 3-tier hierarchy:
+1. Workspace custom drivers: `.contexture/drivers/<name>/driver`
+2. Module-owned drivers: `.contexture/modules/<module>/drivers/<driver-name>/driver` or `.contexture/modules/session/drivers/<driver-name>/driver`
+3. PATH executables: system binaries named `ctx-storage-<name>`
+
+#### Configuration precedence
+
+Driver selection follows deterministic precedence:
+1. `CTX_STORAGE_DRIVER` environment variable
+2. Workspace configuration file (`.contexture/config` or `.contexture/storage.conf`, key `session.storage.driver` or `storage.driver`)
+3. Default baseline: `posix`
+
+#### Capability handshake and error codes
+
+Before executing methods, the engine invokes `$DRIVER_EXEC capability` to retrieve a JSON capability descriptor. The handshake validates mandatory capabilities upfront.
+
+All drivers adhere to a standardized 3-tier exit code hierarchy:
+- `0`: success
+- `1`: semantic or validation error (entity exists, missing entity, invalid arguments, schema violation)
+- `2`: storage or driver fatal error (driver not found, capability failure, IO error, lock contention)
+
+#### Split-brain prevention
+
+If a non-posix driver is configured (such as `fts5` or `sqlite`) and its executable cannot be resolved or fails handshake validation, the engine halts immediately with exit code 2 (`ERR_DRIVER_NOT_FOUND` or `ERR_DRIVER_PROTOCOL`). The engine never falls back silently to `posix` when a custom driver was configured, eliminating accidental split-brain state where records diverge between storage engines.
+
+#### Available drivers
+
+- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver manipulating structured markdown files within `.contexture/sessions/<unit>/`.
+- SQLite FTS5 driver (`storage-fts5` plugin): high-performance indexed driver providing a normalized relational schema, dual FTS5 virtual tables (Porter English stemming plus Trigram tokenization), unicode61 with `remove_diacritics 0` for Turkish and diacritics, pure SQL Reciprocal Rank Fusion (RRF) search ranking, and bidirectional migration (`ctx storage-fts5 migrate`).
+
+### Semantic CLI verbs
+
+Primary agent interactions operate through typed CLI commands with structured arguments and atomic transitions:
+
+#### Task operations: ctx session task
+- `ctx session task add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: creates a new task in `TODO` status.
+- `ctx session task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--add-refs="..."]`: updates task fields in place.
+- `ctx session task start <unit> <slug> [--pointer="..."]`: atomically marks task `IN_PROGRESS` and updates `next_action` in state.
+- `ctx session task complete <unit> <slug> --evidence="..."`: atomically marks task `DONE` and records completion receipt (`backlog/<slug>: DONE <evidence>`) in the journal.
+- `ctx session task reopen <unit> <slug>`: returns task to `TODO`.
+- `ctx session task drop <unit> <slug> --reason="..."`: removes task and logs drop receipt.
+- `ctx session task list <unit> [--status=todo|progress|done|all]`: lists tasks filtered by status.
+- `ctx session task show <unit> <slug>`: prints full task block.
+
+#### Journal event recording: ctx session record
+- `ctx session record <unit> --what="..." [--group=...] [--thread=...] [--ref=...] [--closes=...] [--supersedes=...] [--knowledge]`: appends an immutable event with auto-injected local date (`YYYY-MM-DD`), active anchor from state, and default `THREAD: none`.
+- `ctx session entry show <unit> <slug>`: displays a single journal entry verbatim.
+- `ctx session entry list <unit> [--anchor=A<N>] [--group=...] [--open-threads] [--since=YYYY-MM-DD]`: lists journal entries matching filters.
+
+#### Finding lifecycle CRUD: ctx session finding
+- `ctx session finding add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]`: adds a new finding with status `ACTIVE`.
+- `ctx session finding show <unit> <NAME>`: displays finding and supersession lineage.
+- `ctx session finding update <unit> <NAME> --summary="..." [--ref=...]`: updates summary or reference in place.
+- `ctx session finding supersede <unit> <NAME> --by=<NEW_NAME> [--reason="..."]`: records forward-only supersession preserving audit lineage.
+- `ctx session finding drop <unit> <NAME> --reason="..."`: removes an invalidated finding.
+- `ctx session finding list <unit> [--active-only]`: lists findings, optionally omitting superseded items.
+
+#### Universal search: ctx session search
+- `ctx session search <unit> "<query>" [--limit=N]`: searches across all entity domains. Returns 5 to 12 token contextual snippets with match highlights using RRF ranking.
+
+#### Reference resolution: ctx session resolve
+- `ctx session resolve <unit> <ref>`: resolves abstract domain references (`task#slug`, `entry#slug`, `finding#NAME`, `lane#slug/report#claim`) directly, transparently normalizing legacy `.md` paths.
+
+### Subagent lane management: ctx lane
+
+Subagent operations are governed through the dedicated top-level `ctx lane` module:
+
+```bash
+.contexture/ctx lane show <unit> <lane-slug>
+.contexture/ctx lane record <unit> <lane-slug> --what="..." [--thread=...]
+.contexture/ctx lane report <unit> <lane-slug>
+```
+
+- `show`: reports presence, line counts, byte sizes, and head/tail lines of `recipe.md`, `journal.md`, `report.md`.
+- `record`: logs action traces directly into the subagent's `journal.md`.
+- `report`: inspects and validates `report.md`.
+
+Isolating lane operations into `ctx lane` prevents accidental pollution of parent session journals upon argument omission.
+
 ### ctx session load: the load and the refs form
 
 Returns the map plus one page of the load: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The map names each section with its line count and pages, then the write-scope trailer; pages cut at block boundaries, never mid-body: a page ends before the block that would pass about 500 lines or about 40KB, whichever binds first, and a single block larger than the budget renders whole on its own page. The backlog section renders its DONE task blocks compactly, keeping only the task line, `STATUS`, `OBJECTIVE`, and `DESCRIPTION`; open and statusless blocks render whole, and the backlog file itself is never edited, so the full body stays one `resolve` away. An incomplete call opens with `LOAD INCOMPLETE` and instructs the next call in its last line; the final page opens with `LOAD COMPLETE` and hands off to the receipt stamp.
@@ -100,7 +197,7 @@ Returns the map plus one page of the load: state, backlog, knowledge, the live j
 
 Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes the board (`ctx session board`), so the extraction has one home; the board's open threads and open tasks ride that section unchanged.
 
-The cut is budgeted twice, about 500 lines or about 40KB, whichever binds first, so a page stays under the harness's output cap in practice; the one residual is a single block that exceeds the budget alone, and it renders whole on its own page. If a harness still truncates such a page, it prints a notice naming its saved copy of the command's output: that copy is the command's own output, and reading it is sanctioned by `@laws#workspace-confinement`, read-only, that named file alone. Routing the same content through temp files stays unsanctioned. The in-workspace fallbacks need nothing outside: every section is composed from the session files, so `ctx session board` or a direct read of the record recovers the same content.
+The cut is budgeted twice, about 500 lines or about 40KB, whichever binds first, so a page stays under the harness's output cap in practice; the one residual is a single block that exceeds the budget alone, and it renders whole on its own page. If a harness still truncates such a page, it prints a notice naming its saved copy of the command's output: that copy is the command's own output, and reading it is sanctioned by `@laws#workspace-confinement`, read-only, that named file alone. Routing the same content through temp files stays unsanctioned. The in-workspace fallbacks need nothing outside: every section is composed from the session records, so `ctx session board` or a direct read of the record recovers the same content.
 
 The refs form is the on-demand consult: it streams the named sessions alone, each composed exactly as the unit load composes a reference, and pages them locally with its own map, banner, and tail, so a large reference never truncates. A missing ref is fatal; zero refs, or a numeric token in a ref position, prints the usage at rc 1; a session named `refs` stays reachable through the escape hatch `ctx session load refs refs`.
 
@@ -146,15 +243,15 @@ Answers the foreseeable questions over the record in bounded form, so no one imp
 | `closure` | `<unit> <slug>` | open, or the closers with their verdicts and lines |
 | `units` | `<repo>` | each unit touching the repo: slug, status, anchor, next action |
 | `refs-to` | `<session>` | each unit referencing the session |
-| `resolve` | `<unit> <ref>` | the block behind `journal.md#slug`, `knowledge.md#NAME`, `backlog.md#slug`, or `lanes/<lane>/report.md#section` |
+| `resolve` | `<unit> <ref>` | the block behind an abstract or legacy reference |
 | `lane` | `<unit> <lane>` | file presence with line and byte counts, the journal's last line, the report's first |
-| `search` | `<unit> <term>` | bounded match lines across state, backlog, knowledge, journal, and the subagent journals and reports, each with its locator |
+| `search` | `<unit> <term>` | bounded match lines across state, backlog, knowledge, journal, and subagent artifacts |
 
 Every miss is loud: rc 1, zero stdout, a named error, never a plausible empty. Outputs are bounded by construction: group and search snippets cut at 90 bytes on word boundaries, search stops at 50 lines with a trailing count, and entry, finding, closure, and resolve render verbatim. One bound is deliberately absent: `group` renders one line per matching entry, with its count in the opener, and no cap. A large thread streams whole, because the thread itself is what the caller came to read; the per-row snippet is the part that stays capped. Target lookups miss loudly; a listing without a target carries its count, so a zero-anchor journal prints `0 anchors`. Names match exactly and shapes are validated before any output; a wrong invocation refuses with the kind's usage.
 
-### The write acts: append, amend, flip, drop, next, refs, close
+### The legacy write acts: append, amend, flip, drop, next, refs, close
 
-The write side, one command per act. Every artifact write rides it:
+The legacy block piping commands provide backward compatibility for existing pipelines and bulk data imports:
 
 ```bash
 .contexture/ctx session append <unit>

@@ -1,0 +1,165 @@
+#!/bin/sh
+# summary: session diagnostics: configuration, storage driver, and storage health
+# usage: ctx session diagnose [--json]
+# help: inspect workspace session configuration, resolved storage driver,
+# help: driver capabilities, and storage backend health.
+
+set -e
+
+# Locate driver-resolver script
+sdir=$(CDPATH="" cd "$(dirname "$0")" 2>/dev/null && pwd)
+resolver="$sdir/driver-resolver"
+if [ ! -x "$resolver" ]; then
+  printf 'ctx session diagnose: driver-resolver not found at %s\n' "$resolver" >&2
+  exit 2
+fi
+
+format="text"
+for arg in "$@"; do
+  case "$arg" in
+    --json)
+      format="json"
+      ;;
+    --help|-h)
+      printf 'usage: ctx session diagnose [--json]\n'
+      printf 'inspect session configuration, resolved storage driver, capabilities, and health\n'
+      exit 0
+      ;;
+    *)
+      printf 'ctx session diagnose: unrecognized option: %s\n' "$arg" >&2
+      exit 1
+      ;;
+  esac
+done
+
+root="${CTX_ROOT:-$PWD}"
+ctx_dir="$root/.contexture"
+
+# 1. Config status
+config_file="$ctx_dir/config"
+config_status="absent"
+config_driver=""
+if [ -f "$config_file" ]; then
+  config_status="present"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      session.storage.driver*=*|session.storage.driver*:*|storage.driver*=*|storage.driver*:*)
+        val=${line#*=}
+        [ "$val" = "$line" ] && val=${line#*:}
+        val=${val%%#*}
+        config_driver=$(printf '%s\n' "$val" | tr -d '[:space:]')
+        ;;
+    esac
+  done < "$config_file"
+fi
+
+# 2. Driver resolution
+driver_name=""
+driver_source="default"
+if [ -n "${CTX_STORAGE_DRIVER:-}" ]; then
+  driver_name="$CTX_STORAGE_DRIVER"
+  driver_source="environment (CTX_STORAGE_DRIVER)"
+elif [ -n "$config_driver" ]; then
+  driver_name="$config_driver"
+  driver_source="config (.contexture/config)"
+else
+  driver_name="posix"
+  driver_source="default (posix)"
+fi
+
+# 3. Resolve driver executable and test capabilities via driver-resolver
+caps_json=""
+driver_status="ok"
+driver_err=""
+
+caps_json=$("$resolver" capability 2>&1) || {
+  driver_status="error"
+  driver_err="$caps_json"
+}
+
+# 4. Storage backend health check
+health_status="ok"
+health_detail=""
+
+if [ "$driver_name" = "posix" ]; then
+  sessions_dir="$ctx_dir/sessions"
+  if [ ! -d "$sessions_dir" ]; then
+    health_status="degraded"
+    health_detail="sessions directory does not exist yet (will be created on bootstrap)"
+  elif [ ! -w "$sessions_dir" ]; then
+    health_status="error"
+    health_detail="sessions directory is not writable: $sessions_dir"
+  else
+    lock_file="$sessions_dir/.lock"
+    if [ -d "$lock_file" ]; then
+      health_status="locked"
+      health_detail="storage lock active: $lock_file"
+    else
+      health_detail="sessions directory writable, unlocked"
+    fi
+  fi
+else
+  db_file="$ctx_dir/contexture.db"
+  if [ -f "$db_file" ]; then
+    if [ ! -w "$db_file" ]; then
+      health_status="error"
+      health_detail="database file not writable: $db_file"
+    else
+      health_detail="database file present and writable: $db_file"
+    fi
+  else
+    health_detail="database file not created yet (will be initialized on bootstrap)"
+  fi
+fi
+
+# 5. Active units count
+active_count=0
+if [ -x "$sdir/active" ]; then
+  active_out=$("$sdir/active" 2>/dev/null) || true
+  if [ -n "$active_out" ]; then
+    active_count=$(printf '%s\n' "$active_out" | grep -c '^[a-zA-Z0-9]' || true)
+  fi
+fi
+
+if [ "$format" = "json" ]; then
+  cat <<EOF
+{
+  "workspace_root": "$root",
+  "config": {
+    "status": "$config_status",
+    "driver": "${config_driver:-none}"
+  },
+  "driver": {
+    "name": "$driver_name",
+    "source": "$driver_source",
+    "status": "$driver_status",
+    "capabilities": ${caps_json:-"{}"}
+  },
+  "storage": {
+    "health": "$health_status",
+    "detail": "$health_detail",
+    "active_units": $active_count
+  }
+}
+EOF
+else
+  printf 'ctx session: storage and configuration diagnostics\n'
+  printf '  workspace root:  %s\n' "$root"
+  printf '  configuration:   %s' "$config_status"
+  if [ -n "$config_driver" ]; then
+    printf ' (session.storage.driver = %s)\n' "$config_driver"
+  else
+    printf '\n'
+  fi
+  printf '  storage driver:  %s (source: %s)\n' "$driver_name" "$driver_source"
+  if [ "$driver_status" = "ok" ]; then
+    printf '  driver status:   ok\n'
+    if [ -n "$caps_json" ]; then
+      printf '  capabilities:    %s\n' "$caps_json"
+    fi
+  else
+    printf '  driver status:   error (%s)\n' "$driver_err"
+  fi
+  printf '  storage health:  %s (%s)\n' "$health_status" "$health_detail"
+  printf '  active units:    %d\n' "$active_count"
+fi
