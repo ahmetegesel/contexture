@@ -36,6 +36,7 @@ A plugin installs into an existing setup the same way: the mirrored tree copies 
 ## The test convention
 
 - A plugin's tests live at `plugins/<name>/tests/`, beside the plugin they pin, and are plugin-meta like the README: never copied, never shipped into a workspace.
+- A suite exercises the plugin's own copy, resolved from the suite's location (`plugins/<name>/.contexture/...`), never the workspace's adopted copy in the live drawer: the two drift, and a suite pinned to the adopted copy passes on whatever was installed last. A suite that calls a workspace harness hands it the plugin's executable by path (the storage compliance harness takes `--driver-exec=<path>`), and a storage driver that renders through the reference serialization is handed base's posix driver by path (`CTX_REFERENCE_DRIVER`).
 - The upstream runner may invoke a plugin's suite; a suite with declared needs (a toolchain, a pilot repository) skips cleanly when a need is absent, naming it.
 - The upstream ship gate includes the plugin suites: `tests/run.sh` runs every `plugins/<name>/tests/run.sh` by convention and reports it; a red plugin suite holds the ship breath.
 - A plugin change is not done until its suite passes; the suite's README carries the roots and the maintenance contract, and the harness contract lives in `tests/README.md`.
@@ -51,7 +52,7 @@ Upstream contribution and workspace extension are the same story. Build the mech
 - `lane-isolation`: on-demand worktree isolation for subagents.
 - `docs-discipline`: a corpus-first documentation discipline (the `docs` module: `ctx docs query|audit|check|gate|nudge`).
 - `ast-doc-graph`: an AST symbol graph linked with centralized documentation.
-- `storage-fts5`: SQLite FTS5 storage driver with normalized relational schema, dual Porter and Trigram tokenization, pure SQL Reciprocal Rank Fusion (RRF) search, high-density snippet extraction, and bidirectional migration (`ctx storage-fts5 migrate`).
+- `storage-fts5`: SQLite FTS5 storage driver keeping every artifact verbatim with a relational index rebuilt from its text, dual Porter and Trigram tokenization, pure SQL Reciprocal Rank Fusion (RRF) search, high-density snippet extraction, and bidirectional byte-exact migration (`ctx storage-fts5 migrate`). The upstream gate runs the whole session suite a second time on it (`tests/run.sh`, `core:session-tests.sh:fts5`), so every verb is proven against the fts5 store as well as posix.
 
 ## Where the rest lives
 

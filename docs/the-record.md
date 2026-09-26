@@ -4,7 +4,7 @@ The conversation is a scratchpad; the record is the memory. When a context windo
 
 ## Storage abstraction and entity domains
 
-Under @laws#storage-backend-authority, the configured storage backend is the authoritative single source of truth. The engine completely decouples session machinery from physical disk layouts and file formats. In the default POSIX driver, entities are stored in markdown files and lane directories. In advanced backends like SQLite FTS5 (the storage-fts5 plugin), entities reside in a normalized relational schema with full-text search triggers.
+Under @laws#storage-backend-authority, the configured storage backend is the authoritative single source of truth. The engine completely decouples session machinery from physical disk layouts and file formats. Every verb reaches the record through the configured driver and nothing else, so the record is one store whichever driver holds it. The record grammar is the canonical text: in the default POSIX driver each artifact is a markdown file in its unit folder, and in the SQLite FTS5 backend (the storage-fts5 plugin) each artifact is kept verbatim in the database with a relational index and full-text documents rebuilt from its text, so an export writes the same bytes back.
 
 For agents, under @laws#semantic-boundary, the record is an abstract structured domain surface, never raw files on disk. Agents interact exclusively through semantic CLI verbs, never reading, editing, or grepping storage files or database tables directly.
 
@@ -12,7 +12,7 @@ The record comprises five distinct entity domains:
 
 | domain | role | how it changes |
 |---|---|---|
-| session state | the pointer: where the unit stands and what happens next | overwritten freely; updated via stamp, pointer, refs, close |
+| session state | the pointer: where the unit stands and what happens next | overwritten freely; updated via stamp, pointer, refs, close, reopen |
 | backlog tasks | the declaration: the work declared ahead | mutated atomically via typed task commands; living queue |
 | journal events | the memory: what happened, as it happened | immutable append-only event stream; closed by later reference |
 | durable findings | the mind: settled architectural truths and decisions | full lifecycle CRUD; updated or superseded forward |
@@ -48,7 +48,7 @@ ref_sessions: [design-notes]
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference sessions mounted at boot; boot loads their knowledge and active journal.
 
-The pointer mutates often: it is refreshed as the work moves, at every backlog update, task landing, and period end. It is updated via `ctx session stamp`, `ctx session next`, `ctx session refs`, and `ctx session close`.
+The pointer mutates often: it is refreshed as the work moves, at every backlog update, task landing, and period end. It is updated via `ctx session stamp`, `ctx session next`, `ctx session refs`, `ctx session close`, and `ctx session reopen`.
 
 ## Backlog tasks, the declaration
 
@@ -113,12 +113,12 @@ Fields on journal entries:
 
 - `@entry <date>-<slug>` opens an entry block. Slugs end alphanumeric.
 - `ANCHOR:` identifies the working period.
-- `WHAT:` carries the event substance: what happened, the result, why the next step follows.
+- `WHAT:` carries the event substance: what happened, the result, why the next step follows. It is one quoted line; an embedded double quote is part of the text (the typed `record` writes it and `ctx session append` accepts it), while an embedded newline is refused on every write.
 - `GROUP:` topic thread identifier, stable within the unit.
 - `RHYTHM: <name> <N> <GATE>` records process milestones.
 - `KNOWLEDGE: true` flags entries for durable knowledge harvesting.
 - `THREAD: <what it awaits>` names external acts awaiting completion, or `none` for receipts.
-- `CLOSES:` or `SUPERSEDES:` closes an earlier entry by reference with a verdict word and reason.
+- `CLOSES:` or `SUPERSEDES:` closes an earlier entry by reference with a verdict word and reason. One line may name several targets (`CLOSES: <slug> <slug> (folded: reason)`) and an entry may carry several closer lines; every date-slug before the first spaced paren or spaced hyphen is a target.
 - `REF: "target#symbol"` grounds the event in an artifact.
 
 ### Semantic event recording
@@ -129,11 +129,11 @@ Agents record events via `ctx session record`:
 .contexture/ctx session record <unit> --what="..." [--group=...] [--thread=...] [--ref=...] [--closes=...] [--supersedes=...] [--knowledge]
 ```
 
-The command automatically supplies the current local date (`YYYY-MM-DD`), resolves the active anchor from session state, and defaults `THREAD` to `none` if omitted.
+The command automatically supplies the current local date (`YYYY-MM-DD`), resolves the active anchor from session state, and defaults `THREAD` to `none` if omitted. `--closes` takes one or more target slugs, each of which must exist; a value carrying its own parenthesized verdict (`--closes="<slug> <slug> (dropped: reason)"`) lands verbatim, and a bare target list is closed as `(done: <WHAT>)`. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal is read as it stands.
 
 To inspect entries:
-- `ctx session entry show <unit> <slug>`: prints one entry block.
-- `ctx session entry list <unit> [--anchor=A<N>] [--group=...] [--open-threads] [--since=YYYY-MM-DD]`: lists matching entries.
+- `ctx session entry show <unit> <slug> [--json]`: prints one entry block; `--json` carries `slug`, `anchor`, `what`, `group`, `thread`, `ref` (the entry's `REF`, an empty string when absent), and the closure.
+- `ctx session entry list <unit> [--anchor=A<N>] [--group=...] [--json]`: lists matching entries.
 
 ## Durable findings, the mind
 
@@ -143,9 +143,9 @@ Unlike immutable journal events, findings support full lifecycle CRUD:
 
 - `ctx session finding add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]`: adds a new finding with status `ACTIVE`.
 - `ctx session finding show <unit> <NAME>`: displays the finding and its supersession lineage.
-- `ctx session finding update <unit> <NAME> --summary="..." [--ref=...]`: updates summary or reference in place when concepts are refined.
-- `ctx session finding supersede <unit> <NAME> --by=<NEW_NAME> [--reason="..."]`: marks the finding superseded by its successor, maintaining audit lineage.
-- `ctx session finding drop <unit> <NAME> --reason="..."`: removes an invalidated finding with reason logged.
+- `ctx session finding update <unit> <NAME> --summary="..." [--ref=...]`: updates the summary, the reference, or both in place when concepts are refined; a `--ref` replaces the `REF` line, or adds one after the summary when the finding had none.
+- `ctx session finding supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]`: adds the successor finding carrying `SUPERSEDES: <old-name>`, maintaining audit lineage; a missing predecessor refuses rc 1.
+- `ctx session finding drop <unit> <NAME>`: removes an invalidated finding.
 - `ctx session finding list <unit> [--active-only]`: lists all findings, optionally filtering out superseded or dropped findings.
 
 ```text
@@ -186,16 +186,18 @@ When given legacy file-based paths (such as `knowledge.md#NAME`, `journal.md#slu
 Universal search operates across all entity domains without artificial mode enums:
 
 ```bash
-.contexture/ctx session search <unit> "<query>" [--limit=N]
+.contexture/ctx session search <unit> "<query>" [--limit=N] [--entity=TYPE] [--mode=MODE] [--json]
 ```
+
+Every driver returns the same keys per result (`entity_type`, `entity_id`, `section`, `snippet`), so a caller never branches on the backend; `--limit` caps the results, `--entity` keeps one entity type, and a mode the driver lacks refuses rc 1 (posix searches exact substrings; fts5 adds the ranked `hybrid` and `trigram` modes). An empty query refuses rc 1.
 
 In backends with full text indexing (such as SQLite FTS5), search uses dual virtual tables combining Porter stemming for English prose with Trigram tokenization for code identifiers, symbols, and multilingual text. A pure SQL Reciprocal Rank Fusion (RRF) algorithm ranks results across both tables.
 
-Search returns high-density 5 to 12 token contextual snippets with match highlights. This cuts token consumption by more than 90 percent compared to dumping entire entity bodies.
+On an indexed backend, search returns high-density 5 to 12 token contextual snippets with match highlights, with the RRF score and source count per result. This cuts token consumption by more than 90 percent compared to dumping entire entity bodies.
 
 Agents follow a snippet-first consumption protocol:
 1. Run `ctx session search` to locate candidates.
-2. Review the compact snippets and ranking scores.
+2. Review the compact snippets (and, on a ranked backend, the scores).
 3. Fetch full entity blocks on demand using targeted commands (`ctx session task show`, `entry show`, `finding show`, or `resolve`).
 
 When human users prompt in non-English languages (such as Turkish), agents translate conceptual terms into English search keywords before querying the record, synthesize findings from the English record, and respond to the user in their language.
@@ -204,15 +206,15 @@ When human users prompt in non-English languages (such as Turkish), agents trans
 
 Subagents execute in isolated sandboxes. Operations are governed through the dedicated top-level `ctx lane` module:
 
-- `ctx lane show <unit> <lane-slug>`: inspects lane directory, checking artifact presence, line counts, and sizes.
-- `ctx lane record <unit> <lane-slug> --what="..." [--thread=...]`: appends action traces directly to the lane journal.
-- `ctx lane report <unit> <lane-slug>`: reads and validates the lane report artifact.
+- `ctx lane show <unit> <lane-slug> [recipe|journal|report] [--json]`: prints one lane artifact (the report by default); the text view is the stored artifact byte for byte, and `--json` carries it in the `content` field.
+- `ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...]`: appends action traces to the lane journal; a slug the lane journal carries refuses rc 1 (`ERR_ENTITY_EXISTS`).
+- `ctx lane report <unit> <lane-slug> [--body="..." | stdin] [--json]`: writes the lane report from `--body` or stdin, or reads it back when neither is given; either way it prints the report byte for byte, and `--json` carries it in the `report` field. The report reaches the driver on stdin, so a report of any size lands. With no `--body`, `report` reads stdin whenever stdin is not a terminal, so under an open pipe it waits for the writer to close; a script reads a report with `ctx lane show <unit> <lane-slug> report`, which never reads stdin.
 
 Subagents manage three concrete physical artifacts within their lane directory (`recipe.md`, `journal.md`, `report.md`). There are no fictitious lane-level status or close mechanics: lifecycle is tracked by the parent dispatch thread.
 
 ## Liveness and closure
 
-What loads is decided by one subtraction: live = not closed. The load list comprises every journal entry whose slug no `CLOSES` or `SUPERSEDES` names.
+What loads is decided by one subtraction: live = not closed. The load list comprises every journal entry whose slug no later `CLOSES` or `SUPERSEDES` names. A closer closes the entries standing before it: a legacy journal that repeats a slug (the engine refuses a new repeat at append) resolves by position, so a closer closes every earlier occurrence and never one written after it; `ctx session audit` reports such a repeat as a `LEGACY DUPLICATE SLUG` warning without failing, and `ctx session entry show` reads the last occurrence.
 
 Closure is a later entry naming its target. The target is never touched. The closer carries a verdict word (`done`, `superseded`, `dropped`, or `folded`), then the reason; the closer `WHAT` carries the resolution.
 
@@ -240,6 +242,7 @@ The grammars share strict dialect rules:
 - Typed blocks start at column 0; bodies indent two spaces.
 - `::` opens a block scalar; `|` means alternation only; `[ ]` wraps optional parts; `->` means flow; `#` starts a comment.
 - Whitespace is syntax: queries anchor on block starts, so misplaced indents break parsing.
+- Lines end in LF: a carriage return in a typed field value is refused at the write (rc 1), since every grammar verb refuses an artifact that carries one.
 - Spellings are contractual across tools and queries.
 
 The schema holds the shape, the writer holds the volume. Token efficiency is the dialect, never a cap on content. Omit ornament, never substance.

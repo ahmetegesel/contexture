@@ -55,6 +55,7 @@ acquire_lock() {
       continue
     fi
     if mkdir "$lock_target" 2>/dev/null; then
+      HELD_LOCK="$lock_target"
       return 0
     fi
     attempts=$((attempts + 1))
@@ -68,6 +69,19 @@ release_lock() {
   u="$1"
   locks_dir=$(get_lock_dir)
   rm -rf "$locks_dir/$u.lock" 2>/dev/null || true
+  HELD_LOCK=""
+}
+
+# commit_mv <temp> <target>: the atomic replace of a method's artifact; a failed mv (a
+# read-only drawer, a full disk) removes the temp and reports the storage tier, so the
+# caller returns 2 and never prints success over a write that did not land
+commit_mv() {
+  if ! mv -f "$1" "$2" 2>/dev/null; then
+    rm -f "$1"
+    printf '%s: error: the storage write of %s failed (ERR_STORAGE_WRITE)\n' "${cmd:-posix-driver}" "${2##*/}" >&2
+    return 2
+  fi
+  return 0
 }
 
 escape_json() {
@@ -84,6 +98,219 @@ escape_json() {
   '
 }
 
+# The payload transport: argv carries the method and its bounded identifiers; every
+# free-text field arrives on stdin as key=value lines, the value escaped (backslash,
+# newline, tab, carriage return as \\, \n, \t, \r). A single-document body
+# (artifact.write, lane.report --write) is the raw stdin itself.
+PAYLOAD_FILE=""
+payload_cleanup() {
+  [ -n "$PAYLOAD_FILE" ] && rm -f "$PAYLOAD_FILE"
+  return 0
+}
+# every exit path cleans up: the EXIT trap removes the staged payload and releases a
+# held unit lock; a HUP, INT, or TERM exits through it (dash runs no EXIT trap on a
+# signal it does not trap), so an interrupted method leaves neither behind
+HELD_LOCK=""
+driver_cleanup() {
+  payload_cleanup
+  [ -n "$HELD_LOCK" ] && rm -rf "$HELD_LOCK" 2>/dev/null
+  return 0
+}
+trap driver_cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+payload_load() {
+  tmp_pd=$(get_tmp_dir)
+  PAYLOAD_FILE=$(mktemp "$tmp_pd/payload.XXXXXX") || {
+    printf 'posix-driver: error: cannot stage the payload (ERR_STORAGE_WRITE)\n' >&2
+    exit 2
+  }
+  cat > "$PAYLOAD_FILE"
+}
+# pget <var> <key>: the decoded field, exact (trailing newlines kept), empty when absent
+pget() {
+  _pv=$(awk -v k="$2" '
+    index($0, k "=") == 1 {
+      v = substr($0, length(k) + 2)
+      gsub(/\\\\/, "\001", v); gsub(/\\n/, "\n", v); gsub(/\\t/, "\t", v); gsub(/\\r/, "\r", v)
+      gsub(/\001/, "\\", v)
+      printf "%s", v
+      exit
+    }' "$PAYLOAD_FILE"; printf x)
+  eval "$1=\${_pv%x}"
+}
+
+# block_has <file> <kind> <name>: rc0 when a column-0 @<kind> head names <name> exactly
+block_has() {
+  [ -f "$1" ] || return 1
+  awk -v k="@$2" -v n="$3" '$1 == k && $2 == n { f = 1; exit } END { exit !f }' "$1"
+}
+
+# refs_json <value>: a REFS value (bracketed or bare, comma or space separated) as a JSON array
+refs_json() {
+  printf '%s' "$1" | awk '
+    function esc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
+    { v = v (NR > 1 ? " " : "") $0 }
+    END {
+      sub(/^[ \t]*\[/, "", v); sub(/\][ \t]*$/, "", v); gsub(/,/, " ", v)
+      n = split(v, w, /[ \t]+/); out = ""
+      for (i = 1; i <= n; i++) if (w[i] != "") out = out (out == "" ? "" : ",") "\"" esc(w[i]) "\""
+      printf "[%s]", out
+    }'
+}
+
+slug_valid() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# artifact keys: state, backlog, knowledge, journal, lane/<lane>/{recipe,journal,report}
+art_path() {
+  ap_dir=$(get_session_dir "$1")
+  case "$2" in
+    state|backlog|knowledge|journal) printf '%s/%s.md\n' "$ap_dir" "$2" ;;
+    lane/*/recipe|lane/*/journal|lane/*/report)
+      ap_rest=${2#lane/}
+      ap_lane=${ap_rest%/*}
+      ap_name=${ap_rest##*/}
+      slug_valid "$ap_lane" || return 1
+      printf '%s/lanes/%s/%s.md\n' "$ap_dir" "$ap_lane" "$ap_name"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+artifact_read() {
+  unit="${1:-}"
+  key="${2:-}"
+  if [ -z "$unit" ] || [ -z "$key" ]; then
+    printf 'artifact.read: error: missing required arguments (unit, key) (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  slug_valid "$unit" || { printf "artifact.read: error: malformed unit '%s' (ERR_INVALID_ARGUMENT)\n" "$unit" >&2; return 1; }
+  path=$(art_path "$unit" "$key") || { printf "artifact.read: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$key" >&2; return 1; }
+  if [ ! -f "$path" ]; then
+    printf "artifact.read: error: artifact '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$key" "$unit" >&2
+    return 1
+  fi
+  cat "$path" || return 2
+  return 0
+}
+
+artifact_write() {
+  unit="${1:-}"
+  key="${2:-}"
+  if [ -z "$unit" ] || [ -z "$key" ]; then
+    printf 'artifact.write: error: missing required arguments (unit, key) (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  slug_valid "$unit" || { printf "artifact.write: error: malformed unit '%s' (ERR_INVALID_ARGUMENT)\n" "$unit" >&2; return 1; }
+  path=$(art_path "$unit" "$key") || { printf "artifact.write: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$key" >&2; return 1; }
+  s_dir=$(get_session_dir "$unit")
+  if [ ! -d "$s_dir" ]; then
+    printf "artifact.write: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
+    return 1
+  fi
+  case "$key" in
+    lane/*) mkdir -p "$(dirname "$path")" || return 2 ;;
+  esac
+  # a unique same-directory temp: the mv stays on one filesystem (atomic replace)
+  # and concurrent writers never share a temp name
+  aw_tmp=$(mktemp "$path.XXXXXX" 2>/dev/null) || {
+    printf "artifact.write: error: cannot create a temp beside %s (ERR_STORAGE_WRITE)\n" "$key" >&2
+    return 2
+  }
+  if ! cat > "$aw_tmp"; then
+    rm -f "$aw_tmp"
+    printf 'artifact.write: error: the storage write failed (ERR_STORAGE_WRITE)\n' >&2
+    return 2
+  fi
+  if ! mv "$aw_tmp" "$path"; then
+    rm -f "$aw_tmp"
+    printf 'artifact.write: error: the storage write failed (ERR_STORAGE_WRITE)\n' >&2
+    return 2
+  fi
+  return 0
+}
+
+artifact_list() {
+  unit="${1:-}"
+  if [ -z "$unit" ]; then
+    printf 'artifact.list: error: missing session unit parameter (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  slug_valid "$unit" || { printf "artifact.list: error: malformed unit '%s' (ERR_INVALID_ARGUMENT)\n" "$unit" >&2; return 1; }
+  s_dir=$(get_session_dir "$unit")
+  if [ ! -d "$s_dir" ]; then
+    printf "artifact.list: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
+    return 1
+  fi
+  for al_a in state backlog knowledge journal; do
+    [ -f "$s_dir/$al_a.md" ] && printf '%s\n' "$al_a"
+  done
+  if [ -d "$s_dir/lanes" ]; then
+    for al_l in "$s_dir"/lanes/*; do
+      [ -d "$al_l" ] || continue
+      al_n=${al_l##*/}
+      slug_valid "$al_n" || continue
+      printf 'lane/%s\n' "$al_n"
+      for al_a in recipe journal report; do
+        [ -f "$al_l/$al_a.md" ] && printf 'lane/%s/%s\n' "$al_n" "$al_a"
+      done
+    done
+  fi
+  return 0
+}
+
+session_create() {
+  unit="${1:-}"
+  if [ -z "$unit" ]; then
+    printf 'session.create: error: missing session unit parameter (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  slug_valid "$unit" || { printf "session.create: error: malformed unit '%s' (ERR_INVALID_ARGUMENT)\n" "$unit" >&2; return 1; }
+  s_dir=$(get_session_dir "$unit")
+  if [ -e "$s_dir" ]; then
+    printf "session.create: error: session '%s' already exists (ERR_ENTITY_EXISTS)\n" "$unit" >&2
+    return 1
+  fi
+  mkdir -p "$(dirname "$s_dir")" 2>/dev/null || true
+  if ! mkdir "$s_dir" 2>/dev/null; then
+    if [ -e "$s_dir" ]; then
+      printf "session.create: error: session '%s' already exists (ERR_ENTITY_EXISTS)\n" "$unit" >&2
+      return 1
+    fi
+    printf "session.create: error: cannot create session '%s' (ERR_STORAGE_WRITE)\n" "$unit" >&2
+    return 2
+  fi
+  printf '{"status":"ok","unit":"%s"}\n' "$(escape_json "$unit")"
+  return 0
+}
+
+storage_health() {
+  ws=$(find_workspace_root)
+  sessions_dir="$ws/.contexture/sessions"
+  sh_health="ok"
+  if [ ! -d "$sessions_dir" ]; then
+    sh_health="degraded"
+    sh_detail="sessions directory does not exist yet (will be created on bootstrap)"
+  elif [ ! -w "$sessions_dir" ]; then
+    sh_health="error"
+    sh_detail="sessions directory is not writable"
+  else
+    sh_detail="sessions directory writable, unlocked"
+    if [ -d "$sessions_dir/.lock" ]; then
+      sh_health="locked"
+      sh_detail="storage lock active"
+    fi
+  fi
+  printf '{"driver":"posix","health":"%s","detail":"%s"}\n' "$sh_health" "$(escape_json "$sh_detail")"
+  return 0
+}
+
 capability() {
   cat <<'EOF'
 {
@@ -97,7 +324,8 @@ capability() {
     "finding.knowledge",
     "lane.lifecycle",
     "resolve.symbolic",
-    "search.keyword"
+    "search.keyword",
+    "artifact.store"
   ]
 }
 EOF
@@ -162,8 +390,13 @@ session_load() {
     printf "session.load: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
     return 1
   fi
-  awk -v unit="$unit" -v page="$page" -f "$SCRIPT_DIR/load_bios.awk" \
-    "$s_dir/state.md" "$s_dir/backlog.md" "$s_dir/knowledge.md" "$s_dir/journal.md"
+  # an absent artifact is skipped, never an awk abort (a legacy unit may lack its backlog)
+  set --
+  for sl_f in state backlog knowledge journal; do
+    [ -f "$s_dir/$sl_f.md" ] && set -- "$@" "$s_dir/$sl_f.md"
+  done
+  set -- "$@" /dev/null
+  awk -v unit="$unit" -v page="$page" -f "$SCRIPT_DIR/load_bios.awk" "$@"
   return 0
 }
 
@@ -221,15 +454,16 @@ session_board() {
     FILENAME ~ /journal\.md$/ {
       if ($0 ~ /^[ ]{2}(CLOSES|SUPERSEDES):[ ]*/) {
         line = $0; sub(/^[ ]{2}(CLOSES|SUPERSEDES):[ ]*/, "", line);
-        t = line; sub(/[ (].*$/, "", t);
-        closed[t] = 1;
+        sub(/[ \t]+-[ \t]+.*$/, "", line); sub(/[ \t]+\(.*$/, "", line);
+        nw = split(line, cw, /[ \t]+/);
+        for (wi = 1; wi <= nw; wi++) if (cw[wi] ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[a-zA-Z0-9_-]+[a-zA-Z0-9]$/) closed[cw[wi]] = FNR;
       }
       if ($0 ~ /^@entry[ ]+/) {
         if (cur_entry != "") {
-          entry_cnt++; e_slug[entry_cnt] = cur_entry; e_anc[entry_cnt] = cur_anchor; e_what[entry_cnt] = cur_what; e_th[entry_cnt] = cur_thread;
+          entry_cnt++; e_slug[entry_cnt] = cur_entry; e_ln[entry_cnt] = cur_ln; e_anc[entry_cnt] = cur_anchor; e_what[entry_cnt] = cur_what; e_th[entry_cnt] = cur_thread;
         }
         line = $0; sub(/^@entry[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
-        cur_entry = line; cur_anchor = anchor; cur_what = ""; cur_thread = "none";
+        cur_entry = line; cur_ln = FNR; cur_anchor = anchor; cur_what = ""; cur_thread = "none";
         next
       }
       if ($0 ~ /^[ ]{2}ANCHOR:[ ]*/) {
@@ -255,7 +489,7 @@ session_board() {
         task_cnt++; tasks_slug[task_cnt] = cur_task; tasks_status[task_cnt] = cur_status; tasks_obj[task_cnt] = cur_obj;
       }
       if (cur_entry != "") {
-        entry_cnt++; e_slug[entry_cnt] = cur_entry; e_anc[entry_cnt] = cur_anchor; e_what[entry_cnt] = cur_what; e_th[entry_cnt] = cur_thread;
+        entry_cnt++; e_slug[entry_cnt] = cur_entry; e_ln[entry_cnt] = cur_ln; e_anc[entry_cnt] = cur_anchor; e_what[entry_cnt] = cur_what; e_th[entry_cnt] = cur_thread;
       }
 
       printf "{\"unit\":\"%s\",\"anchor\":\"%s\",", escape_json(unit), escape_json(anchor);
@@ -263,7 +497,7 @@ session_board() {
       printf "\"unclosed_entries\":[";
       first = 1;
       for (i = 1; i <= entry_cnt; i++) {
-        if (e_slug[i] in closed) continue;
+        if (e_slug[i] in closed && closed[e_slug[i]] > e_ln[i]) continue;
         if (!first) printf ",";
         first = 0;
         printf "{\"slug\":\"%s\",\"anchor\":\"%s\",\"what\":\"%s\",\"thread\":\"%s\"}", escape_json(e_slug[i]), escape_json(e_anc[i]), escape_json(e_what[i]), escape_json(e_th[i]);
@@ -282,7 +516,7 @@ session_board() {
       printf "\"open_threads\":[";
       first = 1;
       for (i = 1; i <= entry_cnt; i++) {
-        if (e_slug[i] in closed) continue;
+        if (e_slug[i] in closed && closed[e_slug[i]] > e_ln[i]) continue;
         if (e_th[i] == "" || e_th[i] == "none") continue;
         if (!first) printf ",";
         first = 0;
@@ -291,7 +525,7 @@ session_board() {
       printf "]}";
       printf "\n";
     }
-  ' "$s_dir/state.md" "$s_dir/backlog.md" "$s_dir/journal.md"
+  ' $(for sb_f in state backlog journal; do [ -f "$s_dir/$sb_f.md" ] && printf '%s\n' "$s_dir/$sb_f.md"; done; printf '/dev/null\n')
   return 0
 }
 
@@ -319,7 +553,7 @@ session_stamp() {
   tmp_d=$(get_tmp_dir)
   tmp_s=$(mktemp "$tmp_d/state.XXXXXX")
   sed "s/^current_anchor:.*/current_anchor: $next_anc/" "$state_file" > "$tmp_s"
-  mv -f "$tmp_s" "$state_file"
+  commit_mv "$tmp_s" "$state_file" || return 2
 
   printf '\n@anchor %s ("continues %s", attention: "%s")\n' "$next_anc" "$cur_anc" "$attention" >> "$journal_file"
 
@@ -346,7 +580,7 @@ session_close() {
   tmp_d=$(get_tmp_dir)
   tmp_s=$(mktemp "$tmp_d/state.XXXXXX")
   sed "s/^status:.*/status: CLOSED/" "$state_file" > "$tmp_s"
-  mv -f "$tmp_s" "$state_file"
+  commit_mv "$tmp_s" "$state_file" || return 2
 
   esc_unit=$(escape_json "$unit")
   printf '{"unit":"%s","status":"CLOSED","unclosed_tasks":0,"unclosed_threads":0}\n' "$esc_unit"
@@ -369,8 +603,17 @@ session_pointer() {
   prev_ptr=$(grep '^next_action:' "$state_file" | head -n 1 | sed 's/^next_action:[ ]*//;s/^"//;s/"$//')
   tmp_d=$(get_tmp_dir)
   tmp_s=$(mktemp "$tmp_d/state.XXXXXX")
-  sed "s/^next_action:.*/next_action: \"$pointer\"/" "$state_file" > "$tmp_s"
-  mv -f "$tmp_s" "$state_file"
+  if ! PV_VAL="$pointer" awk '
+    BEGIN { done = 0; val = ENVIRON["PV_VAL"] }
+    /^next_action:/ { print "next_action: \"" val "\""; done = 1; next }
+    { print }
+    END { if (!done) exit 1 }
+  ' "$state_file" > "$tmp_s"; then
+    rm -f "$tmp_s"
+    printf "session.pointer: error: state.md missing next_action field, refusing to overwrite (ERR_STORAGE_CORRUPT)\n" >&2
+    return 2
+  fi
+  commit_mv "$tmp_s" "$state_file" || return 2
 
   esc_unit=$(escape_json "$unit")
   esc_prev=$(escape_json "$prev_ptr")
@@ -404,10 +647,12 @@ session_list() {
     for s_path in "$s_root"/*; do
       [ -d "$s_path" ] || continue
       u=$(basename "$s_path")
+      slug_valid "$u" || continue
       st_file="$s_path/state.md"
-      st="ACTIVE"
+      # a unit without a state carries no status (it is neither ACTIVE nor CLOSED)
+      st=""
       if [ -f "$st_file" ]; then
-        st=$(grep '^status:' "$st_file" | head -n 1 | sed 's/^status:[ ]*//;s/[ \t]*$//')
+        st=$(awk '/^status:/ { v = $0; sub(/^status:[ \t]*/, "", v); sub(/[ \t\r]+$/, "", v); print v; exit }' "$st_file")
       fi
       if [ "$first" -eq 1 ]; then
         first=0
@@ -455,20 +700,24 @@ task_add() {
     return 1
   fi
   backlog="$s_dir/backlog.md"
-  if grep -q "^@task  *$slug" "$backlog" 2>/dev/null || grep -q "^@task $slug$" "$backlog" 2>/dev/null; then
+  if block_has "$backlog" task "$slug"; then
     printf "task.add: error: task '%s' already exists in session '%s' (ERR_ENTITY_EXISTS)\n" "$slug" "$unit" >&2
     return 1
   fi
 
-  block=$(awk -v block_type="task" -v slug="$slug" -v status="TODO" -v objective="$obj" \
-    -v desc="$desc" -v criteria="$crit" -v details="$det" -v refs="$refs" \
-    -f "$SCRIPT_DIR/serialize_blocks.awk")
+  # free text through the environment (serialize_blocks.awk): a newline or a backslash
+  # sequence reaches the block verbatim; a render that fails never lands
+  if ! block=$(SB_OBJECTIVE="$obj" SB_DESC="$desc" SB_CRITERIA="$crit" SB_DETAILS="$det" SB_REFS="$refs" \
+    awk -v block_type="task" -v slug="$slug" -v status="TODO" -f "$SCRIPT_DIR/serialize_blocks.awk") || [ -z "$block" ]; then
+    printf "task.add: error: rendering task '%s' failed, nothing written (ERR_STORAGE_WRITE)\n" "$slug" >&2
+    return 2
+  fi
 
   tmp_d=$(get_tmp_dir)
   tmp_b=$(mktemp "$tmp_d/backlog.XXXXXX")
   cat "$backlog" > "$tmp_b"
   printf '\n%s\n' "$block" >> "$tmp_b"
-  mv -f "$tmp_b" "$backlog"
+  commit_mv "$tmp_b" "$backlog" || return 2
 
   esc_unit=$(escape_json "$unit")
   esc_slug=$(escape_json "$slug")
@@ -476,8 +725,9 @@ task_add() {
   esc_desc=$(escape_json "$desc")
   esc_crit=$(escape_json "$crit")
   esc_det=$(escape_json "$det")
-  printf '{"status":"TODO","unit":"%s","task":{"slug":"%s","status":"TODO","objective":"%s","description":"%s","criteria":"%s","details":"%s","refs":[]}}\n' \
-    "$esc_unit" "$esc_slug" "$esc_obj" "$esc_desc" "$esc_crit" "$esc_det"
+  refs_arr=$(refs_json "$refs")
+  printf '{"status":"TODO","unit":"%s","task":{"slug":"%s","status":"TODO","objective":"%s","description":"%s","criteria":"%s","details":"%s","refs":%s}}\n' \
+    "$esc_unit" "$esc_slug" "$esc_obj" "$esc_desc" "$esc_crit" "$esc_det" "$refs_arr"
   return 0
 }
 
@@ -488,14 +738,6 @@ task_update() {
   desc="${4:-}"
   crit="${5:-}"
   det="${6:-}"
-  for a in "$@"; do
-    case "$a" in
-      --invalid-flag*)
-        printf 'task.update: error: invalid argument: %s (ERR_INVALID_ARGUMENT)\n' "$a" >&2
-        return 1
-        ;;
-    esac
-  done
   if [ -z "$unit" ] || [ -z "$slug" ]; then
     printf 'task.update: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
     return 1
@@ -506,23 +748,59 @@ task_update() {
     return 1
   fi
   backlog="$s_dir/backlog.md"
-  if ! grep -q "^@task  *$slug" "$backlog" 2>/dev/null && ! grep -q "^@task $slug$" "$backlog" 2>/dev/null; then
+  if ! block_has "$backlog" task "$slug"; then
     printf "task.update: error: task '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$slug" "$unit" >&2
     return 1
   fi
 
   tmp_d=$(get_tmp_dir)
   tmp_b=$(mktemp "$tmp_d/backlog.XXXXXX")
-  awk -v target="$slug" -v new_obj="$obj" -v new_desc="$desc" -v new_crit="$crit" -v new_det="$det" '
+  # a field the block already carries is replaced in place; a field it lacks is inserted
+  # at its template position (DESCRIPTION, ACCEPTANCE CRITERIA, IMPLEMENTATION DETAILS)
+  # ahead of the first later section, else after the block's last content line
+  tu_has=$(awk -v target="$slug" '
+    /^@task[ ]+/ { t = $0; sub(/^@task[ ]+/, "", t); sub(/^[ \t]+/, "", t); sub(/[ \t]+$/, "", t); in_t = (t == target); next }
+    /^@[A-Za-z]/ { in_t = 0; next }
+    in_t && /^[ ]{2}DESCRIPTION ::/ { h1 = 1 }
+    in_t && /^[ ]{2}ACCEPTANCE CRITERIA ::/ { h2 = 1 }
+    in_t && /^[ ]{2}IMPLEMENTATION DETAILS ::/ { h3 = 1 }
+    END { printf "%d%d%d", h1, h2, h3 }' "$backlog")
+  # free text through the environment: -v would interpret backslash escapes and refuse a
+  # newline, and a failed render must never replace the backlog
+  if ! TU_OBJ="$obj" TU_DESC="$desc" TU_CRIT="$crit" TU_DET="$det" awk -v target="$slug" -v has_s="$tu_has" '
     function indent_lines(text, prefix,    lines, n, i, r) {
       n = split(text, lines, "\n"); r = "";
       for (i = 1; i <= n; i++) { r = r prefix lines[i]; if (i < n) r = r "\n"; }
       return r;
     }
-    BEGIN { in_target = 0; skip_scalar = 0; }
+    function section(rank) {
+      if (rank == 1) return "DESCRIPTION";
+      if (rank == 2) return "ACCEPTANCE CRITERIA";
+      return "IMPLEMENTATION DETAILS";
+    }
+    function flush_blanks(   i) { for (i = 1; i <= nblank; i++) print ""; nblank = 0 }
+    function emit_missing(upto,   r) {
+      for (r = 1; r <= upto; r++) {
+        if (want[r] != "" && !has[r] && !done[r]) {
+          printf "  %s ::\n%s\n", section(r), indent_lines(want[r], "    ");
+          done[r] = 1;
+        }
+      }
+    }
+    function task_of(line) { sub(/^@task[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line); return line }
+    BEGIN {
+      new_obj = ENVIRON["TU_OBJ"]; new_desc = ENVIRON["TU_DESC"]; new_crit = ENVIRON["TU_CRIT"]; new_det = ENVIRON["TU_DET"];
+      in_target = 0; skip_scalar = 0; nblank = 0;
+      want[1] = new_desc; want[2] = new_crit; want[3] = new_det;
+      for (r = 1; r <= 3; r++) has[r] = (substr(has_s, r, 1) == "1");
+    }
+    /^@[A-Za-z]/ && in_target {
+      emit_missing(3);
+      flush_blanks();
+      in_target = 0;
+    }
     /^@task[ ]+/ {
-      line = $0; sub(/^@task[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
-      if (line == target) {
+      if (task_of($0) == target) {
         in_target = 1;
         printf "@task %s\n", target;
         next;
@@ -530,6 +808,12 @@ task_update() {
         in_target = 0;
       }
     }
+    # an empty line inside the target is held until the next content line, so a missing
+    # section lands after the last content line, never after the trailing blank run
+    in_target && $0 == "" { skip_scalar = 0; nblank++; next; }
+    in_target { flush_blanks(); }
+    in_target && /^[ ]{2}ACCEPTANCE CRITERIA ::/ { emit_missing(1); }
+    in_target && /^[ ]{2}IMPLEMENTATION DETAILS ::/ { emit_missing(2); }
     in_target && /^[ ]{2}OBJECTIVE:[ ]*/ {
       if (new_obj != "") {
         printf "  OBJECTIVE: \"%s\"\n", new_obj;
@@ -564,8 +848,16 @@ task_update() {
       if ($0 !~ /^[ ]{4}/) skip_scalar = 0;
       print $0;
     }
-  ' "$backlog" > "$tmp_b"
-  mv -f "$tmp_b" "$backlog"
+    END {
+      if (in_target) emit_missing(3);
+      flush_blanks();
+    }
+  ' "$backlog" > "$tmp_b"; then
+    rm -f "$tmp_b"
+    printf "task.update: error: rendering task '%s' failed, the backlog is unchanged (ERR_STORAGE_WRITE)\n" "$slug" >&2
+    return 2
+  fi
+  commit_mv "$tmp_b" "$backlog" || return 2
 
   esc_unit=$(escape_json "$unit")
   esc_slug=$(escape_json "$slug")
@@ -587,7 +879,7 @@ task_start() {
     return 1
   fi
   backlog="$s_dir/backlog.md"
-  if ! grep -q "^@task  *$slug" "$backlog" 2>/dev/null && ! grep -q "^@task $slug$" "$backlog" 2>/dev/null; then
+  if ! block_has "$backlog" task "$slug"; then
     printf "task.start: error: task '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$slug" "$unit" >&2
     return 1
   fi
@@ -614,10 +906,20 @@ task_start() {
 
   next_act="work active task: $slug"
   [ -n "$pointer" ] && next_act="$pointer"
-  sed "s/^next_action:.*/next_action: \"$next_act\"/" "$s_dir/state.md" > "$tmp_s"
+  if ! PV_VAL="$next_act" awk '
+    BEGIN { done = 0; val = ENVIRON["PV_VAL"] }
+    /^next_action:/ { print "next_action: \"" val "\""; done = 1; next }
+    { print }
+    END { if (!done) exit 1 }
+  ' "$s_dir/state.md" > "$tmp_s"; then
+    rm -f "$tmp_b" "$tmp_s"
+    release_lock "$unit"
+    printf "task.start: error: state.md missing next_action field, refusing to overwrite (ERR_STORAGE_CORRUPT)\n" >&2
+    return 2
+  fi
 
-  mv -f "$tmp_b" "$backlog"
-  mv -f "$tmp_s" "$s_dir/state.md"
+  commit_mv "$tmp_b" "$backlog" || { rm -f "$tmp_s"; release_lock "$unit"; return 2; }
+  commit_mv "$tmp_s" "$s_dir/state.md" || { release_lock "$unit"; return 2; }
   release_lock "$unit"
 
   esc_unit=$(escape_json "$unit")
@@ -641,7 +943,7 @@ task_complete() {
     return 1
   fi
   backlog="$s_dir/backlog.md"
-  if ! grep -q "^@task  *$slug" "$backlog" 2>/dev/null && ! grep -q "^@task $slug$" "$backlog" 2>/dev/null; then
+  if ! block_has "$backlog" task "$slug"; then
     printf "task.complete: error: task '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$slug" "$unit" >&2
     return 1
   fi
@@ -675,8 +977,8 @@ task_complete() {
   cat "$s_dir/journal.md" > "$tmp_j"
   printf '\n@entry %s\n  ANCHOR: %s\n  WHAT: "%s"\n  THREAD: none\n' "$receipt_slug" "$cur_anc" "$receipt_what" >> "$tmp_j"
 
-  mv -f "$tmp_b" "$backlog"
-  mv -f "$tmp_j" "$s_dir/journal.md"
+  commit_mv "$tmp_b" "$backlog" || { rm -f "$tmp_j"; release_lock "$unit"; return 2; }
+  commit_mv "$tmp_j" "$s_dir/journal.md" || { release_lock "$unit"; return 2; }
   release_lock "$unit"
 
   esc_unit=$(escape_json "$unit")
@@ -701,7 +1003,7 @@ task_reopen() {
     return 1
   fi
   backlog="$s_dir/backlog.md"
-  if ! grep -q "^@task  *$slug" "$backlog" 2>/dev/null && ! grep -q "^@task $slug$" "$backlog" 2>/dev/null; then
+  if ! block_has "$backlog" task "$slug"; then
     printf "task.reopen: error: task '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$slug" "$unit" >&2
     return 1
   fi
@@ -721,7 +1023,7 @@ task_reopen() {
     }
     { print $0; }
   ' "$backlog" > "$tmp_b"
-  mv -f "$tmp_b" "$backlog"
+  commit_mv "$tmp_b" "$backlog" || return 2
 
   esc_unit=$(escape_json "$unit")
   esc_slug=$(escape_json "$slug")
@@ -743,7 +1045,7 @@ task_drop() {
     return 1
   fi
   backlog="$s_dir/backlog.md"
-  if ! grep -q "^@task  *$slug" "$backlog" 2>/dev/null && ! grep -q "^@task $slug$" "$backlog" 2>/dev/null; then
+  if ! block_has "$backlog" task "$slug"; then
     printf "task.drop: error: task '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$slug" "$unit" >&2
     return 1
   fi
@@ -770,13 +1072,14 @@ task_drop() {
   cur_anc=$(grep '^current_anchor:' "$s_dir/state.md" | head -n 1 | sed 's/^current_anchor:[ ]*//;s/[ \t]*$//')
   [ -z "$cur_anc" ] && cur_anc="A1"
   receipt_slug="$today-$slug-dropped"
-  receipt_what="task $slug dropped: $reason"
+  # the canonical drop receipt (the record grammar): backlog/<slug>: DROPPED (<reason>)
+  receipt_what="backlog/$slug: DROPPED ($reason)"
 
   cat "$s_dir/journal.md" > "$tmp_j"
   printf '\n@entry %s\n  ANCHOR: %s\n  WHAT: "%s"\n  THREAD: none\n' "$receipt_slug" "$cur_anc" "$receipt_what" >> "$tmp_j"
 
-  mv -f "$tmp_b" "$backlog"
-  mv -f "$tmp_j" "$s_dir/journal.md"
+  commit_mv "$tmp_b" "$backlog" || { rm -f "$tmp_j"; release_lock "$unit"; return 2; }
+  commit_mv "$tmp_j" "$s_dir/journal.md" || { release_lock "$unit"; return 2; }
   release_lock "$unit"
 
   esc_unit=$(escape_json "$unit")
@@ -854,7 +1157,7 @@ task_show() {
     return 1
   fi
   backlog="$s_dir/backlog.md"
-  if ! grep -q "^@task  *$slug" "$backlog" 2>/dev/null && ! grep -q "^@task $slug$" "$backlog" 2>/dev/null; then
+  if ! block_has "$backlog" task "$slug"; then
     printf "task.show: error: task '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$slug" "$unit" >&2
     return 1
   fi
@@ -863,7 +1166,13 @@ task_show() {
     function escape_json(s,    r) {
       r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
-    BEGIN { found = 0; in_target = 0; in_scalar = ""; status = "TODO"; obj = ""; desc = ""; crit = ""; det = ""; }
+    function refs_arr(v,   n, w, i, out) {
+      sub(/^[ \t]*\[/, "", v); sub(/\][ \t]*$/, "", v); gsub(/,/, " ", v)
+      n = split(v, w, /[ \t]+/); out = ""
+      for (i = 1; i <= n; i++) if (w[i] != "") out = out (out == "" ? "" : ",") "\"" escape_json(w[i]) "\""
+      return "[" out "]"
+    }
+    BEGIN { found = 0; in_target = 0; in_scalar = ""; status = "TODO"; obj = ""; desc = ""; crit = ""; det = ""; refs = ""; }
     /^@task[ ]+/ {
       line = $0; sub(/^@task[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
       if (line == target) {
@@ -882,6 +1191,9 @@ task_show() {
       if (substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") v = substr(v, 2, length(v) - 2);
       obj = v; next;
     }
+    in_target && /^[ ]{2}REFS:[ ]*/ {
+      in_scalar = ""; v = $0; sub(/^[ ]{2}REFS:[ ]*/, "", v); refs = v; next;
+    }
     in_target && /^[ ]{2}DESCRIPTION ::/ { in_scalar = "desc"; next; }
     in_target && /^[ ]{2}ACCEPTANCE CRITERIA ::/ { in_scalar = "crit"; next; }
     in_target && /^[ ]{2}IMPLEMENTATION DETAILS ::/ { in_scalar = "det"; next; }
@@ -895,8 +1207,8 @@ task_show() {
     in_target && /^[ \t]*$/ { in_scalar = ""; }
     END {
       if (!found) exit 1;
-      printf "{\"unit\":\"%s\",\"task\":{\"slug\":\"%s\",\"status\":\"%s\",\"objective\":\"%s\",\"description\":\"%s\",\"criteria\":\"%s\",\"details\":\"%s\",\"refs\":[]}}\n",
-        escape_json(unit), escape_json(target), escape_json(status), escape_json(obj), escape_json(desc), escape_json(crit), escape_json(det);
+      printf "{\"unit\":\"%s\",\"task\":{\"slug\":\"%s\",\"status\":\"%s\",\"objective\":\"%s\",\"description\":\"%s\",\"criteria\":\"%s\",\"details\":\"%s\",\"refs\":%s}}\n",
+        escape_json(unit), escape_json(target), escape_json(status), escape_json(obj), escape_json(desc), escape_json(crit), escape_json(det), refs_arr(refs);
     }
   ' "$backlog"
   return $?
@@ -922,6 +1234,11 @@ entry_record() {
   [ -z "$cur_anc" ] && cur_anc="A1"
 
   journal="$s_dir/journal.md"
+  # a new slug only: the journal is append-only history, a repeat is refused
+  if awk -v s="$slug" '$1 == "@entry" && $2 == s { found = 1 } END { exit !found }' "$journal" 2>/dev/null; then
+    printf "entry.record: error: entry '%s' already exists in session '%s' (ERR_ENTITY_EXISTS)\n" "$slug" "$unit" >&2
+    return 1
+  fi
   tmp_d=$(get_tmp_dir)
   tmp_j=$(mktemp "$tmp_d/journal.XXXXXX")
   cat "$journal" > "$tmp_j"
@@ -931,9 +1248,14 @@ entry_record() {
   printf '  WHAT: "%s"\n' "$what" >> "$tmp_j"
   [ -n "$group" ] && printf '  GROUP: %s\n' "$group" >> "$tmp_j"
   [ -n "$thread" ] && printf '  THREAD: %s\n' "$thread" >> "$tmp_j"
-  [ -n "$closes" ] && printf '  CLOSES: %s (done: %s)\n' "$closes" "$what" >> "$tmp_j"
+  # a value carrying its own verdict stands verbatim; a bare target list is done by this entry
+  case "$closes" in
+    "") ;;
+    *"("*) printf '  CLOSES: %s\n' "$closes" >> "$tmp_j" ;;
+    *) printf '  CLOSES: %s (done: %s)\n' "$closes" "$what" >> "$tmp_j" ;;
+  esac
 
-  mv -f "$tmp_j" "$journal"
+  commit_mv "$tmp_j" "$journal" || return 2
 
   esc_unit=$(escape_json "$unit")
   esc_slug=$(escape_json "$slug")
@@ -959,7 +1281,7 @@ entry_show() {
     return 1
   fi
   journal="$s_dir/journal.md"
-  if ! grep -q "^@entry  *$slug" "$journal" 2>/dev/null && ! grep -q "^@entry $slug$" "$journal" 2>/dev/null; then
+  if ! block_has "$journal" entry "$slug"; then
     printf "entry.show: error: entry '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$slug" "$unit" >&2
     return 1
   fi
@@ -969,7 +1291,7 @@ entry_show() {
       r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
     BEGIN {
-      found = 0; in_target = 0; anchor = ""; what = ""; group = ""; thread = "";
+      found = 0; in_target = 0; anchor = ""; what = ""; group = ""; thread = ""; ref = "";
       closed = 0; closed_by = ""; close_reason = "";
       cur_entry = "";
     }
@@ -977,7 +1299,11 @@ entry_show() {
       line = $0; sub(/^@entry[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
       cur_entry = line;
       if (cur_entry == target) {
+        # a legacy journal may repeat the slug: the last occurrence is reported, and
+        # only a closer standing after it closes it
         found = 1; in_target = 1;
+        anchor = ""; what = ""; group = ""; thread = ""; ref = "";
+        closed = 0; closed_by = ""; close_reason = "";
       } else {
         in_target = 0;
       }
@@ -1000,10 +1326,17 @@ entry_show() {
       v = $0; sub(/^[ ]{2}THREAD:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
       thread = v; next;
     }
+    in_target && /^[ ]{2}REF:[ ]*/ {
+      v = $0; sub(/^[ ]{2}REF:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
+      if (substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") v = substr(v, 2, length(v) - 2);
+      ref = v; next;
+    }
     /^[ ]{2}(CLOSES|SUPERSEDES):[ ]*/ {
       line = $0; sub(/^[ ]{2}(CLOSES|SUPERSEDES):[ ]*/, "", line);
-      t = line; sub(/[ (].*$/, "", t);
-      if (t == target) {
+      t = line; sub(/[ \t]+-[ \t]+.*$/, "", t); sub(/[ \t]+\(.*$/, "", t);
+      hit = 0; nw = split(t, cw, /[ \t]+/);
+      for (wi = 1; wi <= nw; wi++) if (cw[wi] == target && cw[wi] ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-[a-zA-Z0-9_-]+[a-zA-Z0-9]$/) hit = 1;
+      if (hit && !closed) {
         closed = 1;
         closed_by = cur_entry;
         reason = line;
@@ -1014,8 +1347,8 @@ entry_show() {
     }
     END {
       if (!found) exit 1;
-      printf "{\"unit\":\"%s\",\"entry\":{\"slug\":\"%s\",\"anchor\":\"%s\",\"what\":\"%s\",\"group\":\"%s\",\"thread\":\"%s\"},\"is_closed\":%s,\"closed_by\":\"%s\",\"close_reason\":\"%s\"}\n",
-        escape_json(unit), escape_json(target), escape_json(anchor), escape_json(what), escape_json(group), escape_json(thread),
+      printf "{\"unit\":\"%s\",\"entry\":{\"slug\":\"%s\",\"anchor\":\"%s\",\"what\":\"%s\",\"group\":\"%s\",\"thread\":\"%s\",\"ref\":\"%s\"},\"is_closed\":%s,\"closed_by\":\"%s\",\"close_reason\":\"%s\"}\n",
+        escape_json(unit), escape_json(target), escape_json(anchor), escape_json(what), escape_json(group), escape_json(thread), escape_json(ref),
         (closed ? "true" : "false"), escape_json(closed_by), escape_json(close_reason);
     }
   ' "$journal"
@@ -1024,6 +1357,16 @@ entry_show() {
 
 entry_list() {
   unit="${1:-}"
+  el_anchor=""
+  el_group=""
+  [ $# -gt 0 ] && shift
+  for el_a in "$@"; do
+    case "$el_a" in
+      --anchor=*) el_anchor="${el_a#--anchor=}" ;;
+      --group=*) el_group="${el_a#--group=}" ;;
+      *) printf "entry.list: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$el_a" >&2; return 1 ;;
+    esac
+  done
   if [ -z "$unit" ]; then
     printf 'entry.list: error: missing session unit parameter (ERR_INVALID_ARGUMENT)\n' >&2
     return 1
@@ -1034,16 +1377,24 @@ entry_list() {
     return 1
   fi
   journal="$s_dir/journal.md"
-  awk -v unit="$unit" '
+  # --anchor and --group keep only the entries whose ANCHOR and GROUP match exactly
+  awk -v unit="$unit" -v fa="$el_anchor" -v fg="$el_group" '
     function escape_json(s,    r) {
       r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
-    BEGIN { count = 0; cur_slug = ""; cur_anc = ""; cur_what = ""; }
+    BEGIN { count = 0; cur_slug = ""; cur_anc = ""; cur_what = ""; cur_grp = ""; }
     function flush() {
       if (cur_slug == "") return;
-      count++; s[count] = cur_slug; anc[count] = cur_anc; what[count] = cur_what;
-      cur_slug = ""; cur_anc = ""; cur_what = "";
+      if ((fa == "" || cur_anc == fa) && (fg == "" || cur_grp == fg)) {
+        count++; s[count] = cur_slug; anc[count] = cur_anc; what[count] = cur_what;
+      }
+      cur_slug = ""; cur_anc = ""; cur_what = ""; cur_grp = "";
     }
+    /^[ ]{2}GROUP:[ ]*/ {
+      v = $0; sub(/^[ ]{2}GROUP:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
+      if (cur_slug != "") cur_grp = v; next;
+    }
+    /^@anchor[ ]+/ { flush(); next; }
     /^@entry[ ]+/ {
       flush();
       line = $0; sub(/^@entry[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
@@ -1121,14 +1472,28 @@ finding_add() {
     return 1
   fi
   knowledge="$s_dir/knowledge.md"
-  block=$(awk -v block_type="finding" -v name="$name" -v summary="$summary" -v ref="$ref" -v supersedes="$supersedes" \
-    -f "$SCRIPT_DIR/serialize_blocks.awk")
+  # a NAME the knowledge already carries is refused: a replacement is a new finding
+  # that supersedes it (finding.supersede), never a second block under one NAME
+  if block_has "$knowledge" finding "$name"; then
+    printf "finding.add: error: finding '%s' already exists in session '%s' (ERR_ENTITY_EXISTS)\n" "$name" "$unit" >&2
+    return 1
+  fi
+  if [ -n "$supersedes" ] && ! block_has "$knowledge" finding "$supersedes"; then
+    printf "finding.add: error: superseded finding '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$supersedes" "$unit" >&2
+    return 1
+  fi
+  # free text through the environment (serialize_blocks.awk); a failed render never lands
+  if ! block=$(SB_SUMMARY="$summary" SB_REF="$ref" SB_SUPERSEDES="$supersedes" \
+    awk -v block_type="finding" -v name="$name" -f "$SCRIPT_DIR/serialize_blocks.awk") || [ -z "$block" ]; then
+    printf "finding.add: error: rendering finding '%s' failed, nothing written (ERR_STORAGE_WRITE)\n" "$name" >&2
+    return 2
+  fi
 
   tmp_d=$(get_tmp_dir)
   tmp_k=$(mktemp "$tmp_d/knowledge.XXXXXX")
   cat "$knowledge" > "$tmp_k"
   printf '\n%s\n' "$block" >> "$tmp_k"
-  mv -f "$tmp_k" "$knowledge"
+  commit_mv "$tmp_k" "$knowledge" || return 2
 
   esc_unit=$(escape_json "$unit")
   esc_name=$(escape_json "$name")
@@ -1137,6 +1502,163 @@ finding_add() {
   esc_sup=$(escape_json "$supersedes")
   printf '{"unit":"%s","finding":{"name":"%s","summary":"%s","ref":"%s","supersedes":"%s"}}\n' \
     "$esc_unit" "$esc_name" "$esc_sum" "$esc_ref" "$esc_sup"
+  return 0
+}
+
+finding_update() {
+  unit="${1:-}"
+  name="${2:-}"
+  new_sum="${3:-}"
+  new_ref="${4:-}"
+  if [ -z "$unit" ] || [ -z "$name" ]; then
+    printf 'finding.update: error: missing required arguments (unit, name) (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  s_dir=$(get_session_dir "$unit")
+  knowledge="$s_dir/knowledge.md"
+  if [ ! -d "$s_dir" ] || [ ! -f "$knowledge" ]; then
+    printf "finding.update: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
+    return 1
+  fi
+  if ! block_has "$knowledge" finding "$name"; then
+    printf "finding.update: error: finding '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$name" "$unit" >&2
+    return 1
+  fi
+  tmp_d=$(get_tmp_dir)
+  tmp_k=$(mktemp "$tmp_d/knowledge.XXXXXX")
+  # the SUMMARY body and the REF line are replaced in place when given; a REF given for a
+  # finding that carries none lands after the block body (the serializer order): at the
+  # first column-0 line after the target or at EOF, before the blank separator, so the
+  # short blank lines met inside the target are held (verbatim) until that point is known
+  # free text through the environment: -v would interpret backslash escapes and refuse a newline
+  FU_SUM="$new_sum" FU_REF="$new_ref" awk -v target="$name" '
+    function indent_lines(text, prefix,    lines, n, i, r) {
+      n = split(text, lines, "\n"); r = "";
+      for (i = 1; i <= n; i++) { r = r prefix lines[i]; if (i < n) r = r "\n"; }
+      return r;
+    }
+    function add_ref() {
+      if (new_ref != "" && !ref_seen) printf "  REF: \"%s\"\n", new_ref;
+      ref_done = 1;
+    }
+    function flush_held(   i) {
+      for (i = 1; i <= held; i++) print hl[i];
+      if (held > 0) skip_scalar = 0;
+      held = 0;
+    }
+    BEGIN { new_sum = ENVIRON["FU_SUM"]; new_ref = ENVIRON["FU_REF"]; in_target = 0; skip_scalar = 0; found = 0; ref_seen = 0; ref_done = 1; held = 0; }
+    in_target && !ref_done && /^[ \t]*$/ && !/^[ ]{4}/ { hl[++held] = $0; next; }
+    in_target && !ref_done && /^[^ \t]/ { add_ref(); }
+    { flush_held(); }
+    /^@finding[ ]+/ {
+      line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
+      if (line == target) {
+        found = 1; in_target = 1; ref_seen = 0; ref_done = 0;
+        print $0;
+        next;
+      } else in_target = 0;
+    }
+    in_target && /^[ ]{2}SUMMARY ::/ {
+      if (new_sum != "") {
+        printf "  SUMMARY ::\n%s\n", indent_lines(new_sum, "    ");
+        skip_scalar = 1;
+        next;
+      }
+    }
+    in_target && /^[ ]{2}REF:[ ]*/ {
+      ref_seen = 1;
+      if (new_ref != "") {
+        printf "  REF: \"%s\"\n", new_ref;
+        next;
+      }
+    }
+    in_target && skip_scalar && /^[ ]{4}/ { next; }
+    {
+      if ($0 !~ /^[ ]{4}/) skip_scalar = 0;
+      print $0;
+    }
+    END {
+      if (in_target && !ref_done) add_ref();
+      flush_held();
+      if (!found) exit 1;
+    }
+  ' "$knowledge" > "$tmp_k"
+  if [ $? -ne 0 ]; then
+    rm -f "$tmp_k"
+    printf "finding.update: error: finding '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$name" "$unit" >&2
+    return 1
+  fi
+  commit_mv "$tmp_k" "$knowledge" || return 2
+  printf '{"status":"ok","unit":"%s","finding":{"name":"%s"}}\n' "$(escape_json "$unit")" "$(escape_json "$name")"
+  return 0
+}
+
+finding_supersede() {
+  unit="${1:-}"
+  old_name="${2:-}"
+  new_name="${3:-}"
+  summary="${4:-}"
+  ref="${5:-}"
+  if [ -z "$unit" ] || [ -z "$old_name" ] || [ -z "$new_name" ] || [ -z "$summary" ]; then
+    printf 'finding.supersede: error: missing required arguments (unit, predecessor, successor, summary) (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  s_dir=$(get_session_dir "$unit")
+  knowledge="$s_dir/knowledge.md"
+  if [ ! -d "$s_dir" ]; then
+    printf "finding.supersede: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
+    return 1
+  fi
+  if ! block_has "$knowledge" finding "$old_name"; then
+    printf "finding.supersede: error: finding '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$old_name" "$unit" >&2
+    return 1
+  fi
+  finding_add "$unit" "$new_name" "$summary" "$ref" "$old_name" > /dev/null || return $?
+  printf '{"status":"ok","unit":"%s","superseded":"%s","successor":"%s"}\n' "$(escape_json "$unit")" "$(escape_json "$old_name")" "$(escape_json "$new_name")"
+  return 0
+}
+
+finding_drop() {
+  unit="${1:-}"
+  name="${2:-}"
+  if [ -z "$unit" ] || [ -z "$name" ]; then
+    printf 'finding.drop: error: missing required arguments (unit, name) (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  s_dir=$(get_session_dir "$unit")
+  knowledge="$s_dir/knowledge.md"
+  if [ ! -d "$s_dir" ] || [ ! -f "$knowledge" ]; then
+    printf "finding.drop: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
+    return 1
+  fi
+  if ! block_has "$knowledge" finding "$name"; then
+    printf "finding.drop: error: finding '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$name" "$unit" >&2
+    return 1
+  fi
+  tmp_d=$(get_tmp_dir)
+  tmp_k=$(mktemp "$tmp_d/knowledge.XXXXXX")
+  # the block runs from its @finding line to the line before the next column-0 block
+  awk -v target="$name" '
+    BEGIN { in_target = 0; found = 0; }
+    /^@finding[ ]+/ {
+      line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
+      if (line == target) {
+        found = 1; in_target = 1;
+        next;
+      } else in_target = 0;
+    }
+    in_target && /^@[A-Za-z]/ { in_target = 0; }
+    in_target { next; }
+    { print $0; }
+    END { if (!found) exit 1; }
+  ' "$knowledge" > "$tmp_k"
+  if [ $? -ne 0 ]; then
+    rm -f "$tmp_k"
+    printf "finding.drop: error: finding '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$name" "$unit" >&2
+    return 1
+  fi
+  commit_mv "$tmp_k" "$knowledge" || return 2
+  printf '{"status":"DROPPED","unit":"%s","name":"%s"}\n' "$(escape_json "$unit")" "$(escape_json "$name")"
   return 0
 }
 
@@ -1153,7 +1675,7 @@ finding_show() {
     return 1
   fi
   knowledge="$s_dir/knowledge.md"
-  if ! grep -q "^@finding  *$name" "$knowledge" 2>/dev/null && ! grep -q "^@finding $name$" "$knowledge" 2>/dev/null; then
+  if ! block_has "$knowledge" finding "$name"; then
     printf "finding.show: error: finding '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$name" "$unit" >&2
     return 1
   fi
@@ -1211,7 +1733,9 @@ finding_list() {
     return 1
   fi
   knowledge="$s_dir/knowledge.md"
-  awk -v unit="$unit" '
+  # active_only (the SPI flag, any non-empty value) leaves out every finding a later
+  # SUPERSEDES names; empty lists them all
+  awk -v unit="$unit" -v active_only="$active_only" '
     function escape_json(s,    r) {
       r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
@@ -1244,11 +1768,15 @@ finding_list() {
     END {
       flush();
       printf "{\"unit\":\"%s\",\"findings\":[", escape_json(unit);
+      for (i = 1; i <= count; i++) if (sup[i] != "") retired[sup[i]] = 1;
+      shown = 0;
       for (i = 1; i <= count; i++) {
+        if (active_only != "" && (n[i] in retired)) continue;
+        if (shown) printf ",";
+        shown = 1;
         printf "{\"name\":\"%s\",\"summary\":\"%s\",\"ref\":\"%s\"", escape_json(n[i]), escape_json(sum[i]), escape_json(rf[i]);
         if (sup[i] != "") printf ",\"supersedes\":\"%s\"", escape_json(sup[i]);
         printf "}";
-        if (i < count) printf ",";
       }
       printf "]}\n";
     }
@@ -1314,7 +1842,15 @@ lane_record() {
     printf "lane.record: error: lane '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$lane" "$unit" >&2
     return 1
   fi
-  printf '\n@entry %s\n  WHAT: "%s"\n  THREAD: %s\n' "$slug" "$what" "$thread" >> "$l_dir/journal.md"
+  # the lane journal is append-only history: a repeated slug is refused
+  if block_has "$l_dir/journal.md" entry "$slug"; then
+    printf "lane.record: error: entry '%s' already exists in lane '%s' of session '%s' (ERR_ENTITY_EXISTS)\n" "$slug" "$lane" "$unit" >&2
+    return 1
+  fi
+  if ! printf '\n@entry %s\n  WHAT: "%s"\n  THREAD: %s\n' "$slug" "$what" "$thread" >> "$l_dir/journal.md" 2>/dev/null; then
+    printf 'lane.record: error: the storage write of journal.md failed (ERR_STORAGE_WRITE)\n' >&2
+    return 2
+  fi
 
   esc_unit=$(escape_json "$unit")
   esc_lane=$(escape_json "$lane")
@@ -1327,7 +1863,8 @@ lane_record() {
 lane_report() {
   unit="${1:-}"
   lane="${2:-}"
-  report_body="${3:-}"
+  lr_mode="${3:-}"
+  report_body=""
   if [ -z "$unit" ] || [ -z "$lane" ]; then
     printf 'lane.report: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
     return 1
@@ -1339,14 +1876,22 @@ lane_report() {
     return 1
   fi
   rep_file="$l_dir/report.md"
-  if [ -n "$report_body" ]; then
-    printf '%s\n' "$report_body" > "$rep_file"
-  else
-    if [ -f "$rep_file" ]; then
-      report_body=$(cat "$rep_file")
-    else
-      report_body=""
-    fi
+  # --write: the report arrives raw on stdin and is stored byte for byte (any size;
+  # nothing rides argv); without it the stored report is read back
+  case "$lr_mode" in
+    --write)
+      lr_tmp=$(mktemp "$rep_file.XXXXXX" 2>/dev/null) || { printf 'lane.report: error: cannot stage the report (ERR_STORAGE_WRITE)\n' >&2; return 2; }
+      if ! cat > "$lr_tmp" || ! mv "$lr_tmp" "$rep_file"; then
+        rm -f "$lr_tmp"
+        printf 'lane.report: error: the storage write failed (ERR_STORAGE_WRITE)\n' >&2
+        return 2
+      fi
+      ;;
+    "") ;;
+    *) printf "lane.report: error: unknown mode '%s' (--write or none) (ERR_INVALID_ARGUMENT)\n" "$lr_mode" >&2; return 1 ;;
+  esac
+  if [ -f "$rep_file" ]; then
+    report_body=$(cat "$rep_file")
   fi
 
   esc_unit=$(escape_json "$unit")
@@ -1456,113 +2001,97 @@ resolve_ref() {
     return 1
   fi
 
-  file_part="${ref%%#*}"
-  symbol_part="${ref#*#}"
-  if [ "$file_part" = "$ref" ]; then
-    symbol_part=""
-  fi
-
-  case "$file_part" in
-    knowledge*|*knowledge*)
-      target_file="$s_dir/knowledge.md"
-      entity_type="finding"
-      entity_id="$symbol_part"
-      ;;
-    backlog*|*backlog*)
-      target_file="$s_dir/backlog.md"
-      entity_type="task"
-      entity_id="$symbol_part"
-      ;;
-    journal*|*journal*)
-      target_file="$s_dir/journal.md"
-      entity_type="entry"
-      entity_id="$symbol_part"
-      ;;
-    lanes/*)
-      target_file="$s_dir/$file_part"
-      [ ! -f "$target_file" ] && [ -f "$target_file.md" ] && target_file="$target_file.md"
+  # the typed forms (task#slug, finding#NAME, entry#slug, lane#<lane>/report#<claim>)
+  # and the legacy file forms (backlog.md#slug, knowledge.md#NAME, journal.md#slug,
+  # lanes/<lane>/report.md#<claim>) name the same entities
+  entity_type=""
+  entity_id=""
+  lane_id=""
+  case "$ref" in
+    task#*|backlog#*|backlog.md#*) entity_type="task"; entity_id="${ref#*#}"; target_file="$s_dir/backlog.md" ;;
+    finding#*|knowledge#*|knowledge.md#*) entity_type="finding"; entity_id="${ref#*#}"; target_file="$s_dir/knowledge.md" ;;
+    entry#*|journal#*|journal.md#*) entity_type="entry"; entity_id="${ref#*#}"; target_file="$s_dir/journal.md" ;;
+    lane#*/report#*)
+      rr_rest="${ref#lane#}"
+      lane_id="${rr_rest%%/report#*}"
+      entity_id="${rr_rest#*/report#}"
       entity_type="lane_report"
-      entity_id="$symbol_part"
       ;;
-    *)
-      printf "resolve.ref: error: unsupported ref format: '%s' (ERR_INVALID_ARGUMENT)\n" "$ref" >&2
-      return 1
+    lanes/*/report.md#*|lanes/*/report#*)
+      rr_rest="${ref#lanes/}"
+      lane_id="${rr_rest%%/*}"
+      entity_id="${ref##*#}"
+      entity_type="lane_report"
       ;;
   esac
-
+  if [ -z "$entity_type" ] || [ -z "$entity_id" ]; then
+    printf "resolve.ref: error: unsupported ref format: '%s' (ERR_INVALID_ARGUMENT)\n" "$ref" >&2
+    return 1
+  fi
+  if [ "$entity_type" = "lane_report" ]; then
+    if ! slug_valid "$lane_id"; then
+      printf "resolve.ref: error: unsupported ref format: '%s' (ERR_INVALID_ARGUMENT)\n" "$ref" >&2
+      return 1
+    fi
+    target_file="$s_dir/lanes/$lane_id/report.md"
+  fi
   if [ ! -f "$target_file" ]; then
-    printf "resolve.ref: error: target file '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$target_file" >&2
+    printf "resolve.ref: error: reference '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ref" "$unit" >&2
     return 1
   fi
 
-  awk -v unit="$unit" -v full_ref="$ref" -v etype="$entity_type" -v eid="$entity_id" '
+  awk -v unit="$unit" -v full_ref="$ref" -v etype="$entity_type" -v eid="$entity_id" -v lane="$lane_id" '
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
+      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); gsub(/\t/, "\\t", r); return r;
     }
-    BEGIN { found = 0; in_ent = 0; in_sum = 0; sum = ""; fref = ""; tstatus = ""; tobj = ""; ewhat = ""; }
-    etype == "finding" && /^@finding[ ]+/ {
-      line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
-      if (line == eid) {
-        found = 1; in_ent = 1;
-      } else in_ent = 0;
-      next;
+    function head_id(line,   w, n, t) {
+      n = split(line, w, /[ \t]+/)
+      return w[2]
     }
-    etype == "finding" && in_ent && /^[ ]{2}SUMMARY ::/ { in_sum = 1; next; }
-    etype == "finding" && in_ent && in_sum && /^[ ]{4}/ {
-      l = substr($0, 5); sum = (sum == "" ? l : sum "\n" l); next;
+    function is_head(line,   t) {
+      if (etype == "task") return (line ~ /^@task[ \t]/ && head_id(line) == eid)
+      if (etype == "finding") return (line ~ /^@finding[ \t]/ && head_id(line) == eid)
+      if (etype == "entry") return (line ~ /^@entry[ \t]/ && head_id(line) == eid)
+      t = line; sub(/[ \t\r]+$/, "", t)
+      return (t == "@" eid || (line ~ /^@claim[ \t]/ && head_id(line) == eid))
     }
-    etype == "finding" && in_ent && /^[ ]{2}REF:[ ]*/ {
-      v = $0; sub(/^[ ]{2}REF:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
-      if (substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") v = substr(v, 2, length(v) - 2);
-      fref = v; next;
-    }
-    etype == "task" && /^@task[ ]+/ {
-      line = $0; sub(/^@task[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
-      if (line == eid) {
-        found = 1; in_ent = 1;
-      } else in_ent = 0;
-      next;
-    }
-    etype == "task" && in_ent && /^[ ]{2}STATUS:[ ]*/ {
-      v = $0; sub(/^[ ]{2}STATUS:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
-      tstatus = v; next;
-    }
-    etype == "task" && in_ent && /^[ ]{2}OBJECTIVE:[ ]*/ {
-      v = $0; sub(/^[ ]{2}OBJECTIVE:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
-      if (substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") v = substr(v, 2, length(v) - 2);
-      tobj = v; next;
-    }
-    etype == "entry" && /^@entry[ ]+/ {
-      line = $0; sub(/^@entry[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
-      if (line == eid) {
-        found = 1; in_ent = 1;
-      } else in_ent = 0;
-      next;
-    }
-    etype == "entry" && in_ent && /^[ ]{2}WHAT:[ ]*/ {
-      v = $0; sub(/^[ ]{2}WHAT:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
-      if (substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") v = substr(v, 2, length(v) - 2);
-      ewhat = v; next;
-    }
+    { L[NR] = $0 }
     END {
-      if (!found) exit 1;
-      if (etype == "finding") {
-        printf "{\"unit\":\"%s\",\"ref\":\"%s\",\"entity_type\":\"%s\",\"target\":{\"name\":\"%s\",\"summary\":\"%s\",\"ref\":\"%s\"}}\n",
-          escape_json(unit), escape_json(full_ref), escape_json(etype), escape_json(eid), escape_json(sum), escape_json(fref);
-      } else if (etype == "task") {
-        printf "{\"unit\":\"%s\",\"ref\":\"%s\",\"entity_type\":\"%s\",\"target\":{\"slug\":\"%s\",\"status\":\"%s\",\"objective\":\"%s\"}}\n",
-          escape_json(unit), escape_json(full_ref), escape_json(etype), escape_json(eid), escape_json(tstatus), escape_json(tobj);
-      } else if (etype == "entry") {
-        printf "{\"unit\":\"%s\",\"ref\":\"%s\",\"entity_type\":\"%s\",\"target\":{\"slug\":\"%s\",\"what\":\"%s\"}}\n",
-          escape_json(unit), escape_json(full_ref), escape_json(etype), escape_json(eid), escape_json(ewhat);
-      } else {
-        printf "{\"unit\":\"%s\",\"ref\":\"%s\",\"entity_type\":\"%s\",\"target\":{\"ref\":\"%s\"}}\n",
-          escape_json(unit), escape_json(full_ref), escape_json(etype), escape_json(full_ref);
+      # the last occurrence answers, as entry.show reads a legacy repeated slug
+      found = 0
+      for (i = 1; i <= NR; i++) if (is_head(L[i])) found = i
+      if (!found) exit 1
+      e = found + 1
+      while (e <= NR && L[e] !~ /^@[A-Za-z]/) e++
+      e--
+      block = ""
+      for (i = found; i <= e; i++) block = block L[i] "\n"
+      sum = ""; fref = ""; tstatus = ""; tobj = ""; ewhat = ""; insum = 0
+      for (i = found + 1; i <= e; i++) {
+        v = L[i]
+        if (v ~ /^[ ]{2}SUMMARY ::/) { insum = 1; continue }
+        if (insum && v ~ /^[ ]{4}/) { l = substr(v, 5); sum = (sum == "" ? l : sum "\n" l); continue }
+        insum = 0
+        if (v ~ /^[ ]{2}REF:[ ]*/) { sub(/^[ ]{2}REF:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v); if (v ~ /^".*"$/) v = substr(v, 2, length(v) - 2); fref = v }
+        else if (v ~ /^[ ]{2}STATUS:[ ]*/) { sub(/^[ ]{2}STATUS:[ ]*/, "", v); sub(/[ \t]+$/, "", v); tstatus = v }
+        else if (v ~ /^[ ]{2}OBJECTIVE:[ ]*/) { sub(/^[ ]{2}OBJECTIVE:[ ]*/, "", v); sub(/[ \t]+$/, "", v); if (v ~ /^".*"$/) v = substr(v, 2, length(v) - 2); tobj = v }
+        else if (v ~ /^[ ]{2}WHAT:[ ]*/) { sub(/^[ ]{2}WHAT:[ ]*/, "", v); sub(/[ \t]+$/, "", v); if (v ~ /^".*"$/) v = substr(v, 2, length(v) - 2); ewhat = v }
       }
+      if (etype == "finding") {
+        tgt = sprintf("{\"name\":\"%s\",\"summary\":\"%s\",\"ref\":\"%s\"}", escape_json(eid), escape_json(sum), escape_json(fref))
+      } else if (etype == "task") {
+        tgt = sprintf("{\"slug\":\"%s\",\"status\":\"%s\",\"objective\":\"%s\"}", escape_json(eid), escape_json(tstatus), escape_json(tobj))
+      } else if (etype == "entry") {
+        tgt = sprintf("{\"slug\":\"%s\",\"what\":\"%s\"}", escape_json(eid), escape_json(ewhat))
+      } else {
+        tgt = sprintf("{\"lane\":\"%s\",\"claim\":\"%s\"}", escape_json(lane), escape_json(eid))
+      }
+      printf "{\"unit\":\"%s\",\"ref\":\"%s\",\"entity_type\":\"%s\",\"target\":%s,\"block\":\"%s\"}\n",
+        escape_json(unit), escape_json(full_ref), etype, tgt, escape_json(block)
     }
   ' "$target_file"
   if [ $? -ne 0 ]; then
-    printf "resolve.ref: error: entity '%s' not found in '%s' (ERR_ENTITY_NOT_FOUND)\n" "$eid" "$ref" >&2
+    printf "resolve.ref: error: reference '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ref" "$unit" >&2
     return 1
   fi
   return 0
@@ -1571,40 +2100,93 @@ resolve_ref() {
 search_query() {
   unit="${1:-}"
   query="${2:-}"
+  if [ $# -ge 2 ]; then shift 2; else shift $#; fi
+  sq_limit=20
+  sq_entity=""
+  sq_mode="exact"
+  for sq_a in "$@"; do
+    case "$sq_a" in
+      --limit=*) sq_limit="${sq_a#--limit=}" ;;
+      --entity=*) sq_entity="${sq_a#--entity=}" ;;
+      --mode=*) sq_mode="${sq_a#--mode=}" ;;
+      *)
+        printf "search.query: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$sq_a" >&2
+        return 1
+        ;;
+    esac
+  done
   if [ -z "$unit" ] || [ -z "$query" ]; then
-    printf 'search.query: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
+    printf 'search.query: error: missing required arguments (unit, query) (ERR_INVALID_ARGUMENT)\n' >&2
     return 1
   fi
+  case "$sq_limit" in
+    ""|*[!0-9]*) printf "search.query: error: --limit takes a positive number: '%s' (ERR_INVALID_ARGUMENT)\n" "$sq_limit" >&2; return 1 ;;
+  esac
+  [ "$sq_limit" -ge 1 ] || { printf 'search.query: error: --limit takes a positive number (ERR_INVALID_ARGUMENT)\n' >&2; return 1; }
+  case "$sq_entity" in
+    ""|all|session|task|entry|finding|lane|lane_entry) ;;
+    *) printf "search.query: error: unknown entity type '%s' (session, task, entry, finding, lane, lane_entry, all) (ERR_INVALID_ARGUMENT)\n" "$sq_entity" >&2; return 1 ;;
+  esac
+  # the posix driver searches by exact substring; the ranked modes belong to indexed drivers
+  case "$sq_mode" in
+    exact) ;;
+    hybrid|trigram) printf "search.query: error: mode '%s' is not supported by the posix driver; it searches exact substrings (ERR_CAPABILITY_UNSUPPORTED)\n" "$sq_mode" >&2; return 1 ;;
+    *) printf "search.query: error: unknown mode '%s' (exact, hybrid, trigram) (ERR_INVALID_ARGUMENT)\n" "$sq_mode" >&2; return 1 ;;
+  esac
   s_dir=$(get_session_dir "$unit")
   if [ ! -d "$s_dir" ]; then
     printf "search.query: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
     return 1
   fi
 
-  files=""
-  [ -f "$s_dir/knowledge.md" ] && files="$files $s_dir/knowledge.md"
-  [ -f "$s_dir/backlog.md" ] && files="$files $s_dir/backlog.md"
-  [ -f "$s_dir/journal.md" ] && files="$files $s_dir/journal.md"
-  [ -f "$s_dir/state.md" ] && files="$files $s_dir/state.md"
+  set --
+  for sq_f in state backlog knowledge journal; do
+    [ -f "$s_dir/$sq_f.md" ] && set -- "$@" "$s_dir/$sq_f.md"
+  done
   if [ -d "$s_dir/lanes" ]; then
-    for lf in "$s_dir"/lanes/*/*.md; do
-      [ -f "$lf" ] && files="$files $lf"
+    for sq_l in "$s_dir"/lanes/*; do
+      [ -d "$sq_l" ] || continue
+      for sq_f in recipe journal report; do
+        [ -f "$sq_l/$sq_f.md" ] && set -- "$@" "$sq_l/$sq_f.md"
+      done
     done
   fi
 
-  awk -v unit="$unit" -v query="$query" -f "$SCRIPT_DIR/search.awk" $files
+  if [ $# -eq 0 ]; then
+    SQ_QUERY="$query" awk -v unit="$unit" -v limit="$sq_limit" -v entity="$sq_entity" -f "$SCRIPT_DIR/search.awk" /dev/null
+  else
+    SQ_QUERY="$query" awk -v unit="$unit" -v limit="$sq_limit" -v entity="$sq_entity" -f "$SCRIPT_DIR/search.awk" "$@"
+  fi
   return 0
 }
 
 cmd="${1:-}"
-shift 2>/dev/null || true
+[ $# -gt 0 ] && shift
 
+# every method: argv = the method and its identifiers; the free-text fields arrive on
+# stdin as the payload (payload_load, pget); the single-document writes read raw stdin
 case "$cmd" in
   capability)
-    capability "$@"
+    capability
+    ;;
+  storage.health)
+    storage_health
+    ;;
+  artifact.read)
+    artifact_read "$@"
+    ;;
+  artifact.write)
+    artifact_write "$@"
+    ;;
+  artifact.list)
+    artifact_list "$@"
+    ;;
+  session.create)
+    session_create "$@"
     ;;
   session.init)
-    session_init "$@"
+    payload_load; pget p_obj objective
+    session_init "${1:-}" "${p_obj:-new unit}"
     ;;
   session.load)
     session_load "$@"
@@ -1613,10 +2195,12 @@ case "$cmd" in
     session_board "$@"
     ;;
   session.stamp)
-    session_stamp "$@"
+    payload_load; pget p_att attention
+    session_stamp "${1:-}" "${p_att:-session stamp}"
     ;;
   session.pointer)
-    session_pointer "$@"
+    payload_load; pget p_ptr pointer
+    session_pointer "${1:-}" "$p_ptr"
     ;;
   session.refs)
     session_refs "$@"
@@ -1631,22 +2215,32 @@ case "$cmd" in
     session_audit "$@"
     ;;
   task.add)
-    task_add "$@"
+    payload_load; pget p_obj objective; pget p_desc desc; pget p_crit criteria; pget p_det details; pget p_refs refs
+    task_add "${1:-}" "${2:-}" "$p_obj" "$p_desc" "$p_crit" "$p_det" "$p_refs"
     ;;
   task.update)
-    task_update "$@"
+    for tu_a in "$@"; do
+      case "$tu_a" in
+        --*) printf 'task.update: error: invalid argument: %s (ERR_INVALID_ARGUMENT)\n' "$tu_a" >&2; exit 1 ;;
+      esac
+    done
+    payload_load; pget p_obj objective; pget p_desc desc; pget p_crit criteria; pget p_det details
+    task_update "${1:-}" "${2:-}" "$p_obj" "$p_desc" "$p_crit" "$p_det"
     ;;
   task.start)
-    task_start "$@"
+    payload_load; pget p_ptr pointer
+    task_start "${1:-}" "${2:-}" "$p_ptr"
     ;;
   task.complete)
-    task_complete "$@"
+    payload_load; pget p_ev evidence
+    task_complete "${1:-}" "${2:-}" "${p_ev:-verified}"
     ;;
   task.reopen)
     task_reopen "$@"
     ;;
   task.drop)
-    task_drop "$@"
+    payload_load; pget p_rsn reason
+    task_drop "${1:-}" "${2:-}" "${p_rsn:-Deprecating task}"
     ;;
   task.list)
     task_list "$@"
@@ -1655,7 +2249,8 @@ case "$cmd" in
     task_show "$@"
     ;;
   entry.record)
-    entry_record "$@"
+    payload_load; pget p_what what; pget p_grp group; pget p_th thread; pget p_cl closes
+    entry_record "${1:-}" "${2:-}" "$p_what" "$p_grp" "${p_th:-none}" "$p_cl"
     ;;
   entry.show)
     entry_show "$@"
@@ -1667,7 +2262,8 @@ case "$cmd" in
     entry_anchors "$@"
     ;;
   finding.add)
-    finding_add "$@"
+    payload_load; pget p_sum summary; pget p_ref ref; pget p_sup supersedes
+    finding_add "${1:-}" "${2:-}" "$p_sum" "$p_ref" "$p_sup"
     ;;
   finding.show)
     finding_show "$@"
@@ -1675,11 +2271,24 @@ case "$cmd" in
   finding.list)
     finding_list "$@"
     ;;
+  finding.update)
+    payload_load; pget p_sum summary; pget p_ref ref
+    finding_update "${1:-}" "${2:-}" "$p_sum" "$p_ref"
+    ;;
+  finding.supersede)
+    payload_load; pget p_sum summary; pget p_ref ref
+    finding_supersede "${1:-}" "${2:-}" "${3:-}" "$p_sum" "$p_ref"
+    ;;
+  finding.drop)
+    finding_drop "$@"
+    ;;
   lane.create)
-    lane_create "$@"
+    payload_load; pget p_goal goal; pget p_rcp recipe
+    lane_create "${1:-}" "${2:-}" "$p_goal" "$p_rcp"
     ;;
   lane.record)
-    lane_record "$@"
+    payload_load; pget p_what what; pget p_th thread
+    lane_record "${1:-}" "${2:-}" "${3:-}" "$p_what" "${p_th:-none}"
     ;;
   lane.report)
     lane_report "$@"
@@ -1691,13 +2300,17 @@ case "$cmd" in
     lane_status "$@"
     ;;
   lane.close)
-    lane_close "$@"
+    payload_load; pget p_res resolution
+    lane_close "${1:-}" "${2:-}" "${3:-COMPLETE}" "${p_res:-lane closed}"
     ;;
   resolve.ref)
     resolve_ref "$@"
     ;;
   search.query)
-    search_query "$@"
+    payload_load; pget p_q query
+    sq_u="${1:-}"
+    [ $# -gt 0 ] && shift
+    search_query "$sq_u" "$p_q" "$@"
     ;;
   *)
     printf "posix-driver: error: unknown subsystem or method '%s' (ERR_CAPABILITY_UNSUPPORTED)\n" "$cmd" >&2

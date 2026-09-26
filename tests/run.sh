@@ -1,7 +1,11 @@
 #!/bin/sh
-# run.sh: the upstream test runner. Runs the six core suites (filters, ctx,
-# session, hooks, record-audit, governance), each hermetic and staged from the
-# shipped core, then every plugin suite by convention
+# run.sh: the upstream test runner. Runs the core suites (filters, ctx, session, hooks,
+# record-audit, governance, storage-compliance), each hermetic and staged from the
+# shipped core (storage compliance runs against base's posix driver by path, never the
+# live drawer's copy); the session suite runs twice, once on the posix driver and once
+# on the fts5 driver (the plugin's own copy staged into its sandbox; skip 77 when sqlite3
+# lacks FTS5), so every verb is proven to reach the one configured store; then every
+# plugin suite by convention
 # (plugins/<name>/tests/run.sh; a suite with a declared need absent exits 77
 # and skips cleanly, naming the need).
 #
@@ -19,7 +23,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh hook-tests.sh record-audit-tests.sh governance-tests.sh"
+CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh storage-compliance.sh"
 
 pass=0
 fail=0
@@ -28,18 +32,30 @@ skipped=0
 printf 'run: the upstream test runner at %s\n' "$ROOT"
 printf 'core suites: %s\n\n' "$CORE_SUITES"
 
-for s in $CORE_SUITES; do
+for entry in $CORE_SUITES; do
+  s=${entry%%:*}
   if [ ! -f "$SCRIPT_DIR/$s" ]; then
-    printf 'FAIL core:%s (suite missing)\n' "$s"
+    printf 'FAIL core:%s (suite missing)\n' "$entry"
     fail=$((fail + 1))
     continue
   fi
-  if sh "$SCRIPT_DIR/$s"; then
-    printf 'PASS core:%s\n' "$s"
+  args=""
+  case "$entry" in
+    # the SPI harness defaults to the installed driver; the gate pins the shipped one
+    storage-compliance.sh) args="--driver-exec=$ROOT/base/.contexture/modules/session/drivers/posix/driver" ;;
+    # the second session run: the same assertions on the fts5 driver
+    session-tests.sh:fts5) args="--driver=fts5" ;;
+  esac
+  sh "$SCRIPT_DIR/$s" $args
+  rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf 'PASS core:%s\n' "$entry"
     pass=$((pass + 1))
+  elif [ "$rc" -eq 77 ]; then
+    printf 'SKIP core:%s (need named by the suite above)\n' "$entry"
+    skipped=$((skipped + 1))
   else
-    rc=$?
-    printf 'FAIL core:%s (rc=%s)\n' "$s" "$rc"
+    printf 'FAIL core:%s (rc=%s)\n' "$entry" "$rc"
     fail=$((fail + 1))
   fi
 done

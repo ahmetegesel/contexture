@@ -7,7 +7,7 @@
 # help:   --group=...          topic group token
 # help:   --thread=...         what the unit awaits (default: none)
 # help:   --ref="..."          grounding reference
-# help:   --closes=...         closes journal entry target
+# help:   --closes=...         closes journal entry targets: one or more slugs, optionally with its own (verdict: reason); default (done: WHAT)
 # help:   --supersedes=...     supersedes journal entry target
 # help:   --knowledge          flag for harvest
 # help:   --slug=...           override entry slug
@@ -46,6 +46,7 @@ function usage_all() {
   print "       ctx session next <session-slug> \"<pointer>\"" > "/dev/stderr"
   print "       ctx session refs <session-slug> [<session> ...]" > "/dev/stderr"
   print "       ctx session close <session-slug>" > "/dev/stderr"
+  print "       ctx session reopen <session-slug>" > "/dev/stderr"
   print "help: ctx session help" > "/dev/stderr"
   exit 1
 }
@@ -58,6 +59,7 @@ function usage() {
   else if (act == "next") print "Usage: ctx session next <session-slug> \"<pointer>\"" > "/dev/stderr"
   else if (act == "refs") print "Usage: ctx session refs <session-slug> [<session> ...]" > "/dev/stderr"
   else if (act == "close") print "Usage: ctx session close <session-slug>" > "/dev/stderr"
+  else if (act == "reopen") print "Usage: ctx session reopen <session-slug>" > "/dev/stderr"
   else usage_all()
   print "help: ctx session help" > "/dev/stderr"
   exit 1
@@ -109,28 +111,115 @@ function exists(path) {
   return (system("test -f \"" path "\"") == 0)
 }
 
-function load_lines(path, A,   line, n, r) {
+# The record IO: every session artifact is read and written through the configured
+# storage driver (artifact.read, artifact.write) by artifact key; a fetched artifact lands
+# in a scratch file under .contexture/tmp, removed at exit. disp() names an artifact in a
+# message the way the record grammar reads it; it builds a display string, never a path
+# any code opens.
+function disp(u, key) {
+  return ".contexture/sessions/" u "/" key ".md"
+}
+
+function rec_q(s) {
+  gsub(/'/, "'\\''", s)
+  return "'" s "'"
+}
+
+function rec_resolver(   md) {
+  if (REC_RESOLVER != "") return REC_RESOLVER
+  md = (("CTX_MODULE_DIR" in ENVIRON) && ENVIRON["CTX_MODULE_DIR"] != "") ? ENVIRON["CTX_MODULE_DIR"] : ".contexture/modules/session"
+  REC_RESOLVER = md "/scripts/driver-resolver"
+  return REC_RESOLVER
+}
+
+function rec_scratch(   cmd, d) {
+  if (REC_DIR != "") return REC_DIR
+  system("mkdir -p .contexture/tmp")
+  cmd = "mktemp -d .contexture/tmp/rec.XXXXXX 2>/dev/null"
+  d = ""
+  if ((cmd | getline d) <= 0) d = ""
+  close(cmd)
+  if (d == "") {
+    print "ERROR: cannot create a scratch folder under .contexture/tmp" > "/dev/stderr"
+    exit 2
+  }
+  REC_DIR = d
+  return d
+}
+
+# rec_fetch(u, key): the artifact's scratch copy, "" when the driver reports it absent
+# (rc 1); a storage failure (rc 2) is fatal and its diagnostic passes through
+function rec_fetch(u, key,   f, e, rc, k, line) {
+  k = u SUBSEP key
+  if (k in REC_CACHE) return REC_CACHE[k]
+  REC_N++
+  f = rec_scratch() "/a" REC_N
+  e = f ".err"
+  rc = system(rec_q(rec_resolver()) " artifact.read " rec_q(u) " " rec_q(key) " > " rec_q(f) " 2> " rec_q(e))
+  if (rc == 0) {
+    REC_CACHE[k] = f
+    return f
+  }
+  if (rc == 1) {
+    REC_CACHE[k] = ""
+    return ""
+  }
+  while ((getline line < e) > 0) print line > "/dev/stderr"
+  close(e)
+  print "ERROR: the storage driver failed reading " key " of " u " (rc=" rc ")" > "/dev/stderr"
+  exit 2
+}
+
+function rec_exists(u, key) {
+  return (rec_fetch(u, key) != "")
+}
+
+# rec_put(u, key, file): the file becomes the artifact, atomically, through the driver
+function rec_put(u, key, file,   rc) {
+  close(file)
+  rc = system(rec_q(rec_resolver()) " artifact.write " rec_q(u) " " rec_q(key) " < " rec_q(file))
+  if (rc != 0) {
+    print "ERROR: the storage driver refused writing " key " of " u " (rc=" rc ")" > "/dev/stderr"
+    exit (rc == 1) ? 1 : 2
+  }
+  REC_CACHE[u SUBSEP key] = file
+}
+
+function rec_cleanup() {
+  if (REC_DIR != "") system("rm -rf " rec_q(REC_DIR))
+  REC_DIR = ""
+}
+
+function load_lines(path, A, shown,   line, n, r) {
+  if (shown == "") shown = path
   n = 0
   r = 0
   while ((r = (getline line < path)) > 0) {
-    if (index(line, "\r") > 0) fail("ERROR: CRLF in " path " (the dialect is LF)")
+    if (index(line, "\r") > 0) fail("ERROR: CRLF in " shown " (the dialect is LF)")
     n++
     A[n] = line
   }
   close(path)
-  if (r < 0) fail("ERROR: unreadable: " path)
+  if (r < 0) fail("ERROR: unreadable: " shown)
   return n
 }
 
-function load_one(path, A, art) {
-  if (!exists(path)) fail("ERROR: missing " art ": " path)
-  return load_lines(path, A)
+function load_art(u, key, A,   f) {
+  f = rec_fetch(u, key)
+  if (f == "") return 0
+  return load_lines(f, A, disp(u, key))
+}
+
+function load_one(key, A, art) {
+  if (!rec_exists(unit, key)) fail("ERROR: missing " art ": " disp(unit, key))
+  return load_art(unit, key, A)
 }
 
 function load_state(   i, line) {
-  state_path = ".contexture/sessions/" unit "/state.md"
-  if (!exists(state_path)) fail("ERROR: no such session: " unit)
-  NS = load_lines(state_path, SL)
+  state_path = "state"
+  state_disp = disp(unit, "state")
+  if (!rec_exists(unit, "state")) fail("ERROR: no such session: " unit)
+  NS = load_art(unit, "state", SL)
   status = ""
   anchor = ""
   statetext = ""
@@ -148,22 +237,22 @@ function require_active() {
 }
 
 function require_anchor() {
-  if (anchor !~ /^A[0-9]+$/) fail("ERROR: malformed current_anchor in " state_path ": [" anchor "]")
+  if (anchor !~ /^A[0-9]+$/) fail("ERROR: malformed current_anchor in " state_disp ": [" anchor "]")
 }
 
 function load_journal() {
-  NJ = load_one(".contexture/sessions/" unit "/journal.md", JL, "journal")
-  journal_path = ".contexture/sessions/" unit "/journal.md"
+  NJ = load_one("journal", JL, "journal")
+  journal_path = "journal"
 }
 
 function load_knowledge() {
-  NK = load_one(".contexture/sessions/" unit "/knowledge.md", KL, "knowledge")
-  knowledge_path = ".contexture/sessions/" unit "/knowledge.md"
+  NK = load_one("knowledge", KL, "knowledge")
+  knowledge_path = "knowledge"
 }
 
 function load_backlog() {
-  NB = load_one(".contexture/sessions/" unit "/backlog.md", BL, "backlog")
-  backlog_path = ".contexture/sessions/" unit "/backlog.md"
+  NB = load_one("backlog", BL, "backlog")
+  backlog_path = "backlog"
 }
 
 function entry_exists(slug,   i) {
@@ -403,7 +492,9 @@ function parse_entry(k,   i, line, label, val, v) {
   }
   if (!EWSET[k]) fail("ERROR: block " k ": WHAT missing (one quoted WHAT line is required)")
   if (!ETH[k]) fail("ERROR: block " k ": THREAD missing (declare THREAD: <what it awaits> | none)")
-  if (EW[k] !~ /^"[^"]*"$/) fail("ERROR: block " k ": WHAT must be one quoted line with no embedded double quote")
+  # one quoted line: an embedded double quote is accepted, as the typed writes store it and
+  # every reader (board, audit, load, entry show, the fts5 index) tolerates it
+  if (EW[k] !~ /^".*"$/ || length(EW[k]) < 2) fail("ERROR: block " k ": WHAT must be one quoted line")
   if (trim(substr(EW[k], 2, length(EW[k]) - 2)) == "") fail("ERROR: block " k ": WHAT empty")
 }
 
@@ -608,35 +699,22 @@ function trim_body_tail(A, k, n) {
   return n
 }
 
-function unique_tmp(path,   cmd, tmp) {
-  # a unique same-directory temp: the mv stays on one filesystem (atomic
-  # replace) and concurrent writers never share a temp name
-  tmp = ""
-  cmd = "mktemp \"" path ".XXXXXX\" 2>/dev/null"
-  if ((cmd | getline tmp) <= 0) tmp = ""
-  close(cmd)
-  if (tmp == "") fail("ERROR: cannot create a temp beside " path)
-  return tmp
-}
-
-function save(path,   tmp, rc, i) {
-  tmp = unique_tmp(path)
+# save(key): the emitted lines become the unit's artifact; the driver replaces it
+# atomically (the posix driver: a unique same-directory temp plus mv)
+function save(key,   tmp, i) {
+  REC_N++
+  tmp = rec_scratch() "/w" REC_N
   if (ON == 0) {
     printf "" > tmp
-    close(tmp)
   } else {
     for (i = 1; i <= ON; i++) print OB[i] > tmp
-    close(tmp)
   }
-  rc = system("mv \"" tmp "\" \"" path "\"")
-  if (rc != 0) {
-    system("rm -f \"" tmp "\"")
-    fail("ERROR: mv failed rc=" rc " for " path)
-  }
+  close(tmp)
+  rec_put(unit, key, tmp)
 }
 
 function append_block(k, path,   A, n, m, i) {
-  n = load_lines(path, A)
+  n = load_art(unit, path, A)
   m = n
   while (m >= 1 && A[m] == "") m--
   ON = 0
@@ -1160,6 +1238,7 @@ function do_next(   i, j, candidate, missing, n, nimp, slug, nnal) {
   if (pointer == "") fail("ERROR: empty pointer")
   if (index(pointer, "\"") > 0) fail("ERROR: embedded double quote in pointer")
   if (index(pointer, "\n") > 0) fail("ERROR: embedded newline in pointer")
+  if (index(pointer, "\r") > 0) fail("ERROR: embedded carriage return in pointer (the dialect is LF)")
   load_state()
   require_active()
   load_backlog()
@@ -1171,8 +1250,8 @@ function do_next(   i, j, candidate, missing, n, nimp, slug, nnal) {
       nnal++
     }
   }
-  if (nal == 0) fail("ERROR: missing next_action in " state_path " (fix the state by hand)")
-  if (nnal > 1) fail("ERROR: duplicate next_action in " state_path " (fix the state by hand)")
+  if (nal == 0) fail("ERROR: missing next_action in " state_disp " (fix the state by hand)")
+  if (nnal > 1) fail("ERROR: duplicate next_action in " state_disp " (fix the state by hand)")
   ON = 0
   i = 1
   while (i <= NS) {
@@ -1220,7 +1299,7 @@ function do_refs(   i, s, list, p, replaced, inserted) {
     s = ARG[i]
     if (!slug_ok(s)) fail("ERROR: ref session malformed: " s)
     if (s == unit) fail("ERROR: the unit cannot reference itself: " unit)
-    if (!exists(".contexture/sessions/" s "/state.md")) fail("ERROR: no such session: " s)
+    if (!rec_exists(s, "state")) fail("ERROR: no such session: " s)
     for (p = 2; p < i; p++) {
       if (ARG[p] == s) fail("ERROR: duplicate ref session: " s)
     }
@@ -1301,7 +1380,7 @@ function do_close(   i, j, s, open, st) {
     for (i = 1; i <= AUDN; i++) print "WARNING: " AUD[i] > "/dev/stderr"
   }
   open = ""
-  if (exists(".contexture/sessions/" unit "/backlog.md")) {
+  if (rec_exists(unit, "backlog")) {
     load_backlog()
     for (i = 1; i <= NB; i++) {
       if (BL[i] ~ /^@task[ \t]/) {
@@ -1326,7 +1405,22 @@ function do_close(   i, j, s, open, st) {
     fail("ERROR: close point failed (block hook)")
 }
 
-function do_record(u, start_arg,   i, a, what, group, thread, ref, closes, supersedes, knowledge, custom_slug, slug, cur_anc, line, NIN_loc, cslug) {
+function do_reopen(   i) {
+  if (narg != 1) usage()
+  unit = ARG[1]
+  if (!slug_ok(unit)) usage()
+  load_state()
+  if (status != "CLOSED") fail("ERROR: unit is not CLOSED: " unit " (status: [" status "])")
+  ON = 0
+  for (i = 1; i <= NS; i++) {
+    if (SL[i] ~ /^status:[ \t]*/) emit("status: ACTIVE")
+    else emit(SL[i])
+  }
+  save(state_path)
+  print "REOPENED: " unit
+}
+
+function do_record(u, start_arg,   i, a, what, group, thread, ref, closes, supersedes, knowledge, custom_slug, slug, cur_anc, line, NIN_loc, cslug, ctargets, nct, ci) {
   if (u == "-h" || u == "--help" || u == "help" || u == "") {
     if (u == "-h" || u == "--help" || u == "help") {
       print "usage: ctx session record <unit> --what=\"...\" [--group=...] [--thread=...] [--ref=...] [--closes=...] [--supersedes=...] [--knowledge]"
@@ -1368,6 +1462,14 @@ function do_record(u, start_arg,   i, a, what, group, thread, ref, closes, super
     else if (a ~ /^--slug=/) { custom_slug = substr(a, 8) }
     else if (a == "--slug") { i++; custom_slug = ARG[i] }
   }
+  # the dialect is LF: a carriage return in any flag value would poison the journal for
+  # every grammar verb (they refuse CR on read), so it refuses before any write
+  for (i = start_arg; i <= narg; i++)
+    if (index(ARG[i], "\r") > 0) fail("ERROR: embedded carriage return in a record flag value (the dialect is LF)")
+  # every record flag value is written as one line of the entry block: an embedded newline
+  # would start a column-0 continuation that breaks the block grammar, so it refuses too
+  for (i = start_arg; i <= narg; i++)
+    if (index(ARG[i], "\n") > 0) fail("ERROR: embedded newline in a record flag value (one line)")
 
   if (what == "") {
     unit = u
@@ -1385,6 +1487,8 @@ function do_record(u, start_arg,   i, a, what, group, thread, ref, closes, super
     if (slug !~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}-/) {
       slug = today "-" slug
     }
+    # the journal is append-only history: a slug it carries is refused, never repeated
+    if (entry_exists(slug)) fail("ERROR: entry slug exists in journal.md: " slug)
   } else {
     dcmd = "date +%s"
     ts = ""
@@ -1398,9 +1502,16 @@ function do_record(u, start_arg,   i, a, what, group, thread, ref, closes, super
   }
 
   if (closes != "") {
+    # every target the board would read: cut at a spaced hyphen or a spaced paren
     cslug = closes
-    sub(/[ (].*$/, "", cslug)
-    if (!entry_exists(cslug)) fail("ERROR: CLOSES target not found in journal: " cslug)
+    sub(/[ \t]+-[ \t]+.*$/, "", cslug)
+    sub(/[ \t]*\(.*$/, "", cslug)
+    nct = split(cslug, ctargets, /[ \t]+/)
+    if (nct == 0) fail("ERROR: CLOSES names no target: " closes)
+    for (ci = 1; ci <= nct; ci++)
+      if (!entry_exists(ctargets[ci])) fail("ERROR: CLOSES target not found in journal: " ctargets[ci])
+    # a value carrying its own verdict stands verbatim; a bare target list is done by this entry
+    if (closes !~ /\(/) closes = closes " (done: " what ")"
   }
 
   ON = 0
@@ -1412,12 +1523,28 @@ function do_record(u, start_arg,   i, a, what, group, thread, ref, closes, super
   if (group != "") emit("  GROUP: " group)
   if (thread != "") emit("  THREAD: " thread)
   if (ref != "") emit("  REF: \"" ref "\"")
-  if (closes != "") emit("  CLOSES: " closes " (done: " what ")")
+  if (closes != "") emit("  CLOSES: " closes)
   if (supersedes != "") emit("  SUPERSEDES: " supersedes " (superseded)")
   if (knowledge) emit("  KNOWLEDGE: true")
 
   save(journal_path)
   print "recorded entry: " slug
+}
+
+function help_of(a) {
+  if (a == "append") return "usage: ctx session append <session-slug>  (stdin: one or more blocks)"
+  if (a == "amend") return "usage: ctx session amend <session-slug> <task-slug>  (stdin: one or more field blocks)"
+  if (a == "flip") return "usage: ctx session flip <session-slug> <todo | progress | done> <task-slug> [<task-slug> ...]"
+  if (a == "drop") return "usage: ctx session drop <session-slug> <task-slug> [<task-slug> ...]  (stdin: the record block)"
+  if (a == "next") return "usage: ctx session next <session-slug> \"<pointer>\""
+  if (a == "refs") return "usage: ctx session refs <session-slug> [<session> ...]"
+  if (a == "close") return "usage: ctx session close <session-slug>"
+  if (a == "reopen") return "usage: ctx session reopen <session-slug>"
+  return "usage: ctx session record <unit> --what=\"...\" [--group=...] [--thread=...] [--ref=...] [--closes=...] [--supersedes=...] [--knowledge]"
+}
+
+function is_help(a) {
+  return (a == "-h" || a == "--help" || a == "help")
 }
 
 BEGIN {
@@ -1429,6 +1556,9 @@ BEGIN {
   narg = ARGC - 2
   for (i = 2; i < ARGC; i++) ARG[i - 1] = ARGV[i]
   for (i = 0; i < ARGC; i++) delete ARGV[i]
+  # --help and -h print the act's usage on stdout, rc 0, before any argument check
+  if (is_help(act)) { print help_of("record"); exit 0 }
+  if (narg >= 1 && is_help(ARG[1])) { print help_of(act); exit 0 }
   if (act == "append") do_append()
   else if (act == "amend") do_amend()
   else if (act == "flip") do_flip()
@@ -1436,6 +1566,7 @@ BEGIN {
   else if (act == "next") do_next()
   else if (act == "refs") do_refs()
   else if (act == "close") do_close()
+  else if (act == "reopen") do_reopen()
   else if (act == "record") {
     if (narg == 1) {
       unit = ARG[1]
@@ -1459,4 +1590,8 @@ BEGIN {
       fail("ERROR: task-landing point failed (block hook)")
   }
   exit 0
+}
+
+END {
+  rec_cleanup()
 }

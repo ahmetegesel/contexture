@@ -59,20 +59,24 @@ fi
 if [ "$json_out" -eq 1 ]; then
   printf '%s\n' "$out"
 else
-  printf '%s\n' "$out" | awk '
+  printf '%s\n' "$out" | awk -v key='content' '
+    # decode the JSON string value of key in linear passes: escaped backslashes and
+    # quotes are parked on control bytes first, so the first raw quote left is the
+    # closing one; then every escape the drivers emit is restored
     {
-      line = $0
-      if (match(line, /"content":"/)) {
-        line = substr(line, RSTART + 11)
-        sub(/"\}$/, "", line)
-        sub(/",.*$/, "", line)
-        gsub(/\\n/, "\n", line)
-        gsub(/\\"/, "\"", line)
-        gsub(/\\\\/, "\\", line)
-        printf "%s\n", line
-      } else {
-        print line
-      }
+      p = index($0, "\"" key "\":\"")
+      if (p == 0) { print; next }
+      v = substr($0, p + length(key) + 4)
+      gsub(/\\\\/, "\001", v)
+      gsub(/\\"/, "\002", v)
+      q = index(v, "\"")
+      if (q > 0) v = substr(v, 1, q - 1)
+      gsub(/\\n/, "\n", v)
+      gsub(/\\t/, "\t", v)
+      gsub(/\\r/, "\r", v)
+      gsub(/\002/, "\"", v)
+      gsub(/\001/, "\\", v)
+      printf "%s\n", v
     }
   '
 fi

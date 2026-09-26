@@ -39,12 +39,133 @@ function fail(msg) {
   exit 1
 }
 
-function exists(path) {
-  return (system("test -f \"" path "\"") == 0)
+# The record IO: every session artifact is read and written through the configured
+# storage driver (artifact.read, artifact.write, artifact.list, session.list) by artifact
+# key (state, backlog, knowledge, journal, lane/<lane>/<recipe|journal|report>); a fetched
+# artifact lands in a scratch file under .contexture/tmp, removed at exit. disp() names an
+# artifact in a message the way the record grammar reads it; it builds a display string,
+# never a path any code opens.
+function disp(u, key,   l) {
+  if (key ~ /^lane\//) {
+    l = key
+    sub(/^lane\//, "", l)
+    return ".contexture/sessions/" u "/lanes/" l ".md"
+  }
+  return ".contexture/sessions/" u "/" key ".md"
 }
 
-function exists_dir(path) {
-  return (system("test -d \"" path "\"") == 0)
+function rec_q(s) {
+  gsub(/'/, "'\\''", s)
+  return "'" s "'"
+}
+
+function rec_resolver(   md) {
+  if (REC_RESOLVER != "") return REC_RESOLVER
+  md = (("CTX_MODULE_DIR" in ENVIRON) && ENVIRON["CTX_MODULE_DIR"] != "") ? ENVIRON["CTX_MODULE_DIR"] : ".contexture/modules/session"
+  REC_RESOLVER = md "/scripts/driver-resolver"
+  return REC_RESOLVER
+}
+
+function rec_scratch(   cmd, d) {
+  if (REC_DIR != "") return REC_DIR
+  system("mkdir -p .contexture/tmp")
+  cmd = "mktemp -d .contexture/tmp/rec.XXXXXX 2>/dev/null"
+  d = ""
+  if ((cmd | getline d) <= 0) d = ""
+  close(cmd)
+  if (d == "") {
+    print "ERROR: cannot create a scratch folder under .contexture/tmp" > "/dev/stderr"
+    exit 2
+  }
+  REC_DIR = d
+  return d
+}
+
+# rec_call(args, out): one driver call, stdout to the out file; rc 0 ok, 1 absent or
+# refused; a storage failure (rc 2) is fatal and its diagnostic passes through
+function rec_call(args, out,   e, rc, line) {
+  e = out ".err"
+  rc = system(rec_q(rec_resolver()) " " args " > " rec_q(out) " 2> " rec_q(e))
+  if (rc == 0 || rc == 1) return rc
+  while ((getline line < e) > 0) print line > "/dev/stderr"
+  close(e)
+  print "ERROR: the storage driver failed (rc=" rc "): " args > "/dev/stderr"
+  exit 2
+}
+
+# rec_fetch(u, key): the artifact's scratch copy, "" when the driver reports it absent
+function rec_fetch(u, key,   f, k) {
+  k = u SUBSEP key
+  if (k in REC_CACHE) return REC_CACHE[k]
+  REC_N++
+  f = rec_scratch() "/a" REC_N
+  if (rec_call("artifact.read " rec_q(u) " " rec_q(key), f) == 0) {
+    REC_CACHE[k] = f
+    return f
+  }
+  REC_CACHE[k] = ""
+  return ""
+}
+
+function rec_exists(u, key) {
+  return (rec_fetch(u, key) != "")
+}
+
+# rec_put(u, key, file): the file becomes the artifact, atomically, through the driver
+function rec_put(u, key, file,   rc) {
+  close(file)
+  rc = system(rec_q(rec_resolver()) " artifact.write " rec_q(u) " " rec_q(key) " < " rec_q(file))
+  if (rc != 0) {
+    print "ERROR: the storage driver refused writing " key " of " u " (rc=" rc ")" > "/dev/stderr"
+    exit (rc == 1) ? 1 : 2
+  }
+  REC_CACHE[u SUBSEP key] = file
+}
+
+# rec_new(): a fresh scratch file name for a write
+function rec_new() {
+  REC_N++
+  return rec_scratch() "/w" REC_N
+}
+
+# rec_units(U): every unit the store holds, in its listing order (bytewise by name);
+# returns the count, 0 when the store holds none
+function rec_units(U,   f, line, n, rest, p, u) {
+  REC_N++
+  f = rec_scratch() "/l" REC_N
+  if (rec_call("session.list", f) != 0) return 0
+  n = 0
+  while ((getline line < f) > 0) {
+    rest = line
+    while ((p = index(rest, "\"unit\":\"")) > 0) {
+      rest = substr(rest, p + 8)
+      u = substr(rest, 1, index(rest, "\"") - 1)
+      n++
+      U[n] = u
+    }
+  }
+  close(f)
+  return n
+}
+
+# rec_list(u, K): the artifact keys the unit holds (artifact.list), count returned
+function rec_list(u, K,   f, line, n) {
+  REC_N++
+  f = rec_scratch() "/k" REC_N
+  if (rec_call("artifact.list " rec_q(u), f) != 0) return 0
+  n = 0
+  while ((getline line < f) > 0) {
+    if (line == "") continue
+    n++
+    K[n] = line
+  }
+  close(f)
+  return n
+}
+
+function rec_cleanup() {
+  if (REC_DIR != "") system("rm -rf " rec_q(REC_DIR))
+  REC_DIR = ""
 }
 
 function slug_ok(s) {
@@ -103,18 +224,16 @@ function block_end(i,   j) {
   return j - 1
 }
 
-function require_session(unit,   p) {
-  p = ".contexture/sessions/" unit "/state.md"
-  if (!exists(p)) fail("ERROR: no such session: " unit)
+function require_session(unit) {
+  if (!rec_exists(unit, "state")) fail("ERROR: no such session: " unit)
 }
 
-function require_journal(unit,   p) {
-  p = ".contexture/sessions/" unit "/journal.md"
-  if (!exists(p)) fail("ERROR: missing journal: " p)
+function require_journal(unit) {
+  if (!rec_exists(unit, "journal")) fail("ERROR: missing journal: " disp(unit, "journal"))
 }
 
 function do_entry(unit, slug,   path, i, e, k, n) {
-  path = ".contexture/sessions/" unit "/journal.md"
+  path = rec_fetch(unit, "journal")
   load_file(path)
   n = 0
   for (i = 1; i <= NFILE; i++) {
@@ -134,7 +253,7 @@ function do_entry(unit, slug,   path, i, e, k, n) {
 }
 
 function do_group(unit, token,   path, i, j, e, n, a, s, w) {
-  path = ".contexture/sessions/" unit "/journal.md"
+  path = rec_fetch(unit, "journal")
   load_file(path)
   n = 0
   for (i = 1; i <= NFILE; i++) {
@@ -175,7 +294,7 @@ function do_group(unit, token,   path, i, j, e, n, a, s, w) {
 }
 
 function do_anchors(unit,   path, i, n) {
-  path = ".contexture/sessions/" unit "/journal.md"
+  path = rec_fetch(unit, "journal")
   load_file(path)
   n = 0
   for (i = 1; i <= NFILE; i++) {
@@ -218,8 +337,8 @@ function successor_of(cur,   i, j, e, rest, w, nw) {
 }
 
 function do_finding(unit, name,   path, head, cn, cyc, nxt, k, i, e, cur) {
-  path = ".contexture/sessions/" unit "/knowledge.md"
-  if (!exists(path)) fail("ERROR: no such finding: " name)
+  path = rec_fetch(unit, "knowledge")
+  if (path == "") fail("ERROR: no such finding: " name)
   load_file(path)
   head = find_finding_block(name)
   if (head == 0) fail("ERROR: no such finding: " name)
@@ -269,7 +388,7 @@ function verdict_of(line,   p, q, inner, c, h) {
 }
 
 function do_closure(unit, slug,   path, i, k, e, rest, w, nw, hit, n, cur_slug, cur_anchor, v) {
-  path = ".contexture/sessions/" unit "/journal.md"
+  path = rec_fetch(unit, "journal")
   load_file(path)
   hit = 0
   for (i = 1; i <= NFILE; i++) {
@@ -326,12 +445,15 @@ function do_closure(unit, slug,   path, i, k, e, rest, w, nw, hit, n, cur_slug, 
   }
 }
 
-function do_units(repo,   cmd, state, line, i, k, nknown, nparts, parts, status, aline, nl, nxt, r, p, matched, nunits, label, list, key, j, gr, rows) {
-  cmd = "ls .contexture/sessions/*/state.md 2>/dev/null"
+function do_units(repo,   state, line, i, k, nknown, nparts, parts, status, aline, nl, nxt, r, p, matched, nunits, label, list, key, j, gr, rows, U, nall, ui, u) {
   nunits = 0
   nknown = 0
   rows = 0
-  while ((cmd | getline state) > 0) {
+  nall = rec_units(U)
+  for (ui = 1; ui <= nall; ui++) {
+    u = U[ui]
+    state = rec_fetch(u, "state")
+    if (state == "") continue
     rows++
     status = ""
     aline = ""
@@ -383,22 +505,19 @@ function do_units(repo,   cmd, state, line, i, k, nknown, nparts, parts, status,
     }
     close(state)
     if (gr < 0) {
-      print "WARNING: unreadable state: " state > "/dev/stderr"
+      print "WARNING: unreadable state: " disp(u, "state") > "/dev/stderr"
       continue
     }
     if (matched) {
       nunits++
-      uslug[nunits] = state
-      sub(/\/state\.md$/, "", uslug[nunits])
-      sub(/^.*\//, "", uslug[nunits])
+      uslug[nunits] = u
       ustat[nunits] = status
       uanchor[nunits] = aline
       ucount[nunits] = nl
       for (k = 1; k <= nl; k++) unxt[nunits, k] = nxt[k]
     }
   }
-  close(cmd)
-  if (rows == 0 && exists_dir(".contexture/sessions")) print "WARNING: no state files listed: .contexture/sessions" > "/dev/stderr"
+  if (rows == 0 && nall > 0) print "WARNING: no state files listed: .contexture/sessions" > "/dev/stderr"
   if (nunits == 0) {
     for (i = 2; i <= nknown; i++) {
       key = known[i]
@@ -423,11 +542,14 @@ function do_units(repo,   cmd, state, line, i, k, nknown, nparts, parts, status,
   }
 }
 
-function do_refs_to(session,   cmd, state, line, r, n, nparts, parts, k, p, matched, gr, rows) {
-  cmd = "ls .contexture/sessions/*/state.md 2>/dev/null"
+function do_refs_to(session,   state, line, r, n, nparts, parts, k, p, matched, gr, rows, U, nall, ui, u) {
   n = 0
   rows = 0
-  while ((cmd | getline state) > 0) {
+  nall = rec_units(U)
+  for (ui = 1; ui <= nall; ui++) {
+    u = U[ui]
+    state = rec_fetch(u, "state")
+    if (state == "") continue
     rows++
     matched = 0
     gr = 1
@@ -445,18 +567,15 @@ function do_refs_to(session,   cmd, state, line, r, n, nparts, parts, k, p, matc
     }
     close(state)
     if (gr < 0) {
-      print "WARNING: unreadable state: " state > "/dev/stderr"
+      print "WARNING: unreadable state: " disp(u, "state") > "/dev/stderr"
       continue
     }
     if (matched) {
       n++
-      rslug[n] = state
-      sub(/\/state\.md$/, "", rslug[n])
-      sub(/^.*\//, "", rslug[n])
+      rslug[n] = u
     }
   }
-  close(cmd)
-  if (rows == 0 && exists_dir(".contexture/sessions")) print "WARNING: no state files listed: .contexture/sessions" > "/dev/stderr"
+  if (rows == 0 && nall > 0) print "WARNING: no state files listed: .contexture/sessions" > "/dev/stderr"
   if (n == 0) fail("ERROR: no unit references session: " session)
   printf "refs-to %s: %d units\n\n", session, n
   for (k = 1; k <= n; k++) print "  " rslug[k]
@@ -501,8 +620,8 @@ function unsupported(ref) {
 
 function do_resolve(unit, ref,   path, i, e, found, sec) {
   if (RKIND == "entry") {
-    path = ".contexture/sessions/" unit "/journal.md"
-    if (!exists(path)) fail("ERROR: missing journal: " path)
+    path = rec_fetch(unit, "journal")
+    if (path == "") fail("ERROR: missing journal: " disp(unit, "journal"))
     load_file(path)
     found = 0
     for (i = 1; i <= NFILE; i++) {
@@ -513,14 +632,14 @@ function do_resolve(unit, ref,   path, i, e, found, sec) {
     }
     if (found == 0) fail("ERROR: no such entry: " RARG)
   } else if (RKIND == "finding") {
-    path = ".contexture/sessions/" unit "/knowledge.md"
-    if (!exists(path)) fail("ERROR: no such finding: " RARG)
+    path = rec_fetch(unit, "knowledge")
+    if (path == "") fail("ERROR: no such finding: " RARG)
     load_file(path)
     found = find_finding_block(RARG)
     if (found == 0) fail("ERROR: no such finding: " RARG)
   } else if (RKIND == "task") {
-    path = ".contexture/sessions/" unit "/backlog.md"
-    if (!exists(path)) fail("ERROR: missing backlog: " path)
+    path = rec_fetch(unit, "backlog")
+    if (path == "") fail("ERROR: missing backlog: " disp(unit, "backlog"))
     load_file(path)
     found = 0
     for (i = 1; i <= NFILE; i++) {
@@ -531,8 +650,8 @@ function do_resolve(unit, ref,   path, i, e, found, sec) {
     }
     if (found == 0) fail("ERROR: no such task: " RARG)
   } else {
-    path = ".contexture/sessions/" unit "/lanes/" RLANE "/report.md"
-    if (!exists(path)) fail("ERROR: no such section: " RSEC " in " path)
+    path = rec_fetch(unit, "lane/" RLANE "/report")
+    if (path == "") fail("ERROR: no such section: " RSEC " in " disp(unit, "lane/" RLANE "/report"))
     load_file(path)
     found = 0
     sec = RSEC
@@ -545,7 +664,7 @@ function do_resolve(unit, ref,   path, i, e, found, sec) {
         break
       }
     }
-    if (found == 0) fail("ERROR: no such section: " sec " in " path)
+    if (found == 0) fail("ERROR: no such section: " sec " in " disp(unit, "lane/" RLANE "/report"))
   }
   printf "resolve %s %s: %s\n\n", unit, ref, RKIND
   e = block_end(found)
@@ -566,14 +685,16 @@ function file_stats(path,   cmd, line, w, n) {
   if (n == 0) print "WARNING: wc produced no figures: " path > "/dev/stderr"
 }
 
-function do_lane(unit, lane,   ld, p, i, art, last) {
-  ld = ".contexture/sessions/" unit "/lanes/" lane "/"
-  if (!exists_dir(ld)) fail("ERROR: no such lane: " lane " (in " unit ")")
+function do_lane(unit, lane,   p, i, art, last, K, nk, k, has) {
+  nk = rec_list(unit, K)
+  has = 0
+  for (k = 1; k <= nk; k++) if (K[k] == "lane/" lane) has = 1
+  if (!has) fail("ERROR: no such lane: " lane " (in " unit ")")
   print "lane " unit " " lane
   for (i = 1; i <= 3; i++) {
     art = (i == 1) ? "recipe.md" : ((i == 2) ? "journal.md" : "report.md")
-    p = ld art
-    if (exists(p)) {
+    p = rec_fetch(unit, "lane/" lane "/" substr(art, 1, length(art) - 3))
+    if (p != "") {
       file_stats(p)
       printf "  %s: present (%d lines, %d bytes)\n", art, FLINES, FBYTES
     } else {
@@ -581,8 +702,8 @@ function do_lane(unit, lane,   ld, p, i, art, last) {
     }
   }
   last = "none"
-  p = ld "journal.md"
-  if (exists(p)) {
+  p = rec_fetch(unit, "lane/" lane "/journal")
+  if (p != "") {
     load_file(p)
     for (i = NFILE; i >= 1; i--) {
       if (trim(LF[i]) != "") {
@@ -592,8 +713,8 @@ function do_lane(unit, lane,   ld, p, i, art, last) {
     }
   }
   print "  journal last: " last
-  p = ld "report.md"
-  if (exists(p)) {
+  p = rec_fetch(unit, "lane/" lane "/report")
+  if (p != "") {
     load_file(p)
     print "  report first: " ((NFILE >= 1) ? LF[1] : "")
   }
@@ -631,24 +752,25 @@ function scan_file(path, artifact, mode,   line, n, loc) {
   close(path)
 }
 
-function do_search(unit, term,   d, p, lane, cmd, k, shown) {
-  d = ".contexture/sessions/" unit "/"
-  scan_file(d "state.md", "state.md", "state")
-  p = d "backlog.md"
-  if (!exists(p)) print "WARNING: missing backlog: " p > "/dev/stderr"
-  scan_file(p, "backlog.md", "backlog")
-  p = d "knowledge.md"
-  if (!exists(p)) print "WARNING: missing knowledge: " p > "/dev/stderr"
-  scan_file(p, "knowledge.md", "knowledge")
-  scan_file(d "journal.md", "journal.md", "journal")
-  cmd = "ls -d " d "lanes/*/ 2>/dev/null"
-  while ((cmd | getline lane) > 0) {
-    sub(/\/$/, "", lane)
-    sub(/^.*\//, "", lane)
-    scan_file(d "lanes/" lane "/journal.md", "lanes/" lane "/journal.md", "journal")
-    scan_file(d "lanes/" lane "/report.md", "lanes/" lane "/report.md", "report")
+function scan_art(unit, key, artifact, mode,   f) {
+  f = rec_fetch(unit, key)
+  if (f != "") scan_file(f, artifact, mode)
+}
+
+function do_search(unit, term,   p, lane, k, shown, K, nk) {
+  scan_art(unit, "state", "state.md", "state")
+  if (!rec_exists(unit, "backlog")) print "WARNING: missing backlog: " disp(unit, "backlog") > "/dev/stderr"
+  scan_art(unit, "backlog", "backlog.md", "backlog")
+  if (!rec_exists(unit, "knowledge")) print "WARNING: missing knowledge: " disp(unit, "knowledge") > "/dev/stderr"
+  scan_art(unit, "knowledge", "knowledge.md", "knowledge")
+  scan_art(unit, "journal", "journal.md", "journal")
+  nk = rec_list(unit, K)
+  for (k = 1; k <= nk; k++) {
+    if (K[k] !~ /^lane\/[^\/]+$/) continue
+    lane = substr(K[k], 6)
+    scan_art(unit, "lane/" lane "/journal", "lanes/" lane "/journal.md", "journal")
+    scan_art(unit, "lane/" lane "/report", "lanes/" lane "/report.md", "report")
   }
-  close(cmd)
   if (nm == 0) fail("ERROR: no matches: " term)
   printf "search %s %s: %d matches\n\n", unit, term, nm
   shown = (nm > 50) ? 50 : nm
@@ -739,4 +861,8 @@ BEGIN {
     exit 1
   }
   exit 0
+}
+
+END {
+  rec_cleanup()
 }

@@ -77,48 +77,24 @@ caps_json=$("$resolver" capability 2>&1) || {
   driver_err="$caps_json"
 }
 
-# 4. Storage backend health check
+# 4. Storage backend health check: the driver reports its own backend (storage.health),
+# so the check never assumes a physical layout
 health_status="ok"
 health_detail=""
-
-if [ "$driver_name" = "posix" ]; then
-  sessions_dir="$ctx_dir/sessions"
-  if [ ! -d "$sessions_dir" ]; then
-    health_status="degraded"
-    health_detail="sessions directory does not exist yet (will be created on bootstrap)"
-  elif [ ! -w "$sessions_dir" ]; then
-    health_status="error"
-    health_detail="sessions directory is not writable: $sessions_dir"
-  else
-    lock_file="$sessions_dir/.lock"
-    if [ -d "$lock_file" ]; then
-      health_status="locked"
-      health_detail="storage lock active: $lock_file"
-    else
-      health_detail="sessions directory writable, unlocked"
-    fi
-  fi
+health_json=$("$resolver" storage.health 2>/dev/null) || health_json=""
+if [ -n "$health_json" ]; then
+  health_status=$(printf '%s\n' "$health_json" | sed -n 's/.*"health":"\([^"]*\)".*/\1/p')
+  health_detail=$(printf '%s\n' "$health_json" | sed -n 's/.*"detail":"\([^"]*\)".*/\1/p')
 else
-  db_file="$ctx_dir/contexture.db"
-  if [ -f "$db_file" ]; then
-    if [ ! -w "$db_file" ]; then
-      health_status="error"
-      health_detail="database file not writable: $db_file"
-    else
-      health_detail="database file present and writable: $db_file"
-    fi
-  else
-    health_detail="database file not created yet (will be initialized on bootstrap)"
-  fi
+  health_status="error"
+  health_detail="the storage driver did not report its health"
 fi
 
-# 5. Active units count
+# 5. Active units count: the ACTIVE entries of session.list, never a line count of a view
 active_count=0
-if [ -x "$sdir/active" ]; then
-  active_out=$("$sdir/active" 2>/dev/null) || true
-  if [ -n "$active_out" ]; then
-    active_count=$(printf '%s\n' "$active_out" | grep -c '^[a-zA-Z0-9]' || true)
-  fi
+units_json=$("$resolver" session.list 2>/dev/null) || units_json=""
+if [ -n "$units_json" ]; then
+  active_count=$(printf '%s\n' "$units_json" | awk '{ n += gsub(/"status":"ACTIVE"/, "") } END { print n + 0 }')
 fi
 
 if [ "$format" = "json" ]; then

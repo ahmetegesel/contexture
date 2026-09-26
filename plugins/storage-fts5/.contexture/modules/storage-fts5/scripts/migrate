@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: bidirectional migration between POSIX flat files and SQLite FTS5 database
 # usage: ctx storage-fts5 migrate --from=<posix|fts5> --to=<posix|fts5> [--unit=<unit>] [--db=<path>]
-# help: imports existing markdown session files into SQLite relational tables with automated FTS5 indexing, or exports SQLite records into canonical markdown files adhering to .contexture/templates/ grammars.
+# help: imports session files into the store (each file kept verbatim as its artifact, the relational index and the FTS5 documents rebuilt from it), or exports the stored text back to files byte for byte.
 # help: example: ctx storage-fts5 migrate --from=posix --to=fts5
 # help: example: ctx storage-fts5 migrate --from=posix --to=fts5 --unit=storage
 # help: example: ctx storage-fts5 migrate --from=fts5 --to=posix --unit=storage
@@ -90,6 +90,12 @@ if [ -n "$CUSTOM_DB" ]; then
   DB_PATH="$CUSTOM_DB"
 elif [ -n "${CTX_STORAGE_SQLITE_PATH:-}" ]; then
   DB_PATH="$CTX_STORAGE_SQLITE_PATH"
+elif [ -f "$ROOT/.contexture/config" ] && grep -Eq '^(session\.)?storage\.database[:=[:space:]]' "$ROOT/.contexture/config" 2>/dev/null; then
+  val=$(grep -E '^(session\.)?storage\.database[:=[:space:]]' "$ROOT/.contexture/config" | head -n1 | sed -E 's/^(session\.)?storage\.database[:=[:space:]]+//' | tr -d ' \t\r\n"')
+  case "$val" in
+    /*) DB_PATH="$val" ;;
+    *)  DB_PATH="$ROOT/$val" ;;
+  esac
 elif [ -f "$ROOT/.contexture/storage.conf" ] && grep -Eq '^storage\.database[:[:space:]]' "$ROOT/.contexture/storage.conf" 2>/dev/null; then
   val=$(grep -E '^storage\.database[:[:space:]]' "$ROOT/.contexture/storage.conf" | head -n1 | sed -E 's/^storage\.database[:[:space:]]+//')
   case "$val" in
@@ -100,16 +106,13 @@ else
   DB_PATH="$ROOT/.contexture/sessions.db"
 fi
 
-mkdir -p "$(dirname "$DB_PATH")"
+mkdir -p "$(dirname "$DB_PATH")" "$ROOT/.contexture/tmp"
+DB_TMP="$ROOT/.contexture/tmp"
 
-db_init() {
-  has_sessions=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sessions';" 2>/dev/null || echo "0")
-  if [ "$has_sessions" != "1" ]; then
-    if [ -f "$SCHEMA_SQL" ]; then
-      sqlite3 "$DB_PATH" < "$SCHEMA_SQL" >/dev/null 2>&1
-    fi
-  fi
-}
+# the open path (fresh schema, the upgrades, later tables): one home for driver and migration
+. "$MODULE_DIR/db-init.sh"
+# the derived index rebuilt from an artifact's text: one home for driver and migration
+. "$MODULE_DIR/index.sh"
 
 sql_escape() {
   printf '%s' "$1" | sed "s/'/''/g"
@@ -118,6 +121,8 @@ sql_escape() {
 # ==============================================================================
 # Ingest: POSIX -> SQLite FTS5
 # ==============================================================================
+# Every file is stored verbatim as its artifact (the canonical text) and its rows are
+# rebuilt by the shared index; a re-import replaces the unit whole in one transaction.
 migrate_posix_to_fts5() {
   unit="$1"
   dir="$ROOT/.contexture/sessions/$unit"
@@ -128,288 +133,53 @@ migrate_posix_to_fts5() {
 
   db_init
 
-  # Parse state.md
-  st_status="ACTIVE"
-  st_anchor="A1"
-  st_next="plan the next move"
-  st_obj=""
-  st_repos="[]"
-  st_refs="[]"
-
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      status:*)
-        val=$(printf '%s' "${line#status:}" | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//')
-        [ -n "$val" ] && st_status="$val"
-        ;;
-      current_anchor:*)
-        val=$(printf '%s' "${line#current_anchor:}" | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//')
-        [ -n "$val" ] && st_anchor="$val"
-        ;;
-      next_action:*)
-        val=$(printf '%s' "${line#next_action:}" | sed -E 's/^[[:space:]]+"?//;s/"?[[:space:]]*$//')
-        [ -n "$val" ] && st_next="$val"
-        ;;
-      objective:*)
-        val=$(printf '%s' "${line#objective:}" | sed -E 's/^[[:space:]]+"?//;s/"?[[:space:]]*$//')
-        [ -n "$val" ] && st_obj="$val"
-        ;;
-      repos:*)
-        val=$(printf '%s' "${line#repos:}" | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//')
-        [ -n "$val" ] && st_repos="$val"
-        ;;
-      ref_sessions:*)
-        val=$(printf '%s' "${line#ref_sessions:}" | sed -E 's/^[[:space:]]+//;s/[[:space:]]+$//')
-        [ -n "$val" ] && st_refs="$val"
-        ;;
-    esac
-  done < "$dir/state.md"
-
   now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-  # Generate SQL file for ingestion in atomic transaction
+  # Pre-flight: the schema's uniqueness rules, checked before any SQL exists, so a
+  # refusal names the unit, the kind, and the key instead of a temp-file line number;
+  # journal and lane journal slugs are exempt: a legacy repeat imports as its own row
+  # keyed by ordinal (the journal is append-only history, the engine refuses a new one)
+  dups=""
+  [ -f "$dir/backlog.md" ] && dups="$dups$(awk '/^@task[ \t]+/ { print "task " $2 }' "$dir/backlog.md" | sort | uniq -d)
+"
+  [ -f "$dir/knowledge.md" ] && dups="$dups$(awk '/^@finding[ \t]+/ { print "finding " $2 }' "$dir/knowledge.md" | sort | uniq -d)
+"
+  dups=$(printf '%s' "$dups" | sed '/^$/d')
+  if [ -n "$dups" ]; then
+    printf '%s\n' "$dups" | while IFS=' ' read -r kind key; do
+      printf "storage-fts5 migrate: error: unit '%s' repeats %s %s; the record must carry each key once (ERR_SCHEMA_VIOLATION)\n" "$unit" "$kind" "$key" >&2
+    done
+    return 1
+  fi
+
+  # the ingest SQL, one transaction
   tmp_sql="$ROOT/.contexture/tmp/ingest-$unit-$$.sql"
-  mkdir -p "$ROOT/.contexture/tmp"
 
-  cat <<EOF > "$tmp_sql"
-BEGIN IMMEDIATE;
-DELETE FROM sessions WHERE unit = '$(sql_escape "$unit")';
-INSERT INTO sessions (unit, status, current_anchor, objective, next_action, repos, ref_sessions, created_at)
-VALUES ('$(sql_escape "$unit")', '$(sql_escape "$st_status")', '$(sql_escape "$st_anchor")', '$(sql_escape "$st_obj")', '$(sql_escape "$st_next")', '$(sql_escape "$st_repos")', '$(sql_escape "$st_refs")', '$now');
-EOF
+  {
+    printf 'PRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n'
+    printf "DELETE FROM sessions WHERE unit = '%s';\n" "$(sql_escape "$unit")"
+    printf "INSERT INTO sessions (unit, status, current_anchor, objective, next_action, repos, ref_sessions, created_at) VALUES ('%s', 'ACTIVE', 'A1', '', 'plan the next move', '[]', '[]', '%s');\n" "$(sql_escape "$unit")" "$now"
+  } > "$tmp_sql"
 
-  # Parse backlog.md into SQL INSERTs
-  if [ -f "$dir/backlog.md" ]; then
-    awk -v u="$unit" -v now="$now" '
-      function esc(s) { gsub(/'\''/, "'\'''\''", s); return s }
-      function flush_task() {
-        if (slug != "") {
-          printf "INSERT INTO tasks (unit, slug, status, objective, description, acceptance_criteria, implementation_details, refs, created_at, updated_at) VALUES ('\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'');\n",
-            esc(u), esc(slug), esc(status), esc(obj), esc(desc), esc(crit), esc(det), esc(refs), now, now;
-        }
-        slug = ""; status = "TODO"; obj = ""; desc = ""; crit = ""; det = ""; refs = "[]"; mode = "";
-      }
-      BEGIN { slug = ""; status = "TODO"; obj = ""; desc = ""; crit = ""; det = ""; refs = "[]"; mode = "" }
-      /^@task / {
-        flush_task();
-        slug = $2;
-        next;
-      }
-      /^[[:space:]]+STATUS:/ {
-        status = $2;
-        mode = "";
-        next;
-      }
-      /^[[:space:]]+OBJECTIVE:/ {
-        line = $0;
-        sub(/^[[:space:]]+OBJECTIVE:[[:space:]]*"?/, "", line);
-        sub(/"?[[:space:]]*$/, "", line);
-        obj = line;
-        mode = "";
-        next;
-      }
-      /^[[:space:]]+REFS:/ {
-        line = $0;
-        sub(/^[[:space:]]+REFS:[[:space:]]*/, "", line);
-        refs = line;
-        mode = "";
-        next;
-      }
-      /^[[:space:]]+DESCRIPTION ::/ {
-        mode = "desc";
-        next;
-      }
-      /^[[:space:]]+ACCEPTANCE CRITERIA ::/ {
-        mode = "crit";
-        next;
-      }
-      /^[[:space:]]+IMPLEMENTATION DETAILS ::/ {
-        mode = "det";
-        next;
-      }
-      {
-        if (mode == "desc") {
-          line = $0; sub(/^[[:space:]]{2,4}/, "", line);
-          desc = (desc == "" ? line : desc "\n" line);
-        } else if (mode == "crit") {
-          line = $0; sub(/^[[:space:]]{2,4}/, "", line);
-          crit = (crit == "" ? line : crit "\n" line);
-        } else if (mode == "det") {
-          line = $0; sub(/^[[:space:]]{2,4}/, "", line);
-          det = (det == "" ? line : det "\n" line);
-        }
-      }
-      END { flush_task(); }
-    ' "$dir/backlog.md" >> "$tmp_sql"
-  fi
-
-  # Parse journal.md into SQL INSERTs
-  if [ -f "$dir/journal.md" ]; then
-    awk -v u="$unit" -v now="$now" '
-      function esc(s) { gsub(/'\''/, "'\'''\''", s); return s }
-      function flush_entry() {
-        if (slug != "") {
-          printf "INSERT INTO entries (unit, slug, entry_type, anchor, what, entry_group, thread, closes, supersedes, ref, rhythm, is_knowledge, created_at) VALUES ('\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', %d, '\''%s'\'');\n",
-            esc(u), esc(slug), esc(type), esc(anchor), esc(what), esc(grp), esc(thread), esc(closes), esc(supersedes), esc(ref), esc(rhythm), is_k, now;
-        }
-        slug = ""; type = "ENTRY"; anchor = "A1"; what = ""; grp = ""; thread = "none"; closes = ""; supersedes = ""; ref = ""; rhythm = ""; is_k = 0; mode = "";
-      }
-      BEGIN { slug = ""; type = "ENTRY"; anchor = "A1"; what = ""; grp = ""; thread = "none"; closes = ""; supersedes = ""; ref = ""; rhythm = ""; is_k = 0; mode = "" }
-      /^@anchor / {
-        flush_entry();
-        slug = sprintf("%s-anchor-%s", substr(now, 1, 10), $2);
-        type = "ANCHOR";
-        anchor = $2;
-        what = $0;
-        next;
-      }
-      /^@entry / {
-        flush_entry();
-        slug = $2;
-        type = "ENTRY";
-        next;
-      }
-      /^[[:space:]]+ANCHOR:/ { anchor = $2; mode = ""; next }
-      /^[[:space:]]+GROUP:/ { grp = $2; mode = ""; next }
-      /^[[:space:]]+THREAD:/ {
-        line = $0; sub(/^[[:space:]]+THREAD:[[:space:]]*/, "", line);
-        thread = line; mode = ""; next;
-      }
-      /^[[:space:]]+CLOSES:/ {
-        line = $0; sub(/^[[:space:]]+CLOSES:[[:space:]]*/, "", line);
-        sub(/[[:space:]]+.*$/, "", line);
-        closes = line; mode = ""; next;
-      }
-      /^[[:space:]]+SUPERSEDES:/ {
-        line = $0; sub(/^[[:space:]]+SUPERSEDES:[[:space:]]*/, "", line);
-        sub(/[[:space:]]+.*$/, "", line);
-        supersedes = line; mode = ""; next;
-      }
-      /^[[:space:]]+REF:/ {
-        line = $0; sub(/^[[:space:]]+REF:[[:space:]]*"?/, "", line);
-        sub(/"?[[:space:]]*$/, "", line);
-        ref = line; mode = ""; next;
-      }
-      /^[[:space:]]+RHYTHM:/ {
-        line = $0; sub(/^[[:space:]]+RHYTHM:[[:space:]]*/, "", line);
-        rhythm = line; mode = ""; next;
-      }
-      /^[[:space:]]+KNOWLEDGE:[[:space:]]*true/ { is_k = 1; mode = ""; next }
-      /^[[:space:]]+WHAT:/ {
-        line = $0; sub(/^[[:space:]]+WHAT:[[:space:]]*"?/, "", line);
-        sub(/"?[[:space:]]*$/, "", line);
-        what = line;
-        mode = "what";
-        next;
-      }
-      {
-        if (mode == "what") {
-          line = $0; sub(/^[[:space:]]{2,4}/, "", line); sub(/"?[[:space:]]*$/, "", line);
-          what = (what == "" ? line : what "\n" line);
-        }
-      }
-      END { flush_entry(); }
-    ' "$dir/journal.md" >> "$tmp_sql"
-  fi
-
-  # Parse knowledge.md into SQL INSERTs
-  if [ -f "$dir/knowledge.md" ]; then
-    awk -v u="$unit" -v now="$now" '
-      function esc(s) { gsub(/'\''/, "'\'''\''", s); return s }
-      function flush_finding() {
-        if (name != "") {
-          printf "INSERT INTO findings (unit, name, status, summary, ref, supersedes, created_at, updated_at) VALUES ('\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'');\n",
-            esc(u), esc(name), "ACTIVE", esc(summary), esc(ref), esc(supersedes), now, now;
-        }
-        name = ""; summary = ""; ref = ""; supersedes = ""; mode = "";
-      }
-      BEGIN { name = ""; summary = ""; ref = ""; supersedes = ""; mode = "" }
-      /^@finding / {
-        flush_finding();
-        name = $2;
-        next;
-      }
-      /^[[:space:]]+REF:/ {
-        line = $0; sub(/^[[:space:]]+REF:[[:space:]]*"?/, "", line);
-        sub(/"?[[:space:]]*$/, "", line);
-        ref = line; mode = ""; next;
-      }
-      /^[[:space:]]+SUPERSEDES:/ {
-        line = $0; sub(/^[[:space:]]+SUPERSEDES:[[:space:]]*/, "", line);
-        sub(/[[:space:]]+.*$/, "", line);
-        supersedes = line; mode = ""; next;
-      }
-      /^[[:space:]]+SUMMARY ::/ {
-        mode = "summary";
-        next;
-      }
-      {
-        if (mode == "summary") {
-          line = $0; sub(/^[[:space:]]{2,4}/, "", line);
-          summary = (summary == "" ? line : summary "\n" line);
-        }
-      }
-      END { flush_finding(); }
-    ' "$dir/knowledge.md" >> "$tmp_sql"
-  fi
-
-  # Parse lanes directory if present
+  for art in state backlog knowledge journal; do
+    [ -f "$dir/$art.md" ] && idx_artifact_sql "$unit" "$art" "$dir/$art.md" "$now" >> "$tmp_sql"
+  done
   if [ -d "$dir/lanes" ]; then
     for l_dir in "$dir/lanes"/*; do
       [ -d "$l_dir" ] || continue
       lane_name=${l_dir##*/}
-      l_recipe=""
-      [ -f "$l_dir/recipe.md" ] && l_recipe=$(cat "$l_dir/recipe.md")
-      l_report=""
-      [ -f "$l_dir/report.md" ] && l_report=$(cat "$l_dir/report.md")
-
-      cat <<EOF >> "$tmp_sql"
-INSERT INTO lanes (unit, lane_slug, goal, recipe, report, created_at, updated_at)
-VALUES ('$(sql_escape "$unit")', '$(sql_escape "$lane_name")', 'imported lane', '$(sql_escape "$l_recipe")', '$(sql_escape "$l_report")', '$now', '$now');
-EOF
-
-      if [ -f "$l_dir/journal.md" ]; then
-        awk -v u="$unit" -v l="$lane_name" -v now="$now" '
-          function esc(s) { gsub(/'\''/, "'\'''\''", s); return s }
-          function flush_le() {
-            if (slug != "") {
-              printf "INSERT INTO lane_entries (unit, lane_slug, slug, what, thread, created_at) VALUES ('\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'', '\''%s'\'');\n",
-                esc(u), esc(l), esc(slug), esc(what), esc(thread), now;
-            }
-            slug = ""; what = ""; thread = "none"; mode = "";
-          }
-          BEGIN { slug = ""; what = ""; thread = "none"; mode = "" }
-          /^@entry / {
-            flush_le();
-            slug = $2;
-            next;
-          }
-          /^[[:space:]]+THREAD:/ {
-            line = $0; sub(/^[[:space:]]+THREAD:[[:space:]]*/, "", line);
-            thread = line; mode = ""; next;
-          }
-          /^[[:space:]]+WHAT:/ {
-            line = $0; sub(/^[[:space:]]+WHAT:[[:space:]]*"?/, "", line);
-            sub(/"?[[:space:]]*$/, "", line);
-            what = line;
-            mode = "what";
-            next;
-          }
-          {
-            if (mode == "what") {
-              line = $0; sub(/^[[:space:]]{2,4}/, "", line); sub(/"?[[:space:]]*$/, "", line);
-              what = (what == "" ? line : what "\n" line);
-            }
-          }
-          END { flush_le(); }
-        ' "$l_dir/journal.md" >> "$tmp_sql"
-      fi
+      # a lane folder with no artifact is still a lane
+      printf "INSERT OR IGNORE INTO lanes (unit, lane_slug, goal, recipe, report, created_at, updated_at) VALUES ('%s', '%s', '', '', '', '%s', '%s');\n" \
+        "$(sql_escape "$unit")" "$(sql_escape "$lane_name")" "$now" "$now" >> "$tmp_sql"
+      for art in recipe journal report; do
+        [ -f "$l_dir/$art.md" ] && idx_artifact_sql "$unit" "lane/$lane_name/$art" "$l_dir/$art.md" "$now" >> "$tmp_sql"
+      done
     done
   fi
 
   printf 'COMMIT;\n' >> "$tmp_sql"
 
-  sqlite3 -bail "$DB_PATH" < "$tmp_sql"
+  sq -bail "$DB_PATH" < "$tmp_sql"
   rc=$?
   rm -f "$tmp_sql"
 
@@ -419,134 +189,44 @@ EOF
   fi
 
   # Count migrated records
-  cnt_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$unit")';")
-  cnt_e=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM entries WHERE unit='$(sql_escape "$unit")';")
-  cnt_f=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM findings WHERE unit='$(sql_escape "$unit")';")
-  cnt_l=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$unit")';")
-  cnt_le=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lane_entries WHERE unit='$(sql_escape "$unit")';")
+  uq=$(sql_escape "$unit")
+  cnt_t=$(sq "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$uq';")
+  cnt_e=$(sq "$DB_PATH" "SELECT count(*) FROM entries WHERE unit='$uq';")
+  cnt_f=$(sq "$DB_PATH" "SELECT count(*) FROM findings WHERE unit='$uq';")
+  cnt_l=$(sq "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$uq';")
+  cnt_le=$(sq "$DB_PATH" "SELECT count(*) FROM lane_entries WHERE unit='$uq';")
+  cnt_a=$(sq "$DB_PATH" "SELECT count(*) FROM artifacts WHERE unit='$uq';")
 
-  printf '{"status":"ok","from":"posix","to":"fts5","unit":"%s","sessions":1,"tasks":%d,"entries":%d,"findings":%d,"lanes":%d,"lane_entries":%d}\n' \
-    "$unit" "$cnt_t" "$cnt_e" "$cnt_f" "$cnt_l" "$cnt_le"
+  printf '{"status":"ok","from":"posix","to":"fts5","unit":"%s","sessions":1,"tasks":%d,"entries":%d,"findings":%d,"lanes":%d,"lane_entries":%d,"artifacts":%d}\n' \
+    "$unit" "$cnt_t" "$cnt_e" "$cnt_f" "$cnt_l" "$cnt_le" "$cnt_a"
   return 0
 }
 
 # ==============================================================================
 # Export: SQLite FTS5 -> POSIX
 # ==============================================================================
+# The stored text is written back byte for byte; a lane with no artifact keeps its folder.
 migrate_fts5_to_posix() {
   unit="$1"
   db_init
 
-  exists=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$unit")';")
+  uq=$(sql_escape "$unit")
+  exists=$(sq "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$uq';")
   if [ "$exists" -eq 0 ]; then
-    printf 'storage-fts5 migrate: unit '\''%s'\'' not found in SQLite database\n' "$unit" >&2
+    printf "storage-fts5 migrate: unit '%s' not found in SQLite database\n" "$unit" >&2
     return 1
   fi
 
   staging="$ROOT/.contexture/tmp/migrate-export-$unit-$$"
+  rm -rf "$staging"
   mkdir -p "$staging"
-
-  # 1. Export state.md
-  st_row=$(sqlite3 "$DB_PATH" "SELECT status || '|' || current_anchor || '|' || replace(next_action, '|', ' ') || '|' || replace(objective, '|', ' ') || '|' || repos || '|' || ref_sessions FROM sessions WHERE unit='$(sql_escape "$unit")';")
-  o_status=$(printf '%s' "$st_row" | cut -d'|' -f1)
-  o_anchor=$(printf '%s' "$st_row" | cut -d'|' -f2)
-  o_next=$(printf '%s' "$st_row" | cut -d'|' -f3)
-  o_obj=$(printf '%s' "$st_row" | cut -d'|' -f4)
-  o_repos=$(printf '%s' "$st_row" | cut -d'|' -f5)
-  o_refs=$(printf '%s' "$st_row" | cut -d'|' -f6)
-
-  cat <<EOF > "$staging/state.md"
-# state grammar
-
-status: $o_status
-current_anchor: $o_anchor
-next_action: "$o_next"
-objective: "$o_obj"
-repos: $o_repos
-ref_sessions: $o_refs
-EOF
-
-  # 2. Export backlog.md via pure SQL formatting
-  cat <<'EOF' > "$staging/backlog.md"
-# backlog grammar
-
-EOF
-
-  sqlite3 "$DB_PATH" <<EOF >> "$staging/backlog.md"
-SELECT
-  '@task ' || slug || char(10) ||
-  '  STATUS: ' || status || char(10) ||
-  '  OBJECTIVE: "' || objective || '"' ||
-  CASE WHEN refs IS NOT NULL AND refs != '' AND refs != '[]' THEN char(10) || '  REFS: ' || refs ELSE '' END ||
-  CASE WHEN description IS NOT NULL AND description != '' THEN char(10) || '  DESCRIPTION ::' || char(10) || '    ' || replace(description, char(10), char(10) || '    ') ELSE '' END ||
-  CASE WHEN acceptance_criteria IS NOT NULL AND acceptance_criteria != '' THEN char(10) || '  ACCEPTANCE CRITERIA ::' || char(10) || '    ' || replace(acceptance_criteria, char(10), char(10) || '    ') ELSE '' END ||
-  CASE WHEN implementation_details IS NOT NULL AND implementation_details != '' THEN char(10) || '  IMPLEMENTATION DETAILS ::' || char(10) || '    ' || replace(implementation_details, char(10), char(10) || '    ') ELSE '' END ||
-  char(10)
-FROM tasks WHERE unit = '$(sql_escape "$unit")' ORDER BY sort_order ASC, id ASC;
-EOF
-
-  # 3. Export journal.md via pure SQL formatting
-  cat <<'EOF' > "$staging/journal.md"
-# journal grammar
-
-EOF
-
-  sqlite3 "$DB_PATH" <<EOF >> "$staging/journal.md"
-SELECT
-  CASE WHEN entry_type = 'ANCHOR' THEN
-    what || char(10)
-  ELSE
-    '@entry ' || slug || char(10) ||
-    '  ANCHOR: ' || anchor || char(10) ||
-    '  WHAT: "' || replace(what, '"', '\"') || '"' ||
-    CASE WHEN entry_group IS NOT NULL AND entry_group != '' AND entry_group != 'general' THEN char(10) || '  GROUP: ' || entry_group ELSE '' END ||
-    CASE WHEN rhythm IS NOT NULL AND rhythm != '' THEN char(10) || '  RHYTHM: ' || rhythm ELSE '' END ||
-    CASE WHEN is_knowledge = 1 THEN char(10) || '  KNOWLEDGE: true' ELSE '' END ||
-    CASE WHEN thread IS NOT NULL AND thread != '' THEN char(10) || '  THREAD: ' || thread ELSE char(10) || '  THREAD: none' END ||
-    CASE WHEN closes IS NOT NULL AND closes != '' THEN char(10) || '  CLOSES: ' || closes ELSE '' END ||
-    CASE WHEN supersedes IS NOT NULL AND supersedes != '' THEN char(10) || '  SUPERSEDES: ' || supersedes ELSE '' END ||
-    CASE WHEN ref IS NOT NULL AND ref != '' THEN char(10) || '  REF: "' || ref || '"' ELSE '' END ||
-    char(10)
-  END
-FROM entries WHERE unit = '$(sql_escape "$unit")' ORDER BY id ASC;
-EOF
-
-  # 4. Export knowledge.md via pure SQL formatting
-  cat <<'EOF' > "$staging/knowledge.md"
-# knowledge grammar
-
-EOF
-
-  sqlite3 "$DB_PATH" <<EOF >> "$staging/knowledge.md"
-SELECT
-  '@finding ' || name || char(10) ||
-  CASE WHEN supersedes IS NOT NULL AND supersedes != '' THEN '  SUPERSEDES: ' || supersedes || char(10) ELSE '' END ||
-  CASE WHEN ref IS NOT NULL AND ref != '' THEN '  REF: "' || ref || '"' || char(10) ELSE '' END ||
-  '  SUMMARY ::' || char(10) ||
-  '    ' || replace(summary, char(10), char(10) || '    ') || char(10)
-FROM findings WHERE unit = '$(sql_escape "$unit")' ORDER BY id ASC;
-EOF
-
-  # 5. Export lanes
-  l_cnt=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$unit")';")
-  if [ "$l_cnt" -gt 0 ]; then
-    mkdir -p "$staging/lanes"
-    for l_slug in $(sqlite3 "$DB_PATH" "SELECT lane_slug FROM lanes WHERE unit='$(sql_escape "$unit")';"); do
-      mkdir -p "$staging/lanes/$l_slug"
-      sqlite3 "$DB_PATH" "SELECT recipe FROM lanes WHERE unit='$(sql_escape "$unit")' AND lane_slug='$(sql_escape "$l_slug")';" > "$staging/lanes/$l_slug/recipe.md"
-      sqlite3 "$DB_PATH" "SELECT report FROM lanes WHERE unit='$(sql_escape "$unit")' AND lane_slug='$(sql_escape "$l_slug")';" > "$staging/lanes/$l_slug/report.md"
-      cat <<'EOF' > "$staging/lanes/$l_slug/journal.md"
-# journal grammar
-
-EOF
-      sqlite3 "$DB_PATH" <<EOF >> "$staging/lanes/$l_slug/journal.md"
-SELECT
-  '@entry ' || slug || char(10) ||
-  '  WHAT: "' || replace(what, '"', '\"') || '"' || char(10) ||
-  '  THREAD: ' || thread || char(10)
-FROM lane_entries WHERE unit = '$(sql_escape "$unit")' AND lane_slug = '$(sql_escape "$l_slug")' ORDER BY id ASC;
-EOF
-    done
+  for l_slug in $(sq "$DB_PATH" "SELECT lane_slug FROM lanes WHERE unit='$uq' ORDER BY lane_slug;"); do
+    mkdir -p "$staging/lanes/$l_slug"
+  done
+  if ! sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$staging")/' || CASE WHEN lane_slug = '' THEN name ELSE 'lanes/' || lane_slug || '/' || name END || '.md', body) FROM artifacts WHERE unit = '$uq';" > /dev/null; then
+    rm -rf "$staging"
+    printf 'storage-fts5 migrate: export of %s failed\n' "$unit" >&2
+    return 1
   fi
 
   # Atomic replace target session directory
@@ -560,14 +240,15 @@ EOF
   mv "$dest.tmp" "$dest"
   rm -rf "$dest.bak"
 
-  cnt_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$unit")';")
-  cnt_e=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM entries WHERE unit='$(sql_escape "$unit")';")
-  cnt_f=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM findings WHERE unit='$(sql_escape "$unit")';")
-  cnt_l=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$unit")';")
-  cnt_le=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lane_entries WHERE unit='$(sql_escape "$unit")';")
+  cnt_t=$(sq "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$uq';")
+  cnt_e=$(sq "$DB_PATH" "SELECT count(*) FROM entries WHERE unit='$uq';")
+  cnt_f=$(sq "$DB_PATH" "SELECT count(*) FROM findings WHERE unit='$uq';")
+  cnt_l=$(sq "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$uq';")
+  cnt_le=$(sq "$DB_PATH" "SELECT count(*) FROM lane_entries WHERE unit='$uq';")
+  cnt_a=$(sq "$DB_PATH" "SELECT count(*) FROM artifacts WHERE unit='$uq';")
 
-  printf '{"status":"ok","from":"fts5","to":"posix","unit":"%s","sessions":1,"tasks":%d,"entries":%d,"findings":%d,"lanes":%d,"lane_entries":%d}\n' \
-    "$unit" "$cnt_t" "$cnt_e" "$cnt_f" "$cnt_l" "$cnt_le"
+  printf '{"status":"ok","from":"fts5","to":"posix","unit":"%s","sessions":1,"tasks":%d,"entries":%d,"findings":%d,"lanes":%d,"lane_entries":%d,"artifacts":%d}\n' \
+    "$unit" "$cnt_t" "$cnt_e" "$cnt_f" "$cnt_l" "$cnt_le" "$cnt_a"
   return 0
 }
 
@@ -583,7 +264,7 @@ else
     UNITS=$(find "$ROOT/.contexture/sessions" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; 2>/dev/null || true)
   else
     db_init
-    UNITS=$(sqlite3 "$DB_PATH" "SELECT unit FROM sessions;" 2>/dev/null || true)
+    UNITS=$(sq "$DB_PATH" "SELECT unit FROM sessions;" 2>/dev/null || true)
   fi
 fi
 

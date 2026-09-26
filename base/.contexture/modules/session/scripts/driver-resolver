@@ -243,6 +243,7 @@ verify_capabilities() {
       mandatory["entry.journal"] = 1
       mandatory["resolve.symbolic"] = 1
       mandatory["search.keyword"] = 1
+      mandatory["artifact.store"] = 1
       has_finding = 0
       has_lane = 0
       in_caps = 0
@@ -292,6 +293,42 @@ verify_capabilities() {
   return 0
 }
 
+# The handshake at dispatch: a driver other than the bundled posix driver proves its
+# mandatory capabilities before it serves any method, and a driver that fails halts the
+# call rc 2 with the missing capability named. The verdict is cached in the scratch
+# drawer, one file per driver path, valid while it is strictly newer than the driver
+# (test -nt), so the handshake runs once per driver change, never once per call; a driver
+# changed in the second of its verdict is verified again until a later verdict stands.
+# An unwritable drawer caches nothing and verifies on every call. The handshake reads
+# /dev/null, never the payload on stdin.
+handshake_at_dispatch() {
+  hd_path="$1"
+  hd_name="$2"
+  [ "$hd_path" = "$CTX_DIR/modules/session/drivers/posix/driver" ] && return 0
+  [ -n "${CTX_REFERENCE_DRIVER:-}" ] && [ "$hd_path" = "$CTX_REFERENCE_DRIVER" ] && return 0
+  hd_key=""
+  hd_rest=$hd_path
+  while :; do
+    case "$hd_rest" in
+      */*) hd_key="${hd_key}${hd_rest%%/*}_"; hd_rest=${hd_rest#*/} ;;
+      *) hd_key="$hd_key$hd_rest"; break ;;
+    esac
+  done
+  hd_dir="$CTX_DIR/tmp/driver-verdicts"
+  hd_file="$hd_dir/$hd_key"
+  if [ -f "$hd_file" ] && [ "$hd_file" -nt "$hd_path" ]; then
+    return 0
+  fi
+  verify_capabilities "$hd_path" "$hd_name" >/dev/null </dev/null || return 2
+  if mkdir -p "$hd_dir" 2>/dev/null; then
+    hd_tmp="$hd_file.$$"
+    if printf 'verified %s\n' "$hd_path" > "$hd_tmp" 2>/dev/null; then
+      mv -f "$hd_tmp" "$hd_file" 2>/dev/null || rm -f "$hd_tmp"
+    fi
+  fi
+  return 0
+}
+
 # Main entry point
 CTX_DIR=$(find_ctx_dir) || {
   printf 'driver-resolver: ERROR: could not locate .contexture root directory\n' >&2
@@ -319,7 +356,7 @@ while [ $# -gt 0 ]; do
       printf '  resolve [name]                    print resolved driver executable path\n'
       printf '  capability [name]                 validate capability handshake and print capabilities\n'
       printf '  check [name]                      verify resolution and capabilities\n'
-      printf '  exec <subsystem>.<method> [args]  dispatch call to active driver\n'
+      printf '  exec <subsystem>.<method> [args]  dispatch call to active driver (stdin passes through)\n'
       printf '  <subsystem>.<method> [args]       direct dispatch form\n'
       printf 'options:\n'
       printf '  --driver=<name>, -d <name>        explicit driver override\n'
@@ -334,6 +371,17 @@ while [ $# -gt 0 ]; do
 done
 
 TARGET_DRIVER=$(determine_driver_name "$CTX_DIR" "$CLI_DRIVER")
+
+# the reference serialization of the record grammar: the posix driver shipped beside this
+# resolver; an indexed driver renders the grammar through it (stdin, the payload, passes
+# through exec untouched)
+if [ -z "${CTX_REFERENCE_DRIVER:-}" ]; then
+  ref_dir=$(CDPATH="" cd "$(dirname "$0")/../drivers/posix" 2>/dev/null && pwd) || ref_dir=""
+  if [ -n "$ref_dir" ] && [ -x "$ref_dir/driver" ]; then
+    CTX_REFERENCE_DRIVER="$ref_dir/driver"
+    export CTX_REFERENCE_DRIVER
+  fi
+fi
 
 case "$COMMAND" in
   ""|resolve|--resolve)
@@ -380,6 +428,7 @@ case "$COMMAND" in
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
       exit 2
     fi
+    handshake_at_dispatch "$DRIVER_PATH" "$TARGET_DRIVER" || exit 2
     exec "$DRIVER_PATH" "$METHOD" "$@"
     ;;
 
@@ -390,6 +439,7 @@ case "$COMMAND" in
       printf 'driver-resolver: ERROR: driver '\''%s'\'' executable not found at %s (ERR_DRIVER_NOT_FOUND)\n' "$TARGET_DRIVER" "$DRIVER_PATH" >&2
       exit 2
     fi
+    handshake_at_dispatch "$DRIVER_PATH" "$TARGET_DRIVER" || exit 2
     exec "$DRIVER_PATH" "$METHOD" "$@"
     ;;
 

@@ -1,7 +1,6 @@
 # storage-fts5: the SQLite FTS5 storage driver plugin
 
-The storage-fts5 plugin packages a relational SQLite storage driver and full-text search engine for Contexture:
-a normalized relational schema for sessions, tasks, entries, findings, and lanes, coupled with dual SQLite FTS5 virtual tables and pure SQL Reciprocal Rank Fusion (RRF) search. The plugin operates directly on the system `sqlite3` CLI with zero runtime dependencies, providing sub-millisecond retrieval, token-compact snippet extraction, complete finding lifecycle CRUD, and bidirectional migration between POSIX markdown records and SQLite databases.
+The storage-fts5 plugin packages an SQLite storage driver and full-text search engine for Contexture: every record artifact kept verbatim in one database, a relational index rebuilt from that text, dual SQLite FTS5 virtual tables, and pure SQL Reciprocal Rank Fusion (RRF) search. The plugin operates directly on the system `sqlite3` CLI with zero runtime dependencies, providing token-compact snippet extraction and byte-exact bidirectional migration between POSIX markdown records and the database.
 
 ## Adoption
 
@@ -10,15 +9,15 @@ The plugin is adoption-gated: nothing is copied before the maintainer's verdict.
 
 ## What it is
 
-The storage-fts5 plugin serves as an indexed storage backend replacing flat file scans with relational queries and indexed search:
+The storage-fts5 plugin serves as an indexed storage backend: the single store of the record when it is the configured driver.
 
-1. Relational schema: sessions, tasks, entries, findings, lanes, and lane_entries are stored in dedicated normalized tables with foreign keys and cascading integrity.
-2. Dual FTS5 indexing: natural language prose is indexed with `porter unicode61 remove_diacritics 0` to preserve Turkish characters and diacritics, while exact code identifiers and symbols are indexed with `trigram` tokenization.
-3. Automated synchronization triggers: database triggers synchronize all entity mutations into `search_documents`, which automatically updates `fts_prose` and `fts_code` without manual indexing logic.
-4. Pure SQL RRF search: a two-stage Common Table Expression (CTE) executes Reciprocal Rank Fusion (`1.0 / (60.0 + rank)`) natively in SQLite, extracting token-dense contextual snippets with match highlights rather than dumping full records into prompts.
-5. Finding lifecycle CRUD: full lifecycle verbs (`add`, `show`, `update`, `supersede`, `drop`, `list`) maintain durable knowledge states directly in the database.
-6. Subagent lane persistence: subagent recipes, action traces, and reports are persisted directly in native SQLite tables.
-7. Bidirectional migration: `ctx storage-fts5 migrate` provides atomic, lossless conversion between POSIX flat files and SQLite databases.
+1. The canonical text: the `artifacts` table keeps every artifact of a unit (state, backlog, knowledge, journal, and each lane's recipe, journal, report) byte for byte. It is the source of truth: `artifact.read` returns it, an export writes it back, and every write lands a new text. The record grammar lives in one place, the reference serialization (the posix driver, found through `CTX_REFERENCE_DRIVER`, which the resolver exports, or the session module beside this one): every record method (`session.*`, `task.*`, `entry.*`, `finding.*`, `lane.*`, `resolve.ref`) runs through it over the unit materialized from the store into a scratch workspace under `.contexture/tmp`, and every artifact the method changed is stored back with its reindex in one transaction, under a unit write lock. So the fts5 driver answers every method exactly as the posix driver does, and a write the grammar refuses never reaches the store. Native methods: `capability`, `storage.health`, `artifact.read`, `artifact.write`, `artifact.list`, `session.create`, `session.list`, `search.query`.
+2. The derived index: sessions, tasks, entries, findings, lanes, lane_entries, and closures are rebuilt from the text of the artifact that changed (`index.sh`, shared by the driver and the migration). The closures table holds one row per target of every `CLOSES` and `SUPERSEDES` line (main journal and lane journals), with its verdict, reason, and the line verbatim. A legacy journal that repeats an entry slug keeps one row per occurrence keyed by (slug, ordinal), in file order, never renamed. A finding's `SUPERSEDED` status is derived from its successor's `SUPERSEDES` line; a task's `REFS` is indexed as a JSON array. A block scalar (a task section, a finding `SUMMARY`, a `WHAT`) is indexed without the blank separator line that follows its block, so no derived row ends in a newline; interior newlines stay.
+3. Dual FTS5 indexing: natural language prose is indexed with `porter unicode61 remove_diacritics 0` to preserve Turkish characters and diacritics, while exact code identifiers and symbols are indexed with `trigram` tokenization; triggers keep `search_documents` and both tables in step with the index. Each document carries its section, the artifact it came from: `state`, `backlog`, `knowledge`, `journal`, `lane_recipe`, `lane_report`, `lane_journal`.
+4. Search: `search.query` returns the shape every driver shares (`entity_type`, `entity_id`, `section`, `snippet` per result, `total_matches` before the cap, the `mode` it ran) plus `rrf_score` and `sources`. Modes: `hybrid` (the default: RRF over both tables, `1.0 / (60.0 + rank)`, in a two-stage CTE), `trigram` (the trigram table alone), `exact` (a case-insensitive substring, as posix searches); `--limit` (default 20) and `--entity` apply in SQL; an empty query refuses rc 1.
+5. Contract fidelity: every write checks the backend's status and fails with `ERR_STORAGE_WRITE` (rc 2) instead of printing a success payload; every connection waits up to ten seconds on a busy writer (`.timeout`, set per connection because `busy_timeout` never persists); a read never creates the database, and `storage.health` reports `degraded` until a unit is stored.
+6. Bidirectional migration: `ctx storage-fts5 migrate` stores each POSIX file verbatim as its artifact and rebuilds its rows (one transaction per unit; a re-import replaces the unit whole, the cascade sweeping its rows and search documents), and exports the stored text back byte for byte, a lane folder with no artifact kept. A repeated task slug or finding name is refused by name before any SQL (those are mutable surfaces, not history). The migration reads the database path from `.contexture/config` (`storage.database`) as the driver does.
+7. In-place upgrades: a database created before the ordinal key is rebuilt on its next open, every row and id kept; a database created before the artifacts table (schema version 1) gains it on its next open, its search documents re-derived under the uniform sections, and every unit's artifacts seeded from its rows by the legacy serialization, so an older database keeps every record it had.
 
 | piece | what it is | lands as |
 |---|---|---|
@@ -26,6 +25,9 @@ The storage-fts5 plugin serves as an indexed storage backend replacing flat file
 | `.contexture/modules/storage-fts5/schema.sql` | relational SQLite DDL, triggers, and dual FTS5 virtual tables | copy |
 | `.contexture/modules/storage-fts5/drivers/fts5` | the Storage Provider Interface (SPI) driver executable | copy |
 | `.contexture/modules/storage-fts5/scripts/migrate` | bidirectional migration CLI verb | copy |
+| `.contexture/modules/storage-fts5/closer.awk` | the closer line parse shared by the migration and the driver | copy |
+| `.contexture/modules/storage-fts5/db-init.sh` | the database open path shared by the driver and the migration: fresh schema, in-place upgrades, the per-connection busy timeout | copy |
+| `.contexture/modules/storage-fts5/index.sh` | the derived index rebuilt from an artifact's text, shared by the driver and the migration | copy |
 | `tests/test-driver.sh` | SPI compliance test runner against fts5 driver | reference |
 | `tests/test-migration.sh` | bidirectional round-trip migration verification suite | reference |
 | `tests/run.sh` | plugin test suite runner | reference |
@@ -40,7 +42,8 @@ The storage architecture honors these non-negotiable invariants:
 * Pure SQL RRF ranking: combines natural language stem matching and trigram substring matching using Reciprocal Rank Fusion (`1.0 / (60.0 + rank)`).
 * Two-stage CTE execution: separates raw cursor snippet evaluation from outer rank window computation, preventing FTS5 cursor stepping errors.
 * Contextual snippet extraction: returns token-dense excerpts (default 12 tokens) with bold highlight delimiters, slashing prompt token consumption by over 90 percent.
-* Concurrency and WAL mode: connections run with `PRAGMA journal_mode = WAL;` and `PRAGMA busy_timeout = 5000;`, enabling concurrent readers alongside serialized writes without database locking errors.
+* Concurrency and WAL mode: the database runs in `PRAGMA journal_mode = WAL;` and every connection waits up to ten seconds for a busy writer (`sqlite3 -cmd ".timeout 10000"`), enabling concurrent readers alongside serialized writes without database locking errors; the record methods also hold a unit write lock across materialize, render, and store; an interrupted method (HUP, INT, TERM) removes its scratch unit and releases the lock through its exit cleanup, a SIGKILL cannot, and the lock it leaves stalls later writers of that unit until it is removed.
+* One grammar: the record grammar is rendered only by the reference serialization; the driver never re-implements a grammar check.
 * Zero em-dash and zero spaced hyphen compliance: all documentation, scripts, and error diagnostics strictly avoid em-dashes and spaced hyphens.
 
 ```
@@ -76,69 +79,15 @@ The storage architecture honors these non-negotiable invariants:
 
 ### Pure SQL RRF Query Architecture
 
-To resolve the SQLite FTS5 cursor stepping conflict where window functions and auxiliary snippet functions clash within the same SELECT block, the driver executes a two-stage Common Table Expression:
-
-```sql
-WITH
-  raw_prose AS (
-    SELECT rowid AS doc_id, rank, snippet(fts_prose, -1, '<b>', '</b>', '...', 12) AS snip
-    FROM fts_prose WHERE fts_prose MATCH ?
-  ),
-  ranked_prose AS (
-    SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip
-    FROM raw_prose
-  ),
-  raw_code AS (
-    SELECT rowid AS doc_id, rank, snippet(fts_code, -1, '<b>', '</b>', '...', 12) AS snip
-    FROM fts_code WHERE fts_code MATCH ?
-  ),
-  ranked_code AS (
-    SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip
-    FROM raw_code
-  ),
-  combined AS (
-    SELECT doc_id, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_prose
-    UNION ALL
-    SELECT doc_id, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_code
-  ),
-  fused AS (
-    SELECT c.doc_id, round(sum(c.score), 6) AS rrf_score, count(c.doc_id) AS sources, max(c.snip) AS snippet
-    FROM combined c GROUP BY c.doc_id
-  ),
-  ordered_docs AS (
-    SELECT f.doc_id, s.unit, s.entity_type, s.entity_id, s.section, s.title, f.rrf_score, f.sources, f.snippet
-    FROM fused f
-    JOIN search_documents s ON s.doc_id = f.doc_id
-    WHERE s.unit = ? AND (? IS NULL OR s.entity_type = ?)
-    ORDER BY f.rrf_score DESC
-    LIMIT ?
-  )
-SELECT json_object(
-  'unit', ?,
-  'query', ?,
-  'total_matches', (SELECT count(*) FROM ordered_docs),
-  'results', coalesce((
-    SELECT json_group_array(
-      json_object(
-        'entity_type', entity_type,
-        'entity_id', entity_id,
-        'section', section,
-        'title', title,
-        'rrf_score', rrf_score,
-        'sources', sources,
-        'snippet', snippet
-      )
-    ) FROM ordered_docs
-  ), json_array())
-);
-```
+To resolve the SQLite FTS5 cursor stepping conflict where window functions and auxiliary snippet functions clash within the same SELECT block, the driver executes a two-stage Common Table Expression: `raw_prose` and `raw_code` take the rank and the snippet from each FTS5 table, `ranked_prose` and `ranked_code` number the rows in a separate SELECT, `combined` scores each rank `1.0 / (60.0 + rnk)`, `fused` sums the scores per document (`rrf_score`, `sources`, the best snippet), and `hits` joins the search documents under the unit and entity filter; the payload counts `hits` as `total_matches` and returns the first `--limit` of them by score.
 
 ## Assess
 
 Before adopting `storage-fts5` in a repository, verify:
 
 * SQLite CLI availability: verify that `/usr/bin/sqlite3` or `sqlite3` is on PATH with FTS5 support.
-* Workspace storage configuration: determine whether the database lives at default `.contexture/sessions.db` or a custom path configured in `.contexture/storage.conf`.
+* Workspace storage configuration: determine whether the database lives at default `.contexture/sessions.db` or a custom path configured in `.contexture/config` (`storage.database`) or `.contexture/storage.conf`.
+* The cutover: once `storage.driver: fts5` is configured, every verb reads and writes the database alone; import the units first (Step 3), since a unit left in files is invisible to the fts5 store.
 
 ## Propose
 
@@ -188,6 +137,8 @@ Verify the installation against the Storage SPI compliance harness:
 tests/storage-compliance.sh --driver=fts5
 ```
 
+This resolves the driver through the workspace drawer, so it checks the adopted copy (run it with `CTX_REFERENCE_DRIVER` set to the workspace's posix driver when the harness sandbox lacks the session module). The plugin suite (`plugins/storage-fts5/tests/run.sh`) checks the plugin's own copy instead: its scripts resolve the module from their own location and hand the driver to the harness by path (`--driver-exec=<path>`), so an edit to either copy never passes on the other's behalf.
+
 Verify bidirectional migration:
 
 ```sh
@@ -209,8 +160,11 @@ ctx storage-fts5 migrate --from=posix --to=fts5 --unit=<unit>
 |---|---|
 | `.contexture/modules/storage-fts5/module` | authored fresh: module summary line |
 | `.contexture/modules/storage-fts5/schema.sql` | authored fresh: relational SQLite schema, triggers, and FTS5 tables |
-| `.contexture/modules/storage-fts5/drivers/fts5` | authored fresh: 26-method SPI driver with pure SQL RRF ranking |
+| `.contexture/modules/storage-fts5/drivers/fts5` | authored fresh: the SPI driver: the verbatim store, the reference-serialization delegation, pure SQL RRF ranking |
 | `.contexture/modules/storage-fts5/scripts/migrate` | authored fresh: bidirectional migration CLI verb |
+| `.contexture/modules/storage-fts5/closer.awk` | authored fresh: the closer line parse, one home for migrate and the driver |
+| `.contexture/modules/storage-fts5/db-init.sh` | authored fresh: the open path, the ordinal and version 2 upgrades, one home for migrate and the driver |
+| `.contexture/modules/storage-fts5/index.sh` | authored fresh: the derived index, the migrate parsers moved to one home for migrate and the driver |
 | `tests/test-driver.sh` | authored fresh: SPI compliance test runner |
 | `tests/test-migration.sh` | authored fresh: round-trip bidirectional migration verification |
 | `tests/run.sh` | authored fresh: named test runner over plugin test suites |

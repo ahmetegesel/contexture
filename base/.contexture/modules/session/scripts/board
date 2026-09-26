@@ -1,7 +1,7 @@
 #!/usr/bin/awk -f
 # summary: the live board: unclosed journal entries with complete bodies, then the open tasks and the open threads
 # usage: ctx session board <slug>
-# help: one form: the slug resolves .contexture/sessions/<slug>/{journal,backlog}.md; each tail is silent when empty; missing journal is fatal rc=1 with zero stdout; missing backlog warns on stderr and prints no tail
+# help: one form: the slug names the unit whose journal and backlog the storage driver returns; each tail is silent when empty; missing journal is fatal rc=1 with zero stdout; missing backlog warns on stderr and prints no tail
 # help: exit codes: 0 live board printed; 1 missing journal or invalid unit slug
 # help: example: ctx session board my-unit
 
@@ -11,17 +11,146 @@ function usage() {
   exit 1
 }
 
-function process_journal(journal_path,   test_line, test_ret, line, words, n, i, closed, printing, slug, cur_anchor, v) {
-  test_line = ""
-  test_ret = (getline test_line < journal_path)
-  if (test_ret < 0) {
-    print "ERROR: journal file not found: " journal_path > "/dev/stderr"
+# The record IO: every session artifact is read and written through the configured
+# storage driver (artifact.read, artifact.write, artifact.list, session.list) by artifact
+# key (state, backlog, knowledge, journal, lane/<lane>/<recipe|journal|report>); a fetched
+# artifact lands in a scratch file under .contexture/tmp, removed at exit. disp() names an
+# artifact in a message the way the record grammar reads it; it builds a display string,
+# never a path any code opens.
+function disp(u, key,   l) {
+  if (key ~ /^lane\//) {
+    l = key
+    sub(/^lane\//, "", l)
+    return ".contexture/sessions/" u "/lanes/" l ".md"
+  }
+  return ".contexture/sessions/" u "/" key ".md"
+}
+
+function rec_q(s) {
+  gsub(/'/, "'\\''", s)
+  return "'" s "'"
+}
+
+function rec_resolver(   md) {
+  if (REC_RESOLVER != "") return REC_RESOLVER
+  md = (("CTX_MODULE_DIR" in ENVIRON) && ENVIRON["CTX_MODULE_DIR"] != "") ? ENVIRON["CTX_MODULE_DIR"] : ".contexture/modules/session"
+  REC_RESOLVER = md "/scripts/driver-resolver"
+  return REC_RESOLVER
+}
+
+function rec_scratch(   cmd, d) {
+  if (REC_DIR != "") return REC_DIR
+  system("mkdir -p .contexture/tmp")
+  cmd = "mktemp -d .contexture/tmp/rec.XXXXXX 2>/dev/null"
+  d = ""
+  if ((cmd | getline d) <= 0) d = ""
+  close(cmd)
+  if (d == "") {
+    print "ERROR: cannot create a scratch folder under .contexture/tmp" > "/dev/stderr"
+    exit 2
+  }
+  REC_DIR = d
+  return d
+}
+
+# rec_call(args, out): one driver call, stdout to the out file; rc 0 ok, 1 absent or
+# refused; a storage failure (rc 2) is fatal and its diagnostic passes through
+function rec_call(args, out,   e, rc, line) {
+  e = out ".err"
+  rc = system(rec_q(rec_resolver()) " " args " > " rec_q(out) " 2> " rec_q(e))
+  if (rc == 0 || rc == 1) return rc
+  while ((getline line < e) > 0) print line > "/dev/stderr"
+  close(e)
+  print "ERROR: the storage driver failed (rc=" rc "): " args > "/dev/stderr"
+  exit 2
+}
+
+# rec_fetch(u, key): the artifact's scratch copy, "" when the driver reports it absent
+function rec_fetch(u, key,   f, k) {
+  k = u SUBSEP key
+  if (k in REC_CACHE) return REC_CACHE[k]
+  REC_N++
+  f = rec_scratch() "/a" REC_N
+  if (rec_call("artifact.read " rec_q(u) " " rec_q(key), f) == 0) {
+    REC_CACHE[k] = f
+    return f
+  }
+  REC_CACHE[k] = ""
+  return ""
+}
+
+function rec_exists(u, key) {
+  return (rec_fetch(u, key) != "")
+}
+
+# rec_put(u, key, file): the file becomes the artifact, atomically, through the driver
+function rec_put(u, key, file,   rc) {
+  close(file)
+  rc = system(rec_q(rec_resolver()) " artifact.write " rec_q(u) " " rec_q(key) " < " rec_q(file))
+  if (rc != 0) {
+    print "ERROR: the storage driver refused writing " key " of " u " (rc=" rc ")" > "/dev/stderr"
+    exit (rc == 1) ? 1 : 2
+  }
+  REC_CACHE[u SUBSEP key] = file
+}
+
+# rec_new(): a fresh scratch file name for a write
+function rec_new() {
+  REC_N++
+  return rec_scratch() "/w" REC_N
+}
+
+# rec_units(U): every unit the store holds, in its listing order (bytewise by name);
+# returns the count, 0 when the store holds none
+function rec_units(U,   f, line, n, rest, p, u) {
+  REC_N++
+  f = rec_scratch() "/l" REC_N
+  if (rec_call("session.list", f) != 0) return 0
+  n = 0
+  while ((getline line < f) > 0) {
+    rest = line
+    while ((p = index(rest, "\"unit\":\"")) > 0) {
+      rest = substr(rest, p + 8)
+      u = substr(rest, 1, index(rest, "\"") - 1)
+      n++
+      U[n] = u
+    }
+  }
+  close(f)
+  return n
+}
+
+# rec_list(u, K): the artifact keys the unit holds (artifact.list), count returned
+function rec_list(u, K,   f, line, n) {
+  REC_N++
+  f = rec_scratch() "/k" REC_N
+  if (rec_call("artifact.list " rec_q(u), f) != 0) return 0
+  n = 0
+  while ((getline line < f) > 0) {
+    if (line == "") continue
+    n++
+    K[n] = line
+  }
+  close(f)
+  return n
+}
+
+function rec_cleanup() {
+  if (REC_DIR != "") system("rm -rf " rec_q(REC_DIR))
+  REC_DIR = ""
+}
+
+function process_journal(journal_path,   test_line, test_ret, line, words, n, i, closed, printing, slug, cur_anchor, v, ln) {
+  if (journal_path == "") {
+    print "ERROR: journal file not found: " disp(board_unit, "journal") > "/dev/stderr"
     exit 1
   }
-  close(journal_path)
 
-  # Pass 1: collect closed and superseded slugs
+  # Pass 1: the last closer line naming each slug; an occurrence is closed only by a
+  # closer standing after it, so a legacy journal repeating a slug resolves by position
+  ln = 0
   while ((getline line < journal_path) > 0) {
+    ln++
     if (line ~ /^[ \t]*(CLOSES|SUPERSEDES):/) {
       sub(/^[ \t]*(CLOSES|SUPERSEDES):[ \t]*/, "", line)
       sub(/[ \t]+-[ \t]+.*$/, "", line)
@@ -29,7 +158,7 @@ function process_journal(journal_path,   test_line, test_ret, line, words, n, i,
       n = split(line, words, /[ \t]+/)
       for (i = 1; i <= n; i++) {
         if (words[i] ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[a-zA-Z0-9_-]+[a-zA-Z0-9]$/) {
-          closed[words[i]] = 1
+          closed[words[i]] = ln
         }
       }
     }
@@ -41,11 +170,13 @@ function process_journal(journal_path,   test_line, test_ret, line, words, n, i,
   # open thread: the value is its target)
   printing = 0
   cur_anchor = ""
+  ln = 0
   while ((getline line < journal_path) > 0) {
+    ln++
     if (line ~ /^@entry /) {
       n = split(line, words, /[ \t]+/)
       slug = words[2]
-      printing = !(slug in closed)
+      printing = !(slug in closed && closed[slug] > ln)
       cur_anchor = ""
       if (printing) live++
     } else if (line ~ /^@anchor /) {
@@ -105,23 +236,18 @@ BEGIN {
   if (ARGC != 2 || refs != "" || refs_only != "") usage()
   slug = ARGV[1]
   if (slug !~ /^[A-Za-z0-9][A-Za-z0-9_-]*$/) usage()
-  dir = ".contexture/sessions/" slug "/"
-  journal = dir "journal.md"
-  backlog = dir "backlog.md"
+  board_unit = slug
+  journal = rec_fetch(slug, "journal")
+  backlog = rec_fetch(slug, "backlog")
 
   process_journal(journal)
 
-  has_backlog = 0
-  test_line = ""
-  if ((getline test_line < backlog) >= 0) {
-    has_backlog = 1
-    close(backlog)
-  }
+  has_backlog = (backlog != "")
 
   if (has_backlog) {
     collect_open_tasks(backlog)
   } else {
-    print "WARNING: missing backlog: " backlog > "/dev/stderr"
+    print "WARNING: missing backlog: " disp(slug, "backlog") > "/dev/stderr"
   }
 
   lives = (live == 1) ? "entry" : "entries"
@@ -151,4 +277,8 @@ BEGIN {
     print "these await someone outside: resolve or re-ask"
   }
   exit 0
+}
+
+END {
+  rec_cleanup()
 }

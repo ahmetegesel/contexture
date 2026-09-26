@@ -1,0 +1,8 @@
+#!/bin/sh
+# summary: mark a CLOSED unit ACTIVE again; the reverse of close
+# usage: ctx session reopen <slug>
+# help: the unit lifecycle resumes; use when closed work needs another pass (a fix to verify, a finding to test)
+# help: exit codes: 0 unit marked ACTIVE; 1 unit not found, not CLOSED, or bad slug
+# help: example: ctx session reopen my-unit
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/record" reopen "$@"

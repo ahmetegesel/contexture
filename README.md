@@ -99,7 +99,7 @@ A dedicated scope for your task (`.contexture/sessions/<name>/`). Gives the agen
 An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Managed via the top-level `ctx lane` module. Deep dive: [Units and subagents](docs/units-and-lanes.md).
 
 ### Storage abstraction
-Pluggable backend architecture via the Storage Provider Interface (SPI). Decouples agents from physical disk files or database schemas. The zero-dependency baseline POSIX driver manages markdown files, while storage plugins such as `storage-fts5` provide high-performance SQLite storage with dual Porter and Trigram indexing, pure SQL Reciprocal Rank Fusion (RRF) search, and high-density 5 to 12 token snippet extraction. Deep dive: [The record](docs/the-record.md) and [The engine](docs/the-engine.md).
+Pluggable backend architecture via the Storage Provider Interface (SPI). Decouples agents from physical disk files or database schemas. Every verb reaches the record through the configured driver alone, so the configured backend is the single store; free-text fields travel to the driver on stdin, never argv. The zero-dependency baseline POSIX driver manages markdown files, while storage plugins such as `storage-fts5` keep the same text verbatim in SQLite with dual Porter and Trigram indexing, pure SQL Reciprocal Rank Fusion (RRF) search, and high-density 5 to 12 token snippet extraction. Deep dive: [The record](docs/the-record.md) and [The engine](docs/the-engine.md).
 
 ### Rhythms
 A plain text workflow checklist in `.contexture/rhythms/`. Enforces process discipline, requiring the agent to discuss, test, and verify before claiming work is done. Deep dive: [Rhythms](docs/rhythms.md).
@@ -145,10 +145,10 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session record <unit> --what="..." [--flags] | Append an immutable journal event with auto-injected local date, active anchor, and default receipt thread |
 | ctx session entry <verb> [args] | Journal entry inspection: show, list matching entries |
 | ctx session finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list |
-| ctx session search <unit> "<query>" | Universal search across all entity domains returning high-density 5 to 12 token contextual snippets |
-| ctx session resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) |
+| ctx session search <unit> "<query>" [--limit=N] [--entity=TYPE] [--mode=MODE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet); ranked drivers return high-density 5 to 12 token snippets |
+| ctx session resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) and the legacy file forms to the entity block |
 | ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management: show, record, report isolated from parent session journals |
-| ctx storage-fts5 migrate <unit> --from=<posix\|fts5> --to=<posix\|fts5> | Bidirectional lossless migration between POSIX flat files and SQLite database |
+| ctx storage-fts5 migrate --from=<posix\|fts5> --to=<posix\|fts5> [--unit=<unit>] | Bidirectional byte-exact migration between POSIX flat files and the SQLite store |
 | ctx session query entry <unit> <slug> | The entry block verbatim; duplicates render every match |
 | ctx session query group <unit> <token> | The group thread: one short line per entry (anchor, slug, opening) |
 | ctx session query anchors <unit> | The anchor lines verbatim, with the count; zero prints `0 anchors` |
@@ -166,6 +166,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
 | ctx session refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
 | ctx session close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
+| ctx session reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
 | ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw |
 
 The query and search forms answer questions over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.

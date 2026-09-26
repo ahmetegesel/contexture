@@ -9,6 +9,7 @@
 # help:   drop <unit> <NAME>
 # help:   list <unit> [--active-only] [--json]
 # help: stdin fallback: raw @finding block piping supported
+# help: the writes refuse a CLOSED unit with rc 1 before any driver call; a NAME the knowledge already carries is refused (rc 1, ERR_ENTITY_EXISTS), a missing predecessor too (ERR_ENTITY_NOT_FOUND)
 
 set -u
 
@@ -23,6 +24,62 @@ if [ ! -x "$resolver" ]; then
     resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
   fi
 fi
+
+# The driver transport (docs/the-engine.md): argv carries the method and its bounded
+# identifiers; every free-text field travels on stdin as payload lines key=value, the
+# value escaped (backslash, newline, tab, carriage return as \\, \n, \t, \r); pline
+# writes one line, exact (a trailing newline survives).
+pline() {
+  printf '%s=' "$1"
+  printf '%sx' "$2" | awk '
+    BEGIN { ORS = "" }
+    { gsub(/\\/, "\\\\"); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
+    END { sub(/x$/, "", out); print out "\n" }'
+}
+
+# unit_closed <unit>: rc0 when the unit's state reads status: CLOSED (a closed unit takes
+# no writes: the refusal is the verb's, before any driver write)
+unit_closed() {
+  "$resolver" artifact.read "$1" state 2>/dev/null | awk '/^status:[ \t]*CLOSED[ \t\r]*$/ { c = 1 } END { exit !c }'
+}
+
+refuse_closed() {
+  if unit_closed "$1"; then
+    printf 'ERROR: unit is CLOSED: %s (a closed unit takes no writes)\n' "$1" >&2
+    exit 1
+  fi
+}
+
+# the dialect is LF: a carriage return in a field would poison the record for the grammar
+# verbs, which refuse CR on read; the refusal is the verb's, before any driver write
+CR_CHAR=$(printf '\r')
+refuse_cr() {
+  for cr_v in "$@"; do
+    case "$cr_v" in
+      *"$CR_CHAR"*)
+        printf 'ERROR: embedded carriage return in a field value (the dialect is LF)\n' >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+# a one-line field (written as one line of its block) takes no newline: a column-0
+# continuation would break the block grammar; the block scalars keep their newlines;
+# refuse_nl <field> <value> [<field> <value> ...], before any driver write
+NL_CHAR='
+'
+refuse_nl() {
+  while [ $# -ge 2 ]; do
+    case "$2" in
+      *"$NL_CHAR"*)
+        printf 'ERROR: embedded newline in %s (one line)\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+    shift 2
+  done
+}
 
 if [ $# -eq 0 ]; then
   printf 'usage: ctx session finding <subcommand> <unit> [args...]\n' >&2
@@ -46,32 +103,14 @@ esac
 
 subcmd="$1"
 shift
+case "${1:-}" in
+  --help|-h) "$0" --help | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
+esac
 
-get_session_dir() {
-  u="$1"
-  if [ -d ".contexture/sessions/$u" ]; then
-    printf '.contexture/sessions/%s\n' "$u"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -d "$CTX_ROOT/.contexture/sessions/$u" ]; then
-    printf '%s/.contexture/sessions/%s\n' "$CTX_ROOT" "$u"
-  else
-    printf '.contexture/sessions/%s\n' "$u"
-  fi
-}
-
-get_tmp_dir() {
-  if [ -d ".contexture/tmp" ] && [ -w ".contexture/tmp" ]; then
-    printf '.contexture/tmp\n'
-  elif [ -n "${CTX_ROOT:-}" ] && [ -d "$CTX_ROOT/.contexture/tmp" ] && [ -w "$CTX_ROOT/.contexture/tmp" ]; then
-    printf '%s/.contexture/tmp\n' "$CTX_ROOT"
-  else
-    d="${TMPDIR:-/tmp}/contexture-$USER"
-    mkdir -p "$d" 2>/dev/null || true
-    printf '%s\n' "$d"
-  fi
-}
-
+# parse_stdin_finding <field>: one field of a raw @finding block on stdin (name, summary,
+# ref, supersedes), multi-line values exact; no shell evaluation of the block text
 parse_stdin_finding() {
-  awk '
+  awk -v want="$1" '
     BEGIN { in_target = 0; in_sum = 0; name = ""; sum = ""; ref = ""; sup = ""; }
     /^@finding[ ]+/ {
       line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
@@ -94,10 +133,10 @@ parse_stdin_finding() {
     }
     in_target && /^[ \t]*$/ { in_sum = 0; }
     END {
-      printf "PARSED_NAME=%s\n", name;
-      printf "PARSED_SUM=%s\n", sum;
-      printf "PARSED_REF=%s\n", ref;
-      printf "PARSED_SUP=%s\n", sup;
+      if (want == "name") printf "%s", name;
+      else if (want == "summary") printf "%s", sum;
+      else if (want == "ref") printf "%s", ref;
+      else if (want == "supersedes") printf "%s", sup;
     }
   '
 }
@@ -139,11 +178,10 @@ case "$subcmd" in
     if [ -z "$summary" ] && [ ! -t 0 ]; then
       stdin_content=$(cat)
       if [ -n "$stdin_content" ]; then
-        eval "$(printf '%s\n' "$stdin_content" | parse_stdin_finding)"
-        [ -z "$name" ] && name="$PARSED_NAME"
-        [ -z "$summary" ] && summary="$PARSED_SUM"
-        [ -z "$ref" ] && ref="$PARSED_REF"
-        [ -z "$supersedes" ] && supersedes="$PARSED_SUP"
+        [ -z "$name" ] && name=$(printf '%s\n' "$stdin_content" | parse_stdin_finding name)
+        [ -z "$summary" ] && summary=$(printf '%s\n' "$stdin_content" | parse_stdin_finding summary)
+        [ -z "$ref" ] && ref=$(printf '%s\n' "$stdin_content" | parse_stdin_finding ref)
+        [ -z "$supersedes" ] && supersedes=$(printf '%s\n' "$stdin_content" | parse_stdin_finding supersedes)
       fi
     fi
     if [ -z "$name" ]; then
@@ -155,7 +193,10 @@ case "$subcmd" in
       printf 'finding add: error: missing required --summary parameter\n' >&2
       exit 1
     fi
-    out=$("$resolver" finding.add "$unit" "$name" "$summary" "$ref" "$supersedes")
+    refuse_closed "$unit"
+    refuse_cr "$summary" "$ref" "$supersedes"
+    refuse_nl --ref "$ref" --supersedes "$supersedes"
+    out=$({ pline summary "$summary"; pline ref "$ref"; pline supersedes "$supersedes"; } | "$resolver" finding.add "$unit" "$name")
     rc=$?
     if [ "$rc" -ne 0 ]; then
       exit "$rc"
@@ -188,26 +229,46 @@ case "$subcmd" in
     if [ "$json_out" -eq 1 ]; then
       printf '%s\n' "$out"
     else
+      # the readable block, every JSON escape decoded
       printf '%s\n' "$out" | awk '
+        function jstr(s, pos,   out, c, e, i, n) {
+          out = ""
+          n = length(s)
+          for (i = pos; i <= n; i++) {
+            c = substr(s, i, 1)
+            if (c == "\\") {
+              i++
+              e = substr(s, i, 1)
+              if (e == "n") out = out "\n"
+              else if (e == "t") out = out "\t"
+              else if (e == "r") out = out "\r"
+              else out = out e
+              continue
+            }
+            if (c == "\"") { JEND = i; return out }
+            out = out c
+          }
+          JEND = n
+          return out
+        }
+        function jval(s, key,   p) {
+          p = index(s, "\"" key "\":\"")
+          if (p == 0) return ""
+          return jstr(s, p + length(key) + 4)
+        }
         {
           line = $0
-          match(line, /"name":"[^"]*"/)
-          n = substr(line, RSTART + 8, RLENGTH - 9)
-          printf "@finding %s\n", n
-          if (match(line, /"superseded_by":"[^"]*"/)) {
-            sb = substr(line, RSTART + 17, RLENGTH - 18)
-            if (sb != "") printf "  SUPERSEDED_BY: %s\n", sb
-          }
-          if (match(line, /"ref":"[^"]*"/)) {
-            rf = substr(line, RSTART + 7, RLENGTH - 8)
-            if (rf != "") printf "  REF: \"%s\"\n", rf
-          }
-          if (match(line, /"summary":"[^"]*"/)) {
-            sm = substr(line, RSTART + 11, RLENGTH - 12)
-            if (sm != "") {
-              gsub(/\\n/, "\n    ", sm)
-              printf "  SUMMARY ::\n    %s\n", sm
-            }
+          t = index(line, "\"finding\":{")
+          if (t > 0) line = substr(line, t)
+          printf "@finding %s\n", jval(line, "name")
+          sb = jval(line, "superseded_by")
+          if (sb != "") printf "  SUPERSEDED_BY: %s\n", sb
+          rf = jval(line, "ref")
+          if (rf != "") printf "  REF: \"%s\"\n", rf
+          sm = jval(line, "summary")
+          if (sm != "") {
+            gsub(/\n/, "\n    ", sm)
+            printf "  SUMMARY ::\n    %s\n", sm
           }
         }
       '
@@ -236,63 +297,20 @@ case "$subcmd" in
     if [ -z "$summary" ] && [ -z "$ref" ] && [ ! -t 0 ]; then
       stdin_content=$(cat)
       if [ -n "$stdin_content" ]; then
-        eval "$(printf '%s\n' "$stdin_content" | parse_stdin_finding)"
-        [ -z "$summary" ] && summary="$PARSED_SUM"
-        [ -z "$ref" ] && ref="$PARSED_REF"
+        [ -z "$summary" ] && summary=$(printf '%s\n' "$stdin_content" | parse_stdin_finding summary)
+        [ -z "$ref" ] && ref=$(printf '%s\n' "$stdin_content" | parse_stdin_finding ref)
       fi
     fi
-    s_dir=$(get_session_dir "$unit")
-    k_file="$s_dir/knowledge.md"
-    if [ ! -f "$k_file" ]; then
-      printf "finding update: error: session '%s' not found or knowledge.md missing\n" "$unit" >&2
-      exit 1
-    fi
-    tmp_d=$(get_tmp_dir)
-    tmp_k=$(mktemp "$tmp_d/knowledge.XXXXXX")
-    awk -v target="$name" -v new_sum="$summary" -v new_ref="$ref" '
-      function indent_lines(text, prefix,    lines, n, i, r) {
-        n = split(text, lines, "\n"); r = "";
-        for (i = 1; i <= n; i++) { r = r prefix lines[i]; if (i < n) r = r "\n"; }
-        return r;
-      }
-      BEGIN { in_target = 0; skip_scalar = 0; found = 0; }
-      /^@finding[ ]+/ {
-        line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
-        if (line == target) {
-          found = 1; in_target = 1;
-          print $0;
-          next;
-        } else in_target = 0;
-      }
-      in_target && /^[ ]{2}SUMMARY ::/ {
-        if (new_sum != "") {
-          printf "  SUMMARY ::\n%s\n", indent_lines(new_sum, "    ");
-          skip_scalar = 1;
-          next;
-        }
-      }
-      in_target && /^[ ]{2}REF:[ ]*/ {
-        if (new_ref != "") {
-          printf "  REF: \"%s\"\n", new_ref;
-          next;
-        }
-      }
-      in_target && skip_scalar && /^[ ]{4}/ { next; }
-      {
-        if ($0 !~ /^[ ]{4}/) skip_scalar = 0;
-        print $0;
-      }
-      END { if (!found) exit 1; }
-    ' "$k_file" > "$tmp_k"
+    refuse_closed "$unit"
+    refuse_cr "$summary" "$ref"
+    refuse_nl --ref "$ref"
+    out=$({ pline summary "$summary"; pline ref "$ref"; } | "$resolver" finding.update "$unit" "$name")
     rc=$?
     if [ "$rc" -ne 0 ]; then
-      rm -f "$tmp_k"
-      printf "finding update: error: finding '%s' not found in session '%s'\n" "$name" "$unit" >&2
-      exit 1
+      exit "$rc"
     fi
-    mv -f "$tmp_k" "$k_file"
     if [ "$json_out" -eq 1 ]; then
-      printf '{"status":"ok","unit":"%s","finding":{"name":"%s"}}\n' "$unit" "$name"
+      printf '%s\n' "$out"
     else
       printf 'finding updated: %s\n' "$name"
     fi
@@ -324,7 +342,10 @@ case "$subcmd" in
       printf 'finding supersede: error: missing required --summary parameter\n' >&2
       exit 1
     fi
-    out=$("$resolver" finding.add "$unit" "$new_name" "$summary" "$ref" "$old_name")
+    refuse_closed "$unit"
+    refuse_cr "$summary" "$ref"
+    refuse_nl --ref "$ref"
+    out=$({ pline summary "$summary"; pline ref "$ref"; } | "$resolver" finding.supersede "$unit" "$old_name" "$new_name")
     rc=$?
     if [ "$rc" -ne 0 ]; then
       exit "$rc"
@@ -342,35 +363,12 @@ case "$subcmd" in
     unit="$1"; shift
     [ $# -gt 0 ] || { printf 'finding drop: error: missing finding name\n' >&2; exit 1; }
     name="$1"; shift
-    s_dir=$(get_session_dir "$unit")
-    k_file="$s_dir/knowledge.md"
-    if [ ! -f "$k_file" ]; then
-      printf "finding drop: error: session '%s' not found or knowledge.md missing\n" "$unit" >&2
-      exit 1
-    fi
-    tmp_d=$(get_tmp_dir)
-    tmp_k=$(mktemp "$tmp_d/knowledge.XXXXXX")
-    awk -v target="$name" '
-      BEGIN { in_target = 0; found = 0; }
-      /^@finding[ ]+/ {
-        line = $0; sub(/^@finding[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
-        if (line == target) {
-          found = 1; in_target = 1;
-          next;
-        } else in_target = 0;
-      }
-      in_target && /^@[A-Za-z]/ { in_target = 0; }
-      in_target { next; }
-      { print $0; }
-      END { if (!found) exit 1; }
-    ' "$k_file" > "$tmp_k"
+    refuse_closed "$unit"
+    out=$("$resolver" finding.drop "$unit" "$name")
     rc=$?
     if [ "$rc" -ne 0 ]; then
-      rm -f "$tmp_k"
-      printf "finding drop: error: finding '%s' not found in session '%s'\n" "$name" "$unit" >&2
-      exit 1
+      exit "$rc"
     fi
-    mv -f "$tmp_k" "$k_file"
     printf 'finding dropped: %s\n' "$name"
     exit 0
     ;;
@@ -396,16 +394,36 @@ case "$subcmd" in
       printf '%s\n' "$out"
     else
       printf '%s\n' "$out" | awk '
+        # walk a JSON string from the character after its opening quote, honoring
+        # backslash escapes; leaves JEND at the closing quote
+        function jstr(s, pos,   out, c, e, i, n) {
+          out = ""
+          n = length(s)
+          for (i = pos; i <= n; i++) {
+            c = substr(s, i, 1)
+            if (c == "\\") {
+              i++
+              e = substr(s, i, 1)
+              if (e == "n" || e == "t") out = out " "
+              else out = out e
+              continue
+            }
+            if (c == "\"") { JEND = i; return out }
+            out = out c
+          }
+          JEND = n
+          return out
+        }
         {
           line = $0
-          while (match(line, /\{"name":"[^"]*","summary":"[^"]*","ref":"[^"]*"/)) {
-            item = substr(line, RSTART, RLENGTH)
-            line = substr(line, RSTART + RLENGTH)
-            match(item, /"name":"[^"]*"/)
-            n = substr(item, RSTART + 8, RLENGTH - 9)
-            match(item, /"summary":"[^"]*"/)
-            sm = substr(item, RSTART + 11, RLENGTH - 12)
+          while ((p = index(line, "\"name\":\"")) > 0) {
+            n = jstr(line, p + 8)
+            rest = substr(line, JEND + 1)
+            q = index(rest, "\"summary\":\"")
+            if (q == 0) break
+            sm = jstr(rest, q + 11)
             printf "  %s: %s\n", n, sm
+            line = substr(rest, JEND + 1)
           }
         }
       '

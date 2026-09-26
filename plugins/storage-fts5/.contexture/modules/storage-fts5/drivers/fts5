@@ -1,6 +1,19 @@
 #!/bin/sh
-# SQLite FTS5 storage driver implementing Storage Provider Interface (SPI).
-# Normalized relational schema with dual FTS5 virtual tables and pure SQL RRF search.
+# SQLite FTS5 storage driver implementing the Storage Provider Interface (SPI).
+#
+# The store keeps every artifact's canonical text verbatim (the artifacts table) and a
+# derived relational index rebuilt from that text (index.sh), which feeds the dual FTS5
+# tables and the pure SQL RRF search. Native methods: capability, storage.health,
+# artifact.read, artifact.write, artifact.list, session.create, session.list, and
+# search.query. Every other method (session.*, task.*, entry.*, finding.*, lane.*,
+# resolve.ref) is the record grammar itself: it runs through the reference serialization
+# (the posix driver) over the unit materialized from the store into a scratch workspace,
+# and every artifact it changed is stored back with its reindex in one transaction, so
+# the two drivers answer every method alike by construction.
+#
+# Transport: argv carries the method and its identifiers; free-text fields arrive on
+# stdin as payload lines key=value (escaped), a single-document write as raw stdin.
+# Exit tiers: 0 ok, 1 semantic (bad argument, absent entity), 2 storage or driver.
 
 set -u
 
@@ -45,33 +58,100 @@ else
   DB_PATH="$ROOT/.contexture/sessions.db"
 fi
 
-db_init() {
-  mkdir -p "$(dirname "$DB_PATH")"
-  has_sessions=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sessions';" 2>/dev/null || echo "0")
-  if [ "$has_sessions" != "1" ]; then
-    if [ -f "$SCHEMA_SQL" ]; then
-      sqlite3 "$DB_PATH" < "$SCHEMA_SQL" >/dev/null 2>&1
-    fi
-  fi
-}
+# scratch lives in the workspace drawer when it is writable
+DB_TMP="$ROOT/.contexture/tmp"
+if ! mkdir -p "$DB_TMP" 2>/dev/null || [ ! -w "$DB_TMP" ]; then
+  DB_TMP="${TMPDIR:-/tmp}"
+fi
 
-sql_exec() {
-  sqlite3 -bail "$DB_PATH" "$1"
-}
+# the open path (fresh schema, the upgrades, later tables): one home for driver and migration
+. "$MODULE_DIR/db-init.sh"
+# the derived index rebuilt from an artifact's text: one home for driver and migration
+. "$MODULE_DIR/index.sh"
 
 sql_escape() {
   printf '%s' "$1" | sed "s/'/''/g"
 }
 
-sanitize_fts_query() {
-  # Wrap each token in double quotes to prevent FTS5 syntax errors with hyphens or punctuation
-  # Preserves Turkish characters and symbols cleanly
-  printf '%s' "$1" | awk '{
-    for (i = 1; i <= NF; i++) {
-      gsub(/"/, "\"\"", $i);
-      printf "\"%s\"%s", $i, (i == NF ? "" : " ");
+now_utc() {
+  date -u +"%Y-%m-%dT%H:%M:%SZ"
+}
+
+slug_valid() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# a write that sqlite3 refuses (a constraint, a lock, a full disk) must never print its
+# success payload: storage-tier error, rc 2; -bail stops at the first failing statement
+write_failed() {
+  printf '%s: error: the storage write failed (ERR_STORAGE_WRITE)\n' "$CMD" >&2
+  exit 2
+}
+
+unit_exists() {
+  [ -f "$DB_PATH" ] || return 1
+  [ "$(sq "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$1")';")" -gt 0 ] 2>/dev/null
+}
+
+# a read never creates the store: without a database file there is nothing to read
+db_open_read() {
+  [ -f "$DB_PATH" ] || return 1
+  db_init
+  return 0
+}
+
+SCRATCH=""
+cleanup() {
+  [ -n "$SCRATCH" ] && rm -rf "$SCRATCH"
+  [ -n "${LOCK_DIR:-}" ] && rm -rf "$LOCK_DIR"
+  return 0
+}
+trap cleanup EXIT
+# a HUP, INT, or TERM exits through the EXIT trap (dash runs no EXIT trap on a signal it
+# does not trap), so an interrupted method leaves no scratch unit and no held lock
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+scratch() {
+  if [ -z "$SCRATCH" ]; then
+    SCRATCH=$(mktemp -d "$DB_TMP/fts5-ws.XXXXXX") || {
+      printf '%s: error: cannot create a scratch folder (ERR_STORAGE_WRITE)\n' "$CMD" >&2
+      exit 2
     }
-  }'
+  fi
+}
+
+# a unit write lock: the materialize, render, store sequence of one writer is serialized
+LOCK_DIR=""
+acquire_lock() {
+  mkdir -p "$DB_TMP/locks" 2>/dev/null || true
+  lk="$DB_TMP/locks/fts5-$1.lock"
+  lk_n=0
+  while ! mkdir "$lk" 2>/dev/null; do
+    lk_n=$((lk_n + 1))
+    if [ "$lk_n" -ge 100 ]; then
+      printf "%s: error: failed to acquire the write lock of unit '%s' after 10s (ERR_STORAGE_LOCKED)\n" "$CMD" "$1" >&2
+      exit 2
+    fi
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+  LOCK_DIR="$lk"
+}
+
+# key_of <path below a unit folder>: the artifact key (state, lane/<l>/journal, ...)
+key_of() {
+  case "$1" in
+    state.md|backlog.md|knowledge.md|journal.md) printf '%s\n' "${1%.md}" ;;
+    lanes/*/recipe.md|lanes/*/journal.md|lanes/*/report.md)
+      ko=${1#lanes/}
+      printf 'lane/%s\n' "${ko%.md}"
+      ;;
+    *) return 1 ;;
+  esac
 }
 
 if [ $# -eq 0 ]; then
@@ -82,12 +162,278 @@ fi
 CMD="$1"
 shift
 
+# ==============================================================================
+# The reference serialization: the record grammar over the materialized unit
+# ==============================================================================
+find_reference() {
+  if [ -n "${CTX_REFERENCE_DRIVER:-}" ] && [ -x "$CTX_REFERENCE_DRIVER" ]; then
+    printf '%s\n' "$CTX_REFERENCE_DRIVER"; return 0
+  fi
+  for rf in "$ROOT/.contexture/modules/session/drivers/posix/driver" \
+            "$MODULE_DIR/../session/drivers/posix/driver"; do
+    if [ -x "$rf" ]; then printf '%s\n' "$rf"; return 0; fi
+  done
+  return 1
+}
+
+# materialize <unit> <lane>: the unit's main artifacts (and one lane's, when named) as
+# files of a scratch workspace; an absent unit leaves no folder, so the grammar reports it
+materialize() {
+  mt_u=$1
+  mt_l=$2
+  mkdir -p "$SCRATCH/ws/.contexture/tmp" "$SCRATCH/ws/.contexture/sessions"
+  unit_exists "$mt_u" || return 0
+  mt_d="$SCRATCH/ws/.contexture/sessions/$mt_u"
+  mkdir -p "$mt_d"
+  mt_q=$(sql_escape "$mt_u")
+  sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$mt_d")/' || name || '.md', body) FROM artifacts WHERE unit = '$mt_q' AND lane_slug = '';" >/dev/null || exit 2
+  if [ -n "$mt_l" ] && slug_valid "$mt_l"; then
+    mt_lq=$(sql_escape "$mt_l")
+    if [ "$(sq "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit = '$mt_q' AND lane_slug = '$mt_lq';")" -gt 0 ]; then
+      mkdir -p "$mt_d/lanes/$mt_l"
+      sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$mt_d/lanes/$mt_l")/' || name || '.md', body) FROM artifacts WHERE unit = '$mt_q' AND lane_slug = '$mt_lq';" >/dev/null || exit 2
+    fi
+  fi
+}
+
+delegate() {
+  dl_ref=$(find_reference) || {
+    printf '%s: error: the reference serialization (the posix driver) was not found; set CTX_REFERENCE_DRIVER (ERR_DRIVER_NOT_FOUND)\n' "$CMD" >&2
+    exit 2
+  }
+  scratch
+  dl_u="${1:-}"
+  dl_lane=""
+  case "$CMD" in
+    lane.*) dl_lane="${2:-}" ;;
+    resolve.ref)
+      case "${2:-}" in
+        lane\#*/report\#*) dl_lane="${2#lane#}"; dl_lane="${dl_lane%%/*}" ;;
+        lanes/*) dl_lane="${2#lanes/}"; dl_lane="${dl_lane%%/*}" ;;
+      esac
+      ;;
+  esac
+  # the payload: the fields of a payload method, the raw body of a document write
+  dl_in=/dev/null
+  case "$CMD" in
+    session.init|session.stamp|session.pointer|task.add|task.update|task.start|task.complete|task.drop|entry.record|finding.add|finding.update|finding.supersede|lane.create|lane.record|lane.close)
+      dl_in="$SCRATCH/payload"; cat > "$dl_in" ;;
+    lane.report)
+      for dl_a in "$@"; do [ "$dl_a" = "--write" ] && { dl_in="$SCRATCH/payload"; cat > "$dl_in"; }; done ;;
+  esac
+  dl_write=1
+  case "$CMD" in
+    session.load|session.board|session.audit|task.list|task.show|entry.show|entry.list|entry.anchors|finding.show|finding.list|lane.show|lane.status|resolve.ref) dl_write=0 ;;
+    lane.report) [ "$dl_in" = /dev/null ] && dl_write=0 ;;
+  esac
+  if [ "$dl_write" -eq 1 ]; then
+    db_init
+    slug_valid "$dl_u" && acquire_lock "$dl_u"
+  else
+    db_open_read || true
+  fi
+  materialize "$dl_u" "$dl_lane"
+  if [ "$dl_write" -eq 1 ]; then
+    cp -R "$SCRATCH/ws/.contexture/sessions" "$SCRATCH/pre"
+  fi
+  (cd "$SCRATCH/ws" && "$dl_ref" "$CMD" "$@" < "$dl_in" > "$SCRATCH/out" 2> "$SCRATCH/err")
+  dl_rc=$?
+  if [ "$dl_rc" -eq 0 ] && [ "$dl_write" -eq 1 ] && slug_valid "$dl_u" && [ -d "$SCRATCH/ws/.contexture/sessions/$dl_u" ]; then
+    dl_now=$(now_utc)
+    dl_sql="$SCRATCH/store.sql"
+    dl_n=0
+    {
+      printf 'PRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n'
+      printf "INSERT OR IGNORE INTO sessions (unit, status, current_anchor, objective, next_action, repos, ref_sessions, created_at) VALUES ('%s', 'ACTIVE', 'A1', '', 'plan the next move', '[]', '[]', '%s');\n" "$(sql_escape "$dl_u")" "$dl_now"
+    } > "$dl_sql"
+    dl_files=$(cd "$SCRATCH/ws/.contexture/sessions/$dl_u" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
+    for dl_f in $dl_files; do
+      dl_key=$(key_of "$dl_f") || continue
+      dl_path="$SCRATCH/ws/.contexture/sessions/$dl_u/$dl_f"
+      if [ -f "$SCRATCH/pre/$dl_u/$dl_f" ] && cmp -s "$dl_path" "$SCRATCH/pre/$dl_u/$dl_f"; then
+        continue
+      fi
+      idx_artifact_sql "$dl_u" "$dl_key" "$dl_path" "$dl_now" >> "$dl_sql"
+      dl_n=$((dl_n + 1))
+    done
+    printf 'COMMIT;\n' >> "$dl_sql"
+    if [ "$dl_n" -gt 0 ]; then
+      sq -bail "$DB_PATH" < "$dl_sql" > /dev/null || write_failed
+    fi
+  fi
+  cat "$SCRATCH/out"
+  cat "$SCRATCH/err" >&2
+  exit "$dl_rc"
+}
+
+# ==============================================================================
+# Search: the uniform result shape over the FTS5 index
+# ==============================================================================
+sanitize_fts_query() {
+  # each token quoted, so a hyphen or punctuation never reads as FTS5 syntax; Turkish
+  # characters and symbols pass unchanged
+  printf '%s' "$1" | awk '{
+    for (i = 1; i <= NF; i++) {
+      gsub(/"/, "\"\"", $i);
+      printf "\"%s\"%s", $i, (i == NF ? "" : " ");
+    }
+  }'
+}
+
+search_query() {
+  sq_u="${1:-}"
+  [ $# -gt 0 ] && shift
+  sq_limit=20
+  sq_entity=""
+  sq_mode="hybrid"
+  for sq_a in "$@"; do
+    case "$sq_a" in
+      --limit=*) sq_limit="${sq_a#--limit=}" ;;
+      --entity=*) sq_entity="${sq_a#--entity=}" ;;
+      --mode=*) sq_mode="${sq_a#--mode=}" ;;
+      *) printf "search.query: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$sq_a" >&2; exit 1 ;;
+    esac
+  done
+  scratch
+  cat > "$SCRATCH/payload"
+  sq_q=$(awk 'index($0, "query=") == 1 { v = substr($0, 7); gsub(/\\\\/, "\001", v); gsub(/\\n/, "\n", v); gsub(/\\t/, "\t", v); gsub(/\\r/, "\r", v); gsub(/\001/, "\\", v); printf "%s", v; exit }' "$SCRATCH/payload"; printf x)
+  sq_q=${sq_q%x}
+  if [ -z "$sq_u" ] || [ -z "$(printf '%s' "$sq_q" | tr -d ' \t\n')" ]; then
+    printf 'search.query: error: missing required arguments (unit, query) (ERR_INVALID_ARGUMENT)\n' >&2
+    exit 1
+  fi
+  case "$sq_limit" in
+    ""|*[!0-9]*|0) printf "search.query: error: --limit takes a positive number: '%s' (ERR_INVALID_ARGUMENT)\n" "$sq_limit" >&2; exit 1 ;;
+  esac
+  case "$sq_entity" in
+    all) sq_entity="" ;;
+    ""|session|task|entry|finding|lane|lane_entry) ;;
+    *) printf "search.query: error: unknown entity type '%s' (session, task, entry, finding, lane, lane_entry, all) (ERR_INVALID_ARGUMENT)\n" "$sq_entity" >&2; exit 1 ;;
+  esac
+  case "$sq_mode" in
+    hybrid|trigram|exact) ;;
+    *) printf "search.query: error: unknown mode '%s' (exact, hybrid, trigram) (ERR_INVALID_ARGUMENT)\n" "$sq_mode" >&2; exit 1 ;;
+  esac
+  db_open_read || true
+  if ! unit_exists "$sq_u"; then
+    printf "search.query: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$sq_u" >&2
+    exit 1
+  fi
+  sq_uq=$(sql_escape "$sq_u")
+  sq_eq=$(sql_escape "$sq_entity")
+  sq_qq=$(sql_escape "$sq_q")
+  sq_safe=$(sql_escape "$(sanitize_fts_query "$sq_q")")
+  sq_filter="s.unit = '$sq_uq' AND ('$sq_eq' = '' OR s.entity_type = '$sq_eq')"
+  case "$sq_mode" in
+    exact)
+      # a case-insensitive substring over the document text, in record order; the snippet
+      # is trimmed of the blank padding a document body carries (spaces, tabs, newlines)
+      sq "$DB_PATH" <<EOF
+WITH hits AS (
+  SELECT s.doc_id, s.entity_type, s.entity_id, s.section, s.body,
+         instr(lower(s.body), lower('$sq_qq')) AS pos
+  FROM search_documents s
+  WHERE $sq_filter AND (instr(lower(s.body), lower('$sq_qq')) > 0 OR instr(lower(s.title), lower('$sq_qq')) > 0)
+),
+shown AS (SELECT * FROM hits ORDER BY doc_id LIMIT $sq_limit)
+SELECT json_object(
+  'unit', '$sq_uq',
+  'query', '$sq_qq',
+  'mode', 'exact',
+  'total_matches', (SELECT count(*) FROM hits),
+  'results', coalesce((
+    SELECT json_group_array(json_object(
+      'entity_type', entity_type, 'entity_id', entity_id, 'section', section,
+      'snippet', CASE WHEN pos > 0 THEN trim(substr(body, max(1, pos - 40), 120), ' ' || char(9) || char(10) || char(13)) ELSE trim(substr(body, 1, 120), ' ' || char(9) || char(10) || char(13)) END))
+    FROM (SELECT * FROM shown ORDER BY doc_id)
+  ), json_array())
+);
+EOF
+      ;;
+    trigram)
+      sq "$DB_PATH" <<EOF
+WITH
+  raw AS (
+    SELECT rowid AS doc_id, rank, snippet(fts_code, -1, '<b>', '</b>', '...', 12) AS snip
+    FROM fts_code WHERE fts_code MATCH '$sq_safe'
+  ),
+  ranked AS (SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw),
+  hits AS (
+    SELECT r.doc_id, s.entity_type, s.entity_id, s.section, round(1.0 / (60.0 + r.rnk), 6) AS rrf_score, 1 AS sources, r.snip AS snippet
+    FROM ranked r JOIN search_documents s ON s.doc_id = r.doc_id
+    WHERE $sq_filter
+  ),
+  shown AS (SELECT * FROM hits ORDER BY rrf_score DESC, doc_id LIMIT $sq_limit)
+SELECT json_object(
+  'unit', '$sq_uq',
+  'query', '$sq_qq',
+  'mode', 'trigram',
+  'total_matches', (SELECT count(*) FROM hits),
+  'results', coalesce((
+    SELECT json_group_array(json_object(
+      'entity_type', entity_type, 'entity_id', entity_id, 'section', section, 'snippet', snippet,
+      'rrf_score', rrf_score, 'sources', sources))
+    FROM (SELECT * FROM shown ORDER BY rrf_score DESC, doc_id)
+  ), json_array())
+);
+EOF
+      ;;
+    hybrid)
+      # Reciprocal Rank Fusion of the porter table and the trigram table
+      sq "$DB_PATH" <<EOF
+WITH
+  raw_prose AS (
+    SELECT rowid AS doc_id, rank, snippet(fts_prose, -1, '<b>', '</b>', '...', 12) AS snip
+    FROM fts_prose WHERE fts_prose MATCH '$sq_safe'
+  ),
+  ranked_prose AS (SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_prose),
+  raw_code AS (
+    SELECT rowid AS doc_id, rank, snippet(fts_code, -1, '<b>', '</b>', '...', 12) AS snip
+    FROM fts_code WHERE fts_code MATCH '$sq_safe'
+  ),
+  ranked_code AS (SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_code),
+  combined AS (
+    SELECT doc_id, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_prose
+    UNION ALL
+    SELECT doc_id, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_code
+  ),
+  fused AS (
+    SELECT c.doc_id, round(sum(c.score), 6) AS rrf_score, count(c.doc_id) AS sources, max(c.snip) AS snippet
+    FROM combined c GROUP BY c.doc_id
+  ),
+  hits AS (
+    SELECT f.doc_id, s.entity_type, s.entity_id, s.section, f.rrf_score, f.sources, f.snippet
+    FROM fused f JOIN search_documents s ON s.doc_id = f.doc_id
+    WHERE $sq_filter
+  ),
+  shown AS (SELECT * FROM hits ORDER BY rrf_score DESC, doc_id LIMIT $sq_limit)
+SELECT json_object(
+  'unit', '$sq_uq',
+  'query', '$sq_qq',
+  'mode', 'hybrid',
+  'total_matches', (SELECT count(*) FROM hits),
+  'results', coalesce((
+    SELECT json_group_array(json_object(
+      'entity_type', entity_type, 'entity_id', entity_id, 'section', section, 'snippet', snippet,
+      'rrf_score', rrf_score, 'sources', sources))
+    FROM (SELECT * FROM shown ORDER BY rrf_score DESC, doc_id)
+  ), json_array())
+);
+EOF
+      ;;
+  esac
+  exit 0
+}
+
+# ==============================================================================
+# The native methods
+# ==============================================================================
 case "$CMD" in
   capability)
     cat <<'EOF'
 {
   "driver": "fts5",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "capabilities": [
     "session.lifecycle",
     "task.crud",
@@ -101,1182 +447,149 @@ case "$CMD" in
     "search.keyword",
     "search.fts5",
     "search.rrf",
-    "search.trigram"
+    "search.trigram",
+    "artifact.store"
   ]
 }
 EOF
     exit 0
     ;;
 
-  session.init)
-    if [ $# -lt 2 ]; then
-      printf 'session.init: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
+  storage.health)
+    # a probe, never a write: an absent database, or one that holds no unit yet, reports
+    # degraded (the store starts at the first bootstrap), and is never created here
+    if [ ! -f "$DB_PATH" ]; then
+      printf '{"driver":"fts5","health":"degraded","detail":"database not created yet (will be initialized on bootstrap)"}\n'
+    elif [ "$(sq "$DB_PATH" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sessions';" 2>/dev/null)" != "1" ] || [ "$(sq "$DB_PATH" "SELECT count(*) FROM sessions;" 2>/dev/null)" = "0" ]; then
+      printf '{"driver":"fts5","health":"degraded","detail":"database present, no session stored yet"}\n'
+    elif [ ! -w "$DB_PATH" ]; then
+      printf '{"driver":"fts5","health":"error","detail":"database file not writable"}\n'
+    elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
+      printf '{"driver":"fts5","health":"error","detail":"database integrity check failed"}\n'
+    else
+      printf '{"driver":"fts5","health":"ok","detail":"database present and writable"}\n'
     fi
-    db_init
-    u="$1"
-    obj="$2"
-    repos="${3:-[]}"
-    refs="${4:-[]}"
-    exists=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists" -gt 0 ]; then
-      printf 'session.init: error: session '\''%s'\'' already exists (ERR_ENTITY_EXISTS)\n' "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-INSERT INTO sessions (unit, status, current_anchor, objective, next_action, repos, ref_sessions, created_at)
-VALUES ('$(sql_escape "$u")', 'ACTIVE', 'A1', '$(sql_escape "$obj")', 'plan the next move', '$(sql_escape "$repos")', '$(sql_escape "$refs")', '$now');
-EOF
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'status', 'ok',
-  'unit', unit,
-  'anchor', current_anchor,
-  'state', json_object(
-    'status', status,
-    'current_anchor', current_anchor,
-    'next_action', next_action,
-    'objective', objective,
-    'repos', json(repos),
-    'ref_sessions', json(ref_sessions)
-  )
-) FROM sessions WHERE unit = '$(sql_escape "$u")';
-EOF
     exit 0
     ;;
 
-  session.load)
-    if [ $# -lt 1 ]; then
-      printf 'session.load: error: missing unit argument (ERR_INVALID_ARGUMENT)\n' >&2
+  artifact.read)
+    ar_u="${1:-}"
+    ar_key="${2:-}"
+    if [ -z "$ar_u" ] || [ -z "$ar_key" ]; then
+      printf 'artifact.read: error: missing required arguments (unit, key) (ERR_INVALID_ARGUMENT)\n' >&2
       exit 1
     fi
+    case "$ar_key" in
+      state|backlog|knowledge|journal) ar_lane=""; ar_name="$ar_key" ;;
+      lane/*/recipe|lane/*/journal|lane/*/report) ar_rest=${ar_key#lane/}; ar_lane=${ar_rest%/*}; ar_name=${ar_rest##*/} ;;
+      *) printf "artifact.read: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$ar_key" >&2; exit 1 ;;
+    esac
+    if ! db_open_read; then
+      printf "artifact.read: error: artifact '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ar_key" "$ar_u" >&2
+      exit 1
+    fi
+    scratch
+    sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$SCRATCH/art")', body) FROM artifacts WHERE unit = '$(sql_escape "$ar_u")' AND lane_slug = '$(sql_escape "$ar_lane")' AND name = '$(sql_escape "$ar_name")';" > /dev/null || exit 2
+    if [ ! -f "$SCRATCH/art" ]; then
+      printf "artifact.read: error: artifact '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ar_key" "$ar_u" >&2
+      exit 1
+    fi
+    cat "$SCRATCH/art"
+    exit 0
+    ;;
+
+  artifact.write)
+    aw_u="${1:-}"
+    aw_key="${2:-}"
+    if [ -z "$aw_u" ] || [ -z "$aw_key" ]; then
+      printf 'artifact.write: error: missing required arguments (unit, key) (ERR_INVALID_ARGUMENT)\n' >&2
+      exit 1
+    fi
+    case "$aw_key" in
+      state|backlog|knowledge|journal) ;;
+      lane/*/recipe|lane/*/journal|lane/*/report)
+        aw_l=${aw_key#lane/}; aw_l=${aw_l%/*}
+        slug_valid "$aw_l" || { printf "artifact.write: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$aw_key" >&2; exit 1; }
+        ;;
+      *) printf "artifact.write: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$aw_key" >&2; exit 1 ;;
+    esac
     db_init
-    u="$1"
-    page="${2:-1}"
-    compact="${3:-false}"
-    exists=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists" -eq 0 ]; then
-      printf 'session.load: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
+    if ! unit_exists "$aw_u"; then
+      printf "artifact.write: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$aw_u" >&2
       exit 1
     fi
-    filter_done=0
-    if [ "$compact" = "true" ] || [ "$compact" = "1" ]; then
-      filter_done=1
+    scratch
+    cat > "$SCRATCH/body" || write_failed
+    { printf 'PRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n'; idx_artifact_sql "$aw_u" "$aw_key" "$SCRATCH/body" "$(now_utc)"; printf 'COMMIT;\n'; } > "$SCRATCH/store.sql"
+    sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null || write_failed
+    exit 0
+    ;;
+
+  artifact.list)
+    al_u="${1:-}"
+    if [ -z "$al_u" ]; then
+      printf 'artifact.list: error: missing session unit parameter (ERR_INVALID_ARGUMENT)\n' >&2
+      exit 1
     fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', s.unit,
-  'page', $page,
-  'total_pages', 1,
-  'complete', json('true'),
-  'state', json_object(
-    'status', s.status,
-    'current_anchor', s.current_anchor,
-    'next_action', s.next_action,
-    'objective', s.objective,
-    'repos', json(s.repos),
-    'ref_sessions', json(s.ref_sessions)
-  ),
-  'backlog', coalesce((
-    SELECT json_group_array(
-      json_object(
-        'slug', t.slug,
-        'status', t.status,
-        'objective', t.objective,
-        'description', t.description,
-        'criteria', t.acceptance_criteria,
-        'details', t.implementation_details,
-        'refs', json(t.refs)
-      )
-    ) FROM tasks t
-    WHERE t.unit = s.unit AND ($filter_done = 0 OR t.status != 'DONE')
-    ORDER BY t.sort_order ASC, t.id ASC
-  ), json_array()),
-  'knowledge', coalesce((
-    SELECT json_group_array(
-      json_object(
-        'name', f.name,
-        'summary', f.summary,
-        'ref', f.ref
-      )
-    ) FROM findings f
-    WHERE f.unit = s.unit AND f.status = 'ACTIVE'
-    ORDER BY f.id ASC
-  ), json_array()),
-  'board_entries', coalesce((
-    SELECT json_group_array(
-      json_object(
-        'slug', e.slug,
-        'anchor', e.anchor,
-        'what', e.what,
-        'group', e.entry_group,
-        'thread', e.thread
-      )
-    ) FROM entries e
-    WHERE e.unit = s.unit AND e.entry_type = 'ENTRY'
-      AND e.slug NOT IN (
-        SELECT closes FROM entries WHERE unit = s.unit AND closes IS NOT NULL AND closes != ''
-        UNION
-        SELECT supersedes FROM entries WHERE unit = s.unit AND supersedes IS NOT NULL AND supersedes != ''
-      )
-    ORDER BY e.id ASC
-  ), json_array()),
-  'ref_sessions', json(s.ref_sessions)
-)
-FROM sessions s
-WHERE s.unit = '$(sql_escape "$u")';
+    db_open_read || true
+    if ! unit_exists "$al_u"; then
+      printf "artifact.list: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$al_u" >&2
+      exit 1
+    fi
+    al_q=$(sql_escape "$al_u")
+    sq "$DB_PATH" <<EOF
+SELECT name FROM artifacts WHERE unit = '$al_q' AND lane_slug = ''
+  ORDER BY CASE name WHEN 'state' THEN 1 WHEN 'backlog' THEN 2 WHEN 'knowledge' THEN 3 ELSE 4 END;
+SELECT k FROM (
+  SELECT lane_slug AS l, 0 AS o, 'lane/' || lane_slug AS k FROM lanes WHERE unit = '$al_q'
+  UNION ALL
+  SELECT lane_slug AS l, CASE name WHEN 'recipe' THEN 1 WHEN 'journal' THEN 2 ELSE 3 END AS o, 'lane/' || lane_slug || '/' || name AS k
+    FROM artifacts WHERE unit = '$al_q' AND lane_slug != ''
+) ORDER BY l, o;
 EOF
     exit 0
     ;;
 
-  session.board)
-    if [ $# -lt 1 ]; then
-      printf 'session.board: error: missing unit argument (ERR_INVALID_ARGUMENT)\n' >&2
+  session.create)
+    sc_u="${1:-}"
+    if [ -z "$sc_u" ] || ! slug_valid "$sc_u"; then
+      printf "session.create: error: malformed or missing unit '%s' (ERR_INVALID_ARGUMENT)\n" "$sc_u" >&2
       exit 1
     fi
     db_init
-    u="$1"
-    exists=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists" -eq 0 ]; then
-      printf 'session.board: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
+    if unit_exists "$sc_u"; then
+      printf "session.create: error: session '%s' already exists (ERR_ENTITY_EXISTS)\n" "$sc_u" >&2
       exit 1
     fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', s.unit,
-  'anchor', s.current_anchor,
-  'unclosed_entries', coalesce((
-    SELECT json_group_array(
-      json_object(
-        'slug', e.slug,
-        'anchor', e.anchor,
-        'what', e.what,
-        'group', e.entry_group,
-        'thread', e.thread
-      )
-    ) FROM entries e
-    WHERE e.unit = s.unit AND e.entry_type = 'ENTRY'
-      AND e.slug NOT IN (
-        SELECT closes FROM entries WHERE unit = s.unit AND closes IS NOT NULL AND closes != ''
-        UNION
-        SELECT supersedes FROM entries WHERE unit = s.unit AND supersedes IS NOT NULL AND supersedes != ''
-      )
-    ORDER BY e.id ASC
-  ), json_array()),
-  'open_tasks', coalesce((
-    SELECT json_group_array(
-      json_object(
-        'slug', t.slug,
-        'status', t.status,
-        'objective', t.objective
-      )
-    ) FROM tasks t
-    WHERE t.unit = s.unit AND t.status IN ('TODO', 'IN_PROGRESS')
-    ORDER BY t.sort_order ASC, t.id ASC
-  ), json_array()),
-  'open_threads', coalesce((
-    SELECT json_group_array(
-      json_object(
-        'slug', e.slug,
-        'thread', e.thread,
-        'what', e.what
-      )
-    ) FROM entries e
-    WHERE e.unit = s.unit AND e.thread != 'none' AND e.thread != ''
-      AND e.slug NOT IN (
-        SELECT closes FROM entries WHERE unit = s.unit AND closes IS NOT NULL AND closes != ''
-        UNION
-        SELECT supersedes FROM entries WHERE unit = s.unit AND supersedes IS NOT NULL AND supersedes != ''
-      )
-    ORDER BY e.id ASC
-  ), json_array())
-)
-FROM sessions s
-WHERE s.unit = '$(sql_escape "$u")';
-EOF
-    exit 0
-    ;;
-
-  session.stamp)
-    if [ $# -lt 2 ]; then
-      printf 'session.stamp: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    receipt="$2"
-    cur=$(sqlite3 "$DB_PATH" "SELECT current_anchor FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ -z "$cur" ]; then
-      printf 'session.stamp: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    num=${cur#A}
-    next_num=$((num + 1))
-    next_anchor="A$next_num"
-    entry_slug="$(date -u +"%Y-%m-%d")-anchor-$next_anchor"
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-BEGIN IMMEDIATE;
-UPDATE sessions SET current_anchor = '$next_anchor' WHERE unit = '$(sql_escape "$u")';
-INSERT INTO entries (unit, slug, entry_type, anchor, what, thread, created_at)
-VALUES ('$(sql_escape "$u")', '$entry_slug', 'ANCHOR', '$next_anchor', '$(sql_escape "$receipt")', 'none', '$now');
-COMMIT;
-EOF
-    printf '{"unit":"%s","previous_anchor":"%s","current_anchor":"%s","receipt_entry":"%s"}\n' \
-      "$u" "$cur" "$next_anchor" "$receipt"
-    exit 0
-    ;;
-
-  session.pointer)
-    if [ $# -lt 2 ]; then
-      printf 'session.pointer: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    ptr="$2"
-    prev=$(sqlite3 "$DB_PATH" "SELECT next_action FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ -z "$prev" ]; then
-      printf 'session.pointer: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    sqlite3 -bail "$DB_PATH" "UPDATE sessions SET next_action = '$(sql_escape "$ptr")' WHERE unit = '$(sql_escape "$u")';"
-    printf '{"unit":"%s","previous_pointer":"%s","current_pointer":"%s"}\n' "$u" "$prev" "$ptr"
-    exit 0
-    ;;
-
-  session.refs)
-    if [ $# -lt 2 ]; then
-      printf 'session.refs: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    refs="$2"
-    exists=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists" -eq 0 ]; then
-      printf 'session.refs: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    sqlite3 -bail "$DB_PATH" "UPDATE sessions SET ref_sessions = '$(sql_escape "$refs")' WHERE unit = '$(sql_escape "$u")';"
-    sqlite3 "$DB_PATH" "SELECT json_object('unit', unit, 'ref_sessions', json(ref_sessions)) FROM sessions WHERE unit = '$(sql_escape "$u")';"
-    exit 0
-    ;;
-
-  session.close)
-    if [ $# -lt 1 ]; then
-      printf 'session.close: error: missing unit argument (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    exists=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists" -eq 0 ]; then
-      printf 'session.close: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    unclosed_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$u")' AND status IN ('TODO', 'IN_PROGRESS');")
-    unclosed_th=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM entries e WHERE e.unit='$(sql_escape "$u")' AND e.thread != 'none' AND e.thread != '' AND e.slug NOT IN (SELECT closes FROM entries WHERE unit='$(sql_escape "$u")' AND closes IS NOT NULL UNION SELECT supersedes FROM entries WHERE unit='$(sql_escape "$u")' AND supersedes IS NOT NULL);")
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" "UPDATE sessions SET status = 'CLOSED', closed_at = '$now' WHERE unit = '$(sql_escape "$u")';"
-    printf '{"unit":"%s","status":"CLOSED","unclosed_tasks":%d,"unclosed_threads":%d}\n' \
-      "$u" "$unclosed_t" "$unclosed_th"
+    sq -bail "$DB_PATH" "INSERT INTO sessions (unit, status, current_anchor, objective, next_action, repos, ref_sessions, created_at) VALUES ('$(sql_escape "$sc_u")', 'ACTIVE', 'A1', '', 'plan the next move', '[]', '[]', '$(now_utc)');" || write_failed
+    printf '{"status":"ok","unit":"%s"}\n' "$sc_u"
     exit 0
     ;;
 
   session.list)
-    db_init
-    status_filter="${1:-}"
-    where_clause="1=1"
-    if [ -n "$status_filter" ]; then
-      where_clause="status = '$(sql_escape "$status_filter")'"
+    # bytewise by unit, as the posix drawer lists; a unit without a state has no status
+    if ! db_open_read; then
+      printf '{"sessions":[]}\n'
+      exit 0
     fi
-    sqlite3 "$DB_PATH" <<EOF
+    sq "$DB_PATH" <<EOF
 SELECT json_object(
   'sessions', coalesce((
-    SELECT json_group_array(
-      json_object('unit', unit, 'status', status)
-    ) FROM sessions WHERE $where_clause
-    ORDER BY created_at ASC
+    SELECT json_group_array(json_object('unit', unit, 'status', st)) FROM (
+      SELECT s.unit AS unit, CASE WHEN EXISTS (SELECT 1 FROM artifacts a WHERE a.unit = s.unit AND a.lane_slug = '' AND a.name = 'state') THEN s.status ELSE '' END AS st
+      FROM sessions s ORDER BY s.unit)
   ), json_array())
 );
 EOF
-    exit 0
-    ;;
-
-  session.audit)
-    if [ $# -lt 1 ]; then
-      printf 'session.audit: error: missing unit argument (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    exists=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists" -eq 0 ]; then
-      printf 'session.audit: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', '$(sql_escape "$u")',
-  'clean', json('true'),
-  'defects', json_array(),
-  'open_threads', coalesce((
-    SELECT json_group_array(
-      json_object('slug', e.slug, 'thread', e.thread, 'what', e.what)
-    ) FROM entries e
-    WHERE e.unit = '$(sql_escape "$u")' AND e.thread != 'none' AND e.thread != ''
-      AND e.slug NOT IN (
-        SELECT closes FROM entries WHERE unit = '$(sql_escape "$u")' AND closes IS NOT NULL AND closes != ''
-        UNION
-        SELECT supersedes FROM entries WHERE unit = '$(sql_escape "$u")' AND supersedes IS NOT NULL AND supersedes != ''
-      )
-  ), json_array())
-);
-EOF
-    exit 0
-    ;;
-
-  task.add)
-    if [ $# -lt 3 ]; then
-      printf 'task.add: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    obj="$3"
-    desc="${4:-}"
-    crit="${5:-}"
-    det="${6:-}"
-    refs="${7:-[]}"
-    exists_s=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists_s" -eq 0 ]; then
-      printf 'task.add: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    exists_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$slug")';")
-    if [ "$exists_t" -gt 0 ]; then
-      printf 'task.add: error: task '\''%s'\'' already exists in session '\''%s'\'' (ERR_ENTITY_EXISTS)\n' "$slug" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-INSERT INTO tasks (unit, slug, status, objective, description, acceptance_criteria, implementation_details, refs, created_at, updated_at)
-VALUES ('$(sql_escape "$u")', '$(sql_escape "$slug")', 'TODO', '$(sql_escape "$obj")', '$(sql_escape "$desc")', '$(sql_escape "$crit")', '$(sql_escape "$det")', '$(sql_escape "$refs")', '$now', '$now');
-EOF
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'status', 'TODO',
-  'unit', unit,
-  'task', json_object(
-    'slug', slug,
-    'status', status,
-    'objective', objective,
-    'description', description,
-    'criteria', acceptance_criteria,
-    'details', implementation_details,
-    'refs', json(refs)
-  )
-) FROM tasks WHERE unit = '$(sql_escape "$u")' AND slug = '$(sql_escape "$slug")';
-EOF
-    exit 0
-    ;;
-
-  task.update)
-    if [ $# -lt 2 ]; then
-      printf 'task.update: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    if [ $# -ge 3 ]; then
-      case "$3" in
-        --*)
-          printf 'task.update: error: invalid flag or argument '\''%s'\'' (ERR_INVALID_ARGUMENT)\n' "$3" >&2
-          exit 1
-          ;;
-      esac
-    fi
-    exists_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$slug")';")
-    if [ "$exists_t" -eq 0 ]; then
-      printf 'task.update: error: task '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$slug" "$u" >&2
-      exit 1
-    fi
-    obj="${3:-}"
-    desc="${4:-}"
-    crit="${5:-}"
-    det="${6:-}"
-    refs="${7:-}"
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-UPDATE tasks SET
-  objective = CASE WHEN '$(sql_escape "$obj")' != '' THEN '$(sql_escape "$obj")' ELSE objective END,
-  description = CASE WHEN '$(sql_escape "$desc")' != '' THEN '$(sql_escape "$desc")' ELSE description END,
-  acceptance_criteria = CASE WHEN '$(sql_escape "$crit")' != '' THEN '$(sql_escape "$crit")' ELSE acceptance_criteria END,
-  implementation_details = CASE WHEN '$(sql_escape "$det")' != '' THEN '$(sql_escape "$det")' ELSE implementation_details END,
-  refs = CASE WHEN '$(sql_escape "$refs")' != '' THEN '$(sql_escape "$refs")' ELSE refs END,
-  updated_at = '$now'
-WHERE unit = '$(sql_escape "$u")' AND slug = '$(sql_escape "$slug")';
-EOF
-    printf '{"status":"ok","unit":"%s","task_slug":"%s"}\n' "$u" "$slug"
-    exit 0
-    ;;
-
-  task.start)
-    if [ $# -lt 2 ]; then
-      printf 'task.start: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    exists_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$slug")';")
-    if [ "$exists_t" -eq 0 ]; then
-      printf 'task.start: error: task '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$slug" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-BEGIN IMMEDIATE;
-UPDATE tasks SET status = 'IN_PROGRESS', updated_at = '$now' WHERE unit = '$(sql_escape "$u")' AND slug = '$(sql_escape "$slug")';
-UPDATE sessions SET next_action = 'work active task: $(sql_escape "$slug")' WHERE unit = '$(sql_escape "$u")';
-COMMIT;
-EOF
-    printf '{"status":"IN_PROGRESS","unit":"%s","task_slug":"%s","next_action":"work active task: %s"}\n' "$u" "$slug" "$slug"
-    exit 0
-    ;;
-
-  task.complete)
-    if [ $# -lt 2 ]; then
-      printf 'task.complete: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    evidence="${3:-verified}"
-    cur_anchor=$(sqlite3 "$DB_PATH" "SELECT current_anchor FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ -z "$cur_anchor" ]; then
-      printf 'task.complete: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    exists_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$slug")';")
-    if [ "$exists_t" -eq 0 ]; then
-      printf 'task.complete: error: task '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$slug" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    receipt_slug="$(date -u +"%Y-%m-%d")-$slug-completed"
-    receipt_what="backlog/$slug: DONE ($evidence)"
-    sqlite3 -bail "$DB_PATH" <<EOF
-BEGIN IMMEDIATE;
-UPDATE tasks SET status = 'DONE', completed_at = '$now', updated_at = '$now' WHERE unit = '$(sql_escape "$u")' AND slug = '$(sql_escape "$slug")';
-INSERT INTO entries (unit, slug, entry_type, anchor, what, thread, created_at)
-VALUES ('$(sql_escape "$u")', '$receipt_slug', 'ENTRY', '$cur_anchor', '$(sql_escape "$receipt_what")', 'none', '$now');
-COMMIT;
-EOF
-    printf '{"status":"DONE","unit":"%s","task_slug":"%s","receipt_entry":{"slug":"%s","what":"%s"}}\n' \
-      "$u" "$slug" "$receipt_slug" "$receipt_what"
-    exit 0
-    ;;
-
-  task.reopen)
-    if [ $# -lt 2 ]; then
-      printf 'task.reopen: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    exists_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$slug")';")
-    if [ "$exists_t" -eq 0 ]; then
-      printf 'task.reopen: error: task '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$slug" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" "UPDATE tasks SET status = 'TODO', updated_at = '$now' WHERE unit = '$(sql_escape "$u")' AND slug = '$(sql_escape "$slug")';"
-    printf '{"status":"TODO","unit":"%s","task_slug":"%s"}\n' "$u" "$slug"
-    exit 0
-    ;;
-
-  task.drop)
-    if [ $# -lt 2 ]; then
-      printf 'task.drop: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    reason="${3:-deprecated}"
-    cur_anchor=$(sqlite3 "$DB_PATH" "SELECT current_anchor FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ -z "$cur_anchor" ]; then
-      printf 'task.drop: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    exists_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$slug")';")
-    if [ "$exists_t" -eq 0 ]; then
-      printf 'task.drop: error: task '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$slug" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    receipt_slug="$(date -u +"%Y-%m-%d")-$slug-dropped"
-    receipt_what="backlog/$slug: DROPPED ($reason)"
-    sqlite3 -bail "$DB_PATH" <<EOF
-BEGIN IMMEDIATE;
-UPDATE tasks SET status = 'DROPPED', drop_reason = '$(sql_escape "$reason")', dropped_at = '$now', updated_at = '$now' WHERE unit = '$(sql_escape "$u")' AND slug = '$(sql_escape "$slug")';
-INSERT INTO entries (unit, slug, entry_type, anchor, what, thread, created_at)
-VALUES ('$(sql_escape "$u")', '$receipt_slug', 'ENTRY', '$cur_anchor', '$(sql_escape "$receipt_what")', 'none', '$now');
-COMMIT;
-EOF
-    printf '{"status":"DROPPED","unit":"%s","task_slug":"%s"}\n' "$u" "$slug"
-    exit 0
-    ;;
-
-  task.list)
-    if [ $# -lt 1 ]; then
-      printf 'task.list: error: missing unit argument (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    status_filter="${2:-}"
-    exists_s=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists_s" -eq 0 ]; then
-      printf 'task.list: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    where="unit = '$(sql_escape "$u")'"
-    if [ -n "$status_filter" ]; then
-      where="$where AND status = '$(sql_escape "$status_filter")'"
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', '$(sql_escape "$u")',
-  'tasks', coalesce((
-    SELECT json_group_array(
-      json_object('slug', slug, 'status', status, 'objective', objective)
-    ) FROM tasks WHERE $where
-    ORDER BY sort_order ASC, id ASC
-  ), json_array())
-);
-EOF
-    exit 0
-    ;;
-
-  task.show)
-    if [ $# -lt 2 ]; then
-      printf 'task.show: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    exists_t=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM tasks WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$slug")';")
-    if [ "$exists_t" -eq 0 ]; then
-      printf 'task.show: error: task '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$slug" "$u" >&2
-      exit 1
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', unit,
-  'task', json_object(
-    'slug', slug,
-    'status', status,
-    'objective', objective,
-    'description', description,
-    'criteria', acceptance_criteria,
-    'details', implementation_details,
-    'refs', json(refs)
-  )
-) FROM tasks WHERE unit = '$(sql_escape "$u")' AND slug = '$(sql_escape "$slug")';
-EOF
-    exit 0
-    ;;
-
-  entry.record)
-    if [ $# -lt 3 ]; then
-      printf 'entry.record: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    what="$3"
-    group="${4:-general}"
-    thread="${5:-none}"
-    closes="${6:-}"
-    ref="${7:-}"
-    rhythm="${8:-}"
-    is_knowledge="${9:-0}"
-    cur_anchor=$(sqlite3 "$DB_PATH" "SELECT current_anchor FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ -z "$cur_anchor" ]; then
-      printf 'entry.record: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-INSERT INTO entries (unit, slug, entry_type, anchor, what, entry_group, thread, closes, ref, rhythm, is_knowledge, created_at)
-VALUES ('$(sql_escape "$u")', '$(sql_escape "$slug")', 'ENTRY', '$cur_anchor', '$(sql_escape "$what")', '$(sql_escape "$group")', '$(sql_escape "$thread")', '$(sql_escape "$closes")', '$(sql_escape "$ref")', '$(sql_escape "$rhythm")', $is_knowledge, '$now');
-EOF
-    printf '{"unit":"%s","entry":{"slug":"%s","anchor":"%s","what":"%s","group":"%s","thread":"%s"}}\n' \
-      "$u" "$slug" "$cur_anchor" "$what" "$group" "$thread"
-    exit 0
-    ;;
-
-  entry.show)
-    if [ $# -lt 2 ]; then
-      printf 'entry.show: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    slug="$2"
-    exists_e=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM entries WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$slug")';")
-    if [ "$exists_e" -eq 0 ]; then
-      printf 'entry.show: error: entry '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$slug" "$u" >&2
-      exit 1
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', e.unit,
-  'entry', json_object(
-    'slug', e.slug,
-    'anchor', e.anchor,
-    'what', e.what,
-    'group', e.entry_group,
-    'thread', e.thread
-  ),
-  'is_closed', CASE WHEN (SELECT count(*) FROM entries c WHERE c.unit = e.unit AND (c.closes = e.slug OR c.supersedes = e.slug)) > 0 THEN json('true') ELSE json('false') END,
-  'closed_by', coalesce((
-    SELECT c.slug FROM entries c
-    WHERE c.unit = e.unit AND (c.closes = e.slug OR c.supersedes = e.slug)
-    ORDER BY c.id ASC LIMIT 1
-  ), ''),
-  'close_reason', coalesce((
-    SELECT 'done: ' || c.what FROM entries c
-    WHERE c.unit = e.unit AND (c.closes = e.slug OR c.supersedes = e.slug)
-    ORDER BY c.id ASC LIMIT 1
-  ), '')
-) FROM entries e WHERE e.unit = '$(sql_escape "$u")' AND e.slug = '$(sql_escape "$slug")';
-EOF
-    exit 0
-    ;;
-
-  entry.list)
-    if [ $# -lt 1 ]; then
-      printf 'entry.list: error: missing unit argument (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    exists_s=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists_s" -eq 0 ]; then
-      printf 'entry.list: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', '$(sql_escape "$u")',
-  'entries', coalesce((
-    SELECT json_group_array(
-      json_object('slug', slug, 'anchor', anchor, 'what', what)
-    ) FROM entries WHERE unit = '$(sql_escape "$u")' AND entry_type = 'ENTRY'
-    ORDER BY id ASC
-  ), json_array())
-);
-EOF
-    exit 0
-    ;;
-
-  entry.anchors)
-    if [ $# -lt 1 ]; then
-      printf 'entry.anchors: error: missing unit argument (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    exists_s=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists_s" -eq 0 ]; then
-      printf 'entry.anchors: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', '$(sql_escape "$u")',
-  'anchors', coalesce((
-    SELECT json_group_array(DISTINCT anchor) FROM entries WHERE unit = '$(sql_escape "$u")'
-  ), json_array())
-);
-EOF
-    exit 0
-    ;;
-
-  finding.add)
-    if [ $# -lt 3 ]; then
-      printf 'finding.add: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    name="$2"
-    summary="$3"
-    ref="${4:-}"
-    supersedes="${5:-}"
-    exists_s=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists_s" -eq 0 ]; then
-      printf 'finding.add: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-BEGIN IMMEDIATE;
-UPDATE findings SET status = 'SUPERSEDED', superseded_by = '$(sql_escape "$name")', updated_at = '$now'
-WHERE unit = '$(sql_escape "$u")' AND name = '$(sql_escape "$supersedes")' AND '$(sql_escape "$supersedes")' != '';
-INSERT INTO findings (unit, name, status, summary, ref, supersedes, created_at, updated_at)
-VALUES ('$(sql_escape "$u")', '$(sql_escape "$name")', 'ACTIVE', '$(sql_escape "$summary")', '$(sql_escape "$ref")', '$(sql_escape "$supersedes")', '$now', '$now');
-COMMIT;
-EOF
-    printf '{"unit":"%s","finding":{"name":"%s","summary":"%s","ref":"%s","supersedes":"%s"}}\n' \
-      "$u" "$name" "$summary" "$ref" "$supersedes"
-    exit 0
-    ;;
-
-  finding.show)
-    if [ $# -lt 2 ]; then
-      printf 'finding.show: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    name="$2"
-    exists_f=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM findings WHERE unit='$(sql_escape "$u")' AND name='$(sql_escape "$name")';")
-    if [ "$exists_f" -eq 0 ]; then
-      printf 'finding.show: error: finding '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$name" "$u" >&2
-      exit 1
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', unit,
-  'finding', json_object(
-    'name', name,
-    'summary', summary,
-    'ref', ref,
-    'status', status,
-    'superseded_by', coalesce(superseded_by, '')
-  )
-) FROM findings WHERE unit = '$(sql_escape "$u")' AND name = '$(sql_escape "$name")';
-EOF
-    exit 0
-    ;;
-
-  finding.update)
-    if [ $# -lt 3 ]; then
-      printf 'finding.update: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    name="$2"
-    summary="$3"
-    ref="${4:-}"
-    exists_f=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM findings WHERE unit='$(sql_escape "$u")' AND name='$(sql_escape "$name")';")
-    if [ "$exists_f" -eq 0 ]; then
-      printf 'finding.update: error: finding '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$name" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-UPDATE findings SET
-  summary = '$(sql_escape "$summary")',
-  ref = '$(sql_escape "$ref")',
-  updated_at = '$now'
-WHERE unit = '$(sql_escape "$u")' AND name = '$(sql_escape "$name")';
-EOF
-    printf '{"status":"ok","unit":"%s","finding":{"name":"%s","summary":"%s","ref":"%s"}}\n' \
-      "$u" "$name" "$summary" "$ref"
-    exit 0
-    ;;
-
-  finding.supersede)
-    if [ $# -lt 4 ]; then
-      printf 'finding.supersede: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    name="$2"
-    succ_name="$3"
-    succ_summary="$4"
-    succ_ref="${5:-}"
-    reason="${6:-superseded}"
-    exists_f=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM findings WHERE unit='$(sql_escape "$u")' AND name='$(sql_escape "$name")';")
-    if [ "$exists_f" -eq 0 ]; then
-      printf 'finding.supersede: error: finding '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$name" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-BEGIN IMMEDIATE;
-UPDATE findings SET
-  status = 'SUPERSEDED',
-  superseded_by = '$(sql_escape "$succ_name")',
-  supersede_reason = '$(sql_escape "$reason")',
-  updated_at = '$now'
-WHERE unit = '$(sql_escape "$u")' AND name = '$(sql_escape "$name")';
-INSERT INTO findings (unit, name, status, summary, ref, supersedes, created_at, updated_at)
-VALUES ('$(sql_escape "$u")', '$(sql_escape "$succ_name")', 'ACTIVE', '$(sql_escape "$succ_summary")', '$(sql_escape "$succ_ref")', '$(sql_escape "$name")', '$now', '$now');
-COMMIT;
-EOF
-    printf '{"status":"ok","unit":"%s","superseded":"%s","successor":"%s"}\n' \
-      "$u" "$name" "$succ_name"
-    exit 0
-    ;;
-
-  finding.drop)
-    if [ $# -lt 2 ]; then
-      printf 'finding.drop: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    name="$2"
-    reason="${3:-deprecated}"
-    exists_f=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM findings WHERE unit='$(sql_escape "$u")' AND name='$(sql_escape "$name")';")
-    if [ "$exists_f" -eq 0 ]; then
-      printf 'finding.drop: error: finding '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$name" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" "UPDATE findings SET status = 'DROPPED', drop_reason = '$(sql_escape "$reason")', updated_at = '$now' WHERE unit = '$(sql_escape "$u")' AND name = '$(sql_escape "$name")';"
-    printf '{"status":"DROPPED","unit":"%s","name":"%s"}\n' "$u" "$name"
-    exit 0
-    ;;
-
-  finding.list)
-    if [ $# -lt 1 ]; then
-      printf 'finding.list: error: missing unit argument (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    exists_s=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists_s" -eq 0 ]; then
-      printf 'finding.list: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-SELECT json_object(
-  'unit', '$(sql_escape "$u")',
-  'findings', coalesce((
-    SELECT json_group_array(
-      json_object('name', name, 'summary', summary, 'ref', ref)
-    ) FROM findings WHERE unit = '$(sql_escape "$u")' AND status = 'ACTIVE'
-    ORDER BY id ASC
-  ), json_array())
-);
-EOF
-    exit 0
-    ;;
-
-  resolve.ref)
-    if [ $# -lt 2 ]; then
-      printf 'resolve.ref: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    ref="$2"
-    case "$ref" in
-      *knowledge*#*)
-        target_name="${ref#*#}"
-        row=$(sqlite3 "$DB_PATH" "SELECT json_object('name', name, 'summary', summary, 'ref', ref) FROM findings WHERE unit='$(sql_escape "$u")' AND name='$(sql_escape "$target_name")';")
-        if [ -n "$row" ]; then
-          printf '{"unit":"%s","ref":"%s","entity_type":"finding","target":%s}\n' "$u" "$ref" "$row"
-          exit 0
-        fi
-        ;;
-      *journal*#*)
-        target_slug="${ref#*#}"
-        row=$(sqlite3 "$DB_PATH" "SELECT json_object('slug', slug, 'what', what) FROM entries WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$target_slug")';")
-        if [ -n "$row" ]; then
-          printf '{"unit":"%s","ref":"%s","entity_type":"entry","target":%s}\n' "$u" "$ref" "$row"
-          exit 0
-        fi
-        ;;
-      *backlog*#*)
-        target_slug="${ref#*#}"
-        row=$(sqlite3 "$DB_PATH" "SELECT json_object('slug', slug, 'objective', objective) FROM tasks WHERE unit='$(sql_escape "$u")' AND slug='$(sql_escape "$target_slug")';")
-        if [ -n "$row" ]; then
-          printf '{"unit":"%s","ref":"%s","entity_type":"task","target":%s}\n' "$u" "$ref" "$row"
-          exit 0
-        fi
-        ;;
-      *lanes/*)
-        lane_part="${ref#*lanes/}"
-        lane_slug="${lane_part%%/*}"
-        lane_slug="${lane_slug%%#*}"
-        row=$(sqlite3 "$DB_PATH" "SELECT json_object('lane_slug', lane_slug, 'goal', goal) FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-        if [ -n "$row" ]; then
-          printf '{"unit":"%s","ref":"%s","entity_type":"lane","target":%s}\n' "$u" "$ref" "$row"
-          exit 0
-        fi
-        ;;
-    esac
-    printf 'resolve.ref: error: reference '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$ref" "$u" >&2
-    exit 1
-    ;;
-
-  lane.create)
-    if [ $# -lt 3 ]; then
-      printf 'lane.create: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    lane_slug="$2"
-    goal="$3"
-    recipe="${4:-# recipe: $goal}"
-    exists_s=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists_s" -eq 0 ]; then
-      printf 'lane.create: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    exists_l=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    if [ "$exists_l" -gt 0 ]; then
-      printf 'lane.create: error: lane '\''%s'\'' already exists in session '\''%s'\'' (ERR_ENTITY_EXISTS)\n' "$lane_slug" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-INSERT INTO lanes (unit, lane_slug, goal, recipe, report, created_at, updated_at)
-VALUES ('$(sql_escape "$u")', '$(sql_escape "$lane_slug")', '$(sql_escape "$goal")', '$(sql_escape "$recipe")', '', '$now', '$now');
-EOF
-    printf '{"unit":"%s","lane":"%s","status":"CREATED"}\n' "$u" "$lane_slug"
-    exit 0
-    ;;
-
-  lane.record)
-    if [ $# -lt 4 ]; then
-      printf 'lane.record: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    lane_slug="$2"
-    slug="$3"
-    what="$4"
-    thread="${5:-none}"
-    ref="${6:-}"
-    exists_l=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    if [ "$exists_l" -eq 0 ]; then
-      printf 'lane.record: error: lane '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$lane_slug" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    sqlite3 -bail "$DB_PATH" <<EOF
-INSERT INTO lane_entries (unit, lane_slug, slug, what, thread, ref, created_at)
-VALUES ('$(sql_escape "$u")', '$(sql_escape "$lane_slug")', '$(sql_escape "$slug")', '$(sql_escape "$what")', '$(sql_escape "$thread")', '$(sql_escape "$ref")', '$now');
-EOF
-    printf '{"unit":"%s","lane":"%s","entry":{"slug":"%s","what":"%s"}}\n' \
-      "$u" "$lane_slug" "$slug" "$what"
-    exit 0
-    ;;
-
-  lane.report)
-    if [ $# -lt 2 ]; then
-      printf 'lane.report: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    lane_slug="$2"
-    exists_l=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    if [ "$exists_l" -eq 0 ]; then
-      printf 'lane.report: error: lane '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$lane_slug" "$u" >&2
-      exit 1
-    fi
-    if [ $# -ge 3 ]; then
-      report_text="$3"
-      now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-      sqlite3 -bail "$DB_PATH" "UPDATE lanes SET report = '$(sql_escape "$report_text")', updated_at = '$now' WHERE unit = '$(sql_escape "$u")' AND lane_slug = '$(sql_escape "$lane_slug")';"
-      printf '{"unit":"%s","lane":"%s","report":"%s"}\n' "$u" "$lane_slug" "$report_text"
-    else
-      rep=$(sqlite3 "$DB_PATH" "SELECT report FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-      printf '{"unit":"%s","lane":"%s","report":"%s"}\n' "$u" "$lane_slug" "$rep"
-    fi
-    exit 0
-    ;;
-
-  lane.status)
-    if [ $# -lt 2 ]; then
-      printf 'lane.status: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    lane_slug="$2"
-    exists_l=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    if [ "$exists_l" -eq 0 ]; then
-      printf 'lane.status: error: lane '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$lane_slug" "$u" >&2
-      exit 1
-    fi
-    has_recipe=$(sqlite3 "$DB_PATH" "SELECT length(recipe) > 0 FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    has_report=$(sqlite3 "$DB_PATH" "SELECT length(report) > 0 FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    entry_count=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lane_entries WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    r_recipe="false"
-    [ "$has_recipe" = "1" ] && r_recipe="true"
-    r_report="false"
-    [ "$has_report" = "1" ] && r_report="true"
-    r_journal="false"
-    [ "$entry_count" -gt 0 ] && r_journal="true"
-    today=$(date -u +"%Y-%m-%d")
-    printf '{"unit":"%s","lane":"%s","recipe_present":%s,"journal_present":%s,"report_present":%s,"line_counts":{},"last_activity":"%s"}\n' \
-      "$u" "$lane_slug" "$r_recipe" "$r_journal" "$r_report" "$today"
-    exit 0
-    ;;
-
-  lane.show)
-    if [ $# -lt 2 ]; then
-      printf 'lane.show: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    lane_slug="$2"
-    artifact="${3:-report}"
-    exists_l=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    if [ "$exists_l" -eq 0 ]; then
-      printf 'lane.show: error: lane '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$lane_slug" "$u" >&2
-      exit 1
-    fi
-    content=""
-    case "$artifact" in
-      recipe)
-        content=$(sqlite3 "$DB_PATH" "SELECT recipe FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-        ;;
-      report)
-        content=$(sqlite3 "$DB_PATH" "SELECT report FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-        ;;
-      journal)
-        content=$(sqlite3 "$DB_PATH" "SELECT what FROM lane_entries WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")' ORDER BY id ASC;")
-        ;;
-    esac
-    sqlite3 "$DB_PATH" "SELECT json_object('unit', '$(sql_escape "$u")', 'lane', '$(sql_escape "$lane_slug")', 'artifact', '$(sql_escape "$artifact")', 'content', '$(sql_escape "$content")');"
-    exit 0
-    ;;
-
-  lane.close)
-    if [ $# -lt 4 ]; then
-      printf 'lane.close: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    lane_slug="$2"
-    verdict="$3"
-    receipt="$4"
-    cur_anchor=$(sqlite3 "$DB_PATH" "SELECT current_anchor FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ -z "$cur_anchor" ]; then
-      printf 'lane.close: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    exists_l=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit='$(sql_escape "$u")' AND lane_slug='$(sql_escape "$lane_slug")';")
-    if [ "$exists_l" -eq 0 ]; then
-      printf 'lane.close: error: lane '\''%s'\'' not found in session '\''%s'\'' (ERR_ENTITY_NOT_FOUND)\n' "$lane_slug" "$u" >&2
-      exit 1
-    fi
-    now=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    receipt_slug="$(date -u +"%Y-%m-%d")-$lane_slug-closed"
-    receipt_what="lane $lane_slug: $verdict ($receipt)"
-    sqlite3 -bail "$DB_PATH" <<EOF
-BEGIN IMMEDIATE;
-INSERT INTO entries (unit, slug, entry_type, anchor, what, thread, created_at)
-VALUES ('$(sql_escape "$u")', '$receipt_slug', 'ENTRY', '$cur_anchor', '$(sql_escape "$receipt_what")', 'none', '$now');
-COMMIT;
-EOF
-    printf '{"unit":"%s","lane":"%s","status":"RESOLVED","receipt_entry":{"slug":"%s","what":"%s"}}\n' \
-      "$u" "$lane_slug" "$receipt_slug" "$receipt_what"
     exit 0
     ;;
 
   search.query)
-    if [ $# -lt 2 ]; then
-      printf 'search.query: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_init
-    u="$1"
-    q="$2"
-    entity_filter="${3:-}"
-    limit_num="${4:-20}"
-    exists_s=$(sqlite3 "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$u")';")
-    if [ "$exists_s" -eq 0 ]; then
-      printf 'search.query: error: session '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$u" >&2
-      exit 1
-    fi
-    safe_q=$(sanitize_fts_query "$q")
-    if [ -z "$safe_q" ]; then
-      printf '{"unit":"%s","query":"%s","total_matches":0,"results":[]}\n' "$u" "$q"
-      exit 0
-    fi
-    sqlite3 "$DB_PATH" <<EOF
-WITH
-  raw_prose AS (
-    SELECT rowid AS doc_id, rank, snippet(fts_prose, -1, '<b>', '</b>', '...', 12) AS snip
-    FROM fts_prose WHERE fts_prose MATCH '$(sql_escape "$safe_q")'
-  ),
-  ranked_prose AS (
-    SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip
-    FROM raw_prose
-  ),
-  raw_code AS (
-    SELECT rowid AS doc_id, rank, snippet(fts_code, -1, '<b>', '</b>', '...', 12) AS snip
-    FROM fts_code WHERE fts_code MATCH '$(sql_escape "$safe_q")'
-  ),
-  ranked_code AS (
-    SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip
-    FROM raw_code
-  ),
-  combined AS (
-    SELECT doc_id, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_prose
-    UNION ALL
-    SELECT doc_id, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_code
-  ),
-  fused AS (
-    SELECT c.doc_id, round(sum(c.score), 6) AS rrf_score, count(c.doc_id) AS sources, max(c.snip) AS snippet
-    FROM combined c GROUP BY c.doc_id
-  ),
-  ordered_docs AS (
-    SELECT f.doc_id, s.unit, s.entity_type, s.entity_id, s.section, s.title, f.rrf_score, f.sources, f.snippet
-    FROM fused f
-    JOIN search_documents s ON s.doc_id = f.doc_id
-    WHERE s.unit = '$(sql_escape "$u")' AND ('$(sql_escape "$entity_filter")' = '' OR s.entity_type = '$(sql_escape "$entity_filter")')
-    ORDER BY f.rrf_score DESC
-    LIMIT $limit_num
-  )
-SELECT json_object(
-  'unit', '$(sql_escape "$u")',
-  'query', '$(sql_escape "$q")',
-  'total_matches', (SELECT count(*) FROM ordered_docs),
-  'results', coalesce((
-    SELECT json_group_array(
-      json_object(
-        'entity_type', entity_type,
-        'entity_id', entity_id,
-        'section', section,
-        'title', title,
-        'rrf_score', rrf_score,
-        'sources', sources,
-        'snippet', snippet
-      )
-    ) FROM ordered_docs
-  ), json_array())
-);
-EOF
-    exit 0
+    search_query "$@"
+    ;;
+
+  session.*|task.*|entry.*|finding.*|lane.*|resolve.ref)
+    delegate "$@"
     ;;
 
   *)

@@ -85,7 +85,7 @@ The dialect governs form, never volume. It compresses how things are written, ne
 
 ## The scripts
 
-The runtime ships as one POSIX sh file at `.contexture/ctx`: discovery, help assembly, dispatch, the run engine, and the hook runner. Around it, modules declare their surface and the engine does the rest. The record engine is the session module, its verbs as extension-less scripts under `.contexture/modules/session/scripts/`, one file per verb, each carrying its `# summary:` and its `# usage:` lines; the workhorses are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. A module directory holds a `module` file (its `# summary:`) and a `scripts/` folder whose files are its verbs; the engine assembles `ctx help`, `ctx <module> help`, and `ctx <module> help <verb>` from those declarations, so help is engine-owned and no module ships a help script. Dispatch validates the verb engine-side, anchors every command at the workspace root, and passes arguments, streams, and exit codes through. `ctx session` fronts the record engine's verbs; `help` (or `--help`, or `-h`) prints the full contract table, so no one reads a script to learn one. Nothing needs installing.
+The runtime ships as one POSIX sh file at `.contexture/ctx`: discovery, help assembly, dispatch, the run engine, and the hook runner. Around it, modules declare their surface and the engine does the rest. The record engine is the session module, its verbs as extension-less scripts under `.contexture/modules/session/scripts/`, one file per verb, each carrying its `# summary:` and its `# usage:` lines; the workhorses are POSIX awk, which means no dependencies, no model tokens, and the same answer every time. A module directory holds a `module` file (its `# summary:`) and a `scripts/` folder whose files are its verbs; the engine assembles `ctx help`, `ctx <module> help`, and `ctx <module> help <verb>` from those declarations, so help is engine-owned and no module ships a help script. Dispatch validates the verb engine-side, anchors every command at the workspace root, and passes arguments, streams, and exit codes through. `ctx session` fronts the record engine's verbs; `help` (or `--help`, or `-h`) prints the full contract table, so no one reads a script to learn one. After a verb, `--help` or `-h` alone prints that verb's own table: a shell verb answers it itself, and for an awk verb the engine prints the table `ctx <module> help <verb>` prints, since an awk interpreter would read a leading dash argument as its own option and the verb would never see it. Nothing needs installing.
 
 Alongside the session engine, `ctx run` provides zero-parameter discoverable stream compaction and command execution. It operates both as a direct runner prefix (`ctx run <cmd>`, full path `.contexture/ctx run <cmd>`) preserving exact exit codes, and as a standard Unix pipe (`cmd | ctx run`). Runner mode selects the filter by the wrapped command's identity, read from the `# command: <regex>` header, and falls back to the signature scan when no command claims the line; stdin mode selects by the stream signature (`# match: <regex>`), sampled from the first 40 lines. The directive text reaches awk through the environment, so backslash escapes in a signature survive verbatim. ANSI escape sequences are stripped before selection and filtering, while the raw bytes stay untouched for the fail-safe comparison. Capture files for runner mode prefer the workspace's gitignored `.contexture/tmp/` when it is writable, and fall back to the caller's TMPDIR only when the drawer cannot hold them.
 
@@ -95,15 +95,36 @@ Building your own verb, hook, or filter? The module contract is in [Modules](mod
 
 ### Storage Provider Interface (SPI) and driver architecture
 
-The session engine is decoupled from physical storage formats through the Storage Provider Interface (SPI). The SPI normalizes all backend interactions into 26 domain methods across 7 functional subsystems:
+The session engine is decoupled from physical storage formats through the Storage Provider Interface (SPI). Every session and lane verb reaches the record only through driver methods, so the configured backend is the single store: nothing outside a driver opens a session artifact. The methods, by subsystem:
 
-- `session`: `session.init`, `session.load`, `session.stamp`, `session.board`, `session.close`
+- `artifact`: `artifact.read`, `artifact.write`, `artifact.list` (the store: an artifact's canonical text by key)
+- `session`: `session.create`, `session.list`, `session.init`, `session.load`, `session.board`, `session.stamp`, `session.pointer`, `session.refs`, `session.close`, `session.audit`
 - `task`: `task.add`, `task.update`, `task.start`, `task.complete`, `task.reopen`, `task.drop`, `task.list`, `task.show`
-- `entry`: `entry.record`, `entry.show`, `entry.list`
+- `entry`: `entry.record`, `entry.show`, `entry.list`, `entry.anchors`
 - `finding`: `finding.add`, `finding.show`, `finding.update`, `finding.supersede`, `finding.drop`, `finding.list`
 - `resolve`: `resolve.ref`
-- `lane`: `lane.create`, `lane.record`, `lane.report`, `lane.status`, `lane.close`
+- `lane`: `lane.create`, `lane.record`, `lane.report`, `lane.show`, `lane.status`, `lane.close`
 - `search`: `search.query`
+- `storage`: `storage.health`
+
+#### The store methods and the verb layer
+
+The record grammar is the canonical text, and the posix files are its reference serialization. An artifact key names one artifact of a unit: `state`, `backlog`, `knowledge`, `journal`, `lane/<lane>/recipe`, `lane/<lane>/journal`, `lane/<lane>/report`.
+
+| method | argv | stdin | answer |
+|---|---|---|---|
+| `artifact.read` | `<unit> <key>` | none | the stored text byte for byte; rc 1 `ERR_ENTITY_NOT_FOUND` when absent |
+| `artifact.write` | `<unit> <key>` | the whole new text, raw | an atomic replace; a lane key creates its lane; rc 1 for an absent unit |
+| `artifact.list` | `<unit>` | none | the keys the unit holds, one per line: the main four in order, then `lane/<lane>` and its artifacts |
+| `session.create` | `<unit>` | none | an empty unit; rc 1 `ERR_ENTITY_EXISTS` for a unit the store holds |
+| `session.list` | none | none | `{"sessions":[{"unit","status"}]}`, bytewise by unit; a unit without a state carries an empty status |
+| `storage.health` | none | none | `{"driver","health","detail"}`; health `degraded` while the store holds nothing yet |
+
+The grammar verbs (`record`, `append`, `amend`, `flip`, `drop`, `next`, `refs`, `close`, `reopen`, `stamp`, `bootstrap`) and the read verbs (`board`, `load`, `audit`, `refresh`, `active`, every `query` kind) keep their validation and their rendering in the verb layer, unchanged: they fetch the artifacts they read through `artifact.read` into a scratch folder under `.contexture/tmp` (removed at exit), and they land every write through `artifact.write`, so validation runs before any driver call and both drivers feed the same renderer. `bootstrap` creates the unit with `session.create`; `active`, `query units`, and `query refs-to` walk `session.list`; `query lane` and `query search` list a unit's lanes with `artifact.list`; `diagnose` reads `storage.health` and counts the `ACTIVE` units of `session.list`. The typed verbs (`task`, `finding`, `entry`, `resolve`, `search`, `lane record`, `lane report`, `lane show`) call their domain methods. Every typed write refuses a `CLOSED` unit (rc 1) before any driver write, as the grammar verbs always have. The dialect is LF: a carriage return in a typed field value (the `task`, `finding`, and `lane record` fields, every `record` flag, the `next` pointer, the `stamp` attention, the `bootstrap` objective and repos) refuses rc 1 before any write, since the grammar verbs refuse an artifact carrying a carriage return on read. A one-line field (every `record` flag, the `task` objective, refs, pointer, evidence, and reason, the `finding` ref and supersedes, the `lane record` what, thread, and slug, the `next` pointer, the `stamp` attention, the `bootstrap` objective and repos) lands as one line of its block, so an embedded newline refuses rc 1 before any write too: a column-0 continuation would break the block grammar. The block scalars keep their newlines. The refusal is forward only: an entry already written with a continuation line still loads and audits as before. An embedded double quote is text: the typed verbs store it, and `append` accepts a `WHAT` that is one quoted line whatever quotes it carries.
+
+#### The payload transport
+
+argv carries only the method and its bounded identifiers (the unit, a slug or NAME, a lane, an artifact key, a page, a filter token such as `--status`, `--anchor`, `--group`, `--limit`, `--entity`, `--mode`). Every free-text field travels on stdin as payload lines `key=value`, the value escaped (backslash as `\\`, newline as `\n`, tab as `\t`, carriage return as `\r`), so a field of any size or content never meets the platform argument limit and survives exactly, a trailing newline included. A single-document write (`artifact.write`, `lane.report <unit> <lane> --write`) is the raw stdin itself. The decoded value reaches the rendered block verbatim: a newline in a block scalar (`DESCRIPTION`, `ACCEPTANCE CRITERIA`, `IMPLEMENTATION DETAILS`, `SUMMARY`) is a second body line and a backslash sequence stays literal; the posix driver hands free text to its awk renderers through the environment, never through `awk -v`, which interprets backslash escapes and refuses a newline, and a render that fails refuses rc 2 with nothing written. The payload keys: `session.init` objective; `session.stamp` attention; `session.pointer` pointer; `task.add` objective, desc, criteria, details, refs; `task.update` objective, desc, criteria, details; `task.start` pointer; `task.complete` evidence; `task.drop` reason; `entry.record` what, group, thread, closes; `finding.add` summary, ref, supersedes; `finding.update` summary, ref; `finding.supersede` summary, ref (argv `<unit> <predecessor> <successor>`); `lane.create` goal, recipe; `lane.record` what, thread (argv `<unit> <lane> <slug>`); `lane.close` resolution; `search.query` query. A method without payload keys never reads stdin.
 
 #### Driver discovery hierarchy
 
@@ -111,6 +132,8 @@ The driver resolver discovers storage drivers through a strict 3-tier hierarchy:
 1. Workspace custom drivers: `.contexture/drivers/<name>/driver`
 2. Module-owned drivers: `.contexture/modules/<module>/drivers/<driver-name>/driver` or `.contexture/modules/session/drivers/<driver-name>/driver`
 3. PATH executables: system binaries named `ctx-storage-<name>`
+
+The resolver passes stdin through to the driver untouched and exports `CTX_REFERENCE_DRIVER`, the posix driver beside it, the reference serialization an indexed driver renders the grammar through.
 
 #### Configuration precedence
 
@@ -121,21 +144,23 @@ Driver selection follows deterministic precedence:
 
 #### Capability handshake and error codes
 
-Before executing methods, the engine invokes `$DRIVER_EXEC capability` to retrieve a JSON capability descriptor. The handshake validates mandatory capabilities upfront.
+Before a driver serves a method, the resolver invokes `$DRIVER_EXEC capability` (stdin from `/dev/null`, never the payload) to retrieve a JSON capability descriptor and validates the mandatory capabilities: `session.lifecycle`, `task.crud`, `task.atomic_completion`, `entry.journal`, `resolve.symbolic`, `search.keyword`, `artifact.store`, a finding capability (`finding.knowledge` or `finding.crud`), and a lane capability (`lane.lifecycle` or `lane.artifacts`). A driver missing one halts the call rc 2 `ERR_CAPABILITY_UNSUPPORTED`, naming what is missing, before the method runs; so a verb on such a driver (`bootstrap` first of all) refuses and writes nothing. The handshake runs at dispatch for every driver except the bundled posix driver (the reference serialization shipped beside the resolver), in both dispatch forms (`exec <method>` and `<subsystem>.<method>`). The verdict is cached in the scratch drawer (`.contexture/tmp/driver-verdicts/`, one file per driver path) and stays valid while it is strictly newer than the driver executable, so the handshake runs once per driver change, never once per call; a driver changed within the second of its verdict is verified again until a later verdict stands, and an unwritable drawer caches nothing and verifies on every call. `driver-resolver capability` and `check` (and `ctx session diagnose`) run the handshake afresh.
 
 All drivers adhere to a standardized 3-tier exit code hierarchy:
 - `0`: success
-- `1`: semantic or validation error (entity exists, missing entity, invalid arguments, schema violation)
-- `2`: storage or driver fatal error (driver not found, capability failure, IO error, lock contention)
+- `1`: semantic or validation error (entity exists, missing entity, invalid arguments, schema violation, a mode the driver lacks: `ERR_CAPABILITY_UNSUPPORTED`)
+- `2`: storage or driver fatal error (driver not found, capability failure, IO error, lock contention, a write the backend refused: `ERR_STORAGE_WRITE`)
+
+A driver never prints a success payload for a write that did not land: a replace the drawer refuses (a read-only folder, a full disk) removes its temp and exits 2 `ERR_STORAGE_WRITE`. An interrupted method (HUP, INT, TERM) exits through its cleanup on every sh, dash included: the staged payload and the materialized scratch unit are removed and a held unit lock is released; a SIGKILL cannot be trapped, so a lock left by a killed writer stays until it is removed, and later writers of that unit time out on it (`ERR_STORAGE_LOCKED`). A repeated key refuses rc 1 `ERR_ENTITY_EXISTS` on every driver: a task slug, a finding NAME, a journal entry slug, a lane entry slug. The compliance harness (`tests/storage-compliance.sh`, 38 cases in 11 suites) proves each driver against the contract by the data it returns, not by exit codes alone: closure filtering on the board and in `entry.show`, task status after each task verb, a dropped task gone from every read, `finding.list` with and without the active filter, lane artifacts round-tripping, repeated keys refused, the exact bytes of an artifact round trip, a 2 MB report over stdin, the canonical status filter, the refs array, typed resolve blocks, the entry filters, and the search shape. The ship gate runs it against base's posix driver; the storage-fts5 plugin suite runs it against the plugin's own driver.
 
 #### Split-brain prevention
 
-If a non-posix driver is configured (such as `fts5` or `sqlite`) and its executable cannot be resolved or fails handshake validation, the engine halts immediately with exit code 2 (`ERR_DRIVER_NOT_FOUND` or `ERR_DRIVER_PROTOCOL`). The engine never falls back silently to `posix` when a custom driver was configured, eliminating accidental split-brain state where records diverge between storage engines.
+If a non-posix driver is configured (such as `fts5` or `sqlite`) and its executable cannot be resolved or fails handshake validation, the engine halts immediately with exit code 2 (`ERR_DRIVER_NOT_FOUND`, `ERR_DRIVER_PROTOCOL` when the capability call itself fails, or `ERR_CAPABILITY_UNSUPPORTED` when a mandatory capability is missing). The engine never falls back silently to `posix` when a custom driver was configured, and no verb opens an artifact outside the driver, so records never diverge between storage engines. The ship gate runs the whole session suite twice, once per driver, and a verb re-pointed at the files turns the fts5 run red.
 
 #### Available drivers
 
-- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver manipulating structured markdown files within `.contexture/sessions/<unit>/`.
-- SQLite FTS5 driver (`storage-fts5` plugin): high-performance indexed driver providing a normalized relational schema, dual FTS5 virtual tables (Porter English stemming plus Trigram tokenization), unicode61 with `remove_diacritics 0` for Turkish and diacritics, pure SQL Reciprocal Rank Fusion (RRF) search ranking, and bidirectional migration (`ctx storage-fts5 migrate`).
+- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver keeping each artifact as a markdown file under `.contexture/sessions/<unit>/`; it is also the reference serialization of the record grammar.
+- SQLite FTS5 driver (`storage-fts5` plugin): keeps every artifact's canonical text verbatim in one SQLite database, with a relational index rebuilt from the text of the artifact that changed, dual FTS5 virtual tables (Porter English stemming plus Trigram tokenization), unicode61 with `remove_diacritics 0` for Turkish and diacritics, pure SQL Reciprocal Rank Fusion (RRF) search ranking, and bidirectional migration (`ctx storage-fts5 migrate`). Its record methods render through the reference serialization over the unit materialized from the store, so both drivers answer every method alike; see the plugin README.
 
 ### Semantic CLI verbs
 
@@ -143,46 +168,55 @@ Primary agent interactions operate through typed CLI commands with structured ar
 
 #### Task operations: ctx session task
 - `ctx session task add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: creates a new task in `TODO` status.
-- `ctx session task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--add-refs="..."]`: updates task fields in place.
+- `ctx session task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."]`: updates task fields in place; a section the block lacks lands at its template position.
 - `ctx session task start <unit> <slug> [--pointer="..."]`: atomically marks task `IN_PROGRESS` and updates `next_action` in state.
 - `ctx session task complete <unit> <slug> --evidence="..."`: atomically marks task `DONE` and records completion receipt (`backlog/<slug>: DONE <evidence>`) in the journal.
 - `ctx session task reopen <unit> <slug>`: returns task to `TODO`.
-- `ctx session task drop <unit> <slug> --reason="..."`: removes task and logs drop receipt.
-- `ctx session task list <unit> [--status=todo|progress|done|all]`: lists tasks filtered by status.
-- `ctx session task show <unit> <slug>`: prints full task block.
+- `ctx session task drop <unit> <slug> --reason="..."`: removes task and logs the drop receipt (`backlog/<slug>: DROPPED (<reason>)`).
+- `ctx session task list <unit> [--status=todo|progress|done|all]`: lists tasks filtered by status; the verb maps the words to `TODO`, `IN_PROGRESS`, `DONE`, and every status (one home for every driver) and refuses another word rc 1.
+- `ctx session task show <unit> <slug>`: prints full task block; `--json` carries `refs` as an array.
+
+Every task write refuses a malformed slug (letters, digits, underscore, dash; starts alphanumeric) and a `CLOSED` unit with rc 1.
 
 #### Journal event recording: ctx session record
 - `ctx session record <unit> --what="..." [--group=...] [--thread=...] [--ref=...] [--closes=...] [--supersedes=...] [--knowledge]`: appends an immutable event with auto-injected local date (`YYYY-MM-DD`), active anchor from state, and default `THREAD: none`.
-- `ctx session entry show <unit> <slug>`: displays a single journal entry verbatim.
-- `ctx session entry list <unit> [--anchor=A<N>] [--group=...] [--open-threads] [--since=YYYY-MM-DD]`: lists journal entries matching filters.
+- `ctx session entry show <unit> <slug> [--json]`: displays a single journal entry: the text view prints the block's `@entry`, `ANCHOR`, `WHAT`, `GROUP`, and `THREAD` lines; `--json` carries `slug`, `anchor`, `what`, `group`, `thread`, and `ref` (the entry's `REF` value, an empty string when it has none) plus the closure (`is_closed`, `closed_by`, `close_reason`).
+- `ctx session entry list <unit> [--anchor=A<N>] [--group=...] [--json]`: lists journal entries; the driver filters by the exact ANCHOR and GROUP, so the text and the JSON agree.
+- `ctx session record --slug=<slug>` refuses a slug the journal already carries (rc 1).
 
 #### Finding lifecycle CRUD: ctx session finding
 - `ctx session finding add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]`: adds a new finding with status `ACTIVE`.
 - `ctx session finding show <unit> <NAME>`: displays finding and supersession lineage.
-- `ctx session finding update <unit> <NAME> --summary="..." [--ref=...]`: updates summary or reference in place.
-- `ctx session finding supersede <unit> <NAME> --by=<NEW_NAME> [--reason="..."]`: records forward-only supersession preserving audit lineage.
-- `ctx session finding drop <unit> <NAME> --reason="..."`: removes an invalidated finding.
+- `ctx session finding update <unit> <NAME> --summary="..." [--ref=...]`: updates the summary, the reference, or both in place; a `--ref` replaces the finding's `REF` line, or adds one after the summary when the finding had none.
+- `ctx session finding supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]`: records forward-only supersession preserving audit lineage; a missing predecessor refuses rc 1.
+- `ctx session finding drop <unit> <NAME>`: removes an invalidated finding.
+
+A NAME the knowledge already carries refuses rc 1 (`ERR_ENTITY_EXISTS`); a raw `@finding` block on stdin is parsed, never evaluated by the shell; every finding write refuses a `CLOSED` unit.
 - `ctx session finding list <unit> [--active-only]`: lists findings, optionally omitting superseded items.
 
 #### Universal search: ctx session search
-- `ctx session search <unit> "<query>" [--limit=N]`: searches across all entity domains. Returns 5 to 12 token contextual snippets with match highlights using RRF ranking.
+- `ctx session search <unit> "<query>" [--limit=N] [--entity=TYPE] [--mode=MODE] [--json]`: searches across all entity domains. Every driver returns one shape: `{"unit","query","mode","total_matches","results":[...]}`, each result carrying `entity_type` (session, task, entry, finding, lane, lane_entry), `entity_id`, `section` (the artifact the hit came from: state, backlog, knowledge, journal, lane_recipe, lane_journal, lane_report), and `snippet`; a ranked driver adds `rrf_score` and `sources` to each result. `total_matches` counts every match, `--limit` caps the results (default 20), `--entity` keeps one entity type (`all` for every one), `--mode` is `exact` (a case-insensitive substring, every driver), `hybrid` (the fts5 RRF fusion, its default), or `trigram` (the fts5 trigram table); a driver without a mode refuses it rc 1 `ERR_CAPABILITY_UNSUPPORTED` (posix searches exact substrings only). An empty query refuses rc 1 `ERR_INVALID_ARGUMENT`. The text view prints a count line and one line per result; `--json` passes the payload through.
 
 #### Reference resolution: ctx session resolve
-- `ctx session resolve <unit> <ref>`: resolves abstract domain references (`task#slug`, `entry#slug`, `finding#NAME`, `lane#slug/report#claim`) directly, transparently normalizing legacy `.md` paths.
+- `ctx session resolve <unit> <ref>`: resolves abstract domain references (`task#slug`, `entry#slug`, `finding#NAME`, `lane#slug/report#claim`) and the legacy file forms (`backlog.md#slug`, `journal.md#slug`, `knowledge.md#NAME`, `lanes/<lane>/report.md#claim`) on every driver; the text view prints the entity block verbatim, `--json` carries the target fields and the `block`.
 
 ### Subagent lane management: ctx lane
 
 Subagent operations are governed through the dedicated top-level `ctx lane` module:
 
 ```bash
-.contexture/ctx lane show <unit> <lane-slug>
-.contexture/ctx lane record <unit> <lane-slug> --what="..." [--thread=...]
-.contexture/ctx lane report <unit> <lane-slug>
+.contexture/ctx lane show <unit> <lane-slug> [recipe|journal|report] [--json]
+.contexture/ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...]
+.contexture/ctx lane report <unit> <lane-slug> [--body="..." | stdin] [--json]
 ```
 
-- `show`: reports presence, line counts, byte sizes, and head/tail lines of `recipe.md`, `journal.md`, `report.md`.
-- `record`: logs action traces directly into the subagent's `journal.md`.
-- `report`: inspects and validates `report.md`.
+- `show`: prints one of `recipe.md`, `journal.md`, `report.md` (the report by default).
+- `record`: logs action traces into the subagent's lane journal; a slug the lane journal carries refuses rc 1, a generated slug takes a suffix instead.
+- `report`: writes the lane report from `--body` or stdin, or reads it back when neither is given; the body reaches the driver raw on stdin, so a report of any size lands (a 2 MB report is a gate case). With no `--body`, it reads stdin whenever stdin is not a terminal, and no POSIX sh tells an idle open pipe from a slow writer, so under an open pipe it waits until the writer closes. The scripted read path is `ctx lane show <unit> <lane-slug> report`, which never reads stdin; `report`'s read mode is for a terminal (or a call fed `</dev/null`).
+
+`record` and a `report` write refuse a `CLOSED` unit with rc 1.
+
+Both views decode the driver's JSON string with every escape honored (`\\`, `\"`, `\n`, `\t`, `\r`), so the text output is the stored artifact byte for byte; `--json` passes the driver payload through (`show` names the field `content`, `report` names it `report`).
 
 Isolating lane operations into `ctx lane` prevents accidental pollution of parent session journals upon argument omission.
 
@@ -195,7 +229,7 @@ Returns the map plus one page of the load: state, backlog, knowledge, the live j
 .contexture/ctx session load refs <ref_1> ... <ref_N> [<page>]
 ```
 
-Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section. The journal section composes the board (`ctx session board`), so the extraction has one home; the board's open threads and open tasks ride that section unchanged.
+Read every page the map reports. A missing `state.md` is fatal; a missing backlog, knowledge, or journal is loud and nonfatal, with a placeholder standing in its section; the warning names the artifact and its unit (`WARNING: missing knowledge: unit <unit>`), never a storage location, so a ref session the configured store does not hold reads the same under every driver. The journal section composes the board (`ctx session board`), so the extraction has one home; the board's open threads and open tasks ride that section unchanged.
 
 The cut is budgeted twice, about 500 lines or about 40KB, whichever binds first, so a page stays under the harness's output cap in practice; the one residual is a single block that exceeds the budget alone, and it renders whole on its own page. If a harness still truncates such a page, it prints a notice naming its saved copy of the command's output: that copy is the command's own output, and reading it is sanctioned by `@laws#workspace-confinement`, read-only, that named file alone. Routing the same content through temp files stays unsanctioned. The in-workspace fallbacks need nothing outside: every section is composed from the session records, so `ctx session board` or a direct read of the record recovers the same content.
 
@@ -249,7 +283,7 @@ Answers the foreseeable questions over the record in bounded form, so no one imp
 
 Every miss is loud: rc 1, zero stdout, a named error, never a plausible empty. Outputs are bounded by construction: group and search snippets cut at 90 bytes on word boundaries, search stops at 50 lines with a trailing count, and entry, finding, closure, and resolve render verbatim. One bound is deliberately absent: `group` renders one line per matching entry, with its count in the opener, and no cap. A large thread streams whole, because the thread itself is what the caller came to read; the per-row snippet is the part that stays capped. Target lookups miss loudly; a listing without a target carries its count, so a zero-anchor journal prints `0 anchors`. Names match exactly and shapes are validated before any output; a wrong invocation refuses with the kind's usage.
 
-### The legacy write acts: append, amend, flip, drop, next, refs, close
+### The legacy write acts: append, amend, flip, drop, next, refs, close, reopen
 
 The legacy block piping commands provide backward compatibility for existing pipelines and bulk data imports:
 
@@ -261,9 +295,10 @@ The legacy block piping commands provide backward compatibility for existing pip
 .contexture/ctx session next <unit> "<pointer>"
 .contexture/ctx session refs <unit> [<session> ...]
 .contexture/ctx session close <unit>
+.contexture/ctx session reopen <unit>
 ```
 
-`append` reads one or more blocks on stdin, and each block's first line decides where it lands: `@entry` in the journal, `@finding` in knowledge, `@task` in the backlog. The shapes are the templates (`.contexture/templates/`); write by filling one, and the command derives the anchor, normalizes the form, and appends it with the standard separator. An `@entry` must carry its `THREAD` line: the act outside the unit's own flow that must resolve it, or `none`; a missing line, an empty value, a duplicate, or `true` and `false` refuse. `amend` replaces task fields in place, and the rest of the task stays byte-identical. `flip` moves a status: `progress` refuses until the state already names the slug, and `done` lands the receipt first, one entry whose `WHAT` carries each slug's `backlog/<slug>: DONE` with the evidence. `drop` removes the tasks a record entry names, and the record stays. `next` overwrites the pointer. `refs` sets the read-only mounts; zero sessions clears them. `close` marks the unit `CLOSED`, warning on open tasks and audit findings rather than refusing.
+`append` reads one or more blocks on stdin, and each block's first line decides where it lands: `@entry` in the journal, `@finding` in knowledge, `@task` in the backlog. The shapes are the templates (`.contexture/templates/`); write by filling one, and the command derives the anchor, normalizes the form, and appends it with the standard separator. An `@entry` must carry its `THREAD` line: the act outside the unit's own flow that must resolve it, or `none`; a missing line, an empty value, a duplicate, or `true` and `false` refuse. `amend` replaces task fields in place, and the rest of the task stays byte-identical. `flip` moves a status: `progress` refuses until the state already names the slug, and `done` lands the receipt first, one entry whose `WHAT` carries each slug's `backlog/<slug>: DONE` with the evidence. `drop` removes the tasks a record entry names, and the record stays. `next` overwrites the pointer. `refs` sets the read-only mounts; zero sessions clears them. `close` marks the unit `CLOSED`, warning on open tasks and audit findings rather than refusing. `reopen` marks a `CLOSED` unit `ACTIVE` again so its work can resume; it refuses for a unit that is not `CLOSED`.
 
 Every form validates all inputs before any write: a refusal is loud, rc 1 with zero partial writes, and a landing prints what it wrote. The acts repeat, so one call carries several blocks or several slugs.
 
@@ -349,7 +384,7 @@ Placement follows the class of the file, never convenience:
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/run,modules/lane,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
 | live workspace | the untracked root: `AGENTS.md`, `.contexture/` (sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 

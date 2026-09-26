@@ -12,6 +12,17 @@ function indent_lines(text, prefix,    lines, n, i, r) {
 }
 
 BEGIN {
+  # the free-text fields arrive in the environment (SB_<FIELD>), never through -v: -v
+  # interprets backslash escapes and refuses a value holding a newline; the bounded
+  # identifiers (block_type, slug, name, status, anchor) stay -v
+  if ("SB_OBJECTIVE" in ENVIRON) objective = ENVIRON["SB_OBJECTIVE"]
+  if ("SB_DESC" in ENVIRON) desc = ENVIRON["SB_DESC"]
+  if ("SB_CRITERIA" in ENVIRON) criteria = ENVIRON["SB_CRITERIA"]
+  if ("SB_DETAILS" in ENVIRON) details = ENVIRON["SB_DETAILS"]
+  if ("SB_REFS" in ENVIRON) refs = ENVIRON["SB_REFS"]
+  if ("SB_SUMMARY" in ENVIRON) summary = ENVIRON["SB_SUMMARY"]
+  if ("SB_REF" in ENVIRON) ref = ENVIRON["SB_REF"]
+  if ("SB_SUPERSEDES" in ENVIRON) supersedes = ENVIRON["SB_SUPERSEDES"]
   if (block_type == "task") {
     printf "@task %s\n", slug
     printf "  STATUS: %s\n", (status != "" ? status : "TODO")

@@ -37,6 +37,9 @@ esac
 
 subcmd="$1"
 shift
+case "${1:-}" in
+  --help|-h) "$0" --help | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
+esac
 
 case "$subcmd" in
   show)
@@ -59,28 +62,49 @@ case "$subcmd" in
     if [ "$json_out" -eq 1 ]; then
       printf '%s\n' "$out"
     else
+      # the readable block, every JSON escape decoded
       printf '%s\n' "$out" | awk '
+        # jstr(s, pos): the JSON string whose first character sits at pos (after the
+        # opening quote), escapes decoded (\" \\ \/ \n \t \r); JEND lands on the closing quote
+        function jstr(s, pos,   out, c, e, i, n) {
+          out = ""
+          n = length(s)
+          for (i = pos; i <= n; i++) {
+            c = substr(s, i, 1)
+            if (c == "\\") {
+              i++
+              e = substr(s, i, 1)
+              if (e == "n") out = out "\n"
+              else if (e == "t") out = out "\t"
+              else if (e == "r") out = out "\r"
+              else out = out e
+              continue
+            }
+            if (c == "\"") { JEND = i; return out }
+            out = out c
+          }
+          JEND = n
+          return out
+        }
+        # jval(s, key): the decoded string value of the first "key":"..." in s, "" when absent
+        function jval(s, key,   p) {
+          p = index(s, "\"" key "\":\"")
+          if (p == 0) return ""
+          return jstr(s, p + length(key) + 4)
+        }
         {
           line = $0
-          match(line, /"slug":"[^"]*"/)
-          s = substr(line, RSTART + 8, RLENGTH - 9)
-          printf "@entry %s\n", s
-          if (match(line, /"anchor":"[^"]*"/)) {
-            anc = substr(line, RSTART + 10, RLENGTH - 11)
-            if (anc != "") printf "  ANCHOR: %s\n", anc
-          }
-          if (match(line, /"what":"[^"]*"/)) {
-            w = substr(line, RSTART + 8, RLENGTH - 9)
-            if (w != "") printf "  WHAT: \"%s\"\n", w
-          }
-          if (match(line, /"group":"[^"]*"/)) {
-            g = substr(line, RSTART + 9, RLENGTH - 10)
-            if (g != "") printf "  GROUP: %s\n", g
-          }
-          if (match(line, /"thread":"[^"]*"/)) {
-            th = substr(line, RSTART + 10, RLENGTH - 11)
-            if (th != "") printf "  THREAD: %s\n", th
-          }
+          t = index(line, "\"entry\":{")
+          if (t > 0) line = substr(line, t)
+          printf "@entry %s\n", jval(line, "slug")
+          anc = jval(line, "anchor")
+          if (anc != "") printf "  ANCHOR: %s\n", anc
+          w = jval(line, "what")
+          if (w != "") printf "  WHAT: \"%s\"\n", w
+          g = jval(line, "group")
+          if (g != "") printf "  GROUP: %s\n", g
+          th = jval(line, "thread")
+          if (th != "") printf "  THREAD: %s\n", th
         }
       '
     fi
@@ -101,7 +125,11 @@ case "$subcmd" in
       esac
       shift
     done
-    out=$("$resolver" entry.list "$unit")
+    # the filters are the driver's (entry.list --anchor, --group), so text and JSON agree
+    set --
+    [ -n "$anchor_filter" ] && set -- "$@" "--anchor=$anchor_filter"
+    [ -n "$group_filter" ] && set -- "$@" "--group=$group_filter"
+    out=$("$resolver" entry.list "$unit" "$@")
     rc=$?
     if [ "$rc" -ne 0 ]; then
       exit "$rc"
@@ -109,21 +137,43 @@ case "$subcmd" in
     if [ "$json_out" -eq 1 ]; then
       printf '%s\n' "$out"
     else
-      printf '%s\n' "$out" | awk -v af="$anchor_filter" '
+      printf '%s\n' "$out" | awk '
+        # jstr(s, pos): the JSON string whose first character sits at pos (after the
+        # opening quote), escapes decoded (\" \\ \/ \n \t \r); JEND lands on the closing quote
+        function jstr(s, pos,   out, c, e, i, n) {
+          out = ""
+          n = length(s)
+          for (i = pos; i <= n; i++) {
+            c = substr(s, i, 1)
+            if (c == "\\") {
+              i++
+              e = substr(s, i, 1)
+              if (e == "n") out = out "\n"
+              else if (e == "t") out = out "\t"
+              else if (e == "r") out = out "\r"
+              else out = out e
+              continue
+            }
+            if (c == "\"") { JEND = i; return out }
+            out = out c
+          }
+          JEND = n
+          return out
+        }
+        # jval(s, key): the decoded string value of the first "key":"..." in s, "" when absent
+        function jval(s, key,   p) {
+          p = index(s, "\"" key "\":\"")
+          if (p == 0) return ""
+          return jstr(s, p + length(key) + 4)
+        }
         {
           line = $0
-          while (match(line, /\{"slug":"[^"]*","anchor":"[^"]*","what":"[^"]*"\}/)) {
-            item = substr(line, RSTART, RLENGTH)
-            line = substr(line, RSTART + RLENGTH)
-            match(item, /"slug":"[^"]*"/)
-            s = substr(item, RSTART + 8, RLENGTH - 9)
-            match(item, /"anchor":"[^"]*"/)
-            anc = substr(item, RSTART + 10, RLENGTH - 11)
-            match(item, /"what":"[^"]*"/)
-            w = substr(item, RSTART + 8, RLENGTH - 9)
-            if (af == "" || anc == af) {
-              printf "  [%s] %s: %s\n", anc, s, w
-            }
+          # a raw {"slug":" never occurs inside a JSON string (its quotes would be escaped)
+          while ((p = index(line, "{\"slug\":\"")) > 0) {
+            line = substr(line, p + 1)
+            q = index(substr(line, 2), "{\"slug\":\"")
+            item = (q > 0) ? substr(line, 1, q) : line
+            printf "  [%s] %s: %s\n", jval(item, "anchor"), jval(item, "slug"), jval(item, "what")
           }
         }
       '

@@ -126,7 +126,7 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/run,modules/lane,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/` | copied when wanted; shipped with every tag, never deleted at adoption close |
 | workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/` | never touched |
 

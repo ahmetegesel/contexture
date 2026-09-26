@@ -1039,6 +1039,18 @@ if ! verb_exists "$md" "$verb"; then
 fi
 shift
 
+# --help and -h after an awk verb print the verb's help table (the table ctx <module>
+# help <verb> prints): an awk interpreter reads a leading dash argument as its own option,
+# so the verb itself would never see it; shell verbs answer their own --help
+case "${1:-}" in
+  --help|-h)
+    if [ $# -eq 1 ] && head -n 1 "$md/scripts/$verb" | grep -q '^#!.*awk'; then
+      show_verb_help "$found_target" "$verb"
+      exit 0
+    fi
+    ;;
+esac
+
 CTX_ROOT="$root"
 CTX_MODULE_DIR="$md"
 CTX_BIN="$ctx_bin"

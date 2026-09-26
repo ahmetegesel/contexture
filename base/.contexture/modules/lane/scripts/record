@@ -7,6 +7,7 @@
 # help:   --slug=...           override entry slug (default auto-generated with date)
 # help:   --thread=...         what the lane awaits (default: none)
 # help: stdin fallback: raw @entry block piping supported
+# help: a CLOSED unit refuses rc 1; a slug the lane journal already carries refuses rc 1 (ERR_ENTITY_EXISTS)
 
 set -u
 
@@ -19,6 +20,57 @@ if [ ! -x "$resolver" ]; then
     resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
   fi
 fi
+
+# The driver transport (docs/the-engine.md): argv carries the method and its bounded
+# identifiers; every free-text field travels on stdin as payload lines key=value, the
+# value escaped (backslash, newline, tab, carriage return as \\, \n, \t, \r); pline
+# writes one line, exact (a trailing newline survives).
+pline() {
+  printf '%s=' "$1"
+  printf '%sx' "$2" | awk '
+    BEGIN { ORS = "" }
+    { gsub(/\\/, "\\\\"); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
+    END { sub(/x$/, "", out); print out "\n" }'
+}
+
+# a closed unit takes no writes: the refusal is the verb's, before any driver write
+refuse_closed() {
+  if "$resolver" artifact.read "$1" state 2>/dev/null | awk '/^status:[ \t]*CLOSED[ \t\r]*$/ { c = 1 } END { exit !c }'; then
+    printf 'ERROR: unit is CLOSED: %s (a closed unit takes no writes)\n' "$1" >&2
+    exit 1
+  fi
+}
+
+# the dialect is LF: a carriage return in a field would poison the record for the grammar
+# verbs, which refuse CR on read; the refusal is the verb's, before any driver write
+CR_CHAR=$(printf '\r')
+refuse_cr() {
+  for cr_v in "$@"; do
+    case "$cr_v" in
+      *"$CR_CHAR"*)
+        printf 'ERROR: embedded carriage return in a field value (the dialect is LF)\n' >&2
+        exit 1
+        ;;
+    esac
+  done
+}
+
+# a one-line field (written as one line of its block) takes no newline: a column-0
+# continuation would break the block grammar; the block scalars keep their newlines;
+# refuse_nl <field> <value> [<field> <value> ...], before any driver write
+NL_CHAR='
+'
+refuse_nl() {
+  while [ $# -ge 2 ]; do
+    case "$2" in
+      *"$NL_CHAR"*)
+        printf 'ERROR: embedded newline in %s (one line)\n' "$1" >&2
+        exit 1
+        ;;
+    esac
+    shift 2
+  done
+}
 
 if [ $# -lt 2 ]; then
   if [ $# -gt 0 ]; then
@@ -79,9 +131,18 @@ fi
 if [ -z "$slug" ]; then
   today=$(date +%Y-%m-%d)
   slug="$today-event-$(date +%s 2>/dev/null || echo $$)"
+  # a generated slug never collides: a second event in the same second takes a suffix,
+  # as the main journal's record does
+  lane_journal=$("$resolver" artifact.read "$unit" "lane/$lane/journal" 2>/dev/null) || lane_journal=""
+  while printf '%s\n' "$lane_journal" | awk -v s="$slug" '$1 == "@entry" && $2 == s { f = 1 } END { exit !f }'; do
+    slug="$slug-1"
+  done
 fi
 
-out=$("$resolver" lane.record "$unit" "$lane" "$slug" "$what" "$thread")
+refuse_closed "$unit"
+refuse_cr "$what" "$thread" "$slug"
+refuse_nl --what "$what" --thread "$thread" --slug "$slug"
+out=$({ pline what "$what"; pline thread "$thread"; } | "$resolver" lane.record "$unit" "$lane" "$slug")
 rc=$?
 if [ "$rc" -ne 0 ]; then
   exit "$rc"

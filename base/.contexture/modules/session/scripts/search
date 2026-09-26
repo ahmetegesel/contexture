@@ -4,9 +4,10 @@
 # help: searches session records (tasks, entries, findings, lanes) for query terms
 # help: options:
 # help:   --json              output JSON format
-# help:   --limit=N           maximum number of matches to display
-# help:   --mode=MODE         search mode (exact, hybrid, trigram)
-# help:   --entity=TYPE       filter by entity type (task, entry, finding, lane, all)
+# help:   --limit=N           maximum number of results returned (default 20)
+# help:   --mode=MODE         search mode (exact, hybrid, trigram); a driver without the mode refuses rc 1
+# help:   --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)
+# help: every driver returns the same keys per result: entity_type, entity_id, section, snippet (ranked drivers may add rrf_score and sources); an empty query refuses rc 1 (ERR_INVALID_ARGUMENT)
 
 set -u
 
@@ -34,9 +35,9 @@ case "$1" in
     printf 'searches session records (tasks, entries, findings, lanes) for query terms\n'
     printf 'options:\n'
     printf '  --json              output JSON format\n'
-    printf '  --limit=N           maximum number of matches to display\n'
-    printf '  --mode=MODE         search mode (exact, hybrid, trigram)\n'
-    printf '  --entity=TYPE       filter by entity type (task, entry, finding, lane, all)\n'
+    printf '  --limit=N           maximum number of results returned (default 20)\n'
+    printf '  --mode=MODE         search mode (exact, hybrid, trigram); a driver without the mode refuses rc 1\n'
+    printf '  --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)\n'
     exit 0
     ;;
 esac
@@ -52,20 +53,44 @@ fi
 query="$1"
 shift
 
+if [ -z "$(printf '%s' "$query" | tr -d ' \t')" ]; then
+  printf 'search.query: error: empty query (ERR_INVALID_ARGUMENT)\n' >&2
+  exit 1
+fi
+
+# the driver transport: the query is free text (stdin payload); the options are
+# bounded tokens (argv); both drivers return one shape (docs/the-engine.md)
+pline() {
+  printf '%s=' "$1"
+  printf '%sx' "$2" | awk '
+    BEGIN { ORS = "" }
+    { gsub(/\\/, "\\\\"); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
+    END { sub(/x$/, "", out); print out "\n" }'
+}
+
 json_out=0
+set_opts=""
 limit=""
+entity=""
+mode=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --json) json_out=1 ;;
     --limit=*) limit="${1#--limit=}" ;;
     -l) shift; [ $# -gt 0 ] && limit="$1" ;;
-    --mode=*|--entity=*) ;;
+    --mode=*) mode="${1#--mode=}" ;;
+    --entity=*) entity="${1#--entity=}" ;;
+    *) printf "search: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$1" >&2; exit 1 ;;
   esac
   shift
 done
 
-out=$("$resolver" search.query "$unit" "$query")
+set --
+[ -n "$limit" ] && set -- "$@" "--limit=$limit"
+[ -n "$entity" ] && set -- "$@" "--entity=$entity"
+[ -n "$mode" ] && set -- "$@" "--mode=$mode"
+out=$(pline query "$query" | "$resolver" search.query "$unit" "$@")
 rc=$?
 if [ "$rc" -ne 0 ]; then
   exit "$rc"
@@ -74,11 +99,54 @@ fi
 if [ "$json_out" -eq 1 ]; then
   printf '%s\n' "$out"
 else
-  # Format matches or output text
-  if [ -n "$limit" ]; then
-    printf '%s\n' "$out" | head -n "$limit"
-  else
-    printf '%s\n' "$out"
-  fi
+  # the readable view: a count line, then one line per result
+  printf '%s\n' "$out" | awk -v unit="$unit" -v q="$query" '
+        # jstr(s, pos): the JSON string whose first character sits at pos (after the
+        # opening quote), escapes decoded (\" \\ \/ \n \t \r); JEND lands on the closing quote
+        function jstr(s, pos,   out, c, e, i, n) {
+          out = ""
+          n = length(s)
+          for (i = pos; i <= n; i++) {
+            c = substr(s, i, 1)
+            if (c == "\\") {
+              i++
+              e = substr(s, i, 1)
+              if (e == "n") out = out "\n"
+              else if (e == "t") out = out "\t"
+              else if (e == "r") out = out "\r"
+              else out = out e
+              continue
+            }
+            if (c == "\"") { JEND = i; return out }
+            out = out c
+          }
+          JEND = n
+          return out
+        }
+        # jval(s, key): the decoded string value of the first "key":"..." in s, "" when absent
+        function jval(s, key,   p) {
+          p = index(s, "\"" key "\":\"")
+          if (p == 0) return ""
+          return jstr(s, p + length(key) + 4)
+        }
+        {
+          line = $0
+          tm = line; sub(/^.*"total_matches":/, "", tm); sub(/[^0-9].*$/, "", tm)
+          shown = 0
+          rest = line
+          out = ""
+          while ((p = index(rest, "{\"entity_type\":\"")) > 0) {
+            rest = substr(rest, p + 1)
+            nx = index(substr(rest, 2), "{\"entity_type\":\"")
+            item = (nx > 0) ? substr(rest, 1, nx) : rest
+            sn = jval(item, "snippet")
+            gsub(/\n/, " ", sn)
+            out = out sprintf("  %s %s (%s): %s\n", jval(item, "entity_type"), jval(item, "entity_id"), jval(item, "section"), sn)
+            shown++
+          }
+          printf "search %s \"%s\": %d matches, %d shown\n", unit, q, tm + 0, shown
+          printf "%s", out
+        }
+      '
 fi
 exit 0

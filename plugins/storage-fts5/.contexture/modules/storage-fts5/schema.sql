@@ -4,6 +4,20 @@ PRAGMA synchronous = NORMAL;
 PRAGMA foreign_keys = ON;
 PRAGMA busy_timeout = 5000;
 
+-- The canonical text of every artifact, verbatim: the store's source of truth. name is
+-- state, backlog, knowledge, journal (lane_slug '') or recipe, journal, report (a lane).
+-- Every relational table below is a derived index rebuilt from this text when an
+-- artifact changes (index.sh), so an export writes the stored text back byte for byte.
+CREATE TABLE IF NOT EXISTS artifacts (
+  unit TEXT NOT NULL,
+  lane_slug TEXT NOT NULL DEFAULT '',
+  name TEXT NOT NULL,
+  body TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (unit, lane_slug, name),
+  FOREIGN KEY (unit) REFERENCES sessions(unit) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS sessions (
   unit TEXT PRIMARY KEY,
   status TEXT NOT NULL CHECK(status IN ('ACTIVE', 'CLOSED')) DEFAULT 'ACTIVE',
@@ -40,6 +54,7 @@ CREATE TABLE IF NOT EXISTS entries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   unit TEXT NOT NULL,
   slug TEXT NOT NULL,
+  ordinal INTEGER NOT NULL DEFAULT 1,
   entry_type TEXT NOT NULL CHECK(entry_type IN ('ENTRY', 'ANCHOR')) DEFAULT 'ENTRY',
   anchor TEXT NOT NULL,
   what TEXT NOT NULL,
@@ -52,9 +67,34 @@ CREATE TABLE IF NOT EXISTS entries (
   supersedes TEXT,
   verdict TEXT,
   created_at TEXT NOT NULL,
-  UNIQUE(unit, slug),
+  UNIQUE(unit, slug, ordinal),
   FOREIGN KEY (unit) REFERENCES sessions(unit) ON DELETE CASCADE
 );
+
+-- Journal slugs are keyed by (slug, ordinal): a legacy journal may repeat a slug (the
+-- engine refuses a new repeat at append), and each occurrence keeps its own row in file
+-- order, never renamed; ordinal counts the occurrences of a slug from 1.
+
+-- Closer lines (CLOSES / SUPERSEDES) of journal and lane journal entries: one row per
+-- target, the liveness source; raw keeps the line verbatim for export (a line naming
+-- several targets repeats raw and line_no; a line naming none keeps one row, target '').
+-- entries.closes and entries.supersedes are a legacy first-target mirror, never read.
+CREATE TABLE IF NOT EXISTS closures (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  unit TEXT NOT NULL,
+  lane_slug TEXT NOT NULL DEFAULT '',
+  entry_slug TEXT NOT NULL,
+  entry_ordinal INTEGER NOT NULL DEFAULT 1,
+  kind TEXT NOT NULL CHECK(kind IN ('CLOSES', 'SUPERSEDES')),
+  line_no INTEGER NOT NULL,
+  target_slug TEXT NOT NULL DEFAULT '',
+  verdict TEXT NOT NULL DEFAULT '',
+  reason TEXT NOT NULL DEFAULT '',
+  raw TEXT NOT NULL,
+  FOREIGN KEY (unit) REFERENCES sessions(unit) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_closures_target ON closures(unit, lane_slug, target_slug);
+CREATE INDEX IF NOT EXISTS idx_closures_entry ON closures(unit, lane_slug, entry_slug, line_no);
 
 CREATE TABLE IF NOT EXISTS findings (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -90,11 +130,12 @@ CREATE TABLE IF NOT EXISTS lane_entries (
   unit TEXT NOT NULL,
   lane_slug TEXT NOT NULL,
   slug TEXT NOT NULL,
+  ordinal INTEGER NOT NULL DEFAULT 1,
   what TEXT NOT NULL,
   thread TEXT NOT NULL DEFAULT 'none',
   ref TEXT,
   created_at TEXT NOT NULL,
-  UNIQUE(unit, lane_slug, slug),
+  UNIQUE(unit, lane_slug, slug, ordinal),
   FOREIGN KEY (unit, lane_slug) REFERENCES lanes(unit, lane_slug) ON DELETE CASCADE
 );
 
@@ -146,12 +187,12 @@ END;
 -- Sessions
 CREATE TRIGGER IF NOT EXISTS trg_sessions_ai AFTER INSERT ON sessions BEGIN
   INSERT INTO search_documents (unit, entity_type, entity_id, section, title, body)
-  VALUES (new.unit, 'session', new.unit, 'objective', new.unit, new.objective);
+  VALUES (new.unit, 'session', new.unit, 'state', new.unit, new.objective || char(10) || new.next_action);
 END;
 CREATE TRIGGER IF NOT EXISTS trg_sessions_au AFTER UPDATE ON sessions BEGIN
   UPDATE search_documents
-  SET title = new.unit, body = new.objective
-  WHERE unit = new.unit AND entity_type = 'session' AND entity_id = new.unit AND section = 'objective';
+  SET title = new.unit, body = new.objective || char(10) || new.next_action
+  WHERE unit = new.unit AND entity_type = 'session' AND entity_id = new.unit AND section = 'state';
 END;
 CREATE TRIGGER IF NOT EXISTS trg_sessions_ad AFTER DELETE ON sessions BEGIN
   DELETE FROM search_documents WHERE unit = old.unit AND entity_type = 'session' AND entity_id = old.unit;
@@ -160,7 +201,7 @@ END;
 -- Tasks
 CREATE TRIGGER IF NOT EXISTS trg_tasks_ai AFTER INSERT ON tasks BEGIN
   INSERT INTO search_documents (unit, entity_type, entity_id, section, title, body)
-  VALUES (new.unit, 'task', new.slug, 'task', new.slug || ': ' || new.objective,
+  VALUES (new.unit, 'task', new.slug, 'backlog', new.slug || ': ' || new.objective,
           new.objective || char(10) || new.description || char(10) || new.acceptance_criteria || char(10) || new.implementation_details);
 END;
 CREATE TRIGGER IF NOT EXISTS trg_tasks_au AFTER UPDATE ON tasks BEGIN
@@ -201,15 +242,20 @@ CREATE TRIGGER IF NOT EXISTS trg_findings_ad AFTER DELETE ON findings BEGIN
   DELETE FROM search_documents WHERE unit = old.unit AND entity_type = 'finding' AND entity_id = old.name;
 END;
 
--- Lanes
+-- Lanes: the recipe and the report are two documents (sections lane_recipe, lane_report)
 CREATE TRIGGER IF NOT EXISTS trg_lanes_ai AFTER INSERT ON lanes BEGIN
   INSERT INTO search_documents (unit, entity_type, entity_id, section, title, body)
-  VALUES (new.unit, 'lane', new.lane_slug, 'recipe', new.lane_slug || ': ' || new.goal, new.recipe || char(10) || new.report);
+  VALUES (new.unit, 'lane', new.lane_slug, 'lane_recipe', new.lane_slug || ': ' || new.goal, new.recipe);
+  INSERT INTO search_documents (unit, entity_type, entity_id, section, title, body)
+  VALUES (new.unit, 'lane', new.lane_slug, 'lane_report', new.lane_slug || ': ' || new.goal, new.report);
 END;
 CREATE TRIGGER IF NOT EXISTS trg_lanes_au AFTER UPDATE ON lanes BEGIN
   UPDATE search_documents
-  SET title = new.lane_slug || ': ' || new.goal, body = new.recipe || char(10) || new.report
-  WHERE unit = new.unit AND entity_type = 'lane' AND entity_id = new.lane_slug;
+  SET title = new.lane_slug || ': ' || new.goal, body = new.recipe
+  WHERE unit = new.unit AND entity_type = 'lane' AND entity_id = new.lane_slug AND section = 'lane_recipe';
+  UPDATE search_documents
+  SET title = new.lane_slug || ': ' || new.goal, body = new.report
+  WHERE unit = new.unit AND entity_type = 'lane' AND entity_id = new.lane_slug AND section = 'lane_report';
 END;
 CREATE TRIGGER IF NOT EXISTS trg_lanes_ad AFTER DELETE ON lanes BEGIN
   DELETE FROM search_documents WHERE unit = old.unit AND entity_type = 'lane' AND entity_id = old.lane_slug;
@@ -228,3 +274,14 @@ END;
 CREATE TRIGGER IF NOT EXISTS trg_lane_entries_ad AFTER DELETE ON lane_entries BEGIN
   DELETE FROM search_documents WHERE unit = old.unit AND entity_type = 'lane_entry' AND entity_id = old.lane_slug || '/' || old.slug;
 END;
+
+-- Backfill for a database created before closures existed: the legacy columns seed one
+-- row per non-empty value; entries that already carry closure rows are left alone
+INSERT INTO closures (unit, lane_slug, entry_slug, kind, line_no, target_slug, raw)
+SELECT e.unit, '', e.slug, 'CLOSES', 1, e.closes, '  CLOSES: ' || e.closes FROM entries e
+WHERE e.closes IS NOT NULL AND e.closes != ''
+  AND NOT EXISTS (SELECT 1 FROM closures c WHERE c.unit = e.unit AND c.lane_slug = '' AND c.entry_slug = e.slug);
+INSERT INTO closures (unit, lane_slug, entry_slug, kind, line_no, target_slug, raw)
+SELECT e.unit, '', e.slug, 'SUPERSEDES', 2, e.supersedes, '  SUPERSEDES: ' || e.supersedes FROM entries e
+WHERE e.supersedes IS NOT NULL AND e.supersedes != ''
+  AND NOT EXISTS (SELECT 1 FROM closures c WHERE c.unit = e.unit AND c.lane_slug = '' AND c.entry_slug = e.slug AND c.kind = 'SUPERSEDES');

@@ -1,4 +1,4 @@
-# contexture v0.52.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.53.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -24,7 +24,7 @@
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts in value examples, never around field names; -> means flow; # starts a comment. lowercase keys on the state (status: ACTIVE); spellings are contractual; laws are slug-addressed: `slug: statement`, referenced @laws#<slug>; slugs are unique across the merged base + overlays.
   references: a pointer names its target exactly: the section and step (@refresh), or target#symbol (journal#slug, knowledge#finding); a vague prose mention is a defect
   unit status   = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
-  the state    = live pointer: where the unit stands and what happens next; the only artifact updated directly; read WHOLE at boot via ctx session load; terse by design, the map, not the content: detail lives behind refs; optional ref_sessions declares read-only sessions mounted at boot; refreshed as the work moves via ctx session stamp, next, refs, close (every backlog update, task landing, period end).
+  the state    = live pointer: where the unit stands and what happens next; the only artifact updated directly; read WHOLE at boot via ctx session load; terse by design, the map, not the content: detail lives behind refs; optional ref_sessions declares read-only sessions mounted at boot; refreshed as the work moves via ctx session stamp, next, refs, close, reopen (every backlog update, task landing, period end).
   the backlog  = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog; written via ctx session task (add, update, start, complete, reopen, drop, list, show) or append, amend, flip, drop.
   the journal  = the single recording surface: append-only events + @anchor declarations; the workflow in @journal; written via ctx session record, append, stamp.
   knowledge    = settled findings: what is true, what was decided and why, what was ruled out; full lifecycle CRUD via ctx session finding (add, show, update, supersede, drop, list); an intent to act takes the @task shape in the backlog (ctx session task add), a developing idea stays a journal event; REF -> the full version in append-only artifacts: target#symbol (journal#entry, lanes/x/report#claim), never a dynamic surface; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
@@ -131,7 +131,7 @@
   period end (turn ends; unit continues):
     1. refresh (@refresh): the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by ctx session audit is the checklist: every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. session audit: .contexture/ctx session audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from the state) with line numbers; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
+    3. session audit: .contexture/ctx session audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event, STATUS: IN_PROGRESS tasks absent from the state) with line numbers, and warns on a legacy duplicate slug without failing; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
     4. unit stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision

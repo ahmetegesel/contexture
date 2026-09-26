@@ -5,6 +5,8 @@ set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../../.." && pwd)
+# the plugin's own module copy, never the workspace's adopted one: the two drift
+PLUGIN_MODULE="$SCRIPT_DIR/../.contexture/modules/storage-fts5"
 
 if ! command -v sqlite3 >/dev/null 2>&1; then
   printf 'SKIP: sqlite3 not found on PATH\n'
@@ -17,4 +19,7 @@ if [ ! -x "$COMPLIANCE" ]; then
   exit 1
 fi
 
-"$COMPLIANCE" --driver=fts5
+# the record grammar the driver renders through: the shipped core's posix driver
+CTX_REFERENCE_DRIVER="$ROOT/base/.contexture/modules/session/drivers/posix/driver"
+export CTX_REFERENCE_DRIVER
+"$COMPLIANCE" --driver=fts5 --driver-exec="$PLUGIN_MODULE/drivers/fts5"

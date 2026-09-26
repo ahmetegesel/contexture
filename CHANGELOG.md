@@ -4,6 +4,37 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.53.0] - 2026-09-26
+
+### Added
+
+- Single store routing: every `ctx session` and `ctx lane` verb now reaches the record only through the configured storage driver (record, append, amend, flip, drop, next, stamp, refs, close, reopen, bootstrap, active, board, load, audit, refresh, every query kind, and finding update, supersede, drop), so a configured backend is the one store. New driver methods on both drivers: `artifact.read`, `artifact.write`, `artifact.list`, `session.create`, `storage.health`; the POSIX driver gains `finding.update`, `finding.supersede`, `finding.drop`.
+- The FTS5 driver keeps every artifact's text verbatim and answers the record methods through the POSIX reference serialization over its stored text, so both drivers answer alike by construction and an export writes back byte-identical files; it stays native for the store, its index, search, health, and listing.
+- `ctx session reopen`: marks a CLOSED unit ACTIVE again, the reverse of close.
+- The capability handshake runs at dispatch for every driver but the bundled POSIX one, with a cached verdict per driver change; a driver missing a mandatory capability halts with rc2 naming it.
+- The ship gate runs the full session suite twice, once per driver, and the SPI compliance harness against the shipped POSIX driver (`tests/storage-compliance.sh --driver-exec`); plugin suites exercise the plugin's own copy.
+- Multi-target closers and legacy repeated slugs: one closer line may name several targets, an entry may carry several closer lines, and a closer closes every occurrence of a slug that stands before it; a legacy repeated slug stays readable (the audit warns with `LEGACY DUPLICATE SLUG`, rc unchanged) while a new repeat is refused.
+- `entry show --json` carries the entry's `ref`; `ctx session record --closes` keeps a caller verdict verbatim.
+
+### Changed
+
+- The driver payload transport: free text reaches a driver on stdin (escaped key=value lines, a single document raw), never as an argv argument, so a lane report of any size lands. A driver written against 0.52.0 needs updating for this transport and the new methods.
+- One search contract: both drivers return `entity_type`, `entity_id`, `section`, `snippet` per result (a ranked driver adds `rrf_score` and `sources`), and `--limit`, `--entity`, `--mode`, `--json` are honored; an empty query is refused. `entry list --group` and `--anchor` filter on both drivers.
+- The task status vocabulary (`todo`, `progress`, `done`, `all`) maps to the canonical statuses in one place; an unknown word is refused.
+- Every typed write refuses a CLOSED unit; embedded newlines and carriage returns in one-line fields are refused before any write; `ctx session append` accepts a WHAT carrying embedded double quotes.
+- `ctx lane show <unit> <lane> report` is the documented scripted read path of a lane report (`ctx lane report` with no body reads stdin).
+- Verb messages name units and artifacts instead of storage paths where the load warnings are concerned; `ctx session diagnose` reports the driver's own health and counts ACTIVE units exactly.
+
+### Fixed
+
+- Free text reached awk through `-v`, so a two-line `task update --desc` erased the whole backlog while reporting success, two-line `task add` and `finding add` landed nothing, and backslash sequences were rewritten; values now travel in the environment and a failed render exits 2 with nothing written.
+- The POSIX driver ignored failed file commits (success printed on a read-only store); every failed write now exits 2, removes its temp, and releases its lock. Signal cleanup no longer depends on the shell's EXIT trap.
+- `ctx lane report` and `ctx lane show` text views print the stored artifact byte for byte (the escape decoding and a quote-comma truncation were wrong).
+- Task and finding defects found by the dual-driver test: `task update` dropping `--desc`, `--criteria`, `--details`; repeated finding names and lane entry slugs accepted or failing rc2 (now rc1 `ERR_ENTITY_EXISTS`); typed resolve refs unsupported or not found; a lane report resolve crash; `task add --refs` missing from the JSON; a malformed task slug accepted; an objective cut at an escaped quote; `finding supersede` of a missing predecessor exiting 0; a raw `@finding` block on stdin crashing; `record --slug` accepting an existing slug; `finding update --ref` ignored.
+- The FTS5 migration: re-runnable import, supersession status derived from the record's references, every closer target imported with its verdict, an in-place schema upgrade of older databases, and derived index rows without trailing newlines.
+- Help flags: `--help` and `-h` on every finding, task, and entry subcommand and after the record verbs print the usage instead of failing.
+- The governance probe declares the lane module, and the ship steps stage the payload before the gate.
+
 ## [0.52.0] - 2026-09-26
 
 ### Added
