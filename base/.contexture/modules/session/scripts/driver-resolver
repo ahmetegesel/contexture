@@ -329,6 +329,92 @@ handshake_at_dispatch() {
   return 0
 }
 
+# The optional capabilities (corpus.store, corpus.changelog) stay outside the dispatch
+# handshake's mandatory set, so a record-only driver keeps serving every session verb; a
+# caller that needs one asks the resolver first:
+#   require <capability>...  rc 0 when the configured driver declares every one; rc 2
+#                            ERR_CAPABILITY_UNSUPPORTED naming the missing ones otherwise
+#   has <capability>         rc 0 declared, rc 1 not declared, no message
+# The bundled posix driver answers from its descriptor like any other driver. A passing
+# verdict is cached in the scratch drawer, one file per driver path and capability set
+# (sorted, so the order of the arguments never matters), its name apart from the dispatch
+# verdict of the same driver (which it never answers or overwrites), valid while strictly
+# newer than the driver (the rule of handshake_at_dispatch); a missing capability is never
+# cached, and an unwritable drawer caches nothing. The descriptor is read with stdin from
+# /dev/null.
+cap_token_valid() {
+  case "$1" in
+    ""|[!a-z]*|*[!a-z0-9._]*) return 1 ;;
+  esac
+  return 0
+}
+
+# driver_caps: the capability names of a descriptor on stdin, one per line
+driver_caps() {
+  awk '
+    /"capabilities"[[:space:]]*:/ && !seen { in_caps = 1; seen = 1; first = 1 }
+    in_caps {
+      line = $0
+      if (first) { sub(/^.*"capabilities"[[:space:]]*:/, "", line); first = 0 }
+      e = index(line, "]")
+      if (e) line = substr(line, 1, e - 1)
+      while (match(line, /"[^"]+"/)) {
+        print substr(line, RSTART + 1, RLENGTH - 2)
+        line = substr(line, RSTART + RLENGTH)
+      }
+      if (e) in_caps = 0
+    }'
+}
+
+# require_caps <quiet 0|1> <driver path> <driver name> <capability>...: rc 0 all declared,
+# 3 some missing (named on stderr unless quiet), 2 the driver cannot answer its descriptor
+require_caps() {
+  rq_quiet=$1; rq_path=$2; rq_name=$3
+  shift 3
+  rq_set=$(printf '%s\n' "$@" | LC_ALL=C sort -u)
+  rq_tag=$(printf '%s\n' "$rq_set" | tr '\n' '+')
+  rq_tag=${rq_tag%+}
+  rq_key=""
+  rq_rest=$rq_path
+  while :; do
+    case "$rq_rest" in
+      */*) rq_key="${rq_key}${rq_rest%%/*}_"; rq_rest=${rq_rest#*/} ;;
+      *) rq_key="$rq_key$rq_rest"; break ;;
+    esac
+  done
+  rq_dir="$CTX_DIR/tmp/driver-verdicts"
+  rq_file="$rq_dir/$rq_key.require.$rq_tag"
+  if [ -f "$rq_file" ] && [ "$rq_file" -nt "$rq_path" ]; then
+    return 0
+  fi
+  if [ ! -x "$rq_path" ]; then
+    printf 'driver-resolver: ERROR: driver executable '\''%s'\'' not found or not executable (ERR_DRIVER_NOT_FOUND)\n' "$rq_path" >&2
+    return 2
+  fi
+  rq_json=$("$rq_path" capability 2>/dev/null </dev/null)
+  rq_rc=$?
+  if [ "$rq_rc" -ne 0 ]; then
+    printf 'driver-resolver: ERROR: capability handshake failed for driver '\''%s'\'' with exit code %d (ERR_DRIVER_PROTOCOL)\n' "$rq_name" "$rq_rc" >&2
+    return 2
+  fi
+  rq_have=$(printf '%s\n' "$rq_json" | driver_caps)
+  rq_missing=""
+  for rq_c in $rq_set; do
+    printf '%s\n' "$rq_have" | grep -qxF -- "$rq_c" || rq_missing="$rq_missing $rq_c"
+  done
+  if [ -n "$rq_missing" ]; then
+    [ "$rq_quiet" -eq 1 ] || printf 'driver-resolver: ERROR: driver '\''%s'\'' lacks capability:%s (ERR_CAPABILITY_UNSUPPORTED)\n' "$rq_name" "$rq_missing" >&2
+    return 3
+  fi
+  if mkdir -p "$rq_dir" 2>/dev/null; then
+    rq_tmp="$rq_file.$$"
+    if printf 'declares %s: %s\n' "$rq_path" "$rq_tag" > "$rq_tmp" 2>/dev/null; then
+      mv -f "$rq_tmp" "$rq_file" 2>/dev/null || rm -f "$rq_tmp"
+    fi
+  fi
+  return 0
+}
+
 # Main entry point
 CTX_DIR=$(find_ctx_dir) || {
   printf 'driver-resolver: ERROR: could not locate .contexture root directory\n' >&2
@@ -356,6 +442,8 @@ while [ $# -gt 0 ]; do
       printf '  resolve [name]                    print resolved driver executable path\n'
       printf '  capability [name]                 validate capability handshake and print capabilities\n'
       printf '  check [name]                      verify resolution and capabilities\n'
+      printf '  require <capability>...           rc 0 when the driver declares every one, rc 2 naming the missing\n'
+      printf '  has <capability>                  rc 0 declared, rc 1 not declared, no message\n'
       printf '  exec <subsystem>.<method> [args]  dispatch call to active driver (stdin passes through)\n'
       printf '  <subsystem>.<method> [args]       direct dispatch form\n'
       printf 'options:\n'
@@ -414,6 +502,33 @@ case "$COMMAND" in
     verify_capabilities "$DRIVER_PATH" "$TARGET_DRIVER" >/dev/null || exit 2
     printf 'OK: storage driver '\''%s'\'' verified at %s\n' "$TARGET_DRIVER" "$DRIVER_PATH"
     exit 0
+    ;;
+
+  require|has)
+    if [ $# -eq 0 ] || { [ "$COMMAND" = has ] && [ $# -ne 1 ]; }; then
+      if [ "$COMMAND" = has ]; then
+        printf 'driver-resolver: ERROR: has takes exactly one capability (ERR_INVALID_ARGUMENT)\n' >&2
+      else
+        printf 'driver-resolver: ERROR: require takes one or more capabilities (ERR_INVALID_ARGUMENT)\n' >&2
+      fi
+      exit 1
+    fi
+    for rq_arg in "$@"; do
+      cap_token_valid "$rq_arg" || {
+        printf 'driver-resolver: ERROR: malformed capability '\''%s'\'' (ERR_INVALID_ARGUMENT)\n' "$rq_arg" >&2
+        exit 1
+      }
+    done
+    DRIVER_PATH=$(resolve_target_driver "$CTX_DIR" "$TARGET_DRIVER") || exit 2
+    rq_q=0
+    [ "$COMMAND" = has ] && rq_q=1
+    require_caps "$rq_q" "$DRIVER_PATH" "$TARGET_DRIVER" "$@"
+    rq_rc=$?
+    case "$rq_rc" in
+      0) exit 0 ;;
+      3) [ "$COMMAND" = has ] && exit 1; exit 2 ;;
+      *) exit 2 ;;
+    esac
     ;;
 
   exec|dispatch)

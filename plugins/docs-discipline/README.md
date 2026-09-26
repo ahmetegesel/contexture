@@ -37,12 +37,13 @@ What lands where:
 | piece | what it is | lands as |
 |---|---|---|
 | `.contexture/modules/docs/` | the docs module: the five verbs and their private engines | copy |
-| `.contexture/templates/doc.md` | the corpus grammar: eight kinds, the block shapes, the block scalar rules | copy |
+| `.contexture/templates/doc.md` | the corpus grammar: eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema (section 6, the `#%` lines) | copy |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed |
 | `AGENTS.workspace.md` | the overlay blocks: five docs laws, layout, boot, close | merge |
 | `.contexture/rhythms/work.md`, `.contexture/rhythms/docs-authoring.md`, `.contexture/rhythms/docs-drift.md` | the workspace's work rhythm (the canonical variant with the docs discipline) and the two procedure rhythms | copy (optional) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/run.sh` | the plugin's own suite: the audit plus the gate matrix over the sample | reference (never copied) |
+| `tests/run.sh` | the plugin's own suite: the staging check, the audit, the gate matrix over the sample, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`) | reference (never copied) |
+| `tests/grammar-agreement.awk` | the grammar agreement check the suite runs: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
 | `README.md` | this onboarding document | reference |
 
 ## Common shapes (reference rows)
@@ -178,8 +179,9 @@ into an existing file; `seed` means it is starting content to adapt; and
 
 5. Keep `tests/sample/` and this README as references: the sample is
    fictional and never part of the adopted corpus; `tests/run.sh` is the
-   plugin's own suite (the audit plus the gate matrix over the sample), lives
-   with the plugin, is never copied, and the upstream runner may invoke it.
+   plugin's own suite (the audit plus the gate matrix over the sample and the
+   grammar agreement check), lives with the plugin, is never copied, and the
+   upstream runner invokes it twice, once per storage driver.
 
 ## Verify
 
@@ -319,8 +321,13 @@ reads the corpus grammar.
 
 Changes land upstream with the walk re-run: every command in Try it below is
 the plugin's test, and `tests/run.sh` drives the audit and the gate matrix as
-the committed suite. Keep the grammar (`.contexture/templates/doc.md`) and the
-audit in step; the `tests/sample/` corpus is reference data. Packaging,
+the committed suite, staged from the repository's shipped core (`base/`) and
+this plugin's own copies, never an adopted drawer, on the posix driver and
+again with `--driver=fts5` (the storage-fts5 plugin's copy configured; skip 77
+without sqlite3 FTS5). Keep the grammar (`.contexture/templates/doc.md`), its
+machine-readable schema (section 6), and the audit in step: the suite's
+grammar agreement check (`tests/grammar-agreement.awk`) fails on any
+difference among the three; the `tests/sample/` corpus is reference data. Packaging,
 naming, and the test convention are in `docs/plugins.md`; the module shape is
 `docs/modules.md`.
 
@@ -637,11 +644,12 @@ help:
 | `.contexture/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`) |
 | `.contexture/modules/docs/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/modules/docs/README.md` | authored fresh: the off-path module map (layout, workspace root, tests) |
-| `.contexture/templates/doc.md` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII |
+| `.contexture/templates/doc.md` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII; the contract and responsibilities shapes show their id lines, and the machine-readable schema (section 6, the `#%` lines) restates every shape for the write verbs |
 | `.contexture/rhythms/work.md` | authored as the workspace's work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW |
 | `.contexture/rhythms/docs-authoring.md` | authored from the source authoring procedure; the steps name outcomes, the method detail lives in the template's comments |
 | `.contexture/rhythms/docs-drift.md` | authored from the source drift procedure; the method lives in `@rule docs/drift` |
 | `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the drawer sources glob and evidence fields re-pointed at the module |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
-| `tests/run.sh` | authored fresh: the plugin suite (the audit plus the gate matrix over `tests/sample/`), staged under the workspace's `.contexture/tmp/` when writable |
+| `tests/run.sh` | authored fresh: the plugin suite (the staging check, the audit, the gate matrix over `tests/sample/`, and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
+| `tests/grammar-agreement.awk` | authored fresh: the agreement check of the `#%` schema, the prose shapes, and the audit's lists, refusing an empty side as a pass |

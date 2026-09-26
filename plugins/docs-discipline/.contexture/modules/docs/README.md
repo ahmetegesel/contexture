@@ -52,12 +52,16 @@ product directory.
 
 ## Tests
 
-`tests/run.sh` at the plugin root stages a scratch workspace under the
-workspace's `.contexture/tmp/` when it is writable (the system temp
-otherwise), copies this module and the base `.contexture/ctx`, seeds
-`tests/sample/docs/` plus `docs/`, and drives the audit and the gate matrix.
-Needs: POSIX awk/sh and git (the gate matrix plants a local repository for
-the claimant trackedness probe).
+`tests/run.sh [--driver=posix|fts5]` at the plugin root stages a scratch
+workspace under the workspace's `.contexture/tmp/` (made on demand; the system
+temp only when it cannot be), copies the shipped core's runtime and its session
+and lane modules from `base/`, this module, and the grammar template (with
+`--driver=fts5`, the storage-fts5 plugin's module and `storage.driver: fts5`),
+seeds `tests/sample/docs/` plus `docs/`, and drives the staging check, the
+audit, the gate matrix, and the grammar agreement check
+(`tests/grammar-agreement.awk`). Needs: POSIX awk/sh, `base/` beside
+`plugins/`, git (the gate matrix plants a local repository for the claimant
+trackedness probe), and for the fts5 run sqlite3 with FTS5 (skip 77 without).
 
 ## The gate's matrix
 

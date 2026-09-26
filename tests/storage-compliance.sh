@@ -1,9 +1,14 @@
 #!/bin/sh
 # storage-compliance.sh: the Storage Provider Interface (SPI) compliance test harness.
-# Validates storage driver implementations against the SPI contract across 11 test
-# suites and 39 verification scenarios; each case asserts the returned data (exact key
+# Validates storage driver implementations against the SPI contract across 13 test
+# suites and 49 verification scenarios; each case asserts the returned data (exact key
 # and value pairs in the driver's JSON, or the exact bytes of an artifact), never the
-# exit code alone. Payloads travel on stdin (docs/the-engine.md, the transport).
+# exit code alone. Payloads travel on stdin (docs/the-engine.md, the transport). The
+# corpus suite (12) keys on the declared corpus.store: a driver without that optional
+# capability runs one refusal case in place of its seven (43 cases in all), and its
+# changes case keys on the declared corpus.changelog; suite 13 proves the shipped
+# resolver's require and has and the unchanged dispatch handshake over planted
+# descriptors that wrap the driver under test.
 #
 # Usage:
 #   tests/storage-compliance.sh [--driver=<name>] [--driver-exec=<path>] [--keep] [--verbose]
@@ -653,6 +658,288 @@ wantrc "$rc" 0; want "$out" '"total_matches":0,"results":[]'
 tc "TC39: --mode=exact returns one row per matching entity and section with the same total on every driver"
 rm -f ex.txt
 rm -f art-in.txt art-out.txt lane-in.txt lj.txt empty.txt
+
+# ==============================================================================
+# Suite 12: The Corpus Store (7 test cases with corpus.store, 1 without)
+# ==============================================================================
+# corpus.store is optional (outside the handshake's mandatory set): a driver declaring
+# it runs the seven cases; a driver without it proves it refuses every corpus method. The
+# changes case keys on the declared corpus.changelog, never on the driver's name.
+printf '\n== Suite 12: The Corpus Store ==\n'
+CORPUS_STORE=0
+CORPUS_LOG=0
+printf '%s\n' "$cap_out" | grep -qF '"corpus.store"' && CORPUS_STORE=1
+printf '%s\n' "$cap_out" | grep -qF '"corpus.changelog"' && CORPUS_LOG=1
+# a guide at depth one beside the corpus is never a doc
+mkdir -p "$SANDBOX/docs"
+printf '# a guide, not a corpus doc\n' > "$SANDBOX/docs/guide.md"
+cw() { f=$1; shift; "$DRIVER_EXEC" corpus.write "$@" < "$f"; }
+
+if [ "$CORPUS_STORE" -eq 1 ]; then
+  # TC40: corpus.write then corpus.read returns the exact bytes (no trailing newline, a
+  # literal backslash-n, a tab, quotes, non-ASCII); a replace wins; a 1 MB doc round-trips;
+  # the success line names repo, slug, and op
+  out=$(drv corpus.list 2>&1); rc=$?
+  wantrc "$rc" 0; [ -z "$out" ] || tc_fail="$tc_fail; an empty corpus listed [$out]"
+  printf '@doc capability one\n  repo: alpha\n  description: "a \\n literal, a\ttab, a \\"quote\\", çalışma"\n\n@responsibilities\n  - "owns one"' > c-in.txt
+  out=$(cw c-in.txt alpha one 2>&1); rc=$?
+  wantrc "$rc" 0; want "$out" '{"status":"ok","repo":"alpha","slug":"one","op":"write"}'
+  drv corpus.read alpha one > c-out.txt 2>/dev/null; rc=$?
+  wantrc "$rc" 0
+  cmp -s c-in.txt c-out.txt || tc_fail="$tc_fail; corpus.read differs from the written bytes"
+  printf '@doc capability one\n  repo: alpha\n  description: "replaced"\n' > c-in2.txt
+  out=$(cw c-in2.txt alpha one --op=entry --head=0123abcdef 2>&1); rc=$?
+  wantrc "$rc" 0; want "$out" '"op":"entry"'
+  drv corpus.read alpha one > c-out.txt 2>/dev/null
+  cmp -s c-in2.txt c-out.txt || tc_fail="$tc_fail; a replace did not win"
+  awk 'BEGIN { for (i = 1; i <= 13000; i++) printf "    line %06d of a big doc, eighty bytes wide, padded out to its width ...\n", i }' > c-big.txt
+  cw c-big.txt alpha big >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 0
+  drv corpus.read alpha big > c-out.txt 2>/dev/null
+  cmp -s c-big.txt c-out.txt || tc_fail="$tc_fail; the 1 MB doc did not read back byte for byte"
+  drv corpus.read alpha no-such >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 1
+  out=$(drv corpus.read alpha no-such 2>&1)
+  want "$out" 'ERR_ENTITY_NOT_FOUND'
+  tc "TC40: corpus.write and corpus.read round-trip the exact bytes; a replace wins; an absent doc reads rc1"
+
+  # TC41: corpus.list prints <repo>/<slug> in bytewise order, a repo filter keeps one repo,
+  # an absent repo refuses rc1, a malformed repo rc1, the depth-one guide never listed
+  printf '@doc overview zeta\n' > c-z.txt
+  for c_k in "beta zeta" "alpha Two" "alpha a.b" "alpha one-two"; do
+    set -- $c_k
+    cw c-z.txt "$1" "$2" >/dev/null 2>&1 || tc_fail="$tc_fail; write $1/$2 failed"
+  done
+  out=$(drv corpus.list 2>&1); rc=$?
+  wantrc "$rc" 0
+  [ "$out" = "$(printf 'alpha/Two\nalpha/a.b\nalpha/big\nalpha/one-two\nalpha/one\nbeta/zeta')" ] || tc_fail="$tc_fail; list [$out]"
+  out=$(drv corpus.list alpha 2>&1); rc=$?
+  wantrc "$rc" 0
+  [ "$out" = "$(printf 'alpha/Two\nalpha/a.b\nalpha/big\nalpha/one-two\nalpha/one')" ] || tc_fail="$tc_fail; list alpha [$out]"
+  out=$(drv corpus.list gamma 2>&1); rc=$?
+  wantrc "$rc" 1; want "$out" 'ERR_ENTITY_NOT_FOUND'
+  out=$(drv corpus.list ../alpha 2>&1); rc=$?
+  wantrc "$rc" 1; want "$out" 'ERR_INVALID_ARGUMENT'
+  wantnot "$(drv corpus.list 2>&1)" 'guide'
+  tc "TC41: corpus.list orders bytewise, filters by repo, refuses an absent or malformed repo"
+
+  # TC42: --create refuses an existing doc rc1 and leaves it whole; --create lands a new
+  # doc; malformed keys, an unknown flag, and an unknown op refuse rc1 with nothing written
+  out=$(cw c-in.txt alpha one --create 2>&1); rc=$?
+  wantrc "$rc" 1; want "$out" 'ERR_ENTITY_EXISTS'
+  drv corpus.read alpha one > c-out.txt 2>/dev/null
+  cmp -s c-in2.txt c-out.txt || tc_fail="$tc_fail; a refused --create changed the doc"
+  out=$(cw c-in.txt alpha fresh --create --op=new 2>&1); rc=$?
+  wantrc "$rc" 0; want "$out" '"slug":"fresh","op":"new"'
+  c_before=$(drv corpus.list 2>&1)
+  for c_bad in ".hidden" "a/b" ""; do
+    cw c-in.txt alpha "$c_bad" >/dev/null 2>&1; rc=$?
+    wantrc "$rc" 1
+  done
+  cw c-in.txt alpha other --force >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 1
+  out=$(cw c-in.txt alpha other --op=bogus 2>&1); rc=$?
+  wantrc "$rc" 1; want "$out" 'ERR_INVALID_ARGUMENT'
+  [ "$(drv corpus.list 2>&1)" = "$c_before" ] || tc_fail="$tc_fail; a refused write changed the corpus"
+  tc "TC42: --create refuses an existing doc and lands a new one; malformed calls refuse rc1 writing nothing"
+
+  # TC43: corpus.remove then corpus.read rc1; a second remove rc1; the last doc of a repo
+  # removed leaves the repo absent from the corpus
+  out=$(drv corpus.remove alpha fresh 2>&1); rc=$?
+  wantrc "$rc" 0; want "$out" '"slug":"fresh","op":"remove"'
+  drv corpus.read alpha fresh >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 1
+  drv corpus.remove alpha fresh >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 1
+  wantnot "$(drv corpus.list alpha 2>&1)" 'alpha/fresh'
+  drv corpus.remove beta zeta >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 0
+  drv corpus.list beta >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 1
+  [ "$(drv corpus.list 2>&1)" = "$(printf 'alpha/Two\nalpha/a.b\nalpha/big\nalpha/one-two\nalpha/one')" ] || tc_fail="$tc_fail; list after removes"
+  tc "TC43: corpus.remove then corpus.read rc1; an emptied repo leaves the corpus"
+
+  # TC44: corpus.mount prints the root every listed doc reads under at docs/<repo>/<slug>.md,
+  # byte for byte; a repo mount carries that repo's docs; a missing or non-empty folder
+  # and an absent repo refuse rc1; a driver answering elsewhere writes nothing into it
+  mkdir -p c-mnt
+  root=$(drv corpus.mount "$SANDBOX/c-mnt" 2>&1); rc=$?
+  wantrc "$rc" 0
+  c_n=0
+  for c_d in $(drv corpus.list 2>/dev/null); do
+    c_n=$((c_n + 1))
+    drv corpus.read "${c_d%%/*}" "${c_d#*/}" > c-out.txt 2>/dev/null
+    cmp -s c-out.txt "$root/docs/$c_d.md" || tc_fail="$tc_fail; mount copy of $c_d differs"
+  done
+  [ "$c_n" -eq 5 ] || tc_fail="$tc_fail; mount compared $c_n docs, want 5"
+  c_files=$(for c_f in "$root"/docs/*/*.md; do [ -f "$c_f" ] && printf '%s\n' "$c_f"; done | wc -l | tr -d ' ')
+  [ "$c_files" -eq 5 ] || tc_fail="$tc_fail; the mount holds $c_files docs at depth two, want 5"
+  if [ "$root" != "$SANDBOX/c-mnt" ] && [ -n "$(ls -A c-mnt)" ]; then tc_fail="$tc_fail; a driver answering elsewhere wrote into the folder"; fi
+  mkdir -p c-mnt2
+  root2=$(drv corpus.mount "$SANDBOX/c-mnt2" alpha 2>&1); rc=$?
+  wantrc "$rc" 0
+  cmp -s c-in2.txt "$root2/docs/alpha/one.md" || tc_fail="$tc_fail; a repo mount lacks alpha/one"
+  drv corpus.mount "$SANDBOX/no-such-folder" >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 1
+  mkdir -p c-full && : > c-full/x
+  drv corpus.mount "$SANDBOX/c-full" >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 1
+  mkdir -p c-mnt3
+  drv corpus.mount "$SANDBOX/c-mnt3" gamma >/dev/null 2>&1; rc=$?
+  wantrc "$rc" 1
+  rm -rf c-mnt c-mnt2 c-mnt3 c-full
+  tc "TC44: corpus.mount prints the root its docs read under byte for byte; bad folders and absent repos refuse rc1"
+
+  # TC45: corpus.changes follows the declared corpus.changelog: absent, it refuses rc1
+  # ERR_CAPABILITY_UNSUPPORTED printing nothing; present, it returns the rows of the given
+  # heads only, oldest first: <seq> TAB <time> TAB <op> TAB <repo>/<slug> TAB <head>
+  if [ "$CORPUS_LOG" -eq 1 ]; then
+    cw c-z.txt logr one --op=new --head=aaa1 >/dev/null 2>&1
+    cw c-z.txt logr one --op=entry --head=bbb2 >/dev/null 2>&1
+    drv corpus.remove logr one --op=remove --head=aaa1 >/dev/null 2>&1
+    out=$(printf 'head=aaa1\n' | "$DRIVER_EXEC" corpus.changes 2>&1); rc=$?
+    wantrc "$rc" 0
+    c_rows=$(printf '%s\n' "$out" | awk -F '\t' 'NF == 5 && $4 == "logr/one" { printf "%s %s|", $3, $5 }')
+    [ "$c_rows" = "new aaa1|remove aaa1|" ] || tc_fail="$tc_fail; changes rows [$c_rows]"
+    wantnot "$out" 'bbb2'
+  else
+    out=$(printf 'head=aaa1\n' | "$DRIVER_EXEC" corpus.changes 2>/dev/null); rc=$?
+    wantrc "$rc" 1; [ -z "$out" ] || tc_fail="$tc_fail; a refused changes printed [$out]"
+    want "$(printf 'head=aaa1\n' | "$DRIVER_EXEC" corpus.changes 2>&1)" 'ERR_CAPABILITY_UNSUPPORTED'
+  fi
+  tc "TC45: corpus.changes answers the declared corpus.changelog (rows by head, or a refusal rc1)"
+
+  # TC46: the corpus is the workspace's whatever the caller's folder: a call from a
+  # subfolder of the sandbox lists and reads the sandbox's docs
+  mkdir -p "$SANDBOX/sub/deep"
+  c_top=$(drv corpus.list 2>&1)
+  c_sub=$(cd "$SANDBOX/sub/deep" && "$DRIVER_EXEC" corpus.list < /dev/null 2>&1); rc=$?
+  wantrc "$rc" 0
+  [ -n "$c_top" ] && [ "$c_sub" = "$c_top" ] || tc_fail="$tc_fail; subfolder list [$c_sub]"
+  (cd "$SANDBOX/sub/deep" && "$DRIVER_EXEC" corpus.read alpha one < /dev/null) > c-out.txt 2>/dev/null
+  cmp -s c-in2.txt c-out.txt || tc_fail="$tc_fail; a subfolder read differs"
+  rm -rf "$SANDBOX/sub"
+  tc "TC46: a corpus call from a sandbox subfolder lists and reads the sandbox's docs"
+  rm -f c-in.txt c-in2.txt c-out.txt c-big.txt c-z.txt
+else
+  # TC40 (no corpus.store): every corpus method refuses, printing nothing on stdout
+  mkdir -p c-mnt
+  printf '@doc overview x\n' > c-in.txt
+  for c_m in "corpus.list" "corpus.read alpha one" "corpus.write alpha one" "corpus.remove alpha one" "corpus.mount c-mnt" "corpus.changes"; do
+    # shellcheck disable=SC2086
+    out=$("$DRIVER_EXEC" $c_m < c-in.txt 2>/dev/null); rc=$?
+    [ "$rc" -ne 0 ] || tc_fail="$tc_fail; $c_m answered rc0"
+    [ -z "$out" ] || tc_fail="$tc_fail; $c_m printed [$out]"
+  done
+  rm -rf c-mnt c-in.txt
+  tc "TC40: a driver without corpus.store refuses every corpus method"
+  printf 'note: TC41 to TC46 need corpus.store, which this driver does not declare\n'
+fi
+
+# ==============================================================================
+# Suite 13: Optional Capabilities in the Resolver (3 test cases)
+# ==============================================================================
+# the shipped resolver (base's, beside the drivers it names) staged into a workspace of
+# its own; planted descriptors wrap the driver under test, so every case runs alike on
+# every driver: require and has answer the optional capabilities, their verdict cached
+# per driver path and capability set apart from the dispatch verdict, and the dispatch
+# handshake's mandatory set unchanged (a driver without corpus.store serves the record)
+printf '\n== Suite 13: Optional Capabilities in the Resolver ==\n'
+RS="$SANDBOX/rs"
+mkdir -p "$RS/.contexture/modules"
+cp -R "$ROOT/base/.contexture/modules/session" "$RS/.contexture/modules/session"
+RSV="$RS/.contexture/modules/session/scripts/driver-resolver"
+MANDATORY='"session.lifecycle", "task.crud", "task.atomic_completion", "entry.journal", "finding.knowledge", "lane.lifecycle", "resolve.symbolic", "search.keyword", "artifact.store"'
+# wrap <file> <extra capabilities, a JSON list tail or empty> [<caps instead of the mandatory>]
+wrap() {
+  w_caps=${3:-$MANDATORY}
+  {
+    printf '#!/bin/sh\n'
+    printf 'if [ "${1:-}" = capability ]; then\n'
+    printf '  printf '\''{\\n  "driver": "planted",\\n  "capabilities": [ %s%s ]\\n}\\n'\''\n' "$w_caps" "$2"
+    printf '  exit 0\n'
+    printf 'fi\n'
+    printf 'exec "%s" "$@"\n' "$DRIVER_EXEC"
+  } > "$1"
+  chmod +x "$1"
+  touch -t 202001010000 "$1"
+}
+W_NO="$RS/w-nocorpus"
+W_YES="$RS/w-corpus"
+W_BAD="$RS/w-broken"
+wrap "$W_NO" ""
+wrap "$W_YES" ', "corpus.store"'
+wrap "$W_BAD" "" '"session.lifecycle", "task.atomic_completion", "entry.journal", "finding.knowledge", "lane.lifecycle", "resolve.symbolic", "search.keyword", "artifact.store"'
+rsv() { (cd "$RS" && unset CTX_DIR CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH && CTX_ROOT="$RS" "$RSV" "$@"); }
+VD="$RS/.contexture/tmp/driver-verdicts"
+
+# TC47: require refuses rc2 naming what is missing, has answers rc0 or rc1 with no message,
+# for the planted descriptors and the bundled posix driver alike; malformed calls rc1
+out=$(rsv "--driver=$W_NO" require corpus.store 2>&1); rc=$?
+wantrc "$rc" 2; want "$out" 'corpus.store'; want "$out" 'ERR_CAPABILITY_UNSUPPORTED'
+out=$(rsv "--driver=$W_NO" has corpus.store 2>&1); rc=$?
+wantrc "$rc" 1; [ -z "$out" ] || tc_fail="$tc_fail; has printed [$out]"
+out=$(rsv "--driver=$W_YES" require corpus.store 2>&1); rc=$?
+wantrc "$rc" 0; [ -z "$out" ] || tc_fail="$tc_fail; require printed [$out]"
+out=$(rsv "--driver=$W_YES" has corpus.store 2>&1); rc=$?
+wantrc "$rc" 0; [ -z "$out" ] || tc_fail="$tc_fail; has printed [$out]"
+out=$(rsv "--driver=$W_YES" require corpus.store corpus.changelog 2>&1); rc=$?
+wantrc "$rc" 2; want "$out" 'corpus.changelog'; wantnot "$out" 'corpus.store '
+out=$(rsv require corpus.store 2>&1); rc=$?
+wantrc "$rc" 0
+rsv has corpus.changelog >/dev/null 2>&1; rc=$?
+wantrc "$rc" 1
+rsv require >/dev/null 2>&1; rc=$?
+wantrc "$rc" 1
+rsv has corpus.store corpus.changelog >/dev/null 2>&1; rc=$?
+wantrc "$rc" 1
+rsv require 'Bad!' >/dev/null 2>&1; rc=$?
+wantrc "$rc" 1
+tc "TC47: require and has answer the declared optional capabilities on every driver"
+
+# TC48: a passing verdict is cached per driver path and capability set, apart from the
+# dispatch verdict, valid while newer than the driver: it answers for an unchanged driver,
+# never for another set, and a changed driver is read afresh
+rsv "--driver=$W_YES" session.list >/dev/null 2>&1
+c_disp=$(ls "$VD" 2>/dev/null | grep -v '\.require\.' | grep 'w-corpus$')
+[ -n "$c_disp" ] || tc_fail="$tc_fail; no dispatch verdict for the wrapper"
+cp "$VD/$c_disp" c-disp.txt 2>/dev/null
+rsv "--driver=$W_YES" require corpus.store >/dev/null 2>&1
+rsv "--driver=$W_YES" require session.lifecycle corpus.store >/dev/null 2>&1
+rsv "--driver=$W_YES" require corpus.store session.lifecycle >/dev/null 2>&1
+c_req=$(ls "$VD" 2>/dev/null | grep 'w-corpus\.require\.' | tr '\n' ' ')
+case "$c_req" in
+  *"w-corpus.require.corpus.store "*"w-corpus.require.corpus.store+session.lifecycle "*) ;;
+  *) tc_fail="$tc_fail; require verdicts [$c_req]" ;;
+esac
+[ "$(printf '%s' "$c_req" | wc -w | tr -d ' ')" = 2 ] || tc_fail="$tc_fail; want 2 require verdicts [$c_req]"
+cmp -s c-disp.txt "$VD/$c_disp" || tc_fail="$tc_fail; the dispatch verdict changed"
+rsv "--driver=$W_YES" require corpus.changelog >/dev/null 2>&1; rc=$?
+wantrc "$rc" 2
+# the cache answers an unchanged driver: the descriptor loses corpus.store, the mtime stays old
+wrap "$W_YES" ""
+rsv "--driver=$W_YES" require corpus.store >/dev/null 2>&1; rc=$?
+wantrc "$rc" 0
+# a changed driver (newer than its verdict) is read afresh
+touch -t 203001010000 "$W_YES"
+rsv "--driver=$W_YES" require corpus.store >/dev/null 2>&1; rc=$?
+wantrc "$rc" 2
+rm -f c-disp.txt
+tc "TC48: the require verdict is cached per driver path and capability set, apart from the dispatch verdict"
+
+# TC49: the dispatch handshake's mandatory set is unchanged: a driver without corpus.store
+# serves the record methods through the resolver; a planted driver lacking task.crud is
+# halted rc2 naming it, serving nothing
+out=$(rsv "--driver=$W_NO" session.create rs-unit 2>&1); rc=$?
+wantrc "$rc" 0; want "$out" '"status":"ok"'
+out=$(rsv "--driver=$W_NO" session.list 2>&1); rc=$?
+wantrc "$rc" 0; want "$out" '"unit":"rs-unit"'
+pl objective "served" | rsv "--driver=$W_NO" task.add rs-unit rs-task >/dev/null 2>&1; rc=$?
+wantrc "$rc" 0
+want "$(rsv "--driver=$W_NO" task.list rs-unit 2>&1)" '"slug":"rs-task"'
+out=$(rsv "--driver=$W_BAD" session.list 2>&1); rc=$?
+wantrc "$rc" 2; want "$out" 'task.crud'; want "$out" 'ERR_CAPABILITY_UNSUPPORTED'; wantnot "$out" 'rs-unit'
+tc "TC49: a driver without corpus.store serves the record; the mandatory handshake still halts a gap"
 
 # ==============================================================================
 # Summary
