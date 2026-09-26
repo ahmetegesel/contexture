@@ -1,9 +1,17 @@
 # load_bios.awk: generates paginated BIOS JSON view with task compaction
 # Reads state.md, backlog.md, knowledge.md, and journal.md
 
+# a backslash doubled by concatenation, never by a gsub replacement: a replacement of
+# four backslashes yields one under busybox awk and gawk --posix
+function bs_double(s,    n, p, i, o) {
+  n = split(s, p, /\\/)
+  o = (n ? p[1] : "")
+  for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]
+  return o
+}
+
 function escape_json(s,    r) {
-  r = s
-  gsub(/\\/, "\\\\", r)
+  r = bs_double(s)
   gsub(/"/, "\\\"", r)
   gsub(/\n/, "\\n", r)
   gsub(/\r/, "\\r", r)

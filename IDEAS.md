@@ -168,7 +168,7 @@
   WHAT :: An integration pattern where a harness hook rewrites shell commands through the runner (the context-mode PreToolUse plus rtk two-tier defense, natively): the raw command never runs, the compacted stream returns.
   WHY :: The runner prefix is manual today; a harness-side rewrite makes compaction the default path instead of a discipline.
   REF: ".contexture/sessions/context-mode-rtk/lanes/rtk-adaptation/report.md"
-  STATUS: OPEN
+  STATUS: DROPPED the human rejects a harness mechanism for runner adoption; the direction is hardening the rules and the prose (idea ctx-run-adoption, journal#2026-09-26-event-1790452331)
 
 @idea storage-abstraction
   DUMPED: 2026-09-23
@@ -190,3 +190,26 @@
   WHY :: Agents routinely mis-enter blocks, fields, slugs, and dates (this session's retries: hyphenated finding names, missing REF symbols, an apostrophe in a bootstrap objective); each failure costs a roundtrip and invites improvisation.
   REF: "docs/modules.md"
   STATUS: PICKED cli-help-and-governance
+
+@idea busybox-plugin-suites
+  DUMPED: 2026-09-26
+  WHAT ::
+    Make the plugin suites green under Alpine busybox (found by lane awk-portability; every core suite already green there on both drivers):
+    docs-discipline: docs-check.awk reads its change list with getline from the file name dash, which busybox awk opens as a file named dash, so the gate matrix sees 0 files (proposed: read /dev/stdin); without git the gate matrix exits rc1 instead of the 77 skip its suite header promises.
+    ast-doc-graph: test-ddl passes mktemp a template with .db after the X run, which busybox mktemp refuses (proposed: end the template in the X run); verify-pilot exits 127 without bash (proposed: detect bash and skip 77).
+    storage-fts5: the plugin suite reports PASS when both its suites skip (no sqlite3), so a skipped run reads as a pass.
+    cleanup: base parse_blocks.awk is referenced by no script.
+    The container harness stays under the workspace scratch of lane awk-portability (run-env.sh, in-container.sh) for the rerun.
+  WHY ::
+    The storage unit put the Linux containers (mawk, gawk, busybox) into its portability proof; busybox is the one awk that breaks the old escapes, so the rest of the plugin frame should hold there too. The human moved these out of backlog#awk-escape-portability to the ideas list.
+  REF: "lanes/awk-portability/report#open"
+  STATUS: OPEN
+
+@idea ctx-run-adoption
+  DUMPED: 2026-09-26
+  WHAT ::
+    Raise ctx run adoption through the rules and the prose alone: the agents (the main agent and every lane) still run commands raw, read-only views most of all (cat, sed, grep, head, ls, wc, git status and diff, docker inspections), and self-report it as drift afterwards. Harden the compact-streams law and every surface that restates it (the base laws, the subagent contract, recipe templates, the boot and interact steps) so the runner prefix is the default act, never a discipline remembered afterwards.
+  WHY ::
+    The human wants the runner used far more than it is; the evidence is in the storage unit journal: lanes driver-test-run-x, driver-test-run-y, driver-test-compare, driver-retest-run-x, driver-retest-run-y, shared-ref-fixes, awk-portability, verb-consistency reported raw commands, and the main agent ran raw checks too. The human rejects a harness mechanism (a hook rewriting commands); the fix is rules and prose, discussed separately from the storage unit. The idea harness-auto-runner proposes the harness route this direction rejects.
+  REF: "journal#2026-09-26-event-1790452331"
+  STATUS: OPEN

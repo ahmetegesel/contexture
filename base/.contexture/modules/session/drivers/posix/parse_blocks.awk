@@ -4,9 +4,17 @@
 #   action="find" -v target_id="...": prints JSON object for target block or exits 1
 #   action="check_closure" -v target_id="...": checks if target_id is closed by any entry
 
+# a backslash doubled by concatenation, never by a gsub replacement: a replacement of
+# four backslashes yields one under busybox awk and gawk --posix
+function bs_double(s,    n, p, i, o) {
+  n = split(s, p, /\\/)
+  o = (n ? p[1] : "")
+  for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]
+  return o
+}
+
 function escape_json(s,    r) {
-  r = s
-  gsub(/\\/, "\\\\", r)
+  r = bs_double(s)
   gsub(/"/, "\\\"", r)
   gsub(/\n/, "\\n", r)
   gsub(/\r/, "\\r", r)

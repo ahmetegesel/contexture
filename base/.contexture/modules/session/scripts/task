@@ -34,8 +34,9 @@ fi
 pline() {
   printf '%s=' "$1"
   printf '%sx' "$2" | awk '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     BEGIN { ORS = "" }
-    { gsub(/\\/, "\\\\"); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
+    { $0 = bs_double($0); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
     END { sub(/x$/, "", out); print out "\n" }'
 }
 

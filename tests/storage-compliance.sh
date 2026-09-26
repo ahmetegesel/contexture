@@ -1,7 +1,7 @@
 #!/bin/sh
 # storage-compliance.sh: the Storage Provider Interface (SPI) compliance test harness.
 # Validates storage driver implementations against the SPI contract across 11 test
-# suites and 38 verification scenarios; each case asserts the returned data (exact key
+# suites and 39 verification scenarios; each case asserts the returned data (exact key
 # and value pairs in the driver's JSON, or the exact bytes of an artifact), never the
 # exit code alone. Payloads travel on stdin (docs/the-engine.md, the transport).
 #
@@ -198,8 +198,9 @@ pl() {
   while [ $# -gt 1 ]; do
     printf '%s=' "$1"
     printf '%sx' "$2" | awk '
+      function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
       BEGIN { ORS = "" }
-      { gsub(/\\/, "\\\\"); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
+      { $0 = bs_double($0); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
       END { sub(/x$/, "", out); print out "\n" }'
     shift 2
   done
@@ -612,6 +613,45 @@ want "$out" '"entity_type":"task"'; wantnot "$out" '"entity_type":"finding"'; wa
 out=$(pl query "" | "$DRIVER_EXEC" search.query "$TUNIT" 2>&1); rc=$?
 wantrc "$rc" 1; want "$out" 'ERR_INVALID_ARGUMENT'
 tc "TC38: search.query returns one shape, honors --limit and --entity, refuses an empty query"
+
+# TC39: --mode=exact means one thing on every driver: a case-insensitive (ASCII) substring
+# of one line of the artifact text, a column-0 comment never matching; one row per
+# matching entity and section, in record order (state, backlog, knowledge, journal, then
+# each lane's recipe, journal, report), its snippet the first matching line;
+# total_matches counts those rows. The fixture fixes the entity set and the total, so
+# every driver that passes returns the same answer
+EU="compliance-exact"
+drv session.create "$EU" >/dev/null 2>&1
+printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "find the Needle in the state"\nobjective: "exact fixture"\nrepos: []\nref_sessions: []\n' > ex.txt
+"$DRIVER_EXEC" artifact.write "$EU" state < ex.txt >/dev/null 2>&1
+printf '@task t-one\n  STATUS: TODO\n  OBJECTIVE: "a needle in the objective"\n  DESCRIPTION ::\n    a second NEEDLE line of the same task\n\n@task t-two\n  STATUS: TODO\n  OBJECTIVE: "needlework, a substring"\n\n@task t-three\n  STATUS: TODO\n  OBJECTIVE: "no match here"\n' > ex.txt
+"$DRIVER_EXEC" artifact.write "$EU" backlog < ex.txt >/dev/null 2>&1
+printf '@finding F_ONE\n  SUMMARY ::\n    one needle\n\n@finding F_TWO\n  SUMMARY ::\n    none at all\n' > ex.txt
+"$DRIVER_EXEC" artifact.write "$EU" knowledge < ex.txt >/dev/null 2>&1
+printf '@anchor A1 ("continues A0", attention: plain)\n\n@entry 2026-09-25-e-one\n  ANCHOR: A1\n  WHAT: "the needle event"\n  THREAD: none\n\n@entry 2026-09-25-e-two\n  ANCHOR: A1\n  WHAT: "nothing to see"\n  THREAD: a needle awaits\n\n@entry 2026-09-25-e-three\n  ANCHOR: A1\n  WHAT: "quiet"\n  THREAD: none\n' > ex.txt
+"$DRIVER_EXEC" artifact.write "$EU" journal < ex.txt >/dev/null 2>&1
+printf '# needle in a grammar comment never matches\nMISSION\n  GOAL: "thread the needle"\n' > ex.txt
+"$DRIVER_EXEC" artifact.write "$EU" lane/ex-lane/recipe < ex.txt >/dev/null 2>&1
+printf '@entry 2026-09-25-l-one\n  WHAT: "a lane needle"\n  THREAD: none\n' > ex.txt
+"$DRIVER_EXEC" artifact.write "$EU" lane/ex-lane/journal < ex.txt >/dev/null 2>&1
+printf '# report\n\n@orientation\n  VERDICT: "needle one"\n  NOTE: "needle two"\n' > ex.txt
+"$DRIVER_EXEC" artifact.write "$EU" lane/ex-lane/report < ex.txt >/dev/null 2>&1
+out=$(pl query "needle" | "$DRIVER_EXEC" search.query "$EU" --mode=exact 2>&1); rc=$?
+wantrc "$rc" 0; want "$out" '"mode":"exact"'; want "$out" '"total_matches":9,'
+rows=$(printf '%s' "$out" | grep -o '"entity_type":"[a-z_]*","entity_id":"[^"]*","section":"[a-z_]*"' | sed 's/"entity_type":"//; s/","entity_id":"/ /; s/","section":"/ /; s/"$//' | tr '\n' '|')
+[ "$rows" = "session compliance-exact state|task t-one backlog|task t-two backlog|finding F_ONE knowledge|entry 2026-09-25-e-one journal|entry 2026-09-25-e-two journal|lane ex-lane lane_recipe|lane_entry ex-lane/2026-09-25-l-one lane_journal|lane ex-lane lane_report|" ] || tc_fail="$tc_fail; rows [$rows]"
+want "$out" '"entity_id":"t-one","section":"backlog","snippet":"a needle in the objective"'
+want "$out" '"entity_id":"ex-lane","section":"lane_report","snippet":"needle one"'
+wantnot "$out" 't-three'; wantnot "$out" 'F_TWO'; wantnot "$out" 'e-three'; wantnot "$out" 'grammar comment'
+out=$(pl query "needle" | "$DRIVER_EXEC" search.query "$EU" --mode=exact --limit=2 2>&1)
+want "$out" '"total_matches":9,'
+[ "$(printf '%s' "$out" | grep -o '"entity_type":' | wc -l | tr -d ' ')" = "2" ] || tc_fail="$tc_fail; --limit=2 did not cap the rows"
+out=$(pl query "needle" | "$DRIVER_EXEC" search.query "$EU" --mode=exact --entity=task 2>&1)
+want "$out" '"total_matches":2,'; wantnot "$out" '"entity_type":"entry"'
+out=$(pl query "zz-no-such-needle" | "$DRIVER_EXEC" search.query "$EU" --mode=exact 2>&1); rc=$?
+wantrc "$rc" 0; want "$out" '"total_matches":0,"results":[]'
+tc "TC39: --mode=exact returns one row per matching entity and section with the same total on every driver"
+rm -f ex.txt
 rm -f art-in.txt art-out.txt lane-in.txt lj.txt empty.txt
 
 # ==============================================================================

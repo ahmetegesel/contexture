@@ -280,6 +280,30 @@ sanitize_fts_query() {
   }'
 }
 
+# search_exact_reference <unit> <options>: every artifact of the unit materialized into the
+# scratch workspace (the lanes included), then the reference driver's search.query with
+# the same payload and options; its answer, stderr, and exit code pass through
+search_exact_reference() {
+  se_u=$1
+  shift
+  se_ref=$(find_reference) || {
+    printf '%s: error: the reference serialization (the posix driver) was not found; set CTX_REFERENCE_DRIVER (ERR_DRIVER_NOT_FOUND)\n' "$CMD" >&2
+    exit 2
+  }
+  se_d="$SCRATCH/ws/.contexture/sessions/$se_u"
+  mkdir -p "$SCRATCH/ws/.contexture/tmp" "$se_d" || exit 2
+  se_q=$(sql_escape "$se_u")
+  for se_l in $(sq "$DB_PATH" "SELECT DISTINCT lane_slug FROM artifacts WHERE unit = '$se_q' AND lane_slug <> '';"); do
+    slug_valid "$se_l" && mkdir -p "$se_d/lanes/$se_l"
+  done
+  sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$se_d")' || CASE lane_slug WHEN '' THEN '' ELSE '/lanes/' || lane_slug END || '/' || name || '.md', body) FROM artifacts WHERE unit = '$se_q';" >/dev/null || exit 2
+  (cd "$SCRATCH/ws" && "$se_ref" search.query "$se_u" "$@" < "$SCRATCH/payload" > "$SCRATCH/out" 2> "$SCRATCH/err")
+  se_rc=$?
+  cat "$SCRATCH/out"
+  cat "$SCRATCH/err" >&2
+  exit "$se_rc"
+}
+
 search_query() {
   sq_u="${1:-}"
   [ $# -gt 0 ] && shift
@@ -326,29 +350,10 @@ search_query() {
   sq_filter="s.unit = '$sq_uq' AND ('$sq_eq' = '' OR s.entity_type = '$sq_eq')"
   case "$sq_mode" in
     exact)
-      # a case-insensitive substring over the document text, in record order; the snippet
-      # is trimmed of the blank padding a document body carries (spaces, tabs, newlines)
-      sq "$DB_PATH" <<EOF
-WITH hits AS (
-  SELECT s.doc_id, s.entity_type, s.entity_id, s.section, s.body,
-         instr(lower(s.body), lower('$sq_qq')) AS pos
-  FROM search_documents s
-  WHERE $sq_filter AND (instr(lower(s.body), lower('$sq_qq')) > 0 OR instr(lower(s.title), lower('$sq_qq')) > 0)
-),
-shown AS (SELECT * FROM hits ORDER BY doc_id LIMIT $sq_limit)
-SELECT json_object(
-  'unit', '$sq_uq',
-  'query', '$sq_qq',
-  'mode', 'exact',
-  'total_matches', (SELECT count(*) FROM hits),
-  'results', coalesce((
-    SELECT json_group_array(json_object(
-      'entity_type', entity_type, 'entity_id', entity_id, 'section', section,
-      'snippet', CASE WHEN pos > 0 THEN trim(substr(body, max(1, pos - 40), 120), ' ' || char(9) || char(10) || char(13)) ELSE trim(substr(body, 1, 120), ' ' || char(9) || char(10) || char(13)) END))
-    FROM (SELECT * FROM shown ORDER BY doc_id)
-  ), json_array())
-);
-EOF
+      # exact mode means one thing on every driver: the reference serialization's substring
+      # search over the verbatim artifacts (every one of the unit, its lanes included),
+      # so the entity set, the rows, and the total match the posix driver by construction
+      search_exact_reference "$sq_u" "$@"
       ;;
     trigram)
       sq "$DB_PATH" <<EOF

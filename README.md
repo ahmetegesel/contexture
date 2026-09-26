@@ -21,7 +21,7 @@ contexture is a convention, not a tool: lightweight, abstracted, extensible. Pla
 
 ## Why contexture
 
-- **Lightweight by construction**: Plain files and POSIX awk baseline, no mandatory background services, no required databases, no external dependencies.
+- **Lightweight by construction**: Plain files and POSIX awk baseline, no mandatory background services, no required databases, no external dependencies. The system awk is enough: the whole test suite runs green under BWK awk (the macOS awk), mawk (the Debian default), gawk, and busybox awk (Alpine).
 - **Abstracted by design**: The schema governs shapes and the laws govern mechanisms, carrying zero workflow policies your workspace cannot override.
 - **Extensible without forks**: Add custom rhythms, amend rules through overlays, configure storage drivers, and delegate work through subagents while the core stays untouched.
 

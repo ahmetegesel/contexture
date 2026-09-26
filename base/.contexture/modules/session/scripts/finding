@@ -4,7 +4,7 @@
 # help: subcommands:
 # help:   add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]
 # help:   show <unit> <NAME> [--json]
-# help:   update <unit> <NAME> --summary="..." [--ref=...]
+# help:   update <unit> <NAME> [--summary="..."] [--ref=...]
 # help:   supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]
 # help:   drop <unit> <NAME>
 # help:   list <unit> [--active-only] [--json]
@@ -32,8 +32,9 @@ fi
 pline() {
   printf '%s=' "$1"
   printf '%sx' "$2" | awk '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     BEGIN { ORS = "" }
-    { gsub(/\\/, "\\\\"); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
+    { $0 = bs_double($0); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
     END { sub(/x$/, "", out); print out "\n" }'
 }
 
@@ -93,7 +94,7 @@ case "$1" in
     printf 'subcommands:\n'
     printf '  add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]\n'
     printf '  show <unit> <NAME> [--json]\n'
-    printf '  update <unit> <NAME> --summary="..." [--ref=...]\n'
+    printf '  update <unit> <NAME> [--summary="..."] [--ref=...]\n'
     printf '  supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]\n'
     printf '  drop <unit> <NAME>\n'
     printf '  list <unit> [--active-only] [--json]\n'

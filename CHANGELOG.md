@@ -4,6 +4,24 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.53.1] - 2026-09-26
+
+### Added
+
+- `entry.record` takes an optional `ref` payload key: the REF line lands after THREAD and the success echo carries `ref` after `thread` (empty when absent), on both drivers.
+
+### Changed
+
+- One embedded double quote rule for every one-line quoted field: WHAT, a task OBJECTIVE, `next_action`, and the state objective accept an embedded double quote on every write path (append of an `@task` block, amend, `ctx session next`, and bootstrap, which accepts a single quote too); the newline and carriage return refusals stay, and every reader returns the value verbatim.
+- Verb messages name the artifact and the unit, never a storage path, whatever the driver (for example `ERROR: missing state: unit <u>`, `WARNING: missing backlog: unit <u>`).
+- `ctx session search --mode=exact` means one thing on every driver: a line matches when it carries the query as a substring, ASCII letters compared without case in the C locale, a column 0 comment never matching; the answer is one row per matching entity and section in record order, the first matching line as its snippet, `total_matches` counting those rows. The FTS5 driver answers exact queries through the reference search over its verbatim text; hybrid and trigram stay native.
+- The `ctx session finding update` usage shows `--summary` and `--ref` as optional, in the help table and both guides.
+
+### Fixed
+
+- Backslash escaping is portable across awk implementations: every encoder doubles a backslash by concatenation instead of a `gsub` replacement, which busybox awk and `gawk --posix` read as a single backslash (a literal backslash n decoded as a newline, a trailing backslash escaped the next byte, JSON views broke); a dynamic regex string carries a real tab instead of an escaped one. The core suites run green under BWK awk, mawk, gawk, and busybox awk on both drivers; the absolute `/usr/bin/awk` shebangs stay, since an `env` shebang fails on Linux.
+- The session suite's read-only store fixture restores the database's WAL and shared memory files as well as the database; on Linux a read-only WAL refused every later write.
+
 ## [0.53.0] - 2026-09-26
 
 ### Added

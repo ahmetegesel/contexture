@@ -43,15 +43,17 @@ function fail(msg) {
 # storage driver (artifact.read, artifact.write, artifact.list, session.list) by artifact
 # key (state, backlog, knowledge, journal, lane/<lane>/<recipe|journal|report>); a fetched
 # artifact lands in a scratch file under .contexture/tmp, removed at exit. disp() names an
-# artifact in a message the way the record grammar reads it; it builds a display string,
-# never a path any code opens.
-function disp(u, key,   l) {
+# artifact in a message as <artifact>: unit <u> (a lane artifact as lane <l> <artifact>),
+# never a storage location.
+function disp(u, key,   l, a) {
   if (key ~ /^lane\//) {
-    l = key
-    sub(/^lane\//, "", l)
-    return ".contexture/sessions/" u "/lanes/" l ".md"
+    l = substr(key, 6)
+    a = l
+    sub(/\/.*$/, "", l)
+    sub(/^[^\/]*\//, "", a)
+    return "lane " l " " a ": unit " u
   }
-  return ".contexture/sessions/" u "/" key ".md"
+  return key ": unit " u
 }
 
 function rec_q(s) {
@@ -188,7 +190,7 @@ function trim(s) {
 
 function value_after(line, key,   v) {
   v = line
-  sub("^[ \\t]*" key ":[ \\t]*", "", v)
+  sub("^[ \t]*" key ":[ \t]*", "", v)
   return trim(v)
 }
 
@@ -229,7 +231,7 @@ function require_session(unit) {
 }
 
 function require_journal(unit) {
-  if (!rec_exists(unit, "journal")) fail("ERROR: missing journal: " disp(unit, "journal"))
+  if (!rec_exists(unit, "journal")) fail("ERROR: missing " disp(unit, "journal"))
 }
 
 function do_entry(unit, slug,   path, i, e, k, n) {
@@ -505,7 +507,7 @@ function do_units(repo,   state, line, i, k, nknown, nparts, parts, status, alin
     }
     close(state)
     if (gr < 0) {
-      print "WARNING: unreadable state: " disp(u, "state") > "/dev/stderr"
+      print "WARNING: unreadable " disp(u, "state") > "/dev/stderr"
       continue
     }
     if (matched) {
@@ -517,7 +519,7 @@ function do_units(repo,   state, line, i, k, nknown, nparts, parts, status, alin
       for (k = 1; k <= nl; k++) unxt[nunits, k] = nxt[k]
     }
   }
-  if (rows == 0 && nall > 0) print "WARNING: no state files listed: .contexture/sessions" > "/dev/stderr"
+  if (rows == 0 && nall > 0) print "WARNING: missing state: none of the " nall " units the store lists carries one" > "/dev/stderr"
   if (nunits == 0) {
     for (i = 2; i <= nknown; i++) {
       key = known[i]
@@ -567,7 +569,7 @@ function do_refs_to(session,   state, line, r, n, nparts, parts, k, p, matched, 
     }
     close(state)
     if (gr < 0) {
-      print "WARNING: unreadable state: " disp(u, "state") > "/dev/stderr"
+      print "WARNING: unreadable " disp(u, "state") > "/dev/stderr"
       continue
     }
     if (matched) {
@@ -575,7 +577,7 @@ function do_refs_to(session,   state, line, r, n, nparts, parts, k, p, matched, 
       rslug[n] = u
     }
   }
-  if (rows == 0 && nall > 0) print "WARNING: no state files listed: .contexture/sessions" > "/dev/stderr"
+  if (rows == 0 && nall > 0) print "WARNING: missing state: none of the " nall " units the store lists carries one" > "/dev/stderr"
   if (n == 0) fail("ERROR: no unit references session: " session)
   printf "refs-to %s: %d units\n\n", session, n
   for (k = 1; k <= n; k++) print "  " rslug[k]
@@ -621,7 +623,7 @@ function unsupported(ref) {
 function do_resolve(unit, ref,   path, i, e, found, sec) {
   if (RKIND == "entry") {
     path = rec_fetch(unit, "journal")
-    if (path == "") fail("ERROR: missing journal: " disp(unit, "journal"))
+    if (path == "") fail("ERROR: missing " disp(unit, "journal"))
     load_file(path)
     found = 0
     for (i = 1; i <= NFILE; i++) {
@@ -639,7 +641,7 @@ function do_resolve(unit, ref,   path, i, e, found, sec) {
     if (found == 0) fail("ERROR: no such finding: " RARG)
   } else if (RKIND == "task") {
     path = rec_fetch(unit, "backlog")
-    if (path == "") fail("ERROR: missing backlog: " disp(unit, "backlog"))
+    if (path == "") fail("ERROR: missing " disp(unit, "backlog"))
     load_file(path)
     found = 0
     for (i = 1; i <= NFILE; i++) {
@@ -671,7 +673,7 @@ function do_resolve(unit, ref,   path, i, e, found, sec) {
   for (i = found; i <= e; i++) print LF[i]
 }
 
-function file_stats(path,   cmd, line, w, n) {
+function file_stats(path, shown,   cmd, line, w, n) {
   cmd = "LC_ALL=C wc -l -c < \"" path "\""
   FLINES = 0
   FBYTES = 0
@@ -682,7 +684,7 @@ function file_stats(path,   cmd, line, w, n) {
     if (n >= 2) FBYTES = w[2] + 0
   }
   close(cmd)
-  if (n == 0) print "WARNING: wc produced no figures: " path > "/dev/stderr"
+  if (n == 0) print "WARNING: wc produced no figures: " shown > "/dev/stderr"
 }
 
 function do_lane(unit, lane,   p, i, art, last, K, nk, k, has) {
@@ -695,7 +697,7 @@ function do_lane(unit, lane,   p, i, art, last, K, nk, k, has) {
     art = (i == 1) ? "recipe.md" : ((i == 2) ? "journal.md" : "report.md")
     p = rec_fetch(unit, "lane/" lane "/" substr(art, 1, length(art) - 3))
     if (p != "") {
-      file_stats(p)
+      file_stats(p, disp(unit, "lane/" lane "/" substr(art, 1, length(art) - 3)))
       printf "  %s: present (%d lines, %d bytes)\n", art, FLINES, FBYTES
     } else {
       printf "  %s: absent\n", art
@@ -759,9 +761,9 @@ function scan_art(unit, key, artifact, mode,   f) {
 
 function do_search(unit, term,   p, lane, k, shown, K, nk) {
   scan_art(unit, "state", "state.md", "state")
-  if (!rec_exists(unit, "backlog")) print "WARNING: missing backlog: " disp(unit, "backlog") > "/dev/stderr"
+  if (!rec_exists(unit, "backlog")) print "WARNING: missing " disp(unit, "backlog") > "/dev/stderr"
   scan_art(unit, "backlog", "backlog.md", "backlog")
-  if (!rec_exists(unit, "knowledge")) print "WARNING: missing knowledge: " disp(unit, "knowledge") > "/dev/stderr"
+  if (!rec_exists(unit, "knowledge")) print "WARNING: missing " disp(unit, "knowledge") > "/dev/stderr"
   scan_art(unit, "knowledge", "knowledge.md", "knowledge")
   scan_art(unit, "journal", "journal.md", "journal")
   nk = rec_list(unit, K)

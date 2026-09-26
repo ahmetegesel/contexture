@@ -186,7 +186,12 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
    # help: one detail line; repeat for more
    ```
 
-   An awk verb starts `#!/usr/bin/awk -f` instead and writes its output on stdout.
+   An awk verb starts `#!/usr/bin/awk -f` instead and writes its output on stdout. Keep that absolute shebang: Linux hands `env` the words `awk -f` as one argument, so `#!/usr/bin/env awk -f` fails there, while every supported system carries `/usr/bin/awk`.
+
+   Write awk to the common subset of the supported awks, BWK awk (macOS), mawk (the Debian default), gawk, and busybox awk (Alpine); the suite runs green under each. Two rules the shipped scripts follow:
+
+   - Double a backslash by concatenation, never by a `gsub` replacement: `gsub(/\\/, "\\\\")` yields two backslashes under BWK awk, mawk, and gawk but one under busybox awk and `gawk --posix`, which breaks every escape that follows. The shipped encoders call a `bs_double` helper that splits on the backslash and rejoins with `"\\" "\\"`.
+   - Spell a tab inside a dynamic regex string as `"\t"` (the string then holds a real tab), never `"\\t"`: busybox awk reads the escaped form inside a bracket expression as a backslash and a `t`.
 
 3. `chmod +x scripts/<verb>`.
 4. Prove it: `ctx help` lists the module; `ctx <name> help <verb>` renders the detail; `ctx <name> <verb> ...` runs it.

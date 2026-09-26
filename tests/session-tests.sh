@@ -124,7 +124,8 @@ $CTX session bootstrap u1 "again" >/dev/null 2>&1; a_eq "$?" "1" "bootstrap exis
 $CTX session bootstrap "bad slug" "x" >/dev/null 2>&1; a_eq "$?" "1" "bootstrap malformed slug rc1"
 $CTX session load nosuch >/dev/null 2>&1; a_eq "$?" "1" "load missing unit rc1"
 err=$($CTX session load nosuch 2>&1 >/dev/null)
-a_match "$err" "ERROR: missing state: .contexture/sessions/nosuch/state.md" "load missing unit names the state"
+a_match "$err" "^ERROR: missing state: unit nosuch$" "load missing unit names the state and the unit"
+a_not "$err" "sessions" "load missing unit names no storage path"
 $CTX session load u1 99 >/dev/null 2>&1; a_eq "$?" "1" "load page out of range rc1"
 err=$($CTX session load u1 99 2>&1 >/dev/null)
 a_match "$err" "page out of range" "load page refusal names the range"
@@ -729,6 +730,61 @@ a_eq "$?" "1" "R2: lane record with a carriage return refuses rc1"
 $CTX session flip y-unit todo y-bs >/dev/null 2>&1
 a_eq "$?" "0" "R2: the grammar verbs still write the unit after the refusals"
 
+echo "== B backslash payloads on every awk (backlog awk-escape-portability) =="
+# a backslash, a doubled backslash, a literal backslash n, and a trailing backslash travel
+# through every typed write and read back byte for byte: the encoders double a backslash
+# by concatenation, since a gsub replacement of four backslashes yields one backslash
+# under busybox awk and gawk --posix and two under BWK awk, mawk, and gawk
+$CTX session bootstrap b-unit "backslash payload unit" >/dev/null 2>&1
+b_obj='B a\b c\\d \n e\'
+b_json='B a\\b c\\\\d \\n e\\'
+b_l1='body a\b c\\d'
+b_l2='body \n lit \t lit end\'
+b_desc="$b_l1
+$b_l2"
+$CTX session task add b-unit b-task --objective="$b_obj" --desc="$b_desc" >/dev/null 2>&1
+a_eq "$?" "0" "B: task add with backslash payloads rc0"
+a_eq "$(rcat b-unit backlog | grep -cxF "  OBJECTIVE: \"$b_obj\"")" "1" "B: the OBJECTIVE lands byte for byte"
+a_eq "$(rcat b-unit backlog | grep -cxF -e "    $b_l1" -e "    $b_l2")" "2" "B: both DESCRIPTION lines land byte for byte, the trailing backslash kept"
+out=$($CTX session task show b-unit b-task 2>&1)
+a_eq "$(printf '%s\n' "$out" | grep -cxF -e "    $b_l1" -e "    $b_l2")" "2" "B: task show text reads the DESCRIPTION back byte for byte"
+out=$($CTX session task show b-unit b-task --json 2>&1)
+a_eq "$(printf '%s\n' "$out" | grep -cF "\"objective\":\"$b_json\"")" "1" "B: task show --json doubles every backslash of the OBJECTIVE"
+out=$($CTX session task list b-unit --json 2>&1)
+a_eq "$(printf '%s\n' "$out" | grep -cF "\"objective\":\"$b_json\"")" "1" "B: task list --json doubles every backslash of the OBJECTIVE"
+b_sum='S a\b c\\d \n e\'
+$CTX session finding add b-unit B_BS --summary="$b_sum" >/dev/null 2>&1
+a_eq "$?" "0" "B: finding add with backslash payloads rc0"
+a_eq "$(rcat b-unit knowledge | grep -cxF "    $b_sum")" "1" "B: the SUMMARY lands byte for byte"
+out=$($CTX session finding show b-unit B_BS 2>&1)
+a_eq "$(printf '%s\n' "$out" | grep -cxF "    $b_sum")" "1" "B: finding show text reads the SUMMARY back byte for byte"
+out=$($CTX session finding list b-unit --json 2>&1)
+a_eq "$(printf '%s\n' "$out" | grep -cF 'S a\\b c\\\\d \\n e\\')" "1" "B: finding list --json doubles every backslash of the SUMMARY"
+b_what='W a\b c\\d \n e\'
+$CTX session record b-unit --what="$b_what" --slug="$TODAY-b-bs" >/dev/null 2>&1
+a_eq "$?" "0" "B: record with backslash payloads rc0"
+a_eq "$(rcat b-unit journal | grep -cxF "  WHAT: \"$b_what\"")" "1" "B: the WHAT lands byte for byte"
+out=$($CTX session board b-unit 2>&1)
+a_eq "$(printf '%s\n' "$out" | grep -cxF "  WHAT: \"$b_what\"")" "1" "B: board reads the WHAT back byte for byte"
+out=$($CTX session entry show b-unit "$TODAY-b-bs" --json 2>&1)
+a_eq "$(printf '%s\n' "$out" | grep -cF 'W a\\b c\\\\d \\n e\\')" "1" "B: entry show --json doubles every backslash of the WHAT"
+out=$($CTX session search b-unit 'c\\d' --mode=exact --json 2>&1)
+a_not "$out" '"total_matches":0' "B: search finds a doubled backslash sequence"
+printf '# recipe grammar\nMISSION\n  GOAL: "b lane"\n' | rput b-unit lane/b-lane/recipe
+b_lw='L a\b c\\d \n e\'
+$CTX lane record b-unit b-lane --what="$b_lw" >/dev/null 2>&1
+a_eq "$?" "0" "B: lane record with backslash payloads rc0"
+a_eq "$($CTX lane show b-unit b-lane journal 2>&1 | grep -cF "$b_lw")" "1" "B: lane show reads the lane WHAT back byte for byte"
+printf 'r1 a\\b\nr2 c\\\\d\nr3 \\n lit\n\\\nr5 trailing\\\n' > b-report.md
+$CTX lane report b-unit b-lane < b-report.md > b-echo.out 2>&1
+a_eq "$?" "0" "B: lane report with backslash lines rc0"
+cmp -s b-report.md b-echo.out; a_eq "$?" "0" "B: the lane report write echo is byte-identical to the input"
+$CTX lane show b-unit b-lane report > b-show.out 2>&1
+cmp -s b-report.md b-show.out; a_eq "$?" "0" "B: lane show report is byte-identical to the input"
+rcat b-unit lane/b-lane/report > b-stored.out
+cmp -s b-report.md b-stored.out; a_eq "$?" "0" "B: the stored report is byte-identical to the input"
+rm -f b-report.md b-echo.out b-show.out b-stored.out
+
 echo "== W a failed storage write is rc2 (lanes/routing-review/report finding R4) =="
 # a store that refuses writes (read-only files and folders, a read-only database): every
 # typed write exits 2 and leaves the record and the scratch drawer as they were
@@ -759,7 +815,10 @@ a_eq "$?" "2" "R4: finding add on a read-only store exits 2"
 $CTX lane record w-unit w-lane --what="never lands" >/dev/null 2>&1
 a_eq "$?" "2" "R4: lane record on a read-only store exits 2"
 if [ "$DRIVER" = fts5 ]; then
-  chmod 644 .contexture/sessions.db
+  # the store comes back whole: SQLite gives the WAL and shared-memory files a refused
+  # connection creates the database file's mode, and on Linux a read-only WAL keeps
+  # every later write refused
+  chmod 644 .contexture/sessions.db .contexture/sessions.db-wal .contexture/sessions.db-shm 2>/dev/null
 else
   chmod 755 .contexture/sessions/w-unit .contexture/sessions/w-unit/lanes/w-lane
   chmod 644 .contexture/sessions/w-unit/*.md .contexture/sessions/w-unit/lanes/w-lane/*.md
@@ -850,7 +909,7 @@ a_match "$out" 'WHAT: "an appended "quoted" what"' "R3: load (every page) reads 
 $CTX session audit q-unit >/dev/null 2>&1
 a_eq "$?" "0" "R3: audit rc0 over the quoted WHATs"
 out=$($CTX session search q-unit 'appended "quoted" what' --mode=exact --json 2>&1)
-a_match "$out" "\"entity_id\":\"$TODAY-q-appended-quote\"" "R3: search (the fts5 index on that driver) finds the quoted WHAT"
+a_match "$out" "\"entity_id\":\"$TODAY-q-appended-quote\"" "R3: search --mode=exact finds the quoted WHAT"
 printf '@entry %s-q-bad-quote\n  WHAT: unquoted "what"\n  THREAD: none\n' "$TODAY" | $CTX session append q-unit >/dev/null 2>&1
 a_eq "$?" "1" "R3: append still refuses a WHAT that is not one quoted line"
 # legacy records stay readable: an entry written before the refusal with a two-line WHAT
@@ -1019,6 +1078,156 @@ a_match "$err" '^WARNING: missing knowledge: unit f-ghost$' "RF3: the missing re
 a_match "$err" '^WARNING: missing journal: unit f-ghost$' "RF3: the missing ref journal warning names the unit and the artifact"
 a_not "$err" 'sessions/' "RF3: the missing ref warning names no storage path"
 a_not "$err" '\.md' "RF3: the missing ref warning names no file"
+
+echo "== U one quote rule for every one-line quoted field (backlog quote-rule-uniform) =="
+# every one-line quoted field (WHAT, a task OBJECTIVE, the next_action pointer, the state
+# objective) follows one rule on every write path: an embedded double quote is text, an
+# embedded newline refuses; the readers return the stored value verbatim
+$CTX session bootstrap u-unit "quote rule unit" >/dev/null 2>&1 </dev/null
+u_obj='the "quoted" objective of the human'"'"'s unit'
+out=$($CTX session bootstrap u-obj "$u_obj" 2>&1 </dev/null); rc=$?
+a_eq "$rc" "0" "QU: bootstrap accepts an objective with embedded double and single quotes"
+a_eq "$(rcat u-obj state | grep -cF "objective: \"$u_obj\"")" "1" "QU: the state objective lands verbatim"
+a_match "$($CTX session active 2>/dev/null </dev/null)" 'objective: "the "quoted" objective of the human' "QU: active reads the quoted state objective verbatim"
+out=$($CTX session load u-obj 2>&1 </dev/null)
+a_match "$out" "objective: \"the \"quoted\" objective of the human's unit\"" "QU: load reads the quoted state objective verbatim"
+$CTX session audit u-obj >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "QU: audit rc0 over the quoted state objective"
+$CTX session task add u-unit u-a --objective='Task "A" typed' >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "QU: task add --objective with embedded quotes rc0 (unchanged)"
+$CTX session task start u-unit u-a --pointer='u-a IN_PROGRESS: the "typed" pointer' >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "QU: task start --pointer with embedded quotes rc0 (unchanged)"
+out=$($CTX session next u-unit 'u-a IN_PROGRESS: the "next" pointer' 2>&1 </dev/null); rc=$?
+a_eq "$rc" "0" "QU: next accepts a pointer with embedded double quotes"
+a_eq "$(rcat u-unit state | grep -cF 'next_action: "u-a IN_PROGRESS: the "next" pointer"')" "1" "QU: the next pointer lands verbatim"
+printf '@task u-b\n  STATUS: TODO\n  OBJECTIVE: "an "appended" objective"\n' | $CTX session append u-unit >/dev/null 2>&1
+a_eq "$?" "0" "QU: append accepts a task OBJECTIVE with embedded double quotes"
+a_eq "$(rcat u-unit backlog | grep -cF '  OBJECTIVE: "an "appended" objective"')" "1" "QU: the appended OBJECTIVE lands verbatim"
+printf '@task u-c\n  STATUS: TODO\n  OBJECTIVE: "to be amended"\n' | $CTX session append u-unit >/dev/null 2>&1
+printf '  OBJECTIVE: "an "amended" objective"\n' | $CTX session amend u-unit u-c >/dev/null 2>&1
+a_eq "$?" "0" "QU: amend accepts an OBJECTIVE with embedded double quotes"
+a_eq "$(rcat u-unit backlog | grep -cF '  OBJECTIVE: "an "amended" objective"')" "1" "QU: the amended OBJECTIVE lands verbatim"
+out=$($CTX session task show u-unit u-b 2>&1 </dev/null)
+a_match "$out" 'OBJECTIVE: "an "appended" objective"' "QU: task show text reads the appended OBJECTIVE verbatim"
+out=$($CTX session task show u-unit u-c --json 2>&1 </dev/null)
+a_match "$out" '"objective":"an \\"amended\\" objective"' "QU: task show --json carries the amended OBJECTIVE"
+out=""
+u_p=1
+while [ "$u_p" -le 20 ]; do
+  u_page=$($CTX session load u-unit "$u_p" 2>&1 </dev/null)
+  out="$out
+$u_page"
+  printf '%s\n' "$u_page" | grep -qi 'load complete' && break
+  u_p=$((u_p + 1))
+done
+a_match "$out" 'next_action: "u-a IN_PROGRESS: the "next" pointer"' "QU: load reads the quoted next pointer verbatim"
+a_match "$out" 'OBJECTIVE: "an "appended" objective"' "QU: load reads the appended OBJECTIVE verbatim"
+a_match "$out" 'OBJECTIVE: "an "amended" objective"' "QU: load reads the amended OBJECTIVE verbatim"
+out=$($CTX session board u-unit 2>&1 </dev/null)
+a_match "$out" 'u-b' "QU: board lists the task with the quoted OBJECTIVE"
+$CTX session audit u-unit >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "QU: audit rc0 over the quoted fields"
+# the default mode reads the search index of an indexed driver (hybrid on fts5)
+out=$($CTX session search u-unit 'amended' --json 2>&1 </dev/null)
+a_match "$out" '"entity_id":"u-c"' "QU: search in the default mode finds the task with the quoted OBJECTIVE"
+if [ "$DRIVER" = fts5 ]; then u_snip='\\"<b>amended</b>\\"'; else u_snip='an \\"amended\\" objective'; fi
+a_match "$out" "$u_snip" "QU: the default mode search snippet carries the quoted OBJECTIVE text"
+# the newline refusal stays on every one of these paths
+u_nl=$(printf 'first\nsecond')
+$CTX session bootstrap u-nl "$u_nl" >/dev/null 2>&1 </dev/null
+a_eq "$?" "1" "QU: bootstrap still refuses an objective with an embedded newline"
+$CTX session next u-unit "u-a $u_nl" >/dev/null 2>&1 </dev/null
+a_eq "$?" "1" "QU: next still refuses a pointer with an embedded newline"
+printf '@task u-d\n  STATUS: TODO\n  OBJECTIVE: bare objective\n' | $CTX session append u-unit >/dev/null 2>&1
+a_eq "$?" "1" "QU: append still refuses an OBJECTIVE that is not one quoted line"
+printf '  OBJECTIVE: bare objective\n' | $CTX session amend u-unit u-c >/dev/null 2>&1
+a_eq "$?" "1" "QU: amend still refuses an OBJECTIVE that is not one quoted line"
+
+echo "== UP messages name the artifact and its unit, never a storage path (backlog path-free-messages) =="
+# every warning and error of the verbs reads <artifact>: unit <u>; the fixtures are units
+# the store holds with an artifact missing, made through the driver alone
+up_err() { "$@" 2>&1 >/dev/null </dev/null; }
+up_path() { a_not "$1" 'sessions' "$2 names no storage path"; a_not "$1" '\.md' "$2 names no file"; }
+out=$(up_err $CTX session stamp nosuch "attention")
+a_match "$out" '^ERROR: missing state: unit nosuch$' "UP: stamp of an absent unit names the state and the unit"
+up_path "$out" "UP: stamp of an absent unit"
+out=$(up_err $CTX session board nosuch)
+a_match "$out" '^ERROR: missing journal: unit nosuch$' "UP: board of an absent unit names the journal and the unit"
+up_path "$out" "UP: board of an absent unit"
+out=$(up_err $CTX session audit nosuch)
+a_match "$out" '^ERROR: missing journal: unit nosuch$' "UP: audit of an absent unit names the journal and the unit"
+up_path "$out" "UP: audit of an absent unit"
+out=$(up_err $CTX session bootstrap u-unit "again")
+a_match "$out" '^ERROR: session exists: unit u-unit$' "UP: bootstrap of an existing unit names the unit"
+up_path "$out" "UP: bootstrap of an existing unit"
+# up-bare: a state and a journal, no backlog, no knowledge
+"$RESOLVER" session.create up-bare >/dev/null 2>&1 </dev/null
+printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "bare unit"\nrepos: []\nref_sessions: []\n' | rput up-bare state
+printf '@anchor A1 ("continues A0", attention: bare)\n' | rput up-bare journal
+out=$(up_err $CTX session board up-bare)
+a_match "$out" '^WARNING: missing backlog: unit up-bare$' "UP: board without a backlog warns with the artifact and the unit"
+up_path "$out" "UP: the board warning"
+out=$(up_err $CTX session query search up-bare plan)
+a_match "$out" '^WARNING: missing backlog: unit up-bare$' "UP: query search without a backlog warns with the artifact and the unit"
+a_match "$out" '^WARNING: missing knowledge: unit up-bare$' "UP: query search without a knowledge warns with the artifact and the unit"
+up_path "$out" "UP: the query search warnings"
+out=$(up_err $CTX session query resolve up-bare "backlog.md#some-task")
+a_match "$out" '^ERROR: missing backlog: unit up-bare$' "UP: query resolve of a task without a backlog names the artifact and the unit"
+up_path "$out" "UP: the query resolve error"
+out=$(up_err $CTX session query resolve up-bare "lanes/no-lane/report.md#orientation")
+a_match "$out" '^ERROR: no such section: orientation in lane no-lane report: unit up-bare$' "UP: query resolve of an absent lane report names the lane, the artifact, and the unit"
+up_path "$out" "UP: the lane report resolve error"
+out=$(up_err $CTX session next up-bare "plan")
+a_match "$out" '^ERROR: missing backlog: unit up-bare$' "UP: a grammar write without a backlog names the artifact and the unit"
+up_path "$out" "UP: the grammar write error"
+# up-nojournal: a state alone
+"$RESOLVER" session.create up-nojournal >/dev/null 2>&1 </dev/null
+printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "no journal"\nrepos: []\nref_sessions: []\n' | rput up-nojournal state
+out=$(up_err $CTX session query entry up-nojournal "$TODAY-no-entry")
+a_match "$out" '^ERROR: missing journal: unit up-nojournal$' "UP: query entry without a journal names the artifact and the unit"
+up_path "$out" "UP: the query entry error"
+# up-odd: a state with a malformed anchor and an unknown status, then one without next_action
+"$RESOLVER" session.create up-odd >/dev/null 2>&1 </dev/null
+printf 'status: ACTIVE\ncurrent_anchor: X9\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+printf '@anchor A1 ("continues A0", attention: odd)\n' | rput up-odd journal
+: | rput up-odd backlog
+: | rput up-odd knowledge
+out=$(up_err $CTX session record up-odd --what="an event")
+a_match "$out" '^ERROR: malformed current_anchor \[X9\] in state: unit up-odd$' "UP: record under a malformed anchor names the state and the unit"
+up_path "$out" "UP: the malformed anchor error"
+printf 'status: ACTIVE\ncurrent_anchor: A1\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+out=$(up_err $CTX session next up-odd "plan")
+a_match "$out" '^ERROR: missing next_action in state: unit up-odd (fix the state by hand)$' "UP: next without a next_action names the state and the unit"
+up_path "$out" "UP: the missing next_action error"
+printf '@anchor A1 ("continues A0", attention: odd)\r\n' | rput up-odd journal
+printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+out=$(up_err $CTX session record up-odd --what="an event")
+a_match "$out" '^ERROR: CRLF in journal: unit up-odd (the dialect is LF)$' "UP: a CRLF journal names the artifact and the unit"
+up_path "$out" "UP: the CRLF error"
+printf 'status: WEIRD\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+out=$(up_err $CTX session active)
+a_match "$out" '^WARNING: unrecognized status \[WEIRD\] in state: unit up-odd$' "UP: active names the state and the unit of an unknown status"
+up_path "$out" "UP: the active warning"
+printf 'status: CLOSED\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+# no verb script names a sessions path in any warning or error it can print
+up_static=$(grep -n 'contexture/sessions' .contexture/modules/session/scripts/* .contexture/modules/lane/scripts/* | grep -v ':[0-9]*:#' | grep -v 'WRITE SCOPE')
+a_eq "$up_static" "" "UP: no verb script prints a sessions path in a message"
+# the finding update usage: --summary and --ref are both optional (either alone works)
+out=$($CTX session finding update --help 2>&1 </dev/null)
+a_match "$out" 'update <unit> <NAME> \[--summary="\.\.\."\] \[--ref=\.\.\.\]' "UP: finding update --help shows --summary and --ref as optional"
+out=$($CTX session help finding 2>&1 </dev/null)
+a_match "$out" 'update <unit> <NAME> \[--summary="\.\.\."\] \[--ref=\.\.\.\]' "UP: the session help table shows the finding update flags as optional"
+# entry.record carries a ref (the payload key ref, written after THREAD as record does)
+# and echoes it in its success JSON, empty when absent
+out=$(printf 'what=a driver entry with a ref\nthread=none\nref=knowledge#UP_REF\n' | "$RESOLVER" entry.record u-unit "$TODAY-up-er-ref" 2>&1)
+a_match "$out" '"thread":"none","ref":"knowledge#UP_REF"}}' "UP: entry.record echoes the ref after thread"
+u_blk=$(rcat u-unit journal | awk -v s="@entry $TODAY-up-er-ref" '$0 == s { on = 1; print; next } on && /^@/ { on = 0 } on && $0 != "" { print }')
+a_eq "$(printf '%s\n' "$u_blk" | sed -n '4,5p' | tr '\n' '|')" '  THREAD: none|  REF: "knowledge#UP_REF"|' "UP: entry.record writes the REF line after THREAD"
+out=$($CTX session entry show u-unit "$TODAY-up-er-ref" --json 2>&1 </dev/null)
+a_match "$out" '"ref":"knowledge#UP_REF"' "UP: entry show reads the ref entry.record wrote"
+out=$(printf 'what=a driver entry without a ref\nthread=none\n' | "$RESOLVER" entry.record u-unit "$TODAY-up-er-noref" 2>&1)
+a_match "$out" '"thread":"none","ref":""}}' "UP: entry.record echoes an empty ref when absent"
+a_eq "$(rcat u-unit journal | awk -v s="@entry $TODAY-up-er-noref" '$0 == s { on = 1; next } on && /^@/ { on = 0 } on' | grep -c 'REF:')" "0" "UP: entry.record writes no REF line when absent"
 
 echo "== D session diagnostics =="
 $CTX session diagnose >/dev/null 2>&1

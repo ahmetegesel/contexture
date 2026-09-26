@@ -44,7 +44,7 @@ ref_sessions: [design-notes]
 - `status:` is `ACTIVE` or `CLOSED`.
 - `current_anchor:` is the current value of the anchor counter, `A<N>`. A fresh unit starts at `A0`, and its first boot stamps `A1`.
 - `next_action:` is one terse pointer, overwritten never prepended. The why behind it rebuilds from the record; when the unit sits between plans, it reads "plan the next move".
-- `objective:` is what the unit is for.
+- `objective:` is what the unit is for. Both it and `next_action` are one quoted line: an embedded double or single quote is text, an embedded newline refuses.
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference sessions mounted at boot; boot loads their knowledge and active journal.
 
@@ -129,7 +129,7 @@ Agents record events via `ctx session record`:
 .contexture/ctx session record <unit> --what="..." [--group=...] [--thread=...] [--ref=...] [--closes=...] [--supersedes=...] [--knowledge]
 ```
 
-The command automatically supplies the current local date (`YYYY-MM-DD`), resolves the active anchor from session state, and defaults `THREAD` to `none` if omitted. `--closes` takes one or more target slugs, each of which must exist; a value carrying its own parenthesized verdict (`--closes="<slug> <slug> (dropped: reason)"`) lands verbatim, and a bare target list is closed as `(done: <WHAT>)`. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal is read as it stands.
+The command automatically supplies the current local date (`YYYY-MM-DD`), resolves the active anchor from session state, and defaults `THREAD` to `none` if omitted. `--closes` takes one or more target slugs, each of which must exist; a value carrying its own parenthesized verdict (`--closes="<slug> <slug> (dropped: reason)"`) lands verbatim, and a bare target list is closed as `(done: <WHAT>)`. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal is read as it stands. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the `next_action` pointer, the state `objective`) on every write path: an embedded double quote is text (the typed verbs, `append`, `amend`, `next`, and `bootstrap` store it), and every reader returns it verbatim.
 
 To inspect entries:
 - `ctx session entry show <unit> <slug> [--json]`: prints one entry block; `--json` carries `slug`, `anchor`, `what`, `group`, `thread`, `ref` (the entry's `REF`, an empty string when absent), and the closure.
@@ -143,7 +143,7 @@ Unlike immutable journal events, findings support full lifecycle CRUD:
 
 - `ctx session finding add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]`: adds a new finding with status `ACTIVE`.
 - `ctx session finding show <unit> <NAME>`: displays the finding and its supersession lineage.
-- `ctx session finding update <unit> <NAME> --summary="..." [--ref=...]`: updates the summary, the reference, or both in place when concepts are refined; a `--ref` replaces the `REF` line, or adds one after the summary when the finding had none.
+- `ctx session finding update <unit> <NAME> [--summary="..."] [--ref=...]`: updates the summary, the reference, or both in place when concepts are refined (either flag alone works); a `--ref` replaces the `REF` line, or adds one after the summary when the finding had none.
 - `ctx session finding supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]`: adds the successor finding carrying `SUPERSEDES: <old-name>`, maintaining audit lineage; a missing predecessor refuses rc 1.
 - `ctx session finding drop <unit> <NAME>`: removes an invalidated finding.
 - `ctx session finding list <unit> [--active-only]`: lists all findings, optionally filtering out superseded or dropped findings.
@@ -189,7 +189,7 @@ Universal search operates across all entity domains without artificial mode enum
 .contexture/ctx session search <unit> "<query>" [--limit=N] [--entity=TYPE] [--mode=MODE] [--json]
 ```
 
-Every driver returns the same keys per result (`entity_type`, `entity_id`, `section`, `snippet`), so a caller never branches on the backend; `--limit` caps the results, `--entity` keeps one entity type, and a mode the driver lacks refuses rc 1 (posix searches exact substrings; fts5 adds the ranked `hybrid` and `trigram` modes). An empty query refuses rc 1.
+Every driver returns the same keys per result (`entity_type`, `entity_id`, `section`, `snippet`), so a caller never branches on the backend; `--limit` caps the results, `--entity` keeps one entity type, and a mode the driver lacks refuses rc 1 (posix searches exact substrings; fts5 adds the ranked `hybrid` and `trigram` modes). An empty query refuses rc 1. `--mode=exact` means one thing on every driver: a line matches when it carries the query as a substring, ASCII letters compared without case and a column-0 comment never matching; the answer is one row per matching entity and section, in record order, its snippet the first matching line, and `total_matches` counts those rows, so both drivers return the same rows and totals for the same record.
 
 In backends with full text indexing (such as SQLite FTS5), search uses dual virtual tables combining Porter stemming for English prose with Trigram tokenization for code identifiers, symbols, and multilingual text. A pure SQL Reciprocal Rank Fusion (RRF) algorithm ranks results across both tables.
 

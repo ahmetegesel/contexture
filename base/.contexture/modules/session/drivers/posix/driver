@@ -85,11 +85,14 @@ commit_mv() {
 }
 
 escape_json() {
+  # the backslash is doubled by concatenation (bs_double), never by a gsub replacement:
+  # a replacement of four backslashes yields one under busybox awk and gawk --posix
   printf '%s' "$1" | awk '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     BEGIN { ORS="" }
     {
       if (NR > 1) printf "\\n";
-      gsub(/\\/, "\\\\");
+      $0 = bs_double($0);
       gsub(/"/, "\\\"");
       gsub(/\r/, "\\r");
       gsub(/\t/, "\\t");
@@ -150,7 +153,8 @@ block_has() {
 # refs_json <value>: a REFS value (bracketed or bare, comma or space separated) as a JSON array
 refs_json() {
   printf '%s' "$1" | awk '
-    function esc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
+    function esc(s) { s = bs_double(s); gsub(/"/, "\\\"", s); return s }
     { v = v (NR > 1 ? " " : "") $0 }
     END {
       sub(/^[ \t]*\[/, "", v); sub(/\][ \t]*$/, "", v); gsub(/,/, " ", v)
@@ -412,8 +416,9 @@ session_board() {
     return 1
   fi
   awk -v unit="$unit" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
     BEGIN {
       anchor = "A1";
@@ -1101,8 +1106,9 @@ task_list() {
     return 1
   fi
   awk -v unit="$unit" -v filter="$status_filter" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
     BEGIN {
       count = 0; cur_slug = ""; cur_status = "TODO"; cur_obj = "";
@@ -1163,8 +1169,9 @@ task_show() {
   fi
 
   awk -v unit="$unit" -v target="$slug" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
     function refs_arr(v,   n, w, i, out) {
       sub(/^[ \t]*\[/, "", v); sub(/\][ \t]*$/, "", v); gsub(/,/, " ", v)
@@ -1221,6 +1228,7 @@ entry_record() {
   group="${4:-}"
   thread="${5:-none}"
   closes="${6:-}"
+  ref="${7:-}"
   if [ -z "$unit" ] || [ -z "$slug" ] || [ -z "$what" ]; then
     printf 'entry.record: error: missing required arguments (ERR_INVALID_ARGUMENT)\n' >&2
     return 1
@@ -1248,6 +1256,8 @@ entry_record() {
   printf '  WHAT: "%s"\n' "$what" >> "$tmp_j"
   [ -n "$group" ] && printf '  GROUP: %s\n' "$group" >> "$tmp_j"
   [ -n "$thread" ] && printf '  THREAD: %s\n' "$thread" >> "$tmp_j"
+  # the record order: GROUP, THREAD, REF, CLOSES
+  [ -n "$ref" ] && printf '  REF: "%s"\n' "$ref" >> "$tmp_j"
   # a value carrying its own verdict stands verbatim; a bare target list is done by this entry
   case "$closes" in
     "") ;;
@@ -1263,8 +1273,10 @@ entry_record() {
   esc_what=$(escape_json "$what")
   esc_group=$(escape_json "$group")
   esc_th=$(escape_json "$thread")
-  printf '{"unit":"%s","entry":{"slug":"%s","anchor":"%s","what":"%s","group":"%s","thread":"%s"}}\n' \
-    "$esc_unit" "$esc_slug" "$esc_anc" "$esc_what" "$esc_group" "$esc_th"
+  esc_ref=$(escape_json "$ref")
+  # the echo carries ref after thread, as entry.show does (empty when absent)
+  printf '{"unit":"%s","entry":{"slug":"%s","anchor":"%s","what":"%s","group":"%s","thread":"%s","ref":"%s"}}\n' \
+    "$esc_unit" "$esc_slug" "$esc_anc" "$esc_what" "$esc_group" "$esc_th" "$esc_ref"
   return 0
 }
 
@@ -1287,8 +1299,9 @@ entry_show() {
   fi
 
   awk -v unit="$unit" -v target="$slug" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
     BEGIN {
       found = 0; in_target = 0; anchor = ""; what = ""; group = ""; thread = ""; ref = "";
@@ -1379,8 +1392,9 @@ entry_list() {
   journal="$s_dir/journal.md"
   # --anchor and --group keep only the entries whose ANCHOR and GROUP match exactly
   awk -v unit="$unit" -v fa="$el_anchor" -v fg="$el_group" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
     BEGIN { count = 0; cur_slug = ""; cur_anc = ""; cur_what = ""; cur_grp = ""; }
     function flush() {
@@ -1435,8 +1449,9 @@ entry_anchors() {
   fi
   journal="$s_dir/journal.md"
   awk -v unit="$unit" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); return r;
     }
     BEGIN { count = 0; }
     /^@anchor[ ]+/ {
@@ -1681,8 +1696,9 @@ finding_show() {
   fi
 
   awk -v unit="$unit" -v target="$name" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
     BEGIN { found = 0; in_target = 0; in_summary = 0; summary = ""; ref = ""; superseded_by = ""; cur_finding = ""; }
     /^@finding[ ]+/ {
@@ -1736,8 +1752,9 @@ finding_list() {
   # active_only (the SPI flag, any non-empty value) leaves out every finding a later
   # SUPERSEDES names; empty lists them all
   awk -v unit="$unit" -v active_only="$active_only" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); return r;
     }
     BEGIN { count = 0; cur_name = ""; cur_summary = ""; cur_ref = ""; cur_sup = ""; in_summary = 0; }
     function flush() {
@@ -2041,8 +2058,9 @@ resolve_ref() {
   fi
 
   awk -v unit="$unit" -v full_ref="$ref" -v etype="$entity_type" -v eid="$entity_id" -v lane="$lane_id" '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     function escape_json(s,    r) {
-      r = s; gsub(/\\/, "\\\\", r); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); gsub(/\t/, "\\t", r); return r;
+      r = bs_double(s); gsub(/"/, "\\\"", r); gsub(/\n/, "\\n", r); gsub(/\r/, "\\r", r); gsub(/\t/, "\\t", r); return r;
     }
     function head_id(line,   w, n, t) {
       n = split(line, w, /[ \t]+/)
@@ -2127,7 +2145,8 @@ search_query() {
     ""|all|session|task|entry|finding|lane|lane_entry) ;;
     *) printf "search.query: error: unknown entity type '%s' (session, task, entry, finding, lane, lane_entry, all) (ERR_INVALID_ARGUMENT)\n" "$sq_entity" >&2; return 1 ;;
   esac
-  # the posix driver searches by exact substring; the ranked modes belong to indexed drivers
+  # the posix driver searches by exact substring; the ranked modes belong to indexed drivers;
+  # the awk runs in the C locale so the case rule (ASCII letters fold) holds on every awk
   case "$sq_mode" in
     exact) ;;
     hybrid|trigram) printf "search.query: error: mode '%s' is not supported by the posix driver; it searches exact substrings (ERR_CAPABILITY_UNSUPPORTED)\n" "$sq_mode" >&2; return 1 ;;
@@ -2153,9 +2172,9 @@ search_query() {
   fi
 
   if [ $# -eq 0 ]; then
-    SQ_QUERY="$query" awk -v unit="$unit" -v limit="$sq_limit" -v entity="$sq_entity" -f "$SCRIPT_DIR/search.awk" /dev/null
+    SQ_QUERY="$query" LC_ALL=C awk -v unit="$unit" -v limit="$sq_limit" -v entity="$sq_entity" -f "$SCRIPT_DIR/search.awk" /dev/null
   else
-    SQ_QUERY="$query" awk -v unit="$unit" -v limit="$sq_limit" -v entity="$sq_entity" -f "$SCRIPT_DIR/search.awk" "$@"
+    SQ_QUERY="$query" LC_ALL=C awk -v unit="$unit" -v limit="$sq_limit" -v entity="$sq_entity" -f "$SCRIPT_DIR/search.awk" "$@"
   fi
   return 0
 }
@@ -2249,8 +2268,8 @@ case "$cmd" in
     task_show "$@"
     ;;
   entry.record)
-    payload_load; pget p_what what; pget p_grp group; pget p_th thread; pget p_cl closes
-    entry_record "${1:-}" "${2:-}" "$p_what" "$p_grp" "${p_th:-none}" "$p_cl"
+    payload_load; pget p_what what; pget p_grp group; pget p_th thread; pget p_cl closes; pget p_ref ref
+    entry_record "${1:-}" "${2:-}" "$p_what" "$p_grp" "${p_th:-none}" "$p_cl" "$p_ref"
     ;;
   entry.show)
     entry_show "$@"

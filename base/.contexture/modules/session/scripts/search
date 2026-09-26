@@ -5,7 +5,7 @@
 # help: options:
 # help:   --json              output JSON format
 # help:   --limit=N           maximum number of results returned (default 20)
-# help:   --mode=MODE         search mode (exact, hybrid, trigram); a driver without the mode refuses rc 1
+# help:   --mode=MODE         search mode (exact, hybrid, trigram); a driver without the mode refuses rc 1; exact is the same on every driver: a case-insensitive (ASCII) substring of one line, one row per matching entity and section, total_matches counting those rows
 # help:   --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)
 # help: every driver returns the same keys per result: entity_type, entity_id, section, snippet (ranked drivers may add rrf_score and sources); an empty query refuses rc 1 (ERR_INVALID_ARGUMENT)
 
@@ -63,8 +63,9 @@ fi
 pline() {
   printf '%s=' "$1"
   printf '%sx' "$2" | awk '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     BEGIN { ORS = "" }
-    { gsub(/\\/, "\\\\"); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
+    { $0 = bs_double($0); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
     END { sub(/x$/, "", out); print out "\n" }'
 }
 

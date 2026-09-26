@@ -84,7 +84,8 @@ idx_backlog_sql() {
   printf "DELETE FROM tasks WHERE unit = '%s';\n" "$(idx_q "$1")"
   awk -v u="$1" -v now="$3" '
     function esc(s) { gsub(/'\''/, "'\'''\''", s); return s }
-    function jesc(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); return s }
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
+    function jesc(s) { s = bs_double(s); gsub(/"/, "\\\"", s); return s }
     function refs_json(v,   n, w, i, out) {
       sub(/^[ \t]*\[/, "", v); sub(/\][ \t]*$/, "", v); gsub(/,/, " ", v)
       n = split(v, w, /[ \t]+/); out = ""

@@ -15,15 +15,17 @@ function usage() {
 # storage driver (artifact.read, artifact.write, artifact.list, session.list) by artifact
 # key (state, backlog, knowledge, journal, lane/<lane>/<recipe|journal|report>); a fetched
 # artifact lands in a scratch file under .contexture/tmp, removed at exit. disp() names an
-# artifact in a message the way the record grammar reads it; it builds a display string,
-# never a path any code opens.
-function disp(u, key,   l) {
+# artifact in a message as <artifact>: unit <u> (a lane artifact as lane <l> <artifact>),
+# never a storage location.
+function disp(u, key,   l, a) {
   if (key ~ /^lane\//) {
-    l = key
-    sub(/^lane\//, "", l)
-    return ".contexture/sessions/" u "/lanes/" l ".md"
+    l = substr(key, 6)
+    a = l
+    sub(/\/.*$/, "", l)
+    sub(/^[^\/]*\//, "", a)
+    return "lane " l " " a ": unit " u
   }
-  return ".contexture/sessions/" u "/" key ".md"
+  return key ": unit " u
 }
 
 function rec_q(s) {
@@ -142,7 +144,7 @@ function rec_cleanup() {
 
 function process_journal(journal_path,   test_line, test_ret, line, words, n, i, closed, printing, slug, cur_anchor, v, ln) {
   if (journal_path == "") {
-    print "ERROR: journal file not found: " disp(board_unit, "journal") > "/dev/stderr"
+    print "ERROR: missing " disp(board_unit, "journal") > "/dev/stderr"
     exit 1
   }
 
@@ -247,7 +249,7 @@ BEGIN {
   if (has_backlog) {
     collect_open_tasks(backlog)
   } else {
-    print "WARNING: missing backlog: " disp(slug, "backlog") > "/dev/stderr"
+    print "WARNING: missing " disp(slug, "backlog") > "/dev/stderr"
   }
 
   lives = (live == 1) ? "entry" : "entries"

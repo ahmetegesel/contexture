@@ -1,13 +1,22 @@
-# search.awk: case-insensitive substring search over the session artifacts, one result
-# per matching line, in the SPI result shape shared by every driver
+# search.awk: the exact mode shared by every driver: a case-insensitive (ASCII) substring
+# of one line of the artifact text, a column-0 comment never matching; one result per
+# matching entity and section, in record order, its snippet the first matching line
 # Inputs: -v unit="$UNIT" -v limit=N -v entity=TYPE, the query in the environment as SQ_QUERY; the files arrive
 # in the order state, backlog, knowledge, journal, then each lane's recipe, journal, report
-# Result keys: entity_type, entity_id, section, snippet; total_matches counts every
-# match, results stop at limit
+# Result keys: entity_type, entity_id, section, snippet; total_matches counts the
+# matching entity and section pairs, results stop at limit
+
+# a backslash doubled by concatenation, never by a gsub replacement: a replacement of
+# four backslashes yields one under busybox awk and gawk --posix
+function bs_double(s,    n, p, i, o) {
+  n = split(s, p, /\\/)
+  o = (n ? p[1] : "")
+  for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]
+  return o
+}
 
 function escape_json(s,    r) {
-  r = s
-  gsub(/\\/, "\\\\", r)
+  r = bs_double(s)
   gsub(/"/, "\\\"", r)
   gsub(/\n/, "\\n", r)
   gsub(/\r/, "\\r", r)
@@ -86,6 +95,10 @@ FNR == 1 {
     # a column-0 comment is a grammar description, never a match
     if ($0 ~ /^#/) next
     if (entity != "" && entity != "all" && cur_entity_type != entity) next
+    # one row per entity and section: a later matching line of the same pair adds nothing
+    key = cur_entity_type SUBSEP cur_entity_id SUBSEP section
+    if (key in seen) next
+    seen[key] = 1
     match_count++
     if (shown >= limit) next
     snippet = trim($0)

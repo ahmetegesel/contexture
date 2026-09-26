@@ -114,10 +114,16 @@ function exists(path) {
 # The record IO: every session artifact is read and written through the configured
 # storage driver (artifact.read, artifact.write) by artifact key; a fetched artifact lands
 # in a scratch file under .contexture/tmp, removed at exit. disp() names an artifact in a
-# message the way the record grammar reads it; it builds a display string, never a path
-# any code opens.
-function disp(u, key) {
-  return ".contexture/sessions/" u "/" key ".md"
+# message as <artifact>: unit <u>, never a storage location.
+function disp(u, key,   l, a) {
+  if (key ~ /^lane\//) {
+    l = substr(key, 6)
+    a = l
+    sub(/\/.*$/, "", l)
+    sub(/^[^\/]*\//, "", a)
+    return "lane " l " " a ": unit " u
+  }
+  return key ": unit " u
 }
 
 function rec_q(s) {
@@ -200,7 +206,7 @@ function load_lines(path, A, shown,   line, n, r) {
     A[n] = line
   }
   close(path)
-  if (r < 0) fail("ERROR: unreadable: " shown)
+  if (r < 0) fail("ERROR: unreadable " shown)
   return n
 }
 
@@ -211,7 +217,7 @@ function load_art(u, key, A,   f) {
 }
 
 function load_one(key, A, art) {
-  if (!rec_exists(unit, key)) fail("ERROR: missing " art ": " disp(unit, key))
+  if (!rec_exists(unit, key)) fail("ERROR: missing " disp(unit, key))
   return load_art(unit, key, A)
 }
 
@@ -237,7 +243,7 @@ function require_active() {
 }
 
 function require_anchor() {
-  if (anchor !~ /^A[0-9]+$/) fail("ERROR: malformed current_anchor in " state_disp ": [" anchor "]")
+  if (anchor !~ /^A[0-9]+$/) fail("ERROR: malformed current_anchor [" anchor "] in " state_disp)
 }
 
 function load_journal() {
@@ -659,7 +665,8 @@ function parse_task(k,   i, line, s, v, cur, nonblank) {
     fail("ERROR: block " k ": STATUS must be TODO when present (got: " TST[k] ")")
   }
   if (!TOBJSET[k]) fail("ERROR: block " k ": OBJECTIVE missing (one quoted OBJECTIVE line is required)")
-  if (TOBJ[k] !~ /^"[^"]*"$/) fail("ERROR: block " k ": OBJECTIVE must be one quoted line with no embedded double quote")
+  # one quoted line, the WHAT rule: an embedded double quote is text
+  if (TOBJ[k] !~ /^".*"$/ || length(TOBJ[k]) < 2) fail("ERROR: block " k ": OBJECTIVE must be one quoted line")
   if (trim(substr(TOBJ[k], 2, length(TOBJ[k]) - 2)) == "") fail("ERROR: block " k ": OBJECTIVE empty")
   if (TRSET[k]) TRC[k] = canon_refs(k, "REFS", TREFVAL[k])
   DBN[k] = trim_body_tail(DB, k, DBN[k])
@@ -926,7 +933,7 @@ function parse_field_blocks(   i, line, ind, s, name, v, cur, nonblank) {
       if (FFIELD[v] == FFIELD[i]) fail("ERROR: duplicate field block: " FFIELD[i])
     }
     if (FFIELD[i] == "OBJECTIVE") {
-      if (FVAL[i] !~ /^"[^"]*"$/) fail("ERROR: OBJECTIVE must be one quoted line with no embedded double quote")
+      if (FVAL[i] !~ /^".*"$/ || length(FVAL[i]) < 2) fail("ERROR: OBJECTIVE must be one quoted line")
       if (trim(substr(FVAL[i], 2, length(FVAL[i]) - 2)) == "") fail("ERROR: OBJECTIVE empty")
     } else if (FFIELD[i] == "REFS") {
       FREFVAL[i] = canon_refs_field(i, FVAL[i])
@@ -1236,7 +1243,6 @@ function do_next(   i, j, candidate, missing, n, nimp, slug, nnal) {
   pointer = ARG[2]
   if (!slug_ok(unit)) usage()
   if (pointer == "") fail("ERROR: empty pointer")
-  if (index(pointer, "\"") > 0) fail("ERROR: embedded double quote in pointer")
   if (index(pointer, "\n") > 0) fail("ERROR: embedded newline in pointer")
   if (index(pointer, "\r") > 0) fail("ERROR: embedded carriage return in pointer (the dialect is LF)")
   load_state()
