@@ -25,8 +25,13 @@ if [ -z "${TMP_BASE}" ] && [ -d "${WS_ROOT}/.contexture" ] && mkdir -p "${WS_ROO
 fi
 [ -n "${TMP_BASE}" ] || TMP_BASE="${TMPDIR:-/tmp}"
 
-TMP_DB=$(mktemp "${TMP_BASE}/ast_doc_graph_test_XXXXXX.db")
-trap 'rm -f "${TMP_DB}"' EXIT INT TERM
+# a folder of its own (the X run trails the template, as every mktemp needs), so a
+# concurrent run never meets this one's database, WAL, or shared-memory file
+TMP_DIR=$(mktemp -d "${TMP_BASE}/ast_doc_graph_test.XXXXXX")
+TMP_DB="${TMP_DIR}/test.db"
+trap 'rm -rf "${TMP_DIR}"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 
 # 1. Apply schema DDL
 "${SQLITE_BIN}" "${TMP_DB}" < "${SCHEMA_FILE}"

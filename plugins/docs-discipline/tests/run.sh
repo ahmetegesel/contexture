@@ -33,8 +33,12 @@ if [ -d "$WS_ROOT/.contexture" ] && mkdir -p "$WS_ROOT/.contexture/tmp" 2>/dev/n
 else
     TMP_BASE="${TMPDIR:-/tmp}"
 fi
-SANDBOX="$TMP_BASE/docs-plugin-tests"
-rm -rf "$SANDBOX"
+# a sandbox of its own per run (never a fixed name), removed on exit, so concurrent
+# runs of the gate never share or clear one another's staging
+SANDBOX=$(mktemp -d "$TMP_BASE/docs-plugin-tests.XXXXXX") || exit 1
+trap 'rm -rf "$SANDBOX"' EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
 mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/docs"
 cp "$CTX_BIN" "$SANDBOX/.contexture/ctx"
 cp -R "$PLUGIN_ROOT/.contexture/modules/docs" "$SANDBOX/.contexture/modules/"

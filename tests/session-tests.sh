@@ -13,7 +13,12 @@
 # own module copy staged into the sandbox, storage.driver: fts5 in its config; skip 77
 # when sqlite3 lacks FTS5).
 #
-# Usage: tests/session-tests.sh [--driver=posix|fts5]
+# The sections fall into three groups that share no unit (a unit a section creates is
+# named only by sections of its own group): by default the three groups run at once,
+# each in a sandbox of its own, their output printed in group order under one summary;
+# --group=1|2|3 runs one group, --group=all runs every section in one sandbox, in order.
+#
+# Usage: tests/session-tests.sh [--driver=posix|fts5] [--group=1|2|3|all]
 # Exit 0 when every case passes; 1 otherwise; 77 when the fts5 need is absent.
 
 set -u
@@ -24,9 +29,11 @@ CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
 FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
 DRIVER=posix
+GROUP=""
 for a in "$@"; do
   case "$a" in
     --driver=posix|--driver=fts5) DRIVER=${a#--driver=} ;;
+    --group=1|--group=2|--group=3|--group=all) GROUP=${a#--group=} ;;
     *) echo "session-tests.sh: unknown argument: $a" >&2; exit 1 ;;
   esac
 done
@@ -50,6 +57,55 @@ tmp_root="${TMPDIR:-/tmp}"
 if mkdir -p "$ROOT/.contexture/tmp" 2>/dev/null && [ -d "$ROOT/.contexture/tmp" ] && [ -w "$ROOT/.contexture/tmp" ]; then
   tmp_root="$ROOT/.contexture/tmp"
 fi
+
+# no --group: the three groups at once, each a run of this suite in its own sandbox; the
+# exit code of each group is read from the group itself, its counts from its summary line
+if [ -z "$GROUP" ]; then
+  GROUPS_DIR=$(mktemp -d "$tmp_root/session-groups.XXXXXX") || exit 1
+  group_pids=""
+  trap 'rm -rf "$GROUPS_DIR"' EXIT
+  trap '[ -n "$group_pids" ] && kill $group_pids 2>/dev/null; exit 130' INT
+  trap '[ -n "$group_pids" ] && kill $group_pids 2>/dev/null; exit 143' TERM
+  for g in 1 2 3; do
+    ( sh "$SCRIPT_DIR/session-tests.sh" "--driver=$DRIVER" "--group=$g" > "$GROUPS_DIR/$g.out" 2>&1 < /dev/null
+      printf '%s\n' "$?" > "$GROUPS_DIR/$g.rc" ) &
+    group_pids="$group_pids $!"
+  done
+  wait
+  pass=0
+  fail=0
+  broken=""
+  for g in 1 2 3; do
+    g_sum="session-tests ($DRIVER, group $g): pass="
+    grep -v -F "$g_sum" "$GROUPS_DIR/$g.out"
+    g_line=$(grep "^session-tests ($DRIVER, group $g): pass=[0-9][0-9]* fail=[0-9][0-9]*\$" "$GROUPS_DIR/$g.out")
+    g_rc=$(cat "$GROUPS_DIR/$g.rc" 2>/dev/null)
+    if [ -z "$g_line" ]; then
+      broken="$broken group $g (no summary, rc=${g_rc:-none})"
+      continue
+    fi
+    g_pass=${g_line##*pass=}
+    g_pass=${g_pass%% *}
+    g_fail=${g_line##*fail=}
+    pass=$((pass + g_pass))
+    fail=$((fail + g_fail))
+    case "${g_rc:-none}" in
+      0) [ "$g_fail" -eq 0 ] || broken="$broken group $g (rc=0 with $g_fail failed)" ;;
+      1) [ "$g_fail" -gt 0 ] || broken="$broken group $g (rc=1 with no failed case)" ;;
+      *) broken="$broken group $g (rc=${g_rc:-none})" ;;
+    esac
+  done
+  if [ -n "$broken" ]; then
+    echo "FAIL: session groups ended abnormally:$broken"
+    fail=$((fail + 1))
+  fi
+  echo "== summary =="
+  echo "session-tests ($DRIVER): pass=$pass fail=$fail"
+  [ "$fail" -eq 0 ] || exit 1
+  exit 0
+fi
+in_group() { [ "$GROUP" = all ] || [ "$GROUP" = "$1" ]; }
+
 SANDBOX=$(mktemp -d "$tmp_root/session-tests.XXXXXX") || exit 1
 cleanup() {
   rm -rf "$SANDBOX"
@@ -91,6 +147,7 @@ a_eq() { if [ "$1" = "$2" ]; then ok "$3"; else bad "$3 (want [$1] got [$2])"; f
 a_match() { if printf '%s\n' "$1" | grep -q "$2"; then ok "$3"; else bad "$3 (no match: $2)"; fi; }
 a_not() { if printf '%s\n' "$1" | grep -q "$2"; then bad "$3 (unwanted: $2)"; else ok "$3"; fi; }
 
+if in_group 1; then
 echo "== V verb surface and no-arg rc contract =="
 DECLARED="active amend append audit board bootstrap close diagnose drop entry finding flip index load next query record refresh refs reopen resolve search stamp task"
 disk=$(for f in .contexture/modules/session/scripts/*; do
@@ -487,7 +544,9 @@ cmp -s lane-fixture.md lane-write.out; a_eq "$?" "0" "lane: report write echo is
 rcat sem-unit lane/sub-lane/report > lane-stored.out
 cmp -s lane-fixture.md lane-stored.out; a_eq "$?" "0" "lane: stored report is byte-identical to the input"
 rm -f lane-fixture.md lane-write.out lane-report.out lane-show.out lane-stored.out
+fi # group 1
 
+if in_group 2; then
 echo "== X dual-driver defects (lanes/driver-test-compare/report ids) =="
 $CTX session bootstrap x-unit "defect regression unit" >/dev/null 2>&1
 # F1, S3: the status filter vocabulary maps in the task verb, identical for every driver
@@ -919,7 +978,9 @@ $CTX session audit q-unit >/dev/null 2>&1
 a_eq "$?" "0" "R3: a legacy two-line WHAT still audits rc0"
 out=$($CTX session board q-unit 2>&1)
 a_match "$out" "@entry $TODAY-q-legacy-two-line" "R3: a legacy two-line WHAT still loads on the board"
+fi # group 2
 
+if in_group 3; then
 echo "== Z the capability handshake at dispatch (lanes/routing-review/report finding R5) =="
 # a configured driver other than the bundled posix one proves its mandatory capabilities
 # before it serves a method: a planted driver lacking artifact.store is refused rc2 with
@@ -1237,8 +1298,13 @@ a_match "$diag_json" '"workspace_root"' "session diagnose --json carries workspa
 a_match "$diag_json" '"capabilities"' "session diagnose --json carries capabilities"
 $CTX session --diagnose >/dev/null 2>&1
 a_eq "$?" "0" "session --diagnose flag rc0"
+fi # group 3
 
 echo "== summary =="
-echo "session-tests ($DRIVER): pass=$pass fail=$fail"
+if [ "$GROUP" = all ]; then
+  echo "session-tests ($DRIVER): pass=$pass fail=$fail"
+else
+  echo "session-tests ($DRIVER, group $GROUP): pass=$pass fail=$fail"
+fi
 [ "$fail" -eq 0 ] || exit 1
 exit 0

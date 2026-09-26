@@ -38,7 +38,7 @@ A plugin installs into an existing setup the same way: the mirrored tree copies 
 - A plugin's tests live at `plugins/<name>/tests/`, beside the plugin they pin, and are plugin-meta like the README: never copied, never shipped into a workspace.
 - A suite exercises the plugin's own copy, resolved from the suite's location (`plugins/<name>/.contexture/...`), never the workspace's adopted copy in the live drawer: the two drift, and a suite pinned to the adopted copy passes on whatever was installed last. A suite that calls a workspace harness hands it the plugin's executable by path (the storage compliance harness takes `--driver-exec=<path>`), and a storage driver that renders through the reference serialization is handed base's posix driver by path (`CTX_REFERENCE_DRIVER`).
 - The upstream runner may invoke a plugin's suite; a suite with declared needs (a toolchain, a pilot repository) skips cleanly when a need is absent, naming it.
-- The upstream ship gate includes the plugin suites: `tests/run.sh` runs every `plugins/<name>/tests/run.sh` by convention and reports it; a red plugin suite holds the ship breath.
+- The upstream ship gate includes the plugin suites: `tests/run.sh` runs every `plugins/<name>/tests/run.sh` by convention and reports it; a red plugin suite holds the ship breath. The gate runs every suite at the same time, so a plugin suite stages its scratch in a folder of its own (mktemp under the workspace's `.contexture/tmp/`, removed on exit), never a fixed name, and reads nothing from its stdin.
 - A plugin change is not done until its suite passes; the suite's README carries the roots and the maintenance contract, and the harness contract lives in `tests/README.md`.
 
 ## Contribute

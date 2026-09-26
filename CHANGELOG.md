@@ -4,6 +4,17 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.53.2] - 2026-09-27
+
+### Changed
+
+- The ship gate (`tests/run.sh`) runs every suite concurrently: each suite runs as its own job with its own output and exit code file (never read through a pipeline), the output and outcome lines print in the previous fixed order, `GATE_SUITE_TIMEOUT` (default 1200 s) stops a stuck suite with its whole process tree and fails it, `GATE_JOBS` caps how many suites run at once, and every suite reads stdin from `/dev/null`. The same suites, assertion lines, and counts as before; the gate runs about 3.5 times faster.
+- The session suite runs its sections in three concurrent groups, each in its own sandbox, with the same assertions and the same summary line; `--group=all` runs the previous single-sandbox suite.
+
+### Fixed
+
+- Two test scratch names collided when two suites or two gates ran at once: the docs-discipline suite's staging folder and the ast-doc-graph DDL test's database (a `mktemp` template whose X run was not trailing); both now create a unique folder per run and remove it on exit.
+
 ## [0.53.1] - 2026-09-26
 
 ### Added
