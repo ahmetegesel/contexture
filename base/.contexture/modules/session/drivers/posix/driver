@@ -9,8 +9,7 @@
 # string form), model.awk (the parse rules into typed items with their verbatim, the
 # derived fields, the JSON of the schemas), ops.awk (the functions: the record rules, the
 # append and edit rules), import.awk (unit.import), search.awk (the exact rule). It keeps
-# the six corpus methods of v0.54.0 byte for byte (corpus.store) and serves artifact.read,
-# artifact.write, artifact.list undeclared for the base verbs that still call them (D41).
+# the six corpus methods of v0.54.0 byte for byte (corpus.store).
 #
 # Writes: the unit lock (.contexture/tmp/locks/<unit>.lock) is held from the read to the
 # last rename, every changed file is staged beside the sessions folder and renamed into
@@ -34,12 +33,6 @@ find_workspace_root() {
     curr=$(dirname "$curr")
   done
   printf '%s\n' "$PWD"
-}
-
-get_session_dir() {
-  u="$1"
-  ws=$(find_workspace_root)
-  printf '%s/.contexture/sessions/%s\n' "$ws" "$u"
 }
 
 get_tmp_dir() {
@@ -76,111 +69,6 @@ escape_json() {
       printf "%s", $0;
     }
   '
-}
-
-slug_valid() {
-  case "$1" in
-    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
-  esac
-  return 0
-}
-
-# artifact keys: state, backlog, knowledge, journal, lane/<lane>/{recipe,journal,report}
-art_path() {
-  ap_dir=$(get_session_dir "$1")
-  case "$2" in
-    state|backlog|knowledge|journal) printf '%s/%s.md\n' "$ap_dir" "$2" ;;
-    lane/*/recipe|lane/*/journal|lane/*/report)
-      ap_rest=${2#lane/}
-      ap_lane=${ap_rest%/*}
-      ap_name=${ap_rest##*/}
-      slug_valid "$ap_lane" || return 1
-      printf '%s/lanes/%s/%s.md\n' "$ap_dir" "$ap_lane" "$ap_name"
-      ;;
-    *) return 1 ;;
-  esac
-}
-
-artifact_read() {
-  unit="${1:-}"
-  key="${2:-}"
-  if [ -z "$unit" ] || [ -z "$key" ]; then
-    printf 'artifact.read: error: missing required arguments (unit, key) (ERR_INVALID_ARGUMENT)\n' >&2
-    return 1
-  fi
-  slug_valid "$unit" || { printf "artifact.read: error: malformed unit '%s' (ERR_INVALID_ARGUMENT)\n" "$unit" >&2; return 1; }
-  path=$(art_path "$unit" "$key") || { printf "artifact.read: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$key" >&2; return 1; }
-  if [ ! -f "$path" ]; then
-    printf "artifact.read: error: artifact '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$key" "$unit" >&2
-    return 1
-  fi
-  cat "$path" || return 2
-  return 0
-}
-
-artifact_write() {
-  unit="${1:-}"
-  key="${2:-}"
-  if [ -z "$unit" ] || [ -z "$key" ]; then
-    printf 'artifact.write: error: missing required arguments (unit, key) (ERR_INVALID_ARGUMENT)\n' >&2
-    return 1
-  fi
-  slug_valid "$unit" || { printf "artifact.write: error: malformed unit '%s' (ERR_INVALID_ARGUMENT)\n" "$unit" >&2; return 1; }
-  path=$(art_path "$unit" "$key") || { printf "artifact.write: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$key" >&2; return 1; }
-  s_dir=$(get_session_dir "$unit")
-  if [ ! -d "$s_dir" ]; then
-    printf "artifact.write: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
-    return 1
-  fi
-  case "$key" in
-    lane/*) mkdir -p "$(dirname "$path")" || return 2 ;;
-  esac
-  # a unique same-directory temp: the mv stays on one filesystem (atomic replace)
-  # and concurrent writers never share a temp name
-  aw_tmp=$(mktemp "$path.XXXXXX" 2>/dev/null) || {
-    printf "artifact.write: error: cannot create a temp beside %s (ERR_STORAGE_WRITE)\n" "$key" >&2
-    return 2
-  }
-  if ! cat > "$aw_tmp"; then
-    rm -f "$aw_tmp"
-    printf 'artifact.write: error: the storage write failed (ERR_STORAGE_WRITE)\n' >&2
-    return 2
-  fi
-  if ! mv "$aw_tmp" "$path"; then
-    rm -f "$aw_tmp"
-    printf 'artifact.write: error: the storage write failed (ERR_STORAGE_WRITE)\n' >&2
-    return 2
-  fi
-  return 0
-}
-
-artifact_list() {
-  unit="${1:-}"
-  if [ -z "$unit" ]; then
-    printf 'artifact.list: error: missing session unit parameter (ERR_INVALID_ARGUMENT)\n' >&2
-    return 1
-  fi
-  slug_valid "$unit" || { printf "artifact.list: error: malformed unit '%s' (ERR_INVALID_ARGUMENT)\n" "$unit" >&2; return 1; }
-  s_dir=$(get_session_dir "$unit")
-  if [ ! -d "$s_dir" ]; then
-    printf "artifact.list: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$unit" >&2
-    return 1
-  fi
-  for al_a in state backlog knowledge journal; do
-    [ -f "$s_dir/$al_a.md" ] && printf '%s\n' "$al_a"
-  done
-  if [ -d "$s_dir/lanes" ]; then
-    for al_l in "$s_dir"/lanes/*; do
-      [ -d "$al_l" ] || continue
-      al_n=${al_l##*/}
-      slug_valid "$al_n" || continue
-      printf 'lane/%s\n' "$al_n"
-      for al_a in recipe journal report; do
-        [ -f "$al_l/$al_a.md" ] && printf 'lane/%s/%s\n' "$al_n" "$al_a"
-      done
-    done
-  fi
-  return 0
 }
 
 # The corpus store (capability corpus.store): the agent-facing doc corpus beside the
@@ -898,9 +786,6 @@ FN=$cmd
 
 case "$cmd" in
   capability) capability; exit 0 ;;
-  artifact.read) artifact_read "$@"; exit $? ;;
-  artifact.write) artifact_write "$@"; exit $? ;;
-  artifact.list) artifact_list "$@"; exit $? ;;
   corpus.list) corpus_list "$@"; exit $? ;;
   corpus.read) corpus_read "$@"; exit $? ;;
   corpus.write) corpus_write "$@"; exit $? ;;

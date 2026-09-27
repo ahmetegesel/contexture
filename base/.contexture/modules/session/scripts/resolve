@@ -5,22 +5,10 @@
 # help: arguments:
 # help:   <unit>      session unit slug
 # help:   <ref>       abstract entity reference (task#slug, finding#NAME, entry#slug, lane#slug/report#claim); the legacy file forms (backlog.md#slug, knowledge.md#NAME, journal.md#slug, lanes/<lane>/report.md#claim) resolve the same entities
-# help: the text view prints the entity block verbatim; --json returns the target fields and the block
+# help: the text view prints the entity block verbatim (the item's span, its trailing separator included; a report claim from its @<claim> line to the next column-0 @ line); --json prints the storage function's answer (task.get, finding.get, entry.get, or lane.get)
 # help:   --json      output JSON format
 
-set -u
-
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-resolver="$dir/driver-resolver"
-if [ ! -x "$resolver" ]; then
-  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
-    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
-  fi
-fi
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 if [ $# -lt 2 ]; then
   if [ $# -gt 0 ]; then
@@ -39,66 +27,68 @@ if [ $# -lt 2 ]; then
 fi
 
 unit="$1"
+vb_unit resolve "$unit"
 shift
 ref="$1"
 shift
 
 json_out=0
-while [ $# -gt 0 ]; do
-  case "$1" in
+for a in "$@"; do
+  case "$a" in
     --json) json_out=1 ;;
+    *) vb_unknown resolve "$a" ;;
   esac
-  shift
 done
 
-out=$("$resolver" resolve.ref "$unit" "$ref")
-rc=$?
-if [ "$rc" -ne 0 ]; then
-  exit "$rc"
+unsupported() {
+  printf "resolve: error: unsupported ref format: '%s' (ERR_INVALID_ARGUMENT)\n" "$ref" >&2
+  exit 1
+}
+
+kind=""
+id=""
+lane=""
+case "$ref" in
+  task#*|backlog#*|backlog.md#*) kind=task; id="${ref#*#}" ;;
+  finding#*|knowledge#*|knowledge.md#*) kind=finding; id="${ref#*#}" ;;
+  entry#*|journal#*|journal.md#*) kind=entry; id="${ref#*#}" ;;
+  lane#*/report#*)
+    rest="${ref#lane#}"
+    lane="${rest%%/report#*}"
+    id="${rest#*/report#}"
+    kind=claim
+    ;;
+  lanes/*/report.md#*|lanes/*/report#*)
+    rest="${ref#lanes/}"
+    lane="${rest%%/*}"
+    id="${ref##*#}"
+    kind=claim
+    ;;
+esac
+[ -n "$kind" ] && [ -n "$id" ] || unsupported
+[ "$kind" = claim ] && { vb_slug_ok "$lane" || unsupported; }
+
+case "$kind" in
+  task) vb_call task.get "$unit" "$id" ;;
+  finding) vb_call finding.get "$unit" "$id" ;;
+  entry) vb_call entry.get "$unit" "$id" ;;
+  claim) vb_call lane.get "$unit" "$lane" report ;;
+esac
+if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_ENTITY_NOT_FOUND" && ! vb_err_has "unit '$unit' not found"; then
+  printf "resolve: error: reference '%s' not found in unit '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ref" "$unit" >&2
+  exit 1
 fi
+if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_INVALID_ARGUMENT"; then
+  unsupported
+fi
+vb_ok
 
 if [ "$json_out" -eq 1 ]; then
-  printf '%s\n' "$out"
-else
-  # the text view prints the entity block verbatim (the driver returns it whole)
-  printf '%s\n' "$out" | awk '
-        # jstr(s, pos): the JSON string whose first character sits at pos (after the
-        # opening quote), escapes decoded (\" \\ \/ \n \t \r); JEND lands on the closing quote
-        function jstr(s, pos,   out, c, e, i, n) {
-          out = ""
-          n = length(s)
-          for (i = pos; i <= n; i++) {
-            c = substr(s, i, 1)
-            if (c == "\\") {
-              i++
-              e = substr(s, i, 1)
-              if (e == "n") out = out "\n"
-              else if (e == "t") out = out "\t"
-              else if (e == "r") out = out "\r"
-              else out = out e
-              continue
-            }
-            if (c == "\"") { JEND = i; return out }
-            out = out c
-          }
-          JEND = n
-          return out
-        }
-        # jval(s, key): the decoded string value of the first "key":"..." in s, "" when absent
-        function jval(s, key,   p) {
-          p = index(s, "\"" key "\":\"")
-          if (p == 0) return ""
-          return jstr(s, p + length(key) + 4)
-        }
-        {
-          line = $0
-          p = index(line, "\"block\":\"")
-          if (p > 0) {
-            printf "%s", jstr(line, p + 9)
-            next
-          }
-          print line
-        }
-      '
+  # a claim the report lacks refuses in both views
+  if [ "$kind" = claim ]; then
+    vb_render resolve RV_KIND="$kind" RV_CLAIM="$id" RV_REF="$ref" RV_UNIT="$unit" > /dev/null || exit 1
+  fi
+  vb_json
+  exit 0
 fi
-exit 0
+vb_render resolve RV_KIND="$kind" RV_CLAIM="$id" RV_REF="$ref" RV_UNIT="$unit"

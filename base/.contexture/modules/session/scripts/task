@@ -3,181 +3,38 @@
 # usage: ctx session task <subcommand> <unit> [args...]
 # help: subcommands:
 # help:   add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
-# help:   update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."]
+# help:   update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
 # help:   start <unit> <slug> [--pointer="..."]
 # help:   complete <unit> <slug> --evidence="..."
 # help:   reopen <unit> <slug>
 # help:   drop <unit> <slug> [--reason="..."]
 # help:   list <unit> [--status=todo|progress|done|all] [--json]
 # help:   show <unit> <slug> [--json]
-# help: stdin fallback: raw @task block piping supported
-# help: the writes refuse a CLOSED unit and a malformed slug (letters, digits, underscore, dash; starts alphanumeric) with rc 1 before any driver call
+# help: --refs takes the references blank or comma separated (brackets optional); an update with --refs replaces the list, --refs="" clears it
+# help: the storage driver holds the record rules: a CLOSED unit refuses every write; start moves only a TODO task, complete a TODO or IN_PROGRESS task, reopen an IN_PROGRESS or DONE task; drop refuses an IN_PROGRESS task next_action names; start and the pointer it writes must name every IN_PROGRESS task; complete and drop write their receipt entry (backlog/<slug>: DONE (<evidence>), DROPPED (<reason>)) in the same write
+# help: add, start, complete, reopen, and drop fire the task-landing hooks (CTX_ACT add, start, complete, reopen, or drop; CTX_SLUGS the task)
+# help: a malformed slug (letters, digits, underscore, dash; starts alphanumeric) refuses rc 1 before any driver call
 
-set -u
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-resolver="$dir/driver-resolver"
-if [ ! -x "$resolver" ]; then
-  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
-    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
-  fi
-fi
-
-# The driver transport (docs/the-engine.md): argv carries the method and its bounded
-# identifiers; every free-text field travels on stdin as payload lines key=value, the
-# value escaped (backslash, newline, tab, carriage return as \\, \n, \t, \r); pline
-# writes one line, exact (a trailing newline survives).
-pline() {
-  printf '%s=' "$1"
-  printf '%sx' "$2" | awk '
-    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
-    BEGIN { ORS = "" }
-    { $0 = bs_double($0); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
-    END { sub(/x$/, "", out); print out "\n" }'
-}
-
-# unit_closed <unit>: rc0 when the unit's state reads status: CLOSED (a closed unit takes
-# no writes: the refusal is the verb's, before any driver write)
-unit_closed() {
-  "$resolver" artifact.read "$1" state 2>/dev/null | awk '/^status:[ \t]*CLOSED[ \t\r]*$/ { c = 1 } END { exit !c }'
-}
-
-refuse_closed() {
-  if unit_closed "$1"; then
-    printf 'ERROR: unit is CLOSED: %s (a closed unit takes no writes)\n' "$1" >&2
-    exit 1
-  fi
-}
-
-# the dialect is LF: a carriage return in a field would poison the record for the grammar
-# verbs, which refuse CR on read; the refusal is the verb's, before any driver write
-CR_CHAR=$(printf '\r')
-refuse_cr() {
-  for cr_v in "$@"; do
-    case "$cr_v" in
-      *"$CR_CHAR"*)
-        printf 'ERROR: embedded carriage return in a field value (the dialect is LF)\n' >&2
-        exit 1
-        ;;
-    esac
-  done
-}
-
-# a one-line field (written as one line of its block) takes no newline: a column-0
-# continuation would break the block grammar; the block scalars keep their newlines;
-# refuse_nl <field> <value> [<field> <value> ...], before any driver write
-NL_CHAR='
-'
-refuse_nl() {
-  while [ $# -ge 2 ]; do
-    case "$2" in
-      *"$NL_CHAR"*)
-        printf 'ERROR: embedded newline in %s (one line)\n' "$1" >&2
-        exit 1
-        ;;
-    esac
-    shift 2
-  done
-}
-
-slug_ok() {
-  case "$1" in
-    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
-  esac
-  return 0
+help_table() {
+  printf 'usage: ctx session task <subcommand> <unit> [args...]\n'
+  printf 'subcommands:\n'
+  printf '  add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
+  printf '  update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
+  printf '  start <unit> <slug> [--pointer="..."]\n'
+  printf '  complete <unit> <slug> --evidence="..."\n'
+  printf '  reopen <unit> <slug>\n'
+  printf '  drop <unit> <slug> [--reason="..."]\n'
+  printf '  list <unit> [--status=todo|progress|done|all] [--json]\n'
+  printf '  show <unit> <slug> [--json]\n'
 }
 
 require_slug() {
-  if ! slug_ok "$1"; then
+  if ! vb_slug_ok "$1"; then
     printf "task: error: malformed task slug '%s' (letters, digits, underscore, dash; starts alphanumeric) (ERR_INVALID_ARGUMENT)\n" "$1" >&2
     exit 1
   fi
-}
-
-if [ $# -eq 0 ]; then
-  printf 'usage: ctx session task <subcommand> <unit> [args...]\n' >&2
-  printf 'subcommands: add, update, start, complete, reopen, drop, list, show\n' >&2
-  exit 1
-fi
-
-case "$1" in
-  --help|-h|help)
-    printf 'usage: ctx session task <subcommand> <unit> [args...]\n'
-    printf 'subcommands:\n'
-    printf '  add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
-    printf '  update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."]\n'
-    printf '  start <unit> <slug> [--pointer="..."]\n'
-    printf '  complete <unit> <slug> --evidence="..."\n'
-    printf '  reopen <unit> <slug>\n'
-    printf '  drop <unit> <slug> [--reason="..."]\n'
-    printf '  list <unit> [--status=todo|progress|done|all] [--json]\n'
-    printf '  show <unit> <slug> [--json]\n'
-    exit 0
-    ;;
-esac
-
-subcmd="$1"
-shift
-case "${1:-}" in
-  --help|-h) "$0" --help | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
-esac
-
-unit=""
-slug=""
-objective=""
-desc=""
-criteria=""
-details=""
-refs=""
-pointer=""
-evidence=""
-reason="task dropped"
-status_filter=""
-json_out=0
-
-# Helper to parse stdin @task block if piped
-parse_stdin_task() {
-  awk '
-    BEGIN { in_target = 0; in_scalar = ""; status = "TODO"; obj = ""; desc = ""; crit = ""; det = ""; r = ""; sl = ""; }
-    /^@task[ ]+/ {
-      line = $0; sub(/^@task[ ]+/, "", line); sub(/^[ \t]+/, "", line); sub(/[ \t]+$/, "", line);
-      sl = line; in_target = 1; next;
-    }
-    in_target && /^[ ]{2}STATUS:[ ]*/ {
-      in_scalar = ""; v = $0; sub(/^[ ]{2}STATUS:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
-      status = v; next;
-    }
-    in_target && /^[ ]{2}OBJECTIVE:[ ]*/ {
-      in_scalar = ""; v = $0; sub(/^[ ]{2}OBJECTIVE:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
-      if (substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") v = substr(v, 2, length(v) - 2);
-      obj = v; next;
-    }
-    in_target && /^[ ]{2}REFS:[ ]*/ {
-      in_scalar = ""; v = $0; sub(/^[ ]{2}REFS:[ ]*/, "", v); sub(/^[ \t]+/, "", v); sub(/[ \t]+$/, "", v);
-      r = v; next;
-    }
-    in_target && /^[ ]{2}DESCRIPTION ::/ { in_scalar = "desc"; next; }
-    in_target && /^[ ]{2}ACCEPTANCE CRITERIA ::/ { in_scalar = "crit"; next; }
-    in_target && /^[ ]{2}IMPLEMENTATION DETAILS ::/ { in_scalar = "det"; next; }
-    in_target && in_scalar != "" && /^[ ]{4}/ {
-      line = substr($0, 5);
-      if (in_scalar == "desc") desc = (desc == "" ? line : desc "\n" line);
-      else if (in_scalar == "crit") crit = (crit == "" ? line : crit "\n" line);
-      else if (in_scalar == "det") det = (det == "" ? line : det "\n" line);
-      next;
-    }
-    in_target && /^[ \t]*$/ { in_scalar = ""; }
-    END {
-      gsub(/\n/, "\\n", desc);
-      gsub(/\n/, "\\n", crit);
-      gsub(/\n/, "\\n", det);
-      print sl "\t" obj "\t" r "\t" desc "\t" crit "\t" det;
-    }
-  '
 }
 
 # the status filter vocabulary, one home for every driver: todo, progress, done, all (and
@@ -192,252 +49,205 @@ map_status() {
   esac
 }
 
+# landing <act>: the task-landing hooks of a task write
+landing() {
+  vb_hook task-landing CTX_UNIT "$unit" CTX_ACT "$1" CTX_SLUGS "$slug" || {
+    printf 'ERROR: task-landing point failed (block hook)\n' >&2
+    exit 1
+  }
+}
+
+# the refs list of --refs: every element one reference without a blank, bracket, or comma
+refs_payload() {
+  set -f
+  old_ifs=$IFS
+  IFS='
+'
+  # shellcheck disable=SC2046
+  set -- $(vb_refs_split "$1")
+  IFS=$old_ifs
+  set +f
+  vb_list refs "$@"
+}
+
+if [ $# -eq 0 ]; then
+  printf 'usage: ctx session task <subcommand> <unit> [args...]\n' >&2
+  printf 'subcommands: add, update, start, complete, reopen, drop, list, show\n' >&2
+  exit 1
+fi
+
+case "$1" in
+  --help|-h|help) help_table; exit 0 ;;
+esac
+
+subcmd="$1"
+shift
+case "${1:-}" in
+  --help|-h) help_table | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
+esac
+
+unit=""
+slug=""
+objective=""; has_objective=0
+desc=""; has_desc=0
+criteria=""; has_criteria=0
+details=""; has_details=0
+refs=""; has_refs=0
+pointer=""; has_pointer=0
+evidence=""
+reason="task dropped"
+status_filter=""
+json_out=0
+
 case "$subcmd" in
-  add)
-    [ $# -gt 0 ] || { printf 'task add: error: missing unit argument\n' >&2; exit 1; }
+  add|update)
+    [ $# -gt 0 ] || { printf 'task %s: error: missing unit argument\n' "$subcmd" >&2; exit 1; }
     unit="$1"; shift
-    if [ $# -gt 0 ] && [ "$(printf '%s' "$1" | cut -c1-2)" != "--" ]; then
-      slug="$1"; shift
+    vb_unit "task $subcmd" "$unit"
+    if [ $# -gt 0 ]; then
+      case "$1" in -*) ;; *) slug="$1"; shift ;; esac
     fi
     while [ $# -gt 0 ]; do
       case "$1" in
-        --objective=*) objective="${1#--objective=}" ;;
-        -o) shift; [ $# -gt 0 ] && objective="$1" ;;
-        --desc=*|--description=*) desc="${1#*=}" ;;
-        -d) shift; [ $# -gt 0 ] && desc="$1" ;;
-        --criteria=*) criteria="${1#--criteria=}" ;;
-        -c) shift; [ $# -gt 0 ] && criteria="$1" ;;
-        --details=*) details="${1#--details=}" ;;
-        --refs=*) refs="${1#--refs=}" ;;
-        -r) shift; [ $# -gt 0 ] && refs="$1" ;;
+        --objective=*) objective="${1#--objective=}"; has_objective=1 ;;
+        -o) shift; [ $# -gt 0 ] && { objective="$1"; has_objective=1; } ;;
+        --desc=*|--description=*) desc="${1#*=}"; has_desc=1 ;;
+        -d) shift; [ $# -gt 0 ] && { desc="$1"; has_desc=1; } ;;
+        --criteria=*) criteria="${1#--criteria=}"; has_criteria=1 ;;
+        -c) shift; [ $# -gt 0 ] && { criteria="$1"; has_criteria=1; } ;;
+        --details=*) details="${1#--details=}"; has_details=1 ;;
+        --refs=*) refs="${1#--refs=}"; has_refs=1 ;;
+        -r) shift; [ $# -gt 0 ] && { refs="$1"; has_refs=1; } ;;
         --json) json_out=1 ;;
-        *)
-          if [ -z "$slug" ]; then
-            slug="$1"
-          fi
-          ;;
+        *) vb_unknown "task $subcmd" "$1" ;;
       esac
       shift
     done
-    if [ -z "$objective" ] && [ ! -t 0 ]; then
-      stdin_content=$(cat)
-      if [ -n "$stdin_content" ]; then
-        parsed_out=$(printf '%s\n' "$stdin_content" | parse_stdin_task)
-        IFS='	' read -r parsed_slug parsed_obj parsed_refs parsed_desc parsed_crit parsed_det <<EOF
-$parsed_out
-EOF
-        [ -z "$slug" ] && slug="$parsed_slug"
-        [ -z "$objective" ] && objective="$parsed_obj"
-        [ -z "$refs" ] && refs="$parsed_refs"
-        [ -n "$parsed_desc" ] && desc=$(printf '%b' "$parsed_desc")
-        [ -n "$parsed_crit" ] && criteria=$(printf '%b' "$parsed_crit")
-        [ -n "$parsed_det" ] && details=$(printf '%b' "$parsed_det")
-      fi
-    fi
     if [ -z "$slug" ]; then
-      printf 'task add: error: missing task slug\n' >&2
+      printf 'task %s: error: missing task slug\n' "$subcmd" >&2
       exit 1
     fi
     require_slug "$slug"
-    if [ -z "$objective" ]; then
+    if [ "$subcmd" = add ] && [ -z "$objective" ]; then
       printf 'task add: error: missing required --objective parameter\n' >&2
       exit 1
     fi
-    refuse_closed "$unit"
-    refuse_cr "$objective" "$desc" "$criteria" "$details" "$refs"
-    refuse_nl --objective "$objective" --refs "$refs"
-    out=$({ pline objective "$objective"; pline desc "$desc"; pline criteria "$criteria"; pline details "$details"; pline refs "$refs"; } | "$resolver" task.add "$unit" "$slug")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
+    vb_refuse_cr "$objective" "$desc" "$criteria" "$details" "$refs"
+    vb_refuse_nl --objective "$objective" --refs "$refs"
+    if [ "$subcmd" = add ]; then
+      vb_kv objective "$objective"
+      [ -n "$desc" ] && vb_kv desc "$desc"
+      [ -n "$criteria" ] && vb_kv criteria "$criteria"
+      [ -n "$details" ] && vb_kv details "$details"
+      refs_payload "$refs"
+      vb_call task.add "$unit" "$slug"
+      vb_ok
+      if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task added: %s (TODO)\n' "$slug"; fi
+      landing add
     else
-      printf 'task added: %s (TODO)\n' "$slug"
+      [ "$has_objective" -eq 1 ] && [ -n "$objective" ] && vb_kv objective "$objective"
+      [ -n "$desc" ] && vb_kv desc "$desc"
+      [ -n "$criteria" ] && vb_kv criteria "$criteria"
+      [ -n "$details" ] && vb_kv details "$details"
+      [ "$has_refs" -eq 1 ] && refs_payload "$refs"
+      vb_call task.update "$unit" "$slug"
+      vb_ok
+      if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task updated: %s\n' "$slug"; fi
     fi
     exit 0
     ;;
 
-  update)
-    [ $# -gt 0 ] || { printf 'task update: error: missing unit argument\n' >&2; exit 1; }
+  start|complete|reopen|drop|show)
+    [ $# -gt 0 ] || { printf 'task %s: error: missing unit argument\n' "$subcmd" >&2; exit 1; }
     unit="$1"; shift
-    [ $# -gt 0 ] || { printf 'task update: error: missing task slug\n' >&2; exit 1; }
+    vb_unit "task $subcmd" "$unit"
+    [ $# -gt 0 ] || { printf 'task %s: error: missing task slug\n' "$subcmd" >&2; exit 1; }
     slug="$1"; shift
+    npos=0
     while [ $# -gt 0 ]; do
-      case "$1" in
-        --objective=*) objective="${1#--objective=}" ;;
-        -o) shift; [ $# -gt 0 ] && objective="$1" ;;
-        --desc=*|--description=*) desc="${1#*=}" ;;
-        -d) shift; [ $# -gt 0 ] && desc="$1" ;;
-        --criteria=*) criteria="${1#--criteria=}" ;;
-        -c) shift; [ $# -gt 0 ] && criteria="$1" ;;
-        --details=*) details="${1#--details=}" ;;
-        --json) json_out=1 ;;
-      esac
-      shift
-    done
-    if [ -z "$objective" ] && [ -z "$desc" ] && [ -z "$criteria" ] && [ -z "$details" ] && [ ! -t 0 ]; then
-      stdin_content=$(cat)
-      if [ -n "$stdin_content" ]; then
-        parsed_out=$(printf '%s\n' "$stdin_content" | parse_stdin_task)
-        IFS='	' read -r parsed_slug parsed_obj parsed_refs parsed_desc parsed_crit parsed_det <<EOF
-$parsed_out
-EOF
-        [ -z "$objective" ] && objective="$parsed_obj"
-        [ -n "$parsed_desc" ] && desc=$(printf '%b' "$parsed_desc")
-        [ -n "$parsed_crit" ] && criteria=$(printf '%b' "$parsed_crit")
-        [ -n "$parsed_det" ] && details=$(printf '%b' "$parsed_det")
-      fi
-    fi
-    require_slug "$slug"
-    refuse_closed "$unit"
-    refuse_cr "$objective" "$desc" "$criteria" "$details"
-    refuse_nl --objective "$objective"
-    out=$({ pline objective "$objective"; pline desc "$desc"; pline criteria "$criteria"; pline details "$details"; } | "$resolver" task.update "$unit" "$slug")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      printf 'task updated: %s\n' "$slug"
-    fi
-    exit 0
-    ;;
-
-  start)
-    [ $# -gt 0 ] || { printf 'task start: error: missing unit argument\n' >&2; exit 1; }
-    unit="$1"; shift
-    [ $# -gt 0 ] || { printf 'task start: error: missing task slug\n' >&2; exit 1; }
-    slug="$1"; shift
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --pointer=*) pointer="${1#--pointer=}" ;;
-        -p) shift; [ $# -gt 0 ] && pointer="$1" ;;
-        --json) json_out=1 ;;
-        *) [ -z "$pointer" ] && pointer="$1" ;;
+      case "$subcmd:$1" in
+        start:--pointer=*) pointer="${1#--pointer=}"; has_pointer=1 ;;
+        start:-p) shift; [ $# -gt 0 ] && { pointer="$1"; has_pointer=1; } ;;
+        complete:--evidence=*) evidence="${1#--evidence=}" ;;
+        complete:-e) shift; [ $# -gt 0 ] && evidence="$1" ;;
+        drop:--reason=*) reason="${1#--reason=}" ;;
+        drop:-r) shift; [ $# -gt 0 ] && reason="$1" ;;
+        *:--json) json_out=1 ;;
+        *:-*) vb_unknown "task $subcmd" "$1" ;;
+        start:*|complete:*|drop:*)
+          # one positional value stands for the flag (the v0.54.0 form); a second refuses
+          npos=$((npos + 1))
+          [ "$npos" -eq 1 ] || vb_unknown "task $subcmd" "$1"
+          case "$subcmd" in
+            start) [ "$has_pointer" -eq 1 ] || { pointer="$1"; has_pointer=1; } ;;
+            complete) [ -n "$evidence" ] || evidence="$1" ;;
+            drop) [ -n "$1" ] && reason="$1" ;;
+          esac
+          ;;
+        *) vb_unknown "task $subcmd" "$1" ;;
       esac
       shift
     done
     require_slug "$slug"
-    refuse_closed "$unit"
-    refuse_cr "$pointer"
-    refuse_nl --pointer "$pointer"
-    out=$(pline pointer "$pointer" | "$resolver" task.start "$unit" "$slug")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      printf 'task started: %s (IN_PROGRESS)\n' "$slug"
-    fi
-    exit 0
-    ;;
-
-  complete)
-    [ $# -gt 0 ] || { printf 'task complete: error: missing unit argument\n' >&2; exit 1; }
-    unit="$1"; shift
-    [ $# -gt 0 ] || { printf 'task complete: error: missing task slug\n' >&2; exit 1; }
-    slug="$1"; shift
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --evidence=*) evidence="${1#--evidence=}" ;;
-        -e) shift; [ $# -gt 0 ] && evidence="$1" ;;
-        --json) json_out=1 ;;
-        *) [ -z "$evidence" ] && evidence="$1" ;;
-      esac
-      shift
-    done
-    if [ -z "$evidence" ]; then
-      printf 'task complete: error: missing required --evidence parameter\n' >&2
-      exit 1
-    fi
-    require_slug "$slug"
-    refuse_closed "$unit"
-    refuse_cr "$evidence"
-    refuse_nl --evidence "$evidence"
-    out=$(pline evidence "$evidence" | "$resolver" task.complete "$unit" "$slug")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      printf 'task completed: %s (DONE)\n' "$slug"
-    fi
-    exit 0
-    ;;
-
-  reopen)
-    [ $# -gt 0 ] || { printf 'task reopen: error: missing unit argument\n' >&2; exit 1; }
-    unit="$1"; shift
-    [ $# -gt 0 ] || { printf 'task reopen: error: missing task slug\n' >&2; exit 1; }
-    slug="$1"; shift
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --json) json_out=1 ;;
-      esac
-      shift
-    done
-    require_slug "$slug"
-    refuse_closed "$unit"
-    out=$("$resolver" task.reopen "$unit" "$slug")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      printf 'task reopened: %s (TODO)\n' "$slug"
-    fi
-    exit 0
-    ;;
-
-  drop)
-    [ $# -gt 0 ] || { printf 'task drop: error: missing unit argument\n' >&2; exit 1; }
-    unit="$1"; shift
-    [ $# -gt 0 ] || { printf 'task drop: error: missing task slug\n' >&2; exit 1; }
-    slug="$1"; shift
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --reason=*) reason="${1#--reason=}" ;;
-        -r) shift; [ $# -gt 0 ] && reason="$1" ;;
-        --json) json_out=1 ;;
-        *) [ -n "$1" ] && reason="$1" ;;
-      esac
-      shift
-    done
-    require_slug "$slug"
-    refuse_closed "$unit"
-    refuse_cr "$reason"
-    refuse_nl --reason "$reason"
-    out=$(pline reason "$reason" | "$resolver" task.drop "$unit" "$slug")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      printf 'task dropped: %s\n' "$slug"
-    fi
+    case "$subcmd" in
+      start)
+        vb_refuse_cr "$pointer"
+        vb_refuse_nl --pointer "$pointer"
+        [ "$has_pointer" -eq 1 ] && [ -n "$pointer" ] && vb_kv pointer "$pointer"
+        vb_call task.start "$unit" "$slug"
+        vb_ok
+        if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task started: %s (IN_PROGRESS)\n' "$slug"; fi
+        landing start
+        ;;
+      complete)
+        if [ -z "$evidence" ]; then
+          printf 'task complete: error: missing required --evidence parameter\n' >&2
+          exit 1
+        fi
+        vb_refuse_cr "$evidence"
+        vb_refuse_nl --evidence "$evidence"
+        vb_kv evidence "$evidence"
+        vb_kv date "$(vb_today)"
+        vb_call task.complete "$unit" "$slug"
+        vb_ok
+        if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task completed: %s (DONE)\n' "$slug"; fi
+        landing complete
+        ;;
+      reopen)
+        vb_call task.reopen "$unit" "$slug"
+        vb_ok
+        if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task reopened: %s (TODO)\n' "$slug"; fi
+        landing reopen
+        ;;
+      drop)
+        vb_refuse_cr "$reason"
+        vb_refuse_nl --reason "$reason"
+        vb_kv reason "$reason"
+        vb_kv date "$(vb_today)"
+        vb_call task.drop "$unit" "$slug"
+        vb_ok
+        if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task dropped: %s\n' "$slug"; fi
+        landing drop
+        ;;
+      show)
+        vb_call task.get "$unit" "$slug"
+        vb_ok
+        if [ "$json_out" -eq 1 ]; then vb_json; else vb_render task_show; fi
+        ;;
+    esac
     exit 0
     ;;
 
   list)
     [ $# -gt 0 ] || { printf 'task list: error: missing unit argument\n' >&2; exit 1; }
     unit="$1"; shift
+    vb_unit "task $subcmd" "$unit"
     while [ $# -gt 0 ]; do
       case "$1" in
         --status=*) status_filter="${1#--status=}" ;;
         -s) shift; [ $# -gt 0 ] && status_filter="$1" ;;
         --json) json_out=1 ;;
+        *) vb_unknown "task list" "$1" ;;
       esac
       shift
     done
@@ -445,129 +255,14 @@ EOF
       printf "task list: error: unknown status '%s' (todo, progress, done, all) (ERR_INVALID_ARGUMENT)\n" "$status_filter" >&2
       exit 1
     fi
-    out=$("$resolver" task.list "$unit" "$canon")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      # the readable list: one line per task, every JSON escape decoded
-      printf '%s\n' "$out" | awk '
-        # jstr(s, pos): the JSON string whose first character sits at pos (after the
-        # opening quote), escapes decoded (\" \\ \/ \n \t \r); JEND lands on the closing quote
-        function jstr(s, pos,   out, c, e, i, n) {
-          out = ""
-          n = length(s)
-          for (i = pos; i <= n; i++) {
-            c = substr(s, i, 1)
-            if (c == "\\") {
-              i++
-              e = substr(s, i, 1)
-              if (e == "n") out = out "\n"
-              else if (e == "t") out = out "\t"
-              else if (e == "r") out = out "\r"
-              else out = out e
-              continue
-            }
-            if (c == "\"") { JEND = i; return out }
-            out = out c
-          }
-          JEND = n
-          return out
-        }
-        function jval(s, key,   p) {
-          p = index(s, "\"" key "\":\"")
-          if (p == 0) return ""
-          return jstr(s, p + length(key) + 4)
-        }
-        {
-          line = $0
-          # a raw {"slug":" never occurs inside a JSON string (its quotes would be escaped)
-          while ((p = index(line, "{\"slug\":\"")) > 0) {
-            line = substr(line, p + 1)
-            q = index(substr(line, 2), "{\"slug\":\"")
-            item = (q > 0) ? substr(line, 1, q) : line
-            printf "  [%s] %s: %s\n", jval(item, "status"), jval(item, "slug"), jval(item, "objective")
-          }
-        }
-      '
-    fi
-    exit 0
-    ;;
-
-  show)
-    [ $# -gt 0 ] || { printf 'task show: error: missing unit argument\n' >&2; exit 1; }
-    unit="$1"; shift
-    [ $# -gt 0 ] || { printf 'task show: error: missing task slug\n' >&2; exit 1; }
-    slug="$1"; shift
-    while [ $# -gt 0 ]; do
-      case "$1" in
-        --json) json_out=1 ;;
-      esac
-      shift
-    done
-    require_slug "$slug"
-    out=$("$resolver" task.show "$unit" "$slug")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      # the readable block, every JSON escape decoded (a quote in the objective survives)
-      printf '%s\n' "$out" | awk '
-        function jstr(s, pos,   out, c, e, i, n) {
-          out = ""
-          n = length(s)
-          for (i = pos; i <= n; i++) {
-            c = substr(s, i, 1)
-            if (c == "\\") {
-              i++
-              e = substr(s, i, 1)
-              if (e == "n") out = out "\n"
-              else if (e == "t") out = out "\t"
-              else if (e == "r") out = out "\r"
-              else out = out e
-              continue
-            }
-            if (c == "\"") { JEND = i; return out }
-            out = out c
-          }
-          JEND = n
-          return out
-        }
-        function jval(s, key,   p) {
-          p = index(s, "\"" key "\":\"")
-          if (p == 0) return ""
-          return jstr(s, p + length(key) + 4)
-        }
-        {
-          line = $0
-          t = index(line, "\"task\":{")
-          if (t > 0) line = substr(line, t)
-          printf "@task %s\n  STATUS: %s\n  OBJECTIVE: \"%s\"\n", jval(line, "slug"), jval(line, "status"), jval(line, "objective")
-          d = jval(line, "description")
-          if (d != "") { gsub(/\n/, "\n    ", d); printf "  DESCRIPTION ::\n    %s\n", d }
-          c = jval(line, "criteria")
-          if (c != "") { gsub(/\n/, "\n    ", c); printf "  ACCEPTANCE CRITERIA ::\n    %s\n", c }
-          det = jval(line, "details")
-          if (det != "") { gsub(/\n/, "\n    ", det); printf "  IMPLEMENTATION DETAILS ::\n    %s\n", det }
-        }
-      '
-    fi
+    vb_call task.list "$unit" "$canon"
+    vb_ok
+    if [ "$json_out" -eq 1 ]; then vb_json; else vb_render task_list; fi
     exit 0
     ;;
 
   *)
-    # Direct fallback: if $subcmd looks like a unit slug, default to list or show
-    unit="$subcmd"
-    if [ $# -eq 0 ]; then
-      exec "$0" list "$unit"
-    else
-      exec "$0" show "$unit" "$@"
-    fi
+    printf "task: error: unknown subcommand '%s' (add, update, start, complete, reopen, drop, list, show) (ERR_INVALID_ARGUMENT)\n" "$subcmd" >&2
+    exit 1
     ;;
 esac

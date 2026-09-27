@@ -5,23 +5,11 @@
 # help: options:
 # help:   --json              output JSON format
 # help:   --limit=N           maximum number of results returned (default 20)
-# help:   --mode=MODE         search mode (exact, hybrid, trigram); a driver without the mode refuses rc 1; exact is the same on every driver: a case-insensitive (ASCII) substring of one line, one row per matching entity and section, total_matches counting those rows
+# help:   --mode=MODE         search mode; exact is the default on every driver (a case-insensitive ASCII substring of one line, one row per matching entity and section, total_matches counting those rows); a ranked mode (hybrid, trigram) is asked for by name, and a driver that does not declare it refuses rc 1 naming its declared modes
 # help:   --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)
-# help: every driver returns the same keys per result: entity_type, entity_id, section, snippet (ranked drivers may add rrf_score and sources); an empty query refuses rc 1 (ERR_INVALID_ARGUMENT)
+# help: every driver returns the same keys per result: entity_type, entity_id, section, snippet, score (0 for exact); an empty query refuses rc 1 (ERR_INVALID_ARGUMENT)
 
-set -u
-
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-resolver="$dir/driver-resolver"
-if [ ! -x "$resolver" ]; then
-  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
-    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
-  fi
-fi
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 if [ $# -eq 0 ]; then
   printf 'usage: ctx session search <unit> "<query>" [options]\n' >&2
@@ -36,13 +24,14 @@ case "$1" in
     printf 'options:\n'
     printf '  --json              output JSON format\n'
     printf '  --limit=N           maximum number of results returned (default 20)\n'
-    printf '  --mode=MODE         search mode (exact, hybrid, trigram); a driver without the mode refuses rc 1\n'
+    printf '  --mode=MODE         search mode (exact by default; hybrid, trigram by name); a driver without the mode refuses rc 1\n'
     printf '  --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)\n'
     exit 0
     ;;
 esac
 
 unit="$1"
+vb_unit search "$unit"
 shift
 
 if [ $# -eq 0 ]; then
@@ -53,24 +42,13 @@ fi
 query="$1"
 shift
 
+vb_refuse_cr "$query"
 if [ -z "$(printf '%s' "$query" | tr -d ' \t')" ]; then
   printf 'search.query: error: empty query (ERR_INVALID_ARGUMENT)\n' >&2
   exit 1
 fi
 
-# the driver transport: the query is free text (stdin payload); the options are
-# bounded tokens (argv); both drivers return one shape (docs/the-engine.md)
-pline() {
-  printf '%s=' "$1"
-  printf '%sx' "$2" | awk '
-    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
-    BEGIN { ORS = "" }
-    { $0 = bs_double($0); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
-    END { sub(/x$/, "", out); print out "\n" }'
-}
-
 json_out=0
-set_opts=""
 limit=""
 entity=""
 mode=""
@@ -87,67 +65,34 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+if [ -n "$limit" ]; then
+  case "$limit" in
+    *[!0-9]*|0*) printf "search: error: --limit takes a positive number: '%s' (ERR_INVALID_ARGUMENT)\n" "$limit" >&2; exit 1 ;;
+  esac
+fi
+if [ -n "$entity" ]; then
+  case "$entity" in
+    all|session|task|entry|finding|lane|lane_entry) ;;
+    *) printf "search: error: unknown entity type '%s' (session, task, entry, finding, lane, lane_entry, all) (ERR_INVALID_ARGUMENT)\n" "$entity" >&2; exit 1 ;;
+  esac
+fi
+if [ -n "$mode" ]; then
+  case "$mode" in
+    [!a-z]*|*[!a-z0-9_-]*) printf "search: error: malformed mode '%s' (ERR_INVALID_ARGUMENT)\n" "$mode" >&2; exit 1 ;;
+  esac
+fi
+
 set --
 [ -n "$limit" ] && set -- "$@" "--limit=$limit"
 [ -n "$entity" ] && set -- "$@" "--entity=$entity"
 [ -n "$mode" ] && set -- "$@" "--mode=$mode"
-out=$(pline query "$query" | "$resolver" search.query "$unit" "$@")
-rc=$?
-if [ "$rc" -ne 0 ]; then
-  exit "$rc"
-fi
+vb_kv query "$query"
+vb_call search.query "$unit" "$@"
+vb_ok
 
 if [ "$json_out" -eq 1 ]; then
-  printf '%s\n' "$out"
+  vb_json
 else
-  # the readable view: a count line, then one line per result
-  printf '%s\n' "$out" | awk -v unit="$unit" -v q="$query" '
-        # jstr(s, pos): the JSON string whose first character sits at pos (after the
-        # opening quote), escapes decoded (\" \\ \/ \n \t \r); JEND lands on the closing quote
-        function jstr(s, pos,   out, c, e, i, n) {
-          out = ""
-          n = length(s)
-          for (i = pos; i <= n; i++) {
-            c = substr(s, i, 1)
-            if (c == "\\") {
-              i++
-              e = substr(s, i, 1)
-              if (e == "n") out = out "\n"
-              else if (e == "t") out = out "\t"
-              else if (e == "r") out = out "\r"
-              else out = out e
-              continue
-            }
-            if (c == "\"") { JEND = i; return out }
-            out = out c
-          }
-          JEND = n
-          return out
-        }
-        # jval(s, key): the decoded string value of the first "key":"..." in s, "" when absent
-        function jval(s, key,   p) {
-          p = index(s, "\"" key "\":\"")
-          if (p == 0) return ""
-          return jstr(s, p + length(key) + 4)
-        }
-        {
-          line = $0
-          tm = line; sub(/^.*"total_matches":/, "", tm); sub(/[^0-9].*$/, "", tm)
-          shown = 0
-          rest = line
-          out = ""
-          while ((p = index(rest, "{\"entity_type\":\"")) > 0) {
-            rest = substr(rest, p + 1)
-            nx = index(substr(rest, 2), "{\"entity_type\":\"")
-            item = (nx > 0) ? substr(rest, 1, nx) : rest
-            sn = jval(item, "snippet")
-            gsub(/\n/, " ", sn)
-            out = out sprintf("  %s %s (%s): %s\n", jval(item, "entity_type"), jval(item, "entity_id"), jval(item, "section"), sn)
-            shown++
-          }
-          printf "search %s \"%s\": %d matches, %d shown\n", unit, q, tm + 0, shown
-          printf "%s", out
-        }
-      '
+  vb_render search RV_UNIT="$unit" RV_QUERY="$query"
 fi
 exit 0

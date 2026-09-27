@@ -1,0 +1,37 @@
+#!/bin/sh
+# summary: create a subagent lane with its recipe
+# usage: ctx lane create <unit> <lane-slug>  (stdin: the recipe)
+# help: the dispatcher's act: the storage driver creates the lane with the recipe stored byte for byte (normalized to end with one newline) and an empty lane journal (lane.create); the recipe is required on stdin
+# help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1
+# help: example: ctx lane create my-unit my-lane < recipe.md
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../../session/lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'usage: ctx lane create <unit> <lane-slug>  (stdin: the recipe)\n' >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h|help) printf 'usage: ctx lane create <unit> <lane-slug>  (stdin: the recipe)\n'; printf 'creates the lane with its recipe (stdin) and an empty lane journal\n'; exit 0 ;;
+esac
+[ $# -eq 2 ] || usage
+unit=$1
+lane=$2
+vb_slug_ok "$unit" || usage
+vb_slug_ok "$lane" || { printf "lane create: error: malformed lane '%s' (ERR_INVALID_ARGUMENT)\n" "$lane" >&2; exit 1; }
+if [ -t 0 ]; then
+  printf 'lane create: error: the recipe is required on stdin (ERR_INVALID_ARGUMENT)\n' >&2
+  exit 1
+fi
+vb_tmp
+body=$(cat)
+if [ -z "$body" ]; then
+  printf 'lane create: error: the recipe is required on stdin (ERR_INVALID_ARGUMENT)\n' >&2
+  exit 1
+fi
+# the document ends with exactly one newline (B13)
+printf '%s\n' "$body" > "$VB_DIR/doc"
+vb_call_doc "$VB_DIR/doc" lane.create "$unit" "$lane"
+vb_ok
+printf 'lane created: %s in %s\n' "$lane" "$unit"

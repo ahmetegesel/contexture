@@ -1,0 +1,34 @@
+#!/bin/sh
+# summary: the units touching a repo (the cross-repo look)
+# usage: ctx session units <repo> [--json]
+# help: every unit, ACTIVE or CLOSED, whose repos name the repo, with its current_anchor and next_action (session.units); no unit refuses rc 1 naming the repos the units know
+# help: exit codes: 0 units listed; 1 no unit touches the repo, or a bad argument
+# help: example: ctx session units my-repo
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx session units <repo> [--json]\n' >&2
+  printf 'help: ctx session help\n' >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h|help) [ $# -eq 1 ] && { vb_verb_help session "$0"; exit 0; } ;;
+esac
+[ $# -ge 1 ] || usage
+repo=$1
+shift
+json_out=0
+for a in "$@"; do
+  case "$a" in
+    --json) json_out=1 ;;
+    *) vb_unknown units "$a" ;;
+  esac
+done
+case "$repo" in
+  ""|[!A-Za-z0-9._-]*|*[!A-Za-z0-9._/-]*) printf "units: error: malformed repo '%s' (ERR_INVALID_ARGUMENT)\n" "$repo" >&2; exit 1 ;;
+esac
+vb_call session.units "$repo"
+vb_ok
+if [ "$json_out" -eq 1 ]; then vb_json; else vb_render units; fi

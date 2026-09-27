@@ -1,24 +1,14 @@
 #!/bin/sh
 # summary: display subagent lane artifacts (recipe, journal, report)
 # usage: ctx lane show <unit> <lane-slug> [recipe|journal|report] [--json]
-# help: displays specified artifact from subagent lane container (defaults to report)
+# help: displays specified artifact from subagent lane container (defaults to report); the storage driver answers the document or the journal (lane.get) and the text view prints it as stored, its trailing newlines collapsed to one
 # help: arguments:
 # help:   <unit>        session unit slug
 # help:   <lane-slug>   subagent lane slug
 # help:   [artifact]    artifact name: report (default), recipe, or journal
 # help:   --json        output JSON format
 
-set -u
-
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-resolver="$dir/../../session/scripts/driver-resolver"
-if [ ! -x "$resolver" ]; then
-  if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
-  fi
-fi
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../../session/lib" && pwd)/verb.sh"
 
 if [ $# -lt 2 ]; then
   if [ $# -gt 0 ]; then
@@ -35,8 +25,10 @@ if [ $# -lt 2 ]; then
 fi
 
 unit="$1"
+vb_unit "lane show" "$unit"
 shift
 lane="$1"
+vb_lane "lane show" "$lane"
 shift
 
 artifact="report"
@@ -45,39 +37,22 @@ json_out=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --json) json_out=1 ;;
-    recipe*|journal*|report*) artifact="$1" ;;
+    recipe*) artifact=recipe ;;
+    journal*) artifact=journal ;;
+    report*) artifact=report ;;
+    *) vb_unknown "lane show" "$1" ;;
   esac
   shift
 done
 
-out=$("$resolver" lane.show "$unit" "$lane" "$artifact")
-rc=$?
-if [ "$rc" -ne 0 ]; then
-  exit "$rc"
-fi
+vb_call lane.get "$unit" "$lane" "$artifact"
+vb_ok
 
 if [ "$json_out" -eq 1 ]; then
-  printf '%s\n' "$out"
+  vb_json
+elif [ "$artifact" = journal ]; then
+  vb_render lane_journal
 else
-  printf '%s\n' "$out" | awk -v key='content' '
-    # decode the JSON string value of key in linear passes: escaped backslashes and
-    # quotes are parked on control bytes first, so the first raw quote left is the
-    # closing one; then every escape the drivers emit is restored
-    {
-      p = index($0, "\"" key "\":\"")
-      if (p == 0) { print; next }
-      v = substr($0, p + length(key) + 4)
-      gsub(/\\\\/, "\001", v)
-      gsub(/\\"/, "\002", v)
-      q = index(v, "\"")
-      if (q > 0) v = substr(v, 1, q - 1)
-      gsub(/\\n/, "\n", v)
-      gsub(/\\t/, "\t", v)
-      gsub(/\\r/, "\r", v)
-      gsub(/\002/, "\"", v)
-      gsub(/\001/, "\\", v)
-      printf "%s\n", v
-    }
-  '
+  vb_render lane_doc
 fi
 exit 0

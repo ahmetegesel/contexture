@@ -1,0 +1,150 @@
+#!/bin/sh
+# summary: move the record (and with --corpus the doc corpus) from one storage driver to another
+# usage: ctx session migrate --from=<driver> --to=<driver> [--unit=<unit>] [--replace] [--corpus] [--prune]
+# help: per unit the source exports the unit as a neutral dump (unit.export) and the target imports it (unit.import), each unit atomic; the first failing unit stops the run with its message, earlier units stay migrated; every unit of the source by default, --unit one unit
+# help: a unit the target already holds refuses unless --replace, which swaps the unit's record whole; files a unit holds outside the record (scratch, drafts) never travel and warn
+# help: --corpus also moves every doc of the corpus through the corpus methods (corpus.list, read, write): a target holding docs the source lacks refuses unless --prune removes them; an empty source leaves the target corpus as is; a git-tracked files corpus with uncommitted changes refuses to move into a store, and after a clean move the git steps are printed, never run
+# help: both drivers resolve by name through the resolver, each passing its handshake; the configured storage.driver is never read for the pair and never edited (switching the workspace is the human's act)
+# help: exit codes: 0 migrated; 1 a refused unit, doc, or argument; 2 a driver or storage failure
+# help: example: ctx session migrate --from=posix --to=fts5
+# help: example: ctx session migrate --from=fts5 --to=posix --unit=my-unit --replace
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx session migrate --from=<driver> --to=<driver> [--unit=<unit>] [--replace] [--corpus] [--prune]\n' >&2
+  printf 'help: ctx session help migrate\n' >&2
+  exit 1
+}
+
+fail() {
+  printf '%s\n' "$1" >&2
+  exit "${2:-1}"
+}
+
+case "${1:-}" in
+  --help|-h|help) [ $# -eq 1 ] && { vb_verb_help session "$0"; exit 0; } ;;
+esac
+
+from=""
+to=""
+unit=""
+replace=0
+corpus=0
+prune=0
+for a in "$@"; do
+  case "$a" in
+    --from=*) from="${a#--from=}" ;;
+    --to=*) to="${a#--to=}" ;;
+    --unit=*) unit="${a#--unit=}" ;;
+    --replace) replace=1 ;;
+    --corpus) corpus=1 ;;
+    --prune) prune=1 ;;
+    *) vb_unknown "session migrate" "$a" ;;
+  esac
+done
+[ -n "$from" ] && [ -n "$to" ] || usage
+vb_slug_ok "$from" || fail "session migrate: error: malformed driver name '$from' (ERR_INVALID_ARGUMENT)"
+vb_slug_ok "$to" || fail "session migrate: error: malformed driver name '$to' (ERR_INVALID_ARGUMENT)"
+[ -z "$unit" ] || vb_slug_ok "$unit" || fail "session migrate: error: malformed unit '$unit' (ERR_INVALID_ARGUMENT)"
+[ "$prune" -eq 0 ] || [ "$corpus" -eq 1 ] || fail "session migrate: error: --prune applies to --corpus only (ERR_INVALID_ARGUMENT)"
+
+vb_tmp
+SRC="--driver=$from"
+DST="--driver=$to"
+
+# the units: the one --unit, else every unit the source lists
+if [ -n "$unit" ]; then
+  units=$unit
+else
+  vb_call "$SRC" session.list
+  vb_ok
+  units=$(awk -f "$VB_JSON" < "$VB_DIR/ans" | awk '/^units\.[0-9]+\.unit=/ { v = $0; sub(/^[^=]*=/, "", v); print v }')
+fi
+
+n=0
+total=0
+for u in $units; do
+  "$VB_RESOLVER" "$SRC" unit.export "$u" < /dev/null > "$VB_DIR/dump" 2> "$VB_DIR/err"
+  VB_RC=$?
+  [ "$VB_RC" -eq 0 ] || vb_through
+  extras=$(sed -n '1s/.*"extras":\([0-9][0-9]*\).*/\1/p' "$VB_DIR/dump")
+  if [ -n "$extras" ] && [ "$extras" -gt 0 ]; then
+    printf 'WARNING: unit %s holds %s items outside the record in the %s store; they do not travel\n' "$u" "$extras" "$from" >&2
+  fi
+  if [ "$replace" -eq 1 ]; then
+    vb_call_doc "$VB_DIR/dump" "$DST" unit.import "$u" --replace
+  else
+    vb_call_doc "$VB_DIR/dump" "$DST" unit.import "$u"
+  fi
+  vb_ok
+  recs=$(vb_field records)
+  printf 'migrated %s: %s records (%s to %s)\n' "$u" "$recs" "$from" "$to"
+  n=$((n + 1))
+  total=$((total + recs))
+done
+printf 'migrate %s to %s: %d units, %d records\n' "$from" "$to" "$n" "$total"
+
+[ "$corpus" -eq 1 ] || exit 0
+
+# ------------------------------------------------------------------------------
+# the corpus: every doc verbatim through the corpus methods of both drivers
+"$VB_RESOLVER" "$SRC" require corpus.store < /dev/null > /dev/null 2>&1 || fail "session migrate: error: the $from driver holds no corpus (corpus.store) (ERR_CAPABILITY_UNSUPPORTED)"
+"$VB_RESOLVER" "$DST" require corpus.store < /dev/null > /dev/null 2>&1 || fail "session migrate: error: the $to driver holds no corpus (corpus.store) (ERR_CAPABILITY_UNSUPPORTED)"
+"$VB_RESOLVER" "$SRC" corpus.list < /dev/null > "$VB_DIR/src-keys" 2> "$VB_DIR/err" || { VB_RC=$?; vb_through; }
+"$VB_RESOLVER" "$DST" corpus.list < /dev/null > "$VB_DIR/dst-keys" 2> "$VB_DIR/err" || { VB_RC=$?; vb_through; }
+if [ ! -s "$VB_DIR/src-keys" ]; then
+  printf 'corpus: 0 docs (the %s corpus holds no doc; the %s corpus is left as is)\n' "$from" "$to"
+  exit 0
+fi
+LC_ALL=C sort "$VB_DIR/src-keys" > "$VB_DIR/src-sorted"
+LC_ALL=C sort "$VB_DIR/dst-keys" > "$VB_DIR/dst-sorted"
+extras=$(LC_ALL=C comm -13 "$VB_DIR/src-sorted" "$VB_DIR/dst-sorted")
+if [ -n "$extras" ] && [ "$prune" -ne 1 ]; then
+  fail "session migrate: error: the $to corpus holds doc(s) the $from corpus lacks: $(printf '%s' "$extras" | tr '\n' ' ' | sed 's/ $//'); a migrate never deletes a doc silently, rerun with --prune to remove them (ERR_ENTITY_EXISTS)"
+fi
+
+# a git-tracked files corpus moves into a store only from a committed state
+tracked=""
+if [ "$from" = posix ] && [ "$to" != posix ] && git -C . rev-parse --is-inside-work-tree > /dev/null 2>&1; then
+  dirty=""
+  for r in $(sed 's|/.*||' "$VB_DIR/src-sorted" | uniq); do
+    if [ -n "$(git -C . ls-files -- "docs/$r" 2>/dev/null)" ]; then
+      tracked="$tracked $r"
+      [ -n "$(git -C . status --porcelain -- "docs/$r" 2>/dev/null)" ] && dirty="$dirty $r"
+    fi
+  done
+  [ -z "$dirty" ] || fail "session migrate: error: the tracked corpus carries uncommitted changes in repo(s)$dirty; commit or discard them first, the move mirrors a committed state (ERR_SCHEMA_VIOLATION)"
+fi
+
+# every doc read and checked before any write: a doc's @doc line names its own slug
+mkdir -p "$VB_DIR/docs"
+i=0
+while IFS= read -r k; do
+  [ -n "$k" ] || continue
+  i=$((i + 1))
+  "$VB_RESOLVER" "$SRC" corpus.read "${k%%/*}" "${k#*/}" < /dev/null > "$VB_DIR/docs/$i" 2> "$VB_DIR/err" || { VB_RC=$?; vb_through; }
+  hs=$(awk 'NR == 1 { if ($1 == "@doc") print $3; exit }' "$VB_DIR/docs/$i")
+  [ "$hs" = "${k#*/}" ] || fail "session migrate: error: doc $k names itself '$hs' on its @doc line; a doc's slug must equal its name (ERR_SCHEMA_VIOLATION)"
+done < "$VB_DIR/src-sorted"
+i=0
+while IFS= read -r k; do
+  [ -n "$k" ] || continue
+  i=$((i + 1))
+  "$VB_RESOLVER" "$DST" corpus.write "${k%%/*}" "${k#*/}" --op=write --head=none < "$VB_DIR/docs/$i" > /dev/null 2> "$VB_DIR/err" || { VB_RC=$?; vb_through; }
+done < "$VB_DIR/src-sorted"
+pruned=0
+for k in $extras; do
+  "$VB_RESOLVER" "$DST" corpus.remove "${k%%/*}" "${k#*/}" --op=remove --head=none < /dev/null > /dev/null 2> "$VB_DIR/err" || { VB_RC=$?; vb_through; }
+  pruned=$((pruned + 1))
+done
+printf 'corpus: %d docs\n' "$i"
+[ "$pruned" -eq 0 ] || printf 'corpus pruned: %d docs\n' "$pruned"
+if [ -n "$tracked" ]; then
+  printf 'session migrate: the corpus of repo(s)%s is tracked in git; the %s store now holds it, so the files invite edits that no longer reach the corpus. Next steps (run them yourself):\n' "$tracked" "$to" >&2
+  for r in $tracked; do
+    printf '  git rm -r --cached docs/%s\n' "$r" >&2
+  done
+  printf '  ignore those folders (.gitignore), commit, delete the working files, and set storage.driver: %s in .contexture/config\n' "$to" >&2
+fi
+exit 0

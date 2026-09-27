@@ -1,8 +1,48 @@
 #!/bin/sh
 # summary: overwrite next_action with the pointer
 # usage: ctx session next <slug> "<pointer>"
-# help: overwrites next_action in state.md with the given pointer; pointer must be in double quotes and must explicitly name all currently IN_PROGRESS tasks
-# help: exit codes: 0 pointer updated; 1 missing argument or an IN_PROGRESS task would be omitted from pointer
+# help: the storage driver overwrites next_action with the given pointer (session.next); the pointer must name every IN_PROGRESS task, else it refuses rc 1 (ERR_POINTER_INCOMPLETE) and nothing is written; an embedded double quote is text, an embedded newline or carriage return refuses
+# help: then the task-landing hooks fire (CTX_ACT next, CTX_SLUGS the IN_PROGRESS tasks)
+# help: exit codes: 0 pointer updated; 1 missing argument, a CLOSED unit, or an IN_PROGRESS task the pointer omits
 # help: example: ctx session next my-unit "my-task IN_PROGRESS: implement driver interface"
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/record" next "$@"
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx session next <session-slug> "<pointer>"\n' >&2
+  printf 'help: ctx session help\n' >&2
+  exit 1
+}
+
+fail() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h|help) printf 'usage: ctx session next <session-slug> "<pointer>"\n'; exit 0 ;;
+esac
+case "${2:-}" in
+  --help|-h|help) [ $# -eq 2 ] && { printf 'usage: ctx session next <session-slug> "<pointer>"\n'; exit 0; } ;;
+esac
+[ $# -eq 2 ] || usage
+unit=$1
+pointer=$2
+vb_slug_ok "$unit" || usage
+[ -n "$pointer" ] || fail "ERROR: empty pointer"
+vb_has_nl "$pointer" && fail "ERROR: embedded newline in pointer"
+vb_has_cr "$pointer" && fail "ERROR: embedded carriage return in pointer (the dialect is LF)"
+
+vb_kv pointer "$pointer"
+vb_call session.next "$unit"
+vb_ok
+printf 'next_action: "%s"\n' "$(vb_field next_action)"
+
+# the task-landing act: the IN_PROGRESS tasks the pointer names
+vb_call task.list "$unit" IN_PROGRESS
+slugs=""
+if [ "$VB_RC" -eq 0 ]; then
+  slugs=$(awk -f "$VB_JSON" < "$VB_DIR/ans" | awk -F= '/^tasks\.[0-9]+\.slug=/ { s = (s == "" ? "" : s ", ") $2 } END { printf "%s", s }')
+fi
+vb_hook task-landing CTX_UNIT "$unit" CTX_ACT next CTX_SLUGS "$slugs" || fail "ERROR: task-landing point failed (block hook)"
+exit 0

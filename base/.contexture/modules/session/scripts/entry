@@ -1,112 +1,57 @@
 #!/bin/sh
-# summary: journal entry operations (show, list)
+# summary: journal entry operations (show, list, closure)
 # usage: ctx session entry <subcommand> <unit> [args...]
 # help: subcommands:
 # help:   show <unit> <slug> [--json]
 # help:   list <unit> [--anchor=A<N>] [--group=...] [--json]
+# help:   closure <unit> <slug> [--json]
+# help: show prints the entry's stored block (the last occurrence of a repeated legacy slug); list prints one line per entry occurrence; closure prints whether the entry is closed and every later closer naming it (positional: a closer closes the occurrences before it)
 
-set -u
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-resolver="$dir/driver-resolver"
-if [ ! -x "$resolver" ]; then
-  if [ -n "${CTX_MODULE_DIR:-}" ] && [ -x "$CTX_MODULE_DIR/scripts/driver-resolver" ]; then
-    resolver="$CTX_MODULE_DIR/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
-  fi
-fi
+help_table() {
+  printf 'usage: ctx session entry <subcommand> <unit> [args...]\n'
+  printf 'subcommands:\n'
+  printf '  show <unit> <slug> [--json]\n'
+  printf '  list <unit> [--anchor=A<N>] [--group=...] [--json]\n'
+  printf '  closure <unit> <slug> [--json]\n'
+}
 
 if [ $# -eq 0 ]; then
   printf 'usage: ctx session entry <subcommand> <unit> [args...]\n' >&2
-  printf 'subcommands: show, list\n' >&2
+  printf 'subcommands: show, list, closure\n' >&2
   exit 1
 fi
 
 case "$1" in
-  --help|-h|help)
-    printf 'usage: ctx session entry <subcommand> <unit> [args...]\n'
-    printf 'subcommands:\n'
-    printf '  show <unit> <slug> [--json]\n'
-    printf '  list <unit> [--anchor=A<N>] [--group=...] [--json]\n'
-    exit 0
-    ;;
+  --help|-h|help) help_table; exit 0 ;;
 esac
 
 subcmd="$1"
 shift
 case "${1:-}" in
-  --help|-h) "$0" --help | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
+  --help|-h) help_table | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
 esac
 
 case "$subcmd" in
-  show)
-    [ $# -gt 0 ] || { printf 'entry show: error: missing unit argument\n' >&2; exit 1; }
+  show|closure)
+    [ $# -gt 0 ] || { printf 'entry %s: error: missing unit argument\n' "$subcmd" >&2; exit 1; }
     unit="$1"; shift
-    [ $# -gt 0 ] || { printf 'entry show: error: missing entry slug\n' >&2; exit 1; }
+    vb_unit "entry $subcmd" "$unit"
+    [ $# -gt 0 ] || { printf 'entry %s: error: missing entry slug\n' "$subcmd" >&2; exit 1; }
     slug="$1"; shift
     json_out=0
-    while [ $# -gt 0 ]; do
-      case "$1" in
+    for a in "$@"; do
+      case "$a" in
         --json) json_out=1 ;;
+        *) vb_unknown "entry $subcmd" "$a" ;;
       esac
-      shift
     done
-    out=$("$resolver" entry.show "$unit" "$slug")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      # the readable block, every JSON escape decoded
-      printf '%s\n' "$out" | awk '
-        # jstr(s, pos): the JSON string whose first character sits at pos (after the
-        # opening quote), escapes decoded (\" \\ \/ \n \t \r); JEND lands on the closing quote
-        function jstr(s, pos,   out, c, e, i, n) {
-          out = ""
-          n = length(s)
-          for (i = pos; i <= n; i++) {
-            c = substr(s, i, 1)
-            if (c == "\\") {
-              i++
-              e = substr(s, i, 1)
-              if (e == "n") out = out "\n"
-              else if (e == "t") out = out "\t"
-              else if (e == "r") out = out "\r"
-              else out = out e
-              continue
-            }
-            if (c == "\"") { JEND = i; return out }
-            out = out c
-          }
-          JEND = n
-          return out
-        }
-        # jval(s, key): the decoded string value of the first "key":"..." in s, "" when absent
-        function jval(s, key,   p) {
-          p = index(s, "\"" key "\":\"")
-          if (p == 0) return ""
-          return jstr(s, p + length(key) + 4)
-        }
-        {
-          line = $0
-          t = index(line, "\"entry\":{")
-          if (t > 0) line = substr(line, t)
-          printf "@entry %s\n", jval(line, "slug")
-          anc = jval(line, "anchor")
-          if (anc != "") printf "  ANCHOR: %s\n", anc
-          w = jval(line, "what")
-          if (w != "") printf "  WHAT: \"%s\"\n", w
-          g = jval(line, "group")
-          if (g != "") printf "  GROUP: %s\n", g
-          th = jval(line, "thread")
-          if (th != "") printf "  THREAD: %s\n", th
-        }
-      '
+    if [ "$subcmd" = show ]; then vb_call entry.get "$unit" "$slug"; else vb_call entry.closure "$unit" "$slug"; fi
+    vb_ok
+    if [ "$json_out" -eq 1 ]; then vb_json
+    elif [ "$subcmd" = show ]; then vb_render entry_show
+    else vb_render closure
     fi
     exit 0
     ;;
@@ -114,79 +59,34 @@ case "$subcmd" in
   list)
     [ $# -gt 0 ] || { printf 'entry list: error: missing unit argument\n' >&2; exit 1; }
     unit="$1"; shift
+    vb_unit "entry $subcmd" "$unit"
     json_out=0
     anchor_filter=""
     group_filter=""
-    while [ $# -gt 0 ]; do
-      case "$1" in
+    for a in "$@"; do
+      case "$a" in
         --json) json_out=1 ;;
-        --anchor=*) anchor_filter="${1#--anchor=}" ;;
-        --group=*) group_filter="${1#--group=}" ;;
+        --anchor=*) anchor_filter="${a#--anchor=}" ;;
+        --group=*) group_filter="${a#--group=}" ;;
+        *) vb_unknown "entry list" "$a" ;;
       esac
-      shift
     done
     # the filters are the driver's (entry.list --anchor, --group), so text and JSON agree
     set --
     [ -n "$anchor_filter" ] && set -- "$@" "--anchor=$anchor_filter"
     [ -n "$group_filter" ] && set -- "$@" "--group=$group_filter"
-    out=$("$resolver" entry.list "$unit" "$@")
-    rc=$?
-    if [ "$rc" -ne 0 ]; then
-      exit "$rc"
-    fi
-    if [ "$json_out" -eq 1 ]; then
-      printf '%s\n' "$out"
-    else
-      printf '%s\n' "$out" | awk '
-        # jstr(s, pos): the JSON string whose first character sits at pos (after the
-        # opening quote), escapes decoded (\" \\ \/ \n \t \r); JEND lands on the closing quote
-        function jstr(s, pos,   out, c, e, i, n) {
-          out = ""
-          n = length(s)
-          for (i = pos; i <= n; i++) {
-            c = substr(s, i, 1)
-            if (c == "\\") {
-              i++
-              e = substr(s, i, 1)
-              if (e == "n") out = out "\n"
-              else if (e == "t") out = out "\t"
-              else if (e == "r") out = out "\r"
-              else out = out e
-              continue
-            }
-            if (c == "\"") { JEND = i; return out }
-            out = out c
-          }
-          JEND = n
-          return out
-        }
-        # jval(s, key): the decoded string value of the first "key":"..." in s, "" when absent
-        function jval(s, key,   p) {
-          p = index(s, "\"" key "\":\"")
-          if (p == 0) return ""
-          return jstr(s, p + length(key) + 4)
-        }
-        {
-          line = $0
-          # a raw {"slug":" never occurs inside a JSON string (its quotes would be escaped)
-          while ((p = index(line, "{\"slug\":\"")) > 0) {
-            line = substr(line, p + 1)
-            q = index(substr(line, 2), "{\"slug\":\"")
-            item = (q > 0) ? substr(line, 1, q) : line
-            printf "  [%s] %s: %s\n", jval(item, "anchor"), jval(item, "slug"), jval(item, "what")
-          }
-        }
-      '
-    fi
+    vb_call entry.list "$unit" "$@"
+    vb_ok
+    if [ "$json_out" -eq 1 ]; then vb_json; else vb_render entry_list; fi
     exit 0
     ;;
 
   *)
     unit="$subcmd"
     if [ $# -eq 0 ]; then
-      exec "$0" list "$unit"
+      exec sh "$0" list "$unit"
     else
-      exec "$0" show "$unit" "$@"
+      exec sh "$0" show "$unit" "$@"
     fi
     ;;
 esac

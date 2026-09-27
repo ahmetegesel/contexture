@@ -1,101 +1,43 @@
 #!/bin/sh
 # summary: record subagent lane journal events isolated from main session journal
-# usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...]
-# help: appends an append-only event to the subagent lane journal.md
+# usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...] [--ref=...]...
+# help: appends an append-only event to the subagent lane journal (lane.record); the storage driver composes the slug from the local date and time, a second event in the same second taking a suffix
 # help: options:
-# help:   --what="..."         event description
+# help:   --what="..."         event description (required)
 # help:   --slug=...           override entry slug (default auto-generated with date)
 # help:   --thread=...         what the lane awaits (default: none)
-# help: stdin fallback: raw @entry block piping supported
-# help: a CLOSED unit refuses rc 1; a slug the lane journal already carries refuses rc 1 (ERR_ENTITY_EXISTS)
+# help:   --ref="..."          grounding reference; repeatable, one REF line each
+# help: a CLOSED unit refuses rc 1; a slug the lane journal already carries refuses rc 1 (ERR_ENTITY_EXISTS); an absent lane refuses rc 1 (create it with ctx lane create)
 
-set -u
-
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-resolver="$dir/../../session/scripts/driver-resolver"
-if [ ! -x "$resolver" ]; then
-  if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
-  elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
-    resolver="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
-  fi
-fi
-
-# The driver transport (docs/the-engine.md): argv carries the method and its bounded
-# identifiers; every free-text field travels on stdin as payload lines key=value, the
-# value escaped (backslash, newline, tab, carriage return as \\, \n, \t, \r); pline
-# writes one line, exact (a trailing newline survives).
-pline() {
-  printf '%s=' "$1"
-  printf '%sx' "$2" | awk '
-    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
-    BEGIN { ORS = "" }
-    { $0 = bs_double($0); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
-    END { sub(/x$/, "", out); print out "\n" }'
-}
-
-# a closed unit takes no writes: the refusal is the verb's, before any driver write
-refuse_closed() {
-  if "$resolver" artifact.read "$1" state 2>/dev/null | awk '/^status:[ \t]*CLOSED[ \t\r]*$/ { c = 1 } END { exit !c }'; then
-    printf 'ERROR: unit is CLOSED: %s (a closed unit takes no writes)\n' "$1" >&2
-    exit 1
-  fi
-}
-
-# the dialect is LF: a carriage return in a field would poison the record for the grammar
-# verbs, which refuse CR on read; the refusal is the verb's, before any driver write
-CR_CHAR=$(printf '\r')
-refuse_cr() {
-  for cr_v in "$@"; do
-    case "$cr_v" in
-      *"$CR_CHAR"*)
-        printf 'ERROR: embedded carriage return in a field value (the dialect is LF)\n' >&2
-        exit 1
-        ;;
-    esac
-  done
-}
-
-# a one-line field (written as one line of its block) takes no newline: a column-0
-# continuation would break the block grammar; the block scalars keep their newlines;
-# refuse_nl <field> <value> [<field> <value> ...], before any driver write
-NL_CHAR='
-'
-refuse_nl() {
-  while [ $# -ge 2 ]; do
-    case "$2" in
-      *"$NL_CHAR"*)
-        printf 'ERROR: embedded newline in %s (one line)\n' "$1" >&2
-        exit 1
-        ;;
-    esac
-    shift 2
-  done
-}
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../../session/lib" && pwd)/verb.sh"
 
 if [ $# -lt 2 ]; then
   if [ $# -gt 0 ]; then
     case "$1" in
       --help|-h|help)
-        printf 'usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...]\n'
-        printf 'appends an append-only event to the subagent lane journal.md\n'
+        printf 'usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...] [--ref=...]\n'
+        printf 'appends an append-only event to the subagent lane journal\n'
         exit 0
         ;;
     esac
   fi
-  printf 'usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...]\n' >&2
+  printf 'usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...] [--ref=...]\n' >&2
   exit 1
 fi
 
 unit="$1"
+vb_unit "lane record" "$unit"
 shift
 lane="$1"
+vb_lane "lane record" "$lane"
 shift
 
 what=""
 slug=""
 thread="none"
 json_out=0
+nref=0
+npos=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -105,53 +47,54 @@ while [ $# -gt 0 ]; do
     -s) shift; [ $# -gt 0 ] && slug="$1" ;;
     --thread=*) thread="${1#--thread=}" ;;
     -t) shift; [ $# -gt 0 ] && thread="$1" ;;
+    --ref=*) nref=$((nref + 1)); eval "REF_$nref=\${1#--ref=}" ;;
+    -r) shift; [ $# -gt 0 ] && { nref=$((nref + 1)); eval "REF_$nref=\$1"; } ;;
     --json) json_out=1 ;;
-    *) [ -z "$what" ] && what="$1" ;;
+    -*) vb_unknown "lane record" "$1" ;;
+    *)
+      # one positional value stands for --what (the v0.54.0 form); a second refuses
+      npos=$((npos + 1))
+      [ "$npos" -eq 1 ] || vb_unknown "lane record" "$1"
+      [ -z "$what" ] && what="$1"
+      ;;
   esac
   shift
 done
-
-if [ -z "$what" ] && [ ! -t 0 ]; then
-  # Try parsing stdin @entry block
-  stdin_content=$(cat)
-  if [ -n "$stdin_content" ]; then
-    parsed_what=$(printf '%s\n' "$stdin_content" | awk -F'"' '/^[ ]{2}WHAT:[ ]*/ { print $2; exit }')
-    parsed_slug=$(printf '%s\n' "$stdin_content" | awk '/^@entry[ ]+/ { print $2; exit }')
-    parsed_thread=$(printf '%s\n' "$stdin_content" | awk '/^[ ]{2}THREAD:[ ]*/ { print $2; exit }')
-    [ -n "$parsed_what" ] && what="$parsed_what"
-    [ -n "$parsed_slug" ] && slug="$parsed_slug"
-    [ -n "$parsed_thread" ] && thread="$parsed_thread"
-  fi
-fi
 
 if [ -z "$what" ]; then
   printf 'lane record: error: missing required --what parameter\n' >&2
   exit 1
 fi
 
-if [ -z "$slug" ]; then
-  today=$(date +%Y-%m-%d)
-  slug="$today-event-$(date +%s 2>/dev/null || echo $$)"
-  # a generated slug never collides: a second event in the same second takes a suffix,
-  # as the main journal's record does
-  lane_journal=$("$resolver" artifact.read "$unit" "lane/$lane/journal" 2>/dev/null) || lane_journal=""
-  while printf '%s\n' "$lane_journal" | awk -v s="$slug" '$1 == "@entry" && $2 == s { f = 1 } END { exit !f }'; do
-    slug="$slug-1"
-  done
+vb_refuse_cr "$what" "$thread" "$slug"
+vb_refuse_nl --what "$what" --thread "$thread" --slug "$slug"
+set --
+i=0
+while [ "$i" -lt "$nref" ]; do
+  i=$((i + 1))
+  eval "r=\$REF_$i"
+  vb_refuse_cr "$r"
+  vb_refuse_nl --ref "$r"
+  vb_ref_ok "lane record" "$r"
+  set -- "$@" "$r"
+done
+if [ -n "$slug" ] && ! vb_slug_ok "$slug"; then
+  printf "lane record: error: malformed entry slug '%s' (ERR_INVALID_ARGUMENT)\n" "$slug" >&2
+  exit 1
 fi
 
-refuse_closed "$unit"
-refuse_cr "$what" "$thread" "$slug"
-refuse_nl --what "$what" --thread "$thread" --slug "$slug"
-out=$({ pline what "$what"; pline thread "$thread"; } | "$resolver" lane.record "$unit" "$lane" "$slug")
-rc=$?
-if [ "$rc" -ne 0 ]; then
-  exit "$rc"
-fi
+vb_kv what "$what"
+vb_kv thread "$thread"
+vb_list refs "$@"
+[ -n "$slug" ] && vb_kv slug "$slug"
+vb_kv date "$(vb_today)"
+vb_kv epoch "$(vb_epoch)"
+vb_call lane.record "$unit" "$lane"
+vb_ok
 
 if [ "$json_out" -eq 1 ]; then
-  printf '%s\n' "$out"
+  vb_json
 else
-  printf 'lane entry recorded: %s in %s/%s\n' "$slug" "$unit" "$lane"
+  printf 'lane entry recorded: %s in %s/%s\n' "$(vb_field entry.slug)" "$unit" "$lane"
 fi
 exit 0

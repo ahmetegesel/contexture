@@ -158,7 +158,9 @@ for v in $disk_verbs; do
 done
 ok "presence: each verb name appears in the session suite"
 
-disk_points=$( { grep -ho 'fire_hooks("[a-z-]*"' "$ROOT"/base/.contexture/modules/session/scripts/*; grep -ho '_hooks [a-z-]*' "$ROOT"/base/.contexture/modules/session/scripts/refresh; } | sed 's/fire_hooks("//; s/_hooks //; s/"//' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')
+# the points: the awk fire_hooks of load, the sh vb_hook of the verbs over lib/verb.sh
+# (v0.55.0), and the refresh runner
+disk_points=$( { grep -ho 'fire_hooks("[a-z-]*"' "$ROOT"/base/.contexture/modules/session/scripts/*; grep -ho 'vb_hook [a-z-]*' "$ROOT"/base/.contexture/modules/session/scripts/*; grep -ho '_hooks [a-z-]*' "$ROOT"/base/.contexture/modules/session/scripts/refresh; } | sed 's/fire_hooks("//; s/vb_hook //; s/_hooks //; s/"//' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')
 a_eq "$disk_points" "close load-post load-pre refresh stamp task-landing" "presence: the derived hook points are the shipped six"
 for p in $disk_points; do
   grep -q "$p" "$SCRIPT_DIR/hook-tests.sh" || bad "presence: hook point $p has no case in the hook suite"

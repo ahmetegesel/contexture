@@ -14,8 +14,9 @@
 # ignored. A module file without a summary warns and skips; a scripts/
 # directory without a module file warns and skips; a directory with neither
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
-# Reserved names are the session verb set plus run and hooks; the builtin
-# session and run are allowed. A duplicate verb shadows: first file name
+# Reserved names are the session verb set plus refresh, run, hooks, and the
+# verbs retired in v0.55.0 (append, amend, query, flip, drop, which print their
+# replacement); the builtin session and run are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
 # ctx help --all, ctx <module> help, ctx <module> help <verb>, and bare
 # ctx <module> (module table, rc0). Dispatch validates the verb engine-side
@@ -51,7 +52,22 @@ header_values() {
 
 # ---------------------------------------------------------------------------
 # reserved names: the session verb set (its scripts own the list) plus
-# refresh, run, and hooks; the builtin session and run are allowed
+# refresh, run, and hooks, and the verbs retired in v0.55.0 (append, amend,
+# query, flip, drop: a static list, so no module can claim a retired name and
+# a retired call prints its replacement); the builtin session and run are
+# allowed
+
+# retired_replacement <verb>: the replacement of a retired session verb
+retired_replacement() {
+  case "$1" in
+    append) printf 'use record, task add, finding add' ;;
+    amend) printf 'use task update' ;;
+    query) printf 'use entry show, entry list, entry closure, finding show, resolve, search, units, refs-to, lane show' ;;
+    flip) printf 'use task start, complete, reopen' ;;
+    drop) printf 'use task drop' ;;
+    *) return 1 ;;
+  esac
+}
 
 session_verbs=""
 session_verbs_loaded=0
@@ -81,7 +97,7 @@ load_session_verbs() {
 
 is_reserved() {
   case "$1" in
-    refresh|run|hooks)
+    refresh|run|hooks|append|amend|query|flip|drop)
       return 0
       ;;
   esac
@@ -1011,6 +1027,10 @@ case "$1" in
       show_verb_help "$found_target" "$1"
       exit 0
     fi
+    if [ $# -eq 1 ] && [ "$found_target" = session ] && repl=$(retired_replacement "$1"); then
+      printf 'ctx session %s retired in v0.55.0: %s\n' "$1" "$repl" >&2
+      exit 1
+    fi
     ctx_err "unknown verb: $1"
     show_module_help "$found_target" >&2
     exit 1
@@ -1032,6 +1052,10 @@ case "$1" in
 esac
 
 verb=$1
+if [ "$found_target" = session ] && repl=$(retired_replacement "$verb"); then
+  printf 'ctx session %s retired in v0.55.0: %s\n' "$verb" "$repl" >&2
+  exit 1
+fi
 if ! verb_exists "$md" "$verb"; then
   ctx_err "unknown verb: $verb"
   show_module_help "$found_target" >&2

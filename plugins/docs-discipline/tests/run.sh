@@ -144,13 +144,19 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
     fi
     echo ""
 
-    # the unit-form nudge: the sample backlog seeded verbatim into a unit (artifact.write,
-    # since a task add would reshape the block), read back through resolve task# with its
-    # REFS, and the nudge through the unit equal to the backlog-file form byte for byte; the
+    # the unit-form nudge: the sample backlog seeded verbatim into a unit (planted through
+    # the neutral dump by the workspace's tests/lib/plant.sh, D9: a posix staging copy of the
+    # unit takes the sample file, exports it, and the store under test imports it, since a
+    # task add would reshape the block), read back through resolve task# with its REFS, and
+    # the nudge through the unit equal to the backlog-file form byte for byte; the
     # backlog-file form refuses a path inside the sessions drawer rc 1
     NUDGE_NOTE=""
     "$SANDBOX/.contexture/ctx" session bootstrap nudge-demo "the sample nudge task" > /dev/null 2>&1 || NUDGE_NOTE="bootstrap failed"
-    ./.contexture/modules/session/scripts/driver-resolver artifact.write nudge-demo backlog < "$PLUGIN_ROOT/tests/sample/backlog.md" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }seed failed"
+    RESOLVER="$SANDBOX/.contexture/modules/session/scripts/driver-resolver"
+    PLANT_SESSION_MOD="$BASE_MODULES/session"
+    . "$WS_ROOT/tests/lib/plant.sh"
+    rput nudge-demo backlog < "$PLUGIN_ROOT/tests/sample/backlog.md" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }seed failed"
+    rm -rf "$PLANT_WS"
     TASK_BLOCK=$("$SANDBOX/.contexture/ctx" session resolve nudge-demo 'task#install-and-run-local' 2>&1)
     printf '%s\n' "$TASK_BLOCK" | grep -q '^  REFS: \[docs/demo-orders/operational.md\]$' || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }resolve task# carries no REFS"
     "$SANDBOX/.contexture/ctx" docs nudge nudge-demo > "$SANDBOX/nudge-unit.out" 2>&1

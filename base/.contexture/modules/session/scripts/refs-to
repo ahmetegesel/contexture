@@ -1,0 +1,32 @@
+#!/bin/sh
+# summary: the units referencing a session (the cross-session look)
+# usage: ctx session refs-to <unit> [--json]
+# help: every unit whose ref_sessions name the unit (session.refs_to); none refuses rc 1
+# help: exit codes: 0 referrers listed; 1 no unit references the session, or a bad argument
+# help: example: ctx session refs-to my-unit
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx session refs-to <unit> [--json]\n' >&2
+  printf 'help: ctx session help\n' >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h|help) [ $# -eq 1 ] && { vb_verb_help session "$0"; exit 0; } ;;
+esac
+[ $# -ge 1 ] || usage
+unit=$1
+shift
+json_out=0
+for a in "$@"; do
+  case "$a" in
+    --json) json_out=1 ;;
+    *) vb_unknown refs-to "$a" ;;
+  esac
+done
+vb_slug_ok "$unit" || usage
+vb_call session.refs_to "$unit"
+vb_ok
+if [ "$json_out" -eq 1 ]; then vb_json; else vb_render refs_to; fi

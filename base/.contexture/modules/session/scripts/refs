@@ -1,9 +1,45 @@
 #!/bin/sh
-# summary: set the read-only reference sessions (templates/state.md); zero sessions clears
+# summary: set the read-only reference sessions; zero sessions clears
 # usage: ctx session refs <slug> [<session> ...]
-# help: sets ref_sessions in state.md; every named session must exist and differ from the unit; zero sessions clears
-# help: exit codes: 0 reference sessions updated; 1 target session does not exist or matches unit
+# help: the storage driver sets ref_sessions (session.refs); every named session must exist and differ from the unit, no name twice; zero sessions clears to an empty list
+# help: exit codes: 0 reference sessions updated; 1 target session does not exist or matches the unit, or a CLOSED unit
 # help: example: ctx session refs my-unit ref-session-1 ref-session-2
 # help: example: ctx session refs my-unit
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/record" refs "$@"
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx session refs <session-slug> [<session> ...]\n' >&2
+  printf 'help: ctx session help\n' >&2
+  exit 1
+}
+
+fail() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h|help) printf 'usage: ctx session refs <session-slug> [<session> ...]\n'; exit 0 ;;
+esac
+[ $# -ge 1 ] || usage
+unit=$1
+vb_slug_ok "$unit" || usage
+shift
+seen=" "
+for s in "$@"; do
+  vb_slug_ok "$s" || fail "ERROR: ref session malformed: $s"
+  [ "$s" = "$unit" ] && fail "ERROR: the unit cannot reference itself: $unit"
+  case "$seen" in *" $s "*) fail "ERROR: duplicate ref session: $s" ;; esac
+  seen="$seen$s "
+done
+
+vb_call session.refs "$unit" "$@"
+if [ "$VB_RC" -eq 1 ]; then
+  for s in "$@"; do
+    vb_err_has "unit '$s' not found" && fail "ERROR: no such session: $s"
+  done
+fi
+vb_ok
+list=$(awk -f "$VB_JSON" < "$VB_DIR/ans" | awk '/^ref_sessions\.[0-9]+=/ { v = $0; sub(/^[^=]*=/, "", v); s = (n++ ? s ", " : "") v } END { printf "%s", s }')
+printf 'ref_sessions: [%s]\n' "$list"

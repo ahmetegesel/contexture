@@ -7,7 +7,7 @@
 # It proves the six shipped points end to end: stamp (order, context, stdout
 # position), warn-continue at stamp, load-pre/load-post on the main form only,
 # the refs form firing none, refresh (board + audit + hooks), the refresh rc
-# semantics, task-landing from the append/next/flip gates, close (with no
+# semantics, task-landing from the typed task writes and next, close (with no
 # refresh hooks), block mode stopping a point rc1, and the help surface hiding
 # the internal runner and the boot point.
 #
@@ -96,9 +96,10 @@ a_match "$err" "hook failed at stamp: zc-warn-test: 10-stamp-fail.sh (rc=3); con
 
 echo "== S2b standalone worker skips hooks when CTX_BIN unset/nonexec =="
 : > marker.log
-awk -f .contexture/modules/session/scripts/stamp zz-unit "direct invocation" >/dev/null
-a_eq "$?" "0" "S2b direct awk stamp rc0"
-CTX_BIN=/nonexistent-ctx awk -f .contexture/modules/session/scripts/stamp zz-unit "direct invocation 2" >/dev/null
+# the verbs are sh scripts since v0.55.0 (the awk stamp retired with the record engine)
+sh .contexture/modules/session/scripts/stamp zz-unit "direct invocation" >/dev/null
+a_eq "$?" "0" "S2b direct sh stamp rc0"
+CTX_BIN=/nonexistent-ctx sh .contexture/modules/session/scripts/stamp zz-unit "direct invocation 2" >/dev/null
 a_eq "$?" "0" "S2b non-exec CTX_BIN skipped silently"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S2b zero hooks fired standalone"
 
@@ -150,24 +151,41 @@ a_match "$(sed -n 3p marker.log)" "^FAIL zzz-refresh-block-fail point=refresh$" 
 a_match "$err" "hook blocked the point at refresh: zzz-block-refresh: 10-fail.sh" "S5b refresh block stderr"
 
 echo "== S6 task-landing gate =="
+# v0.55.0 (D34): the task-landing acts are the typed task writes and next; append, flip, and
+# amend retired, and task update fires none (amend's replacement)
 : > marker.log
-printf '@task fix-1\n  STATUS: TODO\n  OBJECTIVE: "fixture task"\n  REFS: []\n  DESCRIPTION ::\n    fixture body\n  ACCEPTANCE CRITERIA ::\n    fixture criterion\n  IMPLEMENTATION DETAILS ::\n    fixture detail\n' | $CTX session append zz-unit >/dev/null
-a_eq "$?" "0" "S6 append rc0"
+$CTX session task add zz-unit fix-1 --objective="fixture task" --desc="fixture body" --criteria="fixture criterion" --details="fixture detail" >/dev/null
+a_eq "$?" "0" "S6 task add rc0"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "2" "S6 task-landing fires two hooks"
-a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=append slugs=fix-1 form=none page=none" "S6 append act+slugs context"
-a_eq "$(sed -n 2p marker.log)" "zz-task point=task-landing unit=zz-unit anchor=none act=append slugs=fix-1 form=none page=none" "S6 append zz module"
+a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=add slugs=fix-1 form=none page=none" "S6 add act+slugs context"
+a_eq "$(sed -n 2p marker.log)" "zz-task point=task-landing unit=zz-unit anchor=none act=add slugs=fix-1 form=none page=none" "S6 add zz module"
 : > marker.log
 $CTX session next zz-unit "fix-1 is next" >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=next slugs=none form=none page=none" "S6 next act fires with empty slugs"
 : > marker.log
-$CTX session flip zz-unit progress fix-1 >/dev/null
-a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=flip slugs=fix-1 form=none page=none" "S6 flip act+slugs context"
+$CTX session task start zz-unit fix-1 >/dev/null
+a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=start slugs=fix-1 form=none page=none" "S6 start act+slugs context"
+: > marker.log
+$CTX session next zz-unit "fix-1 IN_PROGRESS: next names it" >/dev/null
+a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=next slugs=fix-1 form=none page=none" "S6 next act carries the IN_PROGRESS task"
+: > marker.log
+$CTX session task complete zz-unit fix-1 --evidence="fixture evidence" >/dev/null
+a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=complete slugs=fix-1 form=none page=none" "S6 complete act+slugs context"
+: > marker.log
+$CTX session task reopen zz-unit fix-1 >/dev/null
+a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=reopen slugs=fix-1 form=none page=none" "S6 reopen act+slugs context"
 : > marker.log
 $CTX session refs zz-unit >/dev/null
 a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 refs act fires no task-landing"
 : > marker.log
-printf 'OBJECTIVE: "fixture task amended"\n' | $CTX session amend zz-unit fix-1 >/dev/null
-a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 amend fires no task-landing"
+$CTX session task update zz-unit fix-1 --objective="fixture task amended" >/dev/null
+a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 task update (amend's replacement) fires no task-landing"
+: > marker.log
+$CTX session task drop zz-unit fix-1 --reason="fixture drop" >/dev/null
+a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=drop slugs=fix-1 form=none page=none" "S6 drop act+slugs context"
+: > marker.log
+$CTX session task start zz-unit no-such-task >/dev/null 2>&1
+a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 a refused task write fires no task-landing"
 
 echo "== S7 close: close hooks only, no refresh hooks =="
 : > marker.log

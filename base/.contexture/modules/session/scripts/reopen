@@ -1,8 +1,23 @@
 #!/bin/sh
 # summary: mark a CLOSED unit ACTIVE again; the reverse of close
 # usage: ctx session reopen <slug>
-# help: the unit lifecycle resumes; use when closed work needs another pass (a fix to verify, a finding to test)
+# help: the storage driver reopens the unit (session.reopen); the unit lifecycle resumes; use when closed work needs another pass (a fix to verify, a finding to test)
 # help: exit codes: 0 unit marked ACTIVE; 1 unit not found, not CLOSED, or bad slug
 # help: example: ctx session reopen my-unit
-dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/record" reopen "$@"
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx session reopen <session-slug>\n' >&2
+  printf 'help: ctx session help\n' >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h|help) printf 'usage: ctx session reopen <session-slug>\n'; exit 0 ;;
+esac
+[ $# -eq 1 ] || usage
+vb_slug_ok "$1" || usage
+vb_call session.reopen "$1"
+vb_ok
+printf 'REOPENED: %s\n' "$1"
