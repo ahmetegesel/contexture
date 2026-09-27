@@ -1,0 +1,34 @@
+#!/bin/sh
+# summary: create a corpus doc holding only its header
+# usage: ctx docs new <repo> <slug> --kind=<kind> --description="..." [--sources=<glob>[,<glob>...]] [--keywords=<word>[,...]] [--role=<role>] [--upstream="..."] [--parent=<slug>] [--children=<slug>[,...]] [--dry-run]
+# help: writes the @doc line and the header fields in the grammar's order; its blocks then land through ctx docs rule, pitfall, entry, and section
+# help: required: --kind (capability, structural, cross-cutting, catalog, conventions, architecture, operational, overview) and --description; --sources on capability, structural, cross-cutting, catalog, and conventions docs; --keywords on capability, structural, cross-cutting, catalog, and operational docs
+# help: the result is grammar-checked by the audit over its repo before the store; an existing doc refuses (ctx docs write --replace rewrites one whole)
+# help: exit codes: 0 created (or the dry run printed); 1 a refusal (a missing or bad field, an existing doc, a grammar defect), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs new workspace billing --kind=capability --description="Billing runs" --sources=src/billing/** --keywords=billing,invoices
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs new: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help new" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" new
+DOCS_FLAGS="--kind= --description= --sources= --keywords= --role= --upstream= --parent= --children= --dry-run"
+docs_parse "kind dry-run" 1 "$@" || exit $?
+if [ "$DOCS_NP" -ne 2 ]; then
+  echo "Usage: ctx docs new <repo> <slug> --kind=<kind> --description=\"...\" [header fields]" >&2
+  exit 1
+fi
+if [ -z "$DOCS_KIND" ]; then
+  echo "ctx docs new: --kind is required (ERR_INVALID_ARGUMENT)" >&2
+  exit 1
+fi
+docs_edit new "$DOCS_P1" "$DOCS_P2"

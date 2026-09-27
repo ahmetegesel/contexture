@@ -1,0 +1,30 @@
+#!/bin/sh
+# summary: change a corpus doc's header fields without reading the doc
+# usage: ctx docs header <repo> <slug> [--description="..."] [--role=<role>] [--upstream="..."] [--parent=<slug>] [--add-source=<glob>]... [--remove-source=<glob>]... [--add-keyword=<word>]... [--remove-keyword=<word>]... [--add-child=<slug>]... [--remove-child=<slug>]... [--unset=<field>]... [--dry-run]
+# help: the fix for UNCOVERED (add a source) and DEAD SOURCE (remove one): a list field keeps one line, an added item lands at its end, a removed one leaves the others in order; every other line stays byte for byte
+# help: adding a listed item or removing an absent one refuses; --unset refuses a required field (repo, description, and sources or keywords where the kind requires them); kind and repo are not flags (a kind change is a rewrite, a repo change a move)
+# help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal, nothing written; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs header workspace plugins --add-source=plugins/storage-fts5/**
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs header: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help header" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" header
+DOCS_FLAGS="--description= --role= --upstream= --parent= --add-source= --remove-source= --add-keyword= --remove-keyword= --add-child= --remove-child= --unset= --dry-run"
+DOCS_ALIASES="source=sources keyword=keywords child=children"
+docs_parse "dry-run" 1 "$@" || exit $?
+if [ "$DOCS_NP" -ne 2 ]; then
+  echo "Usage: ctx docs header <repo> <slug> [--description=...] [--add-source=<glob>] [--remove-source=<glob>] [...]" >&2
+  exit 1
+fi
+docs_edit header "$DOCS_P1" "$DOCS_P2"

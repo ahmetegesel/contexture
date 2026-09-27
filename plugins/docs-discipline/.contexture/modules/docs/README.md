@@ -2,7 +2,7 @@
 
 The docs module ships with the docs-discipline plugin. Adoption copies this
 directory to `<workspace>/.contexture/modules/docs/`; the engine discovers its
-six verbs. This page is the off-path maintainer map: it is not linked from
+sixteen verbs. This page is the off-path maintainer map: it is not linked from
 the workspace's boot, laws, or help.
 
 ## Layout
@@ -11,10 +11,12 @@ the workspace's boot, laws, or help.
 |---|---|
 | `audit` | `scripts/docs-audit.awk` |
 | `check` | `scripts/docs-check.awk` |
-| `query` | `scripts/docs-query.awk` |
+| `query` | `scripts/docs-query.awk` (`--entry`: `scripts/docs-edit.awk`) |
 | `nudge` | `scripts/docs-nudge.awk` |
 | `gate` | self-contained; uses `scripts/docs-audit.awk` and `scripts/docs-check.awk` |
 | `changes` | none: the corpus half of a delta from the store's change log, computed in `docs-io.sh` |
+| `new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `ids` | `scripts/docs-edit.awk` (the edit), then `scripts/docs-audit.awk` (the grammar check) |
+| `remove` | none: `corpus.remove` through `docs-io.sh` |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
 
 - The `.awk` engines and `docs-io.sh` carry no `# summary:` line: discovery
@@ -40,6 +42,31 @@ the workspace's boot, laws, or help.
   <unit> --status=progress` and `ctx session resolve <unit> task#<slug>` (the
   text view of task show drops REFS, which the engine scores); the
   backlog-file form refuses a path inside the sessions drawer.
+- The write verbs run one pipeline in `docs-io.sh`: the arguments parsed
+  (`docs_parse`: the verb's control flags, every other `--<field>=` as a field
+  action carried in the environment as `EDIT_A_<n>`, `EDIT_F_<n>`,
+  `EDIT_V_<n>`); the doc read by `corpus.read`; one edit by `docs-edit.awk`
+  (operands `part=1 <templates/doc.md> part=2 <doc> part=3 <payload>`; only the
+  template's `#%` schema lines are read; the request through the environment,
+  never `awk -v`; the whole new doc on stdout, the note or the refusal on
+  stderr, rc 1 on a refusal); the result audited by `docs-audit.awk` over its
+  repo in a scratch copy of the corpus made from one mount (errors name
+  `docs/<repo>/<slug>.md`); then `corpus.write` with `--op=<verb>` and
+  `--head=<the workspace git HEAD>` (`--create` for new and for write without
+  `--replace`). A result equal to the stored doc writes nothing. `replace` and
+  `ids` run the edit over every doc of their scope first, check the counts
+  (replace: the total must equal `--count`), audit every touched repo, then
+  write one doc after another. The template resolves beside the module
+  (`scripts/../../../templates/doc.md`: the drawer's copy under ctx, the
+  plugin's own copy in the suite sandbox).
+- `docs-edit.awk` addresses what the schema names: an entry by its key (the
+  id of an id-keyed block, the first field's value, `<from>><to>` for
+  data_flow, `<direction>:<key>` for edges, or `#<N>`), a rule by
+  `<category>/<rule-slug>`, a block by name; a new entry's id is the doc's
+  highest number of that kind plus one; a field an entry lacks lands at its
+  schema position; a text value with a newline renders as a block scalar and
+  a field written as one keeps that form; every untouched line passes byte for
+  byte, and a doc without a final newline keeps it so.
 - The verb scripts carry the `# summary:`/`# usage:`/`# help:` declarations;
   `ctx docs help` and `ctx docs help <verb>` render them. Help is
   engine-owned: a sole `help` argument refuses with a pointer, never prints
@@ -102,7 +129,11 @@ fts5 the store seed (the staged corpus imported by `ctx storage-fts5 migrate
 --corpus`, then the docs folder removed, so the corpus checks read the store
 alone); the corpus reads keyed on the declared `corpus.store` (declared: the audit and the
 unit-form nudge, the sample backlog seeded into a unit and compared with the
-backlog-file form; not declared: every read verb's rc 2 refusal); the
+backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
+of `tests/write/`: every success's stored bytes, every refusal leaving the
+stored doc unchanged, the change-log rows under a store), and the engine
+checks (`tests/engine-checks.sh`: the id namespace, the pitfalls scoping, the
+literal backslash search); not declared: every read verb's rc 2 refusal); the
 single-door census (`tests/census.sh` over `tests/census-allow.txt`, with two
 planted bypasses); the gate matrix; and the grammar agreement check
 (`tests/grammar-agreement.awk`). `tests/captures.sh` is the capture set of the

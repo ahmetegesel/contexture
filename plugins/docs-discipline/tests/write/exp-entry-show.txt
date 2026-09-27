@@ -1,0 +1,8 @@
+  - id: unit-p1
+    summary: "The first pitfall"
+    class: bug
+    severity: medium
+    trigger: "A trigger"
+    consequence ::
+      A consequence body.
+    evidence: "pitSym"

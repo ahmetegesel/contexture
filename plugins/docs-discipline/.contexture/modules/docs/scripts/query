@@ -1,6 +1,7 @@
 #!/bin/sh
 # summary: the corpus retrieval CLI: index, projection, section, owner, search, rules, pitfalls, and edges
 # usage: ctx docs query <repo> <slug> [--section <name>]
+# usage: ctx docs query <repo> <slug> --entry <block>/<key>
 # usage: ctx docs query <repo> --file <path>
 # usage: ctx docs query <repo> --search <term>
 # usage: ctx docs query <repo> --rules [category]
@@ -8,6 +9,7 @@
 # usage: ctx docs query --edge <channel>
 # usage: ctx docs query --index [repo]
 # help: projects the typed-block corpus down to one answer, so no one reads the corpus to find it: the index, a doc projection, a section, the owner of a code path, a search, the rules, the pitfalls, or the edges
+# help: --entry <block>/<key> prints one entry's raw lines, quotes kept (the verbatim text a ctx docs entry, pitfall, or rule write starts from); keys as ctx docs entry takes them (an id, a first field's value, <from>><to>, <direction>:<key>, #<N>), a rule as rule/<category>/<rule-slug>
 # help: exit codes: 0 with an answer; 1 no match, a missing repo, or a bad option; 2 unreadable input (the awk engine's own failure)
 # help: example: ctx docs query --index (the full overview, never truncated (no head/tail); ends with an entry count)
 # help: the "index complete" marker proves the read was whole; a missing marker means the read was truncated, re-read it whole
@@ -93,6 +95,12 @@ while [ $# -gt 0 ]; do
       CHANNEL="$2"
       shift 2
       ;;
+    --entry)
+      [ $# -ge 2 ] || { echo "ctx docs query: --entry needs a value" >&2; exit 1; }
+      MODE="entry"
+      ENTRY="$2"
+      shift 2
+      ;;
     *)
       if [ "${1#--}" != "$1" ]; then
         echo "ctx docs query: unknown option: $1" >&2
@@ -112,6 +120,15 @@ if [ -n "$REPO" ] && ! docs_key_valid "$REPO"; then
   echo "ctx docs query: no such repo: $REPO" >&2
   exit 1
 fi
+# --entry: one entry's raw lines (quotes kept), the verbatim text a field rewrite starts from
+if [ "$MODE" = entry ]; then
+  if [ -z "$REPO" ] || [ -z "$SLUG" ]; then
+    echo "Usage: ctx docs query <repo> <slug> --entry <block>/<key>" >&2
+    exit 1
+  fi
+  docs_show "$REPO" "$SLUG" "$ENTRY"
+  exit $?
+fi
 if docs_corpus "$REPO"; then
   :
 else
@@ -127,15 +144,18 @@ while IFS= read -r DOC_PATH; do
   set -- "$@" "$DOC_PATH"
 done < "$DOCS_PATHS"
 
+# the free-text options reach the engine through the environment, never awk -v (which
+# rewrites backslash escapes and refuses a newline); mode and repo are bounded tokens
+DOCS_Q_SLUG=$SLUG
+DOCS_Q_SECTION=$SECTION
+DOCS_Q_FILE=$FILE
+DOCS_Q_SEARCH=$SEARCH
+DOCS_Q_CATEGORY=$CATEGORY
+DOCS_Q_SEVERITY=$SEVERITY
+DOCS_Q_CHANNEL=$CHANNEL
+export DOCS_Q_SLUG DOCS_Q_SECTION DOCS_Q_FILE DOCS_Q_SEARCH DOCS_Q_CATEGORY DOCS_Q_SEVERITY DOCS_Q_CHANNEL
 QUERY_OUT=$(docs_run awk -v mode="$MODE" \
     -v repo="$REPO" \
-    -v slug="$SLUG" \
-    -v section="$SECTION" \
-    -v file="$FILE" \
-    -v search="$SEARCH" \
-    -v category="$CATEGORY" \
-    -v severity="$SEVERITY" \
-    -v channel="$CHANNEL" \
     -f "$AWK_SCRIPT" "$@")
 AWK_RC=$?
 if [ -z "$QUERY_OUT" ] && [ -z "$MODE" ] && [ -n "$REPO" ] && [ -n "$SLUG" ]; then

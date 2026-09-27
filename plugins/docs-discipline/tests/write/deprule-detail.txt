@@ -1,0 +1,2 @@
+A new detail
+with "quotes" and a \ backslash

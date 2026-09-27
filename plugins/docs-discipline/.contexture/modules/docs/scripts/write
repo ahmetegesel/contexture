@@ -1,0 +1,31 @@
+#!/bin/sh
+# summary: write a whole corpus doc from stdin (first extraction, or a deliberate rewrite)
+# usage: ctx docs write <repo> <slug> [--replace] [--dry-run] < doc
+# help: the doc on stdin is stored byte for byte once its @doc line names <slug>, its repo: line names <repo>, and the audit over its repo passes; a carriage return anywhere refuses
+# help: a new doc by default (an existing one refuses); --replace rewrites an existing doc and refuses an absent one
+# help: a header field past line 12 is stored with a warning: the nudge reads the header within its first 12 lines
+# help: exit codes: 0 written (or the dry run printed); 1 a refusal (a slug or repo mismatch, an existing or absent doc, a grammar defect, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs write workspace billing < billing.md
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs write: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help write" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" write
+DOCS_FLAGS="--replace --dry-run"
+docs_parse "replace dry-run" 0 "$@" || exit $?
+if [ "$DOCS_NP" -ne 2 ]; then
+  echo "Usage: ctx docs write <repo> <slug> [--replace] [--dry-run] < doc" >&2
+  exit 1
+fi
+docs_payload || exit $?
+docs_edit write "$DOCS_P1" "$DOCS_P2"

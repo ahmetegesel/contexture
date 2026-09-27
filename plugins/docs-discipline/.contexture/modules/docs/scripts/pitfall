@@ -1,0 +1,34 @@
+#!/bin/sh
+# summary: add, change, or retire a @pitfalls entry by its repo-unique id
+# usage: ctx docs pitfall <repo> <slug> [<id>] [--summary="..."] [--class=<bug|tech-debt|gotcha|drift-risk>] [--severity=<low|medium|high|critical>] [--trigger="..."] [--consequence="..."] [--evidence="..."] [--unset=<field>]... [--stdin=<field>] [--id=<slug>-p<N>] [--after=<id> | --first] [--remove] [--dry-run]
+# help: no id: a new pitfall (the @pitfalls block made at its grammar position when absent) with summary, class, severity, trigger, consequence, and evidence required, its id the doc's highest pitfall number plus one unless --id names one; placed after the named pitfall, first, or at the block's end
+# help: an id: the given fields in place, every other line byte for byte; --remove retires the id (never recycled; the resolution belongs to the journal)
+# help: the shorthand of ctx docs entry <repo> <slug> pitfalls; the result is grammar-checked by the audit over its repo (a duplicate id in the repo refuses) before the store
+# help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (an unknown field, an enum value outside its set, a missing required field, a duplicate or missing id, a grammar defect, a newline in a one-line field, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs pitfall demo-web cart-ui cart-ui-p1 --severity=high
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs pitfall: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help pitfall" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" pitfall
+DOCS_FLAGS="--summary= --class= --severity= --trigger= --consequence= --evidence= --unset= --stdin= --id= --after= --first --remove --dry-run"
+docs_parse "after first remove id stdin dry-run" 1 "$@" || exit $?
+if [ "$DOCS_NP" -lt 2 ] || [ "$DOCS_NP" -gt 3 ]; then
+  echo "Usage: ctx docs pitfall <repo> <slug> [<id>] [--<field>=<value>]... [--after=<id> | --first] [--remove]" >&2
+  exit 1
+fi
+docs_stdin_value || exit $?
+EDIT_BLOCK=pitfalls
+EDIT_KEY=${DOCS_P3:-}
+DOCS_STORE_OP=pitfall
+docs_edit entry "$DOCS_P1" "$DOCS_P2"

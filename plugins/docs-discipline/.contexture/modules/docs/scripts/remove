@@ -1,0 +1,28 @@
+#!/bin/sh
+# summary: remove a whole doc from the corpus
+# usage: ctx docs remove <repo> <slug>
+# help: the only way to delete a doc under a store driver (its files are not the corpus); under the files driver it removes the doc's file; a store driver logs the removal with the workspace git HEAD (ctx docs changes prints it as D)
+# help: exit codes: 0 removed; 1 no such doc or a malformed key; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs remove workspace retired-unit
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs remove: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help remove" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" remove
+DOCS_FLAGS="(none)"
+docs_parse "" 0 "$@" || exit $?
+if [ "$DOCS_NP" -ne 2 ]; then
+  echo "Usage: ctx docs remove <repo> <slug>" >&2
+  exit 1
+fi
+docs_remove_doc "$DOCS_P1" "$DOCS_P2"

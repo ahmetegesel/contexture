@@ -37,6 +37,7 @@ DOCS_ERR=""
 # parent) and the resolver as ctx lane show finds it
 docs_io_init() {
   DOCS_VERB="ctx docs $2"
+  DOCS_DIR=$1
   di_root=""
   di_p=$1
   while [ "$di_p" != "/" ] && [ "${di_p##*/}" != ".contexture" ]; do di_p=${di_p%/*}; done
@@ -563,4 +564,472 @@ docs_exec() {
   fi
   docs_run "$@"
   exit $?
+}
+
+# ---------------------------------------------------------------------------------------
+# The write side (ctx docs new, write, header, rule, pitfall, entry, section, replace,
+# remove, ids, and query --entry). Every write runs one pipeline: the arguments parsed and
+# refused early (an unknown flag); the doc read through corpus.read; one structural edit by
+# docs-edit.awk against the grammar's #% schema (the template beside the module), which
+# refuses what the schema refuses (an unknown field, an enum value outside its set, a
+# missing required field, a duplicate key or id, a missing address, a newline in a one-line
+# field, a carriage return); the result audited by docs-audit.awk over its whole repo (the
+# stored docs with the edited ones in place, run from a scratch copy so errors name
+# docs/<repo>/<slug>.md); then corpus.write with --op=<verb> and --head=<the workspace git
+# HEAD>. A refusal at any step writes nothing. --dry-run stops before the store and prints
+# the changed lines.
+
+DOCS_NA=0
+DOCS_NP=0
+DOCS_AFTER=""
+DOCS_FIRST=0
+DOCS_REMOVE=0
+DOCS_ID=""
+DOCS_DRY=0
+DOCS_REPLACE=0
+DOCS_KIND=""
+DOCS_OLD=""
+DOCS_HAS_OLD=0
+DOCS_NEW=""
+DOCS_HAS_NEW=0
+DOCS_COUNT=""
+DOCS_STDIN_FIELD=""
+DOCS_FLAGS=""
+DOCS_GRAMMAR=""
+
+# docs_template: the grammar template beside the module (the drawer's templates folder
+# under ctx, the plugin's own copy in a suite sandbox)
+docs_template() {
+  DOCS_TEMPLATE="$DOCS_DIR/../../../templates/doc.md"
+  [ -f "$DOCS_TEMPLATE" ] && return 0
+  printf '%s: the grammar template (templates/doc.md beside the modules) is missing (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+  return 2
+}
+
+# docs_act <set|unset|add|remove> <field> <value>: one field action for the edit engine,
+# carried in the environment (free text never through awk -v)
+docs_act() {
+  DOCS_NA=$((DOCS_NA + 1))
+  eval "EDIT_A_$DOCS_NA=\$1 EDIT_F_$DOCS_NA=\$2 EDIT_V_$DOCS_NA=\$3"
+  export "EDIT_A_$DOCS_NA" "EDIT_F_$DOCS_NA" "EDIT_V_$DOCS_NA"
+  EDIT_NA=$DOCS_NA
+  export EDIT_NA
+}
+
+docs_bad_flag() {
+  printf '%s: unknown option: %s (flags: %s) (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" "$1" "$DOCS_FLAGS" >&2
+  return 1
+}
+
+# docs_parse <controls> <fields 0|1> [<argument>...]: positionals into DOCS_P1..DOCS_P<n>
+# (DOCS_NP); the control flags the verb takes (<controls>, space separated: after first
+# remove id dry-run replace kind old new count stdin) into DOCS_*; with <fields> 1 every
+# other --<field>=<value>, --add-<field>=<item>, --remove-<field>=<item>, and
+# --unset=<field> into a field action (dashes read as underscores; the engine refuses a
+# field the block does not carry); anything else refuses rc 1 naming the verb's flags
+docs_parse() {
+  dp_ok=" $1 "
+  dp_fields=$2
+  shift 2
+  for dp_a in "$@"; do
+    dp_c=""
+    case "$dp_a" in
+      --after=*) dp_c=after ;;
+      --first) dp_c=first ;;
+      --remove) dp_c=remove ;;
+      --id=*) dp_c=id ;;
+      --dry-run) dp_c=dry-run ;;
+      --replace) dp_c=replace ;;
+      --kind=*) dp_c=kind ;;
+      --old=*) dp_c=old ;;
+      --new=*) dp_c=new ;;
+      --count=*) dp_c=count ;;
+      --stdin=*) dp_c=stdin ;;
+    esac
+    if [ -n "$dp_c" ]; then
+      case "$dp_ok" in
+        *" $dp_c "*) ;;
+        *) docs_bad_flag "$dp_a"; return 1 ;;
+      esac
+      case "$dp_c" in
+        after) DOCS_AFTER=${dp_a#--after=} ;;
+        first) DOCS_FIRST=1 ;;
+        remove) DOCS_REMOVE=1 ;;
+        id) DOCS_ID=${dp_a#--id=} ;;
+        dry-run) DOCS_DRY=1 ;;
+        replace) DOCS_REPLACE=1 ;;
+        kind) DOCS_KIND=${dp_a#--kind=} ;;
+        old) DOCS_OLD=${dp_a#--old=}; DOCS_HAS_OLD=1 ;;
+        new) DOCS_NEW=${dp_a#--new=}; DOCS_HAS_NEW=1 ;;
+        count) DOCS_COUNT=${dp_a#--count=} ;;
+        stdin) DOCS_STDIN_FIELD=$(printf '%s' "${dp_a#--stdin=}" | tr - _) ;;
+      esac
+      continue
+    fi
+    case "$dp_a" in
+      --*)
+        [ "$dp_fields" -eq 1 ] || { docs_bad_flag "$dp_a"; return 1; }
+        case "$dp_a" in
+          --*=*) ;;
+          *) docs_bad_flag "$dp_a"; return 1 ;;
+        esac
+        dp_n=${dp_a%%=*}
+        dp_n=${dp_n#--}
+        dp_v=${dp_a#*=}
+        dp_act=set
+        case "$dp_n" in
+          unset) dp_act=unset; dp_n=$dp_v; dp_v="" ;;
+          add-?*) dp_act=add; dp_n=${dp_n#add-} ;;
+          remove-?*) dp_act=remove; dp_n=${dp_n#remove-} ;;
+        esac
+        case "$dp_n" in
+          ""|*[!a-z0-9_-]*) docs_bad_flag "$dp_a"; return 1 ;;
+        esac
+        dp_n=$(printf '%s' "$dp_n" | tr - _)
+        # a verb's singular spellings (header: --add-source for the sources list)
+        for dp_al in ${DOCS_ALIASES:-}; do
+          [ "${dp_al%%=*}" = "$dp_n" ] && dp_n=${dp_al#*=}
+        done
+        docs_act "$dp_act" "$dp_n" "$dp_v"
+        ;;
+      *)
+        DOCS_NP=$((DOCS_NP + 1))
+        eval "DOCS_P$DOCS_NP=\$dp_a"
+        ;;
+    esac
+  done
+  return 0
+}
+
+# docs_stdin_value: the --stdin=<field> value read raw from stdin (quotes, backslashes, and
+# newlines kept) into a set action
+docs_stdin_value() {
+  [ -n "$DOCS_STDIN_FIELD" ] || return 0
+  case "$DOCS_STDIN_FIELD" in
+    *[!a-z0-9_]*) docs_bad_flag "--stdin=$DOCS_STDIN_FIELD"; return 1 ;;
+  esac
+  ds_v=$(cat) || return 2
+  docs_act set "$DOCS_STDIN_FIELD" "$ds_v"
+}
+
+# docs_payload: the verb's stdin saved raw into scratch (a whole doc, a section block);
+# DOCS_PAYLOAD names the file
+docs_payload() {
+  if [ -t 0 ]; then
+    printf '%s: the content comes on stdin (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" >&2
+    return 1
+  fi
+  docs_scratch || return 2
+  DOCS_PAYLOAD="$DOCS_SCRATCH/payload"
+  cat > "$DOCS_PAYLOAD" || return 2
+}
+
+# docs_noeol <file>: rc 0 when a non-empty file lacks its final newline
+docs_noeol() {
+  [ -s "$1" ] || return 1
+  [ "$(tail -c 1 "$1" | wc -l | tr -d ' ')" -eq 0 ]
+}
+
+# docs_read_doc <repo> <slug> <file>: the stored doc into <file>; rc 1 names an absent doc
+docs_read_doc() {
+  if docs_call corpus.read "$1" "$2" > "$3" 2> "$DOCS_SCRATCH/read.err"; then
+    return 0
+  else
+    dr_rc=$?
+  fi
+  if [ "$dr_rc" -eq 1 ]; then
+    printf '%s: no such doc: %s/%s (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$1" "$2" >&2
+  else
+    cat "$DOCS_SCRATCH/read.err" >&2
+  fi
+  return "$dr_rc"
+}
+
+# docs_exists <repo> <slug>: rc 0 when the corpus holds the doc, 1 when not, 2 on a failure
+docs_exists() {
+  if docs_call corpus.read "$1" "$2" > /dev/null 2> "$DOCS_SCRATCH/exists.err"; then
+    return 0
+  else
+    de_rc=$?
+  fi
+  [ "$de_rc" -eq 1 ] && return 1
+  cat "$DOCS_SCRATCH/exists.err" >&2
+  return 2
+}
+
+# docs_engine <op> <repo> <slug> <doc file> <out file>: the edit engine over one doc with
+# the request exported; its note (or refusal) lands in <out file>.note; rc 0, 1 a refusal,
+# 2 the engine's own failure
+docs_engine() {
+  EDIT_VERB=$DOCS_VERB
+  EDIT_OP=$1
+  EDIT_REPO=$2
+  EDIT_SLUG=$3
+  EDIT_NOEOL=0
+  docs_noeol "$4" && EDIT_NOEOL=1
+  EDIT_KIND=$DOCS_KIND
+  EDIT_AFTER=$DOCS_AFTER
+  EDIT_FIRST=$DOCS_FIRST
+  EDIT_REMOVE=$DOCS_REMOVE
+  EDIT_ID=$DOCS_ID
+  EDIT_DRY=$DOCS_DRY
+  EDIT_OLD=$DOCS_OLD
+  EDIT_NEW=$DOCS_NEW
+  EDIT_NA=$DOCS_NA
+  export EDIT_VERB EDIT_OP EDIT_REPO EDIT_SLUG EDIT_NOEOL EDIT_KIND EDIT_BLOCK EDIT_KEY EDIT_AFTER EDIT_FIRST EDIT_REMOVE EDIT_ID EDIT_DRY EDIT_OLD EDIT_NEW EDIT_NA
+  if awk -f "$DOCS_DIR/docs-edit.awk" part=1 "$DOCS_TEMPLATE" part=2 "$4" part=3 "${DOCS_PAYLOAD:-/dev/null}" > "$5" 2> "$5.note"; then
+    return 0
+  else
+    dn_rc=$?
+  fi
+  cat "$5.note" >&2
+  [ "$dn_rc" -eq 1 ] && return 1
+  return 2
+}
+
+# docs_grammar_put <repo> <slug> <file>: the grammar check's scratch copy of the corpus
+# (made once per verb from one mount), with <file> in the doc's place (an empty <file>
+# name removes it)
+docs_grammar_put() {
+  if [ -z "$DOCS_GRAMMAR" ]; then
+    docs_mount || return $?
+    docs_keys || return $?
+    DOCS_ALL=$DOCS_KEYS
+    DOCS_GRAMMAR="$DOCS_SCRATCH/grammar"
+    mkdir -p "$DOCS_GRAMMAR/docs" || return 2
+    gp_list=$(printf '%s\n' "$DOCS_ALL")
+    for gp_k in $gp_list; do
+      mkdir -p "$DOCS_GRAMMAR/docs/${gp_k%/*}" && cp "$DOCS_MOUNT/docs/$gp_k.md" "$DOCS_GRAMMAR/docs/$gp_k.md" || {
+        printf '%s: cannot stage the grammar check (ERR_STORAGE_WRITE)\n' "$DOCS_VERB" >&2
+        return 2
+      }
+    done
+  fi
+  mkdir -p "$DOCS_GRAMMAR/docs/$1" || return 2
+  if [ -n "$3" ]; then
+    cp "$3" "$DOCS_GRAMMAR/docs/$1/$2.md" || return 2
+  else
+    rm -f "$DOCS_GRAMMAR/docs/$1/$2.md"
+  fi
+  return 0
+}
+
+# docs_grammar_check <repo>: the audit engine over the repo's docs in the scratch copy (the
+# canonical addresses in its messages); rc 1 prints the audit's lines and the refusal
+docs_grammar_check() {
+  if (cd "$DOCS_GRAMMAR" && set -- docs/"$1"/*.md && [ -f "$1" ] && exec awk -f "$DOCS_DIR/docs-audit.awk" "$@") 2> "$DOCS_SCRATCH/audit.err"; then
+    return 0
+  fi
+  cat "$DOCS_SCRATCH/audit.err" >&2
+  printf '%s: the result fails the grammar audit of repo %s; nothing written (ERR_SCHEMA_VIOLATION)\n' "$DOCS_VERB" "$1" >&2
+  return 1
+}
+
+# docs_store <repo> <slug> <op> <file> [--create]: corpus.write stamped with the op and the
+# workspace HEAD; the driver's message passes on a failure
+docs_store() {
+  ds_head=$(docs_head)
+  if (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" corpus.write "$1" "$2" ${5:+"$5"} "--op=$3" "--head=$ds_head" < "$4") > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+    return 0
+  else
+    dst_rc=$?
+  fi
+  cat "$DOCS_SCRATCH/store.err" >&2
+  return "$dst_rc"
+}
+
+# docs_say <repo> <slug> <note file>: the verb's line (docs <verb>: <repo>/<slug> <note>)
+# and, on a dry run, the changed lines after it
+docs_say() {
+  DOCS_SAY_PFX="${DOCS_VERB#ctx }: " DOCS_SAY_DOC="$1/$2" awk 'NR == 1 { print ENVIRON["DOCS_SAY_PFX"] ENVIRON["DOCS_SAY_DOC"] " " $0; next } { print }' "$3"
+}
+
+docs_keys_ok() {
+  docs_key_valid "$1" || { printf '%s: malformed repo: %s (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" "$1" >&2; return 1; }
+  docs_key_valid "$2" || { printf '%s: malformed slug: %s (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" "$2" >&2; return 1; }
+  return 0
+}
+
+# docs_edit <op> <repo> <slug>: the one-doc write pipeline (new, write, header, rule, entry,
+# section); EDIT_BLOCK and EDIT_KEY name the address, the field actions are in place
+docs_edit() {
+  dd_op=$1
+  dd_repo=$2
+  dd_slug=$3
+  docs_keys_ok "$dd_repo" "$dd_slug" || return 1
+  docs_require || return 2
+  docs_scratch || return 2
+  docs_template || return 2
+  dd_old="$DOCS_SCRATCH/old"
+  dd_new="$DOCS_SCRATCH/new"
+  dd_create=""
+  : > "$dd_old"
+  case "$dd_op" in
+    new)
+      if docs_exists "$dd_repo" "$dd_slug"; then
+        printf '%s: %s/%s already exists (ERR_ENTITY_EXISTS)\n' "$DOCS_VERB" "$dd_repo" "$dd_slug" >&2
+        return 1
+      else
+        dd_rc=$?
+        [ "$dd_rc" -eq 1 ] || return "$dd_rc"
+      fi
+      dd_create=--create
+      ;;
+    write)
+      if docs_exists "$dd_repo" "$dd_slug"; then
+        if [ "$DOCS_REPLACE" -ne 1 ]; then
+          printf '%s: %s/%s already exists; --replace rewrites it whole (ERR_ENTITY_EXISTS)\n' "$DOCS_VERB" "$dd_repo" "$dd_slug" >&2
+          return 1
+        fi
+      else
+        dd_rc=$?
+        [ "$dd_rc" -eq 1 ] || return "$dd_rc"
+        if [ "$DOCS_REPLACE" -eq 1 ]; then
+          printf '%s: no such doc: %s/%s; --replace rewrites an existing doc (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$dd_repo" "$dd_slug" >&2
+          return 1
+        fi
+        dd_create=--create
+      fi
+      dd_old=$DOCS_PAYLOAD
+      DOCS_PAYLOAD=""
+      ;;
+    *)
+      docs_read_doc "$dd_repo" "$dd_slug" "$dd_old" || return $?
+      ;;
+  esac
+  docs_engine "$dd_op" "$dd_repo" "$dd_slug" "$dd_old" "$dd_new" || return $?
+  if [ "$dd_op" != new ] && [ "$dd_op" != write ] && cmp -s "$dd_old" "$dd_new"; then
+    printf '%s: %s/%s unchanged (nothing written)\n' "${DOCS_VERB#ctx }" "$dd_repo" "$dd_slug"
+    return 0
+  fi
+  docs_grammar_put "$dd_repo" "$dd_slug" "$dd_new" || return $?
+  docs_grammar_check "$dd_repo" || return 1
+  if [ "$DOCS_DRY" -eq 1 ]; then
+    docs_say "$dd_repo" "$dd_slug" "$dd_new.note"
+    printf '%s: dry run, nothing written\n' "$DOCS_VERB"
+    return 0
+  fi
+  # the change-log op is the verb's own (pitfall runs the engine's entry op)
+  docs_store "$dd_repo" "$dd_slug" "${DOCS_STORE_OP:-$dd_op}" "$dd_new" $dd_create || return $?
+  docs_say "$dd_repo" "$dd_slug" "$dd_new.note"
+  return 0
+}
+
+# docs_show <repo> <slug> <block>/<key>: the addressed entry's raw lines (query --entry)
+docs_show() {
+  docs_keys_ok "$1" "$2" || return 1
+  case "$3" in
+    */?*) ;;
+    *) printf '%s: --entry takes <block>/<key> (got %s) (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" "$3" >&2; return 1 ;;
+  esac
+  EDIT_BLOCK=${3%%/*}
+  EDIT_KEY=${3#*/}
+  docs_require || return 2
+  docs_scratch || return 2
+  docs_template || return 2
+  docs_read_doc "$1" "$2" "$DOCS_SCRATCH/old" || return $?
+  docs_engine show "$1" "$2" "$DOCS_SCRATCH/old" "$DOCS_SCRATCH/new" || return $?
+  cat "$DOCS_SCRATCH/new"
+}
+
+# docs_remove_doc <repo> <slug>: corpus.remove with op remove, stamped with the HEAD
+docs_remove_doc() {
+  docs_keys_ok "$1" "$2" || return 1
+  docs_require || return 2
+  docs_scratch || return 2
+  docs_exists "$1" "$2" || {
+    dx_rc=$?
+    [ "$dx_rc" -eq 1 ] && printf '%s: no such doc: %s/%s (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$1" "$2" >&2
+    return "$dx_rc"
+  }
+  dx_head=$(docs_head)
+  if (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" corpus.remove "$1" "$2" --op=remove "--head=$dx_head" < /dev/null) > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+    printf 'docs remove: %s/%s removed\n' "$1" "$2"
+    return 0
+  else
+    dx_rc=$?
+  fi
+  cat "$DOCS_SCRATCH/store.err" >&2
+  return "$dx_rc"
+}
+
+# docs_scope [<repo> [<slug>]]: DOCS_KEYS narrowed to the scope a multi-doc verb names (the
+# whole corpus, one repo, one doc); rc 1 names what the corpus lacks
+docs_scope() {
+  docs_keys || return $?
+  DOCS_ALL=$DOCS_KEYS
+  if [ -n "${1:-}" ]; then
+    docs_key_valid "$1" || { printf '%s: malformed repo: %s (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" "$1" >&2; return 1; }
+    docs_select "$1" || { printf '%s: no such repo: %s (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$1" >&2; return 1; }
+  fi
+  if [ -n "${2:-}" ]; then
+    docs_key_valid "$2" || { printf '%s: malformed slug: %s (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" "$2" >&2; return 1; }
+    printf '%s\n' "$DOCS_KEYS" | grep -qxF -- "$1/$2" || { printf '%s: no such doc: %s/%s (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$1" "$2" >&2; return 1; }
+    DOCS_KEYS="$1/$2"
+  fi
+  [ -n "$DOCS_KEYS" ] || { printf '%s: the corpus is empty\n' "$DOCS_VERB" >&2; return 1; }
+  return 0
+}
+
+# docs_multi <op> [<repo> [<slug>]]: the multi-doc pipeline (replace, ids): every doc of the
+# scope edited into scratch first, the counts checked (replace: the total must equal
+# --count, else each doc's count is printed and nothing written), every touched repo
+# audited, then the writes one doc after another (a failure names the docs that landed)
+docs_multi() {
+  dm_op=$1
+  shift
+  docs_require || return 2
+  docs_scratch || return 2
+  docs_template || return 2
+  docs_scope "$@" || return $?
+  dm_i=0
+  dm_total=0
+  : > "$DOCS_SCRATCH/touched"
+  : > "$DOCS_SCRATCH/counts"
+  dm_list=$(printf '%s\n' "$DOCS_KEYS")
+  for dm_k in $dm_list; do
+    dm_i=$((dm_i + 1))
+    dm_r=${dm_k%/*}
+    dm_s=${dm_k#*/}
+    docs_read_doc "$dm_r" "$dm_s" "$DOCS_SCRATCH/m$dm_i.old" || return $?
+    docs_engine "$dm_op" "$dm_r" "$dm_s" "$DOCS_SCRATCH/m$dm_i.old" "$DOCS_SCRATCH/m$dm_i.new" || return $?
+    dm_c=$(awk 'NR == 1 { print $NF + 0; exit }' "$DOCS_SCRATCH/m$dm_i.new.note")
+    dm_total=$((dm_total + dm_c))
+    if [ "$dm_c" -gt 0 ]; then
+      printf '%s\t%s\t%s\n' "$dm_i" "$dm_k" "$dm_c" >> "$DOCS_SCRATCH/counts"
+    fi
+  done
+  if [ "$dm_op" = replace ] && [ "$dm_total" -ne "$DOCS_COUNT" ]; then
+    awk -F '\t' '{ print "  " $2 ": " $3 }' "$DOCS_SCRATCH/counts" >&2
+    printf '%s: %s occurrences in scope, --count says %s; nothing written (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" "$dm_total" "$DOCS_COUNT" >&2
+    return 1
+  fi
+  dm_tab=$(printf '\t')
+  while IFS=$dm_tab read -r dm_i dm_k dm_c; do
+    docs_grammar_put "${dm_k%/*}" "${dm_k#*/}" "$DOCS_SCRATCH/m$dm_i.new" || return $?
+    printf '%s\n' "${dm_k%/*}" >> "$DOCS_SCRATCH/touched"
+  done < "$DOCS_SCRATCH/counts"
+  for dm_r in $(sort -u "$DOCS_SCRATCH/touched"); do
+    docs_grammar_check "$dm_r" || return 1
+  done
+  dm_docs=$(awk 'END { print NR }' "$DOCS_SCRATCH/counts")
+  if [ "$DOCS_DRY" -eq 1 ]; then
+    while IFS=$dm_tab read -r dm_i dm_k dm_c; do
+      docs_say "${dm_k%/*}" "${dm_k#*/}" "$DOCS_SCRATCH/m$dm_i.new.note"
+    done < "$DOCS_SCRATCH/counts"
+    printf '%s: dry run: %s in %s docs, nothing written\n' "$DOCS_VERB" "$dm_total" "$dm_docs"
+    return 0
+  fi
+  while IFS=$dm_tab read -r dm_i dm_k dm_c; do
+    if ! docs_store "${dm_k%/*}" "${dm_k#*/}" "$dm_op" "$DOCS_SCRATCH/m$dm_i.new"; then
+      printf '%s: stopped at %s; the docs printed above landed (ERR_STORAGE_WRITE)\n' "$DOCS_VERB" "$dm_k" >&2
+      return 2
+    fi
+    docs_say "${dm_k%/*}" "${dm_k#*/}" "$DOCS_SCRATCH/m$dm_i.new.note" | awk 'NR == 1'
+  done < "$DOCS_SCRATCH/counts"
+  case "$dm_op" in
+    replace) printf '%s: %s replaced in %s docs\n' "${DOCS_VERB#ctx }" "$dm_total" "$dm_docs" ;;
+    ids) printf '%s: %s entries keyed\n' "${DOCS_VERB#ctx }" "$dm_total" ;;
+  esac
+  return 0
 }

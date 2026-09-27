@@ -1,0 +1,35 @@
+#!/bin/sh
+# summary: add, change, or remove one entry of a list block, schema-checked field by field
+# usage: ctx docs entry <repo> <slug> <block> [<key>] [--<field>=<value>]... [--add-<field>=<item>]... [--remove-<field>=<item>]... [--unset=<field>]... [--stdin=<field>] [--id=<id>] [--after=<key> | --first] [--remove] [--dry-run]
+# help: blocks: responsibilities, contract, dependencies, edges, pitfalls, patterns, see_also, members, components, layers, stages, deployables, data_flow, dependency_rules, run, build, test, debug, observability, areas, caveats; the flags are the block's fields from the grammar, dashes for underscores (--absence-scope, --points-to); a responsibility's text is --text
+# help: keys: the id (contract <slug>-r<N>, responsibilities <slug>-o<N>, pitfalls <slug>-p<N>, caveats <slug>-c<N>), the first field's value (target, name, ref, stage, step, area), <from>><to> for data_flow, <direction>:<key> for edges, or #<N> (the entry's place in its block, from 1) for a keyless block and a legacy entry without an id
+# help: no key: a new entry with the block's required fields, an id-keyed block's id assigned as the doc's highest number plus one (or --id), placed after the named entry, first, or at the block's end (an absent block is made at its grammar position); a key: the given fields in place, a field the entry lacks landing at its grammar position, every other line byte for byte; ids never change
+# help: a text value with a newline renders as a block scalar (and a field written as one keeps that form); --stdin=<field> reads that field's value raw from stdin; list fields take a comma list or --add-<field> and --remove-<field>; --remove deletes the entry (its id retires)
+# help: the result is grammar-checked by the audit over its repo before the store; see also ctx docs query <repo> <slug> --entry <block>/<key>, the entry's raw lines
+# help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (an unknown field, an enum value outside its set, a missing required field, a duplicate key or id, a missing address, a grammar defect, a newline in a one-line field, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs entry workspace the-record contract --rule="Closers close preceding occurrences" --evidence=closer.awk --after=the-record-r7
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs entry: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help entry" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" entry
+DOCS_FLAGS="--<field>= --add-<field>= --remove-<field>= --unset= --stdin= --id= --after= --first --remove --dry-run"
+docs_parse "after first remove id stdin dry-run" 1 "$@" || exit $?
+if [ "$DOCS_NP" -lt 3 ] || [ "$DOCS_NP" -gt 4 ]; then
+  echo "Usage: ctx docs entry <repo> <slug> <block> [<key>] [--<field>=<value>]... [--after=<key> | --first] [--remove]" >&2
+  exit 1
+fi
+docs_stdin_value || exit $?
+EDIT_BLOCK=$DOCS_P3
+EDIT_KEY=${DOCS_P4:-}
+docs_edit entry "$DOCS_P1" "$DOCS_P2"

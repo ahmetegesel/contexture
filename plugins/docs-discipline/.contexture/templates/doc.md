@@ -7,6 +7,8 @@ rules use unique addressable slugs (@rule <category>/<rule-slug>).
 pitfalls are unified in @pitfalls with full triggers and consequences.
 cross-references: an entry by its id; a block by #<block> in-doc or <slug>.md#<block> cross-doc (docs/workspace/conventions.md @rule docs/section-refs).
 the machine-readable schema at the foot (section 6, every line prefixed #%) restates these shapes one line each for the write verbs, and the plugin suite's agreement check keeps it, this prose, and the audit in step.
+a doc is written through the ctx docs write verbs (new or write for a first extraction; header, rule, pitfall, entry, section, replace, remove after), each checked against section 6 and the audit before it is stored.
+ids: a contract rule and a responsibility carry theirs on the entry's second line (<slug>-r<N>, <slug>-o<N>), a pitfall and a caveat at the entry head; a new entry takes the doc's highest number plus one; a removed id retires; a legacy keyless entry stays legitimate (ctx docs ids keys a corpus once).
 
 # kind definitions:
 #   conventions   = normative rules for repo or workspace

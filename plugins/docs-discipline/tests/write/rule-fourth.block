@@ -1,0 +1,8 @@
+@rule docs/fourth
+  directive: must
+  statement: "The fourth rule"
+  status: followed
+  prevalence: dominant
+  layer: repo
+  provenance: ratified
+  evidence: "ruleFour"

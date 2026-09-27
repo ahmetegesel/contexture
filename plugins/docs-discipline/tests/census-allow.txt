@@ -1,14 +1,17 @@
 # census-allow.txt: the classified lines of the docs module's single-door census (tests/census.sh).
 # One entry per flagged line outside docs-io.sh: <class><TAB><file><TAB><the line as written>.
 # Classes: helper-source (a verb sources the one door); helper-output (a verb consumes the
-# paths or runs the engine the helper handed it); usage-text (a refusal message naming a
+# paths or runs the engine the helper handed it, or hands its arguments to the helper's
+# write-side parser; every corpus read and write of a write verb runs inside the helper);
+# usage-text (a refusal message naming a
 # form); delta-read (the check's stdin delta); claimant-probe (the check's git trackedness
 # probe of a claimant doc path, turned off under a store's change log in B4); engine-output
-# (an engine prints); engine-path-logic (an engine reads FILENAME or matches the address
+# (an engine prints; the edit engine's one stderr line carries its note or refusal);
+# engine-path-logic (an engine reads FILENAME or matches the address
 # shape, no IO); git-delta (the gate's code half from git); topology-probe (the gate's
 # product repository and .git probes, never the corpus); matrix-fixture (the gate's
 # self-planted matrix, files by construction); false-positive (an instrument B pattern
-# inside a word). A new corpus read or path print outside the helper lands here only by an
+# inside a word or a string). A new corpus read or path print outside the helper lands here only by an
 # explicit edit, which is the point: it stays visible.
 claimant-probe	docs-check.awk	    cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
 claimant-probe	docs-check.awk	    rc = system(cmd)
@@ -40,8 +43,8 @@ engine-path-logic	docs-audit.awk	    err(FILENAME, FNR, "malformed block header 
 engine-path-logic	docs-audit.awk	    err(FILENAME, FNR, "line must indent at least 2 spaces: '" $0 "'")
 engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "directive must be 'must', 'should', or 'never', got '" dir "'")
 engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "evidence must be greppable code symbols, never line numbers: '" $0 "'")
-engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "duplicate pitfall id '" pid "' in repo '" curr_repo "' (first seen at " seen_pitfalls[scope_pid] ")")
-engine-path-logic	docs-audit.awk	        seen_pitfalls[scope_pid] = FILENAME ":" FNR
+engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "duplicate id '" pid "' in repo '" curr_repo "' (first seen at " seen_ids[scope_pid] ")")
+engine-path-logic	docs-audit.awk	        seen_ids[scope_pid] = FILENAME ":" FNR
 engine-path-logic	docs-check.awk	    GUIDE_RE = "^docs/[^/]+\\.md$"
 engine-path-logic	docs-check.awk	        if (line ~ /docs\/[^\/]+\/[^\/]+\.md$/) {
 engine-path-logic	docs-check.awk	            match(line, /docs\/[^\/]+\/[^\/]+\.md$/)
@@ -114,3 +117,27 @@ topology-probe	gate	        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.g
 usage-text	check	  echo "Usage: git diff --name-status | ctx docs check docs/<repo>/*.md" >&2
 usage-text	nudge	  echo "Usage: ctx docs nudge backlog.md docs/<repo>/*.md" >&2
 usage-text	query	  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index" >&2
+engine-output	docs-edit.awk	    print s > "/dev/stderr"
+false-positive	docs-edit.awk	        sep = (f1 == "from") ? ">" : ":"
+helper-source	entry	. "$dir/docs-io.sh"
+helper-output	entry	docs_parse "after first remove id stdin dry-run" 1 "$@" || exit $?
+helper-source	header	. "$dir/docs-io.sh"
+helper-output	header	docs_parse "dry-run" 1 "$@" || exit $?
+helper-source	ids	. "$dir/docs-io.sh"
+helper-output	ids	docs_parse "dry-run" 0 "$@" || exit $?
+helper-source	new	. "$dir/docs-io.sh"
+helper-output	new	docs_parse "kind dry-run" 1 "$@" || exit $?
+helper-source	pitfall	. "$dir/docs-io.sh"
+helper-output	pitfall	docs_parse "after first remove id stdin dry-run" 1 "$@" || exit $?
+usage-text	query	    echo "Usage: ctx docs query <repo> <slug> --entry <block>/<key>" >&2
+helper-source	remove	. "$dir/docs-io.sh"
+helper-output	remove	docs_parse "" 0 "$@" || exit $?
+usage-text	remove	  echo "Usage: ctx docs remove <repo> <slug>" >&2
+helper-source	replace	. "$dir/docs-io.sh"
+helper-output	replace	docs_parse "old new count dry-run" 0 "$@" || exit $?
+helper-source	rule	. "$dir/docs-io.sh"
+helper-output	rule	docs_parse "after first remove stdin dry-run" 1 "$@" || exit $?
+helper-source	section	. "$dir/docs-io.sh"
+helper-output	section	docs_parse "after first remove dry-run" 0 "$@" || exit $?
+helper-source	write	. "$dir/docs-io.sh"
+helper-output	write	docs_parse "replace dry-run" 0 "$@" || exit $?

@@ -1,0 +1,37 @@
+#!/bin/sh
+# summary: replace, create, or remove a whole block of a corpus doc (the block on stdin)
+# usage: ctx docs section <repo> <slug> <block> [--after=<block> | --first] [--dry-run] < block
+# usage: ctx docs section <repo> <slug> <block> --remove
+# help: the block on stdin opens with its own header line (@<block>; a rule is addressed rule/<category>/<rule-slug> and opens with @rule <category>/<rule-slug>) and carries no other block; it replaces the doc's block of that name, or lands after the named block (--after=<block> or rule/<category>/<rule-slug>), first after the header, or at its grammar position
+# help: rare by design: an entry, a rule, a pitfall, or a header field has its own verb (ctx docs entry, rule, pitfall, header); the result is grammar-checked by the audit over its repo before the store
+# help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (a header mismatch, a second block, a missing address, a block the doc kind does not carry, a grammar defect, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs section demo-web cart-ui see_also < see-also.block
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs section: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help section" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" section
+DOCS_FLAGS="--after= --first --remove --dry-run"
+docs_parse "after first remove dry-run" 0 "$@" || exit $?
+if [ "$DOCS_NP" -ne 3 ]; then
+  echo "Usage: ctx docs section <repo> <slug> <block> [--after=<block> | --first] [--remove] < block" >&2
+  exit 1
+fi
+case "$DOCS_P3" in
+  rule/*) EDIT_BLOCK=rule; EDIT_KEY=${DOCS_P3#rule/} ;;
+  *) EDIT_BLOCK=$DOCS_P3; EDIT_KEY="" ;;
+esac
+if [ "$DOCS_REMOVE" -ne 1 ]; then
+  docs_payload || exit $?
+fi
+docs_edit section "$DOCS_P1" "$DOCS_P2"

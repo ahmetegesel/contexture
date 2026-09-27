@@ -2,7 +2,9 @@
 # docs-discipline plugin suite: the named runner for tests/.
 # Drives the staging check; the corpus reads through the storage driver (keyed on the
 # declared corpus.store: the audit and the unit-form nudge against the backlog-file form
-# when declared, every read verb's rc 2 refusal when not); the single-door census
+# and the write verbs (tests/write-verbs.sh over tests/write/) and the engine checks
+# (tests/engine-checks.sh) when declared, every read
+# verb's rc 2 refusal when not); the single-door census
 # (tests/census.sh over tests/census-allow.txt, with its two plants); the close-gate
 # matrix over tests/sample/; and the grammar agreement check
 # (tests/grammar-agreement.awk, with its two plants) in a staged
@@ -180,6 +182,36 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
     else
         echo "[nudge-unit] FAIL (${NUDGE_NOTE:-unit rc=$NUDGE_U_RC, file rc=$NUDGE_F_RC, refusal rc=$NUDGE_R_RC})"
         head -5 "$SANDBOX/nudge-unit.out" "$SANDBOX/nudge-file.out" "$SANDBOX/nudge-refuse.out"
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # the write verbs (tests/write-verbs.sh over the fixtures of tests/write/): every verb's
+    # success bytes, every refusal leaving the stored doc byte-identical, and under a change
+    # log one row per success with its op and the HEAD, read back through ctx docs changes
+    WRITE_OUT=$(sh "$SCRIPT_DIR/write-verbs.sh" "$SANDBOX" "$SCRIPT_DIR/write" 2>&1)
+    WRITE_RC=$?
+    if [ "$WRITE_RC" -eq 0 ]; then
+        echo "[write-verbs] PASS ($(printf '%s\n' "$WRITE_OUT" | tail -n 1 | sed 's/^write-verbs: //'))"
+        PASS=$((PASS + 1))
+    else
+        echo "[write-verbs] FAIL (rc=$WRITE_RC)"
+        printf '%s\n' "$WRITE_OUT" | tail -n 30
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # the engines (tests/engine-checks.sh): one id namespace per repo in the audit, query
+    # --pitfalls scoped to @pitfalls, and a backslash search kept literal (free text through
+    # the environment, never awk -v)
+    ENGINE_OUT=$(sh "$SCRIPT_DIR/engine-checks.sh" "$SANDBOX" 2>&1)
+    ENGINE_RC=$?
+    if [ "$ENGINE_RC" -eq 0 ]; then
+        echo "[engine-checks] PASS (duplicate id across kinds, pitfalls scoping, backslash search)"
+        PASS=$((PASS + 1))
+    else
+        echo "[engine-checks] FAIL (rc=$ENGINE_RC)"
+        printf '%s\n' "$ENGINE_OUT"
         FAIL=$((FAIL + 1))
     fi
     echo ""

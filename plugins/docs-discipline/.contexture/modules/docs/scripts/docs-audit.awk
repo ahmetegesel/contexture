@@ -198,14 +198,16 @@ in_block_scalar {
     }
 }
 
-# Pitfall checks
-/^[ ]{2,4}- id:[ ]*/ {
+# Id checks: one namespace per repo for every id field, an entry head (- id:, the pitfalls
+# and caveats) or an id line of its own at indent 4 (the contract rules and
+# responsibilities); a legacy entry without an id stays silent
+/^[ ]{2,4}- id:[ ]*/ || /^[ ]{4}id:[ ]*/ {
     pid = $NF
     scope_pid = (curr_repo ? curr_repo : "default") ":" pid
-    if (scope_pid in seen_pitfalls) {
-        err(FILENAME, FNR, "duplicate pitfall id '" pid "' in repo '" curr_repo "' (first seen at " seen_pitfalls[scope_pid] ")")
+    if (scope_pid in seen_ids) {
+        err(FILENAME, FNR, "duplicate id '" pid "' in repo '" curr_repo "' (first seen at " seen_ids[scope_pid] ")")
     } else {
-        seen_pitfalls[scope_pid] = FILENAME ":" FNR
+        seen_ids[scope_pid] = FILENAME ":" FNR
     }
 }
 

@@ -1,0 +1,33 @@
+#!/bin/sh
+# summary: add, change, or remove a @rule block by its category/slug
+# usage: ctx docs rule <repo> <slug> <category>/<rule-slug> [--directive=<must|should|never>] [--statement="..."] [--status=<followed|aspirational|violated>] [--prevalence=<universal|dominant|rare>] [--layer=<workspace|repo>] [--provenance=<extracted|ratified>] [--scope="..."] [--exception="..."] [--caution="..."] [--enforced-at=<path>[,...]] [--add-enforced-at=<path>] [--remove-enforced-at=<path>] [--evidence="..."] [--anti="..."] [--good="..."] [--unset=<field>]... [--stdin=<field>] [--after=<category>/<rule-slug> | --first] [--remove] [--dry-run]
+# help: an absent rule is created with directive, statement, status, prevalence, layer, provenance, and evidence required, placed after the named rule, first among the doc's rules, or after the last block; a present rule takes the given fields in place (a field it lacks lands at its grammar position) and every other line stays byte for byte
+# help: --remove deletes the block (the rule slug is never recycled); evidence refuses a line-number shape; a text value with a newline renders as a block scalar; --stdin=<field> reads that field's value raw from stdin
+# help: the result is grammar-checked by the audit over its repo (a duplicate rule id in the repo refuses) before the store
+# help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (an unknown field, an enum value outside its set, a missing required field, a missing address, a grammar defect, a newline in a one-line field, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs rule workspace conventions docs/fixed-pitfalls --caution="A recycled id misroutes old references"
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs rule: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help rule" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" rule
+DOCS_FLAGS="--<field>= --add-enforced-at= --remove-enforced-at= --unset= --stdin= --after= --first --remove --dry-run"
+docs_parse "after first remove stdin dry-run" 1 "$@" || exit $?
+if [ "$DOCS_NP" -ne 3 ]; then
+  echo "Usage: ctx docs rule <repo> <slug> <category>/<rule-slug> [--<field>=<value>]... [--after=<category>/<rule-slug> | --first] [--remove]" >&2
+  exit 1
+fi
+docs_stdin_value || exit $?
+EDIT_BLOCK=rule
+EDIT_KEY=$DOCS_P3
+docs_edit rule "$DOCS_P1" "$DOCS_P2"

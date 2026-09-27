@@ -1,0 +1,29 @@
+#!/bin/sh
+# summary: key the corpus's keyless contract rules and responsibilities with ids (a one-time migration)
+# usage: ctx docs ids [<repo>] [--dry-run]
+# help: every @contract entry without an id gains <slug>-r<N> and every @responsibilities entry <slug>-o<N>, in document order, N continuing past the doc's highest id of that kind; the id rides the line after the entry's first line, and nothing else in the doc changes
+# help: one write per changed doc (grammar-checked by the audit over its repo first); a second run finds nothing to key and prints 0 entries keyed; --dry-run lists each entry it would key (doc, block, place, the new id, the entry's first 60 bytes) and writes nothing
+# help: exit codes: 0 keyed (or nothing to key, or the dry run printed); 1 a refusal (a missing repo, a grammar defect), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs ids --dry-run
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs ids: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help ids" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" ids
+DOCS_FLAGS="--dry-run"
+docs_parse "dry-run" 0 "$@" || exit $?
+if [ "$DOCS_NP" -gt 1 ]; then
+  echo "Usage: ctx docs ids [<repo>] [--dry-run]" >&2
+  exit 1
+fi
+docs_multi ids ${DOCS_P1:+"$DOCS_P1"}

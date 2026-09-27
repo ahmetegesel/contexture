@@ -4,6 +4,19 @@
 # Help: ctx docs help query
 # Supports: projection, section slicing, rules query, pitfall scan, file owner lookup, corpus search, edges, index.
 
+# The free-text options come through the environment (the query verb exports them), never
+# awk -v, which rewrites backslash escapes and refuses a newline; mode and repo stay -v
+# (bounded tokens)
+BEGIN {
+    slug = ENVIRON["DOCS_Q_SLUG"]
+    section = ENVIRON["DOCS_Q_SECTION"]
+    file = ENVIRON["DOCS_Q_FILE"]
+    search = ENVIRON["DOCS_Q_SEARCH"]
+    category = ENVIRON["DOCS_Q_CATEGORY"]
+    severity = ENVIRON["DOCS_Q_SEVERITY"]
+    channel = ENVIRON["DOCS_Q_CHANNEL"]
+}
+
 # Per-file metadata extraction
 FNR == 1 {
     curr_file = FILENAME
@@ -235,7 +248,9 @@ function print_rule() {
 # ─── MODE: PITFALLS SCAN ─────────────────────────────────────────────────────
 mode == "pitfalls" {
     if (repo != "" && curr_repo != repo && curr_repo != "") next
-    if (/^[ ]{2,4}- id:[ ]*/) {
+    # entries count only inside @pitfalls (an overview doc's @caveats carry ids too)
+    if (/^@[a-z_]+/) p_block = $1
+    if (p_block == "@pitfalls" && /^[ ]{2,4}- id:[ ]*/) {
         if (in_pitfall) print_pitfall()
         p_id = $NF
         p_class = ""
