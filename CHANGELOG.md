@@ -4,6 +4,36 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.54.0] - 2026-09-27
+
+### Added
+
+- The docs corpus behind the storage driver: the SPI gains a corpus subsystem (`corpus.list`, `corpus.read`, `corpus.write`, `corpus.remove`, `corpus.mount`, `corpus.changes`) with the optional capabilities `corpus.store` and `corpus.changelog`, outside the mandatory handshake, so a record-only driver keeps serving every session verb. `driver-resolver` gains `require` and `has`, with a verdict cache per capability set. The POSIX driver serves the corpus as files under `docs/<repo>/<slug>.md`; the FTS5 driver keeps it in its store with a change log.
+- Every `ctx docs` read verb (query, audit, check, gate, nudge) reaches the corpus only through the configured driver, by one helper; under a store the verbs print the same doc paths the files driver prints. `ctx docs nudge <unit> [<repo>...]` reads the active task through `ctx session`.
+- Ten write verbs, each checked against the grammar and audited over its repo before anything is stored, then stamped with its operation and the workspace git HEAD: `ctx docs new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `remove`, `ids`. `ctx docs query <repo> <slug> --entry <block>/<key>` prints one entry's raw lines.
+- `ctx docs changes [--since=<rev>]`: the corpus half of a delta under a change-log driver, one net status line per doc written since the current HEAD.
+- Ids for contract rules (`<slug>-r<N>`) and responsibilities (`<slug>-o<N>`) on the entry's second line; `ctx docs ids [<repo>] [--dry-run]` keys a legacy corpus once.
+- The grammar template carries a machine-readable schema section (`#%` lines) with an agreement check against the prose and the audit's lists.
+- `ctx storage-fts5 migrate --corpus` (with `--prune` on export) moves the corpus both ways through the POSIX reference, byte-identical round trip; the FTS5 schema reaches version 3 (tables `docs` and `doc_changes`), and an older database climbs to it on its next open.
+- The docs-discipline suite runs twice in the gate (`plugin:docs-discipline` and `plugin:docs-discipline:fts5`), staged from the shipped copies, with the single-door census, the write-verb table, the delta-source cases, the migration round trip, and the capture parity against the files driver. The compliance harness grows to 51 cases in 13 suites (the corpus store and the resolver's optional capabilities).
+
+### Changed
+
+- Under a change-log driver the check drops the blanket rule and the untracked-claimant verdict (a doc refreshes only the code its own sources name), and the gate composes the code half from git with the corpus half from the store; `--drift` under a store prints a deferral notice. The files driver keeps git as before.
+- A bare `ctx docs audit` audits the whole corpus instead of refusing; an absent doc, an unknown repo, and an empty corpus refuse rc 1 with a named message (an awk open error rc 2 before); under the files driver an explicit path to a file outside the corpus folder refuses rc 1 and names `ctx docs write --dry-run` for drafts; the backlog-file nudge refuses a path inside the sessions drawer; the usage lines of a bare `ctx docs check` and `ctx docs nudge` name the repo and unit forms.
+- The bare `ctx storage-fts5 migrate` moves the corpus beside every unit; an empty source never empties the destination.
+- `corpus.changes` rows carry six fields, the doc's prior state (`absent` or `present`) included, so the net status tells an added doc from a modified one.
+- `corpus.write` refuses, on every driver, a key that folds onto another doc's or repo's key under ASCII case (`ERR_ENTITY_EXISTS`); every corpus method acts on the exact key alone, a case twin reading as absent.
+- The audit keeps one id namespace per repo across every id field (message `duplicate id`); `ctx docs query --pitfalls` lists only `@pitfalls` entries; a backslash in a query option is literal, since free text reaches the engines through the environment, never `awk -v`.
+- Removing the last item of a list field removes the field, refused where the field is required; a `ctx docs write --replace` carrying the stored bytes writes nothing and logs no change.
+- The laws docs-are-code, corpus-untracked, corpus-reconcile, docs-audience-separation, and harness-free, the @layout docs line, and the docs-drift, docs-authoring, and work rhythms read the store-aware way; the guides follow. The ast-doc-graph plugin still reads the corpus as files and indexes no docs under a store driver, documented as a limit.
+
+### Fixed
+
+- `ctx docs query --pitfalls` credits a pitfall that ends a doc to its own doc, never the next doc's slug.
+- `ctx docs replace` refuses a carriage return; a `--stdin` value of any size reaches the write verbs through a payload file instead of the environment.
+- On a case-insensitive filesystem the POSIX `corpus.read`, `corpus.remove`, and the repo-filtered `corpus.list` and `corpus.mount` answered for a key that differed from a stored doc's only by case, and a twin remove deleted the stored doc.
+
 ## [0.53.2] - 2026-09-27
 
 ### Changed
