@@ -2243,7 +2243,9 @@ corpus_flags() {
 # gives, so one-two sorts before one); an empty corpus
 # lists nothing (rc 0); a named repo the corpus lacks refuses rc 1. A doc is a regular
 # file at depth two under docs/ whose folder and base name are valid keys (the guides at
-# depth one, temps, and dot files are never docs)
+# depth one, temps, and dot files are never docs). Both path parts are globbed, so every
+# name is read from the folder entries as stored and a repo filter keeps the exact repo:
+# a literal folder name would open a case twin on a case-insensitive filesystem
 corpus_list() {
   if [ $# -gt 1 ]; then
     printf 'corpus.list: error: takes at most one argument, the repo (ERR_INVALID_ARGUMENT)\n' >&2
@@ -2256,11 +2258,12 @@ corpus_list() {
   fi
   ws=$(find_workspace_root)
   cl_out=$(
-    if [ -n "$cl_repo" ]; then set -- "$ws/docs/$cl_repo"/*.md; else set -- "$ws"/docs/*/*.md; fi
+    set -- "$ws"/docs/*/*.md
     for cl_f in "$@"; do
       [ -f "$cl_f" ] || continue
       cl_s=${cl_f##*/}; cl_s=${cl_s%.md}
       cl_r=${cl_f%/*}; cl_r=${cl_r##*/}
+      [ -z "$cl_repo" ] || [ "$cl_r" = "$cl_repo" ] || continue
       corpus_key_valid "$cl_r" && corpus_key_valid "$cl_s" && printf '%s/%s.md\n' "$cl_r" "$cl_s"
     done | LC_ALL=C sort | sed 's/\.md$//'
   )
@@ -2272,7 +2275,16 @@ corpus_list() {
   return 0
 }
 
-# corpus.read <repo> <slug>: the doc byte for byte; rc 1 when absent
+# corpus_exact <repo> <slug>: rc 0 when the corpus lists exactly <repo>/<slug>, else rc 1.
+# The listing reads every name from the folder entries as stored, so a case twin that a
+# case-insensitive filesystem would open for a stored doc never matches: read and remove
+# act on the exact key alone, as a store driver's lookup does
+corpus_exact() {
+  corpus_list 2>/dev/null | CE_KEY="$1/$2" awk '$0 == ENVIRON["CE_KEY"] { f = 1; exit } END { exit !f }'
+}
+
+# corpus.read <repo> <slug>: the doc byte for byte; rc 1 when absent (a case twin of a
+# stored key is absent)
 corpus_read() {
   if [ $# -gt 2 ]; then
     printf 'corpus.read: error: takes two arguments, repo and slug (ERR_INVALID_ARGUMENT)\n' >&2
@@ -2281,7 +2293,7 @@ corpus_read() {
   corpus_keys corpus.read "${1:-}" "${2:-}" || return 1
   ws=$(find_workspace_root)
   cr_f="$ws/docs/$1/$2.md"
-  if [ ! -f "$cr_f" ]; then
+  if ! corpus_exact "$1" "$2"; then
     printf "corpus.read: error: doc '%s/%s' not found in the corpus (ERR_ENTITY_NOT_FOUND)\n" "$1" "$2" >&2
     return 1
   fi
@@ -2305,8 +2317,9 @@ corpus_twin() {
 # corpus.write <repo> <slug> [--create] [--op=<op>] [--head=<sha>|none]: the whole doc raw on
 # stdin replaces the stored one (a new doc when absent, its repo folder made on demand);
 # --create refuses an existing doc rc 1; a key folding onto another doc's or repo's under
-# ASCII case refuses rc 1, nothing written; a same-directory temp moved over the doc, so a
-# failed write leaves the old doc whole and prints no success (rc 2)
+# ASCII case refuses rc 1, nothing written, and that pass runs before the --create probe,
+# so a stored doc's case twin is refused before the probe's file test; a same-directory temp moved over
+# the doc, so a failed write leaves the old doc whole and prints no success (rc 2)
 corpus_write() {
   cw_repo="${1:-}"; cw_slug="${2:-}"
   if [ $# -ge 2 ]; then shift 2; else shift $#; fi
@@ -2343,7 +2356,8 @@ corpus_write() {
 }
 
 # corpus.remove <repo> <slug> [--op=<op>] [--head=<sha>|none]: removes the doc, and its repo
-# folder when that empties; rc 1 when absent
+# folder when that empties; rc 1 when absent (a case twin of a stored key is absent, and
+# the stored doc stays)
 corpus_remove() {
   cx_repo="${1:-}"; cx_slug="${2:-}"
   if [ $# -ge 2 ]; then shift 2; else shift $#; fi
@@ -2351,7 +2365,7 @@ corpus_remove() {
   corpus_flags corpus.remove remove "$@" || return 1
   ws=$(find_workspace_root)
   cx_f="$ws/docs/$cx_repo/$cx_slug.md"
-  if [ ! -f "$cx_f" ]; then
+  if ! corpus_exact "$cx_repo" "$cx_slug"; then
     printf "corpus.remove: error: doc '%s/%s' not found in the corpus (ERR_ENTITY_NOT_FOUND)\n" "$cx_repo" "$cx_slug" >&2
     return 1
   fi

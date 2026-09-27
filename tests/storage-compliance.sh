@@ -1,11 +1,11 @@
 #!/bin/sh
 # storage-compliance.sh: the Storage Provider Interface (SPI) compliance test harness.
 # Validates storage driver implementations against the SPI contract across 13 test
-# suites and 50 verification scenarios; each case asserts the returned data (exact key
+# suites and 51 verification scenarios; each case asserts the returned data (exact key
 # and value pairs in the driver's JSON, or the exact bytes of an artifact), never the
 # exit code alone. Payloads travel on stdin (docs/the-engine.md, the transport). The
 # corpus suite (12) keys on the declared corpus.store: a driver without that optional
-# capability runs one refusal case in place of its eight (43 cases in all), and its
+# capability runs one refusal case in place of its nine (43 cases in all), and its
 # changes case keys on the declared corpus.changelog; suite 13 proves the shipped
 # resolver's require and has and the unchanged dispatch handshake over planted
 # descriptors that wrap the driver under test.
@@ -660,10 +660,10 @@ rm -f ex.txt
 rm -f art-in.txt art-out.txt lane-in.txt lj.txt empty.txt
 
 # ==============================================================================
-# Suite 12: The Corpus Store (8 test cases with corpus.store, 1 without)
+# Suite 12: The Corpus Store (9 test cases with corpus.store, 1 without)
 # ==============================================================================
 # corpus.store is optional (outside the handshake's mandatory set): a driver declaring
-# it runs the eight cases; a driver without it proves it refuses every corpus method. The
+# it runs the nine cases; a driver without it proves it refuses every corpus method. The
 # changes case keys on the declared corpus.changelog, never on the driver's name.
 printf '\n== Suite 12: The Corpus Store ==\n'
 CORPUS_STORE=0
@@ -845,7 +845,41 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
   drv corpus.remove alpha one-too >/dev/null 2>&1
   [ "$(drv corpus.list 2>&1)" = "$c_before" ] || tc_fail="$tc_fail; list after the twin cases [$(drv corpus.list 2>&1)]"
   tc "TC50: a key that folds onto another doc or repo under ASCII case refuses rc1 ERR_ENTITY_EXISTS, nothing stored"
-  rm -f c-in.txt c-in2.txt c-out.txt c-big.txt c-z.txt c-twin.txt
+
+  # TC51: every method acts on the exact key alone, never on a case twin a case-insensitive
+  # filesystem folds onto a stored doc: reading or removing a twin of a slug or a repo
+  # answers as for an absent doc (rc1 ERR_ENTITY_NOT_FOUND, nothing on stdout), --create of
+  # a twin keeps the TC50 refusal, and a repo twin neither lists nor mounts; the real docs
+  # stay byte for byte and the list unchanged; the exact keys still read
+  c_before=$(drv corpus.list 2>&1)
+  for c_k in "alpha ONE" "alpha One" "ALPHA one" "Alpha one" "alpha TWO" "alpha two"; do
+    set -- $c_k
+    drv corpus.read "$1" "$2" > c-out.txt 2> c-err.txt; rc=$?
+    wantrc "$rc" 1; want "$(cat c-err.txt)" 'ERR_ENTITY_NOT_FOUND'
+    [ -s c-out.txt ] && tc_fail="$tc_fail; corpus.read $1/$2 printed a doc"
+    out=$(drv corpus.remove "$1" "$2" 2>&1); rc=$?
+    wantrc "$rc" 1; want "$out" 'ERR_ENTITY_NOT_FOUND'; wantnot "$out" '"status":"ok"'
+    out=$(cw c-twin.txt "$1" "$2" --create 2>&1); rc=$?
+    wantrc "$rc" 1; want "$out" 'ERR_ENTITY_EXISTS'; wantnot "$out" '"status":"ok"'
+  done
+  for c_r in ALPHA Alpha; do
+    out=$(drv corpus.list "$c_r" 2>/dev/null); rc=$?
+    wantrc "$rc" 1; [ -z "$out" ] || tc_fail="$tc_fail; corpus.list $c_r listed [$out]"
+    want "$(drv corpus.list "$c_r" 2>&1)" 'ERR_ENTITY_NOT_FOUND'
+    mkdir -p c-mnt4
+    out=$(drv corpus.mount "$SANDBOX/c-mnt4" "$c_r" 2>&1); rc=$?
+    wantrc "$rc" 1; want "$out" 'ERR_ENTITY_NOT_FOUND'
+    rm -rf c-mnt4
+  done
+  drv corpus.read alpha one > c-out.txt 2>/dev/null; rc=$?
+  wantrc "$rc" 0
+  cmp -s c-in2.txt c-out.txt || tc_fail="$tc_fail; a twin call changed or hid alpha/one"
+  drv corpus.read alpha Two > c-out.txt 2>/dev/null; rc=$?
+  wantrc "$rc" 0
+  cmp -s c-z.txt c-out.txt || tc_fail="$tc_fail; a twin call changed or hid alpha/Two"
+  [ "$(drv corpus.list 2>&1)" = "$c_before" ] || tc_fail="$tc_fail; a twin call changed the list [$(drv corpus.list 2>&1)]"
+  tc "TC51: a case twin reads, removes, lists, and mounts as absent; --create of a twin refuses; the real docs untouched"
+  rm -f c-in.txt c-in2.txt c-out.txt c-err.txt c-big.txt c-z.txt c-twin.txt
 else
   # TC40 (no corpus.store): every corpus method refuses, printing nothing on stdout
   mkdir -p c-mnt
@@ -858,7 +892,7 @@ else
   done
   rm -rf c-mnt c-in.txt
   tc "TC40: a driver without corpus.store refuses every corpus method"
-  printf 'note: TC41 to TC46 and TC50 need corpus.store, which this driver does not declare\n'
+  printf 'note: TC41 to TC46, TC50, and TC51 need corpus.store, which this driver does not declare\n'
 fi
 
 # ==============================================================================
