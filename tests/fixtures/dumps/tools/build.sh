@@ -56,8 +56,10 @@ echo "build: goldens $(ls "$DUMPS/golden/legacy-u" | wc -l | tr -d ' ') answers"
 # answers <unit> <dump> <queries> <out>: the exact answers of search.awk (the exact rule
 # posix keeps, docs/the-engine.md) over the unit's rendered text in the rule's file
 # order (state, backlog, knowledge, journal, then each lane bytewise: recipe, journal,
-# report), each result given score 0; one "query|limit|entity|answer" line per query
-SA="$ROOT/base/.contexture/modules/session/drivers/posix/search.awk"
+# report), each result scoring 0; one "query|limit|entity|answer" line per query. The
+# driver's search.awk runs after canon.awk and model.awk and reads the query from a payload
+# file (the contract 2 driver's own invocation)
+PD="$ROOT/base/.contexture/modules/session/drivers/posix"
 answers() {
   rm -rf "$SCR/sa"
   awk -v lineno=1 -f "$JF" "$2" | awk -v out="$SCR/sa/$1" -f "$TOOLS/dump2md.awk"
@@ -72,9 +74,10 @@ answers() {
   : > "$4"
   while IFS='|' read -r q lim ent; do
     [ -n "$q" ] || continue
+    printf 'query=%s\n' "$(printf '%s' "$q" | sed 's/\\/\\\\/g')" > "$SCR/pay"
     # shellcheck disable=SC2086
-    SQ_QUERY="$q" awk -v unit="$1" -v limit="${lim:-20}" -v entity="${ent:-all}" -f "$SA" $files \
-      | awk '{ gsub(/"\},\{"entity_type"/, "\",\"score\":0},{\"entity_type\""); sub(/"\}\]\}$/, "\",\"score\":0}]}"); print }' > "$SCR/ans"
+    LC_ALL=C PX_PAY="$SCR/pay" PX_ERR="$SCR/err" SQ_UNIT="$1" SQ_LIMIT="${lim:-20}" SQ_ENTITY="${ent:-all}" SQ_MODE=exact \
+      awk -f "$PD/canon.awk" -f "$PD/model.awk" -f "$PD/search.awk" $files > "$SCR/ans"
     printf '%s|%s|%s|%s\n' "$q" "$lim" "$ent" "$(cat "$SCR/ans")" >> "$4"
   done < "$3"
   echo "build: $(basename "$4") $(wc -l < "$4" | tr -d ' ') exact answers"

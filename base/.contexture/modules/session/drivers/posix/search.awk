@@ -1,28 +1,14 @@
-# search.awk: the exact mode shared by every driver: a case-insensitive (ASCII) substring
-# of one line of the artifact text, a column-0 comment never matching; one result per
-# matching entity and section, in record order, its snippet the first matching line
-# Inputs: -v unit="$UNIT" -v limit=N -v entity=TYPE, the query in the environment as SQ_QUERY; the files arrive
-# in the order state, backlog, knowledge, journal, then each lane's recipe, journal, report
-# Result keys: entity_type, entity_id, section, snippet; total_matches counts the
-# matching entity and section pairs, results stop at limit
-
-# a backslash doubled by concatenation, never by a gsub replacement: a replacement of
-# four backslashes yields one under busybox awk and gawk --posix
-function bs_double(s,    n, p, i, o) {
-  n = split(s, p, /\\/)
-  o = (n ? p[1] : "")
-  for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]
-  return o
-}
-
-function escape_json(s,    r) {
-  r = bs_double(s)
-  gsub(/"/, "\\\"", r)
-  gsub(/\n/, "\\n", r)
-  gsub(/\r/, "\\r", r)
-  gsub(/\t/, "\\t", r)
-  return r
-}
+# search.awk: the exact mode of search.query (docs/the-engine.md, Search): a case-insensitive
+# (ASCII) substring of one line of the artifact text, a column-0 comment never matching; one
+# result per matching entity and section, in record order, its snippet the first matching
+# line, every exact result scoring 0. Run after canon.awk (the JSON string form) and
+# model.awk (the payload reader and the refusal), in the C locale.
+# Inputs: the files in the order state, backlog, knowledge, journal, then each lane in
+# bytewise order: recipe, journal, report; the environment: PX_PAY (the payload, its query
+# key), PX_ERR, SQ_UNIT, SQ_LIMIT, SQ_ENTITY, SQ_MODE (checked shapes).
+# Result keys: unit, query, mode, total_matches, results [{entity_type, entity_id, section,
+# snippet, score}]; total_matches counts the matching entity and section pairs, results
+# stop at the limit.
 
 function trim(s,    r) {
   r = s
@@ -32,16 +18,21 @@ function trim(s,    r) {
 }
 
 BEGIN {
-  # the query arrives in the environment (SQ_QUERY), never through -v, which would
-  # interpret its backslash escapes
-  if ("SQ_QUERY" in ENVIRON) query = ENVIRON["SQ_QUERY"]
+  FN = "search.query"; ERRF = ENVIRON["PX_ERR"]; REFUSED = 0
+  # the query arrives in the payload file, never through -v, which would interpret its
+  # backslash escapes
+  load_payload(ENVIRON["PX_PAY"])
+  query = has("query") ? pv("query") : ""
+  if (query !~ /[^ \t\r\n]/) { REFUSED = 1; die(1, "ERR_INVALID_ARGUMENT", "the search query is empty") }
+  if (ENVIRON["SQ_MODE"] != "exact") { REFUSED = 1; die(1, "ERR_CAPABILITY_UNSUPPORTED", "mode '" ENVIRON["SQ_MODE"] "' is not supported; declared modes: exact") }
+  unit = ENVIRON["SQ_UNIT"]
+  limit = ENVIRON["SQ_LIMIT"] + 0
+  entity = ENVIRON["SQ_ENTITY"]
   match_count = 0
   shown = 0
   cur_entity_type = "session"
   cur_entity_id = unit
   query_lower = tolower(query)
-  if (limit == "") limit = 20
-  limit = limit + 0
 }
 
 # a new file sets the section and the default entity
@@ -115,18 +106,20 @@ FNR == 1 {
 }
 
 END {
+  if (REFUSED) exit 1
   printf "{"
-  printf "\"unit\":\"%s\",", escape_json(unit)
-  printf "\"query\":\"%s\",", escape_json(query)
+  printf "\"unit\":%s,", jstr(unit)
+  printf "\"query\":%s,", jstr(query)
   printf "\"mode\":\"exact\","
   printf "\"total_matches\":%d,", match_count
   printf "\"results\":["
   for (i = 1; i <= shown; i++) {
     printf "{"
-    printf "\"entity_type\":\"%s\",", escape_json(res_type[i])
-    printf "\"entity_id\":\"%s\",", escape_json(res_id[i])
-    printf "\"section\":\"%s\",", escape_json(res_section[i])
-    printf "\"snippet\":\"%s\"", escape_json(res_snippet[i])
+    printf "\"entity_type\":%s,", jstr(res_type[i])
+    printf "\"entity_id\":%s,", jstr(res_id[i])
+    printf "\"section\":%s,", jstr(res_section[i])
+    printf "\"snippet\":%s,", jstr(res_snippet[i])
+    printf "\"score\":0"
     printf "}"
     if (i < shown) printf ","
   }

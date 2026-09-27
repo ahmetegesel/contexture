@@ -227,7 +227,7 @@ verify_capabilities() {
     return 2
   fi
 
-  cap_json=$("$driver_exec" capability 2>&1)
+  cap_json=$("$driver_exec" capability 2>/dev/null </dev/null)
   cap_rc=$?
 
   if [ "$cap_rc" -ne 0 ]; then
@@ -235,57 +235,23 @@ verify_capabilities() {
     return 2
   fi
 
-  check_result=$(printf '%s\n' "$cap_json" | awk '
-    BEGIN {
-      mandatory["session.lifecycle"] = 1
-      mandatory["task.crud"] = 1
-      mandatory["task.atomic_completion"] = 1
-      mandatory["entry.journal"] = 1
-      mandatory["resolve.symbolic"] = 1
-      mandatory["search.keyword"] = 1
-      mandatory["artifact.store"] = 1
-      has_finding = 0
-      has_lane = 0
-      in_caps = 0
-    }
-    /"capabilities"[[:space:]]*:/ { in_caps = 1 }
-    in_caps {
-      line = $0
-      while (match(line, /"[^"]+"/)) {
-        cap = substr(line, RSTART + 1, RLENGTH-2)
-        line = substr(line, RSTART + RLENGTH)
-        found[cap] = 1
-        if (cap == "finding.knowledge" || cap == "finding.crud") has_finding = 1
-        if (cap == "lane.lifecycle" || cap == "lane.artifacts") has_lane = 1
-      }
-      if (/\]/) in_caps = 0
-    }
-    END {
-      missing = ""
-      for (m in mandatory) {
-        if (!found[m]) {
-          missing = missing " " m
-        }
-      }
-      if (!has_finding) {
-        missing = missing " finding.knowledge"
-      }
-      if (!has_lane) {
-        missing = missing " lane.lifecycle"
-      }
-      if (missing != "") {
-        sub(/^ /, "", missing)
-        print "MISSING:" missing
-        exit 1
-      }
-      exit 0
-    }
-  ')
-  check_rc=$?
-
-  if [ "$check_rc" -ne 0 ]; then
-    missing_caps=${check_result#MISSING:}
-    printf 'driver-resolver: ERROR: driver '\''%s'\'' missing mandatory capability: %s (ERR_CAPABILITY_UNSUPPORTED)\n' "$driver_name" "$missing_caps" >&2
+  # descriptor v2 (docs/the-engine.md, The descriptor and the handshake): contract "2" and
+  # every one of the 40 record functions; no record function is optional
+  check_result=$(printf '%s\n' "$cap_json" | desc_field contract)
+  if [ "$check_result" != 2 ]; then
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares contract '\''%s'\'', not 2 (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$check_result" >&2
+    return 2
+  fi
+  cap_have=" $(printf '%s\n' "$cap_json" | desc_field functions | tr '\n' ' ') "
+  missing_fns=""
+  for cap_f in $CONTRACT_FUNCTIONS; do
+    case "$cap_have" in
+      *" $cap_f "*) ;;
+      *) missing_fns="$missing_fns $cap_f" ;;
+    esac
+  done
+  if [ -n "$missing_fns" ]; then
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' lacks contract 2 function(s):%s (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$missing_fns" >&2
     return 2
   fi
 
@@ -293,19 +259,54 @@ verify_capabilities() {
   return 0
 }
 
+# the 40 record functions of contract 2
+CONTRACT_FUNCTIONS="capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query unit.export unit.import"
+
+# desc_field <key>: the value of one descriptor key on stdin: a string, or each element of
+# a list of strings on its own line (the descriptor is one compact JSON object; a legacy
+# pretty-printed descriptor reads the same)
+desc_field() {
+  DF_KEY="$1" awk '
+    { t = t $0 "\n" }
+    END {
+      k = "\"" ENVIRON["DF_KEY"] "\""
+      p = index(t, k)
+      if (p == 0) exit 0
+      r = substr(t, p + length(k))
+      sub(/^[ \t\r\n]*:[ \t\r\n]*/, "", r)
+      if (substr(r, 1, 1) == "[") {
+        e = index(r, "]")
+        r = substr(r, 2, e - 2)
+        while (match(r, /"[^"]*"/)) { print substr(r, RSTART + 1, RLENGTH - 2); r = substr(r, RSTART + RLENGTH) }
+      } else if (substr(r, 1, 1) == "\"") {
+        r = substr(r, 2)
+        print substr(r, 1, index(r, "\"") - 1)
+      }
+    }'
+}
+
+# verdict_fresh <verdict file> <driver path>: a cached verdict stands while it is strictly
+# newer than the driver and, when the workspace carries one, than its configuration (a
+# driver that reads configuration, such as the service's URL and key, is verified again
+# after the configuration changes)
+verdict_fresh() {
+  [ -f "$1" ] && [ "$1" -nt "$2" ] || return 1
+  if [ -f "$CTX_DIR/config" ] && [ ! "$1" -nt "$CTX_DIR/config" ]; then return 1; fi
+  return 0
+}
+
 # The handshake at dispatch: a driver other than the bundled posix driver proves its
-# mandatory capabilities before it serves any method, and a driver that fails halts the
-# call rc 2 with the missing capability named. The verdict is cached in the scratch
-# drawer, one file per driver path, valid while it is strictly newer than the driver
-# (test -nt), so the handshake runs once per driver change, never once per call; a driver
-# changed in the second of its verdict is verified again until a later verdict stands.
-# An unwritable drawer caches nothing and verifies on every call. The handshake reads
-# /dev/null, never the payload on stdin.
+# descriptor (contract "2" and all 40 record functions) before it serves any function, and
+# a driver that fails halts the call rc 2 ERR_DRIVER_PROTOCOL with the gap named. The
+# verdict is cached in the scratch drawer, one file per driver path, valid while fresh
+# (verdict_fresh), so the handshake runs once per driver change, never once per call; a
+# driver changed in the second of its verdict is verified again until a later verdict
+# stands. An unwritable drawer caches nothing and verifies on every call. The handshake
+# reads /dev/null, never the payload on stdin.
 handshake_at_dispatch() {
   hd_path="$1"
   hd_name="$2"
   [ "$hd_path" = "$CTX_DIR/modules/session/drivers/posix/driver" ] && return 0
-  [ -n "${CTX_REFERENCE_DRIVER:-}" ] && [ "$hd_path" = "$CTX_REFERENCE_DRIVER" ] && return 0
   hd_key=""
   hd_rest=$hd_path
   while :; do
@@ -316,7 +317,7 @@ handshake_at_dispatch() {
   done
   hd_dir="$CTX_DIR/tmp/driver-verdicts"
   hd_file="$hd_dir/$hd_key"
-  if [ -f "$hd_file" ] && [ "$hd_file" -nt "$hd_path" ]; then
+  if verdict_fresh "$hd_file" "$hd_path"; then
     return 0
   fi
   verify_capabilities "$hd_path" "$hd_name" >/dev/null </dev/null || return 2
@@ -329,19 +330,18 @@ handshake_at_dispatch() {
   return 0
 }
 
-# The optional capabilities (corpus.store, corpus.changelog) stay outside the dispatch
-# handshake's mandatory set, so a record-only driver keeps serving every session verb; a
-# caller that needs one asks the resolver first:
+# The optional capabilities (corpus.store, corpus.changelog) and the search modes stay
+# outside the dispatch handshake, so a record-only driver keeps serving every session verb;
+# a caller that needs one asks the resolver first (a search mode reads search.mode.<m>):
 #   require <capability>...  rc 0 when the configured driver declares every one; rc 2
 #                            ERR_CAPABILITY_UNSUPPORTED naming the missing ones otherwise
 #   has <capability>         rc 0 declared, rc 1 not declared, no message
 # The bundled posix driver answers from its descriptor like any other driver. A passing
 # verdict is cached in the scratch drawer, one file per driver path and capability set
-# (sorted, so the order of the arguments never matters), its name apart from the dispatch
-# verdict of the same driver (which it never answers or overwrites), valid while strictly
-# newer than the driver (the rule of handshake_at_dispatch); a missing capability is never
-# cached, and an unwritable drawer caches nothing. The descriptor is read with stdin from
-# /dev/null.
+# (sorted, so the order of the arguments never matters; has reads it and writes none), its name apart from the dispatch
+# verdict of the same driver (which it never answers or overwrites), valid while fresh (the
+# rule of handshake_at_dispatch); a missing capability is never cached, and an unwritable
+# drawer caches nothing. The descriptor is read with stdin from /dev/null.
 cap_token_valid() {
   case "$1" in
     ""|[!a-z]*|*[!a-z0-9._]*) return 1 ;;
@@ -349,21 +349,12 @@ cap_token_valid() {
   return 0
 }
 
-# driver_caps: the capability names of a descriptor on stdin, one per line
+# driver_caps: the capabilities a descriptor on stdin declares, one per line: its optional
+# capabilities, then each search mode as search.mode.<m>
 driver_caps() {
-  awk '
-    /"capabilities"[[:space:]]*:/ && !seen { in_caps = 1; seen = 1; first = 1 }
-    in_caps {
-      line = $0
-      if (first) { sub(/^.*"capabilities"[[:space:]]*:/, "", line); first = 0 }
-      e = index(line, "]")
-      if (e) line = substr(line, 1, e - 1)
-      while (match(line, /"[^"]+"/)) {
-        print substr(line, RSTART + 1, RLENGTH - 2)
-        line = substr(line, RSTART + RLENGTH)
-      }
-      if (e) in_caps = 0
-    }'
+  dc_json=$(cat)
+  printf '%s\n' "$dc_json" | desc_field optional
+  printf '%s\n' "$dc_json" | desc_field search_modes | sed 's/^/search.mode./'
 }
 
 # require_caps <quiet 0|1> <driver path> <driver name> <capability>...: rc 0 all declared,
@@ -384,7 +375,7 @@ require_caps() {
   done
   rq_dir="$CTX_DIR/tmp/driver-verdicts"
   rq_file="$rq_dir/$rq_key.require.$rq_tag"
-  if [ -f "$rq_file" ] && [ "$rq_file" -nt "$rq_path" ]; then
+  if verdict_fresh "$rq_file" "$rq_path"; then
     return 0
   fi
   if [ ! -x "$rq_path" ]; then
@@ -406,6 +397,9 @@ require_caps() {
     [ "$rq_quiet" -eq 1 ] || printf 'driver-resolver: ERROR: driver '\''%s'\'' lacks capability:%s (ERR_CAPABILITY_UNSUPPORTED)\n' "$rq_name" "$rq_missing" >&2
     return 3
   fi
+  # has is a probe: it reads a require verdict but never writes one, so the verdicts name
+  # exactly the capability sets callers required
+  [ "$rq_quiet" -eq 1 ] && return 0
   if mkdir -p "$rq_dir" 2>/dev/null; then
     rq_tmp="$rq_file.$$"
     if printf 'declares %s: %s\n' "$rq_path" "$rq_tag" > "$rq_tmp" 2>/dev/null; then
@@ -460,16 +454,8 @@ done
 
 TARGET_DRIVER=$(determine_driver_name "$CTX_DIR" "$CLI_DRIVER")
 
-# the reference serialization of the record grammar: the posix driver shipped beside this
-# resolver; an indexed driver renders the grammar through it (stdin, the payload, passes
-# through exec untouched)
-if [ -z "${CTX_REFERENCE_DRIVER:-}" ]; then
-  ref_dir=$(CDPATH="" cd "$(dirname "$0")/../drivers/posix" 2>/dev/null && pwd) || ref_dir=""
-  if [ -n "$ref_dir" ] && [ -x "$ref_dir/driver" ]; then
-    CTX_REFERENCE_DRIVER="$ref_dir/driver"
-    export CTX_REFERENCE_DRIVER
-  fi
-fi
+# contract 2: no backend delegates to another, so the resolver exports no reference
+# driver (the v0.54.0 CTX_REFERENCE_DRIVER retired with the delegate design)
 
 case "$COMMAND" in
   ""|resolve|--resolve)

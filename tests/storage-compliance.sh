@@ -553,7 +553,10 @@ tc "TC11: entry.get answers the entry open; an absent slug refuses rc1 ERR_ENTIT
 # journal list keeps both
 kv group topic-group; kv closers.count 1; kcl 1 CLOSES done "Closer event" "$ALPHA"
 rec "$TUNIT" 1790000011 "Closer event"
-answer; wantout "{\"unit\":\"compliance-tasks\",\"entry\":$(entry_json "$BETA" 1 5 '"A1"' "Closer event" '"topic-group"' '"none"' '[]' "[{\"kind\":\"CLOSES\",\"targets\":[\"$ALPHA\"],\"verdict\":\"done\",\"reason\":\"Closer event\",\"verbatim\":null}]" null)}"
+# the closer list is assigned first: bash 3.2 (the macOS sh) brace-expands a double-quoted
+# "[{a,b}]" argument inside a command substitution that itself sits in double quotes
+C12="[{\"kind\":\"CLOSES\",\"targets\":[\"$ALPHA\"],\"verdict\":\"done\",\"reason\":\"Closer event\",\"verbatim\":null}]"
+answer; wantout "{\"unit\":\"compliance-tasks\",\"entry\":$(entry_json "$BETA" 1 5 '"A1"' "Closer event" '"topic-group"' '"none"' '[]' "$C12" null)}"
 call entry.get "$TUNIT" "$ALPHA"
 answer; wantv entry.closed true; wantv entry.closed_by "\"$BETA\""; wantv entry.close_reason '"done: Closer event"'; wantv entry.next '"entry"'
 call session.board "$TUNIT"
@@ -672,7 +675,7 @@ wantfile "$SANDBOX/tc21-before.dump"
 tc "TC21: every refused write leaves the unit's dump byte-identical"
 
 # TC22: concurrent writers serialize: five entry.record calls at once with one date and
-# epoch land five entries under the slug and its suffixes -1 to -4, each exactly once
+# epoch land five entries under the slug suffixed -1 while the journal holds it (R6: X, X-1, X-1-1, and on), each exactly once
 X22=2026-09-27-event-1790000030
 _t22_i=1
 while [ "$_t22_i" -le 5 ]; do
@@ -689,7 +692,7 @@ while [ "$_t22_i" -le 5 ]; do
   _t22_i=$((_t22_i + 1))
 done
 _t22_sorted=$(printf '%s\n' $_t22_got | LC_ALL=C sort | tr '\n' ' ')
-[ "$_t22_sorted" = "\"$X22\" \"$X22-1\" \"$X22-2\" \"$X22-3\" \"$X22-4\" " ] || miss "concurrent slugs [$_t22_sorted]"
+[ "$_t22_sorted" = "\"$X22\" \"$X22-1\" \"$X22-1-1\" \"$X22-1-1-1\" \"$X22-1-1-1-1\" " ] || miss "concurrent slugs [$_t22_sorted]"
 call entry.list "$TUNIT"
 answer
 _t22_list=$(vals entries slug | tr ' ' '\n' | grep -c "\"$X22")
