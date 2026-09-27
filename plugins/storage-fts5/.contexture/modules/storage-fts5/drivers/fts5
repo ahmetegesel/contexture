@@ -1,27 +1,28 @@
 #!/bin/sh
-# SQLite FTS5 storage driver implementing the Storage Provider Interface (SPI).
+# drivers/fts5: the SQLite FTS5 storage driver (contract 2, docs/the-engine.md, The storage
+# contract). One sh entry point over the sqlite3 command line: the store is one database at
+# schema version 4 (schema.sql, the typed tables of the record data model, each item with its
+# verbatim; db-init.sh opens it and upgrades an older store in place through upgrade/), and
+# every one of the 40 record functions answers natively in SQL, one script per function
+# under sql/fn/ over the shared pieces of sql/lib/ (the call prelude and the payload, the
+# refusal point, the derived fields and the JSON of the schemas, the line toolkit of the
+# append and edit rules), beside the dump SQL (unit.export, unit.import) and the search
+# tables derive.sql rebuilds in the transaction of every write. No function reads markdown
+# or reaches another driver; the markdown of an older store is read once, by the upgrade.
 #
-# In transition to contract 2 (backlog#fts5-native): the store is at schema version 4
-# (schema.sql, the typed tables of the contract 2 data model), reached from any older
-# store by the in-place upgrade on its first open (db-init.sh, upgrade/), and unit.export
-# and unit.import answer natively in SQL (sql/). The methods below this note still speak
-# contract 1 over the version 3 artifacts table until their native rework, so the contract
-# 2 handshake refuses this driver until then.
+# The wire: argv carries the function and its bounded identifiers, checked here with the
+# posix driver's messages in its refusal order (the argv shape, the unit, CLOSED, then the
+# function's own rules, those in SQL); the free-text fields arrive on stdin as escaped
+# key=value payload lines, staged in a per-call scratch folder under the workspace's
+# .contexture/tmp and read by the SQL with readfile(); a document (a recipe, a report, a
+# dump) arrives raw. The answer is one compact JSON line built with json_object in the
+# contract key order; a refusal is one stderr line "<function>: error: <message> (<CODE>)"
+# with nothing on stdout. Exit tiers: 0 ok, 1 semantic, 2 storage or driver.
 #
-# The store keeps every artifact's canonical text verbatim (the artifacts table) and a
-# derived relational index rebuilt from that text (index.sh), which feeds the dual FTS5
-# tables and the pure SQL RRF search. Native methods: capability, storage.health,
-# artifact.read, artifact.write, artifact.list, session.create, session.list,
-# search.query, and the corpus store (corpus.list, read, write, remove, mount, changes;
-# capabilities corpus.store and corpus.changelog). Every other method (session.*, task.*, entry.*, finding.*, lane.*,
-# resolve.ref) is the record grammar itself: it runs through the reference serialization
-# (the posix driver) over the unit materialized from the store into a scratch workspace,
-# and every artifact it changed is stored back with its reindex in one transaction, so
-# the two drivers answer every method alike by construction.
-#
-# Transport: argv carries the method and its identifiers; free-text fields arrive on
-# stdin as payload lines key=value (escaped), a single-document write as raw stdin.
-# Exit tiers: 0 ok, 1 semantic (bad argument, absent entity), 2 storage or driver.
+# Writes: one transaction each (BEGIN IMMEDIATE to COMMIT, whole or nothing), under the unit
+# write lock (.contexture/tmp/locks/fts5-<unit>.lock) so writers of one unit serialize; the
+# answer prints only after the commit. The six corpus methods of v0.54.0 are kept as shipped
+# (corpus.store, corpus.changelog) until backlog#docs-corpus-port.
 
 set -u
 
@@ -33,6 +34,9 @@ fi
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 MODULE_DIR=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 SCHEMA_SQL="$MODULE_DIR/schema.sql"
+SQL_DIR="$MODULE_DIR/sql"
+LC_ALL=C
+export LC_ALL
 
 find_workspace_root() {
   curr="$PWD"
@@ -72,10 +76,8 @@ if ! mkdir -p "$DB_TMP" 2>/dev/null || [ ! -w "$DB_TMP" ]; then
   DB_TMP="${TMPDIR:-/tmp}"
 fi
 
-# the open path (fresh schema, the upgrades, later tables): one home for driver and migration
+# the open path (a fresh schema, the in-place upgrade of an older store)
 . "$MODULE_DIR/db-init.sh"
-# the derived index rebuilt from an artifact's text: one home for driver and migration
-. "$MODULE_DIR/index.sh"
 
 sql_escape() {
   printf '%s' "$1" | sed "s/'/''/g"
@@ -85,6 +87,7 @@ now_utc() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
+# a written unit, task, lane slug: ^[A-Za-z0-9][A-Za-z0-9_-]*$
 slug_valid() {
   case "$1" in
     ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
@@ -92,17 +95,12 @@ slug_valid() {
   return 0
 }
 
-# a write that sqlite3 refuses (a constraint, a lock, a full disk) must never print its
-# success payload: storage-tier error, rc 2; -bail stops at the first failing statement
-write_failed() {
-  printf '%s: error: the storage write failed (ERR_STORAGE_WRITE)\n' "$CMD" >&2
-  exit 2
-}
-
-unit_exists() {
-  [ -f "$DB_PATH" ] || return 1
-  # a version 4 store has no sessions table: the contract 1 methods read it as no unit
-  [ "$(sq "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$1")';" 2>/dev/null)" -gt 0 ] 2>/dev/null
+# the entry slug and the finding NAME a read addresses: the legacy shapes stay addressable
+name_valid() {
+  case "$1" in
+    ""|[!A-Za-z0-9_]*|*[!A-Za-z0-9_.-]*) return 1 ;;
+  esac
+  return 0
 }
 
 # a read never creates the store: without a database file there is nothing to read
@@ -113,14 +111,16 @@ db_open_read() {
 }
 
 SCRATCH=""
+LOCK_DIR=""
 cleanup() {
   [ -n "$SCRATCH" ] && rm -rf "$SCRATCH"
-  [ -n "${LOCK_DIR:-}" ] && rm -rf "$LOCK_DIR"
+  [ -n "$LOCK_DIR" ] && rm -rf "$LOCK_DIR"
   return 0
 }
 trap cleanup EXIT
 # a HUP, INT, or TERM exits through the EXIT trap (dash runs no EXIT trap on a signal it
-# does not trap), so an interrupted method leaves no scratch unit and no held lock
+# does not trap), so an interrupted function leaves no scratch and no held lock; an open
+# transaction rolls back with its connection
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -134,8 +134,8 @@ scratch() {
   fi
 }
 
-# a unit write lock: the materialize, render, store sequence of one writer is serialized
-LOCK_DIR=""
+# the unit write lock: the writers of one unit serialize (beside the transaction itself, so a
+# held lock is the one lever a probe can hold them with)
 acquire_lock() {
   mkdir -p "$DB_TMP/locks" 2>/dev/null || true
   lk="$DB_TMP/locks/fts5-$1.lock"
@@ -151,18 +151,6 @@ acquire_lock() {
   LOCK_DIR="$lk"
 }
 
-# key_of <path below a unit folder>: the artifact key (state, lane/<l>/journal, ...)
-key_of() {
-  case "$1" in
-    state.md|backlog.md|knowledge.md|journal.md) printf '%s\n' "${1%.md}" ;;
-    lanes/*/recipe.md|lanes/*/journal.md|lanes/*/report.md)
-      ko=${1#lanes/}
-      printf 'lane/%s\n' "${ko%.md}"
-      ;;
-    *) return 1 ;;
-  esac
-}
-
 if [ $# -eq 0 ]; then
   printf 'fts5-driver: error: missing command (ERR_INVALID_ARGUMENT)\n' >&2
   exit 1
@@ -170,274 +158,6 @@ fi
 
 CMD="$1"
 shift
-
-# ==============================================================================
-# The reference serialization: the record grammar over the materialized unit
-# ==============================================================================
-find_reference() {
-  if [ -n "${CTX_REFERENCE_DRIVER:-}" ] && [ -x "$CTX_REFERENCE_DRIVER" ]; then
-    printf '%s\n' "$CTX_REFERENCE_DRIVER"; return 0
-  fi
-  for rf in "$ROOT/.contexture/modules/session/drivers/posix/driver" \
-            "$MODULE_DIR/../session/drivers/posix/driver"; do
-    if [ -x "$rf" ]; then printf '%s\n' "$rf"; return 0; fi
-  done
-  return 1
-}
-
-# materialize <unit> <lane>: the unit's main artifacts (and one lane's, when named) as
-# files of a scratch workspace; an absent unit leaves no folder, so the grammar reports it
-materialize() {
-  mt_u=$1
-  mt_l=$2
-  mkdir -p "$SCRATCH/ws/.contexture/tmp" "$SCRATCH/ws/.contexture/sessions"
-  unit_exists "$mt_u" || return 0
-  mt_d="$SCRATCH/ws/.contexture/sessions/$mt_u"
-  mkdir -p "$mt_d"
-  mt_q=$(sql_escape "$mt_u")
-  sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$mt_d")/' || name || '.md', body) FROM artifacts WHERE unit = '$mt_q' AND lane_slug = '';" >/dev/null || exit 2
-  if [ -n "$mt_l" ] && slug_valid "$mt_l"; then
-    mt_lq=$(sql_escape "$mt_l")
-    if [ "$(sq "$DB_PATH" "SELECT count(*) FROM lanes WHERE unit = '$mt_q' AND lane_slug = '$mt_lq';")" -gt 0 ]; then
-      mkdir -p "$mt_d/lanes/$mt_l"
-      sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$mt_d/lanes/$mt_l")/' || name || '.md', body) FROM artifacts WHERE unit = '$mt_q' AND lane_slug = '$mt_lq';" >/dev/null || exit 2
-    fi
-  fi
-}
-
-delegate() {
-  dl_ref=$(find_reference) || {
-    printf '%s: error: the reference serialization (the posix driver) was not found; set CTX_REFERENCE_DRIVER (ERR_DRIVER_NOT_FOUND)\n' "$CMD" >&2
-    exit 2
-  }
-  scratch
-  dl_u="${1:-}"
-  dl_lane=""
-  case "$CMD" in
-    lane.*) dl_lane="${2:-}" ;;
-    resolve.ref)
-      case "${2:-}" in
-        lane\#*/report\#*) dl_lane="${2#lane#}"; dl_lane="${dl_lane%%/*}" ;;
-        lanes/*) dl_lane="${2#lanes/}"; dl_lane="${dl_lane%%/*}" ;;
-      esac
-      ;;
-  esac
-  # the payload: the fields of a payload method, the raw body of a document write
-  dl_in=/dev/null
-  case "$CMD" in
-    session.init|session.stamp|session.pointer|task.add|task.update|task.start|task.complete|task.drop|entry.record|finding.add|finding.update|finding.supersede|lane.create|lane.record|lane.close)
-      dl_in="$SCRATCH/payload"; cat > "$dl_in" ;;
-    lane.report)
-      for dl_a in "$@"; do [ "$dl_a" = "--write" ] && { dl_in="$SCRATCH/payload"; cat > "$dl_in"; }; done ;;
-  esac
-  dl_write=1
-  case "$CMD" in
-    session.load|session.board|session.audit|task.list|task.show|entry.show|entry.list|entry.anchors|finding.show|finding.list|lane.show|lane.status|resolve.ref) dl_write=0 ;;
-    lane.report) [ "$dl_in" = /dev/null ] && dl_write=0 ;;
-  esac
-  if [ "$dl_write" -eq 1 ]; then
-    db_init
-    slug_valid "$dl_u" && acquire_lock "$dl_u"
-  else
-    db_open_read || true
-  fi
-  materialize "$dl_u" "$dl_lane"
-  if [ "$dl_write" -eq 1 ]; then
-    cp -R "$SCRATCH/ws/.contexture/sessions" "$SCRATCH/pre"
-  fi
-  (cd "$SCRATCH/ws" && "$dl_ref" "$CMD" "$@" < "$dl_in" > "$SCRATCH/out" 2> "$SCRATCH/err")
-  dl_rc=$?
-  if [ "$dl_rc" -eq 0 ] && [ "$dl_write" -eq 1 ] && slug_valid "$dl_u" && [ -d "$SCRATCH/ws/.contexture/sessions/$dl_u" ]; then
-    dl_now=$(now_utc)
-    dl_sql="$SCRATCH/store.sql"
-    dl_n=0
-    {
-      printf 'PRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n'
-      printf "INSERT OR IGNORE INTO sessions (unit, status, current_anchor, objective, next_action, repos, ref_sessions, created_at) VALUES ('%s', 'ACTIVE', 'A1', '', 'plan the next move', '[]', '[]', '%s');\n" "$(sql_escape "$dl_u")" "$dl_now"
-    } > "$dl_sql"
-    dl_files=$(cd "$SCRATCH/ws/.contexture/sessions/$dl_u" && find . -type f | sed 's|^\./||' | LC_ALL=C sort)
-    for dl_f in $dl_files; do
-      dl_key=$(key_of "$dl_f") || continue
-      dl_path="$SCRATCH/ws/.contexture/sessions/$dl_u/$dl_f"
-      if [ -f "$SCRATCH/pre/$dl_u/$dl_f" ] && cmp -s "$dl_path" "$SCRATCH/pre/$dl_u/$dl_f"; then
-        continue
-      fi
-      idx_artifact_sql "$dl_u" "$dl_key" "$dl_path" "$dl_now" >> "$dl_sql"
-      dl_n=$((dl_n + 1))
-    done
-    printf 'COMMIT;\n' >> "$dl_sql"
-    if [ "$dl_n" -gt 0 ]; then
-      sq -bail "$DB_PATH" < "$dl_sql" > /dev/null || write_failed
-    fi
-  fi
-  cat "$SCRATCH/out"
-  cat "$SCRATCH/err" >&2
-  exit "$dl_rc"
-}
-
-# ==============================================================================
-# Search: the uniform result shape over the FTS5 index
-# ==============================================================================
-sanitize_fts_query() {
-  # each token quoted, so a hyphen or punctuation never reads as FTS5 syntax; Turkish
-  # characters and symbols pass unchanged
-  printf '%s' "$1" | awk '{
-    for (i = 1; i <= NF; i++) {
-      gsub(/"/, "\"\"", $i);
-      printf "\"%s\"%s", $i, (i == NF ? "" : " ");
-    }
-  }'
-}
-
-# search_exact_reference <unit> <options>: every artifact of the unit materialized into the
-# scratch workspace (the lanes included), then the reference driver's search.query with
-# the same payload and options; its answer, stderr, and exit code pass through
-search_exact_reference() {
-  se_u=$1
-  shift
-  se_ref=$(find_reference) || {
-    printf '%s: error: the reference serialization (the posix driver) was not found; set CTX_REFERENCE_DRIVER (ERR_DRIVER_NOT_FOUND)\n' "$CMD" >&2
-    exit 2
-  }
-  se_d="$SCRATCH/ws/.contexture/sessions/$se_u"
-  mkdir -p "$SCRATCH/ws/.contexture/tmp" "$se_d" || exit 2
-  se_q=$(sql_escape "$se_u")
-  for se_l in $(sq "$DB_PATH" "SELECT DISTINCT lane_slug FROM artifacts WHERE unit = '$se_q' AND lane_slug <> '';"); do
-    slug_valid "$se_l" && mkdir -p "$se_d/lanes/$se_l"
-  done
-  sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$se_d")' || CASE lane_slug WHEN '' THEN '' ELSE '/lanes/' || lane_slug END || '/' || name || '.md', body) FROM artifacts WHERE unit = '$se_q';" >/dev/null || exit 2
-  (cd "$SCRATCH/ws" && "$se_ref" search.query "$se_u" "$@" < "$SCRATCH/payload" > "$SCRATCH/out" 2> "$SCRATCH/err")
-  se_rc=$?
-  cat "$SCRATCH/out"
-  cat "$SCRATCH/err" >&2
-  exit "$se_rc"
-}
-
-search_query() {
-  sq_u="${1:-}"
-  [ $# -gt 0 ] && shift
-  sq_limit=20
-  sq_entity=""
-  sq_mode="hybrid"
-  for sq_a in "$@"; do
-    case "$sq_a" in
-      --limit=*) sq_limit="${sq_a#--limit=}" ;;
-      --entity=*) sq_entity="${sq_a#--entity=}" ;;
-      --mode=*) sq_mode="${sq_a#--mode=}" ;;
-      *) printf "search.query: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$sq_a" >&2; exit 1 ;;
-    esac
-  done
-  scratch
-  cat > "$SCRATCH/payload"
-  sq_q=$(awk 'index($0, "query=") == 1 { v = substr($0, 7); gsub(/\\\\/, "\001", v); gsub(/\\n/, "\n", v); gsub(/\\t/, "\t", v); gsub(/\\r/, "\r", v); gsub(/\001/, "\\", v); printf "%s", v; exit }' "$SCRATCH/payload"; printf x)
-  sq_q=${sq_q%x}
-  if [ -z "$sq_u" ] || [ -z "$(printf '%s' "$sq_q" | tr -d ' \t\n')" ]; then
-    printf 'search.query: error: missing required arguments (unit, query) (ERR_INVALID_ARGUMENT)\n' >&2
-    exit 1
-  fi
-  case "$sq_limit" in
-    ""|*[!0-9]*|0) printf "search.query: error: --limit takes a positive number: '%s' (ERR_INVALID_ARGUMENT)\n" "$sq_limit" >&2; exit 1 ;;
-  esac
-  case "$sq_entity" in
-    all) sq_entity="" ;;
-    ""|session|task|entry|finding|lane|lane_entry) ;;
-    *) printf "search.query: error: unknown entity type '%s' (session, task, entry, finding, lane, lane_entry, all) (ERR_INVALID_ARGUMENT)\n" "$sq_entity" >&2; exit 1 ;;
-  esac
-  case "$sq_mode" in
-    hybrid|trigram|exact) ;;
-    *) printf "search.query: error: unknown mode '%s' (exact, hybrid, trigram) (ERR_INVALID_ARGUMENT)\n" "$sq_mode" >&2; exit 1 ;;
-  esac
-  db_open_read || true
-  if ! unit_exists "$sq_u"; then
-    printf "search.query: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$sq_u" >&2
-    exit 1
-  fi
-  sq_uq=$(sql_escape "$sq_u")
-  sq_eq=$(sql_escape "$sq_entity")
-  sq_qq=$(sql_escape "$sq_q")
-  sq_safe=$(sql_escape "$(sanitize_fts_query "$sq_q")")
-  sq_filter="s.unit = '$sq_uq' AND ('$sq_eq' = '' OR s.entity_type = '$sq_eq')"
-  case "$sq_mode" in
-    exact)
-      # exact mode means one thing on every driver: the reference serialization's substring
-      # search over the verbatim artifacts (every one of the unit, its lanes included),
-      # so the entity set, the rows, and the total match the posix driver by construction
-      search_exact_reference "$sq_u" "$@"
-      ;;
-    trigram)
-      sq "$DB_PATH" <<EOF
-WITH
-  raw AS (
-    SELECT rowid AS doc_id, rank, snippet(fts_code, -1, '<b>', '</b>', '...', 12) AS snip
-    FROM fts_code WHERE fts_code MATCH '$sq_safe'
-  ),
-  ranked AS (SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw),
-  hits AS (
-    SELECT r.doc_id, s.entity_type, s.entity_id, s.section, round(1.0 / (60.0 + r.rnk), 6) AS rrf_score, 1 AS sources, r.snip AS snippet
-    FROM ranked r JOIN search_documents s ON s.doc_id = r.doc_id
-    WHERE $sq_filter
-  ),
-  shown AS (SELECT * FROM hits ORDER BY rrf_score DESC, doc_id LIMIT $sq_limit)
-SELECT json_object(
-  'unit', '$sq_uq',
-  'query', '$sq_qq',
-  'mode', 'trigram',
-  'total_matches', (SELECT count(*) FROM hits),
-  'results', coalesce((
-    SELECT json_group_array(json_object(
-      'entity_type', entity_type, 'entity_id', entity_id, 'section', section, 'snippet', snippet,
-      'rrf_score', rrf_score, 'sources', sources))
-    FROM (SELECT * FROM shown ORDER BY rrf_score DESC, doc_id)
-  ), json_array())
-);
-EOF
-      ;;
-    hybrid)
-      # Reciprocal Rank Fusion of the porter table and the trigram table
-      sq "$DB_PATH" <<EOF
-WITH
-  raw_prose AS (
-    SELECT rowid AS doc_id, rank, snippet(fts_prose, -1, '<b>', '</b>', '...', 12) AS snip
-    FROM fts_prose WHERE fts_prose MATCH '$sq_safe'
-  ),
-  ranked_prose AS (SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_prose),
-  raw_code AS (
-    SELECT rowid AS doc_id, rank, snippet(fts_code, -1, '<b>', '</b>', '...', 12) AS snip
-    FROM fts_code WHERE fts_code MATCH '$sq_safe'
-  ),
-  ranked_code AS (SELECT doc_id, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_code),
-  combined AS (
-    SELECT doc_id, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_prose
-    UNION ALL
-    SELECT doc_id, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_code
-  ),
-  fused AS (
-    SELECT c.doc_id, round(sum(c.score), 6) AS rrf_score, count(c.doc_id) AS sources, max(c.snip) AS snippet
-    FROM combined c GROUP BY c.doc_id
-  ),
-  hits AS (
-    SELECT f.doc_id, s.entity_type, s.entity_id, s.section, f.rrf_score, f.sources, f.snippet
-    FROM fused f JOIN search_documents s ON s.doc_id = f.doc_id
-    WHERE $sq_filter
-  ),
-  shown AS (SELECT * FROM hits ORDER BY rrf_score DESC, doc_id LIMIT $sq_limit)
-SELECT json_object(
-  'unit', '$sq_uq',
-  'query', '$sq_qq',
-  'mode', 'hybrid',
-  'total_matches', (SELECT count(*) FROM hits),
-  'results', coalesce((
-    SELECT json_group_array(json_object(
-      'entity_type', entity_type, 'entity_id', entity_id, 'section', section, 'snippet', snippet,
-      'rrf_score', rrf_score, 'sources', sources))
-    FROM (SELECT * FROM shown ORDER BY rrf_score DESC, doc_id)
-  ), json_array())
-);
-EOF
-      ;;
-  esac
-  exit 0
-}
 
 # ==============================================================================
 # The corpus store (capabilities corpus.store and corpus.changelog)
@@ -699,7 +419,6 @@ corpus_changes() {
   sq -bail "$DB_PATH" < "$SCRATCH/changes.sql" || exit 2
   exit 0
 }
-
 # ==============================================================================
 # The dump (contract 2, docs/the-engine.md, The dump): unit.export and unit.import
 # ==============================================================================
@@ -728,9 +447,9 @@ unit_held() {
 # unit.export <unit>: the unit's dump lines on stdout
 unit_export() {
   want_unit "${1:-}"
-  [ $# -le 1 ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$2'"
   db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
   unit_held "$1" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
+  [ $# -le 1 ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$2'"
   scratch
   printf "CREATE TEMP TABLE arg (k TEXT PRIMARY KEY, v TEXT);\nINSERT INTO temp.arg VALUES ('unit', '%s');\n.read '%s'\n" \
     "$(sql_escape "$1")" "$SQL_DIR/unit.export.sql" > "$SCRATCH/export.sql"
@@ -791,173 +510,237 @@ unit_import() {
 }
 
 # ==============================================================================
-# The native methods
+# The record functions (contract 2): the argv shape here, every record rule in SQL
 # ==============================================================================
+# A call runs one sqlite3 process over one script: the call header (temp.arg: the function,
+# the unit, the other argv tokens a1..aN, the staged payload and document files), then
+# sql/lib/prelude.sql and sql/fn/<function>.sql, with sqlite3 working in sql/ so the scripts
+# read their pieces by relative path. A script refuses by printing one ERR|<rc>|<code>|<msg>
+# line and stopping (sql/lib/stop.sql); a write prints its answer inside its transaction
+# and commits after, so an answer reaches stdout only when sqlite3 exits 0.
+CALL=""
+call_begin() {
+  scratch
+  CALL="$SCRATCH/call.sql"
+  printf 'PRAGMA foreign_keys = ON;\nCREATE TEMP TABLE arg (k TEXT PRIMARY KEY, v TEXT);\n' > "$CALL"
+  call_arg fn "$CMD"
+}
+
+call_arg() {
+  printf "INSERT INTO temp.arg VALUES ('%s', '%s');\n" "$1" "$(sql_escape "$2")" >> "$CALL"
+}
+
+# call_argv <token...>: the argv after the unit as a1..aN, na their count
+call_argv() {
+  ca_i=0
+  for ca_v in "$@"; do
+    ca_i=$((ca_i + 1))
+    call_arg "a$ca_i" "$ca_v"
+  done
+  call_arg na "$ca_i"
+}
+
+# the payload lines, staged whole; the SQL decodes them
+call_payload() {
+  cat > "$SCRATCH/pay" || refuse 2 ERR_STORAGE_READ "cannot read the payload"
+  call_arg pay "$SCRATCH/pay"
+}
+
+# a raw document (a recipe, a report), staged whole with its byte count
+call_doc() {
+  cat > "$SCRATCH/doc" || refuse 2 ERR_STORAGE_READ "cannot read the document"
+  call_arg doc "$SCRATCH/doc"
+  call_arg docsize "$(wc -c < "$SCRATCH/doc" | tr -d ' ')"
+}
+
+# call_run <function script> <read|write>: the script over the store; its refusal, a storage
+# failure, or its answer
+call_run() {
+  printf '.read lib/prelude.sql\n.read fn/%s.sql\n' "$1" >> "$CALL"
+  (cd "$SQL_DIR" && sq -bail "$DB_PATH" < "$CALL" > "$SCRATCH/out" 2> "$SCRATCH/err")
+  cr_rc=$?
+  case "$(sed -n '1p' "$SCRATCH/out")" in
+    'ERR|'*)
+      cr_l=$(cat "$SCRATCH/out")
+      cr_l=${cr_l#ERR|}
+      cr_t=${cr_l%%|*}
+      cr_l=${cr_l#*|}
+      cr_c=${cr_l%%|*}
+      cr_m=${cr_l#*|}
+      printf '%s: error: %s (%s)\n' "$CMD" "$cr_m" "$cr_c" >&2
+      exit "$cr_t"
+      ;;
+  esac
+  if [ "$cr_rc" -ne 0 ]; then
+    cr_e=$(sed -n '1p' "$SCRATCH/err")
+    case "$cr_e" in
+      *"database is locked"*|*"database table is locked"*) refuse 2 ERR_STORAGE_LOCKED "the store is locked by another writer" ;;
+    esac
+    [ "$2" = write ] && refuse 2 ERR_STORAGE_WRITE "the storage write failed: $cr_e"
+    refuse 2 ERR_STORAGE_READ "the storage read failed: $cr_e"
+  fi
+  cat "$SCRATCH/out"
+  exit 0
+}
+
+# px_extra <n> <argv...>: no argument beyond the n the function takes
+px_extra() {
+  pe_n=$1
+  shift
+  [ $# -le "$pe_n" ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$(eval "printf '%s' \"\${$((pe_n + 1))}\"")'"
+}
+
+# want_held <unit>: a well formed unit the store holds (a read of a store without a database
+# file finds no unit)
+want_held() {
+  want_unit "${1:-}"
+  db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
+  unit_held "$1" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
+}
+
+# rec_read <function> <unit> <argv after the unit...>: a read of one unit (the held check in
+# SQL, lib/held.sql)
+rec_read() {
+  rr_f=$1
+  rr_u=$2
+  shift 2
+  db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$rr_u' not found"
+  call_begin
+  call_arg unit "$rr_u"
+  call_argv "$@"
+  call_run "$rr_f" read
+}
+
+# rec_write <function> <unit> <payload|doc|none> <argv after the unit...>: a write of one unit,
+# its input staged, under the unit write lock, in one transaction
+rec_write() {
+  rw_f=$1
+  rw_u=$2
+  rw_in=$3
+  shift 3
+  [ -f "$DB_PATH" ] || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$rw_u' not found"
+  call_begin
+  call_arg unit "$rw_u"
+  call_argv "$@"
+  case "$rw_in" in
+    payload) call_payload ;;
+    doc) call_doc ;;
+  esac
+  acquire_lock "$rw_u"
+  db_init
+  call_run "$rw_f" write
+}
+
+want_task_slug() {
+  [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the task slug"
+  slug_valid "$1" || refuse 1 ERR_INVALID_ARGUMENT "malformed task slug '$1'"
+}
+
+want_lane() {
+  [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
+  slug_valid "$1" || refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$1'"
+}
+
+capability() {
+  printf '{"driver":"fts5","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","unit.export","unit.import","corpus.list","corpus.read","corpus.write","corpus.remove","corpus.mount","corpus.changes"],"search_modes":["exact","hybrid","trigram"],"optional":["corpus.store","corpus.changelog"]}\n'
+}
+
+# storage.health: a probe, never a write: an absent database reports degraded with store
+# absent (the store starts at the first bootstrap), and an older store is not upgraded here
+storage_health() {
+  if [ ! -f "$DB_PATH" ]; then
+    printf '{"driver":"fts5","health":"degraded","detail":"database not created yet (will be initialized on bootstrap)","store":"absent","active_units":0}\n'
+    exit 0
+  fi
+  sh_p=$(sq "$DB_PATH" "SELECT (SELECT user_version FROM pragma_user_version) || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table');" 2>/dev/null) || {
+    printf '{"driver":"fts5","health":"error","detail":"database unreadable","store":"absent","active_units":0}\n'
+    exit 0
+  }
+  sh_v=${sh_p%%|*}
+  sh_t=${sh_p#*|}
+  if [ "$sh_t" = 0 ]; then
+    printf '{"driver":"fts5","health":"degraded","detail":"database present, no unit stored yet","store":"absent","active_units":0}\n'
+    exit 0
+  fi
+  if [ "$sh_v" != "$DB_SCHEMA_VERSION" ]; then
+    printf '{"driver":"fts5","health":"degraded","detail":"database at schema %s; it upgrades in place on its first open","store":"present","active_units":0}\n' "$sh_v"
+    exit 0
+  fi
+  sh_c=$(sq "$DB_PATH" "SELECT count(*) || '|' || (SELECT count(*) FROM units WHERE status = 'ACTIVE') FROM units;" 2>/dev/null) || sh_c="0|0"
+  sh_n=${sh_c%%|*}
+  sh_a=${sh_c#*|}
+  if [ "$sh_n" = 0 ]; then
+    printf '{"driver":"fts5","health":"degraded","detail":"database present, no unit stored yet","store":"absent","active_units":0}\n'
+  elif [ ! -w "$DB_PATH" ]; then
+    printf '{"driver":"fts5","health":"error","detail":"database file not writable","store":"present","active_units":%s}\n' "$sh_a"
+  elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
+    printf '{"driver":"fts5","health":"error","detail":"database integrity check failed","store":"present","active_units":%s}\n' "$sh_a"
+  else
+    printf '{"driver":"fts5","health":"ok","detail":"database present and writable","store":"present","active_units":%s}\n' "$sh_a"
+  fi
+  exit 0
+}
+
+# search.query <unit> [--limit=N] [--entity=T] [--mode=M] | query: the shapes here, the
+# exact rule over the lines table and the ranked modes over the FTS5 tables in SQL
+search_query() {
+  want_unit "${1:-}"
+  sq_u=$1
+  shift
+  sq_limit=20
+  sq_entity=all
+  sq_mode=exact
+  for sq_a in "$@"; do
+    case "$sq_a" in
+      --limit=*) sq_limit="${sq_a#--limit=}" ;;
+      --entity=*) sq_entity="${sq_a#--entity=}" ;;
+      --mode=*) sq_mode="${sq_a#--mode=}" ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$sq_a'" ;;
+    esac
+  done
+  case "$sq_limit" in
+    ""|*[!0-9]*|0) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$sq_limit'" ;;
+  esac
+  case "$sq_entity" in
+    all|session|task|entry|finding|lane|lane_entry) ;;
+    *) refuse 1 ERR_INVALID_ARGUMENT "unknown entity type '$sq_entity' (session, task, entry, finding, lane, lane_entry, all)" ;;
+  esac
+  case "$sq_mode" in
+    ""|[!a-z]*|*[!a-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$sq_mode'" ;;
+  esac
+  db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sq_u' not found"
+  call_begin
+  call_arg unit "$sq_u"
+  call_arg limit "$sq_limit"
+  call_arg entity "$sq_entity"
+  call_arg mode "$sq_mode"
+  call_payload
+  case "$sq_mode" in
+    hybrid|trigram) call_run search.ranked read ;;
+    *) call_run search.query read ;;
+  esac
+}
+
+# session.refload <unit>...: every named unit well formed and held, in argv order
+session_refload() {
+  [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "missing the unit"
+  db_open_read || { want_unit "$1"; refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"; }
+  sr_held=" $(sq "$DB_PATH" "SELECT group_concat(unit, ' ') FROM units;" 2>/dev/null) "
+  for sr_u in "$@"; do
+    want_unit "$sr_u"
+    case "$sr_held" in *" $sr_u "*) ;; *) refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sr_u' not found" ;; esac
+  done
+  call_begin
+  call_arg unit "$1"
+  shift
+  call_argv "$@"
+  call_run session.refload read
+}
+
 case "$CMD" in
   unit.export) unit_export "$@" ;;
   unit.import) unit_import "$@" ;;
-
-  capability)
-    cat <<'EOF'
-{
-  "driver": "fts5",
-  "version": "2.0.0",
-  "capabilities": [
-    "session.lifecycle",
-    "task.crud",
-    "task.atomic_completion",
-    "entry.journal",
-    "finding.crud",
-    "finding.knowledge",
-    "lane.artifacts",
-    "lane.lifecycle",
-    "resolve.symbolic",
-    "search.keyword",
-    "search.fts5",
-    "search.rrf",
-    "search.trigram",
-    "artifact.store",
-    "corpus.store",
-    "corpus.changelog"
-  ]
-}
-EOF
-    exit 0
-    ;;
-
-  storage.health)
-    # a probe, never a write: an absent database, or one that holds no unit yet, reports
-    # degraded (the store starts at the first bootstrap), and is never created here
-    if [ ! -f "$DB_PATH" ]; then
-      printf '{"driver":"fts5","health":"degraded","detail":"database not created yet (will be initialized on bootstrap)"}\n'
-    elif [ "$(sq "$DB_PATH" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='sessions';" 2>/dev/null)" != "1" ] || [ "$(sq "$DB_PATH" "SELECT count(*) FROM sessions;" 2>/dev/null)" = "0" ]; then
-      printf '{"driver":"fts5","health":"degraded","detail":"database present, no session stored yet"}\n'
-    elif [ ! -w "$DB_PATH" ]; then
-      printf '{"driver":"fts5","health":"error","detail":"database file not writable"}\n'
-    elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
-      printf '{"driver":"fts5","health":"error","detail":"database integrity check failed"}\n'
-    else
-      printf '{"driver":"fts5","health":"ok","detail":"database present and writable"}\n'
-    fi
-    exit 0
-    ;;
-
-  artifact.read)
-    ar_u="${1:-}"
-    ar_key="${2:-}"
-    if [ -z "$ar_u" ] || [ -z "$ar_key" ]; then
-      printf 'artifact.read: error: missing required arguments (unit, key) (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    case "$ar_key" in
-      state|backlog|knowledge|journal) ar_lane=""; ar_name="$ar_key" ;;
-      lane/*/recipe|lane/*/journal|lane/*/report) ar_rest=${ar_key#lane/}; ar_lane=${ar_rest%/*}; ar_name=${ar_rest##*/} ;;
-      *) printf "artifact.read: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$ar_key" >&2; exit 1 ;;
-    esac
-    if ! db_open_read; then
-      printf "artifact.read: error: artifact '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ar_key" "$ar_u" >&2
-      exit 1
-    fi
-    scratch
-    sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$SCRATCH/art")', body) FROM artifacts WHERE unit = '$(sql_escape "$ar_u")' AND lane_slug = '$(sql_escape "$ar_lane")' AND name = '$(sql_escape "$ar_name")';" > /dev/null || exit 2
-    if [ ! -f "$SCRATCH/art" ]; then
-      printf "artifact.read: error: artifact '%s' not found in session '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ar_key" "$ar_u" >&2
-      exit 1
-    fi
-    cat "$SCRATCH/art"
-    exit 0
-    ;;
-
-  artifact.write)
-    aw_u="${1:-}"
-    aw_key="${2:-}"
-    if [ -z "$aw_u" ] || [ -z "$aw_key" ]; then
-      printf 'artifact.write: error: missing required arguments (unit, key) (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    case "$aw_key" in
-      state|backlog|knowledge|journal) ;;
-      lane/*/recipe|lane/*/journal|lane/*/report)
-        aw_l=${aw_key#lane/}; aw_l=${aw_l%/*}
-        slug_valid "$aw_l" || { printf "artifact.write: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$aw_key" >&2; exit 1; }
-        ;;
-      *) printf "artifact.write: error: unknown artifact key '%s' (ERR_INVALID_ARGUMENT)\n" "$aw_key" >&2; exit 1 ;;
-    esac
-    db_init
-    if ! unit_exists "$aw_u"; then
-      printf "artifact.write: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$aw_u" >&2
-      exit 1
-    fi
-    scratch
-    cat > "$SCRATCH/body" || write_failed
-    { printf 'PRAGMA foreign_keys = ON;\nBEGIN IMMEDIATE;\n'; idx_artifact_sql "$aw_u" "$aw_key" "$SCRATCH/body" "$(now_utc)"; printf 'COMMIT;\n'; } > "$SCRATCH/store.sql"
-    sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null || write_failed
-    exit 0
-    ;;
-
-  artifact.list)
-    al_u="${1:-}"
-    if [ -z "$al_u" ]; then
-      printf 'artifact.list: error: missing session unit parameter (ERR_INVALID_ARGUMENT)\n' >&2
-      exit 1
-    fi
-    db_open_read || true
-    if ! unit_exists "$al_u"; then
-      printf "artifact.list: error: session '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$al_u" >&2
-      exit 1
-    fi
-    al_q=$(sql_escape "$al_u")
-    sq "$DB_PATH" <<EOF
-SELECT name FROM artifacts WHERE unit = '$al_q' AND lane_slug = ''
-  ORDER BY CASE name WHEN 'state' THEN 1 WHEN 'backlog' THEN 2 WHEN 'knowledge' THEN 3 ELSE 4 END;
-SELECT k FROM (
-  SELECT lane_slug AS l, 0 AS o, 'lane/' || lane_slug AS k FROM lanes WHERE unit = '$al_q'
-  UNION ALL
-  SELECT lane_slug AS l, CASE name WHEN 'recipe' THEN 1 WHEN 'journal' THEN 2 ELSE 3 END AS o, 'lane/' || lane_slug || '/' || name AS k
-    FROM artifacts WHERE unit = '$al_q' AND lane_slug != ''
-) ORDER BY l, o;
-EOF
-    exit 0
-    ;;
-
-  session.create)
-    sc_u="${1:-}"
-    if [ -z "$sc_u" ] || ! slug_valid "$sc_u"; then
-      printf "session.create: error: malformed or missing unit '%s' (ERR_INVALID_ARGUMENT)\n" "$sc_u" >&2
-      exit 1
-    fi
-    db_init
-    if unit_exists "$sc_u"; then
-      printf "session.create: error: session '%s' already exists (ERR_ENTITY_EXISTS)\n" "$sc_u" >&2
-      exit 1
-    fi
-    sq -bail "$DB_PATH" "INSERT INTO sessions (unit, status, current_anchor, objective, next_action, repos, ref_sessions, created_at) VALUES ('$(sql_escape "$sc_u")', 'ACTIVE', 'A1', '', 'plan the next move', '[]', '[]', '$(now_utc)');" || write_failed
-    printf '{"status":"ok","unit":"%s"}\n' "$sc_u"
-    exit 0
-    ;;
-
-  session.list)
-    # bytewise by unit, as the posix drawer lists; a unit without a state has no status
-    if ! db_open_read; then
-      printf '{"sessions":[]}\n'
-      exit 0
-    fi
-    sq "$DB_PATH" <<EOF
-SELECT json_object(
-  'sessions', coalesce((
-    SELECT json_group_array(json_object('unit', unit, 'status', st)) FROM (
-      SELECT s.unit AS unit, CASE WHEN EXISTS (SELECT 1 FROM artifacts a WHERE a.unit = s.unit AND a.lane_slug = '' AND a.name = 'state') THEN s.status ELSE '' END AS st
-      FROM sessions s ORDER BY s.unit)
-  ), json_array())
-);
-EOF
-    exit 0
-    ;;
-
-  search.query)
-    search_query "$@"
-    ;;
-
+  capability) capability; exit 0 ;;
   corpus.list) corpus_list "$@" ;;
   corpus.read) corpus_read "$@" ;;
   corpus.write) corpus_write "$@" ;;
@@ -965,12 +748,189 @@ EOF
   corpus.mount) corpus_mount "$@" ;;
   corpus.changes) corpus_changes "$@" ;;
 
-  session.*|task.*|entry.*|finding.*|lane.*|resolve.ref)
-    delegate "$@"
+  storage.health)
+    px_extra 0 "$@"
+    storage_health
     ;;
+  session.create)
+    want_unit "${1:-}"
+    px_extra 1 "$@"
+    call_begin
+    call_arg unit "$1"
+    call_payload
+    acquire_lock "$1"
+    db_init
+    call_run session.create write
+    ;;
+  session.list)
+    px_extra 0 "$@"
+    if [ ! -f "$DB_PATH" ]; then
+      printf '{"store":"absent","units":[]}\n'
+      exit 0
+    fi
+    db_init
+    call_begin
+    call_run session.list read
+    ;;
+  session.load)
+    [ $# -gt 1 ] && want_held "${1:-}"
+    want_unit "${1:-}"
+    px_extra 1 "$@"
+    rec_read session.load "$1"
+    ;;
+  session.refload) session_refload "$@" ;;
+  session.board|session.audit)
+    px_extra 1 "$@"
+    want_unit "${1:-}"
+    rec_read "$CMD" "$1"
+    ;;
+  session.stamp|session.next|session.close|session.reopen)
+    px_extra 1 "$@"
+    want_unit "${1:-}"
+    rec_write "$CMD" "$1" payload
+    ;;
+  session.refs)
+    want_unit "${1:-}"
+    sf_u=$1
+    shift
+    sf_bad=""
+    for sf_r in "$@"; do
+      if [ -z "$sf_bad" ] && ! slug_valid "$sf_r"; then sf_bad=$sf_r; sf_badset=1; fi
+    done
+    [ -f "$DB_PATH" ] || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sf_u' not found"
+    call_begin
+    call_arg unit "$sf_u"
+    call_argv "$@"
+    [ -n "${sf_badset:-}" ] && call_arg badref "$sf_bad"
+    call_payload
+    acquire_lock "$sf_u"
+    db_init
+    call_run session.refs write
+    ;;
+  session.units)
+    [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the repo"
+    case "$1" in
+      [!A-Za-z0-9._-]*|*[!A-Za-z0-9._/-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed repo '$1'" ;;
+    esac
+    px_extra 1 "$@"
+    if [ ! -f "$DB_PATH" ]; then
+      printf '{"repo":"%s","units":[],"known_repos":[]}\n' "$1"
+      exit 0
+    fi
+    db_init
+    call_begin
+    call_arg unit "$1"
+    call_run session.units read
+    ;;
+  session.refs_to)
+    want_unit "${1:-}"
+    px_extra 1 "$@"
+    if [ ! -f "$DB_PATH" ]; then
+      printf '{"unit":"%s","referrers":[]}\n' "$1"
+      exit 0
+    fi
+    db_init
+    call_begin
+    call_arg unit "$1"
+    call_run session.refs_to read
+    ;;
+  task.add|task.update|task.start|task.complete|task.reopen|task.drop|task.get)
+    px_extra 2 "$@"
+    want_unit "${1:-}"
+    want_task_slug "${2:-}"
+    case "$CMD" in
+      task.get) rec_read "$CMD" "$1" "$2" ;;
+      *) rec_write "$CMD" "$1" payload "$2" ;;
+    esac
+    ;;
+  task.list)
+    px_extra 2 "$@"
+    want_unit "${1:-}"
+    case "${2:-}" in
+      TODO|IN_PROGRESS|DONE|all) ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "task.list takes TODO, IN_PROGRESS, DONE, or all: '${2:-}'" ;;
+    esac
+    rec_read "$CMD" "$1" "$2"
+    ;;
+  entry.record)
+    px_extra 1 "$@"
+    want_unit "${1:-}"
+    rec_write "$CMD" "$1" payload
+    ;;
+  entry.get|entry.closure)
+    px_extra 2 "$@"
+    want_unit "${1:-}"
+    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the entry slug"
+    name_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed entry slug '$2'"
+    rec_read "$CMD" "$1" "$2"
+    ;;
+  entry.list)
+    want_unit "${1:-}"
+    el_u=$1
+    shift
+    for el_a in "$@"; do
+      case "$el_a" in
+        --anchor=A[0-9]*) case "${el_a#--anchor=A}" in *[!0-9]*) refuse 1 ERR_INVALID_ARGUMENT "--anchor takes A<N>: '$el_a'" ;; esac ;;
+        --group=?*) case "${el_a#--group=}" in [!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed group in '$el_a'" ;; esac ;;
+        *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$el_a'" ;;
+      esac
+    done
+    rec_read "$CMD" "$el_u" "$@"
+    ;;
+  finding.add|finding.update|finding.drop|finding.get)
+    px_extra 2 "$@"
+    want_unit "${1:-}"
+    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the finding NAME"
+    name_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$2'"
+    case "$CMD" in
+      finding.get) rec_read "$CMD" "$1" "$2" ;;
+      *) rec_write "$CMD" "$1" payload "$2" ;;
+    esac
+    ;;
+  finding.supersede)
+    px_extra 3 "$@"
+    want_unit "${1:-}"
+    for fs_n in "${2:-}" "${3:-}"; do
+      [ -n "$fs_n" ] || refuse 1 ERR_INVALID_ARGUMENT "finding.supersede takes the unit, OLD, and NEW"
+      name_valid "$fs_n" || refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$fs_n'"
+    done
+    rec_write "$CMD" "$1" payload "$2" "$3"
+    ;;
+  finding.list)
+    px_extra 2 "$@"
+    want_unit "${1:-}"
+    case "${2:-}" in
+      active|all) ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "finding.list takes active or all: '${2:-}'" ;;
+    esac
+    rec_read "$CMD" "$1" "$2"
+    ;;
+  lane.create|lane.write_report)
+    px_extra 2 "$@"
+    want_held "${1:-}"
+    want_lane "${2:-}"
+    rec_write "$CMD" "$1" doc "$2"
+    ;;
+  lane.record)
+    px_extra 2 "$@"
+    want_unit "${1:-}"
+    want_lane "${2:-}"
+    rec_write "$CMD" "$1" payload "$2"
+    ;;
+  lane.get)
+    px_extra 3 "$@"
+    want_unit "${1:-}"
+    want_lane "${2:-}"
+    case "${3:-}" in
+      recipe|journal|report) ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "lane.get takes recipe, journal, or report: '${3:-}'" ;;
+    esac
+    rec_read "$CMD" "$1" "$2" "$3"
+    ;;
+  search.query) search_query "$@" ;;
 
   *)
-    printf 'fts5-driver: error: unknown subsystem or method '\''%s'\'' (ERR_CAPABILITY_UNSUPPORTED)\n' "$CMD" >&2
-    exit 2
+    refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$CMD'"
     ;;
 esac
+exit 0

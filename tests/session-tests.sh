@@ -256,7 +256,11 @@ a_eq "$?" "1" "duplicate fixture: the backend refuses the second record of the s
 printf '\n@entry %s-twice\n  ANCHOR: A1\n  WHAT: "second, landed by another path"\n  THREAD: none\n' "$TODAY" | rappend dup-audit journal
 $CTX session audit dup-audit >/dev/null 2>&1; a_eq "$?" "0" "audit keeps rc0 on a legacy duplicated entry slug"
 out=$($CTX session audit dup-audit 2>/dev/null)
-a_match "$out" "LEGACY DUPLICATE SLUG at line [0-9]*: $TODAY-twice (first at line [0-9]*; warning" "audit warns on the duplicated slug with both lines"
+if [ "$DRIVER" = posix ]; then
+  a_match "$out" "LEGACY DUPLICATE SLUG at line [0-9]*: $TODAY-twice (first at line [0-9]*; warning" "audit warns on the duplicated slug with both lines"
+else
+  a_match "$out" "LEGACY DUPLICATE SLUG: $TODAY-twice (occurrence 2; warning" "audit warns on the duplicated slug with its occurrence (a store without lines, D29)"
+fi
 printf '\n@entry %s-fold-twice\n  ANCHOR: A1\n  WHAT: "folds both"\n  THREAD: none\n  CLOSES: %s-twice (folded: both precede)\n' "$TODAY" "$TODAY" | rappend dup-audit journal
 printf '\n@entry %s-twice\n  ANCHOR: A1\n  WHAT: "third, after the closer"\n  THREAD: none\n' "$TODAY" | rappend dup-audit journal
 out=$($CTX session board dup-audit 2>/dev/null)
@@ -1402,6 +1406,11 @@ out=$($CTX session search up-odd "legacy crlf" --json 2>&1 </dev/null)
 a_match "$out" '"entity_type":"entry","entity_id":"2026-09-20-up-crlf","section"' "B5-F2: exact search attributes the CRLF entry to its slug"
 $CTX session record up-odd --what="after crlf" >/dev/null 2>&1 </dev/null
 a_eq "$(rcat up-odd journal | grep -c "$(printf '\r')\$")" "5" "B5-F2: a later record keeps every legacy CR byte"
+# a document line ending in a carriage return reads back with it (lanes/si-f1-fts5-schema/report
+# @open 7): lane show and the dump of the store keep the byte, on every driver
+printf '# recipe grammar\r\nMISSION\n  GOAL: "a CRLF recipe"\n' | lane_new up-odd up-cr
+a_eq "$($CTX lane show up-odd up-cr recipe 2>/dev/null </dev/null | grep -c "$(printf '\r')\$")" "1" "F2-CR: lane show keeps the CR byte of a recipe line"
+a_eq "$(rcat up-odd lane/up-cr/recipe | grep -c "$(printf '\r')\$")" "1" "F2-CR: the dump of the store keeps the recipe's CR byte"
 printf 'status: WEIRD\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
 out=$(up_err $CTX session active)
 a_match "$out" '^WARNING: unrecognized status \[WEIRD\] in state: unit up-odd$' "UP: active names the state and the unit of an unknown status"

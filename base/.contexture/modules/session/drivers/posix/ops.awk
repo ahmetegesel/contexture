@@ -836,11 +836,12 @@ function f_lane_write_report(   l) {
   answer("{\"unit\":" jstr(U) ",\"lane\":" jstr(l) ",\"bytes\":" (ENVIRON["PX_DOCSIZE"] + 0) "}")
 }
 
-# doc_out(k): a document as one JSON string, streamed line by line, or null
+# doc_out(k): a document as one JSON string, streamed line by line, or null; a line that ended
+# in a carriage return (CRL, model.awk) gets it back, so the document reads byte for byte
 function doc_out(k,   i) {
   if (!(k in PRES)) { O("null"); return }
   O("\"")
-  for (i = 1; i <= NL[k]; i++) O(jesc(L[k, i]) ((i < NL[k] || EOFNL[k]) ? "\\n" : ""))
+  for (i = 1; i <= NL[k]; i++) O(jesc(L[k, i] (((k, i) in CRL) ? "\r" : "")) ((i < NL[k] || EOFNL[k]) ? "\\n" : ""))
   O("\"")
 }
 

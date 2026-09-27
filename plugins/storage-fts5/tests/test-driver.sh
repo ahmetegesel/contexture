@@ -1,5 +1,6 @@
 #!/bin/sh
-# test-driver.sh: execute SPI compliance test suite against SQLite FTS5 driver.
+# test-driver.sh: the contract 2 compliance suite (tests/storage-compliance.sh) against the
+# plugin's own fts5 driver.
 
 set -u
 
@@ -19,7 +20,5 @@ if [ ! -x "$COMPLIANCE" ]; then
   exit 1
 fi
 
-# the record grammar the driver renders through: the shipped core's posix driver
-CTX_REFERENCE_DRIVER="$ROOT/base/.contexture/modules/session/drivers/posix/driver"
-export CTX_REFERENCE_DRIVER
+# the plugin's own driver alone: it answers every function natively, no other driver runs
 "$COMPLIANCE" --driver=fts5 --driver-exec="$PLUGIN_MODULE/drivers/fts5"
