@@ -3,8 +3,9 @@
 # Drives the staging check; the corpus reads through the storage driver (keyed on the
 # declared corpus.store: the audit and the unit-form nudge against the backlog-file form
 # and the write verbs (tests/write-verbs.sh over tests/write/) and the engine checks
-# (tests/engine-checks.sh) when declared, every read
-# verb's rc 2 refusal when not); the single-door census
+# (tests/engine-checks.sh) and the delta-source cases (tests/store-cases.sh) when declared,
+# every read verb's rc 2 refusal when not); on fts5 the migration round trip and the
+# capture parity against the files driver at the sandbox path; the single-door census
 # (tests/census.sh over tests/census-allow.txt, with its two plants); the close-gate
 # matrix over tests/sample/; and the grammar agreement check
 # (tests/grammar-agreement.awk, with its two plants) in a staged
@@ -116,6 +117,24 @@ else
 fi
 echo ""
 
+# the capture parity, first half (fts5 run): the read verbs' capture set (tests/captures.sh)
+# run on the files driver at this very sandbox path while the docs folder is still there (the
+# config set aside for the run), so the store's captures below compare byte for byte; the plan
+# leaves out what cannot differ by driver and costs the most (every block section, the per-repo
+# searches, the matrix): the index, every projection, the owner lookups, the corpus searches,
+# the rules and pitfalls views, the edges, the audits, the check and the gate over the twelve
+# deltas, and the nudge stay
+if [ "$DRIVER" = fts5 ]; then
+    mv "$SANDBOX/.contexture/config" "$SANDBOX/config.store"
+    sh "$SCRIPT_DIR/captures.sh" plan "$SANDBOX" 2>/dev/null \
+        | grep -v -e ' --section ' -e ' --test-matrix' -e 'docs query [a-z-]* --search ' > "$SANDBOX/parity.plan"
+    sh "$SCRIPT_DIR/captures.sh" run "$SANDBOX" "$SANDBOX/parity.plan" "$SANDBOX/parity-files" > /dev/null 2>&1
+    PARITY_FILES_RC=$?
+    mv "$SANDBOX/config.store" "$SANDBOX/.contexture/config"
+    mkdir -p "$SANDBOX/corpus-staged"
+    cp -R "$SANDBOX/docs/." "$SANDBOX/corpus-staged/"
+fi
+
 # the store run: the staged corpus imported into the store (ctx storage-fts5 migrate
 # --corpus, the files read through the posix reference driver), then the docs folder
 # removed, so every corpus check below reads the store alone
@@ -131,6 +150,59 @@ if [ "$DRIVER" = fts5 ]; then
     else
         echo "[store-seed] FAIL (rc=$SEED_RC, want $SEED_WANT docs)"
         printf '%s\n' "$SEED_OUT"
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # the migration round trip: the store exported back to files through the posix reference
+    # equals the staged corpus byte for byte (diff -r, the file count, a planted byte read as a
+    # difference so the comparison can fail), then the docs folder removed again
+    RT_OUT=$("$SANDBOX/.contexture/ctx" storage-fts5 migrate --from=fts5 --to=posix --corpus 2>&1)
+    RT_RC=$?
+    RT_N=$(find "$SANDBOX/docs" -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')
+    diff -r "$SANDBOX/corpus-staged" "$SANDBOX/docs" > /dev/null 2>&1
+    RT_DIFF=$?
+    RT_PLANT=0
+    if [ "$RT_N" -gt 0 ]; then
+        RT_ONE=$(find "$SANDBOX/docs" -name '*.md' -type f | head -n 1)
+        printf 'x' >> "$RT_ONE"
+        diff -r "$SANDBOX/corpus-staged" "$SANDBOX/docs" > /dev/null 2>&1 || RT_PLANT=1
+    fi
+    rm -rf "$SANDBOX/docs"
+    if [ "$RT_RC" -eq 0 ] && [ "$RT_N" -eq "$SEED_WANT" ] && [ "$RT_DIFF" -eq 0 ] && [ "$RT_PLANT" -eq 1 ] && [ ! -e "$SANDBOX/docs" ]; then
+        echo "[round-trip] PASS ($RT_N docs exported byte for byte; a planted byte reads as a difference)"
+        PASS=$((PASS + 1))
+    else
+        echo "[round-trip] FAIL (rc=$RT_RC, $RT_N of $SEED_WANT docs, diff rc=$RT_DIFF, plant seen=$RT_PLANT)"
+        printf '%s\n' "$RT_OUT"
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # the capture parity, second half: the same plan on the store with the docs folder gone;
+    # every capture byte-identical to the files driver's except the store mode's named verdicts:
+    # a check or gate capture where the files driver prints the blanket (FRESH (BLANKET)) or the
+    # untracked-claimant verdict and the store prints STALE DOC
+    sh "$SCRIPT_DIR/captures.sh" run "$SANDBOX" "$SANDBOX/parity.plan" "$SANDBOX/parity-store" > /dev/null 2>&1
+    sh "$SCRIPT_DIR/captures.sh" compare "$SANDBOX/parity-files" "$SANDBOX/parity-store" > "$SANDBOX/parity.cmp" 2>&1
+    P_TOTAL=$(awk 'END { print NR }' "$SANDBOX/parity.plan")
+    P_SAME=$(sed -n 's/^compare: .* same \([0-9]*\), diff .*/\1/p' "$SANDBOX/parity.cmp")
+    P_DIFF=0
+    P_BAD=""
+    for id in $(awk '/^DIFF / { print $2 }' "$SANDBOX/parity.cmp"); do
+        P_DIFF=$((P_DIFF + 1))
+        grep -q -e 'docs check ' -e 'docs gate ' "$SANDBOX/parity-files/$id.cmd" \
+            && grep -q -e 'FRESH (BLANKET)' -e 'UNTRACKED CLAIMANT' "$SANDBOX/parity-files/$id.out" \
+            && grep -q 'STALE DOC' "$SANDBOX/parity-store/$id.out" \
+            || P_BAD="$P_BAD $id"
+    done
+    if [ "$PARITY_FILES_RC" -eq 0 ] && [ "$P_TOTAL" -gt 0 ] && [ "${P_SAME:-0}" -gt 0 ] \
+        && [ $((${P_SAME:-0} + P_DIFF)) -eq "$P_TOTAL" ] && [ "$P_DIFF" -gt 0 ] && [ -z "$P_BAD" ]; then
+        echo "[capture-parity] PASS ($P_TOTAL captures: $P_SAME byte-identical to the files driver, $P_DIFF the store mode's named verdicts)"
+        PASS=$((PASS + 1))
+    else
+        echo "[capture-parity] FAIL ($P_TOTAL captures, same ${P_SAME:-0}, diff $P_DIFF, unexplained:${P_BAD:- none})"
+        grep '^DIFF\|^compare' "$SANDBOX/parity.cmp" | head -20
         FAIL=$((FAIL + 1))
     fi
     echo ""
@@ -212,6 +284,22 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
     else
         echo "[engine-checks] FAIL (rc=$ENGINE_RC)"
         printf '%s\n' "$ENGINE_OUT"
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+
+    # the delta sources (tests/store-cases.sh), keyed on the declared corpus.changelog: the
+    # check's store mode against its git mode, ctx docs changes (its window, --since, A, M, D,
+    # its refusals) or its files-driver refusal, and the gate composing the code half from git
+    # with the corpus half from the store (or from git under the files driver)
+    STORE_OUT=$(sh "$SCRIPT_DIR/store-cases.sh" "$SANDBOX" 2>&1)
+    STORE_RC=$?
+    if [ "$STORE_RC" -eq 0 ]; then
+        echo "[store-cases] PASS ($(printf '%s\n' "$STORE_OUT" | tail -n 1 | sed 's/^store-cases: //'))"
+        PASS=$((PASS + 1))
+    else
+        echo "[store-cases] FAIL (rc=$STORE_RC)"
+        printf '%s\n' "$STORE_OUT" | tail -n 30
         FAIL=$((FAIL + 1))
     fi
     echo ""

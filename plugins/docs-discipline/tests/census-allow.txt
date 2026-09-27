@@ -114,8 +114,8 @@ topology-probe	gate	        elif [ -d "$pdir/.git" ]; then
 topology-probe	gate	    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
 topology-probe	gate	        if [ -e "$WORKSPACE_ROOT/.git" ]; then
 topology-probe	gate	        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.git" ]; then
-usage-text	check	  echo "Usage: git diff --name-status | ctx docs check docs/<repo>/*.md" >&2
-usage-text	nudge	  echo "Usage: ctx docs nudge backlog.md docs/<repo>/*.md" >&2
+usage-text	check	  echo "Usage: git diff --name-status | ctx docs check <repo>..." >&2
+usage-text	nudge	  echo "Usage: ctx docs nudge <unit> [<repo>...] (or: ctx docs nudge backlog.md <repo>...)" >&2
 usage-text	query	  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index" >&2
 engine-output	docs-edit.awk	    print s > "/dev/stderr"
 false-positive	docs-edit.awk	        sep = (f1 == "from") ? ">" : ":"

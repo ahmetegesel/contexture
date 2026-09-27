@@ -21,7 +21,7 @@ case "$1" in
 esac
 
 if [ "$#" -eq 0 ]; then
-  echo "Usage: git diff --name-status | ctx docs check docs/<repo>/*.md" >&2
+  echo "Usage: git diff --name-status | ctx docs check <repo>..." >&2
   echo "help: ctx docs help check" >&2
   exit 1
 fi

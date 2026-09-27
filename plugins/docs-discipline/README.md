@@ -5,17 +5,21 @@ agents read before code, a `docs` module whose read verbs index, project,
 check, nudge, and gate it and list its changes under a store driver and whose
 write verbs change it block by block, each write schema-checked and audited
 before it is stored, and a close gate that fails when a code change lands
-without its doc update. Everything runs on plain files and POSIX awk/sh: no
-runtime, no network, no vendor glue. Adopt it when agents working in your
+without its doc update. Everything runs on POSIX awk/sh and the ctx verbs,
+over plain files under the files driver or inside the store a storage driver
+keeps: no runtime, no network, no vendor glue. Adopt it when agents working in your
 repositories should consult a corpus instead of rediscovering the codebase by
 grep.
 
 ## What it is
 
-The mechanism in one paragraph: every repository gets unit docs in
-`docs/<repo>/` written per the grammar in `.contexture/templates/doc.md`, and
-the workspace gets its own docs in `docs/workspace/` (the conventions and the
-map); `ctx docs query` serves the index, the projections, the lookups, and the
+The mechanism in one paragraph: every repository gets unit docs addressed
+`docs/<repo>/<slug>.md` written per the grammar in
+`.contexture/templates/doc.md`, and the workspace gets its own docs addressed
+`docs/workspace/<slug>.md` (the conventions and the map); the configured
+storage driver holds them (the files driver as those very files, a store
+driver such as the storage-fts5 plugin's in its store) and every verb reaches
+them through it; the write verbs change a doc block by block; `ctx docs query` serves the index, the projections, the lookups, and the
 rule and pitfall views; `ctx docs check` compares a git change delta against
 the corpus (coverage, freshness, dead sources); `ctx docs gate` runs the audit
 and the check as one close check; `ctx docs nudge` extracts the active task's
@@ -55,7 +59,8 @@ What lands where:
 | `AGENTS.workspace.md` | the overlay blocks: five docs laws, layout, boot, close | merge |
 | `.contexture/rhythms/work.md`, `.contexture/rhythms/docs-authoring.md`, `.contexture/rhythms/docs-drift.md` | the workspace's work rhythm (the canonical variant with the docs discipline) and the two procedure rhythms | copy (optional) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/run.sh` | the plugin's own suite: the staging check, the audit, the write verbs, the engine checks, the gate matrix over the sample, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`) | reference (never copied) |
+| `tests/run.sh` | the plugin's own suite: the staging check, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed, the migration round trip, and the capture parity against the files driver | reference (never copied) |
+| `tests/store-cases.sh` | the delta-source cases: the check's store mode against its git mode, `ctx docs changes` (its window, `--since`, A, M, D, its refusals), and the gate composing the code half from git with the corpus half from the store (or from git under the files driver) | reference (never copied) |
 | `tests/write-verbs.sh`, `tests/write/` | the write verbs' assertions and their fixtures: every verb's result byte for byte, every refusal leaving the stored doc unchanged, the change-log rows under a store | reference (never copied) |
 | `tests/engine-checks.sh` | the audit's one id namespace per repo, the pitfalls view scoped to `@pitfalls`, a backslash search kept literal | reference (never copied) |
 | `tests/grammar-agreement.awk` | the grammar agreement check the suite runs: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
@@ -171,12 +176,16 @@ into an existing file; `seed` means it is starting content to adapt; and
    already allows (the contexture base normally allows AGENTS.md and
    AGENTS.workspace.md).
 
+   The corpus lines apply under the files driver, whose corpus is the files
+   under `docs/`; a corpus kept in a store driver needs none (the storage-fts5
+   README names the git steps for moving a tracked corpus into its store).
+
    ```gitignore
    # the plugin drawer: the module and the grammar template
    !/.contexture/
    !/.contexture/**
 
-   # the corpus: the conventions and the per-repo docs
+   # the corpus under the files driver: the conventions and the per-repo docs
    !/docs/
    !/docs/**
 
@@ -187,16 +196,21 @@ into an existing file; `seed` means it is starting content to adapt; and
    !/projects/.gitkeep
    ```
 
-4. Seed the corpus: copy `docs/workspace/conventions.md`, write a
-   `docs/workspace/` map for the tree (per the grammar template), then one
-   unit doc per repository, then the operational doc for the repository whose
-   setup targets the nudge should force.
+4. Seed the corpus through the write verbs, which check each doc against the
+   grammar and audit it before the configured driver stores it: the
+   conventions first (`ctx docs write workspace conventions <
+   <plugin>/docs/workspace/conventions.md`), then a workspace map for the tree
+   (`ctx docs write` for a whole draft, or `ctx docs new` and the block verbs,
+   per the grammar template), then one unit doc per repository, then the
+   operational doc for the repository whose setup targets the nudge should
+   force. Under the files driver each write lands as `docs/<repo>/<slug>.md`.
 
 5. Keep `tests/sample/` and this README as references: the sample is
    fictional and never part of the adopted corpus; `tests/run.sh` is the
-   plugin's own suite (the audit plus the gate matrix over the sample and the
-   grammar agreement check), lives with the plugin, is never copied, and the
-   upstream runner invokes it twice, once per storage driver.
+   plugin's own suite (the corpus checks, the write verbs, the store cases, and
+   the gate matrix over the sample, the census, and the grammar agreement
+   check), lives with the plugin, is never copied, and the upstream runner
+   invokes it twice, once per storage driver.
 
 ## Verify
 
@@ -244,11 +258,15 @@ it walk below runs every one of these.
 - Authoring: the `docs-authoring` rhythm: the 11-step progression (sync,
   map, backlog, draft, interrogate, audit, coverage, reconcile, project,
   trace and accumulate, refresh); the method detail lives in the template's
-  comments.
+  comments, and each draft lands through `ctx docs write` (a whole first
+  extraction) or `ctx docs new` and the block verbs.
 - Drift: the `docs-drift` rhythm: sync the checkout to the current base first
   (fetch; a branch comes up to date with main), declare the affected units as
-  `@task` entries in `backlog.md`, pipe the status-prefixed git delta through
-  the check, update each affected doc in the same change, re-verify.
+  `@task` entries in `backlog.md`, pipe the status-prefixed code delta from git
+  with the corpus half (the corpus paths of the same git delta under the files
+  driver, `ctx docs changes` under a store) through the check, update each
+  affected doc through the write verbs in the same change, re-verify with
+  `ctx docs gate`.
 - Close: `ctx docs gate` must pass cleanly. The gate verifies change, never
   truth. A default run also warns on stderr when a scanned repository is on a
   non-main branch or behind its last-fetched origin; `ctx docs gate --drift`
@@ -395,7 +413,10 @@ from the release that carries the corpus methods; an older base makes every
 read verb refuse rc 2), and git for the close gate's delta, the check's claimant trackedness
 probe, and the matrix's planted fixture repository (a non-repository run of
 the check reads claimants untracked and reports the process-owned verdict;
-the audit needs no repository). Nothing is installed: no runtime, no network.
+the audit needs no repository; under a store driver git also supplies the
+HEAD each doc write is stamped with, `none` outside a repository). A store
+driver brings its own needs (the storage-fts5 plugin: sqlite3 with FTS5).
+Nothing is installed: no runtime, no network.
 The optional ast-doc-graph plugin pairs with this one: its docs extractor
 reads the corpus grammar.
 
@@ -411,11 +432,16 @@ without sqlite3 FTS5). The suite also runs the single-door census
 print outside `scripts/docs-io.sh` fails it until the allow-list names it on
 purpose. `tests/captures.sh` (plan, run, compare) is the capture set of the
 read verbs, the instrument of the byte identity between two module versions
-at one path and of the parity between two drivers. `tests/write-verbs.sh`
-asserts every write verb against the expected docs under `tests/write/` (a
-changed rendering updates its fixture on purpose), and
+at one path and of the parity between two drivers: the fts5 run compares the
+files driver and the store at one sandbox path and accepts only the store
+mode's named verdicts as differences. The fts5 run also round-trips the
+corpus through `ctx storage-fts5 migrate --corpus` byte for byte.
+`tests/write-verbs.sh` asserts every write verb against the expected docs
+under `tests/write/` (a changed rendering updates its fixture on purpose),
 `tests/engine-checks.sh` the id namespace, the pitfalls scoping, and the
-literal backslash search. Keep the grammar (`.contexture/templates/doc.md`), its
+literal backslash search, and `tests/store-cases.sh` the delta sources on
+either driver (the check's two modes, `ctx docs changes`, the gate's two
+halves in a git workspace of its own). Keep the grammar (`.contexture/templates/doc.md`), its
 machine-readable schema (section 6), and the audit in step: the suite's
 grammar agreement check (`tests/grammar-agreement.awk`) fails on any
 difference among the three; the `tests/sample/` corpus is reference data. Packaging,
@@ -424,32 +450,39 @@ naming, and the test convention are in `docs/plugins.md`; the module shape is
 
 ## Try it
 
-Every command below runs from the plugin root and was run as written; the
-outputs are verbatim from that run (long ones abbreviated with `...` where
-the full output repeats the shown shape; `<scratch>` in an output line stands
-for the temp path the staging step created). The staging builds a scratch
-workspace carrying the base runtime, its session module (the storage driver
-the verbs read the corpus through), and this plugin's module; the commands
-then run through the staged `ctx` (in an adopted workspace the same commands
-run as `ctx docs ...`).
+Every command below runs from the plugin root, in the repository that ships
+this plugin beside `base/`, and was run as written; the outputs are verbatim
+from that run (long ones abbreviated with `...` where the full output repeats
+the shown shape; `<scratch>` in an output line stands for the absolute path of
+the scratch workspace; a nonzero exit shows as `(exit N)`). The staging builds
+a scratch workspace from the shipped copies: the base runtime, its session
+module (the storage driver the verbs reach the corpus through), and this
+plugin's module and grammar; it commits the corpus in a repository of its own,
+since the check reads a claimant outside git as untracked (the process-owned
+verdict) and never as stale. The commands then run through the staged `ctx`
+(in an adopted workspace the same commands run as `ctx docs ...`). The first
+part runs on the files driver, the second on the fts5 store.
 
 ```sh
 scratch="../../.contexture/tmp/docs-walk"
 rm -rf "$scratch"
 mkdir -p "$scratch/.contexture/modules" "$scratch/docs"
-cp ../../.contexture/ctx "$scratch/.contexture/ctx"
-cp -R ../../.contexture/modules/session "$scratch/.contexture/modules/"
+cp ../../base/.contexture/ctx "$scratch/.contexture/ctx"
+cp -R ../../base/.contexture/modules/session "$scratch/.contexture/modules/"
 cp -R .contexture/modules/docs "$scratch/.contexture/modules/"
+cp -R .contexture/templates "$scratch/.contexture/"
 cp -R docs/. "$scratch/docs/"
 cp -R tests/sample/docs/. "$scratch/docs/"
 cp tests/sample/backlog.md "$scratch/backlog.md"
 cd "$scratch"
+git init -q && git add docs && git -c user.name=walk -c user.email=walk@example.invalid commit -qm walk
 ```
 
-The audit over the corpus:
+The audit over the whole corpus (a bare call; `ctx docs audit <repo>` audits
+one repo):
 
 ```sh
-./.contexture/ctx docs audit docs/*/*.md
+./.contexture/ctx docs audit
 ```
 
 ```text
@@ -528,10 +561,10 @@ DOC: <scratch>/docs/demo-orders/order-flow.md
 
 ```text
 MUST docs/drift (universal, workspace)
-  Drift is reconciled from the change delta, never from memory: the status-prefixed git delta feeds ctx docs check with BOTH halves in one stream (the repository's code delta and the workspace's own docs/<repo>/ delta); every affected doc is updated in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands.
+  Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta under the files driver, ctx docs changes under a store driver); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands.
   evidence: .contexture/modules/docs/scripts/docs-check.awk
   anti: Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone, which cannot exit 0 by construction
-  good: Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, ctx docs gate already aggregates both halves and needs no pipeline
+  good: Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline
 ```
 
 ```sh
@@ -561,10 +594,12 @@ The edge view:
       via: http
 ```
 
-The nudge over the demo backlog:
+The nudge over the demo backlog, the corpus named by its repos (in a
+workspace with a record, `ctx docs nudge <unit>` reads the active task
+through `ctx session` instead):
 
 ```sh
-./.contexture/ctx docs nudge backlog.md docs/*/*.md
+./.contexture/ctx docs nudge backlog.md demo-orders demo-web workspace
 ```
 
 ```text
@@ -579,10 +614,12 @@ Pitfalls: order-flow-p1: A retried checkout can persist the same cart twice; ord
 ```
 
 The check over a delta: clean when the doc rides the change, red when it does
-not, red when a new file no doc claims:
+not, red when a new file no doc claims (the repo names select the corpus; the
+files driver also takes the glob form `docs/*/*.md`, which zsh refuses once no
+file matches):
 
 ```sh
-printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/demo-orders/order-flow.md\n' | ./.contexture/ctx docs check docs/*/*.md
+printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/demo-orders/order-flow.md\n' | ./.contexture/ctx docs check demo-orders demo-web workspace
 ```
 
 ```text
@@ -601,33 +638,39 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 ```
 
 ```sh
-printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | ./.contexture/ctx docs check docs/*/*.md
+printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | ./.contexture/ctx docs check demo-orders demo-web workspace
 ```
 
 ```text
-docs-check: FAILED: 1 file(s) are stale (changed without a doc update).
 ...
+--- FRESHNESS AUDIT ---
+docs-check: FAILED: 1 file(s) are stale (changed without a doc update).
 STALE DOC: demo-orders/order-flow (code modified without doc update)
   file: projects/demo-orders/src/order/validate.ts
+
+(exit 1)
 ```
 
 ```sh
-printf 'A\tprojects/demo-orders/src/tools/report.ts\n' | ./.contexture/ctx docs check docs/*/*.md
+printf 'A\tprojects/demo-orders/src/tools/report.ts\n' | ./.contexture/ctx docs check demo-orders demo-web workspace
 ```
 
 ```text
 docs-check: FAILED: 1 code file(s) are uncovered by any documentation.
 ...
 UNCOVERED: projects/demo-orders/src/tools/report.ts
+...
+(exit 1)
 ```
 
 An architecture, overview, or workspace doc riding a change marks every file
-in the repo fresh wholesale. That is a blanket, not evidence: the check
-reports it instead of folding it into the clean verdict, and counts the files
-that no riding claimant covered.
+in the repo fresh wholesale under the files driver. That is a blanket, not
+evidence: the check reports it instead of folding it into the clean verdict,
+and counts the files that no riding claimant covered (a store driver turns the
+blanket off).
 
 ```sh
-printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/workspace/system-map.md\n' | ./.contexture/ctx docs check docs/*/*.md
+printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/workspace/system-map.md\n' | ./.contexture/ctx docs check demo-orders demo-web workspace
 ```
 
 ```text
@@ -641,17 +684,27 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 ```
 
 **The two-sided delta.** A pushed range needs both halves in one stream, the
-repository's code delta and the workspace's own docs delta, records split so a
-rename's old path surfaces as a dead source:
+repository's code delta and the corpus delta, records split so a rename's old
+path surfaces as a dead source. Under the files driver with a tracked corpus
+the corpus half is the corpus paths of git:
 
 ```sh
-{ git -C projects/<repo> diff --name-status --no-renames <base>..origin/<branch> | awk -F'\t' -v p=projects/<repo>/ '{ print $1 "\t" p $2 }'; git status --porcelain docs/<repo>/ | sed 's|^ *\([A-Z?]\)[A-Z? ] *|\1\t|'; } | ctx docs check docs/<repo>/*.md
+{ git -C projects/<repo> diff --name-status --no-renames <base>..origin/<branch> | awk -F'\t' -v p=projects/<repo>/ '{ print $1 "\t" p $2 }'; git status --porcelain docs/<repo>/ | sed 's|^ *\([A-Z?]\)[A-Z? ] *|\1\t|'; } | ctx docs check <repo>
 ```
 
-For an uncommitted working tree, `ctx docs gate` already aggregates both
-halves and needs no pipeline.
+Under a store driver the corpus half is the store's change log since the
+workspace revision the work began at:
 
-The gate: clean over the same delta, then red on a planted syntax defect.
+```sh
+{ git -C projects/<repo> diff --name-status --no-renames <base>..origin/<branch> | awk -F'\t' -v p=projects/<repo>/ '{ print $1 "\t" p $2 }'; ctx docs changes --since=<workspace rev>; } | ctx docs check <repo>
+```
+
+For an uncommitted working tree, `ctx docs gate` composes both halves by
+itself on every driver and needs no pipeline.
+
+The gate: clean over the same delta, then red on a planted syntax defect (a
+direct file edit, which only the files driver allows and which the write
+verbs would refuse):
 
 ```sh
 printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/demo-orders/order-flow.md\n' | ./.contexture/ctx docs gate --stdin
@@ -721,6 +774,165 @@ help:
   example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
 ```
 
+Writing through the verbs. The one-time id migration keys the sample's
+contract rules and responsibilities; an entry is then read by its key, one
+field rewritten, an entry added beside a related one, and a source added to
+the header without reading the doc; a value outside its enum refuses and
+writes nothing:
+
+```sh
+./.contexture/ctx docs ids
+```
+
+```text
+docs ids: demo-orders/order-flow keyed 4
+docs ids: demo-web/cart-ui keyed 4
+docs ids: 8 entries keyed
+```
+
+```sh
+./.contexture/ctx docs query demo-orders order-flow --entry contract/order-flow-r1
+```
+
+```text
+  - rule: "A cart naming an unknown item id is rejected with a typed validation error"
+    id: order-flow-r1
+    evidence: "validateCart"
+    detail ::
+      Unknown ids never reach persistence; the caller receives the offending id list.
+```
+
+```sh
+./.contexture/ctx docs entry demo-orders order-flow contract order-flow-r1 --detail="Unknown ids never reach persistence; the caller receives the offending id list and the cart stays unchanged."
+./.contexture/ctx docs entry demo-orders order-flow contract --rule="An accepted order publishes exactly one order-accepted event" --evidence=publishOrderAccepted --after=order-flow-r2
+./.contexture/ctx docs header demo-orders order-flow --add-source='src/events/**'
+```
+
+```text
+docs entry: demo-orders/order-flow contract/order-flow-r1 updated (detail)
+docs entry: demo-orders/order-flow contract/order-flow-r3 added after contract/order-flow-r2
+docs header: demo-orders/order-flow header updated (sources)
+```
+
+```sh
+./.contexture/ctx docs pitfall demo-orders order-flow order-flow-p2 --severity=urgent
+```
+
+```text
+ctx docs pitfall: severity takes one of: low medium high critical (got 'urgent') (ERR_SCHEMA_VIOLATION)
+(exit 1)
+```
+
+The audit stays silent and the section shows the three writes (the detail
+kept a block scalar, the new rule placed after its neighbor):
+
+```sh
+./.contexture/ctx docs audit
+./.contexture/ctx docs query demo-orders order-flow --section contract
+```
+
+```text
+[order-flow > contract]
+  - rule: "A cart naming an unknown item id is rejected with a typed validation error"
+    id: order-flow-r1
+    evidence: "validateCart"
+    detail ::
+      Unknown ids never reach persistence; the caller receives the offending id list and the cart stays unchanged.
+  - rule: "Prices are computed from the server-side price table, never from client totals"
+    id: order-flow-r2
+    evidence: "priceCart"
+  - rule: "An accepted order publishes exactly one order-accepted event"
+    id: order-flow-r3
+    evidence: "publishOrderAccepted"
+```
+
+The same corpus on the fts5 store (the storage-fts5 plugin beside this one;
+needs sqlite3 with FTS5). The import mirrors a committed corpus, so the writes
+are committed first; it refuses a tracked corpus with uncommitted changes and,
+after a clean import, prints the git steps that retire the files (the walk
+skips them and removes the folder):
+
+```sh
+git -c user.name=walk -c user.email=walk@example.invalid commit -qam writes
+cp -R ../../../plugins/storage-fts5/.contexture/modules/storage-fts5 .contexture/modules/
+printf 'storage.driver: fts5\n' > .contexture/config
+./.contexture/ctx storage-fts5 migrate --from=posix --to=fts5 --corpus
+rm -rf docs
+```
+
+```text
+{"status":"ok","from":"posix","to":"fts5","corpus":"imported","docs":5,"dropped":0}
+storage-fts5 migrate: the corpus of repo(s) demo-orders demo-web workspace is tracked in git; the store now holds it, so the files invite edits that no longer reach the corpus. Next steps (run them yourself):
+  git rm -r --cached docs/demo-orders
+  git rm -r --cached docs/demo-web
+  git rm -r --cached docs/workspace
+  ignore those folders (.gitignore), commit, delete the working files, and set storage.driver: fts5 in .contexture/config
+```
+
+With no docs folder left, the verbs read the store and print what the files
+driver printed:
+
+```sh
+./.contexture/ctx docs audit
+./.contexture/ctx docs query --index
+```
+
+```text
+demo-orders               operational                  operational                     Run, build, test, debug, and observe the demo order service
+demo-orders               order-flow                   capability                      Cart validation, pricing, and order persistence for the demo
+demo-web                  cart-ui                      capability                      Storefront cart interaction: add, remove, quantity edits, an
+workspace                 conventions                  conventions                     Universal workspace conventions: documentation discipline, g
+workspace                 system-map                   architecture                    The demo workspace map: two fictional product repos, their c
+index complete: 5 entries
+```
+
+A write lands in the store stamped with the workspace git HEAD, and
+`ctx docs changes` prints the corpus half of the delta:
+
+```sh
+./.contexture/ctx docs entry demo-orders order-flow contract order-flow-r2 --detail="The price table is read once per checkout, at validation."
+./.contexture/ctx docs changes
+```
+
+```text
+docs entry: demo-orders/order-flow contract/order-flow-r2 updated (detail)
+M	docs/demo-orders/order-flow.md
+```
+
+The code change alone reads stale; with the corpus half beside it, fresh (the
+check in its store mode; the default gate composes both halves by itself):
+
+```sh
+printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | ./.contexture/ctx docs gate --stdin
+```
+
+```text
+docs-check: FAILED: 1 file(s) are stale (changed without a doc update).
+--- TOUCHED DOCUMENTATION ---
+AFFECTED: order-flow [demo-orders] -> <scratch>/docs/demo-orders/order-flow.md
+  files: src/order/validate.ts
+...
+STALE DOC: demo-orders/order-flow (code modified without doc update)
+  file: projects/demo-orders/src/order/validate.ts
+
+(exit 1)
+```
+
+```sh
+{ printf 'M\tprojects/demo-orders/src/order/validate.ts\n'; ./.contexture/ctx docs changes; } | ./.contexture/ctx docs gate --stdin
+```
+
+```text
+--- TOUCHED DOCUMENTATION ---
+AFFECTED: order-flow [demo-orders] -> <scratch>/docs/demo-orders/order-flow.md
+  files: src/order/validate.ts
+...
+FRESH: demo-orders > order-flow (doc updated in change delta)
+CLEAN: all affected code files have corresponding doc updates.
+
+docs-check: CLEAN: all touched code files are covered and fresh.
+```
+
 ## Files in this plugin (provenance)
 
 | file | provenance |
@@ -749,9 +961,10 @@ help:
 | `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the drawer sources glob and evidence fields re-pointed at the module |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
-| `tests/run.sh` | authored fresh: the plugin suite (the staging check; on fts5 the store seed, the corpus imported and the docs folder removed; the corpus checks keyed on the declared `corpus.store`: the audit, the unit-form nudge against the backlog-file form, the write verbs, and the engine checks, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
+| `tests/run.sh` | authored fresh: the plugin suite (the staging check; on fts5 the capture set run first on the files driver at the sandbox path, then the store seed, the corpus imported and the docs folder removed, the migration round trip, and the capture parity against the files driver; the corpus checks keyed on the declared `corpus.store`: the audit, the unit-form nudge against the backlog-file form, the write verbs, the engine checks, and the delta-source cases, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
 | `tests/write-verbs.sh`, `tests/write/` | authored fresh: the write verbs' table (success bytes against the expected docs, refusals leaving the stored doc unchanged, the change-log rows and `ctx docs changes` under a store) and its fixtures |
 | `tests/engine-checks.sh` | authored fresh: the audit's id namespace, the pitfalls scoping, and the literal backslash search, through the verbs on the configured driver |
+| `tests/store-cases.sh` | authored fresh: the delta-source cases keyed on the declared `corpus.changelog` (the check's two modes over planted deltas; `ctx docs changes` and the gate's halves in a git workspace of its own made from the sandbox) |
 | `tests/census.sh`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, the classified allow-list by file and exact line, remainder zero) |
 | `tests/captures.sh` | authored fresh: the capture set of the read verbs (plan, run, compare) |
 | `tests/grammar-agreement.awk` | authored fresh: the agreement check of the `#%` schema, the prose shapes, and the audit's lists, refusing an empty side as a pass |

@@ -34,6 +34,13 @@ produced them, resolves the `GOVERNS`, `WARNS`, and `COVERS` edges, and
 compiles `graph.db` (relational tables plus the dual `fts_symbols` and
 `fts_docs` virtual tables). Retrieval runs directly on system `sqlite3`.
 
+The docs extractor reads the corpus as files: `bin/ast-doc-index` scans the
+workspace's `docs/` folder and `extractors/docs/extract-docs.ts` parses each
+file, never through `ctx docs` or the storage driver. Under the docs-discipline
+files driver that folder is the corpus; under a store driver it holds none, so
+the graph carries no docs, rules, or pitfalls (the code side is unaffected).
+This files-only limit stands until the extraction routes through `ctx docs`.
+
 Launchers resolve their runner dynamically: a project-local `tsx`, `tsx` on
 PATH, or Node with type stripping (the launchers end with
 `node --experimental-strip-types`). The graph database is generated, never

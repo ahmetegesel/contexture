@@ -112,7 +112,9 @@ corpus is `<root>/docs/<repo>/<slug>.md`). `DOCS_PRODUCT_REPOS_DIR` (default
 
 - The corpus grammar: `.contexture/templates/doc.md` (adopted beside the
   module).
-- The seed conventions: `docs/workspace/conventions.md` (copied by adoption).
+- The seed conventions: the plugin's `docs/workspace/conventions.md`, written
+  into the corpus by adoption through `ctx docs write workspace conventions`
+  (under the files driver the doc lands at that same path).
 - The plugin's `tests/sample/` corpus is reference data only: five fictional
   docs plus a demo backlog used by the nudge walk and the tests. It is never
   copied into a workspace.
@@ -125,9 +127,17 @@ temp only when it cannot be), copies the shipped core's runtime and its session
 and lane modules from `base/`, this module, and the grammar template (with
 `--driver=fts5`, the storage-fts5 plugin's module and `storage.driver: fts5`),
 seeds `tests/sample/docs/` plus `docs/`, and drives the staging check; on
-fts5 the store seed (the staged corpus imported by `ctx storage-fts5 migrate
---corpus`, then the docs folder removed, so the corpus checks read the store
-alone); the corpus reads keyed on the declared `corpus.store` (declared: the audit and the
+fts5 the capture set first run on the files driver at the sandbox path (the
+config set aside), then the store seed (the staged corpus imported by `ctx
+storage-fts5 migrate --corpus`, then the docs folder removed, so the corpus
+checks read the store alone), the migration round trip (the store exported
+back to files equals the staged corpus by `diff -r`, a planted byte read as a
+difference), and the capture parity (every capture byte-identical to the
+files driver's except a check or gate capture where the files driver prints
+the blanket or the untracked-claimant verdict and the store `STALE DOC`); the
+delta-source cases (`tests/store-cases.sh`: the check's two modes, `ctx docs
+changes`, the gate's halves in a git workspace of its own, keyed on the
+declared `corpus.changelog`); the corpus reads keyed on the declared `corpus.store` (declared: the audit and the
 unit-form nudge, the sample backlog seeded into a unit and compared with the
 backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
 of `tests/write/`: every success's stored bytes, every refusal leaving the

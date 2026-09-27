@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: the task nudge over the active task and the corpus
 # usage: ctx docs nudge <unit> [<repo>...]
-# usage: ctx docs nudge backlog.md docs/<repo>/*.md
+# usage: ctx docs nudge backlog.md <repo>...
 # help: reads the active task (the unit's first IN_PROGRESS task in backlog order, through ctx session task list and ctx session resolve) and prints the matched docs, the top pitfalls, and (when the task names setup verbs) the owning operational doc's run, build, and test targets with its toolchain note
 # help: the corpus comes from the configured storage driver: the whole corpus, or the named repos' docs
 # help: the backlog-file form reads a backlog outside the record (the plugin's demo); a path inside the sessions drawer refuses: a record artifact is read through its unit, never as a file
@@ -20,7 +20,7 @@ case "$1" in
 esac
 
 if [ "$#" -eq 0 ]; then
-  echo "Usage: ctx docs nudge backlog.md docs/<repo>/*.md" >&2
+  echo "Usage: ctx docs nudge <unit> [<repo>...] (or: ctx docs nudge backlog.md <repo>...)" >&2
   echo "help: ctx docs help nudge" >&2
   exit 1
 fi

@@ -175,7 +175,7 @@ The primary interaction toolbox provides typed semantic verbs (`task`, `record`,
 
 ## Maintaining contexture
 
-This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus (`docs/workspace/`) are untracked working state, this repository's own running installation and operational corpus, and they keep working through every change; the guides (`docs/*.md`) stay tracked.
+This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,modules/session,modules/run,templates,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the operational corpus is untracked working state at `docs/workspace/` under the files driver (under a store driver it lives in the store alone); both keep working through every change, and the guides (`docs/*.md`) stay tracked.
 
 The dev loop:
 

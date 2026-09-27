@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 # docs-nudge.awk: task context and pitfall extractor for the workspace docs (private engine; the nudge verb wraps it)
-# Usage: ctx docs nudge backlog.md docs/<repo>/*.md
+# Usage: ctx docs nudge <unit> [<repo>...]
 # Help: ctx docs help nudge
 # Pure POSIX awk; extracts active task intent, matches relevant documentation and pitfalls,
 # and forces the owning operational doc's @run/@build/@test targets on setup verbs.

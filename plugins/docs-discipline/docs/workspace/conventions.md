@@ -50,8 +50,8 @@
   provenance: ratified
   scope: "All changes affecting public APIs, contracts, behaviors, or dependencies."
   evidence: ".contexture/modules/docs/scripts/docs-audit.awk"
-  anti: "Refactoring an API contract without updating the corresponding doc in docs/<repo>/"
-  good: "Updating the endpoint signature in code and the matching contract rule in docs/<repo>/<slug>.md in the same commit"
+  anti: "Refactoring an API contract without updating the unit's corpus doc"
+  good: "Updating the endpoint signature in code and, with ctx docs entry on the matching contract rule, the unit's corpus doc in the same change"
 
 @rule docs/prompt-to-doc
   directive: must
@@ -75,13 +75,13 @@
   provenance: ratified
   scope: "All session completion checkpoints and close transactions."
   evidence: ".contexture/modules/docs/scripts/gate"
-  caution: "A failing close gate indicates uncovered code files, uncommitted doc updates, or doc syntax errors that break downstream readers."
+  caution: "A failing close gate indicates uncovered code files, doc updates missing from the delta, or doc syntax errors that break downstream readers."
   anti: "Closing a task or ending a session with modified code but unupdated documentation"
   good: "Chaining the audit and the check via ctx docs gate to verify coverage and zero stale docs before closing"
 
 @rule docs/authoring
   directive: must
-  statement: "New documentation is authored map-first: the codebase is mapped to coherent units with scoped sources globs (never a folder-by-folder mirror), each unit is drafted per .contexture/templates/doc.md, and the draft is verified before it lands (ctx docs audit for integrity, ctx docs check for coverage, ctx docs query for the projected read)."
+  statement: "New documentation is authored map-first: the codebase is mapped to coherent units with scoped sources globs (never a folder-by-folder mirror), each unit is drafted per .contexture/templates/doc.md and written through the ctx docs write verbs (ctx docs write for a whole draft, ctx docs new and the block verbs for the rest), and the draft is verified before it lands (ctx docs audit for integrity, ctx docs check for coverage, ctx docs query for the projected read)."
   status: followed
   prevalence: universal
   layer: workspace
@@ -94,7 +94,7 @@
 
 @rule docs/drift
   directive: must
-  statement: "Drift is reconciled from the change delta, never from memory: the status-prefixed git delta feeds ctx docs check with BOTH halves in one stream (the repository's code delta and the workspace's own docs/<repo>/ delta); every affected doc is updated in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands."
+  statement: "Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta under the files driver, ctx docs changes under a store driver); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands."
   status: followed
   prevalence: universal
   layer: workspace
@@ -102,9 +102,9 @@
   scope: "Any code change inside a documented repository."
   evidence: ".contexture/modules/docs/scripts/docs-check.awk"
   enforced_at: [.contexture/modules/docs/scripts/docs-check.awk, .contexture/modules/docs/scripts/gate, .contexture/rhythms/docs-drift.md]
-  caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: the check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered."
+  caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: the check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered. Under a store driver the check runs in its store mode: a doc refreshes only the code its own sources name, and every doc can ride the driver-fed delta."
   anti: "Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone, which cannot exit 0 by construction"
-  good: "Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, ctx docs gate already aggregates both halves and needs no pipeline"
+  good: "Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline"
 
 @rule docs/greppable-evidence
   directive: must
@@ -132,16 +132,16 @@
 
 @rule docs/fixed-pitfalls
   directive: must
-  statement: "A fixed pitfall is removed (the doc describes current truth); the id retires, never recycled; a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise, new id; references re-point via a fresh journal entry recording the resolution (append-only; git history holds the removed text)."
+  statement: "A fixed pitfall is removed (the doc describes current truth); the id retires, never recycled; a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise, new id; references re-point via a fresh journal entry recording the resolution (append-only; under the files driver git history holds the removed text)."
   status: followed
   prevalence: universal
   layer: workspace
   provenance: ratified
-  scope: "All docs/<repo>/*.md @pitfalls blocks."
+  scope: "Every @pitfalls block of the corpus."
   evidence: ".contexture/modules/docs/scripts/docs-audit.awk"
   caution: "A pitfall morphed in class to keep its journal anchor describes behavior that no longer exists."
   anti: "Reclassifying a fixed bug as a gotcha to preserve its journal anchor."
-  good: "Remove the fixed pitfall, retire its id, land the behavior as a contract @rule, and re-point refs from a fresh journal entry."
+  good: "Remove the fixed pitfall with ctx docs pitfall <id> --remove (the id retires), land the behavior as a contract @rule, and re-point refs from a fresh journal entry."
 
 @rule docs/section-refs
   directive: must

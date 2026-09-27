@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 # docs-audit.awk: audits typed-block markdown documents (private engine; the audit verb wraps it)
-# Usage: ctx docs audit docs/<repo>/*.md
+# Usage: ctx docs audit [<repo>...]
 # Help: ctx docs help audit
 # Exits 0 on clean; exits 1 on errors with line numbers.
 
