@@ -275,6 +275,32 @@ CREATE TRIGGER IF NOT EXISTS trg_lane_entries_ad AFTER DELETE ON lane_entries BE
   DELETE FROM search_documents WHERE unit = old.unit AND entity_type = 'lane_entry' AND entity_id = old.lane_slug || '/' || old.slug;
 END;
 
+-- The corpus (schema version 3): the agent-facing docs beside the record, one row per doc
+-- keyed by (repo, slug), the text verbatim; its canonical address is docs/<repo>/<slug>.md.
+-- The corpus is not a unit: no row references sessions, so no cascade ever reaches it, and
+-- no doc is indexed for search (the corpus search stays the docs verbs' own pass).
+CREATE TABLE IF NOT EXISTS docs (
+  repo TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  body TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (repo, slug)
+);
+
+-- The corpus change log: one row per corpus.write and corpus.remove, never edited or pruned;
+-- head is the workspace git HEAD the verb passed (or none), prior the doc's state before
+-- the change (absent or present), so a window of rows yields each doc's net status
+CREATE TABLE IF NOT EXISTS doc_changes (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  op TEXT NOT NULL,
+  repo TEXT NOT NULL,
+  slug TEXT NOT NULL,
+  head TEXT NOT NULL,
+  prior TEXT NOT NULL CHECK(prior IN ('absent', 'present'))
+);
+CREATE INDEX IF NOT EXISTS idx_doc_changes_head ON doc_changes(head);
+
 -- Backfill for a database created before closures existed: the legacy columns seed one
 -- row per non-empty value; entries that already carry closure rows are left alone
 INSERT INTO closures (unit, lane_slug, entry_slug, kind, line_no, target_slug, raw)

@@ -1,0 +1,25 @@
+#!/bin/sh
+# summary: the corpus half of a change delta from the store's change log
+# usage: ctx docs changes
+# usage: ctx docs changes --since=<rev>
+# help: prints one status-prefixed line per doc written or removed through the docs verbs since the current git HEAD (A added, M modified, D deleted; a doc created and removed again prints nothing), docs/<repo>/<slug>.md by path, the corpus half a store driver adds to the code delta from git
+# help: --since=<rev> widens the window to every commit from <rev> to HEAD, <rev> included: the recovery after a HEAD move that was not a commit (a checkout, a reset), piped with the git delta into ctx docs check
+# help: the files driver keeps no change log (its corpus rides the git delta with the code), so the verb refuses there; the gate composes both halves by itself on every driver
+# help: exit codes: 0 the lines printed (none when nothing changed); 1 a driver without corpus.changelog, an unknown revision, or a bad argument; 2 a storage driver failure
+# help: example: { git diff --name-status; ctx docs changes; } | ctx docs check workspace
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs changes: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help changes" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" changes
+docs_changes "$@"

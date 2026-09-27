@@ -1,7 +1,7 @@
 # db-init.sh: the database open path shared by the driver and the migration (sourced;
 # needs DB_PATH and SCHEMA_SQL; the backfill needs a scratch folder, DB_TMP). The schema
 # is idempotent (IF NOT EXISTS throughout, a guarded backfill): it runs on a fresh
-# database and again on one that predates a later table. Two in-place upgrades, each in
+# database and again on one that predates a later table. Three in-place upgrades, each in
 # one transaction:
 #   ordinal: journal tables that predate the ordinal key (slugs unique per unit) are
 #     rebuilt, every row kept, its id and file order kept, ordinal 1, the search documents
@@ -9,7 +9,10 @@
 #   version 2 (PRAGMA user_version): the artifacts table (the canonical text) and the
 #     search documents re-derived under the uniform sections; a unit whose text the
 #     database never held gets its artifacts synthesized from its rows (the legacy
-#     serialization), so an older dogfood database keeps every record it had.
+#     serialization), so an older dogfood database keeps every record it had;
+#   version 3: the corpus tables (docs, doc_changes); every row of every earlier table kept.
+# The steps run in order and each runs whenever the version is below it, so a database of
+# any age (a version 0 dogfood copy included) climbs the whole chain in one open.
 
 # every connection waits for a busy writer instead of failing at once: busy_timeout is
 # per connection, so each sqlite3 call sets it (the schema's PRAGMA covers only its own)
@@ -49,6 +52,16 @@ db_upgrade_v2() {
     printf "INSERT INTO search_documents (unit, entity_type, entity_id, section, title, body) SELECT unit, 'lane', lane_slug, 'lane_report', lane_slug || ': ' || goal, report FROM lanes;\n"
     printf "INSERT INTO search_documents (unit, entity_type, entity_id, section, title, body) SELECT unit, 'lane_entry', lane_slug || '/' || slug, 'lane_journal', lane_slug || '/' || slug, what FROM lane_entries ORDER BY id;\n"
     printf 'PRAGMA user_version = 2;\nCOMMIT;\n'
+  } | sq -bail "$DB_PATH" >/dev/null
+}
+
+# version 3: the schema (docs and doc_changes among its IF NOT EXISTS tables) and the version,
+# one transaction; no earlier row is touched
+db_upgrade_v3() {
+  {
+    printf 'BEGIN IMMEDIATE;\n'
+    grep -v '^PRAGMA' "$SCHEMA_SQL"
+    printf 'PRAGMA user_version = 3;\nCOMMIT;\n'
   } | sq -bail "$DB_PATH" >/dev/null
 }
 
@@ -158,11 +171,14 @@ db_init() {
     # a fresh database: the whole schema at the current version
     if [ -f "$SCHEMA_SQL" ]; then
       sq "$DB_PATH" < "$SCHEMA_SQL" >/dev/null 2>&1
-      sq "$DB_PATH" "PRAGMA user_version = 2;" >/dev/null 2>&1
+      sq "$DB_PATH" "PRAGMA user_version = 3;" >/dev/null 2>&1
     fi
     return 0
   fi
-  if [ "${db_version:-0}" -lt 2 ] 2>/dev/null; then
+  case "${db_version:-0}" in
+    ""|*[!0-9]*) db_version=0 ;;
+  esac
+  if [ "$db_version" -lt 2 ]; then
     if ! db_upgrade_v2; then
       printf 'storage-fts5: error: the version 2 upgrade of %s failed and rolled back (ERR_STORAGE_CORRUPT)\n' "$DB_PATH" >&2
       exit 2
@@ -171,7 +187,16 @@ db_init() {
       printf 'storage-fts5: error: seeding the artifacts of %s failed and rolled back (ERR_STORAGE_CORRUPT)\n' "$DB_PATH" >&2
       exit 2
     fi
-    return 0
+    db_version=2
+    upgraded=1
+  fi
+  if [ "$db_version" -lt 3 ]; then
+    if ! db_upgrade_v3; then
+      printf 'storage-fts5: error: the version 3 upgrade of %s failed and rolled back (ERR_STORAGE_CORRUPT)\n' "$DB_PATH" >&2
+      exit 2
+    fi
+    db_version=3
+    upgraded=1
   fi
   if [ "$has_tables" != "3" ] || [ "${upgraded:-0}" = "1" ]; then
     if [ -f "$SCHEMA_SQL" ]; then

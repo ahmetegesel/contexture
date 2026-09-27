@@ -399,6 +399,110 @@ docs_active_task() {
   fi
 }
 
+# docs_delta_source: DOCS_DELTA is log when the configured driver keeps a corpus change log
+# (corpus.changelog: the corpus half of a delta comes from the store), git otherwise (the
+# files driver: the corpus rides the git delta as the code does); the check engine takes it
+# as its bounded delta_source token
+docs_delta_source() {
+  DOCS_DELTA=git
+  if [ -n "$DOCS_RESOLVER" ] && docs_call has corpus.changelog; then
+    DOCS_DELTA=log
+  fi
+  return 0
+}
+
+# docs_head: the workspace's git HEAD (a full commit id), or none outside a repository
+docs_head() {
+  dh_h=$(git -C "$DOCS_ROOT" rev-parse --verify -q HEAD 2>/dev/null) || dh_h=""
+  [ -n "$dh_h" ] || dh_h=none
+  printf '%s\n' "$dh_h"
+}
+
+# docs_changes [--since=<rev>]: the corpus half of a delta from the store's change log, one
+# status-prefixed line per doc, <status> TAB docs/<repo>/<slug>.md, bytewise by path. The
+# window is the rows stamped with the current HEAD; --since=<rev> widens it to the heads git
+# rev-list --boundary <rev>..HEAD names (the boundary's leading dash stripped), <rev> itself,
+# and HEAD. Net status per doc, as git would report the same history: A when the doc was
+# absent before its first row in the window and exists now, M when it was present and
+# exists now, D when it was present and is gone now, no line when it was absent and is gone.
+# rc 1 on a driver without corpus.changelog (the files driver takes the corpus delta from
+# git), an unknown revision, or --since outside a repository; rc 2 a driver failure
+docs_changes() {
+  dx_since=""
+  for dx_a in "$@"; do
+    case "$dx_a" in
+      --since=?*) dx_since=${dx_a#--since=} ;;
+      *) printf '%s: unknown argument: %s (usage: ctx docs changes [--since=<rev>])\n' "$DOCS_VERB" "$dx_a" >&2; return 1 ;;
+    esac
+  done
+  docs_require || return 2
+  if ! docs_call has corpus.changelog; then
+    printf '%s: the configured storage driver keeps no corpus change log (corpus.changelog); under the files driver the corpus delta comes from git\n' "$DOCS_VERB" >&2
+    return 1
+  fi
+  docs_scratch || return 2
+  dx_head=$(docs_head)
+  printf 'head=%s\n' "$dx_head" > "$DOCS_SCRATCH/heads"
+  if [ -n "$dx_since" ]; then
+    if [ "$dx_head" = none ]; then
+      printf '%s: --since needs the workspace to be a git repository with a commit\n' "$DOCS_VERB" >&2
+      return 1
+    fi
+    if ! dx_rev=$(git -C "$DOCS_ROOT" rev-parse --verify -q "$dx_since^{commit}" 2>/dev/null); then
+      printf '%s: unknown revision: %s\n' "$DOCS_VERB" "$dx_since" >&2
+      return 1
+    fi
+    printf 'head=%s\n' "$dx_rev" >> "$DOCS_SCRATCH/heads"
+    git -C "$DOCS_ROOT" rev-list --boundary "$dx_rev..HEAD" 2>/dev/null | sed -e 's/^-//' -e 's/^/head=/' >> "$DOCS_SCRATCH/heads"
+  fi
+  if ! (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" corpus.changes < "$DOCS_SCRATCH/heads") > "$DOCS_SCRATCH/rows"; then
+    return 2
+  fi
+  docs_keys || return $?
+  printf '%s\n' "$DOCS_KEYS" > "$DOCS_SCRATCH/now"
+  DOCS_NOW_FILE="$DOCS_SCRATCH/now" awk -F '\t' '
+    BEGIN {
+      f = ENVIRON["DOCS_NOW_FILE"]
+      while ((getline k < f) > 0) if (k != "") now[k] = 1
+      close(f)
+    }
+    NF == 6 && !($4 in first) { first[$4] = $6; order[++n] = $4 }
+    END {
+      for (i = 1; i <= n; i++) {
+        k = order[i]
+        if (first[k] == "absent" && (k in now)) print "A\tdocs/" k ".md"
+        else if (first[k] == "present" && (k in now)) print "M\tdocs/" k ".md"
+        else if (first[k] == "present") print "D\tdocs/" k ".md"
+      }
+    }' "$DOCS_SCRATCH/rows" | sort -t "$(printf '\t')" -k2,2
+}
+
+# docs_changes_prepare [--since=<rev>] / docs_changes_emit: the corpus half computed into the
+# scratch before a pipeline (its refusal stops the verb), then printed inside it
+docs_changes_prepare() {
+  docs_scratch || return 2
+  docs_changes "$@" > "$DOCS_SCRATCH/changes"
+}
+docs_changes_emit() {
+  cat "$DOCS_SCRATCH/changes"
+}
+
+# docs_code_half: a git delta on stdin without the workspace root's corpus paths
+# (docs/<repo>/<slug>.md): under a store those files, if any linger, are not the corpus; a
+# rename with one corpus side keeps its other side (A for the new path, D for the old)
+docs_code_half() {
+  awk -F '\t' '
+    function corpus(p) { return p ~ /^docs\/[^\/]+\/[^\/]+\.md$/ }
+    $1 ~ /^R/ && NF >= 3 {
+      if (corpus($2) && corpus($3)) next
+      if (corpus($3)) { print "D\t" $2; next }
+      if (corpus($2)) { print "A\t" $3; next }
+      print; next
+    }
+    NF >= 2 && corpus($2) { next }
+    { print }'
+}
+
 # docs_map: stdin to stdout with every display pair of DOCS_MAP applied (exact substrings,
 # the pair file named through the environment)
 docs_map() {

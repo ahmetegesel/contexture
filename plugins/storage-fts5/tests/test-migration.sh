@@ -498,5 +498,46 @@ if ! printf '%s\n' "$show7" | grep -q '"is_closed":true' || ! printf '%s\n' "$sh
   exit 1
 fi
 
+# 7. The corpus: --corpus alone imports through the posix reference (no unit needed), writes no
+# change-log row, and the export writes every doc back byte for byte; a depth-one guide is
+# never a doc; the database reads schema version 3
+C=$SANDBOX/corpus-ws
+mkdir -p "$C/.contexture/tmp" "$C/docs/alpha" "$C/docs/beta"
+printf '@doc overview one\n  repo: alpha\n  description: "a \\n literal, a\ttab, çalışma"' > "$C/docs/alpha/one.md"
+printf '@doc overview two\n  repo: alpha\n' > "$C/docs/alpha/two.md"
+printf '@doc overview three\n  repo: beta\n' > "$C/docs/beta/three.md"
+printf '# a guide, never a doc\n' > "$C/docs/guide.md"
+cp -R "$C/docs" "$C/docs.orig"
+out_ci=$(cd "$C" && "$MIGRATE" --from=posix --to=fts5 --corpus --db="$C/c.db" 2>&1)
+if [ $? -ne 0 ] || ! printf '%s\n' "$out_ci" | grep -q '"corpus":"imported","docs":3,"dropped":0'; then
+  printf 'FAIL: corpus import (out=%s)\n' "$out_ci" >&2
+  exit 1
+fi
+c_state=$(sqlite3 "$C/c.db" "SELECT (SELECT user_version FROM pragma_user_version) || '|' || (SELECT count(*) FROM docs) || '|' || (SELECT count(*) FROM doc_changes);")
+if [ "$c_state" != "3|3|0" ]; then
+  printf 'FAIL: corpus store after the import (want version 3, 3 docs, 0 change-log rows; got %s)\n' "$c_state" >&2
+  exit 1
+fi
+rm -rf "$C/docs/alpha" "$C/docs/beta"
+out_ce=$(cd "$C" && "$MIGRATE" --from=fts5 --to=posix --corpus --db="$C/c.db" 2>&1)
+if [ $? -ne 0 ] || ! printf '%s\n' "$out_ce" | grep -q '"corpus":"exported","docs":3,"pruned":0'; then
+  printf 'FAIL: corpus export (out=%s)\n' "$out_ce" >&2
+  exit 1
+fi
+if ! diff -r "$C/docs.orig" "$C/docs" > /dev/null 2>&1; then
+  printf 'FAIL: the corpus did not round-trip byte for byte\n' >&2
+  exit 1
+fi
+printf '@doc overview extra\n' > "$C/docs/beta/extra.md"
+if (cd "$C" && "$MIGRATE" --from=fts5 --to=posix --corpus --db="$C/c.db" > /dev/null 2>&1); then
+  printf 'FAIL: an export over a doc the store lacks must refuse without --prune\n' >&2
+  exit 1
+fi
+(cd "$C" && "$MIGRATE" --from=fts5 --to=posix --corpus --prune --db="$C/c.db" > /dev/null 2>&1)
+if [ -e "$C/docs/beta/extra.md" ] || [ ! -f "$C/docs/guide.md" ]; then
+  printf 'FAIL: --prune must remove the extra doc and keep the depth-one guide\n' >&2
+  exit 1
+fi
+
 printf 'PASS: bidirectional migration verified cleanly\n'
 exit 0

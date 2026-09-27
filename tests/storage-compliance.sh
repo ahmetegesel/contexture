@@ -792,15 +792,16 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
 
   # TC45: corpus.changes follows the declared corpus.changelog: absent, it refuses rc1
   # ERR_CAPABILITY_UNSUPPORTED printing nothing; present, it returns the rows of the given
-  # heads only, oldest first: <seq> TAB <time> TAB <op> TAB <repo>/<slug> TAB <head>
+  # heads only, oldest first: <seq> TAB <time> TAB <op> TAB <repo>/<slug> TAB <head> TAB
+  # <prior>, prior the doc's state before the change (absent or present)
   if [ "$CORPUS_LOG" -eq 1 ]; then
     cw c-z.txt logr one --op=new --head=aaa1 >/dev/null 2>&1
     cw c-z.txt logr one --op=entry --head=bbb2 >/dev/null 2>&1
     drv corpus.remove logr one --op=remove --head=aaa1 >/dev/null 2>&1
     out=$(printf 'head=aaa1\n' | "$DRIVER_EXEC" corpus.changes 2>&1); rc=$?
     wantrc "$rc" 0
-    c_rows=$(printf '%s\n' "$out" | awk -F '\t' 'NF == 5 && $4 == "logr/one" { printf "%s %s|", $3, $5 }')
-    [ "$c_rows" = "new aaa1|remove aaa1|" ] || tc_fail="$tc_fail; changes rows [$c_rows]"
+    c_rows=$(printf '%s\n' "$out" | awk -F '\t' 'NF == 6 && $4 == "logr/one" { printf "%s %s %s|", $3, $5, $6 }')
+    [ "$c_rows" = "new aaa1 absent|remove aaa1 present|" ] || tc_fail="$tc_fail; changes rows [$c_rows]"
     wantnot "$out" 'bbb2'
   else
     out=$(printf 'head=aaa1\n' | "$DRIVER_EXEC" corpus.changes 2>/dev/null); rc=$?

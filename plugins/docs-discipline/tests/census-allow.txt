@@ -71,6 +71,8 @@ helper-output	audit	docs_args 1 0 "$@" || exit $?
 helper-output	audit	docs_exec "$dir/docs-audit.awk"
 helper-output	check	docs_args 0 0 "$@" || exit $?
 helper-output	check	docs_exec "$dir/docs-check.awk"
+helper-output	check	  docs_exec "$dir/docs-check.awk" -v delta_source=log
+helper-output	changes	docs_changes "$@"
 helper-output	gate	        set -- "$@" "$doc_path"
 helper-output	gate	    done < "$DOCS_PATHS"
 helper-output	gate	    docs_run awk -f "$eng" "$@"
@@ -82,6 +84,7 @@ helper-output	query	  set -- "$@" "$DOC_PATH"
 helper-output	query	done < "$DOCS_PATHS"
 helper-output	query	    -f "$AWK_SCRIPT" "$@")
 helper-source	audit	. "$dir/docs-io.sh"
+helper-source	changes	. "$dir/docs-io.sh"
 helper-source	check	. "$dir/docs-io.sh"
 helper-source	gate	. "$dir/docs-io.sh"
 helper-source	nudge	. "$dir/docs-io.sh"

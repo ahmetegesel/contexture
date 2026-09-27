@@ -16,7 +16,9 @@
 #
 # The suite runs on either storage driver: --driver=posix (the default) or
 # --driver=fts5 (the storage-fts5 plugin's own module copy staged into the
-# sandbox, storage.driver: fts5 in its config; skip 77 when sqlite3 lacks FTS5).
+# sandbox, storage.driver: fts5 in its config; skip 77 when sqlite3 lacks FTS5);
+# the fts5 run imports the staged corpus into the store and removes the docs
+# folder first ([store-seed]), so its corpus checks read the store alone.
 # Scratch stages under the workspace's .contexture/tmp/ (created when the tree is
 # writable, as the core suites do), the system temp only when it cannot be made.
 # Exit: 0 when every check passes, 1 on a failure, 77 when a need is absent.
@@ -112,9 +114,29 @@ else
 fi
 echo ""
 
+# the store run: the staged corpus imported into the store (ctx storage-fts5 migrate
+# --corpus, the files read through the posix reference driver), then the docs folder
+# removed, so every corpus check below reads the store alone
+if [ "$DRIVER" = fts5 ]; then
+    SEED_WANT=0
+    for f in docs/*/*.md; do [ -f "$f" ] && SEED_WANT=$((SEED_WANT + 1)); done
+    SEED_OUT=$("$SANDBOX/.contexture/ctx" storage-fts5 migrate --from=posix --to=fts5 --corpus 2>&1)
+    SEED_RC=$?
+    rm -rf "$SANDBOX/docs"
+    if [ "$SEED_RC" -eq 0 ] && [ "$SEED_WANT" -gt 0 ] && printf '%s' "$SEED_OUT" | grep -q "\"corpus\":\"imported\",\"docs\":$SEED_WANT," && [ ! -e "$SANDBOX/docs" ]; then
+        echo "[store-seed] PASS ($SEED_WANT docs imported into the store; the docs folder removed)"
+        PASS=$((PASS + 1))
+    else
+        echo "[store-seed] FAIL (rc=$SEED_RC, want $SEED_WANT docs)"
+        printf '%s\n' "$SEED_OUT"
+        FAIL=$((FAIL + 1))
+    fi
+    echo ""
+fi
+
 # the corpus reads key on the declared capability, never on the driver name: a driver that
-# declares corpus.store serves the full checks; one that does not (fts5 until its corpus
-# store lands) must refuse every read verb rc 2 naming the capability
+# declares corpus.store serves the full checks; one that does not must refuse every read
+# verb rc 2 naming the capability
 if ./.contexture/modules/session/scripts/driver-resolver has corpus.store; then
     CORPUS_STORE=1
 else

@@ -4,8 +4,9 @@
 # The store keeps every artifact's canonical text verbatim (the artifacts table) and a
 # derived relational index rebuilt from that text (index.sh), which feeds the dual FTS5
 # tables and the pure SQL RRF search. Native methods: capability, storage.health,
-# artifact.read, artifact.write, artifact.list, session.create, session.list, and
-# search.query. Every other method (session.*, task.*, entry.*, finding.*, lane.*,
+# artifact.read, artifact.write, artifact.list, session.create, session.list,
+# search.query, and the corpus store (corpus.list, read, write, remove, mount, changes;
+# capabilities corpus.store and corpus.changelog). Every other method (session.*, task.*, entry.*, finding.*, lane.*,
 # resolve.ref) is the record grammar itself: it runs through the reference serialization
 # (the posix driver) over the unit materialized from the store into a scratch workspace,
 # and every artifact it changed is stored back with its reindex in one transaction, so
@@ -431,6 +432,252 @@ EOF
 }
 
 # ==============================================================================
+# The corpus store (capabilities corpus.store and corpus.changelog)
+# ==============================================================================
+# The agent-facing doc corpus beside the record: a doc keyed by (repo, slug), its text
+# verbatim in the docs table, its canonical address docs/<repo>/<slug>.md (never a storage
+# location). The driver never parses a doc; the grammar stays in the docs verbs. Every
+# write and remove lands its change-log row (doc_changes: the op and the git HEAD the verb
+# passed, and the doc's state before the change) in the same transaction as the doc row.
+# Keys, flags, messages, and exit tiers are the posix driver's, so a caller never branches.
+corpus_key_valid() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9._-]*) return 1 ;;
+  esac
+  return 0
+}
+
+# corpus_keys <method> <repo> <slug>: both keys valid, else rc 1 with the method named
+corpus_keys() {
+  if [ -z "$2" ] || [ -z "$3" ]; then
+    printf '%s: error: missing required arguments (repo, slug) (ERR_INVALID_ARGUMENT)\n' "$1" >&2
+    exit 1
+  fi
+  corpus_key_valid "$2" || { printf "%s: error: malformed repo '%s' (ERR_INVALID_ARGUMENT)\n" "$1" "$2" >&2; exit 1; }
+  corpus_key_valid "$3" || { printf "%s: error: malformed slug '%s' (ERR_INVALID_ARGUMENT)\n" "$1" "$3" >&2; exit 1; }
+}
+
+# corpus_flags <method> <default op> [flags]: --create, --op=<op>, --head=<sha>|none, bounded
+# tokens only; sets CF_CREATE, CF_OP, CF_HEAD (none when absent); a bad token refuses rc 1
+corpus_flags() {
+  cf_m="$1"; CF_OP="$2"; CF_CREATE=0; CF_HEAD=none
+  shift 2
+  for cf_a in "$@"; do
+    case "$cf_a" in
+      --create)
+        [ "$cf_m" = corpus.write ] || { printf "%s: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$cf_m" "$cf_a" >&2; exit 1; }
+        CF_CREATE=1 ;;
+      --op=*)
+        CF_OP="${cf_a#--op=}"
+        case "$CF_OP" in
+          new|write|header|rule|pitfall|entry|section|replace|remove|ids) ;;
+          *) printf "%s: error: unknown op '%s' (new, write, header, rule, pitfall, entry, section, replace, remove, ids) (ERR_INVALID_ARGUMENT)\n" "$cf_m" "$CF_OP" >&2; exit 1 ;;
+        esac
+        ;;
+      --head=*)
+        CF_HEAD="${cf_a#--head=}"
+        case "$CF_HEAD" in
+          none) ;;
+          ""|*[!0-9a-fA-F]*) printf "%s: error: --head takes a commit id or none: '%s' (ERR_INVALID_ARGUMENT)\n" "$cf_m" "$CF_HEAD" >&2; exit 1 ;;
+        esac
+        ;;
+      *) printf "%s: error: unknown argument '%s' (ERR_INVALID_ARGUMENT)\n" "$cf_m" "$cf_a" >&2; exit 1 ;;
+    esac
+  done
+}
+
+# corpus_has_db: the store holds the corpus tables (a read never creates the database)
+corpus_has_db() {
+  db_open_read || return 1
+  [ "$(sq "$DB_PATH" "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='docs';" 2>/dev/null)" = "1" ]
+}
+
+# corpus_doc_exists <repo> <slug>: rc 0 when the store holds the doc
+corpus_doc_exists() {
+  [ "$(sq "$DB_PATH" "SELECT count(*) FROM docs WHERE repo = '$(sql_escape "$1")' AND slug = '$(sql_escape "$2")';")" = "1" ]
+}
+
+# corpus.list [<repo>]: one <repo>/<slug> line per doc in the bytewise order of the canonical
+# addresses (docs/<repo>/<slug>.md, as a C-locale glob of the files lists them, so one-two
+# sorts before one); an empty corpus lists nothing rc 0; an absent repo refuses rc 1
+corpus_list() {
+  if [ $# -gt 1 ]; then
+    printf 'corpus.list: error: takes at most one argument, the repo (ERR_INVALID_ARGUMENT)\n' >&2
+    exit 1
+  fi
+  cl_repo="${1:-}"
+  if [ -n "$cl_repo" ] && ! corpus_key_valid "$cl_repo"; then
+    printf "corpus.list: error: malformed repo '%s' (ERR_INVALID_ARGUMENT)\n" "$cl_repo" >&2
+    exit 1
+  fi
+  cl_out=""
+  if corpus_has_db; then
+    cl_out=$(sq -bail "$DB_PATH" "SELECT repo || '/' || slug FROM docs WHERE '$(sql_escape "$cl_repo")' = '' OR repo = '$(sql_escape "$cl_repo")' ORDER BY repo || '/' || slug || '.md' COLLATE BINARY;") || exit 2
+  fi
+  if [ -n "$cl_repo" ] && [ -z "$cl_out" ]; then
+    printf "corpus.list: error: repo '%s' not found in the corpus (ERR_ENTITY_NOT_FOUND)\n" "$cl_repo" >&2
+    exit 1
+  fi
+  [ -n "$cl_out" ] && printf '%s\n' "$cl_out"
+  exit 0
+}
+
+# corpus.read <repo> <slug>: the doc byte for byte; rc 1 when absent
+corpus_read() {
+  if [ $# -gt 2 ]; then
+    printf 'corpus.read: error: takes two arguments, repo and slug (ERR_INVALID_ARGUMENT)\n' >&2
+    exit 1
+  fi
+  corpus_keys corpus.read "${1:-}" "${2:-}"
+  if ! corpus_has_db || ! corpus_doc_exists "$1" "$2"; then
+    printf "corpus.read: error: doc '%s/%s' not found in the corpus (ERR_ENTITY_NOT_FOUND)\n" "$1" "$2" >&2
+    exit 1
+  fi
+  scratch
+  : > "$SCRATCH/doc"
+  sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$SCRATCH/doc")', body) FROM docs WHERE repo = '$(sql_escape "$1")' AND slug = '$(sql_escape "$2")';" > /dev/null || {
+    printf "corpus.read: error: doc '%s/%s' is unreadable (ERR_STORAGE_READ)\n" "$1" "$2" >&2
+    exit 2
+  }
+  cat "$SCRATCH/doc"
+  exit 0
+}
+
+# corpus.write <repo> <slug> [--create] [--op=<op>] [--head=<sha>|none]: the whole doc raw on
+# stdin replaces the stored one (a new doc when absent); --create refuses an existing doc
+# rc 1; the doc row and its change-log row land in one transaction, else rc 2 and no success
+corpus_write() {
+  cw_repo="${1:-}"; cw_slug="${2:-}"
+  if [ $# -ge 2 ]; then shift 2; else shift $#; fi
+  corpus_keys corpus.write "$cw_repo" "$cw_slug"
+  corpus_flags corpus.write write "$@"
+  db_init
+  if [ "$CF_CREATE" -eq 1 ] && corpus_doc_exists "$cw_repo" "$cw_slug"; then
+    printf "corpus.write: error: doc '%s/%s' already exists in the corpus (ERR_ENTITY_EXISTS)\n" "$cw_repo" "$cw_slug" >&2
+    exit 1
+  fi
+  scratch
+  cat > "$SCRATCH/doc" || { printf "corpus.write: error: the storage write of doc '%s/%s' failed (ERR_STORAGE_WRITE)\n" "$cw_repo" "$cw_slug" >&2; exit 2; }
+  cw_r=$(sql_escape "$cw_repo"); cw_s=$(sql_escape "$cw_slug"); cw_now=$(now_utc)
+  {
+    printf 'BEGIN IMMEDIATE;\n'
+    printf "INSERT INTO doc_changes (at, op, repo, slug, head, prior) VALUES ('%s', '%s', '%s', '%s', '%s', CASE WHEN EXISTS (SELECT 1 FROM docs WHERE repo = '%s' AND slug = '%s') THEN 'present' ELSE 'absent' END);\n" \
+      "$cw_now" "$CF_OP" "$cw_r" "$cw_s" "$CF_HEAD" "$cw_r" "$cw_s"
+    printf "INSERT OR REPLACE INTO docs (repo, slug, body, updated_at) VALUES ('%s', '%s', CAST(readfile('%s') AS TEXT), '%s');\n" \
+      "$cw_r" "$cw_s" "$(sql_escape "$SCRATCH/doc")" "$cw_now"
+    printf 'COMMIT;\n'
+  } > "$SCRATCH/corpus.sql"
+  sq -bail "$DB_PATH" < "$SCRATCH/corpus.sql" > /dev/null 2>&1 || {
+    printf "corpus.write: error: the storage write of doc '%s/%s' failed (ERR_STORAGE_WRITE)\n" "$cw_repo" "$cw_slug" >&2
+    exit 2
+  }
+  printf '{"status":"ok","repo":"%s","slug":"%s","op":"%s"}\n' "$cw_repo" "$cw_slug" "$CF_OP"
+  exit 0
+}
+
+# corpus.remove <repo> <slug> [--op=<op>] [--head=<sha>|none]: removes the doc with its
+# change-log row in one transaction; rc 1 when absent
+corpus_remove() {
+  cx_repo="${1:-}"; cx_slug="${2:-}"
+  if [ $# -ge 2 ]; then shift 2; else shift $#; fi
+  corpus_keys corpus.remove "$cx_repo" "$cx_slug"
+  corpus_flags corpus.remove remove "$@"
+  if ! corpus_has_db || ! corpus_doc_exists "$cx_repo" "$cx_slug"; then
+    printf "corpus.remove: error: doc '%s/%s' not found in the corpus (ERR_ENTITY_NOT_FOUND)\n" "$cx_repo" "$cx_slug" >&2
+    exit 1
+  fi
+  cx_r=$(sql_escape "$cx_repo"); cx_s=$(sql_escape "$cx_slug")
+  {
+    printf 'BEGIN IMMEDIATE;\n'
+    printf "INSERT INTO doc_changes (at, op, repo, slug, head, prior) VALUES ('%s', '%s', '%s', '%s', '%s', 'present');\n" "$(now_utc)" "$CF_OP" "$cx_r" "$cx_s" "$CF_HEAD"
+    printf "DELETE FROM docs WHERE repo = '%s' AND slug = '%s';\n" "$cx_r" "$cx_s"
+    printf 'COMMIT;\n'
+  } | sq -bail "$DB_PATH" > /dev/null 2>&1 || {
+    printf "corpus.remove: error: the storage write of doc '%s/%s' failed (ERR_STORAGE_WRITE)\n" "$cx_repo" "$cx_slug" >&2
+    exit 2
+  }
+  printf '{"status":"ok","repo":"%s","slug":"%s","op":"%s"}\n' "$cx_repo" "$cx_slug" "$CF_OP"
+  exit 0
+}
+
+# corpus.mount <dest> [<repo>]: fills the empty folder the caller made with every doc (or
+# the one repo's) at <dest>/docs/<repo>/<slug>.md and prints <dest>; an empty store mounts
+# an empty docs folder; a missing or non-empty folder and an absent repo refuse rc 1
+corpus_mount() {
+  cm_dest="${1:-}"; cm_repo="${2:-}"
+  if [ $# -gt 2 ]; then
+    printf 'corpus.mount: error: takes the destination folder and at most a repo (ERR_INVALID_ARGUMENT)\n' >&2
+    exit 1
+  fi
+  if [ -z "$cm_dest" ] || [ ! -d "$cm_dest" ]; then
+    printf 'corpus.mount: error: the destination must be an existing empty folder the caller made (ERR_INVALID_ARGUMENT)\n' >&2
+    exit 1
+  fi
+  if [ -n "$(ls -A "$cm_dest" 2>/dev/null)" ]; then
+    printf 'corpus.mount: error: the destination folder is not empty (ERR_INVALID_ARGUMENT)\n' >&2
+    exit 1
+  fi
+  if [ -n "$cm_repo" ] && ! corpus_key_valid "$cm_repo"; then
+    printf "corpus.mount: error: malformed repo '%s' (ERR_INVALID_ARGUMENT)\n" "$cm_repo" >&2
+    exit 1
+  fi
+  cm_keys=""
+  if corpus_has_db; then
+    cm_keys=$(sq -bail "$DB_PATH" "SELECT repo || '/' || slug FROM docs WHERE '$(sql_escape "$cm_repo")' = '' OR repo = '$(sql_escape "$cm_repo")' ORDER BY repo || '/' || slug || '.md' COLLATE BINARY;") || exit 2
+  fi
+  if [ -n "$cm_repo" ] && [ -z "$cm_keys" ]; then
+    printf "corpus.mount: error: repo '%s' not found in the corpus (ERR_ENTITY_NOT_FOUND)\n" "$cm_repo" >&2
+    exit 1
+  fi
+  mkdir -p "$cm_dest/docs" || { printf 'corpus.mount: error: the destination folder is not writable (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
+  if [ -n "$cm_keys" ]; then
+    for cm_r in $(printf '%s\n' "$cm_keys" | sed 's|/.*||' | uniq); do
+      mkdir -p "$cm_dest/docs/$cm_r" || { printf 'corpus.mount: error: the destination folder is not writable (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
+    done
+    sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$cm_dest")/docs/' || repo || '/' || slug || '.md', body) FROM docs WHERE '$(sql_escape "$cm_repo")' = '' OR repo = '$(sql_escape "$cm_repo")';" > /dev/null || {
+      printf 'corpus.mount: error: the corpus could not be written into the destination folder (ERR_STORAGE_WRITE)\n' >&2
+      exit 2
+    }
+    # an empty doc writes no bytes: every listed doc still sits at its address
+    for cm_k in $cm_keys; do
+      [ -f "$cm_dest/docs/$cm_k.md" ] || : > "$cm_dest/docs/$cm_k.md"
+    done
+  fi
+  printf '%s\n' "$cm_dest"
+  exit 0
+}
+
+# corpus.changes: the change-log rows whose head is in the set given on stdin (payload lines
+# head=<sha>|none), oldest first, one TAB-separated line each:
+#   <seq> <at> <op> <repo>/<slug> <head> <prior: absent|present>
+# prior is the doc's state before that change, so a window's rows yield each doc's net status
+corpus_changes() {
+  if [ $# -gt 0 ]; then
+    printf 'corpus.changes: error: takes no arguments; the heads travel on stdin as head=<sha> lines (ERR_INVALID_ARGUMENT)\n' >&2
+    exit 1
+  fi
+  scratch
+  cat > "$SCRATCH/heads" || exit 2
+  printf 'CREATE TEMP TABLE want_heads (head TEXT PRIMARY KEY);\n' > "$SCRATCH/changes.sql"
+  while IFS= read -r ch_l || [ -n "$ch_l" ]; do
+    [ -n "$ch_l" ] || continue
+    case "$ch_l" in
+      head=*) ch_h=${ch_l#head=} ;;
+      *) printf "corpus.changes: error: unknown payload line '%s' (head=<sha> lines only) (ERR_INVALID_ARGUMENT)\n" "$ch_l" >&2; exit 1 ;;
+    esac
+    case "$ch_h" in
+      none) ;;
+      ""|*[!0-9a-fA-F]*) printf "corpus.changes: error: a head is a commit id or none: '%s' (ERR_INVALID_ARGUMENT)\n" "$ch_h" >&2; exit 1 ;;
+    esac
+    printf "INSERT OR IGNORE INTO want_heads VALUES ('%s');\n" "$ch_h" >> "$SCRATCH/changes.sql"
+  done < "$SCRATCH/heads"
+  corpus_has_db || exit 0
+  printf "SELECT seq || char(9) || at || char(9) || op || char(9) || repo || '/' || slug || char(9) || head || char(9) || prior FROM doc_changes WHERE head IN (SELECT head FROM want_heads) ORDER BY seq;\n" >> "$SCRATCH/changes.sql"
+  sq -bail "$DB_PATH" < "$SCRATCH/changes.sql" || exit 2
+  exit 0
+}
+
+# ==============================================================================
 # The native methods
 # ==============================================================================
 case "$CMD" in
@@ -453,7 +700,9 @@ case "$CMD" in
     "search.fts5",
     "search.rrf",
     "search.trigram",
-    "artifact.store"
+    "artifact.store",
+    "corpus.store",
+    "corpus.changelog"
   ]
 }
 EOF
@@ -592,6 +841,13 @@ EOF
   search.query)
     search_query "$@"
     ;;
+
+  corpus.list) corpus_list "$@" ;;
+  corpus.read) corpus_read "$@" ;;
+  corpus.write) corpus_write "$@" ;;
+  corpus.remove) corpus_remove "$@" ;;
+  corpus.mount) corpus_mount "$@" ;;
+  corpus.changes) corpus_changes "$@" ;;
 
   session.*|task.*|entry.*|finding.*|lane.*|resolve.ref)
     delegate "$@"

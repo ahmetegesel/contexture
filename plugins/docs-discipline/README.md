@@ -1,8 +1,8 @@
 # docs-discipline: the corpus-first documentation plugin
 
 The docs-discipline plugin packages a typed-block documentation corpus that
-agents read before code, a `docs` module whose five verbs index, project,
-check, nudge, and gate it, and a close gate that fails when a code change lands
+agents read before code, a `docs` module whose six verbs index, project,
+check, nudge, and gate it and list its changes under a store driver, and a close gate that fails when a code change lands
 without its doc update. Everything runs on plain files and POSIX awk/sh: no
 runtime, no network, no vendor glue. Adopt it when agents working in your
 repositories should consult a corpus instead of rediscovering the codebase by
@@ -27,8 +27,9 @@ owning repo's run, build, and test targets.
 | `ctx docs check` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | `docs-check.awk` |
 | `ctx docs gate` | the close gate: audit then check over the aggregated delta (or the incoming remote delta with `--drift`), plus a self-planted eight-scenario matrix | self-contained |
 | `ctx docs nudge` | the task nudge: matched docs, top pitfalls, forced setup targets | `docs-nudge.awk` |
+| `ctx docs changes` | the corpus half of a delta under a store driver: one net status line per doc written since the current git HEAD (`--since=<rev>` widens the window); refuses under the files driver, whose corpus rides git | none (the IO helper) |
 
-The help surface is engine-owned: `ctx docs help` lists the five verbs and
+The help surface is engine-owned: `ctx docs help` lists the six verbs and
 `ctx docs help <verb>` prints that verb's usage and detail lines. A sole
 `help` argument to a verb refuses with a pointer to the ctx form.
 
@@ -36,7 +37,7 @@ What lands where:
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/modules/docs/` | the docs module: the five verbs and their private engines | copy |
+| `.contexture/modules/docs/` | the docs module: the six verbs and their private engines | copy |
 | `.contexture/templates/doc.md` | the corpus grammar: eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema (section 6, the `#%` lines) | copy |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed |
 | `AGENTS.workspace.md` | the overlay blocks: five docs laws, layout, boot, close | merge |
@@ -261,6 +262,22 @@ it walk below runs every one of these.
   path a verb prints is the path the files driver prints for the same call.
 - A driver that serves no corpus (without the capability `corpus.store`)
   makes every read verb refuse rc 2 naming the capability.
+- Under a store driver that keeps a corpus change log (`corpus.changelog`,
+  the storage-fts5 plugin among them) the corpus leaves git: each doc write
+  is stamped with the workspace git HEAD, and the corpus half of a delta is
+  `ctx docs changes` (the docs written since the current HEAD) while the code
+  half stays on git. `ctx docs gate` composes both halves by itself (the
+  workspace root's `docs/<repo>/<slug>.md` files, if any linger, are dropped
+  from the git half: they are not the corpus), so a commit empties both
+  together. The check then runs in its store mode: no blanket (a doc
+  refreshes only the code its own sources name, so `FRESH (BLANKET)` and
+  `ARCH-COVERED` never print) and no trackedness probe (every claimant can
+  ride the delta, so `UNTRACKED CLAIMANT` never fires). A HEAD move that is
+  not a commit (a checkout, a reset) leaves the earlier doc writes outside the
+  window and reads their code stale; recover with
+  `{ git diff --name-status; ctx docs changes --since=<the previous HEAD>; } | ctx docs check <repo>`.
+  `ctx docs gate --drift` under a store prints a deferral notice (drift over
+  a shared store is undesigned) and checks the incoming code delta alone.
 - The sample corpus is fictional and reference-only; the adopter's corpus is
   the real subject.
 - The gate's matrix is self-planted: it builds its fixtures with `mktemp`,
@@ -309,7 +326,8 @@ it walk below runs every one of these.
   of a false `STALE`; one tracked claimant among several restores the delta
   rule. The trackedness probe runs `git ls-files` per unique claimant and
   memoizes it; a non-repository run reads every claimant untracked, which is
-  the honest state there.
+  the honest state there. The blanket and the untracked-claimant verdict are
+  the files driver's; the store mode (above) turns both off.
 - The excluded set is path-shaped: the generated and test families
   (`.spec.`, `.Test`, `.min.`, `.generated.`) plus any path segment named
   `spec` (including a top-level `spec/`), so a repository or directory
@@ -649,6 +667,7 @@ usage:
 
 help:
   runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
+  under a store driver with a change log (corpus.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
   exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
   example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
 ```
@@ -662,13 +681,14 @@ help:
 | `.contexture/modules/docs/module` | authored fresh: the module summary line |
 | `.contexture/modules/docs/scripts/audit` | authored fresh from the docs-query precedent: the help text moved into the `# summary`/`# usage`/`# help` declarations and delegation to `docs-audit.awk` over the corpus the IO helper resolved (a bare call reads the whole corpus) |
 | `.contexture/modules/docs/scripts/query` | reworked from the source CLI: the workspace root and the corpus from the IO helper (`CTX_ROOT`, the `DOCS_WORKSPACE_ROOT` override), the usage strings are ctx forms, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, an empty-corpus refusal, a no-match note on an empty projection, and the help forms moved into the declarations |
-| `.contexture/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and delegation to `docs-check.awk` over the corpus the IO helper resolved |
+| `.contexture/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and delegation to `docs-check.awk` over the corpus the IO helper resolved, in the engine's store mode (`-v delta_source=log`) when the driver keeps a change log |
+| `.contexture/modules/docs/scripts/changes` | authored fresh: the corpus half of a delta from the store's change log (the net status computed in the IO helper), refusing under the files driver |
 | `.contexture/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, the unit form (the active task through `ctx session task list` and `ctx session resolve task#`), the backlog-file form refusing a record path, and delegation to `docs-nudge.awk` over the corpus the IO helper resolved |
-| `.contexture/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (from the IO helper: `DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the corpus mounted once through the IO helper, the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, and the help moved into the declarations |
-| `.contexture/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `corpus.store` requirement, the mount and the list through the configured storage driver, the corpus argument forms, and the display-path rule |
+| `.contexture/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (from the IO helper: `DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the corpus mounted once through the IO helper, the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, the help moved into the declarations, and the store mode (the git half without the workspace root's corpus paths plus `ctx docs changes`, the check's store mode, the drift deferral notice) |
+| `.contexture/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `corpus.store` requirement, the mount and the list through the configured storage driver, the corpus argument forms, the display-path rule, and the store mode's delta source, change window, and code-half filter |
 | `.contexture/modules/docs/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/modules/docs/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
-| `.contexture/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`) |
+| `.contexture/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`); the `delta_source` token (`log` turns the blanket and the trackedness probe off for a store's driver-fed delta) |
 | `.contexture/modules/docs/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/modules/docs/README.md` | authored fresh: the off-path module map (layout, workspace root, tests) |
 | `.contexture/templates/doc.md` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII; the contract and responsibilities shapes show their id lines, and the machine-readable schema (section 6, the `#%` lines) restates every shape for the write verbs |
@@ -678,7 +698,7 @@ help:
 | `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the drawer sources glob and evidence fields re-pointed at the module |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
-| `tests/run.sh` | authored fresh: the plugin suite (the staging check; the corpus reads keyed on the declared `corpus.store`: the audit and the unit-form nudge against the backlog-file form, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
+| `tests/run.sh` | authored fresh: the plugin suite (the staging check; on fts5 the store seed, the corpus imported and the docs folder removed; the corpus reads keyed on the declared `corpus.store`: the audit and the unit-form nudge against the backlog-file form, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
 | `tests/census.sh`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, the classified allow-list by file and exact line, remainder zero) |
 | `tests/captures.sh` | authored fresh: the capture set of the read verbs (plan, run, compare) |
 | `tests/grammar-agreement.awk` | authored fresh: the agreement check of the `#%` schema, the prose shapes, and the audit's lists, refusing an empty side as a pass |

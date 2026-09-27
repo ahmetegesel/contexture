@@ -2,7 +2,7 @@
 
 The docs module ships with the docs-discipline plugin. Adoption copies this
 directory to `<workspace>/.contexture/modules/docs/`; the engine discovers its
-five verbs. This page is the off-path maintainer map: it is not linked from
+six verbs. This page is the off-path maintainer map: it is not linked from
 the workspace's boot, laws, or help.
 
 ## Layout
@@ -14,6 +14,7 @@ the workspace's boot, laws, or help.
 | `query` | `scripts/docs-query.awk` |
 | `nudge` | `scripts/docs-nudge.awk` |
 | `gate` | self-contained; uses `scripts/docs-audit.awk` and `scripts/docs-check.awk` |
+| `changes` | none: the corpus half of a delta from the store's change log, computed in `docs-io.sh` |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
 
 - The `.awk` engines and `docs-io.sh` carry no `# summary:` line: discovery
@@ -46,6 +47,24 @@ the workspace's boot, laws, or help.
 - A bare `check` or `nudge` refuses loudly instead of reading standard input
   as an empty corpus; a bare `audit` reads the whole corpus through the
   driver.
+- The delta source: a driver declaring `corpus.changelog` (a store) records
+  every doc write with the workspace git HEAD, so the corpus half of a delta
+  comes from the store (`ctx docs changes`: the rows stamped with the current
+  HEAD, or with `--since=<rev>` every commit from `<rev>` to HEAD, the
+  boundary's leading dash stripped, one net status line per doc) while the
+  code half stays on git. `check` and `gate` pick the mode by `driver-resolver
+  has corpus.changelog`, never by the driver's name, and run the check engine
+  with `-v delta_source=log`: the blanket is off (a doc refreshes only the code
+  its own sources name) and the trackedness probe is off (every claimant can
+  ride the delta, so `UNTRACKED CLAIMANT` never fires). Under the files driver
+  the engine runs as before (`delta_source` unset is git). The gate's store
+  mode drops the workspace root's `docs/<repo>/<slug>.md` paths from the git
+  half (those files are not the corpus) and appends `ctx docs changes`, so a
+  commit empties both halves together; a HEAD move that is not a commit (a
+  checkout, a reset) leaves the old rows outside the window, recovered by
+  `ctx docs changes --since=<the previous HEAD>` piped with the git delta into
+  the check; `--drift` prints a deferral notice (drift over a shared store is
+  undesigned) and checks the incoming code delta alone.
 
 ## Workspace root
 
@@ -78,8 +97,10 @@ workspace under the workspace's `.contexture/tmp/` (made on demand; the system
 temp only when it cannot be), copies the shipped core's runtime and its session
 and lane modules from `base/`, this module, and the grammar template (with
 `--driver=fts5`, the storage-fts5 plugin's module and `storage.driver: fts5`),
-seeds `tests/sample/docs/` plus `docs/`, and drives the staging check; the
-corpus reads keyed on the declared `corpus.store` (declared: the audit and the
+seeds `tests/sample/docs/` plus `docs/`, and drives the staging check; on
+fts5 the store seed (the staged corpus imported by `ctx storage-fts5 migrate
+--corpus`, then the docs folder removed, so the corpus checks read the store
+alone); the corpus reads keyed on the declared `corpus.store` (declared: the audit and the
 unit-form nudge, the sample backlog seeded into a unit and compared with the
 backlog-file form; not declared: every read verb's rc 2 refusal); the
 single-door census (`tests/census.sh` over `tests/census-allow.txt`, with two
@@ -96,5 +117,7 @@ trackedness probe), and for the fts5 run sqlite3 with FTS5 (skip 77 without).
 local repository inside them for the claimant trackedness probe, writes
 nothing outside them, and exercises the check over eight self-planted
 scenarios. The default gate run aggregates the live git delta (workspace root
-plus every child repository); `--drift` evaluates the incoming remote delta;
-`--stdin` takes a piped name-status list.
+plus every child repository), with the store's corpus half under a store
+driver; `--drift` evaluates the incoming remote delta; `--stdin` takes a piped
+name-status list. The matrix runs the engine in its git mode on every driver
+(its fixture is files by construction).

@@ -5,6 +5,7 @@
 # usage: ctx docs gate --stdin
 # usage: ctx docs gate --test-matrix
 # help: runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
+# help: under a store driver with a change log (corpus.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
 # help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
 # help: example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
 #
@@ -212,6 +213,7 @@ check_drift_warnings() {
 # this shell); an empty corpus or a driver without one refuses
 prepare_corpus() {
     if docs_corpus; then
+        docs_delta_source
         return 0
     else
         pc_rc=$?
@@ -220,11 +222,11 @@ prepare_corpus() {
     exit "$pc_rc"
 }
 
-# run_engine_over_corpus <engine>: the engine over every mounted doc (display paths as the
-# files driver prints them)
+# run_engine_over_corpus <engine> [awk options]: the engine over every mounted doc (display
+# paths as the files driver prints them)
 run_engine_over_corpus() {
     eng="$1"
-    set --
+    shift
     while IFS= read -r doc_path; do
         set -- "$@" "$doc_path"
     done < "$DOCS_PATHS"
@@ -234,8 +236,15 @@ run_engine_over_corpus() {
 # Run syntax/integrity audit across all typed documentation
 run_audit() { run_engine_over_corpus "$AWK_AUDIT"; }
 
-# Run coverage, freshness, and dead sources check on streamed diff
-run_gate_check() { run_engine_over_corpus "$AWK_CHECK"; }
+# Run coverage, freshness, and dead sources check on streamed diff; under a store's change
+# log the engine runs in its log mode (no blanket, no trackedness probe)
+run_gate_check() {
+    if [ "$DOCS_DELTA" = log ]; then
+        run_engine_over_corpus "$AWK_CHECK" -v delta_source=log
+    else
+        run_engine_over_corpus "$AWK_CHECK"
+    fi
+}
 
 # Self-planted test matrix: builds its own fixture corpus with mktemp, plants
 # a local repository inside it for the claimant trackedness probe, then
@@ -338,12 +347,25 @@ if [ "$1" = "-" ] || [ "$1" = "--stdin" ]; then
 elif [ "$1" = "--drift" ]; then
     prepare_corpus
     run_audit
-    aggregate_remote_drift_changes | sort -u | run_gate_check
+    if [ "$DOCS_DELTA" = log ]; then
+        # the store's corpus has no incoming half: the incoming code delta alone
+        echo "[DRIFT NOTICE] the corpus store carries no incoming changes; drift over a shared store is deferred" >&2
+        aggregate_remote_drift_changes | docs_code_half | sort -u | run_gate_check
+    else
+        aggregate_remote_drift_changes | sort -u | run_gate_check
+    fi
 elif [ -z "$1" ]; then
     prepare_corpus
     run_audit
     check_drift_warnings
-    aggregate_git_changes | sort -u | run_gate_check
+    if [ "$DOCS_DELTA" = log ]; then
+        # the code half from git without the workspace root's corpus paths, the corpus half
+        # from the store's change log (the docs written since the current HEAD)
+        docs_changes_prepare || exit $?
+        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | run_gate_check
+    else
+        aggregate_git_changes | sort -u | run_gate_check
+    fi
 else
     echo "ctx docs gate: unknown argument: $1" >&2
     echo "Usage: ctx docs gate [--drift | --stdin | --test-matrix]" >&2

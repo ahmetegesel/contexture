@@ -8,6 +8,11 @@
 # ride a tracked delta: the check reports the state (UNTRACKED CLAIMANT) and leaves reconciliation
 # to the process (the docs-drift flow), never a false STALE; one tracked claimant among several
 # restores the delta rule.
+# delta_source (a bounded token, -v): git (the default, the files driver: the rules above) or
+# log (a store driver feeds the corpus half from its change log): a claimed file reads fresh only
+# when a doc whose own sources claim it rode the delta, so the blanket (a workspace,
+# architecture, or overview doc freshening its whole repo) is off, and every claimant can ride a
+# driver-fed delta, so the trackedness probe is off and UNTRACKED CLAIMANT never fires.
 
 BEGIN {
     CODE_EXT_RE = "\\.(cs|js|cjs|mjs|jsx|ts|tsx|vue|svelte|astro|dart|py|rb|php|java|kt|kts|go|rs|swift|c|h|cc|cpp|hpp|sh|bash|zsh|sql|proto|graphql|gql|html|css|scss|sass|less|lua|pl|r|ex|exs|erl|hs|cshtml)$"
@@ -68,6 +73,8 @@ BEGIN {
         }
     }
     if (input_src != "-") close(input_src)
+    # under a store's change log a doc refreshes only the code its own sources name
+    if (delta_source == "log") split("", arch_touched)
 }
 
 function split_sources(str, arr,    len, i, ch, depth, current, count) {
@@ -128,6 +135,8 @@ function claimant_is_tracked(path,   cmd, rc) {
 }
 
 function any_claimant_tracked(t_file,   n, parts, i) {
+    # a driver-fed delta carries every claimant: nothing to probe
+    if (delta_source == "log") return 1
     n = split(claimant_paths[t_file], parts, "\n")
     for (i = 1; i <= n; i++) {
         if (parts[i] != "" && claimant_is_tracked(parts[i])) return 1
