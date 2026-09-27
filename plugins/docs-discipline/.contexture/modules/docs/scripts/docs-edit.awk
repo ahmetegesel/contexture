@@ -479,6 +479,14 @@ function apply_actions(isnew,    i, a, f, v, j, cnt, items, k, found, ty) {
                 if (!found) refuse("'" v "' is not listed in " dash(f) " (ERR_ENTITY_NOT_FOUND)")
                 for (k = found; k < cnt; k++) items[k] = items[k + 1]
                 cnt--
+                # the last item gone: the field goes with it (an empty list is no value), which a
+                # required field refuses, as --unset does
+                if (cnt == 0) {
+                    if (required(UB, f) || (UHEAD && j == 1)) refuse("removing '" v "' would empty " dash(f) "; " dash(f) " is required and cannot be removed (ERR_SCHEMA_VIOLATION)")
+                    unit_delete(j)
+                    if (index(" " ACTED " ", " " dash(f) " ") == 0) ACTED = ACTED (ACTED == "" ? "" : ", ") dash(f)
+                    continue
+                }
             }
             if (j) {
                 UL[j] = render(UHEAD && j == 1, f, join_items(items, cnt), 0, 0)

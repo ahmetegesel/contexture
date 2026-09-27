@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: change a corpus doc's header fields without reading the doc
 # usage: ctx docs header <repo> <slug> [--description="..."] [--role=<role>] [--upstream="..."] [--parent=<slug>] [--add-source=<glob>]... [--remove-source=<glob>]... [--add-keyword=<word>]... [--remove-keyword=<word>]... [--add-child=<slug>]... [--remove-child=<slug>]... [--unset=<field>]... [--dry-run]
-# help: the fix for UNCOVERED (add a source) and DEAD SOURCE (remove one): a list field keeps one line, an added item lands at its end, a removed one leaves the others in order; every other line stays byte for byte
+# help: the fix for UNCOVERED (add a source) and DEAD SOURCE (remove one): a list field keeps one line, an added item lands at its end, a removed one leaves the others in order, and removing the last item removes the field (refused where the field is required); every other line stays byte for byte
 # help: adding a listed item or removing an absent one refuses; --unset refuses a required field (repo, description, and sources or keywords where the kind requires them); kind and repo are not flags (a kind change is a rewrite, a repo change a move)
 # help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal, nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs header workspace plugins --add-source=plugins/storage-fts5/**

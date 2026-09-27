@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# engine-checks.sh <sandbox>: three engine behaviors asserted through the verbs on the
+# engine-checks.sh <sandbox>: five engine behaviors asserted through the verbs on the
 # sandbox's configured driver, each with a discriminating input (a repo etest seeded through
 # the driver, removed again at the end):
 #   [dup-id]     the audit's one id namespace per repo: a contract rule's id line and a
@@ -12,7 +12,12 @@
 #   [pitfall-doc] query --pitfalls credits a pitfall that ends a doc to that doc: idtwo ends
 #                in @pitfalls and over follows it (the pending pitfall was once printed after
 #                the next doc's first line had turned the slug, as over.md)
-# Exit 0 when all four pass, 1 otherwise.
+#   [draft-path] an explicit doc path to a file outside the corpus folder (a draft at
+#                .../docs/etest/esc.md, its kind broken): under the files driver (its
+#                corpus.mount answers in place) audit and check refuse rc 1 naming the path
+#                and ctx docs write, never silently reading the stored doc, while a path with
+#                no file behind it keeps the address rule; under a store the address rule holds
+# Exit 0 when all five pass, 1 otherwise.
 
 set -u
 SB=$1
@@ -70,9 +75,38 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+# a draft of etest/esc outside the corpus folder, its doc kind broken; the driver's own
+# corpus.mount answer tells the files driver (in place: the workspace root) from a store (the
+# folder it was handed filled)
+mkdir -p "$W/draft/docs/etest" "$W/mnt"
+sed 's/^@doc structural esc$/@doc bogus esc/' "$W/esc.md" > "$W/draft/docs/etest/esc.md"
+MNT=$("$R" corpus.mount "$W/mnt" 2>/dev/null)
+DWHY=""
+if [ "$MNT" != "$W/mnt" ]; then
+  OUT=$("$C" docs audit "$W/draft/docs/etest/esc.md" 2>&1)
+  RC=$?
+  { [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -qF "not the corpus doc: $W/draft/docs/etest/esc.md" && printf '%s\n' "$OUT" | grep -qF 'ctx docs write'; } || DWHY="audit of the draft rc=$RC: $OUT"
+  OUT=$(printf '' | "$C" docs check "$W/draft/docs/etest/esc.md" 2>&1)
+  RC=$?
+  { [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -qF 'not the corpus doc'; } || DWHY="$DWHY; check of the draft rc=$RC: $OUT"
+  OUT=$("$C" docs audit "$W/nofile/docs/etest/esc.md" 2>&1)
+  RC=$?
+  { [ "$RC" -eq 0 ] && [ -z "$OUT" ]; } || DWHY="$DWHY; a path with no file behind it rc=$RC: $OUT"
+else
+  OUT=$("$C" docs audit "$W/draft/docs/etest/esc.md" 2>&1)
+  RC=$?
+  { [ "$RC" -eq 0 ] && ! printf '%s\n' "$OUT" | grep -qF 'not the corpus doc'; } || DWHY="a store reads the address: audit rc=$RC: $OUT"
+fi
+if [ -z "$DWHY" ]; then
+  echo "  [draft-path] PASS"
+else
+  echo "  [draft-path] FAIL ($DWHY)"
+  FAIL=$((FAIL + 1))
+fi
+
 for d in idone idtwo over esc; do
   "$R" corpus.remove etest "$d" --head=0000000 > /dev/null 2>&1
 done
 rm -rf "$W"
-echo "engine-checks: $((4 - FAIL)) passed, $FAIL failed"
+echo "engine-checks: $((5 - FAIL)) passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

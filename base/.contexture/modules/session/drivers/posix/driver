@@ -2289,9 +2289,23 @@ corpus_read() {
   return 0
 }
 
+# corpus_twin <repo> <slug>: the key of a doc that folds onto <repo>/<slug> under ASCII case
+# without matching it exactly (its repo alone, or its slug inside the same repo), else
+# nothing: keys differing only by case never coexist, since a case-insensitive filesystem
+# holds them in one file and a store's mount would fold them into one
+corpus_twin() {
+  corpus_list 2>/dev/null | CT_KEY="$1/$2" LC_ALL=C awk -F/ '
+    BEGIN {
+      k = ENVIRON["CT_KEY"]; p = index(k, "/")
+      r = substr(k, 1, p - 1); s = substr(k, p + 1); lr = tolower(r); ls = tolower(s)
+    }
+    $0 != k && tolower($1) == lr && ($1 != r || tolower($2) == ls) { print; exit }'
+}
+
 # corpus.write <repo> <slug> [--create] [--op=<op>] [--head=<sha>|none]: the whole doc raw on
 # stdin replaces the stored one (a new doc when absent, its repo folder made on demand);
-# --create refuses an existing doc rc 1; a same-directory temp moved over the doc, so a
+# --create refuses an existing doc rc 1; a key folding onto another doc's or repo's under
+# ASCII case refuses rc 1, nothing written; a same-directory temp moved over the doc, so a
 # failed write leaves the old doc whole and prints no success (rc 2)
 corpus_write() {
   cw_repo="${1:-}"; cw_slug="${2:-}"
@@ -2299,6 +2313,11 @@ corpus_write() {
   corpus_keys corpus.write "$cw_repo" "$cw_slug" || return 1
   corpus_flags corpus.write write "$@" || return 1
   ws=$(find_workspace_root)
+  cw_twin=$(corpus_twin "$cw_repo" "$cw_slug")
+  if [ -n "$cw_twin" ]; then
+    printf "corpus.write: error: doc '%s/%s' folds onto '%s' under ASCII case; keys differing only by case never coexist (ERR_ENTITY_EXISTS)\n" "$cw_repo" "$cw_slug" "$cw_twin" >&2
+    return 1
+  fi
   cw_f="$ws/docs/$cw_repo/$cw_slug.md"
   if [ "$CF_CREATE" -eq 1 ] && [ -e "$cw_f" ]; then
     printf "corpus.write: error: doc '%s/%s' already exists in the corpus (ERR_ENTITY_EXISTS)\n" "$cw_repo" "$cw_slug" >&2

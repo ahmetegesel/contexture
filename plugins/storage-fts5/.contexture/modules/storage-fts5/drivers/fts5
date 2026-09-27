@@ -543,15 +543,30 @@ corpus_read() {
   exit 0
 }
 
+# corpus_twin <repo> <slug>: the key of a stored doc that folds onto <repo>/<slug> under ASCII
+# case without matching it exactly (its repo alone, or its slug inside the same repo), else
+# nothing: keys differing only by case never coexist, since a mount onto a case-insensitive
+# filesystem would fold them into one file (the posix driver's rule)
+corpus_twin() {
+  ct_r=$(sql_escape "$1"); ct_s=$(sql_escape "$2")
+  sq -bail "$DB_PATH" "SELECT repo || '/' || slug FROM docs WHERE lower(repo) = lower('$ct_r') AND (repo <> '$ct_r' OR (lower(slug) = lower('$ct_s') AND slug <> '$ct_s')) ORDER BY repo || '/' || slug || '.md' COLLATE BINARY LIMIT 1;"
+}
+
 # corpus.write <repo> <slug> [--create] [--op=<op>] [--head=<sha>|none]: the whole doc raw on
 # stdin replaces the stored one (a new doc when absent); --create refuses an existing doc
-# rc 1; the doc row and its change-log row land in one transaction, else rc 2 and no success
+# rc 1; a key folding onto another doc's or repo's under ASCII case refuses rc 1, nothing
+# written; the doc row and its change-log row land in one transaction, else rc 2 and no success
 corpus_write() {
   cw_repo="${1:-}"; cw_slug="${2:-}"
   if [ $# -ge 2 ]; then shift 2; else shift $#; fi
   corpus_keys corpus.write "$cw_repo" "$cw_slug"
   corpus_flags corpus.write write "$@"
   db_init
+  cw_twin=$(corpus_twin "$cw_repo" "$cw_slug") || exit 2
+  if [ -n "$cw_twin" ]; then
+    printf "corpus.write: error: doc '%s/%s' folds onto '%s' under ASCII case; keys differing only by case never coexist (ERR_ENTITY_EXISTS)\n" "$cw_repo" "$cw_slug" "$cw_twin" >&2
+    exit 1
+  fi
   if [ "$CF_CREATE" -eq 1 ] && corpus_doc_exists "$cw_repo" "$cw_slug"; then
     printf "corpus.write: error: doc '%s/%s' already exists in the corpus (ERR_ENTITY_EXISTS)\n" "$cw_repo" "$cw_slug" >&2
     exit 1

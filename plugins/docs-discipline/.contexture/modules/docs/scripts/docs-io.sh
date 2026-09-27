@@ -220,8 +220,9 @@ docs_not_a_doc() {
 # expanded by the driver's list when the shell left them literal; no argument: the whole
 # corpus when <bare> is 1, none otherwise. Only repo names (or no argument) run the engine
 # inside the mount on relative paths (DOCS_CD=1), unless <cwd> is 1 (the verb keeps its
-# cwd); any path form keeps the caller's cwd. rc 1 names a doc, a repo, or an argument the
-# corpus does not hold; rc 2 a driver failure.
+# cwd); any path form keeps the caller's cwd. Under the files driver an existing file at a
+# doc path whose folder is not physically the corpus folder (a draft) refuses. rc 1 names a
+# doc, a repo, a draft, or an argument the corpus does not hold; rc 2 a driver failure.
 docs_args() {
   da_bare=$1
   da_cwd=$2
@@ -278,6 +279,14 @@ docs_args() {
           da_slug=${da_s%.md}
           if [ "$da_slug" = "$da_s" ] || ! docs_key_valid "$da_r" || ! docs_key_valid "$da_slug"; then
             docs_not_a_doc "$da_a"
+            return 1
+          fi
+          # under the files driver the corpus is the docs folder itself: an existing file at
+          # this spelling outside it (a draft) is not the corpus doc, so it refuses rather than
+          # read the stored doc in its place; a path with no file behind it keeps the address rule
+          if [ "$DOCS_INPLACE" -eq 1 ] && [ -f "$da_a" ] \
+            && [ "$(CDPATH= cd -- "$da_rest" 2>/dev/null && pwd -P)" != "$(CDPATH= cd -- "$DOCS_ROOT/docs/$da_r" 2>/dev/null && pwd -P)" ]; then
+            printf '%s: not the corpus doc: %s (the corpus reads docs/<repo>/<slug>.md; check a draft with ctx docs write <repo> <slug> [--replace] --dry-run < <draft>)\n' "$DOCS_VERB" "$da_a" >&2
             return 1
           fi
           if docs_select "$da_r"; then

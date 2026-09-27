@@ -1,11 +1,11 @@
 #!/bin/sh
 # storage-compliance.sh: the Storage Provider Interface (SPI) compliance test harness.
 # Validates storage driver implementations against the SPI contract across 13 test
-# suites and 49 verification scenarios; each case asserts the returned data (exact key
+# suites and 50 verification scenarios; each case asserts the returned data (exact key
 # and value pairs in the driver's JSON, or the exact bytes of an artifact), never the
 # exit code alone. Payloads travel on stdin (docs/the-engine.md, the transport). The
 # corpus suite (12) keys on the declared corpus.store: a driver without that optional
-# capability runs one refusal case in place of its seven (43 cases in all), and its
+# capability runs one refusal case in place of its eight (43 cases in all), and its
 # changes case keys on the declared corpus.changelog; suite 13 proves the shipped
 # resolver's require and has and the unchanged dispatch handshake over planted
 # descriptors that wrap the driver under test.
@@ -660,10 +660,10 @@ rm -f ex.txt
 rm -f art-in.txt art-out.txt lane-in.txt lj.txt empty.txt
 
 # ==============================================================================
-# Suite 12: The Corpus Store (7 test cases with corpus.store, 1 without)
+# Suite 12: The Corpus Store (8 test cases with corpus.store, 1 without)
 # ==============================================================================
 # corpus.store is optional (outside the handshake's mandatory set): a driver declaring
-# it runs the seven cases; a driver without it proves it refuses every corpus method. The
+# it runs the eight cases; a driver without it proves it refuses every corpus method. The
 # changes case keys on the declared corpus.changelog, never on the driver's name.
 printf '\n== Suite 12: The Corpus Store ==\n'
 CORPUS_STORE=0
@@ -821,7 +821,31 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
   cmp -s c-in2.txt c-out.txt || tc_fail="$tc_fail; a subfolder read differs"
   rm -rf "$SANDBOX/sub"
   tc "TC46: a corpus call from a sandbox subfolder lists and reads the sandbox's docs"
-  rm -f c-in.txt c-in2.txt c-out.txt c-big.txt c-z.txt
+
+  # TC50: keys that differ only by ASCII case never coexist: a write whose slug folds onto
+  # another doc of its repo, or whose repo folds onto another repo, refuses rc1
+  # ERR_ENTITY_EXISTS with nothing stored (the first doc byte for byte, the list unchanged);
+  # the exact key still replaces, and a key folding onto nothing lands
+  printf '@doc capability One\n  repo: alpha\n  description: "a case twin"\n' > c-twin.txt
+  c_before=$(drv corpus.list 2>&1)
+  for c_k in "alpha One" "alpha ONE" "alpha two" "Alpha fresh" "ALPHA one"; do
+    set -- $c_k
+    out=$(cw c-twin.txt "$1" "$2" 2>&1); rc=$?
+    wantrc "$rc" 1; want "$out" 'ERR_ENTITY_EXISTS'; wantnot "$out" '"status":"ok"'
+    out=$(cw c-twin.txt "$1" "$2" --create 2>&1); rc=$?
+    wantrc "$rc" 1; want "$out" 'ERR_ENTITY_EXISTS'
+  done
+  drv corpus.read alpha one > c-out.txt 2>/dev/null
+  cmp -s c-in2.txt c-out.txt || tc_fail="$tc_fail; a refused case twin changed alpha/one"
+  [ "$(drv corpus.list 2>&1)" = "$c_before" ] || tc_fail="$tc_fail; a refused case twin changed the list [$(drv corpus.list 2>&1)]"
+  out=$(cw c-in2.txt alpha one 2>&1); rc=$?
+  wantrc "$rc" 0; want "$out" '"slug":"one"'
+  out=$(cw c-twin.txt alpha one-too 2>&1); rc=$?
+  wantrc "$rc" 0
+  drv corpus.remove alpha one-too >/dev/null 2>&1
+  [ "$(drv corpus.list 2>&1)" = "$c_before" ] || tc_fail="$tc_fail; list after the twin cases [$(drv corpus.list 2>&1)]"
+  tc "TC50: a key that folds onto another doc or repo under ASCII case refuses rc1 ERR_ENTITY_EXISTS, nothing stored"
+  rm -f c-in.txt c-in2.txt c-out.txt c-big.txt c-z.txt c-twin.txt
 else
   # TC40 (no corpus.store): every corpus method refuses, printing nothing on stdout
   mkdir -p c-mnt
@@ -834,7 +858,7 @@ else
   done
   rm -rf c-mnt c-in.txt
   tc "TC40: a driver without corpus.store refuses every corpus method"
-  printf 'note: TC41 to TC46 need corpus.store, which this driver does not declare\n'
+  printf 'note: TC41 to TC46 and TC50 need corpus.store, which this driver does not declare\n'
 fi
 
 # ==============================================================================

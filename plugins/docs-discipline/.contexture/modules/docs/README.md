@@ -33,7 +33,9 @@ the workspace's boot, laws, or help.
   a store driver fills the scratch folder it is handed), lists it with
   `corpus.list`, and applies the display-path rule: every doc path a verb
   prints is the path the files driver prints for the same call (an explicit
-  path read in place passes as the caller's own string, a repo name or a bare
+  path read in place passes as the caller's own string, while under the files
+  driver an existing file at a doc path outside the corpus folder, a draft,
+  refuses rc 1; a repo name or a bare
   call reads `docs/<repo>/<slug>.md` inside the mount, any other doc from a
   filled mount is mapped back by exact substitution). Driver calls run from
   the workspace root with stdin from `/dev/null`; scratch lives under
@@ -134,7 +136,9 @@ checks read the store alone), the migration round trip (the store exported
 back to files equals the staged corpus by `diff -r`, a planted byte read as a
 difference), and the capture parity (every capture byte-identical to the
 files driver's except a check or gate capture where the files driver prints
-the blanket or the untracked-claimant verdict and the store `STALE DOC`); the
+the blanket or the untracked-claimant verdict and the store `STALE DOC`), while
+the corpus checks run in a second sandbox of the same staging and import in the
+background, their lines printed after the chain in the same order; the
 delta-source cases (`tests/store-cases.sh`: the check's two modes, `ctx docs
 changes`, the gate's halves in a git workspace of its own, keyed on the
 declared `corpus.changelog`); the corpus reads keyed on the declared `corpus.store` (declared: the audit and the
@@ -143,7 +147,7 @@ backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
 of `tests/write/`: every success's stored bytes, every refusal leaving the
 stored doc unchanged, the change-log rows under a store), and the engine
 checks (`tests/engine-checks.sh`: the id namespace, the pitfalls scoping and a doc-ending pitfall credited to its doc, the
-literal backslash search); not declared: every read verb's rc 2 refusal); the
+literal backslash search, the files driver's draft-path refusal); not declared: every read verb's rc 2 refusal); the
 single-door census (`tests/census.sh` over `tests/census-allow.txt`, with three
 planted bypasses); the gate matrix; and the grammar agreement check
 (`tests/grammar-agreement.awk`). `tests/captures.sh` is the capture set of the

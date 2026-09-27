@@ -8,7 +8,8 @@
 # carrying the verb's op and the workspace git HEAD. Every refusal case: its rc, its message,
 # the stored doc byte-identical to before (or still absent), and no new change-log row.
 # Covered: ctx docs new, write (a doc without a final newline kept so; a --replace of the
-# stored bytes writes nothing and logs no row), header, rule,
+# stored bytes writes nothing and logs no row), header (a list emptied by its last removal
+# drops the field), rule,
 # pitfall, entry (an id-keyed add, a legacy #N update, a natural and a composite key, a block
 # scalar, --stdin, --first, --after, --remove), section, replace, remove, ids (a run, a
 # rerun keying 0, a dry run), query --entry, a dry run; the refusals: an unknown field, an
@@ -16,7 +17,8 @@
 # missing address (entry, rule, doc), a stale replace count, audit failures (an id taken by
 # another doc of the repo, an unknown block), a newline in a one-line field, a carriage
 # return (a flag value, a whole doc, a replace text), an unknown flag, an id set by hand, an existing doc
-# for new and write, --replace of an absent doc, a slug mismatch, a required field unset,
+# for new and write, --replace of an absent doc, a slug mismatch, a required field unset or
+# emptied by the removal of its last item,
 # a line-number evidence, a section header mismatch, an empty value, a block the kind lacks.
 # Each case reseeds repo wtest through the driver (stamped with a head no window holds).
 # Exit 0 when every case passes, 1 otherwise.
@@ -164,6 +166,11 @@ same write-replace-identical written "wtest/written unchanged (nothing written)"
 succeed write-no-final-newline nonl "$W/nonl.md" write 1 "$W/nonl.md" "$C" docs write wtest nonl
 seed
 succeed header unit "$FX/exp-header.md" header 1 - "$C" docs header wtest unit '--add-source=src/more/**' --remove-keyword=unit '--upstream=An upstream note'
+# a list emptied by removing its last item leaves the header with the field gone (map's
+# optional children, added first, then removed: the doc back to its fixture byte for byte)
+seed
+run - "$C" docs header wtest map --add-child=unit
+succeed header-remove-last-child map "$FX/map.md" header 1 - "$C" docs header wtest map --remove-child=unit
 seed
 succeed rule-add conv "$FX/exp-rule-add.md" rule 1 - "$C" docs rule wtest conv docs/third --directive=never '--statement=The third rule' --status=aspirational --prevalence=rare --layer=repo --provenance=ratified --evidence=thirdSym --after=docs/first
 seed
@@ -252,6 +259,7 @@ refuse write-existing unit 1 "--replace rewrites it whole" "$FX/unit.md" "$C" do
 refuse write-replace-absent written 1 "--replace rewrites an existing doc" "$FX/written.md" "$C" docs write wtest written --replace
 refuse write-slug-mismatch other 1 "names slug 'written'" "$FX/written.md" "$C" docs write wtest other
 refuse unset-required unit 1 "description is required" - "$C" docs header wtest unit --unset=description
+refuse remove-last-required-item unit 1 "sources is required" - "$C" docs header wtest unit '--remove-source=src/unit/**'
 refuse evidence-line-number unit 1 "never line numbers" - "$C" docs entry wtest unit contract '#1' --evidence=file.sh:12
 refuse section-header unit 1 "must open with @see_also" "$FX/rule-fourth.block" "$C" docs section wtest unit see_also
 refuse empty-value unit 1 "an empty value for summary" - "$C" docs pitfall wtest unit unit-p1 --summary=
