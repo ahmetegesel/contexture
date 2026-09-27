@@ -3,8 +3,8 @@
 # the version 3 store kept every artifact's text verbatim (the artifacts table), and this
 # program reads one unit's texts, written to files by the upgrade, into the neutral dump
 # of contract 2 (docs/the-engine.md, The dump), which the upgrade then loads through the
-# same import as unit.import. It grew from the plugin's own readings of these texts
-# (index.sh per artifact kind, closer.awk's closer cut) and follows the parse rules of
+# same import as unit.import. It grew from the plugin's own v0.54.0 readings of these texts
+# (the retired index.sh per artifact kind, closer.awk's closer cut) and follows the parse rules of
 # docs/the-engine.md, The record data model, line for line, since the verbatim rule is a
 # function of the bytes: an item carries its stored span as verbatim exactly when the
 # canonical span its typed fields render differs from it, so this reading decides every

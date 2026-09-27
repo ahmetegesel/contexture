@@ -125,7 +125,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [Lane isolation](plugins/lane-isolation/): On-demand worktree isolation for subagents
 - [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
 - [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
-- [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and migration
+- [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and an in-place upgrade of older stores
 - [Tests](tests/): The filter test material, upstream only; see [tests/README.md](tests/README.md)
 - [Maintaining contexture](#maintaining-contexture): The `base/` dev loop: edit, ship, apply
 

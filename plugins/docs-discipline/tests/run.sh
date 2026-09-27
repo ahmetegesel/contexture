@@ -98,7 +98,7 @@ cp "$PLUGIN_ROOT/tests/sample/backlog.md" "$SANDBOX/backlog.md"
 cd "$SANDBOX" || exit 1
 # the sandbox answers for itself: an inherited root, driver choice, or store path
 # from the calling workspace never reaches it
-unset CTX_DIR CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH CTX_REFERENCE_DRIVER
+unset CTX_DIR CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH
 export LC_ALL=C
 
 echo "docs-discipline plugin suite: staging, corpus reads, census, gate matrix, grammar agreement (driver: $DRIVER; staged at $SANDBOX)"
@@ -261,7 +261,7 @@ if [ "$DRIVER" = fts5 ]; then
         SANDBOX=$SANDBOX_B
         PASS=0
         FAIL=0
-        B_SEED=$("$SANDBOX/.contexture/ctx" storage-fts5 migrate --from=posix --to=fts5 --corpus 2>&1)
+        B_SEED=$("$SANDBOX/.contexture/ctx" session migrate --from=posix --to=fts5 --corpus 2>&1)
         B_SEED_RC=$?
         rm -rf "$SANDBOX/docs"
         if [ "$B_SEED_RC" -ne 0 ] || [ -e "$SANDBOX/docs" ]; then
@@ -293,16 +293,16 @@ if [ "$DRIVER" = fts5 ]; then
     cp -R "$SANDBOX/docs/." "$SANDBOX/corpus-staged/"
 fi
 
-# the store run: the staged corpus imported into the store (ctx storage-fts5 migrate
-# --corpus, the files read through the posix reference driver), then the docs folder
-# removed, so every corpus check below reads the store alone
+# the store run: the staged corpus imported into the store (ctx session migrate --corpus,
+# every doc read by the posix driver's corpus methods and written by the store's), then the
+# docs folder removed, so every corpus check below reads the store alone
 if [ "$DRIVER" = fts5 ]; then
     SEED_WANT=0
     for f in docs/*/*.md; do [ -f "$f" ] && SEED_WANT=$((SEED_WANT + 1)); done
-    SEED_OUT=$("$SANDBOX/.contexture/ctx" storage-fts5 migrate --from=posix --to=fts5 --corpus 2>&1)
+    SEED_OUT=$("$SANDBOX/.contexture/ctx" session migrate --from=posix --to=fts5 --corpus 2>&1)
     SEED_RC=$?
     rm -rf "$SANDBOX/docs"
-    if [ "$SEED_RC" -eq 0 ] && [ "$SEED_WANT" -gt 0 ] && printf '%s' "$SEED_OUT" | grep -q "\"corpus\":\"imported\",\"docs\":$SEED_WANT," && [ ! -e "$SANDBOX/docs" ]; then
+    if [ "$SEED_RC" -eq 0 ] && [ "$SEED_WANT" -gt 0 ] && printf '%s\n' "$SEED_OUT" | grep -qx "corpus: $SEED_WANT docs" && [ ! -e "$SANDBOX/docs" ]; then
         echo "[store-seed] PASS ($SEED_WANT docs imported into the store; the docs folder removed)"
         PASS=$((PASS + 1))
     else
@@ -312,10 +312,10 @@ if [ "$DRIVER" = fts5 ]; then
     fi
     echo ""
 
-    # the migration round trip: the store exported back to files through the posix reference
-    # equals the staged corpus byte for byte (diff -r, the file count, a planted byte read as a
+    # the migration round trip: the store exported back to files (ctx session migrate
+    # --corpus, written by the posix driver's corpus methods) equals the staged corpus byte for byte (diff -r, the file count, a planted byte read as a
     # difference so the comparison can fail), then the docs folder removed again
-    RT_OUT=$("$SANDBOX/.contexture/ctx" storage-fts5 migrate --from=fts5 --to=posix --corpus 2>&1)
+    RT_OUT=$("$SANDBOX/.contexture/ctx" session migrate --from=fts5 --to=posix --corpus 2>&1)
     RT_RC=$?
     RT_N=$(find "$SANDBOX/docs" -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')
     diff -r "$SANDBOX/corpus-staged" "$SANDBOX/docs" > /dev/null 2>&1

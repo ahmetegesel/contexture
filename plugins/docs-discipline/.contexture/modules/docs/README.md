@@ -131,7 +131,7 @@ and lane modules from `base/`, this module, and the grammar template (with
 seeds `tests/sample/docs/` plus `docs/`, and drives the staging check; on
 fts5 the capture set first run on the files driver at the sandbox path (the
 config set aside), then the store seed (the staged corpus imported by `ctx
-storage-fts5 migrate --corpus`, then the docs folder removed, so the corpus
+session migrate --corpus`, then the docs folder removed, so the corpus
 checks read the store alone), the migration round trip (the store exported
 back to files equals the staged corpus by `diff -r`, a planted byte read as a
 difference), and the capture parity (every capture byte-identical to the

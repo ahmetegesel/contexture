@@ -1,1 +1,1 @@
-# summary: SQLite FTS5 storage driver: relational schema, dual FTS5 virtual tables, pure SQL RRF search, and bidirectional migration
+# summary: SQLite FTS5 storage driver (contract 2): typed tables answered natively in SQL, dual FTS5 virtual tables, pure SQL RRF search, the doc corpus with a change log; no verbs (ctx session migrate moves a record)

@@ -438,7 +438,7 @@ read verbs, the instrument of the byte identity between two module versions
 at one path and of the parity between two drivers: the fts5 run compares the
 files driver and the store at one sandbox path and accepts only the store
 mode's named verdicts as differences. The fts5 run also round-trips the
-corpus through `ctx storage-fts5 migrate --corpus` byte for byte.
+corpus through `ctx session migrate --corpus` byte for byte.
 `tests/write-verbs.sh` asserts every write verb against the expected docs
 under `tests/write/` (a changed rendering updates its fixture on purpose),
 `tests/engine-checks.sh` the id namespace, the pitfalls scoping (a doc-ending pitfall credited to its own doc), the
@@ -850,22 +850,24 @@ kept a block scalar, the new rule placed after its neighbor):
 ```
 
 The same corpus on the fts5 store (the storage-fts5 plugin beside this one;
-needs sqlite3 with FTS5). The import mirrors a committed corpus, so the writes
-are committed first; it refuses a tracked corpus with uncommitted changes and,
-after a clean import, prints the git steps that retire the files (the walk
-skips them and removes the folder):
+needs sqlite3 with FTS5), moved by `ctx session migrate --corpus` (the scratch
+holds no unit, so only the corpus travels). The move mirrors a committed corpus,
+so the writes are committed first; it refuses a tracked corpus with uncommitted
+changes and, after a clean move, prints the git steps that retire the files (the
+walk skips them and removes the folder):
 
 ```sh
 git -c user.name=walk -c user.email=walk@example.invalid commit -qam writes
 cp -R ../../../plugins/storage-fts5/.contexture/modules/storage-fts5 .contexture/modules/
 printf 'storage.driver: fts5\n' > .contexture/config
-./.contexture/ctx storage-fts5 migrate --from=posix --to=fts5 --corpus
+./.contexture/ctx session migrate --from=posix --to=fts5 --corpus
 rm -rf docs
 ```
 
 ```text
-{"status":"ok","from":"posix","to":"fts5","corpus":"imported","docs":5,"dropped":0}
-storage-fts5 migrate: the corpus of repo(s) demo-orders demo-web workspace is tracked in git; the store now holds it, so the files invite edits that no longer reach the corpus. Next steps (run them yourself):
+migrate posix to fts5: 0 units, 0 records
+corpus: 5 docs
+session migrate: the corpus of repo(s) demo-orders demo-web workspace is tracked in git; the fts5 store now holds it, so the files invite edits that no longer reach the corpus. Next steps (run them yourself):
   git rm -r --cached docs/demo-orders
   git rm -r --cached docs/demo-web
   git rm -r --cached docs/workspace
