@@ -13,8 +13,9 @@
 #
 # Writes: the unit lock (.contexture/tmp/locks/<unit>.lock) is held from the read to the
 # last rename, every changed file is staged beside the sessions folder and renamed into
-# place (one mv per file), and the answer prints only after every file landed; a refusal
-# stages nothing. Every awk runs in the C locale (bytes) and takes every value through the
+# place (one mv per file, each replaced file hard-linked into the stage first so a failed
+# rename or an interrupt rolls the earlier ones back), and the answer prints only after
+# every file landed; a refusal stages nothing. Every awk runs in the C locale (bytes) and takes every value through the
 # environment or a file, never through awk -v.
 
 set -u
@@ -313,7 +314,12 @@ FN=""
 SCR=""
 STAGE=""
 PX_LOCK=""
+PC_ON=0
+PC_N=0
 px_cleanup() {
+  # a commit cut short (a failed rename, an interrupt) rolls back what it renamed, so a
+  # write lands whole or not at all (R20); the backups live in the stage, removed after
+  [ "$PC_ON" -eq 1 ] && pc_rollback
   [ -n "$SCR" ] && rm -rf "$SCR"
   [ -n "$STAGE" ] && rm -rf "$STAGE"
   [ -n "$PX_LOCK" ] && rm -rf "$PX_LOCK" 2>/dev/null
@@ -471,24 +477,73 @@ px_stage() {
   PX_OUT="$SCR/answer"
 }
 
-# px_commit <unit folder>: every staged file renamed into place (one mv per file), then
-# the answer; a failed rename exits 2 ERR_STORAGE_WRITE and prints no answer
+# the commit's undo log: PC_K_<n> (f a file replaced or created, d a folder created),
+# PC_P_<n> its path, PC_B_<n> the backup of the file it replaced ("" when it was new)
+pc_note() {
+  PC_N=$((PC_N + 1))
+  eval "PC_K_$PC_N=\$1; PC_P_$PC_N=\$2; PC_B_$PC_N=\${3:-}"
+}
+
+# pc_dir <folder>: the folder made when absent, noted so a rollback removes it again
+pc_dir() {
+  [ -d "$1" ] && return 0
+  pd_up=$(dirname "$1")
+  pc_dir "$pd_up" || return 1
+  pc_note d "$1"
+  mkdir "$1" 2>/dev/null || [ -d "$1" ] || return 1
+}
+
+# pc_backup <path>: a hard link of the file about to be replaced or removed, kept in the
+# stage (the same filesystem), a copy where the link is refused; prints the backup path
+pc_backup() {
+  [ -f "$1" ] || { printf '\n'; return 0; }
+  pb_b="$STAGE/.bak.$((PC_N + 1))"
+  ln "$1" "$pb_b" 2>/dev/null || cp -p "$1" "$pb_b" 2>/dev/null || return 1
+  printf '%s\n' "$pb_b"
+}
+
+# pc_rollback: every noted step undone, the last first: a replaced file gets its backup
+# back, a created file and a created folder go
+pc_rollback() {
+  PC_ON=0
+  while [ "$PC_N" -gt 0 ]; do
+    eval "pr_k=\$PC_K_$PC_N; pr_p=\$PC_P_$PC_N; pr_b=\$PC_B_$PC_N"
+    case "$pr_k" in
+      f) if [ -n "$pr_b" ]; then mv -f "$pr_b" "$pr_p" 2>/dev/null; else rm -f "$pr_p" 2>/dev/null; fi ;;
+      d) rmdir "$pr_p" 2>/dev/null ;;
+    esac
+    PC_N=$((PC_N - 1))
+  done
+}
+
+# px_commit <unit folder>: every staged step applied in manifest order (one mv per file, a
+# removal, a folder), then the answer; each replaced or removed file is backed up first, so a
+# failed step (rc 2 ERR_STORAGE_WRITE, no answer) or an interrupt rolls every earlier step
+# back and the unit reads as before (R20)
 px_commit() {
   pc_ud=$1
+  PC_ON=1
   if [ -f "$STAGE/manifest" ]; then
     while IFS='	' read -r pc_src pc_rel; do
       case "$pc_src" in
-        d) mkdir -p "$pc_ud/$pc_rel" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed" ;;
-        -) rm -f "$pc_ud/$pc_rel" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "the storage removal of $pc_rel failed" ;;
+        d) pc_dir "$pc_ud/$pc_rel" || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed" ;;
+        -)
+          [ -f "$pc_ud/$pc_rel" ] || continue
+          pc_b=$(pc_backup "$pc_ud/$pc_rel") || refuse 2 ERR_STORAGE_WRITE "the storage removal of $pc_rel failed"
+          # noted before the step: an interrupt landing right after it still undoes it
+          pc_note f "$pc_ud/$pc_rel" "$pc_b"
+          rm -f "$pc_ud/$pc_rel" 2>/dev/null && [ ! -f "$pc_ud/$pc_rel" ] || refuse 2 ERR_STORAGE_WRITE "the storage removal of $pc_rel failed"
+          ;;
         *)
-          [ "$pc_src" = doc ] && pc_src=doc
-          pc_dir=$(dirname "$pc_ud/$pc_rel")
-          mkdir -p "$pc_dir" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed"
+          pc_dir "$(dirname "$pc_ud/$pc_rel")" || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed"
+          pc_b=$(pc_backup "$pc_ud/$pc_rel") || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed"
+          pc_note f "$pc_ud/$pc_rel" "$pc_b"
           mv -f "$STAGE/$pc_src" "$pc_ud/$pc_rel" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed"
           ;;
       esac
     done < "$STAGE/manifest"
   fi
+  PC_ON=0
   cat "$SCR/answer"
 }
 
@@ -620,6 +675,7 @@ session_create() {
   px_stage
   px_awk
   mkdir "$SESS/$PX_UNIT" 2>/dev/null || refuse 1 ERR_ENTITY_EXISTS "unit '$PX_UNIT' already exists"
+  pc_note d "$SESS/$PX_UNIT"
   px_commit "$SESS/$PX_UNIT"
 }
 
@@ -756,11 +812,13 @@ unit_import() {
   held "$ui_u" && ui_held=1
   [ "$ui_held" -eq 1 ] && [ "$ui_rep" -eq 0 ] && refuse 1 ERR_ENTITY_EXISTS "unit '$ui_u' already exists"
   ui_d="$SESS/$ui_u"
-  mkdir -p "$ui_d" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the unit folder"
+  pc_dir "$ui_d" || refuse 2 ERR_STORAGE_WRITE "cannot create the unit folder"
+  ui_gone=""
   if [ "$ui_rep" -eq 1 ]; then
-    # --replace: every artifact the dump does not carry leaves; other files stay
+    # --replace: every artifact the dump does not carry leaves (a removal step of the
+    # commit, so a failed commit brings it back); other files stay
     for ui_f in state backlog knowledge journal; do
-      grep -q "	$ui_f\\.md\$" "$STAGE/manifest" || rm -f "$ui_d/$ui_f.md"
+      grep -q "	$ui_f\\.md\$" "$STAGE/manifest" || printf -- '-\t%s\n' "$ui_f.md" >> "$STAGE/manifest"
     done
     if [ -d "$ui_d/lanes" ]; then
       for ui_l in "$ui_d"/lanes/*; do
@@ -768,9 +826,9 @@ unit_import() {
         ui_n=${ui_l##*/}
         ident_valid "$ui_n" || continue
         for ui_f in recipe journal report; do
-          grep -q "	lanes/$ui_n/$ui_f\\.md\$" "$STAGE/manifest" || rm -f "$ui_l/$ui_f.md"
+          grep -q "	lanes/$ui_n/$ui_f\\.md\$" "$STAGE/manifest" || printf -- '-\t%s\n' "lanes/$ui_n/$ui_f.md" >> "$STAGE/manifest"
         done
-        grep -q "^d	lanes/$ui_n\$" "$STAGE/manifest" || rmdir "$ui_l" 2>/dev/null
+        grep -q "^d	lanes/$ui_n\$" "$STAGE/manifest" || ui_gone="$ui_gone $ui_n"
       done
     fi
   fi
@@ -778,6 +836,9 @@ unit_import() {
   if [ "$ui_held" -eq 1 ]; then ui_r=true; else ui_r=false; fi
   printf '{"unit":"%s","records":%s,"replaced":%s}\n' "$ui_u" "$ui_n" "$ui_r" > "$SCR/answer"
   px_commit "$ui_d"
+  # a lane the dump lacks goes once it holds nothing else
+  for ui_n in $ui_gone; do rmdir "$ui_d/lanes/$ui_n" 2>/dev/null; done
+  return 0
 }
 
 cmd="${1:-}"

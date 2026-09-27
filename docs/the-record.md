@@ -246,7 +246,7 @@ The grammars share strict dialect rules:
 - Typed blocks start at column 0; bodies indent two spaces.
 - `::` opens a block scalar; `|` means alternation only; `[ ]` wraps optional parts; `->` means flow; `#` starts a comment.
 - Whitespace is syntax: queries anchor on block starts, so misplaced indents break parsing.
-- Lines end in LF: a carriage return in any field value is refused at the write (rc 1) before any storage call; a legacy line already stored with one keeps its bytes.
+- Lines end in LF: a carriage return in any field value is refused at the write (rc 1) before any storage call; a legacy line already stored with one keeps its bytes, and its fields read without it.
 - Spellings are contractual across tools and queries.
 
 The schema holds the shape, the writer holds the volume. Token efficiency is the dialect, never a cap on content. Omit ornament, never substance.

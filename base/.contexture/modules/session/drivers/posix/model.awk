@@ -100,7 +100,14 @@ function load_manifest(path, sizes,   line, f, n, k, sz, p, t, tot, SZ, nsz, nf)
     k = f[2]; sz = SZ[++nf]
     p = substr(line, length(f[1]) + length(f[2]) + 3)
     NL[k] = 0; PRES[k] = 1; tot = 0
-    while ((getline t < p) > 0) { NL[k]++; L[k, NL[k]] = t; tot += length(t) + 1 }
+    # a legacy line ending in a carriage return parses without it (every typed string is LF
+    # only) and keeps it in its stored bytes: CRL marks the line, text() and stage() write
+    # the carriage return back
+    while ((getline t < p) > 0) {
+      NL[k]++; tot += length(t) + 1
+      if (t ~ /\r$/) { CRL[k, NL[k]] = 1; t = substr(t, 1, length(t) - 1) }
+      L[k, NL[k]] = t
+    }
     close(p)
     EOFNL[k] = (tot == sz) ? 1 : 0
     if (NL[k] == 0) EOFNL[k] = 1
@@ -112,7 +119,7 @@ function load_manifest(path, sizes,   line, f, n, k, sz, p, t, tot, SZ, nsz, nf)
 # line only when the file ends with one)
 function text(k, a, b,   i, o) {
   o = ""
-  for (i = a; i <= b; i++) o = o L[k, i] ((i < NL[k] || EOFNL[k]) ? "\n" : "")
+  for (i = a; i <= b; i++) o = o L[k, i] (((k, i) in CRL) ? "\r" : "") ((i < NL[k] || EOFNL[k]) ? "\n" : "")
   return o
 }
 

@@ -1624,7 +1624,9 @@ call session.load tc66-u; answer; wantv state.status '"ACTIVE"'
 tc "TC66: session.close and session.reopen refuse the move they cannot make"
 
 # TC67: the three-unit fixture: session.units answers the units touching a repo (ACTIVE
-# and CLOSED) and every known repo; session.refs_to answers the referrers
+# and CLOSED) and every known repo; session.refs_to answers the referrers. tc67-c lists
+# tc67-aardvark after tc67-gamma, so the repos in unit order are not sorted and an unsorted
+# known_repos fails the case (lanes/si-b5-base-review/report, B2 @open 6)
 awk -v d="$SANDBOX" '/^\{"kind":"unit"/ { n++; f = d "/tc67-" n ".dump" } { print > f }' "$FX/tc67-three.dump"
 for _u in a b c; do
   case "$_u" in a) _f=1 ;; b) _f=2 ;; *) _f=3 ;; esac
@@ -1762,7 +1764,19 @@ call session.stamp tc73-u
 refused_like 2 ERR_STORAGE_CORRUPT
 call session.load tc73-u
 answer; wantv state.current_anchor '"Ax"'
-tc "TC73: session.stamp answers the canonical anchor; a malformed stored anchor refuses rc2"
+# every write that stamps the anchor into an entry refuses it too (entry.record and both
+# receipts), the journal unchanged: a corrupt anchor never spreads into new entries
+kv objective "anchor probe"; call task.add tc73-u t73-a; answer
+kv objective "anchor probe two"; call task.add tc73-u t73-b; answer
+call unit.export tc73-u; cp "$O" "$SANDBOX/t73-before"
+rec tc73-u 1790000730 "never lands"
+refused_like 2 ERR_STORAGE_CORRUPT
+kv evidence "never lands"; kv date "$DATE"; call task.complete tc73-u t73-a
+refused_like 2 ERR_STORAGE_CORRUPT
+kv reason "never lands"; kv date "$DATE"; call task.drop tc73-u t73-b
+refused_like 2 ERR_STORAGE_CORRUPT
+call unit.export tc73-u; wantfile "$SANDBOX/t73-before"
+tc "TC73: session.stamp answers the canonical anchor; a malformed stored anchor refuses rc2, on entry.record and the receipts too"
 
 # TC75: a refusal prints exactly one stderr line in the fixed form and nothing on stdout
 call task.get "$TUNIT" no-such-task

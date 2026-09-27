@@ -63,6 +63,8 @@ FNR == 1 {
 /^@[a-zA-Z0-9_-]+/ {
   header = $0
   sub(/^@/, "", header)
+  # a legacy CRLF head names its item without the carriage return (the typed slug)
+  sub(/\r$/, "", header)
   split(header, parts, /[ \t]+/)
   t = parts[1]
   id = parts[2]

@@ -14,21 +14,25 @@
 # ---- the line edits ----
 # ed_splice(k, a, b, s): lines a..b of artifact k become the lines of s (newline
 # terminated; "" removes them; b = a - 1 inserts before line a)
+# the carriage return mark of a legacy line (CRL, model.awk) moves with its line; a line an
+# edit writes carries none
+function cr_mv(k, from, to) { if ((k, from) in CRL) CRL[k, to] = 1; else delete CRL[k, to] }
+
 function ed_splice(k, a, b, s,   n, P, i, d, old) {
   if (!(k in PRES)) { PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1 }
   n = 0
   if (s != "") { n = split(s, P, "\n"); if (P[n] == "") n-- }
   old = b - a + 1
   d = n - old
-  if (d > 0) { for (i = NL[k]; i > b; i--) L[k, i + d] = L[k, i] }
-  else if (d < 0) { for (i = b + 1; i <= NL[k]; i++) L[k, i + d] = L[k, i]; for (i = NL[k] + d + 1; i <= NL[k]; i++) delete L[k, i] }
-  for (i = 1; i <= n; i++) L[k, a + i - 1] = P[i]
+  if (d > 0) { for (i = NL[k]; i > b; i--) { L[k, i + d] = L[k, i]; cr_mv(k, i, i + d) } }
+  else if (d < 0) { for (i = b + 1; i <= NL[k]; i++) { L[k, i + d] = L[k, i]; cr_mv(k, i, i + d) }; for (i = NL[k] + d + 1; i <= NL[k]; i++) { delete L[k, i]; delete CRL[k, i] } }
+  for (i = 1; i <= n; i++) { L[k, a + i - 1] = P[i]; delete CRL[k, a + i - 1] }
   NL[k] += d
   if (NL[k] == 0) EOFNL[k] = 1
 }
 
 function ed_trim(k) {
-  while (NL[k] > 0 && L[k, NL[k]] == "") { delete L[k, NL[k]]; NL[k]-- }
+  while (NL[k] > 0 && L[k, NL[k]] == "") { delete L[k, NL[k]]; delete CRL[k, NL[k]]; NL[k]-- }
 }
 
 # ed_append(k, s, isanchor): the append rule: the artifact's trailing empty lines go, one
@@ -37,7 +41,7 @@ function ed_trim(k) {
 function ed_append(k, s, isanchor,   n) {
   if (!(k in PRES)) { PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1 }
   ed_trim(k)
-  if (NL[k] > 0 && !isanchor) { NL[k]++; L[k, NL[k]] = "" }
+  if (NL[k] > 0 && !isanchor) { NL[k]++; L[k, NL[k]] = ""; delete CRL[k, NL[k]] }
   n = NL[k]
   ed_splice(k, n + 1, n, s)
   EOFNL[k] = 1
@@ -54,7 +58,7 @@ function stage(k,   f, i, o) {
   NSTAGED++
   f = STAGE "/" NSTAGED
   printf "" > f
-  for (i = 1; i <= NL[k]; i++) printf "%s%s", L[k, i], ((i < NL[k] || EOFNL[k]) ? "\n" : "") > f
+  for (i = 1; i <= NL[k]; i++) printf "%s%s%s", L[k, i], (((k, i) in CRL) ? "\r" : ""), ((i < NL[k] || EOFNL[k]) ? "\n" : "") > f
   close(f)
   printf "%s\t%s\n", NSTAGED, relpath(k) > (STAGE "/manifest")
 }
@@ -501,8 +505,16 @@ function f_task_start(   kb, s, i, p, m) {
   answer("{\"unit\":" jstr(U) ",\"task\":" taskitem_json(kb, find_task(kb, s)) ",\"next_action\":" jstr(ST[U, "next"]) "}")
 }
 
+# want_anchor: the state's current_anchor is A<N>, else the store is corrupt (the rule of
+# session.stamp, D43): an entry never takes a malformed or missing anchor
+function want_anchor(   ca) {
+  ca = ST[U, "anchor"]
+  if (ca !~ /^A[0-9]+$/ || !((U, "current_anchor") in SLINE)) die(2, "ERR_STORAGE_CORRUPT", "the state's current_anchor '" ca "' is not A<N>")
+}
+
 # receipt(what, base slug): the receipt entry appended to the journal; returns its index
 function receipt(what, base,   kj, slug) {
+  want_anchor()
   kj = U "|journal"
   if (!(kj in PRES)) TYPE[kj] = "journal"
   slug = gen_slug(kj, base)
@@ -571,6 +583,7 @@ function f_task_get(   kb, s, i) {
 function f_entry_record(   kj, what, grp, th, rh, kn, R, nr, nc, c, kind, T, nt, t, vd, rs, cls, slug, d, ep) {
   parse_unit(U, "journal")
   not_closed()
+  want_anchor()
   kj = U "|journal"
   if (!(kj in PRES)) TYPE[kj] = "journal"
   if (has("slug")) {

@@ -932,6 +932,51 @@ a_eq "$(w_residue)" "$w_res0" "R4: the refused writes left no temp in the scratc
 $CTX session task start w-unit w-a --pointer="w-a IN_PROGRESS" >/dev/null 2>&1
 a_eq "$?" "0" "R4: the unit lock was released: a later task start lands"
 
+echo "== WA a write failing between its renames lands nothing (posix; lanes/si-b5-base-review/report F1) =="
+# a write touching two files (task complete: the backlog, then the journal) renames them one
+# after the other; a planted mv refusing the journal makes the second rename fail after the
+# first landed: the write exits 2 and the first rename is rolled back (R20: each write lands
+# whole or not at all); a TERM while the second rename runs rolls both back the same way.
+# Posix only: the renames are the posix store's
+if [ "$DRIVER" = posix ]; then
+  mkdir -p "$SANDBOX/wa-bin"
+  cat > "$SANDBOX/wa-bin/mv" <<'EOF'
+#!/bin/sh
+for a in "$@"; do last=$a; done
+case "$last" in
+  */journal.md)
+    if [ -n "${WA_PAUSE:-}" ]; then : > "$WA_PAUSE"; sleep 2; exec /bin/mv "$@"; fi
+    exit 1 ;;
+esac
+exec /bin/mv "$@"
+EOF
+  chmod 755 "$SANDBOX/wa-bin/mv"
+  $CTX session bootstrap wa-unit "rename failure unit" >/dev/null 2>&1 </dev/null
+  $CTX session task add wa-unit wa-t --objective="Task T" >/dev/null 2>&1 </dev/null
+  wa_sum() { for k in state backlog journal; do rcat wa-unit "$k"; done | cksum; }
+  wa_stages() { ls -a .contexture/sessions | grep -c '^\.stage'; }
+  wa_before=$(wa_sum)
+  out=$(PATH="$SANDBOX/wa-bin:$PATH" $CTX session task complete wa-unit wa-t --evidence="never lands" 2>&1 </dev/null); rc=$?
+  a_eq "$rc" "2" "B5-F1: a write whose second rename fails exits 2"
+  a_match "$out" "ERR_STORAGE_WRITE" "B5-F1: the refusal names the storage write"
+  a_eq "$(wa_sum)" "$wa_before" "B5-F1: the failed write rolled its first rename back (state, backlog, journal as before)"
+  a_eq "$(wa_stages)" "0" "B5-F1: the failed write left no stage"
+  wa_mark="$SANDBOX/wa-mark"
+  rm -f "$wa_mark"
+  printf 'evidence=terminated\ndate=%s\n' "$TODAY" | WA_PAUSE="$wa_mark" PATH="$SANDBOX/wa-bin:$PATH" "$RESOLVER" task.complete wa-unit wa-t >/dev/null 2>&1 &
+  wa_pid=$!
+  wa_n=0
+  while [ ! -f "$wa_mark" ] && [ "$wa_n" -lt 50 ]; do sleep 0.1; wa_n=$((wa_n + 1)); done
+  kill -TERM "$wa_pid" 2>/dev/null
+  wait "$wa_pid"; rc=$?
+  a_eq "$rc" "143" "B5-F1: a TERM during the renames exits 143"
+  a_eq "$(wa_sum)" "$wa_before" "B5-F1: a TERM during the renames rolled them back"
+  a_eq "$(wa_stages)" "0" "B5-F1: the interrupted write left no stage"
+  $CTX session task complete wa-unit wa-t --evidence="lands" >/dev/null 2>&1 </dev/null
+  a_eq "$?" "0" "B5-F1: the unit lock was released: a later complete lands"
+  a_eq "$($CTX session entry list wa-unit 2>/dev/null | grep -c "$TODAY-wa-t-completed")" "1" "B5-F1: the later complete wrote its one receipt"
+fi
+
 echo "== K an interrupted driver method leaves no scratch (lanes/routing-review/report finding R8) =="
 # the method stages its scratch, then waits on a held unit lock; a TERM there exits
 # through the cleanup on every sh. Decoupled from the driver's scratch names (B2 @open 2):
@@ -1140,7 +1185,10 @@ done
 a_eq "$p2_rc_bad" "0" "P2 same-target concurrency: every write act rc0"
 a_eq "$p2_residue" "0" "P2 same-target concurrency: no temp residue"
 a_eq "$p2_incomplete" "0" "P2 same-target concurrency: no torn journal block"
-echo "note: P2 same-target both-landed $p2_both/$p2_iters (last-writer-wins is the documented design)"
+# every write act answered rc 0 and concurrent writers of one unit serialize (R20), so both
+# records of every iteration landed; a lost write reads as fewer (lanes/si-b5-base-review/report,
+# the retired last-writer-wins note of B4 @open 4)
+a_eq "$p2_both" "$p2_iters" "P2 same-target concurrency: both writes landed every iteration (the writers serialize)"
 
 echo "== RF shared ref fixes =="
 # finding update --ref stores the ref (a REF line added when the finding had none, the
@@ -1340,6 +1388,20 @@ out=$($CTX session record up-odd --what="an event" 2>&1 </dev/null); rc=$?
 a_eq "$rc" "0" "UP: a record after a legacy CRLF line lands rc0"
 a_eq "$(rcat up-odd journal | grep -c "$(printf '\r')\$")" "1" "UP: the legacy CRLF line keeps its bytes"
 up_path "$out" "UP: the record after a CRLF line"
+# a legacy CRLF entry reads with LF-only typed fields (the data model types every string LF
+# only; lanes/si-b5-base-review/report F2): its slug addressable, its WHAT without the
+# carriage return, the audit clean; every CR byte stays in the stored bytes
+printf '@anchor A1 ("continues A0", attention: odd)\r\n\r\n@entry 2026-09-20-up-crlf\r\n  WHAT: "legacy crlf"\r\n  THREAD: none\r\n' | rput up-odd journal
+out=$($CTX session entry show up-odd 2026-09-20-up-crlf --json 2>&1 </dev/null); rc=$?
+a_eq "$rc" "0" "B5-F2: a legacy CRLF entry is addressable by its slug"
+a_match "$out" '"what":"legacy crlf","group"' "B5-F2: its WHAT reads without the carriage return"
+a_eq "$($CTX session entry list up-odd 2>/dev/null </dev/null | grep -c "$(printf '\r')")" "0" "B5-F2: entry list prints no carriage return"
+$CTX session audit up-odd >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "B5-F2: the audit reads the CRLF entry clean"
+out=$($CTX session search up-odd "legacy crlf" --json 2>&1 </dev/null)
+a_match "$out" '"entity_type":"entry","entity_id":"2026-09-20-up-crlf","section"' "B5-F2: exact search attributes the CRLF entry to its slug"
+$CTX session record up-odd --what="after crlf" >/dev/null 2>&1 </dev/null
+a_eq "$(rcat up-odd journal | grep -c "$(printf '\r')\$")" "5" "B5-F2: a later record keeps every legacy CR byte"
 printf 'status: WEIRD\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
 out=$(up_err $CTX session active)
 a_match "$out" '^WARNING: unrecognized status \[WEIRD\] in state: unit up-odd$' "UP: active names the state and the unit of an unknown status"

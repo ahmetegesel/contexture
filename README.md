@@ -159,7 +159,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
 | ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw |
 
-The named looks (`entry show`, `entry list`, `entry closure`, `units`, `refs-to`, `resolve`) and search answer questions over the record, so agents never improvise greps that over-read: a miss is loud, rc=1 with a named error, never an empty success.
+The named looks (`entry show`, `entry closure`, `units`, `refs-to`, `resolve`) and search answer questions over the record, so agents never improvise greps that over-read: a look that misses is loud, rc=1 with a named error, never an empty success; search prints its zero count. The lists (`entry list` with `--group` or `--anchor`, `task list`, `finding list`) print nothing with rc 0 when nothing matches.
 
 The interaction toolbox is the typed semantic verbs (`task`, `record`, `entry`, `finding`, `search`, `resolve`) and `ctx lane`, ensuring atomic state transitions and eliminating format guessing; they are the only write inputs, so no markdown crosses the command interface. The earlier verbs that carried raw blocks or duplicated a typed verb (`append`, `amend`, `flip`, `drop`, and the `query` family) retired in v0.55.0: each name stays reserved and prints its replacement with rc 1.
 

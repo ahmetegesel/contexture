@@ -115,8 +115,10 @@ rc=1.
   `length()` stays byte-oriented on every awk (the page byte budget).
 - write safety (posix driver): every changed file is staged in a dot folder
   inside the sessions folder (the same filesystem) and renamed into place under the unit lock
-  (`.contexture/tmp/locks/<unit>.lock`), so a failed write leaves the
-  record whole.
+  (`.contexture/tmp/locks/<unit>.lock`); every file a rename replaces is
+  hard-linked into the stage first, so a failed rename or an interrupt
+  (HUP, INT, TERM) among the renames rolls the earlier ones back and a
+  failed write leaves the record whole.
 - reserved names: the engine derives the session verb set from this
   module's `scripts/`, adds the retired names, and refuses a module
   shadowing one at discovery.
