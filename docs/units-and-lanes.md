@@ -27,7 +27,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 `state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the one next action, the objective, the repos it touches, and optional reference sessions (`ref_sessions`). Nothing else; detail lives behind references. It is a pointer, not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
 
-`backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence (`ctx session flip done`), and the completion lands in the journal in the same breath.
+`backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence (`ctx session task complete`), and the completion receipt lands in the journal in the same write.
 
 `journal.md` is the memory: the running record of what happened. Entries land as things happen, never batched at the end, and they are never edited afterward; a revision supersedes its predecessor by reference. Each entry carries what happened, the result, and why the next step follows. The journal exists to rebuild the working context from scratch: a fresh boot loads the live entries and nothing else, and holds the position without the conversation.
 
@@ -35,7 +35,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 `lanes/` holds delegated work, one folder per dispatch; its own section follows.
 
-The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command. `state.md` is the pointer, refreshed as the work moves (`ctx session stamp`, `next`, `refs`, `close`); `backlog.md` evolves in place as tasks move (`ctx session append`, `amend`, `flip`, `drop`); `journal.md` and `knowledge.md` only grow (`ctx session append`), which is why they survive every compaction intact.
+The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command; no one edits them by hand, and under the posix driver the driver is the only code that touches them. `state.md` is the pointer, refreshed as the work moves (`ctx session stamp`, `next`, `refs`, `close`, `reopen`, and `task start`); `backlog.md` evolves in place as tasks move (`ctx session task add`, `update`, `start`, `complete`, `reopen`, `drop`); `journal.md` only grows (`ctx session record`, the receipts `task complete` and `task drop` write, the anchors `stamp` appends), which is why it survives every compaction intact; `knowledge.md` changes through `ctx session finding` (add, update, supersede, drop).
 
 ## The unit's life
 
@@ -65,14 +65,14 @@ The first thing the agent does in a fresh context, mechanically:
    The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The backlog section renders its DONE task blocks compactly (the task line, status, objective, description); open and statusless blocks render whole, and the file itself is never edited. The load is one subtraction: live means not closed; anchors order periods and receipt loads, never liveness. Knowledge loads fully; it is small, and every line is a settled decision. Reference sessions are consulted on demand with `load refs <ref_1> ... <ref_N>`: they stream read-only under their own banner, map, and tail, apart from the unit load.
 6. Run the rhythm index: one line per rhythm, its trigger, and its activation policy.
 7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the session files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
-8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `.contexture/ctx session query anchors <unit>` reconstructs the map of periods and their receipts:
+8. Run the stamp: it derives the next anchor from `state.md`, rewrites the pointer, and appends the anchor line with the attention verbatim, naming the loaded set, any `ref_sessions`, and the git state. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `.contexture/ctx session entry list <unit> --anchor=A<N>` lists the entries written in one period:
 
    ```bash
    .contexture/ctx session stamp <unit> "<the loaded set + ref_sessions + the git state>"
    ```
 9. Continue from `next_action`, following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
 
-New work bootstraps a unit instead of joining one: run `.contexture/ctx session bootstrap <slug> "<objective>" [<repos>]`; it creates the folder, the state pointer at A0, and the folded A1 receipt, printing the next move; then continue at step 5.
+New work bootstraps a unit instead of joining one: run `.contexture/ctx session bootstrap <slug> "<objective>" [<repos>]`; the storage driver creates the unit whole (the state pointer at A1 with its folded first anchor, an empty backlog and knowledge), and the verb prints the state and the next move; then continue at step 6.
 
 ### Refresh
 
@@ -97,23 +97,23 @@ Several units can be active at once. The field is what a boot sees: every unit w
 
 The opening message is the primary signal; the field is the cross-check. The agent reads the message against the candidates, proposes its pick (continue this one, or bootstrap a new one), and waits for the human's word. A sweep of the folders before knowing the ask spends context on irrelevant text; matching the message first and verifying with one grep is the boot's order.
 
-When no unit matches, the agent bootstraps one and says so. The bootstrap is minimal: a state file with the unit ACTIVE, its anchor counter at zero, and the first action set to declaring the work. The first boot stamps A1.
+When no unit matches, the agent bootstraps one and says so. The bootstrap is minimal: the unit ACTIVE at A1, whose folded first anchor names the objective and the git state, and the first action set to declaring the work. The next stamp opens A2.
 
 Units stay independent. Each keeps its own record; cross-references between units never merge their records, and a period that closes on one unit does not touch another. A later period simply boots on whichever unit the work points to.
 
 ## Subagents, the delegated unit
 
-When the agent hands work to a subagent, the dispatch gets its own unit folder at `lanes/<slug>/`, inside the unit the work belongs to. Inside are the three files the dispatch needs to be self-contained: `recipe.md` (the brief it received), `journal.md` (the trace of what it did), and `report.md` (the evidence it leaves).
+When the agent hands work to a subagent, the dispatch gets its own lane inside the unit the work belongs to, created by the dispatcher with its brief: `ctx lane create <unit> <lane>`, the recipe on stdin. A lane holds the three artifacts the dispatch needs to be self-contained: the recipe (the brief it received), the lane journal (the trace of what it did), and the report (the evidence it leaves). Under the posix driver they are the files `recipe.md`, `journal.md`, and `report.md` in the folder `lanes/<slug>/`; under another driver they live in its store; either way the lane verbs (`ctx lane show`, `record`, `report`) are the only way in.
 
 Delegation is first-class; an orchestrating agent is the clearest example, not a special citizen: it learns from every report while its own context stays lean, and the detail never enters its window.
 
-The memory is physical, so nothing depends on the subagent surviving. If a subagent stalls or dies, its folder still holds the brief, the trace, and the report so far; a re-dispatch resumes from the folder, continuing from the last uncompleted task, never rebuilding from scratch. A crash costs the dispatch, not the work.
+The memory is in the record, so nothing depends on the subagent surviving. If a subagent stalls or dies, its lane still holds the brief, the trace, and the report so far; a re-dispatch resumes from the lane, continuing from the last uncompleted task, never rebuilding from scratch. A crash costs the dispatch, not the work.
 
-One writer per surface: the session journal records the dispatch (the subagent's folder path), and the subagent records the execution. The subagent never writes session surfaces; the dispatcher never mines the subagent journal for what the report should carry.
+One writer per surface: the session journal records the dispatch (the subagent's lane slug), and the subagent records the execution. The subagent never writes session surfaces; the dispatcher never mines the subagent journal for what the report should carry.
 
-The subagent's folder layout does the containment work. It is a derived structure: write isolation, auditability, and crash resumption fall out of the folder itself, and the standard journal grammar applies inside. Nothing extra needs remembering, and `AGENTS.md` stays lean.
+The lane does the containment work. It is a derived structure: write isolation, auditability, and crash resumption fall out of the lane itself, and the standard journal grammar applies inside. Nothing extra needs remembering, and `AGENTS.md` stays lean.
 
-*In practice:* an enrichment subagent hit a harness concurrency limit and died mid-edit. A fresh instance read the action trace, verified the unjournaled edit against git, and continued without rebuilding. The seam held because the folder, not the conversation, carried the state.
+*In practice:* an enrichment subagent hit a harness concurrency limit and died mid-edit. A fresh instance read the action trace, verified the unjournaled edit against git, and continued without rebuilding. The seam held because the lane, not the conversation, carried the state.
 
 ## The subagent contracts
 
@@ -121,13 +121,13 @@ What makes subagents portable between agents is a contract: the subagent's own o
 
 ### The recipe, and the subagent's boot
 
-The recipe is the brief on disk. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch/worktree the subagent works on, so the subagent knows where to edit and commit; its working root sits in the write scope. A message-brief dies at compaction; a recipe on disk survives, and that persistence is the audit trail.
+The recipe is the brief in the record: the dispatcher lands it with `ctx lane create`, and the subagent reads it with `ctx lane show <unit> <lane> recipe`. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch/worktree the subagent works on, so the subagent knows where to edit and commit; its working root sits in the write scope. A message-brief dies at compaction; a recipe in the record survives, and that persistence is the audit trail.
 
 Before any work, the subagent boots read-only: the overlays, the unit's state, backlog, and knowledge, the recipe, and every reference the recipe names. Its first journal entry is the load receipt: the refs loaded, one per line. An unresolved reference is a defect in the brief; the subagent stops and reports it, never working around the gap.
 
 ### The subagent journal
 
-The subagent journals at action granularity as things happen, never batched to the end: every state-changing action (a file written, a command with a non-obvious result), every claim formed, every decision point taken, every drift notice. Each entry carries the action, its result, and why the next step follows. Only task receipts batch, at task completion.
+The subagent journals at action granularity as things happen (`ctx lane record`), never batched to the end: every state-changing action (a file written, a command with a non-obvious result), every claim formed, every decision point taken, every drift notice. Each entry carries the action, its result, and why the next step follows. Only task receipts batch, at task completion.
 
 The journal is the audit trail and the resumption surface. It says where the work stopped and why the next step followed, which is exactly what a fresh instance needs to continue.
 
@@ -139,7 +139,7 @@ The contract names no channel: steering is a harness capability, and plain files
 
 ### The report
 
-The report is the dispatcher's only window into the dispatch. It must be self-sufficient: an orientation block that mirrors the recipe's tasks with their proven exit conditions, claims each carrying an epistemic mark (VERIFIED, INFERRED, or ABSENT), verbatim evidence, and the structural detail the dispatcher needs to re-verify and decide, and typed risks naming what was skipped and what rests on inference. The dispatcher reads it whole, no exception; an unread part wears the look of review.
+The report is the dispatcher's only window into the dispatch, landed with `ctx lane report` (the body on stdin, any size). It must be self-sufficient: an orientation block that mirrors the recipe's tasks with their proven exit conditions, claims each carrying an epistemic mark (VERIFIED, INFERRED, or ABSENT), verbatim evidence, and the structural detail the dispatcher needs to re-verify and decide, and typed risks naming what was skipped and what rests on inference. The dispatcher reads it whole, no exception; an unread part wears the look of review.
 
 A subagent that cannot write its report returns the artifact verbatim: nothing before it, nothing after it, and the dispatcher persists it byte-clean.
 
@@ -150,4 +150,4 @@ A subagent that cannot write its report returns the artifact verbatim: nothing b
 - Subagents run in the background: the turn ends at launch, and the conversation never blocks on a subagent.
 - Parallel subagents are only for independent domains. Shared state or ordering means sequential, however tempting the fan-out.
 
-And every dispatch is journaled in the session journal: an entry carrying the subagent's folder path.
+And every dispatch is journaled in the session journal: an entry carrying the subagent's lane slug.

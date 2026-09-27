@@ -2,7 +2,7 @@
 
 `.contexture/ctx` is the engine: discovery, help assembly, dispatch, the run engine, and the hook runner. Modules declare; the engine assembles. A module teaches `ctx` a namespace of verbs, implicit hook points, or stream-compaction filters, and nothing in the engine changes when one is added.
 
-This page is the authoring contract: what to write, where it goes, and how to prove it works. The engine's own behavior — run guards, load paging, audit classes, query kinds — lives in `docs/the-engine.md`; the sections below point there instead of restating it.
+This page is the authoring contract: what to write, where it goes, and how to prove it works. The engine's own behavior (run guards, load paging, audit classes, the named looks) lives in `docs/the-engine.md`; the sections below point there instead of restating it.
 
 ## Anatomy
 
@@ -23,7 +23,7 @@ A module is a directory under `.contexture/modules/`:
 - Declarations are `# key: value` comment lines in the file they govern, placed in the file's header.
 - `scripts/` files and `hooks/` files are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
 
-The builtin modules `session` and `run` ship with the base; a module you add is workspace-owned. See Payload.
+The builtin modules `session`, `lane`, and `run` ship with the base; a module you add is workspace-owned. See Payload.
 
 ## Declarations
 
@@ -67,7 +67,7 @@ Filters declare themselves with their own header vocabulary; see Filters.
 - `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines.
 - `ctx help --all` prints the top summary plus every module's block.
 - A duplicate verb name inside one module shadows: the engine warns and the first file name in byte order wins.
-- Reserved names cannot be module names: the session verb set — its sixteen scripts plus `help`, so seventeen names — plus `run` and `hooks`. A directory carrying one is refused at discovery with a warning and never listed; the builtin `session` and `run` directories are exempt.
+- Reserved names cannot be module names: the session verb set (its twenty-two verbs plus `help`, so twenty-three names), plus `run` and `hooks`, plus the five session verbs retired in v0.55.0 (`append`, `amend`, `query`, `flip`, `drop`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `session` and `run` directories are exempt.
 - Help is engine-owned: no module ships a help script.
 
 ## Dispatch
@@ -99,7 +99,7 @@ Six points ship:
 | point | fires |
 |---|---|
 | `stamp` | after `ctx session stamp` appends its journal receipt |
-| `task-landing` | after a `ctx session append\|flip\|drop\|next` act lands; a refusal never fires |
+| `task-landing` | after a `ctx session task add\|start\|complete\|reopen\|drop` or `ctx session next` act lands (`task update` fires none); a refusal never fires |
 | `close` | at the end of `ctx session close` |
 | `load-pre` | in the main form of `ctx session load`, before the load map |
 | `load-post` | in the main form of `ctx session load`, after the load banner |
@@ -116,7 +116,7 @@ Every hook runs with:
 | point | context |
 |---|---|
 | `stamp` | `CTX_UNIT`, `CTX_ANCHOR` (the new anchor) |
-| `task-landing` | `CTX_UNIT`, `CTX_ACT`, `CTX_SLUGS` (comma-space list) |
+| `task-landing` | `CTX_UNIT`, `CTX_ACT` (`add`, `start`, `complete`, `reopen`, `drop`, or `next`), `CTX_SLUGS` (the task; for `next`, the `IN_PROGRESS` tasks as a comma-space list) |
 | `close` | `CTX_UNIT` |
 | `load-pre` | `CTX_UNIT`, `CTX_LOAD_FORM=main`, `CTX_LOAD_PAGE` |
 | `load-post` | `CTX_UNIT`, `CTX_LOAD_FORM=main`, `CTX_LOAD_PAGE` |
@@ -140,14 +140,13 @@ The pattern for a set of similar verbs: one private implementation file, one thi
 
 ```sh
 #!/bin/sh
-# summary: append one or more blocks to the session
-# usage: ctx session append <slug>
-# help: pipe the blocks on stdin
+# summary: list ideas by status (default: open)
+# usage: ctx ideas list [open|picked|dropped|all]
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/record" append "$@"
+exec "$dir/ideas" list "$@"
 ```
 
-One home for the logic and its validation; a clean verb table. The shipped session and ideas modules are both built this way (see Worked examples).
+One home for the logic and its validation; a clean verb table. The ideas module is built this way (see Worked examples); the session module shares its logic through a sourced library instead, since each of its verbs is one storage call and one render.
 
 ## Filters
 
@@ -234,9 +233,9 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
 ## Worked examples
 
-### session: wrappers over a private engine
+### session: thin verbs over a shared library and a storage driver
 
-The builtin record engine, `.contexture/modules/session/`. Its `module` carries one summary line; its extension-less scripts are `active`, `bootstrap`, `load`, `stamp`, `board`, `audit`, `index`, `query`, and `refresh`. The private `scripts/record` has no summary, so it is not a verb; the seven wrappers `append`, `amend`, `flip`, `drop`, `next`, `refs`, and `close` exec it with their act name. `refresh` is a real script rather than a wrapper because it composes sibling workers and then fires the refresh point. Off-path detail — the worker map, helpers, and call sites — is in `.contexture/modules/session/README.md`.
+The builtin record engine, `.contexture/modules/session/`. Its `module` carries one summary line; its twenty-two extension-less verbs are sh scripts that source `lib/verb.sh`, check the input shape, make one call to the configured storage driver through `scripts/driver-resolver` (a private script: it carries no summary), and render the answer through `lib/json.awk` and `lib/render.awk`; `index` alone is an awk verb, since it reads the rhythm files rather than the record. `refresh` is the one composite verb: it runs the board and the audit and then fires the refresh point. The posix driver under `drivers/posix/` is the only code that touches the record's files. Off-path detail (the verb to function map, the helpers, the hook call sites) is in `.contexture/modules/session/README.md`.
 
 ### ideas: a private engine with an environment override
 
@@ -248,11 +247,11 @@ The builtin run module, `.contexture/modules/run/`. It has no module file and no
 
 ## Payload
 
-A module you add is workspace-owned: updates never touch it. The builtin `session` and `run` modules ride the update payload: the source repository tracks them mirrored under `base/`, and an update applies them onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
+A module you add is workspace-owned: updates never touch it. The builtin `session`, `lane`, and `run` modules ride the update payload: the source repository tracks them mirrored under `base/`, and an update applies them onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
 
 ## Where the rest lives
 
-- Engine behavior: run guards, load paging, audit classes, query kinds — `docs/the-engine.md`.
+- Engine behavior: run guards, load paging, audit classes, the named looks: `docs/the-engine.md`.
 - The record grammars (state, backlog, journal, knowledge) — `docs/the-record.md`.
 - Drawer layout, the three payload classes, and update mechanics — `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing, Updating).
 - Packaging a module as a plugin for reuse or contribution: `docs/plugins.md`.

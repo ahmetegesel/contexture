@@ -136,7 +136,7 @@ In this repository the live root (`AGENTS.md` and `.contexture/`) is untracked w
 
 1. Edit `base/` directly: it is the shipping copy.
 2. Ship: docs sync, commit, push, and the annotated tag in one breath.
-3. Apply: `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched.
+3. Apply: `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched. A copy adds and replaces files but never removes one: delete from the live drawer every payload path the release removed (`git diff --name-status --diff-filter=D <previous-tag> <tag> -- base/` lists them).
 4. Verify the live install: the boot load, the audit, and the ground check.
 
 ## Updating
@@ -148,7 +148,7 @@ The base evolves upstream, and updating is judgment, not a script: the changes a
 3. Read the CHANGELOG from your installed version to the target: what changed and why.
 4. Read your workspace: the overlay's `@replace` blocks, live sessions, in-flight artifacts.
 5. Decide: adopt now, migrate first, or wait.
-6. Copy the payload: `git archive <tag> base/ | tar -x --strip-components=1 -C <your-repo>`; the archive carries only payload paths, so workspace-owned paths are never touched.
+6. Copy the payload: `git archive <tag> base/ | tar -x --strip-components=1 -C <your-repo>`; the archive carries only payload paths, so workspace-owned paths are never touched. The archive adds and replaces files but never removes one, so delete every payload path the target tag no longer carries (`git diff --name-status --diff-filter=D <installed-tag> <tag> -- base/` lists them): v0.55.0, for one, removes the session verbs `append`, `amend`, `query`, `flip`, and `drop` and three posix driver awk files, and a removed verb file left behind still lists in `ctx session help` though its call prints the replacement.
 7. Verify it: `git ls-tree -r --name-only <tag> -- base/` plus a `cmp` per file against the applied paths.
 8. Review the staged diff before committing; it shows you the changed base.
 9. Run your instruments against the result: the boot query, the audit, the ground check. After a MAJOR tag, review the overlay: its rules were written against the old shape.

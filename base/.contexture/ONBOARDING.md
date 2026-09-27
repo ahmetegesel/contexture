@@ -16,7 +16,7 @@
   2. branch: `git checkout -b adopt-contexture` (or team branch convention)
   3. never execute onboarding directly on main/master/production branches
   4. bootstrap the adoption session: `.contexture/ctx session bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
-  5. journal the phase (`.contexture/ctx session append`): the branch and the starting git state
+  5. journal the phase (`.contexture/ctx session record`): the branch and the starting git state
 
 @assess
   topology:
@@ -63,7 +63,7 @@
     <every open question beside the plan: resolutions, history, intent the evidence cannot answer; none states none>
 
 @configure
-  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx session append`; the pointer moves via `.contexture/ctx session next`; every task's completion journals (`.contexture/ctx session flip done`) and advances the pointer (`.contexture/ctx session next`); drift updates the backlog in the same breath via `.contexture/ctx session amend`
+  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx session task add`; the pointer moves via `.contexture/ctx session next` (a task start writes it too: `.contexture/ctx session task start`); every task's completion journals its receipt (`.contexture/ctx session task complete`) and advances the pointer (`.contexture/ctx session next`); drift updates the backlog in the same breath via `.contexture/ctx session task update`
   base assets:
     copy the adoption set: `git archive <tag> base/ plugins/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`) and the plugins alongside it (`cp -R <scratch>/plugins <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
     set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk`

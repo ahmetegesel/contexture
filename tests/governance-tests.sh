@@ -9,8 +9,8 @@
 #   2. the payload path tables re-derived against git ls-files: the declaration
 #      in docs/adoption.md and docs/the-engine.md is one string, and every
 #      tracked path under base/ sits under a declared root, every declared root
-#      carries a tracked path, and the payload modules are exactly session and
-#      run;
+#      carries a tracked path, and the payload modules are exactly lane, run,
+#      and session (lib/ and every new verb script sit under modules/session);
 #   3. presence: every shipped session verb, hook point, and filter has a case
 #      in the committed suites (a new surface without one fails), and the ship
 #      gate lines live on the three declared surfaces.

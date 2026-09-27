@@ -27,10 +27,10 @@ GROUND_AND_REFS
   COMMAND_POLICY: execute all shell commands through .contexture/ctx run <cmd>
 
 OUTPUTS
-  JOURNAL: journal.md               # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the dispatcher never reads it
-  REPORT: report.md                 # the dispatcher's only window: self-sufficient claims and evidence; .contexture/templates/report.md
+  JOURNAL: ctx lane record <unit> <lane>   # action trace + resumption surface: a WHAT per state-changing action (file written, command with a non-obvious result), claim formed, decision point, drift notice; action + result + why-next; task receipts batch at completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the dispatcher never reads it
+  REPORT: ctx lane report <unit> <lane>    # the report on stdin; the dispatcher's only window: self-sufficient claims and evidence; .contexture/templates/report.md
   RETURN: summary only: verdicts + residual risks
-  RESUME: read recipe.md + journal.md; continue from last uncompleted task
+  RESUME: ctx lane show <unit> <lane> recipe, then journal; continue from last uncompleted task
 
 # filled sample
 @context: "remediate README.md and AGENTS.md consistency and contradictions"
@@ -56,12 +56,13 @@ GROUND_AND_REFS
   COMMAND_POLICY: execute all shell commands through .contexture/ctx run <cmd>
 
 OUTPUTS
-  JOURNAL: journal.md
-  REPORT: report.md
+  JOURNAL: ctx lane record workspace-record readme-remediation
+  REPORT: ctx lane report workspace-record readme-remediation
   RETURN: summary only: verdicts + residual risks
-  RESUME: read recipe.md + journal.md; continue from last uncompleted task
+  RESUME: ctx lane show workspace-record readme-remediation recipe, then journal; continue from last uncompleted task
 
 # the journal grammar: a WHAT per state-changing action (file written,
 # command with a non-obvious result), claim formed, decision point, drift
 # notice; action + result + why-next; task receipts batch at completion;
-# the dispatcher reads the report, never the journal
+# the dispatcher reads the report, never the journal; the dispatcher lands
+# the recipe itself with ctx lane create <unit> <lane> (the recipe on stdin)

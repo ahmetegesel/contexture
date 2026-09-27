@@ -20,11 +20,14 @@ its slug when the summary leaves a question open.
   WHAT: "..."                             # the event's substance; a closer carries the verdict + the resolution here
   GROUP: <token>                          # optional; agent-chosen thread, stable within the unit
   RHYTHM: <name> <N> <GATE>               # optional; the process in force, on the entries that advance the rhythm
-  KNOWLEDGE: true                         # optional; knowledge-worthy, the harvest's input
   THREAD: <what it awaits>                # required; the act outside the unit's flow that must resolve this: the human's response | a dispatched subagent's report | another unit's act; none when nothing outside acts; born at the write, never flipped; the resolving entry carries CLOSES same-breath; none = receipt: final word on a completed fact, no closer obligation
-  CLOSES: <slug> (<verdict>: reason)      # optional; verdict = done | superseded | dropped | folded; the ONLY closure; no closer = still open
-  SUPERSEDES: <slug> (<verdict>: reason)  # optional; closes by replacement, never a rewrite
-  REF: "target#symbol"                    # optional; grounding, same format as knowledge REFs
+  REF: "target#symbol"                    # optional, repeatable; grounding, same format as knowledge REFs
+  CLOSES: <slug> (<verdict>: reason)      # optional, repeatable; verdict = done | superseded | dropped | folded; the ONLY closure; no closer = still open
+  SUPERSEDES: <slug> (<verdict>: reason)  # optional, repeatable; closes by replacement, never a rewrite
+  KNOWLEDGE: true                         # optional; knowledge-worthy, the harvest's input
+
+# the fields above stand in the canonical order the record verbs write
+# (ctx session record); an older entry in another order reads back as stored
 
 # filled sample
 @anchor A<N> ("continues A<N-1>", attention: <the loaded set>)
@@ -34,7 +37,7 @@ its slug when the summary leaves a question open.
   WHAT: "<the event's substance: what happened, the result, why next>"
   GROUP: <token>
   RHYTHM: work 6 EXECUTE
-  KNOWLEDGE: true
   THREAD: <what it awaits>
-  CLOSES: <date>-<slug> (done: <the resolution>)
   REF: "<target#symbol>"
+  CLOSES: <date>-<slug> (done: <the resolution>)
+  KNOWLEDGE: true
