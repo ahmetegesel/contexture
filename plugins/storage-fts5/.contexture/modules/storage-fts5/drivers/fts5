@@ -1,6 +1,13 @@
 #!/bin/sh
 # SQLite FTS5 storage driver implementing the Storage Provider Interface (SPI).
 #
+# In transition to contract 2 (backlog#fts5-native): the store is at schema version 4
+# (schema.sql, the typed tables of the contract 2 data model), reached from any older
+# store by the in-place upgrade on its first open (db-init.sh, upgrade/), and unit.export
+# and unit.import answer natively in SQL (sql/). The methods below this note still speak
+# contract 1 over the version 3 artifacts table until their native rework, so the contract
+# 2 handshake refuses this driver until then.
+#
 # The store keeps every artifact's canonical text verbatim (the artifacts table) and a
 # derived relational index rebuilt from that text (index.sh), which feeds the dual FTS5
 # tables and the pure SQL RRF search. Native methods: capability, storage.health,
@@ -94,7 +101,8 @@ write_failed() {
 
 unit_exists() {
   [ -f "$DB_PATH" ] || return 1
-  [ "$(sq "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$1")';")" -gt 0 ] 2>/dev/null
+  # a version 4 store has no sessions table: the contract 1 methods read it as no unit
+  [ "$(sq "$DB_PATH" "SELECT count(*) FROM sessions WHERE unit='$(sql_escape "$1")';" 2>/dev/null)" -gt 0 ] 2>/dev/null
 }
 
 # a read never creates the store: without a database file there is nothing to read
@@ -693,9 +701,102 @@ corpus_changes() {
 }
 
 # ==============================================================================
+# The dump (contract 2, docs/the-engine.md, The dump): unit.export and unit.import
+# ==============================================================================
+# Each is SQL beside this entry point (sql/): the export one query over the typed tables
+# answering the dump lines in order; the import the whole dump validated before any write
+# (sql/dump.check.sql), then in one transaction the unit loaded whole (sql/dump.import.sql)
+# and its search tables derived (sql/derive.sql). A refusal is one stderr line
+# "<function>: error: <message> (<CODE>)" with nothing on stdout.
+SQL_DIR="$MODULE_DIR/sql"
+
+refuse() {
+  printf '%s: error: %s (%s)\n' "$CMD" "$3" "$2" >&2
+  exit "$1"
+}
+
+want_unit() {
+  [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the unit"
+  slug_valid "$1" || refuse 1 ERR_INVALID_ARGUMENT "malformed unit '$1'"
+}
+
+# unit_held <unit>: the store holds the unit (its state row)
+unit_held() {
+  [ "$(sq "$DB_PATH" "SELECT count(*) FROM units WHERE unit = '$(sql_escape "$1")';" 2>/dev/null)" = "1" ]
+}
+
+# unit.export <unit>: the unit's dump lines on stdout
+unit_export() {
+  want_unit "${1:-}"
+  [ $# -le 1 ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$2'"
+  db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
+  unit_held "$1" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
+  scratch
+  printf "CREATE TEMP TABLE arg (k TEXT PRIMARY KEY, v TEXT);\nINSERT INTO temp.arg VALUES ('unit', '%s');\n.read '%s'\n" \
+    "$(sql_escape "$1")" "$SQL_DIR/unit.export.sql" > "$SCRATCH/export.sql"
+  sq -bail "$DB_PATH" < "$SCRATCH/export.sql" > "$SCRATCH/dump" 2> "$SCRATCH/err" \
+    || refuse 2 ERR_STORAGE_READ "the export of unit '$1' failed: $(head -n 1 "$SCRATCH/err")"
+  cat "$SCRATCH/dump"
+  exit 0
+}
+
+# unit.import <unit> [--replace] | the dump raw: validated whole before anything lands; a
+# held unit refuses without --replace; with it the unit is swapped whole in one transaction
+unit_import() {
+  want_unit "${1:-}"
+  ui_u=$1
+  shift
+  ui_rep=0
+  for ui_a in "$@"; do
+    case "$ui_a" in
+      --replace) ui_rep=1 ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$ui_a'" ;;
+    esac
+  done
+  scratch
+  cat > "$SCRATCH/dump" || refuse 2 ERR_STORAGE_READ "cannot read the dump"
+  db_init
+  ui_q=$(sql_escape "$ui_u")
+  {
+    printf "PRAGMA foreign_keys = ON;\n.read '%s'\n" "$SQL_DIR/split.sql"
+    printf "CREATE TEMP TABLE arg (k TEXT PRIMARY KEY, v TEXT);\nINSERT INTO temp.arg VALUES ('unit', '%s'), ('dump', '%s');\n" "$ui_q" "$(sql_escape "$SCRATCH/dump")"
+    printf "CREATE TEMP TABLE touched (unit TEXT PRIMARY KEY);\nINSERT INTO temp.touched VALUES ('%s');\n" "$ui_q"
+    printf 'CREATE TEMP TABLE guard (x INTEGER CHECK (x = 0));\n'
+    printf ".read '%s'\n.read '%s'\n" "$SQL_DIR/dump.load.sql" "$SQL_DIR/dump.check.sql"
+    # a defect stops the script before any write
+    printf "SELECT 'ERR ' || msg FROM temp.dverr;\nINSERT INTO temp.guard SELECT count(*) FROM temp.dverr;\n"
+    printf 'BEGIN IMMEDIATE;\n'
+    printf "SELECT 'HELD' FROM units WHERE unit = '%s';\n" "$ui_q"
+    if [ "$ui_rep" -eq 0 ]; then
+      printf "INSERT INTO temp.guard SELECT count(*) FROM units WHERE unit = '%s';\n" "$ui_q"
+    fi
+    printf ".read '%s'\n.read '%s'\n" "$SQL_DIR/dump.import.sql" "$SQL_DIR/derive.sql"
+    printf "COMMIT;\nSELECT 'OK ' || records FROM temp.dok;\n"
+  } > "$SCRATCH/import.sql"
+  sq -bail "$DB_PATH" < "$SCRATCH/import.sql" > "$SCRATCH/out" 2> "$SCRATCH/err"
+  ui_rc=$?
+  ui_err=$(grep '^ERR ' "$SCRATCH/out" | head -n 1)
+  [ -z "$ui_err" ] || refuse 1 ERR_DUMP_FORMAT "${ui_err#ERR }"
+  ui_held=0
+  grep -q '^HELD$' "$SCRATCH/out" && ui_held=1
+  if [ "$ui_rc" -ne 0 ]; then
+    [ "$ui_held" -eq 1 ] && [ "$ui_rep" -eq 0 ] && refuse 1 ERR_ENTITY_EXISTS "unit '$ui_u' already exists"
+    refuse 2 ERR_STORAGE_WRITE "the import of unit '$ui_u' failed: $(head -n 1 "$SCRATCH/err")"
+  fi
+  ui_n=$(sed -n 's/^OK //p' "$SCRATCH/out" | head -n 1)
+  [ -n "$ui_n" ] || refuse 2 ERR_STORAGE_WRITE "the import of unit '$ui_u' answered no record count"
+  if [ "$ui_held" -eq 1 ]; then ui_r=true; else ui_r=false; fi
+  printf '{"unit":"%s","records":%s,"replaced":%s}\n' "$ui_u" "$ui_n" "$ui_r"
+  exit 0
+}
+
+# ==============================================================================
 # The native methods
 # ==============================================================================
 case "$CMD" in
+  unit.export) unit_export "$@" ;;
+  unit.import) unit_import "$@" ;;
+
   capability)
     cat <<'EOF'
 {
