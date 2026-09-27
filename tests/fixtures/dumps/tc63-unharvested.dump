@@ -1,0 +1,8 @@
+{"kind":"unit","format":"contexture-dump","version":1,"unit":"tc63-unharvested","extras":0}
+{"kind":"state","status":"ACTIVE","current_anchor":"A1","next_action":"audit the fixture","objective":"The unharvested knowledge fixture","repos":[],"ref_sessions":null,"verbatim":null}
+{"kind":"artifact","name":"backlog","preamble":""}
+{"kind":"artifact","name":"knowledge","preamble":""}
+{"kind":"artifact","name":"journal","preamble":""}
+{"kind":"anchor","anchor":"A1","continues":"A0","attention":"unharvested knowledge fixture","verbatim":null}
+{"kind":"entry","slug":"2026-09-20-flagged","anchor":"A1","what":"a knowledge flag no closer names","group":null,"rhythm":null,"knowledge":true,"thread":"none","legacy_status":null,"refs":[],"closers":[],"extra_fields":[],"verbatim":null}
+{"kind":"end","unit":"tc63-unharvested","records":6}

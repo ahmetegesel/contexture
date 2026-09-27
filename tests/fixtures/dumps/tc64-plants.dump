@@ -1,0 +1,11 @@
+{"kind":"unit","format":"contexture-dump","version":1,"unit":"tc64-u","extras":0}
+{"kind":"state","status":"ACTIVE","current_anchor":"A1","next_action":"audit the plants","objective":"The posix grammar plants","repos":[],"ref_sessions":null,"verbatim":null}
+{"kind":"artifact","name":"backlog","preamble":""}
+{"kind":"artifact","name":"knowledge","preamble":""}
+{"kind":"artifact","name":"journal","preamble":""}
+{"kind":"anchor","anchor":"A1","continues":"A0","attention":"grammar plants","verbatim":null}
+{"kind":"entry","slug":"legacy-dateless","anchor":null,"what":"a dateless slug","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":[],"closers":[],"extra_fields":[],"verbatim":null}
+{"kind":"entry","slug":"2026-09-20-inline","anchor":null,"what":"an inline marker on the head line","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":[],"closers":[],"extra_fields":[],"verbatim":"@entry 2026-09-20-inline [THREAD: none]\n  WHAT: \"an inline marker on the head line\"\n  THREAD: none\n\n"}
+{"kind":"entry","slug":"2026-09-20-bracketed","anchor":null,"what":"a bracketed field","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":[],"closers":[],"extra_fields":[],"verbatim":"@entry 2026-09-20-bracketed\n  WHAT: \"a bracketed field\"\n  THREAD: none\n  [THREAD: none]\n\n"}
+{"kind":"entry","slug":"2026-09-20-slugless","anchor":null,"what":"a closer without a date-slug target","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":[],"closers":[{"kind":"CLOSES","targets":[],"verdict":"done","reason":"no target","verbatim":"  CLOSES: nothing-dated-here (done: no target)"}],"extra_fields":[],"verbatim":null}
+{"kind":"end","unit":"tc64-u","records":9}

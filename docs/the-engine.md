@@ -93,39 +93,208 @@ Filters live in the run module's `.contexture/modules/run/filters/*.awk` and in 
 
 Building your own verb, hook, or filter? The module contract is in [Modules](modules.md).
 
-### Storage Provider Interface (SPI) and driver architecture
+### The storage contract (contract 2)
 
-The session engine is decoupled from physical storage formats through the Storage Provider Interface (SPI). Every session and lane verb reaches the record only through driver methods, so the configured backend is the single store: nothing outside a driver opens a session artifact. The methods, by subsystem:
+The session engine is decoupled from how any backend stores the record. Base maps every session and lane command to one storage function, sends it the command's parameters, and renders the data the function returns; each backend owns how it interprets, processes, and stores that data, and each implements the record rules itself. The posix driver keeps the record as markdown files under `.contexture/sessions/<unit>/` and is the only code that touches them; the fts5 driver answers from its database with SQL; the service driver forwards each call to the storage service and never sees how the service stores it. No backend materializes a unit or delegates to another backend, and no markdown crosses the interface: the record travels as typed data. The configured backend is the single store, so a verb never opens a session artifact itself.
 
-- `artifact`: `artifact.read`, `artifact.write`, `artifact.list` (the store: an artifact's canonical text by key)
-- `session`: `session.create`, `session.list`, `session.init`, `session.load`, `session.board`, `session.stamp`, `session.pointer`, `session.refs`, `session.close`, `session.audit`
-- `task`: `task.add`, `task.update`, `task.start`, `task.complete`, `task.reopen`, `task.drop`, `task.list`, `task.show`
-- `entry`: `entry.record`, `entry.show`, `entry.list`, `entry.anchors`
-- `finding`: `finding.add`, `finding.show`, `finding.update`, `finding.supersede`, `finding.drop`, `finding.list`
-- `resolve`: `resolve.ref`
-- `lane`: `lane.create`, `lane.record`, `lane.report`, `lane.show`, `lane.status`, `lane.close`
-- `search`: `search.query`
-- `storage`: `storage.health`
-- `corpus`: `corpus.list`, `corpus.read`, `corpus.write`, `corpus.remove`, `corpus.mount`, `corpus.changes` (the doc corpus beside the record, the optional capabilities `corpus.store` and `corpus.changelog`; see the corpus store below)
+This section is the text every backend is held to, and `tests/storage-compliance.sh` is its executable form: the same suite runs against posix, fts5, and the service through `--driver-exec`, and a backend is compliant when every case passes. The v0.54.0 drivers still speak contract 1 (the artifact methods `artifact.read`, `artifact.write`, `artifact.list` and the verb layer rendering the files it fetched); the contract 2 rework replaces them, and the suite already states contract 2, so against a v0.54.0 driver every record case fails and only the corpus cases pass.
 
-#### The store methods and the verb layer
+#### The wire
 
-The record grammar is the canonical text, and the posix files are its reference serialization. An artifact key names one artifact of a unit: `state`, `backlog`, `knowledge`, `journal`, `lane/<lane>/recipe`, `lane/<lane>/journal`, `lane/<lane>/report`.
+A call is the driver executable run with the function name and its bounded identifiers as argv (a unit, a slug or NAME, a lane, an artifact word, filter tokens such as `--limit=N`), and every free-text field on stdin as payload lines `key=value`. The value is escaped: backslash as `\\`, newline as `\n`, tab as `\t`, carriage return as `\r`, so a value of any size or content survives exactly and never meets the platform argument limit. A list travels as `<key>.count=N` followed by `<key>.1` to `<key>.N`; `<key>.count=0` is the empty list, and an absent key is an absent field. A list of records travels as `<key>.count=N` and `<key>.<n>.<field>`, and a list inside a record nests the same way (`closers.1.targets.count=2`, `closers.1.targets.1=...`). A single document (a recipe, a report, a dump) is the raw stdin itself and the function takes no other payload. A function without payload keys never needs stdin.
 
-| method | argv | stdin | answer |
-|---|---|---|---|
-| `artifact.read` | `<unit> <key>` | none | the stored text byte for byte; rc 1 `ERR_ENTITY_NOT_FOUND` when absent |
-| `artifact.write` | `<unit> <key>` | the whole new text, raw | an atomic replace; a lane key creates its lane; rc 1 for an absent unit |
-| `artifact.list` | `<unit>` | none | the keys the unit holds, one per line: the main four in order, then `lane/<lane>` and its artifacts |
-| `session.create` | `<unit>` | none | an empty unit; rc 1 `ERR_ENTITY_EXISTS` for a unit the store holds |
-| `session.list` | none | none | `{"sessions":[{"unit","status"}]}`, bytewise by unit; a unit without a state carries an empty status |
-| `storage.health` | none | none | `{"driver","health","detail"}`; health `degraded` while the store holds nothing yet |
+The answer is rc 0 and exactly one line on stdout: one compact JSON object (no whitespace between tokens) with its keys in the order this section lists them and every listed field present, `null` when absent. Strings are UTF-8 in one JSON form, the form `JSON.stringify` writes: `\"` and `\\`, the short escapes `\b`, `\f`, `\n`, `\r`, `\t`, `\u00XX` (lower-case hex) for the other characters below 0x20, and every other character raw, `/` and non-ASCII included. Integers are plain decimals; a score is a JSON number. Because the form is fixed, the same record answers the same bytes from every backend, and `--json` on a verb prints the function's answer unchanged. Two functions stream instead: `unit.export` writes dump lines and `unit.import` reads them (the dump, below).
 
-The grammar verbs (`record`, `append`, `amend`, `flip`, `drop`, `next`, `refs`, `close`, `reopen`, `stamp`, `bootstrap`) and the read verbs (`board`, `load`, `audit`, `refresh`, `active`, every `query` kind) keep their validation and their rendering in the verb layer, unchanged: they fetch the artifacts they read through `artifact.read` into a scratch folder under `.contexture/tmp` (removed at exit), and they land every write through `artifact.write`, so validation runs before any driver call and both drivers feed the same renderer. `bootstrap` creates the unit with `session.create`; `active`, `query units`, and `query refs-to` walk `session.list`; `query lane` and `query search` list a unit's lanes with `artifact.list`; `diagnose` reads `storage.health` and counts the `ACTIVE` units of `session.list`. The typed verbs (`task`, `finding`, `entry`, `resolve`, `search`, `lane record`, `lane report`, `lane show`) call their domain methods. Every typed write refuses a `CLOSED` unit (rc 1) before any driver write, as the grammar verbs always have. The dialect is LF: a carriage return in a typed field value (the `task`, `finding`, and `lane record` fields, every `record` flag, the `next` pointer, the `stamp` attention, the `bootstrap` objective and repos) refuses rc 1 before any write, since the grammar verbs refuse an artifact carrying a carriage return on read. A one-line field (every `record` flag, the `task` objective, refs, pointer, evidence, and reason, the `finding` ref and supersedes, the `lane record` what, thread, and slug, the `next` pointer, the `stamp` attention, the `bootstrap` objective and repos) lands as one line of its block, so an embedded newline refuses rc 1 before any write too: a column-0 continuation would break the block grammar. The block scalars keep their newlines. The refusal is forward only: an entry already written with a continuation line still loads and audits as before. An embedded double quote is text in every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the `next_action` pointer, the state `objective`), on every write path and every driver: the typed verbs store it, `append` accepts a `WHAT` or a task `OBJECTIVE` that is one quoted line whatever quotes it carries, `amend` the same `OBJECTIVE`, `next` a pointer, and `bootstrap` an objective (a single quote too), and the readers (`board`, `load`, `active`, `audit`, `task show`, `entry show`, the fts5 index, `search`) return the stored value verbatim.
+A refusal is rc 1 (the caller's input or the record's rules) or rc 2 (storage or driver failure), nothing on stdout, and exactly one stderr line `<function>: error: <message> (<CODE>)`. The message is fixed per code, so every backend prints the same line:
+
+| code | tier | message |
+|---|---|---|
+| `ERR_INVALID_ARGUMENT` | 1 | the detail of the shape at fault (a missing or malformed identifier, a malformed payload line, an empty search query) |
+| `ERR_ENTITY_NOT_FOUND` | 1 | `<kind> '<x>' not found in unit '<u>'` (kind `task`, `entry`, `finding`, `lane`); `unit '<u>' not found` |
+| `ERR_ENTITY_EXISTS` | 1 | `<kind> '<x>' already exists in unit '<u>'` (a lane entry reads `lane entry '<lane>/<slug>'`); `unit '<u>' already exists` |
+| `ERR_UNIT_CLOSED` | 1 | `unit '<u>' is CLOSED; a closed unit takes no writes` |
+| `ERR_INVALID_TRANSITION` | 1 | `<kind> '<x>' is <STATUS>; <function> moves only from <allowed>`, allowed `TODO` (task.start), `TODO or IN_PROGRESS` (task.complete), `IN_PROGRESS or DONE` (task.reopen), `TODO, DONE, or an IN_PROGRESS task next_action does not name` (task.drop), `ACTIVE` (session.close), `CLOSED` (session.reopen) |
+| `ERR_POINTER_INCOMPLETE` | 1 | `next_action would not name IN_PROGRESS task(s): <slugs>`, the omitted slugs in backlog order joined by `, ` |
+| `ERR_CAPABILITY_UNSUPPORTED` | 1 | `mode '<m>' is not supported; declared modes: <modes joined by , >` |
+| `ERR_CAPABILITY_UNSUPPORTED` | 2 | `unknown function '<f>'` (the function name at dispatch) |
+| `ERR_DUMP_FORMAT` | 1 | `dump line <n>: <detail>`, n the first bad line |
+| `ERR_STORAGE_READ`, `ERR_STORAGE_WRITE`, `ERR_STORAGE_LOCKED`, `ERR_STORAGE_CORRUPT` | 2 | the backend's detail |
+| `ERR_STORAGE_SCHEMA` | 2 | `the store is at schema <v>; this driver reads <w>` (fts5) |
+| `ERR_STORAGE_UNAVAILABLE` | 2 | `the storage service at <url> did not answer` (the service) |
+| `ERR_AUTH` | 2 | `the storage service refused the key from <source>`, or `no service key: set storage.service.keychain or CTX_STORAGE_SERVICE_KEY` |
+| `ERR_DRIVER_NOT_FOUND`, `ERR_DRIVER_PROTOCOL` | 2 | the resolver's |
+
+The order of refusals: the argv shape first (`ERR_INVALID_ARGUMENT`), then the unit (`ERR_ENTITY_NOT_FOUND`), then a write to a `CLOSED` unit (`ERR_UNIT_CLOSED`, before any other record rule), then the function's own rules. A write refused at any point writes nothing.
+
+#### The functions
+
+Forty record functions, each called by the verb in the last column; the corpus methods follow unchanged below. Schemas are in the data model.
+
+| function | argv | payload | answer | called by |
+|---|---|---|---|---|
+| `capability` | none | none | the Descriptor | the resolver's handshake, `session diagnose` |
+| `storage.health` | none | none | `{driver, health, detail, store, active_units}`; health `ok`, `degraded`, `locked`, or `error`; store `present` or `absent`; active_units the ACTIVE units | `session diagnose` |
+| `session.create` | unit | objective, repos (list), attention | `{unit, state: State}`: status ACTIVE, current_anchor A1, next_action `backlog the first task`, ref_sessions null; backlog and knowledge present and empty (preamble `""`), the journal (preamble `""`) holding the anchor A1 continuing A0 with the attention | `session bootstrap` |
+| `session.list` | none | none | `{store, units: [UnitSummary]}` bytewise by unit; store `absent` while the store holds nothing | `session active`, `session migrate` |
+| `session.load` | unit | none | Load | `session load` |
+| `session.refload` | unit... | none | `{refs: [RefLoad]}` in argv order | `session load` (the refs form) |
+| `session.board` | unit | none | Board | `session board`, `session refresh` |
+| `session.audit` | unit | none | Audit | `session audit`, `session refresh` |
+| `session.stamp` | unit | attention | `{unit, previous_anchor, current_anchor, receipt: Anchor}` | `session stamp` |
+| `session.next` | unit | pointer | `{unit, next_action}` | `session next` |
+| `session.refs` | unit, ref... | none | `{unit, ref_sessions: [unit]}` (no ref: `[]`) | `session refs` |
+| `session.close` | unit | none | `{unit, status: "CLOSED", open_tasks: [slug], audit: Audit}` | `session close` |
+| `session.reopen` | unit | none | `{unit, status: "ACTIVE"}` | `session reopen` |
+| `session.units` | repo | none | `{repo, units: [UnitSummary], known_repos: [repo]}`: the units (ACTIVE and CLOSED) whose repos hold the repo, bytewise; every repo any unit names, bytewise and unique; no unit is `units: []`, rc 0 | `session units` |
+| `session.refs_to` | unit | none | `{unit, referrers: [unit]}`: the units whose ref_sessions name it, bytewise | `session refs-to` |
+| `task.add` | unit, slug | objective, desc, criteria, details, refs (list) | `{unit, task: Task}` | `session task add` |
+| `task.update` | unit, slug | any of objective, desc, criteria, details, refs (a present key replaces the field; `refs.count=0` clears) | `{unit, task: Task}` | `session task update` |
+| `task.start` | unit, slug | pointer (default `work active task: <slug>`) | `{unit, task: TaskItem, next_action}` | `session task start` |
+| `task.complete` | unit, slug | evidence, date | `{unit, task: TaskItem, receipt: Entry}` | `session task complete` |
+| `task.reopen` | unit, slug | none | `{unit, task: TaskItem}` | `session task reopen` |
+| `task.drop` | unit, slug | reason, date | `{unit, slug, receipt: Entry}` | `session task drop` |
+| `task.list` | unit, status (`TODO`, `IN_PROGRESS`, `DONE`, `all`) | none | `{unit, tasks: [TaskItem]}` in backlog order | `session task list` |
+| `task.get` | unit, slug | none | `{unit, task: Task}` | `session task show`, `session resolve task#` |
+| `entry.record` | unit | what, group, thread, rhythm, knowledge (`true` or `false`), refs (list), closers (list of kind, targets, verdict, reason), slug (optional), date, epoch | `{unit, entry: Entry}` | `session record` |
+| `entry.get` | unit, slug | none | `{unit, entry: Entry}`, the last occurrence, with closed, closed_by, close_reason | `session entry show`, `session resolve entry#` |
+| `entry.list` | unit, `--anchor=A<N>`, `--group=<token>` | none | `{unit, entries: [EntryItem]}` in journal order, every occurrence | `session entry list` |
+| `entry.closure` | unit, slug | none | Closure | `session entry closure` |
+| `finding.add` | unit, NAME | summary, refs (list), supersedes, supersedes_reason (default `superseded`) | `{unit, finding: Finding}` | `session finding add` |
+| `finding.update` | unit, NAME | summary and or refs (a present key replaces) | `{unit, finding: Finding}` | `session finding update` |
+| `finding.supersede` | unit, OLD, NEW | summary, refs (list), reason (default `superseded`) | `{unit, superseded: OLD, finding: Finding}` | `session finding supersede` |
+| `finding.drop` | unit, NAME | none | `{unit, name}` | `session finding drop` |
+| `finding.get` | unit, NAME | none | `{unit, finding: Finding}` | `session finding show`, `session resolve finding#` |
+| `finding.list` | unit, `active` or `all` | none | `{unit, findings: [FindingItem]}` in knowledge order | `session finding list` |
+| `lane.create` | unit, lane | the recipe, raw | `{unit, lane}`; the recipe stored byte for byte and an empty journal (preamble `""`) | `lane create` |
+| `lane.record` | unit, lane | what, thread, refs (list), slug (optional), date, epoch | `{unit, lane, entry: LaneEntry}` | `lane record` |
+| `lane.write_report` | unit, lane | the report, raw | `{unit, lane, bytes}` | `lane report` (a write) |
+| `lane.get` | unit, lane, `recipe`, `journal`, or `report` | none | LaneDoc for recipe and report, LaneJournal for journal | `lane show`, `lane report` (a read), `session resolve lane#` |
+| `search.query` | unit, `--limit=N`, `--entity=T`, `--mode=M` | query | Search | `session search` |
+| `unit.export` | unit | none | the unit's dump lines | `session migrate` (the source) |
+| `unit.import` | unit, `--replace` | the dump lines, raw | `{unit, records, replaced}` | `session migrate` (the target) |
+
+Base composes `date` (the client's local date, `YYYY-MM-DD`) and `epoch` for every function that generates a slug; the backend composes and suffixes the slug and takes the anchor from the unit's current_anchor, so a remote backend composes the same slug the caller's clock implies.
+
+#### The record data model
+
+Every block artifact (the journal, the backlog, the knowledge, a lane journal) is a preamble followed by items in order. The preamble is the exact bytes before the first item head; `null` means the artifact is absent, `""` present with nothing before the first item. In a journal and a lane journal only a column-0 `@entry ` or `@anchor ` line starts an item, so any other column-0 text (a comment, a continuation line, an unknown `@` word) belongs to the preceding item's span; in a backlog and a knowledge artifact every column-0 `^@[A-Za-z]` line starts an item, a head other than `@task` (in the backlog) or `@finding` (in the knowledge) making an opaque item. An item's span is its exact bytes from its head line to the next head line or the end of the artifact, trailing separator lines included.
+
+The canonical span of an item is its canonical lines (per kind, below), each newline terminated, followed by one empty line when a next item exists and is not an anchor, and by nothing when the next item is an anchor or the item is the last. Every item carries `verbatim`: the stored span exactly when it differs from the canonical span its typed fields render, else `null`; the rule is a function of the bytes, never of the backend, so the same record returns the same data everywhere. Every item a view renders as a span carries `next`, the kind of the following item (`entry`, `anchor`, `task`, `finding`, `opaque`, or `null`), so base computes the separator without seeing the neighbor. Rendering an item is its verbatim when present, else its canonical span.
+
+The append rule, for every write that adds an item: remove the artifact's trailing empty lines, write one empty line unless the new item is an anchor or the artifact holds nothing, then the new item's canonical lines. A backend holding a verbatim on the previous last item strips that verbatim's trailing empty lines the same way and drops the verbatim when it now equals the canonical span. So a journal never ends with an empty line, an anchor follows its predecessor directly, and an entry follows one empty line.
+
+The edit rules keep every untouched byte of a legacy item untouched on every backend: a task status move replaces the first `  STATUS: ` line of the span (a span without one gains `  STATUS: <s>` after its head); `task.update` replaces the OBJECTIVE and REFS lines in place (inserting them after STATUS, respectively OBJECTIVE, when absent) and replaces a block scalar section in place with its body, inserting a missing one at its template position before the first later section, else after the last content line; `finding.update` replaces the SUMMARY body in place and replaces the REF lines at the position of the first one (after the body when there is none); a state edit replaces the `next_action` line and its continuation lines with one line, replaces the `ref_sessions` line (inserting it after `repos` when absent), and replaces the `current_anchor` and `status` lines; a drop removes the item's span, the previous item keeping its bytes, then the artifact's trailing empty lines go. After any edit a verbatim that equals the canonical span becomes `null`.
+
+The schemas, each field in answer order (`T|null` optional, `[T]` a list):
+
+| schema | fields |
+|---|---|
+| State | unit, status (`ACTIVE`, `CLOSED`, or a legacy value as stored), current_anchor, next_action, objective, repos [string], ref_sessions [unit]\|null (null: no ref_sessions line), verbatim |
+| UnitSummary | the State fields (unit through verbatim) |
+| Task | slug, ordinal, status, objective, refs [string], description, criteria, details (string\|null each), next, verbatim |
+| TaskItem | slug, status, objective |
+| Entry | kind (`entry`), slug, occurrence, seq, anchor, what, group, rhythm, knowledge (bool), thread, legacy_status, refs [string], closers [Closer], extra_fields [{key, value}], then closed, closed_by, close_reason on `entry.get` alone, then next, verbatim |
+| Closer | kind (`CLOSES` or `SUPERSEDES`), targets [string], verdict (`done`, `superseded`, `dropped`, `folded`, or null), reason, verbatim (the exact line when the canonical closer line does not reproduce it) |
+| EntryItem | slug, occurrence, anchor, what, group |
+| Anchor | kind (`anchor`), seq, anchor, continues, attention, next, verbatim |
+| Opaque | kind (`opaque`), seq, next, verbatim (always present) |
+| Finding | name, ordinal, supersedes {name, reason}\|null, refs [string], summary, superseded_by, active (bool), next, verbatim |
+| FindingItem | name, summary, refs, supersedes (the NAME or null), active |
+| LaneEntry | kind (`entry`), lane, then the Entry fields from slug on (without the closure fields) |
+| LaneDoc | unit, lane, artifact (`recipe` or `report`), content (the bytes as stored, null when absent) |
+| LaneJournal | unit, lane, artifact (`journal`), preamble, items [LaneEntry\|Anchor] |
+| Board | unit, backlog_present (bool), live [Entry], open_tasks [slug], open_threads [{slug, anchor, thread}] |
+| Load | unit, state: State, backlog {preamble, tasks: [Task\|Opaque]}, knowledge {preamble, findings: [Finding\|Opaque]}, board: Board\|null (null when the journal is absent), refs [RefLoad] in ref_sessions order |
+| RefLoad | unit, present (bool), knowledge {preamble, findings}\|null, board: Board\|null |
+| Audit | unit, clean (bool), findings [{code, severity, slug, line, detail, first_line, occurrence}], open_threads [{slug, thread, line}] |
+| Closure | unit, slug, occurrence (the last), closed (bool), closers [{by, by_anchor, closer: Closer}] |
+| Search | unit, query, mode, total_matches, results [{entity_type, entity_id, section, snippet, score}] |
+
+The derived fields: `ordinal` and an opaque item's `seq` count every item of the backlog or the knowledge from 1, opaque items included; `seq` counts every journal (or lane journal) item from 1, anchors included; `occurrence` counts the occurrences of a slug up to this one from 1, so a legacy repeat reads 2 and up. Liveness is positional: an entry occurrence is closed exactly when a closer standing after it names its slug; `closed_by` is the slug of the first such closing entry and `close_reason` its parenthesis, `<verdict>: <reason>` with a verdict, the reason alone without one, null when both are absent. `superseded_by` is the NAME of a finding whose supersedes names this one, and `active` is true when there is none. The board's `live` holds every entry occurrence no later closer names, in journal order; `open_tasks` every task whose status is not DONE, in backlog order; `open_threads` every live entry whose thread is set and not `none`, its anchor the entry's ANCHOR or `""`. An Audit finding's `slug` names the entry or task it is about (for DANGLING_CLOSER the closing entry, with the absent target in `detail`; for BRACKETED_FIELD the owning entry, with the field text in `detail`); `line` and `first_line` are posix's alone (the line of the store's file, null on every other backend), and `occurrence` is set for LEGACY_DUPLICATE_SLUG on every backend.
+
+The canonical lines, what every new write stores:
+
+- state: `status: <s>`, `current_anchor: <a>`, `next_action: "<p>"`, `objective: "<o>"`, `repos: [<a, b>]`, then `ref_sessions: [<c, d>]` when not null.
+- task: `@task <slug>`, `  STATUS: <s>`, `  OBJECTIVE: "<o>"`, `  REFS: [<a, b>]` when refs is not empty, then `  DESCRIPTION ::`, `  ACCEPTANCE CRITERIA ::`, `  IMPLEMENTATION DETAILS ::` for each non-null section, each followed by its body lines prefixed by four spaces, an empty body line written empty.
+- entry: `@entry <slug>`, then, each when set, `  ANCHOR: <a>`, `  WHAT: "<w>"`, `  GROUP: <g>`, `  RHYTHM: <r>`, `  THREAD: <t>`, one `  REF: "<r>"` per ref, one closer line per closer (its verbatim when present, else `  <KIND>: <targets joined by one space>` followed by ` (<verdict>: <reason>)`, or ` (<reason>)` without a verdict, or nothing without either), and `  KNOWLEDGE: true` when set. A legacy STATUS field and extra fields have no canonical line, so an entry carrying one keeps a verbatim.
+- anchor: `@anchor <A> ("continues <P>", attention: <text>)`, or `@anchor <A>` alone when continues or attention is null.
+- finding: `@finding <NAME>`, `  SUPERSEDES: <old> (<reason>)` when set, one `  REF: "<r>"` per ref, `  SUMMARY ::` and its body lines as a task's.
+- lane entry: `@entry <slug>`, `  WHAT: "<w>"`, `  THREAD: <t>`, one `  REF: "<r>"` per ref; a lane entry carrying an ANCHOR, GROUP, RHYTHM, closer, or KNOWLEDGE keeps a verbatim.
+
+The parse rules, how a backend holding text (posix today, the fts5 upgrade parser once) reads every legacy shape the convention once accepted into these fields (a legacy unit stays readable without repair; strictness applies to new writes only):
+
+- The content of a span is its lines after the head up to its trailing blank lines. A field line is `  <LABEL>: <value>` (label upper case with underscores); a block scalar opens with `  <LABEL> ::` and its body is the following lines indented four spaces or more, blank lines inside it kept as empty lines, four spaces removed from each. Every other line (a continuation, a comment) carries no field and lives in the verbatim.
+- A quoted value that opens with `"` on a WHAT or OBJECTIVE line and does not close on it continues over the following content lines until one ends with `"`; the value is those lines joined by newlines as stored.
+- Unquoting removes a leading and a trailing double quote (a value that only opens a quote loses its leading one); a REF loses a surrounding pair.
+- Entries: for each one-line schema field (ANCHOR, WHAT, GROUP, RHYTHM, THREAD, KNOWLEDGE, STATUS) the last occurrence is the typed value (STATUS reads into legacy_status, KNOWLEDGE is true when its value is `true`); every earlier occurrence and every unknown label go to extra_fields in line order with their raw value; REF, CLOSES, and SUPERSEDES are lists in line order. A `WHAT ::` block is the what when no one-line WHAT exists.
+- A closer's targets are its value cut at the first ` - ` or ` (`, every blank-separated date-slug token of the part before the cut. After the cut, a parenthesis whose text (up to the first `)`) reads `<verdict>: <reason>` with a known verdict gives both; other parenthesis text is the reason with a null verdict; ` - <text>` is the reason with a null verdict.
+- Tasks: the first STATUS (a statusless task reads `TODO`), the first OBJECTIVE unquoted, the first REFS as a list (`[a, b]` split on commas, or blank-separated bare refs), the first of each block section.
+- Findings: SUPERSEDES `<old> (<reason>)` gives the name (its first token) and the reason (the parenthesis text, `""` without one); every REF unquoted; the SUMMARY body (`""` when absent). The two block orders both read; SUPERSEDES, REF, SUMMARY is canonical.
+- Anchors: `("continues <P>", attention: <text>)` after the anchor gives continues and attention, the attention losing a surrounding pair of quotes; any other spelling reads continues and attention null.
+- State: each `<key>: <value>` line at column 0 (the first of each key); next_action and objective unquoted as above; repos and ref_sessions as lists, ref_sessions null without its line; continuation lines stay in the verbatim.
+
+#### The record rules
+
+Base checks only the input shape before any call (slug and NAME shapes, no newline in a one-line field, no carriage return anywhere, required flags, the closer grammar with its verdict completed from the WHAT, the search flags, the ref forms, unknown flags refused) and keeps its v0.54.0 messages. Every record rule belongs to the backend and is pinned by a compliance case, so the three backends answer alike:
+
+| rule | pinned by |
+|---|---|
+| a unit-scoped function on a unit the store lacks refuses `ERR_ENTITY_NOT_FOUND` | TC28, TC75 |
+| every write to a CLOSED unit refuses `ERR_UNIT_CLOSED` (every write but `session.reopen` and `unit.import`) | TC52 |
+| `session.close` only from ACTIVE, `session.reopen` only from CLOSED | TC04, TC66 |
+| a repeated key refuses forward only: a unit, a task slug, a finding NAME, a given entry or lane entry slug, a lane; legacy repeats already stored read back | TC02, TC05, TC26, TC32, TC57, TC71 |
+| generated slugs `<date>-event-<epoch>`, `<date>-<slug>-completed`, `<date>-<slug>-dropped`, each suffixed `-1` while the journal holds it; the anchor is current_anchor | TC10, TC55, TC59 |
+| every closer target names an entry the journal already holds | TC21, TC58 |
+| status moves: start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop from any status unless IN_PROGRESS and named by next_action | TC53, TC56 |
+| `task.complete` and `task.drop` write their receipt (`backlog/<slug>: DONE (<evidence>)` or `DROPPED (<reason>)`, thread none) in the same atomic write | TC08, TC09, TC55, TC56 |
+| after `session.next` or `task.start`, next_action names every IN_PROGRESS task | TC07, TC54 |
+| `session.refs` names only units the store holds | TC65 |
+| a supersedes predecessor exists and a successor NAME is new; `finding.list active` leaves out every superseded finding | TC15, TC33, TC72 |
+| positional liveness on the board, the load, `entry.get`, `entry.closure`, and the audit | TC12, TC27, TC57, TC68 |
+| the audit's record checks (DANGLING_CLOSER, UNHARVESTED_KNOWLEDGE, DONE_WITHOUT_EVENT, IN_PROGRESS_ABSENT_FROM_STATE, MISSING_THREAD for entries dated 2026-09-18 or later, LEGACY_DUPLICATE_SLUG as a warning) on every backend; the grammar checks (DATELESS_SLUG, INLINE_MARKER, BRACKETED_FIELD, SLUGLESS_CLOSER) on posix alone, whose store alone can hold broken text | TC55, TC57, TC63, TC64 |
+| `session.stamp` moves A<N> to A<N+1> and appends the canonical anchor atomically; a malformed stored anchor refuses rc 2 `ERR_STORAGE_CORRUPT` | TC04, TC73 |
+| lanes: `lane.record` and `lane.write_report` need the lane; `lane.create` refuses an existing lane | TC16, TC17, TC71 |
+| each write lands whole or not at all; concurrent writers serialize | TC21, TC22 |
+| the verbatim rule and the append rule | TC60, TC61 |
+| the exact search rule and the declared modes | TC20, TC38, TC39, TC69 |
+| export and import byte-identical, a held unit refused without `--replace`, a malformed dump refused with nothing written | TC62 |
+| the descriptor | TC70, TC47 to TC49 |
+
+The audit orders its findings deterministically: first, in journal position order, LEGACY_DUPLICATE_SLUG, DATELESS_SLUG, INLINE_MARKER, BRACKETED_FIELD, SLUGLESS_CLOSER; then DANGLING_CLOSER (one per distinct target, at the first closer naming it), UNHARVESTED_KNOWLEDGE, DONE_WITHOUT_EVENT (backlog order), IN_PROGRESS_ABSENT_FROM_STATE (backlog order), MISSING_THREAD, each by position. `clean` is true when no finding has severity error; the open thread tail holds the live threaded entries, posix giving each its THREAD line.
+
+#### Search
+
+`search.query` answers `{unit, query, mode, total_matches, results}` with each result `{entity_type, entity_id, section, snippet, score}`. The entity types are `session`, `task`, `entry`, `finding`, `lane`, `lane_entry` (the id `<lane>/<slug>`); the sections `state`, `backlog`, `knowledge`, `journal`, `lane_recipe`, `lane_journal`, `lane_report`. `--limit` defaults to 20, `--entity` to all. The default mode is `exact` on every backend, so a caller that names no mode gets the same answer everywhere; a ranked mode is asked for by name, and a mode the backend does not declare refuses `ERR_CAPABILITY_UNSUPPORTED` naming the declared ones.
+
+The exact rule, one text every backend implements natively: the searched text of a unit is, in order, the state text, the backlog (preamble, then every item's span), the knowledge, the journal, then every lane in bytewise order (the recipe, the lane journal, the report); an absent artifact contributes nothing. A line matches when the query is a substring of it after ASCII case folding (A to Z fold to a to z, nothing else folds); a line starting with `#` never matches. A line belongs to the session for the state and the main preambles, to its task, finding, or entry for a span, to the session for a main journal anchor, to the lane for the recipe, the report, and the lane journal preamble, to its lane entry for a lane entry span; a lane anchor and an opaque item keep the attribution of the line before them. One result per (entity_type, entity_id, section), its snippet the first matching line in text order with its blanks trimmed, then a leading upper-case label and colon (`[A-Z_]+:`) with its following blanks removed, then one leading and one trailing double quote with their adjacent blanks; `total_matches` counts those pairs, results follow text order and stop at `--limit`, and every exact result scores 0. The posix driver's `search.awk` is this rule as code.
+
+#### The dump
+
+`unit.export` writes one unit as neutral data: UTF-8 JSON Lines, one compact JSON object per line in the contract key order and JSON form, each line ending with one LF. A dump of several units is the concatenation of unit dumps. The lines of one unit, in order:
+
+1. `{"kind":"unit","format":"contexture-dump","version":1,"unit":<u>,"extras":<n>}`: extras counts what the source store holds for the unit outside the record (posix: files in the unit folder other than the artifacts); import ignores it, migrate warns on it.
+2. `{"kind":"state","status","current_anchor","next_action","objective","repos","ref_sessions","verbatim"}`.
+3. `{"kind":"artifact","name":"backlog","preamble"}`, then per item `{"kind":"task","slug","status","objective","refs","description","criteria","details","verbatim"}` or `{"kind":"opaque","verbatim"}`.
+4. `{"kind":"artifact","name":"knowledge","preamble"}`, then per item `{"kind":"finding","name","supersedes","refs","summary","verbatim"}` or an opaque line.
+5. `{"kind":"artifact","name":"journal","preamble"}`, then per item `{"kind":"entry","slug","anchor","what","group","rhythm","knowledge","thread","legacy_status","refs","closers","extra_fields","verbatim"}` or `{"kind":"anchor","anchor","continues","attention","verbatim"}`.
+6. per lane in bytewise order, `{"kind":"lane","lane","recipe","report","journal_preamble"}`, then per lane journal item `{"kind":"lane_item","lane","item":"entry",...}` with the entry fields from slug on, or `{"kind":"lane_item","lane","item":"anchor","anchor","continues","attention","verbatim"}`.
+7. `{"kind":"end","unit":<u>,"records":<n>}`, n the lines between the unit line and the end line.
+
+The three artifact lines are always present (a null preamble means the artifact is absent and no item follows it). Position is the line order: ordinals, sequence numbers, occurrences, and every derived field (next, closed, active, superseded_by) are never written, the importer derives them. A dump never carries files outside the record, search rows or any derived table, the docs corpus, configuration, keys, locks, timestamps, or the name of the backend that wrote it, so the same record dumps to the same bytes from every backend. `unit.import` validates the whole dump before any write (a JSON object per line, a known kind, the required fields in order, the unit line first and the end line last, the unit equal to the argv unit, the record count, version 1) and refuses the first defect `ERR_DUMP_FORMAT` naming its line; a unit the store holds refuses `ERR_ENTITY_EXISTS` unless `--replace`, which swaps the unit's record whole in one atomic write (under posix the other files of the unit folder are untouched). `tests/dump-check.sh` validates a dump the same way and names its first bad line.
+
+#### The descriptor and the handshake
+
+`capability` answers `{"driver","version","contract":"2","functions":[...],"search_modes":[...],"optional":[...]}`: functions every function the driver serves (the 40 record functions, and the corpus methods of a corpus store), search_modes its modes (`exact` always), optional its optional capabilities (`corpus.store`, `corpus.changelog`). Posix declares `["exact"]` and `["corpus.store"]`; fts5 `["exact","hybrid","trigram"]` and both corpus capabilities; the service what its capability endpoint answers. No record function is optional: a backend serves all 40 or does not load.
+
+Before a driver serves a call the resolver runs its handshake (stdin from `/dev/null`): the descriptor must read contract `"2"` and list all 40 record functions, else the call halts rc 2 `ERR_DRIVER_PROTOCOL` naming what is missing, before the function runs. The handshake runs at dispatch for every driver except the bundled posix driver, and its verdict is cached in the scratch drawer (`.contexture/tmp/driver-verdicts/`, one file per driver path, for a driver that reads configuration keyed also on the configuration's mtime) and stays valid while strictly newer than the driver executable; `driver-resolver capability` and `check` (and `ctx session diagnose`) run it afresh. A caller that needs an optional capability or a search mode asks first: `driver-resolver require <capability>...` exits 0 when the driver declares every one and 2 `ERR_CAPABILITY_UNSUPPORTED` naming the missing ones, `driver-resolver has <capability>` exits 0 or 1 and prints nothing; a search mode reads as `search.mode.<m>`. A passing `require` verdict is cached per driver path and capability set (sorted), apart from the dispatch verdict, which it never answers or overwrites.
+
+#### The compliance suite
+
+`tests/storage-compliance.sh [--driver-exec=<path>]` holds every backend to this section: 70 cases in 19 suites (62 on a driver without `corpus.store`), every one asserting the data returned (a key and its JSON value, a whole answer, the fixed stderr line of a refusal, the bytes of a document or a dump), never an exit code alone; `--census` lists any case that would check only an exit code, and answers none. It reaches a backend only through the driver executable; fixtures load through `unit.import` from `tests/fixtures/dumps/` (the legacy fixture carrying every legacy shape with its golden answers, the repeated slug fixture, one fixture per audit check, the three-unit fixture, the append rule fixture and its expected dump, the malformed anchor fixture, the exact search fixtures with their answers), and only two cases touch posix's files: TC64 plants markdown carrying the grammar faults a typed store cannot hold, and TC61 compares the posix journal with its expected bytes. The fixtures are generated from markdown sources by the fixture tools under `tests/fixtures/dumps/tools/` (the parse rules and canonical lines above as awk, a golden generator, and `build.sh`, which proves each source round-trips byte for byte); the suite never runs them. The corpus cases keep the v0.54.0 corpus contract below; the resolver cases stage the shipped resolver and wrap the driver under test in planted contract 2 descriptors. Retired with contract 1: TC18 (`lane.close`), TC19 and TC36 (`resolve.ref`; resolving a reference is base's, proven by the session suite), TC29 and TC30 (the artifact methods).
 
 #### The corpus store
 
-The configured driver holds the agent-facing doc corpus beside the record: one setting (`storage.driver`) serves both. A doc is keyed by `(repo, slug)`, each a key of letters, digits, dot, underscore, and dash that starts with a letter or digit; its canonical address is `docs/<repo>/<slug>.md` under every driver, the name the docs verbs print and the check keys freshness on, never a storage location. A driver stores and hands back a doc's text verbatim and never parses it: the doc grammar stays in the docs verbs, as the record grammar stays in the session verbs. The posix layout is the reference serialization: the files at `<root>/docs/<repo>/<slug>.md`, exactly where the docs verbs read them.
+The configured driver holds the agent-facing doc corpus beside the record: one setting (`storage.driver`) serves both. A doc is keyed by `(repo, slug)`, each a key of letters, digits, dot, underscore, and dash that starts with a letter or digit; its canonical address is `docs/<repo>/<slug>.md` under every driver, the name the docs verbs print and the check keys freshness on, never a storage location. A driver stores and hands back a doc's text verbatim and never parses it: the doc grammar stays in the docs verbs, as the record grammar stays in the session verbs. The posix layout is the reference serialization: the files at `<root>/docs/<repo>/<slug>.md`, exactly where the docs verbs read them. The corpus methods keep this v0.54.0 contract, their answers plain text rather than contract 2 JSON, until the docs corpus moves to doc-level functions.
 
 | method | argv | stdin | answer |
 |---|---|---|---|
@@ -140,10 +309,6 @@ Every corpus method acts on the exact key alone. A key that differs from a store
 
 A store driver records one change-log row per `corpus.write` and `corpus.remove` from `--op` (the verb that wrote) and `--head` (the workspace git HEAD the verb computed, or `none`), with the doc's prior state, in the same transaction as the doc itself, so a window of rows yields each doc's net status (added, modified, deleted, or gone again) the way git would report it; the posix driver checks both tokens and ignores them, since its corpus delta is git, and declares `corpus.store` alone. The corpus resolves against the workspace root whatever the caller's folder: a call from a subfolder lists and reads the workspace's docs.
 
-#### The payload transport
-
-argv carries only the method and its bounded identifiers (the unit, a slug or NAME, a lane, an artifact key, a page, a filter token such as `--status`, `--anchor`, `--group`, `--limit`, `--entity`, `--mode`). Every free-text field travels on stdin as payload lines `key=value`, the value escaped (backslash as `\\`, newline as `\n`, tab as `\t`, carriage return as `\r`), so a field of any size or content never meets the platform argument limit and survives exactly, a trailing newline included. A single-document write (`artifact.write`, `lane.report <unit> <lane> --write`, `corpus.write`) is the raw stdin itself; `corpus.changes` takes its head set on stdin as `head=<sha>` lines, since a window of heads is unbounded. The decoded value reaches the rendered block verbatim: a newline in a block scalar (`DESCRIPTION`, `ACCEPTANCE CRITERIA`, `IMPLEMENTATION DETAILS`, `SUMMARY`) is a second body line and a backslash sequence stays literal; the posix driver hands free text to its awk renderers through the environment, never through `awk -v`, which interprets backslash escapes and refuses a newline, and a render that fails refuses rc 2 with nothing written. The payload keys: `session.init` objective; `session.stamp` attention; `session.pointer` pointer; `task.add` objective, desc, criteria, details, refs; `task.update` objective, desc, criteria, details; `task.start` pointer; `task.complete` evidence; `task.drop` reason; `entry.record` what, group, thread, closes, ref (the `REF` line lands after `THREAD`, the order `record` writes, and the success JSON echoes the entry with `ref` after `thread`, empty when absent); `finding.add` summary, ref, supersedes; `finding.update` summary, ref; `finding.supersede` summary, ref (argv `<unit> <predecessor> <successor>`); `lane.create` goal, recipe; `lane.record` what, thread (argv `<unit> <lane> <slug>`); `lane.close` resolution; `search.query` query. A method without payload keys never reads stdin.
-
 #### Driver discovery hierarchy
 
 The driver resolver discovers storage drivers through a strict 3-tier hierarchy:
@@ -151,7 +316,7 @@ The driver resolver discovers storage drivers through a strict 3-tier hierarchy:
 2. Module-owned drivers: `.contexture/modules/<module>/drivers/<driver-name>/driver` or `.contexture/modules/session/drivers/<driver-name>/driver`
 3. PATH executables: system binaries named `ctx-storage-<name>`
 
-The resolver passes stdin through to the driver untouched and exports `CTX_REFERENCE_DRIVER`, the posix driver beside it, the reference serialization an indexed driver renders the grammar through.
+The resolver passes stdin through to the driver untouched.
 
 #### Configuration precedence
 
@@ -160,27 +325,18 @@ Driver selection follows deterministic precedence:
 2. Workspace configuration file (`.contexture/config` or `.contexture/storage.conf`, key `session.storage.driver` or `storage.driver`)
 3. Default baseline: `posix`
 
-#### Capability handshake and error codes
+#### Exit tiers, atomicity, and interruption
 
-Before a driver serves a method, the resolver invokes `$DRIVER_EXEC capability` (stdin from `/dev/null`, never the payload) to retrieve a JSON capability descriptor and validates the mandatory capabilities: `session.lifecycle`, `task.crud`, `task.atomic_completion`, `entry.journal`, `resolve.symbolic`, `search.keyword`, `artifact.store`, a finding capability (`finding.knowledge` or `finding.crud`), and a lane capability (`lane.lifecycle` or `lane.artifacts`). A driver missing one halts the call rc 2 `ERR_CAPABILITY_UNSUPPORTED`, naming what is missing, before the method runs; so a verb on such a driver (`bootstrap` first of all) refuses and writes nothing. The handshake runs at dispatch for every driver except the bundled posix driver (the reference serialization shipped beside the resolver), in both dispatch forms (`exec <method>` and `<subsystem>.<method>`). The verdict is cached in the scratch drawer (`.contexture/tmp/driver-verdicts/`, one file per driver path) and stays valid while it is strictly newer than the driver executable, so the handshake runs once per driver change, never once per call; a driver changed within the second of its verdict is verified again until a later verdict stands, and an unwritable drawer caches nothing and verifies on every call. `driver-resolver capability` and `check` (and `ctx session diagnose`) run the handshake afresh.
-
-The corpus capabilities are optional and stay outside that mandatory set, so a record-only driver keeps serving every session verb: `corpus.store` (the methods list, read, write, remove, mount; declared by every driver that holds a corpus, posix included) and `corpus.changelog` (the change-log rows and `corpus.changes`; declared by a store driver, never by posix). A caller that needs one asks the resolver first: `driver-resolver require <capability>...` exits 0 when the configured driver declares every one and 2 `ERR_CAPABILITY_UNSUPPORTED` naming the missing ones otherwise; `driver-resolver has <capability>` exits 0 or 1 and prints nothing, the switch a verb picks a behavior by without naming a driver. Both read the descriptor of the bundled posix driver like any other, and a malformed capability or a wrong arity refuses rc 1. A passing `require` verdict is cached in the same drawer, one file per driver path and capability set (sorted, so the order of the arguments never matters), named apart from the dispatch verdict of that driver, which it never answers or overwrites, and valid while strictly newer than the driver; a missing capability is never cached.
-
-All drivers adhere to a standardized 3-tier exit code hierarchy:
-- `0`: success
-- `1`: semantic or validation error (entity exists, missing entity, invalid arguments, schema violation, a mode the driver lacks: `ERR_CAPABILITY_UNSUPPORTED`)
-- `2`: storage or driver fatal error (driver not found, capability failure, IO error, lock contention, a write the backend refused: `ERR_STORAGE_WRITE`)
-
-A driver never prints a success payload for a write that did not land: a replace the drawer refuses (a read-only folder, a full disk) removes its temp and exits 2 `ERR_STORAGE_WRITE`. An interrupted method (HUP, INT, TERM) exits through its cleanup on every sh, dash included: the staged payload and the materialized scratch unit are removed and a held unit lock is released; a SIGKILL cannot be trapped, so a lock left by a killed writer stays until it is removed, and later writers of that unit time out on it (`ERR_STORAGE_LOCKED`). A repeated key refuses rc 1 `ERR_ENTITY_EXISTS` on every driver: a task slug, a finding NAME, a journal entry slug, a lane entry slug. The compliance harness (`tests/storage-compliance.sh`, 51 cases in 13 suites) proves each driver against the contract by the data it returns, not by exit codes alone: closure filtering on the board and in `entry.show`, task status after each task verb, a dropped task gone from every read, `finding.list` with and without the active filter, lane artifacts round-tripping, repeated keys refused, the exact bytes of an artifact round trip, a 2 MB report over stdin, the canonical status filter, the refs array, typed resolve blocks, the entry filters, the search shape, and the exact search rule. Its corpus suite keys on the declared `corpus.store`: a driver declaring it proves the exact bytes of a read after a write (a 1 MB doc among them), the list order and its repo filter, `--create` refused on an existing doc, remove then read rc 1, the mount's printed root and its files, a call from a subfolder, a key folding onto another doc or repo under ASCII case refused with nothing stored, and a case twin of a stored key read, removed, listed, and mounted as absent with the stored docs untouched; its changes case keys on the declared `corpus.changelog` (rows by head, or the refusal); a driver without `corpus.store` runs one case in place of the nine, every corpus method refusing (43 cases in all). Its resolver suite stages the shipped resolver and wraps the driver under test in planted descriptors: `require` and `has` on a descriptor with and without `corpus.store`, the verdict cache per capability set beside the untouched dispatch verdict, and a driver without `corpus.store` serving the record methods while a planted driver lacking a mandatory capability is halted. The ship gate runs it against base's posix driver; the storage-fts5 plugin suite runs it against the plugin's own driver.
+Every function answers in three tiers: `0` success; `1` a semantic refusal (the input or a record rule); `2` a storage or driver failure (driver not found, a failed handshake, an IO error, lock contention, a write the backend refused). A backend never prints a success answer for a write that did not land: a replace the store refuses removes its temp and exits 2 `ERR_STORAGE_WRITE`. Each write function lands whole or not at all (posix: a temp file and a rename per file, the unit lock for a write touching several files; fts5: one transaction; the service: one transaction per request), and concurrent writers of one unit serialize. An interrupted posix call (HUP, INT, TERM) exits through its cleanup on every sh, dash included: its scratch is removed and a held unit lock is released; a SIGKILL cannot be trapped, so a lock left by a killed writer stays until it is removed, and later writers of that unit time out on it (`ERR_STORAGE_LOCKED`).
 
 #### Split-brain prevention
 
-If a non-posix driver is configured (such as `fts5` or `sqlite`) and its executable cannot be resolved or fails handshake validation, the engine halts immediately with exit code 2 (`ERR_DRIVER_NOT_FOUND`, `ERR_DRIVER_PROTOCOL` when the capability call itself fails, or `ERR_CAPABILITY_UNSUPPORTED` when a mandatory capability is missing). The engine never falls back silently to `posix` when a custom driver was configured, and no verb opens an artifact outside the driver, so records never diverge between storage engines. The ship gate runs the whole session suite twice, once per driver, and a verb re-pointed at the files turns the fts5 run red.
+If a non-posix driver is configured (such as `fts5` or the service) and its executable cannot be resolved or fails its handshake, the engine halts immediately with exit code 2 (`ERR_DRIVER_NOT_FOUND`, or `ERR_DRIVER_PROTOCOL` when the capability call fails or the descriptor is not a complete contract 2). The engine never falls back silently to `posix` when another driver was configured, and no verb opens an artifact outside the driver, so records never diverge between storage engines. The ship gate runs the whole session suite once per driver, and a verb re-pointed at the files turns the fts5 run red.
 
 #### Available drivers
 
-- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver keeping each artifact as a markdown file under `.contexture/sessions/<unit>/` and each corpus doc as the file `docs/<repo>/<slug>.md` under the workspace root (`corpus.store`; no change log, the posix corpus delta is git); it is also the reference serialization of the record grammar and of the corpus. It runs on the system awk: BWK awk, mawk, gawk, and busybox awk each carry the full session suite green on both drivers, and every payload and JSON encoder doubles a backslash by concatenation, since a `gsub` replacement of four backslashes yields one backslash under busybox awk and `gawk --posix` (the authoring rule in `docs/modules.md`).
-- SQLite FTS5 driver (`storage-fts5` plugin): keeps every artifact's canonical text verbatim in one SQLite database, with a relational index rebuilt from the text of the artifact that changed, dual FTS5 virtual tables (Porter English stemming plus Trigram tokenization), unicode61 with `remove_diacritics 0` for Turkish and diacritics, pure SQL Reciprocal Rank Fusion (RRF) search ranking, and bidirectional migration (`ctx storage-fts5 migrate`, units and, with `--corpus`, the doc corpus through the posix reference). Its record methods render through the reference serialization over the unit materialized from the store, so both drivers answer every method alike. It holds the corpus natively (`corpus.store` and `corpus.changelog`, schema version 3): each doc verbatim, a change-log row per write in the doc's own transaction, a mount that fills the folder it is handed; see the plugin README.
+- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver keeping each artifact as a markdown file under `.contexture/sessions/<unit>/` and each corpus doc as the file `docs/<repo>/<slug>.md` under the workspace root (`corpus.store`; no change log, the posix corpus delta is git). It runs on the system awk: BWK awk, mawk, gawk, and busybox awk each carry the full session suite green on both drivers, and every payload and JSON encoder doubles a backslash by concatenation, since a `gsub` replacement of four backslashes yields one backslash under busybox awk and `gawk --posix` (the authoring rule in `docs/modules.md`).
+- SQLite FTS5 driver (`storage-fts5` plugin): keeps every artifact's canonical text verbatim in one SQLite database, with a relational index rebuilt from the text of the artifact that changed, dual FTS5 virtual tables (Porter English stemming plus Trigram tokenization), unicode61 with `remove_diacritics 0` for Turkish and diacritics, pure SQL Reciprocal Rank Fusion (RRF) search ranking, and bidirectional migration (`ctx storage-fts5 migrate`, units and, with `--corpus`, the doc corpus through the posix reference). In v0.54.0 its record methods render through the reference serialization over the unit materialized from the store; contract 2 replaces that with native SQL per function. It holds the corpus natively (`corpus.store` and `corpus.changelog`, schema version 3): each doc verbatim, a change-log row per write in the doc's own transaction, a mount that fills the folder it is handed; see the plugin README.
 
 ### Semantic CLI verbs
 

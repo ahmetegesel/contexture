@@ -1,0 +1,48 @@
+# legacy.notes: the items of legacy.dump (unit legacy-u), each canonical (verbatim null)
+# or verbatim-bearing (verbatim holds the stored span), with the legacy shape it
+# carries (the design's LEGACY SHAPES CARRIED, numbered 1 to 15 below). Source:
+# tools/src/legacy-u; regenerate with tools/build.sh. Line numbers are dump lines.
+#
+# The shapes: 1 STATUS field on an entry; 2 two WHAT lines; 3 closers without a verdict
+# word and doubled verdict groups; 4 unquoted REF; 5 bare REFS; 6 lowercase hyphen
+# finding NAME; 7 lane WHAT :: block scalar and multi-line WHAT; 8 unknown lane fields;
+# 9 continuation text and column-0 comment lines inside a span; 10 grammar comment
+# headers before the first item; 11 @anchor lines in lane journals; 12 entries without
+# ANCHOR or THREAD; 13 repeated slugs; 14 the two finding block orders; 15 a state
+# objective not one closed quoted value, with a continuation line.
+
+line  kind      id                                   form       shape and why
+2     state     legacy-u                             verbatim   15: objective opens a quote and continues on an indented line
+3     artifact  backlog preamble                     preamble   10: "# backlog grammar" and a prose line before the first task
+4     task      canon-task                           canonical  every task field set: REFS bracketed, DESCRIPTION with an empty body line, ACCEPTANCE CRITERIA
+5     task      bare-refs-task                       verbatim   5: bare REFS (blank-separated), which parse into refs and render bracketed
+6     task      four-space-blank                     verbatim   the posix serializer's four-space blank body line, parsed as an empty line
+7     opaque    @note                                verbatim   a backlog head other than @task, kept whole
+8     task      statusless-task                      verbatim   a task without STATUS reads TODO; the canonical lines gain STATUS
+9     artifact  knowledge preamble                   preamble   10: "# knowledge grammar"
+10    finding   LEGACY_CANON                         canonical  REF then SUMMARY; superseded by LEGACY_SUCCESSOR
+11    finding   legacy-lowercase-name                canonical  6: a lowercase hyphen NAME read as stored
+12    finding   SUMMARY_FIRST                        verbatim   14: SUMMARY before REF
+13    finding   LEGACY_SUCCESSOR                     canonical  SUPERSEDES with its reason, REF, SUMMARY
+14    artifact  journal preamble                     preamble   10: "# journal grammar" and a prose line
+15    anchor    A1                                   verbatim   the posix session.init spelling ("session initialized", attention: []): continues and attention null
+16    entry     2026-09-20-legacy-one                canonical  every entry field: ANCHOR, WHAT, GROUP, RHYTHM, THREAD, REF, KNOWLEDGE; closed later by a SUPERSEDES
+17    entry     2026-09-20-legacy-status             verbatim   1: STATUS DONE read into legacy_status
+18    entry     2026-09-20-double-what               verbatim   2 and 9: two WHAT lines (the first in extra_fields) and a column-0 comment in the span
+19    entry     2026-09-20-legacy-two                verbatim   4: an unquoted REF; 3: a closer whose parenthesis has no verdict word (the closer line itself is canonical); a separator before an anchor
+20    anchor    A2                                   verbatim   the posix session.stamp quoted attention, no separator before the next entry
+21    entry     2026-09-21-legacy-three              verbatim   3: doubled verdict groups and a spaced hyphen reason (each closer carries its own verbatim line); a separator before an anchor
+22    anchor    A3                                   canonical  the stamp form followed by one empty line
+23    entry     2026-09-21-multi-line                verbatim   7: a quoted WHAT over two lines (what keeps the newline); 8: an unknown NOTE field in extra_fields
+24    entry     2026-09-10-no-anchor                 canonical  12: no ANCHOR and no THREAD (dated before the thread rule), the journal's last item
+25    lane      bare-lane                            n/a        a lane with a recipe only: report null, journal_preamble null (TC71)
+26    lane      legacy-lane                          n/a        recipe and report documents (a backslash, a tab, UTF-8 in the report); journal preamble "# journal grammar"
+27    lane_item legacy-lane A1                       canonical  11: an @anchor in a lane journal
+28    lane_item legacy-lane 2026-09-20-lane-block    verbatim   7: a WHAT :: block scalar; 8: an unknown RESULT field
+29    lane_item legacy-lane 2026-09-20-lane-cont     verbatim   9: a continuation line that is no field
+30    lane_item legacy-lane 2026-09-20-lane-canon    canonical  12: a lane entry without ANCHOR, with a REF
+31    lane_item legacy-lane 2026-09-20-lane-repeat   canonical  13: the first occurrence of a repeated lane slug
+32    lane_item legacy-lane 2026-09-20-lane-repeat   canonical  13: the second occurrence (occurrence 2)
+#
+# The main journal's repeated slugs (13) live in tc57-repeat.dump, whose positional
+# reading TC57 pins.
