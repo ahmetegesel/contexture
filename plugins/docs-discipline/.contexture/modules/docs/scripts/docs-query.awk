@@ -19,6 +19,12 @@ BEGIN {
 
 # Per-file metadata extraction
 FNR == 1 {
+    # a pitfall still open at the end of the previous doc prints under that doc's slug,
+    # before the metadata below turns to this doc
+    if (mode == "pitfalls" && in_pitfall) {
+        print_pitfall()
+        in_pitfall = 0
+    }
     curr_file = FILENAME
     curr_kind = ""
     curr_slug = ""

@@ -6,7 +6,7 @@
 # (tests/engine-checks.sh) and the delta-source cases (tests/store-cases.sh) when declared,
 # every read verb's rc 2 refusal when not); on fts5 the migration round trip and the
 # capture parity against the files driver at the sandbox path; the single-door census
-# (tests/census.sh over tests/census-allow.txt, with its two plants); the close-gate
+# (tests/census.sh over tests/census-allow.txt, with its three plants); the close-gate
 # matrix over tests/sample/; and the grammar agreement check
 # (tests/grammar-agreement.awk, with its two plants) in a staged
 # scratch workspace built from the shipped copies only: the runtime and the
@@ -279,7 +279,7 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
     ENGINE_OUT=$(sh "$SCRIPT_DIR/engine-checks.sh" "$SANDBOX" 2>&1)
     ENGINE_RC=$?
     if [ "$ENGINE_RC" -eq 0 ]; then
-        echo "[engine-checks] PASS (duplicate id across kinds, pitfalls scoping, backslash search)"
+        echo "[engine-checks] PASS (duplicate id across kinds, pitfalls scoping, the doc a pitfall belongs to, backslash search)"
         PASS=$((PASS + 1))
     else
         echo "[engine-checks] FAIL (rc=$ENGINE_RC)"
@@ -326,8 +326,9 @@ fi
 
 # the single-door census (tests/census.sh): every line of the module's verbs and engines
 # that names the corpus or uses an IO primitive sits in docs-io.sh or in the classified
-# allow-list (tests/census-allow.txt), remainder zero; two plants prove it can fail: a cat of
-# a composed corpus path in a verb, and a getline over a computed path in an engine
+# allow-list (tests/census-allow.txt), remainder zero; three plants prove it can fail: a cat
+# of a composed corpus path in a verb, a getline over a computed path in an engine, and a
+# quote-split corpus path read by awk without -f in a verb
 S_SCRIPTS="$SANDBOX/.contexture/modules/docs/scripts"
 CENSUS_OUT=$(sh "$SCRIPT_DIR/census.sh" "$S_SCRIPTS" "$SCRIPT_DIR/census-allow.txt" 2>&1)
 CENSUS_RC=$?
@@ -340,14 +341,21 @@ cp "$S_SCRIPTS/query" "$SANDBOX/census-plant/query"
 awk '{ print } /^END \{/ && !d { print "    while ((getline pl < (root \"/do\" \"cs/x/y\" \".m\" \"d\")) > 0) n++"; d = 1 }' "$S_SCRIPTS/docs-check.awk" > "$SANDBOX/census-plant/docs-check.awk"
 PLANT_C2=$(sh "$SCRIPT_DIR/census.sh" "$SANDBOX/census-plant" "$SCRIPT_DIR/census-allow.txt" 2>&1)
 PLANT_C2_RC=$?
+# the third plant hides from a literal match: the corpus path split by quotes and read by a
+# command outside the old primitive list (awk without -f)
+cp "$S_SCRIPTS/docs-check.awk" "$SANDBOX/census-plant/docs-check.awk"
+printf '%s\n' 'pf="$DOCS_ROOT/do""cs/$REPO/x.m""d"' "awk 'NR == 1' \"\$pf\" >/dev/null 2>&1" >> "$SANDBOX/census-plant/query"
+PLANT_C3=$(sh "$SCRIPT_DIR/census.sh" "$SANDBOX/census-plant" "$SCRIPT_DIR/census-allow.txt" 2>&1)
+PLANT_C3_RC=$?
 if [ "$CENSUS_RC" -eq 0 ] && printf '%s' "$CENSUS_OUT" | grep -q 'remainder 0$' \
     && [ "$PLANT_C1_RC" -eq 1 ] && printf '%s' "$PLANT_C1" | grep -q '^REMAINDER query:' \
-    && [ "$PLANT_C2_RC" -eq 1 ] && printf '%s' "$PLANT_C2" | grep -q '^REMAINDER docs-check.awk:'; then
-    echo "[census] PASS ($(printf '%s' "$CENSUS_OUT" | tail -1 | sed 's/^census: //'); both plants read REMAINDER)"
+    && [ "$PLANT_C2_RC" -eq 1 ] && printf '%s' "$PLANT_C2" | grep -q '^REMAINDER docs-check.awk:' \
+    && [ "$PLANT_C3_RC" -eq 1 ] && [ "$(printf '%s\n' "$PLANT_C3" | grep -c '^REMAINDER query:')" -eq 2 ]; then
+    echo "[census] PASS ($(printf '%s' "$CENSUS_OUT" | tail -1 | sed 's/^census: //'); all three plants read REMAINDER)"
     PASS=$((PASS + 1))
 else
-    echo "[census] FAIL (rc=$CENSUS_RC, verb plant rc=$PLANT_C1_RC, engine plant rc=$PLANT_C2_RC)"
-    printf '%s\n%s\n%s\n' "$CENSUS_OUT" "$PLANT_C1" "$PLANT_C2" | grep -e REMAINDER -e '^census' | head -20
+    echo "[census] FAIL (rc=$CENSUS_RC, verb plant rc=$PLANT_C1_RC, engine plant rc=$PLANT_C2_RC, split-name plant rc=$PLANT_C3_RC)"
+    printf '%s\n%s\n%s\n%s\n' "$CENSUS_OUT" "$PLANT_C1" "$PLANT_C2" "$PLANT_C3" | grep -e REMAINDER -e '^census' | head -20
     FAIL=$((FAIL + 1))
 fi
 echo ""

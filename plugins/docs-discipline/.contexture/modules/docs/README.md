@@ -45,7 +45,7 @@ the workspace's boot, laws, or help.
 - The write verbs run one pipeline in `docs-io.sh`: the arguments parsed
   (`docs_parse`: the verb's control flags, every other `--<field>=` as a field
   action carried in the environment as `EDIT_A_<n>`, `EDIT_F_<n>`,
-  `EDIT_V_<n>`); the doc read by `corpus.read`; one edit by `docs-edit.awk`
+  `EDIT_V_<n>`, a `--stdin=<field>` value kept in a scratch file the engine reads as its payload operand, so a body of any size meets no environment limit); the doc read by `corpus.read`; one edit by `docs-edit.awk`
   (operands `part=1 <templates/doc.md> part=2 <doc> part=3 <payload>`; only the
   template's `#%` schema lines are read; the request through the environment,
   never `awk -v`; the whole new doc on stdout, the note or the refusal on
@@ -142,9 +142,9 @@ unit-form nudge, the sample backlog seeded into a unit and compared with the
 backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
 of `tests/write/`: every success's stored bytes, every refusal leaving the
 stored doc unchanged, the change-log rows under a store), and the engine
-checks (`tests/engine-checks.sh`: the id namespace, the pitfalls scoping, the
+checks (`tests/engine-checks.sh`: the id namespace, the pitfalls scoping and a doc-ending pitfall credited to its doc, the
 literal backslash search); not declared: every read verb's rc 2 refusal); the
-single-door census (`tests/census.sh` over `tests/census-allow.txt`, with two
+single-door census (`tests/census.sh` over `tests/census-allow.txt`, with three
 planted bypasses); the gate matrix; and the grammar agreement check
 (`tests/grammar-agreement.awk`). `tests/captures.sh` is the capture set of the
 read verbs (plan, run, compare) for the byte-identity and driver-parity

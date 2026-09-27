@@ -141,3 +141,9 @@ helper-source	section	. "$dir/docs-io.sh"
 helper-output	section	docs_parse "after first remove dry-run" 0 "$@" || exit $?
 helper-source	write	. "$dir/docs-io.sh"
 helper-output	write	docs_parse "replace dry-run" 0 "$@" || exit $?
+git-delta	gate	        aggregate_remote_drift_changes | docs_code_half | sort -u | run_gate_check
+git-delta	gate	        aggregate_remote_drift_changes | sort -u | run_gate_check
+git-delta	gate	        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | run_gate_check
+git-delta	gate	        aggregate_git_changes | sort -u | run_gate_check
+false-positive	query	      if [ $# -gt 0 ] && [ "$(echo "$1" | cut -c 1-2)" != "--" ]; then
+helper-output	query	QUERY_OUT=$(docs_run awk -v mode="$MODE" \

@@ -2,9 +2,9 @@
 # summary: write a whole corpus doc from stdin (first extraction, or a deliberate rewrite)
 # usage: ctx docs write <repo> <slug> [--replace] [--dry-run] < doc
 # help: the doc on stdin is stored byte for byte once its @doc line names <slug>, its repo: line names <repo>, and the audit over its repo passes; a carriage return anywhere refuses
-# help: a new doc by default (an existing one refuses); --replace rewrites an existing doc and refuses an absent one
+# help: a new doc by default (an existing one refuses); --replace rewrites an existing doc and refuses an absent one; a --replace carrying the stored bytes writes nothing (unchanged, and no change-log row under a store)
 # help: a header field past line 12 is stored with a warning: the nudge reads the header within its first 12 lines
-# help: exit codes: 0 written (or the dry run printed); 1 a refusal (a slug or repo mismatch, an existing or absent doc, a grammar defect, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (a slug or repo mismatch, an existing or absent doc, a grammar defect, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs write workspace billing < billing.md
 
 case "$1" in

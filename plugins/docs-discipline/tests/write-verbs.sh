@@ -7,14 +7,15 @@
 # driver with a change log (corpus.changelog) exactly the expected new rows, the last one
 # carrying the verb's op and the workspace git HEAD. Every refusal case: its rc, its message,
 # the stored doc byte-identical to before (or still absent), and no new change-log row.
-# Covered: ctx docs new, write (a doc without a final newline kept so), header, rule,
+# Covered: ctx docs new, write (a doc without a final newline kept so; a --replace of the
+# stored bytes writes nothing and logs no row), header, rule,
 # pitfall, entry (an id-keyed add, a legacy #N update, a natural and a composite key, a block
 # scalar, --stdin, --first, --after, --remove), section, replace, remove, ids (a run, a
 # rerun keying 0, a dry run), query --entry, a dry run; the refusals: an unknown field, an
 # enum value outside its set, a missing required field, a duplicate key, a duplicate id, a
 # missing address (entry, rule, doc), a stale replace count, audit failures (an id taken by
 # another doc of the repo, an unknown block), a newline in a one-line field, a carriage
-# return (a flag value, a whole doc), an unknown flag, an id set by hand, an existing doc
+# return (a flag value, a whole doc, a replace text), an unknown flag, an id set by hand, an existing doc
 # for new and write, --replace of an absent doc, a slug mismatch, a required field unset,
 # a line-number evidence, a section header mismatch, an empty value, a block the kind lacks.
 # Each case reseeds repo wtest through the driver (stamped with a head no window holds).
@@ -159,6 +160,7 @@ seed
 succeed new fresh "$FX/exp-new.md" new 1 - "$C" docs new wtest fresh --kind=structural '--description=A fresh doc' '--sources=src/fresh/**' --keywords=fresh
 succeed write written "$FX/written.md" write 1 "$FX/written.md" "$C" docs write wtest written
 succeed write-replace written "$W/written2.md" write 1 "$W/written2.md" "$C" docs write wtest written --replace
+same write-replace-identical written "wtest/written unchanged (nothing written)" "$W/written2.md" "$C" docs write wtest written --replace
 succeed write-no-final-newline nonl "$W/nonl.md" write 1 "$W/nonl.md" "$C" docs write wtest nonl
 seed
 succeed header unit "$FX/exp-header.md" header 1 - "$C" docs header wtest unit '--add-source=src/more/**' --remove-keyword=unit '--upstream=An upstream note'
@@ -189,6 +191,14 @@ succeed entry-block-scalar map "$FX/exp-entry-dataflow.md" entry 1 - "$C" docs e
 line two'
 seed
 succeed entry-stdin map "$FX/exp-entry-deprule-stdin.md" entry 1 "$FX/deprule-detail.txt" "$C" docs entry wtest map dependency_rules '#1' --stdin=detail
+# a --stdin body larger than the platform's argument and environment limit (about 1.1 MB)
+# lands whole: the value reaches the edit engine as a file operand, never the environment
+seed
+awk 'BEGIN { for (i = 1; i <= 14000; i++) printf "big detail line %06d, padded out to about eighty bytes wide for the limit\n", i }' > "$W/bigdetail.txt"
+run "$W/bigdetail.txt" "$C" docs entry wtest map dependency_rules '#1' --stdin=detail
+rc=$?
+stored map | awk '/^@dependency_rules/ { d = 1 } d && /^    detail ::$/ { f = 1; next } f && /^      / { sub(/^      /, ""); print; next } f { exit }' > "$W/bigdetail.got"
+{ [ "$rc" -eq 0 ] && cmp -s "$W/bigdetail.txt" "$W/bigdetail.got"; } && verdict entry-stdin-large "" || verdict entry-stdin-large "rc=$rc: $(head -c 300 "$W/err")"
 seed
 succeed section-replace unit "$FX/exp-section-replace.md" section 1 "$FX/see-also.block" "$C" docs section wtest unit see_also
 seed
@@ -233,6 +243,8 @@ refuse newline unit 1 "a newline in the one-line field severity" - "$C" docs pit
 x'
 refuse carriage-return unit 1 "a carriage return in the value of summary" - "$C" docs pitfall wtest unit unit-p1 "--summary=$(printf 'a\rb')"
 refuse carriage-return-doc crdoc 1 "a carriage return in the doc" "$W/cr.md" "$C" docs write wtest crdoc
+refuse carriage-return-replace-new unit 1 "a carriage return in --new" - "$C" docs replace wtest unit '--old=invariant holds' "--new=$(printf 'a\rb')" --count=2
+refuse carriage-return-replace-old unit 1 "a carriage return in --old" - "$C" docs replace wtest unit "--old=$(printf 'holds\r')" --new=x --count=0
 refuse unknown-flag unit 1 "unknown option: --bogus" - "$C" docs entry wtest unit contract --bogus
 refuse id-by-hand unit 1 "ids are stable" - "$C" docs pitfall wtest unit unit-p1 --id=unit-p3
 refuse new-existing unit 1 "wtest/unit already exists (ERR_ENTITY_EXISTS)" - "$C" docs new wtest unit --kind=capability --description=d --sources=a --keywords=b

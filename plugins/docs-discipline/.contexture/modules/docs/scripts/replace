@@ -1,9 +1,9 @@
 #!/bin/sh
 # summary: counted exact text replacement across a doc, a repo, or the whole corpus (sync sweeps)
 # usage: ctx docs replace [<repo> [<slug>]] --old="text" --new="text" --count=<N> [--dry-run]
-# help: every occurrence of --old in the scope becomes --new (both may carry newlines); the total over the scope must equal --count, else each doc's count is printed and nothing is written: the check that the sweep's scope is what the author believed
+# help: every occurrence of --old in the scope becomes --new (both may carry newlines, never a carriage return); the total over the scope must equal --count, else each doc's count is printed and nothing is written: the check that the sweep's scope is what the author believed
 # help: every touched doc is edited and grammar-checked by the audit over its repo before the first write; the writes then land one doc after another (a failure names the docs that landed), one change-log row per touched doc under a store driver
-# help: exit codes: 0 replaced (or the dry run printed); 1 a refusal (a stale count, an empty --old, a missing scope, a grammar defect), nothing written; 2 a storage driver failure or a driver without a corpus
+# help: exit codes: 0 replaced (or the dry run printed); 1 a refusal (a stale count, an empty --old, a missing scope, a grammar defect, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs replace workspace --old="ctx docs gate --drift" --new="ctx docs gate --drift --stdin" --count=3
 
 case "$1" in

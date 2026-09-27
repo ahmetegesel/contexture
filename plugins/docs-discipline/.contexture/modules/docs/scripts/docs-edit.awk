@@ -13,7 +13,7 @@
 #   EDIT_AFTER, EDIT_FIRST, EDIT_REMOVE, EDIT_ID, EDIT_DRY, EDIT_NOEOL (the doc lacks a
 #   final newline), EDIT_OLD, EDIT_NEW, and the field actions: EDIT_NA with EDIT_A_<n>
 #   (set, unset, add, remove), EDIT_F_<n> (the field), EDIT_V_<n> (the value; trailing
-#   newlines dropped, so a value read from a file keeps its text).
+#   newlines dropped, so a value read from a file keeps its text); EDIT_STDIN_N names the action a --stdin value fills from the payload operand (never the environment, whatever its size).
 #
 # Success: the whole new doc on stdout, every untouched line byte for byte, and the note
 # on stderr (<address> <what>; the dry run adds the changed lines after it), rc 0. The show
@@ -971,6 +971,9 @@ function op_show(    b, k) {
 
 function op_replace(    s, i, p, cnt, out) {
     if (OLDTXT == "") refuse("--old is empty (ERR_INVALID_ARGUMENT)")
+    # the dialect is LF: a carriage return never lands through a sweep, as through every write
+    if (index(OLDTXT, CR)) refuse("a carriage return in --old (ERR_INVALID_ARGUMENT)")
+    if (index(NEWTXT, CR)) refuse("a carriage return in --new (ERR_INVALID_ARGUMENT)")
     s = ""
     for (i = 1; i <= n; i++) s = s L[i] ((i < n || !NOEOL) ? "\n" : "")
     cnt = 0
@@ -985,6 +988,14 @@ function op_replace(    s, i, p, cnt, out) {
 }
 
 END {
+    # a --stdin=<field> value arrives as the payload operand (never the environment): its
+    # lines joined, trailing newlines dropped, into the action EDIT_STDIN_N names
+    SN = ENVIRON["EDIT_STDIN_N"] + 0
+    if (SN >= 1 && SN <= NA) {
+        AV[SN] = ""
+        for (i = 1; i <= np; i++) AV[SN] = AV[SN] (i > 1 ? "\n" : "") P[i]
+        sub(/\n+$/, "", AV[SN])
+    }
     if (OP == "replace") { op_replace(); exit 0 }
     parse_doc()
     if (OP == "show") { op_show(); exit 0 }

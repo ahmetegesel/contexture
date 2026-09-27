@@ -1,12 +1,16 @@
 #!/usr/bin/env sh
 # census.sh <scripts dir> <allow-list>: the standing single-door census of the docs module.
 # Two instruments over every verb script and engine (comment lines skipped):
-#   A (names): a line naming the corpus layout or a record artifact:
+#   A (names): a line naming the corpus layout or a record artifact, read with its quotes
+#      and backslashes deleted (so a name split as do""cs/ or .m'd' still reads whole):
 #      docs/  .md  DOC_FILES  backlog  FILENAME  sessions
 #   B (IO primitives): a line that opens, lists, copies, moves, writes, probes, spawns, or
 #      sources: awk -f, exec, getline, cat, cp, mv, rm, mkdir, mktemp, ls, find, git,
 #      system(, sqlite3, a redirect to or from a quoted path, the file tests -d -e -f -r -s
-#      -w -x, dot-sourcing, the argv pass-through "$@", $DOC_FILES
+#      -w -x, dot-sourcing, the argv pass-through "$@", $DOC_FILES; in a shell script (never
+#      an .awk engine, where these words are variables and text) also any command that reads
+#      a file operand as a word of its own: awk, sed, head, tail, grep, wc, cut, sort, uniq,
+#      tr, od, dd, tee, xargs, cmp, diff, paste
 # Every union line of docs-io.sh (the one door) counts as helper. Every other union line
 # must match an allow-list entry exactly: <class><TAB><file><TAB><the line as written>
 # (by file and content, never by line number); a line no entry matches is the remainder.
@@ -45,8 +49,10 @@ CENSUS_ALLOW=$allow awk '
   FNR == 1 { base = FILENAME; sub(/^.*\//, "", base) }
   /^[ \t]*#/ { next }
   {
-    a = ($0 ~ /docs\/|\.md|DOC_FILES|backlog|FILENAME|sessions/)
+    nq = $0; gsub(/["\047\\]/, "", nq)
+    a = (nq ~ /docs\/|\.md|DOC_FILES|backlog|FILENAME|sessions/)
     b = ($0 ~ /awk -f|exec |getline|cat |cp |mv |rm |mkdir|mktemp|ls |find |git |system\(|sqlite3|> *"|>> *"|< *"|-[defrswx] "|^[ \t]*\. |[;&|][ \t]*\. |"\$@"|\$DOC_FILES/)
+    if (!b && base !~ /\.awk$/) b = ($0 ~ /(^|[^A-Za-z0-9_.-])(awk|sed|head|tail|grep|wc|cut|sort|uniq|tr|od|dd|tee|xargs|cmp|diff|paste)[ \t]/)
     if (!(a || b)) next
     flagged++
     if (base == "docs-io.sh") { helper++; next }

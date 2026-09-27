@@ -62,7 +62,7 @@ What lands where:
 | `tests/run.sh` | the plugin's own suite: the staging check, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed, the migration round trip, and the capture parity against the files driver | reference (never copied) |
 | `tests/store-cases.sh` | the delta-source cases: the check's store mode against its git mode, `ctx docs changes` (its window, `--since`, A, M, D, its refusals), and the gate composing the code half from git with the corpus half from the store (or from git under the files driver) | reference (never copied) |
 | `tests/write-verbs.sh`, `tests/write/` | the write verbs' assertions and their fixtures: every verb's result byte for byte, every refusal leaving the stored doc unchanged, the change-log rows under a store | reference (never copied) |
-| `tests/engine-checks.sh` | the audit's one id namespace per repo, the pitfalls view scoped to `@pitfalls`, a backslash search kept literal | reference (never copied) |
+| `tests/engine-checks.sh` | the audit's one id namespace per repo, the pitfalls view scoped to `@pitfalls` with a doc-ending pitfall credited to its own doc, a backslash search kept literal | reference (never copied) |
 | `tests/grammar-agreement.awk` | the grammar agreement check the suite runs: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
 | `README.md` | this onboarding document | reference |
 
@@ -438,7 +438,7 @@ mode's named verdicts as differences. The fts5 run also round-trips the
 corpus through `ctx storage-fts5 migrate --corpus` byte for byte.
 `tests/write-verbs.sh` asserts every write verb against the expected docs
 under `tests/write/` (a changed rendering updates its fixture on purpose),
-`tests/engine-checks.sh` the id namespace, the pitfalls scoping, and the
+`tests/engine-checks.sh` the id namespace, the pitfalls scoping (a doc-ending pitfall credited to its own doc), and the
 literal backslash search, and `tests/store-cases.sh` the delta sources on
 either driver (the check's two modes, `ctx docs changes`, the gate's two
 halves in a git workspace of its own). Keep the grammar (`.contexture/templates/doc.md`), its
@@ -963,8 +963,8 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
 | `tests/run.sh` | authored fresh: the plugin suite (the staging check; on fts5 the capture set run first on the files driver at the sandbox path, then the store seed, the corpus imported and the docs folder removed, the migration round trip, and the capture parity against the files driver; the corpus checks keyed on the declared `corpus.store`: the audit, the unit-form nudge against the backlog-file form, the write verbs, the engine checks, and the delta-source cases, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
 | `tests/write-verbs.sh`, `tests/write/` | authored fresh: the write verbs' table (success bytes against the expected docs, refusals leaving the stored doc unchanged, the change-log rows and `ctx docs changes` under a store) and its fixtures |
-| `tests/engine-checks.sh` | authored fresh: the audit's id namespace, the pitfalls scoping, and the literal backslash search, through the verbs on the configured driver |
+| `tests/engine-checks.sh` | authored fresh: the audit's id namespace, the pitfalls scoping and attribution, and the literal backslash search, through the verbs on the configured driver |
 | `tests/store-cases.sh` | authored fresh: the delta-source cases keyed on the declared `corpus.changelog` (the check's two modes over planted deltas; `ctx docs changes` and the gate's halves in a git workspace of its own made from the sandbox) |
-| `tests/census.sh`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, the classified allow-list by file and exact line, remainder zero) |
+| `tests/census.sh`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, names read with quotes deleted and the file-reading commands of a shell script counted, the classified allow-list by file and exact line, remainder zero) |
 | `tests/captures.sh` | authored fresh: the capture set of the read verbs (plan, run, compare) |
 | `tests/grammar-agreement.awk` | authored fresh: the agreement check of the `#%` schema, the prose shapes, and the audit's lists, refusing an empty side as a pass |

@@ -9,7 +9,10 @@
 #                (ids at the entry head too) are not printed as pitfalls
 #   [backslash]  query --search keeps a backslash literal (the free text reaches the engine
 #                through the environment, never awk -v, which read \t as a tab)
-# Exit 0 when all three pass, 1 otherwise.
+#   [pitfall-doc] query --pitfalls credits a pitfall that ends a doc to that doc: idtwo ends
+#                in @pitfalls and over follows it (the pending pitfall was once printed after
+#                the next doc's first line had turned the slug, as over.md)
+# Exit 0 when all four pass, 1 otherwise.
 
 set -u
 SB=$1
@@ -51,6 +54,13 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+if printf '%s\n' "$OUT" | grep -qxF '! [LOW/bug] idone-r1: A pitfall (idtwo.md)' && ! printf '%s\n' "$OUT" | grep -qF '(over.md)'; then
+  echo "  [pitfall-doc] PASS"
+else
+  echo "  [pitfall-doc] FAIL (rc=$RC): $OUT"
+  FAIL=$((FAIL + 1))
+fi
+
 OUT=$("$C" docs query etest --search 'zz\tqq' 2>&1)
 RC=$?
 if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -qF 'The marker reads zz\tqq on disk'; then
@@ -64,5 +74,5 @@ for d in idone idtwo over esc; do
   "$R" corpus.remove etest "$d" --head=0000000 > /dev/null 2>&1
 done
 rm -rf "$W"
-echo "engine-checks: $((3 - FAIL)) passed, $FAIL failed"
+echo "engine-checks: $((4 - FAIL)) passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

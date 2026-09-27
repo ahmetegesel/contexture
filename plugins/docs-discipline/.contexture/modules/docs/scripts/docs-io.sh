@@ -702,14 +702,20 @@ docs_parse() {
 }
 
 # docs_stdin_value: the --stdin=<field> value read raw from stdin (quotes, backslashes, and
-# newlines kept) into a set action
+# newlines kept) into a set action; the value itself stays in a scratch file the edit engine
+# reads as its payload operand (EDIT_STDIN_N names the action it fills), never in the
+# environment, so a body of any size meets no argument or environment limit
 docs_stdin_value() {
   [ -n "$DOCS_STDIN_FIELD" ] || return 0
   case "$DOCS_STDIN_FIELD" in
     *[!a-z0-9_]*) docs_bad_flag "--stdin=$DOCS_STDIN_FIELD"; return 1 ;;
   esac
-  ds_v=$(cat) || return 2
-  docs_act set "$DOCS_STDIN_FIELD" "$ds_v"
+  docs_scratch || return 2
+  DOCS_PAYLOAD="$DOCS_SCRATCH/payload"
+  cat > "$DOCS_PAYLOAD" || return 2
+  docs_act set "$DOCS_STDIN_FIELD" ""
+  EDIT_STDIN_N=$DOCS_NA
+  export EDIT_STDIN_N
 }
 
 # docs_payload: the verb's stdin saved raw into scratch (a whole doc, a section block);
@@ -880,6 +886,13 @@ docs_edit() {
         if [ "$DOCS_REPLACE" -ne 1 ]; then
           printf '%s: %s/%s already exists; --replace rewrites it whole (ERR_ENTITY_EXISTS)\n' "$DOCS_VERB" "$dd_repo" "$dd_slug" >&2
           return 1
+        fi
+        # a rewrite of the stored bytes changes nothing: nothing written and, under a store,
+        # no change-log row (a row would let the doc ride the delta and freshen its code)
+        docs_read_doc "$dd_repo" "$dd_slug" "$DOCS_SCRATCH/stored" || return $?
+        if cmp -s "$DOCS_SCRATCH/stored" "$DOCS_PAYLOAD"; then
+          printf '%s: %s/%s unchanged (nothing written)\n' "${DOCS_VERB#ctx }" "$dd_repo" "$dd_slug"
+          return 0
         fi
       else
         dd_rc=$?
