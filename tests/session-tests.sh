@@ -980,6 +980,23 @@ a_eq "$(w_residue)" "$w_res0" "R4: the refused writes left no temp in the scratc
 $CTX session task start w-unit w-a --pointer="w-a IN_PROGRESS" >/dev/null 2>&1
 a_eq "$?" "0" "R4: the unit lock was released: a later task start lands"
 
+echo "== WH a refused handshake names the driver's own refusal (lanes/si-s3-service-review/report) =="
+# a workspace with no dispatch verdict yet whose driver refuses its descriptor: the caller
+# reads the driver's own line through the handshake (under the service a wrong key names
+# ERR_AUTH, never a bare exit code under ERR_DRIVER_PROTOCOL); service only, since the
+# bundled posix driver skips the handshake and fts5 refuses nothing here
+if [ "$DRIVER" = service ]; then
+  wh=$SANDBOX/wh-ws
+  mkdir -p "$wh/.contexture"
+  cp -R .contexture/ctx .contexture/modules .contexture/config "$wh/.contexture/"
+  out=$(cd "$wh" && CTX_STORAGE_SERVICE_KEY=wrong-key-0123456789abcdef ./.contexture/ctx session active 2>&1 </dev/null); rc=$?
+  a_eq "$rc" "2" "WH: a wrong key on a fresh workspace exits 2"
+  a_match "$out" "capability handshake failed for driver 'service': capability: error: the storage service refused the key from CTX_STORAGE_SERVICE_KEY (ERR_AUTH)" "WH: the handshake passes the driver's ERR_AUTH line through"
+  a_not "$out" "(ERR_DRIVER_PROTOCOL)" "WH: no bare protocol refusal hides it"
+  a_eq "$(ls "$wh/.contexture/tmp" 2>/dev/null | grep -c '^cap-err\.')" "0" "WH: the handshake left no stderr scratch"
+  rm -rf "$wh"
+fi
+
 echo "== WA a write failing between its renames lands nothing (posix; lanes/si-b5-base-review/report F1) =="
 # a write touching two files (task complete: the backlog, then the journal) renames them one
 # after the other; a planted mv refusing the journal makes the second rename fail after the

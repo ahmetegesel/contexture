@@ -217,6 +217,31 @@ resolve_target_driver() {
   return 2
 }
 
+# cap_prep: CAP_ERR_FILE, a scratch file of the drawer that takes the driver's stderr at the
+# handshake (removed by cap_refused or cap_done); empty when the drawer cannot be written,
+# and the stderr is then set aside as before
+cap_prep() {
+  CAP_ERR_FILE=""
+  mkdir -p "$CTX_DIR/tmp" 2>/dev/null && CAP_ERR_FILE=$(mktemp "$CTX_DIR/tmp/cap-err.XXXXXX" 2>/dev/null) || CAP_ERR_FILE=""
+}
+cap_done() { [ -n "${CAP_ERR_FILE:-}" ] && rm -f "$CAP_ERR_FILE"; CAP_ERR_FILE=""; return 0; }
+
+# cap_refused <driver name> <rc>: the handshake's refusal, one line: the driver's own refusal
+# line when it printed one (a service driver's ERR_AUTH or ERR_STORAGE_UNAVAILABLE names what
+# failed; its code ends the line), else the handshake's ERR_DRIVER_PROTOCOL line
+cap_refused() {
+  cr_line=""
+  if [ -n "${CAP_ERR_FILE:-}" ]; then
+    cr_line=$(head -n 1 "$CAP_ERR_FILE" 2>/dev/null)
+    cap_done
+  fi
+  if [ -n "$cr_line" ]; then
+    printf 'driver-resolver: ERROR: capability handshake failed for driver '\''%s'\'': %s\n' "$1" "$cr_line" >&2
+  else
+    printf 'driver-resolver: ERROR: capability handshake failed for driver '\''%s'\'' with exit code %d (ERR_DRIVER_PROTOCOL)\n' "$1" "$2" >&2
+  fi
+}
+
 # Validate capability handshake
 verify_capabilities() {
   driver_exec="$1"
@@ -227,11 +252,13 @@ verify_capabilities() {
     return 2
   fi
 
-  cap_json=$("$driver_exec" capability 2>/dev/null </dev/null)
+  cap_prep
+  cap_json=$("$driver_exec" capability 2>"${CAP_ERR_FILE:-/dev/null}" </dev/null)
   cap_rc=$?
+  [ "$cap_rc" -eq 0 ] && cap_done
 
   if [ "$cap_rc" -ne 0 ]; then
-    printf 'driver-resolver: ERROR: capability handshake failed for driver '\''%s'\'' with exit code %d (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_rc" >&2
+    cap_refused "$driver_name" "$cap_rc"
     return 2
   fi
 
@@ -382,10 +409,12 @@ require_caps() {
     printf 'driver-resolver: ERROR: driver executable '\''%s'\'' not found or not executable (ERR_DRIVER_NOT_FOUND)\n' "$rq_path" >&2
     return 2
   fi
-  rq_json=$("$rq_path" capability 2>/dev/null </dev/null)
+  cap_prep
+  rq_json=$("$rq_path" capability 2>"${CAP_ERR_FILE:-/dev/null}" </dev/null)
   rq_rc=$?
+  [ "$rq_rc" -eq 0 ] && cap_done
   if [ "$rq_rc" -ne 0 ]; then
-    printf 'driver-resolver: ERROR: capability handshake failed for driver '\''%s'\'' with exit code %d (ERR_DRIVER_PROTOCOL)\n' "$rq_name" "$rq_rc" >&2
+    cap_refused "$rq_name" "$rq_rc"
     return 2
   fi
   rq_have=$(printf '%s\n' "$rq_json" | driver_caps)

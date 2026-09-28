@@ -332,7 +332,7 @@ Every function answers in three tiers: `0` success; `1` a semantic refusal (the 
 
 #### Split-brain prevention
 
-If a non-posix driver is configured (such as `fts5` or the service) and its executable cannot be resolved or fails its handshake, the engine halts immediately with exit code 2 (`ERR_DRIVER_NOT_FOUND`, or `ERR_DRIVER_PROTOCOL` when the capability call fails or the descriptor is not a complete contract 2). The engine never falls back silently to `posix` when another driver was configured, and no verb opens an artifact outside the driver, so records never diverge between storage engines. The ship gate runs the whole session suite once per driver, and a verb re-pointed at the files turns the fts5 run red.
+If a non-posix driver is configured (such as `fts5` or the service) and its executable cannot be resolved or fails its handshake, the engine halts immediately with exit code 2 (`ERR_DRIVER_NOT_FOUND`, or `ERR_DRIVER_PROTOCOL` when the capability call fails or the descriptor is not a complete contract 2; a driver whose capability call refuses with its own line, such as the service's `ERR_AUTH` for a wrong key or `ERR_STORAGE_UNAVAILABLE` for a stopped service, has that line passed through the handshake's one line, its code ending it). The engine never falls back silently to `posix` when another driver was configured, and no verb opens an artifact outside the driver, so records never diverge between storage engines. The ship gate runs the whole session suite once per driver, and a verb re-pointed at the files turns the fts5 run red.
 
 #### Available drivers
 
