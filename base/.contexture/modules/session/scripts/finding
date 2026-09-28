@@ -9,6 +9,7 @@
 # help:   drop <unit> <NAME>
 # help:   list <unit> [--active-only] [--json]
 # help: --ref repeats (one REF line each); an update with --ref replaces the list
+# help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --summary carrying no field
 # help: the storage driver holds the record rules: a CLOSED unit refuses every write; a NAME the knowledge already carries is refused (rc 1, ERR_ENTITY_EXISTS), a missing predecessor too (ERR_ENTITY_NOT_FOUND); a new NAME is upper case letters, digits, and underscores
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
@@ -19,6 +20,7 @@ help_table() {
   printf '  add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]\n'
   printf '  show <unit> <NAME> [--json]\n'
   printf '  update <unit> <NAME> [--summary="..."] [--ref=...]\n'
+  printf '  update reads no stdin; an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT)\n'
   printf '  supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]\n'
   printf '  drop <unit> <NAME>\n'
   printf '  list <unit> [--active-only] [--json]\n'
@@ -175,6 +177,12 @@ case "$subcmd" in
     parse_flags "finding update" "$@"
     vb_refuse_cr "$summary"
     check_refs
+    # an update carrying no field refuses before any call (D26): the flags are its only
+    # input (stdin is not read, D1), and an empty --summary carries no field
+    if [ -z "$summary" ] && [ "$nref" -eq 0 ]; then
+      printf 'finding update: error: no field to update (give --summary or --ref) (ERR_INVALID_ARGUMENT)\n' >&2
+      exit 1
+    fi
     [ -n "$summary" ] && vb_kv summary "$summary"
     [ "$nref" -gt 0 ] && refs_payload
     vb_call finding.update "$unit" "$name"

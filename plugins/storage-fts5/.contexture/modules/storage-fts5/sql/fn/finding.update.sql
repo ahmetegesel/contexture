@@ -59,7 +59,11 @@ INSERT INTO finding_refs (unit, pos, rpos, ref) SELECT (SELECT unit FROM temp.a)
 INSERT INTO temp.stl (tbl, pos, cand) SELECT 'finding', k.pos, v.span FROM temp.fk k, v_finding_span v
   WHERE k.verbatim IS NULL AND v.unit = (SELECT unit FROM temp.a) AND v.pos = k.pos;
 INSERT INTO temp.stl (tbl, pos, cand) SELECT 'finding', k.pos, e.t FROM temp.fk k, temp.edt e WHERE k.verbatim IS NOT NULL;
-UPDATE findings SET summary = rtrim(summary, char(10)) WHERE unit = (SELECT unit FROM temp.a) AND pos = (SELECT pos FROM temp.fk);
+-- the SUMMARY read back from the text the finding now stores (lib/reblock.sql)
+DELETE FROM temp.edt;
+INSERT INTO temp.edt SELECT cand FROM temp.stl WHERE tbl = 'finding' AND pos = (SELECT pos FROM temp.fk);
+.read lib/reblock.sql
+UPDATE findings SET summary = coalesce((SELECT v FROM temp.rb WHERE lab = 'SUMMARY'), '') WHERE unit = (SELECT unit FROM temp.a) AND pos = (SELECT pos FROM temp.fk);
 .read lib/settle.sql
 INSERT INTO temp.tart SELECT unit, 'knowledge' FROM temp.a;
 .read lib/touch.sql

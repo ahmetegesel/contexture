@@ -79,7 +79,7 @@ Three fields carry the task's identity: `STATUS` (`TODO`, `IN_PROGRESS`, `DONE`)
 Agents mutate the backlog through typed CLI verbs, the only write inputs (no markdown block crosses the command interface):
 
 - `ctx session task add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: creates a task in `TODO` status.
-- `ctx session task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: updates the given fields in place; `--refs` replaces the list and `--refs=""` clears it.
+- `ctx session task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: updates the given fields in place; `--refs` replaces the list and `--refs=""` clears it; an update carrying no field refuses rc 1.
 - `ctx session task start <unit> <slug> [--pointer="..."]`: atomically moves a `TODO` task to `IN_PROGRESS` and writes `next_action`.
 - `ctx session task complete <unit> <slug> --evidence="..."`: atomically moves a `TODO` or `IN_PROGRESS` task to `DONE` and records its completion receipt (`<date>-<slug>-completed`, `WHAT: "backlog/<slug>: DONE (<evidence>)"`) in the journal.
 - `ctx session task reopen <unit> <slug>`: moves an `IN_PROGRESS` or `DONE` task back to `TODO`.
@@ -144,7 +144,7 @@ Unlike immutable journal events, findings support full lifecycle CRUD:
 
 - `ctx session finding add <unit> <NAME> --summary="..." [--ref=...]... [--supersedes=...]`: adds a new finding, active until a later finding supersedes it.
 - `ctx session finding show <unit> <NAME>`: prints the finding's stored block, with `SUPERSEDED_BY: <successor>` after its head when a later finding supersedes it.
-- `ctx session finding update <unit> <NAME> [--summary="..."] [--ref=...]...`: updates the summary, the references, or both in place when concepts are refined (either flag alone works); `--ref` repeats and replaces the whole list.
+- `ctx session finding update <unit> <NAME> [--summary="..."] [--ref=...]...`: updates the summary, the references, or both in place when concepts are refined (either flag alone works); `--ref` repeats and replaces the whole list; an update carrying no field refuses rc 1.
 - `ctx session finding supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]...`: adds the successor finding carrying `SUPERSEDES: <old-name>`, maintaining audit lineage; a missing predecessor refuses rc 1.
 - `ctx session finding drop <unit> <NAME>`: removes an invalidated finding.
 - `ctx session finding list <unit> [--active-only]`: lists all findings, optionally leaving out the superseded ones.

@@ -573,6 +573,9 @@ call_run() {
   esac
   if [ "$cr_rc" -ne 0 ]; then
     cr_e=$(sed -n '1p' "$SCRATCH/err")
+    # a signal ended the sqlite3 (rc above 128): its first stderr line is the shell's job
+    # line, which names the plugin's files; the message names the interruption instead
+    [ "$cr_rc" -gt 128 ] && cr_e="sqlite3 was interrupted (exit $cr_rc); the transaction rolled back"
     case "$cr_e" in
       *"database is locked"*|*"database table is locked"*) refuse 2 ERR_STORAGE_LOCKED "the store is locked by another writer" ;;
     esac
@@ -648,6 +651,20 @@ capability() {
 # storage.health: a probe, never a write: an absent database reports degraded with store
 # absent (the store starts at the first bootstrap), and an older store is not upgraded here
 storage_health() {
+  # an sqlite3 older than the driver's minimum serves no function (db_init refuses each), so
+  # the probe reports error naming it, never ok (lanes/si-f5-fts5-review/report F3)
+  sh_sv=$(sq :memory: "SELECT sqlite_version();" 2>/dev/null)
+  sh_svn=$(printf '%s\n' "$sh_sv" | awk -F. '{ printf "%d", ($1 * 1000000) + ($2 * 1000) + $3 }')
+  if [ "${sh_svn:-0}" -lt "$DB_SQLITE_MIN" ]; then
+    sh_st=absent; sh_a=0
+    if [ -f "$DB_PATH" ]; then
+      sh_st=present
+      sh_a=$(sq "$DB_PATH" "SELECT count(*) FROM units WHERE status = 'ACTIVE';" 2>/dev/null) || sh_a=0
+      case "$sh_a" in ""|*[!0-9]*) sh_a=0 ;; esac
+    fi
+    printf '{"driver":"fts5","health":"error","detail":"sqlite3 %s is older than the 3.44 the driver needs","store":"%s","active_units":%s}\n' "${sh_sv:-unknown}" "$sh_st" "$sh_a"
+    exit 0
+  fi
   if [ ! -f "$DB_PATH" ]; then
     printf '{"driver":"fts5","health":"degraded","detail":"database not created yet (will be initialized on bootstrap)","store":"absent","active_units":0}\n'
     exit 0

@@ -443,6 +443,20 @@ $CTX session task update sem-unit task-1 --objective="Updated objective 1" >/dev
 a_eq "$?" "0" "semantic: task update rc0"
 out=$($CTX session task show sem-unit task-1)
 a_match "$out" "OBJECTIVE: \"Updated objective 1\"" "semantic: task update verified"
+# an update carrying no field refuses (lanes/si-f4-compare/report A607: a raw block piped on
+# stdin answered "task updated" rc 0 and changed nothing; the verb reads no stdin, D1, D26)
+nf_msg='task update: error: no field to update (give --objective, --desc, --criteria, --details, or --refs) (ERR_INVALID_ARGUMENT)'
+out=$(printf '@task task-1\n  OBJECTIVE: "Raw block update"\n' | $CTX session task update sem-unit task-1 2>&1); rc=$?
+a_eq "$rc" "1" "F5-NOFIELD: task update with a raw block on stdin and no field flag refuses rc1"
+a_eq "$out" "$nf_msg" "F5-NOFIELD: task update without a field prints the one fixed refusal line"
+out=$($CTX session task update sem-unit task-1 --json 2>&1 </dev/null); rc=$?
+a_eq "$rc" "1" "F5-NOFIELD: task update with --json alone refuses rc1"
+out=$($CTX session task update sem-unit task-1 --desc="" 2>&1 </dev/null); rc=$?
+a_eq "$rc:$out" "1:$nf_msg" "F5-NOFIELD: task update whose only flag is empty carries no field and refuses rc1"
+out=$($CTX session task show sem-unit task-1)
+a_match "$out" "OBJECTIVE: \"Updated objective 1\"" "F5-NOFIELD: the refused task updates changed nothing"
+out=$($CTX session task update --help 2>&1 </dev/null)
+a_match "$out" "no field refuses" "F5-NOFIELD: task help names the no-field refusal and the unread stdin"
 
 # 4. task start (atomic status and state pointer update)
 $CTX session task start sem-unit task-1 --pointer="work on task-1" >/dev/null 2>&1
@@ -521,6 +535,18 @@ $CTX session finding update sem-unit ARCH_DECISION --summary="Updated architectu
 a_eq "$?" "0" "semantic: finding update rc0"
 out=$($CTX session finding show sem-unit ARCH_DECISION)
 a_match "$out" "Updated architecture decision" "semantic: finding update persists"
+# an update carrying no field refuses (lanes/si-f4-compare/report A610: a raw block piped on
+# stdin answered "finding updated" rc 0 and changed nothing)
+nf_msg='finding update: error: no field to update (give --summary or --ref) (ERR_INVALID_ARGUMENT)'
+out=$(printf '@finding ARCH_DECISION\n  SUMMARY ::\n    Raw finding update.\n' | $CTX session finding update sem-unit ARCH_DECISION 2>&1); rc=$?
+a_eq "$rc" "1" "F5-NOFIELD: finding update with a raw block on stdin and no field flag refuses rc1"
+a_eq "$out" "$nf_msg" "F5-NOFIELD: finding update without a field prints the one fixed refusal line"
+out=$($CTX session finding update sem-unit ARCH_DECISION --summary="" 2>&1 </dev/null); rc=$?
+a_eq "$rc:$out" "1:$nf_msg" "F5-NOFIELD: finding update whose only flag is empty carries no field and refuses rc1"
+out=$($CTX session finding show sem-unit ARCH_DECISION)
+a_match "$out" "Updated architecture decision" "F5-NOFIELD: the refused finding updates changed nothing"
+out=$($CTX session finding update --help 2>&1 </dev/null)
+a_match "$out" "no field refuses" "F5-NOFIELD: finding help names the no-field refusal and the unread stdin"
 
 $CTX session finding supersede sem-unit ARCH_DECISION ARCH_V2 --summary="Architecture decision version 2" >/dev/null 2>&1
 a_eq "$?" "0" "semantic: finding supersede rc0"
@@ -837,6 +863,24 @@ a_eq "$?" "1" "R2: lane record with a carriage return refuses rc1"
 # flip retired (D1): the reopen of the IN_PROGRESS task is task reopen
 $CTX session task reopen y-unit y-bs >/dev/null 2>&1
 a_eq "$?" "0" "R2: the typed verbs still write the unit after the refusals"
+
+# a block value whose trailing lines hold only blanks or tabs reads back as the parse rules
+# read the written text (lanes/si-f5-fts5-review/report F2): after the item's last block those
+# lines fall outside it and the item keeps the bytes as its verbatim; a section added later
+# lands after the content end, so they stay outside every block; the same on every driver
+y_ws=$(printf 'kept line\n   \n\t')
+$CTX session task add y-unit y-ws --objective="trailing blank lines" --desc="$y_ws" >/dev/null 2>&1
+out=$($CTX session task show y-unit y-ws --json 2>&1 </dev/null)
+a_match "$out" '"description":"kept line",' "F5-WS: a last block's trailing whitespace-only lines fall outside it"
+a_match "$out" '"verbatim":"@task y-ws' "F5-WS: the task keeps the written bytes as its verbatim"
+$CTX session task update y-unit y-ws --details="later section" >/dev/null 2>&1 </dev/null
+out=$($CTX session task show y-unit y-ws --json 2>&1 </dev/null)
+a_match "$out" '"description":"kept line","criteria":null,"details":"later section"' "F5-WS: a section added later lands at the content end and leaves them outside every block"
+a_match "$out" 'later section\\n       \\n    \\t\\n"' "F5-WS: the whitespace lines stay the verbatim's last bytes after the added section"
+$CTX session finding add y-unit Y_WS --summary="$y_ws" >/dev/null 2>&1 </dev/null
+out=$($CTX session finding show y-unit Y_WS --json 2>&1 </dev/null)
+a_match "$out" '"summary":"kept line",' "F5-WS: a summary's trailing whitespace-only lines fall outside it"
+a_match "$out" '"verbatim":"@finding Y_WS' "F5-WS: the finding keeps the written bytes as its verbatim"
 
 echo "== B backslash payloads on every awk (backlog awk-escape-portability) =="
 # a backslash, a doubled backslash, a literal backslash n, and a trailing backslash travel

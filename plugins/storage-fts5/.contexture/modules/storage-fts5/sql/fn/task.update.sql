@@ -98,7 +98,13 @@ INSERT INTO item_refs (unit, lane, artifact, pos, rpos, ref)
 INSERT INTO temp.stl (tbl, pos, cand) SELECT 'task', k.pos, v.span FROM temp.tk k, v_task_span v
   WHERE k.verbatim IS NULL AND v.unit = (SELECT unit FROM temp.a) AND v.pos = k.pos;
 INSERT INTO temp.stl (tbl, pos, cand) SELECT 'task', k.pos, e.t FROM temp.tk k, temp.edt e WHERE k.verbatim IS NOT NULL;
-UPDATE tasks SET description = rtrim(description, char(10)), criteria = rtrim(criteria, char(10)), details = rtrim(details, char(10))
+-- the block fields read back from the text the task now stores (lib/reblock.sql), a block the
+-- text lacks reading null: a canonical task's span or a verbatim task's edited text alike
+DELETE FROM temp.edt;
+INSERT INTO temp.edt SELECT cand FROM temp.stl WHERE tbl = 'task' AND pos = (SELECT pos FROM temp.tk);
+.read lib/reblock.sql
+UPDATE tasks SET description = (SELECT v FROM temp.rb WHERE lab = 'DESCRIPTION'), criteria = (SELECT v FROM temp.rb WHERE lab = 'ACCEPTANCE CRITERIA'),
+    details = (SELECT v FROM temp.rb WHERE lab = 'IMPLEMENTATION DETAILS')
   WHERE unit = (SELECT unit FROM temp.a) AND pos = (SELECT pos FROM temp.tk);
 .read lib/settle.sql
 INSERT INTO temp.tart SELECT unit, 'backlog' FROM temp.a;

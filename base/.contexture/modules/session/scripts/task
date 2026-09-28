@@ -11,6 +11,7 @@
 # help:   list <unit> [--status=todo|progress|done|all] [--json]
 # help:   show <unit> <slug> [--json]
 # help: --refs takes the references blank or comma separated (brackets optional); an update with --refs replaces the list, --refs="" clears it
+# help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --objective, --desc, --criteria, or --details carrying no field
 # help: the storage driver holds the record rules: a CLOSED unit refuses every write; start moves only a TODO task, complete a TODO or IN_PROGRESS task, reopen an IN_PROGRESS or DONE task; drop refuses an IN_PROGRESS task next_action names; start and the pointer it writes must name every IN_PROGRESS task; complete and drop write their receipt entry (backlog/<slug>: DONE (<evidence>), DROPPED (<reason>)) in the same write
 # help: add, start, complete, reopen, and drop fire the task-landing hooks (CTX_ACT add, start, complete, reopen, or drop; CTX_SLUGS the task)
 # help: a malformed slug (letters, digits, underscore, dash; starts alphanumeric) refuses rc 1 before any driver call
@@ -22,6 +23,7 @@ help_table() {
   printf 'subcommands:\n'
   printf '  add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
   printf '  update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
+  printf '  update reads no stdin; an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT)\n'
   printf '  start <unit> <slug> [--pointer="..."]\n'
   printf '  complete <unit> <slug> --evidence="..."\n'
   printf '  reopen <unit> <slug>\n'
@@ -145,11 +147,18 @@ case "$subcmd" in
       if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task added: %s (TODO)\n' "$slug"; fi
       landing add
     else
-      [ "$has_objective" -eq 1 ] && [ -n "$objective" ] && vb_kv objective "$objective"
-      [ -n "$desc" ] && vb_kv desc "$desc"
-      [ -n "$criteria" ] && vb_kv criteria "$criteria"
-      [ -n "$details" ] && vb_kv details "$details"
-      [ "$has_refs" -eq 1 ] && refs_payload "$refs"
+      # an update carrying no field refuses before any call (D26): the flags are its only
+      # input (stdin is not read, D1), and an empty flag value carries no field
+      nfield=0
+      [ "$has_objective" -eq 1 ] && [ -n "$objective" ] && { vb_kv objective "$objective"; nfield=1; }
+      [ -n "$desc" ] && { vb_kv desc "$desc"; nfield=1; }
+      [ -n "$criteria" ] && { vb_kv criteria "$criteria"; nfield=1; }
+      [ -n "$details" ] && { vb_kv details "$details"; nfield=1; }
+      [ "$has_refs" -eq 1 ] && { refs_payload "$refs"; nfield=1; }
+      if [ "$nfield" -eq 0 ]; then
+        printf 'task update: error: no field to update (give --objective, --desc, --criteria, --details, or --refs) (ERR_INVALID_ARGUMENT)\n' >&2
+        exit 1
+      fi
       vb_call task.update "$unit" "$slug"
       vb_ok
       if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task updated: %s\n' "$slug"; fi
