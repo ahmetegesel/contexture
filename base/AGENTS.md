@@ -1,4 +1,4 @@
-# contexture v0.54.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.55.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
