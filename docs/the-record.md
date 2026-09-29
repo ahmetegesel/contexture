@@ -117,7 +117,7 @@ Fields on journal entries, in the canonical order every read prints and the reco
 - `GROUP:` topic thread identifier, stable within the unit.
 - `RHYTHM: <name> <N> <GATE>` records process milestones.
 - `THREAD: <what it awaits>` names external acts awaiting completion, or `none` for receipts.
-- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several. A reference takes one of two shapes, `<target>#<symbol>` or a whole target path (`lanes/<lane>/recipe`), one token without blanks or double quotes; the verbs refuse any other value on a new write, naming both shapes, and a legacy value reads as stored.
+- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several. A reference takes one of two shapes, `<target>#<symbol>` or a whole target path holding a `/` (`lanes/<lane>/recipe`; a root-level file as `./README.md`, or `README.md#<section>`), one token without blanks or double quotes; the verbs refuse any other value on a new write, naming both shapes, and a legacy value reads as stored.
 - `CLOSES:` or `SUPERSEDES:` closes an earlier entry by reference with a verdict word and reason. One line may name several targets (`CLOSES: <slug> <slug> (folded: reason)`) and an entry may carry several closer lines; every date-slug before the first spaced paren or spaced hyphen is a target.
 - `KNOWLEDGE: true` flags entries for durable knowledge harvesting.
 

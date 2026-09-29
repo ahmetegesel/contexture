@@ -691,6 +691,14 @@ out=$($CTX lane show x-unit x-lane journal 2>&1)
 a_match "$out" "^@entry $TODAY-x-l2\$" "F5: lane show journal keeps the entry header"
 a_match "$out" "^  THREAD: the dispatcher\$" "F5: lane show journal keeps the THREAD line"
 a_eq "$(printf '%s\n' "$out" | grep -c "^@entry $TODAY-x-l1\$")" "1" "F5: the refused repeat never landed a second block"
+# E5-T (the review lane si-e5, B9 on lane record): a THREAD that is empty, true, or false
+# refuses rc1 as record's does, nothing landed
+for e5_t in "" true false; do
+  err=$($CTX lane record x-unit x-lane --what="E5-T bad thread" --thread="$e5_t" 2>&1 >/dev/null); rc=$?
+  a_eq "$rc" "1" "E5-T: lane record --thread='$e5_t' refuses rc1"
+  a_match "$err" "THREAD malformed: \[$e5_t\]" "E5-T: lane record --thread='$e5_t' names the THREAD shape"
+done
+a_eq "$($CTX lane show x-unit x-lane journal 2>/dev/null | grep -c 'E5-T bad thread')" "0" "E5-T: no refused lane record landed"
 # F6: a report written by --body reads back, and the stdin echo carries no JSON tail
 $CTX lane report x-unit x-lane --body="report by the body flag" >/dev/null 2>&1
 out=$($CTX lane report x-unit x-lane < /dev/null 2>&1)
@@ -866,7 +874,7 @@ printf 'the e3 recipe\n' | $CTX lane create e3-unit e3-lane >/dev/null 2>&1
 # item 6 (Q6 by the human): a REF or REFS element takes one of two pointer shapes,
 # <target>#<symbol> (text on both sides of a #) or a whole target path (holding a /), one
 # token without blanks or double quotes; anything else refuses rc1 naming both shapes
-e3_shapes="a reference is <target>#<symbol> or a whole target path, one token without blanks or double quotes (ERR_INVALID_ARGUMENT)"
+e3_shapes="a reference is <target>#<symbol> or a whole target path holding a / (a root-level file as ./<file>), one token without blanks or double quotes (ERR_INVALID_ARGUMENT)"
 e3_ref_refused() { # <label> <command...>: rc1, both shapes named, nothing on stdout
   e3_l=$1; shift
   e3_o=$("$@" 2>e3.err); e3_rc=$?
@@ -877,6 +885,11 @@ e3_ref_refused() { # <label> <command...>: rc1, both shapes named, nothing on st
 for e3_bad in "free text reference" "bareword" "journal#" "#slug" 'journal#"quoted"' "a b#c"; do
   e3_ref_refused "record --ref='$e3_bad'" $CTX session record e3-unit --what="ref probe" --ref="$e3_bad"
 done
+# a root-level file name (the human's A17 decision: it refuses and reads ./README.md or
+# README.md#<section>); the refusal names that spelling (the review lane si-e5, E5-R)
+e3_ref_refused "record --ref=README.md" $CTX session record e3-unit --what="ref probe" --ref="README.md"
+$CTX session record e3-unit --what="root file ok" --slug="$TODAY-e3-root" --ref="./README.md" --ref="README.md#top" >/dev/null 2>&1
+a_eq "$?" "0" "E5-R: record takes ./README.md and README.md#top"
 e3_ref_refused "finding add --ref=bareword" $CTX session finding add e3-unit E3_TWO --summary="two" --ref="bareword"
 e3_ref_refused "finding update --ref=bareword" $CTX session finding update e3-unit E3_ONE --ref="bareword"
 e3_ref_refused "finding supersede --ref=bareword" $CTX session finding supersede e3-unit E3_ONE E3_THREE --summary="three" --ref="bareword"
@@ -1364,6 +1377,11 @@ z_plant() {
 }
 z_plant z-bad task.add
 z_plant z-good none
+# a verdict stands while strictly newer than the configuration too; the sandbox's config was
+# written moments ago, and a shell whose test -nt reads whole seconds (busybox sh) would see
+# a verdict of the same second as no newer and verify again: the config goes back in time as
+# the plants do (the review lane si-e5, F4)
+[ -f .contexture/config ] && touch -t 202001010000 .contexture/config
 out=$(CTX_STORAGE_DRIVER=z-bad $CTX session bootstrap z-unit "handshake unit" 2>&1 </dev/null); rc=$?
 a_eq "$rc" "2" "R5: bootstrap on a driver lacking task.add refuses rc2"
 a_match "$out" "lacks contract 2 function(s): task.add (ERR_DRIVER_PROTOCOL)" "R5: the refusal names the missing function"

@@ -4,14 +4,26 @@
 # a write stores a new or touched item as these lines, a read prints them, and search reads
 # them, so one text decides the layout on every path. No item keeps its stored bytes.
 #
-# The awk runs in the C locale: every string is bytes. A backslash is doubled by
-# concatenation, never by a gsub replacement (busybox awk and gawk --posix yield one
-# backslash from a replacement of four). NULLV is the sentinel of an absent value.
+# The awk runs in the C locale: every string is bytes. An escape is written by split and
+# concatenation (jjoin), never by a gsub replacement: awk builds read a backslash inside a
+# replacement differently (busybox awk and gawk --posix yield one backslash from four, and
+# Debian's busybox awk drops the backslash of a replacement backslash quote or backslash n).
+# NULLV is the sentinel of an absent value.
 
 BEGIN {
   NULLV = "\001null\001"
   CTRL = ""
   for (c_i = 1; c_i < 32; c_i++) CTRL = CTRL sprintf("%c", c_i)
+}
+
+# jjoin(s, sep, lit): s with every match of the regex sep written as the literal lit; a one
+# byte sep is spelled as a bracket (a one-character string separator also splits at a
+# newline under BWK awk), a newline as "\n" itself
+function jjoin(s, sep, lit,   n, parts, i, out) {
+  n = split(s, parts, sep)
+  out = (n ? parts[1] : "")
+  for (i = 2; i <= n; i++) out = out lit parts[i]
+  return out
 }
 
 # jesc(s): the JSON string body of s in the JSON.stringify form: \" and \\, the short
@@ -23,11 +35,11 @@ function jesc(s,   n, parts, i, out, o, c, p) {
     out = parts[1]
     for (i = 2; i <= n; i++) out = out "\\" "\\" parts[i]
   } else out = s
-  if (index(out, "\"") > 0) gsub(/"/, "\\\"", out)
+  if (index(out, "\"") > 0) out = jjoin(out, "[\"]", "\\" "\"")
   if (out ~ /[\001-\037]/) {
-    gsub(/\n/, "\\n", out)
-    gsub(/\t/, "\\t", out)
-    gsub(/\r/, "\\r", out)
+    if (index(out, "\n") > 0) out = jjoin(out, "\n", "\\" "n")
+    if (index(out, "\t") > 0) out = jjoin(out, "[\t]", "\\" "t")
+    if (index(out, "\r") > 0) out = jjoin(out, "[\r]", "\\" "r")
     if (out ~ /[\001-\037]/) {
       o = ""
       n = length(out)

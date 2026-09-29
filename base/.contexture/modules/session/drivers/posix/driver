@@ -58,18 +58,21 @@ get_lock_dir() {
 }
 
 escape_json() {
-  # the backslash is doubled by concatenation (bs_double), never by a gsub replacement:
-  # a replacement of four backslashes yields one under busybox awk and gawk --posix
+  # every escape is written by split and concatenation (bs_double, sjoin), never by a gsub
+  # replacement: awk builds read a backslash inside a replacement differently (busybox awk
+  # and gawk --posix yield one backslash from four, Debian's busybox awk drops the backslash
+  # before a quote, r, or t)
   printf '%s' "$1" | awk '
     function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
+    function sjoin(s, sep, lit,    n, p, i, o) { n = split(s, p, sep); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o lit p[i]; return o }
     BEGIN { ORS="" }
     {
       if (NR > 1) printf "\\n";
-      $0 = bs_double($0);
-      gsub(/"/, "\\\"");
-      gsub(/\r/, "\\r");
-      gsub(/\t/, "\\t");
-      printf "%s", $0;
+      s = bs_double($0);
+      s = sjoin(s, "[\"]", "\\" "\"");
+      s = sjoin(s, "[\r]", "\\" "r");
+      s = sjoin(s, "[\t]", "\\" "t");
+      printf "%s", s;
     }
   '
 }

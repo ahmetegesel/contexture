@@ -81,7 +81,8 @@ function esc(s,   n, P, i, o) {
   n = split(s, P, /\\/)
   o = P[1]
   for (i = 2; i <= n; i++) o = o "\\" "\\" P[i]
-  gsub(/\n/, "\\n", o); gsub(/\t/, "\\t", o)
+  n = split(o, P, "\n"); o = (n ? P[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "n" P[i]
+  n = split(o, P, /\t/); o = (n ? P[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "t" P[i]
   return o
 }
 

@@ -105,7 +105,7 @@ function split_sources(str, arr,    len, i, ch, depth, current, count) {
 
 function glob_to_regex(g,    rgx, brace_part) {
     rgx = g
-    gsub(/\./, "\\.", rgx)
+    gsub(/\./, "[.]", rgx)
     while (match(rgx, /\{[^{}]*\}/)) {
         brace_part = substr(rgx, RSTART + 1, RLENGTH - 2)
         gsub(/,/, "|", brace_part)

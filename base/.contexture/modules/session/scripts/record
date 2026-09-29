@@ -7,7 +7,7 @@
 # help:   --group=...          topic group token
 # help:   --thread=...         what the unit awaits (default: none)
 # help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of .contexture/rhythms/<name>.md
-# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path, one token without blanks or double quotes; repeatable, one REF line each
+# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / (a root-level file as ./<file>), one token without blanks or double quotes; repeatable, one REF line each
 # help:   --closes="<slug> (<verdict>: <reason>)"   closes journal entry targets (one or more slugs before the parenthesis); the verdict done, superseded, dropped, or folded; repeatable, one CLOSES line each
 # help:   --supersedes="<slug> (<verdict>: <reason>)"   supersedes journal entry targets, the same form; repeatable, one SUPERSEDES line each
 # help:   --knowledge          flag for harvest

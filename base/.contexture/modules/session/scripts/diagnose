@@ -95,7 +95,8 @@ jstr() {
     s = ENVIRON["JS_V"]
     n = split(s, P, /\\/); o = (n ? P[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" P[i]
     n = split(o, Q, /"/); o = (n ? Q[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\"" Q[i]
-    gsub(/\t/, "\\t", o); gsub(/\r/, "\\r", o)
+    n = split(o, T, /\t/); o = (n ? T[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "t" T[i]
+    n = split(o, T, /\r/); o = (n ? T[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "r" T[i]
     n = split(o, L, "\n"); r = (n ? L[1] : ""); for (i = 2; i <= n; i++) r = r "\\" "n" L[i]
     printf "\"%s\"", r
   }'

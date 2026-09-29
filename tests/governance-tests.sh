@@ -1,6 +1,7 @@
 #!/bin/sh
 # governance-tests.sh: the governance suite over the tracked upstream tree.
-# Owns three families of checks:
+# Owns these families of checks (G4, the ship-gate lines, and G5, the awk replacement
+# census, below the three):
 #   1. the main-surface forbid grep: no invocable raw tool path (session.sh,
 #      compact.sh, session-*.awk, .contexture/scripts/) on any main surface
 #      (base AGENTS, base ONBOARDING, base templates, the overlays, the top
@@ -216,6 +217,30 @@ if grep -q "ship breath" "$ROOT/plugins/lane-isolation/README.md" 2>/dev/null; t
 else
   ok "gate: lane-isolation carries no ship-breath clause (consistent)"
 fi
+
+echo "== G5 awk replacement strings portable to every awk (the review lane si-e5, F3) =="
+# a sub or gsub replacement string carrying a backslash before any character but a backslash
+# or & reads differently across awk builds (Debian's busybox awk drops the backslash: a
+# replacement "\\t" writes a bare t, "\\\"" a bare quote), so the shipped awk and the suites'
+# own helpers escape by split and concatenation; tests/lib/awkrepl.awk lists every such
+# replacement in the awk and sh files of base, the plugins' module copies, and tests (this
+# file aside: its null check below plants the unportable forms on purpose)
+g5_files="$SANDBOX/g5.files"
+find "$ROOT/base/.contexture" "$ROOT"/plugins/*/.contexture "$ROOT/tests" -type f \
+  ! -name '*.ts' ! -name '*.js' ! -name '*.json' ! -name '*.md' ! -name '*.py' ! -name '*.sql' \
+  ! -path '*/node_modules/*' ! -path '*/fixtures/*' ! -path '*/.contexture/tmp/*' ! -path '*/.contexture/sessions/*' \
+  ! -path "$SCRIPT_DIR/governance-tests.sh" 2>/dev/null \
+  | LC_ALL=C sort > "$g5_files"
+g5_hits=$(while IFS= read -r f; do grep -q 'sub(' "$f" 2>/dev/null && printf '%s\n' "$f"; done < "$g5_files" | while IFS= read -r f; do awk -f "$SCRIPT_DIR/lib/awkrepl.awk" "$f" < /dev/null; done)
+if [ -z "$g5_hits" ]; then
+  ok "awk: no sub or gsub replacement carries a backslash before another character ($(grep -c '' "$g5_files") files read)"
+else
+  bad "awk: sub or gsub replacements carry a backslash before another character: $(printf '%s\n' "$g5_hits" | sed "s|^$ROOT/||" | tr '\n' ' ')"
+fi
+# the instrument's null check: a planted replacement of each unportable form reads, a portable one does not
+printf '%s\n' '  gsub(/"/, "\\\"", s)' '  gsub(/\t/, "\\t", s); x = 1' '  sub(/a/, "\\n")' '  gsub(/\\/, "\\\\", s)' '  gsub(/b/, "\\&", s)' '  gsub(/c/, "\034", s)' '  gsub(/\./, "[.]", s)' > "$SANDBOX/g5-plant.awk"
+g5_plant=$(awk -f "$SCRIPT_DIR/lib/awkrepl.awk" "$SANDBOX/g5-plant.awk" < /dev/null | sed 's/^[^:]*:\([0-9]*\):.*/\1/' | tr '\n' ' ')
+a_eq "$g5_plant" "1 2 3 " "awk: the replacement census reads the three planted unportable forms and none of the four portable ones"
 
 echo "== summary =="
 echo "governance-tests: pass=$pass fail=$fail"

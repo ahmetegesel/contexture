@@ -187,9 +187,10 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
    An awk verb starts `#!/usr/bin/awk -f` instead and writes its output on stdout. Keep that absolute shebang: Linux hands `env` the words `awk -f` as one argument, so `#!/usr/bin/env awk -f` fails there, while every supported system carries `/usr/bin/awk`.
 
-   Write awk to the common subset of the supported awks, BWK awk (macOS), mawk (the Debian default), gawk, and busybox awk (Alpine); the suite runs green under each. Two rules the shipped scripts follow:
+   Write awk to the common subset of the supported awks, BWK awk (macOS), mawk (the Debian default), gawk, and busybox awk (Alpine's build and Debian's); the suite runs green under each. Three rules the shipped scripts follow:
 
    - Double a backslash by concatenation, never by a `gsub` replacement: `gsub(/\\/, "\\\\")` yields two backslashes under BWK awk, mawk, and gawk but one under busybox awk and `gawk --posix`, which breaks every escape that follows. The shipped encoders call a `bs_double` helper that splits on the backslash and rejoins with `"\\" "\\"`.
+   - Write every escape by splitting and rejoining, never by a `sub` or `gsub` replacement carrying a backslash before another character: `gsub(/"/, "\\\"")` or `gsub(/\t/, "\\t")` writes the backslash under BWK awk, mawk, gawk, and Alpine's busybox, but Debian's busybox awk drops it and writes a bare quote or `t`. The shipped encoders split on the byte and rejoin with the literal (`n = split(s, P, /\t/); o = P[1]; for (i = 2; i <= n; i++) o = o "\\" "t" P[i]`), the separator a regex (`/\t/`, or a bracketed string such as `"[\t]"` passed to a helper), never a one-character string, since BWK awk splits a value at its newlines too under a one-character string separator; the governance suite's G5 census (`tests/lib/awkrepl.awk`) keeps the form out of base, the plugin module copies, and the suites.
    - Spell a tab inside a dynamic regex string as `"\t"` (the string then holds a real tab), never `"\\t"`: busybox awk reads the escaped form inside a bracket expression as a backslash and a `t`.
 
 3. `chmod +x scripts/<verb>`.

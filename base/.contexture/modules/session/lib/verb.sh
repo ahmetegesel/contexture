@@ -101,8 +101,11 @@ vb_kv() {
     n = split(s, P, /\\/)
     o = (n ? P[1] : "")
     for (i = 2; i <= n; i++) o = o "\\" "\\" P[i]
-    gsub(/\t/, "\\t", o)
-    gsub(/\r/, "\\r", o)
+    # a tab and a carriage return are written by split and concatenation too, never by a
+    # gsub replacement (the Debian build of busybox awk drops the backslash of such a
+    # replacement before a t or an r)
+    n = split(o, L, /\t/); o = (n ? L[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "t" L[i]
+    n = split(o, L, /\r/); o = (n ? L[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "r" L[i]
     n = split(o, L, "\n")
     r = (n ? L[1] : "")
     for (i = 2; i <= n; i++) r = r "\\" "n" L[i]
@@ -312,13 +315,14 @@ vb_lane() {
 
 # vb_ref_ok <label> <ref>: a REF or REFS element names its target in one of the two
 # pointer shapes of @record references (end review item 6, Q6 by the human): <target>#<symbol>
-# (a # with text on both sides) or a whole target path (holding a /); one token, no blank,
-# no double quote. New writes only: a legacy value already stored reads as it stands.
+# (a # with text on both sides) or a whole target path (holding a /, so a root-level file
+# reads ./<file> or <file>#<section>: the human's A17 decision); one token, no blank, no
+# double quote. New writes only: a legacy value already stored reads as it stands.
 vb_ref_ok() {
   case "$2" in
     ""|*[' 	"']*) ;;
     ?*'#'?*|*/*) return 0 ;;
   esac
-  printf "%s: error: malformed ref '%s': a reference is <target>#<symbol> or a whole target path, one token without blanks or double quotes (ERR_INVALID_ARGUMENT)\n" "$1" "$2" >&2
+  printf "%s: error: malformed ref '%s': a reference is <target>#<symbol> or a whole target path holding a / (a root-level file as ./<file>), one token without blanks or double quotes (ERR_INVALID_ARGUMENT)\n" "$1" "$2" >&2
   exit 1
 }

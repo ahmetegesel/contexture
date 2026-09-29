@@ -283,7 +283,8 @@ esc() {
   printf '%sx' "$1" | awk '
     function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
     BEGIN { ORS = "" }
-    { $0 = bs_double($0); gsub(/\t/, "\\t"); gsub(/\r/, "\\r"); out = out (NR > 1 ? "\\n" : "") $0 }
+    function sjoin(s, sep, lit,    n, p, i, o) { n = split(s, p, sep); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o lit p[i]; return o }
+    { s = sjoin(sjoin(bs_double($0), "[\t]", "\\" "t"), "[\r]", "\\" "r"); out = out (NR > 1 ? "\\n" : "") s }
     END { sub(/x$/, "", out); print out }'
 }
 kv() { printf '%s=%s\n' "$1" "$(esc "$2")" >> "$P"; }
