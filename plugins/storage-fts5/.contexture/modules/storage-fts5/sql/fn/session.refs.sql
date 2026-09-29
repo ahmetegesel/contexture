@@ -8,9 +8,6 @@ INSERT INTO temp.err SELECT 40 + CAST(substr(k, 2) AS INTEGER) * 0.001, 1, 'ERR_
 .read lib/stop.sql
 CREATE TEMP TABLE rfs AS SELECT CAST(substr(k, 2) AS INTEGER) AS i, v FROM temp.arg WHERE k GLOB 'a[0-9]*';
 UPDATE units SET ref_sessions = (SELECT json_group_array(v ORDER BY i) FROM temp.rfs) WHERE unit = (SELECT unit FROM temp.a);
-INSERT INTO temp.sts SELECT 'ref_sessions', 'ref_sessions: [' || coalesce((SELECT group_concat(v, ', ' ORDER BY i) FROM temp.rfs), '') || ']';
-.read lib/stedit.sql
-.read lib/settle.sql
 INSERT INTO temp.tart SELECT unit, 'state' FROM temp.a;
 .read lib/touch.sql
 SELECT json_object('unit', u.unit, 'ref_sessions', json((SELECT json_group_array(e.value ORDER BY e.key) FROM json_each(u.ref_sessions) e)))

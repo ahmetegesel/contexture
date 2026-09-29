@@ -1,1 +1,1 @@
-{"unit":"legacy-u","finding":{"name":"legacy-lowercase-name","ordinal":2,"supersedes":null,"refs":[],"summary":"A canonical finding whose legacy name is lowercase with hyphens.","superseded_by":null,"active":true,"next":"finding","verbatim":null}}
+{"unit":"legacy-u","finding":{"name":"legacy-lowercase-name","ordinal":2,"supersedes":null,"refs":[],"summary":"A canonical finding whose legacy name is lowercase with hyphens.","extra_fields":[],"head_text":null,"extra_lines":[],"superseded_by":null,"active":true,"next":"finding"}}

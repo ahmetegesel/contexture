@@ -1,1 +1,1 @@
-{"unit":"verb-u","slug":"2026-09-27-verb-two","occurrence":1,"closed":true,"closers":[{"by":"2026-09-27-verb-four","by_anchor":"A2","closer":{"kind":"CLOSES","targets":["2026-09-27-verb-two","2026-09-27-verb-three"],"verdict":"folded","reason":"read together","verbatim":null}}]}
+{"unit":"verb-u","slug":"2026-09-27-verb-two","occurrence":1,"closed":true,"closers":[{"by":"2026-09-27-verb-four","by_anchor":"A2","closer":{"kind":"CLOSES","targets":["2026-09-27-verb-two","2026-09-27-verb-three"],"verdict":"folded","reason":"read together","extra_text":null}}]}

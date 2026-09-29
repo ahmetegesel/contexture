@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: every ACTIVE unit at a glance
 # usage: ctx session active
-# help: no arguments: every ACTIVE unit (slug, current_anchor, next_action, objective verbatim) then the closed count; a store not created yet prints "no sessions yet" rc=0; an argument refuses rc=1
+# help: no arguments: every ACTIVE unit (slug, then the current_anchor, next_action, and objective lines of its canonical state) then the closed count; a store not created yet prints "no sessions yet" rc=0; an argument refuses rc=1
 # help: the storage driver lists the units with their states (session.list, bytewise by name); a state whose status is neither exact ACTIVE nor CLOSED warns on stderr and counts as closed
 # help: exit codes: 0 every active unit printed (or "no sessions yet"); 1 an argument was passed
 # help: example: ctx session active

@@ -14,8 +14,8 @@ INSERT INTO temp.err SELECT 44, 1, 'ERR_INVALID_ARGUMENT', 'reason takes one lin
 INSERT INTO temp.err SELECT 45, 1, 'ERR_INVALID_ARGUMENT', 'reason holds a carriage return' FROM temp.pay WHERE k = 'reason' AND instr(v, char(13)) > 0;
 .read lib/anchor.sql
 .read lib/stop.sql
-INSERT INTO temp.idp SELECT 'task', pos FROM temp.tk;
-.read lib/idrop.sql
+DELETE FROM item_refs WHERE unit = (SELECT unit FROM temp.a) AND lane = '' AND artifact = 'backlog' AND pos = (SELECT pos FROM temp.tk);
+DELETE FROM tasks WHERE unit = (SELECT unit FROM temp.a) AND pos = (SELECT pos FROM temp.tk);
 CREATE TEMP TABLE rcp AS SELECT (SELECT v FROM temp.pay WHERE k = 'date') || '-' || a.a1 || '-dropped' AS base,
   'backlog/' || a.a1 || ': DROPPED (' || coalesce((SELECT v FROM temp.pay WHERE k = 'reason'), 'task dropped') || ')' AS what FROM temp.a a;
 .read lib/receipt.sql

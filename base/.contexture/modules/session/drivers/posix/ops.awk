@@ -1,7 +1,8 @@
 # ops.awk: the record functions of the posix driver (contract 2, docs/the-engine.md, The
 # functions and The record rules), run after canon.awk and model.awk. The reads answer from
-# the parsed model; the writes apply the append rule and the edit rules to the artifact
-# lines, parse the result again, stage every changed artifact under PX_STAGE with one
+# the parsed model; the writes add items by the append rule and rewrite a touched item
+# canonical in place (every other line of the artifact keeps its bytes), parse the result
+# again, stage every changed artifact under PX_STAGE with one
 # manifest line "<staged name><TAB><path in the unit folder>", and write the answer to
 # PX_OUT, which the driver prints only after every staged file has landed. A refusal
 # writes one line to PX_ERR and exits 1 or 2 with nothing staged.
@@ -92,28 +93,13 @@ function gen_slug(k, s) { while (held(k, s)) s = s "-1"; return s }
 function want_date(d) { if (d !~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) die(1, "ERR_INVALID_ARGUMENT", "date takes YYYY-MM-DD") }
 function want_epoch(e) { if (e !~ /^[0-9]+$/) die(1, "ERR_INVALID_ARGUMENT", "epoch takes digits") }
 
-# ---- the state edits ----
-# st_group_end(u, key): the last line of the key's line group (its continuation lines)
-function st_group_end(u, key,   k, i) {
+# ---- the state write ----
+# st_write(u): the state, a touched item, rewritten canonical from its typed fields (the
+# caller set them in ST first), its extra fields and extra lines kept
+function st_write(u,   k) {
   k = u "|state"
-  i = SLINE[u, key]
-  while (i + 1 <= NL[k] && L[k, i + 1] ~ /^[ \t]/) i++
-  return i
-}
-
-function st_set(u, key, line,   k, e, a) {
-  k = u "|state"
-  if ((u, key) in SLINE) {
-    e = st_group_end(u, key)
-    ed_splice(k, SLINE[u, key], e, line "\n")
-  } else if (key == "ref_sessions" && ((u, "repos") in SLINE)) {
-    a = st_group_end(u, "repos")
-    ed_splice(k, a + 1, a, line "\n")
-  } else {
-    ed_splice(k, NL[k] + 1, NL[k], line "\n")
-    EOFNL[k] = 1
-  }
-  for (a in SLINE) if (index(a, u SUBSEP) == 1) delete SLINE[a]
+  ed_splice(k, 1, NL[k], state_text(u))
+  EOFNL[k] = 1
   parse_state(u)
 }
 
@@ -130,47 +116,27 @@ function ptr_missing(p, extra,   kb, i, s, m) {
   return m
 }
 
-# ---- the item edits ----
-function item_scan(k, i) { scan(k, IH[k, i], content_end(k, IH[k, i], IE[k, i])) }
-function field_of(lab, block,   j) { for (j = 1; j <= NFD; j++) if (FL[j] == lab && FB[j] == block) return j; return 0 }
-
+# ---- the item writes ----
 function reparse(k,   key) {
   for (key in LASTOCC) if (index(key, k SUBSEP) == 1) delete LASTOCC[key]
   for (key in SUPBY) if (index(key, k SUBSEP) == 1) delete SUPBY[key]
   parse_art(k, TYPE[k])
 }
 
-function task_status(k, i, s,   j) {
-  item_scan(k, i)
-  j = field_of("STATUS", 0)
-  if (j) ed_splice(k, FLINE[j], FEND[j], "  STATUS: " s "\n")
-  else ed_splice(k, IH[k, i] + 1, IH[k, i], "  STATUS: " s "\n")
+# item_rewrite(k, i): the touched item i of artifact k rewritten canonical in place from its
+# typed fields (the caller set them in X first): its span, to the next head, becomes its
+# canonical lines and its separator; every other line of the artifact keeps its bytes (a last
+# item rewritten leaves the artifact ending with a newline)
+function item_rewrite(k, i,   last) {
+  last = (i == NI[k])
+  ed_splice(k, IH[k, i], IE[k, i], item_text(k, i))
+  if (last) EOFNL[k] = 1
   reparse(k)
 }
 
-function task_set_field(k, s, lab, line,   i, j, a) {
-  i = find_task(k, s); item_scan(k, i)
-  j = field_of(lab, 0)
-  if (j) { ed_splice(k, FLINE[j], FEND[j], line); reparse(k); return }
-  if (line == "") return
-  if (lab == "REFS" && (a = field_of("OBJECTIVE", 0))) a = FEND[a]
-  else if ((a = field_of("STATUS", 0))) a = FEND[a]
-  else a = IH[k, i]
-  ed_splice(k, a + 1, a, line)
-  reparse(k)
-}
-
-function task_set_block(k, s, lab, v,   i, j, a, t, later, n, LB) {
-  i = find_task(k, s); item_scan(k, i)
-  j = field_of(lab, 1)
-  if (j) { ed_splice(k, FLINE[j], FEND[j], c_block(lab, v)); reparse(k); return }
-  n = split("DESCRIPTION|ACCEPTANCE CRITERIA|IMPLEMENTATION DETAILS", LB, "|")
-  later = 0
-  for (t = 1; t <= n; t++) if (LB[t] == lab) break
-  for (t = t + 1; t <= n && !later; t++) if ((j = field_of(LB[t], 1))) later = FLINE[j]
-  if (later) ed_splice(k, later, later - 1, c_block(lab, v))
-  else { a = content_end(k, IH[k, i], IE[k, i]); ed_splice(k, a + 1, a, c_block(lab, v)) }
-  reparse(k)
+function task_status(k, i, s) {
+  X[k, i, "status"] = s
+  item_rewrite(k, i)
 }
 
 function item_drop(k, i,   a, b) {
@@ -198,14 +164,14 @@ function f_session_create(   R, nr, S, ob, att, k) {
   nr = recs_refs("repos", R)
   UNITS[U] = 1
   k = U "|state"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1
-  ed_splice(k, 1, 0, c_state("ACTIVE", "A1", "backlog the first task", ob, R, nr, 0, S, 0))
+  ed_splice(k, 1, 0, c_state("ACTIVE", "A1", "backlog the first task", ob, R, nr, 0, S, 0, "", ""))
   parse_state(U)
   k = U "|backlog"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1
   stage(k)
   k = U "|knowledge"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1
   stage(k)
   k = U "|journal"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1
-  ed_append(k, c_anchor("A1", "A0", att), 1)
+  ed_append(k, c_anchor("A1", "A0", att, NULLV, ""), 1)
   stage(k)
   stage(U "|state")
   answer("{\"unit\":" jstr(U) ",\"state\":" state_json(U) "}")
@@ -358,10 +324,11 @@ function f_session_stamp(   att, ca, n, kj) {
   ca = ST[U, "anchor"]
   if (ca !~ /^A[0-9]+$/ || !((U, "current_anchor") in SLINE)) die(2, "ERR_STORAGE_CORRUPT", "the state's current_anchor '" ca "' is not A<N>")
   n = substr(ca, 2) + 1
-  st_set(U, "current_anchor", "current_anchor: A" n)
+  ST[U, "anchor"] = "A" n
+  st_write(U)
   kj = U "|journal"
   if (!(kj in PRES)) TYPE[kj] = "journal"
-  ed_append(kj, c_anchor("A" n, ca, att), 1)
+  ed_append(kj, c_anchor("A" n, ca, att, NULLV, ""), 1)
   reparse(kj)
   stage(U "|state"); stage(kj)
   answer("{\"unit\":" jstr(U) ",\"previous_anchor\":" jstr(ca) ",\"current_anchor\":" jstr("A" n) ",\"receipt\":" anchor_json(kj, NI[kj]) "}")
@@ -374,7 +341,8 @@ function f_session_next(   p, m) {
   if (!((U, "next_action") in SLINE)) die(2, "ERR_STORAGE_CORRUPT", "the state holds no next_action line")
   m = ptr_missing(p, NULLV)
   if (m != "") die(1, "ERR_POINTER_INCOMPLETE", "next_action would not name IN_PROGRESS task(s): " m)
-  st_set(U, "next_action", "next_action: \"" p "\"")
+  ST[U, "next"] = p
+  st_write(U)
   stage(U "|state")
   answer("{\"unit\":" jstr(U) ",\"next_action\":" jstr(ST[U, "next"]) "}")
 }
@@ -384,7 +352,9 @@ function f_session_refs(   n, i, r, R, o) {
   not_closed()
   n = ENVIRON["PX_NA"] + 0
   for (i = 1; i <= n; i++) { r = ENVIRON["PX_A" i]; if (!(r in UNITS)) die(1, "ERR_ENTITY_NOT_FOUND", "unit '" r "' not found"); R[i] = r }
-  st_set(U, "ref_sessions", "ref_sessions: [" c_join(R, n, ", ") "]")
+  ST[U, "hasrs"] = 1; ST[U, "s#"] = n
+  for (i = 1; i <= n; i++) ST[U, "s", i] = R[i]
+  st_write(U)
   stage(U "|state")
   o = "["
   for (i = 1; i <= ST[U, "s#"]; i++) o = o (i > 1 ? "," : "") jstr(ST[U, "s", i])
@@ -394,7 +364,8 @@ function f_session_refs(   n, i, r, R, o) {
 function f_session_close(   kb, i, first, o) {
   parse_unit(U, "backlog journal")
   if (ST[U, "status"] != "ACTIVE") die(1, "ERR_INVALID_TRANSITION", "unit '" U "' is " ST[U, "status"] "; session.close moves only from ACTIVE")
-  st_set(U, "status", "status: CLOSED")
+  ST[U, "status"] = "CLOSED"
+  st_write(U)
   stage(U "|state")
   kb = U "|backlog"
   o = "["; first = 1
@@ -405,7 +376,8 @@ function f_session_close(   kb, i, first, o) {
 function f_session_reopen() {
   parse_state(U)
   if (ST[U, "status"] != "CLOSED") die(1, "ERR_INVALID_TRANSITION", "unit '" U "' is " ST[U, "status"] "; session.reopen moves only from CLOSED")
-  st_set(U, "status", "status: ACTIVE")
+  ST[U, "status"] = "ACTIVE"
+  st_write(U)
   stage(U "|state")
   answer("{\"unit\":" jstr(U) ",\"status\":\"ACTIVE\"}")
 }
@@ -444,20 +416,20 @@ function f_task_add(   kb, s, ob, desc, crit, det, R, nr) {
   kb = U "|backlog"; s = ENVIRON["PX_A1"]
   if (find_task(kb, s)) ex("task", s)
   need("objective"); ob = pv("objective"); oneline("objective", ob)
-  desc = pv("desc"); crit = pv("criteria"); det = pv("details")
+  desc = nb(pv("desc")); crit = nb(pv("criteria")); det = nb(pv("details"))
   nocr("desc", desc); nocr("criteria", crit); nocr("details", det)
   nr = recs_refs("refs", R)
   if (!(kb in PRES)) TYPE[kb] = "backlog"
-  ed_append(kb, c_task(s, "TODO", ob, R, nr, desc, crit, det), 0)
+  ed_append(kb, c_task(s, "TODO", ob, R, nr, desc, crit, det, NULLV, "", ""), 0)
   reparse(kb)
   stage(kb)
   answer("{\"unit\":" jstr(U) ",\"task\":" task_json(kb, find_task(kb, s)) "}")
 }
 
-# task.update: a canonical task (verbatim null) takes the new typed fields and renders
-# canonically again; a task holding a verbatim takes the edit rules, so every untouched
-# byte stays
-function f_task_update(   kb, s, R, nr, v, i, ob, T, nt, nk) {
+# task.update: the task takes the given typed fields (a present key replaces its field) and is
+# rewritten canonical in place with every field it holds (its extra fields, head text, and
+# extra lines kept); every other byte of the backlog stays
+function f_task_update(   kb, s, R, nr, v, i) {
   parse_unit(U, "backlog")
   not_closed()
   kb = U "|backlog"; s = ENVIRON["PX_A1"]
@@ -466,20 +438,12 @@ function f_task_update(   kb, s, R, nr, v, i, ob, T, nt, nk) {
   nr = plist("refs", R)
   for (v = 1; v <= nr; v++) oneline("refs element", R[v])
   nocr("desc", pv("desc")); nocr("criteria", pv("criteria")); nocr("details", pv("details"))
-  if (IV[kb, i] == NULLV) {
-    ob = has("objective") ? pv("objective") : X[kb, i, "objective"]
-    if (nr >= 0) { nt = nr; for (v = 1; v <= nr; v++) T[v] = R[v] }
-    else { nt = X[kb, i, "r#"]; for (v = 1; v <= nt; v++) T[v] = X[kb, i, "r", v] }
-    nk = (i < NI[kb]) ? IK[kb, i + 1] : NULLV
-    ed_splice(kb, IH[kb, i], IE[kb, i], c_task(s, X[kb, i, "status"], ob, T, nt, has("desc") ? pv("desc") : X[kb, i, "desc"], has("criteria") ? pv("criteria") : X[kb, i, "crit"], has("details") ? pv("details") : X[kb, i, "det"]) c_sep(nk))
-    reparse(kb)
-  } else {
-    if (has("objective")) task_set_field(kb, s, "OBJECTIVE", "  OBJECTIVE: \"" pv("objective") "\"\n")
-    if (nr >= 0) task_set_field(kb, s, "REFS", (nr > 0) ? "  REFS: [" c_join(R, nr, ", ") "]\n" : "")
-    if (has("desc")) task_set_block(kb, s, "DESCRIPTION", pv("desc"))
-    if (has("criteria")) task_set_block(kb, s, "ACCEPTANCE CRITERIA", pv("criteria"))
-    if (has("details")) task_set_block(kb, s, "IMPLEMENTATION DETAILS", pv("details"))
-  }
+  if (has("objective")) X[kb, i, "objective"] = pv("objective")
+  if (nr >= 0) { X[kb, i, "r#"] = nr; for (v = 1; v <= nr; v++) X[kb, i, "r", v] = R[v] }
+  if (has("desc")) X[kb, i, "desc"] = nb(pv("desc"))
+  if (has("criteria")) X[kb, i, "crit"] = nb(pv("criteria"))
+  if (has("details")) X[kb, i, "det"] = nb(pv("details"))
+  item_rewrite(kb, i)
   stage(kb)
   answer("{\"unit\":" jstr(U) ",\"task\":" task_json(kb, find_task(kb, s)) "}")
 }
@@ -500,7 +464,8 @@ function f_task_start(   kb, s, i, p, m) {
   m = ptr_missing(p, s)
   if (m != "") die(1, "ERR_POINTER_INCOMPLETE", "next_action would not name IN_PROGRESS task(s): " m)
   task_status(kb, i, "IN_PROGRESS")
-  st_set(U, "next_action", "next_action: \"" p "\"")
+  ST[U, "next"] = p
+  st_write(U)
   stage(kb); stage(U "|state")
   answer("{\"unit\":" jstr(U) ",\"task\":" taskitem_json(kb, find_task(kb, s)) ",\"next_action\":" jstr(ST[U, "next"]) "}")
 }
@@ -518,7 +483,7 @@ function receipt(what, base,   kj, slug) {
   kj = U "|journal"
   if (!(kj in PRES)) TYPE[kj] = "journal"
   slug = gen_slug(kj, base)
-  ed_append(kj, c_entry(slug, ST[U, "anchor"], what, NULLV, NULLV, "none", EMPTY, 0, "", 0), 0)
+  ed_append(kj, c_entry(slug, ST[U, "anchor"], what, NULLV, NULLV, "none", EMPTY, 0, "", 0, NULLV, NULLV, "", ""), 0)
   reparse(kj)
   return NI[kj]
 }
@@ -614,14 +579,14 @@ function f_entry_record(   kj, what, grp, th, rh, kn, R, nr, nc, c, kind, T, nt,
       if (!isdateslug(T[t])) die(1, "ERR_INVALID_ARGUMENT", "closers." c " target '" T[t] "' is not a date-slug")
       if (!held(kj, T[t])) nf("entry", T[t])
     }
-    cls = cls c_closer(kind, T, nt, vd, rs) "\n"
+    cls = cls c_closer(kind, T, nt, vd, rs, NULLV) "\n"
   }
   if (!has("slug")) {
     need("date"); need("epoch")
     d = pv("date"); ep = pv("epoch"); want_date(d); want_epoch(ep)
     slug = gen_slug(kj, d "-event-" ep)
   }
-  ed_append(kj, c_entry(slug, ST[U, "anchor"], what, grp, rh, th, R, nr, cls, kn), 0)
+  ed_append(kj, c_entry(slug, ST[U, "anchor"], what, grp, rh, th, R, nr, cls, kn, NULLV, NULLV, "", ""), 0)
   reparse(kj)
   stage(kj)
   answer("{\"unit\":" jstr(U) ",\"entry\":" entry_json(kj, NI[kj], 0) "}")
@@ -697,12 +662,14 @@ function f_finding_add(   kk, n, sm, R, nr, sp, sr) {
 
 function add_finding(kk, n, sp, sr, R, nr, sm) {
   if (!(kk in PRES)) TYPE[kk] = "knowledge"
-  ed_append(kk, c_finding(n, sp, sr, R, nr, sm), 0)
+  ed_append(kk, c_finding(n, sp, sr, R, nr, nb(sm), NULLV, "", ""), 0)
   reparse(kk)
   stage(kk)
 }
 
-function f_finding_update(   kk, n, i, j, R, nr, a, p, m) {
+# finding.update: the finding takes the given summary and or refs and is rewritten canonical
+# in place with every field it holds; every other byte of the knowledge stays
+function f_finding_update(   kk, n, i, R, nr, m) {
   parse_unit(U, "knowledge")
   not_closed()
   kk = U "|knowledge"; n = ENVIRON["PX_A1"]
@@ -710,35 +677,9 @@ function f_finding_update(   kk, n, i, j, R, nr, a, p, m) {
   nocr("summary", pv("summary"))
   nr = plist("refs", R)
   for (m = 1; m <= nr; m++) oneline("refs element", R[m])
-  if (IV[kk, i] == NULLV) {
-    # a canonical finding takes the new typed fields and renders canonically again
-    if (nr < 0) { nr = X[kk, i, "r#"]; for (m = 1; m <= nr; m++) R[m] = X[kk, i, "r", m] }
-    p = (i < NI[kk]) ? IK[kk, i + 1] : NULLV
-    ed_splice(kk, IH[kk, i], IE[kk, i], c_finding(n, X[kk, i, "supn"], X[kk, i, "supr"], R, nr, has("summary") ? pv("summary") : X[kk, i, "summ"]) c_sep(p))
-    reparse(kk)
-    stage(kk)
-    answer("{\"unit\":" jstr(U) ",\"finding\":" finding_json(kk, find_finding(kk, n)) "}")
-    return
-  }
-  if (has("summary")) {
-    item_scan(kk, i); j = field_of("SUMMARY", 1)
-    if (j) ed_splice(kk, FLINE[j], FEND[j], c_block("SUMMARY", pv("summary")))
-    else { a = content_end(kk, IH[kk, i], IE[kk, i]); ed_splice(kk, a + 1, a, c_block("SUMMARY", pv("summary"))) }
-    reparse(kk)
-  }
-  if (nr >= 0) {
-    i = find_finding(kk, n); item_scan(kk, i)
-    p = 0
-    for (j = NFD; j >= 1; j--) if (FL[j] == "REF" && !FB[j]) { p = FLINE[j]; ed_splice(kk, FLINE[j], FEND[j], "") }
-    if (!p) {
-      j = field_of("SUMMARY", 1)
-      p = (j ? FEND[j] : content_end(kk, IH[kk, i], IE[kk, i])) + 1
-    }
-    a = ""
-    for (m = 1; m <= nr; m++) a = a "  REF: \"" R[m] "\"\n"
-    if (a != "") ed_splice(kk, p, p - 1, a)
-    reparse(kk)
-  }
+  if (has("summary")) X[kk, i, "summ"] = nb(pv("summary"))
+  if (nr >= 0) { X[kk, i, "r#"] = nr; for (m = 1; m <= nr; m++) X[kk, i, "r", m] = R[m] }
+  item_rewrite(kk, i)
   stage(kk)
   answer("{\"unit\":" jstr(U) ",\"finding\":" finding_json(kk, find_finding(kk, n)) "}")
 }
@@ -821,7 +762,7 @@ function f_lane_record(   l, k, what, th, R, nr, slug, d, ep, i) {
     d = pv("date"); ep = pv("epoch"); want_date(d); want_epoch(ep)
     slug = gen_slug(k, d "-event-" ep)
   }
-  ed_append(k, c_lane_entry(slug, what, th, R, nr), 0)
+  ed_append(k, c_entry(slug, NULLV, what, NULLV, NULLV, th, R, nr, "", 0, NULLV, NULLV, "", ""), 0)
   reparse(k)
   stage(k)
   answer("{\"unit\":" jstr(U) ",\"lane\":" jstr(l) ",\"entry\":" laneentry_json(k, NI[k], l) "}")

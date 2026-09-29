@@ -6,9 +6,9 @@ BEGIN IMMEDIATE;
 .read lib/closed.sql
 INSERT INTO temp.err SELECT 40, 1, 'ERR_ENTITY_NOT_FOUND', 'finding ''' || a.a1 || ''' not found in unit ''' || a.unit || ''''
   FROM temp.a a WHERE EXISTS (SELECT 1 FROM units u WHERE u.unit = a.unit)
-    AND NOT EXISTS (SELECT 1 FROM findings f WHERE f.unit = a.unit AND f.kind = 'finding' AND f.name = a.a1);
+    AND NOT EXISTS (SELECT 1 FROM findings f WHERE f.unit = a.unit AND f.name = a.a1);
 INSERT INTO temp.err SELECT 41, 1, 'ERR_ENTITY_EXISTS', 'finding ''' || a.a2 || ''' already exists in unit ''' || a.unit || ''''
-  FROM temp.a a WHERE EXISTS (SELECT 1 FROM findings f WHERE f.unit = a.unit AND f.kind = 'finding' AND f.name = a.a2);
+  FROM temp.a a WHERE EXISTS (SELECT 1 FROM findings f WHERE f.unit = a.unit AND f.name = a.a2);
 INSERT INTO temp.err SELECT 42, 1, 'ERR_INVALID_ARGUMENT', 'missing payload key summary' WHERE NOT EXISTS (SELECT 1 FROM temp.pay WHERE k = 'summary');
 INSERT INTO temp.err SELECT 43, 1, 'ERR_INVALID_ARGUMENT', 'summary holds a carriage return' FROM temp.pay WHERE k = 'summary' AND instr(v, char(13)) > 0;
 INSERT INTO temp.err SELECT 44, 1, 'ERR_INVALID_ARGUMENT', 'reason takes one line' FROM temp.pay WHERE k = 'reason' AND instr(v, char(10)) > 0;

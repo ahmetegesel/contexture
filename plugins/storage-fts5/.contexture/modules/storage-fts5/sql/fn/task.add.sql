@@ -4,7 +4,7 @@ BEGIN IMMEDIATE;
 .read lib/held.sql
 .read lib/closed.sql
 INSERT INTO temp.err SELECT 40, 1, 'ERR_ENTITY_EXISTS', 'task ''' || a.a1 || ''' already exists in unit ''' || a.unit || ''''
-  FROM temp.a a WHERE EXISTS (SELECT 1 FROM tasks t WHERE t.unit = a.unit AND t.kind = 'task' AND t.slug = a.a1);
+  FROM temp.a a WHERE EXISTS (SELECT 1 FROM tasks t WHERE t.unit = a.unit AND t.slug = a.a1);
 INSERT INTO temp.err SELECT 41, 1, 'ERR_INVALID_ARGUMENT', 'missing payload key objective' WHERE NOT EXISTS (SELECT 1 FROM temp.pay WHERE k = 'objective');
 INSERT INTO temp.err SELECT 42, 1, 'ERR_INVALID_ARGUMENT', 'objective takes one line' FROM temp.pay WHERE k = 'objective' AND instr(v, char(10)) > 0;
 INSERT INTO temp.err SELECT 43, 1, 'ERR_INVALID_ARGUMENT', 'objective holds a carriage return' FROM temp.pay WHERE k = 'objective' AND instr(v, char(13)) > 0;

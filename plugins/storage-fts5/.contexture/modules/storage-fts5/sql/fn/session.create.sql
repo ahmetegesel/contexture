@@ -15,9 +15,9 @@ INSERT INTO temp.err SELECT 46, 1, 'ERR_INVALID_ARGUMENT', msg FROM temp.plbad W
 INSERT INTO temp.err SELECT 47, 1, 'ERR_INVALID_ARGUMENT', 'repos element takes one line' FROM temp.plv WHERE base = 'repos' AND instr(v, char(10)) > 0;
 INSERT INTO temp.err SELECT 47, 1, 'ERR_INVALID_ARGUMENT', 'repos element holds a carriage return' FROM temp.plv WHERE base = 'repos' AND instr(v, char(13)) > 0 AND instr(v, char(10)) = 0;
 .read lib/stop.sql
-INSERT INTO units (unit, status, current_anchor, next_action, objective, repos, ref_sessions, verbatim)
+INSERT INTO units (unit, status, current_anchor, next_action, objective, repos, ref_sessions)
   SELECT a.unit, 'ACTIVE', 'A1', 'backlog the first task', (SELECT v FROM temp.pay WHERE k = 'objective'),
-    (SELECT json_group_array(v ORDER BY i) FROM temp.plv WHERE base = 'repos'), NULL, NULL FROM temp.a a;
+    (SELECT json_group_array(v ORDER BY i) FROM temp.plv WHERE base = 'repos'), NULL FROM temp.a a;
 INSERT INTO preambles (unit, artifact, preamble) SELECT a.unit, x.column1, '' FROM temp.a a, (VALUES ('backlog'), ('knowledge'), ('journal')) x;
 INSERT INTO temp.jn (lane, kind, anchor, continues, attention) SELECT '', 'anchor', 'A1', 'A0', v FROM temp.pay WHERE k = 'attention';
 .read lib/jappend.sql

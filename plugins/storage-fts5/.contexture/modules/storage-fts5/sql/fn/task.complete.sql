@@ -15,8 +15,7 @@ INSERT INTO temp.err SELECT 46, 1, 'ERR_INVALID_ARGUMENT', 'date takes YYYY-MM-D
   AND NOT (length(v) = 10 AND v GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]');
 .read lib/anchor.sql
 .read lib/stop.sql
-INSERT INTO temp.tst SELECT pos, 'DONE' FROM temp.tk;
-.read lib/tstatus.sql
+UPDATE tasks SET status = 'DONE' WHERE unit = (SELECT unit FROM temp.a) AND pos = (SELECT pos FROM temp.tk);
 CREATE TEMP TABLE rcp AS SELECT (SELECT v FROM temp.pay WHERE k = 'date') || '-' || a.a1 || '-completed' AS base,
   'backlog/' || a.a1 || ': DONE (' || (SELECT v FROM temp.pay WHERE k = 'evidence') || ')' AS what FROM temp.a a;
 .read lib/receipt.sql

@@ -6,9 +6,11 @@
 # functions (argv identifiers, the escaped key=value payload on stdin with indexed list
 # keys, one compact JSON answer in the contract key order, one fixed stderr line per
 # refusal) through awk programs beside it: canon.awk (the canonical renderer and the JSON
-# string form), model.awk (the parse rules into typed items with their verbatim, the
-# derived fields, the JSON of the schemas), ops.awk (the functions: the record rules, the
-# append and edit rules), search.awk (the exact rule). It keeps
+# string form), model.awk (the parse rules into typed items holding all of their content,
+# the derived fields, the JSON of the schemas), ops.awk (the functions: the record rules, the
+# append rule, a touched item rewritten canonical in place), search.awk (the exact rule over
+# the rendered text). Every item reads in the canonical layout; a file keeps its bytes until
+# a write touches one of its items. It keeps
 # the six corpus methods of v0.54.0 byte for byte (corpus.store).
 #
 # Writes: the unit lock (.contexture/tmp/locks/<unit>.lock) is held from the read to the
@@ -638,23 +640,11 @@ search_query() {
   esac
   held "$sq_u" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sq_u' not found"
   payload_stage
-  sq_d="$SESS/$sq_u"
-  set --
-  for sq_f in state backlog knowledge journal; do
-    [ -f "$sq_d/$sq_f.md" ] && set -- "$@" "$sq_d/$sq_f.md"
-  done
-  if [ -d "$sq_d/lanes" ]; then
-    for sq_l in "$sq_d"/lanes/*; do
-      [ -d "$sq_l" ] || continue
-      ident_valid "${sq_l##*/}" || continue
-      for sq_f in recipe journal report; do
-        [ -f "$sq_l/$sq_f.md" ] && set -- "$@" "$sq_l/$sq_f.md"
-      done
-    done
-  fi
-  [ $# -gt 0 ] || set -- /dev/null
-  PX_PAY="$PAYLOAD_FILE" PX_ERR="$SCR/err" SQ_UNIT="$sq_u" SQ_LIMIT="$sq_limit" SQ_ENTITY="$sq_entity" SQ_MODE="$sq_mode" \
-    awk -f "$SCRIPT_DIR/canon.awk" -f "$SCRIPT_DIR/model.awk" -f "$SCRIPT_DIR/search.awk" "$@" > "$SCR/answer"
+  # the searched text is the rendered one: the unit parsed whole, every item's canonical span
+  man_unit "$sq_u" "backlog knowledge journal lanes"
+  man_sizes
+  PX_PAY="$PAYLOAD_FILE" PX_ERR="$SCR/err" PX_MAN="$SCR/man" PX_SIZES="$SCR/sizes" SQ_UNIT="$sq_u" SQ_LIMIT="$sq_limit" SQ_ENTITY="$sq_entity" SQ_MODE="$sq_mode" \
+    awk -f "$SCRIPT_DIR/canon.awk" -f "$SCRIPT_DIR/model.awk" -f "$SCRIPT_DIR/search.awk" < /dev/null > "$SCR/answer"
   sq_rc=$?
   if [ "$sq_rc" -ne 0 ]; then
     if [ -s "$SCR/err" ]; then cat "$SCR/err" >&2; else printf '%s: error: the search failed (rc %s) (ERR_STORAGE_READ)\n' "$FN" "$sq_rc" >&2; sq_rc=2; fi

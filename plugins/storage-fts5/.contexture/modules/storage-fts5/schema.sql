@@ -1,9 +1,11 @@
 -- schema.sql: the fts5 store at schema version 4 (PRAGMA user_version 4), the typed tables
 -- of the contract 2 record data model (docs/the-engine.md, The record data model). The
--- store holds the record as typed rows, never as markdown: every item keeps the fields the
--- data model names plus its verbatim (the stored span exactly when it differs from the
--- canonical span its fields render, else NULL), so the same record returns the same data
--- from every backend. An item is keyed by (unit, lane, pos): lane '' is the main journal,
+-- store holds the record as typed rows, never as markdown and never as stored text: an item
+-- keeps exactly the fields the functions write, and every read renders it in the canonical
+-- layout. No function writes legacy text, so the legacy fields of the data model (an
+-- entry's legacy status and extra fields, an item's head text and extra lines, a closer's
+-- extra text, an opaque item) have no column here and always answer null or empty. An item
+-- is keyed by (unit, lane, pos): lane '' is the main journal,
 -- pos the 1 based position the writer assigns in its artifact; ordinal, seq, occurrence,
 -- next, and liveness are derived by the reads, never stored. Two derived tables serve the
 -- search and are rebuilt per unit in the transaction of every write (derive.sql): lines
@@ -24,8 +26,7 @@ CREATE TABLE IF NOT EXISTS units (
   next_action TEXT NOT NULL,
   objective TEXT NOT NULL,
   repos TEXT NOT NULL DEFAULT '[]',
-  ref_sessions TEXT,
-  verbatim TEXT
+  ref_sessions TEXT
 );
 
 -- The preamble of each main block artifact: the exact bytes before its first item; NULL
@@ -39,45 +40,39 @@ CREATE TABLE IF NOT EXISTS preambles (
   FOREIGN KEY (unit) REFERENCES units(unit) ON DELETE CASCADE
 );
 
--- The backlog items: a task, or an opaque item (a head other than @task) carrying only its
--- verbatim. description, criteria, details are the block bodies (NULL when the section is
--- absent); REFS elements live in item_refs (artifact 'backlog').
+-- The backlog's tasks: description, criteria, details are the block bodies (NULL when the
+-- section is absent); REFS elements live in item_refs (artifact 'backlog').
 CREATE TABLE IF NOT EXISTS tasks (
   unit TEXT NOT NULL,
   pos INTEGER NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('task', 'opaque')),
-  slug TEXT,
-  status TEXT,
-  objective TEXT,
+  slug TEXT NOT NULL,
+  status TEXT NOT NULL,
+  objective TEXT NOT NULL,
   description TEXT,
   criteria TEXT,
   details TEXT,
-  verbatim TEXT,
   PRIMARY KEY (unit, pos),
   FOREIGN KEY (unit) REFERENCES units(unit) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_slug ON tasks(unit, slug);
 
--- The knowledge items: a finding or an opaque item; supersedes_name NULL when the finding
--- supersedes none (supersedes_reason then NULL too); REF lines live in finding_refs.
+-- The knowledge's findings: supersedes_name NULL when the finding supersedes none
+-- (supersedes_reason then NULL too); REF lines live in finding_refs.
 CREATE TABLE IF NOT EXISTS findings (
   unit TEXT NOT NULL,
   pos INTEGER NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('finding', 'opaque')),
-  name TEXT,
+  name TEXT NOT NULL,
   supersedes_name TEXT,
   supersedes_reason TEXT,
-  summary TEXT,
-  verbatim TEXT,
+  summary TEXT NOT NULL,
   PRIMARY KEY (unit, pos),
   FOREIGN KEY (unit) REFERENCES units(unit) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_findings_name ON findings(unit, name);
 
 -- The main journal items: an entry (slug, the one line fields, knowledge 0 or 1) or an
--- anchor (anchor, continues, attention). A legacy repeated slug keeps one row per
--- occurrence in position order. REF lines, closers, and extra fields live in item_refs
--- (artifact 'journal'), closers with closer_targets, and extra_fields, with lane ''.
+-- anchor (anchor, continues, attention). REF lines and closers live in item_refs (artifact
+-- 'journal') and closers with closer_targets, with lane ''.
 CREATE TABLE IF NOT EXISTS journal_items (
   unit TEXT NOT NULL,
   pos INTEGER NOT NULL,
@@ -89,10 +84,8 @@ CREATE TABLE IF NOT EXISTS journal_items (
   rhythm TEXT,
   knowledge INTEGER NOT NULL DEFAULT 0 CHECK (knowledge IN (0, 1)),
   thread TEXT,
-  legacy_status TEXT,
   continues TEXT,
   attention TEXT,
-  verbatim TEXT,
   PRIMARY KEY (unit, pos),
   FOREIGN KEY (unit) REFERENCES units(unit) ON DELETE CASCADE
 );
@@ -123,17 +116,15 @@ CREATE TABLE IF NOT EXISTS lane_items (
   rhythm TEXT,
   knowledge INTEGER NOT NULL DEFAULT 0 CHECK (knowledge IN (0, 1)),
   thread TEXT,
-  legacy_status TEXT,
   continues TEXT,
   attention TEXT,
-  verbatim TEXT,
   PRIMARY KEY (unit, lane, pos),
   FOREIGN KEY (unit, lane) REFERENCES lanes(unit, lane) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_lane_items_slug ON lane_items(unit, lane, slug);
 
 -- The closer lines of an entry (lane '' the main journal, else a lane journal), cpos their
--- line order; verbatim the exact line when the canonical closer line does not reproduce it.
+-- line order.
 CREATE TABLE IF NOT EXISTS closers (
   unit TEXT NOT NULL,
   lane TEXT NOT NULL DEFAULT '',
@@ -142,7 +133,6 @@ CREATE TABLE IF NOT EXISTS closers (
   kind TEXT NOT NULL CHECK (kind IN ('CLOSES', 'SUPERSEDES')),
   verdict TEXT CHECK (verdict IS NULL OR verdict IN ('done', 'superseded', 'dropped', 'folded')),
   reason TEXT,
-  verbatim TEXT,
   PRIMARY KEY (unit, lane, pos, cpos),
   FOREIGN KEY (unit) REFERENCES units(unit) ON DELETE CASCADE
 );
@@ -171,19 +161,6 @@ CREATE TABLE IF NOT EXISTS item_refs (
   rpos INTEGER NOT NULL,
   ref TEXT NOT NULL,
   PRIMARY KEY (unit, lane, artifact, pos, rpos),
-  FOREIGN KEY (unit) REFERENCES units(unit) ON DELETE CASCADE
-);
-
--- The field lines of an entry beyond the schema, in line order, with their raw values (a
--- repeated one line field's earlier occurrences, unknown labels, other block scalars).
-CREATE TABLE IF NOT EXISTS extra_fields (
-  unit TEXT NOT NULL,
-  lane TEXT NOT NULL DEFAULT '',
-  pos INTEGER NOT NULL,
-  fpos INTEGER NOT NULL,
-  key TEXT NOT NULL,
-  value TEXT NOT NULL,
-  PRIMARY KEY (unit, lane, pos, fpos),
   FOREIGN KEY (unit) REFERENCES units(unit) ON DELETE CASCADE
 );
 
@@ -270,113 +247,102 @@ END;
 
 -- ==============================================================================
 -- The canonical renderer (docs/the-engine.md, The canonical lines), as views: each item's
--- span is its verbatim when present, else its canonical lines followed by one empty line
--- when a next item exists and is not an anchor. derive.sql builds the searched text from
--- them; they read the typed tables only.
+-- span is its canonical lines followed by one empty line when a next item exists and is not
+-- an anchor, the text every backend prints for the same data. derive.sql builds the
+-- searched text from them; they read the typed tables only.
 -- ==============================================================================
 
 -- the state text of each unit
 CREATE VIEW IF NOT EXISTS v_state_text AS
 SELECT u.unit AS unit,
-  coalesce(u.verbatim,
-    'status: ' || u.status || char(10) ||
-    'current_anchor: ' || u.current_anchor || char(10) ||
-    'next_action: "' || u.next_action || '"' || char(10) ||
-    'objective: "' || u.objective || '"' || char(10) ||
-    'repos: [' || coalesce((SELECT group_concat(j.value, ', ' ORDER BY j.key) FROM json_each(u.repos) j), '') || ']' || char(10) ||
-    CASE WHEN u.ref_sessions IS NULL THEN '' ELSE
-      'ref_sessions: [' || coalesce((SELECT group_concat(j.value, ', ' ORDER BY j.key) FROM json_each(u.ref_sessions) j), '') || ']' || char(10) END
-  ) AS body
+  'status: ' || u.status || char(10) ||
+  'current_anchor: ' || u.current_anchor || char(10) ||
+  'next_action: "' || u.next_action || '"' || char(10) ||
+  'objective: "' || u.objective || '"' || char(10) ||
+  'repos: [' || coalesce((SELECT group_concat(j.value, ', ' ORDER BY j.key) FROM json_each(u.repos) j), '') || ']' || char(10) ||
+  CASE WHEN u.ref_sessions IS NULL THEN '' ELSE
+    'ref_sessions: [' || coalesce((SELECT group_concat(j.value, ', ' ORDER BY j.key) FROM json_each(u.ref_sessions) j), '') || ']' || char(10) END
+  AS body
 FROM units u;
 
--- the backlog items with their spans
+-- the backlog's tasks with their spans
 CREATE VIEW IF NOT EXISTS v_task_span AS
-SELECT t.unit AS unit, t.pos AS pos, t.kind AS kind, t.slug AS slug,
-  coalesce(t.verbatim,
-    '@task ' || t.slug || char(10) ||
-    '  STATUS: ' || t.status || char(10) ||
-    '  OBJECTIVE: "' || t.objective || '"' || char(10) ||
-    coalesce((SELECT '  REFS: [' || group_concat(r.ref, ', ' ORDER BY r.rpos) || ']' || char(10)
-      FROM item_refs r WHERE r.unit = t.unit AND r.lane = '' AND r.artifact = 'backlog' AND r.pos = t.pos), '') ||
-    CASE WHEN t.description IS NULL THEN '' WHEN t.description = '' THEN '  DESCRIPTION ::' || char(10) ELSE
-      replace(replace('  DESCRIPTION ::' || char(10) || '    ' || replace(t.description, char(10), char(10) || '    ') || char(10),
-        char(10) || '    ' || char(10), char(10) || char(10)), char(10) || '    ' || char(10), char(10) || char(10)) END ||
-    CASE WHEN t.criteria IS NULL THEN '' WHEN t.criteria = '' THEN '  ACCEPTANCE CRITERIA ::' || char(10) ELSE
-      replace(replace('  ACCEPTANCE CRITERIA ::' || char(10) || '    ' || replace(t.criteria, char(10), char(10) || '    ') || char(10),
-        char(10) || '    ' || char(10), char(10) || char(10)), char(10) || '    ' || char(10), char(10) || char(10)) END ||
-    CASE WHEN t.details IS NULL THEN '' WHEN t.details = '' THEN '  IMPLEMENTATION DETAILS ::' || char(10) ELSE
-      replace(replace('  IMPLEMENTATION DETAILS ::' || char(10) || '    ' || replace(t.details, char(10), char(10) || '    ') || char(10),
-        char(10) || '    ' || char(10), char(10) || char(10)), char(10) || '    ' || char(10), char(10) || char(10)) END ||
-    CASE WHEN EXISTS (SELECT 1 FROM tasks n WHERE n.unit = t.unit AND n.pos > t.pos) THEN char(10) ELSE '' END
-  ) AS span
+SELECT t.unit AS unit, t.pos AS pos, t.slug AS slug,
+  '@task ' || t.slug || char(10) ||
+  '  STATUS: ' || t.status || char(10) ||
+  '  OBJECTIVE: "' || t.objective || '"' || char(10) ||
+  coalesce((SELECT '  REFS: [' || group_concat(r.ref, ', ' ORDER BY r.rpos) || ']' || char(10)
+    FROM item_refs r WHERE r.unit = t.unit AND r.lane = '' AND r.artifact = 'backlog' AND r.pos = t.pos), '') ||
+  CASE WHEN t.description IS NULL THEN '' WHEN t.description = '' THEN '  DESCRIPTION ::' || char(10) ELSE
+    replace(replace('  DESCRIPTION ::' || char(10) || '    ' || replace(t.description, char(10), char(10) || '    ') || char(10),
+      char(10) || '    ' || char(10), char(10) || char(10)), char(10) || '    ' || char(10), char(10) || char(10)) END ||
+  CASE WHEN t.criteria IS NULL THEN '' WHEN t.criteria = '' THEN '  ACCEPTANCE CRITERIA ::' || char(10) ELSE
+    replace(replace('  ACCEPTANCE CRITERIA ::' || char(10) || '    ' || replace(t.criteria, char(10), char(10) || '    ') || char(10),
+      char(10) || '    ' || char(10), char(10) || char(10)), char(10) || '    ' || char(10), char(10) || char(10)) END ||
+  CASE WHEN t.details IS NULL THEN '' WHEN t.details = '' THEN '  IMPLEMENTATION DETAILS ::' || char(10) ELSE
+    replace(replace('  IMPLEMENTATION DETAILS ::' || char(10) || '    ' || replace(t.details, char(10), char(10) || '    ') || char(10),
+      char(10) || '    ' || char(10), char(10) || char(10)), char(10) || '    ' || char(10), char(10) || char(10)) END ||
+  CASE WHEN EXISTS (SELECT 1 FROM tasks n WHERE n.unit = t.unit AND n.pos > t.pos) THEN char(10) ELSE '' END
+  AS span
 FROM tasks t;
 
--- the knowledge items with their spans
+-- the knowledge's findings with their spans
 CREATE VIEW IF NOT EXISTS v_finding_span AS
-SELECT f.unit AS unit, f.pos AS pos, f.kind AS kind, f.name AS name,
-  coalesce(f.verbatim,
-    '@finding ' || f.name || char(10) ||
-    CASE WHEN f.supersedes_name IS NULL THEN '' ELSE '  SUPERSEDES: ' || f.supersedes_name || ' (' || coalesce(f.supersedes_reason, '') || ')' || char(10) END ||
-    coalesce((SELECT group_concat('  REF: "' || r.ref || '"' || char(10), '' ORDER BY r.rpos)
-      FROM finding_refs r WHERE r.unit = f.unit AND r.pos = f.pos), '') ||
-    CASE WHEN f.summary = '' THEN '  SUMMARY ::' || char(10) ELSE
-      replace(replace('  SUMMARY ::' || char(10) || '    ' || replace(f.summary, char(10), char(10) || '    ') || char(10),
-        char(10) || '    ' || char(10), char(10) || char(10)), char(10) || '    ' || char(10), char(10) || char(10)) END ||
-    CASE WHEN EXISTS (SELECT 1 FROM findings n WHERE n.unit = f.unit AND n.pos > f.pos) THEN char(10) ELSE '' END
-  ) AS span
+SELECT f.unit AS unit, f.pos AS pos, f.name AS name,
+  '@finding ' || f.name || char(10) ||
+  CASE WHEN f.supersedes_name IS NULL THEN '' ELSE '  SUPERSEDES: ' || f.supersedes_name || ' (' || coalesce(f.supersedes_reason, '') || ')' || char(10) END ||
+  coalesce((SELECT group_concat('  REF: "' || r.ref || '"' || char(10), '' ORDER BY r.rpos)
+    FROM finding_refs r WHERE r.unit = f.unit AND r.pos = f.pos), '') ||
+  CASE WHEN f.summary = '' THEN '  SUMMARY ::' || char(10) ELSE
+    replace(replace('  SUMMARY ::' || char(10) || '    ' || replace(f.summary, char(10), char(10) || '    ') || char(10),
+      char(10) || '    ' || char(10), char(10) || char(10)), char(10) || '    ' || char(10), char(10) || char(10)) END ||
+  CASE WHEN EXISTS (SELECT 1 FROM findings n WHERE n.unit = f.unit AND n.pos > f.pos) THEN char(10) ELSE '' END
+  AS span
 FROM findings f;
 
--- every closer line, newline terminated (its verbatim, else its canonical line)
+-- every closer line, newline terminated
 CREATE VIEW IF NOT EXISTS v_closer_line AS
 SELECT c.unit AS unit, c.lane AS lane, c.pos AS pos, c.cpos AS cpos,
-  coalesce(c.verbatim,
-    '  ' || c.kind || ': ' ||
-    coalesce((SELECT group_concat(t.target, ' ' ORDER BY t.tpos) FROM closer_targets t
-      WHERE t.unit = c.unit AND t.lane = c.lane AND t.pos = c.pos AND t.cpos = c.cpos), '') ||
-    CASE WHEN c.verdict IS NOT NULL THEN ' (' || c.verdict || ': ' || coalesce(c.reason, '') || ')'
-         WHEN c.reason IS NOT NULL THEN ' (' || c.reason || ')' ELSE '' END) || char(10) AS line
+  '  ' || c.kind || ': ' ||
+  coalesce((SELECT group_concat(t.target, ' ' ORDER BY t.tpos) FROM closer_targets t
+    WHERE t.unit = c.unit AND t.lane = c.lane AND t.pos = c.pos AND t.cpos = c.cpos), '') ||
+  CASE WHEN c.verdict IS NOT NULL THEN ' (' || c.verdict || ': ' || coalesce(c.reason, '') || ')'
+       WHEN c.reason IS NOT NULL THEN ' (' || c.reason || ')' ELSE '' END || char(10) AS line
 FROM closers c;
 
 -- the journal items of the main journal (lane '') and of every lane journal with their
--- spans; a lane entry renders its lane canonical lines unless it carries a field only a
--- main entry holds (ANCHOR, GROUP, RHYTHM, a closer, KNOWLEDGE), as the posix driver renders it
+-- spans: an anchor in the stamp form, an entry in the entry lines (ANCHOR, WHAT, GROUP,
+-- RHYTHM, THREAD, REF, the closers, KNOWLEDGE, each when set), in a main and a lane journal
+-- alike
 CREATE VIEW IF NOT EXISTS v_journal_span AS
 SELECT j.unit AS unit, j.lane AS lane, j.pos AS pos, j.kind AS kind, j.slug AS slug,
-  coalesce(j.verbatim,
-    CASE WHEN j.kind = 'anchor' THEN
-      '@anchor ' || j.anchor ||
-      CASE WHEN j.continues IS NOT NULL AND j.attention IS NOT NULL THEN ' ("continues ' || j.continues || '", attention: ' || j.attention || ')' ELSE '' END || char(10)
-    WHEN j.lane <> '' AND j.anchor IS NULL AND j.grp IS NULL AND j.rhythm IS NULL AND j.knowledge = 0
-      AND NOT EXISTS (SELECT 1 FROM closers c WHERE c.unit = j.unit AND c.lane = j.lane AND c.pos = j.pos) THEN
-      '@entry ' || j.slug || char(10) ||
-      CASE WHEN j.what IS NULL THEN '' ELSE '  WHAT: "' || j.what || '"' || char(10) END ||
-      CASE WHEN j.thread IS NULL THEN '' ELSE '  THREAD: ' || j.thread || char(10) END ||
-      coalesce((SELECT group_concat('  REF: "' || r.ref || '"' || char(10), '' ORDER BY r.rpos)
-        FROM item_refs r WHERE r.unit = j.unit AND r.lane = j.lane AND r.artifact = 'journal' AND r.pos = j.pos), '')
-    ELSE
-      '@entry ' || j.slug || char(10) ||
-      CASE WHEN j.anchor IS NULL THEN '' ELSE '  ANCHOR: ' || j.anchor || char(10) END ||
-      CASE WHEN j.what IS NULL THEN '' ELSE '  WHAT: "' || j.what || '"' || char(10) END ||
-      CASE WHEN j.grp IS NULL THEN '' ELSE '  GROUP: ' || j.grp || char(10) END ||
-      CASE WHEN j.rhythm IS NULL THEN '' ELSE '  RHYTHM: ' || j.rhythm || char(10) END ||
-      CASE WHEN j.thread IS NULL THEN '' ELSE '  THREAD: ' || j.thread || char(10) END ||
-      coalesce((SELECT group_concat('  REF: "' || r.ref || '"' || char(10), '' ORDER BY r.rpos)
-        FROM item_refs r WHERE r.unit = j.unit AND r.lane = j.lane AND r.artifact = 'journal' AND r.pos = j.pos), '') ||
-      coalesce((SELECT group_concat(cl.line, '' ORDER BY cl.cpos)
-        FROM v_closer_line cl WHERE cl.unit = j.unit AND cl.lane = j.lane AND cl.pos = j.pos), '') ||
-      CASE WHEN j.knowledge = 1 THEN '  KNOWLEDGE: true' || char(10) ELSE '' END
-    END ||
-    CASE WHEN j.nextk IS NULL OR j.nextk = 'anchor' THEN '' ELSE char(10) END
-  ) AS span
+  CASE WHEN j.kind = 'anchor' THEN
+    '@anchor ' || j.anchor ||
+    CASE WHEN j.continues IS NOT NULL AND j.attention IS NOT NULL THEN ' ("continues ' || j.continues || '", attention: ' || j.attention || ')' ELSE '' END || char(10)
+  ELSE
+    '@entry ' || j.slug || char(10) ||
+    CASE WHEN j.anchor IS NULL THEN '' ELSE '  ANCHOR: ' || j.anchor || char(10) END ||
+    CASE WHEN j.what IS NULL THEN '' ELSE '  WHAT: "' || j.what || '"' || char(10) END ||
+    CASE WHEN j.grp IS NULL THEN '' ELSE '  GROUP: ' || j.grp || char(10) END ||
+    CASE WHEN j.rhythm IS NULL THEN '' ELSE '  RHYTHM: ' || j.rhythm || char(10) END ||
+    CASE WHEN j.thread IS NULL THEN '' ELSE '  THREAD: ' || j.thread || char(10) END ||
+    coalesce((SELECT group_concat('  REF: "' || r.ref || '"' || char(10), '' ORDER BY r.rpos)
+      FROM item_refs r WHERE r.unit = j.unit AND r.lane = j.lane AND r.artifact = 'journal' AND r.pos = j.pos), '') ||
+    coalesce((SELECT group_concat(cl.line, '' ORDER BY cl.cpos)
+      FROM v_closer_line cl WHERE cl.unit = j.unit AND cl.lane = j.lane AND cl.pos = j.pos), '') ||
+    CASE WHEN j.knowledge = 1 THEN '  KNOWLEDGE: true' || char(10) ELSE '' END
+  END ||
+  CASE WHEN j.nextk IS NULL OR j.nextk = 'anchor' THEN '' ELSE char(10) END
+  AS span
 FROM (
   SELECT '' AS lane, i.unit AS unit, i.pos AS pos, i.kind AS kind, i.slug AS slug, i.anchor AS anchor, i.what AS what,
     i.grp AS grp, i.rhythm AS rhythm, i.knowledge AS knowledge, i.thread AS thread, i.continues AS continues,
-    i.attention AS attention, i.verbatim AS verbatim,
+    i.attention AS attention,
     (SELECT n.kind FROM journal_items n WHERE n.unit = i.unit AND n.pos > i.pos ORDER BY n.pos LIMIT 1) AS nextk
   FROM journal_items i
   UNION ALL
   SELECT i.lane, i.unit, i.pos, i.kind, i.slug, i.anchor, i.what, i.grp, i.rhythm, i.knowledge, i.thread, i.continues,
-    i.attention, i.verbatim,
+    i.attention,
     (SELECT n.kind FROM lane_items n WHERE n.unit = i.unit AND n.lane = i.lane AND n.pos > i.pos ORDER BY n.pos LIMIT 1)
   FROM lane_items i
 ) j;

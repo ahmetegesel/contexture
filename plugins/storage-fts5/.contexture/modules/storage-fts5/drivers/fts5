@@ -1,14 +1,14 @@
 #!/bin/sh
 # drivers/fts5: the SQLite FTS5 storage driver (contract 2, docs/the-engine.md, The storage
 # contract). One sh entry point over the sqlite3 command line: the store is one database at
-# schema version 4 (schema.sql, the typed tables of the record data model, each item with its
-# verbatim; db-init.sh opens it, lays the schema in a new or empty file, and refuses a store
-# at any other schema), and every one of the 38 record functions answers natively in SQL,
-# one script per function under sql/fn/ over the shared pieces of sql/lib/ (the call prelude
-# and the payload, the refusal point, the derived fields and the JSON of the schemas, the
-# line toolkit of the append and edit rules), beside the search tables derive.sql rebuilds
-# in the transaction of every write. No function reads markdown or reaches another driver;
-# the store holds only what the functions write.
+# schema version 4 (schema.sql, the typed tables of the record data model holding the fields
+# the functions write, no stored text; db-init.sh opens it, lays the schema in a new or empty
+# file, and refuses a store at any other schema), and every one of the 38 record functions
+# answers natively in SQL, one script per function under sql/fn/ over the shared pieces of
+# sql/lib/ (the call prelude and the payload, the refusal point, the derived fields and the
+# JSON of the schemas), beside the search tables derive.sql rebuilds in the transaction of
+# every write. No function reads markdown or reaches another driver; the store holds only
+# what the functions write, and every read renders it in the canonical layout.
 #
 # The wire: argv carries the function and its bounded identifiers, checked here with the
 # posix driver's messages in its refusal order (the argv shape, the unit, CLOSED, then the

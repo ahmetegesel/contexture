@@ -5,9 +5,6 @@ INSERT INTO temp.err SELECT 40, 1, 'ERR_INVALID_TRANSITION', 'unit ''' || u.unit
   FROM units u, temp.a a WHERE u.unit = a.unit AND u.status <> 'CLOSED';
 .read lib/stop.sql
 UPDATE units SET status = 'ACTIVE' WHERE unit = (SELECT unit FROM temp.a);
-INSERT INTO temp.sts VALUES ('status', 'status: ACTIVE');
-.read lib/stedit.sql
-.read lib/settle.sql
 INSERT INTO temp.tart SELECT unit, 'state' FROM temp.a;
 .read lib/touch.sql
 SELECT json_object('unit', a.unit, 'status', 'ACTIVE') FROM temp.a a;

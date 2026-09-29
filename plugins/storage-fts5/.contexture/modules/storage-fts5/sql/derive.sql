@@ -104,11 +104,11 @@ SELECT s.unit, 'session', s.unit, 'state', s.unit, s.body FROM v_state_text s WH
 UNION ALL
 SELECT t.unit, 'task', t.slug, 'backlog', t.slug || ': ' || coalesce(x.objective, ''), t.span
 FROM v_task_span t JOIN tasks x ON x.unit = t.unit AND x.pos = t.pos
-WHERE t.kind = 'task' AND t.unit IN (SELECT unit FROM temp.touched)
+WHERE t.unit IN (SELECT unit FROM temp.touched)
   AND EXISTS (SELECT 1 FROM temp.dsel d WHERE d.unit = t.unit AND d.part IN ('*', 'backlog'))
 UNION ALL
 SELECT f.unit, 'finding', f.name, 'knowledge', f.name, f.span FROM v_finding_span f
-WHERE f.kind = 'finding' AND f.unit IN (SELECT unit FROM temp.touched)
+WHERE f.unit IN (SELECT unit FROM temp.touched)
   AND EXISTS (SELECT 1 FROM temp.dsel d WHERE d.unit = f.unit AND d.part IN ('*', 'knowledge'))
 UNION ALL
 SELECT j.unit, CASE WHEN j.lane = '' THEN 'entry' ELSE 'lane_entry' END,

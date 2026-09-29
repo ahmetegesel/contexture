@@ -79,16 +79,15 @@ INSERT INTO temp.jn (lane, kind, slug, anchor, what, grp, rhythm, knowledge, thr
     CASE WHEN (SELECT v FROM temp.pay WHERE k = 'knowledge') = 'true' THEN 1 ELSE 0 END, (SELECT v FROM temp.pay WHERE k = 'thread');
 DELETE FROM temp.gs;
 INSERT INTO temp.jnr SELECT i, v FROM temp.plv WHERE base = 'refs';
--- each closer as the parse rules read its line back: a reason alone that opens with a verdict
--- word and a colon reads as that verdict and the rest; an empty reason alone reads as none,
--- the line keeping its empty parenthesis as the closer's verbatim
+-- each closer as the parse rules read its canonical line back: a reason alone that opens with a
+-- verdict word and a colon reads as that verdict and the rest; an empty reason alone reads as
+-- none (its empty parenthesis carries no content)
 INSERT INTO temp.jnc SELECT c, kind,
   CASE WHEN verdict IS NULL AND (reason GLOB 'done: *' OR reason GLOB 'superseded: *' OR reason GLOB 'dropped: *' OR reason GLOB 'folded: *')
     THEN substr(reason, 1, instr(reason, ':') - 1) ELSE verdict END,
   CASE WHEN verdict IS NULL AND (reason GLOB 'done: *' OR reason GLOB 'superseded: *' OR reason GLOB 'dropped: *' OR reason GLOB 'folded: *')
       THEN substr(reason, instr(reason, ':') + 2)
-    WHEN verdict IS NULL AND reason = '' THEN NULL ELSE reason END,
-  CASE WHEN verdict IS NULL AND reason = '' THEN '  ' || kind || ': ' || (SELECT group_concat(t.target, ' ' ORDER BY t.t) FROM temp.rct t WHERE t.c = rcl.c) || ' ()' END
+    WHEN verdict IS NULL AND reason = '' THEN NULL ELSE reason END
 FROM temp.rcl;
 INSERT INTO temp.jnt SELECT c, t, target FROM temp.rct;
 .read lib/jappend.sql

@@ -4,7 +4,7 @@ The conversation is a scratchpad; the record is the memory. When a context windo
 
 ## Storage abstraction and entity domains
 
-Under @laws#storage-backend-authority, the configured storage backend is the authoritative single source of truth. The engine completely decouples session machinery from physical disk layouts and file formats. Every verb reaches the record through the configured driver and nothing else, so the record is one store whichever driver holds it. Base maps every command to one storage function and renders the typed data it returns, and each backend stores the record its own way and enforces the record rules itself. The data model is one for every backend: every item answers typed fields, and an item stored in an older shape also carries its exact bytes (its verbatim span), so every backend returns the same data for the same record and older records read back unchanged. In the default POSIX driver each artifact is a markdown file in its unit folder, written in the record grammar below; the SQLite FTS5 backend (the storage-fts5 plugin) keeps the record in its database. No command moves a record between backends: a record reaches another backend through the agent re-entering it with the ordinary verbs, so a store other than posix holds only what the verbs write and older record shapes live in posix files alone.
+Under @laws#storage-backend-authority, the configured storage backend is the authoritative single source of truth. The engine completely decouples session machinery from physical disk layouts and file formats. Every verb reaches the record through the configured driver and nothing else, so the record is one store whichever driver holds it. Base maps every command to one storage function and renders the typed data it returns, and each backend stores the record its own way and enforces the record rules itself. The data model is one for every backend: every item answers typed fields and reads in one canonical layout (field order, spacing, and quoting are layout, never data), and an item stored in an older shape keeps every value in named fields (a legacy status, extra fields, head text, extra lines), so every backend returns the same data and prints the same text for the same record, and an older record reads back with nothing lost. In the default POSIX driver each artifact is a markdown file in its unit folder, written in the record grammar below; the SQLite FTS5 backend (the storage-fts5 plugin) keeps the record in its database. No command moves a record between backends: a record reaches another backend through the agent re-entering it with the ordinary verbs, so a store other than posix holds only what the verbs write and older record shapes live in posix files alone.
 
 For agents, under @laws#semantic-boundary, the record is an abstract structured domain surface, never raw files on disk. Agents interact exclusively through semantic CLI verbs, never reading, editing, or grepping storage files or database tables directly.
 
@@ -109,7 +109,7 @@ The journal is the unit's chronological event trace and recording surface: event
   KNOWLEDGE: true
 ```
 
-Fields on journal entries, in the canonical order the record verbs write (an older entry in another order reads back as stored):
+Fields on journal entries, in the canonical order every read prints and the record verbs write (an older entry stored in another order reads in this order, every value kept):
 
 - `@entry <date>-<slug>` opens an entry block. Slugs end alphanumeric.
 - `ANCHOR:` identifies the working period.
@@ -129,7 +129,7 @@ Agents record events via `ctx session record`:
 .contexture/ctx session record <unit> --what="..." [--group=...] [--thread=...] [--rhythm="<name> <N> <GATE>"] [--ref=...]... [--closes=...]... [--supersedes=...]... [--knowledge] [--slug=...]
 ```
 
-The command sends the current local date and time, the storage driver takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` takes one or more target slugs, each of which must name an entry the journal already holds; a value carrying its own parenthesized verdict (`--closes="<slug> <slug> (dropped: reason)"`) lands as given, and a bare target list is closed as `(done: <WHAT>)` (a bare `--supersedes` as `(superseded: <WHAT>)`), every parenthesis of the WHAT written as a square bracket since a closer reason holds none. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal is read as it stands. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the `next_action` pointer, the state `objective`) on every write path: an embedded double quote is text (the typed verbs, `next`, and `bootstrap` store it), and every reader returns it verbatim.
+The command sends the current local date and time, the storage driver takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` takes one or more target slugs, each of which must name an entry the journal already holds; a value carrying its own parenthesized verdict (`--closes="<slug> <slug> (dropped: reason)"`) lands as given, and a bare target list is closed as `(done: <WHAT>)` (a bare `--supersedes` as `(superseded: <WHAT>)`), every parenthesis of the WHAT written as a square bracket since a closer reason holds none. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal reads in the canonical layout, every value kept, and its file bytes stay as they are. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the `next_action` pointer, the state `objective`) on every write path: an embedded double quote is text (the typed verbs, `next`, and `bootstrap` store it), and every reader returns it verbatim.
 
 To inspect entries:
 - `ctx session entry show <unit> <slug> [--json]`: prints the entry's stored block (every field it carries); `--json` prints the typed entry: its fields, `refs` as a list, its closers, and the closure derived by position (`closed`, `closed_by`, `close_reason`).
@@ -161,7 +161,7 @@ Unlike immutable journal events, findings support full lifecycle CRUD:
 - `@finding NAME` opens the block with uppercase alphanumeric naming.
 - `SUPERSEDES: <NAME> (reason)` records forward-only supersession.
 
-The fields stand in the canonical order the finding verbs write (`SUPERSEDES`, `REF`, `SUMMARY`); an older finding with `SUMMARY` first reads back as stored.
+The fields stand in the canonical order every read prints and the finding verbs write (`SUPERSEDES`, `REF`, `SUMMARY`); an older finding stored with `SUMMARY` first reads in this order.
 - `REF: "target#symbol"` grounds the finding in append-only artifacts (`entry#slug` or `lane#slug/report#claim`).
 - `SUMMARY ::` carries the settled claim.
 
@@ -246,7 +246,7 @@ The grammars share strict dialect rules:
 - Typed blocks start at column 0; bodies indent two spaces.
 - `::` opens a block scalar; `|` means alternation only; `[ ]` wraps optional parts; `->` means flow; `#` starts a comment.
 - Whitespace is syntax: queries anchor on block starts, so misplaced indents break parsing.
-- Lines end in LF: a carriage return in any field value is refused at the write (rc 1) before any storage call; a legacy line already stored with one keeps its bytes, and its fields read without it.
+- Lines end in LF: a carriage return in any field value is refused at the write (rc 1) before any storage call; a legacy line already stored with one reads without it, and the file keeps that byte until a write touches its item, which is then stored canonical.
 - Spellings are contractual across tools and queries.
 
 The schema holds the shape, the writer holds the volume. Token efficiency is the dialect, never a cap on content. Omit ornament, never substance.

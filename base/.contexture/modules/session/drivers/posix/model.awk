@@ -1,8 +1,10 @@
 # model.awk: the posix driver's record model (contract 2, docs/the-engine.md, The record
 # data model): it loads the artifacts the driver hands it, parses every legacy shape by the
-# parse rules into typed items, decides each item's verbatim with the canonical renderer
-# (canon.awk), derives the positional fields (occurrence, seq, next, closure, liveness,
-# superseded_by), and renders the JSON answers of the schemas. The driver runs it after
+# parse rules into typed items that hold all of their content (the schema fields, the extra
+# fields, the head text, the extra lines; no item keeps its stored bytes), renders each
+# item's canonical text through canon.awk, derives the positional fields (occurrence, seq,
+# next, closure, liveness, superseded_by), and renders the JSON answers of the schemas. The
+# driver runs it after
 # canon.awk and before ops.awk; every value arrives through the environment or a file,
 # never through awk -v (knowledge#FREE_TEXT_NEVER_THROUGH_AWK_V).
 #
@@ -115,8 +117,9 @@ function load_manifest(path, sizes,   line, f, n, k, sz, p, t, tot, SZ, nsz, nf)
   close(path)
 }
 
+
 # text(k, a, b): the stored bytes of lines a..b (each newline terminated, the file's last
-# line only when the file ends with one)
+# line only when the file ends with one); the preamble and a lane document read this way
 function text(k, a, b,   i, o) {
   o = ""
   for (i = a; i <= b; i++) o = o L[k, i] (((k, i) in CRL) ? "\r" : "") ((i < NL[k] || EOFNL[k]) ? "\n" : "")
@@ -138,6 +141,16 @@ function unq(v) {
 function unq_both(v) {
   if (length(v) >= 2 && substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") return substr(v, 2, length(v) - 2)
   return v
+}
+
+function trimb(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+
+# lastparen(s): the text of s up to its last closing parenthesis (all of s without one): a
+# legacy closer or supersedes reason may hold parentheses of its own
+function lastparen(s,   p, q) {
+  p = 0
+  while ((q = index(substr(s, p + 1), ")")) > 0) p += q
+  return (p > 0) ? substr(s, 1, p - 1) : s
 }
 
 # listparse(value, arr): [a, b] split on commas, or blank separated bare tokens
@@ -162,16 +175,24 @@ function listparse(v, arr,   n, inner, k, parts, i, t) {
   return n
 }
 
-# scan(k, a, cend): the field lines of one item (lines a+1..cend): NFD fields, FL label,
-# FV value, FB 1 for a block scalar, FLINE its first line, FEND its last line
-function scan(k, a, cend,   j, m, last, lab, v) {
-  NFD = 0
+# scan(k, a, cend): the lines of one item after its head (lines a+1..cend): NFD fields, FL
+# label, FV value, FB 1 for a block scalar, FLINE its first line, FEND its last line; NSTR
+# lines no field holds, STR each (a continuation, a comment, any other text). A block scalar
+# opens with "  <LABEL> ::", text after the "::" being its first line; its body is the
+# following lines indented four spaces (blank lines inside kept as empty lines), four spaces
+# removed, its trailing whitespace-only lines dropped (nb).
+function scan(k, a, cend,   j, m, last, lab, v, t, first, hasfirst) {
+  NFD = 0; NSTR = 0
   j = a + 1
   while (j <= cend) {
-    if (L[k, j] ~ /^  [A-Z][A-Z_ ]* ::[ \t]*$/) {
-      lab = L[k, j]
+    t = L[k, j]
+    if (t ~ /^  [A-Z][A-Z_ ]* ::([ \t].*)?$/) {
+      lab = t
       sub(/^  /, "", lab)
-      sub(/ ::[ \t]*$/, "", lab)
+      sub(/ ::.*$/, "", lab)
+      first = substr(t, index(t, " ::") + 3)
+      sub(/^[ \t]+/, "", first)
+      hasfirst = !isblank(first)
       last = j
       m = j + 1
       while (m <= cend) {
@@ -179,19 +200,19 @@ function scan(k, a, cend,   j, m, last, lab, v) {
         else if (isblank(L[k, m])) m++
         else break
       }
-      v = ""
-      for (m = j + 1; m <= last; m++) v = v (m > j + 1 ? "\n" : "") (L[k, m] ~ /^    / ? substr(L[k, m], 5) : "")
-      NFD++; FL[NFD] = lab; FV[NFD] = v; FB[NFD] = 1; FLINE[NFD] = j; FEND[NFD] = last
+      v = hasfirst ? first : ""
+      for (m = j + 1; m <= last; m++) v = v ((m > j + 1 || hasfirst) ? "\n" : "") (L[k, m] ~ /^    / ? substr(L[k, m], 5) : "")
+      NFD++; FL[NFD] = lab; FV[NFD] = nb(v); FB[NFD] = 1; FLINE[NFD] = j; FEND[NFD] = last
       j = last + 1
       continue
     }
-    if (L[k, j] ~ /^  [A-Z][A-Z_]*: /) {
-      lab = L[k, j]
+    if (t ~ /^  [A-Z][A-Z_]*: /) {
+      lab = t
       sub(/^  /, "", lab)
       sub(/: .*$/, "", lab)
-      v = substr(L[k, j], length(lab) + 5)
+      v = substr(t, length(lab) + 5)
       NFD++; FL[NFD] = lab; FB[NFD] = 0; FLINE[NFD] = j
-      if ((lab == "WHAT" || lab == "OBJECTIVE") && substr(v, 1, 1) == "\"" && (length(v) == 1 || substr(v, length(v), 1) != "\"")) {
+      if ((lab == "WHAT" || lab == "OBJECTIVE") && c_opens(v)) {
         m = j + 1
         while (m <= cend) {
           v = v "\n" L[k, m]
@@ -202,7 +223,10 @@ function scan(k, a, cend,   j, m, last, lab, v) {
         j = m
       }
       FV[NFD] = v; FEND[NFD] = j
+      j++
+      continue
     }
+    if (!isblank(t)) STR[++NSTR] = t
     j++
   }
 }
@@ -213,65 +237,84 @@ function content_end(k, a, b,   e) {
   return e
 }
 
+# p_head(k, a, word): the id of a head line (its second token) into HID, the text after it
+# (blanks trimmed; NULLV when none) into HTX
+function p_head(k, a, w,   h) {
+  h = L[k, a]
+  sub("^@" w "[ \t]*", "", h)
+  HID = h
+  sub(/[ \t].*$/, "", HID)
+  HTX = trimb(substr(h, length(HID) + 1))
+  if (HTX == "") HTX = NULLV
+}
+
+# x_extra(k, i, key, value), x_lines(k, i): an extra field, the extra lines of the scan
+function x_extra(k, i, key, v) { X[k, i, "e", ++X[k, i, "e#"], "key"] = key; X[k, i, "e", X[k, i, "e#"], "val"] = v }
+function x_lines(k, i,   n) { X[k, i, "l#"] = NSTR; for (n = 1; n <= NSTR; n++) X[k, i, "l", n] = STR[n] }
+
 # ---- the parse of each kind into X[k, i, field] ----
-function p_task(k, i, a, b, nextk,   cend, j, status, obj, refsv, R, nr, desc, crit, det, slug, canon, stored) {
+# a task: the first STATUS, the first OBJECTIVE (a line unquoted, or a block), the first
+# REFS, the first of each block section; every other field (a later occurrence, an unknown
+# label) an extra field in line order
+function p_task(k, i, a, b,   cend, j, status, obj, refsv, R, nr, desc, crit, det) {
   cend = content_end(k, a, b)
   scan(k, a, cend)
   status = NULLV; obj = NULLV; refsv = NULLV; desc = NULLV; crit = NULLV; det = NULLV
+  X[k, i, "e#"] = 0
   for (j = 1; j <= NFD; j++) {
     if (FL[j] == "STATUS" && !FB[j] && status == NULLV) status = FV[j]
-    else if (FL[j] == "OBJECTIVE" && !FB[j] && obj == NULLV) obj = unq(FV[j])
+    else if (FL[j] == "OBJECTIVE" && obj == NULLV) obj = FB[j] ? FV[j] : unq(FV[j])
     else if (FL[j] == "REFS" && !FB[j] && refsv == NULLV) refsv = FV[j]
     else if (FL[j] == "DESCRIPTION" && FB[j] && desc == NULLV) desc = FV[j]
     else if (FL[j] == "ACCEPTANCE CRITERIA" && FB[j] && crit == NULLV) crit = FV[j]
     else if (FL[j] == "IMPLEMENTATION DETAILS" && FB[j] && det == NULLV) det = FV[j]
+    else x_extra(k, i, FL[j], FV[j])
   }
   if (status == NULLV) status = "TODO"
   if (obj == NULLV) obj = ""
   nr = (refsv == NULLV) ? 0 : listparse(refsv, R)
-  slug = L[k, a]; sub(/^@task[ \t]+/, "", slug); sub(/[ \t].*$/, "", slug)
-  X[k, i, "slug"] = slug; X[k, i, "status"] = status; X[k, i, "objective"] = obj
+  p_head(k, a, "task")
+  X[k, i, "slug"] = HID; X[k, i, "ht"] = HTX; X[k, i, "status"] = status; X[k, i, "objective"] = obj
   X[k, i, "r#"] = nr
   for (j = 1; j <= nr; j++) X[k, i, "r", j] = R[j]
   X[k, i, "desc"] = desc; X[k, i, "crit"] = crit; X[k, i, "det"] = det
-  canon = c_task(slug, status, obj, R, nr, desc, crit, det) c_sep(nextk)
-  stored = text(k, a, b)
-  IV[k, i] = (stored == canon) ? NULLV : stored
+  x_lines(k, i)
 }
 
-function p_finding(k, i, a, b, nextk,   cend, j, sup, supn, supr, nr, R, summ, name, t, canon, stored) {
+# a finding: the first SUPERSEDES (its name the first token, its reason the parenthesis text
+# to the last closing parenthesis, "" without one), every REF unquoted, the first SUMMARY (a
+# block, or a line); every other field an extra field in line order
+function p_finding(k, i, a, b,   cend, j, sup, supn, supr, nr, R, summ, t) {
   cend = content_end(k, a, b)
   scan(k, a, cend)
   sup = NULLV; summ = NULLV; nr = 0
   split("", R)
+  X[k, i, "e#"] = 0
   for (j = 1; j <= NFD; j++) {
     if (FL[j] == "SUPERSEDES" && !FB[j] && sup == NULLV) sup = FV[j]
     else if (FL[j] == "REF" && !FB[j]) R[++nr] = unq_both(FV[j])
-    else if (FL[j] == "SUMMARY" && FB[j] && summ == NULLV) summ = FV[j]
+    else if (FL[j] == "SUMMARY" && summ == NULLV) summ = FV[j]
+    else x_extra(k, i, FL[j], FV[j])
   }
   if (summ == NULLV) summ = ""
-  name = L[k, a]; sub(/^@finding[ \t]+/, "", name); sub(/[ \t].*$/, "", name)
+  p_head(k, a, "finding")
   supn = NULLV; supr = ""
   if (sup != NULLV) {
     supn = sup; sub(/[ \t].*$/, "", supn)
     t = sup
-    if (index(t, "(") > 0) {
-      t = substr(t, index(t, "(") + 1)
-      if (index(t, ")") > 0) t = substr(t, 1, index(t, ")") - 1)
-      supr = t
-    }
+    if (index(t, "(") > 0) supr = lastparen(substr(t, index(t, "(") + 1))
   }
-  X[k, i, "name"] = name; X[k, i, "supn"] = supn; X[k, i, "supr"] = supr; X[k, i, "summ"] = summ
+  X[k, i, "name"] = HID; X[k, i, "ht"] = HTX; X[k, i, "supn"] = supn; X[k, i, "supr"] = supr; X[k, i, "summ"] = summ
   X[k, i, "r#"] = nr
   for (j = 1; j <= nr; j++) X[k, i, "r", j] = R[j]
-  canon = c_finding(name, supn, supr, R, nr, summ) c_sep(nextk)
-  stored = text(k, a, b)
-  IV[k, i] = (stored == canon) ? NULLV : stored
+  x_lines(k, i)
 }
 
-# p_closer(k, i, kind, value, line, line number): one closer into X[k, i, "c", n, ...];
-# returns the line the entry's canonical lines carry (the stored line)
-function p_closer(k, i, kind, v, line, lno,   cut, tpart, rest, n, parts, j, T, nt, verdict, reason, inner, canon, p1, p2, c) {
+# p_closer(k, i, kind, value, line number): one closer into X[k, i, "c", n, ...]: its targets
+# the date-slug tokens before the first " - " or " (" (every other token of that part its extra
+# text, joined by one space), then a parenthesis read to its last closing parenthesis
+# ("<verdict>: <reason>" with a known verdict, else the reason alone), or " - <reason>"
+function p_closer(k, i, kind, v, lno,   cut, tpart, rest, n, parts, j, T, nt, verdict, reason, inner, p1, p2, c, xt) {
   p1 = index(v, " - "); p2 = index(v, " (")
   cut = 0
   if (p1 > 0) cut = p1
@@ -282,11 +325,14 @@ function p_closer(k, i, kind, v, line, lno,   cut, tpart, rest, n, parts, j, T, 
   nt = 0
   split("", T)
   n = split(tpart, parts, /[ \t]+/)
-  for (j = 1; j <= n; j++) if (isdateslug(parts[j])) T[++nt] = parts[j]
+  xt = NULLV
+  for (j = 1; j <= n; j++) {
+    if (isdateslug(parts[j])) T[++nt] = parts[j]
+    else if (parts[j] != "") xt = (xt == NULLV) ? parts[j] : xt " " parts[j]
+  }
   verdict = NULLV; reason = NULLV
   if (substr(rest, 1, 1) == "(") {
-    inner = substr(rest, 2)
-    if (index(inner, ")") > 0) inner = substr(inner, 1, index(inner, ")") - 1)
+    inner = lastparen(substr(rest, 2))
     if (inner ~ /^(done|superseded|dropped|folded): /) {
       verdict = inner; sub(/: .*$/, "", verdict)
       reason = substr(inner, length(verdict) + 3)
@@ -295,77 +341,82 @@ function p_closer(k, i, kind, v, line, lno,   cut, tpart, rest, n, parts, j, T, 
     reason = substr(rest, 3)
     if (reason == "") reason = NULLV
   }
-  canon = c_closer(kind, T, nt, verdict, reason)
   c = ++X[k, i, "c#"]
   X[k, i, "c", c, "kind"] = kind; X[k, i, "c", c, "t#"] = nt
   for (j = 1; j <= nt; j++) X[k, i, "c", c, "t", j] = T[j]
-  X[k, i, "c", c, "verdict"] = verdict; X[k, i, "c", c, "reason"] = reason
-  X[k, i, "c", c, "verb"] = (canon == line) ? NULLV : line
+  X[k, i, "c", c, "verdict"] = verdict; X[k, i, "c", c, "reason"] = reason; X[k, i, "c", c, "xt"] = xt
   X[k, i, "c", c, "line"] = lno
-  return line "\n"
 }
 
-function p_entry(k, i, a, b, nextk, islane,   cend, j, last, slug, anchor, what, group, rhythm, thread, know, lst, nr, R, ne, cls, canon, stored, tl) {
+# an entry (main or lane journal): the last occurrence of ANCHOR, GROUP, RHYTHM, THREAD, and
+# STATUS (legacy_status) is typed; the last WHAT, a line unquoted or a block; KNOWLEDGE true
+# when its last line reads true; REF, CLOSES, SUPERSEDES lines are lists in line order; every
+# other field (an earlier occurrence, a KNOWLEDGE not typed, an unknown label, a block of a
+# one-line label) an extra field in line order
+function p_entry(k, i, a, b,   cend, j, last, lw, anchor, what, group, rhythm, thread, know, lst, nr, R, tl, lab) {
   cend = content_end(k, a, b)
   scan(k, a, cend)
   split("", last)
-  for (j = 1; j <= NFD; j++) last[FL[j] SUBSEP FB[j]] = j
-  anchor = NULLV; what = NULLV; group = NULLV; rhythm = NULLV; thread = NULLV; know = 0; lst = NULLV
-  nr = 0; ne = 0; cls = ""; tl = 0
-  split("", R)
-  X[k, i, "c#"] = 0
+  lw = 0
   for (j = 1; j <= NFD; j++) {
-    if (!FB[j] && FL[j] ~ /^(ANCHOR|WHAT|GROUP|RHYTHM|THREAD|KNOWLEDGE|STATUS)$/ && last[FL[j] SUBSEP 0] == j) {
-      if (FL[j] == "ANCHOR") anchor = FV[j]
-      else if (FL[j] == "WHAT") what = unq(FV[j])
-      else if (FL[j] == "GROUP") group = FV[j]
-      else if (FL[j] == "RHYTHM") rhythm = FV[j]
-      else if (FL[j] == "THREAD") { thread = FV[j]; tl = FLINE[j] }
-      else if (FL[j] == "KNOWLEDGE") know = (FV[j] == "true") ? 1 : 0
-      else if (FL[j] == "STATUS") lst = FV[j]
-    } else if (FB[j] && FL[j] == "WHAT" && last["WHAT" SUBSEP 1] == j && !(("WHAT" SUBSEP 0) in last)) {
-      what = FV[j]
-    } else if (!FB[j] && FL[j] == "REF") {
-      R[++nr] = unq_both(FV[j])
-    } else if (!FB[j] && (FL[j] == "CLOSES" || FL[j] == "SUPERSEDES")) {
-      cls = cls p_closer(k, i, FL[j], FV[j], L[k, FLINE[j]], FLINE[j])
-    } else {
-      ne++
-      X[k, i, "e", ne, "key"] = FL[j]; X[k, i, "e", ne, "val"] = FV[j]
-    }
+    if (!FB[j]) last[FL[j]] = j
+    if (FL[j] == "WHAT") lw = j
   }
-  slug = L[k, a]; sub(/^@entry[ \t]+/, "", slug); sub(/[ \t].*$/, "", slug)
-  X[k, i, "slug"] = slug; X[k, i, "anchor"] = anchor; X[k, i, "what"] = what; X[k, i, "group"] = group
+  anchor = NULLV; what = NULLV; group = NULLV; rhythm = NULLV; thread = NULLV; know = 0; lst = NULLV
+  nr = 0; tl = 0
+  split("", R)
+  X[k, i, "c#"] = 0; X[k, i, "e#"] = 0
+  for (j = 1; j <= NFD; j++) {
+    lab = FL[j]
+    if (lab == "WHAT" && j == lw) what = FB[j] ? FV[j] : unq(FV[j])
+    else if (!FB[j] && lab ~ /^(ANCHOR|GROUP|RHYTHM|THREAD|STATUS)$/ && last[lab] == j) {
+      if (lab == "ANCHOR") anchor = FV[j]
+      else if (lab == "GROUP") group = FV[j]
+      else if (lab == "RHYTHM") rhythm = FV[j]
+      else if (lab == "THREAD") { thread = FV[j]; tl = FLINE[j] }
+      else lst = FV[j]
+    } else if (!FB[j] && lab == "KNOWLEDGE" && last[lab] == j && FV[j] == "true") know = 1
+    else if (!FB[j] && lab == "REF") R[++nr] = unq_both(FV[j])
+    else if (!FB[j] && (lab == "CLOSES" || lab == "SUPERSEDES")) p_closer(k, i, lab, FV[j], FLINE[j])
+    else x_extra(k, i, lab, FV[j])
+  }
+  p_head(k, a, "entry")
+  X[k, i, "slug"] = HID; X[k, i, "ht"] = HTX; X[k, i, "anchor"] = anchor; X[k, i, "what"] = what; X[k, i, "group"] = group
   X[k, i, "rhythm"] = rhythm; X[k, i, "thread"] = thread; X[k, i, "know"] = know; X[k, i, "lst"] = lst
   X[k, i, "tline"] = tl
   X[k, i, "r#"] = nr
   for (j = 1; j <= nr; j++) X[k, i, "r", j] = R[j]
-  X[k, i, "e#"] = ne
-  if (islane) {
-    canon = c_lane_entry(slug, what, thread, R, nr)
-    # a lane entry's canonical lines never carry ANCHOR, GROUP, RHYTHM, closers, KNOWLEDGE
-    if (anchor != NULLV || group != NULLV || rhythm != NULLV || X[k, i, "c#"] > 0 || know) canon = canon "\001"
-  } else canon = c_entry(slug, anchor, what, group, rhythm, thread, R, nr, cls, know)
-  canon = canon c_sep(nextk)
-  stored = text(k, a, b)
-  IV[k, i] = (stored == canon) ? NULLV : stored
+  x_lines(k, i)
 }
 
-function p_anchor(k, i, a, b, nextk,   h, anc, rest, cont, att, canon, stored) {
-  h = L[k, a]
-  sub(/^@anchor[ \t]+/, "", h)
-  anc = h; sub(/[ \t].*$/, "", anc)
-  rest = substr(h, length(anc) + 2)
+# an anchor: the stamp form ("continues <P>", attention: <text>) gives continues and attention
+# (a surrounding pair of quotes off the attention); any other text after the anchor is its
+# head text; the lines after the head its extra lines
+function p_anchor(k, i, a, b,   cend, rest, cont, att, j) {
+  p_head(k, a, "anchor")
+  rest = (HTX == NULLV) ? "" : HTX
   cont = NULLV; att = NULLV
   if (rest ~ /^\("continues A[0-9]+", attention: .*\)$/) {
     cont = rest; sub(/^\("continues /, "", cont); sub(/".*$/, "", cont)
     att = rest; sub(/^\("continues A[0-9]+", attention: /, "", att); sub(/\)$/, "", att)
     att = unq_both(att)
+    HTX = NULLV
   }
-  X[k, i, "anchor"] = anc; X[k, i, "cont"] = cont; X[k, i, "att"] = att
-  canon = c_anchor(anc, cont, att) c_sep(nextk)
-  stored = text(k, a, b)
-  IV[k, i] = (stored == canon) ? NULLV : stored
+  X[k, i, "anchor"] = HID; X[k, i, "cont"] = cont; X[k, i, "att"] = att; X[k, i, "ht"] = HTX
+  cend = content_end(k, a, b)
+  NSTR = 0
+  for (j = a + 1; j <= cend; j++) if (!isblank(L[k, j])) STR[++NSTR] = L[k, j]
+  x_lines(k, i)
+}
+
+# an opaque item (a head other than @task in a backlog, other than @finding in a knowledge):
+# its head line and its lines to its content end
+function p_opaque(k, i, a, b,   cend, j) {
+  X[k, i, "head"] = L[k, a]
+  cend = content_end(k, a, b)
+  NSTR = 0
+  for (j = a + 1; j <= cend; j++) STR[++NSTR] = L[k, j]
+  x_lines(k, i)
 }
 
 # kindof(type, head line)
@@ -378,7 +429,7 @@ function kindof(type, h) {
 
 # parse_art(k, type): the preamble and the items of one block artifact; an absent
 # artifact reads preamble NULLV and no item
-function parse_art(k, type,   i, nh, H, b, nk) {
+function parse_art(k, type,   i, nh, H) {
   TYPE[k] = type
   NI[k] = 0
   if (!(k in PRES)) { PRE[k] = NULLV; return }
@@ -396,12 +447,11 @@ function parse_art(k, type,   i, nh, H, b, nk) {
     IK[k, i] = kindof(type, L[k, H[i]])
   }
   for (i = 1; i <= nh; i++) {
-    nk = (i < nh) ? IK[k, i + 1] : NULLV
-    if (IK[k, i] == "task") p_task(k, i, IH[k, i], IE[k, i], nk)
-    else if (IK[k, i] == "finding") p_finding(k, i, IH[k, i], IE[k, i], nk)
-    else if (IK[k, i] == "entry") p_entry(k, i, IH[k, i], IE[k, i], nk, type == "lanejournal")
-    else if (IK[k, i] == "anchor") p_anchor(k, i, IH[k, i], IE[k, i], nk)
-    else IV[k, i] = text(k, IH[k, i], IE[k, i])
+    if (IK[k, i] == "task") p_task(k, i, IH[k, i], IE[k, i])
+    else if (IK[k, i] == "finding") p_finding(k, i, IH[k, i], IE[k, i])
+    else if (IK[k, i] == "entry") p_entry(k, i, IH[k, i], IE[k, i])
+    else if (IK[k, i] == "anchor") p_anchor(k, i, IH[k, i], IE[k, i])
+    else p_opaque(k, i, IH[k, i], IE[k, i])
   }
   if (type == "journal" || type == "lanejournal") derive_journal(k)
   if (type == "knowledge") derive_knowledge(k)
@@ -438,23 +488,44 @@ function derive_knowledge(k,   i, n) {
 }
 
 # ---- the state ----
-function parse_state(u,   k, i, key, v, st, ca, na, ob, rv, rs, R, nr, S, ns, seen, canon, stored) {
+# every "<key>: <value>" line at column 0 opens a key; the indented lines after it continue
+# its value (joined by newlines as stored) until a blank line or the next column-0 line; the
+# first line of each of the six keys is typed (next_action and objective unquoted, repos and
+# ref_sessions lists, ref_sessions null without its line), every other key (unknown, or a
+# later occurrence) an extra field in line order, every other line an extra line
+function parse_state(u,   k, i, key, v, st, ca, na, ob, rv, rs, R, nr, S, ns, seen, t, cur, NK, KK, KV, KL) {
   k = u "|state"
   st = ""; ca = ""; na = ""; ob = ""; rv = NULLV; rs = NULLV
   split("", seen)
+  for (t in SLINE) if (index(t, u SUBSEP) == 1) delete SLINE[t]
+  ST[u, "e#"] = 0; ST[u, "l#"] = 0
+  NK = 0; cur = 0
   for (i = 1; i <= NL[k]; i++) {
-    if (L[k, i] !~ /^[a-z_]+: ?/) continue
-    key = L[k, i]; sub(/:.*$/, "", key)
-    v = substr(L[k, i], length(key) + 2); sub(/^ /, "", v)
-    if (key in seen) continue
-    seen[key] = 1
-    SLINE[u, key] = i
-    if (key == "status") st = v
-    else if (key == "current_anchor") ca = v
-    else if (key == "next_action") na = unq(v)
-    else if (key == "objective") ob = unq(v)
-    else if (key == "repos") rv = v
-    else if (key == "ref_sessions") rs = v
+    t = L[k, i]
+    if (t ~ /^[a-z_]+: ?/) {
+      key = t; sub(/:.*$/, "", key)
+      v = substr(t, length(key) + 2); sub(/^ /, "", v)
+      NK++; KK[NK] = key; KV[NK] = v; KL[NK] = i; cur = NK
+      continue
+    }
+    if (isblank(t)) { cur = 0; continue }
+    if (cur && t ~ /^[ \t]/) { KV[cur] = KV[cur] "\n" t; continue }
+    ST[u, "l", ++ST[u, "l#"]] = t
+  }
+  for (i = 1; i <= NK; i++) {
+    key = KK[i]; v = KV[i]
+    if (!(key in seen) && key ~ /^(status|current_anchor|next_action|objective|repos|ref_sessions)$/) {
+      seen[key] = 1
+      SLINE[u, key] = KL[i]
+      if (key == "status") st = v
+      else if (key == "current_anchor") ca = v
+      else if (key == "next_action") na = unq(v)
+      else if (key == "objective") ob = unq(v)
+      else if (key == "repos") rv = v
+      else rs = v
+      continue
+    }
+    ST[u, "e", ++ST[u, "e#"], "key"] = key; ST[u, "e", ST[u, "e#"], "val"] = v
   }
   nr = (rv == NULLV) ? 0 : listparse(rv, R)
   ns = (rs == NULLV) ? 0 : listparse(rs, S)
@@ -464,10 +535,45 @@ function parse_state(u,   k, i, key, v, st, ca, na, ob, rv, rs, R, nr, S, ns, se
   ST[u, "hasrs"] = (rs != NULLV)
   ST[u, "s#"] = ns
   for (i = 1; i <= ns; i++) ST[u, "s", i] = S[i]
-  canon = c_state(st, ca, na, ob, R, nr, rs != NULLV, S, ns)
-  stored = text(k, 1, NL[k])
-  ST[u, "verb"] = (stored == canon) ? NULLV : stored
-  ST[u, "text"] = stored
+  ST[u, "text"] = state_text(u)
+}
+
+# ---- the canonical text of every item from its typed fields (canon.awk) ----
+function xl_text(k, i,   n, o) { o = ""; for (n = 1; n <= X[k, i, "l#"]; n++) o = o X[k, i, "l", n] "\n"; return o }
+function xf_text(k, i,   n, o) { o = ""; for (n = 1; n <= X[k, i, "e#"]; n++) o = o c_xfield(X[k, i, "e", n, "key"], X[k, i, "e", n, "val"]); return o }
+function xr(k, i, R,   n) { split("", R); for (n = 1; n <= X[k, i, "r#"]; n++) R[n] = X[k, i, "r", n]; return X[k, i, "r#"] + 0 }
+
+function cls_text(k, i,   c, t, T, nt, o) {
+  o = ""
+  for (c = 1; c <= X[k, i, "c#"]; c++) {
+    nt = X[k, i, "c", c, "t#"] + 0
+    split("", T)
+    for (t = 1; t <= nt; t++) T[t] = X[k, i, "c", c, "t", t]
+    o = o c_closer(X[k, i, "c", c, "kind"], T, nt, X[k, i, "c", c, "verdict"], X[k, i, "c", c, "reason"], X[k, i, "c", c, "xt"]) "\n"
+  }
+  return o
+}
+
+# item_lines(k, i): the canonical lines of item i of artifact k; item_text adds its separator
+function item_lines(k, i,   R, nr) {
+  nr = xr(k, i, R)
+  if (IK[k, i] == "task") return c_task(X[k, i, "slug"], X[k, i, "status"], X[k, i, "objective"], R, nr, X[k, i, "desc"], X[k, i, "crit"], X[k, i, "det"], X[k, i, "ht"], xl_text(k, i), xf_text(k, i))
+  if (IK[k, i] == "finding") return c_finding(X[k, i, "name"], X[k, i, "supn"], X[k, i, "supr"], R, nr, X[k, i, "summ"], X[k, i, "ht"], xl_text(k, i), xf_text(k, i))
+  if (IK[k, i] == "entry") return c_entry(X[k, i, "slug"], X[k, i, "anchor"], X[k, i, "what"], X[k, i, "group"], X[k, i, "rhythm"], X[k, i, "thread"], R, nr, cls_text(k, i), X[k, i, "know"], X[k, i, "lst"], X[k, i, "ht"], xl_text(k, i), xf_text(k, i))
+  if (IK[k, i] == "anchor") return c_anchor(X[k, i, "anchor"], X[k, i, "cont"], X[k, i, "att"], X[k, i, "ht"], xl_text(k, i))
+  return c_opaque(X[k, i, "head"], xl_text(k, i))
+}
+
+function item_text(k, i) { return item_lines(k, i) c_sep((i < NI[k]) ? IK[k, i + 1] : NULLV) }
+
+function state_text(u,   i, R, S, xl, xf) {
+  split("", R); split("", S)
+  for (i = 1; i <= ST[u, "r#"]; i++) R[i] = ST[u, "r", i]
+  for (i = 1; i <= ST[u, "s#"]; i++) S[i] = ST[u, "s", i]
+  xl = ""; xf = ""
+  for (i = 1; i <= ST[u, "l#"]; i++) xl = xl ST[u, "l", i] "\n"
+  for (i = 1; i <= ST[u, "e#"]; i++) xf = xf ST[u, "e", i, "key"] ": " ST[u, "e", i, "val"] "\n"
+  return c_state(ST[u, "status"], ST[u, "anchor"], ST[u, "next"], ST[u, "obj"], R, ST[u, "r#"], ST[u, "hasrs"], S, ST[u, "s#"], xl, xf)
 }
 
 # ---- the JSON of the schemas ----
@@ -480,7 +586,21 @@ function xlist(k, i, tag,   n, j, o) {
 
 function nextk_json(k, i) { return (i < NI[k]) ? jstr(IK[k, i + 1]) : "null" }
 
-function state_json(u,   i, o, rs) {
+function kv_json(key, v) { return "{\"key\":" jstr(key) ",\"value\":" jstr(v) "}" }
+
+function extras_json(k, i,   e, o) {
+  o = "["
+  for (e = 1; e <= X[k, i, "e#"]; e++) o = o (e > 1 ? "," : "") kv_json(X[k, i, "e", e, "key"], X[k, i, "e", e, "val"])
+  return o "]"
+}
+
+# the fields every item with a head shares after its schema fields: head_text, extra_fields
+# (extras 1), extra_lines
+function tail_json(k, i, extras) {
+  return (extras ? ",\"extra_fields\":" extras_json(k, i) : "") ",\"head_text\":" jnull(X[k, i, "ht"]) ",\"extra_lines\":" xlist(k, i, "l")
+}
+
+function state_json(u,   i, o, rs, e, l) {
   o = "["
   for (i = 1; i <= ST[u, "r#"]; i++) o = o (i > 1 ? "," : "") jstr(ST[u, "r", i])
   o = o "]"
@@ -489,11 +609,17 @@ function state_json(u,   i, o, rs) {
     for (i = 1; i <= ST[u, "s#"]; i++) rs = rs (i > 1 ? "," : "") jstr(ST[u, "s", i])
     rs = rs "]"
   } else rs = "null"
-  return "{\"unit\":" jstr(u) ",\"status\":" jstr(ST[u, "status"]) ",\"current_anchor\":" jstr(ST[u, "anchor"]) ",\"next_action\":" jstr(ST[u, "next"]) ",\"objective\":" jstr(ST[u, "obj"]) ",\"repos\":" o ",\"ref_sessions\":" rs ",\"verbatim\":" jnull(ST[u, "verb"]) "}"
+  e = "["
+  for (i = 1; i <= ST[u, "e#"]; i++) e = e (i > 1 ? "," : "") kv_json(ST[u, "e", i, "key"], ST[u, "e", i, "val"])
+  e = e "]"
+  l = "["
+  for (i = 1; i <= ST[u, "l#"]; i++) l = l (i > 1 ? "," : "") jstr(ST[u, "l", i])
+  l = l "]"
+  return "{\"unit\":" jstr(u) ",\"status\":" jstr(ST[u, "status"]) ",\"current_anchor\":" jstr(ST[u, "anchor"]) ",\"next_action\":" jstr(ST[u, "next"]) ",\"objective\":" jstr(ST[u, "obj"]) ",\"repos\":" o ",\"ref_sessions\":" rs ",\"extra_fields\":" e ",\"extra_lines\":" l "}"
 }
 
 function task_json(k, i) {
-  return "{\"slug\":" jstr(X[k, i, "slug"]) ",\"ordinal\":" i ",\"status\":" jstr(X[k, i, "status"]) ",\"objective\":" jstr(X[k, i, "objective"]) ",\"refs\":" xlist(k, i, "r") ",\"description\":" jnull(X[k, i, "desc"]) ",\"criteria\":" jnull(X[k, i, "crit"]) ",\"details\":" jnull(X[k, i, "det"]) ",\"next\":" nextk_json(k, i) ",\"verbatim\":" jnull(IV[k, i]) "}"
+  return "{\"slug\":" jstr(X[k, i, "slug"]) ",\"ordinal\":" i ",\"status\":" jstr(X[k, i, "status"]) ",\"objective\":" jstr(X[k, i, "objective"]) ",\"refs\":" xlist(k, i, "r") ",\"description\":" jnull(X[k, i, "desc"]) ",\"criteria\":" jnull(X[k, i, "crit"]) ",\"details\":" jnull(X[k, i, "det"]) tail_json(k, i, 1) ",\"next\":" nextk_json(k, i) "}"
 }
 
 function taskitem_json(k, i) {
@@ -501,13 +627,13 @@ function taskitem_json(k, i) {
 }
 
 function opaque_json(k, i) {
-  return "{\"kind\":\"opaque\",\"seq\":" i ",\"next\":" nextk_json(k, i) ",\"verbatim\":" jstr(IV[k, i]) "}"
+  return "{\"kind\":\"opaque\",\"seq\":" i ",\"head\":" jstr(X[k, i, "head"]) ",\"lines\":" xlist(k, i, "l") ",\"next\":" nextk_json(k, i) "}"
 }
 
 function finding_json(k, i,   sb, sup) {
   sb = ((k, X[k, i, "name"]) in SUPBY) ? SUPBY[k, X[k, i, "name"]] : NULLV
   sup = (X[k, i, "supn"] == NULLV) ? "null" : "{\"name\":" jstr(X[k, i, "supn"]) ",\"reason\":" jstr(X[k, i, "supr"]) "}"
-  return "{\"name\":" jstr(X[k, i, "name"]) ",\"ordinal\":" i ",\"supersedes\":" sup ",\"refs\":" xlist(k, i, "r") ",\"summary\":" jstr(X[k, i, "summ"]) ",\"superseded_by\":" jnull(sb) ",\"active\":" jbool(sb == NULLV) ",\"next\":" nextk_json(k, i) ",\"verbatim\":" jnull(IV[k, i]) "}"
+  return "{\"name\":" jstr(X[k, i, "name"]) ",\"ordinal\":" i ",\"supersedes\":" sup ",\"refs\":" xlist(k, i, "r") ",\"summary\":" jstr(X[k, i, "summ"]) tail_json(k, i, 1) ",\"superseded_by\":" jnull(sb) ",\"active\":" jbool(sb == NULLV) ",\"next\":" nextk_json(k, i) "}"
 }
 
 function findingitem_json(k, i,   sb) {
@@ -520,7 +646,7 @@ function closer_json(k, i, c,   n, j, o) {
   o = "["
   for (j = 1; j <= n; j++) o = o (j > 1 ? "," : "") jstr(X[k, i, "c", c, "t", j])
   o = o "]"
-  return "{\"kind\":" jstr(X[k, i, "c", c, "kind"]) ",\"targets\":" o ",\"verdict\":" jnull(X[k, i, "c", c, "verdict"]) ",\"reason\":" jnull(X[k, i, "c", c, "reason"]) ",\"verbatim\":" jnull(X[k, i, "c", c, "verb"]) "}"
+  return "{\"kind\":" jstr(X[k, i, "c", c, "kind"]) ",\"targets\":" o ",\"verdict\":" jnull(X[k, i, "c", c, "verdict"]) ",\"reason\":" jnull(X[k, i, "c", c, "reason"]) ",\"extra_text\":" jnull(X[k, i, "c", c, "xt"]) "}"
 }
 
 function closers_json(k, i,   c, o) {
@@ -529,15 +655,9 @@ function closers_json(k, i,   c, o) {
   return o "]"
 }
 
-function extras_json(k, i,   e, o) {
-  o = "["
-  for (e = 1; e <= X[k, i, "e#"]; e++) o = o (e > 1 ? "," : "") "{\"key\":" jstr(X[k, i, "e", e, "key"]) ",\"value\":" jstr(X[k, i, "e", e, "val"]) "}"
-  return o "]"
-}
-
-# the entry fields from slug through extra_fields (the part every Entry form shares)
+# the entry fields from slug through extra_lines (the part every Entry form shares)
 function entry_core(k, i) {
-  return "\"slug\":" jstr(X[k, i, "slug"]) ",\"occurrence\":" OCC[k, i] ",\"seq\":" i ",\"anchor\":" jnull(X[k, i, "anchor"]) ",\"what\":" jnull(X[k, i, "what"]) ",\"group\":" jnull(X[k, i, "group"]) ",\"rhythm\":" jnull(X[k, i, "rhythm"]) ",\"knowledge\":" jbool(X[k, i, "know"]) ",\"thread\":" jnull(X[k, i, "thread"]) ",\"legacy_status\":" jnull(X[k, i, "lst"]) ",\"refs\":" xlist(k, i, "r") ",\"closers\":" closers_json(k, i) ",\"extra_fields\":" extras_json(k, i)
+  return "\"slug\":" jstr(X[k, i, "slug"]) ",\"occurrence\":" OCC[k, i] ",\"seq\":" i ",\"anchor\":" jnull(X[k, i, "anchor"]) ",\"what\":" jnull(X[k, i, "what"]) ",\"group\":" jnull(X[k, i, "group"]) ",\"rhythm\":" jnull(X[k, i, "rhythm"]) ",\"knowledge\":" jbool(X[k, i, "know"]) ",\"thread\":" jnull(X[k, i, "thread"]) ",\"legacy_status\":" jnull(X[k, i, "lst"]) ",\"refs\":" xlist(k, i, "r") ",\"closers\":" closers_json(k, i) tail_json(k, i, 1)
 }
 
 # close_reason(k, i): "<verdict>: <reason>", the reason alone, or NULLV
@@ -554,15 +674,15 @@ function entry_json(k, i, withclosed,   o) {
     if (CLBY[k, i] == 0) o = o ",\"closed\":false,\"closed_by\":null,\"close_reason\":null"
     else o = o ",\"closed\":true,\"closed_by\":" jstr(X[k, CLBY[k, i], "slug"]) ",\"close_reason\":" jnull(close_reason(k, i))
   }
-  return o ",\"next\":" nextk_json(k, i) ",\"verbatim\":" jnull(IV[k, i]) "}"
+  return o ",\"next\":" nextk_json(k, i) "}"
 }
 
 function laneentry_json(k, i, lane) {
-  return "{\"kind\":\"entry\",\"lane\":" jstr(lane) "," entry_core(k, i) ",\"next\":" nextk_json(k, i) ",\"verbatim\":" jnull(IV[k, i]) "}"
+  return "{\"kind\":\"entry\",\"lane\":" jstr(lane) "," entry_core(k, i) ",\"next\":" nextk_json(k, i) "}"
 }
 
 function anchor_json(k, i) {
-  return "{\"kind\":\"anchor\",\"seq\":" i ",\"anchor\":" jstr(X[k, i, "anchor"]) ",\"continues\":" jnull(X[k, i, "cont"]) ",\"attention\":" jnull(X[k, i, "att"]) ",\"next\":" nextk_json(k, i) ",\"verbatim\":" jnull(IV[k, i]) "}"
+  return "{\"kind\":\"anchor\",\"seq\":" i ",\"anchor\":" jstr(X[k, i, "anchor"]) ",\"continues\":" jnull(X[k, i, "cont"]) ",\"attention\":" jnull(X[k, i, "att"]) tail_json(k, i, 0) ",\"next\":" nextk_json(k, i) "}"
 }
 
 function entryitem_json(k, i) {

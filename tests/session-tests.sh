@@ -872,23 +872,27 @@ a_eq "$?" "1" "R2: lane record with a carriage return refuses rc1"
 $CTX session task reopen y-unit y-bs >/dev/null 2>&1
 a_eq "$?" "0" "R2: the typed verbs still write the unit after the refusals"
 
-# a block value whose trailing lines hold only blanks or tabs reads back as the parse rules
-# read the written text (lanes/si-f5-fts5-review/report F2): after the item's last block those
-# lines fall outside it and the item keeps the bytes as its verbatim; a section added later
-# lands after the content end, so they stay outside every block; the same on every driver
+# a block value drops its trailing whitespace-only lines on every write and every read, in any
+# block of the item (the one block value rule; the dialect cannot tell such a line from the
+# separator): the value reads back without them, the item renders canonical with no stored
+# bytes, a section added later follows the canonical order; the same on every driver
+# (lanes/si-f5-fts5-review/report F2 read them by position: outside the last block only)
 y_ws=$(printf 'kept line\n   \n\t')
 $CTX session task add y-unit y-ws --objective="trailing blank lines" --desc="$y_ws" >/dev/null 2>&1
 out=$($CTX session task show y-unit y-ws --json 2>&1 </dev/null)
-a_match "$out" '"description":"kept line",' "F5-WS: a last block's trailing whitespace-only lines fall outside it"
-a_match "$out" '"verbatim":"@task y-ws' "F5-WS: the task keeps the written bytes as its verbatim"
+a_match "$out" '"description":"kept line",' "F5-WS: a block's trailing whitespace-only lines leave its value"
+a_not "$out" '"verbatim"' "F5-WS: the task answers no stored bytes"
 $CTX session task update y-unit y-ws --details="later section" >/dev/null 2>&1 </dev/null
 out=$($CTX session task show y-unit y-ws --json 2>&1 </dev/null)
-a_match "$out" '"description":"kept line","criteria":null,"details":"later section"' "F5-WS: a section added later lands at the content end and leaves them outside every block"
-a_match "$out" 'later section\\n       \\n    \\t\\n"' "F5-WS: the whitespace lines stay the verbatim's last bytes after the added section"
+a_match "$out" '"description":"kept line","criteria":null,"details":"later section"' "F5-WS: a section added later keeps the value without them"
+a_eq "$($CTX session task show y-unit y-ws 2>&1 </dev/null)" "$(printf '@task y-ws\n  STATUS: TODO\n  OBJECTIVE: "trailing blank lines"\n  DESCRIPTION ::\n    kept line\n  IMPLEMENTATION DETAILS ::\n    later section')" "F5-WS: the task shows canonical, the whitespace lines gone"
+$CTX session task add y-unit y-ws2 --objective="a block before another" --desc="$y_ws" --criteria="a criterion" >/dev/null 2>&1
+out=$($CTX session task show y-unit y-ws2 --json 2>&1 </dev/null)
+a_match "$out" '"description":"kept line","criteria":"a criterion"' "F5-WS: a block followed by another drops its trailing whitespace-only lines too"
 $CTX session finding add y-unit Y_WS --summary="$y_ws" >/dev/null 2>&1 </dev/null
 out=$($CTX session finding show y-unit Y_WS --json 2>&1 </dev/null)
-a_match "$out" '"summary":"kept line",' "F5-WS: a summary's trailing whitespace-only lines fall outside it"
-a_match "$out" '"verbatim":"@finding Y_WS' "F5-WS: the finding keeps the written bytes as its verbatim"
+a_match "$out" '"summary":"kept line",' "F5-WS: a summary's trailing whitespace-only lines leave its value"
+a_not "$out" '"verbatim"' "F5-WS: the finding answers no stored bytes"
 
 echo "== B backslash payloads on every awk (backlog awk-escape-portability) =="
 # a backslash, a doubled backslash, a literal backslash n, and a trailing backslash travel
@@ -1299,11 +1303,11 @@ out=$($CTX session finding show f-unit F_NOREF 2>&1 </dev/null)
 a_match "$out" '^  REF: "journal#f-target"$' "RF1: finding show text reads the ref finding update stored"
 f_block=$($CTX session finding show f-unit F_NOREF 2>/dev/null </dev/null)
 a_eq "$(printf '%s\n' "$f_block" | grep -c '^  REF: ')" "1" "RF1: the updated finding carries exactly one REF line"
-# D6 and B2 P4: a canonical finding gaining its first REF stays canonical, the REF line
-# before SUMMARY (v0.54.0 placed it after the summary body); its separator is the canonical
-# span's, the next item a finding and no verbatim
+# D6 and B2 P4: a finding gaining its first REF is rewritten canonical, the REF line before
+# SUMMARY (v0.54.0 placed it after the summary body); its separator is the canonical span's,
+# the next item a finding
 a_eq "$(printf '%s\n' "$f_block" | sed -n '2p' | tr '\n' '|')" '  REF: "journal#f-target"|' "RF1: the block keeps REF first"
-a_match "$($CTX session finding show f-unit F_NOREF --json 2>/dev/null </dev/null)" '"next":"finding","verbatim":null}' "RF1: the block stays canonical, its blank separator the canonical span's"
+a_match "$($CTX session finding show f-unit F_NOREF --json 2>/dev/null </dev/null)" '"next":"finding"}}$' "RF1: the block stays canonical, its blank separator the canonical span's"
 a_eq "$(printf '%s\n' "$f_block" | grep -n '' | sed -n '/REF: /s/:.*//p')" "2" "RF1: the REF line precedes SUMMARY, the canonical finding order"
 $CTX session finding update f-unit F_LAST --ref="journal#f-last" >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "RF1: finding update --ref alone on the last finding rc0"
@@ -1480,7 +1484,7 @@ out=$(up_err $CTX session next up-odd "plan"); rc=$?
 a_eq "$rc" "2" "UP: next without a next_action refuses rc2 (the backend's corrupt state)"
 a_match "$out" '^session.next: error: the state holds no next_action line (ERR_STORAGE_CORRUPT)$' "UP: next without a next_action names the missing line"
 up_path "$out" "UP: the missing next_action error"
-# a legacy CRLF line the posix store holds keeps its bytes (the verbatim rule, D7); the typed
+# a legacy CRLF line the posix store holds keeps its bytes until a write touches its item; the typed
 # record appends after it (the retired record engine refused every CRLF artifact on read)
 printf '@anchor A1 ("continues A0", attention: odd)\r\n' | rput up-odd journal
 printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
@@ -1535,6 +1539,56 @@ a_match "$out" '"refs":\["knowledge#UP_REF"\]' "UP: entry show reads the ref ent
 out=$(printf 'what=a driver entry without a ref\nthread=none\nknowledge=false\nrefs.count=0\nclosers.count=0\nslug=%s-up-er-noref\ndate=%s\nepoch=1\n' "$TODAY" "$TODAY" | "$RESOLVER" entry.record u-unit 2>&1)
 a_match "$out" '"thread":"none","legacy_status":null,"refs":\[\]' "UP: entry.record answers an empty refs list when absent"
 a_eq "$($CTX session entry show u-unit "$TODAY-up-er-noref" 2>/dev/null </dev/null | grep -c 'REF:')" "0" "UP: entry.record writes no REF line when absent"
+
+echo "== CL every item reads in the canonical layout, every value kept (backlog end-review-fixes item 4) =="
+# no answer carries a verbatim span: every backend renders every item from its typed fields in
+# the one canonical layout (the verbs write canonical items, so this holds on every driver)
+$CTX session bootstrap cl-verbs "a unit written by the verbs" >/dev/null 2>&1 </dev/null
+$CTX session task add cl-verbs cl-v --objective="a verb task" --desc="a body" >/dev/null 2>&1 </dev/null
+$CTX session record cl-verbs --what="a verb entry" --slug="$TODAY-cl-v" >/dev/null 2>&1 </dev/null
+$CTX session finding add cl-verbs CL_V --summary="a verb finding" >/dev/null 2>&1 </dev/null
+printf '# recipe\n' | lane_new cl-verbs cl-vl
+$CTX lane record cl-verbs cl-vl --what="a lane entry" >/dev/null 2>&1 </dev/null
+cl_json=$( { $CTX session task show cl-verbs cl-v --json; $CTX session entry show cl-verbs "$TODAY-cl-v" --json; $CTX session finding show cl-verbs CL_V --json; $CTX lane show cl-verbs cl-vl journal --json; $CTX session board cl-verbs --json; $CTX session task list cl-verbs --json; } 2>&1 </dev/null)
+a_not "$cl_json" '"verbatim"' "CL: no answer of a verb-written unit carries a verbatim key"
+a_match "$cl_json" '"extra_fields":\[\],"head_text":null,"extra_lines":\[\]' "CL: an entry answers its extra fields, head text, and extra lines, empty when the verbs wrote it"
+# legacy text only a hand-written posix file holds: posix alone. Every item reads in the
+# canonical layout with every value kept, and the files stay byte for byte until a write
+# touches an item, which is then rewritten canonical in place
+if [ "$DRIVER" = posix ]; then
+printf 'status: ACTIVE\ncurrent_anchor: A2\nnext_action: "plan the legacy unit"\nobjective: Legacy objective;\n  continued on a second line\nrepos: [cl]\n' | rput cl-unit state
+printf '# backlog grammar\n\n@task cl-task\n  OBJECTIVE: "legacy task"\n  STATUS: TODO\n  REFS: a#b c#d\n  DESCRIPTION ::\n    legacy body\n\n\n@task cl-other\n  STATUS: TODO\n  OBJECTIVE: "other task"\n' | rput cl-unit backlog
+printf '@finding CL_FIND\n  SUMMARY ::\n    a legacy summary\n  REF: "journal#2026-09-20-cl-zero"\n' | rput cl-unit knowledge
+printf '@anchor A1 ("unit birth", attention: legacy)\n\n@entry 2026-09-20-cl-zero\n  ANCHOR: A1\n  WHAT: "the closed target"\n  THREAD: none\n\n@entry 2026-09-20-cl-one\n  ANCHOR: A1\n  GROUP: cl\n  STATUS: DONE\n  WHAT: unquoted legacy what\n  NOTE: an unknown field\n  CLOSES: 2026-09-20-cl-zero (done: a (nested) reason, kept)\n  THREAD: none\n@anchor A2 ("continues A1", attention: second)\n' | rput cl-unit journal
+printf '# recipe\n' | rput cl-unit lane/cl-lane/recipe
+printf '@anchor A0 ("lane boot, no parent anchor")\n\n@entry 2026-09-20-cl-lane\n  ANCHOR: A2\n  GROUP: cl\n  WHAT :: a head line with text\n    and a body line\n  RESULT: kept\n' | rput cl-unit lane/cl-lane/journal
+cl_sum() { for k in state backlog knowledge journal lane/cl-lane/recipe lane/cl-lane/journal; do rcat cl-unit "$k"; done | cksum; }
+cl_before=$(cl_sum)
+out=$($CTX session entry show cl-unit 2026-09-20-cl-one 2>&1 </dev/null)
+a_eq "$out" "$(printf '@entry 2026-09-20-cl-one\n  NOTE: an unknown field\n  ANCHOR: A1\n  STATUS: DONE\n  WHAT: "unquoted legacy what"\n  GROUP: cl\n  THREAD: none\n  CLOSES: 2026-09-20-cl-zero (done: a (nested) reason, kept)')" "CL: a legacy entry shows in the canonical layout: extra fields first, the legacy STATUS, the WHAT quoted, the nested reason whole"
+out=$($CTX session entry show cl-unit 2026-09-20-cl-one --json 2>&1 </dev/null)
+a_not "$out" '"verbatim"' "CL: the legacy entry answers no verbatim key"
+a_match "$out" '"legacy_status":"DONE","refs":\[\],"closers":\[{"kind":"CLOSES","targets":\["2026-09-20-cl-zero"\],"verdict":"done","reason":"a (nested) reason, kept","extra_text":null}\],"extra_fields":\[{"key":"NOTE","value":"an unknown field"}\]' "CL: the legacy entry answers its STATUS, its whole closer reason, and its unknown field"
+out=$($CTX session resolve cl-unit entry#2026-09-20-cl-zero 2>&1 </dev/null; echo .)
+a_eq "$out" "$(printf '@entry 2026-09-20-cl-zero\n  ANCHOR: A1\n  WHAT: "the closed target"\n  THREAD: none\n\n.')" "CL: resolve prints the canonical span with its separator"
+out=$($CTX session task show cl-unit cl-task 2>&1 </dev/null)
+a_eq "$out" "$(printf '@task cl-task\n  STATUS: TODO\n  OBJECTIVE: "legacy task"\n  REFS: [a#b, c#d]\n  DESCRIPTION ::\n    legacy body')" "CL: a legacy task shows in the canonical layout"
+out=$($CTX session finding show cl-unit CL_FIND 2>&1 </dev/null)
+a_eq "$out" "$(printf '@finding CL_FIND\n  REF: "journal#2026-09-20-cl-zero"\n  SUMMARY ::\n    a legacy summary')" "CL: a legacy finding shows REF before SUMMARY"
+out=$($CTX session load cl-unit 1 2>&1 </dev/null)
+a_match "$out" '^objective: "Legacy objective;$' "CL: load prints the legacy objective quoted"
+a_match "$out" '^  continued on a second line"$' "CL: load keeps the objective's continuation line as its value"
+out=$($CTX lane show cl-unit cl-lane journal 2>&1 </dev/null)
+a_eq "$out" "$(printf '@anchor A0 ("lane boot, no parent anchor")\n\n@entry 2026-09-20-cl-lane\n  RESULT: kept\n  ANCHOR: A2\n  WHAT ::\n    a head line with text\n    and a body line\n  GROUP: cl')" "CL: a legacy lane journal shows its anchor text and its lane entry whole: the unknown field, ANCHOR, GROUP, and the WHAT block"
+out=$($CTX lane show cl-unit cl-lane journal --json 2>&1 </dev/null)
+a_match "$out" '"head_text":"(\\"lane boot, no parent anchor\\")"' "CL: the legacy lane anchor answers its head text"
+a_eq "$(cl_sum)" "$cl_before" "CL: the reads leave every posix file byte for byte"
+# a write touching one item rewrites it canonical in place; every other byte stays
+$CTX session task update cl-unit cl-task --criteria="a criterion" >/dev/null 2>&1 </dev/null
+a_eq "$(rcat cl-unit backlog)" "$(printf '# backlog grammar\n\n@task cl-task\n  STATUS: TODO\n  OBJECTIVE: "legacy task"\n  REFS: [a#b, c#d]\n  DESCRIPTION ::\n    legacy body\n  ACCEPTANCE CRITERIA ::\n    a criterion\n\n@task cl-other\n  STATUS: TODO\n  OBJECTIVE: "other task"')" "CL: task update rewrites the touched legacy task canonical, the preamble and the other task byte for byte"
+$CTX session next cl-unit "plan the legacy unit again" >/dev/null 2>&1 </dev/null
+a_eq "$(rcat cl-unit state)" "$(printf 'status: ACTIVE\ncurrent_anchor: A2\nnext_action: "plan the legacy unit again"\nobjective: "Legacy objective;\n  continued on a second line"\nrepos: [cl]')" "CL: next rewrites the legacy state canonical, the continuation kept in the objective"
+fi
 
 echo "== N the verbs added in v0.55.0: entry closure, units, refs-to (D42) =="
 $CTX session bootstrap n-unit "new verbs unit" "n-repo, n-other" >/dev/null 2>&1 </dev/null

@@ -5,7 +5,7 @@
 # help: arguments:
 # help:   <unit>      session unit slug
 # help:   <ref>       abstract entity reference (task#slug, finding#NAME, entry#slug, lane#slug/report#claim); the legacy file forms (backlog.md#slug, knowledge.md#NAME, journal.md#slug, lanes/<lane>/report.md#claim) resolve the same entities
-# help: the text view prints the entity block verbatim (the item's span, its trailing separator included; a report claim from its @<claim> line to the next column-0 @ line); --json prints the storage function's answer (task.get, finding.get, entry.get, or lane.get)
+# help: the text view prints the item's span in the canonical layout (its canonical lines, its trailing separator included; a report claim from its @<claim> line to the next column-0 @ line); --json prints the storage function's answer (task.get, finding.get, entry.get, or lane.get)
 # help:   --json      output JSON format
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"

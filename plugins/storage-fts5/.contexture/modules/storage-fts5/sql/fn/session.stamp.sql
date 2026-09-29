@@ -11,9 +11,6 @@ INSERT INTO temp.err SELECT 42, 1, 'ERR_INVALID_ARGUMENT', 'attention holds a ca
 CREATE TEMP TABLE stp AS SELECT u.current_anchor AS prev, 'A' || (CAST(substr(u.current_anchor, 2) AS INTEGER) + 1) AS cur
   FROM units u WHERE u.unit = (SELECT unit FROM temp.a);
 UPDATE units SET current_anchor = (SELECT cur FROM temp.stp) WHERE unit = (SELECT unit FROM temp.a);
-INSERT INTO temp.sts SELECT 'current_anchor', 'current_anchor: ' || cur FROM temp.stp;
-.read lib/stedit.sql
-.read lib/settle.sql
 INSERT INTO temp.jn (lane, kind, anchor, continues, attention) SELECT '', 'anchor', s.cur, s.prev, (SELECT v FROM temp.pay WHERE k = 'attention') FROM temp.stp s;
 .read lib/jappend.sql
 INSERT INTO temp.tart SELECT unit, 'state' FROM temp.a;

@@ -404,7 +404,7 @@ rec() { kv what "$3"; kv thread "${4:-none}"; kv date "$DATE"; kv epoch "$2"; ca
 entry_json() {
   _ej=""
   if [ $# -ge 13 ]; then _ej=",\"closed\":${11},\"closed_by\":${12},\"close_reason\":${13}"; fi
-  printf '{"kind":"entry","slug":"%s","occurrence":%s,"seq":%s,"anchor":%s,"what":"%s","group":%s,"rhythm":null,"knowledge":false,"thread":%s,"legacy_status":null,"refs":%s,"closers":%s,"extra_fields":[]%s,"next":%s,"verbatim":null}' "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "$_ej" "${10}"
+  printf '{"kind":"entry","slug":"%s","occurrence":%s,"seq":%s,"anchor":%s,"what":"%s","group":%s,"rhythm":null,"knowledge":false,"thread":%s,"legacy_status":null,"refs":%s,"closers":%s,"extra_fields":[],"head_text":null,"extra_lines":[]%s,"next":%s}' "$1" "$2" "$3" "$4" "$5" "$6" "$7" "$8" "$9" "$_ej" "${10}"
 }
 # receipt_json <slug> <seq> <what>: a task receipt entry, the last item of its journal
 receipt_json() { entry_json "$1" 1 "$2" '"A1"' "$3" null '"none"' '[]' '[]' null; }
@@ -439,7 +439,7 @@ tc "TC74: a fresh store: session.list and storage.health answer store absent, no
 # ==============================================================================
 printf '\n== Suite 1: Session Lifecycle ==\n'
 UNIT="compliance-u1"
-U1STATE='{"unit":"compliance-u1","status":"ACTIVE","current_anchor":"A1","next_action":"backlog the first task","objective":"Compliance test session","repos":["alpha","beta"],"ref_sessions":null,"verbatim":null}'
+U1STATE='{"unit":"compliance-u1","status":"ACTIVE","current_anchor":"A1","next_action":"backlog the first task","objective":"Compliance test session","repos":["alpha","beta"],"ref_sessions":null,"extra_fields":[],"extra_lines":[]}'
 
 # TC01: session.create answers the new unit's canonical state at A1
 kv objective "Compliance test session"; kl repos alpha beta; kv attention "compliance fixture"
@@ -471,7 +471,7 @@ tc "TC03: session.load and session.board answer the empty unit; its journal hold
 # TC04: session.stamp advances the anchor and answers its receipt; session.close closes
 kv attention "Stamp test receipt"
 call session.stamp "$UNIT"
-answer; wantout '{"unit":"compliance-u1","previous_anchor":"A1","current_anchor":"A2","receipt":{"kind":"anchor","seq":2,"anchor":"A2","continues":"A1","attention":"Stamp test receipt","next":null,"verbatim":null}}'
+answer; wantout '{"unit":"compliance-u1","previous_anchor":"A1","current_anchor":"A2","receipt":{"kind":"anchor","seq":2,"anchor":"A2","continues":"A1","attention":"Stamp test receipt","head_text":null,"extra_lines":[],"next":null}}'
 call session.load "$UNIT"
 answer; wantv state.current_anchor '"A2"'
 call session.close "$UNIT"
@@ -492,7 +492,7 @@ answer
 # repeated slug refuses rc1 ERR_ENTITY_EXISTS with the task unchanged
 kv objective "Sample task objective"; kv desc "$(printf 'Sample description\nwith a second line')"; kv criteria "Acceptance criteria 1"; kv details "Implementation detail 1"
 call task.add "$TUNIT" task-sample
-T5='{"slug":"task-sample","ordinal":1,"status":"TODO","objective":"Sample task objective","refs":[],"description":"Sample description\nwith a second line","criteria":"Acceptance criteria 1","details":"Implementation detail 1","next":null,"verbatim":null}'
+T5='{"slug":"task-sample","ordinal":1,"status":"TODO","objective":"Sample task objective","refs":[],"description":"Sample description\nwith a second line","criteria":"Acceptance criteria 1","details":"Implementation detail 1","extra_fields":[],"head_text":null,"extra_lines":[],"next":null}'
 answer; wantout "{\"unit\":\"compliance-tasks\",\"task\":$T5}"
 call task.get "$TUNIT" task-sample
 answer; wantout "{\"unit\":\"compliance-tasks\",\"task\":$T5}"
@@ -506,7 +506,7 @@ tc "TC05: task.add answers the TODO task with its block scalars; a repeated slug
 # TC06: task.update replaces the fields it is given and keeps the others
 kv objective "Updated task objective"; kv desc "Updated description"
 call task.update "$TUNIT" task-sample
-T6='{"slug":"task-sample","ordinal":1,"status":"TODO","objective":"Updated task objective","refs":[],"description":"Updated description","criteria":"Acceptance criteria 1","details":"Implementation detail 1","next":null,"verbatim":null}'
+T6='{"slug":"task-sample","ordinal":1,"status":"TODO","objective":"Updated task objective","refs":[],"description":"Updated description","criteria":"Acceptance criteria 1","details":"Implementation detail 1","extra_fields":[],"head_text":null,"extra_lines":[],"next":null}'
 answer; wantout "{\"unit\":\"compliance-tasks\",\"task\":$T6}"
 call task.get "$TUNIT" task-sample
 answer; wantout "{\"unit\":\"compliance-tasks\",\"task\":$T6}"
@@ -580,7 +580,7 @@ kv group topic-group; kv closers.count 1; kcl 1 CLOSES done "Closer event" "$ALP
 rec "$TUNIT" 1790000011 "Closer event"
 # the closer list is assigned first: bash 3.2 (the macOS sh) brace-expands a double-quoted
 # "[{a,b}]" argument inside a command substitution that itself sits in double quotes
-C12="[{\"kind\":\"CLOSES\",\"targets\":[\"$ALPHA\"],\"verdict\":\"done\",\"reason\":\"Closer event\",\"verbatim\":null}]"
+C12="[{\"kind\":\"CLOSES\",\"targets\":[\"$ALPHA\"],\"verdict\":\"done\",\"reason\":\"Closer event\",\"extra_text\":null}]"
 answer; wantout "{\"unit\":\"compliance-tasks\",\"entry\":$(entry_json "$BETA" 1 5 '"A1"' "Closer event" '"topic-group"' '"none"' '[]' "$C12" null)}"
 call entry.get "$TUNIT" "$ALPHA"
 answer; wantv entry.closed true; wantv entry.closed_by "\"$BETA\""; wantv entry.close_reason '"done: Closer event"'; wantv entry.next '"entry"'
@@ -595,7 +595,7 @@ tc "TC12: a closer closes its target on entry.get and the board; entry.list keep
 # Suite 4: Knowledge Findings (3 test cases)
 # ==============================================================================
 printf '\n== Suite 4: Knowledge Findings ==\n'
-FA='{"name":"FINDING_ALPHA","ordinal":1,"supersedes":null,"refs":["journal#2026-09-27-event-1790000010"],"summary":"Alpha architectural decision summary","superseded_by":null,"active":true,"next":null,"verbatim":null}'
+FA='{"name":"FINDING_ALPHA","ordinal":1,"supersedes":null,"refs":["journal#2026-09-27-event-1790000010"],"summary":"Alpha architectural decision summary","extra_fields":[],"head_text":null,"extra_lines":[],"superseded_by":null,"active":true,"next":null}'
 
 # TC13: finding.add answers the finding with its summary and refs
 kv summary "Alpha architectural decision summary"; kl refs "journal#$ALPHA"
@@ -614,7 +614,7 @@ tc "TC14: finding.get answers the finding; an absent NAME refuses rc1"
 # predecessor answers superseded_by and inactive
 kv summary "Beta superseding finding"; kl refs "journal#$BETA"; kv supersedes FINDING_ALPHA
 call finding.add "$TUNIT" FINDING_BETA
-answer; wantout '{"unit":"compliance-tasks","finding":{"name":"FINDING_BETA","ordinal":2,"supersedes":{"name":"FINDING_ALPHA","reason":"superseded"},"refs":["journal#2026-09-27-event-1790000011"],"summary":"Beta superseding finding","superseded_by":null,"active":true,"next":null,"verbatim":null}}'
+answer; wantout '{"unit":"compliance-tasks","finding":{"name":"FINDING_BETA","ordinal":2,"supersedes":{"name":"FINDING_ALPHA","reason":"superseded"},"refs":["journal#2026-09-27-event-1790000011"],"summary":"Beta superseding finding","extra_fields":[],"head_text":null,"extra_lines":[],"superseded_by":null,"active":true,"next":null}}'
 call finding.list "$TUNIT" all
 answer; wantout '{"unit":"compliance-tasks","findings":[{"name":"FINDING_ALPHA","summary":"Alpha architectural decision summary","refs":["journal#2026-09-27-event-1790000010"],"supersedes":null,"active":false},{"name":"FINDING_BETA","summary":"Beta superseding finding","refs":["journal#2026-09-27-event-1790000011"],"supersedes":"FINDING_ALPHA","active":true}]}'
 call finding.list "$TUNIT" active
@@ -628,7 +628,7 @@ tc "TC15: finding.list filters the superseded finding; the predecessor names its
 # ==============================================================================
 printf '\n== Suite 5: Subagent Lanes ==\n'
 printf '# recipe grammar\nMISSION\n  GOAL: "Subagent goal description"\n' > "$SANDBOX/recipe.txt"
-LE="{\"kind\":\"entry\",\"lane\":\"lane-worker\",\"slug\":\"2026-09-27-event-1790000020\",\"occurrence\":1,\"seq\":1,\"anchor\":null,\"what\":\"Subagent action trace WHAT\",\"group\":null,\"rhythm\":null,\"knowledge\":false,\"thread\":\"none\",\"legacy_status\":null,\"refs\":[\"journal#$ALPHA\"],\"closers\":[],\"extra_fields\":[],\"next\":null,\"verbatim\":null}"
+LE="{\"kind\":\"entry\",\"lane\":\"lane-worker\",\"slug\":\"2026-09-27-event-1790000020\",\"occurrence\":1,\"seq\":1,\"anchor\":null,\"what\":\"Subagent action trace WHAT\",\"group\":null,\"rhythm\":null,\"knowledge\":false,\"thread\":\"none\",\"legacy_status\":null,\"refs\":[\"journal#$ALPHA\"],\"closers\":[],\"extra_fields\":[],\"head_text\":null,\"extra_lines\":[],\"next\":null}"
 
 # TC16: lane.create stores the recipe byte for byte and an empty journal; no report yet
 doc "$SANDBOX/recipe.txt"
@@ -854,13 +854,13 @@ tc "TC32: a repeated finding NAME and lane entry slug refuse rc1 ERR_ENTITY_EXIS
 # TC33: finding.update, finding.supersede (a missing predecessor refuses), finding.drop
 kv summary Updated; kl refs "journal#2026-09-25-s-l1"
 call finding.update "$SUNIT" STORE_F
-answer; wantout '{"unit":"compliance-store","finding":{"name":"STORE_F","ordinal":1,"supersedes":null,"refs":["journal#2026-09-25-s-l1"],"summary":"Updated","superseded_by":null,"active":true,"next":null,"verbatim":null}}'
+answer; wantout '{"unit":"compliance-store","finding":{"name":"STORE_F","ordinal":1,"supersedes":null,"refs":["journal#2026-09-25-s-l1"],"summary":"Updated","extra_fields":[],"head_text":null,"extra_lines":[],"superseded_by":null,"active":true,"next":null}}'
 kv summary Successor
 call finding.supersede "$SUNIT" NO_SUCH STORE_G
 refused 1 ERR_ENTITY_NOT_FOUND "finding 'NO_SUCH' not found in unit 'compliance-store'"
 kv summary Successor
 call finding.supersede "$SUNIT" STORE_F STORE_G
-answer; wantout '{"unit":"compliance-store","superseded":"STORE_F","finding":{"name":"STORE_G","ordinal":2,"supersedes":{"name":"STORE_F","reason":"superseded"},"refs":[],"summary":"Successor","superseded_by":null,"active":true,"next":null,"verbatim":null}}'
+answer; wantout '{"unit":"compliance-store","superseded":"STORE_F","finding":{"name":"STORE_G","ordinal":2,"supersedes":{"name":"STORE_F","reason":"superseded"},"refs":[],"summary":"Successor","extra_fields":[],"head_text":null,"extra_lines":[],"superseded_by":null,"active":true,"next":null}}'
 call finding.get "$SUNIT" STORE_F
 answer; wantv finding.superseded_by '"STORE_G"'; wantv finding.active false
 call finding.drop "$SUNIT" STORE_G
@@ -1541,9 +1541,9 @@ tc "TC59: generated slugs take -1 while held; a held given slug refuses"
 printf '\n== Suite 15: The Data Model ==\n'
 
 # TC60 (posix alone: the legacy shapes live in hand-written files, legacy.notes names each):
-# every canonical item answers verbatim null, every other item its stored bytes, and
-# task.get, finding.get, entry.get, session.board, session.load, lane.get answer the
-# golden JSON byte for byte
+# every item answers its typed fields, the content no schema field holds in its extra
+# fields, head text, and extra lines, never its stored bytes; task.get, finding.get,
+# entry.get, session.board, session.load, lane.get answer the golden JSON byte for byte
 # wantgolden <unit> <dir> <count>: every golden answer of <dir> compared with the function
 # its file name calls (or, with COMPLIANCE_WRITE_GOLDENS naming <dir>, the answer written there)
 wantgolden() {
@@ -1577,18 +1577,18 @@ fi
 
 # TC61: the append rule: an entry after an anchor gets one empty line before it, an entry
 # after an entry one, a stamped anchor none, the journal no trailing empty line: every
-# backend answers each entry canonical (verbatim null) with the kind of the item after it
-# (the separator the canonical span implies), and on posix the journal is the expected bytes
+# backend answers each entry with the kind of the item after it (the separator the canonical
+# span implies) and no stored bytes, and on posix the journal is the expected bytes
 kv objective "The append rule fixture"; kv attention "append rule fixture"; call session.create tc61-u; answer
 rec tc61-u 1790000100 "first, after an anchor"; answer
 rec tc61-u 1790000101 "second, after an entry"; answer
 kv attention "append rule stamp"; call session.stamp tc61-u
-answer; wantv receipt.seq 4; wantv receipt.next null; wantv receipt.verbatim null
+answer; wantv receipt.seq 4; wantv receipt.next null; wantno '"verbatim"'
 rec tc61-u 1790000102 "third, after a stamped anchor"; answer
 for _t61 in "1790000100 2 entry" "1790000101 3 anchor" "1790000102 5 null"; do
   set -- $_t61
   call entry.get tc61-u "2026-09-27-event-$1"
-  answer; wantv entry.seq "$2"; wantv entry.verbatim null
+  answer; wantv entry.seq "$2"; wantno '"verbatim"'
   if [ "$3" = null ]; then wantv entry.next null; else wantv entry.next "\"$3\""; fi
 done
 call entry.list tc61-u
@@ -1742,7 +1742,7 @@ answer
 _t67_known=$(awk 'index($0, "units.") == 1 { k = $0; sub(/=.*$/, "", k); if (k ~ /^units\.[0-9]+\.repos\.[0-9]+$/) print substr($0, length(k) + 2) }' "$F" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')
 call session.units tc67-beta
 answer; wantv repo '"tc67-beta"'; wantvals units unit '"tc67-a" "tc67-b"'
-wantv units.1 '{unit,status,current_anchor,next_action,objective,repos,ref_sessions,verbatim}'
+wantv units.1 '{unit,status,current_anchor,next_action,objective,repos,ref_sessions,extra_fields,extra_lines}'
 wantvals units status '"ACTIVE" "CLOSED"'; wantvals units.1.repos "" '"tc67-alpha" "tc67-beta"'; wantvals units.2.ref_sessions "" '"tc67-a" "tc67-c"'
 wantvals known_repos "" "$_t67_known"
 case " $_t67_known " in *' "tc67-alpha" "tc67-beta" "tc67-gamma" '*) ;; *) miss "known repos [$_t67_known]" ;; esac
@@ -1764,7 +1764,7 @@ kv closers.count 1; kcl 1 SUPERSEDES superseded "a second closer" "$GAMMA"
 rec "$TUNIT" 1790000060 "Supersedes gamma again"
 answer
 call entry.closure "$TUNIT" "$GAMMA"
-answer; wantout "{\"unit\":\"compliance-tasks\",\"slug\":\"$GAMMA\",\"occurrence\":1,\"closed\":true,\"closers\":[{\"by\":\"$EPS\",\"by_anchor\":\"A1\",\"closer\":{\"kind\":\"CLOSES\",\"targets\":[\"$GAMMA\",\"$DELTA\"],\"verdict\":\"folded\",\"reason\":\"two at once\",\"verbatim\":null}},{\"by\":\"$ZETA\",\"by_anchor\":\"A1\",\"closer\":{\"kind\":\"SUPERSEDES\",\"targets\":[\"$GAMMA\"],\"verdict\":\"superseded\",\"reason\":\"a second closer\",\"verbatim\":null}}]}"
+answer; wantout "{\"unit\":\"compliance-tasks\",\"slug\":\"$GAMMA\",\"occurrence\":1,\"closed\":true,\"closers\":[{\"by\":\"$EPS\",\"by_anchor\":\"A1\",\"closer\":{\"kind\":\"CLOSES\",\"targets\":[\"$GAMMA\",\"$DELTA\"],\"verdict\":\"folded\",\"reason\":\"two at once\",\"extra_text\":null}},{\"by\":\"$ZETA\",\"by_anchor\":\"A1\",\"closer\":{\"kind\":\"SUPERSEDES\",\"targets\":[\"$GAMMA\"],\"verdict\":\"superseded\",\"reason\":\"a second closer\",\"extra_text\":null}}]}"
 call entry.closure "$TUNIT" "$OTHER"
 answer; wantout "{\"unit\":\"compliance-tasks\",\"slug\":\"$OTHER\",\"occurrence\":1,\"closed\":false,\"closers\":[]}"
 call entry.closure "$TUNIT" 2026-01-01-absent
@@ -1862,7 +1862,7 @@ tc "TC72: supersedes needs its predecessor and a new successor; the active list 
 mk tc73-s; answer
 kv attention "first stamp"
 call session.stamp tc73-s
-answer; wantout '{"unit":"tc73-s","previous_anchor":"A1","current_anchor":"A2","receipt":{"kind":"anchor","seq":2,"anchor":"A2","continues":"A1","attention":"first stamp","next":null,"verbatim":null}}'
+answer; wantout '{"unit":"tc73-s","previous_anchor":"A1","current_anchor":"A2","receipt":{"kind":"anchor","seq":2,"anchor":"A2","continues":"A1","attention":"first stamp","head_text":null,"extra_lines":[],"next":null}}'
 kv query "first stamp"
 call search.query tc73-s --mode=exact
 answer; wantout '{"unit":"tc73-s","query":"first stamp","mode":"exact","total_matches":1,"results":[{"entity_type":"session","entity_id":"tc73-s","section":"journal","snippet":"@anchor A2 (\"continues A1\", attention: first stamp)","score":0}]}'

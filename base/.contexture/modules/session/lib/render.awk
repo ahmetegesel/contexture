@@ -9,10 +9,11 @@
 # the environment (RV_UNIT, RV_REF, RV_QUERY, ...), never through awk -v, so free text of
 # any content reaches the renderer exactly.
 #
-# The spans (docs/the-engine.md, The record data model): an item renders as its verbatim
-# when it carries one, else as its canonical lines followed by one empty line when the
-# next item exists and is not an anchor. The canonical lines here are the contract's, the
-# same text every backend's writes store, so a canonical item renders the bytes it holds.
+# The spans (docs/the-engine.md, The record data model): every item renders from its typed
+# fields as its canonical lines followed by one empty line when the next item exists and is
+# not an anchor. The canonical lines here are the contract's, the same text every backend
+# prints for the same data, so every backend's answer renders the same text; no item
+# carries stored bytes.
 #
 # Views: board, load, refload, audit, close, active, units, refs_to, closure, task_list,
 # task_show, entry_show, entry_list, finding_show, finding_list, search, resolve,
@@ -110,42 +111,75 @@ function c_block(label, v,   o, n, P, i) {
   return o
 }
 
-function c_state(p,   o) {
-  o = "status: " sv(D(p) "status") "\ncurrent_anchor: " sv(D(p) "current_anchor") "\nnext_action: \"" sv(D(p) "next_action") "\"\nobjective: \"" sv(D(p) "objective") "\"\nrepos: [" list_join(D(p) "repos", ", ") "]\n"
-  if (!nul(D(p) "ref_sessions")) o = o "ref_sessions: [" list_join(D(p) "ref_sessions", ", ") "]\n"
+# c_opens(v): v opens a double quote it does not close
+function c_opens(v) { return substr(v, 1, 1) == "\"" && (length(v) == 1 || substr(v, length(v), 1) != "\"") }
+
+# c_quoted(label, value): a quoted one-line field, a block scalar when the value holds a newline
+function c_quoted(label, v) {
+  if (index(v, "\n") > 0) return c_block(label, v)
+  return "  " label ": \"" v "\"\n"
+}
+
+# c_xfield(key, value): an extra field: one line with the value as stored, a block scalar when
+# the value holds a newline (or opens a WHAT or OBJECTIVE quote it never closes)
+function c_xfield(k, v) {
+  if (index(v, "\n") > 0 || ((k == "WHAT" || k == "OBJECTIVE") && c_opens(v))) return c_block(k, v)
+  return "  " k ": " v "\n"
+}
+
+# the extra lines and the extra fields of an item, and its head line
+function c_xl(p,   n, i, o) {
+  o = ""
+  n = nn(D(p) "extra_lines")
+  for (i = 1; i <= n; i++) o = o sv(D(p) "extra_lines." i) "\n"
   return o
 }
 
-function state_text(p) { return nul(D(p) "verbatim") ? c_state(p) : unesc(V[D(p) "verbatim"]) }
+function c_xf(p,   n, i, o) {
+  o = ""
+  n = nn(D(p) "extra_fields")
+  for (i = 1; i <= n; i++) o = o c_xfield(sv(D(p) "extra_fields." i ".key"), sv(D(p) "extra_fields." i ".value"))
+  return o
+}
 
+function c_head(w, id, p) { return "@" w " " id (nul(D(p) "head_text") ? "" : " " sv(D(p) "head_text")) "\n" }
+
+# the state: its extra lines, the six keys, its extra keys (a value's later lines as stored)
+function c_state(p,   o, n, i) {
+  o = c_xl(p) "status: " sv(D(p) "status") "\ncurrent_anchor: " sv(D(p) "current_anchor") "\nnext_action: \"" sv(D(p) "next_action") "\"\nobjective: \"" sv(D(p) "objective") "\"\nrepos: [" list_join(D(p) "repos", ", ") "]\n"
+  if (!nul(D(p) "ref_sessions")) o = o "ref_sessions: [" list_join(D(p) "ref_sessions", ", ") "]\n"
+  n = nn(D(p) "extra_fields")
+  for (i = 1; i <= n; i++) o = o sv(D(p) "extra_fields." i ".key") ": " sv(D(p) "extra_fields." i ".value") "\n"
+  return o
+}
+
+function state_text(p) { return c_state(p) }
+
+# a task: the head, the extra lines, the schema lines, then the extra fields
 function c_task(p,   o) {
-  o = "@task " sv(D(p) "slug") "\n  STATUS: " sv(D(p) "status") "\n  OBJECTIVE: \"" sv(D(p) "objective") "\"\n"
+  o = c_head("task", sv(D(p) "slug"), p) c_xl(p) "  STATUS: " sv(D(p) "status") "\n" c_quoted("OBJECTIVE", sv(D(p) "objective"))
   if (nn(D(p) "refs") > 0) o = o "  REFS: [" list_join(D(p) "refs", ", ") "]\n"
   if (!nul(D(p) "description")) o = o c_block("DESCRIPTION", sv(D(p) "description"))
   if (!nul(D(p) "criteria")) o = o c_block("ACCEPTANCE CRITERIA", sv(D(p) "criteria"))
   if (!nul(D(p) "details")) o = o c_block("IMPLEMENTATION DETAILS", sv(D(p) "details"))
-  return o
+  return o c_xf(p)
 }
 
 function c_closer(p,   o) {
-  if (!nul(D(p) "verbatim")) return sv(D(p) "verbatim")
   o = "  " sv(D(p) "kind") ": " list_join(D(p) "targets", " ")
+  if (!nul(D(p) "extra_text")) o = o (nn(D(p) "targets") > 0 ? " " : "") sv(D(p) "extra_text")
   if (!nul(D(p) "verdict")) o = o " (" sv(D(p) "verdict") ": " sv(D(p) "reason") ")"
   else if (!nul(D(p) "reason")) o = o " (" sv(D(p) "reason") ")"
   return o
 }
 
+# an entry of the main journal or a lane journal: the head, the extra lines, the extra fields,
+# then ANCHOR, STATUS, WHAT, GROUP, RHYTHM, THREAD, REF, the closers, KNOWLEDGE, each when set
 function c_entry(p,   o, i, n) {
-  o = "@entry " sv(D(p) "slug") "\n"
-  if (ex(D(p) "lane")) {
-    if (!nul(D(p) "what")) o = o "  WHAT: \"" sv(D(p) "what") "\"\n"
-    if (!nul(D(p) "thread")) o = o "  THREAD: " sv(D(p) "thread") "\n"
-    n = nn(D(p) "refs")
-    for (i = 1; i <= n; i++) o = o "  REF: \"" sv(D(p) "refs." i) "\"\n"
-    return o
-  }
+  o = c_head("entry", sv(D(p) "slug"), p) c_xl(p) c_xf(p)
   if (!nul(D(p) "anchor")) o = o "  ANCHOR: " sv(D(p) "anchor") "\n"
-  if (!nul(D(p) "what")) o = o "  WHAT: \"" sv(D(p) "what") "\"\n"
+  if (!nul(D(p) "legacy_status")) o = o "  STATUS: " sv(D(p) "legacy_status") "\n"
+  if (!nul(D(p) "what")) o = o c_quoted("WHAT", sv(D(p) "what"))
   if (!nul(D(p) "group")) o = o "  GROUP: " sv(D(p) "group") "\n"
   if (!nul(D(p) "rhythm")) o = o "  RHYTHM: " sv(D(p) "rhythm") "\n"
   if (!nul(D(p) "thread")) o = o "  THREAD: " sv(D(p) "thread") "\n"
@@ -159,16 +193,24 @@ function c_entry(p,   o, i, n) {
 
 function c_anchor(p) {
   if (!nul(D(p) "continues") && !nul(D(p) "attention"))
-    return "@anchor " sv(D(p) "anchor") " (\"continues " sv(D(p) "continues") "\", attention: " sv(D(p) "attention") ")\n"
-  return "@anchor " sv(D(p) "anchor") "\n"
+    return "@anchor " sv(D(p) "anchor") " (\"continues " sv(D(p) "continues") "\", attention: " sv(D(p) "attention") ")\n" c_xl(p)
+  return c_head("anchor", sv(D(p) "anchor"), p) c_xl(p)
 }
 
 function c_finding(p,   o, i, n) {
-  o = "@finding " sv(D(p) "name") "\n"
+  o = c_head("finding", sv(D(p) "name"), p) c_xl(p)
   if (!znull(D(p) "supersedes") && ex(D(p) "supersedes.name")) o = o "  SUPERSEDES: " sv(D(p) "supersedes.name") " (" sv(D(p) "supersedes.reason") ")\n"
   n = nn(D(p) "refs")
   for (i = 1; i <= n; i++) o = o "  REF: \"" sv(D(p) "refs." i) "\"\n"
-  return o c_block("SUMMARY", sv(D(p) "summary"))
+  return o c_block("SUMMARY", sv(D(p) "summary")) c_xf(p)
+}
+
+# an opaque item: its head line and its lines
+function c_opaque(p,   o, n, i) {
+  o = sv(D(p) "head") "\n"
+  n = nn(D(p) "lines")
+  for (i = 1; i <= n; i++) o = o sv(D(p) "lines." i) "\n"
+  return o
 }
 
 # kind(p, dflt): an item's kind: its kind field, else the kind of its artifact (a Task and
@@ -180,12 +222,12 @@ function canon(p, k) {
   if (k == "finding") return c_finding(p)
   if (k == "anchor") return c_anchor(p)
   if (k == "entry") return c_entry(p)
+  if (k == "opaque") return c_opaque(p)
   return ""
 }
 
-# span(p, k): the item's span: its verbatim, else its canonical lines and the separator
+# span(p, k): the item's canonical lines and its separator
 function span(p, k,   t) {
-  if (!nul(D(p) "verbatim")) return unesc(V[D(p) "verbatim"])
   t = canon(p, k)
   if (!nul(D(p) "next") && sv(D(p) "next") != "anchor") t = t "\n"
   return t

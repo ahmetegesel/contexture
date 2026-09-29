@@ -17,28 +17,19 @@ CREATE TEMP TABLE IF NOT EXISTS du (unit TEXT PRIMARY KEY);
 CREATE TEMP TABLE IF NOT EXISTS dp (part TEXT PRIMARY KEY);
 CREATE TEMP TABLE IF NOT EXISTS touched (unit TEXT PRIMARY KEY);
 CREATE TEMP TABLE IF NOT EXISTS tart (unit TEXT NOT NULL, part TEXT NOT NULL);
--- the working tables of the write pieces: the texts to trim (lib/trim.sql), the items to
--- settle (lib/settle.sql), a new journal item with its lists (lib/jappend.sql)
-CREATE TEMP TABLE IF NOT EXISTS trm (id INTEGER PRIMARY KEY, s0 TEXT NOT NULL, mode TEXT NOT NULL, eof0 INTEGER NOT NULL DEFAULT 0, s TEXT);
-CREATE TEMP TABLE IF NOT EXISTS stl (tbl TEXT NOT NULL, lane TEXT NOT NULL DEFAULT '', pos INTEGER NOT NULL DEFAULT 0, cand TEXT NOT NULL);
+-- the working tables of the write pieces: a new journal item with its lists (lib/jappend.sql)
 CREATE TEMP TABLE IF NOT EXISTS jn (lane TEXT NOT NULL, kind TEXT NOT NULL, slug TEXT, anchor TEXT, what TEXT, grp TEXT, rhythm TEXT,
   knowledge INTEGER, thread TEXT, continues TEXT, attention TEXT);
 CREATE TEMP TABLE IF NOT EXISTS jnr (rpos INTEGER, ref TEXT);
-CREATE TEMP TABLE IF NOT EXISTS jnc (cpos INTEGER, kind TEXT, verdict TEXT, reason TEXT, verbatim TEXT);
+CREATE TEMP TABLE IF NOT EXISTS jnc (cpos INTEGER, kind TEXT, verdict TEXT, reason TEXT);
 CREATE TEMP TABLE IF NOT EXISTS jnt (cpos INTEGER, tpos INTEGER, target TEXT);
--- the line toolkit (lib/ed.sql, lib/splice.sql) and a state key edit (lib/stedit.sql)
-CREATE TEMP TABLE IF NOT EXISTS edt (t TEXT);
-CREATE TEMP TABLE IF NOT EXISTS sp (a INTEGER, b INTEGER, s TEXT);
-CREATE TEMP TABLE IF NOT EXISTS sts (key TEXT, line TEXT);
--- a new task or finding with its lists (lib/tappend.sql, lib/fappend.sql), a task status
--- move (lib/tstatus.sql), a generated slug (lib/genslug.sql)
+-- a new task or finding with its lists (lib/tappend.sql, lib/fappend.sql), a generated slug
+-- (lib/genslug.sql)
 CREATE TEMP TABLE IF NOT EXISTS tn (slug TEXT, objective TEXT, description TEXT, criteria TEXT, details TEXT);
 CREATE TEMP TABLE IF NOT EXISTS tnr (rpos INTEGER, ref TEXT);
 CREATE TEMP TABLE IF NOT EXISTS fnw (name TEXT, supersedes_name TEXT, supersedes_reason TEXT, summary TEXT);
 CREATE TEMP TABLE IF NOT EXISTS fnr (rpos INTEGER, ref TEXT);
-CREATE TEMP TABLE IF NOT EXISTS tst (pos INTEGER, status TEXT);
 CREATE TEMP TABLE IF NOT EXISTS gs (lane TEXT, base TEXT, slug TEXT);
-CREATE TEMP TABLE IF NOT EXISTS idp (tbl TEXT, pos INTEGER);
 
 INSERT INTO temp.split_in (id, body) SELECT -1, coalesce(CAST(readfile(v) AS TEXT), '') FROM temp.arg WHERE k = 'pay';
 CREATE TEMP TABLE payl AS SELECT n, line FROM temp.split_lines WHERE id = -1;
@@ -54,6 +45,13 @@ INSERT OR REPLACE INTO temp.pay (k, v)
   FROM temp.payl WHERE instr(line, '=') >= 2
     AND json_valid(replace(json_quote(substr(line, instr(line, '=') + 1)), '\\', '\'))
   ORDER BY n;
+-- the block value rule (docs/the-engine.md, The record data model): a block value (desc,
+-- criteria, details, summary) drops its trailing whitespace-only lines, a value of blanks
+-- alone reading "", so every write stores what the canonical lines read back as
+UPDATE temp.pay SET v = CASE WHEN rtrim(v, char(32, 9, 10)) = '' THEN ''
+    ELSE rtrim(v, char(32, 9, 10)) || substr(substr(v, length(rtrim(v, char(32, 9, 10))) + 1), 1,
+      instr(substr(v, length(rtrim(v, char(32, 9, 10))) + 1) || char(10), char(10)) - 1) END
+  WHERE k IN ('desc', 'criteria', 'details', 'summary');
 
 -- the lists of the payload: <key>.count=N then <key>.1 .. <key>.N; pl their counts, plv their
 -- elements, plbad the first defect of a list (a count that is not digits, a missing element)

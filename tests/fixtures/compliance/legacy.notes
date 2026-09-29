@@ -1,8 +1,10 @@
 # legacy.notes: the items of the legacy fixture (unit legacy-u, the markdown files under
-# units/legacy-u), each canonical (verbatim null) or verbatim-bearing (verbatim holds the
-# stored span), with the legacy shape it carries (the design's LEGACY SHAPES CARRIED,
-# numbered 1 to 15 below). Only a hand-written posix file can hold these shapes: the fts5
-# and service stores hold what the verbs write, so TC60 plants the files on posix alone.
+# units/legacy-u), each stored canonical (its file lines are the lines a read prints) or in
+# another layout (it reads in the canonical layout, every value kept), with the legacy shape
+# it carries (the design's LEGACY SHAPES CARRIED, numbered 1 to 15 below) and the typed home
+# of any content no schema field holds. No answer carries stored bytes. Only a hand-written
+# posix file can hold these shapes: the fts5 and service stores hold what the verbs write,
+# so TC60 plants the files on posix alone.
 # Positions are <file>:<line> of the item's head (the state's first line for the state).
 #
 # The shapes: 1 STATUS field on an entry; 2 two WHAT lines; 3 closers without a verdict
@@ -14,34 +16,34 @@
 # objective not one closed quoted value, with a continuation line.
 
 position                        kind      id                                   form       shape and why
-state.md:1                      state     legacy-u                             verbatim   15: objective opens a quote and continues on an indented line
+state.md:1                      state     legacy-u                             layout     15: objective opens a quote and continues on an indented line: the continuation joins the objective
 backlog.md:1                    preamble  backlog preamble                     preamble   10: "# backlog grammar" and a prose line before the first task
 backlog.md:4                    task      canon-task                           canonical  every task field set: REFS bracketed, DESCRIPTION with an empty body line, ACCEPTANCE CRITERIA
-backlog.md:15                   task      bare-refs-task                       verbatim   5: bare REFS (blank-separated), which parse into refs and render bracketed
-backlog.md:20                   task      four-space-blank                     verbatim   the posix serializer's four-space blank body line, parsed as an empty line
-backlog.md:28                   opaque    @note                                verbatim   a backlog head other than @task, kept whole
-backlog.md:31                   task      statusless-task                      verbatim   a task without STATUS reads TODO; the canonical lines gain STATUS
+backlog.md:15                   task      bare-refs-task                       layout     5: bare REFS (blank-separated), which parse into refs and render bracketed
+backlog.md:20                   task      four-space-blank                     layout     the posix serializer's four-space blank body line, parsed as an empty line
+backlog.md:28                   opaque    @note                                opaque     a backlog head other than @task: its head and its lines
+backlog.md:31                   task      statusless-task                      layout     a task without STATUS reads TODO; the canonical lines gain STATUS
 knowledge.md:1                  preamble  knowledge preamble                   preamble   10: "# knowledge grammar"
 knowledge.md:3                  finding   LEGACY_CANON                         canonical  REF then SUMMARY; superseded by LEGACY_SUCCESSOR
 knowledge.md:8                  finding   legacy-lowercase-name                canonical  6: a lowercase hyphen NAME read as stored
-knowledge.md:12                 finding   SUMMARY_FIRST                        verbatim   14: SUMMARY before REF
+knowledge.md:12                 finding   SUMMARY_FIRST                        layout     14: SUMMARY before REF
 knowledge.md:17                 finding   LEGACY_SUCCESSOR                     canonical  SUPERSEDES with its reason, REF, SUMMARY
 journal.md:1                    preamble  journal preamble                     preamble   10: "# journal grammar" and a prose line
-journal.md:5                    anchor    A1                                   verbatim   the posix session.init spelling ("session initialized", attention: []): continues and attention null
+journal.md:5                    anchor    A1                                   layout     the posix session.init spelling ("session initialized", attention: []): continues and attention null, the text its head_text
 journal.md:7                    entry     2026-09-20-legacy-one                canonical  every entry field: ANCHOR, WHAT, GROUP, RHYTHM, THREAD, REF, KNOWLEDGE; closed later by a SUPERSEDES
-journal.md:16                   entry     2026-09-20-legacy-status             verbatim   1: STATUS DONE read into legacy_status
-journal.md:21                   entry     2026-09-20-double-what               verbatim   2 and 9: two WHAT lines (the first in extra_fields) and a column-0 comment in the span
-journal.md:27                   entry     2026-09-20-legacy-two                verbatim   4: an unquoted REF; 3: a closer whose parenthesis has no verdict word (the closer line itself is canonical); a separator before an anchor
-journal.md:34                   anchor    A2                                   verbatim   the posix session.stamp quoted attention, no separator before the next entry
-journal.md:35                   entry     2026-09-21-legacy-three              verbatim   3: doubled verdict groups and a spaced hyphen reason (each closer carries its own verbatim line); a separator before an anchor
+journal.md:16                   entry     2026-09-20-legacy-status             layout     1: STATUS DONE read into legacy_status
+journal.md:21                   entry     2026-09-20-double-what               layout     2 and 9: two WHAT lines (the first in extra_fields) and a column-0 comment in the span (its extra_lines)
+journal.md:27                   entry     2026-09-20-legacy-two                layout     4: an unquoted REF; 3: a closer whose parenthesis has no verdict word (the closer line itself is canonical); a separator before an anchor
+journal.md:34                   anchor    A2                                   layout     the posix session.stamp quoted attention, no separator before the next entry
+journal.md:35                   entry     2026-09-21-legacy-three              layout     3: doubled verdict groups (the reason read to the last closing parenthesis holds both) and a spaced hyphen reason (read as the reason); a separator before an anchor
 journal.md:42                   anchor    A3                                   canonical  the stamp form followed by one empty line
-journal.md:44                   entry     2026-09-21-multi-line                verbatim   7: a quoted WHAT over two lines (what keeps the newline); 8: an unknown NOTE field in extra_fields
+journal.md:44                   entry     2026-09-21-multi-line                layout     7: a quoted WHAT over two lines (what keeps the newline); 8: an unknown NOTE field in extra_fields
 journal.md:52                   entry     2026-09-10-no-anchor                 canonical  12: no ANCHOR and no THREAD (dated before the thread rule), the journal's last item
 lanes/bare-lane                 lane      bare-lane                            n/a        a lane with a recipe only: report null, journal preamble null (no journal file)
 lanes/legacy-lane               lane      legacy-lane                          n/a        recipe and report documents (a backslash, a tab, UTF-8 in the report); journal preamble "# journal grammar"
 lanes/legacy-lane/journal.md:3  lane item legacy-lane A1                       canonical  11: an @anchor in a lane journal
-lanes/legacy-lane/journal.md:5  lane item legacy-lane 2026-09-20-lane-block    verbatim   7: a WHAT :: block scalar; 8: an unknown RESULT field
-lanes/legacy-lane/journal.md:12 lane item legacy-lane 2026-09-20-lane-cont     verbatim   9: a continuation line that is no field
+lanes/legacy-lane/journal.md:5  lane item legacy-lane 2026-09-20-lane-block    layout     7: a WHAT :: block scalar; 8: an unknown RESULT field (its extra_fields)
+lanes/legacy-lane/journal.md:12 lane item legacy-lane 2026-09-20-lane-cont     layout     9: a continuation line that is no field (its extra_lines)
 lanes/legacy-lane/journal.md:17 lane item legacy-lane 2026-09-20-lane-canon    canonical  12: a lane entry without ANCHOR, with a REF
 lanes/legacy-lane/journal.md:22 lane item legacy-lane 2026-09-20-lane-repeat   canonical  13: the first occurrence of a repeated lane slug
 lanes/legacy-lane/journal.md:26 lane item legacy-lane 2026-09-20-lane-repeat   canonical  13: the second occurrence (occurrence 2)

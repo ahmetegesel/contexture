@@ -1,1 +1,1 @@
-{"unit":"legacy-u","task":{"slug":"statusless-task","ordinal":5,"status":"TODO","objective":"A legacy task without STATUS","refs":[],"description":null,"criteria":null,"details":null,"next":null,"verbatim":"@task statusless-task\n  OBJECTIVE: \"A legacy task without STATUS\"\n"}}
+{"unit":"legacy-u","task":{"slug":"statusless-task","ordinal":5,"status":"TODO","objective":"A legacy task without STATUS","refs":[],"description":null,"criteria":null,"details":null,"extra_fields":[],"head_text":null,"extra_lines":[],"next":null}}

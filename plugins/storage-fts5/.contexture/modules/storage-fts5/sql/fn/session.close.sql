@@ -5,9 +5,6 @@ INSERT INTO temp.err SELECT 40, 1, 'ERR_INVALID_TRANSITION', 'unit ''' || u.unit
   FROM units u, temp.a a WHERE u.unit = a.unit AND u.status <> 'ACTIVE';
 .read lib/stop.sql
 UPDATE units SET status = 'CLOSED' WHERE unit = (SELECT unit FROM temp.a);
-INSERT INTO temp.sts VALUES ('status', 'status: CLOSED');
-.read lib/stedit.sql
-.read lib/settle.sql
 INSERT INTO temp.tart SELECT unit, 'state' FROM temp.a;
 .read lib/touch.sql
 INSERT INTO temp.du SELECT unit FROM temp.a;
@@ -15,6 +12,6 @@ INSERT INTO temp.dp VALUES ('backlog'), ('journal');
 .read lib/model.sql
 .read lib/audit.sql
 SELECT json_object('unit', a.unit, 'status', 'CLOSED',
-  'open_tasks', json((SELECT json_group_array(t.slug ORDER BY t.pos) FROM temp.xt t WHERE t.unit = a.unit AND t.kind = 'task' AND t.status <> 'DONE')),
+  'open_tasks', json((SELECT json_group_array(t.slug ORDER BY t.pos) FROM temp.xt t WHERE t.unit = a.unit AND t.status <> 'DONE')),
   'audit', json((SELECT j FROM temp.audj))) FROM temp.a a;
 COMMIT;
