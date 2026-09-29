@@ -10,7 +10,7 @@
 # help:   drop <unit> <slug> [--reason="..."]
 # help:   list <unit> [--status=todo|progress|done|all] [--json]
 # help:   show <unit> <slug> [--json]
-# help: --refs takes the references blank or comma separated (brackets optional); an update with --refs replaces the list, --refs="" clears it
+# help: --refs takes the references blank or comma separated (brackets optional), each <target>#<symbol> or a whole target path; an update with --refs replaces the list, --refs="" clears it
 # help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --objective, --desc, --criteria, or --details carrying no field
 # help: the storage driver holds the record rules: a CLOSED unit refuses every write; start moves only a TODO task, complete a TODO or IN_PROGRESS task, reopen an IN_PROGRESS or DONE task; drop refuses an IN_PROGRESS task next_action names; start and the pointer it writes must name every IN_PROGRESS task; complete and drop write their receipt entry (backlog/<slug>: DONE (<evidence>), DROPPED (<reason>)) in the same write
 # help: add, start, complete, reopen, and drop fire the task-landing hooks (CTX_ACT add, start, complete, reopen, or drop; CTX_SLUGS the task)
@@ -59,7 +59,8 @@ landing() {
   }
 }
 
-# the refs list of --refs: every element one reference without a blank, bracket, or comma
+# the refs list of --refs: every element one reference without a blank, bracket, or comma,
+# in one of the two pointer shapes (end review item 6), checked before any payload line
 refs_payload() {
   set -f
   old_ifs=$IFS
@@ -69,6 +70,7 @@ refs_payload() {
   set -- $(vb_refs_split "$1")
   IFS=$old_ifs
   set +f
+  for rp_r in "$@"; do vb_ref_ok "task $subcmd" "$rp_r"; done
   vb_list refs "$@"
 }
 

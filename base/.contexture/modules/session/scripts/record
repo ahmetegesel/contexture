@@ -7,12 +7,12 @@
 # help:   --group=...          topic group token
 # help:   --thread=...         what the unit awaits (default: none)
 # help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of .contexture/rhythms/<name>.md
-# help:   --ref="..."          grounding reference (path#symbol by convention); repeatable, one REF line each
-# help:   --closes=...         closes journal entry targets: one or more slugs, optionally with its own (verdict: reason); default (done: WHAT); repeatable, one CLOSES line each
-# help:   --supersedes=...     supersedes journal entry targets, the same shape; default (superseded: WHAT); repeatable
+# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path, one token without blanks or double quotes; repeatable, one REF line each
+# help:   --closes="<slug> (<verdict>: <reason>)"   closes journal entry targets (one or more slugs before the parenthesis); the verdict done, superseded, dropped, or folded; repeatable, one CLOSES line each
+# help:   --supersedes="<slug> (<verdict>: <reason>)"   supersedes journal entry targets, the same form; repeatable, one SUPERSEDES line each
 # help:   --knowledge          flag for harvest
 # help:   --slug=...           override entry slug (today's date prefixed when it carries none)
-# help: a bare closer's reason is the WHAT with every parenthesis written as a square bracket (a closer reason holds no parenthesis); every closer target must name an entry the journal holds; a CLOSED unit and a slug the journal holds refuse rc 1
+# help: a closer takes only the explicit form: a bare target list, a missing or unknown verdict, an empty reason, or a reason holding a parenthesis refuses rc 1 (ERR_INVALID_ARGUMENT) naming the form; every closer target must name an entry the journal holds; a CLOSED unit and a slug the journal holds refuse rc 1
 # help: every flag value is one line: an embedded newline or carriage return refuses before any write
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
@@ -130,15 +130,13 @@ if [ -n "$rhythm" ]; then
   [ "$g" = "$rgate" ] || fail "ERROR: RHYTHM step $rstep of $rname reads $g, not $rgate"
 fi
 
-# a REF is one quoted line: not empty, no double quote (the path#symbol shape stays the
-# writer's: the record carries lane references without a symbol, REF: "lanes/<lane>/recipe")
+# a REF names its target in one of the two pointer shapes: <target>#<symbol> or a whole
+# target path (lanes/<lane>/recipe), one token (end review item 6)
 i=0
 while [ "$i" -lt "$nref" ]; do
   i=$((i + 1))
   eval "r=\$REF_$i"
-  case "$r" in
-    ""|*'"'*) fail "ERROR: REF malformed: [$r] (one line, no double quote)" ;;
-  esac
+  vb_ref_ok record "$r"
 done
 
 today=$(vb_today)
@@ -147,45 +145,47 @@ if [ -n "$slug" ]; then
   dateslug_ok "$slug" || fail "ERROR: malformed entry slug: $slug (a date-slug like 2026-09-17-example)"
 fi
 
-# the closers (B10): one or more date-slug targets, then optionally (verdict: reason); a
-# bare list takes the verb's verdict and the WHAT as its reason (D3)
-bare_reason=$(printf '%s' "$what" | tr '()' '[]')
+# the closers (B10, end review item 5): only the explicit form <slug> (<verdict>: <reason>),
+# one or more date-slug targets before the parenthesis, a verdict of done, superseded,
+# dropped, or folded, and a non-empty reason holding no parenthesis; a bare target list
+# refuses (the law puts the resolution in the closer, never a copy of the WHAT)
+closer_fail() {
+  fail "record: error: --$(printf '%s' "$1" | tr 'A-Z' 'a-z') takes <slug> (<verdict>: <reason>) with a verdict of done, superseded, dropped, or folded and a non-empty reason; $3: '$2' (ERR_INVALID_ARGUMENT)"
+}
 i=0
 while [ "$i" -lt "$ncl" ]; do
   i=$((i + 1))
   eval "k=\$CL_KIND_$i; val=\$CL_VAL_$i"
   case "$val" in
-    *'('*)
-      ts=${val%%(*}
-      inner=${val#*(}
-      case "$inner" in *')'*) ;; *) fail "ERROR: $k carries an unclosed reason" ;; esac
-      after=${inner#*)}
-      inner=${inner%%)*}
-      case "$after" in *[!' 	']*) fail "ERROR: $k carries text after the reason" ;; esac
-      case "$inner" in *'('*) fail "ERROR: $k reason carries parentheses; write the reason without parentheses" ;; esac
-      case "$inner" in *:*) ;; *) fail "ERROR: $k needs the verdict then a colon then the reason (the shape: (done: the resolution))" ;; esac
-      verdict=$(printf '%s' "${inner%%:*}" | sed 's/^[ 	]*//; s/[ 	]*$//')
-      reason=$(printf '%s' "${inner#*:}" | sed 's/^[ 	]*//; s/[ 	]*$//')
-      case "$verdict" in
-        done|superseded|dropped|folded) ;;
-        *) fail "ERROR: $k verdict must be done | superseded | dropped | folded (got: $verdict)" ;;
-      esac
-      [ -n "$reason" ] || fail "ERROR: $k needs a non-empty reason"
-      ;;
-    *)
-      ts=$val
-      if [ "$k" = CLOSES ]; then verdict=done; else verdict=superseded; fi
-      reason=$bare_reason
-      ;;
+    *'('*) ;;
+    *) closer_fail "$k" "$val" "no (<verdict>: <reason>) given" ;;
   esac
-  case "$ts" in *' - '*|*'	-	'*|*' -	'*|*'	- '*) fail "ERROR: $k carries the legacy spaced-hyphen delimiter; write (verdict: reason) instead" ;; esac
+  ts=${val%%(*}
+  inner=${val#*(}
+  case "$inner" in *')'*) ;; *) closer_fail "$k" "$val" "an unclosed reason" ;; esac
+  after=${inner#*)}
+  inner=${inner%%)*}
+  case "$after" in
+    *')'*|*'('*) closer_fail "$k" "$val" "a closer reason holds no parenthesis" ;;
+    *[!' 	']*) closer_fail "$k" "$val" "text after the reason" ;;
+  esac
+  case "$inner" in *'('*) closer_fail "$k" "$val" "a closer reason holds no parenthesis" ;; esac
+  case "$inner" in *:*) ;; *) closer_fail "$k" "$val" "no verdict before the reason" ;; esac
+  verdict=$(printf '%s' "${inner%%:*}" | sed 's/^[ 	]*//; s/[ 	]*$//')
+  reason=$(printf '%s' "${inner#*:}" | sed 's/^[ 	]*//; s/[ 	]*$//')
+  case "$verdict" in
+    done|superseded|dropped|folded) ;;
+    *) closer_fail "$k" "$val" "unknown verdict '$verdict'" ;;
+  esac
+  [ -n "$reason" ] || closer_fail "$k" "$val" "an empty reason"
+  case "$ts" in *' - '*|*'	-	'*|*' -	'*|*'	- '*) closer_fail "$k" "$val" "the legacy spaced-hyphen delimiter" ;; esac
   set -f
   # shellcheck disable=SC2086
   set -- $ts
   set +f
-  [ $# -ge 1 ] || fail "ERROR: $k needs at least one target"
+  [ $# -ge 1 ] || closer_fail "$k" "$val" "no target slug"
   for t in "$@"; do
-    dateslug_ok "$t" || fail "ERROR: $k target malformed: $t (a date-slug like 2026-09-17-example)"
+    dateslug_ok "$t" || closer_fail "$k" "$val" "the target '$t' is not a date-slug like 2026-09-17-example"
   done
   eval "CL_V_$i=\$verdict; CL_R_$i=\$reason"
   eval "CL_TN_$i=$#"

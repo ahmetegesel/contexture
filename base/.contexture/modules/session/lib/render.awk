@@ -192,6 +192,7 @@ function c_entry(p,   o, i, n) {
 }
 
 function c_anchor(p) {
+  if (!nul(D(p) "date")) return "@anchor " sv(D(p) "anchor") " " sv(D(p) "date") "\n" c_xl(p)
   if (!nul(D(p) "continues") && !nul(D(p) "attention"))
     return "@anchor " sv(D(p) "anchor") " (\"continues " sv(D(p) "continues") "\", attention: " sv(D(p) "attention") ")\n" c_xl(p)
   return c_head("anchor", sv(D(p) "anchor"), p) c_xl(p)
@@ -700,7 +701,7 @@ function v_diagnose(   m) {
   m = list_join("search_modes", ", ")
   printf "  contract:        %s (%s %s)\n", sv("contract"), sv("driver"), sv("version")
   printf "  functions:       %d declared\n", nn("functions")
-  printf "  search modes:    %s (default exact)\n", (m == "" ? "none" : m)
+  printf "  search modes:    %s\n", (m == "" ? "none" : m)
   m = list_join("optional", ", ")
   printf "  optional:        %s\n", (m == "" ? "none" : m)
 }

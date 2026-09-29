@@ -6,7 +6,7 @@
 # help:   --body="..."         report content to write
 # help:   --json               output JSON format
 # help: stdin fallback: pipe report markdown on stdin to write (any size; the body reaches the driver on stdin, normalized to end with one newline)
-# help: a write prints one line with the stored size; a write into a CLOSED unit refuses rc 1
+# help: a write prints one line with the stored size; a write into a CLOSED unit refuses rc 1; a body holding a NUL byte or bytes that are not valid UTF-8 refuses rc 1 (ERR_INVALID_ARGUMENT) before any write
 # help: scripted reads: ctx lane show <unit> <lane-slug> report never reads stdin; with no --body, report reads stdin whenever stdin is not a terminal, so under an open pipe it waits for the writer to close
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../../session/lib" && pwd)/verb.sh"
@@ -47,8 +47,16 @@ while [ $# -gt 0 ]; do
 done
 
 vb_tmp
-if [ -z "$body" ] && [ ! -t 0 ]; then
-  body=$(cat)
+# the body lands in a file first, so a NUL byte or bytes that are not UTF-8 refuse before
+# any driver call (end review item 10; a command substitution would drop a NUL silently)
+if [ -n "$body" ]; then
+  printf '%s' "$body" > "$VB_DIR/raw"
+elif [ ! -t 0 ]; then
+  cat > "$VB_DIR/raw" || { printf 'lane report: error: cannot read the report on stdin\n' >&2; exit 2; }
+fi
+if [ -f "$VB_DIR/raw" ]; then
+  vb_doc_ok "the report" "$VB_DIR/raw"
+  body=$(cat "$VB_DIR/raw")
 fi
 
 # the report travels raw on the driver's stdin (any size; argv carries only identifiers),

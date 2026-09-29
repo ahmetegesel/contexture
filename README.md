@@ -137,7 +137,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the next move |
 | ctx session load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
 | ctx session load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
-| ctx session stamp <unit> "<attention>" | The load receipt: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with the attention verbatim |
+| ctx session stamp <unit> | Stamps the new period: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with its number and date (@anchor A<N> <date>), no receipt text; a text argument refuses rc 1 |
 | ctx session board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
 | ctx session audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
 | ctx session index | One line per rhythm: name, path, use when, activation |
@@ -147,7 +147,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session entry list <unit> [--anchor=A<N>] [--group=<token>] | One line per entry occurrence (anchor, slug, WHAT), open or closed; `--group` is the topic thread, `--anchor` one period |
 | ctx session entry closure <unit> <slug> | Open, or closed with the verdict of the first closer, then every later closer naming it with its line |
 | ctx session finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list; `--ref` repeats |
-| ctx session search <unit> "<query>" [--limit=N] [--entity=TYPE] [--mode=MODE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet, score); exact is the default on every driver, a ranked mode (hybrid, trigram) is asked for by name where the driver declares it |
+| ctx session search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet, score); --mode is required, no default: exact on every driver or a mode the configured driver declares (ctx session diagnose lists them); a search without it refuses rc 1 naming the declared modes |
 | ctx session resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) and the legacy file forms to the entity block |
 | ctx session units <repo> | Each unit touching the repo: slug, status, anchor, next action |
 | ctx session refs-to <session> | Each unit referencing the session |

@@ -391,7 +391,8 @@ want_held() {
 }
 
 # the manifest: F lines (key, path) with the sizes one wc answers, U lines per unit held,
-# L lines per lane folder of a unit, in bytewise order (the C locale's glob)
+# L lines per lane of a unit (a lane folder holding at least one artifact), in bytewise
+# order (the C locale's glob)
 man_file() {
   if [ -f "$2" ]; then
     printf 'F\t%s\t%s\n' "$1" "$2" >> "$SCR/man"
@@ -412,6 +413,10 @@ man_unit() {
       [ -d "$mu_l" ] || continue
       mu_n=${mu_l##*/}
       ident_valid "$mu_n" || continue
+      # a lane is its artifacts (end review item 8): a folder holding no recipe, journal,
+      # or report is no lane, whatever other files it holds (lane.get refuses it, every
+      # listing skips it, lane.create of the name lands beside those files)
+      [ -f "$mu_l/recipe.md" ] || [ -f "$mu_l/journal.md" ] || [ -f "$mu_l/report.md" ] || continue
       printf 'L\t%s\t%s\n' "$1" "$mu_n" >> "$SCR/man"
       case " $2 " in
         *" lanes "*|*" lane:$mu_n "*)

@@ -9,7 +9,7 @@
   ANCHOR: A1
   WHAT: "second, after an entry"
   THREAD: none
-@anchor A2 ("continues A1", attention: append rule stamp)
+@anchor A2 2026-09-27
 
 @entry 2026-09-27-event-1790000102
   ANCHOR: A2

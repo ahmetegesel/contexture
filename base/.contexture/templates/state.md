@@ -5,10 +5,10 @@ the map, not the content: terse by design: detail lives behind refs;
 the record carries the substance.
 
 status: ACTIVE | CLOSED                  # ACTIVE = the unit is in flight
-current_anchor: A<N>                     # the anchor bumped at boot;
-                                         # N = previous + 1; a fresh unit
-                                         # starts at A0; its first boot
-                                         # stamps A1
+current_anchor: A<N>                     # the period, bumped at boot by
+                                         # ctx session stamp: N = previous
+                                         # + 1; a fresh unit starts at A1
+                                         # (the bootstrap's first anchor)
 next_action: "one terse pointer:        # the ONLY next step; overwritten,
   what to do next"                       # never prepended; the WHY rebuilds
                                          # from the record, never here;

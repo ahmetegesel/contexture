@@ -37,16 +37,16 @@ DROP TABLE IF EXISTS temp.xj;
 CREATE TEMP TABLE xj AS
 SELECT j.unit AS unit, j.lane AS lane, j.pos AS pos, j.kind AS kind, j.slug AS slug, j.anchor AS anchor, j.what AS what,
   j.grp AS grp, j.rhythm AS rhythm, j.knowledge AS knowledge, j.thread AS thread,
-  j.continues AS continues, j.attention AS attention,
+  j.stamp_date AS stamp_date, j.continues AS continues, j.attention AS attention,
   row_number() OVER (PARTITION BY j.unit, j.lane ORDER BY j.pos) AS seq,
   lead(j.kind) OVER (PARTITION BY j.unit, j.lane ORDER BY j.pos) AS nextk,
   CASE WHEN j.kind = 'entry' THEN row_number() OVER (PARTITION BY j.unit, j.lane, j.kind, j.slug ORDER BY j.pos) END AS occ,
   CAST(NULL AS INTEGER) AS cb_pos, CAST(NULL AS INTEGER) AS cb_cpos
 FROM (
-  SELECT unit, '' AS lane, pos, kind, slug, anchor, what, grp, rhythm, knowledge, thread, continues, attention
+  SELECT unit, '' AS lane, pos, kind, slug, anchor, what, grp, rhythm, knowledge, thread, stamp_date, continues, attention
   FROM journal_items WHERE unit IN (SELECT unit FROM temp.du) AND EXISTS (SELECT 1 FROM temp.dp WHERE part = 'journal')
   UNION ALL
-  SELECT unit, lane, pos, kind, slug, anchor, what, grp, rhythm, knowledge, thread, continues, attention
+  SELECT unit, lane, pos, kind, slug, anchor, what, grp, rhythm, knowledge, thread, stamp_date, continues, attention
   FROM lane_items WHERE unit IN (SELECT unit FROM temp.du) AND EXISTS (SELECT 1 FROM temp.dp WHERE part = 'lanes')
 ) j;
 CREATE INDEX IF NOT EXISTS temp.xj_key ON xj (unit, lane, pos);
@@ -112,7 +112,7 @@ CREATE TEMP VIEW IF NOT EXISTS jent AS
 SELECT x.unit AS unit, x.lane AS lane, x.pos AS pos, x.kind AS kind, x.slug AS slug, x.seq AS seq, x.occ AS occ,
   x.cb_pos AS cb_pos, x.cb_cpos AS cb_cpos, x.thread AS thread, x.anchor AS anchor, x.what AS what, x.grp AS grp,
   x.knowledge AS knowledge, x.nextk AS nextk,
-  CASE x.kind WHEN 'anchor' THEN json_object('kind', 'anchor', 'seq', x.seq, 'anchor', x.anchor, 'continues', x.continues,
+  CASE x.kind WHEN 'anchor' THEN json_object('kind', 'anchor', 'seq', x.seq, 'anchor', x.anchor, 'date', x.stamp_date, 'continues', x.continues,
       'attention', x.attention, 'head_text', NULL, 'extra_lines', json('[]'), 'next', x.nextk)
     ELSE json_object('kind', 'entry', 'slug', x.slug, 'occurrence', x.occ, 'seq', x.seq, 'anchor', x.anchor, 'what', x.what,
       'group', x.grp, 'rhythm', x.rhythm, 'knowledge', json(x.know_j), 'thread', x.thread, 'legacy_status', NULL,
@@ -126,7 +126,7 @@ SELECT x.unit AS unit, x.lane AS lane, x.pos AS pos, x.kind AS kind, x.slug AS s
       'close_reason', (SELECT CASE WHEN c.verdict IS NOT NULL THEN c.verdict || ': ' || coalesce(c.reason, '') ELSE c.reason END
         FROM closers c WHERE c.unit = x.unit AND c.lane = x.lane AND c.pos = x.cb_pos AND c.cpos = x.cb_cpos),
       'next', x.nextk) END AS jc,
-  CASE x.kind WHEN 'anchor' THEN json_object('kind', 'anchor', 'seq', x.seq, 'anchor', x.anchor, 'continues', x.continues,
+  CASE x.kind WHEN 'anchor' THEN json_object('kind', 'anchor', 'seq', x.seq, 'anchor', x.anchor, 'date', x.stamp_date, 'continues', x.continues,
       'attention', x.attention, 'head_text', NULL, 'extra_lines', json('[]'), 'next', x.nextk)
     ELSE json_object('kind', 'entry', 'lane', x.lane, 'slug', x.slug, 'occurrence', x.occ, 'seq', x.seq, 'anchor', x.anchor,
       'what', x.what, 'group', x.grp, 'rhythm', x.rhythm, 'knowledge', json(x.know_j), 'thread', x.thread, 'legacy_status', NULL,

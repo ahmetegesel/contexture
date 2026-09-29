@@ -22,7 +22,7 @@ In the POSIX baseline driver, these domains map to four files and the lanes fold
 
 | file | physical role in POSIX driver |
 |---|---|
-| `state.md` | state card: status, current anchor, next action, attention, refs |
+| `state.md` | state card: status, current anchor, next action, objective, repos, refs |
 | `backlog.md` | task queue: multiline containers for description, criteria, details |
 | `journal.md` | event log: chronological entries stamped with anchor and thread |
 | `knowledge.md` | findings store: settled findings with references and summaries |
@@ -96,7 +96,7 @@ A task marked `IN_PROGRESS` is executable as written: every needed decision live
 The journal is the unit's chronological event trace and recording surface: events land as they happen, and the record only gains entries. It exists to rebuild the working context from scratch. A fresh session loads the live entries and nothing else.
 
 ```text
-@anchor A12 ("continues A11", attention: <the loaded set>)
+@anchor A12 2026-09-29
 
 @entry 2026-09-12-auth-cookie-sessions
   ANCHOR: A12
@@ -117,7 +117,7 @@ Fields on journal entries, in the canonical order every read prints and the reco
 - `GROUP:` topic thread identifier, stable within the unit.
 - `RHYTHM: <name> <N> <GATE>` records process milestones.
 - `THREAD: <what it awaits>` names external acts awaiting completion, or `none` for receipts.
-- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several.
+- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several. A reference takes one of two shapes, `<target>#<symbol>` or a whole target path (`lanes/<lane>/recipe`), one token without blanks or double quotes; the verbs refuse any other value on a new write, naming both shapes, and a legacy value reads as stored.
 - `CLOSES:` or `SUPERSEDES:` closes an earlier entry by reference with a verdict word and reason. One line may name several targets (`CLOSES: <slug> <slug> (folded: reason)`) and an entry may carry several closer lines; every date-slug before the first spaced paren or spaced hyphen is a target.
 - `KNOWLEDGE: true` flags entries for durable knowledge harvesting.
 
@@ -129,7 +129,7 @@ Agents record events via `ctx session record`:
 .contexture/ctx session record <unit> --what="..." [--group=...] [--thread=...] [--rhythm="<name> <N> <GATE>"] [--ref=...]... [--closes=...]... [--supersedes=...]... [--knowledge] [--slug=...]
 ```
 
-The command sends the current local date and time, the storage driver takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` takes one or more target slugs, each of which must name an entry the journal already holds; a value carrying its own parenthesized verdict (`--closes="<slug> <slug> (dropped: reason)"`) lands as given, and a bare target list is closed as `(done: <WHAT>)` (a bare `--supersedes` as `(superseded: <WHAT>)`), every parenthesis of the WHAT written as a square bracket since a closer reason holds none. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal reads in the canonical layout, every value kept, and its file bytes stay as they are. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the `next_action` pointer, the state `objective`) on every write path: an embedded double quote is text (the typed verbs, `next`, and `bootstrap` store it), and every reader returns it verbatim.
+The command sends the current local date and time, the storage driver takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` and `--supersedes` take only the explicit form `<slug> (<verdict>: <reason>)` (one or more target slugs before the parenthesis, each naming an entry the journal already holds, as in `--closes="<slug> <slug> (dropped: reason)"`), the verdict one of `done`, `superseded`, `dropped`, `folded` and the reason non-empty; a bare target list refuses rc 1 naming the form, since the closer carries the resolution itself, and a reason holding a parenthesis refuses naming the rule. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal reads in the canonical layout, every value kept, and its file bytes stay as they are. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the `next_action` pointer, the state `objective`) on every write path: an embedded double quote is text (the typed verbs, `next`, and `bootstrap` store it), and every reader returns it verbatim.
 
 To inspect entries:
 - `ctx session entry show <unit> <slug> [--json]`: prints the entry's stored block (every field it carries); `--json` prints the typed entry: its fields, `refs` as a list, its closers, and the closure derived by position (`closed`, `closed_by`, `close_reason`).
@@ -186,20 +186,20 @@ When given legacy file-based paths (such as `knowledge.md#NAME`, `journal.md#slu
 
 ## Universal search and snippet consumption
 
-Universal search operates across all entity domains, `exact` by default on every driver:
+Universal search operates across all entity domains; every search names its mode (`--mode` is required, with no default: `exact` on every driver, or a mode the configured driver declares, which `ctx session diagnose` lists):
 
 ```bash
-.contexture/ctx session search <unit> "<query>" [--limit=N] [--entity=TYPE] [--mode=MODE] [--json]
+.contexture/ctx session search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json]
 ```
 
-Every driver returns the same keys per result (`entity_type`, `entity_id`, `section`, `snippet`, `score`), so a caller never branches on the backend; `--limit` caps the results, `--entity` keeps one entity type, and a mode the driver does not declare refuses rc 1 naming the declared ones (posix declares `exact` alone; fts5 adds the ranked `hybrid` and `trigram` modes, asked for by name). An empty query refuses rc 1. `exact`, the default, means one thing on every driver: a line matches when it carries the query as a substring, ASCII letters compared without case and a column-0 comment never matching; the answer is one row per matching entity and section, in record order, its snippet the first matching line, its score 0, and `total_matches` counts those rows, so every driver returns the same rows and totals for the same record.
+Every driver returns the same keys per result (`entity_type`, `entity_id`, `section`, `snippet`, `score`), so a caller never branches on the backend; `--limit` caps the results, `--entity` keeps one entity type, and a mode the driver does not declare refuses rc 1 naming the declared ones (posix declares `exact` alone; fts5 adds the ranked `hybrid` and `trigram` modes, asked for by name). An empty query refuses rc 1, and so does a search without `--mode`, naming the modes the configured driver declares. `exact`, the one mode every driver implements, means one thing on every driver: a line matches when it carries the query as a substring, ASCII letters compared without case and a column-0 comment never matching; the answer is one row per matching entity and section, in record order, its snippet the first matching line, its score 0, and `total_matches` counts those rows, so every driver returns the same rows and totals for the same record.
 
 In backends with full text indexing (such as SQLite FTS5), search uses dual virtual tables combining Porter stemming for English prose with Trigram tokenization for code identifiers, symbols, and multilingual text. A pure SQL Reciprocal Rank Fusion (RRF) algorithm ranks results across both tables.
 
 On an indexed backend, a ranked mode returns high-density contextual snippets ordered by their score. This cuts token consumption by more than 90 percent compared to dumping entire entity bodies.
 
 Agents follow a snippet-first consumption protocol:
-1. Run `ctx session search` to locate candidates.
+1. Run `ctx session search <unit> "<query>" --mode=<mode>` to locate candidates.
 2. Review the compact snippets (and, on a ranked backend, the scores).
 3. Fetch full entity blocks on demand using targeted commands (`ctx session task show`, `entry show`, `finding show`, or `resolve`).
 
@@ -230,13 +230,13 @@ Closers must resolve: every `CLOSES` or `SUPERSEDES` slug must name a real entry
 
 ## Anchors
 
-Time is recorded by anchors. An `@anchor` line stamps one working period, a fresh context load, and receipts what that period loaded:
+Time is recorded by anchors. An `@anchor` line stamps one working period, a fresh context load, with its number and date alone (`ctx session stamp <unit>`, no receipt text):
 
 ```text
-@anchor A12 ("continues A11", attention: <the loaded set>)
+@anchor A12 2026-09-29
 ```
 
-A fresh unit starts at `A1`, the bootstrap's folded first anchor; each later stamp is the previous plus one. Anchors provide period ordering and load receipts. No entry loads or skips by its anchor, and age never closes anything: an entry stays live until a closure names it.
+A fresh unit starts at `A1`, the bootstrap's folded first anchor; each later stamp is the previous plus one. Anchors provide period ordering: `ctx session entry list <unit> --anchor=A<N>` lists one period, and an entry's `ANCHOR` names the period it was written in. A legacy anchor that carries receipt text (`("continues A11", attention: ...)`) keeps it as content and reads back as stored. No entry loads or skips by its anchor, and age never closes anything: an entry stays live until a closure names it.
 
 ## The schema as the memory boundary
 

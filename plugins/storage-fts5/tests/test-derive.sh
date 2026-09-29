@@ -62,12 +62,12 @@ done
 printf '# seed recipe\nMISSION\n  GOAL: "a derive lane"\n' | w lane.create der-a seed-lane
 printf 'what=a seed lane entry\nthread=none\nrefs.count=0\ndate=2026-09-27\nepoch=3\n' | w lane.record der-a seed-lane
 printf '# report\n\n@claim seed\n  a seed claim\n' | w lane.write_report der-a seed-lane
-printf 'attention=seed stamp\n' | w session.stamp der-b
+printf 'date=2026-09-27\n' | w session.stamp der-b
 printf 'what=closes the second seed\nthread=none\nknowledge=false\nrefs.count=0\nclosers.count=1\nclosers.1.kind=CLOSES\nclosers.1.targets.count=1\nclosers.1.targets.1=2026-09-27-seed-two\nclosers.1.verdict=done\nclosers.1.reason=seeded\ndate=2026-09-27\nepoch=4\n' | w entry.record der-b
 
 for u in der-a der-b; do
   printf 'pointer=derive pointer\n' | w session.next "$u"
-  printf 'attention=derive stamp\n' | w session.stamp "$u"
+  printf 'date=2026-09-28\n' | w session.stamp "$u"
   w session.refs "$u" < /dev/null
   printf 'objective=derive task\ndesc=body line\\nsecond\nrefs.count=1\nrefs.1=knowledge#DERIVE\n' | w task.add "$u" dv-task
   printf 'objective=derive task renamed\ncriteria=a criterion\nrefs.count=0\n' | w task.update "$u" dv-task

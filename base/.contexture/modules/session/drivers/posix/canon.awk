@@ -162,9 +162,12 @@ function c_entry(slug, anchor, what, group, rhythm, thread, R, nr, cls, know, ls
   return o
 }
 
-# c_anchor(anchor, continues, attention, head text, the extra lines): the stamp form, or the
-# bare head followed by its head text when either part is absent
-function c_anchor(a, cont, att, ht, xl) {
+# c_anchor(anchor, date, continues, attention, head text, the extra lines): the stamp form
+# @anchor <A> <date> (end review item 7: the period's number and date, no receipt text); a
+# legacy anchor in the former receipt form ("continues <P>", attention: <text>) when both
+# parts are set; else the bare head followed by its head text
+function c_anchor(a, dt, cont, att, ht, xl) {
+  if (dt != NULLV) return "@anchor " a " " dt "\n" xl
   if (cont != NULLV && att != NULLV) return "@anchor " a " (\"continues " cont "\", attention: " att ")\n" xl
   return c_head("anchor", a, ht) xl
 }

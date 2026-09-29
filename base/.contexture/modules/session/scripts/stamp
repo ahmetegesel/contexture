@@ -1,14 +1,14 @@
 #!/bin/sh
-# summary: bump the session anchor and append the load receipt
-# usage: ctx session stamp <slug> "<attention>"
-# help: the storage driver moves current_anchor from A<N> to A<N+1> and appends the anchor receipt in one atomic write (session.stamp); prints the transition; an empty, whitespace-only, or newline-carrying attention refuses rc=1 before any write; a CLOSED unit refuses rc=1 and a malformed stored anchor rc=2
-# help: exit codes: 0 anchor bumped and transition printed; 1 empty attention, a missing or CLOSED unit; 2 a malformed stored anchor
-# help: example: ctx session stamp my-unit "loaded state, backlog, knowledge, journal; git clean"
+# summary: stamp the new period: bump the session anchor and append its anchor line
+# usage: ctx session stamp <slug>
+# help: the storage driver moves current_anchor from A<N> to A<N+1> and appends the anchor line with its number and today's date, @anchor A<N+1> <date>, in one atomic write (session.stamp); prints the transition; the anchor carries no receipt text: a text argument refuses rc=1 (ERR_INVALID_ARGUMENT) naming the form ctx session stamp <unit>
+# help: exit codes: 0 anchor bumped and transition printed; 1 a text argument, a missing or CLOSED unit; 2 a malformed stored anchor
+# help: example: ctx session stamp my-unit
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
-  printf 'Usage: ctx session stamp <session-slug> "<attention>"\n' >&2
+  printf 'Usage: ctx session stamp <session-slug>\n' >&2
   printf 'help: ctx session help\n' >&2
   exit 1
 }
@@ -21,19 +21,16 @@ fail() {
 case "${1:-}" in
   --help|-h) [ $# -eq 1 ] && { vb_verb_help session "$0"; exit 0; } ;;
 esac
-[ $# -eq 2 ] || usage
+[ $# -ge 1 ] || usage
 slug=$1
-attention=$2
 vb_slug_ok "$slug" || usage
-[ -n "$attention" ] || fail "ERROR: empty attention"
-vb_has_nl "$attention" && fail "ERROR: embedded newline in attention"
-vb_has_cr "$attention" && fail "ERROR: embedded carriage return in attention (the dialect is LF)"
-case "$attention" in
-  *[!"$VB_CR"' 	']*) ;;
-  *) fail "ERROR: whitespace-only attention" ;;
-esac
+# the anchor is period ordering alone (end review item 7): no receipt text reaches it
+if [ $# -gt 1 ]; then
+  printf "stamp: error: stamp takes the unit alone (ctx session stamp <unit>): the anchor carries its number and date, no receipt text; unexpected argument '%s' (ERR_INVALID_ARGUMENT)\n" "$2" >&2
+  exit 1
+fi
 
-vb_kv attention "$attention"
+vb_kv date "$(vb_today)"
 vb_call session.stamp "$slug"
 if [ "$VB_RC" -eq 1 ] && vb_err_has "unit '$slug' not found"; then
   fail "ERROR: missing state: unit $slug"

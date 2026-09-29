@@ -71,7 +71,7 @@ a_eq "$?" "0" "S0 bootstrap rc0"
 
 echo "== S1 stamp: order, context, stdout position =="
 : > marker.log
-out=$($CTX session stamp zz-unit "fixture stamp")
+out=$($CTX session stamp zz-unit)
 rc=$?
 a_eq "$rc" "0" "S1 stamp rc0"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "5" "S1 five stamp hooks ran (az a, az b, zc warn, zc after, zz)"
@@ -85,7 +85,7 @@ a_eq "$(printf '%s\n' "$out" | tail -n 1)" "transition: A1 -> A2" "S1 transition
 
 echo "== S2 stamp warn-continue =="
 : > marker.log
-err=$(FORCE_FAIL=1 $CTX session stamp zz-unit "fixture warn" 2>&1 >/dev/null)
+err=$(FORCE_FAIL=1 $CTX session stamp zz-unit 2>&1 >/dev/null)
 rc=$?
 a_eq "$rc" "0" "S2 warn-continue rc0 (point unaffected)"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "5" "S2 five hooks: failing zc warned, remaining ran"
@@ -97,9 +97,9 @@ a_match "$err" "hook failed at stamp: zc-warn-test: 10-stamp-fail.sh (rc=3); con
 echo "== S2b standalone worker skips hooks when CTX_BIN unset/nonexec =="
 : > marker.log
 # the verbs are sh scripts since v0.55.0 (the awk stamp retired with the record engine)
-sh .contexture/modules/session/scripts/stamp zz-unit "direct invocation" >/dev/null
+sh .contexture/modules/session/scripts/stamp zz-unit >/dev/null
 a_eq "$?" "0" "S2b direct sh stamp rc0"
-CTX_BIN=/nonexistent-ctx sh .contexture/modules/session/scripts/stamp zz-unit "direct invocation 2" >/dev/null
+CTX_BIN=/nonexistent-ctx sh .contexture/modules/session/scripts/stamp zz-unit >/dev/null
 a_eq "$?" "0" "S2b non-exec CTX_BIN skipped silently"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S2b zero hooks fired standalone"
 

@@ -2,7 +2,7 @@
 # summary: create a subagent lane with its recipe
 # usage: ctx lane create <unit> <lane-slug>  (stdin: the recipe)
 # help: the dispatcher's act: the storage driver creates the lane with the recipe stored byte for byte (normalized to end with one newline) and an empty lane journal (lane.create); the recipe is required on stdin
-# help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1
+# help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1; a recipe holding a NUL byte or bytes that are not valid UTF-8 refuses rc 1 (ERR_INVALID_ARGUMENT) before any write
 # help: example: ctx lane create my-unit my-lane < recipe.md
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../../session/lib" && pwd)/verb.sh"
@@ -25,7 +25,11 @@ if [ -t 0 ]; then
   exit 1
 fi
 vb_tmp
-body=$(cat)
+# the recipe lands in a file first, so a NUL byte or bytes that are not UTF-8 refuse before
+# any driver call (end review item 10; a command substitution would drop a NUL silently)
+cat > "$VB_DIR/raw" || { printf 'lane create: error: cannot read the recipe on stdin\n' >&2; exit 2; }
+vb_doc_ok "the recipe" "$VB_DIR/raw"
+body=$(cat "$VB_DIR/raw")
 if [ -z "$body" ]; then
   printf 'lane create: error: the recipe is required on stdin (ERR_INVALID_ARGUMENT)\n' >&2
   exit 1

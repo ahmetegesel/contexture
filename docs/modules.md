@@ -98,7 +98,7 @@ Six points ship:
 
 | point | fires |
 |---|---|
-| `stamp` | after `ctx session stamp` appends its journal receipt |
+| `stamp` | after `ctx session stamp` appends the new period's anchor |
 | `task-landing` | after a `ctx session task add\|start\|complete\|reopen\|drop` or `ctx session next` act lands (`task update` fires none); a refusal never fires |
 | `close` | at the end of `ctx session close` |
 | `load-pre` | in the main form of `ctx session load`, before the load map |
@@ -200,7 +200,7 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 1. `mkdir -p .contexture/modules/<name>/hooks`.
 2. Write a hook file declaring `# ctx-hook: <point>` and, when the point must stop on failure, `# ctx-hook-mode: block`. The body reads the context variables above.
 3. `chmod +x hooks/<file>`.
-4. Probe at a real point: a stamp hook is the cheapest — run `ctx session stamp <unit> "<attention>"` on a scratch unit and watch the side effect.
+4. Probe at a real point: a stamp hook is the cheapest: run `ctx session stamp <unit>` on a scratch unit and watch the side effect.
 
 ### Add a filter
 

@@ -221,7 +221,7 @@ a_not "$err" "sessions" "load missing unit names no storage path"
 $CTX session load u1 99 >/dev/null 2>&1; a_eq "$?" "1" "load page out of range rc1"
 err=$($CTX session load u1 99 2>&1 >/dev/null)
 a_match "$err" "page out of range" "load page refusal names the range"
-$CTX session stamp u1 >/dev/null 2>&1; a_eq "$?" "1" "stamp without a message rc1"
+$CTX session stamp u1 "a receipt text" >/dev/null 2>&1; a_eq "$?" "1" "stamp with a receipt text rc1 (the anchor carries none, end review item 7)"
 $CTX session audit nosuch >/dev/null 2>&1; a_eq "$?" "1" "audit missing unit rc1"
 # query retired (D1, journal of the query retirement): an unknown kind stays rc1 through the
 # retirement message; the entry lookup moved to entry show
@@ -288,9 +288,31 @@ $CTX session record cl-unit --what="closes two" --slug="$TODAY-cl-d" --closes="$
 a_eq "$?" "0" "record with two targets and its own verdict rc0"
 out=$($CTX session entry show cl-unit "$TODAY-cl-d" 2>/dev/null | grep '^  CLOSES: ')
 a_match "$out" "^  CLOSES: $TODAY-cl-a $TODAY-cl-b (folded: two at once)\$" "record keeps a caller verdict verbatim, never doubled"
-$CTX session record cl-unit --what="closes one" --slug="$TODAY-cl-e" --closes="$TODAY-cl-c" >/dev/null 2>&1
+# end review item 5 (Q5 reversed by the human): a closer takes only the explicit form
+# <slug> (<verdict>: <reason>); a bare closer refuses and nothing is written (the former
+# completion of a bare target as (done: <WHAT>), with the WHAT's parentheses as brackets,
+# is gone), and a reason holding a parenthesis refuses naming the rule
+err=$($CTX session record cl-unit --what="closes one" --slug="$TODAY-cl-e" --closes="$TODAY-cl-c" 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "E3-5: a bare --closes refuses rc1"
+a_match "$err" "^record: error: --closes takes <slug> (<verdict>: <reason>)" "E3-5: the bare --closes refusal names the explicit form"
+a_match "$err" "(ERR_INVALID_ARGUMENT)\$" "E3-5: the bare --closes refusal is ERR_INVALID_ARGUMENT"
+$CTX session entry show cl-unit "$TODAY-cl-e" >/dev/null 2>&1
+a_eq "$?" "1" "E3-5: the refused bare closer wrote no entry"
+err=$($CTX session record cl-unit --what="supersedes one" --supersedes="$TODAY-cl-c" 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "E3-5: a bare --supersedes refuses rc1"
+a_match "$err" "^record: error: --supersedes takes <slug> (<verdict>: <reason>)" "E3-5: the bare --supersedes refusal names the explicit form"
+err=$($CTX session record cl-unit --what="nested" --closes="$TODAY-cl-c (done: a (nested) reason)" 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "E3-5: a closer reason holding a parenthesis refuses rc1"
+a_match "$err" "a closer reason holds no parenthesis" "E3-5: the parenthesis refusal names the rule"
+for cl_bad in "$TODAY-cl-c (a reason without a verdict)" "$TODAY-cl-c (finished: an unknown verdict)" "$TODAY-cl-c (done: )" "$TODAY-cl-c (done: open"; do
+  err=$($CTX session record cl-unit --what="bad closer" --closes="$cl_bad" 2>&1 >/dev/null); rc=$?
+  a_eq "$rc" "1" "E3-5: --closes='$cl_bad' refuses rc1"
+  a_match "$err" "takes <slug> (<verdict>: <reason>) with a verdict of done, superseded, dropped, or folded and a non-empty reason" "E3-5: --closes='$cl_bad' names the explicit form"
+done
+$CTX session record cl-unit --what="closes one (a WHAT with parentheses)" --slug="$TODAY-cl-e" --closes="$TODAY-cl-c (done: the resolution)" >/dev/null 2>&1
+a_eq "$?" "0" "E3-5: the explicit form lands rc0"
 out=$($CTX session entry show cl-unit "$TODAY-cl-e" 2>/dev/null | grep '^  CLOSES: ')
-a_match "$out" "^  CLOSES: $TODAY-cl-c (done: closes one)\$" "record gives a bare target the done verdict"
+a_eq "$out" "  CLOSES: $TODAY-cl-c (done: the resolution)" "E3-5: the closer carries its own reason, never the WHAT"
 $CTX session record cl-unit --what="bad" --closes="$TODAY-cl-d $TODAY-cl-nosuch (done: x)" >/dev/null 2>&1
 a_eq "$?" "1" "record refuses a closer whose second target is missing"
 out=$($CTX session board cl-unit 2>/dev/null)
@@ -321,6 +343,8 @@ out=$($CTX session load page-unit "$npages")
 rc=$?
 a_eq "$rc" "0" "load last page rc0"
 a_match "$out" "LOAD COMPLETE: pages $npages/$npages" "last page reads complete"
+# end review item 7: the last page hands off to stamping the new period, no receipt text
+a_match "$out" "^LOAD COMPLETE: pages $npages/$npages; stamp the new period: ctx session stamp page-unit\$" "E3-7: the last page hands off to ctx session stamp <unit> alone"
 map=$($CTX session load page-unit "$npages" | grep -m1 '^  journal:')
 a_match "$map" "pages [0-9][0-9]*-$npages$" "map reports the journal span through the last page"
 $CTX session load page-unit $((npages + 1)) >/dev/null 2>&1
@@ -412,7 +436,7 @@ rc=$?
 a_eq "$rc" "0" "standalone close (the audit through the backend) rc0"
 a_match "$out" "CLOSED: u2" "standalone close prints CLOSED"
 $CTX session bootstrap u3 "standalone stamp unit" >/dev/null 2>&1
-env -u CTX_BIN sh .contexture/modules/session/scripts/stamp u3 "standalone stamp" >stamp.out 2>stamp.err
+env -u CTX_BIN sh .contexture/modules/session/scripts/stamp u3 >stamp.out 2>stamp.err
 rc=$?
 a_eq "$rc" "0" "standalone stamp without CTX_BIN rc0"
 a_match "$(cat stamp.out)" "transition: A1 -> A2" "standalone stamp prints the transition"
@@ -563,7 +587,7 @@ $CTX session finding show sem-unit ARCH_DECISION >/dev/null 2>&1
 a_eq "$?" "1" "semantic: finding drop removes finding"
 
 # 12. search
-out=$($CTX session search sem-unit "Architecture decision")
+out=$($CTX session search sem-unit "Architecture decision" --mode=exact)
 a_match "$out" "ARCH_V2" "semantic: search locates finding query"
 
 # 13. entry show and list
@@ -739,16 +763,36 @@ $CTX session task add x-unit x-pre --objective="Prefix slug" >/dev/null 2>&1; a_
 $CTX session task drop x-unit x-pre --reason="suite drop" >/dev/null 2>&1
 a_match "$($CTX session entry show x-unit "$TODAY-x-pre-dropped" 2>/dev/null)" "WHAT: \"backlog/x-pre: DROPPED (suite drop)\"" "task drop writes the canonical backlog/<slug>: DROPPED (<reason>) receipt"
 # the search contract: one shape, the flags honored, an empty query refused
-out=$($CTX session search x-unit "task" --json --limit=1 2>&1)
+out=$($CTX session search x-unit "task" --mode=exact --json --limit=1 2>&1)
 a_eq "$(printf '%s\n' "$out" | grep -o '"entity_type":' | wc -l | tr -d ' ')" "1" "search --limit=1 caps the results at one"
-out=$($CTX session search x-unit "task" --json --limit=50 2>&1)
+out=$($CTX session search x-unit "task" --mode=exact --json --limit=50 2>&1)
 a_match "$out" '"entity_type":"[a-z_]*","entity_id":"[^"]*","section":"[a-z_]*","snippet":' "search results carry entity_type, entity_id, section, snippet"
 a_not "$out" '"file":' "search results carry no physical file key"
+# end review items 1 and 2 (D4 reversed by the human): no default mode; a search without
+# --mode refuses before any call, naming the modes the configured driver declares in its
+# descriptor; the help names no driver's modes
+if [ "$DRIVER" = posix ]; then x_modes="exact"; else x_modes="exact, hybrid, trigram"; fi
+err=$($CTX session search x-unit "task" 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "E3-2: search without --mode refuses rc1"
+a_match "$err" "^search: error: --mode is required" "E3-2: the refusal names the missing --mode"
+a_match "$err" "declared modes: $x_modes (ERR_INVALID_ARGUMENT)\$" "E3-2: the refusal names the configured driver's declared modes"
+out=$($CTX session search x-unit "task" --json 2>/dev/null); rc=$?
+a_eq "$out" "" "E3-2: a search without --mode prints nothing on stdout"
+out=$($CTX session search --help 2>&1)
+a_match "$out" " --mode=MODE " "E3-1: search --help names the --mode flag"
+a_not "$out" "hybrid\|trigram" "E3-1: search --help names no driver's modes"
+out=$($CTX session help search 2>&1)
+a_match "$out" "ctx session diagnose" "E3-1: ctx session help search points to diagnose for the declared modes"
+a_not "$out" "hybrid\|trigram" "E3-1: ctx session help search names no driver's modes"
+err=$($CTX session search 2>&1 >/dev/null)
+a_not "$err" "hybrid\|trigram" "E3-1: the search usage names no driver's modes"
+out=$($CTX session diagnose 2>&1)
+a_match "$out" "^  search modes:    $x_modes\$" "E3-2: diagnose lists the declared modes with no default"
 $CTX session task add x-unit x-shared --objective="zzshared term in a task" >/dev/null 2>&1
 $CTX session finding add x-unit X_SHARED --summary="zzshared term in a finding" >/dev/null 2>&1
-out=$($CTX session search x-unit "zzshared" --json --limit=50 2>&1)
+out=$($CTX session search x-unit "zzshared" --mode=exact --json --limit=50 2>&1)
 a_match "$out" '"entity_type":"task"' "search without --entity finds the task"
-out=$($CTX session search x-unit "zzshared" --json --entity=finding --limit=50 2>&1)
+out=$($CTX session search x-unit "zzshared" --mode=exact --json --entity=finding --limit=50 2>&1)
 a_match "$out" '"entity_type":"finding"' "search --entity=finding finds the finding"
 a_not "$out" '"entity_type":"task"' "search --entity=finding leaves the task out"
 out=$($CTX session search x-unit "Open task" --json --mode=exact 2>&1); rc=$?
@@ -758,8 +802,8 @@ a_match "$out" '"mode":"exact"' "search --mode=exact reports the mode it ran"
 txt=$($CTX session search x-unit "Open task" --mode=exact 2>&1)
 a_match "$txt" "^search x-unit \"Open task\": [0-9]* matches" "search text view is its own format"
 a_not "$txt" '^{"unit"' "search text view is not the JSON"
-$CTX session search x-unit "" >/dev/null 2>&1; a_eq "$?" "1" "search with an empty query refuses rc1"
-err=$($CTX session search x-unit "" 2>&1 >/dev/null)
+$CTX session search x-unit "" --mode=exact >/dev/null 2>&1; a_eq "$?" "1" "search with an empty query refuses rc1"
+err=$($CTX session search x-unit "" --mode=exact 2>&1 >/dev/null)
 a_match "$err" "ERR_INVALID_ARGUMENT" "search empty query names ERR_INVALID_ARGUMENT"
 if [ "$DRIVER" = posix ]; then
   err=$($CTX session search x-unit "task" --mode=hybrid 2>&1 >/dev/null); rc=$?
@@ -775,7 +819,7 @@ a_match "$out" "$TODAY-x-g1: Grouped entry" "entry list --group keeps the group'
 a_not "$out" "$TODAY-x-e1" "entry list --group leaves other entries out"
 out=$($CTX session entry list x-unit --group=x-grp --json 2>&1)
 a_not "$out" "$TODAY-x-e1" "entry list --group --json filters too"
-$CTX session stamp x-unit "defect suite stamp" >/dev/null 2>&1
+$CTX session stamp x-unit >/dev/null 2>&1
 $CTX session record x-unit --what="After the stamp" --slug="$TODAY-x-a2" >/dev/null 2>&1
 out=$($CTX session entry list x-unit --anchor=A2 2>&1)
 a_match "$out" "$TODAY-x-a2: After the stamp" "entry list --anchor keeps the anchor's entry"
@@ -812,6 +856,135 @@ a_match "$out" '"active_units":0}}$' "diagnose --json counts zero ACTIVE units w
 out=$(cd diag-empty && ./.contexture/ctx session diagnose 2>&1)
 a_match "$out" "active units:    0\$" "diagnose text counts zero ACTIVE units when every unit is CLOSED"
 rm -rf diag-empty
+
+echo "== E3 the base input checks of the end review (backlog end-review-fixes items 6, 10) =="
+$CTX session bootstrap e3-unit "end review checks" >/dev/null 2>&1
+$CTX session record e3-unit --what="the target" --slug="$TODAY-e3-t" >/dev/null 2>&1
+$CTX session finding add e3-unit E3_ONE --summary="one" >/dev/null 2>&1
+$CTX session task add e3-unit e3-task --objective="a task" >/dev/null 2>&1
+printf 'the e3 recipe\n' | $CTX lane create e3-unit e3-lane >/dev/null 2>&1
+# item 6 (Q6 by the human): a REF or REFS element takes one of two pointer shapes,
+# <target>#<symbol> (text on both sides of a #) or a whole target path (holding a /), one
+# token without blanks or double quotes; anything else refuses rc1 naming both shapes
+e3_shapes="a reference is <target>#<symbol> or a whole target path, one token without blanks or double quotes (ERR_INVALID_ARGUMENT)"
+e3_ref_refused() { # <label> <command...>: rc1, both shapes named, nothing on stdout
+  e3_l=$1; shift
+  e3_o=$("$@" 2>e3.err); e3_rc=$?
+  a_eq "$e3_rc" "1" "E3-6: $e3_l refuses rc1"
+  a_match "$(cat e3.err)" "$e3_shapes" "E3-6: $e3_l names both pointer shapes"
+  a_eq "$e3_o" "" "E3-6: $e3_l prints nothing on stdout"
+}
+for e3_bad in "free text reference" "bareword" "journal#" "#slug" 'journal#"quoted"' "a b#c"; do
+  e3_ref_refused "record --ref='$e3_bad'" $CTX session record e3-unit --what="ref probe" --ref="$e3_bad"
+done
+e3_ref_refused "finding add --ref=bareword" $CTX session finding add e3-unit E3_TWO --summary="two" --ref="bareword"
+e3_ref_refused "finding update --ref=bareword" $CTX session finding update e3-unit E3_ONE --ref="bareword"
+e3_ref_refused "finding supersede --ref=bareword" $CTX session finding supersede e3-unit E3_ONE E3_THREE --summary="three" --ref="bareword"
+e3_ref_refused "lane record --ref=bareword" $CTX lane record e3-unit e3-lane --what="lane probe" --ref="bareword"
+e3_ref_refused "task add --refs='journal#x bareword'" $CTX session task add e3-unit e3-bad --objective="bad refs" --refs="journal#x bareword"
+e3_ref_refused "task update --refs=bareword" $CTX session task update e3-unit e3-task --refs="bareword"
+a_eq "$($CTX session entry list e3-unit 2>/dev/null | grep -c 'ref probe')" "0" "E3-6: no refused record landed"
+$CTX session task show e3-unit e3-bad >/dev/null 2>&1; a_eq "$?" "1" "E3-6: the refused task add landed nothing"
+# both shapes land on every write path
+$CTX session record e3-unit --what="refs ok" --slug="$TODAY-e3-refs" --ref="journal#$TODAY-e3-t" --ref="lanes/e3-lane/recipe" --ref="src/a.sh#fn" >/dev/null 2>&1
+a_eq "$?" "0" "E3-6: record takes a target#symbol, a whole path, and a file#symbol"
+a_eq "$($CTX session entry show e3-unit "$TODAY-e3-refs" 2>/dev/null | grep -c '^  REF: ')" "3" "E3-6: the three REF lines landed"
+$CTX session finding update e3-unit E3_ONE --ref="knowledge#E3_ONE" --ref="docs/the-record.md" >/dev/null 2>&1; a_eq "$?" "0" "E3-6: finding update takes both shapes"
+$CTX lane record e3-unit e3-lane --what="lane refs ok" --ref="lanes/e3-lane/report#claim" >/dev/null 2>&1; a_eq "$?" "0" "E3-6: lane record takes a lane report claim"
+$CTX session task update e3-unit e3-task --refs="journal#$TODAY-e3-t, lanes/e3-lane/recipe" >/dev/null 2>&1; a_eq "$?" "0" "E3-6: task update takes both shapes"
+a_match "$($CTX session task show e3-unit e3-task 2>/dev/null)" "^  REFS: \[journal#$TODAY-e3-t, lanes/e3-lane/recipe\]\$" "E3-6: the REFS list landed"
+# legacy values read as stored (posix: a legacy entry carrying a free-text REF)
+if [ "$DRIVER" = posix ]; then
+  printf '\n@entry 2026-09-20-e3-legacy\n  ANCHOR: A1\n  WHAT: "legacy ref"\n  THREAD: none\n  REF: "a free text legacy reference"\n' | rappend e3-unit journal
+  a_match "$($CTX session entry show e3-unit 2026-09-20-e3-legacy 2>/dev/null)" '^  REF: "a free text legacy reference"$' "E3-6: a legacy free-text REF reads as stored"
+fi
+# item 10 (the UTF-8 decision by the human): a flag value, payload field, or document that
+# is not valid UTF-8 or holds a NUL byte refuses rc1 naming the field, before any driver
+# call, on every backend (a NUL only reaches a verb through a document on stdin)
+e3_bad=$(printf 'bad \377 byte')
+e3_utf8_refused() { # <label> <field> <command...>: rc1, the field named, nothing on stdout
+  e3_l=$1; e3_f=$2; shift 2
+  e3_o=$("$@" 2>e3.err </dev/null); e3_rc=$?
+  a_eq "$e3_rc" "1" "E3-10: $e3_l refuses rc1"
+  a_match "$(cat e3.err)" "error: $e3_f is not valid UTF-8 (ERR_INVALID_ARGUMENT)\$" "E3-10: $e3_l names the field $e3_f"
+  a_eq "$e3_o" "" "E3-10: $e3_l prints nothing on stdout"
+}
+e3_utf8_refused "record --what" what $CTX session record e3-unit --what="$e3_bad"
+for e3_seq in '\200' '\300\200' '\355\240\200' 'x \342\202' '\364\220\200\200' '\370\210\200\200\200' '\376'; do
+  e3_utf8_refused "record --what holding $e3_seq" what $CTX session record e3-unit --what="$(printf "a $e3_seq b")"
+done
+e3_utf8_refused "record --thread" thread $CTX session record e3-unit --what="ok" --thread="$e3_bad"
+e3_utf8_refused "task add --objective" objective $CTX session task add e3-unit e3-u8 --objective="$e3_bad"
+e3_utf8_refused "task add --desc" desc $CTX session task add e3-unit e3-u8 --objective="fine" --desc="$(printf 'line one\nline \377 two')"
+e3_utf8_refused "task update --details" details $CTX session task update e3-unit e3-task --details="$e3_bad"
+e3_utf8_refused "task complete --evidence" evidence $CTX session task complete e3-unit e3-task --evidence="$e3_bad"
+e3_utf8_refused "finding add --summary" summary $CTX session finding add e3-unit E3_U8 --summary="$e3_bad"
+e3_utf8_refused "lane record --what" what $CTX lane record e3-unit e3-lane --what="$e3_bad"
+e3_utf8_refused "bootstrap objective" objective $CTX session bootstrap e3-u8-unit "$e3_bad"
+e3_utf8_refused "next pointer" pointer $CTX session next e3-unit "$e3_bad"
+e3_utf8_refused "search query" query $CTX session search e3-unit "$e3_bad" --mode=exact
+e3_utf8_refused "lane report --body" "the report" $CTX lane report e3-unit e3-lane --body="$e3_bad"
+$CTX session task show e3-unit e3-u8 >/dev/null 2>&1; a_eq "$?" "1" "E3-10: the refused task add landed nothing"
+$CTX session entry list e3-unit 2>/dev/null > e3.list
+a_eq "$(grep -c 'bad' e3.list)" "0" "E3-10: no refused record landed"
+# the documents on stdin: a recipe or a report that is not UTF-8 or holds a NUL
+printf 'a recipe \377\n' > e3.doc
+out=$($CTX lane create e3-unit e3-u8-lane < e3.doc 2>e3.err); rc=$?
+a_eq "$rc" "1" "E3-10: lane create refuses a recipe that is not UTF-8 rc1"
+a_match "$(cat e3.err)" "error: the recipe is not valid UTF-8 (ERR_INVALID_ARGUMENT)\$" "E3-10: lane create names the recipe"
+printf 'a recipe\000with a NUL\n' > e3.doc
+out=$($CTX lane create e3-unit e3-u8-lane < e3.doc 2>e3.err); rc=$?
+a_eq "$rc" "1" "E3-10: lane create refuses a recipe holding a NUL rc1"
+a_match "$(cat e3.err)" "error: the recipe holds a NUL byte (ERR_INVALID_ARGUMENT)\$" "E3-10: lane create names the recipe and the NUL"
+$CTX lane show e3-unit e3-u8-lane recipe >/dev/null 2>&1; a_eq "$?" "1" "E3-10: the refused lane create landed nothing"
+printf 'a report\000with a NUL\n' > e3.doc
+out=$($CTX lane report e3-unit e3-lane < e3.doc 2>e3.err); rc=$?
+a_eq "$rc" "1" "E3-10: lane report refuses a body holding a NUL rc1"
+a_match "$(cat e3.err)" "error: the report holds a NUL byte (ERR_INVALID_ARGUMENT)\$" "E3-10: lane report names the report and the NUL"
+printf 'a report \300\200\n' > e3.doc
+out=$($CTX lane report e3-unit e3-lane < e3.doc 2>e3.err); rc=$?
+a_eq "$rc" "1" "E3-10: lane report refuses a stdin body that is not UTF-8 rc1"
+a_eq "$($CTX lane show e3-unit e3-lane report 2>/dev/null)" "" "E3-10: no refused report landed"
+# valid UTF-8 of every length lands and reads back byte for byte
+e3_ok=$(printf 'ascii, \303\247al\304\261\305\237ma, \346\227\245\346\234\254, \360\237\230\200')
+$CTX session record e3-unit --what="$e3_ok" --slug="$TODAY-e3-u8ok" >/dev/null 2>&1
+a_eq "$?" "0" "E3-10: a WHAT of two, three, and four byte UTF-8 lands rc0"
+a_match "$($CTX session entry show e3-unit "$TODAY-e3-u8ok" 2>/dev/null)" "WHAT: \"$e3_ok\"" "E3-10: the UTF-8 WHAT reads back as given"
+printf '# recipe \303\247al\304\261\305\237ma \360\237\230\200\n' > e3.doc
+$CTX lane create e3-unit e3-u8-lane < e3.doc >/dev/null 2>&1; a_eq "$?" "0" "E3-10: a UTF-8 recipe lands rc0"
+$CTX lane show e3-unit e3-u8-lane recipe > e3.out 2>/dev/null
+cmp -s e3.doc e3.out; a_eq "$?" "0" "E3-10: the UTF-8 recipe reads back byte for byte"
+# legacy posix files holding such bytes keep reading
+if [ "$DRIVER" = posix ]; then
+  printf '\n@entry 2026-09-20-e3-bytes\n  ANCHOR: A1\n  WHAT: "legacy \377 bytes"\n  THREAD: none\n' | rappend e3-unit journal
+  out=$($CTX session entry show e3-unit 2026-09-20-e3-bytes 2>/dev/null); rc=$?
+  a_eq "$rc" "0" "E3-10: a legacy entry holding a byte that is not UTF-8 reads rc0"
+  a_match "$out" "legacy $(printf '\377') bytes" "E3-10: the legacy bytes read as stored"
+  $CTX session board e3-unit >/dev/null 2>&1; a_eq "$?" "0" "E3-10: the board reads the legacy bytes rc0"
+fi
+# item 7 (B5 F5 by the human): ctx session stamp takes the unit alone; the anchor carries its
+# number and date only, no receipt text; a text argument refuses rc1 naming the new form
+e3_a0=$($CTX session load e3-unit 2>/dev/null | grep '^current_anchor: ')
+err=$($CTX session stamp e3-unit "a receipt text" 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "E3-7: stamp with a receipt text refuses rc1"
+a_match "$err" "ctx session stamp <unit>" "E3-7: the refusal names the new form"
+a_match "$err" "(ERR_INVALID_ARGUMENT)\$" "E3-7: the refusal is ERR_INVALID_ARGUMENT"
+a_eq "$($CTX session load e3-unit 2>/dev/null | grep '^current_anchor: ')" "$e3_a0" "E3-7: the refused stamp left current_anchor"
+out=$($CTX session stamp e3-unit 2>&1); rc=$?
+a_eq "$rc" "0" "E3-7: stamp <unit> alone lands rc0"
+a_eq "$out" "transition: A1 -> A2" "E3-7: stamp prints the transition"
+out=$($CTX session search e3-unit "@anchor A2" --mode=exact --json 2>/dev/null)
+a_match "$out" "\"snippet\":\"@anchor A2 $TODAY\"" "E3-7: the anchor line carries its number and date only"
+out=$($CTX session search e3-unit "attention" --mode=exact --entity=session 2>/dev/null)
+a_not "$out" "@anchor A2" "E3-7: the new anchor carries no attention"
+if [ "$DRIVER" = posix ]; then
+  a_eq "$(rcat e3-unit journal | grep -c "^@anchor A2 $TODAY\$")" "1" "E3-7: the posix journal holds @anchor A2 <date>"
+  # a legacy anchor holding receipt text keeps it as content and reads back
+  printf '@anchor A3 ("continues A2", attention: a legacy receipt kept)\n' | rappend e3-unit journal
+  out=$($CTX session search e3-unit "a legacy receipt kept" --mode=exact --json 2>/dev/null)
+  a_match "$out" '"snippet":"@anchor A3 (\\"continues A2\\", attention: a legacy receipt kept)"' "E3-7: a legacy anchor with receipt text reads back"
+fi
+rm -f e3.err e3.doc e3.out e3.list
 
 echo "== Y payload fidelity (lanes/routing-review/report findings R1, R2) =="
 # R1: a field value reaches the rendered block verbatim: a real newline in a block scalar
@@ -1116,7 +1289,6 @@ q_refuse "finding update --ref" $CTX session finding update q-unit Q_ONE --ref="
 q_refuse "finding supersede --ref" $CTX session finding supersede q-unit Q_ONE Q_THREE --summary="Three" --ref="$q_nl"
 q_refuse "lane record --what" $CTX lane record q-unit q-lane --what="$q_nl"
 q_refuse "lane record --thread" $CTX lane record q-unit q-lane --what="one line" --thread="$q_nl"
-q_refuse "stamp attention" $CTX session stamp q-unit "$q_nl"
 q_refuse "next pointer" $CTX session next q-unit "$q_nl"
 a_eq "$(q_sum)" "$q_before" "R3: the refused one-line writes left every artifact unchanged"
 out=$($CTX session task add q-unit q-d --objective="Task D" --desc="$q_nl" 2>&1); rc=$?
@@ -1397,11 +1569,12 @@ out=$($CTX session board u-unit 2>&1 </dev/null)
 a_match "$out" 'u-b' "QU: board lists the task with the quoted OBJECTIVE"
 $CTX session audit u-unit >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "QU: audit rc0 over the quoted fields"
-# D4: the default mode is exact on every driver, so the snippet is the exact one everywhere
-out=$($CTX session search u-unit 'amended' --json 2>&1 </dev/null)
-a_match "$out" '"entity_id":"u-c"' "QU: search in the default mode finds the task with the quoted OBJECTIVE"
+# exact is one rule on every driver (no default mode: every search names its mode, end
+# review item 2), so the snippet is the exact one everywhere
+out=$($CTX session search u-unit 'amended' --mode=exact --json 2>&1 </dev/null)
+a_match "$out" '"entity_id":"u-c"' "QU: search --mode=exact finds the task with the quoted OBJECTIVE"
 u_snip='an \\"amended\\" objective'
-a_match "$out" "$u_snip" "QU: the default mode search snippet carries the quoted OBJECTIVE text"
+a_match "$out" "$u_snip" "QU: the --mode=exact search snippet carries the quoted OBJECTIVE text"
 # the newline refusal stays on every one of these paths
 u_nl=$(printf 'first\nsecond')
 $CTX session bootstrap u-nl "$u_nl" >/dev/null 2>&1 </dev/null
@@ -1421,7 +1594,7 @@ echo "== UP messages name the artifact and its unit, never a storage path (backl
 # the store holds with an artifact missing, made through the driver alone
 up_err() { "$@" 2>&1 >/dev/null </dev/null; }
 up_path() { a_not "$1" 'sessions' "$2 names no storage path"; a_not "$1" '\.md' "$2 names no file"; }
-out=$(up_err $CTX session stamp nosuch "attention")
+out=$(up_err $CTX session stamp nosuch)
 a_match "$out" '^ERROR: missing state: unit nosuch$' "UP: stamp of an absent unit names the state and the unit"
 up_path "$out" "UP: stamp of an absent unit"
 out=$(up_err $CTX session board nosuch)
@@ -1445,7 +1618,7 @@ a_match "$out" '^WARNING: missing backlog: unit up-bare$' "UP: board without a b
 up_path "$out" "UP: the board warning"
 # query retired (D1): its search moved to session search, whose backend reads the artifacts
 # the unit holds, so a missing backlog or knowledge is no warning there
-out=$($CTX session search up-bare plan 2>&1 </dev/null); rc=$?
+out=$($CTX session search up-bare plan --mode=exact 2>&1 </dev/null); rc=$?
 a_eq "$rc" "0" "UP: search over a unit without backlog and knowledge rc0 (the former query search)"
 a_match "$out" 'session up-bare (state): next_action: "plan' "UP: search reads the state of the bare unit"
 up_path "$out" "UP: the search output"
@@ -1475,7 +1648,7 @@ printf '@anchor A1 ("continues A0", attention: odd)\n' | rput up-odd journal
 : | rput up-odd knowledge
 # the malformed stored anchor is the backend's to refuse: session.stamp rc2 ERR_STORAGE_CORRUPT
 # (D43; the retired record engine refused it on every write)
-out=$(up_err $CTX session stamp up-odd "attention"); rc=$?
+out=$(up_err $CTX session stamp up-odd); rc=$?
 a_eq "$rc" "2" "UP: stamp under a malformed anchor refuses rc2 (D43)"
 a_match "$out" "^session.stamp: error: the state's current_anchor 'X9' is not A<N> (ERR_STORAGE_CORRUPT)\$" "UP: stamp under a malformed anchor names the anchor"
 up_path "$out" "UP: the malformed anchor error"
@@ -1502,7 +1675,7 @@ a_match "$out" '"what":"legacy crlf","group"' "B5-F2: its WHAT reads without the
 a_eq "$($CTX session entry list up-odd 2>/dev/null </dev/null | grep -c "$(printf '\r')")" "0" "B5-F2: entry list prints no carriage return"
 $CTX session audit up-odd >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "B5-F2: the audit reads the CRLF entry clean"
-out=$($CTX session search up-odd "legacy crlf" --json 2>&1 </dev/null)
+out=$($CTX session search up-odd "legacy crlf" --mode=exact --json 2>&1 </dev/null)
 a_match "$out" '"entity_type":"entry","entity_id":"2026-09-20-up-crlf","section"' "B5-F2: exact search attributes the CRLF entry to its slug"
 $CTX session record up-odd --what="after crlf" >/dev/null 2>&1 </dev/null
 a_eq "$(rcat up-odd journal | grep -c "$(printf '\r')\$")" "5" "B5-F2: a later record keeps every legacy CR byte"

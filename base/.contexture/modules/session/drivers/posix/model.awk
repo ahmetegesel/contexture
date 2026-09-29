@@ -389,20 +389,24 @@ function p_entry(k, i, a, b,   cend, j, last, lw, anchor, what, group, rhythm, t
   x_lines(k, i)
 }
 
-# an anchor: the stamp form ("continues <P>", attention: <text>) gives continues and attention
-# (a surrounding pair of quotes off the attention); any other text after the anchor is its
-# head text; the lines after the head its extra lines
-function p_anchor(k, i, a, b,   cend, rest, cont, att, j) {
+# an anchor: the stamp form <date> (YYYY-MM-DD) gives the date; the former receipt form
+# ("continues <P>", attention: <text>) gives continues and attention (a surrounding pair of
+# quotes off the attention); any other text after the anchor is its head text; the lines
+# after the head its extra lines
+function p_anchor(k, i, a, b,   cend, rest, cont, att, dt, j) {
   p_head(k, a, "anchor")
   rest = (HTX == NULLV) ? "" : HTX
-  cont = NULLV; att = NULLV
-  if (rest ~ /^\("continues A[0-9]+", attention: .*\)$/) {
+  cont = NULLV; att = NULLV; dt = NULLV
+  if (rest ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) {
+    dt = rest
+    HTX = NULLV
+  } else if (rest ~ /^\("continues A[0-9]+", attention: .*\)$/) {
     cont = rest; sub(/^\("continues /, "", cont); sub(/".*$/, "", cont)
     att = rest; sub(/^\("continues A[0-9]+", attention: /, "", att); sub(/\)$/, "", att)
     att = unq_both(att)
     HTX = NULLV
   }
-  X[k, i, "anchor"] = HID; X[k, i, "cont"] = cont; X[k, i, "att"] = att; X[k, i, "ht"] = HTX
+  X[k, i, "anchor"] = HID; X[k, i, "date"] = dt; X[k, i, "cont"] = cont; X[k, i, "att"] = att; X[k, i, "ht"] = HTX
   cend = content_end(k, a, b)
   NSTR = 0
   for (j = a + 1; j <= cend; j++) if (!isblank(L[k, j])) STR[++NSTR] = L[k, j]
@@ -560,7 +564,7 @@ function item_lines(k, i,   R, nr) {
   if (IK[k, i] == "task") return c_task(X[k, i, "slug"], X[k, i, "status"], X[k, i, "objective"], R, nr, X[k, i, "desc"], X[k, i, "crit"], X[k, i, "det"], X[k, i, "ht"], xl_text(k, i), xf_text(k, i))
   if (IK[k, i] == "finding") return c_finding(X[k, i, "name"], X[k, i, "supn"], X[k, i, "supr"], R, nr, X[k, i, "summ"], X[k, i, "ht"], xl_text(k, i), xf_text(k, i))
   if (IK[k, i] == "entry") return c_entry(X[k, i, "slug"], X[k, i, "anchor"], X[k, i, "what"], X[k, i, "group"], X[k, i, "rhythm"], X[k, i, "thread"], R, nr, cls_text(k, i), X[k, i, "know"], X[k, i, "lst"], X[k, i, "ht"], xl_text(k, i), xf_text(k, i))
-  if (IK[k, i] == "anchor") return c_anchor(X[k, i, "anchor"], X[k, i, "cont"], X[k, i, "att"], X[k, i, "ht"], xl_text(k, i))
+  if (IK[k, i] == "anchor") return c_anchor(X[k, i, "anchor"], X[k, i, "date"], X[k, i, "cont"], X[k, i, "att"], X[k, i, "ht"], xl_text(k, i))
   return c_opaque(X[k, i, "head"], xl_text(k, i))
 }
 
@@ -682,7 +686,7 @@ function laneentry_json(k, i, lane) {
 }
 
 function anchor_json(k, i) {
-  return "{\"kind\":\"anchor\",\"seq\":" i ",\"anchor\":" jstr(X[k, i, "anchor"]) ",\"continues\":" jnull(X[k, i, "cont"]) ",\"attention\":" jnull(X[k, i, "att"]) tail_json(k, i, 0) ",\"next\":" nextk_json(k, i) "}"
+  return "{\"kind\":\"anchor\",\"seq\":" i ",\"anchor\":" jstr(X[k, i, "anchor"]) ",\"date\":" jnull(X[k, i, "date"]) ",\"continues\":" jnull(X[k, i, "cont"]) ",\"attention\":" jnull(X[k, i, "att"]) tail_json(k, i, 0) ",\"next\":" nextk_json(k, i) "}"
 }
 
 function entryitem_json(k, i) {

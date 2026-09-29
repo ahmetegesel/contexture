@@ -171,7 +171,7 @@ function f_session_create(   R, nr, S, ob, att, k) {
   k = U "|knowledge"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1
   stage(k)
   k = U "|journal"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1
-  ed_append(k, c_anchor("A1", "A0", att, NULLV, ""), 1)
+  ed_append(k, c_anchor("A1", NULLV, "A0", att, NULLV, ""), 1)
   stage(k)
   stage(U "|state")
   answer("{\"unit\":" jstr(U) ",\"state\":" state_json(U) "}")
@@ -317,10 +317,11 @@ function f_session_audit() {
   answer(audit_json(U))
 }
 
-function f_session_stamp(   att, ca, n, kj) {
+# session.stamp: the new period's anchor, its number and date (end review item 7); no text
+function f_session_stamp(   dt, ca, n, kj) {
   parse_unit(U, "journal")
   not_closed()
-  need("attention"); att = pv("attention"); oneline("attention", att)
+  need("date"); dt = pv("date"); want_date(dt)
   ca = ST[U, "anchor"]
   if (ca !~ /^A[0-9]+$/ || !((U, "current_anchor") in SLINE)) die(2, "ERR_STORAGE_CORRUPT", "the state's current_anchor '" ca "' is not A<N>")
   n = substr(ca, 2) + 1
@@ -328,7 +329,7 @@ function f_session_stamp(   att, ca, n, kj) {
   st_write(U)
   kj = U "|journal"
   if (!(kj in PRES)) TYPE[kj] = "journal"
-  ed_append(kj, c_anchor("A" n, ca, att, NULLV, ""), 1)
+  ed_append(kj, c_anchor("A" n, dt, NULLV, NULLV, NULLV, ""), 1)
   reparse(kj)
   stage(U "|state"); stage(kj)
   answer("{\"unit\":" jstr(U) ",\"previous_anchor\":" jstr(ca) ",\"current_anchor\":" jstr("A" n) ",\"receipt\":" anchor_json(kj, NI[kj]) "}")

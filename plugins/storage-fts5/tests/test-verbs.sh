@@ -90,7 +90,7 @@ build() {
     w $d session record verb-unit --what="Event $n on the fidelity walk" --slug="2026-09-25-event-$n" --thread="$th" --group=walk
     n=$((n + 1))
   done
-  w $d session stamp verb-unit "the verb stamp"
+  w $d session stamp verb-unit
   w $d session record verb-unit --what="Folds two and drops one" --slug=2026-09-25-event-6 \
     --closes="2026-09-25-event-3 2026-09-25-event-4 (folded: two at once)" --closes="2026-09-25-event-5 (dropped: not needed)"
   w $d session record verb-unit --what="A KNOWLEDGE flag harvested below" --slug=2026-09-25-event-7 --knowledge --ref="knowledge#VERB_FIDELITY_V2"

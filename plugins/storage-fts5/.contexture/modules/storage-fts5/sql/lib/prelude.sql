@@ -19,7 +19,7 @@ CREATE TEMP TABLE IF NOT EXISTS touched (unit TEXT PRIMARY KEY);
 CREATE TEMP TABLE IF NOT EXISTS tart (unit TEXT NOT NULL, part TEXT NOT NULL);
 -- the working tables of the write pieces: a new journal item with its lists (lib/jappend.sql)
 CREATE TEMP TABLE IF NOT EXISTS jn (lane TEXT NOT NULL, kind TEXT NOT NULL, slug TEXT, anchor TEXT, what TEXT, grp TEXT, rhythm TEXT,
-  knowledge INTEGER, thread TEXT, continues TEXT, attention TEXT);
+  knowledge INTEGER, thread TEXT, stamp_date TEXT, continues TEXT, attention TEXT);
 CREATE TEMP TABLE IF NOT EXISTS jnr (rpos INTEGER, ref TEXT);
 CREATE TEMP TABLE IF NOT EXISTS jnc (cpos INTEGER, kind TEXT, verdict TEXT, reason TEXT);
 CREATE TEMP TABLE IF NOT EXISTS jnt (cpos INTEGER, tpos INTEGER, target TEXT);

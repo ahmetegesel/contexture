@@ -12,11 +12,11 @@ CREATE TEMP TABLE jnpos AS SELECT coalesce(CASE WHEN (SELECT lane FROM temp.jn) 
   (SELECT lane FROM temp.jn) AS lane, (SELECT kind FROM temp.jn) AS kind;
 UPDATE temp.jn SET attention = substr(attention, 2, length(attention) - 2)
   WHERE kind = 'anchor' AND continues IS NOT NULL AND length(attention) >= 2 AND substr(attention, 1, 1) = '"' AND substr(attention, -1) = '"';
-INSERT INTO journal_items (unit, pos, kind, slug, anchor, what, grp, rhythm, knowledge, thread, continues, attention)
-  SELECT (SELECT unit FROM temp.a), p.pos, n.kind, n.slug, n.anchor, n.what, n.grp, n.rhythm, coalesce(n.knowledge, 0), n.thread, n.continues, n.attention
+INSERT INTO journal_items (unit, pos, kind, slug, anchor, what, grp, rhythm, knowledge, thread, stamp_date, continues, attention)
+  SELECT (SELECT unit FROM temp.a), p.pos, n.kind, n.slug, n.anchor, n.what, n.grp, n.rhythm, coalesce(n.knowledge, 0), n.thread, n.stamp_date, n.continues, n.attention
   FROM temp.jn n, temp.jnpos p WHERE p.lane = '';
-INSERT INTO lane_items (unit, lane, pos, kind, slug, anchor, what, grp, rhythm, knowledge, thread, continues, attention)
-  SELECT (SELECT unit FROM temp.a), p.lane, p.pos, n.kind, n.slug, n.anchor, n.what, n.grp, n.rhythm, coalesce(n.knowledge, 0), n.thread, n.continues, n.attention
+INSERT INTO lane_items (unit, lane, pos, kind, slug, anchor, what, grp, rhythm, knowledge, thread, stamp_date, continues, attention)
+  SELECT (SELECT unit FROM temp.a), p.lane, p.pos, n.kind, n.slug, n.anchor, n.what, n.grp, n.rhythm, coalesce(n.knowledge, 0), n.thread, n.stamp_date, n.continues, n.attention
   FROM temp.jn n, temp.jnpos p WHERE p.lane <> '';
 INSERT INTO item_refs (unit, lane, artifact, pos, rpos, ref)
   SELECT (SELECT unit FROM temp.a), p.lane, 'journal', p.pos, r.rpos, r.ref FROM temp.jnr r, temp.jnpos p;

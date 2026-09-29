@@ -231,7 +231,7 @@ BEGIN {
   if (page < npages) {
     printf "LOAD INCOMPLETE (page %d of %d): keep calling until a page reads complete; do not start work from a partial record\n", page, npages
   } else {
-    printf "LOAD COMPLETE: pages %d/%d; stamp the receipt: ctx session stamp %s \"<the loaded set + ref_sessions + the git state>\"\n", npages, npages, slug
+    printf "LOAD COMPLETE: pages %d/%d; stamp the new period: ctx session stamp %s\n", npages, npages, slug
   }
   fflush()
   if (fire_hooks("load-post", " CTX_UNIT \"" slug "\" CTX_LOAD_FORM main CTX_LOAD_PAGE " page) != 0)

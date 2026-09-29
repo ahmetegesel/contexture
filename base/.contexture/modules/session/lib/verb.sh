@@ -50,12 +50,54 @@ vb_tmp() {
   fi
 }
 
-# vb_kv <key> <value>: one payload line
+# VB_UTF8_AWK: the awk function utf8_ok(s), true when s is valid UTF-8 (RFC 3629: no
+# overlong form, no surrogate, nothing above U+10FFFF); byte values come from a table built
+# with sprintf("%c"), so it runs alike on BWK awk, mawk, gawk, and busybox awk under
+# LC_ALL=C (every caller sets it: bytes, never the locale's characters); an ASCII value
+# takes the fast path, one match against a class of the bytes 1 to 127
+VB_UTF8_AWK='
+function utf8_ok(s,   n, i, j, c, need, lo, hi) {
+  if (s ~ /^[\001-\177]*$/) return 1
+  if (!U8_T) { for (i = 1; i < 256; i++) U8_ORD[sprintf("%c", i)] = i; U8_T = 1 }
+  n = length(s); i = 1
+  while (i <= n) {
+    c = U8_ORD[substr(s, i, 1)]
+    if (c < 128) { i++; continue }
+    if (c >= 194 && c <= 223) { need = 1; lo = 128; hi = 191 }
+    else if (c == 224) { need = 2; lo = 160; hi = 191 }
+    else if (c >= 225 && c <= 236) { need = 2; lo = 128; hi = 191 }
+    else if (c == 237) { need = 2; lo = 128; hi = 159 }
+    else if (c == 238 || c == 239) { need = 2; lo = 128; hi = 191 }
+    else if (c == 240) { need = 3; lo = 144; hi = 191 }
+    else if (c >= 241 && c <= 243) { need = 3; lo = 128; hi = 191 }
+    else if (c == 244) { need = 3; lo = 128; hi = 143 }
+    else return 0
+    if (i + need > n) return 0
+    c = U8_ORD[substr(s, i + 1, 1)]
+    if (c < lo || c > hi) return 0
+    for (j = 2; j <= need; j++) { c = U8_ORD[substr(s, i + j, 1)]; if (c < 128 || c > 191) return 0 }
+    i += need + 1
+  }
+  return 1
+}
+'
+
+# vb_label: the verb's name in its refusals (the lane verbs as "lane <verb>")
+vb_label() {
+  case "${VB_SELF:-$0}" in
+    */lane/scripts/*) printf 'lane %s' "${0##*/}" ;;
+    *) printf '%s' "${0##*/}" ;;
+  esac
+}
+
+# vb_kv <key> <value>: one payload line; a value that is not valid UTF-8 refuses rc 1 naming
+# its field before any driver call (end review item 10; an argv value never holds a NUL)
 vb_kv() {
   vb_tmp
   [ -n "$VB_PAY" ] || { VB_PAY="$VB_DIR/pay"; : > "$VB_PAY"; }
-  VB_K="$1" VB_V="$2" awk 'BEGIN {
+  VB_K="$1" VB_V="$2" LC_ALL=C awk "$VB_UTF8_AWK"'BEGIN {
     s = ENVIRON["VB_V"]
+    if (!utf8_ok(s)) exit 3
     n = split(s, P, /\\/)
     o = (n ? P[1] : "")
     for (i = 2; i <= n; i++) o = o "\\" "\\" P[i]
@@ -66,6 +108,29 @@ vb_kv() {
     for (i = 2; i <= n; i++) r = r "\\" "n" L[i]
     printf "%s=%s\n", ENVIRON["VB_K"], r
   }' >> "$VB_PAY"
+  case $? in
+    0) ;;
+    3) printf '%s: error: %s is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n' "$(vb_label)" "$1" >&2; exit 1 ;;
+    *) printf '%s: error: cannot stage the payload field %s\n' "$(vb_label)" "$1" >&2; exit 2 ;;
+  esac
+}
+
+# vb_doc_ok <field> <file>: a document (a recipe, a report) holding a NUL byte or bytes that
+# are not valid UTF-8 refuses rc 1 naming it, before any driver call (end review item 10);
+# the NUL is found by size (tr drops it), so awk never reads one
+vb_doc_ok() {
+  vd_all=$(wc -c < "$2" | tr -d ' ')
+  vd_non=$(tr -d '\000' < "$2" | wc -c | tr -d ' ')
+  if [ "$vd_all" != "$vd_non" ]; then
+    printf '%s: error: %s holds a NUL byte (ERR_INVALID_ARGUMENT)\n' "$(vb_label)" "$1" >&2
+    exit 1
+  fi
+  LC_ALL=C awk "$VB_UTF8_AWK"'{ if (!utf8_ok($0)) exit 3 }' "$2"
+  case $? in
+    0) ;;
+    3) printf '%s: error: %s is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n' "$(vb_label)" "$1" >&2; exit 1 ;;
+    *) printf '%s: error: cannot read %s\n' "$(vb_label)" "$1" >&2; exit 2 ;;
+  esac
 }
 
 # vb_list <key> [<value>...]: a list payload (<key>.count, then <key>.1 to <key>.N)
@@ -245,9 +310,15 @@ vb_lane() {
   exit 1
 }
 
-# vb_ref_ok <label> <ref>: a REF value is one quoted line, not empty, no double quote (B9)
+# vb_ref_ok <label> <ref>: a REF or REFS element names its target in one of the two
+# pointer shapes of @record references (end review item 6, Q6 by the human): <target>#<symbol>
+# (a # with text on both sides) or a whole target path (holding a /); one token, no blank,
+# no double quote. New writes only: a legacy value already stored reads as it stands.
 vb_ref_ok() {
   case "$2" in
-    ""|*'"'*) printf "%s: error: malformed ref '%s' (one line, no double quote) (ERR_INVALID_ARGUMENT)\n" "$1" "$2" >&2; exit 1 ;;
+    ""|*[' 	"']*) ;;
+    ?*'#'?*|*/*) return 0 ;;
   esac
+  printf "%s: error: malformed ref '%s': a reference is <target>#<symbol> or a whole target path, one token without blanks or double quotes (ERR_INVALID_ARGUMENT)\n" "$1" "$2" >&2
+  exit 1
 }

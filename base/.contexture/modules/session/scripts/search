@@ -1,30 +1,30 @@
 #!/bin/sh
 # summary: universal search across session records and artifacts
-# usage: ctx session search <unit> "<query>" [options]
+# usage: ctx session search <unit> "<query>" --mode=MODE [options]
 # help: searches session records (tasks, entries, findings, lanes) for query terms
 # help: options:
 # help:   --json              output JSON format
 # help:   --limit=N           maximum number of results returned (default 20)
-# help:   --mode=MODE         search mode; exact is the default on every driver (a case-insensitive ASCII substring of one line, one row per matching entity and section, total_matches counting those rows); a ranked mode (hybrid, trigram) is asked for by name, and a driver that does not declare it refuses rc 1 naming its declared modes
+# help:   --mode=MODE         the search mode, required (no default): exact, the one mode every driver implements (a case-insensitive ASCII substring of one line, one row per matching entity and section, total_matches counting those rows), or a ranked mode the configured driver declares (ctx session diagnose lists the declared modes); a search without --mode refuses rc 1 naming the declared modes, and a mode the driver does not declare refuses rc 1 naming them too
 # help:   --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)
 # help: every driver returns the same keys per result: entity_type, entity_id, section, snippet, score (0 for exact); an empty query refuses rc 1 (ERR_INVALID_ARGUMENT)
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 if [ $# -eq 0 ]; then
-  printf 'usage: ctx session search <unit> "<query>" [options]\n' >&2
-  printf 'options: --json, --limit=N, --mode=MODE, --entity=TYPE\n' >&2
+  printf 'usage: ctx session search <unit> "<query>" --mode=MODE [options]\n' >&2
+  printf 'options: --mode=MODE (required), --json, --limit=N, --entity=TYPE\n' >&2
   exit 1
 fi
 
 case "$1" in
   --help|-h|help)
-    printf 'usage: ctx session search <unit> "<query>" [options]\n'
+    printf 'usage: ctx session search <unit> "<query>" --mode=MODE [options]\n'
     printf 'searches session records (tasks, entries, findings, lanes) for query terms\n'
     printf 'options:\n'
     printf '  --json              output JSON format\n'
     printf '  --limit=N           maximum number of results returned (default 20)\n'
-    printf '  --mode=MODE         search mode (exact by default; hybrid, trigram by name); a driver without the mode refuses rc 1\n'
+    printf '  --mode=MODE         the search mode, required: exact or a mode the configured driver declares (ctx session diagnose lists them)\n'
     printf '  --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)\n'
     exit 0
     ;;
@@ -80,12 +80,25 @@ if [ -n "$mode" ]; then
   case "$mode" in
     [!a-z]*|*[!a-z0-9_-]*) printf "search: error: malformed mode '%s' (ERR_INVALID_ARGUMENT)\n" "$mode" >&2; exit 1 ;;
   esac
+else
+  # no default mode (end review item 2): the refusal names the modes the configured driver
+  # declares, read from its descriptor (the resolver's handshake read, never a record read)
+  vb_tmp
+  if "$VB_RESOLVER" capability < /dev/null > "$VB_DIR/cap" 2> "$VB_DIR/caperr"; then
+    modes=$(awk -f "$VB_JSON" < "$VB_DIR/cap" | awk '
+      /^search_modes\.[0-9]+=/ { v = $0; sub(/^[^=]*=/, "", v); o = o (o == "" ? "" : ", ") v }
+      END { print (o == "" ? "none" : o) }')
+  else
+    modes="unknown (the driver's descriptor did not answer)"
+  fi
+  printf "search: error: --mode is required: exact or a mode the configured driver declares; declared modes: %s (ERR_INVALID_ARGUMENT)\n" "$modes" >&2
+  exit 1
 fi
 
 set --
 [ -n "$limit" ] && set -- "$@" "--limit=$limit"
 [ -n "$entity" ] && set -- "$@" "--entity=$entity"
-[ -n "$mode" ] && set -- "$@" "--mode=$mode"
+set -- "$@" "--mode=$mode"
 vb_kv query "$query"
 vb_call search.query "$unit" "$@"
 vb_ok

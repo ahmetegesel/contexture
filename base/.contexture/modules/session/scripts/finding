@@ -8,7 +8,7 @@
 # help:   supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]...
 # help:   drop <unit> <NAME>
 # help:   list <unit> [--active-only] [--json]
-# help: --ref repeats (one REF line each); an update with --ref replaces the list
+# help: --ref repeats (one REF line each), each <target>#<symbol> or a whole target path, one token without blanks or double quotes; an update with --ref replaces the list
 # help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --summary carrying no field
 # help: the storage driver holds the record rules: a CLOSED unit refuses every write; a NAME the knowledge already carries is refused (rc 1, ERR_ENTITY_EXISTS), a missing predecessor too (ERR_ENTITY_NOT_FOUND); a new NAME is upper case letters, digits, and underscores
 

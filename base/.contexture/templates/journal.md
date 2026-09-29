@@ -13,7 +13,7 @@ its CLOSES fold the originals by reference and stand as the fetch map; folded
 entries leave the load, never the file, and a reader fetches an original by
 its slug when the summary leaves a question open.
 
-@anchor A<N> ("continues A<N-1>", attention: <the loaded set>)   # period ordering + load receipt; never liveness
+@anchor A<N> <YYYY-MM-DD>                                           # period ordering: the period's number and date (ctx session stamp), no receipt text; never liveness
 
 @entry <date>-<slug>
   ANCHOR: A<N>                            # current anchor at write time
@@ -30,7 +30,7 @@ its slug when the summary leaves a question open.
 # (ctx session record); an older entry in another order reads back as stored
 
 # filled sample
-@anchor A<N> ("continues A<N-1>", attention: <the loaded set>)
+@anchor A<N> <YYYY-MM-DD>
 
 @entry <date>-<slug>
   ANCHOR: A<N>

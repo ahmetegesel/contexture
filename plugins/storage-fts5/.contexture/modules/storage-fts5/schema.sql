@@ -71,7 +71,8 @@ CREATE TABLE IF NOT EXISTS findings (
 CREATE INDEX IF NOT EXISTS idx_findings_name ON findings(unit, name);
 
 -- The main journal items: an entry (slug, the one line fields, knowledge 0 or 1) or an
--- anchor (anchor, continues, attention). REF lines and closers live in item_refs (artifact
+-- anchor (anchor, stamp_date for a stamped period, continues and attention for the A1 of
+-- session.create). REF lines and closers live in item_refs (artifact
 -- 'journal') and closers with closer_targets, with lane ''.
 CREATE TABLE IF NOT EXISTS journal_items (
   unit TEXT NOT NULL,
@@ -84,6 +85,7 @@ CREATE TABLE IF NOT EXISTS journal_items (
   rhythm TEXT,
   knowledge INTEGER NOT NULL DEFAULT 0 CHECK (knowledge IN (0, 1)),
   thread TEXT,
+  stamp_date TEXT,
   continues TEXT,
   attention TEXT,
   PRIMARY KEY (unit, pos),
@@ -116,6 +118,7 @@ CREATE TABLE IF NOT EXISTS lane_items (
   rhythm TEXT,
   knowledge INTEGER NOT NULL DEFAULT 0 CHECK (knowledge IN (0, 1)),
   thread TEXT,
+  stamp_date TEXT,
   continues TEXT,
   attention TEXT,
   PRIMARY KEY (unit, lane, pos),
@@ -311,14 +314,16 @@ SELECT c.unit AS unit, c.lane AS lane, c.pos AS pos, c.cpos AS cpos,
 FROM closers c;
 
 -- the journal items of the main journal (lane '') and of every lane journal with their
--- spans: an anchor in the stamp form, an entry in the entry lines (ANCHOR, WHAT, GROUP,
+-- spans: an anchor in the stamp form (@anchor <A> <date>) or the A1 form ("continues A0",
+-- attention: <text>), an entry in the entry lines (ANCHOR, WHAT, GROUP,
 -- RHYTHM, THREAD, REF, the closers, KNOWLEDGE, each when set), in a main and a lane journal
 -- alike
 CREATE VIEW IF NOT EXISTS v_journal_span AS
 SELECT j.unit AS unit, j.lane AS lane, j.pos AS pos, j.kind AS kind, j.slug AS slug,
   CASE WHEN j.kind = 'anchor' THEN
     '@anchor ' || j.anchor ||
-    CASE WHEN j.continues IS NOT NULL AND j.attention IS NOT NULL THEN ' ("continues ' || j.continues || '", attention: ' || j.attention || ')' ELSE '' END || char(10)
+    CASE WHEN j.stamp_date IS NOT NULL THEN ' ' || j.stamp_date
+         WHEN j.continues IS NOT NULL AND j.attention IS NOT NULL THEN ' ("continues ' || j.continues || '", attention: ' || j.attention || ')' ELSE '' END || char(10)
   ELSE
     '@entry ' || j.slug || char(10) ||
     CASE WHEN j.anchor IS NULL THEN '' ELSE '  ANCHOR: ' || j.anchor || char(10) END ||
@@ -336,12 +341,12 @@ SELECT j.unit AS unit, j.lane AS lane, j.pos AS pos, j.kind AS kind, j.slug AS s
   AS span
 FROM (
   SELECT '' AS lane, i.unit AS unit, i.pos AS pos, i.kind AS kind, i.slug AS slug, i.anchor AS anchor, i.what AS what,
-    i.grp AS grp, i.rhythm AS rhythm, i.knowledge AS knowledge, i.thread AS thread, i.continues AS continues,
+    i.grp AS grp, i.rhythm AS rhythm, i.knowledge AS knowledge, i.thread AS thread, i.stamp_date AS stamp_date, i.continues AS continues,
     i.attention AS attention,
     (SELECT n.kind FROM journal_items n WHERE n.unit = i.unit AND n.pos > i.pos ORDER BY n.pos LIMIT 1) AS nextk
   FROM journal_items i
   UNION ALL
-  SELECT i.lane, i.unit, i.pos, i.kind, i.slug, i.anchor, i.what, i.grp, i.rhythm, i.knowledge, i.thread, i.continues,
+  SELECT i.lane, i.unit, i.pos, i.kind, i.slug, i.anchor, i.what, i.grp, i.rhythm, i.knowledge, i.thread, i.stamp_date, i.continues,
     i.attention,
     (SELECT n.kind FROM lane_items n WHERE n.unit = i.unit AND n.lane = i.lane AND n.pos > i.pos ORDER BY n.pos LIMIT 1)
   FROM lane_items i
