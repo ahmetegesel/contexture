@@ -1,9 +1,8 @@
 # canon.awk: the canonical renderer of the posix driver (contract 2, docs/the-engine.md,
 # The record data model): the canonical lines of every item kind and the one JSON string
-# form. Every write renders a new item through these functions, the parse compares a
+# form. Every write renders a new item through these functions, and the parse compares a
 # stored span with the canonical span these functions render from its typed fields (the
-# verbatim rule), and unit.import renders every item without a verbatim through them, so
-# one text decides what is canonical on every path.
+# verbatim rule), so one text decides what is canonical on every path.
 #
 # The awk runs in the C locale: every string is bytes. A backslash is doubled by
 # concatenation, never by a gsub replacement (busybox awk and gawk --posix yield one

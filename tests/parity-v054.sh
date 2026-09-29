@@ -1,9 +1,9 @@
 #!/bin/sh
 # parity-v054.sh: the kept-view parity harness (lanes/storage-interface-design/report
 # @rendering KEPT BYTE TARGET PROOF). Two sandboxes over copies of the same units: side A
-# runs one base (the v0.54.0 base by default), side B another (the branch base), each on
-# its own storage driver (posix by default); per unit it captures every kept text view on
-# both sides and compares them byte for byte, stdout and exit code together:
+# runs one base (the v0.54.0 base by default), side B another (the branch base), both on the
+# posix driver, whose store the copied unit folders are; per unit it captures every kept
+# text view on both sides and compares them byte for byte, stdout and exit code together:
 #   board, every load page, audit, refresh, active (once), task list --status=all,
 #   entry list, finding list, search --mode=exact over a fixed query set of 12, resolve of
 #   every task, finding, and entry (task#, finding#, entry#), lane show of every lane
@@ -13,13 +13,17 @@
 # Stderr is captured and compared too and reported as information, never as the verdict.
 #
 # Usage: sh tests/parity-v054.sh --old=<base dir> --new=<base dir> --units=<sessions dir>
-#          --out=<dir> [--unit=<u>]... [--jobs=N] [--old-driver=<d>] [--new-driver=<d>]
-#          [--plugins=<dir>] [--views=<v,v,...>]
+#          --out=<dir> [--unit=<u>]... [--jobs=N] [--views=<v,v,...>]
 #   a base dir holds .contexture/ctx and .contexture/modules (session, lane, run); the
 #   units dir holds one folder per unit (the sessions folder of a workspace, read only,
-#   copied); --plugins names module folders to stage beside (a driver plugin); --views
-#   limits the views (board, load, audit, refresh, active, tasks, entries, findings,
-#   search, resolve, lanes)
+#   copied); --views limits the views (board, load, audit, refresh, active, tasks,
+#   entries, findings, search, resolve, lanes)
+# The driver options of v0.55.0's build (--old-driver, --new-driver, --plugins: a store
+# driver on one side) retired with unit.export, unit.import, and ctx session migrate: a
+# store side held the copied units only once migrate had filled it, and no command moves a
+# record between backends now (knowledge#MIGRATION_IS_AGENT_JUDGMENT); posix against a store
+# driver is proven by one verb sequence on each (tests/storage-compliance.sh TC76,
+# plugins/storage-fts5/tests/test-verbs.sh).
 # Exit 0 when the remainder is 0; 1 otherwise; 2 on a harness error.
 # The out dir holds cap/<unit>/<view>.{a,b,ea,eb} and the summary in summary.txt.
 
@@ -27,7 +31,7 @@ set -u
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG CTX_STORAGE_DRIVER CTX_ROOT CTX_DIR CTX_MODULE_DIR CTX_BIN
 
-OLD=""; NEW=""; UNITS=""; OUT=""; JOBS=4; ODRV=posix; NDRV=posix; PLUGINS=""; VIEWS=""
+OLD=""; NEW=""; UNITS=""; OUT=""; JOBS=4; VIEWS=""
 SEL=""
 for a in "$@"; do
   case "$a" in
@@ -37,9 +41,6 @@ for a in "$@"; do
     --out=*) OUT=${a#--out=} ;;
     --unit=*) SEL="$SEL ${a#--unit=}" ;;
     --jobs=*) JOBS=${a#--jobs=} ;;
-    --old-driver=*) ODRV=${a#--old-driver=} ;;
-    --new-driver=*) NDRV=${a#--new-driver=} ;;
-    --plugins=*) PLUGINS=${a#--plugins=} ;;
     --views=*) VIEWS=",${a#--views=}," ;;
     *) echo "parity-v054.sh: unknown argument: $a" >&2; exit 2 ;;
   esac
@@ -58,26 +59,20 @@ rm -rf "$OUT/a" "$OUT/b" "$OUT/cap" "$OUT/res"
 mkdir -p "$OUT/cap" "$OUT/res"
 
 stage() {
-  st_side=$1; st_base=$2; st_drv=$3
+  st_side=$1; st_base=$2
   mkdir -p "$OUT/$st_side/.contexture/modules" "$OUT/$st_side/.contexture/sessions"
   cp "$st_base/.contexture/ctx" "$OUT/$st_side/.contexture/ctx"
   chmod 755 "$OUT/$st_side/.contexture/ctx"
   for m in session lane run; do
     [ -d "$st_base/.contexture/modules/$m" ] && cp -R "$st_base/.contexture/modules/$m" "$OUT/$st_side/.contexture/modules/$m"
   done
-  if [ -n "$PLUGINS" ]; then
-    for p in "$PLUGINS"/*; do [ -d "$p" ] && cp -R "$p" "$OUT/$st_side/.contexture/modules/"; done
-  fi
   for u in "$UNITS"/*; do
     [ -d "$u" ] || continue
     cp -R "$u" "$OUT/$st_side/.contexture/sessions/"
   done
-  if [ "$st_drv" != posix ]; then
-    printf 'storage.driver: %s\n' "$st_drv" > "$OUT/$st_side/.contexture/config"
-  fi
 }
-stage a "$OLD" "$ODRV"
-stage b "$NEW" "$NDRV"
+stage a "$OLD"
+stage b "$NEW"
 
 if [ -n "$SEL" ]; then
   LIST=$SEL

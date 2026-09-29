@@ -263,7 +263,7 @@ verify_capabilities() {
   fi
 
   # descriptor v2 (docs/the-engine.md, The descriptor and the handshake): contract "2" and
-  # every one of the 40 record functions; no record function is optional
+  # every one of the 38 record functions; no record function is optional
   check_result=$(printf '%s\n' "$cap_json" | desc_field contract)
   if [ "$check_result" != 2 ]; then
     printf 'driver-resolver: ERROR: driver '\''%s'\'' declares contract '\''%s'\'', not 2 (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$check_result" >&2
@@ -286,8 +286,8 @@ verify_capabilities() {
   return 0
 }
 
-# the 40 record functions of contract 2
-CONTRACT_FUNCTIONS="capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query unit.export unit.import"
+# the 38 record functions of contract 2 (unit.export and unit.import left it with the dump)
+CONTRACT_FUNCTIONS="capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query"
 
 # desc_field <key>: the value of one descriptor key on stdin: a string, or each element of
 # a list of strings on its own line (the descriptor is one compact JSON object; a legacy
@@ -323,7 +323,7 @@ verdict_fresh() {
 }
 
 # The handshake at dispatch: a driver other than the bundled posix driver proves its
-# descriptor (contract "2" and all 40 record functions) before it serves any function, and
+# descriptor (contract "2" and all 38 record functions) before it serves any function, and
 # a driver that fails halts the call rc 2 ERR_DRIVER_PROTOCOL with the gap named. The
 # verdict is cached in the scratch drawer, one file per driver path, valid while fresh
 # (verdict_fresh), so the handshake runs once per driver change, never once per call; a

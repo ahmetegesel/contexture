@@ -67,7 +67,7 @@ Filters declare themselves with their own header vocabulary; see Filters.
 - `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines.
 - `ctx help --all` prints the top summary plus every module's block.
 - A duplicate verb name inside one module shadows: the engine warns and the first file name in byte order wins.
-- Reserved names cannot be module names: the session verb set (its twenty-two verbs plus `help`, so twenty-three names), plus `run` and `hooks`, plus the five session verbs retired in v0.55.0 (`append`, `amend`, `query`, `flip`, `drop`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `session` and `run` directories are exempt.
+- Reserved names cannot be module names: the session verb set (its twenty-one verbs plus `help`, so twenty-two names), plus `run` and `hooks`, plus the five session verbs retired in v0.55.0 (`append`, `amend`, `query`, `flip`, `drop`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `session` and `run` directories are exempt.
 - Help is engine-owned: no module ships a help script.
 
 ## Dispatch
@@ -235,7 +235,7 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
 ### session: thin verbs over a shared library and a storage driver
 
-The builtin record engine, `.contexture/modules/session/`. Its `module` carries one summary line; its twenty-two extension-less verbs are sh scripts that source `lib/verb.sh`, check the input shape, make one call to the configured storage driver through `scripts/driver-resolver` (a private script: it carries no summary), and render the answer through `lib/json.awk` and `lib/render.awk`; `index` alone is an awk verb, since it reads the rhythm files rather than the record. `refresh` is the one composite verb: it runs the board and the audit and then fires the refresh point. The posix driver under `drivers/posix/` is the only code that touches the record's files. Off-path detail (the verb to function map, the helpers, the hook call sites) is in `.contexture/modules/session/README.md`.
+The builtin record engine, `.contexture/modules/session/`. Its `module` carries one summary line; its twenty-one extension-less verbs are sh scripts that source `lib/verb.sh`, check the input shape, make one call to the configured storage driver through `scripts/driver-resolver` (a private script: it carries no summary), and render the answer through `lib/json.awk` and `lib/render.awk`; `index` alone is an awk verb, since it reads the rhythm files rather than the record. `refresh` is the one composite verb: it runs the board and the audit and then fires the refresh point. The posix driver under `drivers/posix/` is the only code that touches the record's files. Off-path detail (the verb to function map, the helpers, the hook call sites) is in `.contexture/modules/session/README.md`.
 
 ### ideas: a private engine with an environment override
 

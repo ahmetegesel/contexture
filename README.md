@@ -99,7 +99,7 @@ A dedicated scope for your task (`.contexture/sessions/<name>/`). Gives the agen
 An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Managed via the top-level `ctx lane` module. Deep dive: [Units and subagents](docs/units-and-lanes.md).
 
 ### Storage abstraction
-Pluggable backend architecture via the storage contract (contract 2). Decouples agents from physical disk files or database schemas. Every command maps to one storage function: base sends it the parameters and renders the data it returns, so every backend prints the same text, and each backend owns how it stores the record and enforces the record rules itself. Every verb reaches the record through the configured driver alone, so the configured backend is the single store; free-text fields travel to the driver on stdin, never argv, and no markdown crosses the interface. The zero-dependency baseline POSIX driver manages markdown files, while storage plugins such as `storage-fts5` answer from SQLite with dual Porter and Trigram indexing and pure SQL Reciprocal Rank Fusion (RRF) search; `ctx session migrate` moves a record between any two drivers through a neutral dump. Deep dive: [The record](docs/the-record.md) and [The engine](docs/the-engine.md).
+Pluggable backend architecture via the storage contract (contract 2). Decouples agents from physical disk files or database schemas. Every command maps to one storage function: base sends it the parameters and renders the data it returns, so every backend prints the same text, and each backend owns how it stores the record and enforces the record rules itself. Every verb reaches the record through the configured driver alone, so the configured backend is the single store; free-text fields travel to the driver on stdin, never argv, and no markdown crosses the interface. The zero-dependency baseline POSIX driver manages markdown files, while storage plugins such as `storage-fts5` answer from SQLite with dual Porter and Trigram indexing and pure SQL Reciprocal Rank Fusion (RRF) search; no command moves a record between drivers, so a record reaches another backend through the agent re-entering it with the ordinary verbs. Deep dive: [The record](docs/the-record.md) and [The engine](docs/the-engine.md).
 
 ### Rhythms
 A plain text workflow checklist in `.contexture/rhythms/`. Enforces process discipline, requiring the agent to discuss, test, and verify before claiming work is done. Deep dive: [Rhythms](docs/rhythms.md).
@@ -125,7 +125,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [Lane isolation](plugins/lane-isolation/): On-demand worktree isolation for subagents
 - [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
 - [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
-- [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and an in-place upgrade of older stores
+- [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing and RRF search
 - [Tests](tests/): The filter test material, upstream only; see [tests/README.md](tests/README.md)
 - [Maintaining contexture](#maintaining-contexture): The `base/` dev loop: edit, ship, apply
 
@@ -151,7 +151,6 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) and the legacy file forms to the entity block |
 | ctx session units <repo> | Each unit touching the repo: slug, status, anchor, next action |
 | ctx session refs-to <session> | Each unit referencing the session |
-| ctx session migrate --from=<driver> --to=<driver> [--unit=<unit>] [--replace] [--corpus] [--prune] | Move the record from one storage driver to another, unit by unit through a neutral dump (and with `--corpus` the doc corpus); a unit the target holds refuses without `--replace`; the configured driver is never edited |
 | ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from parent session journals: create (the dispatcher's act, the recipe on stdin), record, report, show |
 | ctx session next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
 | ctx session refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |

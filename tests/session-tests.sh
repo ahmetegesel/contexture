@@ -7,13 +7,16 @@
 # CTX_BIN), and the parallel-write probe (distinct-target writes both land;
 # same-target writes exit clean with no temp residue and no torn journal).
 #
-# The suite runs on either storage driver and reads and writes the record only through
-# the verbs and the storage functions (tests/lib/plant.sh: rcat, rput, rappend read and
-# plant markdown through unit.export and unit.import and a posix staging workspace, D9),
-# so the same assertions hold on both: --driver=posix (the default) or --driver=fts5 (the
-# plugin's own module copy staged into the sandbox, storage.driver: fts5 in its config;
-# skip 77 when sqlite3 lacks FTS5). The posix-only grammar cases (W's read-only files)
-# touch the posix files directly and say so.
+# The suite runs on either storage driver and writes the record through the verbs and
+# reads it through the verbs and the storage functions (tests/lib/plant.sh: rsum, the
+# unit as its read functions answer it), so the same assertions hold on both:
+# --driver=posix (the default) or --driver=fts5 (the plugin's own module copy staged into
+# the sandbox, storage.driver: fts5 in its config; skip 77 when sqlite3 lacks FTS5). No
+# function moves a record between backends, so a store other than posix holds only what
+# the verbs write: the cases that need legacy text (a repeated slug, a CRLF line, a two-line
+# WHAT, a malformed anchor, a state missing a line, a reference to an absent unit) plant it
+# as posix files (rcat, rput, rappend) and run on posix alone, each saying so, as do the
+# cases that read the posix files' bytes (W's read-only files, WA's renames).
 #
 # The sections fall into three groups that share no unit (a unit a section creates is
 # named only by sections of its own group): by default the three groups run at once,
@@ -133,12 +136,12 @@ cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
 chmod +x .contexture/modules/*/scripts/* 2>/dev/null || true
 
-# the record through the storage functions, never a path: rcat prints an artifact, rput
-# replaces it from stdin, rappend adds stdin after its last byte (tests/lib/plant.sh)
+# the record through the verbs and the storage functions: rsum reads a unit through its
+# read functions on every driver; rcat, rput, rappend read and plant legacy text as posix
+# files on posix alone (tests/lib/plant.sh)
 RESOLVER="$SANDBOX/.contexture/modules/session/scripts/driver-resolver"
-PLANT_SESSION_MOD="$SESSION_MOD"
+PLANT_DRIVER=$DRIVER
 . "$SCRIPT_DIR/lib/plant.sh"
-plant_setup
 # lane_new <unit> <lane>: a lane with a recipe (stdin), through ctx lane create
 lane_new() { $CTX lane create "$1" "$2" >/dev/null; }
 echo "== driver: $DRIVER =="
@@ -154,8 +157,10 @@ a_not() { if printf '%s\n' "$1" | grep -q "$2"; then bad "$3 (unwanted: $2)"; el
 if in_group 1; then
 echo "== V verb surface and no-arg rc contract =="
 # v0.55.0: append, amend, query, flip, drop retired (D1, D14; their names reserved in ctx
-# and each call printing its replacement, below); migrate, units, refs-to added (D31, D42)
-DECLARED="active audit board bootstrap close diagnose entry finding index load migrate next record refresh refs refs-to reopen resolve search stamp task units"
+# and each call printing its replacement, below); units, refs-to added (D42); migrate, added
+# on this branch and never released, left the contract with unit.export and unit.import
+# (knowledge#MIGRATION_IS_AGENT_JUDGMENT) and answers as an unknown verb (below)
+DECLARED="active audit board bootstrap close diagnose entry finding index load next record refresh refs refs-to reopen resolve search stamp task units"
 disk=$(for f in .contexture/modules/session/scripts/*; do
   [ -f "$f" ] || continue
   b=${f##*/}
@@ -175,7 +180,12 @@ for v in $DECLARED; do
   esac
   a_eq "$rc" "$want" "verb:$v no-arg rc $want"
 done
-a_eq "$(printf '%s\n' $DECLARED | grep -c '')" "22" "verb surface: 22 session verbs"
+a_eq "$(printf '%s\n' $DECLARED | grep -c '')" "21" "verb surface: 21 session verbs"
+# migrate: no verb moves a record between backends; the name is no reserved retirement (it
+# never shipped), so ctx answers it as any unknown verb
+err=$($CTX session migrate --from=posix --to=fts5 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "migrate: ctx session migrate rc1"
+a_match "$err" "^ctx: unknown verb: migrate\$" "migrate: ctx session migrate answers an unknown verb"
 # the retired verbs: each prints its replacement rc 1, and ctx session help <verb> too
 for v in append amend query flip drop; do
   err=$($CTX session "$v" u1 2>&1 >/dev/null); rc=$?
@@ -192,7 +202,7 @@ rm -rf .contexture/modules/flip
 err=$($CTX session help query 2>&1 >/dev/null); rc=$?
 a_eq "$rc" "1" "retired: session help query rc1"
 a_match "$err" "^ctx session query retired in v0.55.0: use entry show" "retired: session help query prints the replacement"
-a_eq "$($CTX session help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "22" "session help lists the 22 verbs"
+a_eq "$($CTX session help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "21" "session help lists the 21 verbs"
 a_eq "$($CTX lane help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "4" "lane help lists the 4 verbs (create added)"
 out=$($CTX session index)
 a_match "$out" "probe (.*probe.md) | use when: the suite needs an index line | activation: propose" "index renders the rhythm line"
@@ -253,14 +263,13 @@ $CTX session record dup-audit --what="first" --slug="$TODAY-twice" >/dev/null 2>
 a_eq "$?" "0" "duplicate fixture: first entry records"
 $CTX session record dup-audit --what="second" --slug="$TODAY-twice" >/dev/null 2>&1
 a_eq "$?" "1" "duplicate fixture: the backend refuses the second record of the slug"
+# a repeated slug is legacy text only a hand-written posix file holds (the verbs refuse it):
+# posix alone
+if [ "$DRIVER" = posix ]; then
 printf '\n@entry %s-twice\n  ANCHOR: A1\n  WHAT: "second, landed by another path"\n  THREAD: none\n' "$TODAY" | rappend dup-audit journal
 $CTX session audit dup-audit >/dev/null 2>&1; a_eq "$?" "0" "audit keeps rc0 on a legacy duplicated entry slug"
 out=$($CTX session audit dup-audit 2>/dev/null)
-if [ "$DRIVER" = posix ]; then
-  a_match "$out" "LEGACY DUPLICATE SLUG at line [0-9]*: $TODAY-twice (first at line [0-9]*; warning" "audit warns on the duplicated slug with both lines"
-else
-  a_match "$out" "LEGACY DUPLICATE SLUG: $TODAY-twice (occurrence 2; warning" "audit warns on the duplicated slug with its occurrence (a store without lines, D29)"
-fi
+a_match "$out" "LEGACY DUPLICATE SLUG at line [0-9]*: $TODAY-twice (first at line [0-9]*; warning" "audit warns on the duplicated slug with both lines"
 printf '\n@entry %s-fold-twice\n  ANCHOR: A1\n  WHAT: "folds both"\n  THREAD: none\n  CLOSES: %s-twice (folded: both precede)\n' "$TODAY" "$TODAY" | rappend dup-audit journal
 printf '\n@entry %s-twice\n  ANCHOR: A1\n  WHAT: "third, after the closer"\n  THREAD: none\n' "$TODAY" | rappend dup-audit journal
 out=$($CTX session board dup-audit 2>/dev/null)
@@ -270,16 +279,17 @@ out=$($CTX session entry show dup-audit "$TODAY-twice" --json 2>/dev/null)
 # --json follows the contract schema (@rendering --json): Entry carries closed
 a_match "$out" '"closed":false' "entry show reads the last occurrence, open after the closer"
 a_match "$out" 'third, after the closer' "entry show reports the last occurrence"
+fi
 
 echo "== C multi-target closers =="
 $CTX session bootstrap cl-unit "closer unit" >/dev/null 2>&1
 for x in a b c; do $CTX session record cl-unit --what="closer target $x" --slug="$TODAY-cl-$x" >/dev/null 2>&1; done
 $CTX session record cl-unit --what="closes two" --slug="$TODAY-cl-d" --closes="$TODAY-cl-a $TODAY-cl-b (folded: two at once)" >/dev/null 2>&1
 a_eq "$?" "0" "record with two targets and its own verdict rc0"
-out=$(rcat cl-unit journal | grep '^  CLOSES: ')
+out=$($CTX session entry show cl-unit "$TODAY-cl-d" 2>/dev/null | grep '^  CLOSES: ')
 a_match "$out" "^  CLOSES: $TODAY-cl-a $TODAY-cl-b (folded: two at once)\$" "record keeps a caller verdict verbatim, never doubled"
 $CTX session record cl-unit --what="closes one" --slug="$TODAY-cl-e" --closes="$TODAY-cl-c" >/dev/null 2>&1
-out=$(rcat cl-unit journal | grep '^  CLOSES: ')
+out=$($CTX session entry show cl-unit "$TODAY-cl-e" 2>/dev/null | grep '^  CLOSES: ')
 a_match "$out" "^  CLOSES: $TODAY-cl-c (done: closes one)\$" "record gives a bare target the done verdict"
 $CTX session record cl-unit --what="bad" --closes="$TODAY-cl-d $TODAY-cl-nosuch (done: x)" >/dev/null 2>&1
 a_eq "$?" "1" "record refuses a closer whose second target is missing"
@@ -372,15 +382,8 @@ printf '#!/bin/sh\n# ctx-hook: refresh\n# ctx-hook-mode: block\nexit 4\n' > .con
 chmod +x .contexture/modules/blockmod/hooks/b
 $CTX session refresh refresh-unit >/dev/null 2>&1
 a_eq "$?" "1" "block hook fails a clean refresh rc1"
-rcat refresh-unit journal > journal.bak
-rappend refresh-unit journal <<'EOF'
-
-@entry 2026-09-22-broken
-  ANCHOR: A2
-  WHAT: "sandbox broken entry"
-  THREAD: none
-  CLOSES: 2026-01-01-nonexistent (done: nothing)
-EOF
+# the audit made dirty through the verbs, on every driver: a KNOWLEDGE entry no closer names
+$CTX session record refresh-unit --what="sandbox unharvested entry" --knowledge --slug=2026-09-22-broken >/dev/null 2>&1
 $CTX session audit refresh-unit >/dev/null 2>&1
 a_eq "$?" "1" "dirty audit rc1"
 $CTX session refresh refresh-unit >/dev/null 2>&1
@@ -388,7 +391,8 @@ a_eq "$?" "1" "refresh rc stays 1 while dirty"
 rm -rf .contexture/modules/blockmod
 $CTX session refresh refresh-unit >/dev/null 2>&1
 a_eq "$?" "1" "refresh rc = dirty audit rc without the block hook"
-rput refresh-unit journal < journal.bak
+# the repair: the harvest closes the flagged entry by reference
+$CTX session record refresh-unit --what="sandbox harvest" --closes="2026-09-22-broken (done: harvested)" >/dev/null 2>&1
 $CTX session audit refresh-unit >/dev/null 2>&1
 a_eq "$?" "0" "repaired audit rc0"
 $CTX session refresh refresh-unit >/dev/null 2>&1
@@ -463,14 +467,14 @@ $CTX session task start sem-unit task-1 --pointer="work on task-1" >/dev/null 2>
 a_eq "$?" "0" "semantic: task start rc0"
 out=$($CTX session task show sem-unit task-1)
 a_match "$out" "STATUS: IN_PROGRESS" "semantic: task start updates status to IN_PROGRESS"
-a_match "$(rcat sem-unit state)" "next_action: \"work on task-1\"" "semantic: task start atomically updates next_action"
+a_match "$($CTX session load sem-unit 1 2>/dev/null)" "next_action: \"work on task-1\"" "semantic: task start atomically updates next_action"
 
 # 5. task complete (atomic status and receipt event)
 $CTX session task complete sem-unit task-1 --evidence="test verified cleanly" >/dev/null 2>&1
 a_eq "$?" "0" "semantic: task complete rc0"
 out=$($CTX session task show sem-unit task-1)
 a_match "$out" "STATUS: DONE" "semantic: task complete updates status to DONE"
-a_match "$(rcat sem-unit journal)" "backlog/task-1: DONE (test verified cleanly)" "semantic: task complete appends receipt event"
+a_match "$($CTX session entry show sem-unit "$TODAY-task-1-completed" 2>/dev/null)" "backlog/task-1: DONE (test verified cleanly)" "semantic: task complete appends receipt event"
 
 # 6. task reopen
 $CTX session task reopen sem-unit task-1 >/dev/null 2>&1
@@ -481,7 +485,7 @@ a_match "$out" "STATUS: TODO" "semantic: task reopen restores TODO"
 # 7. task drop
 $CTX session task drop sem-unit task-2 --reason="task deprecated" >/dev/null 2>&1
 a_eq "$?" "0" "semantic: task drop rc0"
-a_not "$(rcat sem-unit backlog)" "task-2" "semantic: task drop removes task block"
+a_not "$($CTX session task list sem-unit --status=all 2>/dev/null)" "task-2" "semantic: task drop removes task block"
 
 # 8. task list
 out=$($CTX session task list sem-unit)
@@ -492,7 +496,7 @@ a_match "$out_json" "\"slug\":\"task-1\"" "semantic: task list --json outputs va
 # 9. record with typed flags and auto-injected date/anchor
 $CTX session record sem-unit --what="event recorded via flags" --group="dev" --thread="review" >/dev/null 2>&1
 a_eq "$?" "0" "semantic: record typed flags rc0"
-j_content=$(rcat sem-unit journal)
+j_content=$($CTX session board sem-unit 2>/dev/null)
 a_match "$j_content" "WHAT: \"event recorded via flags\"" "semantic: record event content verified"
 a_match "$j_content" "GROUP: dev" "semantic: record group verified"
 a_match "$j_content" "THREAD: review" "semantic: record thread verified"
@@ -505,7 +509,7 @@ printf '@entry %s-piped-event\n  WHAT: "piped event content"\n  THREAD: none\n' 
 a_eq "$?" "1" "semantic: record raw stdin fallback retired, refused rc1 (D1)"
 $CTX session record sem-unit --what="piped event content" --slug="$TODAY-piped-event" >/dev/null 2>&1
 a_eq "$?" "0" "semantic: record of the former piped entry through the typed flags rc0"
-a_match "$(rcat sem-unit journal)" "piped event content" "semantic: record piped block lands in journal"
+a_match "$($CTX session entry show sem-unit "$TODAY-piped-event" 2>/dev/null)" "piped event content" "semantic: record piped block lands in journal"
 
 # 11. finding CRUD (add, show, update, supersede, drop, list)
 $CTX session finding add sem-unit ARCH_DECISION --summary="Architecture decision 1" --ref="journal.md#event" >/dev/null 2>&1
@@ -555,7 +559,8 @@ a_match "$out" "ARCH_V2" "semantic: finding list displays ARCH_V2"
 
 $CTX session finding drop sem-unit ARCH_DECISION >/dev/null 2>&1
 a_eq "$?" "0" "semantic: finding drop rc0"
-a_not "$(rcat sem-unit knowledge)" "@finding ARCH_DECISION" "semantic: finding drop removes finding"
+$CTX session finding show sem-unit ARCH_DECISION >/dev/null 2>&1
+a_eq "$?" "1" "semantic: finding drop removes finding"
 
 # 12. search
 out=$($CTX session search sem-unit "Architecture decision")
@@ -594,8 +599,8 @@ a_match "$out" "lane test subagent" "lane: show recipe matches"
 
 $CTX lane record sem-unit sub-lane --what="lane event 1" >/dev/null 2>&1
 a_eq "$?" "0" "lane: record event rc0"
-a_match "$(rcat sem-unit lane/sub-lane/journal)" "lane event 1" "lane: record appends to lane journal"
-a_not "$(rcat sem-unit journal)" "lane event 1" "lane: record does not contaminate main session journal"
+a_match "$($CTX lane show sem-unit sub-lane journal 2>/dev/null)" "lane event 1" "lane: record appends to lane journal"
+a_not "$($CTX session entry list sem-unit 2>/dev/null)" "lane event 1" "lane: record does not contaminate main session journal"
 
 $CTX lane report sem-unit sub-lane --body="lane report summary" >/dev/null 2>&1
 a_eq "$?" "0" "lane: report write rc0"
@@ -613,8 +618,11 @@ $CTX lane show sem-unit sub-lane report > lane-show.out 2>&1
 cmp -s lane-fixture.md lane-show.out; a_eq "$?" "0" "lane: show text view is byte-identical to the stored report"
 # D27: a write prints one line with the stored size (v0.54.0 echoed the report back)
 a_eq "$(cat lane-write.out)" "lane report written: sub-lane in sem-unit ($(wc -c < lane-fixture.md | tr -d ' ') bytes)" "lane: report write echo is one line with the stored size"
-rcat sem-unit lane/sub-lane/report > lane-stored.out
-cmp -s lane-fixture.md lane-stored.out; a_eq "$?" "0" "lane: stored report is byte-identical to the input"
+# the stored bytes of the posix file (posix alone; every driver's reads are the two checks above)
+if [ "$DRIVER" = posix ]; then
+  rcat sem-unit lane/sub-lane/report > lane-stored.out
+  cmp -s lane-fixture.md lane-stored.out; a_eq "$?" "0" "lane: stored report is byte-identical to the input"
+fi
 rm -f lane-fixture.md lane-write.out lane-report.out lane-show.out lane-stored.out
 fi # group 1
 
@@ -729,7 +737,7 @@ $CTX session task add x-unit x-pre-long --objective="Long slug" >/dev/null 2>&1
 $CTX session task add x-unit x-pre --objective="Prefix slug" >/dev/null 2>&1; a_eq "$?" "0" "a slug prefixing another task's slug adds rc0"
 # the canonical drop receipt
 $CTX session task drop x-unit x-pre --reason="suite drop" >/dev/null 2>&1
-a_match "$(rcat x-unit journal)" "WHAT: \"backlog/x-pre: DROPPED (suite drop)\"" "task drop writes the canonical backlog/<slug>: DROPPED (<reason>) receipt"
+a_match "$($CTX session entry show x-unit "$TODAY-x-pre-dropped" 2>/dev/null)" "WHAT: \"backlog/x-pre: DROPPED (suite drop)\"" "task drop writes the canonical backlog/<slug>: DROPPED (<reason>) receipt"
 # the search contract: one shape, the flags honored, an empty query refused
 out=$($CTX session search x-unit "task" --json --limit=1 2>&1)
 a_eq "$(printf '%s\n' "$out" | grep -o '"entity_type":' | wc -l | tr -d ' ')" "1" "search --limit=1 caps the results at one"
@@ -815,29 +823,29 @@ y_nl=$(printf 'first body line\nsecond body line')
 out=$($CTX session task add y-unit y-multi --objective="Multi-line task" --desc="$y_nl" 2>&1); rc=$?
 a_eq "$rc" "0" "R1: task add with a two-line --desc rc0"
 a_not "$out" "newline in string" "R1: task add with a two-line --desc renders without an awk error"
-a_eq "$(rcat y-unit backlog | grep -c -e '^    first body line$' -e '^    second body line$')" "2" "R1: both --desc lines land as indented body lines"
+a_eq "$($CTX session task show y-unit y-multi 2>/dev/null | grep -c -e '^    first body line$' -e '^    second body line$')" "2" "R1: both --desc lines land as indented body lines"
 $CTX session task show y-unit y-multi >/dev/null 2>&1
 a_eq "$?" "0" "R1: the two-line task shows rc0"
 $CTX session task add y-unit y-bs --objective='path C:\new\table' --desc='literal \n and \t stay' >/dev/null 2>&1
-a_eq "$(rcat y-unit backlog | grep -cF '  OBJECTIVE: "path C:\new\table"')" "1" "R1: a literal backslash sequence in --objective stays verbatim"
-a_eq "$(rcat y-unit backlog | grep -cF '    literal \n and \t stay')" "1" "R1: a literal backslash sequence in --desc stays verbatim"
+a_eq "$($CTX session task show y-unit y-bs 2>/dev/null | grep -cF '  OBJECTIVE: "path C:\new\table"')" "1" "R1: a literal backslash sequence in --objective stays verbatim"
+a_eq "$($CTX session task show y-unit y-bs 2>/dev/null | grep -cF '    literal \n and \t stay')" "1" "R1: a literal backslash sequence in --desc stays verbatim"
 out=$($CTX session task show y-unit y-bs --json 2>&1)
 a_match "$out" '"objective":"path C:\\\\new\\\\table"' "R1: task show --json carries the backslashes escaped"
 out=$($CTX session task update y-unit y-keep --desc="$y_nl" 2>&1); rc=$?
 a_eq "$rc" "0" "R1: task update with a two-line --desc rc0"
-a_eq "$(rcat y-unit backlog | grep -c '^@task ')" "3" "R1: task update with a two-line --desc keeps every task block"
-a_eq "$(rcat y-unit backlog | grep -c '^    first body line$')" "2" "R1: the updated --desc lands as body lines"
+a_eq "$($CTX session task list y-unit --status=all 2>/dev/null | grep -c '^  \[')" "3" "R1: task update with a two-line --desc keeps every task block"
+a_eq "$($CTX session task show y-unit y-keep 2>/dev/null | grep -c -e '^    first body line$' -e '^    second body line$')" "2" "R1: the updated --desc lands as body lines"
 $CTX session task start y-unit y-bs --pointer='y-bs IN_PROGRESS: see C:\new' >/dev/null 2>&1
-a_eq "$(rcat y-unit state | grep -cF 'next_action: "y-bs IN_PROGRESS: see C:\new"')" "1" "R1: a literal backslash sequence in --pointer stays verbatim"
+a_eq "$($CTX session load y-unit 1 2>/dev/null | grep -cF 'next_action: "y-bs IN_PROGRESS: see C:\new"')" "1" "R1: a literal backslash sequence in --pointer stays verbatim"
 out=$($CTX session finding add y-unit Y_MULTI --summary="$y_nl" 2>&1); rc=$?
 a_eq "$rc" "0" "R1: finding add with a two-line --summary rc0"
 $CTX session finding show y-unit Y_MULTI >/dev/null 2>&1
 a_eq "$?" "0" "R1: the two-line finding shows rc0"
 $CTX session finding add y-unit Y_BS --summary='literal \n here' >/dev/null 2>&1
-a_eq "$(rcat y-unit knowledge | grep -cF '    literal \n here')" "1" "R1: a literal backslash sequence in --summary stays verbatim"
+a_eq "$($CTX session finding show y-unit Y_BS 2>/dev/null | grep -cF '    literal \n here')" "1" "R1: a literal backslash sequence in --summary stays verbatim"
 $CTX session finding update y-unit Y_BS --summary="$y_nl" >/dev/null 2>&1
 a_eq "$?" "0" "R1: finding update with a two-line --summary rc0"
-a_eq "$(rcat y-unit knowledge | grep -c '^@finding ')" "2" "R1: finding update with a two-line --summary keeps every finding"
+a_eq "$($CTX session finding list y-unit 2>/dev/null | grep -c '^  Y_')" "2" "R1: finding update with a two-line --summary keeps every finding"
 out=$($CTX session search y-unit 'C:\new' --mode=exact --json 2>&1)
 a_not "$out" '"total_matches":0' "R1: search finds a literal backslash sequence"
 # R9: an exact-mode snippet carries no edge padding (the document body's trailing blanks)
@@ -847,16 +855,16 @@ a_not "$out" '\\n"}' "R9: an exact search snippet ends without a trailing newlin
 # R2: the dialect is LF: a carriage return in a typed field refuses rc1 before any write,
 # so no verb poisons the record for the grammar verbs that refuse CR on read
 y_cr=$(printf 'carriage\rreturn')
-y_before=$(rcat y-unit backlog | cksum)
+y_before=$(rsum y-unit)
 $CTX session task add y-unit y-cr --objective="CR task" --desc="$y_cr" >/dev/null 2>&1
 a_eq "$?" "1" "R2: task add with a carriage return refuses rc1"
-a_eq "$(rcat y-unit backlog | cksum)" "$y_before" "R2: the refused task add leaves the backlog unchanged"
+a_eq "$(rsum y-unit)" "$y_before" "R2: the refused task add leaves the backlog unchanged"
 $CTX session finding add y-unit Y_CR --summary="$y_cr" >/dev/null 2>&1
 a_eq "$?" "1" "R2: finding add with a carriage return refuses rc1"
-y_jbefore=$(rcat y-unit journal | cksum)
+y_jbefore=$(rsum y-unit)
 $CTX session record y-unit --what="$y_cr" >/dev/null 2>&1
 a_eq "$?" "1" "R2: record with a carriage return refuses rc1"
-a_eq "$(rcat y-unit journal | cksum)" "$y_jbefore" "R2: the refused record leaves the journal unchanged"
+a_eq "$(rsum y-unit)" "$y_jbefore" "R2: the refused record leaves the journal unchanged"
 printf '# recipe grammar\nMISSION\n  GOAL: "y lane"\n' | lane_new y-unit y-lane
 $CTX lane record y-unit y-lane --what="$y_cr" >/dev/null 2>&1
 a_eq "$?" "1" "R2: lane record with a carriage return refuses rc1"
@@ -896,8 +904,10 @@ b_desc="$b_l1
 $b_l2"
 $CTX session task add b-unit b-task --objective="$b_obj" --desc="$b_desc" >/dev/null 2>&1
 a_eq "$?" "0" "B: task add with backslash payloads rc0"
-a_eq "$(rcat b-unit backlog | grep -cxF "  OBJECTIVE: \"$b_obj\"")" "1" "B: the OBJECTIVE lands byte for byte"
-a_eq "$(rcat b-unit backlog | grep -cxF -e "    $b_l1" -e "    $b_l2")" "2" "B: both DESCRIPTION lines land byte for byte, the trailing backslash kept"
+a_eq "$($CTX session task show b-unit b-task 2>&1 | grep -cxF "  OBJECTIVE: \"$b_obj\"")" "1" "B: the OBJECTIVE lands byte for byte"
+if [ "$DRIVER" = posix ]; then
+  a_eq "$(rcat b-unit backlog | grep -cxF -e "    $b_l1" -e "    $b_l2")" "2" "B: both DESCRIPTION lines land byte for byte in the posix file, the trailing backslash kept"
+fi
 out=$($CTX session task show b-unit b-task 2>&1)
 a_eq "$(printf '%s\n' "$out" | grep -cxF -e "    $b_l1" -e "    $b_l2")" "2" "B: task show text reads the DESCRIPTION back byte for byte"
 out=$($CTX session task show b-unit b-task --json 2>&1)
@@ -907,7 +917,9 @@ a_eq "$(printf '%s\n' "$out" | grep -cF "\"objective\":\"$b_json\"")" "1" "B: ta
 b_sum='S a\b c\\d \n e\'
 $CTX session finding add b-unit B_BS --summary="$b_sum" >/dev/null 2>&1
 a_eq "$?" "0" "B: finding add with backslash payloads rc0"
-a_eq "$(rcat b-unit knowledge | grep -cxF "    $b_sum")" "1" "B: the SUMMARY lands byte for byte"
+if [ "$DRIVER" = posix ]; then
+  a_eq "$(rcat b-unit knowledge | grep -cxF "    $b_sum")" "1" "B: the SUMMARY lands byte for byte in the posix file"
+fi
 out=$($CTX session finding show b-unit B_BS 2>&1)
 a_eq "$(printf '%s\n' "$out" | grep -cxF "    $b_sum")" "1" "B: finding show text reads the SUMMARY back byte for byte"
 out=$($CTX session finding list b-unit --json 2>&1)
@@ -915,7 +927,7 @@ a_eq "$(printf '%s\n' "$out" | grep -cF 'S a\\b c\\\\d \\n e\\')" "1" "B: findin
 b_what='W a\b c\\d \n e\'
 $CTX session record b-unit --what="$b_what" --slug="$TODAY-b-bs" >/dev/null 2>&1
 a_eq "$?" "0" "B: record with backslash payloads rc0"
-a_eq "$(rcat b-unit journal | grep -cxF "  WHAT: \"$b_what\"")" "1" "B: the WHAT lands byte for byte"
+a_eq "$($CTX session entry show b-unit "$TODAY-b-bs" 2>&1 | grep -cxF "  WHAT: \"$b_what\"")" "1" "B: the WHAT lands byte for byte"
 out=$($CTX session board b-unit 2>&1)
 a_eq "$(printf '%s\n' "$out" | grep -cxF "  WHAT: \"$b_what\"")" "1" "B: board reads the WHAT back byte for byte"
 out=$($CTX session entry show b-unit "$TODAY-b-bs" --json 2>&1)
@@ -934,8 +946,10 @@ a_eq "$?" "0" "B: lane report with backslash lines rc0"
 a_eq "$(cat b-echo.out)" "lane report written: b-lane in b-unit ($(wc -c < b-report.md | tr -d ' ') bytes)" "B: the lane report write echo is one line with the stored size"
 $CTX lane show b-unit b-lane report > b-show.out 2>&1
 cmp -s b-report.md b-show.out; a_eq "$?" "0" "B: lane show report is byte-identical to the input"
-rcat b-unit lane/b-lane/report > b-stored.out
-cmp -s b-report.md b-stored.out; a_eq "$?" "0" "B: the stored report is byte-identical to the input"
+if [ "$DRIVER" = posix ]; then
+  rcat b-unit lane/b-lane/report > b-stored.out
+  cmp -s b-report.md b-stored.out; a_eq "$?" "0" "B: the stored report is byte-identical to the input in the posix file"
+fi
 rm -f b-report.md b-echo.out b-show.out b-stored.out
 
 echo "== W a failed storage write is rc2 (lanes/routing-review/report finding R4) =="
@@ -946,7 +960,7 @@ $CTX session task add w-unit w-a --objective="Task A" >/dev/null 2>&1
 $CTX session task add w-unit w-b --objective="Task B" >/dev/null 2>&1
 $CTX session finding add w-unit W_ONE --summary="One" >/dev/null 2>&1
 printf '# recipe grammar\nMISSION\n  GOAL: "w lane"\n' | lane_new w-unit w-lane
-w_sum() { for k in state backlog knowledge journal lane/w-lane/journal; do rcat w-unit "$k"; done | cksum; }
+w_sum() { rsum w-unit w-lane; }
 w_residue() { ls .contexture/tmp 2>/dev/null | grep -c -e '^backlog\.' -e '^knowledge\.' -e '^state\.' -e '^journal\.' -e '^payload\.' -e '^rec\.' -e '^fts5-ws\.'; }
 w_before=$(w_sum)
 w_res0=$(w_residue)
@@ -1075,7 +1089,7 @@ $CTX session task add q-unit q-a --objective="Task A" >/dev/null 2>&1
 $CTX session finding add q-unit Q_ONE --summary="One" >/dev/null 2>&1
 printf '# recipe grammar\nMISSION\n  GOAL: "q lane"\n' | lane_new q-unit q-lane
 q_nl=$(printf 'first line\nsecond line')
-q_sum() { for k in state backlog knowledge journal lane/q-lane/journal; do rcat q-unit "$k"; done | cksum; }
+q_sum() { rsum q-unit q-lane; }
 q_before=$(q_sum)
 q_refuse() {
   q_label=$1; shift
@@ -1109,7 +1123,9 @@ out=$($CTX session record q-unit --what='the typed "quoted" what' --slug=q-typed
 a_eq "$rc" "0" "R3: record --what with embedded double quotes rc0"
 $CTX session record q-unit --what='an appended "quoted" what' --slug="$TODAY-q-appended-quote" >/dev/null 2>&1
 a_eq "$?" "0" "R3: record accepts the formerly appended WHAT with embedded double quotes"
-a_eq "$(rcat q-unit journal | grep -cF '  WHAT: "an appended "quoted" what"')" "1" "R3: the appended quoted WHAT lands verbatim"
+if [ "$DRIVER" = posix ]; then
+  a_eq "$(rcat q-unit journal | grep -cF '  WHAT: "an appended "quoted" what"')" "1" "R3: the appended quoted WHAT lands verbatim in the posix file"
+fi
 out=$($CTX session board q-unit 2>&1)
 a_match "$out" 'WHAT: "an appended "quoted" what"' "R3: board reads the appended quoted WHAT verbatim"
 a_match "$out" 'WHAT: "the typed "quoted" what"' "R3: board reads the typed quoted WHAT verbatim"
@@ -1133,25 +1149,28 @@ err=$(printf '@entry %s-q-bad-quote\n  WHAT: unquoted "what"\n  THREAD: none\n' 
 a_eq "$rc" "1" "R3: append (retired) refuses rc1"
 a_match "$err" "^ctx session append retired in v0.55.0: use record, task add, finding add" "R3: append names its replacement (D14)"
 # legacy records stay readable: an entry written before the refusal with a two-line WHAT
-# still loads and audits as before (knowledge#BACKWARD_COMPATIBLE_READS)
+# still loads and audits as before (knowledge#BACKWARD_COMPATIBLE_READS); legacy text lives
+# in posix files alone
+if [ "$DRIVER" = posix ]; then
 printf '\n@entry %s-q-legacy-two-line\n  ANCHOR: A1\n  WHAT: "legacy first line\nlegacy second line"\n  THREAD: none\n' "$TODAY" | rappend q-unit journal
 $CTX session audit q-unit >/dev/null 2>&1
 a_eq "$?" "0" "R3: a legacy two-line WHAT still audits rc0"
 out=$($CTX session board q-unit 2>&1)
 a_match "$out" "@entry $TODAY-q-legacy-two-line" "R3: a legacy two-line WHAT still loads on the board"
+fi
 fi # group 2
 
 if in_group 3; then
 echo "== Z the capability handshake at dispatch (lanes/routing-review/report finding R5) =="
 # a configured driver other than the bundled posix one proves its descriptor before it
-# serves a function: contract "2" and every one of the 40 record functions (descriptor v2,
+# serves a function: contract "2" and every one of the 38 record functions (descriptor v2,
 # docs/the-engine.md); a planted driver lacking task.add is refused rc2 with the function
 # named; a complete one is verified once and served from the cached verdict until the
 # driver changes. Both plants delegate every function to this sandbox's posix driver.
 z_posix="$PWD/.contexture/modules/session/drivers/posix/driver"
 z_log="$PWD/z-handshakes.log"
 : > "$z_log"
-z_fns='capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query unit.export unit.import'
+z_fns='capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query'
 z_plant() {
   mkdir -p ".contexture/modules/zz-plant/drivers/$1"
   z_list=$(for f in $z_fns; do [ "$f" = "$2" ] || printf '"%s",' "$f"; done | sed 's/,$//')
@@ -1206,8 +1225,8 @@ while [ "$i" -le 10 ]; do
   b=$!
   wait "$a" || true
   wait "$b" || true
-  if rcat "$slug" journal | grep -q "@entry $today-probe-journal-$i" \
-    && rcat "$slug" state | grep -q "next_action: \"pointer $i\""; then
+  if $CTX session entry show "$slug" "$today-probe-journal-$i" >/dev/null 2>&1 \
+    && $CTX session load "$slug" 1 2>/dev/null | grep -q "next_action: \"pointer $i\""; then
     p1_pass=$((p1_pass + 1))
   else
     p1_fail=$((p1_fail + 1))
@@ -1236,13 +1255,20 @@ while [ "$i" -le "$p2_iters" ]; do
   if ls .contexture/sessions/p2/.tmp* .contexture/sessions/p2/*.XXXXXX .contexture/tmp/rec.* .contexture/tmp/fts5-ws.* >/dev/null 2>&1; then
     p2_residue=$((p2_residue + 1))
   fi
-  rcat p2 journal | awk '
-    /^@entry / { if (pending) bad = 1; pending = 1; next }
-    /^  THREAD: / { pending = 0 }
-    END { exit (pending ? 1 : bad ? 1 : 0) }
-  ' || p2_incomplete=$((p2_incomplete + 1))
-  if rcat p2 journal | grep -q "@entry $today-probe-x-$i" \
-    && rcat p2 journal | grep -q "@entry $today-probe-y-$i"; then
+  # no torn block: on posix every entry of the file closes with its THREAD line; on every
+  # driver both entries read back whole through entry show
+  if [ "$DRIVER" = posix ]; then
+    rcat p2 journal | awk '
+      /^@entry / { if (pending) bad = 1; pending = 1; next }
+      /^  THREAD: / { pending = 0 }
+      END { exit (pending ? 1 : bad ? 1 : 0) }
+    ' || p2_incomplete=$((p2_incomplete + 1))
+  fi
+  for p2_e in x y; do
+    $CTX session entry show p2 "$today-probe-$p2_e-$i" 2>/dev/null | grep -qx "  WHAT: \"$p2_e $i\"" || p2_incomplete=$((p2_incomplete + 1))
+  done
+  if $CTX session entry show p2 "$today-probe-x-$i" >/dev/null 2>&1 \
+    && $CTX session entry show p2 "$today-probe-y-$i" >/dev/null 2>&1; then
     p2_both=$((p2_both + 1))
   fi
   i=$((i + 1))
@@ -1271,11 +1297,13 @@ a_match "$out" '"refs":\["journal#f-target"\]' "RF1: finding show --json reads t
 a_match "$out" '"summary":"updated summary"' "RF1: finding update --ref still updates the summary"
 out=$($CTX session finding show f-unit F_NOREF 2>&1 </dev/null)
 a_match "$out" '^  REF: "journal#f-target"$' "RF1: finding show text reads the ref finding update stored"
-f_block=$(rcat f-unit knowledge | awk '/^@finding F_NOREF$/ { on = 1; print; next } on && /^@/ { on = 0 } on { print ($0 == "" ? "<>" : $0) }')
+f_block=$($CTX session finding show f-unit F_NOREF 2>/dev/null </dev/null)
 a_eq "$(printf '%s\n' "$f_block" | grep -c '^  REF: ')" "1" "RF1: the updated finding carries exactly one REF line"
 # D6 and B2 P4: a canonical finding gaining its first REF stays canonical, the REF line
-# before SUMMARY (v0.54.0 placed it after the summary body)
-a_eq "$(printf '%s\n' "$f_block" | sed -n '2p;$p' | tr '\n' '|')" '  REF: "journal#f-target"|<>|' "RF1: the block keeps REF first and its blank separator last"
+# before SUMMARY (v0.54.0 placed it after the summary body); its separator is the canonical
+# span's, the next item a finding and no verbatim
+a_eq "$(printf '%s\n' "$f_block" | sed -n '2p' | tr '\n' '|')" '  REF: "journal#f-target"|' "RF1: the block keeps REF first"
+a_match "$($CTX session finding show f-unit F_NOREF --json 2>/dev/null </dev/null)" '"next":"finding","verbatim":null}' "RF1: the block stays canonical, its blank separator the canonical span's"
 a_eq "$(printf '%s\n' "$f_block" | grep -n '' | sed -n '/REF: /s/:.*//p')" "2" "RF1: the REF line precedes SUMMARY, the canonical finding order"
 $CTX session finding update f-unit F_LAST --ref="journal#f-last" >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "RF1: finding update --ref alone on the last finding rc0"
@@ -1285,7 +1313,7 @@ a_match "$out" '"summary":"last summary"' "RF1: finding update --ref alone keeps
 $CTX session finding update f-unit F_REF --ref="journal#f-new" >/dev/null 2>&1 </dev/null
 out=$($CTX session finding show f-unit F_REF --json 2>&1 </dev/null)
 a_match "$out" '"refs":\["journal#f-new"\]' "RF1: finding update --ref replaces an existing REF"
-a_eq "$(rcat f-unit knowledge | grep -c '^  REF: ')" "3" "RF1: every finding carries one REF line after the updates"
+a_eq "$(for f_n in F_NOREF F_REF F_LAST; do $CTX session finding show f-unit "$f_n" 2>/dev/null </dev/null; done | grep -c '^  REF: ')" "3" "RF1: every finding carries one REF line after the updates"
 a_eq "$($CTX session finding list f-unit 2>/dev/null </dev/null | grep -c '^  F_')" "3" "RF1: finding list still sees every finding"
 
 $CTX session record f-unit --what="entry with a ref" --slug="$TODAY-f-e1" --ref="knowledge#F_NOREF" >/dev/null 2>&1 </dev/null
@@ -1302,6 +1330,8 @@ a_eq "$(printf '%s\n' "$out" | sed -n '1p;3p;4p' | tr '\n' '|')" "@entry $TODAY-
 # D15: entry show prints the stored block, its REF line included
 a_match "$out" '^  REF: "knowledge#F_NOREF"$' "RF2: entry show text prints the REF line of the block (D15)"
 
+# a reference to a unit the store lacks is legacy text (session refs refuses it): posix alone
+if [ "$DRIVER" = posix ]; then
 { rcat f-unit state | grep -v '^ref_sessions:'; printf 'ref_sessions: [f-ghost]\n'; } > f-state.tmp
 rput f-unit state < f-state.tmp; rm -f f-state.tmp
 a_match "$(rcat f-unit state)" '^ref_sessions: \[f-ghost\]$' "RF3: the fixture names a ref session absent from the store"
@@ -1311,6 +1341,7 @@ a_match "$err" '^WARNING: missing knowledge: unit f-ghost$' "RF3: the missing re
 a_match "$err" '^WARNING: missing journal: unit f-ghost$' "RF3: the missing ref journal warning names the unit and the artifact"
 a_not "$err" 'sessions/' "RF3: the missing ref warning names no storage path"
 a_not "$err" '\.md' "RF3: the missing ref warning names no file"
+fi
 
 echo "== U one quote rule for every one-line quoted field (backlog quote-rule-uniform) =="
 # every one-line quoted field (WHAT, a task OBJECTIVE, the next_action pointer, the state
@@ -1320,7 +1351,7 @@ $CTX session bootstrap u-unit "quote rule unit" >/dev/null 2>&1 </dev/null
 u_obj='the "quoted" objective of the human'"'"'s unit'
 out=$($CTX session bootstrap u-obj "$u_obj" 2>&1 </dev/null); rc=$?
 a_eq "$rc" "0" "QU: bootstrap accepts an objective with embedded double and single quotes"
-a_eq "$(rcat u-obj state | grep -cF "objective: \"$u_obj\"")" "1" "QU: the state objective lands verbatim"
+a_eq "$($CTX session load u-obj 1 2>/dev/null </dev/null | grep -cF "objective: \"$u_obj\"")" "1" "QU: the state objective lands verbatim"
 a_match "$($CTX session active 2>/dev/null </dev/null)" 'objective: "the "quoted" objective of the human' "QU: active reads the quoted state objective verbatim"
 out=$($CTX session load u-obj 2>&1 </dev/null)
 a_match "$out" "objective: \"the \"quoted\" objective of the human's unit\"" "QU: load reads the quoted state objective verbatim"
@@ -1332,16 +1363,16 @@ $CTX session task start u-unit u-a --pointer='u-a IN_PROGRESS: the "typed" point
 a_eq "$?" "0" "QU: task start --pointer with embedded quotes rc0 (unchanged)"
 out=$($CTX session next u-unit 'u-a IN_PROGRESS: the "next" pointer' 2>&1 </dev/null); rc=$?
 a_eq "$rc" "0" "QU: next accepts a pointer with embedded double quotes"
-a_eq "$(rcat u-unit state | grep -cF 'next_action: "u-a IN_PROGRESS: the "next" pointer"')" "1" "QU: the next pointer lands verbatim"
+a_eq "$($CTX session load u-unit 1 2>/dev/null </dev/null | grep -cF 'next_action: "u-a IN_PROGRESS: the "next" pointer"')" "1" "QU: the next pointer lands verbatim"
 # append and amend retired (D1): the formerly appended and amended tasks land through task add
 # and task update
 $CTX session task add u-unit u-b --objective='an "appended" objective' >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "QU: task add accepts the formerly appended OBJECTIVE with embedded double quotes"
-a_eq "$(rcat u-unit backlog | grep -cF '  OBJECTIVE: "an "appended" objective"')" "1" "QU: the appended OBJECTIVE lands verbatim"
+a_eq "$($CTX session task show u-unit u-b 2>/dev/null </dev/null | grep -cF '  OBJECTIVE: "an "appended" objective"')" "1" "QU: the appended OBJECTIVE lands verbatim"
 $CTX session task add u-unit u-c --objective="to be amended" >/dev/null 2>&1 </dev/null
 $CTX session task update u-unit u-c --objective='an "amended" objective' >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "QU: task update accepts the formerly amended OBJECTIVE with embedded double quotes"
-a_eq "$(rcat u-unit backlog | grep -cF '  OBJECTIVE: "an "amended" objective"')" "1" "QU: the amended OBJECTIVE lands verbatim"
+a_eq "$($CTX session task show u-unit u-c 2>/dev/null </dev/null | grep -cF '  OBJECTIVE: "an "amended" objective"')" "1" "QU: the amended OBJECTIVE lands verbatim"
 out=$($CTX session task show u-unit u-b 2>&1 </dev/null)
 a_match "$out" 'OBJECTIVE: "an "appended" objective"' "QU: task show text reads the appended OBJECTIVE verbatim"
 out=$($CTX session task show u-unit u-c --json 2>&1 </dev/null)
@@ -1398,7 +1429,11 @@ up_path "$out" "UP: audit of an absent unit"
 out=$(up_err $CTX session bootstrap u-unit "again")
 a_match "$out" '^ERROR: session exists: unit u-unit$' "UP: bootstrap of an existing unit names the unit"
 up_path "$out" "UP: bootstrap of an existing unit"
-# up-bare: a state and a journal, no backlog, no knowledge (planted through the dump, D9)
+# the units below hold legacy text (a unit without a backlog, knowledge, or journal, a
+# malformed anchor, a state without next_action, CRLF lines, an unknown status) only
+# hand-written posix files hold: posix alone
+if [ "$DRIVER" = posix ]; then
+# up-bare: a state and a journal, no backlog, no knowledge
 printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "bare unit"\nrepos: []\nref_sessions: []\n' | rput up-bare state
 printf '@anchor A1 ("continues A0", attention: bare)\n' | rput up-bare journal
 out=$(up_err $CTX session board up-bare)
@@ -1467,16 +1502,20 @@ out=$($CTX session search up-odd "legacy crlf" --json 2>&1 </dev/null)
 a_match "$out" '"entity_type":"entry","entity_id":"2026-09-20-up-crlf","section"' "B5-F2: exact search attributes the CRLF entry to its slug"
 $CTX session record up-odd --what="after crlf" >/dev/null 2>&1 </dev/null
 a_eq "$(rcat up-odd journal | grep -c "$(printf '\r')\$")" "5" "B5-F2: a later record keeps every legacy CR byte"
-# a document line ending in a carriage return reads back with it (lanes/si-f1-fts5-schema/report
-# @open 7): lane show and the dump of the store keep the byte, on every driver
-printf '# recipe grammar\r\nMISSION\n  GOAL: "a CRLF recipe"\n' | lane_new up-odd up-cr
-a_eq "$($CTX lane show up-odd up-cr recipe 2>/dev/null </dev/null | grep -c "$(printf '\r')\$")" "1" "F2-CR: lane show keeps the CR byte of a recipe line"
-a_eq "$(rcat up-odd lane/up-cr/recipe | grep -c "$(printf '\r')\$")" "1" "F2-CR: the dump of the store keeps the recipe's CR byte"
 printf 'status: WEIRD\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
 out=$(up_err $CTX session active)
 a_match "$out" '^WARNING: unrecognized status \[WEIRD\] in state: unit up-odd$' "UP: active names the state and the unit of an unknown status"
 up_path "$out" "UP: the active warning"
 printf 'status: CLOSED\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+fi
+# a document line ending in a carriage return reads back with it (lanes/si-f1-fts5-schema/report
+# @open 7): lane show keeps the byte on every driver, and the posix file holds it
+$CTX session bootstrap up-crdoc "a unit for a CRLF recipe" >/dev/null 2>&1 </dev/null
+printf '# recipe grammar\r\nMISSION\n  GOAL: "a CRLF recipe"\n' | lane_new up-crdoc up-cr
+a_eq "$($CTX lane show up-crdoc up-cr recipe 2>/dev/null </dev/null | grep -c "$(printf '\r')\$")" "1" "F2-CR: lane show keeps the CR byte of a recipe line"
+if [ "$DRIVER" = posix ]; then
+  a_eq "$(rcat up-crdoc lane/up-cr/recipe | grep -c "$(printf '\r')\$")" "1" "F2-CR: the posix file keeps the recipe's CR byte"
+fi
 # no verb script names a sessions path in any warning or error it can print
 up_static=$(grep -n 'contexture/sessions' .contexture/modules/session/scripts/* .contexture/modules/lane/scripts/* | grep -v ':[0-9]*:#' | grep -v 'WRITE SCOPE')
 a_eq "$up_static" "" "UP: no verb script prints a sessions path in a message"
@@ -1489,15 +1528,15 @@ a_match "$out" 'update <unit> <NAME> \[--summary="\.\.\."\] \[--ref=\.\.\.\]' "U
 # does) and answers them in its Entry, an empty list when absent
 out=$(printf 'what=a driver entry with a ref\nthread=none\nknowledge=false\nrefs.count=1\nrefs.1=knowledge#UP_REF\nclosers.count=0\nslug=%s-up-er-ref\ndate=%s\nepoch=1\n' "$TODAY" "$TODAY" | "$RESOLVER" entry.record u-unit 2>&1)
 a_match "$out" '"thread":"none","legacy_status":null,"refs":\["knowledge#UP_REF"\]' "UP: entry.record answers the refs after thread"
-u_blk=$(rcat u-unit journal | awk -v s="@entry $TODAY-up-er-ref" '$0 == s { on = 1; print; next } on && /^@/ { on = 0 } on && $0 != "" { print }')
+u_blk=$($CTX session entry show u-unit "$TODAY-up-er-ref" 2>/dev/null </dev/null)
 a_eq "$(printf '%s\n' "$u_blk" | sed -n '4,5p' | tr '\n' '|')" '  THREAD: none|  REF: "knowledge#UP_REF"|' "UP: entry.record writes the REF line after THREAD"
 out=$($CTX session entry show u-unit "$TODAY-up-er-ref" --json 2>&1 </dev/null)
 a_match "$out" '"refs":\["knowledge#UP_REF"\]' "UP: entry show reads the ref entry.record wrote"
 out=$(printf 'what=a driver entry without a ref\nthread=none\nknowledge=false\nrefs.count=0\nclosers.count=0\nslug=%s-up-er-noref\ndate=%s\nepoch=1\n' "$TODAY" "$TODAY" | "$RESOLVER" entry.record u-unit 2>&1)
 a_match "$out" '"thread":"none","legacy_status":null,"refs":\[\]' "UP: entry.record answers an empty refs list when absent"
-a_eq "$(rcat u-unit journal | awk -v s="@entry $TODAY-up-er-noref" '$0 == s { on = 1; next } on && /^@/ { on = 0 } on' | grep -c 'REF:')" "0" "UP: entry.record writes no REF line when absent"
+a_eq "$($CTX session entry show u-unit "$TODAY-up-er-noref" 2>/dev/null </dev/null | grep -c 'REF:')" "0" "UP: entry.record writes no REF line when absent"
 
-echo "== N the verbs added in v0.55.0: entry closure, units, refs-to, migrate (D31, D37, D42) =="
+echo "== N the verbs added in v0.55.0: entry closure, units, refs-to (D42) =="
 $CTX session bootstrap n-unit "new verbs unit" "n-repo, n-other" >/dev/null 2>&1 </dev/null
 $CTX session bootstrap n-ref "new verbs referrer" >/dev/null 2>&1 </dev/null
 $CTX session record n-unit --what="closure target" --slug="$TODAY-n-t" >/dev/null 2>&1 </dev/null
@@ -1525,49 +1564,6 @@ a_eq "$(printf '%s\n' "$out" | tr '\n' '|')" "refs-to n-unit: 1 units||  n-ref|"
 err=$($CTX session refs-to n-ref 2>&1 >/dev/null </dev/null); rc=$?
 a_eq "$rc" "1" "N: refs-to of an unreferenced unit refuses rc1"
 a_match "$err" '^ERROR: no unit references session: n-ref$' "N: refs-to names the unit"
-# migrate: a second store through a planted driver that runs the posix driver of another
-# workspace (the target store), so a unit moves between two stores; posix-only fixture
-n_other="$PWD/n-other-ws"
-mkdir -p "$n_other/.contexture/modules" "$n_other/.contexture/sessions"
-cp -R .contexture/modules/session "$n_other/.contexture/modules/session"
-mkdir -p .contexture/modules/zz-mig/drivers/mig-other
-printf '#!/bin/sh\ncd "%s" || exit 2\nexec ./.contexture/modules/session/drivers/posix/driver "$@"\n' "$n_other" > .contexture/modules/zz-mig/drivers/mig-other/driver
-chmod +x .contexture/modules/zz-mig/drivers/mig-other/driver
-if [ "$DRIVER" = posix ]; then printf 'scratch\n' > .contexture/sessions/n-unit/notes.txt; fi
-out=$($CTX session migrate --from="$DRIVER" --to=mig-other --unit=n-unit 2>&1 </dev/null); rc=$?
-a_eq "$rc" "0" "N: migrate one unit into another store rc0"
-a_match "$out" "^migrated n-unit: [0-9][0-9]* records ($DRIVER to mig-other)\$" "N: migrate names the unit and its records"
-a_match "$out" "^migrate $DRIVER to mig-other: 1 units, [0-9][0-9]* records\$" "N: migrate prints the totals"
-if [ "$DRIVER" = posix ]; then a_match "$out" "^WARNING: unit n-unit holds 1 items outside the record in the posix store; they do not travel\$" "N: migrate warns on the files outside the record (D11)"; fi
-a_eq "$(CTX_STORAGE_DRIVER=mig-other $CTX session board n-unit 2>&1 </dev/null)" "$($CTX session board n-unit 2>&1 </dev/null)" "N: the migrated unit's board equals the source's"
-a_eq "$(CTX_STORAGE_DRIVER=mig-other "$RESOLVER" unit.export n-unit 2>/dev/null | sed 1d)" "$("$RESOLVER" unit.export n-unit 2>/dev/null | sed 1d)" "N: the migrated unit's dump equals the source's (the extras count aside)"
-err=$($CTX session migrate --from="$DRIVER" --to=mig-other --unit=n-unit 2>&1 >/dev/null </dev/null); rc=$?
-a_eq "$rc" "1" "N: migrate into a store holding the unit refuses rc1 without --replace (D37)"
-a_match "$err" "unit 'n-unit' already exists (ERR_ENTITY_EXISTS)" "N: the refusal names the held unit"
-$CTX session migrate --from="$DRIVER" --to=mig-other --unit=n-unit --replace >/dev/null 2>&1 </dev/null
-a_eq "$?" "0" "N: migrate --replace swaps the held unit rc0"
-$CTX session migrate --from="$DRIVER" --to=mig-other --prune >/dev/null 2>&1 </dev/null
-a_eq "$?" "1" "N: --prune without --corpus refuses rc1"
-$CTX session migrate --to=mig-other >/dev/null 2>&1 </dev/null
-a_eq "$?" "1" "N: migrate without --from refuses rc1"
-if [ "$DRIVER" = posix ]; then
-  mkdir -p docs/n-repo
-  printf '@doc n-repo n-doc\n  ROLE: overview\n' > docs/n-repo/n-doc.md
-  out=$($CTX session migrate --from=posix --to=mig-other --unit=n-unit --replace --corpus 2>&1 </dev/null); rc=$?
-  a_eq "$rc" "0" "N: migrate --corpus rc0"
-  a_match "$out" '^corpus: 1 docs$' "N: migrate --corpus counts the docs"
-  cmp -s docs/n-repo/n-doc.md "$n_other/docs/n-repo/n-doc.md"; a_eq "$?" "0" "N: the doc moved byte for byte"
-  mkdir -p "$n_other/docs/n-repo"
-  printf '@doc n-repo n-extra\n' > "$n_other/docs/n-repo/n-extra.md"
-  err=$($CTX session migrate --from=posix --to=mig-other --unit=n-unit --replace --corpus 2>&1 >/dev/null </dev/null); rc=$?
-  a_eq "$rc" "1" "N: a target holding a doc the source lacks refuses rc1"
-  a_match "$err" "holds doc(s) the posix corpus lacks: n-repo/n-extra" "N: the refusal names the extra doc"
-  $CTX session migrate --from=posix --to=mig-other --unit=n-unit --replace --corpus --prune >/dev/null 2>&1 </dev/null
-  a_eq "$?" "0" "N: --prune removes the extra doc rc0"
-  [ -f "$n_other/docs/n-repo/n-extra.md" ]; a_eq "$?" "1" "N: the pruned doc is gone"
-  rm -rf docs/n-repo .contexture/sessions/n-unit/notes.txt
-fi
-rm -rf .contexture/modules/zz-mig "$n_other"
 
 echo "== D session diagnostics =="
 $CTX session diagnose >/dev/null 2>&1

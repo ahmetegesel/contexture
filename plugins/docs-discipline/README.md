@@ -59,7 +59,7 @@ What lands where:
 | `AGENTS.workspace.md` | the overlay blocks: five docs laws, layout, boot, close | merge |
 | `.contexture/rhythms/work.md`, `.contexture/rhythms/docs-authoring.md`, `.contexture/rhythms/docs-drift.md` | the workspace's work rhythm (the canonical variant with the docs discipline) and the two procedure rhythms | copy (optional) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/run.sh` | the plugin's own suite: the staging check, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed, the migration round trip, and the capture parity against the files driver, with the corpus checks in a second sandbox running beside that chain | reference (never copied) |
+| `tests/run.sh` | the plugin's own suite: the staging check, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed through `ctx docs write`, the stored bytes read back through the write verb, and the capture parity against the files driver, with the corpus checks in a second sandbox running beside that chain | reference (never copied) |
 | `tests/store-cases.sh` | the delta-source cases: the check's store mode against its git mode, `ctx docs changes` (its window, `--since`, A, M, D, its refusals), and the gate composing the code half from git with the corpus half from the store (or from git under the files driver) | reference (never copied) |
 | `tests/write-verbs.sh`, `tests/write/` | the write verbs' assertions and their fixtures: every verb's result byte for byte, every refusal leaving the stored doc unchanged, the change-log rows under a store | reference (never copied) |
 | `tests/engine-checks.sh` | the audit's one id namespace per repo, the pitfalls view scoped to `@pitfalls` with a doc-ending pitfall credited to its own doc, a backslash search kept literal, a draft path outside the corpus folder refused under the files driver | reference (never copied) |
@@ -437,8 +437,9 @@ purpose. `tests/captures.sh` (plan, run, compare) is the capture set of the
 read verbs, the instrument of the byte identity between two module versions
 at one path and of the parity between two drivers: the fts5 run compares the
 files driver and the store at one sandbox path and accepts only the store
-mode's named verdicts as differences. The fts5 run also round-trips the
-corpus through `ctx session migrate --corpus` byte for byte.
+mode's named verdicts as differences. The fts5 run also seeds the store
+through `ctx docs write` and reads every doc back unchanged through
+`ctx docs write --replace --dry-run`, byte for byte.
 `tests/write-verbs.sh` asserts every write verb against the expected docs
 under `tests/write/` (a changed rendering updates its fixture on purpose),
 `tests/engine-checks.sh` the id namespace, the pitfalls scoping (a doc-ending pitfall credited to its own doc), the
@@ -850,28 +851,28 @@ kept a block scalar, the new rule placed after its neighbor):
 ```
 
 The same corpus on the fts5 store (the storage-fts5 plugin beside this one;
-needs sqlite3 with FTS5), moved by `ctx session migrate --corpus` (the scratch
-holds no unit, so only the corpus travels). The move mirrors a committed corpus,
-so the writes are committed first; it refuses a tracked corpus with uncommitted
-changes and, after a clean move, prints the git steps that retire the files (the
-walk skips them and removes the folder):
+needs sqlite3 with FTS5). No command moves a corpus between drivers: once the
+driver is set, each doc goes into the store through `ctx docs write` (the
+grammar check and the repo's audit on every doc, as on any write). The writes
+are committed first, and after the move the files leave git in a commit of
+their own, so the store's change-log rows of the move fall outside the window
+`ctx docs changes` reads below:
 
 ```sh
 git -c user.name=walk -c user.email=walk@example.invalid commit -qam writes
 cp -R ../../../plugins/storage-fts5/.contexture/modules/storage-fts5 .contexture/modules/
 printf 'storage.driver: fts5\n' > .contexture/config
-./.contexture/ctx session migrate --from=posix --to=fts5 --corpus
+for f in docs/*/*.md; do r=${f#docs/}; s=${f##*/}; ./.contexture/ctx docs write "${r%%/*}" "${s%.md}" < "$f"; done
+git rm -r -q --cached docs && git -c user.name=walk -c user.email=walk@example.invalid commit -qm "the corpus moves into the store"
 rm -rf docs
 ```
 
 ```text
-migrate posix to fts5: 0 units, 0 records
-corpus: 5 docs
-session migrate: the corpus of repo(s) demo-orders demo-web workspace is tracked in git; the fts5 store now holds it, so the files invite edits that no longer reach the corpus. Next steps (run them yourself):
-  git rm -r --cached docs/demo-orders
-  git rm -r --cached docs/demo-web
-  git rm -r --cached docs/workspace
-  ignore those folders (.gitignore), commit, delete the working files, and set storage.driver: fts5 in .contexture/config
+docs write: demo-orders/operational written (47 lines)
+docs write: demo-orders/order-flow written (56 lines)
+docs write: demo-web/cart-ui written (39 lines)
+docs write: workspace/conventions written (157 lines)
+docs write: workspace/system-map written (45 lines)
 ```
 
 With no docs folder left, the verbs read the store and print what the files
@@ -966,7 +967,7 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the drawer sources glob and evidence fields re-pointed at the module |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
-| `tests/run.sh` | authored fresh: the plugin suite (the staging check; on fts5 the capture set run first on the files driver at the sandbox path, then the store seed, the corpus imported and the docs folder removed, the migration round trip, and the capture parity against the files driver, the corpus checks then running in a second sandbox beside that chain; the corpus checks keyed on the declared `corpus.store`: the audit, the unit-form nudge against the backlog-file form, the write verbs, the engine checks, and the delta-source cases, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
+| `tests/run.sh` | authored fresh: the plugin suite (the staging check; on fts5 the capture set run first on the files driver at the sandbox path, then the store seed, every doc written through `ctx docs write` and the docs folder removed, the stored bytes read back unchanged through the write verb, and the capture parity against the files driver, the corpus checks then running in a second sandbox beside that chain; the corpus checks keyed on the declared `corpus.store`: the audit, the unit-form nudge against the backlog-file form, the write verbs, the engine checks, and the delta-source cases, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
 | `tests/write-verbs.sh`, `tests/write/` | authored fresh: the write verbs' table (success bytes against the expected docs, refusals leaving the stored doc unchanged, the change-log rows and `ctx docs changes` under a store) and its fixtures |
 | `tests/engine-checks.sh` | authored fresh: the audit's id namespace, the pitfalls scoping and attribution, the literal backslash search, and the draft-path refusal, through the verbs on the configured driver |
 | `tests/store-cases.sh` | authored fresh: the delta-source cases keyed on the declared `corpus.changelog` (the check's two modes over planted deltas; `ctx docs changes` and the gate's halves in a git workspace of its own made from the sandbox) |

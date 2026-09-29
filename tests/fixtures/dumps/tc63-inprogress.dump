@@ -1,9 +1,0 @@
-{"kind":"unit","format":"contexture-dump","version":1,"unit":"tc63-inprogress","extras":0}
-{"kind":"state","status":"ACTIVE","current_anchor":"A1","next_action":"audit something else","objective":"The in progress absent fixture","repos":[],"ref_sessions":null,"verbatim":null}
-{"kind":"artifact","name":"backlog","preamble":""}
-{"kind":"task","slug":"t-active","status":"IN_PROGRESS","objective":"An IN_PROGRESS task the state does not name","refs":[],"description":null,"criteria":null,"details":null,"verbatim":null}
-{"kind":"artifact","name":"knowledge","preamble":""}
-{"kind":"artifact","name":"journal","preamble":""}
-{"kind":"anchor","anchor":"A1","continues":"A0","attention":"in progress absent fixture","verbatim":null}
-{"kind":"entry","slug":"2026-09-20-plain","anchor":"A1","what":"an ordinary entry","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":[],"closers":[],"extra_fields":[],"verbatim":null}
-{"kind":"end","unit":"tc63-inprogress","records":7}

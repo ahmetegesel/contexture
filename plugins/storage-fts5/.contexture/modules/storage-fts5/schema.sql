@@ -339,7 +339,7 @@ FROM closers c;
 
 -- the journal items of the main journal (lane '') and of every lane journal with their
 -- spans; a lane entry renders its lane canonical lines unless it carries a field only a
--- main entry holds (ANCHOR, GROUP, RHYTHM, a closer, KNOWLEDGE), as the import renders it
+-- main entry holds (ANCHOR, GROUP, RHYTHM, a closer, KNOWLEDGE), as the posix driver renders it
 CREATE VIEW IF NOT EXISTS v_journal_span AS
 SELECT j.unit AS unit, j.lane AS lane, j.pos AS pos, j.kind AS kind, j.slug AS slug,
   coalesce(j.verbatim,

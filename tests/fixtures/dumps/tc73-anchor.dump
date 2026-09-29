@@ -1,7 +1,0 @@
-{"kind":"unit","format":"contexture-dump","version":1,"unit":"tc73-u","extras":0}
-{"kind":"state","status":"ACTIVE","current_anchor":"Ax","next_action":"stamp the broken anchor","objective":"The malformed anchor fixture","repos":[],"ref_sessions":null,"verbatim":null}
-{"kind":"artifact","name":"backlog","preamble":""}
-{"kind":"artifact","name":"knowledge","preamble":""}
-{"kind":"artifact","name":"journal","preamble":""}
-{"kind":"anchor","anchor":"A1","continues":"A0","attention":"tc73-u fixture","verbatim":null}
-{"kind":"end","unit":"tc73-u","records":5}

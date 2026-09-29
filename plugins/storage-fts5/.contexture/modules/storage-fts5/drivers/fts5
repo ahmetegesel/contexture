@@ -2,20 +2,20 @@
 # drivers/fts5: the SQLite FTS5 storage driver (contract 2, docs/the-engine.md, The storage
 # contract). One sh entry point over the sqlite3 command line: the store is one database at
 # schema version 4 (schema.sql, the typed tables of the record data model, each item with its
-# verbatim; db-init.sh opens it and upgrades an older store in place through upgrade/), and
-# every one of the 40 record functions answers natively in SQL, one script per function
-# under sql/fn/ over the shared pieces of sql/lib/ (the call prelude and the payload, the
-# refusal point, the derived fields and the JSON of the schemas, the line toolkit of the
-# append and edit rules), beside the dump SQL (unit.export, unit.import) and the search
-# tables derive.sql rebuilds in the transaction of every write. No function reads markdown
-# or reaches another driver; the markdown of an older store is read once, by the upgrade.
+# verbatim; db-init.sh opens it, lays the schema in a new or empty file, and refuses a store
+# at any other schema), and every one of the 38 record functions answers natively in SQL,
+# one script per function under sql/fn/ over the shared pieces of sql/lib/ (the call prelude
+# and the payload, the refusal point, the derived fields and the JSON of the schemas, the
+# line toolkit of the append and edit rules), beside the search tables derive.sql rebuilds
+# in the transaction of every write. No function reads markdown or reaches another driver;
+# the store holds only what the functions write.
 #
 # The wire: argv carries the function and its bounded identifiers, checked here with the
 # posix driver's messages in its refusal order (the argv shape, the unit, CLOSED, then the
 # function's own rules, those in SQL); the free-text fields arrive on stdin as escaped
 # key=value payload lines, staged in a per-call scratch folder under the workspace's
-# .contexture/tmp and read by the SQL with readfile(); a document (a recipe, a report, a
-# dump) arrives raw. The answer is one compact JSON line built with json_object in the
+# .contexture/tmp and read by the SQL with readfile(); a document (a recipe, a report)
+# arrives raw. The answer is one compact JSON line built with json_object in the
 # contract key order; a refusal is one stderr line "<function>: error: <message> (<CODE>)"
 # with nothing on stdout. Exit tiers: 0 ok, 1 semantic, 2 storage or driver.
 #
@@ -76,7 +76,7 @@ if ! mkdir -p "$DB_TMP" 2>/dev/null || [ ! -w "$DB_TMP" ]; then
   DB_TMP="${TMPDIR:-/tmp}"
 fi
 
-# the open path (a fresh schema, the in-place upgrade of an older store)
+# the open path (a fresh schema; a store at another schema refused)
 . "$MODULE_DIR/db-init.sh"
 
 sql_escape() {
@@ -420,14 +420,10 @@ corpus_changes() {
   exit 0
 }
 # ==============================================================================
-# The dump (contract 2, docs/the-engine.md, The dump): unit.export and unit.import
+# The refusal and the unit checks every record function shares
 # ==============================================================================
-# Each is SQL beside this entry point (sql/): the export one query over the typed tables
-# answering the dump lines in order; the import the whole dump validated before any write
-# (sql/dump.check.sql), then in one transaction the unit loaded whole (sql/dump.import.sql)
-# and its search tables derived (sql/derive.sql). A refusal is one stderr line
-# "<function>: error: <message> (<CODE>)" with nothing on stdout.
-SQL_DIR="$MODULE_DIR/sql"
+# A refusal is one stderr line "<function>: error: <message> (<CODE>)" with nothing on
+# stdout.
 
 refuse() {
   printf '%s: error: %s (%s)\n' "$CMD" "$3" "$2" >&2
@@ -442,71 +438,6 @@ want_unit() {
 # unit_held <unit>: the store holds the unit (its state row)
 unit_held() {
   [ "$(sq "$DB_PATH" "SELECT count(*) FROM units WHERE unit = '$(sql_escape "$1")';" 2>/dev/null)" = "1" ]
-}
-
-# unit.export <unit>: the unit's dump lines on stdout
-unit_export() {
-  want_unit "${1:-}"
-  db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
-  unit_held "$1" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
-  [ $# -le 1 ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$2'"
-  scratch
-  printf "CREATE TEMP TABLE arg (k TEXT PRIMARY KEY, v TEXT);\nINSERT INTO temp.arg VALUES ('unit', '%s');\n.read '%s'\n" \
-    "$(sql_escape "$1")" "$SQL_DIR/unit.export.sql" > "$SCRATCH/export.sql"
-  sq -bail "$DB_PATH" < "$SCRATCH/export.sql" > "$SCRATCH/dump" 2> "$SCRATCH/err" \
-    || refuse 2 ERR_STORAGE_READ "the export of unit '$1' failed: $(head -n 1 "$SCRATCH/err")"
-  cat "$SCRATCH/dump"
-  exit 0
-}
-
-# unit.import <unit> [--replace] | the dump raw: validated whole before anything lands; a
-# held unit refuses without --replace; with it the unit is swapped whole in one transaction
-unit_import() {
-  want_unit "${1:-}"
-  ui_u=$1
-  shift
-  ui_rep=0
-  for ui_a in "$@"; do
-    case "$ui_a" in
-      --replace) ui_rep=1 ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$ui_a'" ;;
-    esac
-  done
-  scratch
-  cat > "$SCRATCH/dump" || refuse 2 ERR_STORAGE_READ "cannot read the dump"
-  db_init
-  ui_q=$(sql_escape "$ui_u")
-  {
-    printf "PRAGMA foreign_keys = ON;\n.read '%s'\n" "$SQL_DIR/split.sql"
-    printf "CREATE TEMP TABLE arg (k TEXT PRIMARY KEY, v TEXT);\nINSERT INTO temp.arg VALUES ('unit', '%s'), ('dump', '%s');\n" "$ui_q" "$(sql_escape "$SCRATCH/dump")"
-    printf "CREATE TEMP TABLE touched (unit TEXT PRIMARY KEY);\nINSERT INTO temp.touched VALUES ('%s');\n" "$ui_q"
-    printf 'CREATE TEMP TABLE guard (x INTEGER CHECK (x = 0));\n'
-    printf ".read '%s'\n.read '%s'\n" "$SQL_DIR/dump.load.sql" "$SQL_DIR/dump.check.sql"
-    # a defect stops the script before any write
-    printf "SELECT 'ERR ' || msg FROM temp.dverr;\nINSERT INTO temp.guard SELECT count(*) FROM temp.dverr;\n"
-    printf 'BEGIN IMMEDIATE;\n'
-    printf "SELECT 'HELD' FROM units WHERE unit = '%s';\n" "$ui_q"
-    if [ "$ui_rep" -eq 0 ]; then
-      printf "INSERT INTO temp.guard SELECT count(*) FROM units WHERE unit = '%s';\n" "$ui_q"
-    fi
-    printf ".read '%s'\n.read '%s'\n" "$SQL_DIR/dump.import.sql" "$SQL_DIR/derive.sql"
-    printf "COMMIT;\nSELECT 'OK ' || records FROM temp.dok;\n"
-  } > "$SCRATCH/import.sql"
-  sq -bail "$DB_PATH" < "$SCRATCH/import.sql" > "$SCRATCH/out" 2> "$SCRATCH/err"
-  ui_rc=$?
-  ui_err=$(grep '^ERR ' "$SCRATCH/out" | head -n 1)
-  [ -z "$ui_err" ] || refuse 1 ERR_DUMP_FORMAT "${ui_err#ERR }"
-  ui_held=0
-  grep -q '^HELD$' "$SCRATCH/out" && ui_held=1
-  if [ "$ui_rc" -ne 0 ]; then
-    [ "$ui_held" -eq 1 ] && [ "$ui_rep" -eq 0 ] && refuse 1 ERR_ENTITY_EXISTS "unit '$ui_u' already exists"
-    refuse 2 ERR_STORAGE_WRITE "the import of unit '$ui_u' failed: $(head -n 1 "$SCRATCH/err")"
-  fi
-  ui_n=$(sed -n 's/^OK //p' "$SCRATCH/out" | head -n 1)
-  [ -n "$ui_n" ] || refuse 2 ERR_STORAGE_WRITE "the import of unit '$ui_u' answered no record count"
-  if [ "$ui_held" -eq 1 ]; then ui_r=true; else ui_r=false; fi
-  printf '{"unit":"%s","records":%s,"replaced":%s}\n' "$ui_u" "$ui_n" "$ui_r"
-  exit 0
 }
 
 # ==============================================================================
@@ -645,11 +576,12 @@ want_lane() {
 }
 
 capability() {
-  printf '{"driver":"fts5","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","unit.export","unit.import","corpus.list","corpus.read","corpus.write","corpus.remove","corpus.mount","corpus.changes"],"search_modes":["exact","hybrid","trigram"],"optional":["corpus.store","corpus.changelog"]}\n'
+  printf '{"driver":"fts5","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","corpus.list","corpus.read","corpus.write","corpus.remove","corpus.mount","corpus.changes"],"search_modes":["exact","hybrid","trigram"],"optional":["corpus.store","corpus.changelog"]}\n'
 }
 
 # storage.health: a probe, never a write: an absent database reports degraded with store
-# absent (the store starts at the first bootstrap), and an older store is not upgraded here
+# absent (the store starts at the first bootstrap), and a store at another schema reports
+# error
 storage_health() {
   # an sqlite3 older than the driver's minimum serves no function (db_init refuses each), so
   # the probe reports error naming it, never ok (lanes/si-f5-fts5-review/report F3)
@@ -680,7 +612,9 @@ storage_health() {
     exit 0
   fi
   if [ "$sh_v" != "$DB_SCHEMA_VERSION" ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database at schema %s; it upgrades in place on its first open","store":"present","active_units":0}\n' "$sh_v"
+    # a store at another schema serves no function (db_init refuses each), so the probe
+    # reports error naming its version, never degraded or ok
+    printf '{"driver":"fts5","health":"error","detail":"database at schema %s; this driver reads %s and has no upgrade path","store":"present","active_units":0}\n' "$sh_v" "$DB_SCHEMA_VERSION"
     exit 0
   fi
   sh_c=$(sq "$DB_PATH" "SELECT count(*) || '|' || (SELECT count(*) FROM units WHERE status = 'ACTIVE') FROM units;" 2>/dev/null) || sh_c="0|0"
@@ -755,8 +689,6 @@ session_refload() {
 }
 
 case "$CMD" in
-  unit.export) unit_export "$@" ;;
-  unit.import) unit_import "$@" ;;
   capability) capability; exit 0 ;;
   corpus.list) corpus_list "$@" ;;
   corpus.read) corpus_read "$@" ;;

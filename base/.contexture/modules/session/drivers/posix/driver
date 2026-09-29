@@ -2,13 +2,13 @@
 # driver: the zero-dependency POSIX storage driver (contract 2, docs/the-engine.md, The
 # storage contract). The record lives as markdown files under .contexture/sessions/<unit>/
 # (state.md, backlog.md, knowledge.md, journal.md, lanes/<lane>/recipe.md, journal.md,
-# report.md), and this driver is the only code that touches them. It answers the 40 record
+# report.md), and this driver is the only code that touches them. It answers the 38 record
 # functions (argv identifiers, the escaped key=value payload on stdin with indexed list
 # keys, one compact JSON answer in the contract key order, one fixed stderr line per
 # refusal) through awk programs beside it: canon.awk (the canonical renderer and the JSON
 # string form), model.awk (the parse rules into typed items with their verbatim, the
 # derived fields, the JSON of the schemas), ops.awk (the functions: the record rules, the
-# append and edit rules), import.awk (unit.import), search.awk (the exact rule). It keeps
+# append and edit rules), search.awk (the exact rule). It keeps
 # the six corpus methods of v0.54.0 byte for byte (corpus.store).
 #
 # Writes: the unit lock (.contexture/tmp/locks/<unit>.lock) is held from the read to the
@@ -589,7 +589,7 @@ rec_write() {
 }
 
 capability() {
-  printf '{"driver":"posix","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","unit.export","unit.import","corpus.list","corpus.read","corpus.write","corpus.remove","corpus.mount","corpus.changes"],"search_modes":["exact"],"optional":["corpus.store"]}\n'
+  printf '{"driver":"posix","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","corpus.list","corpus.read","corpus.write","corpus.remove","corpus.mount","corpus.changes"],"search_modes":["exact"],"optional":["corpus.store"]}\n'
 }
 
 storage_health() {
@@ -771,76 +771,6 @@ lane_doc() {
   px_commit "$SESS/$PX_UNIT"
 }
 
-unit_export() {
-  FN=unit.export
-  want_held "${1:-}"
-  px_extra 1 "$@"
-  PX_UNIT=$1; export PX_UNIT
-  man_unit "$1" "backlog knowledge journal lanes"
-  ue_all=$(find "$SESS/$1" -type f 2>/dev/null | wc -l | tr -d ' ')
-  ue_art=$(grep -c '^F	' "$SCR/man")
-  PX_EXTRAS=$((ue_all - ue_art)); export PX_EXTRAS
-  px_awk
-}
-
-# unit.import <unit> [--replace] | the dump raw: validated whole before anything lands
-unit_import() {
-  FN=unit.import
-  want_unit "${1:-}"
-  ui_u=$1
-  shift
-  ui_rep=0
-  for ui_a in "$@"; do
-    case "$ui_a" in
-      --replace) ui_rep=1 ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$ui_a'" ;;
-    esac
-  done
-  PX_UNIT=$ui_u; export PX_UNIT
-  cat > "$SCR/dump" || refuse 2 ERR_STORAGE_READ "cannot read the dump"
-  px_lock "$ui_u"
-  px_stage
-  PX_DOCSIZE=$(wc -c < "$SCR/dump" | tr -d ' ')
-  PX_FN="$FN" PX_UNIT="$ui_u" PX_ERR="$SCR/err" PX_STAGE="$STAGE" PX_OUT="$SCR/records" PX_DUMP="$SCR/dump" PX_DOCSIZE="$PX_DOCSIZE" \
-    awk -f "$SCRIPT_DIR/canon.awk" -f "$SCRIPT_DIR/import.awk"
-  ui_rc=$?
-  if [ "$ui_rc" -ne 0 ]; then
-    if [ -s "$SCR/err" ]; then cat "$SCR/err" >&2; else printf '%s: error: the dump reader failed (rc %s) (ERR_STORAGE_READ)\n' "$FN" "$ui_rc" >&2; ui_rc=2; fi
-    exit "$ui_rc"
-  fi
-  ui_held=0
-  held "$ui_u" && ui_held=1
-  [ "$ui_held" -eq 1 ] && [ "$ui_rep" -eq 0 ] && refuse 1 ERR_ENTITY_EXISTS "unit '$ui_u' already exists"
-  ui_d="$SESS/$ui_u"
-  pc_dir "$ui_d" || refuse 2 ERR_STORAGE_WRITE "cannot create the unit folder"
-  ui_gone=""
-  if [ "$ui_rep" -eq 1 ]; then
-    # --replace: every artifact the dump does not carry leaves (a removal step of the
-    # commit, so a failed commit brings it back); other files stay
-    for ui_f in state backlog knowledge journal; do
-      grep -q "	$ui_f\\.md\$" "$STAGE/manifest" || printf -- '-\t%s\n' "$ui_f.md" >> "$STAGE/manifest"
-    done
-    if [ -d "$ui_d/lanes" ]; then
-      for ui_l in "$ui_d"/lanes/*; do
-        [ -d "$ui_l" ] || continue
-        ui_n=${ui_l##*/}
-        ident_valid "$ui_n" || continue
-        for ui_f in recipe journal report; do
-          grep -q "	lanes/$ui_n/$ui_f\\.md\$" "$STAGE/manifest" || printf -- '-\t%s\n' "lanes/$ui_n/$ui_f.md" >> "$STAGE/manifest"
-        done
-        grep -q "^d	lanes/$ui_n\$" "$STAGE/manifest" || ui_gone="$ui_gone $ui_n"
-      done
-    fi
-  fi
-  ui_n=$(cat "$SCR/records")
-  if [ "$ui_held" -eq 1 ]; then ui_r=true; else ui_r=false; fi
-  printf '{"unit":"%s","records":%s,"replaced":%s}\n' "$ui_u" "$ui_n" "$ui_r" > "$SCR/answer"
-  px_commit "$ui_d"
-  # a lane the dump lacks goes once it holds nothing else
-  for ui_n in $ui_gone; do rmdir "$ui_d/lanes/$ui_n" 2>/dev/null; done
-  return 0
-}
-
 cmd="${1:-}"
 [ $# -gt 0 ] && shift
 FN=$cmd
@@ -993,8 +923,6 @@ case "$cmd" in
     rec_read "$cmd" "$1" "lane:$2" "$2" "$3"
     ;;
   search.query) search_query "$@" ;;
-  unit.export) unit_export "$@" ;;
-  unit.import) unit_import "$@" ;;
   *) refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$cmd'" ;;
 esac
 exit 0

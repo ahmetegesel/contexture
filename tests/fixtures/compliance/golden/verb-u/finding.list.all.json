@@ -1,0 +1,1 @@
+{"unit":"verb-u","findings":[{"name":"VERB_CANON","summary":"a canonical finding\nover two lines","refs":["journal#2026-09-27-verb-one"],"supersedes":null,"active":true},{"name":"VERB_OLD","summary":"the older reading","refs":[],"supersedes":null,"active":false},{"name":"VERB_NEW","summary":"the newer reading","refs":[],"supersedes":"VERB_OLD","active":true}]}

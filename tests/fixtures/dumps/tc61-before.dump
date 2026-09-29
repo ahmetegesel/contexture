@@ -1,7 +1,0 @@
-{"kind":"unit","format":"contexture-dump","version":1,"unit":"tc61-u","extras":0}
-{"kind":"state","status":"ACTIVE","current_anchor":"A1","next_action":"append after the anchor","objective":"The append rule fixture","repos":[],"ref_sessions":null,"verbatim":null}
-{"kind":"artifact","name":"backlog","preamble":""}
-{"kind":"artifact","name":"knowledge","preamble":""}
-{"kind":"artifact","name":"journal","preamble":""}
-{"kind":"anchor","anchor":"A1","continues":"A0","attention":"append rule fixture","verbatim":null}
-{"kind":"end","unit":"tc61-u","records":5}

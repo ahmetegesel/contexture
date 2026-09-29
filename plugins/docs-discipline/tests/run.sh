@@ -4,8 +4,8 @@
 # declared corpus.store: the audit and the unit-form nudge against the backlog-file form
 # and the write verbs (tests/write-verbs.sh over tests/write/) and the engine checks
 # (tests/engine-checks.sh) and the delta-source cases (tests/store-cases.sh) when declared,
-# every read verb's rc 2 refusal when not); on fts5 the migration round trip and the
-# capture parity against the files driver at the sandbox path; the single-door census
+# every read verb's rc 2 refusal when not); on fts5 the stored bytes read back through the
+# write verb and the capture parity against the files driver at the sandbox path; the single-door census
 # (tests/census.sh over tests/census-allow.txt, with its three plants); the close-gate
 # matrix over tests/sample/; and the grammar agreement check
 # (tests/grammar-agreement.awk, with its two plants) in a staged
@@ -20,9 +20,9 @@
 # The suite runs on either storage driver: --driver=posix (the default) or
 # --driver=fts5 (the storage-fts5 plugin's own module copy staged into the
 # sandbox, storage.driver: fts5 in its config; skip 77 when sqlite3 lacks FTS5);
-# the fts5 run imports the staged corpus into the store and removes the docs
-# folder first ([store-seed]), so its corpus checks read the store alone; it runs
-# those corpus checks in a second sandbox (the same staging and import) in the
+# the fts5 run writes the staged corpus into the store through ctx docs write and
+# removes the docs folder first ([store-seed]), so its corpus checks read the store
+# alone; it runs those corpus checks in a second sandbox (the same staging and seed) in the
 # background beside the capture-parity chain, printing their lines after the
 # chain in the same order, so the two halves share no state and no wall time.
 # Scratch stages under the workspace's .contexture/tmp/ (created when the tree is
@@ -120,6 +120,41 @@ else
 fi
 echo ""
 
+# seed_store: every staged doc (docs/<repo>/<slug>.md) written into the store through
+# ctx docs write, each through the verb's grammar check and its repo's audit; a doc whose
+# write refuses is retried after the others (a doc may wait on another of its repo), so the
+# order of the files never decides; git is kept from walking above the sandbox, so the
+# change-log rows read head none as a store seeded outside any repository (the files
+# driver's captures carry no such rows either). Sets SEED_WANT, SEED_DONE, SEED_ERR.
+seed_store() {
+    SEED_WANT=0
+    SEED_DONE=0
+    SEED_ERR=""
+    ss_pending=""
+    for ss_f in docs/*/*.md; do
+        [ -f "$ss_f" ] || continue
+        SEED_WANT=$((SEED_WANT + 1))
+        ss_pending="$ss_pending $ss_f"
+    done
+    ss_pass=0
+    while [ -n "$ss_pending" ] && [ "$ss_pass" -lt "$SEED_WANT" ]; do
+        ss_pass=$((ss_pass + 1))
+        ss_left=""
+        for ss_f in $ss_pending; do
+            ss_r=${ss_f#docs/}; ss_r=${ss_r%%/*}
+            ss_s=${ss_f##*/}; ss_s=${ss_s%.md}
+            if GIT_CEILING_DIRECTORIES=$(dirname "$SANDBOX") "$SANDBOX/.contexture/ctx" docs write "$ss_r" "$ss_s" < "$ss_f" > "$SANDBOX/seed.out" 2>&1; then
+                SEED_DONE=$((SEED_DONE + 1))
+            else
+                ss_left="$ss_left $ss_f"
+                SEED_ERR="$ss_f: $(head -n 1 "$SANDBOX/seed.out")"
+            fi
+        done
+        ss_pending=$ss_left
+    done
+    [ -z "$ss_pending" ] && SEED_ERR=""
+}
+
 # the corpus checks (a function, so the fts5 run can give them a sandbox of their own)
 corpus_checks() {
 # the corpus reads key on the declared capability, never on the driver name: a driver that
@@ -144,21 +179,23 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
     fi
     echo ""
 
-    # the unit-form nudge: the sample backlog seeded verbatim into a unit (planted through
-    # the neutral dump by the workspace's tests/lib/plant.sh, D9: a posix staging copy of the
-    # unit takes the sample file, exports it, and the store under test imports it, since a
-    # task add would reshape the block), read back through resolve task# with its REFS, and
-    # the nudge through the unit equal to the backlog-file form byte for byte; the
+    # the unit-form nudge: the sample backlog's task entered into a unit through the verbs
+    # (task add with its sections and REFS, task start), on every driver alike, so its block
+    # equals the sample file's (the sample is canonical: resolve task# reads it back byte for
+    # byte); the nudge through the unit equal to the backlog-file form byte for byte; the
     # backlog-file form refuses a path inside the sessions drawer rc 1
     NUDGE_NOTE=""
     "$SANDBOX/.contexture/ctx" session bootstrap nudge-demo "the sample nudge task" > /dev/null 2>&1 || NUDGE_NOTE="bootstrap failed"
-    RESOLVER="$SANDBOX/.contexture/modules/session/scripts/driver-resolver"
-    PLANT_SESSION_MOD="$BASE_MODULES/session"
-    . "$WS_ROOT/tests/lib/plant.sh"
-    rput nudge-demo backlog < "$PLUGIN_ROOT/tests/sample/backlog.md" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }seed failed"
-    rm -rf "$PLANT_WS"
+    "$SANDBOX/.contexture/ctx" session task add nudge-demo install-and-run-local \
+        --objective="Install the local toolchain and run the demo-orders service before the pricing change lands" \
+        --refs="docs/demo-orders/operational.md" \
+        --desc="Set up the environment, run the build, and test the checkout path on demo-orders." \
+        --criteria="- the suite is green" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }task add failed"
+    "$SANDBOX/.contexture/ctx" session task start nudge-demo install-and-run-local \
+        --pointer="install-and-run-local IN_PROGRESS: the sample nudge" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }task start failed"
     TASK_BLOCK=$("$SANDBOX/.contexture/ctx" session resolve nudge-demo 'task#install-and-run-local' 2>&1)
-    printf '%s\n' "$TASK_BLOCK" | grep -q '^  REFS: \[docs/demo-orders/operational.md\]$' || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }resolve task# carries no REFS"
+    printf '%s\n' "$TASK_BLOCK" > "$SANDBOX/nudge-task.out"
+    cmp -s "$SANDBOX/nudge-task.out" "$PLUGIN_ROOT/tests/sample/backlog.md" || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }resolve task# differs from the sample block"
     "$SANDBOX/.contexture/ctx" docs nudge nudge-demo > "$SANDBOX/nudge-unit.out" 2>&1
     NUDGE_U_RC=$?
     "$SANDBOX/.contexture/ctx" docs nudge backlog.md docs/*/*.md > "$SANDBOX/nudge-file.out" 2>&1
@@ -261,12 +298,10 @@ if [ "$DRIVER" = fts5 ]; then
         SANDBOX=$SANDBOX_B
         PASS=0
         FAIL=0
-        B_SEED=$("$SANDBOX/.contexture/ctx" session migrate --from=posix --to=fts5 --corpus 2>&1)
-        B_SEED_RC=$?
+        seed_store
         rm -rf "$SANDBOX/docs"
-        if [ "$B_SEED_RC" -ne 0 ] || [ -e "$SANDBOX/docs" ]; then
-            echo "[store-seed] FAIL (the corpus checks' sandbox: rc=$B_SEED_RC)"
-            printf '%s\n' "$B_SEED"
+        if [ -n "$SEED_ERR" ] || [ "$SEED_DONE" -ne "$SEED_WANT" ] || [ "$SEED_WANT" -eq 0 ] || [ -e "$SANDBOX/docs" ]; then
+            echo "[store-seed] FAIL (the corpus checks' sandbox: $SEED_DONE of $SEED_WANT docs; ${SEED_ERR:-no refusal})"
             FAIL=$((FAIL + 1))
         fi
         corpus_checks
@@ -293,46 +328,47 @@ if [ "$DRIVER" = fts5 ]; then
     cp -R "$SANDBOX/docs/." "$SANDBOX/corpus-staged/"
 fi
 
-# the store run: the staged corpus imported into the store (ctx session migrate --corpus,
-# every doc read by the posix driver's corpus methods and written by the store's), then the
-# docs folder removed, so every corpus check below reads the store alone
+# the store run: every staged doc written into the store through ctx docs write (seed_store),
+# then the docs folder removed, so every corpus check below reads the store alone
 if [ "$DRIVER" = fts5 ]; then
-    SEED_WANT=0
-    for f in docs/*/*.md; do [ -f "$f" ] && SEED_WANT=$((SEED_WANT + 1)); done
-    SEED_OUT=$("$SANDBOX/.contexture/ctx" session migrate --from=posix --to=fts5 --corpus 2>&1)
-    SEED_RC=$?
+    seed_store
     rm -rf "$SANDBOX/docs"
-    if [ "$SEED_RC" -eq 0 ] && [ "$SEED_WANT" -gt 0 ] && printf '%s\n' "$SEED_OUT" | grep -qx "corpus: $SEED_WANT docs" && [ ! -e "$SANDBOX/docs" ]; then
-        echo "[store-seed] PASS ($SEED_WANT docs imported into the store; the docs folder removed)"
+    if [ -z "$SEED_ERR" ] && [ "$SEED_WANT" -gt 0 ] && [ "$SEED_DONE" -eq "$SEED_WANT" ] && [ ! -e "$SANDBOX/docs" ]; then
+        echo "[store-seed] PASS ($SEED_WANT docs written into the store through ctx docs write; the docs folder removed)"
         PASS=$((PASS + 1))
     else
-        echo "[store-seed] FAIL (rc=$SEED_RC, want $SEED_WANT docs)"
-        printf '%s\n' "$SEED_OUT"
+        echo "[store-seed] FAIL ($SEED_DONE of $SEED_WANT docs; ${SEED_ERR:-no refusal})"
         FAIL=$((FAIL + 1))
     fi
     echo ""
 
-    # the migration round trip: the store exported back to files (ctx session migrate
-    # --corpus, written by the posix driver's corpus methods) equals the staged corpus byte for byte (diff -r, the file count, a planted byte read as a
-    # difference so the comparison can fail), then the docs folder removed again
-    RT_OUT=$("$SANDBOX/.contexture/ctx" session migrate --from=fts5 --to=posix --corpus 2>&1)
-    RT_RC=$?
-    RT_N=$(find "$SANDBOX/docs" -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')
-    diff -r "$SANDBOX/corpus-staged" "$SANDBOX/docs" > /dev/null 2>&1
-    RT_DIFF=$?
-    RT_PLANT=0
-    if [ "$RT_N" -gt 0 ]; then
-        RT_ONE=$(find "$SANDBOX/docs" -name '*.md' -type f | head -n 1)
-        printf 'x' >> "$RT_ONE"
-        diff -r "$SANDBOX/corpus-staged" "$SANDBOX/docs" > /dev/null 2>&1 || RT_PLANT=1
+    # the stored bytes: every staged doc offered back to ctx docs write --replace --dry-run
+    # reads unchanged (the verb compares the stored bytes with the offered ones and writes
+    # nothing), with the docs folder gone, so the store holds each doc byte for byte; a
+    # planted byte in one offered copy never reads unchanged (the comparison can fail)
+    SB_N=0
+    SB_BAD=""
+    for sb_f in "$SANDBOX"/corpus-staged/*/*.md; do
+        [ -f "$sb_f" ] || continue
+        sb_r=${sb_f#"$SANDBOX"/corpus-staged/}; sb_r=${sb_r%%/*}
+        sb_s=${sb_f##*/}; sb_s=${sb_s%.md}
+        sb_out=$("$SANDBOX/.contexture/ctx" docs write "$sb_r" "$sb_s" --replace --dry-run < "$sb_f" 2>&1)
+        if [ "$?" -eq 0 ] && [ "$sb_out" = "docs write: $sb_r/$sb_s unchanged (nothing written)" ]; then SB_N=$((SB_N + 1)); else SB_BAD="$SB_BAD $sb_r/$sb_s"; fi
+    done
+    SB_PLANT=0
+    sb_one=$(ls "$SANDBOX"/corpus-staged/*/*.md | head -n 1)
+    if [ -n "$sb_one" ]; then
+        sb_r=${sb_one#"$SANDBOX"/corpus-staged/}; sb_r=${sb_r%%/*}
+        sb_s=${sb_one##*/}; sb_s=${sb_s%.md}
+        { cat "$sb_one"; printf 'planted line\n'; } > "$SANDBOX/planted.md"
+        sb_out=$("$SANDBOX/.contexture/ctx" docs write "$sb_r" "$sb_s" --replace --dry-run < "$SANDBOX/planted.md" 2>&1)
+        [ "$sb_out" = "docs write: $sb_r/$sb_s unchanged (nothing written)" ] || SB_PLANT=1
     fi
-    rm -rf "$SANDBOX/docs"
-    if [ "$RT_RC" -eq 0 ] && [ "$RT_N" -eq "$SEED_WANT" ] && [ "$RT_DIFF" -eq 0 ] && [ "$RT_PLANT" -eq 1 ] && [ ! -e "$SANDBOX/docs" ]; then
-        echo "[round-trip] PASS ($RT_N docs exported byte for byte; a planted byte reads as a difference)"
+    if [ "$SB_N" -eq "$SEED_WANT" ] && [ "$SEED_WANT" -gt 0 ] && [ -z "$SB_BAD" ] && [ "$SB_PLANT" -eq 1 ] && [ ! -e "$SANDBOX/docs" ]; then
+        echo "[store-bytes] PASS ($SB_N docs read back unchanged through ctx docs write --replace --dry-run; a planted byte reads as a change)"
         PASS=$((PASS + 1))
     else
-        echo "[round-trip] FAIL (rc=$RT_RC, $RT_N of $SEED_WANT docs, diff rc=$RT_DIFF, plant seen=$RT_PLANT)"
-        printf '%s\n' "$RT_OUT"
+        echo "[store-bytes] FAIL ($SB_N of $SEED_WANT unchanged, differing:${SB_BAD:- none}, plant seen=$SB_PLANT)"
         FAIL=$((FAIL + 1))
     fi
     echo ""

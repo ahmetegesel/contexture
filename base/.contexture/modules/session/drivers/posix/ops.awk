@@ -7,7 +7,7 @@
 # writes one line to PX_ERR and exits 1 or 2 with nothing staged.
 #
 # The environment: PX_FN the function, PX_UNIT the unit, PX_NA and PX_A1.. the other argv
-# tokens (checked by the driver), PX_STAGE the stage folder, PX_EXTRAS (unit.export),
+# tokens (checked by the driver), PX_STAGE the stage folder,
 # PX_DOCSIZE (the document on stdin, staged as "doc"), PX_HEALTH and PX_DETAIL
 # (storage.health).
 
@@ -865,59 +865,6 @@ function f_lane_get(   l, a, k) {
   answer("}")
 }
 
-# ---- the dump (@dump): unit.export ----
-function D(s) { O(s "\n"); NREC++ }
-
-function dump_entry_fields(k, i) {
-  return "\"slug\":" jstr(X[k, i, "slug"]) ",\"anchor\":" jnull(X[k, i, "anchor"]) ",\"what\":" jnull(X[k, i, "what"]) ",\"group\":" jnull(X[k, i, "group"]) ",\"rhythm\":" jnull(X[k, i, "rhythm"]) ",\"knowledge\":" jbool(X[k, i, "know"]) ",\"thread\":" jnull(X[k, i, "thread"]) ",\"legacy_status\":" jnull(X[k, i, "lst"]) ",\"refs\":" xlist(k, i, "r") ",\"closers\":" closers_json(k, i) ",\"extra_fields\":" extras_json(k, i) ",\"verbatim\":" jnull(IV[k, i])
-}
-
-function dump_anchor_fields(k, i) {
-  return "\"anchor\":" jstr(X[k, i, "anchor"]) ",\"continues\":" jnull(X[k, i, "cont"]) ",\"attention\":" jnull(X[k, i, "att"]) ",\"verbatim\":" jnull(IV[k, i])
-}
-
-function f_unit_export(   k, i, l, s, sp, j, o, rs) {
-  parse_unit(U, "backlog knowledge journal lanes")
-  O("{\"kind\":\"unit\",\"format\":\"contexture-dump\",\"version\":1,\"unit\":" jstr(U) ",\"extras\":" (ENVIRON["PX_EXTRAS"] + 0) "}\n")
-  NREC = 0
-  s = state_json(U); sub(/^\{"unit":"[^"]*",/, "{\"kind\":\"state\",", s)
-  D(s)
-  k = U "|backlog"
-  D("{\"kind\":\"artifact\",\"name\":\"backlog\",\"preamble\":" jnull(PRE[k]) "}")
-  for (i = 1; i <= NI[k]; i++) {
-    if (IK[k, i] == "task") D("{\"kind\":\"task\",\"slug\":" jstr(X[k, i, "slug"]) ",\"status\":" jstr(X[k, i, "status"]) ",\"objective\":" jstr(X[k, i, "objective"]) ",\"refs\":" xlist(k, i, "r") ",\"description\":" jnull(X[k, i, "desc"]) ",\"criteria\":" jnull(X[k, i, "crit"]) ",\"details\":" jnull(X[k, i, "det"]) ",\"verbatim\":" jnull(IV[k, i]) "}")
-    else D("{\"kind\":\"opaque\",\"verbatim\":" jstr(IV[k, i]) "}")
-  }
-  k = U "|knowledge"
-  D("{\"kind\":\"artifact\",\"name\":\"knowledge\",\"preamble\":" jnull(PRE[k]) "}")
-  for (i = 1; i <= NI[k]; i++) {
-    if (IK[k, i] == "finding") {
-      sp = (X[k, i, "supn"] == NULLV) ? "null" : "{\"name\":" jstr(X[k, i, "supn"]) ",\"reason\":" jstr(X[k, i, "supr"]) "}"
-      D("{\"kind\":\"finding\",\"name\":" jstr(X[k, i, "name"]) ",\"supersedes\":" sp ",\"refs\":" xlist(k, i, "r") ",\"summary\":" jstr(X[k, i, "summ"]) ",\"verbatim\":" jnull(IV[k, i]) "}")
-    } else D("{\"kind\":\"opaque\",\"verbatim\":" jstr(IV[k, i]) "}")
-  }
-  k = U "|journal"
-  D("{\"kind\":\"artifact\",\"name\":\"journal\",\"preamble\":" jnull(PRE[k]) "}")
-  for (i = 1; i <= NI[k]; i++) {
-    if (IK[k, i] == "entry") D("{\"kind\":\"entry\"," dump_entry_fields(k, i) "}")
-    else D("{\"kind\":\"anchor\"," dump_anchor_fields(k, i) "}")
-  }
-  for (j = 1; j <= NLANE[U]; j++) {
-    l = LANE[U, j]
-    O("{\"kind\":\"lane\",\"lane\":" jstr(l) ",\"recipe\":")
-    doc_out(U "|lane/" l "/recipe")
-    O(",\"report\":")
-    doc_out(U "|lane/" l "/report")
-    k = U "|lane/" l "/journal"
-    D(",\"journal_preamble\":" jnull(PRE[k]) "}")
-    for (i = 1; i <= NI[k]; i++) {
-      if (IK[k, i] == "entry") D("{\"kind\":\"lane_item\",\"lane\":" jstr(l) ",\"item\":\"entry\"," dump_entry_fields(k, i) "}")
-      else D("{\"kind\":\"lane_item\",\"lane\":" jstr(l) ",\"item\":\"anchor\"," dump_anchor_fields(k, i) "}")
-    }
-  }
-  O("{\"kind\":\"end\",\"unit\":" jstr(U) ",\"records\":" NREC "}\n")
-}
-
 # ---- the dispatch ----
 BEGIN {
   FN = ENVIRON["PX_FN"]; U = ENVIRON["PX_UNIT"]; ERRF = ENVIRON["PX_ERR"]; OUTF = ENVIRON["PX_OUT"]
@@ -968,7 +915,6 @@ BEGIN {
   else if (FN == "lane.record") f_lane_record()
   else if (FN == "lane.write_report") f_lane_write_report()
   else if (FN == "lane.get") f_lane_get()
-  else if (FN == "unit.export") f_unit_export()
   else die(2, "ERR_CAPABILITY_UNSUPPORTED", "unknown function '" FN "'")
   if (STAGE != "") stage_close()
   if (OUTF != "") close(OUTF)

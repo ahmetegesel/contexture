@@ -15,7 +15,6 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../../.." && pwd)
 MOD="$SCRIPT_DIR/../.contexture/modules/storage-fts5"
 DRV="$MOD/drivers/fts5"
-FXD="$ROOT/tests/fixtures/dumps"
 
 REAL=$(command -v sqlite3 2>/dev/null) || { printf 'SKIP: sqlite3 not found on PATH\n'; exit 77; }
 
@@ -40,7 +39,8 @@ EOF
 chmod 755 "$SB/bin/sqlite3"
 f() { fv=$1; shift; (cd "$SB/ws" && PATH="$SB/bin:$PATH" FAKE_VER="$fv" CTX_STORAGE_SQLITE_PATH="$DB" "$DRV" "$@" > "$SB/out" 2> "$SB/err" < /dev/null); RC=$?; }
 
-(cd "$SB/ws" && CTX_STORAGE_SQLITE_PATH="$DB" "$DRV" unit.import tc63-clean < "$FXD/tc63-clean.dump" > /dev/null) || { bad "the fixture import"; }
+# the unit the reads address, written through the function (the store holds what the functions write)
+printf 'objective=the version probe\nrepos.count=0\nattention=version fixture\n' | (cd "$SB/ws" && CTX_STORAGE_SQLITE_PATH="$DB" "$DRV" session.create tc63-clean > /dev/null) || { bad "the fixture unit"; }
 
 # the fake itself answers the version it was given (null check of the instrument)
 v=$(PATH="$SB/bin:$PATH" FAKE_VER=3.43.2 sqlite3 :memory: "SELECT sqlite_version();")

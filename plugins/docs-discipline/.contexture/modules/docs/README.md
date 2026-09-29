@@ -130,19 +130,19 @@ and lane modules from `base/`, this module, and the grammar template (with
 `--driver=fts5`, the storage-fts5 plugin's module and `storage.driver: fts5`),
 seeds `tests/sample/docs/` plus `docs/`, and drives the staging check; on
 fts5 the capture set first run on the files driver at the sandbox path (the
-config set aside), then the store seed (the staged corpus imported by `ctx
-session migrate --corpus`, then the docs folder removed, so the corpus
-checks read the store alone), the migration round trip (the store exported
-back to files equals the staged corpus by `diff -r`, a planted byte read as a
-difference), and the capture parity (every capture byte-identical to the
+config set aside), then the store seed (every staged doc written through `ctx
+docs write`, then the docs folder removed, so the corpus checks read the
+store alone), the stored bytes (every staged doc offered back to `ctx docs
+write --replace --dry-run` reads unchanged, a planted line never does), and
+the capture parity (every capture byte-identical to the
 files driver's except a check or gate capture where the files driver prints
 the blanket or the untracked-claimant verdict and the store `STALE DOC`), while
-the corpus checks run in a second sandbox of the same staging and import in the
+the corpus checks run in a second sandbox of the same staging and seed in the
 background, their lines printed after the chain in the same order; the
 delta-source cases (`tests/store-cases.sh`: the check's two modes, `ctx docs
 changes`, the gate's halves in a git workspace of its own, keyed on the
 declared `corpus.changelog`); the corpus reads keyed on the declared `corpus.store` (declared: the audit and the
-unit-form nudge, the sample backlog seeded into a unit and compared with the
+unit-form nudge, the sample backlog's task entered into a unit through the session verbs and compared with the
 backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
 of `tests/write/`: every success's stored bytes, every refusal leaving the
 stored doc unchanged, the change-log rows under a store), and the engine

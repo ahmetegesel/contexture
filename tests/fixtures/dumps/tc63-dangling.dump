@@ -1,8 +1,0 @@
-{"kind":"unit","format":"contexture-dump","version":1,"unit":"tc63-dangling","extras":0}
-{"kind":"state","status":"ACTIVE","current_anchor":"A1","next_action":"audit the fixture","objective":"The dangling closer fixture","repos":[],"ref_sessions":null,"verbatim":null}
-{"kind":"artifact","name":"backlog","preamble":""}
-{"kind":"artifact","name":"knowledge","preamble":""}
-{"kind":"artifact","name":"journal","preamble":""}
-{"kind":"anchor","anchor":"A1","continues":"A0","attention":"dangling closer fixture","verbatim":null}
-{"kind":"entry","slug":"2026-09-20-closer-a","anchor":"A1","what":"names an entry the journal lacks","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":[],"closers":[{"kind":"CLOSES","targets":["2026-09-19-absent-target"],"verdict":"done","reason":"gone","verbatim":null}],"extra_fields":[],"verbatim":null}
-{"kind":"end","unit":"tc63-dangling","records":6}

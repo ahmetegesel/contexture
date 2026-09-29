@@ -27,7 +27,7 @@ a static list in the engine: a call prints its replacement rc 1.
 ## Layout
 
 ```text
-scripts/          the 22 verbs (sh; index alone is awk) and the private driver-resolver
+scripts/          the 21 verbs (sh; index alone is awk) and the private driver-resolver
 lib/verb.sh       the shared verb shell: input shape checks, the payload, one storage call, the scratch folder, hooks
 lib/json.awk      the one flattener: a function's JSON answer to path=value lines
 lib/render.awk    the one renderer: every text view from the flattened lines
@@ -53,7 +53,6 @@ No verb opens a session artifact itself.
 | `scripts/finding` | `finding.add`, `get`, `update`, `supersede`, `drop`, `list` |
 | `scripts/index` | none: reads `.contexture/rhythms/` |
 | `scripts/load` | `session.load`, or `session.refload` for the refs form; base pages the rendered text |
-| `scripts/migrate` | the source's `session.list` and `unit.export`, the target's `unit.import`; with `--corpus` the corpus methods of both |
 | `scripts/next` | `session.next`, then `task.list` for the hook's slugs |
 | `scripts/record` | `entry.record` |
 | `scripts/refresh` | the board and audit verbs, then the refresh hooks (the one composite verb) |

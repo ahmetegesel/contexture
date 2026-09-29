@@ -5,14 +5,19 @@
 # The storage contract. The suite reaches a backend only through the driver executable
 # (argv identifiers, the escaped key=value payload on stdin with indexed list keys, one
 # compact JSON answer in the contract key order, one stderr line per refusal in the
-# fixed "<function>: error: <message> (<CODE>)" form); it never reads or writes a store
-# directly, except the posix-only grammar plants of TC64 and the posix journal bytes of
-# TC61. Fixtures load through unit.import from the dumps under tests/fixtures/dumps.
-# Every case asserts the exact data returned (a key and its JSON value, a whole answer,
-# a stderr line, the bytes of a document or a dump), never an exit code alone; the
-# census (--census) lists any case that would.
+# fixed "<function>: error: <message> (<CODE>)" form). A fixture a backend can hold is
+# built through the functions themselves, the same call sequence on every backend, and its
+# read answers (board, load, get, list, closure, search) are what every backend is held
+# to; no function moves a record between backends (knowledge#MIGRATION_IS_AGENT_JUDGMENT).
+# The legacy shapes only a hand-written posix file can hold (tests/fixtures/compliance/units,
+# tests/fixtures/compliance/legacy.notes) are planted as files and run on posix alone: TC57,
+# TC60, TC64, TC69, TC77, TC78; those cases, and the posix journal bytes of TC61, are the
+# only places the suite touches a store directly. Every case asserts the exact data
+# returned (a key and its JSON value, a whole answer, a stderr line, the bytes of a
+# document), never an exit code alone; the census (--census) lists any case that would.
 #
-# Suites and cases (70 in all with corpus.store, 62 without):
+# Suites and cases (72 on posix, 66 on every other backend, whose store holds no legacy
+# text; a driver without corpus.store runs 8 corpus cases fewer):
 #    0 the fresh store: TC74
 #    1 session lifecycle: TC01 to TC04
 #    2 tasks: TC05 to TC09
@@ -29,12 +34,18 @@
 #      without corpus.store)
 #   13 the resolver: TC47 to TC49
 #   14 record rules: TC52 to TC59
-#   15 the data model and the dump: TC60 to TC62
-#   16 the audit: TC63, TC64
+#   15 the data model: TC60 (posix), TC61, TC76
+#   16 the audit: TC63, TC64 (posix), TC77 (posix)
 #   17 units and references: TC65 to TC68
-#   18 the contract surface: TC69 to TC73, TC75
+#   18 the contract surface: TC69 (posix), TC70 to TC73, TC75, TC78 (posix)
 # Retired with contract 1: TC18 (lane.close), TC19 and TC36 (resolve.ref: resolve is
-# base's, proven by the session suite), TC29 and TC30 (the artifact methods).
+# base's, proven by the session suite), TC29 and TC30 (the artifact methods). Retired with
+# unit.export, unit.import, and the dump: TC62 (the export and import round trip).
+#
+# The TC76 goldens (tests/fixtures/compliance/golden/verb-u) are the read answers of one
+# call sequence; COMPLIANCE_WRITE_GOLDENS=<dir> writes the answers of the backend under
+# test into <dir> instead of comparing them (how they were made: from posix, then proven
+# equal on fts5, then read by hand); a changed golden is a contract change.
 #
 # Usage:
 #   tests/storage-compliance.sh [--driver=<name>] [--driver-exec=<path>] [--keep] [--verbose]
@@ -56,7 +67,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 RESOLVER="$ROOT/.contexture/modules/session/scripts/driver-resolver"
 BASE_RESOLVER="$ROOT/base/.contexture/modules/session/scripts/driver-resolver"
 JF="$SCRIPT_DIR/lib/jflat.awk"
-FX="$SCRIPT_DIR/fixtures/dumps"
+FX="$SCRIPT_DIR/fixtures/compliance"
 
 DRIVER_NAME="posix"
 DRIVER_EXEC_ARG=""
@@ -357,7 +368,7 @@ refused() {
   [ "$_rg" = "$_rw" ] || miss "$FN stderr [$_rg] want [$_rw]"
 }
 # refused_like <rc> <CODE> [<message prefix>]: the same for a message the contract
-# leaves free (ERR_INVALID_ARGUMENT details, a dump line detail, ERR_STORAGE_CORRUPT)
+# leaves free (ERR_INVALID_ARGUMENT details, ERR_STORAGE_CORRUPT)
 refused_like() {
   [ "$RC" -eq "$1" ] || miss "$FN rc $RC want $1"
   if [ -s "$O" ]; then miss "$FN printed stdout on a refusal [$(head -c 200 "$O")]"; fi
@@ -369,8 +380,20 @@ refused_like() {
     *) miss "$FN stderr [$_rg] want [$FN: error: ${3-}... ($2)]" ;;
   esac
 }
-# imp <unit> <dump> [--replace]: a fixture loaded through unit.import (R25)
-imp() { doc "$2"; if [ $# -ge 3 ]; then call unit.import "$1" "$3"; else call unit.import "$1"; fi; }
+# plant <unit>: a legacy fixture's markdown files planted in the posix store of the
+# sandbox (the posix-alone cases only: no other backend holds legacy text)
+plant() { rm -rf "$SANDBOX/.contexture/sessions/$1"; mkdir -p "$SANDBOX/.contexture/sessions"; cp -R "$FX/units/$1" "$SANDBOX/.contexture/sessions/$1"; }
+# reads <unit> <file>: the unit's read answers in one file (load, board, the task, entry,
+# and finding lists), the backend-neutral picture of a unit a refused write must leave
+reads() {
+  _rd_u=$1; _rd_f=$2
+  : > "$_rd_f"
+  for _rd in "session.load $_rd_u" "session.board $_rd_u" "task.list $_rd_u all" "entry.list $_rd_u" "finding.list $_rd_u all"; do
+    set -- $_rd
+    call "$@"
+    { printf '%s: rc %s\n' "$_rd" "$RC"; cat "$O"; } >> "$_rd_f"
+  done
+}
 # mk <unit> [<objective>]: a fresh unit
 mk() { kv objective "${2:-compliance unit $1}"; kv attention "compliance fixture"; call session.create "$1"; }
 DATE=2026-09-27
@@ -391,8 +414,8 @@ if printf '%s' "$cap_out" | grep -q '"driver": *"posix"'; then IS_POSIX=1; fi
 posix_line() { if [ "$IS_POSIX" -eq 1 ]; then printf '%s' "$1"; else printf 'null'; fi; }
 # the declared search modes, from the descriptor
 MODES=$(printf '%s\n' "$cap_out" | awk -f "$JF" | awk 'index($0, "search_modes.") == 1 { v = $0; sub(/^[^=]*=/, "", v); gsub(/"/, "", v); printf "%s%s", (n++ ? ", " : ""), v }')
-# the 40 record functions of contract 2
-FUNCS40="capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query unit.export unit.import"
+# the 38 record functions of contract 2 (unit.export and unit.import left it)
+FUNCS38="capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query"
 CORPUS6="corpus.list corpus.read corpus.write corpus.remove corpus.mount corpus.changes"
 
 # ==============================================================================
@@ -432,16 +455,18 @@ call session.load "$UNIT"
 answer; wantv state.objective '"Compliance test session"'
 tc "TC02: a repeated session.create refuses rc1 ERR_ENTITY_EXISTS; the state untouched"
 
-# TC03: session.load and session.board answer the empty unit; the export holds the A1 anchor
+# TC03: session.load and session.board answer the empty unit; the journal holds the A1 anchor
 call session.load "$UNIT"
 answer; wantkeys @ "unit,state,backlog,knowledge,board,refs"
 wantout "{\"unit\":\"compliance-u1\",\"state\":$U1STATE,\"backlog\":{\"preamble\":\"\",\"tasks\":[]},\"knowledge\":{\"preamble\":\"\",\"findings\":[]},\"board\":{\"unit\":\"compliance-u1\",\"backlog_present\":true,\"live\":[],\"open_tasks\":[],\"open_threads\":[]},\"refs\":[]}"
 call session.board "$UNIT"
 answer; wantout '{"unit":"compliance-u1","backlog_present":true,"live":[],"open_tasks":[],"open_threads":[]}'
-call unit.export "$UNIT"
-[ "$RC" -eq 0 ] || miss "unit.export rc $RC"
-wantout "$(printf '%s\n' '{"kind":"unit","format":"contexture-dump","version":1,"unit":"compliance-u1","extras":0}' '{"kind":"state","status":"ACTIVE","current_anchor":"A1","next_action":"backlog the first task","objective":"Compliance test session","repos":["alpha","beta"],"ref_sessions":null,"verbatim":null}' '{"kind":"artifact","name":"backlog","preamble":""}' '{"kind":"artifact","name":"knowledge","preamble":""}' '{"kind":"artifact","name":"journal","preamble":""}' '{"kind":"anchor","anchor":"A1","continues":"A0","attention":"compliance fixture","verbatim":null}' '{"kind":"end","unit":"compliance-u1","records":5}')"
-tc "TC03: session.load and session.board answer the empty unit; its dump holds the A1 anchor"
+kv query "continues A0"
+call search.query "$UNIT" --mode=exact
+answer; wantout '{"unit":"compliance-u1","query":"continues A0","mode":"exact","total_matches":1,"results":[{"entity_type":"session","entity_id":"compliance-u1","section":"journal","snippet":"@anchor A1 (\"continues A0\", attention: compliance fixture)","score":0}]}'
+call entry.list "$UNIT"
+answer; wantout '{"unit":"compliance-u1","entries":[]}'
+tc "TC03: session.load and session.board answer the empty unit; its journal holds the A1 anchor alone"
 
 # TC04: session.stamp advances the anchor and answers its receipt; session.close closes
 kv attention "Stamp test receipt"
@@ -652,27 +677,23 @@ tc "TC20: search.query without a mode answers exact results in the shared shape"
 printf '\n== Suite 7: Atomicity and Concurrency ==\n'
 
 # TC21: every refused write leaves the unit whole: after a closer list whose second
-# target is absent, an import --replace whose end line is wrong, a supersede onto an
-# existing NAME, and a repeated task, the unit's dump is byte-identical to before
-call unit.export "$TUNIT"
-[ "$RC" -eq 0 ] || miss "unit.export rc $RC"
-cp "$O" "$SANDBOX/tc21-before.dump"
+# target is absent, a supersede onto an existing NAME, and a repeated task, the unit's
+# read answers (load, board, the task, entry, and finding lists) are byte-identical to
+# before
+reads "$TUNIT" "$SANDBOX/tc21-before.reads"
+grep -q '"slug":"task-keeper"' "$SANDBOX/tc21-before.reads" || miss "the read picture holds no task-keeper"
 kv closers.count 2; kcl 1 CLOSES done "valid" "$BETA"; kcl 2 CLOSES done "absent" 2026-01-01-absent
 rec "$TUNIT" 1790000021 "two closers, the second absent"
 refused 1 ERR_ENTITY_NOT_FOUND "entry '2026-01-01-absent' not found in unit 'compliance-tasks'"
-_t21_n=$(wc -l < "$SANDBOX/tc21-before.dump" | tr -d ' ')
-awk -v n="$_t21_n" 'NR == n { sub(/"records":[0-9]+/, "\"records\":1") } { print }' "$SANDBOX/tc21-before.dump" > "$SANDBOX/tc21-bad.dump"
-imp "$TUNIT" "$SANDBOX/tc21-bad.dump" --replace
-refused_like 1 ERR_DUMP_FORMAT "dump line $_t21_n: "
 kv summary "never lands"
 call finding.supersede "$TUNIT" FINDING_BETA FINDING_ALPHA
 refused 1 ERR_ENTITY_EXISTS "finding 'FINDING_ALPHA' already exists in unit 'compliance-tasks'"
 kv objective "never lands"
 call task.add "$TUNIT" task-keeper
 refused 1 ERR_ENTITY_EXISTS "task 'task-keeper' already exists in unit 'compliance-tasks'"
-call unit.export "$TUNIT"
-wantfile "$SANDBOX/tc21-before.dump"
-tc "TC21: every refused write leaves the unit's dump byte-identical"
+reads "$TUNIT" "$SANDBOX/tc21-after.reads"
+cmp -s "$SANDBOX/tc21-before.reads" "$SANDBOX/tc21-after.reads" || miss "the read answers changed $(firstdiff "$(cat "$SANDBOX/tc21-after.reads")" "$(cat "$SANDBOX/tc21-before.reads")")"
+tc "TC21: every refused write leaves the unit's read answers byte-identical"
 
 # TC22: concurrent writers serialize: five entry.record calls at once with one date and
 # epoch land five entries under the slug suffixed -1 while the journal holds it (R6: X, X-1, X-1-1, and on), each exactly once
@@ -718,10 +739,19 @@ call session.load '../escape'
 refused_like 1 ERR_INVALID_ARGUMENT
 tc "TC24: a missing or malformed identifier refuses rc1 ERR_INVALID_ARGUMENT"
 
-# TC25: an unknown function refuses rc2 ERR_CAPABILITY_UNSUPPORTED
+# TC25: an unknown function refuses rc2 ERR_CAPABILITY_UNSUPPORTED; unit.export and
+# unit.import left the contract (knowledge#MIGRATION_IS_AGENT_JUDGMENT) and answer the same
 call non_existent_subsystem.method
 refused 2 ERR_CAPABILITY_UNSUPPORTED "unknown function 'non_existent_subsystem.method'"
-tc "TC25: an unknown function refuses rc2 ERR_CAPABILITY_UNSUPPORTED"
+call unit.export "$TUNIT"
+refused 2 ERR_CAPABILITY_UNSUPPORTED "unknown function 'unit.export'"
+printf '{"kind":"unit","format":"contexture-dump","version":1,"unit":"tc25-u","extras":0}\n' > "$SANDBOX/tc25.in"
+doc "$SANDBOX/tc25.in"
+call unit.import tc25-u
+refused 2 ERR_CAPABILITY_UNSUPPORTED "unknown function 'unit.import'"
+call session.list
+answer; wantno '"unit":"tc25-u"'
+tc "TC25: an unknown function refuses rc2 ERR_CAPABILITY_UNSUPPORTED, unit.export and unit.import among them"
 
 # ==============================================================================
 # Suite 9: Journal Integrity (2 test cases)
@@ -775,7 +805,7 @@ wantv store '"present"'
 call storage.health
 answer; wantkeys @ "driver,health,detail,store,active_units"; wantv store '"present"'; wantv active_units "$_t28_act"
 [ "$_t28_act" = 2 ] || miss "session.list shows $_t28_act ACTIVE units, want 2"
-for _t28_f in "session.load" "session.board" "session.audit" "task.list no-such-unit all" "entry.list" "finding.list no-such-unit all" "task.get no-such-unit t1" "unit.export"; do
+for _t28_f in "session.load" "session.board" "session.audit" "task.list no-such-unit all" "entry.list" "finding.list no-such-unit all" "task.get no-such-unit t1"; do
   set -- $_t28_f
   if [ $# -eq 1 ]; then call "$1" no-such-unit; else call "$@"; fi
   refused 1 ERR_ENTITY_NOT_FOUND "unit 'no-such-unit' not found"
@@ -906,10 +936,28 @@ call search.query "$TUNIT"
 refused_like 1 ERR_INVALID_ARGUMENT
 tc "TC38: search.query answers one shape, honors --limit and --entity, refuses an empty query"
 
-# TC39: the exact rule on the exact fixture: one row per matching entity and section in
-# text order, its snippet the first matching line, total_matches counting the rows
-imp compliance-exact "$FX/tc39-exact.dump"
-answer; wantout '{"unit":"compliance-exact","records":15,"replaced":false}'
+# TC39: the exact rule on the exact fixture, built through the functions on every backend
+# (the state, three tasks, two findings, an anchor and three entries, a lane with its
+# recipe, journal, and report): one row per matching entity and section in text order, its
+# snippet the first matching line, total_matches counting the rows; no mode is exact; an
+# undeclared mode refuses naming the declared modes
+EX=compliance-exact
+kv objective "exact fixture"; kl repos; kv attention plain; call session.create "$EX"; answer
+call session.refs "$EX"; answer
+kv pointer "find the Needle in the state"; call session.next "$EX"; answer
+kv objective "a needle in the objective"; kv desc "a second NEEDLE line of the same task"; call task.add "$EX" t-one; answer
+kv objective "needlework, a substring"; call task.add "$EX" t-two; answer
+kv objective "no match here"; call task.add "$EX" t-three; answer
+kv summary "one needle"; call finding.add "$EX" F_ONE; answer
+kv summary "none at all"; call finding.add "$EX" F_TWO; answer
+kv slug 2026-09-25-e-one; rec "$EX" 1790000391 "the needle event"; answer
+kv slug 2026-09-25-e-two; rec "$EX" 1790000392 "nothing to see" "a needle awaits"; answer
+kv slug 2026-09-25-e-three; rec "$EX" 1790000393 "quiet"; answer
+printf '# needle in a grammar comment never matches\nMISSION\n  GOAL: "thread the needle"\n' > "$SANDBOX/tc39-recipe.txt"
+doc "$SANDBOX/tc39-recipe.txt"; call lane.create "$EX" ex-lane; answer
+kv what "a lane needle"; kv thread none; kv slug 2026-09-25-l-one; kv date "$DATE"; kv epoch 1790000394; call lane.record "$EX" ex-lane; answer
+printf '# report\n\n@orientation\n  VERDICT: "needle one"\n  NOTE: "needle two"\n' > "$SANDBOX/tc39-report.txt"
+doc "$SANDBOX/tc39-report.txt"; call lane.write_report "$EX" ex-lane; answer
 while IFS='|' read -r _q _lim _ent _want; do
   kv query "$_q"
   set -- --mode=exact
@@ -918,7 +966,13 @@ while IFS='|' read -r _q _lim _ent _want; do
   call search.query compliance-exact "$@"
   answer; wantout "$_want"
 done < "$FX/tc39-exact.answers"
-tc "TC39: --mode=exact answers one row per matching entity and section, the same on every backend"
+kv query needle
+call search.query "$EX"
+answer; wantout "$(sed -n '1s/^needle|||//p' "$FX/tc39-exact.answers")"
+kv query needle
+call search.query "$EX" --mode=nosuchmode
+refused 1 ERR_CAPABILITY_UNSUPPORTED "mode 'nosuchmode' is not supported; declared modes: $MODES"
+tc "TC39: --mode=exact answers one row per matching entity and section, the same on every backend; no mode is exact; an undeclared mode refuses"
 
 # ==============================================================================
 # Suite 12: The Corpus Store (9 test cases with corpus.store, 1 without)
@@ -1164,15 +1218,15 @@ fi
 # alike on every driver: require and has answer the optional capabilities and the search
 # modes (search.mode.<m>), their verdict cached per driver path and capability set apart
 # from the dispatch verdict; the dispatch handshake refuses a descriptor that is not
-# contract 2 or lacks one of the 40 functions (a driver without corpus.store serves the
+# contract 2 or lacks one of the 38 functions (a driver without corpus.store serves the
 # record)
 printf '\n== Suite 13: The Resolver ==\n'
 RS="$SANDBOX/rs"
 mkdir -p "$RS/.contexture/modules"
 cp -R "$ROOT/base/.contexture/modules/session" "$RS/.contexture/modules/session"
 RSV="$RS/.contexture/modules/session/scripts/driver-resolver"
-FUNCS_JSON=$(printf '"%s",' $FUNCS40 | sed 's/,$//')
-FUNCS_NO_TASK_ADD=$(printf '"%s",' $FUNCS40 | sed 's/"task\.add",//; s/,$//')
+FUNCS_JSON=$(printf '"%s",' $FUNCS38 | sed 's/,$//')
+FUNCS_NO_TASK_ADD=$(printf '"%s",' $FUNCS38 | sed 's/"task\.add",//; s/,$//')
 # wrap <file> <optional list items> [<functions list>] [<contract>]
 wrap() {
   w_desc="{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"${4:-2}\",\"functions\":[${3:-$FUNCS_JSON}],\"search_modes\":[\"exact\"],\"optional\":[$2]}"
@@ -1277,7 +1331,7 @@ wantrc "$RC" 2
 rm -f c-disp.txt
 tc "TC48: the require verdict is cached per driver path and capability set, apart from the dispatch verdict"
 
-# TC49: the dispatch handshake: a contract 2 descriptor with all 40 functions and no
+# TC49: the dispatch handshake: a contract 2 descriptor with all 38 functions and no
 # corpus.store serves the record through the resolver; a descriptor lacking task.add or
 # declaring contract 1 is halted rc2 ERR_DRIVER_PROTOCOL naming the gap, serving nothing
 kv objective "served"; kv attention "resolver fixture"
@@ -1432,11 +1486,12 @@ refused 1 ERR_INVALID_TRANSITION "task 'tc56-t' is IN_PROGRESS; task.drop moves 
 call task.get tc56-u tc56-t; answer; wantv task.status '"IN_PROGRESS"'
 tc "TC56: task.drop answers its receipt; a dropped slug is addable again; the active task refuses"
 
-# TC57: a legacy repeated slug (X at entries 1 and 5, a closer naming X at 3): the board
-# holds the later occurrence, entry.get answers it open, entry.closure finds no later
-# closer, the audit warns LEGACY_DUPLICATE_SLUG and stays clean, a new repeat refuses
-imp tc57-u "$FX/tc57-repeat.dump"
-answer; wantout '{"unit":"tc57-u","records":10,"replaced":false}'
+# TC57 (posix alone: a repeated slug is legacy text only a hand-written file holds): X at
+# entries 1 and 5, a closer naming X at 3: the board holds the later occurrence, entry.get
+# answers it open, entry.closure finds no later closer, the audit warns
+# LEGACY_DUPLICATE_SLUG and stays clean, a new repeat refuses
+if [ "$IS_POSIX" -eq 1 ]; then
+plant tc57-u
 X57=2026-09-20-repeat
 call session.board tc57-u
 answer; wantvals live slug '"2026-09-20-between" "2026-09-20-closer" "2026-09-20-after" "2026-09-20-repeat"'; wantvals live occurrence '1 1 1 2'; wantvals live seq '3 4 5 6'
@@ -1453,6 +1508,7 @@ kv slug "$X57"
 rec tc57-u 1790000570 "a new repeat"
 refused 1 ERR_ENTITY_EXISTS "entry '$X57' already exists in unit 'tc57-u'"
 tc "TC57: a legacy repeated slug reads positionally; the audit warns; a new repeat refuses"
+fi
 
 # TC58: a closer naming an absent entry refuses rc1 ERR_ENTITY_NOT_FOUND, nothing written
 mk tc58-u; answer
@@ -1480,109 +1536,155 @@ refused 1 ERR_ENTITY_EXISTS "entry '2026-09-27-event-1790000590' already exists 
 tc "TC59: generated slugs take -1 while held; a held given slug refuses"
 
 # ==============================================================================
-# Suite 15: The Data Model and the Dump (3 test cases)
+# Suite 15: The Data Model (3 test cases on posix, 2 elsewhere)
 # ==============================================================================
-printf '\n== Suite 15: The Data Model and the Dump ==\n'
+printf '\n== Suite 15: The Data Model ==\n'
 
-# TC60: the legacy fixture (every legacy shape, tests/fixtures/dumps/legacy.notes):
+# TC60 (posix alone: the legacy shapes live in hand-written files, legacy.notes names each):
 # every canonical item answers verbatim null, every other item its stored bytes, and
 # task.get, finding.get, entry.get, session.board, session.load, lane.get answer the
-# golden JSON byte for byte, the same on every backend
-imp legacy-u "$FX/legacy.dump"
-answer; wantout '{"unit":"legacy-u","records":31,"replaced":false}'
-_t60_n=0
-for _g in "$FX"/golden/legacy-u/*.json; do
-  _b=$(basename "$_g" .json)
-  case "$_b" in
-    task.get.*) call task.get legacy-u "${_b#task.get.}" ;;
-    finding.get.*) call finding.get legacy-u "${_b#finding.get.}" ;;
-    entry.get.*) call entry.get legacy-u "${_b#entry.get.}" ;;
-    session.board) call session.board legacy-u ;;
-    session.load) call session.load legacy-u ;;
-    lane.get.*) _r=${_b#lane.get.}; call lane.get legacy-u "${_r%.*}" "${_r##*.}" ;;
-    *) miss "unknown golden $_b"; continue ;;
-  esac
-  answer; wantfile "$_g"
-  _t60_n=$((_t60_n + 1))
-done
-[ "$_t60_n" = 23 ] || miss "compared $_t60_n goldens, want 23"
-tc "TC60: the legacy fixture answers the golden JSON of every item, the board, the load, and the lanes"
+# golden JSON byte for byte
+# wantgolden <unit> <dir> <count>: every golden answer of <dir> compared with the function
+# its file name calls (or, with COMPLIANCE_WRITE_GOLDENS naming <dir>, the answer written there)
+wantgolden() {
+  _gn=0
+  for _g in "$2"/*.json; do
+    _b=$(basename "$_g" .json)
+    case "$_b" in
+      task.get.*) call task.get "$1" "${_b#task.get.}" ;;
+      finding.get.*) call finding.get "$1" "${_b#finding.get.}" ;;
+      entry.get.*) call entry.get "$1" "${_b#entry.get.}" ;;
+      entry.closure.*) call entry.closure "$1" "${_b#entry.closure.}" ;;
+      session.board) call session.board "$1" ;;
+      session.load) call session.load "$1" ;;
+      entry.list) call entry.list "$1" ;;
+      task.list.*) call task.list "$1" "${_b#task.list.}" ;;
+      finding.list.*) call finding.list "$1" "${_b#finding.list.}" ;;
+      lane.get.*) _r=${_b#lane.get.}; call lane.get "$1" "${_r%.*}" "${_r##*.}" ;;
+      *) miss "unknown golden $_b"; continue ;;
+    esac
+    answer
+    if [ "${COMPLIANCE_WRITE_GOLDENS:-}" = "$2" ]; then cp "$O" "$COMPLIANCE_WRITE_GOLDENS/$_b.json"; else wantfile "$_g"; fi
+    _gn=$((_gn + 1))
+  done
+  [ "$_gn" = "$3" ] || miss "compared $_gn goldens of $1, want $3"
+}
+if [ "$IS_POSIX" -eq 1 ]; then
+  plant legacy-u
+  wantgolden legacy-u "$FX/golden/legacy-u" 23
+  tc "TC60: the legacy fixture answers the golden JSON of every item, the board, the load, and the lanes"
+fi
 
 # TC61: the append rule: an entry after an anchor gets one empty line before it, an entry
-# after an entry one, a stamped anchor none, the journal no trailing empty line; the
-# unit's dump equals the expected dump (and on posix the journal its expected bytes)
-imp tc61-u "$FX/tc61-before.dump"
-answer
+# after an entry one, a stamped anchor none, the journal no trailing empty line: every
+# backend answers each entry canonical (verbatim null) with the kind of the item after it
+# (the separator the canonical span implies), and on posix the journal is the expected bytes
+kv objective "The append rule fixture"; kv attention "append rule fixture"; call session.create tc61-u; answer
 rec tc61-u 1790000100 "first, after an anchor"; answer
 rec tc61-u 1790000101 "second, after an entry"; answer
-kv attention "append rule stamp"; call session.stamp tc61-u; answer
+kv attention "append rule stamp"; call session.stamp tc61-u
+answer; wantv receipt.seq 4; wantv receipt.next null; wantv receipt.verbatim null
 rec tc61-u 1790000102 "third, after a stamped anchor"; answer
-call unit.export tc61-u
-wantfile "$FX/tc61-expected.dump"
+for _t61 in "1790000100 2 entry" "1790000101 3 anchor" "1790000102 5 null"; do
+  set -- $_t61
+  call entry.get tc61-u "2026-09-27-event-$1"
+  answer; wantv entry.seq "$2"; wantv entry.verbatim null
+  if [ "$3" = null ]; then wantv entry.next null; else wantv entry.next "\"$3\""; fi
+done
+call entry.list tc61-u
+answer; wantvals entries anchor '"A1" "A1" "A2"'
 if [ "$IS_POSIX" -eq 1 ]; then
   cmp -s "$SANDBOX/.contexture/sessions/tc61-u/journal.md" "$FX/tc61-expected-journal.md" || miss "the posix journal differs from tc61-expected-journal.md"
 fi
-tc "TC61: the append rule places the separators; the dump (and the posix journal) equals the expected bytes"
+tc "TC61: the append rule places the separators: each entry canonical with the kind after it (and the posix journal its expected bytes)"
 
-# TC62: import then export is byte for byte; a held unit refuses without --replace;
-# --replace swaps it whole; a malformed line 7 refuses naming it with no unit made; a
-# dump for another unit refuses at line 1
-call unit.export legacy-u
-wantfile "$FX/legacy.dump"
-imp legacy-u "$FX/legacy.dump"
-refused 1 ERR_ENTITY_EXISTS "unit 'legacy-u' already exists"
-imp legacy-u "$FX/legacy.dump" --replace
-answer; wantout '{"unit":"legacy-u","records":31,"replaced":true}'
-call unit.export legacy-u
-wantfile "$FX/legacy.dump"
-awk 'NR == 7 { print "{\"kind\":\"entry\""; next } { gsub(/"unit":"tc63-clean"/, "\"unit\":\"tc62-u\""); print }' "$FX/tc63-clean.dump" > "$SANDBOX/tc62-bad.dump"
-imp tc62-u "$SANDBOX/tc62-bad.dump"
-refused_like 1 ERR_DUMP_FORMAT "dump line 7: "
-call session.list
-answer; wantno '"unit":"tc62-u"'
-imp other-u "$FX/legacy.dump"
-refused_like 1 ERR_DUMP_FORMAT "dump line 1: "
-tc "TC62: export equals the imported dump; held units refuse without --replace; a bad dump names its line"
+# TC76: one call sequence builds a unit with every canonical item kind (a state with repos
+# and a reference, tasks with every section, a completed and a started task, findings with
+# refs and a supersession, entries with a group, a rhythm, knowledge, refs, a thread, a
+# stamped anchor, a multi-target closer, lanes with and without a report), the same on
+# every backend; its read answers equal the goldens of tests/fixtures/compliance/golden/verb-u
+# byte for byte, so posix and fts5 are held to the same answers for the same writes
+VU=verb-u
+mk verb-ref; answer
+kv objective "The verb fixture unit"; kl repos alpha beta; kv attention "verb fixture"; call session.create "$VU"; answer
+call session.refs "$VU" verb-ref; answer
+kv objective "Every section filled"; kl refs "journal#2026-09-27-verb-one" "knowledge#VERB_CANON"
+kv desc "$(printf 'first description line\n\nthird line after an empty one')"; kv criteria "one criterion"; kv details "$(printf 'detail one\ndetail two')"
+call task.add "$VU" canon-task; answer
+kv objective "Only an objective"; call task.add "$VU" plain-task; answer
+kv objective "Completed in the walk"; call task.add "$VU" done-task; answer
+kv evidence "the walk verified it"; kv date "$DATE"; call task.complete "$VU" done-task; answer
+kv objective "Started in the walk"; call task.add "$VU" active-task; answer
+kv pointer "active-task IN_PROGRESS: the verb walk"; call task.start "$VU" active-task; answer
+kv summary "$(printf 'a canonical finding\nover two lines')"; kl refs "journal#2026-09-27-verb-one"; call finding.add "$VU" VERB_CANON; answer
+kv summary "the older reading"; call finding.add "$VU" VERB_OLD; answer
+kv summary "the newer reading"; kv reason "replaced by the walk"; call finding.supersede "$VU" VERB_OLD VERB_NEW; answer
+kv slug 2026-09-27-verb-one; kv group verb-group; kv rhythm probe; kv knowledge true; kl refs "task#canon-task" "lanes/verb-lane/report"
+rec "$VU" 1790000761 "the first verb entry" "the human"; answer
+kv slug 2026-09-27-verb-two; kv group verb-group; rec "$VU" 1790000762 "the second verb entry"; answer
+kv slug 2026-09-27-verb-three; rec "$VU" 1790000763 "the third verb entry"; answer
+kv attention "verb stamp"; call session.stamp "$VU"; answer
+kv slug 2026-09-27-verb-four; kv closers.count 1; kcl 1 CLOSES folded "read together" 2026-09-27-verb-two 2026-09-27-verb-three
+rec "$VU" 1790000764 "folds the second and the third"; answer
+printf '# recipe grammar\nMISSION\n  GOAL: "walk the verbs"\n' > "$SANDBOX/tc76-recipe.txt"
+doc "$SANDBOX/tc76-recipe.txt"; call lane.create "$VU" verb-lane; answer
+kv what "a lane step"; kv thread none; kl refs "task#canon-task"; kv slug 2026-09-27-verb-lane-one; kv date "$DATE"; kv epoch 1790000765; call lane.record "$VU" verb-lane; answer
+printf '@claim one\n  the walk landed, a \\ backslash and a "quote"\n' > "$SANDBOX/tc76-report.txt"
+doc "$SANDBOX/tc76-report.txt"; call lane.write_report "$VU" verb-lane; answer
+printf '# a quiet lane\n' > "$SANDBOX/tc76-quiet.txt"
+doc "$SANDBOX/tc76-quiet.txt"; call lane.create "$VU" quiet-lane; answer
+wantgolden "$VU" "$FX/golden/verb-u" 23
+tc "TC76: the verb-built unit answers the golden JSON of every item, the lists, the board, the load, and the lanes, the same on every backend"
 
 # ==============================================================================
 # Suite 16: The Audit (2 test cases)
 # ==============================================================================
 printf '\n== Suite 16: The Audit ==\n'
 
-# TC63: one fixture per record check yields exactly its finding; the clean fixture
-# answers clean true with its open threads
-a63() {
-  imp "$1" "$FX/$1.dump"
-  answer
+# TC63: the record checks a verb-built unit can carry, on every backend: an unharvested
+# KNOWLEDGE entry and an entry without THREAD (dated after the thread rule) each yield
+# exactly their finding; a clean unit answers clean true with its open threads
+wantaudit() {
   call session.audit "$1"
   answer; wantout "{\"unit\":\"$1\",\"clean\":false,\"findings\":[{\"code\":\"$2\",\"severity\":\"error\",\"slug\":\"$3\",\"line\":$4,\"detail\":$5,\"first_line\":null,\"occurrence\":null}],\"open_threads\":[]}"
 }
-a63 tc63-dangling DANGLING_CLOSER 2026-09-20-closer-a "$(posix_line 7)" '"2026-09-19-absent-target"'
-a63 tc63-unharvested UNHARVESTED_KNOWLEDGE 2026-09-20-flagged "$(posix_line 3)" null
-a63 tc63-done DONE_WITHOUT_EVENT t-done null null
-a63 tc63-inprogress IN_PROGRESS_ABSENT_FROM_STATE t-active null null
-a63 tc63-thread MISSING_THREAD 2026-09-20-threadless "$(posix_line 3)" null
-imp tc63-clean "$FX/tc63-clean.dump"
-answer
+# m63 <unit> <attention>: a fixture unit at A1
+m63() { kv objective "the $1 fixture"; kv attention "$2"; call session.create "$1"; answer; }
+m63 tc63-unharvested "unharvested knowledge fixture"
+kv slug 2026-09-20-flagged; kv knowledge true; rec tc63-unharvested 1790000631 "a knowledge flag no closer names"; answer
+wantaudit tc63-unharvested UNHARVESTED_KNOWLEDGE 2026-09-20-flagged "$(posix_line 3)" null
+m63 tc63-thread "missing thread fixture"
+printf 'what=an entry dated after the thread rule without THREAD\nslug=2026-09-20-threadless\ndate=%s\nepoch=1790000632\n' "$DATE" > "$P"
+call entry.record tc63-thread; answer; wantv entry.thread null
+wantaudit tc63-thread MISSING_THREAD 2026-09-20-threadless "$(posix_line 3)" null
+m63 tc63-clean "clean fixture"
+kv slug 2026-09-20-asked; rec tc63-clean 1790000633 "a question to the human, answered below" "the human's answer"; answer
+kv slug 2026-09-20-open; rec tc63-clean 1790000634 "a dispatch still awaited" "lane review report"; answer
+kv slug 2026-09-20-answered; kv closers.count 1; kcl 1 CLOSES done "the human answered" 2026-09-20-asked
+rec tc63-clean 1790000635 "the human answered"; answer
 call session.audit tc63-clean
 answer; wantout "{\"unit\":\"tc63-clean\",\"clean\":true,\"findings\":[],\"open_threads\":[{\"slug\":\"2026-09-20-open\",\"thread\":\"lane review report\",\"line\":$(posix_line 11)}]}"
-tc "TC63: each record check yields exactly its finding; a clean unit answers its open threads"
+tc "TC63: each record check a verb-built unit can carry yields exactly its finding; a clean unit answers its open threads"
 
-# TC64: the posix grammar checks: planted files yield DATELESS_SLUG, INLINE_MARKER,
-# BRACKETED_FIELD, SLUGLESS_CLOSER with their lines on posix; any other backend, given
-# the same record through its dump, returns none of these codes
+# TC77 (posix alone: the functions refuse to write these shapes, so only a hand-written
+# file holds them): a closer naming an entry the journal lacks, a DONE task without its
+# receipt, an IN_PROGRESS task the state does not name each yield exactly their finding
 if [ "$IS_POSIX" -eq 1 ]; then
-  mkdir -p "$SANDBOX/.contexture/sessions/tc64-u"
-  cp "$FX/plants/tc64-u/"*.md "$SANDBOX/.contexture/sessions/tc64-u/"
+  plant tc63-dangling; wantaudit tc63-dangling DANGLING_CLOSER 2026-09-20-closer-a 7 '"2026-09-19-absent-target"'
+  plant tc63-done; wantaudit tc63-done DONE_WITHOUT_EVENT t-done null null
+  plant tc63-inprogress; wantaudit tc63-inprogress IN_PROGRESS_ABSENT_FROM_STATE t-active null null
+  tc "TC77: the record checks only legacy text carries (a dangling closer, DONE without its event, IN_PROGRESS absent from the state) yield exactly their finding"
+fi
+
+# TC64 (posix alone: broken text only a hand-written file holds): the posix grammar
+# checks: planted files yield DATELESS_SLUG, INLINE_MARKER, BRACKETED_FIELD,
+# SLUGLESS_CLOSER with their lines
+if [ "$IS_POSIX" -eq 1 ]; then
+  plant tc64-u
   call session.audit tc64-u
   answer; wantout '{"unit":"tc64-u","clean":false,"findings":[{"code":"DATELESS_SLUG","severity":"error","slug":"legacy-dateless","line":3,"detail":null,"first_line":null,"occurrence":null},{"code":"INLINE_MARKER","severity":"error","slug":"2026-09-20-inline","line":7,"detail":null,"first_line":null,"occurrence":null},{"code":"BRACKETED_FIELD","severity":"error","slug":"2026-09-20-bracketed","line":14,"detail":"[THREAD: none]","first_line":null,"occurrence":null},{"code":"SLUGLESS_CLOSER","severity":"error","slug":"2026-09-20-slugless","line":19,"detail":null,"first_line":null,"occurrence":null}],"open_threads":[]}'
-else
-  imp tc64-u "$FX/tc64-plants.dump"
-  answer
-  call session.audit tc64-u
-  answer; wantno '"DATELESS_SLUG"'; wantno '"INLINE_MARKER"'; wantno '"BRACKETED_FIELD"'; wantno '"SLUGLESS_CLOSER"'; wantv unit '"tc64-u"'
+  tc "TC64: the posix grammar checks answer with their lines on posix"
 fi
-tc "TC64: the posix grammar checks answer with their lines on posix and never elsewhere"
 
 # ==============================================================================
 # Suite 17: Units and References (4 test cases)
@@ -1623,16 +1725,18 @@ refused 1 ERR_INVALID_TRANSITION "unit 'tc66-u' is ACTIVE; session.reopen moves 
 call session.load tc66-u; answer; wantv state.status '"ACTIVE"'
 tc "TC66: session.close and session.reopen refuse the move they cannot make"
 
-# TC67: the three-unit fixture: session.units answers the units touching a repo (ACTIVE
-# and CLOSED) and every known repo; session.refs_to answers the referrers. tc67-c lists
-# tc67-aardvark after tc67-gamma, so the repos in unit order are not sorted and an unsorted
-# known_repos fails the case (lanes/si-b5-base-review/report, B2 @open 6)
-awk -v d="$SANDBOX" '/^\{"kind":"unit"/ { n++; f = d "/tc67-" n ".dump" } { print > f }' "$FX/tc67-three.dump"
-for _u in a b c; do
-  case "$_u" in a) _f=1 ;; b) _f=2 ;; *) _f=3 ;; esac
-  imp "tc67-$_u" "$SANDBOX/tc67-$_f.dump"
-  answer; wantout "{\"unit\":\"tc67-$_u\",\"records\":5,\"replaced\":false}"
-done
+# TC67: the three-unit fixture, built through the functions: session.units answers the
+# units touching a repo (ACTIVE and CLOSED) and every known repo; session.refs_to answers
+# the referrers. tc67-c lists tc67-aardvark after tc67-gamma, so the repos in unit order are
+# not sorted and an unsorted known_repos fails the case (lanes/si-b5-base-review/report, B2
+# @open 6)
+kv objective "Unit c of three"; kl repos tc67-gamma tc67-aardvark; kv attention "tc67-c fixture"; call session.create tc67-c; answer
+kv objective "Unit a of three"; kl repos tc67-alpha tc67-beta; kv attention "tc67-a fixture"; call session.create tc67-a; answer
+kv objective "Unit b of three"; kl repos tc67-beta; kv attention "tc67-b fixture"; call session.create tc67-b; answer
+call session.refs tc67-a tc67-c; answer
+call session.refs tc67-b tc67-a tc67-c; answer
+kv pointer "closed unit b"; call session.next tc67-b; answer
+call session.close tc67-b; answer; wantv status '"CLOSED"'
 call session.list
 answer
 _t67_known=$(awk 'index($0, "units.") == 1 { k = $0; sub(/=.*$/, "", k); if (k ~ /^units\.[0-9]+\.repos\.[0-9]+$/) print substr($0, length(k) + 2) }' "$F" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')
@@ -1672,9 +1776,9 @@ tc "TC68: entry.closure answers every later closer with its entry, anchor, and c
 # ==============================================================================
 printf '\n== Suite 18: The Contract Surface ==\n'
 
-# TC69: the exact rule over the legacy fixture: the fixed query set answers the same
-# results on every backend; no --mode is exact; an undeclared mode refuses naming the
-# declared modes
+# TC69 (posix alone: the legacy fixture of TC60): the exact rule over legacy text: the
+# fixed query set answers its fixed results; --mode=exact answers the same as no mode
+if [ "$IS_POSIX" -eq 1 ]; then
 _t69_n=0
 while IFS='|' read -r _q _lim _ent _want; do
   kv query "$_q"
@@ -1689,45 +1793,49 @@ done < "$FX/tc69-exact.answers"
 kv query legacy
 call search.query legacy-u --mode=exact
 answer; wantout "$(sed -n '1s/^legacy|||//p' "$FX/tc69-exact.answers")"
-kv query legacy
-call search.query legacy-u --mode=nosuchmode
-refused 1 ERR_CAPABILITY_UNSUPPORTED "mode 'nosuchmode' is not supported; declared modes: $MODES"
-tc "TC69: the exact query set answers identical results; no mode is exact; an undeclared mode refuses"
+tc "TC69: the exact query set over legacy text answers its fixed results; --mode=exact answers the same"
+fi
 
-# TC70: the descriptor declares contract 2, every one of the 40 functions and nothing
-# retired, exact among the search modes, and only known optional capabilities
+# TC70: the descriptor declares contract 2, every one of the 38 functions and nothing
+# retired (unit.export and unit.import among the retired), exact among the search modes,
+# and only known optional capabilities
 call capability
 answer; wantkeys @ "driver,version,contract,functions,search_modes,optional"; wantv contract '"2"'
 case "$(jv version)" in '"'[0-9]*.[0-9]*.[0-9]*'"') ;; *) miss "version [$(jv version)]" ;; esac
 case "$(jv driver)" in '""'|'') miss "the descriptor names no driver" ;; esac
 _t70_fns=" $(vals functions | tr -d '"') "
-for _f in $FUNCS40; do
+for _f in $FUNCS38; do
   case "$_t70_fns" in *" $_f "*) ;; *) miss "functions lacks $_f" ;; esac
 done
 for _f in $_t70_fns; do
-  case " $FUNCS40 $CORPUS6 " in *" $_f "*) ;; *) miss "functions declares $_f, outside contract 2" ;; esac
+  case " $FUNCS38 $CORPUS6 " in *" $_f "*) ;; *) miss "functions declares $_f, outside contract 2" ;; esac
 done
 case " $(vals search_modes) " in *' "exact" '*) ;; *) miss "search_modes lacks exact [$(vals search_modes)]" ;; esac
 for _f in $(vals optional | tr -d '"'); do
   case "$_f" in corpus.store|corpus.changelog) ;; *) miss "optional declares $_f" ;; esac
 done
-tc "TC70: the descriptor declares contract 2 with the 40 functions and exact search"
+tc "TC70: the descriptor declares contract 2 with the 38 functions and exact search"
 
-# TC71: lane.create refuses an existing lane with the recipe unchanged; an imported lane
-# without journal or report answers preamble null and content null
+# TC71: lane.create refuses an existing lane with the recipe unchanged; a lane without a
+# report answers content null and its empty journal preamble "" with no item (a journal
+# preamble null is legacy text only posix holds: TC60's bare-lane golden); an absent lane
+# refuses
 printf '# another recipe\n' > "$SANDBOX/recipe2.txt"
 doc "$SANDBOX/recipe2.txt"
 call lane.create "$TUNIT" lane-worker
 refused 1 ERR_ENTITY_EXISTS "lane 'lane-worker' already exists in unit 'compliance-tasks'"
 call lane.get "$TUNIT" lane-worker recipe
 answer; wantout '{"unit":"compliance-tasks","lane":"lane-worker","artifact":"recipe","content":"# recipe grammar\nMISSION\n  GOAL: \"Subagent goal description\"\n"}'
-call lane.get legacy-u bare-lane journal
-answer; wantout '{"unit":"legacy-u","lane":"bare-lane","artifact":"journal","preamble":null,"items":[]}'
-call lane.get legacy-u bare-lane report
-answer; wantout '{"unit":"legacy-u","lane":"bare-lane","artifact":"report","content":null}'
-call lane.get legacy-u no-such-lane recipe
-refused 1 ERR_ENTITY_NOT_FOUND "lane 'no-such-lane' not found in unit 'legacy-u'"
-tc "TC71: lane.create refuses an existing lane; a lane without journal or report reads null"
+printf '# a bare recipe\n' > "$SANDBOX/recipe3.txt"
+doc "$SANDBOX/recipe3.txt"
+call lane.create "$TUNIT" bare-lane; answer
+call lane.get "$TUNIT" bare-lane journal
+answer; wantout '{"unit":"compliance-tasks","lane":"bare-lane","artifact":"journal","preamble":"","items":[]}'
+call lane.get "$TUNIT" bare-lane report
+answer; wantout '{"unit":"compliance-tasks","lane":"bare-lane","artifact":"report","content":null}'
+call lane.get "$TUNIT" no-such-lane recipe
+refused 1 ERR_ENTITY_NOT_FOUND "lane 'no-such-lane' not found in unit 'compliance-tasks'"
+tc "TC71: lane.create refuses an existing lane; a lane without a report reads content null and an empty journal"
 
 # TC72: a supersedes naming an absent finding refuses; a successor NAME the knowledge
 # holds refuses; finding.list active leaves out the superseded finding
@@ -1749,34 +1857,43 @@ call finding.list tc72-u all
 answer; wantvals findings name '"OLD_F" "OTHER_F" "NEW_F"'; wantvals findings active 'false true true'
 tc "TC72: supersedes needs its predecessor and a new successor; the active list leaves the superseded out"
 
-# TC73: session.stamp answers A<N> to A<N+1> with the canonical anchor; a stored
-# current_anchor that is not A<N> refuses rc2 ERR_STORAGE_CORRUPT, the state unchanged
+# TC73: session.stamp answers A<N> to A<N+1> with the canonical anchor, and the journal
+# holds that anchor line
 mk tc73-s; answer
 kv attention "first stamp"
 call session.stamp tc73-s
 answer; wantout '{"unit":"tc73-s","previous_anchor":"A1","current_anchor":"A2","receipt":{"kind":"anchor","seq":2,"anchor":"A2","continues":"A1","attention":"first stamp","next":null,"verbatim":null}}'
-call unit.export tc73-s
-wantline '{"kind":"anchor","anchor":"A2","continues":"A1","attention":"first stamp","verbatim":null}'
-imp tc73-u "$FX/tc73-anchor.dump"
-answer
-kv attention "never lands"
-call session.stamp tc73-u
-refused_like 2 ERR_STORAGE_CORRUPT
-call session.load tc73-u
-answer; wantv state.current_anchor '"Ax"'
-# every write that stamps the anchor into an entry refuses it too (entry.record and both
-# receipts), the journal unchanged: a corrupt anchor never spreads into new entries
-kv objective "anchor probe"; call task.add tc73-u t73-a; answer
-kv objective "anchor probe two"; call task.add tc73-u t73-b; answer
-call unit.export tc73-u; cp "$O" "$SANDBOX/t73-before"
-rec tc73-u 1790000730 "never lands"
-refused_like 2 ERR_STORAGE_CORRUPT
-kv evidence "never lands"; kv date "$DATE"; call task.complete tc73-u t73-a
-refused_like 2 ERR_STORAGE_CORRUPT
-kv reason "never lands"; kv date "$DATE"; call task.drop tc73-u t73-b
-refused_like 2 ERR_STORAGE_CORRUPT
-call unit.export tc73-u; wantfile "$SANDBOX/t73-before"
-tc "TC73: session.stamp answers the canonical anchor; a malformed stored anchor refuses rc2, on entry.record and the receipts too"
+kv query "first stamp"
+call search.query tc73-s --mode=exact
+answer; wantout '{"unit":"tc73-s","query":"first stamp","mode":"exact","total_matches":1,"results":[{"entity_type":"session","entity_id":"tc73-s","section":"journal","snippet":"@anchor A2 (\"continues A1\", attention: first stamp)","score":0}]}'
+call session.load tc73-s; answer; wantv state.current_anchor '"A2"'
+tc "TC73: session.stamp answers the canonical anchor, and the journal holds its line"
+
+# TC78 (posix alone: a malformed current_anchor is legacy text the functions never write):
+# a stored current_anchor that is not A<N> refuses session.stamp rc2 ERR_STORAGE_CORRUPT,
+# the state unchanged, and every write that stamps the anchor into an entry refuses it too
+# (entry.record and both receipts), the unit's read answers unchanged: a corrupt anchor
+# never spreads into new entries
+if [ "$IS_POSIX" -eq 1 ]; then
+  plant tc73-u
+  kv attention "never lands"
+  call session.stamp tc73-u
+  refused_like 2 ERR_STORAGE_CORRUPT
+  call session.load tc73-u
+  answer; wantv state.current_anchor '"Ax"'
+  kv objective "anchor probe"; call task.add tc73-u t73-a; answer
+  kv objective "anchor probe two"; call task.add tc73-u t73-b; answer
+  reads tc73-u "$SANDBOX/t78-before.reads"
+  rec tc73-u 1790000730 "never lands"
+  refused_like 2 ERR_STORAGE_CORRUPT
+  kv evidence "never lands"; kv date "$DATE"; call task.complete tc73-u t73-a
+  refused_like 2 ERR_STORAGE_CORRUPT
+  kv reason "never lands"; kv date "$DATE"; call task.drop tc73-u t73-b
+  refused_like 2 ERR_STORAGE_CORRUPT
+  reads tc73-u "$SANDBOX/t78-after.reads"
+  cmp -s "$SANDBOX/t78-before.reads" "$SANDBOX/t78-after.reads" || miss "the read answers changed $(firstdiff "$(cat "$SANDBOX/t78-after.reads")" "$(cat "$SANDBOX/t78-before.reads")")"
+  tc "TC78: a malformed stored anchor refuses rc2 on session.stamp, entry.record, and the receipts, the unit unchanged"
+fi
 
 # TC75: a refusal prints exactly one stderr line in the fixed form and nothing on stdout
 call task.get "$TUNIT" no-such-task

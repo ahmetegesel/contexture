@@ -14,7 +14,7 @@
 --
 -- A write names the parts it changed in temp.tart (unit, part: state, backlog, knowledge,
 -- journal, or lane:<lane>): only those texts are rebuilt, the head rule starting afresh in
--- every text; a unit touched with no part named (an import, the upgrade) is rebuilt whole.
+-- every text; a unit touched with no part named is rebuilt whole.
 CREATE TEMP TABLE IF NOT EXISTS tart (unit TEXT NOT NULL, part TEXT NOT NULL);
 DROP TABLE IF EXISTS temp.dsel;
 CREATE TEMP TABLE dsel AS

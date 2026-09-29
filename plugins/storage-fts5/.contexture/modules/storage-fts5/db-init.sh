@@ -1,10 +1,11 @@
 # db-init.sh: the open path of the fts5 store (sourced; needs DB_PATH, MODULE_DIR, and a
 # scratch folder DB_TMP; CMD names the calling function in a refusal). The store is at
-# schema version 4 (PRAGMA user_version 4, schema.sql): a fresh database gets the whole
-# schema at once; a store below version 4 is upgraded in place on its first open
-# (upgrade/upgrade.sh: the backup <db>.v<old>.bak, the shipped steps to version 3, the one
-# transaction to version 4); a store above version 4 refuses rc 2 ERR_STORAGE_SCHEMA; a
-# store at version 4 opens with one read.
+# schema version 4 (PRAGMA user_version 4, schema.sql): a new or empty database gets the
+# whole schema at once; a store at version 4 opens with one read; a store at any other
+# version refuses rc 2 ERR_STORAGE_SCHEMA naming its version and the way forward, and is
+# never written: the plugin carries no upgrade path and no backup (D30 reversed at the end
+# review), so an older store is moved aside and its record re-entered into a fresh one
+# through the ctx verbs.
 
 DB_SCHEMA_VERSION=4
 
@@ -39,11 +40,7 @@ db_init() {
   if [ "$db_version" -eq "$DB_SCHEMA_VERSION" ]; then
     return 0
   fi
-  if [ "$db_version" -gt "$DB_SCHEMA_VERSION" ]; then
-    printf '%s: error: the store is at schema %s; this driver reads %s (ERR_STORAGE_SCHEMA)\n' "${CMD:-storage-fts5}" "$db_version" "$DB_SCHEMA_VERSION" >&2
-    exit 2
-  fi
-  if [ "$db_tables" = "0" ]; then
+  if [ "$db_tables" = "0" ] && [ "$db_version" -eq 0 ]; then
     # a fresh database: the whole schema at the current version, one transaction
     { grep '^PRAGMA' "$MODULE_DIR/schema.sql"; printf 'BEGIN IMMEDIATE;\n'; grep -v '^PRAGMA' "$MODULE_DIR/schema.sql"; printf 'PRAGMA user_version = %s;\nCOMMIT;\n' "$DB_SCHEMA_VERSION"; } \
       | sq -bail "$DB_PATH" >/dev/null 2>&1 || {
@@ -54,6 +51,6 @@ db_init() {
     }
     return 0
   fi
-  . "$MODULE_DIR/upgrade/upgrade.sh"
-  db_upgrade "$db_version"
+  printf '%s: error: the store is at schema %s; this driver reads %s and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)\n' "${CMD:-storage-fts5}" "$db_version" "$DB_SCHEMA_VERSION" >&2
+  exit 2
 }
