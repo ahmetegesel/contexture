@@ -872,9 +872,10 @@ $CTX session finding add e3-unit E3_ONE --summary="one" >/dev/null 2>&1
 $CTX session task add e3-unit e3-task --objective="a task" >/dev/null 2>&1
 printf 'the e3 recipe\n' | $CTX lane create e3-unit e3-lane >/dev/null 2>&1
 # item 6 (Q6 by the human): a REF or REFS element takes one of two pointer shapes,
-# <target>#<symbol> (text on both sides of a #) or a whole target path (holding a /), one
-# token without blanks or double quotes; anything else refuses rc1 naming both shapes
-e3_shapes="a reference is <target>#<symbol> or a whole target path holding a / (a root-level file as ./<file>), one token without blanks or double quotes (ERR_INVALID_ARGUMENT)"
+# <target>#<symbol> (text on both sides of a #) or a whole target path (holding a / and
+# ending in a name, R-REF), one token without blanks, control characters, or double quotes;
+# anything else refuses rc1 naming both shapes
+e3_shapes="a reference is <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes (ERR_INVALID_ARGUMENT)"
 e3_ref_refused() { # <label> <command...>: rc1, both shapes named, nothing on stdout
   e3_l=$1; shift
   e3_o=$("$@" 2>e3.err); e3_rc=$?
@@ -906,6 +907,51 @@ $CTX session finding update e3-unit E3_ONE --ref="knowledge#E3_ONE" --ref="docs/
 $CTX lane record e3-unit e3-lane --what="lane refs ok" --ref="lanes/e3-lane/report#claim" >/dev/null 2>&1; a_eq "$?" "0" "E3-6: lane record takes a lane report claim"
 $CTX session task update e3-unit e3-task --refs="journal#$TODAY-e3-t, lanes/e3-lane/recipe" >/dev/null 2>&1; a_eq "$?" "0" "E3-6: task update takes both shapes"
 a_match "$($CTX session task show e3-unit e3-task 2>/dev/null)" "^  REFS: \[journal#$TODAY-e3-t, lanes/e3-lane/recipe\]\$" "E3-6: the REFS list landed"
+# R-REF (the human's second review, A17): a whole target path ends in a name, so a lone /,
+# //, a trailing /, lanes/, and ./ refuse; an ASCII control byte counts as a blank (a form
+# feed, a vertical tab), and so does a Unicode blank (NBSP, U+2028); each refuses rc1 naming
+# both shapes on every REF write path; ### keeps passing (text on both sides of a #)
+e7_val() { # <tag>: the probe value, built by printf so no raw control byte sits in the suite
+  case "$1" in
+    slash) printf '/' ;; dslash) printf '//' ;; trail) printf 'a/' ;; lanes) printf 'lanes/' ;;
+    dot) printf './' ;; ff) printf 'journal#x\014y' ;; vt) printf 'lanes/x\013y' ;;
+    nbsp) printf 'journal#x\302\240y' ;; ls) printf 'lanes/x\342\200\250y' ;;
+  esac
+}
+e7_refused() { # <label> <command...>: rc1, both shapes named, nothing on stdout
+  e7_l=$1; shift
+  e7_o=$("$@" 2>e7.err); e7_rc=$?
+  a_eq "$e7_rc" "1" "E7-R: $e7_l refuses rc1"
+  a_match "$(cat e7.err)" "$e3_shapes" "E7-R: $e7_l names both pointer shapes"
+  a_eq "$e7_o" "" "E7-R: $e7_l prints nothing on stdout"
+}
+for e7_t in slash dslash trail lanes dot ff vt nbsp ls; do
+  e7_v=$(e7_val "$e7_t")
+  e7_refused "record --ref ($e7_t)" $CTX session record e3-unit --what="e7 probe" --ref="$e7_v"
+  e7_n=$(printf '%s' "$e7_t" | tr 'a-z' 'A-Z')
+  e7_refused "task add --refs ($e7_t)" $CTX session task add e3-unit "e7-bad-$e7_t" --objective="e7 bad refs" --refs="journal#x $e7_v"
+  $CTX session task show e3-unit "e7-bad-$e7_t" >/dev/null 2>&1; a_eq "$?" "1" "E7-R: the refused task add ($e7_t) landed nothing"
+  e7_refused "finding add --ref ($e7_t)" $CTX session finding add e3-unit "E7_BAD_$e7_n" --summary="e7 bad" --ref="$e7_v"
+  $CTX session finding show e3-unit "E7_BAD_$e7_n" >/dev/null 2>&1; a_eq "$?" "1" "E7-R: the refused finding add ($e7_t) landed nothing"
+  e7_refused "lane record --ref ($e7_t)" $CTX lane record e3-unit e3-lane --what="e7 lane probe" --ref="$e7_v"
+done
+a_eq "$($CTX session entry list e3-unit 2>/dev/null | grep -c 'e7 probe')" "0" "E7-R: no refused record landed"
+a_not "$($CTX lane show e3-unit e3-lane journal 2>/dev/null)" "e7 lane probe" "E7-R: no refused lane record landed"
+# what lands: an absolute path, a parent path, a root-level ./<file>, a lane path, a
+# target#symbol, a file#section, and ### (the human: it still passes), on every path
+$CTX session record e3-unit --what="e7 refs ok" --slug="$TODAY-e7-refs" --ref="/abs/file" --ref="../x" --ref="./README.md" --ref="lanes/l/recipe" --ref="journal#x" --ref="README.md#top" --ref="###" >/dev/null 2>&1
+a_eq "$?" "0" "E7-R: record takes the seven shapes that name a target"
+a_eq "$($CTX session entry show e3-unit "$TODAY-e7-refs" 2>/dev/null | grep -c '^  REF: ')" "7" "E7-R: the seven REF lines landed"
+$CTX session task add e3-unit e7-good --objective="e7 good refs" --refs="/abs/file ../x ./README.md lanes/l/recipe journal#x README.md#top ###" >/dev/null 2>&1
+a_eq "$?" "0" "E7-R: task add takes the seven shapes"
+a_match "$($CTX session task show e3-unit e7-good 2>/dev/null)" "^  REFS: \[/abs/file, \.\./x, \./README\.md, lanes/l/recipe, journal#x, README\.md#top, ###\]\$" "E7-R: the REFS list landed"
+$CTX session finding add e3-unit E7_GOOD --summary="e7 good" --ref="/abs/file" --ref="../x" --ref="./README.md" --ref="lanes/l/recipe" --ref="journal#x" --ref="README.md#top" --ref="###" >/dev/null 2>&1
+a_eq "$?" "0" "E7-R: finding add takes the seven shapes"
+a_eq "$($CTX session finding show e3-unit E7_GOOD 2>/dev/null | grep -c '^  REF: ')" "7" "E7-R: the seven finding REF lines landed"
+$CTX lane record e3-unit e3-lane --what="e7 lane refs ok" --ref="/abs/file" --ref="../x" --ref="./README.md" --ref="lanes/l/recipe" --ref="journal#x" --ref="README.md#top" --ref="###" >/dev/null 2>&1
+a_eq "$?" "0" "E7-R: lane record takes the seven shapes"
+a_match "$($CTX lane show e3-unit e3-lane journal 2>/dev/null)" "e7 lane refs ok" "E7-R: the lane entry landed"
+rm -f e7.err
 # legacy values read as stored (posix: a legacy entry carrying a free-text REF)
 if [ "$DRIVER" = posix ]; then
   printf '\n@entry 2026-09-20-e3-legacy\n  ANCHOR: A1\n  WHAT: "legacy ref"\n  THREAD: none\n  REF: "a free text legacy reference"\n' | rappend e3-unit journal
@@ -1521,7 +1567,7 @@ out=$($CTX session entry show f-unit "$TODAY-f-e2" --json 2>&1 </dev/null)
 a_match "$out" '"refs":\[\]' "RF2: entry show --json carries an empty refs list when the entry has none"
 out=$($CTX session entry show f-unit "$TODAY-f-e1" 2>&1 </dev/null)
 a_eq "$(printf '%s\n' "$out" | sed -n '1p;3p;4p' | tr '\n' '|')" "@entry $TODAY-f-e1|  WHAT: \"entry with a ref\"|  THREAD: none|" "RF2: entry show text keeps its lines"
-# D15: entry show prints the stored block, its REF line included
+# D15: entry show prints the canonical block, its REF line included
 a_match "$out" '^  REF: "knowledge#F_NOREF"$' "RF2: entry show text prints the REF line of the block (D15)"
 
 # a reference to a unit the store lacks is legacy text (session refs refuses it): posix alone

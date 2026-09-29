@@ -141,9 +141,9 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx session board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
 | ctx session audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
 | ctx session index | One line per rhythm: name, path, use when, activation |
-| ctx session task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags; the driver enforces the status moves (start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop refused for the task next_action names) and writes the completion or drop receipt in the same write; show prints the stored block |
+| ctx session task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags; the driver enforces the status moves (start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop refused for the task next_action names) and writes the completion or drop receipt in the same write; show prints the canonical block |
 | ctx session record <unit> --what="..." [--flags] | Append an immutable journal event (--group, --thread, --rhythm, --knowledge, --slug, and the repeatable --ref, --closes, --supersedes); the driver injects the active anchor and composes the slug from the local date and time |
-| ctx session entry show <unit> <slug> | The entry's stored block (the last occurrence of a repeated legacy slug) |
+| ctx session entry show <unit> <slug> | The entry's canonical block (the last occurrence of a repeated legacy slug) |
 | ctx session entry list <unit> [--anchor=A<N>] [--group=<token>] | One line per entry occurrence (anchor, slug, WHAT), open or closed; `--group` is the topic thread, `--anchor` one period |
 | ctx session entry closure <unit> <slug> | Open, or closed with the verdict of the first closer, then every later closer naming it with its line |
 | ctx session finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list; `--ref` repeats |

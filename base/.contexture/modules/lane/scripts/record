@@ -6,7 +6,7 @@
 # help:   --what="..."         event description (required)
 # help:   --slug=...           override entry slug (default auto-generated with date)
 # help:   --thread=...         what the lane awaits (default: none); empty, true, or false refuses rc 1
-# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / (a root-level file as ./<file>), one token without blanks or double quotes; repeatable, one REF line each
+# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes; repeatable, one REF line each
 # help: a CLOSED unit refuses rc 1; a slug the lane journal already carries refuses rc 1 (ERR_ENTITY_EXISTS); an absent lane refuses rc 1 (create it with ctx lane create)
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../../session/lib" && pwd)/verb.sh"

@@ -315,14 +315,32 @@ vb_lane() {
 
 # vb_ref_ok <label> <ref>: a REF or REFS element names its target in one of the two
 # pointer shapes of @record references (end review item 6, Q6 by the human): <target>#<symbol>
-# (a # with text on both sides) or a whole target path (holding a /, so a root-level file
-# reads ./<file> or <file>#<section>: the human's A17 decision); one token, no blank, no
-# double quote. New writes only: a legacy value already stored reads as it stands.
+# (a # with text on both sides, so ### passes) or a whole target path (holding a / and
+# ending in a name, so a root-level file reads ./<file> or <file>#<section>: the human's A17
+# decision; a lone /, //, a trailing / as in lanes/, and ./ name no target and refuse: R-REF
+# of the second review); one token: no blank, no double quote, and no control character (an
+# ASCII control byte counts as a blank, R-REF, and so does a Unicode blank). The control
+# check goes through tr, since bash as sh reserves \001 and \177 inside its patterns; the
+# Unicode blanks through awk index under LC_ALL=C (bytes, never the locale). New writes
+# only: a legacy value already stored reads as it stands.
 vb_ref_ok() {
-  case "$2" in
+  vr_ok=1
+  # the Unicode blanks beyond ASCII (the White_Space set: NEL, NBSP, U+1680, U+2000 to
+  # U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) as UTF-8 byte strings, each followed by
+  # a |, built by printf so no such byte sits in this file
+  vr_ub=$(printf '\302\205|\302\240|\341\232\200|\342\200\200|\342\200\201|\342\200\202|\342\200\203|\342\200\204|\342\200\205|\342\200\206|\342\200\207|\342\200\210|\342\200\211|\342\200\212|\342\200\250|\342\200\251|\342\200\257|\342\201\237|\343\200\200|')
+  [ "$(printf '%s' "$2" | LC_ALL=C tr -d '\001-\037\177')" = "$2" ] || vr_ok=0
+  [ "$vr_ok" -eq 1 ] && VB_V="$2" VB_B="$vr_ub" LC_ALL=C awk 'BEGIN {
+    n = split(ENVIRON["VB_B"], B, "|")
+    for (i = 1; i < n; i++) if (index(ENVIRON["VB_V"], B[i])) exit 0
+    exit 1
+  }' && vr_ok=0
+  [ "$vr_ok" -eq 1 ] && case "$2" in
     ""|*[' 	"']*) ;;
-    ?*'#'?*|*/*) return 0 ;;
+    */|.|./) ;;
+    ?*'#'?*) return 0 ;;
+    */?*) return 0 ;;
   esac
-  printf "%s: error: malformed ref '%s': a reference is <target>#<symbol> or a whole target path holding a / (a root-level file as ./<file>), one token without blanks or double quotes (ERR_INVALID_ARGUMENT)\n" "$1" "$2" >&2
+  printf "%s: error: malformed ref '%s': a reference is <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes (ERR_INVALID_ARGUMENT)\n" "$1" "$2" >&2
   exit 1
 }

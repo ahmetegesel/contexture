@@ -7,7 +7,7 @@
 # help:   --group=...          topic group token
 # help:   --thread=...         what the unit awaits (default: none)
 # help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of .contexture/rhythms/<name>.md
-# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / (a root-level file as ./<file>), one token without blanks or double quotes; repeatable, one REF line each
+# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes; repeatable, one REF line each
 # help:   --closes="<slug> (<verdict>: <reason>)"   closes journal entry targets (one or more slugs before the parenthesis); the verdict done, superseded, dropped, or folded; repeatable, one CLOSES line each
 # help:   --supersedes="<slug> (<verdict>: <reason>)"   supersedes journal entry targets, the same form; repeatable, one SUPERSEDES line each
 # help:   --knowledge          flag for harvest
@@ -131,7 +131,7 @@ if [ -n "$rhythm" ]; then
 fi
 
 # a REF names its target in one of the two pointer shapes: <target>#<symbol> or a whole
-# target path (lanes/<lane>/recipe), one token (end review item 6)
+# target path ending in a name (lanes/<lane>/recipe), one token (end review item 6, R-REF)
 i=0
 while [ "$i" -lt "$nref" ]; do
   i=$((i + 1))

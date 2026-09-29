@@ -5,7 +5,7 @@
 # help:   show <unit> <slug> [--json]
 # help:   list <unit> [--anchor=A<N>] [--group=...] [--json]
 # help:   closure <unit> <slug> [--json]
-# help: show prints the entry's stored block (the last occurrence of a repeated legacy slug); list prints one line per entry occurrence; closure prints whether the entry is closed and every later closer naming it (positional: a closer closes the occurrences before it)
+# help: show prints the entry's canonical block (the last occurrence of a repeated legacy slug); list prints one line per entry occurrence; closure prints whether the entry is closed and every later closer naming it (positional: a closer closes the occurrences before it)
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 

@@ -4,9 +4,9 @@ The conversation is a scratchpad; the record is the memory. When a context windo
 
 ## Storage abstraction and entity domains
 
-Under @laws#storage-backend-authority, the configured storage backend is the authoritative single source of truth. The engine completely decouples session machinery from physical disk layouts and file formats. Every verb reaches the record through the configured driver and nothing else, so the record is one store whichever driver holds it. Base maps every command to one storage function and renders the typed data it returns, and each backend stores the record its own way and enforces the record rules itself. The data model is one for every backend: every item answers typed fields and reads in one canonical layout (field order, spacing, and quoting are layout, never data), and an item stored in an older shape keeps every value in named fields (a legacy status, extra fields, head text, extra lines), so every backend returns the same data and prints the same text for the same record, and an older record reads back with nothing lost. In the default POSIX driver each artifact is a markdown file in its unit folder, written in the record grammar below; the SQLite FTS5 backend (the storage-fts5 plugin) keeps the record in its database. No command moves a record between backends: a record reaches another backend through the agent re-entering it with the ordinary verbs, so a store other than posix holds only what the verbs write and older record shapes live in posix files alone.
+Under @laws#source-of-truth the record is the only source of truth, and the configured storage backend holds it: one authoritative store. The engine completely decouples session machinery from physical disk layouts and file formats. Every verb reaches the record through the configured driver and nothing else, so the record is one store whichever driver holds it. Base maps every command to one storage function and renders the typed data it returns, and each backend stores the record its own way and enforces the record rules itself. The data model is one for every backend: every item answers typed fields and reads in one canonical layout (field order, spacing, and quoting are layout, never data), and an item stored in an older shape keeps every value in named fields (a legacy status, extra fields, head text, extra lines), so every backend returns the same data and prints the same text for the same record, and an older record reads back with nothing lost. In the default POSIX driver each artifact is a markdown file in its unit folder, written in the record grammar below; the SQLite FTS5 backend (the storage-fts5 plugin) keeps the record in its database. No command moves a record between backends: a record reaches another backend through the agent re-entering it with the ordinary verbs, so a store other than posix holds only what the verbs write and older record shapes live in posix files alone.
 
-For agents, under @laws#semantic-boundary, the record is an abstract structured domain surface, never raw files on disk. Agents interact exclusively through semantic CLI verbs, never reading, editing, or grepping storage files or database tables directly.
+For agents, under @laws#cli-doorway, the record is an abstract structured domain surface, never raw files on disk: agents reach it strictly through the `ctx session` and `ctx lane` verbs, never reading, editing, or grepping storage files or database tables directly.
 
 The record comprises five distinct entity domains:
 
@@ -85,7 +85,7 @@ Agents mutate the backlog through typed CLI verbs, the only write inputs (no mar
 - `ctx session task reopen <unit> <slug>`: moves an `IN_PROGRESS` or `DONE` task back to `TODO`.
 - `ctx session task drop <unit> <slug> [--reason="..."]`: removes the task and records its drop receipt (`backlog/<slug>: DROPPED (<reason>)`) in the journal; an `IN_PROGRESS` task the pointer names refuses.
 - `ctx session task list <unit> [--status=todo|progress|done|all]`: lists tasks matching the filter.
-- `ctx session task show <unit> <slug>`: prints the task's stored block, its `REFS` included.
+- `ctx session task show <unit> <slug>`: prints the task's canonical block, its `REFS` included (a legacy task too, every value kept).
 
 The storage driver enforces the status moves: any other move refuses with the task unchanged. The raw block verbs of earlier releases (`append`, `amend`, `flip`, `drop`) retired in v0.55.0; each name prints its replacement.
 
@@ -117,7 +117,7 @@ Fields on journal entries, in the canonical order every read prints and the reco
 - `GROUP:` topic thread identifier, stable within the unit.
 - `RHYTHM: <name> <N> <GATE>` records process milestones.
 - `THREAD: <what it awaits>` names external acts awaiting completion, or `none` for receipts.
-- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several. A reference takes one of two shapes, `<target>#<symbol>` or a whole target path holding a `/` (`lanes/<lane>/recipe`; a root-level file as `./README.md`, or `README.md#<section>`), one token without blanks or double quotes; the verbs refuse any other value on a new write, naming both shapes, and a legacy value reads as stored.
+- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several. A reference takes one of two shapes, `<target>#<symbol>` or a whole target path holding a `/` and ending in a name (`lanes/<lane>/recipe`; a root-level file as `./README.md`, or `README.md#<section>`; a lone `/`, a trailing `/` as in `lanes/`, and `./` name no target), one token without blanks, control characters, or double quotes (an ASCII control byte such as a form feed or a vertical tab counts as a blank, and so does a Unicode blank such as a no-break space or U+2028); the verbs refuse any other value on a new write, naming both shapes, and a legacy value reads as stored.
 - `CLOSES:` or `SUPERSEDES:` closes an earlier entry by reference with a verdict word and reason. One line may name several targets (`CLOSES: <slug> <slug> (folded: reason)`) and an entry may carry several closer lines; every date-slug before the first spaced paren or spaced hyphen is a target.
 - `KNOWLEDGE: true` flags entries for durable knowledge harvesting.
 
@@ -132,7 +132,7 @@ Agents record events via `ctx session record`:
 The command sends the current local date and time, the storage driver takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` and `--supersedes` take only the explicit form `<slug> (<verdict>: <reason>)` (one or more target slugs before the parenthesis, each naming an entry the journal already holds, as in `--closes="<slug> <slug> (dropped: reason)"`), the verdict one of `done`, `superseded`, `dropped`, `folded` and the reason non-empty; a bare target list refuses rc 1 naming the form, since the closer carries the resolution itself, and a reason holding a parenthesis refuses naming the rule. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal reads in the canonical layout, every value kept, and its file bytes stay as they are. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the `next_action` pointer, the state `objective`) on every write path: an embedded double quote is text (the typed verbs, `next`, and `bootstrap` store it), and every reader returns it verbatim.
 
 To inspect entries:
-- `ctx session entry show <unit> <slug> [--json]`: prints the entry's stored block (every field it carries); `--json` prints the typed entry: its fields, `refs` as a list, its closers, and the closure derived by position (`closed`, `closed_by`, `close_reason`).
+- `ctx session entry show <unit> <slug> [--json]`: prints the entry's canonical block (every field it carries); `--json` prints the typed entry: its fields, `refs` as a list, its closers, and the closure derived by position (`closed`, `closed_by`, `close_reason`).
 - `ctx session entry list <unit> [--anchor=A<N>] [--group=...] [--json]`: one line per entry occurrence, open or closed.
 - `ctx session entry closure <unit> <slug> [--json]`: whether the entry is closed, and every later closer naming it with its line.
 
@@ -143,7 +143,7 @@ Findings hold what the unit settled: validated truths, architectural decisions, 
 Unlike immutable journal events, findings support full lifecycle CRUD:
 
 - `ctx session finding add <unit> <NAME> --summary="..." [--ref=...]... [--supersedes=...]`: adds a new finding, active until a later finding supersedes it.
-- `ctx session finding show <unit> <NAME>`: prints the finding's stored block, with `SUPERSEDED_BY: <successor>` after its head when a later finding supersedes it.
+- `ctx session finding show <unit> <NAME>`: prints the finding's canonical block, with `SUPERSEDED_BY: <successor>` after its head when a later finding supersedes it.
 - `ctx session finding update <unit> <NAME> [--summary="..."] [--ref=...]...`: updates the summary, the references, or both in place when concepts are refined (either flag alone works); `--ref` repeats and replaces the whole list; an update carrying no field refuses rc 1.
 - `ctx session finding supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]...`: adds the successor finding carrying `SUPERSEDES: <old-name>`, maintaining audit lineage; a missing predecessor refuses rc 1.
 - `ctx session finding drop <unit> <NAME>`: removes an invalidated finding.
@@ -169,7 +169,7 @@ Findings land through the harvest of `KNOWLEDGE: true` entries: the agent propos
 
 ## Abstract entity references and resolution
 
-Under @laws#abstract-references, all cross-entity citations use domain notation rather than physical file paths:
+A REF names its target exactly in one of the two pointer shapes of the laws' references rule (@record references; the REF line above). The resolve verb reads an entity reference in domain notation:
 
 - Tasks: `task#<slug>`
 - Journal entries: `entry#<slug>`
