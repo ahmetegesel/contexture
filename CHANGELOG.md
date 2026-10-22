@@ -4,6 +4,14 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.55.1] - 2026-10-22
+
+PATCH: a wording change to the harvest law, no artifact shape changed.
+
+### Changed
+
+- The harvest lands by the agent's judgement: a candidate that meets the bar lands in knowledge and its entry closes by reference, and a candidate that does not drops; no approval gate. The unit close promotes durable knowledge by the same bar. The law, the refresh and close steps, and the guides follow.
+
 ## [0.55.0] - 2026-09-30
 
 MINOR by the version ceiling; every break is named below.

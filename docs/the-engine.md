@@ -43,7 +43,7 @@ The laws are the spine of the whole system, and they ride with the agent every t
 - `process-free`: process is free and human-chosen; govern the output, not the process.
 - `compose-from-record`: compose from the record, never from the conversation.
 - `verify-before-close`: no done without evidence, and never a claim of verification not performed.
-- `harvest-the-human`: durable knowledge is surfaced by question, crystallized, and landed with approval.
+- `harvest-the-human`: durable knowledge is surfaced by question, crystallized, and landed by the agent's judgement when it meets the bar, never just to record; a candidate that does not drops.
 - `workspace-confinement`: the workspace is the boundary; the agent never roams outside it.
 - `cli-doorway`: the CLI (`.contexture/ctx`) is the single doorway to the runtime and the record: contracts are discovered through `ctx help`, the record is reached strictly through `ctx session` and `ctx lane`, and stderr is the diagnostic, with `--diagnose` on the engine subcommands for the runtime and storage state.
 
@@ -504,7 +504,7 @@ The loop is what the machinery does with the record: it makes gaps visible at fi
 
 - **Boot** runs `ctx session load` and `ctx session index`. The load is the subtraction, not a judgment call, so the agent pays for what is open and nothing else.
 - **Work** journals events as they happen and flags knowledge-worthy entries where they land. The flag is the harvest's input; nothing needs to be collected later.
-- **Refresh** runs at every rhythm boundary and inside close. It sweeps the artifacts: events journaled, backlog statuses advanced, `next_action` refreshed. It runs the harvest: every open flag, one candidate each; a confirmed candidate lands in knowledge and its entry closes by reference, and a candidate that is not landed drops. Then it runs the audit, and what it flags is fixed.
+- **Refresh** runs at every rhythm boundary and inside close. It sweeps the artifacts: events journaled, backlog statuses advanced, `next_action` refreshed. It runs the harvest: every open flag, one candidate each; a candidate that meets the bar lands in knowledge and its entry closes by reference, and a candidate that does not drops. Then it runs the audit, and what it flags is fixed.
 - **Close** closes the period's done events by reference and requires the audit to exit 0.
 - **Handoff** runs before context death, whether that is a compaction, a tool change, or a long break. The period-end writes run if they are not done, then the bounded cold read: run `ctx session load` and read the map and the state page, the backlog section with its open tasks whole, the journal's tail (this period's entries), and the knowledge tail when this period landed findings; the full-body pass belongs to the next boot, a fresh context. While the context is still full, improve the quality and fix what was missed; the gaps close now, never after compaction. `ctx session audit` exits 0.
 

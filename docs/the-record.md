@@ -165,7 +165,7 @@ The fields stand in the canonical order every read prints and the finding verbs 
 - `REF: "target#symbol"` grounds the finding in append-only artifacts (`entry#slug` or `lane#slug/report#claim`).
 - `SUMMARY ::` carries the settled claim.
 
-Findings land through the harvest of `KNOWLEDGE: true` entries: the agent proposes a compact candidate, the human confirms or reshapes it, and the entry closes by reference.
+Findings land through the harvest of `KNOWLEDGE: true` entries: the agent forms a compact candidate, lands it when it meets the bar, and the entry closes by reference; a candidate that does not drops.
 
 ## Abstract entity references and resolution
 

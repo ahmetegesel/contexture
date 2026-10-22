@@ -1,4 +1,4 @@
-# contexture v0.55.0: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.55.1: the shared base; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -7,7 +7,7 @@
   process-free: process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
   compose-from-record: compose from the record, never from conversation: rewrites grounded in journal/knowledge.
   verify-before-close: verify before close: no done without evidence; never claim verification you did not perform; re-read the record, confirm consistency.
-  harvest-the-human: harvest the human: question to surface durable knowledge; crystallize into compact candidates; land with approval; land when deserved, never just to record; developing ideas stay in the journal.
+  harvest-the-human: harvest the human: question to surface durable knowledge; crystallize into compact candidates; land when deserved, never just to record; the agent lands a candidate that meets the bar and drops the rest, with no approval gate; developing ideas stay in the journal.
   workspace-confinement: the current workspace (the repo/worktree the agent was started in) is the boundary; never read, write, search, or otherwise reach outside it unless the human specifically asks for that act; an apparent outside need stops and asks: the agent never roams; the harness's saved copy of a command's own truncated output is the agent's own output, sanctioned to read, read-only, the named file alone; the temp-file routing stays unsanctioned.
   cli-doorway: the CLI (.contexture/ctx) is the single doorway to the runtime and the record; discover contracts through ctx help; interact with the record strictly through ctx session and ctx lane; stderr is the diagnostic, augmented by --diagnose on engine subcommands to inspect runtime and storage state.
 
@@ -125,7 +125,7 @@
   - journal every dispatch: the subagent's lane slug
 
 @refresh
-  the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the board read (its open-thread and open-task lists are the status checklist), the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run: every open flag, one candidate each; confirmed candidates land in knowledge via ctx session finding add (REF to the full version, or the whole story carried) and the entry closes by reference; "not landed" drops; ctx session audit run, what it flags fixed; beyond the harvest, nothing closes here
+  the artifact sweep, shared by rhythm boundaries, @close, and @handoff: the board read (its open-thread and open-task lists are the status checklist), the events journaled, backlog statuses advanced, next_action refreshed (one terse pointer, overwritten never prepended; the WHY rebuilds from open items + GROUNDED IN + live findings), the harvest run: every open flag, one candidate each; a candidate that meets the bar lands in knowledge via ctx session finding add (REF to the full version, or the whole story carried) and the entry closes by reference; one that does not is dropped (not landed); ctx session audit run, what it flags fixed; beyond the harvest, nothing closes here
 
 @close
   period end (turn ends; unit continues):
@@ -136,7 +136,7 @@
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
     2. re-read; confirm consistency (@laws#verify-before-close)
-    3. promote durable knowledge at the human's direction
+    3. promote durable knowledge by the harvest bar: the agent lands what deserves knowledge and drops the rest
     4. mark CLOSED
 
 @handoff
