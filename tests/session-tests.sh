@@ -377,6 +377,8 @@ a_match "$out" "REF SESSION: ref-src (READ-ONLY)" "main load renders the ref ses
 # D28: the WRITE SCOPE line names the unit, never a storage path
 a_match "$out" "WRITE SCOPE: unit ref-unit + repos: .*ref sessions READ-ONLY" "main load scopes writes to the unit"
 a_not "$out" "WRITE SCOPE: .contexture/sessions" "main load names no storage path in its WRITE SCOPE line"
+a_match "$out" "# --- ref knowledge ---" "main load renders ref knowledge without physical file extension"
+a_not "$out" "# --- ref knowledge.md ---" "main load leaks no physical knowledge file name"
 out=$(load_all refs ref-src)
 rc=$?
 a_eq "$rc" "0" "refs form load rc0"

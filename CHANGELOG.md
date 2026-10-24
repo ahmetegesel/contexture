@@ -4,6 +4,14 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.55.2] - 2026-10-24
+
+PATCH: clean up physical file leakage in session ref renderer.
+
+### Fixed
+
+- The session ref renderer during session load with `ref_sessions` output `# --- ref knowledge.md ---`, leaking the physical storage file extension. Rendered delimiter is now `# --- ref knowledge ---`, consistent with `# --- ref live journal ---` and the docs-audience-separation law.
+
 ## [0.55.1] - 2026-10-22
 
 PATCH: a wording change to the harvest law, no artifact shape changed.

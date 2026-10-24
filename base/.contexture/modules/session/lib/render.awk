@@ -400,7 +400,7 @@ function load_ref(p,   u) {
   line("# === REF SESSION: " u " (READ-ONLY) ===")
   line("# NOTICE: Read-only reference context. Do not edit, resolve, or append entries here.")
   line("# All new tasks, active events, and state changes belong exclusively to the active session.")
-  line("# --- ref knowledge.md ---")
+  line("# --- ref knowledge ---")
   load_knowledge(D(p) "knowledge", u)
   line("# --- ref live journal ---")
   if (znull(D(p) "board") || !ex(D(p) "board.unit")) {
