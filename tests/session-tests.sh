@@ -257,6 +257,37 @@ out=$($CTX session load rw-unit 1 2>/dev/null)
 a_match "$out" "^status: ACTIVE" "reopen flips status back to ACTIVE"
 out=$($CTX session active 2>/dev/null)
 a_match "$out" "^rw-unit" "reopened unit lists as active again"
+# active recency: an A1-only unit prints no date line, an entry prints its slug date, a
+# stamped anchor prints its own distinct date, and the units order newest first with a
+# bytewise tie and the undated last; the fixtures enter in creation order (null, entry,
+# tie-b, tie-a, stamp), so creation order, the entry date for an anchor, or an absent
+# last_event each fails these assertions
+$CTX session bootstrap a80-null "recency null unit" >/dev/null 2>&1
+$CTX session bootstrap a80-entry "recency entry unit" >/dev/null 2>&1
+$CTX session record a80-entry --what="a dated entry" --slug=2026-09-27-a80-entry >/dev/null 2>&1
+a_eq "$?" "0" "active recency: the entry fixture records rc0"
+$CTX session bootstrap a80-tie-b "recency tie b" >/dev/null 2>&1
+$CTX session record a80-tie-b --what="a tied entry" --slug=2026-09-27-a80-tie-b >/dev/null 2>&1
+$CTX session bootstrap a80-tie-a "recency tie a" >/dev/null 2>&1
+$CTX session record a80-tie-a --what="a tied entry" --slug=2026-09-27-a80-tie-a >/dev/null 2>&1
+$CTX session bootstrap a80-stamp "recency stamp unit" >/dev/null 2>&1
+$CTX session record a80-stamp --what="the entry before the stamp" --slug=2026-09-27-a80-stamp-e >/dev/null 2>&1
+printf 'date=2026-09-28\n' | "$RESOLVER" session.stamp a80-stamp >/dev/null 2>&1
+a_eq "$?" "0" "active recency: the stamp fixture lands rc0"
+a80_out=$($CTX session active 2>/dev/null)
+a80_block() { printf '%s\n' "$a80_out" | sed -n "/^$1\$/,/^\$/p"; }
+a_not "$(a80_block a80-null)" "last_event:" "active recency: an A1-only unit prints no last_event line"
+a_match "$(a80_block a80-entry)" "^  last_event: 2026-09-27\$" "active recency: an entry prints its slug date"
+a_match "$(a80_block a80-stamp)" "^  last_event: 2026-09-28\$" "active recency: a stamped anchor prints its own date, not the entry's"
+a_eq "$(a80_block a80-entry | grep -v '^$' | tail -n 1)" "  last_event: 2026-09-27" "active recency: the date line closes the block after the objectives"
+a_eq "$(printf '%s\n' "$a80_out" | grep -E '^a80-(stamp|entry|tie-a|tie-b|null)$' | tr '\n' ' ' | sed 's/ $//')" "a80-stamp a80-entry a80-tie-a a80-tie-b a80-null" "active recency: newest first, bytewise ties, undated last"
+a80_le_last=$(printf '%s\n' "$a80_out" | grep -n '^  last_event: ' | tail -n 1 | cut -d: -f1)
+a80_null_line=$(printf '%s\n' "$a80_out" | grep -n '^a80-null$' | cut -d: -f1)
+if [ -n "$a80_le_last" ] && [ -n "$a80_null_line" ] && [ "$a80_le_last" -lt "$a80_null_line" ]; then
+  ok "active recency: every dated unit precedes the undated one"
+else
+  bad "active recency: every dated unit precedes the undated one (last date line: ${a80_le_last:-none}, a80-null: ${a80_null_line:-none})"
+fi
 $CTX session bootstrap dup-audit "duplicate slug unit" >/dev/null 2>&1
 # append retired (D1): the typed record writes the entries, the backend refuses the repeat (R5)
 $CTX session record dup-audit --what="first" --slug="$TODAY-twice" >/dev/null 2>&1

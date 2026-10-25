@@ -793,7 +793,7 @@ case "$cmd" in
   session.create) session_create "$@" ;;
   session.list)
     px_extra 0 "$@"
-    man_all_units ""
+    man_all_units journal
     px_awk
     ;;
   session.load) session_load "$@" ;;

@@ -4,7 +4,7 @@
 # runs one base (the v0.54.0 base by default), side B another (the branch base), both on the
 # posix driver, whose store the copied unit folders are; per unit it captures every kept
 # text view on both sides and compares their content, stdout and exit code together:
-#   board, the load (every page of each side, joined), audit, refresh, active (once), task
+#   board, the load (every page of each side, joined), audit, refresh, task
 #   list --status=all, entry list, finding list, search --mode=exact over a fixed query set of
 #   12, resolve of every task, finding, and entry (task#, finding#, entry#), lane show of every
 #   lane artifact (recipe, journal, report)
@@ -26,7 +26,7 @@
 #          --out=<dir> [--unit=<u>]... [--jobs=N] [--views=<v,v,...>] [--bytes]
 #   a base dir holds .contexture/ctx and .contexture/modules (session, lane, run); the
 #   units dir holds one folder per unit (the sessions folder of a workspace, read only,
-#   copied); --views limits the views (board, load, audit, refresh, active, tasks,
+#   copied); --views limits the views (board, load, audit, refresh, tasks,
 #   entries, findings, search, resolve, lanes)
 # The driver options of v0.55.0's build (--old-driver, --new-driver, --plugins: a store
 # driver on one side) retired with unit.export, unit.import, and ctx session migrate: a
@@ -187,9 +187,6 @@ while [ "$k" -le "$JOBS" ]; do
   fi
   k=$((k + 1))
 done
-JOB=0
-: > "$OUT/res/0.list"
-want active && cap _all active session active
 wait
 
 # the verdict per capture pair: the content signatures (tests/lib/content.awk) equal, or the

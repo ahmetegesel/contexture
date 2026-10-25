@@ -177,11 +177,18 @@ function f_session_create(   R, nr, S, ob, att, k) {
   answer("{\"unit\":" jstr(U) ",\"state\":" state_json(U) "}")
 }
 
+# unit_listing_json(u): the UnitSummary fields in their order, then last_event last (the
+# UnitListing schema of session.list)
+function unit_listing_json(u,   j) {
+  j = state_json(u)
+  return substr(j, 1, length(j) - 1) ",\"last_event\":" jnull(last_event(u "|journal")) "}"
+}
+
 function f_session_list(   u, first, n, i) {
   n = 0
   for (i = 1; i <= NUNITS; i++) { u = UL[i]; parse_state(u); n++ }
   O("{\"store\":" jstr(n > 0 ? "present" : "absent") ",\"units\":[")
-  for (i = 1; i <= NUNITS; i++) O((i > 1 ? "," : "") state_json(UL[i]))
+  for (i = 1; i <= NUNITS; i++) O((i > 1 ? "," : "") unit_listing_json(UL[i]))
   answer("]}")
 }
 

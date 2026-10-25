@@ -622,6 +622,36 @@ function state_json(u,   i, o, rs, e, l) {
   return "{\"unit\":" jstr(u) ",\"status\":" jstr(ST[u, "status"]) ",\"current_anchor\":" jstr(ST[u, "anchor"]) ",\"next_action\":" jstr(ST[u, "next"]) ",\"objective\":" jstr(ST[u, "obj"]) ",\"repos\":" o ",\"ref_sessions\":" rs ",\"extra_fields\":" e ",\"extra_lines\":" l "}"
 }
 
+# last_event(k): the date the last head line of the main journal carries: an anchor's stamp
+# date, or an entry slug's YYYY-MM-DD prefix; NULLV for a dateless last head, an empty
+# journal, or an absent journal. A light backward scan of the column-0 heads: no item or
+# closure parse
+function last_event(k,   i, s, h, d) {
+  if (!(k in PRES)) return NULLV
+  for (i = NL[k]; i >= 1; i--) {
+    s = L[k, i]
+    sub(/\r$/, "", s)
+    if (s ~ /^@entry /) {
+      h = s
+      sub(/^@entry[ \t]*/, "", h)
+      sub(/[ \t].*$/, "", h)
+      d = substr(h, 1, 10)
+      if (d ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) return d
+      return NULLV
+    }
+    if (s ~ /^@anchor /) {
+      h = s
+      sub(/^@anchor[ \t]*/, "", h)
+      sub(/[^ \t]+/, "", h)
+      sub(/^[ \t]+/, "", h)
+      sub(/[ \t]+$/, "", h)
+      if (h ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) return h
+      return NULLV
+    }
+  }
+  return NULLV
+}
+
 function task_json(k, i) {
   return "{\"slug\":" jstr(X[k, i, "slug"]) ",\"ordinal\":" i ",\"status\":" jstr(X[k, i, "status"]) ",\"objective\":" jstr(X[k, i, "objective"]) ",\"refs\":" xlist(k, i, "r") ",\"description\":" jnull(X[k, i, "desc"]) ",\"criteria\":" jnull(X[k, i, "crit"]) ",\"details\":" jnull(X[k, i, "det"]) tail_json(k, i, 1) ",\"next\":" nextk_json(k, i) "}"
 }

@@ -4,6 +4,20 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.56.0] - 2026-10-25
+
+MINOR: `ctx session active` carries each unit's recency and orders the field newest first.
+
+### Added
+
+- `session.list` answers the UnitListing schema: the UnitSummary fields (unit through extra_lines), then `last_event`, the date the last main-journal item carries (an anchor's stamp date or an entry slug's `YYYY-MM-DD` prefix), null when the last item carries no date or the journal is empty; lane journals are excluded. The posix derivation is a backward head-line scan of the manifested journal, the fts5 derivation a last-row lookup over `journal_items`; both answer the same JSON for the same record, with the stored schema, `session.units`, and the 38-function contract unchanged.
+- `ctx session active` prints two spaces then `last_event: YYYY-MM-DD` after each unit's objective lines when the date is known, and orders the ACTIVE units newest first, with a bytewise unit tie-break and undated units last; the verb help names the field and the order.
+- The compliance suite pins the derivation as TC80 (an A1-only unit answers null, a recorded entry its date, a stamped anchor its distinct stamp date) and asserts session.list's bytewise order; the session suite pins the active date line, the newest-first order, and nulls last; the counts are 74 cases on posix and 68 on every other backend.
+
+### Changed
+
+- `tests/parity-v054.sh` retires the active view: the intentional output addition and order change leave nothing to compare against the old base, so active leaves the kept-view list.
+
 ## [0.55.3] - 2026-10-25
 
 PATCH: the runner's capture sink is anonymous; a command can no longer read its own captured output.

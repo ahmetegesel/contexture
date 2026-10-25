@@ -1,7 +1,8 @@
 #!/bin/sh
 # summary: every ACTIVE unit at a glance
 # usage: ctx session active
-# help: no arguments: every ACTIVE unit (slug, then the current_anchor, next_action, and objective lines of its canonical state) then the closed count; a store not created yet prints "no sessions yet" rc=0; an argument refuses rc=1
+# help: no arguments: every ACTIVE unit newest last_event first (a bytewise unit tie-break, a unit with no date last), its slug, then the current_anchor, next_action, and objective lines of its canonical state, then its last_event date when known, then the closed count; a store not created yet prints "no sessions yet" rc=0; an argument refuses rc=1
+# help: last_event is the date the last main-journal item carries: an anchor's stamp date or a dated entry slug; a unit whose journal carries no date prints no line
 # help: the storage driver lists the units with their states (session.list, bytewise by name); a state whose status is neither exact ACTIVE nor CLOSED warns on stderr and counts as closed
 # help: exit codes: 0 every active unit printed (or "no sessions yet"); 1 an argument was passed
 # help: example: ctx session active

@@ -93,7 +93,7 @@ Boot is the reader; handoff is the writer's proof. Both run against the same rec
 
 ## The field
 
-Several units can be active at once. The field is what a boot sees: every unit whose state says ACTIVE.
+Several units can be active at once. The field is what a boot sees: every unit whose state says ACTIVE, ordered newest `last_event` first (the date the last main-journal item carries, an anchor's stamp date or a dated entry slug), with a bytewise unit tie-break and undated units last. Each unit renders its slug, anchor, next action, and objective, then its `last_event` date when known.
 
 The opening message is the primary signal; the field is the cross-check. The agent reads the message against the candidates, proposes its pick (continue this one, or bootstrap a new one), and waits for the human's word. A sweep of the folders before knowing the ask spends context on irrelevant text; matching the message first and verifying with one grep is the boot's order.
 

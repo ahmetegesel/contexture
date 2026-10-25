@@ -50,6 +50,8 @@ ref_sessions: [design-notes]
 
 The pointer mutates often: it is refreshed as the work moves, at every backlog update, task landing, and period end. It is updated via `ctx session stamp`, `ctx session next`, `ctx session refs`, `ctx session close`, `ctx session reopen`, and `ctx session task start` (which writes the pointer with the start); after `next` or a start, `next_action` must name every `IN_PROGRESS` task, else the write refuses.
 
+The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `ctx session active` orders it newest first. A unit whose last item carries no date answers null, and lane journals never enter the derivation.
+
 ## Backlog tasks, the declaration
 
 The backlog holds actionable tasks as a living queue: the current declaration of work, written to be executed from no matter when the agent looks. Tasks advance, update, and drop as the work teaches; the journal holds the history; the unit objective lives in the session state.
@@ -237,6 +239,8 @@ Time is recorded by anchors. An `@anchor` line stamps one working period, a fres
 ```
 
 A fresh unit starts at `A1`, the bootstrap's folded first anchor; each later stamp is the previous plus one. Anchors provide period ordering: `ctx session entry list <unit> --anchor=A<N>` lists one period, and an entry's `ANCHOR` names the period it was written in. A legacy anchor that carries receipt text (`("continues A11", attention: ...)`) keeps it as content and reads back as stored. No entry loads or skips by its anchor, and age never closes anything: an entry stays live until a closure names it.
+
+The stamped date is also a recency source: when an anchor is the last main-journal item, its date is the unit's `last_event`, the date `session.list` answers and `ctx session active` renders and orders by. A dated entry slug supplies the date otherwise; an anchor holding no date stamp, or a dateless last item, answers null.
 
 ## The schema as the memory boundary
 

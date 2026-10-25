@@ -17,7 +17,7 @@
 # returned (a key and its JSON value, a whole answer, a stderr line, the bytes of a
 # document), never an exit code alone; the census (--census) lists any case that would.
 #
-# Suites and cases (73 on posix, 67 on every other backend, whose store holds no legacy
+# Suites and cases (74 on posix, 68 on every other backend, whose store holds no legacy
 # text; a driver without corpus.store runs 8 corpus cases fewer):
 #    0 the fresh store: TC74
 #    1 session lifecycle: TC01 to TC04
@@ -29,7 +29,7 @@
 #    7 atomicity and concurrency: TC21, TC22
 #    8 refusals and tiers: TC23 to TC25
 #    9 journal integrity: TC26, TC27
-#   10 the store and the transport: TC28, TC31 to TC33
+#   10 the store and the transport: TC28, TC31 to TC33, TC80
 #   11 uniform answers: TC34, TC35, TC37 to TC39
 #   12 the corpus store (unchanged from v0.54.0): TC40 to TC46, TC50, TC51 (TC40 alone
 #      without corpus.store)
@@ -333,6 +333,16 @@ vals() {
 }
 # subobj <path>: the flattened lines under <path>, the prefix removed
 subobj() { awk -v p="$1." 'index($0, p) == 1 { print substr($0, length(p) + 1) }' "$F"; }
+# uidx <slug>: the index of <slug> in the session.list units array (never units.1)
+uidx() {
+  awk -v s="$1" '
+    index($0, "units.") == 1 {
+      k = $0; sub(/=.*$/, "", k); v = substr($0, length(k) + 2)
+      if (k ~ /^units\.[0-9]+\.unit$/ && v == "\"" s "\"") {
+        sub(/^units\./, "", k); sub(/\..*$/, "", k); print k; exit
+      }
+    }' "$F"
+}
 # firstdiff <a> <b>: the first differing position of two texts with some context
 firstdiff() {
   A_TXT=$1 B_TXT=$2 awk 'BEGIN {
@@ -791,7 +801,7 @@ answer; wantv entry.closed true; wantv entry.closed_by "\"$EPS\""
 tc "TC27: a multi-target closer closes every target and keeps its verdict"
 
 # ==============================================================================
-# Suite 10: The Store and the Transport (4 test cases)
+# Suite 10: The Store and the Transport (5 test cases)
 # ==============================================================================
 printf '\n== Suite 10: The Store and the Transport ==\n'
 SUNIT="compliance-store"
@@ -874,6 +884,65 @@ refused 1 ERR_ENTITY_NOT_FOUND "finding 'STORE_G' not found in unit 'compliance-
 call finding.get "$SUNIT" STORE_F
 answer; wantv finding.superseded_by null; wantv finding.active true
 tc "TC33: finding.update, finding.supersede, finding.drop answer and mutate the knowledge"
+
+# TC80: session.list answers a UnitListing per unit: the UnitSummary fields in their order,
+# then last_event last, the date the last main-journal item carries (an anchor's stamp date
+# or a dated entry slug; null for an A1-only unit and a dateless last item), bytewise by
+# unit; the anchor date is its own, never the entry's; session.units stays UnitSummary
+mk tc80-null "recency null fixture"
+answer
+kv objective "recency entry fixture"; kl repos tc80-repo; kv attention "recency fixture"
+call session.create tc80-entry
+answer
+kv slug 2026-09-27-tc80-entry
+rec tc80-entry 1790000801 "a dated entry"
+answer
+mk tc80-stamp "recency stamp fixture"
+answer
+rec tc80-stamp 1790000802 "the entry before the stamp"
+answer
+kv date 2026-09-28
+call session.stamp tc80-stamp
+answer
+mk tc80-dateless "recency dateless fixture"
+answer
+kv slug dateless-tc80
+rec tc80-dateless 1790000803 "a dateless last entry"
+answer
+mk tc80-zulu "bytewise probe zulu"
+answer
+mk tc80-alpha "bytewise probe alpha"
+answer
+call session.list
+answer
+_t80_null=$(uidx tc80-null)
+_t80_entry=$(uidx tc80-entry)
+_t80_stamp=$(uidx tc80-stamp)
+_t80_dateless=$(uidx tc80-dateless)
+[ -n "$_t80_null" ] || miss "session.list holds no tc80-null"
+[ -n "$_t80_entry" ] || miss "session.list holds no tc80-entry"
+[ -n "$_t80_stamp" ] || miss "session.list holds no tc80-stamp"
+[ -n "$_t80_dateless" ] || miss "session.list holds no tc80-dateless"
+wantv "units.$_t80_null.last_event" null
+wantv "units.$_t80_entry.last_event" '"2026-09-27"'
+wantv "units.$_t80_stamp.last_event" '"2026-09-28"'
+wantv "units.$_t80_dateless.last_event" null
+wantkeys "units.$_t80_entry" "unit,status,current_anchor,next_action,objective,repos,ref_sessions,extra_fields,extra_lines,last_event"
+_t80_units=$(vals units unit | tr ' ' '\n' | sed 's/^"//; s/"$//')
+_t80_sorted=$(printf '%s\n' "$_t80_units" | LC_ALL=C sort)
+[ "$_t80_units" = "$_t80_sorted" ] || miss "session.list units [$_t80_units] want the LC_ALL=C order [$_t80_sorted]"
+call session.units tc80-repo
+answer; wantv units.1.unit '"tc80-entry"'; wantkeys units.1 "unit,status,current_anchor,next_action,objective,repos,ref_sessions,extra_fields,extra_lines"
+# a lane journal is never the unit's recency: a newer lane trace leaves the main date alone
+printf 'recency lane recipe\n' > "$SANDBOX/tc80-recipe.txt"
+doc "$SANDBOX/tc80-recipe.txt"
+call lane.create tc80-entry recency-lane; answer
+kv what "a newer lane trace"; kv thread none; kv date 2026-10-05; kv epoch 1790000804
+call lane.record tc80-entry recency-lane; answer
+call session.list; answer
+_t80_entry=$(uidx tc80-entry)
+wantv "units.$_t80_entry.last_event" '"2026-09-27"'
+tc "TC80: session.list answers UnitListing with last_event last (anchor and entry dates, null; lane journals excluded), bytewise; session.units stays UnitSummary"
 
 # ==============================================================================
 # Suite 11: Uniform Answers (5 test cases)

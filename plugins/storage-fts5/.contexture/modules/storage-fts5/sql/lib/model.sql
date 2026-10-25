@@ -68,6 +68,23 @@ SELECT u.unit AS unit, json_object('unit', u.unit, 'status', u.status, 'current_
   'extra_fields', json('[]'), 'extra_lines', json('[]')) AS j
 FROM units u;
 
+-- session.list's UnitListing: the UnitSummary fields then last_event, the date the last main
+-- journal item carries (an anchor's stamp_date, an entry slug's YYYY-MM-DD prefix), null
+-- when the last item carries none or the journal is empty
+CREATE TEMP VIEW IF NOT EXISTS jlisting AS
+SELECT u.unit AS unit, json_object('unit', u.unit, 'status', u.status, 'current_anchor', u.current_anchor,
+  'next_action', u.next_action, 'objective', u.objective,
+  'repos', json((SELECT json_group_array(e.value ORDER BY e.key) FROM json_each(u.repos) e)),
+  'ref_sessions', json(CASE WHEN u.ref_sessions IS NULL THEN NULL ELSE
+    (SELECT json_group_array(e.value ORDER BY e.key) FROM json_each(u.ref_sessions) e) END),
+  'extra_fields', json('[]'), 'extra_lines', json('[]'),
+  'last_event', (SELECT CASE
+      WHEN j.kind = 'anchor' THEN j.stamp_date
+      WHEN substr(j.slug, 1, 10) GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]' THEN substr(j.slug, 1, 10)
+    END
+    FROM journal_items j WHERE j.unit = u.unit ORDER BY j.pos DESC LIMIT 1)) AS j
+FROM units u;
+
 CREATE TEMP VIEW IF NOT EXISTS jtask AS
 SELECT unit, pos, slug, status, ordinal,
   json_object('slug', slug, 'ordinal', ordinal, 'status', status, 'objective', objective,

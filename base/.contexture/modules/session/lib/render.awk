@@ -494,29 +494,54 @@ function v_close(   n, i, u, o) {
   line("CLOSED: " u)
 }
 
+# act_before(a, b): unit index a sorts before b in the active view: last_event descending
+# (a bytewise unit tie-break), a unit with no date last
+function act_before(a, b,   da, db, ua, ub) {
+  da = sv("units." a ".last_event")
+  db = sv("units." b ".last_event")
+  if (da != "" && db != "" && da != db) return da > db
+  if (da == "" && db != "") return 0
+  if (da != "" && db == "") return 1
+  ua = sv("units." a ".unit")
+  ub = sv("units." b ".unit")
+  return ua < ub
+}
+
 # ------------------------------------------------------------------------------
-# active (kept): every ACTIVE unit with its anchor, next_action, and objective line groups
-function v_active(   n, i, p, first, nact, ntot, j, st) {
+# active (kept): every ACTIVE unit newest last_event first, with its anchor, next_action,
+# and objective line groups and its last_event date when present
+function v_active(   n, i, p, k, m, j, v, nact, ntot, le) {
   n = nn("units")
   if (n == 0 && sv("store") == "absent") { line("no sessions yet"); return }
-  first = 1
   nact = 0
   ntot = 0
+  m = 0
+  split("", ACTS)
   for (i = 1; i <= n; i++) {
     p = "units." i
     ntot++
     st_groups(state_text(p), 1)
-    if (ST_status == "ACTIVE") {
-      if (!first) line("")
-      first = 0
-      nact++
-      line(sv(D(p) "unit"))
-      if (ST_anchor != "") line("  " ST_anchor)
-      for (j = 1; j <= ST_nl; j++) line("  " ST_nxt[j])
-      for (j = 1; j <= ST_ol; j++) line("  " ST_obj[j])
-    } else if (ST_status != "CLOSED") {
-      warn("WARNING: unrecognized status [" ST_status "] in state: unit " sv(D(p) "unit"))
-    }
+    if (ST_status == "ACTIVE") ACTS[++m] = i
+    else if (ST_status != "CLOSED") warn("WARNING: unrecognized status [" ST_status "] in state: unit " sv(D(p) "unit"))
+  }
+  for (i = 2; i <= m; i++) {
+    v = ACTS[i]
+    j = i - 1
+    while (j >= 1 && act_before(v, ACTS[j])) { ACTS[j + 1] = ACTS[j]; j-- }
+    ACTS[j + 1] = v
+  }
+  for (k = 1; k <= m; k++) {
+    i = ACTS[k]
+    p = "units." i
+    st_groups(state_text(p), 1)
+    if (k > 1) line("")
+    nact++
+    line(sv(D(p) "unit"))
+    if (ST_anchor != "") line("  " ST_anchor)
+    for (j = 1; j <= ST_nl; j++) line("  " ST_nxt[j])
+    for (j = 1; j <= ST_ol; j++) line("  " ST_obj[j])
+    le = sv(D(p) "last_event")
+    if (le != "") line("  last_event: " le)
   }
   if (nact == 0) line("no active sessions")
   line("closed: " (ntot - nact))

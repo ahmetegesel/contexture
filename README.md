@@ -133,7 +133,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 |---|---|
 | ctx help | The runtime summary: `ctx run`, `ctx session` with its verbs, and every discovered module with its summary line |
 | ctx session help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
-| ctx session active | The field: each ACTIVE unit with its slug, anchor, next action, and objective, then the closed count |
+| ctx session active | The field: each ACTIVE unit newest last_event first, with its slug, anchor, next action, objective, and last_event date when known, then the closed count |
 | ctx session bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the next move |
 | ctx session load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
 | ctx session load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
