@@ -300,7 +300,21 @@ a_eq "$?" "0" "run --diagnose rc0"
 run_diag=$($CTX run --diagnose 2>/dev/null)
 a_match "$run_diag" "runner compaction diagnostics" "run --diagnose outputs header"
 a_match "$run_diag" "temp directory:" "run --diagnose reports temp directory"
+a_match "$run_diag" "capture mode:    anonymous" "run --diagnose reports anonymous capture"
 a_match "$run_diag" "builtin filters:" "run --diagnose reports builtin filters"
+
+# Anonymous capture: the wrapped command cannot see the runner's own files
+seen=$($CTX run sh -c 'find .contexture/tmp -type f -print' 2>/dev/null)
+a_not "$seen" "compact-stdout" "runner stdout capture is not visible to the command"
+a_not "$seen" "compact-stderr" "runner stderr capture is not visible"
+
+# Capture still carries both streams, stdin, and the command exit code
+out=$(printf 'stdin line\n' | $CTX run sh -c 'cat; echo "err line" >&2' 2>capture.err)
+a_match "$out" "stdin line" "anonymous capture preserves command stdin"
+a_not "$out" "err line" "stderr stays out of stdout"
+a_match "$(cat capture.err)" "err line" "anonymous capture keeps stderr visible"
+$CTX run sh -c 'exit 7' >/dev/null 2>&1
+a_eq "$?" "7" "anonymous capture keeps the command exit code"
 
 echo "== summary =="
 echo "ctx-tests: pass=$pass fail=$fail"

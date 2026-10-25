@@ -4,6 +4,14 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.55.3] - 2026-10-25
+
+PATCH: the runner's capture sink is anonymous; a command can no longer read its own captured output.
+
+### Fixed
+
+- `ctx run` creates its stdout and stderr capture files in the workspace scratch drawer and unlinks them before the wrapped command runs. The runner keeps open read and write handles, so the capture lives without a directory entry: a recursive command can no longer find, read, and re-emit its own output. This closes the self-referential loop that grew a capture file until the disk filled. Tests pin the capture's invisibility, stdin preservation, stderr separation, and exit-code preservation.
+
 ## [0.55.2] - 2026-10-24
 
 PATCH: clean up physical file leakage in session ref renderer.

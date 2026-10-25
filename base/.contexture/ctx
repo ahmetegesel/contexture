@@ -335,7 +335,8 @@ run_body() {
     fi
   fi
 
-  # Sanctioned scratch: workspace .contexture/tmp when writable, else TMPDIR
+  # Sanctioned scratch: workspace .contexture/tmp when writable, else TMPDIR.
+  # Capture names are removed before the command runs (see Step 1).
   compact_tmpdir="${TMPDIR:-/tmp}"
   ctx_root_tmp="$root/.contexture/tmp"
   if [ -d "$root/.contexture" ] && mkdir -p "$ctx_root_tmp" 2>/dev/null && [ -d "$ctx_root_tmp" ] && [ -w "$ctx_root_tmp" ]; then
@@ -347,8 +348,10 @@ run_body() {
     printf '  workspace root:  %s\n' "$root"
     if [ -w "$compact_tmpdir" ]; then
       printf '  temp directory:  %s (writable)\n' "$compact_tmpdir"
+      printf '  capture mode:    anonymous (names removed before the command)\n'
     else
       printf '  temp directory:  %s (not writable)\n' "$compact_tmpdir"
+      printf '  capture mode:    anonymous (names removed before the command)\n'
     fi
     printf '  bypass config:   COMPACT_DISABLE=%s COMPACT_DEBUG=%s\n' "${COMPACT_DISABLE:-0}" "${COMPACT_DEBUG:-0}"
     printf '  builtin filters: %s\n' "$FILTERS_DIR"
@@ -516,30 +519,39 @@ run_body() {
   stdout_tmp=""
   stderr_tmp=""
 
-
-
-  cleanup() {
-    if [ -n "$stdout_tmp" ]; then
-      rm -f "$stdout_tmp"
-    fi
-    if [ -n "$stderr_tmp" ]; then
-      rm -f "$stderr_tmp"
-    fi
+  # The capture files live in the sanctioned scratch dir but their names are
+  # removed before the command runs. The open handles keep them alive; with no
+  # directory entry a recursive search cannot reach the command's own output.
+  # The kernel reclaims the inode when the last handle closes, even after a
+  # kill, so no cleanup trap is needed once the names are gone.
+  cleanup_capture() {
+    [ -z "$stdout_tmp" ] || rm -f "$stdout_tmp"
+    [ -z "$stderr_tmp" ] || rm -f "$stderr_tmp"
   }
 
   if [ $# -gt 0 ]; then
     # Command wrapper mode: stdout and stderr captured separately, exit code kept
-    trap cleanup EXIT
-    stdout_tmp=$(mktemp "$compact_tmpdir/compact-stdout.XXXXXX")
-    stderr_tmp=$(mktemp "$compact_tmpdir/compact-stderr.XXXXXX")
-    rc=0
-    ( "$@" >"$stdout_tmp" 2>"$stderr_tmp" ) || rc=$?
-    cmd_status=$rc
-    raw_input=$(cat "$stdout_tmp")
-    stderr_input=$(cat "$stderr_tmp")
+    trap cleanup_capture EXIT
+    stdout_tmp=$(mktemp "$compact_tmpdir/compact-stdout.XXXXXX") || {
+      printf '%s: cannot create a capture file in %s\n' "$run_label" "$compact_tmpdir" >&2
+      exit 2
+    }
+    stderr_tmp=$(mktemp "$compact_tmpdir/compact-stderr.XXXXXX") || {
+      printf '%s: cannot create a capture file in %s\n' "$run_label" "$compact_tmpdir" >&2
+      exit 2
+    }
+    exec 3>"$stdout_tmp" 4<"$stdout_tmp" 5>"$stderr_tmp" 6<"$stderr_tmp"
     rm -f "$stdout_tmp" "$stderr_tmp"
     stdout_tmp=""
     stderr_tmp=""
+    trap - EXIT
+    rc=0
+    ( exec 4<&- 6<&-; "$@" >&3 ) 2>&5 || rc=$?
+    cmd_status=$rc
+    exec 3>&- 5>&-
+    raw_input=$(cat <&4)
+    stderr_input=$(cat <&6)
+    exec 4<&- 6<&-
   else
     # Stdin pipe mode
     raw_input=$(cat)
