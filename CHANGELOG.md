@@ -4,6 +4,27 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.57.0] - 2026-10-27
+
+MINOR: the consolidation fold consolidates a unit's live record into ordinary entries whose REFs name the batch, with the record as the state, the grain planned at the record's mechanical seams, and the open threads carried (a fold compacts history, never obligations).
+
+### Added
+
+- `ctx session fold <unit> [--lane=<lane> [--merge] | --check | --finish]`: one stateless verb over the record. The first no-lane call computes the live scope, partitions it once in journal order into chunks at the mechanical seams, coalesces the mechanical series (consecutive task receipts, a release with its land, a `part N` or lane-prefix series, a shared backlog REF), splits an over-12 chunk only as the last resort (recorded as `cap_split`, at the last seam in its first 12 or at the last entry with a `(cap split: no seam)` note), records the fold start, and prints the plan with the carried open threads, the first lane's manual, and the first act. A fetch returns one unclosed chunk, its entries, the lane's remaining chunks (never another chunk's entries), and the next act; `--merge` adds only the immediately following chunk's entries, the one permitted merge partner; a fetch never advances. The lane writes one ordinary journal entry with `ctx session record`: the one-line synthesis in the WHAT, one REF per constituent plus any external report, and one folded closer per non-thread constituent; a carried open thread is REF'd as context, never closed; a merge records its same-topic reason in the WHAT as `(merged: <reason>)`. `--check` derives the batches from the live post-plan entries' CLOSES and REFs, treats a scoped live entry carrying THREAD other than none as carried (never `SCOPED_LIVE`), proves every batch REFs the carried threads in its chunks and the closed receipts are the scope minus the carried threads, no non-thread scoped entry remains live, and the audit is clean with its open-thread tail; it names every defect class, the grain's included (`CONSTITUENT_CAP`, `WHOLE_ANCHOR_BATCH`, `MERGE_BEYOND_NEXT`, `MERGE_REASON_MISSING`). `--finish` writes `FOLD FINISH v4 ... covered=<n> carried=<m> open threads ...` and closes the fold start done; the carried threads stay live and a live receipt refuses a second one.
+- The grain is mechanical: the plan owns the batch boundaries, coalescing the series and splitting at the seams; the over-12 split is the plan's last resort, never a hard cap on a seam-sized batch; the fetch hands one chunk at a time; the lane merges only the immediately following chunk with a recorded reason; a whole-anchor batch is refused; a lane never splits a chunk.
+- Open threads are carried, not folded: the fold leaves every open obligation live and visible, references it from its batch, and reports the carried count in the finish receipt; a batch that closes a carried thread (`THREAD_CLOSED`) or skips its REF (`CARRIED_UNREFERENCED`) refuses the check.
+- The lane manual teaches the ordinary record command, the refs and closers as the batch (open threads REF'd and never closed), the one-chunk handoff and the `--merge` next-chunk handoff, the same-topic reason, the supersession repair, the boundary, the finish, and the no-digest rule; every step goes through the runner.
+- Tests FC1 to FC17 cover the command surface and the manual, the plan and the partition (a zero-milestone anchor, a tail, a closed entry outside the scope), the lanes, the one-chunk fetch and the merge fetch, the lane's normal entry, the merge with its reason, the boundary, the coverage check and every defect class, the carried open-thread path (live, visible, counted, tail kept), the supersession repair, the finish and its idempotence, the long one-line WHAT, the NUL and CR refusals, the one-chunk handoff, the merge reason, the last-resort split, and the whole-anchor refusal.
+
+### Changed
+
+- `docs/the-engine.md` and `docs/the-record.md` document the consolidation fold, its mechanical grain, and the carried open threads; `README.md` carries the command row; `docs/modules.md` describes the fold's role; the journal template and the `@journal` folding law state the mechanical grain and that a fold compacts history, never obligations, and that open threads stay live and are carried.
+- The live drawer adopts the base session module.
+
+### Fixed
+
+- The v3 digest path, the full bucket-set checkpoint and its percent encoding, and the `CHAPTER_FOLD` milestone leave the command, the tests, and the guides. The v3 draft was never released.
+
 ## [0.56.0] - 2026-10-25
 
 MINOR: `ctx session active` carries each unit's recency and orders the field newest first.

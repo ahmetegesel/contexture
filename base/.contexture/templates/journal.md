@@ -7,11 +7,14 @@ substance: what happened, the result, why the next step follows;
 would a fresh boot reconstructing the position need it? then it
 records.
 
-a folded digest is an @entry like any other: its WHAT carries its chapter's
-synthesis and its decision sets whole for a reader with no prior context, and
-its CLOSES fold the originals by reference and stand as the fetch map; folded
-entries leave the load, never the file, and a reader fetches an original by
-its slug when the summary leaves a question open.
+a consolidated entry is an @entry like any other: its WHAT carries its batch's
+synthesis for a reader with no prior context, its REFs name every constituent
+(the carried open threads included) and any external report, and its CLOSES
+fold the same constituents except the open threads; folded entries leave the
+load, never the file, and a reader fetches an original by its slug when the
+summary leaves a question open. a fold compacts history, never obligations: an
+open thread (THREAD other than none) is REF'd as context, never closed, stays
+live, and the finish counts it as carried.
 
 @anchor A<N> <YYYY-MM-DD>                                           # period ordering: the period's number and date (ctx session stamp), no receipt text; never liveness
 

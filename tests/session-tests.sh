@@ -160,7 +160,7 @@ echo "== V verb surface and no-arg rc contract =="
 # and each call printing its replacement, below); units, refs-to added (D42); migrate, added
 # on this branch and never released, left the contract with unit.export and unit.import
 # (knowledge#MIGRATION_IS_AGENT_JUDGMENT) and answers as an unknown verb (below)
-DECLARED="active audit board bootstrap close diagnose entry finding index load next record refresh refs refs-to reopen resolve search stamp task units"
+DECLARED="active audit board bootstrap close diagnose entry finding fold index load next record refresh refs refs-to reopen resolve search stamp task units"
 disk=$(for f in .contexture/modules/session/scripts/*; do
   [ -f "$f" ] || continue
   b=${f##*/}
@@ -180,7 +180,7 @@ for v in $DECLARED; do
   esac
   a_eq "$rc" "$want" "verb:$v no-arg rc $want"
 done
-a_eq "$(printf '%s\n' $DECLARED | grep -c '')" "21" "verb surface: 21 session verbs"
+a_eq "$(printf '%s\n' $DECLARED | grep -c '')" "22" "verb surface: 22 session verbs"
 # migrate: no verb moves a record between backends; the name is no reserved retirement (it
 # never shipped), so ctx answers it as any unknown verb
 err=$($CTX session migrate --from=posix --to=fts5 2>&1 >/dev/null); rc=$?
@@ -202,7 +202,7 @@ rm -rf .contexture/modules/flip
 err=$($CTX session help query 2>&1 >/dev/null); rc=$?
 a_eq "$rc" "1" "retired: session help query rc1"
 a_match "$err" "^ctx session query retired in v0.55.0: use entry show" "retired: session help query prints the replacement"
-a_eq "$($CTX session help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "21" "session help lists the 21 verbs"
+a_eq "$($CTX session help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "22" "session help lists the 22 verbs"
 a_eq "$($CTX lane help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "4" "lane help lists the 4 verbs (create added)"
 out=$($CTX session index)
 a_match "$out" "probe (.*probe.md) | use when: the suite needs an index line | activation: propose" "index renders the rhythm line"
@@ -1897,6 +1897,589 @@ a_match "$diag_json" '"workspace_root"' "session diagnose --json carries workspa
 a_match "$diag_json" '"descriptor":{"driver":"' "session diagnose --json carries the capability descriptor (@rendering diagnose)"
 $CTX session --diagnose >/dev/null 2>&1
 a_eq "$?" "0" "session --diagnose flag rc0"
+
+echo "== FC the consolidation fold =="
+# FC1 the command surface and the help manual
+$CTX session fold >/dev/null 2>&1; a_eq "$?" "1" "FC1: fold no args rc1"
+err=$($CTX session fold 2>&1)
+a_match "$err" "^usage: ctx session fold <unit>" "FC1: fold no args prints usage"
+$CTX session fold --help >/dev/null 2>&1; a_eq "$?" "0" "FC1: fold --help rc0"
+$CTX session fold -h >/dev/null 2>&1; a_eq "$?" "0" "FC1: fold -h rc0"
+$CTX session fold help >/dev/null 2>&1; a_eq "$?" "0" "FC1: fold help rc0"
+help=$($CTX session fold --help 2>&1)
+a_match "$help" "# Consolidation fold lane" "FC1: help prints the lane manual"
+a_match "$help" "one ordinary journal entry" "FC1: the manual names the ordinary entry"
+a_match "$help" "ctx run \.contexture/ctx session record" "FC1: the manual's record command goes through the runner"
+a_match "$help" "thread=none" "FC1: the manual teaches the receipt thread"
+a_match "$help" "supersedes=" "FC1: the manual teaches the supersession repair"
+a_match "$help" "no digest" "FC1: the manual states the no-digest rule"
+a_match "$help" "Every step through the runner" "FC1: the manual teaches the runner"
+a_not "$help" "CHAPTER FOLD: <Title>" "FC1: the retired digest form is absent"
+$CTX session fold "bad slug!" >/dev/null 2>&1; a_eq "$?" "1" "FC1: malformed unit rc1"
+$CTX session fold no-such-unit >/dev/null 2>&1; a_eq "$?" "1" "FC1: absent unit rc1"
+$CTX session bootstrap fc-empty "empty fold unit" >/dev/null 2>&1
+err=$($CTX session fold fc-empty --lane=fold-x 2>&1 >/dev/null); fc_rc=$?
+a_eq "$fc_rc" "1" "FC1: a lane call with no active fold rc1"
+a_match "$err" "no active fold" "FC1: the no-active refusal names the plan call"
+out=$($CTX session fold fc-empty 2>&1); a_eq "$?" "0" "FC1: an empty unit rc0"
+a_match "$out" "holds no live entries" "FC1: an empty unit says there is nothing to fold"
+printf 'x\n' | $CTX session fold fc-empty >/dev/null 2>&1
+a_eq "$?" "1" "FC1: a payload refuses rc1 (the lane writes with record)"
+printf 'a\000b\n' | $CTX session fold fc-empty >/dev/null 2>&1
+a_eq "$?" "1" "FC1: a NUL payload refuses rc1"
+$CTX session fold fc-empty --bogus >/dev/null 2>&1; a_eq "$?" "1" "FC1: an unknown option rc1"
+
+# the fixture: A1 one anchor, A2 a task milestone and a tail, A3 a release,
+# a decide, a closed constituent, and a live closer receipt
+fc_fixture() {
+  fc_u=$1
+  $CTX session bootstrap "$fc_u" "fold fixture" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="Initial kickoff event" --slug="$TODAY-fc-01" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="Open thread: waiting on the human" --thread="the human's answer" --slug="$TODAY-fc-02" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="Just a note" --slug="$TODAY-fc-03" >/dev/null 2>&1
+  $CTX session stamp "$fc_u" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="backlog/task-alpha: DONE verification evidence" --slug="$TODAY-fc-04" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="Tail work after the milestone" --slug="$TODAY-fc-05" >/dev/null 2>&1
+  $CTX session stamp "$fc_u" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="LAND: shipped v0.1.0 (commit abc1234, tag v0.1.0)" --slug="$TODAY-fc-06" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="DECIDE (human): architecture choice settled" --slug="$TODAY-fc-07" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="Closed constituent" --slug="$TODAY-fc-08" >/dev/null 2>&1
+  $CTX session record "$fc_u" --what="Closer receipt" --closes="$TODAY-fc-08 (done: resolved)" --slug="$TODAY-fc-09" >/dev/null 2>&1
+}
+lane_of() { printf '%s\n' "$1" | awk -v id="$2" '$1==id{for(i=1;i<=NF;i++) if($i=="lane"){print $(i+1); exit}}'; }
+
+fc_fixture fc-unit
+
+# FC2 the plan: one partition, the chunks, the lanes, the fold start, the manual
+plan=$($CTX session fold fc-unit 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC2: the plan call rc0"
+a_match "$plan" "^FOLD START v4 fc-unit" "FC2: the plan names the unit"
+a_match "$plan" "^fold start: [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-event-" "FC2: the fold start is a dated entry"
+a_match "$plan" "scope: 8 live entries" "FC2: the scope is the live record"
+a_match "$plan" "batch rule: the plan chunks are atomic" "FC2: the plan states the batch rule"
+a_match "$plan" "carried open threads: 1" "FC2: the plan prints the carried open thread"
+a_match "$plan" "$TODAY-fc-02 \[A1\]: the human's answer" "FC2: the carried list names the open thread"
+a_eq "$(printf '%s\n' "$plan" | sed -n 's/^partition: scope=\([0-9]*\) chunks=\([0-9]*\) covered=\([0-9]*\) uncovered=\([0-9]*\)$/\1 \2 \3 \4/p')" "8 6 8 0" "FC2: the plan partitions the live scope exactly once"
+a_match "$plan" "1  \[A1\] ANCHOR.*from $TODAY-fc-01 to $TODAY-fc-03 (3 entries)" "FC2: a zero-milestone anchor is one ANCHOR chunk"
+a_match "$plan" "2  \[A2\] TASK_DONE.*from $TODAY-fc-04 to $TODAY-fc-04" "FC2: a task receipt ends a milestone chunk"
+a_match "$plan" "3  \[A2\] TAIL.*from $TODAY-fc-05 to $TODAY-fc-05" "FC2: the entries after the last milestone are a TAIL chunk"
+a_match "$plan" "4  \[A3\] RELEASE.*from $TODAY-fc-06 to $TODAY-fc-06" "FC2: a release ends a milestone chunk"
+a_match "$plan" "5  \[A3\] DECIDE.*from $TODAY-fc-07 to $TODAY-fc-07" "FC2: a decide ends a milestone chunk"
+a_match "$plan" "6  \[A3\] TAIL.*from $TODAY-fc-09 to $TODAY-fc-09" "FC2: the live closer receipt is the last tail"
+a_not "$plan" "$TODAY-fc-08" "FC2: the already-closed entry is outside the scope"
+a_match "$plan" "position: chunk 1 of 6; next lane " "FC2: the plan prints the position"
+a_match "$plan" "# Consolidation fold lane: " "FC2: the plan prints the first lane's manual"
+a_match "$plan" "Your chunks in this plan:" "FC2: the manual lists the lane's chunks"
+a_match "$plan" "chunk 1 \[A1\] ANCHOR: $TODAY-fc-01 to $TODAY-fc-03 (3 entries)" "FC2: the manual lists chunk 1"
+a_not "$plan" "CHAPTER FOLD" "FC2: no chapter-digest marker"
+fc_fs=$(printf '%s\n' "$plan" | sed -n 's/^fold start: \([^ ]*\).*/\1/p')
+fc_l1=$(lane_of "$plan" 1); fc_l2=$(lane_of "$plan" 2); fc_l3=$(lane_of "$plan" 4)
+a_match "$fc_l1" "^fold-[0-9]*-1$" "FC2: the first lane is deterministic"
+a_eq "$fc_l2" "$(lane_of "$plan" 3)" "FC2: the A2 chunks share one lane"
+a_match "$fc_l3" "^fold-[0-9]*-3$" "FC2: the A3 chunks share a later lane"
+a_match "$plan" "ctx run \.contexture/ctx lane create fc-unit $fc_l1" "FC2: the first act creates the lane through the runner"
+a_match "$plan" "ctx run \.contexture/ctx session fold fc-unit --lane=$fc_l1" "FC2: the first act fetches through the runner"
+a_match "$plan" "ctx run \.contexture/ctx session record fc-unit" "FC2: the manual's record command is runner-prefixed"
+for fc_l in "$fc_l1" "$fc_l2" "$fc_l3"; do
+  printf 'fold fixture lane %s\n' "$fc_l" | lane_new fc-unit "$fc_l"
+  a_eq "$?" "0" "FC2: lane $fc_l is created"
+done
+
+# FC3 the fetch: the next batch, its entries, the remaining chunks, no advance
+before=$($CTX session board fc-unit 2>&1)
+fetch=$($CTX session fold fc-unit --lane="$fc_l1" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC3: the lane fetch rc0"
+a_match "$fetch" "position: chunk 1 of 6; lane $fc_l1" "FC3: the fetch names the next chunk"
+a_match "$fetch" "NEXT BATCH: chunk 1 of the plan" "FC3: the fetch names the next batch"
+a_match "$fetch" "CHUNK 1/6 \[A1\] ANCHOR" "FC3: the fetch returns the next chunk"
+a_match "$fetch" "Initial kickoff event" "FC3: the fetch returns the first entry"
+a_match "$fetch" "Open thread" "FC3: the fetch returns the open thread"
+a_match "$fetch" "Just a note" "FC3: the fetch returns the last entry"
+a_match "$fetch" "YOUR CHUNKS IN THIS PLAN (lane $fc_l1)" "FC3: the fetch lists the lane's chunks"
+a_match "$fetch" "chunk 1 \[A1\] ANCHOR: .* \[next\]" "FC3: the next chunk is marked"
+a_not "$fetch" "REMAINING ENTRIES" "FC3: the fetch hands no other chunk's entries"
+a_match "$fetch" "The fetch hands one chunk at a time" "FC3: the fetch states the one-chunk handoff"
+a_match "$fetch" "ctx run \.contexture/ctx session record fc-unit" "FC3: the next act writes through the runner"
+a_match "$fetch" "ref=\"journal#$TODAY-fc-01\"" "FC3: the hint carries the batch refs"
+a_match "$fetch" "closes=\"$TODAY-fc-01 (folded: consolidated)\"" "FC3: the hint carries the folded closers"
+after=$($CTX session board fc-unit 2>&1)
+a_eq "$before" "$after" "FC3: a fetch never advances"
+err=$($CTX session fold fc-unit --lane=fold-nope 2>&1 >/dev/null); fc_rc=$?
+a_eq "$fc_rc" "1" "FC3: a lane the plan does not name refuses rc1"
+a_match "$err" "not assigned" "FC3: the wrong-lane refusal names the plan"
+
+# FC4 the lane's ordinary record entry: the refs carry the batch, the closers the non-thread part
+fc_c1=$($CTX session record fc-unit --what="Batch one: the kickoff, the carried thread, and the note" --group=fc --thread=none \
+  --ref="journal#$TODAY-fc-01" --ref="journal#$TODAY-fc-02" --ref="journal#$TODAY-fc-03" --ref="lanes/fc-unit/report" \
+  --closes="$TODAY-fc-01 (folded: consolidated)" --closes="$TODAY-fc-03 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+a_match "$fc_c1" "^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-event-" "FC4: the lane writes a normal dated entry"
+show=$($CTX session entry show fc-unit "$fc_c1" 2>&1)
+a_match "$show" 'WHAT: "Batch one' "FC4: the entry carries the synthesis WHAT"
+a_match "$show" "^  GROUP: fc$" "FC4: the entry carries the optional group"
+a_match "$show" "^  THREAD: none$" "FC4: the entry is a receipt"
+a_eq "$(printf '%s\n' "$show" | grep -c '^  REF:')" "4" "FC4: one ref per constituent (the carried thread included) plus the external report"
+a_eq "$(printf '%s\n' "$show" | grep -c '^  CLOSES:')" "2" "FC4: one folded closer per non-thread constituent"
+a_match "$show" "CLOSES: $TODAY-fc-01 (folded: consolidated)" "FC4: the closer carries the folded verdict"
+a_not "$show" "CLOSES: $TODAY-fc-02" "FC4: the carried open thread is never closed"
+boundary=$($CTX session fold fc-unit --lane="$fc_l1" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC4: the lane boundary rc0"
+a_match "$boundary" "LANE BOUNDARY: lane $fc_l1 is done; the next lane is $fc_l2" "FC4: the boundary names the next lane"
+a_match "$boundary" "# Consolidation fold lane: $fc_l2" "FC4: the boundary prints the next lane's manual"
+a_not "$boundary" "CHUNK 2/6" "FC4: the boundary returns no other lane's batch"
+a_match "$boundary" "ctx run \.contexture/ctx lane create fc-unit $fc_l2" "FC4: the boundary's create command is runner-prefixed"
+a_match "$boundary" "ctx run \.contexture/ctx session fold fc-unit --lane=$fc_l2" "FC4: the boundary's fetch command is runner-prefixed"
+
+# FC5 lane 2: chunk 2 then chunk 3, the remaining chunk is visible before its turn
+fetch=$($CTX session fold fc-unit --lane="$fc_l2" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC5: the lane 2 fetch rc0"
+a_match "$fetch" "NEXT BATCH: chunk 2" "FC5: lane 2 fetches chunk 2"
+a_match "$fetch" "CHUNK 2/6 \[A2\] TASK_DONE" "FC5: the task milestone chunk is handed over"
+a_match "$fetch" "$TODAY-fc-04" "FC5: chunk 2's entry is returned"
+a_match "$fetch" "chunk 3 \[A2\] TAIL: .* \[open\]" "FC5: the next chunk in the lane is listed"
+a_not "$fetch" "CHUNK 3/6" "FC5: the next chunk's entries wait for a --merge fetch"
+fc_merge=$($CTX session fold fc-unit --lane="$fc_l2" --merge 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC5: the --merge fetch rc0"
+a_match "$fc_merge" "CHUNK 3/6 \[A2\] TAIL" "FC5: the --merge fetch returns the next chunk's entries"
+a_match "$fc_merge" "$TODAY-fc-05" "FC5: chunk 3's entry is returned by the merge fetch"
+a_match "$fc_merge" "MERGE: the only merge partner is the immediately following chunk 3" "FC5: the merge names its only partner"
+fc_c2=$($CTX session record fc-unit --what="Batch two: the task receipt" --thread=none \
+  --ref="journal#$TODAY-fc-04" --closes="$TODAY-fc-04 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+fetch=$($CTX session fold fc-unit --lane="$fc_l2" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC5: the post-chunk-2 fetch rc0"
+a_match "$fetch" "NEXT BATCH: chunk 3" "FC5: the next chunk in the same lane is handed over"
+a_not "$fetch" "LANE BOUNDARY" "FC5: a same-lane fetch is no boundary"
+fc_c3=$($CTX session record fc-unit --what="Batch three: the tail after the milestone" --thread=none \
+  --ref="journal#$TODAY-fc-05" --closes="$TODAY-fc-05 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+boundary=$($CTX session fold fc-unit --lane="$fc_l2" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC5: the lane 2 boundary rc0"
+a_match "$boundary" "LANE BOUNDARY: lane $fc_l2 is done; the next lane is $fc_l3" "FC5: the lane 2 boundary names lane 3"
+a_match "$boundary" "# Consolidation fold lane: $fc_l3" "FC5: the lane 3 manual is printed"
+
+# FC6 lane 3: the merge of consecutive chunks 4 and 5, then chunk 6
+fetch=$($CTX session fold fc-unit --lane="$fc_l3" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC6: the lane 3 fetch rc0"
+a_match "$fetch" "NEXT BATCH: chunk 4" "FC6: lane 3 fetches chunk 4"
+a_match "$fetch" "chunk 5 \[A3\] DECIDE: .* \[open\]" "FC6: chunk 5 is listed as the next chunk"
+a_not "$fetch" "CHUNK 5/6" "FC6: the next chunk's entries wait for the merge fetch"
+fetch=$($CTX session fold fc-unit --lane="$fc_l3" --merge 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC6: the lane 3 merge fetch rc0"
+a_match "$fetch" "CHUNK 5/6 \[A3\] DECIDE" "FC6: the merge partner's entries are returned"
+a_not "$fetch" "CHUNK 6/6" "FC6: only the next chunk is handed, never a third"
+fc_c45=$($CTX session record fc-unit --what="Batch four: the release and the decision, merged (merged: same topic)" --thread=none \
+  --ref="journal#$TODAY-fc-06" --ref="journal#$TODAY-fc-07" \
+  --closes="$TODAY-fc-06 (folded: consolidated)" --closes="$TODAY-fc-07 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+fetch=$($CTX session fold fc-unit --lane="$fc_l3" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC6: the post-merge fetch rc0"
+a_match "$fetch" "NEXT BATCH: chunk 6" "FC6: the merge closes two chunks at once"
+a_match "$fetch" "chunk 4 \[A3\] RELEASE: .* \[done\]" "FC6: the merged chunk 4 reads done"
+a_match "$fetch" "chunk 5 \[A3\] DECIDE: .* \[done\]" "FC6: the merged chunk 5 reads done"
+fc_c6=$($CTX session record fc-unit --what="Batch five: the closer receipt tail" --thread=none \
+  --ref="journal#$TODAY-fc-09" --closes="$TODAY-fc-09 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+end=$($CTX session fold fc-unit --lane="$fc_l3" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC6: the last fetch rc0"
+a_match "$end" "LANE BOUNDARY: lane $fc_l3 is done; all 6 chunks are consolidated" "FC6: the last lane ends the plan"
+a_match "$end" "ctx run \.contexture/ctx session fold fc-unit --check" "FC6: the boundary names the check"
+a_match "$end" "ctx run \.contexture/ctx session fold fc-unit --finish" "FC6: the boundary names the finish"
+
+# FC7 the check: the batches partition the scope, no scoped live, the audit clean
+check=$($CTX session fold fc-unit --check 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC7: the check rc0"
+a_match "$check" "batches: 5 (5 valid)" "FC7: the check counts the live consolidated entries"
+a_match "$check" "chunks 1-1" "FC7: the first batch covers chunk 1"
+a_match "$check" "chunks 2-2" "FC7: the second batch covers chunk 2"
+a_match "$check" "chunks 3-3" "FC7: the third batch covers chunk 3"
+a_match "$check" "chunks 4-5 (2 entries)" "FC7: the merged batch covers chunks 4 and 5"
+a_match "$check" "chunks 6-6" "FC7: the last batch covers chunk 6"
+a_match "$check" "external refs:" "FC7: the check lists the external refs"
+a_match "$check" "lanes/fc-unit/report" "FC7: the external report is listed"
+a_match "$check" "covered: 7 closed receipts" "FC7: the closed receipts are the scope minus the carried thread"
+a_match "$check" "carried open threads: 1" "FC7: the check counts the carried open thread"
+a_match "$check" "$TODAY-fc-02: the human's answer" "FC7: the check lists the carried open thread"
+a_match "$check" "OPEN THREADS (awaiting resolution):" "FC7: the audit thread tail prints beside the check"
+a_match "$check" "$TODAY-fc-02 (the human's answer)" "FC7: the audit tail names the carried thread"
+a_match "$check" "coverage: 0 uncovered" "FC7: coverage is zero"
+a_match "$check" "audit: clean" "FC7: the audit is clean"
+a_match "$check" "fold check: clean" "FC7: the check is clean"
+progress=$($CTX session fold fc-unit 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC7: the progress rc0"
+a_match "$progress" "position: all 6 chunks are consolidated" "FC7: the progress derives completion from the record"
+a_match "$progress" "batches: 5" "FC7: the progress derives the batches from the record"
+a_match "$progress" "carried: 1 open threads" "FC7: the progress counts the carried thread"
+
+# FC8 the finish: the receipt, the fold start closed done, the audit clean
+finish=$($CTX session fold fc-unit --finish 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC8: the finish rc0"
+a_match "$finish" "^FOLD FINISH v4 $fc_fs batches=5 covered=7 carried=1 open threads :: coverage zero; audit clean" "FC8: the receipt names the fold start, the batches, the coverage, and the carried thread"
+a_match "$finish" "fold start: $fc_fs closed (done: the v4 consolidation fold complete)" "FC8: the finish closes the fold start done"
+a_match "$finish" "coverage: 0 uncovered" "FC8: the receipt proves coverage zero"
+a_match "$finish" "carried: 1 open threads stay live" "FC8: the receipt proves the carried thread stays live"
+a_match "$finish" "OPEN THREADS (awaiting resolution):" "FC8: the finish keeps the audit thread tail"
+a_match "$finish" "audit: clean" "FC8: the receipt proves the audit clean"
+fc_receipt=$(printf '%s\n' "$finish" | sed -n 's/^receipt: //p')
+a_match "$fc_receipt" "^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-event-" "FC8: the receipt is a dated entry"
+out=$($CTX session entry closure fc-unit "$fc_fs" 2>&1); a_eq "$?" "0" "FC8: the fold start closure reads"
+a_match "$out" "closed (done)" "FC8: the fold start is closed done"
+board=$($CTX session board fc-unit 2>&1)
+a_match "$board" "@entry $fc_receipt" "FC8: the receipt is live"
+for fc_s in "$TODAY-fc-01" "$TODAY-fc-03" "$TODAY-fc-04" "$TODAY-fc-05" "$TODAY-fc-06" "$TODAY-fc-07" "$TODAY-fc-09"; do
+  a_not "$board" "@entry $fc_s" "FC8: the folded constituent $fc_s leaves the board"
+done
+a_match "$board" "@entry $TODAY-fc-02" "FC8: the carried open thread stays live"
+a_match "$board" "THREAD: the human's answer" "FC8: the carried thread keeps its obligation"
+a_not "$board" "@entry $fc_fs" "FC8: the fold start leaves the board"
+a_not "$board" "CHAPTER FOLD" "FC8: no digest entry exists"
+audit=$($CTX session audit fc-unit 2>&1); a_eq "$?" "0" "FC8: the folded unit audits clean"
+a_match "$audit" "OPEN THREADS (awaiting resolution):" "FC8: the audit tail remains after the finish"
+a_match "$audit" "$TODAY-fc-02 (the human's answer)" "FC8: the audit tail names the carried thread"
+before=$($CTX session board fc-unit 2>&1 | grep -c '^@entry')
+finish2=$($CTX session fold fc-unit --finish 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC8: a second finish rc0"
+a_match "$finish2" "already complete; no second receipt" "FC8: the finish is idempotent"
+after=$($CTX session board fc-unit 2>&1 | grep -c '^@entry')
+a_eq "$before" "$after" "FC8: the second finish writes no entry"
+
+# FC9 the defect classes: each named by the check and red
+fc_one() {
+  o_u=$1
+  $CTX session bootstrap "$o_u" "fold defect $o_u" >/dev/null 2>&1
+  $CTX session record "$o_u" --what="e1" --slug="$TODAY-$o_u-1" >/dev/null 2>&1
+  o_p=$($CTX session fold "$o_u" 2>&1)
+  o_l=$(lane_of "$o_p" 1)
+  printf 'fold defect lane\n' | lane_new "$o_u" "$o_l"
+}
+fc_two() {
+  t_u=$1
+  $CTX session bootstrap "$t_u" "fold defect $t_u" >/dev/null 2>&1
+  $CTX session record "$t_u" --what="e1" --slug="$TODAY-$t_u-1" >/dev/null 2>&1
+  $CTX session record "$t_u" --what="e2" --slug="$TODAY-$t_u-2" >/dev/null 2>&1
+  t_p=$($CTX session fold "$t_u" 2>&1)
+  t_l=$(lane_of "$t_p" 1)
+  printf 'fold defect lane\n' | lane_new "$t_u" "$t_l"
+}
+fc_three() {
+  h_u=$1
+  $CTX session bootstrap "$h_u" "fold defect $h_u" >/dev/null 2>&1
+  $CTX session record "$h_u" --what="e1" --slug="$TODAY-$h_u-1" >/dev/null 2>&1
+  $CTX session record "$h_u" --what="backlog/a: DONE x" --slug="$TODAY-$h_u-2" >/dev/null 2>&1
+  $CTX session record "$h_u" --what="e2" --slug="$TODAY-$h_u-3" >/dev/null 2>&1
+  $CTX session record "$h_u" --what="backlog/b: DONE x" --slug="$TODAY-$h_u-4" >/dev/null 2>&1
+  $CTX session record "$h_u" --what="e3" --slug="$TODAY-$h_u-5" >/dev/null 2>&1
+  h_p=$($CTX session fold "$h_u" 2>&1)
+  h_l=$(lane_of "$h_p" 1)
+  printf 'fold defect lane\n' | lane_new "$h_u" "$h_l"
+}
+fc_two_chunks() {
+  q_u=$1
+  $CTX session bootstrap "$q_u" "fold defect $q_u" >/dev/null 2>&1
+  $CTX session record "$q_u" --what="e1" --slug="$TODAY-$q_u-1" >/dev/null 2>&1
+  $CTX session record "$q_u" --what="backlog/a: DONE x" --slug="$TODAY-$q_u-2" >/dev/null 2>&1
+  $CTX session record "$q_u" --what="e2" --slug="$TODAY-$q_u-3" >/dev/null 2>&1
+  q_p=$($CTX session fold "$q_u" 2>&1)
+  q_l=$(lane_of "$q_p" 1)
+  printf 'fold defect lane\n' | lane_new "$q_u" "$q_l"
+}
+fc_defect() {
+  d_out=$($CTX session fold "$1" --check 2>&1); d_rc=$?
+  a_eq "$d_rc" "1" "FC9: $2 refuses rc1"
+  a_match "$d_out" "$2" "FC9: $2 is named"
+}
+fc_clean_check() {
+  k_out=$($CTX session fold "$1" --check 2>&1); k_rc=$?
+  a_eq "$k_rc" "0" "$2 rc0"
+  a_match "$k_out" "fold check: clean" "$2 is clean"
+}
+
+fc_two fc-unref
+$CTX session record fc-unref --what="batch" --ref="journal#$TODAY-fc-unref-1" \
+  --closes="$TODAY-fc-unref-1 (folded: consolidated)" --closes="$TODAY-fc-unref-2 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-unref "UNREFERENCED_CLOSER"
+
+fc_one fc-notfolded
+$CTX session record fc-notfolded --what="batch" --ref="journal#$TODAY-fc-notfolded-1" \
+  --closes="$TODAY-fc-notfolded-1 (done: not folded)" >/dev/null 2>&1
+fc_defect fc-notfolded "CLOSER_NOT_FOLDED"
+
+fc_one fc-outside
+$CTX session record fc-outside --what="outside" --slug="$TODAY-fc-outside-2" >/dev/null 2>&1
+$CTX session record fc-outside --what="batch" --ref="journal#$TODAY-fc-outside-1" --ref="journal#$TODAY-fc-outside-2" \
+  --closes="$TODAY-fc-outside-1 (folded: consolidated)" --closes="$TODAY-fc-outside-2 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-outside "TARGET_OUTSIDE_SCOPE"
+
+fc_two fc-partial
+$CTX session record fc-partial --what="batch" --ref="journal#$TODAY-fc-partial-1" \
+  --closes="$TODAY-fc-partial-1 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-partial "BATCH_PARTIAL_CHUNK"
+d_out=$($CTX session fold fc-partial --check 2>&1)
+a_match "$d_out" "SCOPED_LIVE" "FC9: a partial chunk leaves its other constituent live"
+
+$CTX session bootstrap fc-noncon "fold defect fc-noncon" >/dev/null 2>&1
+$CTX session record fc-noncon --what="e1" --slug="$TODAY-fc-noncon-1" >/dev/null 2>&1
+$CTX session record fc-noncon --what="backlog/a: DONE x" --slug="$TODAY-fc-noncon-2" >/dev/null 2>&1
+$CTX session record fc-noncon --what="e2" --slug="$TODAY-fc-noncon-3" >/dev/null 2>&1
+$CTX session record fc-noncon --what="DECIDE x" --slug="$TODAY-fc-noncon-4" >/dev/null 2>&1
+$CTX session record fc-noncon --what="e3" --slug="$TODAY-fc-noncon-5" >/dev/null 2>&1
+noncon_p=$($CTX session fold fc-noncon 2>&1)
+noncon_l=$(lane_of "$noncon_p" 1)
+printf 'fold defect lane\n' | lane_new fc-noncon "$noncon_l"
+$CTX session record fc-noncon --what="batch" --ref="journal#$TODAY-fc-noncon-1" --ref="journal#$TODAY-fc-noncon-5" \
+  --closes="$TODAY-fc-noncon-1 (folded: consolidated)" --closes="$TODAY-fc-noncon-5 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-noncon "BATCH_NOT_CONSECUTIVE"
+
+$CTX session bootstrap fc-cross "fold defect fc-cross" >/dev/null 2>&1
+$CTX session record fc-cross --what="e1" --slug="$TODAY-fc-cross-1" >/dev/null 2>&1
+$CTX session record fc-cross --what="backlog/a: DONE x" --slug="$TODAY-fc-cross-2" >/dev/null 2>&1
+$CTX session record fc-cross --what="e2" --slug="$TODAY-fc-cross-3" >/dev/null 2>&1
+$CTX session stamp fc-cross >/dev/null 2>&1
+$CTX session record fc-cross --what="e3" --slug="$TODAY-fc-cross-4" >/dev/null 2>&1
+cross_p=$($CTX session fold fc-cross 2>&1)
+cross_l1=$(lane_of "$cross_p" 1); cross_l2=$(lane_of "$cross_p" 3)
+printf 'fold defect lane\n' | lane_new fc-cross "$cross_l1"
+printf 'fold defect lane\n' | lane_new fc-cross "$cross_l2"
+$CTX session record fc-cross --what="batch one" --ref="journal#$TODAY-fc-cross-1" --ref="journal#$TODAY-fc-cross-2" \
+  --closes="$TODAY-fc-cross-1 (folded: consolidated)" --closes="$TODAY-fc-cross-2 (folded: consolidated)" >/dev/null 2>&1
+$CTX session record fc-cross --what="batch crossing the lane" --ref="journal#$TODAY-fc-cross-3" --ref="journal#$TODAY-fc-cross-4" \
+  --closes="$TODAY-fc-cross-3 (folded: consolidated)" --closes="$TODAY-fc-cross-4 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-cross "BATCH_CROSS_LANE"
+
+fc_two fc-double
+$CTX session record fc-double --what="batch A" --ref="journal#$TODAY-fc-double-1" --ref="journal#$TODAY-fc-double-2" \
+  --closes="$TODAY-fc-double-1 (folded: consolidated)" --closes="$TODAY-fc-double-2 (folded: consolidated)" >/dev/null 2>&1
+$CTX session record fc-double --what="batch B" --ref="journal#$TODAY-fc-double-1" --ref="journal#$TODAY-fc-double-2" \
+  --closes="$TODAY-fc-double-1 (folded: consolidated)" --closes="$TODAY-fc-double-2 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-double "DOUBLE_CONSOLIDATION"
+
+fc_two_chunks fc-overlap
+$CTX session record fc-overlap --what="batch A" --ref="journal#$TODAY-fc-overlap-1" --ref="journal#$TODAY-fc-overlap-2" \
+  --closes="$TODAY-fc-overlap-1 (folded: consolidated)" --closes="$TODAY-fc-overlap-2 (folded: consolidated)" >/dev/null 2>&1
+$CTX session record fc-overlap --what="batch B" --ref="journal#$TODAY-fc-overlap-1" --ref="journal#$TODAY-fc-overlap-2" --ref="journal#$TODAY-fc-overlap-3" \
+  --closes="$TODAY-fc-overlap-1 (folded: consolidated)" --closes="$TODAY-fc-overlap-2 (folded: consolidated)" --closes="$TODAY-fc-overlap-3 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-overlap "BATCH_OVERLAP"
+d_out=$($CTX session fold fc-overlap 2>&1); d_rc=$?
+a_eq "$d_rc" "1" "FC9: an overlap stops progress (the partial check)"
+a_match "$d_out" "BATCH_OVERLAP" "FC9: the partial check names the overlap"
+
+fc_two_chunks fc-gap
+$CTX session record fc-gap --what="batch one" --ref="journal#$TODAY-fc-gap-1" --ref="journal#$TODAY-fc-gap-2" \
+  --closes="$TODAY-fc-gap-1 (folded: consolidated)" --closes="$TODAY-fc-gap-2 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-gap "BATCH_GAP"
+d_out=$($CTX session fold fc-gap --check 2>&1)
+a_match "$d_out" "SCOPED_LIVE" "FC9: a missing batch leaves a scoped entry live"
+
+fc_one fc-notlive
+fc_notlive_a=$($CTX session record fc-notlive --what="batch A" --ref="journal#$TODAY-fc-notlive-1" \
+  --closes="$TODAY-fc-notlive-1 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+$CTX session record fc-notlive --what="batch A revised" --supersedes="$fc_notlive_a (superseded: revised)" >/dev/null 2>&1
+fc_defect fc-notlive "CONSOLIDATION_NOT_LIVE"
+
+$CTX session bootstrap fc-drift "fold drift" >/dev/null 2>&1
+$CTX session record fc-drift --what="e1" --slug="$TODAY-fc-drift-1" >/dev/null 2>&1
+$CTX session record fc-drift --what="e2" --slug="$TODAY-fc-drift-2" >/dev/null 2>&1
+drift_json="{\"v\":4,\"unit\":\"fc-drift\",\"epoch\":\"1\",\"scope\":[\"$TODAY-fc-drift-1\"],\"chunks\":[{\"id\":1,\"anchor\":\"A1\",\"lane\":\"fold-1-1\",\"kind\":\"ANCHOR\",\"first\":1,\"last\":1,\"from\":\"$TODAY-fc-drift-1\",\"to\":\"$TODAY-fc-drift-1\",\"count\":1}],\"lanes\":[\"fold-1-1\"]}"
+$CTX session record fc-drift --what="FOLD START v4 fc-drift scope=1 chunks=1 lanes=1 batch=one-or-more-chunks-per-entry :: $drift_json" --group=fold --thread=none >/dev/null 2>&1
+fc_defect fc-drift "PLAN_DRIFT"
+
+$CTX session bootstrap fc-v3 "fold v3" >/dev/null 2>&1
+$CTX session record fc-v3 --what="e1" --slug="$TODAY-fc-v3-1" >/dev/null 2>&1
+$CTX session record fc-v3 --what="FOLD START v1 fc-v3 scope=1 chunks=1 lanes=1 batch=one-chunk-per-call :: {}" --group=fold --thread=none >/dev/null 2>&1
+fc_defect fc-v3 "V3_START_LIVE"
+
+fc_one fc-audit
+$CTX session record fc-audit --what="batch" --ref="journal#$TODAY-fc-audit-1" \
+  --closes="$TODAY-fc-audit-1 (folded: consolidated)" >/dev/null 2>&1
+$CTX session record fc-audit --what="knowledge flag" --slug="$TODAY-fc-audit-2" --knowledge >/dev/null 2>&1
+fc_defect fc-audit "AUDIT_RED"
+
+# FC10 the supersession repair: the prior consolidated entry closes, the new live one is the batch
+fc_one fc-repair
+fc_bad=$($CTX session record fc-repair --what="bad batch" --ref="journal#$TODAY-fc-repair-1" \
+  --closes="$TODAY-fc-repair-1 (done: not folded)" 2>&1 | sed -n 's/^recorded entry: //p')
+$CTX session record fc-repair --what="good batch" --ref="journal#$TODAY-fc-repair-1" \
+  --closes="$TODAY-fc-repair-1 (folded: consolidated)" --supersedes="$fc_bad (superseded: revised)" >/dev/null 2>&1
+fc_clean_check fc-repair "FC10: the supersession repair"
+out=$($CTX session entry closure fc-repair "$fc_bad" 2>&1)
+a_match "$out" "closed (superseded)" "FC10: the prior consolidated entry is closed superseded"
+
+# FC11 the long one-line WHAT round-trips
+fc_one fc-long
+fc_long=$(awk 'BEGIN{for(i=0;i<2000;i++) printf "x"}')
+fc_long_entry=$($CTX session record fc-long --what="$fc_long" --ref="journal#$TODAY-fc-long-1" \
+  --closes="$TODAY-fc-long-1 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+a_match "$fc_long_entry" "^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-event-" "FC11: the long WHAT entry is recorded"
+show=$($CTX session entry show fc-long "$fc_long_entry" 2>&1)
+a_eq "$(printf '%s\n' "$show" | sed -n 's/^  WHAT: "\(x*\)"$/\1/p' | wc -c | tr -d ' ')" "2001" "FC11: the long one-line WHAT round-trips"
+fc_clean_check fc-long "FC11: the check after the long WHAT"
+
+# FC12 the NUL and CR refusals
+printf 'a\000b\n' | $CTX session fold fc-empty >/dev/null 2>&1
+a_eq "$?" "1" "FC12: a NUL fold payload refuses rc1"
+$CTX session record fc-empty --what="a$(printf '\r')b" >/dev/null 2>&1
+a_eq "$?" "1" "FC12: a CR --what refuses rc1"
+$CTX session record fc-empty --closes="$TODAY-fc-long-1 (folded: $(printf '\r')bad)" >/dev/null 2>&1
+a_eq "$?" "1" "FC12: a CR closer refuses rc1"
+
+# FC13 the carried open thread: it stays live and visible, is REF'd as context,
+# never closed, counted by the receipt, and kept in the audit tail
+$CTX session bootstrap fc-thread "fold carried thread" >/dev/null 2>&1
+$CTX session record fc-thread --what="A note before the thread" --slug="$TODAY-fc-thread-1" >/dev/null 2>&1
+$CTX session record fc-thread --what="Open thread: awaiting the human" --thread="the human's verdict" --slug="$TODAY-fc-thread-2" >/dev/null 2>&1
+$CTX session record fc-thread --what="A note after the thread" --slug="$TODAY-fc-thread-3" >/dev/null 2>&1
+t_plan=$($CTX session fold fc-thread 2>&1); t_rc=$?
+a_eq "$t_rc" "0" "FC13: the plan rc0"
+a_match "$t_plan" "scope: 3 live entries" "FC13: the open thread stays in the scope"
+a_match "$t_plan" "carried open threads: 1" "FC13: the plan prints the carried thread"
+a_match "$t_plan" "$TODAY-fc-thread-2 \[A1\]: the human's verdict" "FC13: the carried list names the thread"
+a_match "$t_plan" "1  \[A1\] ANCHOR.*from $TODAY-fc-thread-1 to $TODAY-fc-thread-3 (3 entries)" "FC13: the open thread stays in its chunk"
+t_fs=$(printf '%s\n' "$t_plan" | sed -n 's/^fold start: \([^ ]*\).*/\1/p')
+t_l=$(lane_of "$t_plan" 1)
+printf 'fold thread lane\n' | lane_new fc-thread "$t_l"
+t_fetch=$($CTX session fold fc-thread --lane="$t_l" 2>&1); t_rc=$?
+a_eq "$t_rc" "0" "FC13: the fetch rc0"
+a_match "$t_fetch" "THREAD: the human's verdict" "FC13: the fetch returns the open thread"
+a_match "$t_fetch" "ref=\"journal#$TODAY-fc-thread-2\"" "FC13: the hint REFs the carried thread as context"
+a_not "$t_fetch" "closes=\"$TODAY-fc-thread-2" "FC13: the hint never closes the carried thread"
+a_match "$t_fetch" "NOTE: carried open threads stay live" "FC13: the hint notes the carried thread"
+a_match "$t_fetch" "$TODAY-fc-thread-2" "FC13: the hint names the carried thread"
+t_bad=$($CTX session record fc-thread --what="Batch one: the notes without the carried ref" --group=fc --thread=none \
+  --ref="journal#$TODAY-fc-thread-1" --ref="journal#$TODAY-fc-thread-3" \
+  --closes="$TODAY-fc-thread-1 (folded: consolidated)" --closes="$TODAY-fc-thread-3 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+t_check=$($CTX session fold fc-thread --check 2>&1); t_rc=$?
+a_eq "$t_rc" "1" "FC13: a batch that skips the carried ref refuses rc1"
+a_match "$t_check" "CARRIED_UNREFERENCED" "FC13: the check names the unreferenced carried thread"
+t_good=$($CTX session record fc-thread --what="Batch one: the notes and the carried thread" --group=fc --thread=none \
+  --ref="journal#$TODAY-fc-thread-1" --ref="journal#$TODAY-fc-thread-2" --ref="journal#$TODAY-fc-thread-3" \
+  --closes="$TODAY-fc-thread-1 (folded: consolidated)" --closes="$TODAY-fc-thread-3 (folded: consolidated)" \
+  --supersedes="$t_bad (superseded: revised)" 2>&1 | sed -n 's/^recorded entry: //p')
+t_check=$($CTX session fold fc-thread --check 2>&1); t_rc=$?
+a_eq "$t_rc" "0" "FC13: the carried-thread check rc0"
+a_match "$t_check" "fold check: clean" "FC13: the carried-thread check is clean"
+a_match "$t_check" "covered: 2 closed receipts" "FC13: the closed receipts exclude the carried thread"
+a_match "$t_check" "carried open threads: 1" "FC13: the check counts the carried thread"
+a_match "$t_check" "coverage: 0 uncovered" "FC13: coverage is zero"
+a_match "$t_check" "OPEN THREADS (awaiting resolution):" "FC13: the check audit tail remains"
+board=$($CTX session board fc-thread 2>&1)
+a_match "$board" "@entry $TODAY-fc-thread-2" "FC13: the carried thread stays live"
+show=$($CTX session entry show fc-thread "$TODAY-fc-thread-2" 2>&1)
+a_match "$show" "THREAD: the human's verdict" "FC13: the carried thread keeps its obligation"
+t_finish=$($CTX session fold fc-thread --finish 2>&1); t_rc=$?
+a_eq "$t_rc" "0" "FC13: the finish rc0"
+a_match "$t_finish" "^FOLD FINISH v4 $t_fs batches=1 covered=2 carried=1 open threads :: coverage zero; audit clean" "FC13: the receipt counts the covered receipts and the carried thread"
+a_match "$t_finish" "carried: 1 open threads stay live" "FC13: the finish says the thread stays live"
+board=$($CTX session board fc-thread 2>&1)
+a_match "$board" "@entry $TODAY-fc-thread-2" "FC13: the carried thread survives the finish"
+audit=$($CTX session audit fc-thread 2>&1); t_rc=$?
+a_eq "$t_rc" "0" "FC13: the unit audits clean with the open thread"
+a_match "$audit" "OPEN THREADS (awaiting resolution):" "FC13: the audit tail stays after the finish"
+a_match "$audit" "$TODAY-fc-thread-2 (the human's verdict)" "FC13: the audit tail names the carried thread"
+
+# FC13b closing a carried thread is refused, never folded
+$CTX session bootstrap fc-thread-close "fold thread close" >/dev/null 2>&1
+$CTX session record fc-thread-close --what="A note" --slug="$TODAY-fc-thread-close-1" >/dev/null 2>&1
+$CTX session record fc-thread-close --what="Open thread: awaiting the human" --thread="the human's verdict" --slug="$TODAY-fc-thread-close-2" >/dev/null 2>&1
+tc_plan=$($CTX session fold fc-thread-close 2>&1)
+tc_l=$(lane_of "$tc_plan" 1)
+printf 'fold thread close lane\n' | lane_new fc-thread-close "$tc_l"
+$CTX session record fc-thread-close --what="Bad batch: closes the open thread" --group=fc --thread=none \
+  --ref="journal#$TODAY-fc-thread-close-1" --ref="journal#$TODAY-fc-thread-close-2" \
+  --closes="$TODAY-fc-thread-close-1 (folded: consolidated)" --closes="$TODAY-fc-thread-close-2 (folded: consolidated)" >/dev/null 2>&1
+tc_check=$($CTX session fold fc-thread-close --check 2>&1); t_rc=$?
+a_eq "$t_rc" "1" "FC13: closing a carried thread refuses rc1"
+a_match "$tc_check" "THREAD_CLOSED" "FC13: the check names the closed open thread"
+a_match "$tc_check" "$TODAY-fc-thread-close-2" "FC13: the refusal names the thread"
+
+# FC14 the one-chunk handoff: the fetch returns the current chunk alone; a --merge
+# fetch offers only the immediately following chunk, and a single-chunk lane has none
+fc_n() {
+  n_u=$1
+  n_n=$2
+  $CTX session bootstrap "$n_u" "fold defect $n_u" >/dev/null 2>&1
+  n_i=1
+  while [ "$n_i" -le "$n_n" ]; do
+    $CTX session record "$n_u" --what="e$n_i" --slug="$TODAY-$n_u-$n_i" >/dev/null 2>&1
+    n_i=$((n_i + 1))
+  done
+  n_p=$($CTX session fold "$n_u" 2>&1)
+  n_l=$(lane_of "$n_p" 1)
+  printf 'fold defect lane\n' | lane_new "$n_u" "$n_l"
+  printf '%s\n' "$n_p"
+}
+one_plan=$(fc_n fc-one 2)
+one_l=$(lane_of "$one_plan" 1)
+one_fetch=$($CTX session fold fc-one --lane="$one_l" 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC14: the one-chunk fetch rc0"
+a_match "$one_fetch" "The fetch hands one chunk at a time" "FC14: the fetch states the one-chunk handoff"
+a_not "$one_fetch" "REMAINING ENTRIES" "FC14: the fetch prints no later chunk's entries"
+one_merge=$($CTX session fold fc-one --lane="$one_l" --merge 2>&1); fc_rc=$?
+a_eq "$fc_rc" "0" "FC14: the one-chunk merge fetch rc0"
+a_match "$one_merge" "MERGE: no following unclosed chunk in this lane" "FC14: a single-chunk lane has no merge partner"
+$CTX session record fc-one --what="Batch one: the two notes" --thread=none \
+  --ref="journal#$TODAY-fc-one-1" --ref="journal#$TODAY-fc-one-2" \
+  --closes="$TODAY-fc-one-1 (folded: consolidated)" --closes="$TODAY-fc-one-2 (folded: consolidated)" >/dev/null 2>&1
+fc_clean_check fc-one "FC14: the one-chunk batch"
+
+# FC15 the merge reason: a two-chunk batch is refused without a (merged: <reason>)
+# marker in the WHAT, and passes with one
+$CTX session bootstrap fc-merge "fold merge" >/dev/null 2>&1
+$CTX session record fc-merge --what="e1" --slug="$TODAY-fc-merge-1" >/dev/null 2>&1
+$CTX session record fc-merge --what="backlog/a: DONE x" --slug="$TODAY-fc-merge-2" >/dev/null 2>&1
+$CTX session record fc-merge --what="e2" --slug="$TODAY-fc-merge-3" >/dev/null 2>&1
+$CTX session record fc-merge --what="DECIDE x" --slug="$TODAY-fc-merge-4" >/dev/null 2>&1
+$CTX session record fc-merge --what="e3" --slug="$TODAY-fc-merge-5" >/dev/null 2>&1
+$CTX session record fc-merge --what="DECIDE y" --slug="$TODAY-fc-merge-6" >/dev/null 2>&1
+gm_plan=$($CTX session fold fc-merge 2>&1)
+gm_l=$(lane_of "$gm_plan" 1)
+printf 'fold merge lane\n' | lane_new fc-merge "$gm_l"
+gm_bad=$($CTX session record fc-merge --what="Batch one: the two chunks merged" --thread=none \
+  --ref="journal#$TODAY-fc-merge-1" --ref="journal#$TODAY-fc-merge-2" --ref="journal#$TODAY-fc-merge-3" --ref="journal#$TODAY-fc-merge-4" \
+  --closes="$TODAY-fc-merge-1 (folded: consolidated)" --closes="$TODAY-fc-merge-2 (folded: consolidated)" --closes="$TODAY-fc-merge-3 (folded: consolidated)" --closes="$TODAY-fc-merge-4 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+fc_defect fc-merge "MERGE_REASON_MISSING"
+$CTX session record fc-merge --what="Batch one: the two chunks merged (merged: same topic)" --thread=none \
+  --ref="journal#$TODAY-fc-merge-1" --ref="journal#$TODAY-fc-merge-2" --ref="journal#$TODAY-fc-merge-3" --ref="journal#$TODAY-fc-merge-4" \
+  --closes="$TODAY-fc-merge-1 (folded: consolidated)" --closes="$TODAY-fc-merge-2 (folded: consolidated)" --closes="$TODAY-fc-merge-3 (folded: consolidated)" --closes="$TODAY-fc-merge-4 (folded: consolidated)" \
+  --supersedes="$gm_bad (superseded: revised)" >/dev/null 2>&1
+$CTX session record fc-merge --what="Batch two: the third chunk" --thread=none \
+  --ref="journal#$TODAY-fc-merge-5" --ref="journal#$TODAY-fc-merge-6" \
+  --closes="$TODAY-fc-merge-5 (folded: consolidated)" --closes="$TODAY-fc-merge-6 (folded: consolidated)" >/dev/null 2>&1
+fc_clean_check fc-merge "FC15: the merged batch with a recorded reason"
+
+# FC16 the constituent cap: a 13-constituent batch is refused
+fc_n fc-cap 13
+gc_plan=$($CTX session fold fc-cap 2>&1)
+gc_l=$(lane_of "$gc_plan" 1)
+printf 'fold cap lane\n' | lane_new fc-cap "$gc_l"
+$CTX session record fc-cap --what="Batch one: thirteen notes" --thread=none \
+  --ref="journal#$TODAY-fc-cap-1" --ref="journal#$TODAY-fc-cap-2" --ref="journal#$TODAY-fc-cap-3" \
+  --ref="journal#$TODAY-fc-cap-4" --ref="journal#$TODAY-fc-cap-5" --ref="journal#$TODAY-fc-cap-6" \
+  --ref="journal#$TODAY-fc-cap-7" --ref="journal#$TODAY-fc-cap-8" --ref="journal#$TODAY-fc-cap-9" \
+  --ref="journal#$TODAY-fc-cap-10" --ref="journal#$TODAY-fc-cap-11" --ref="journal#$TODAY-fc-cap-12" \
+  --ref="journal#$TODAY-fc-cap-13" \
+  --closes="$TODAY-fc-cap-1 (folded: consolidated)" --closes="$TODAY-fc-cap-2 (folded: consolidated)" \
+  --closes="$TODAY-fc-cap-3 (folded: consolidated)" --closes="$TODAY-fc-cap-4 (folded: consolidated)" \
+  --closes="$TODAY-fc-cap-5 (folded: consolidated)" --closes="$TODAY-fc-cap-6 (folded: consolidated)" \
+  --closes="$TODAY-fc-cap-7 (folded: consolidated)" --closes="$TODAY-fc-cap-8 (folded: consolidated)" \
+  --closes="$TODAY-fc-cap-9 (folded: consolidated)" --closes="$TODAY-fc-cap-10 (folded: consolidated)" \
+  --closes="$TODAY-fc-cap-11 (folded: consolidated)" --closes="$TODAY-fc-cap-12 (folded: consolidated)" \
+  --closes="$TODAY-fc-cap-13 (folded: consolidated)" >/dev/null 2>&1
+fc_defect fc-cap "CONSTITUENT_CAP"
+
+# FC17 the whole-anchor refusal: one entry for every chunk of an anchor is refused;
+# split batches inside the anchor pass
+fc_two_chunks fc-anchor
+ga_plan=$($CTX session fold fc-anchor 2>&1)
+ga_l=$(lane_of "$ga_plan" 1)
+printf 'fold anchor lane\n' | lane_new fc-anchor "$ga_l"
+ga_bad=$($CTX session record fc-anchor --what="Batch one: the whole anchor" --thread=none \
+  --ref="journal#$TODAY-fc-anchor-1" --ref="journal#$TODAY-fc-anchor-2" --ref="journal#$TODAY-fc-anchor-3" \
+  --closes="$TODAY-fc-anchor-1 (folded: consolidated)" --closes="$TODAY-fc-anchor-2 (folded: consolidated)" --closes="$TODAY-fc-anchor-3 (folded: consolidated)" 2>&1 | sed -n 's/^recorded entry: //p')
+fc_defect fc-anchor "WHOLE_ANCHOR_BATCH"
+$CTX session record fc-anchor --what="Batch one: the first chunk" --thread=none \
+  --ref="journal#$TODAY-fc-anchor-1" --ref="journal#$TODAY-fc-anchor-2" \
+  --closes="$TODAY-fc-anchor-1 (folded: consolidated)" --closes="$TODAY-fc-anchor-2 (folded: consolidated)" >/dev/null 2>&1
+$CTX session record fc-anchor --what="Batch two: the second chunk" --thread=none \
+  --ref="journal#$TODAY-fc-anchor-3" \
+  --closes="$TODAY-fc-anchor-3 (folded: consolidated)" \
+  --supersedes="$ga_bad (superseded: split)" >/dev/null 2>&1
+fc_clean_check fc-anchor "FC17: the split batches"
+
 fi # group 3
 
 echo "== summary =="

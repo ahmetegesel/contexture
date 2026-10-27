@@ -1,0 +1,1166 @@
+#!/bin/sh
+# summary: the consolidation fold: plan, fetch, check, finish, progress
+# usage: ctx session fold <unit> [--lane=<lane> [--merge] | --check | --finish]
+# help: the plan (the first no-lane call) freezes the live scope, partitions it once in journal order into chunks, records the fold start (the plan JSON), and prints the plan (the carried open threads included), the first lane's manual, and the first act
+# help: a lane fetch (--lane, no payload) returns the lane's next unclosed chunk, its entries, the lane's remaining chunks (no other chunk's entries), and the next act; --merge adds the immediately following chunk's entries only, for a recorded same-topic merge; a fetch never advances and the lane writes the consolidated entry with the ordinary ctx session record verb; a carried open thread is REF'd as context, never closed
+# help: --check reads the batches from the live post-plan entries' closers and refs, proves the closed receipts are the scope minus the carried open threads (whole consecutive chunks in one lane), no non-thread scoped entry remains live, and the audit is clean; it writes nothing
+# help: --finish re-runs the check and, when clean, writes the receipt FOLD FINISH v4 with the covered and carried counts and closes the fold start done; a live receipt refuses a second one
+# help: rules: the consolidated entry is an ordinary entry (the WHAT is the synthesis, the REFs name the batch, the CLOSES fold the batch's non-thread constituents); a fold compacts history, never obligations: open threads stay live and are carried; the lane may merge consecutive chunks inside its anchor; no digest, no checkpoint, no marker; the record is the state
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+fold_fail() {
+  printf 'fold: error: %s (ERR_INVALID_ARGUMENT)\n' "$1" >&2
+  exit 1
+}
+
+fold_corrupt() {
+  printf 'fold: error: %s (ERR_STORAGE_CORRUPT)\n' "$1" >&2
+  exit 2
+}
+
+manual_text() {
+  sed -e "s|@UNIT@|$1|g" -e "s|@LANE@|$2|g" <<'EOF'
+# Consolidation fold lane: @LANE@
+
+You are the consolidation lane for unit @UNIT@. The fold command plans the batches;
+you write one ordinary journal entry per batch with ctx session record. The record is
+the state; there is no digest, no checkpoint, and no marker.
+
+## The loop
+
+1. Fetch your next batch:
+   .contexture/ctx run .contexture/ctx session fold @UNIT@ --lane=@LANE@
+   The answer carries the next unclosed chunk, its entries, your remaining chunks and
+   entries, and the next act. A fetch never advances; re-run it after a repair.
+
+2. Read the batch's entries. Consolidate them into one ordinary journal entry:
+   the WHAT is the through-line for a reader with no prior context, one line; one REF
+   names every constituent slug of the batch, plus any external report; one folded
+   closer per constituent. The refs and the closers are the same batch, except that
+   an entry carrying THREAD other than none is an open obligation: REF it as context,
+   never close it; it stays live and the finish counts it as carried. The fetch hands
+   one chunk at a time; you may merge only the immediately following chunk, and only
+   when it continues the same topic: fetch it with --merge, then append
+   (merged: <the reason>) to the WHAT. At most 12 constituents per entry; never the
+   whole anchor. Preserve decisions, rejected alternatives, exact signatures, root causes, and
+   verification evidence; compress only mechanical repetition. The refs carry the
+   detail and the originals stay fetchable.
+
+3. Write the entry, every command through the runner:
+   .contexture/ctx run .contexture/ctx session record @UNIT@ \
+     --what="<the synthesis, one line>" \
+     --group=<optional topic token> \
+     --thread=none \
+     --ref="journal#<slug>" ... \
+     --ref="<external report>" ... \
+     --closes="<slug> (folded: consolidated)" ...
+   One REF per constituent (the carried open threads too); one folded closer per
+   non-thread constituent only.
+
+4. Re-fetch. When this lane has no unclosed chunk, the fetch returns the lane boundary
+   and the next lane's instruction; stop. The orchestrator creates and dispatches that
+   lane with its manual.
+
+5. Repair. A defect from the check is repaired with the ordinary supersession: a new
+   entry with the same batch refs and closers closes the prior one:
+   .contexture/ctx run .contexture/ctx session record @UNIT@ \
+     --what="<the corrected synthesis, one line>" \
+     --thread=none \
+     --ref="journal#<slug>" ... \
+     --closes="<slug> (folded: consolidated)" ... \
+     --supersedes="<the prior entry> (superseded: revised)"
+   The prior entry closes; the new live entry is the batch. Never edit an entry.
+
+6. The finish (the orchestrator): when every lane is done, run
+   .contexture/ctx run .contexture/ctx session fold @UNIT@ --check
+   .contexture/ctx run .contexture/ctx session fold @UNIT@ --finish
+   The check proves the batches partition the scope and the audit is clean; the finish
+   writes the receipt and closes the fold start.
+
+## Rules
+
+- Every step through the runner: .contexture/ctx run <cmd>.
+- One entry per batch; the batch is a whole chunk, or that chunk and only its
+  immediately following same-lane chunk merged for a recorded same-topic reason.
+- The refs name every constituent (the carried open threads included) plus any
+  external report; the closers are exactly the batch's non-thread constituents.
+- A merged batch covers at most 2 chunks and at most 12 constituents; append
+  (merged: <the reason>) to the WHAT.
+- Never one entry for the whole anchor; the check refuses a whole-anchor batch.
+- Open threads (THREAD other than none) are carried: REF them, never close them; a
+  fold compacts history, never obligations.
+- The WHAT is one line; the closers carry the folded verdict and its reason.
+- Do not write a digest, a checkpoint, or a class manifest; there are none.
+- A fetch never advances. Never cross the anchor or another lane.
+- The lane journal is your audit trail: journal at action granularity as you work.
+EOF
+}
+
+help_table() {
+  printf 'usage: ctx session fold <unit> [--lane=<lane> [--merge] | --check | --finish]\n'
+  printf '\n'
+  manual_text '<unit>' '<lane>'
+  printf '\nThe plan and each lane boundary print this manual with the actual lane name.\n'
+}
+
+case "${1:-}" in
+  "")
+    help_table >&2
+    exit 1
+    ;;
+  --help|-h)
+    [ $# -eq 1 ] && { help_table; exit 0; }
+    ;;
+  help)
+    [ $# -eq 1 ] && { help_table; exit 0; }
+    ;;
+esac
+
+case "$1" in
+  -*) fold_fail "unknown option '$1'" ;;
+esac
+
+unit=$1
+shift
+vb_unit "fold" "$unit"
+
+lane=""
+lane_given=0
+do_merge=0
+do_check=0
+do_finish=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --lane=*) lane="${1#--lane=}"; lane_given=1 ;;
+    --lane) shift; [ $# -gt 0 ] || fold_fail "--lane needs a value"; lane="$1"; lane_given=1 ;;
+    --merge) do_merge=1 ;;
+    --check) do_check=1 ;;
+    --finish) do_finish=1 ;;
+    *) vb_unknown "fold" "$1" ;;
+  esac
+  shift
+done
+[ "$lane_given" -eq 0 ] || vb_lane "fold" "$lane"
+[ "$do_merge" -eq 1 ] && [ "$lane_given" -eq 0 ] && fold_fail "--merge belongs to a --lane fetch"
+modes=$((lane_given + do_check + do_finish))
+[ "$modes" -le 1 ] || fold_fail "--lane, --check, and --finish are separate calls"
+
+vb_tmp
+tab=$(printf '\t')
+
+write_lib() {
+  cat > "$VB_DIR/lib.awk" <<'AWK'
+function ld(line,   c, p, v) {
+  if (!match(line, /[=:#]/)) return
+  p = substr(line, 1, RSTART - 1)
+  c = substr(line, RSTART, 1)
+  v = substr(line, RSTART + 1)
+  V[p] = v
+  if (c == "=") T[p] = "s"
+  else if (c == "#") T[p] = "a"
+  else if (v == "null") T[p] = "z"
+  else if (v == "true" || v == "false") T[p] = "b"
+  else T[p] = "n"
+}
+function sv(p) { return !(p in T) || T[p] == "z" ? "" : unesc(V[p]) }
+function unesc(v,   n, A, i, o) {
+  if (index(v, "\\") == 0) return v
+  gsub(/\\\\/, "\034", v)
+  gsub(/\\n/, "\n", v)
+  gsub(/\\t/, "\t", v)
+  gsub(/\\r/, "\r", v)
+  if (index(v, "\034") == 0) return v
+  n = split(v, A, /\034/)
+  o = A[1]
+  for (i = 2; i <= n; i++) o = o "\\" A[i]
+  return o
+}
+AWK
+}
+write_lib
+
+write_progs() {
+  cat > "$VB_DIR/plan_load.awk" <<'AWK'
+BEGIN {
+  while ((getline ln < (dir "/plan.flat")) > 0) ld(ln)
+  if (sv("v") != "4") exit 8
+  ns = (T["scope"] == "a") ? V["scope"] + 0 : 0
+  nc = (T["chunks"] == "a") ? V["chunks"] + 0 : 0
+  nl = (T["lanes"] == "a") ? V["lanes"] + 0 : 0
+  if (ns < 1 || nc < 1 || nl < 1) exit 8
+  for (i = 1; i <= ns; i++) {
+    s = sv("scope." i)
+    if (s == "") exit 8
+    SIDX[s] = i
+    print s > (dir "/scope.txt")
+  }
+  ncar = (T["carried"] == "a") ? V["carried"] + 0 : 0
+  for (i = 1; i <= ncar; i++) {
+    s = sv("carried." i)
+    if (s == "" || !(s in SIDX)) exit 8
+    if (s in PCARR) exit 8
+    PCARR[s] = 1
+    print s > (dir "/carried_plan.txt")
+  }
+  covered = 0
+  prev_last = 0
+  for (i = 1; i <= nc; i++) {
+    p = "chunks." i
+    id = sv(p ".id"); anc = sv(p ".anchor"); ln = sv(p ".lane"); kd = sv(p ".kind")
+    f = sv(p ".first") + 0; l = sv(p ".last") + 0; fr = sv(p ".from"); to = sv(p ".to"); ct = sv(p ".count") + 0
+    if (id != i) exit 8
+    if (f != prev_last + 1 || l < f) exit 8
+    if (fr != sv("scope." f) || to != sv("scope." l)) exit 8
+    if (ct != l - f + 1) exit 8
+    if (ct > 12) exit 8
+    if (ln in lane_last) {
+      if (lane_last[ln] + 1 != f || lane_anchor[ln] != anc) exit 8
+    } else {
+      lane_anchor[ln] = anc
+    }
+    lane_last[ln] = l
+    prev_last = l
+    print id "\t" anc "\t" ln "\t" kd "\t" f "\t" l "\t" fr "\t" to "\t" ct > (dir "/chunks.tsv")
+    covered += ct
+  }
+  if (prev_last != ns || covered != ns) exit 8
+  for (i = 1; i <= nl; i++) {
+    ln = sv("lanes." i)
+    if (ln == "" || !(ln in lane_last)) exit 8
+    print ln > (dir "/lanes.txt")
+  }
+  print "unit\t" sv("unit") > (dir "/plan.meta")
+  print "epoch\t" sv("epoch") > (dir "/plan.meta")
+  print "scope_n\t" ns > (dir "/plan.meta")
+  print "chunk_n\t" nc > (dir "/plan.meta")
+  print "lane_n\t" nl > (dir "/plan.meta")
+  print "covered\t" covered > (dir "/plan.meta")
+  print "uncovered\t" (ns - covered) > (dir "/plan.meta")
+}
+AWK
+  cat > "$VB_DIR/plan_gen.awk" <<'AWK'
+BEGIN {
+  while ((getline ln < (dir "/board.flat")) > 0) ld(ln)
+  nl = (T["live"] == "a") ? V["live"] + 0 : 0
+  n = 0
+  for (i = 1; i <= nl; i++) {
+    p = "live." i
+    s = sv(p ".slug"); if (s == "") continue
+    n++; S[n] = s; A[n] = sv(p ".anchor"); W[n] = sv(p ".what"); TH[n] = sv(p ".thread")
+  }
+  if (n == 0) exit 0
+  ng = 0; i = 1
+  while (i <= n) {
+    ng++; GF[ng] = i; a = A[i]; j = i
+    while (j < n && A[j + 1] == a) j++
+    GL[ng] = j; GA[ng] = a; i = j + 1
+  }
+  nc = 0
+  for (g = 1; g <= ng; g++) {
+    f = GF[g]; l = GL[g]; nm = 0
+    for (k = f; k <= l; k++) {
+      kd = kind(W[k])
+      if (kd != "") { nm++; MI[nm] = k; MK[nm] = kd }
+    }
+    lane = "fold-" epoch "-" g
+    if (nm == 0) {
+      nc++; CAN[nc] = san(GA[g]); CLN[nc] = lane; CKD[nc] = "ANCHOR"; CF[nc] = f; CL[nc] = l
+    } else {
+      prev = f
+      for (m = 1; m <= nm; m++) {
+        nc++; CAN[nc] = san(GA[g]); CLN[nc] = lane; CKD[nc] = MK[m]; CF[nc] = prev; CL[nc] = MI[m]
+        prev = MI[m] + 1
+      }
+      if (prev <= l) { nc++; CAN[nc] = san(GA[g]); CLN[nc] = lane; CKD[nc] = "TAIL"; CF[nc] = prev; CL[nc] = l }
+    }
+  }
+  ncc = 0
+  for (c = 1; c <= nc; c++) {
+    if (ncc > 0 && CLN[c] == GCN[ncc] && CF[c] == GCL[ncc] + 1 && joins(GCF[ncc], GCL[ncc], GCK[ncc], CF[c], CL[c], CKD[c])) {
+      GCL[ncc] = CL[c]; GCK[ncc] = GCK[ncc] "/" CKD[c]
+    } else {
+      ncc++; GCF[ncc] = CF[c]; GCL[ncc] = CL[c]; GCN[ncc] = CLN[c]; GCK[ncc] = CKD[c]; GCA[ncc] = CAN[c]
+    }
+  }
+  nc = ncc
+  for (c = 1; c <= nc; c++) { CF[c] = GCF[c]; CL[c] = GCL[c]; CLN[c] = GCN[c]; CKD[c] = GCK[c]; CAN[c] = GCA[c] }
+  ncs = 0
+  for (c = 1; c <= nc; c++) {
+    f = CF[c]; l = CL[c]; was = 0
+    while (l - f + 1 > 12) {
+      s = split_at(f, l)
+      ncs++; SCF[ncs] = f; SCL[ncs] = s; SCK[ncs] = CKD[c]; SCN[ncs] = CLN[c]; SCA[ncs] = CAN[c]; SCS[ncs] = 1
+      f = s + 1; was = 1
+    }
+    ncs++; SCF[ncs] = f; SCL[ncs] = l; SCK[ncs] = CKD[c]; SCN[ncs] = CLN[c]; SCA[ncs] = CAN[c]; SCS[ncs] = (was ? 1 : 0)
+  }
+  nc = ncs
+  for (c = 1; c <= nc; c++) { CF[c] = SCF[c]; CL[c] = SCL[c]; CKD[c] = SCK[c]; CLN[c] = SCN[c]; CAN[c] = SCA[c]; CSP[c] = SCS[c] }
+  covered = 0
+  for (c = 1; c <= nc; c++) covered += (CL[c] - CF[c] + 1)
+  if (covered != n) exit 9
+  for (c = 1; c <= nc; c++) if (CL[c] - CF[c] + 1 > 12) exit 9
+  ncar = 0
+  for (i = 1; i <= n; i++) if (TH[i] != "" && TH[i] != "none") { ncar++; CR[ncar] = S[i] }
+  out = dir "/plan.json"
+  printf "{\"v\":4,\"unit\":\"%s\",\"epoch\":\"%s\",\"scope\":[", unit, epoch > out
+  for (i = 1; i <= n; i++) printf "%s\"%s\"", (i > 1 ? "," : ""), S[i] > out
+  printf "],\"carried\":[" > out
+  for (i = 1; i <= ncar; i++) printf "%s\"%s\"", (i > 1 ? "," : ""), CR[i] > out
+  printf "],\"chunks\":[" > out
+  for (c = 1; c <= nc; c++) printf "%s{\"id\":%d,\"anchor\":\"%s\",\"lane\":\"%s\",\"kind\":\"%s\",\"first\":%d,\"last\":%d,\"from\":\"%s\",\"to\":\"%s\",\"count\":%d,\"cap_split\":%s}", (c > 1 ? "," : ""), c, CAN[c], CLN[c], CKD[c], CF[c], CL[c], S[CF[c]], S[CL[c]], (CL[c] - CF[c] + 1), (CSP[c] ? "true" : "false") > out
+  printf "],\"lanes\":[" > out
+  nlan = 0
+  for (c = 1; c <= nc; c++) if (!(CLN[c] in SEENL)) { SEENL[CLN[c]] = 1; nlan++; LAN[nlan] = CLN[c] }
+  for (i = 1; i <= nlan; i++) printf "%s\"%s\"", (i > 1 ? "," : ""), LAN[i] > out
+  printf "]}\n" > out
+  close(out)
+}
+function joins(pf, pl, pk, cf, cl, ck) {
+  if (pk == "TASK_DONE" && ck == "TASK_DONE") return 1
+  if (pk == "RELEASE" && ck == "TASK_DONE") return 1
+  p1 = clause(W[pf]); c1 = clause(W[cf])
+  if (p1 != "" && p1 == c1) return 1
+  return 0
+}
+function clause(w,   x) {
+  x = w
+  if (match(x, /part [0-9]+/)) return "part " substr(x, RSTART + 5, RLENGTH - 5)
+  if (match(x, /si-[A-Za-z0-9_]+/)) return substr(x, RSTART, RLENGTH)
+  if (match(x, /backlog#[A-Za-z0-9_-]+/)) return substr(x, RSTART, RLENGTH)
+  return ""
+}
+function split_at(f, l,   i, best) {
+  best = f + 11
+  for (i = f + 1; i <= f + 11 && i < l; i++) if (is_seam(i)) best = i
+  return best
+}
+function is_seam(i) {
+  if (W[i] ~ /^backlog\/[A-Za-z0-9_-]+: DONE/) return 1
+  if (W[i] ~ /^DECIDE/ || W[i] ~ /^RELEASE/ || W[i] ~ /^LAND /) return 1
+  if (clause(W[i]) != "") return 1
+  return 0
+}
+function san(a,   s, i, c, o) {
+  if (a == "") return "NA"
+  s = a; o = ""
+  for (i = 1; i <= length(s); i++) {
+    c = substr(s, i, 1)
+    o = o (c ~ /[A-Za-z0-9_-]/ ? c : "_")
+  }
+  return (o == "" ? "NA" : o)
+}
+function kind(w) {
+  if (w ~ /^backlog\/[A-Za-z0-9_-]+: DONE/) return "TASK_DONE"
+  if (w ~ /^LAND / || w ~ /^RELEASE/ || w ~ /^shipped/ || w ~ /tag v[0-9]/) return "RELEASE"
+  if (w ~ /^DECIDE/ || w ~ /DISCUSS and DECIDE settled/) return "DECIDE"
+  if (w ~ /^HANDOFF/) return "HANDOFF"
+  if (w ~ /^PERIOD CLOSE/) return "PERIOD_CLOSE"
+  if (w ~ /^HARVEST/) return "HARVEST"
+  if (w ~ /^LANE REPORT/) return "LANE_REPORT"
+  if (w ~ /^HUMAN/) return "HUMAN"
+  return ""
+}
+AWK
+  cat > "$VB_DIR/carried_scan.awk" <<'AWK'
+BEGIN {
+  while ((getline ln < (dir "/board.flat")) > 0) ld(ln)
+  nl = (T["live"] == "a") ? V["live"] + 0 : 0
+  for (i = 1; i <= nl; i++) {
+    p = "live." i
+    s = sv(p ".slug"); if (s == "") continue
+    TH[s] = sv(p ".thread"); AN[s] = sv(p ".anchor")
+  }
+  while ((getline s < (dir "/scope.txt")) > 0) {
+    t = TH[s]
+    if (t != "" && t != "none") print s "\t" AN[s] "\t" t > (dir "/carried.tsv")
+  }
+}
+AWK
+  cat > "$VB_DIR/hint.awk" <<'AWK'
+BEGIN {
+  while ((getline ln < (dir "/board.flat")) > 0) ld(ln)
+  nl = (T["live"] == "a") ? V["live"] + 0 : 0
+  for (i = 1; i <= nl; i++) {
+    p = "live." i
+    s = sv(p ".slug"); if (s == "") continue
+    t = sv(p ".thread")
+    if (t != "" && t != "none") TH[s] = t
+  }
+  while ((getline s < (dir "/carried_plan.txt")) > 0) PC[s] = 1
+  n = 0
+  while ((getline s < (dir "/scope.txt")) > 0) { n++; SL[n] = s }
+  for (i = first; i <= last; i++) printf "    --ref=\"journal#%s\" \\\n", SL[i] >> (dir "/hint_refs")
+  for (i = first; i <= last; i++) {
+    s = SL[i]
+    if (s in TH || s in PC) print s >> (dir "/hint_carried")
+    else printf "    --closes=\"%s (folded: consolidated)\" \\\n", s >> (dir "/hint_closers")
+  }
+}
+AWK
+  cat > "$VB_DIR/find_active.awk" <<'AWK'
+BEGIN {
+  while ((getline ln < (dir "/board.flat")) > 0) ld(ln)
+  n = (T["live"] == "a") ? V["live"] + 0 : 0
+  v4 = 0; v1 = 0; fin = 0
+  for (i = 1; i <= n; i++) {
+    w = sv("live." i ".what"); s = sv("live." i ".slug")
+    if (w ~ /^FOLD START v4 /) {
+      v4++
+      if (v4 == 1) {
+        v4_slug = s
+        p = index(w, " :: ")
+        if (p == 0) v4_bad = 1
+        else v4_plan = substr(w, p + 4)
+      }
+    } else if (w ~ /^FOLD START v1 /) {
+      v1++
+      if (v1 == 1) v1_slug = s
+    } else if (w ~ /^FOLD FINISH v4 /) {
+      fin++
+      fin_slug = s
+      fin_what = w
+      split(w, P, " ")
+      fin_start = (4 in P) ? P[4] : ""
+    }
+  }
+  if (v1 > 0) { print "V3\t" v1_slug; exit 0 }
+  if (v4 > 1) { print "MULTI\t" v4_slug; exit 0 }
+  if (v4 == 1) {
+    if (v4_bad) { print "CORRUPT\t" v4_slug; exit 0 }
+    print "ACTIVE\t" v4_slug "\t" v4_plan
+    exit 0
+  }
+  if (fin > 0) { print "FINISHED\t" fin_slug "\t" fin_start "\t" fin_what; exit 0 }
+  print "NONE"
+}
+AWK
+  cat > "$VB_DIR/check_scan.awk" <<'AWK'
+function defect(code, detail) { printf "%s\t%s\n", code, detail >> (dir "/defects") }
+function is_ref(p, s,   k, r) {
+  k = (T[p ".refs"] == "a") ? V[p ".refs"] + 0 : 0
+  for (r = 1; r <= k; r++) if (sv(p ".refs." r) == "journal#" s) return 1
+  return 0
+}
+function is_live_thread(s) { return LIVE[s] && TH_OF[s] != "" && TH_OF[s] != "none" }
+function chunk_carried_only(c, bi,   q, s) {
+  for (q = C_FIRST[c]; q <= C_LAST[c]; q++) {
+    s = S[q]
+    if (ETS[s] == bi) continue
+    if (!is_live_thread(s)) return 0
+  }
+  return 1
+}
+BEGIN {
+  ns = nscope + 0; nc = nchunk + 0
+  printf "" > (dir "/external.tsv")
+  while ((getline ln < (dir "/scope.txt")) > 0) {
+    nsx++; S[nsx] = ln; IDX[ln] = nsx
+  }
+  while ((getline ln < (dir "/carried_plan.txt")) > 0) PC[ln] = 1
+  while ((getline ln < (dir "/chunks.tsv")) > 0) {
+    split(ln, Q, "\t")
+    c = Q[1] + 0
+    C_LANE[c] = Q[3]; C_FIRST[c] = Q[5] + 0; C_LAST[c] = Q[6] + 0
+    C_FROM[c] = Q[7]; C_TO[c] = Q[8]; C_ANCHOR[c] = Q[2]; C_KIND[c] = Q[4]
+    anc = C_ANCHOR[c]
+    if (!(anc in AC_FIRST) || c < AC_FIRST[anc]) AC_FIRST[anc] = c
+    if (c > AC_LAST[anc]) AC_LAST[anc] = c
+    AC_N[anc]++
+    for (i = C_FIRST[c]; i <= C_LAST[c]; i++) SC[S[i]] = c
+  }
+  while ((getline ln < (dir "/board.flat")) > 0) ld(ln)
+  nlive = (T["live"] == "a") ? V["live"] + 0 : 0
+  for (i = 1; i <= nlive; i++) {
+    p = "live." i
+    L[i] = sv(p ".slug"); W[i] = sv(p ".what"); A[i] = sv(p ".anchor")
+    LIVE[L[i]] = 1; TH_OF[L[i]] = sv(p ".thread"); AN_OF[L[i]] = A[i]
+    if (L[i] == fs) fs_pos = i
+  }
+  if (fs_pos == 0) defect("PLAN_DRIFT", "the fold start " fs " is not live")
+  for (i = 1; i <= nlive; i++) if (W[i] ~ /^FOLD START v1 /) defect("V3_START_LIVE", L[i] " is a live v3 fold start")
+  for (i = 1; i < fs_pos; i++) if (!(L[i] in IDX)) defect("PLAN_DRIFT", L[i] " is live before the fold start but outside the plan scope")
+  nb = 0
+  for (i = fs_pos + 1; i <= nlive; i++) {
+    p = "live." i
+    ncl = (T[p ".closers"] == "a") ? V[p ".closers"] + 0 : 0
+    nsct = 0; bad = 0; nother = 0
+    for (j = 1; j <= ncl; j++) {
+      cp = p ".closers." j
+      kind = sv(cp ".kind"); verdict = sv(cp ".verdict"); reason = sv(cp ".reason")
+      if (kind != "CLOSES") continue
+      tn = (T[cp ".targets"] == "a") ? V[cp ".targets"] + 0 : 0
+      for (k = 1; k <= tn; k++) {
+        t = sv(cp ".targets." k)
+        if (TSEEN[t] == i) continue
+        TSEEN[t] = i
+        if (!(t in IDX)) { nother++; OTHER[nother] = t; continue }
+        nsct++
+        ETS[t] = i
+        if (t in PC) {
+          defect("THREAD_CLOSED", L[i] " closes the carried open thread " t "; an open thread stays live and is carried")
+          bad = 1
+        }
+        if (verdict != "folded" || reason == "") {
+          defect("CLOSER_NOT_FOLDED", L[i] " closes " t " with " ((verdict == "") ? "(no verdict)" : verdict))
+          bad = 1
+        }
+        if (!is_ref(p, t)) { defect("UNREFERENCED_CLOSER", L[i] " closes " t " without a journal#" t " REF"); bad = 1 }
+      }
+    }
+    if (nsct == 0) continue
+    nb++
+    B_SLUG[nb] = L[i]; B_VALID[nb] = 1
+    for (m = 1; m <= nother; m++) { defect("TARGET_OUTSIDE_SCOPE", L[i] " closes " OTHER[m] " outside the scope"); bad = 1 }
+    min = 0; max = 0; lanes = 0; cross = 0; nonc = 0
+    for (s in ETS) {
+      if (ETS[s] != i) continue
+      c = SC[s]
+      if (ECS[c] != i) { ECS[c] = i; if (min == 0 || c < min) min = c; if (c > max) max = c }
+      ln = C_LANE[c]
+      if (LSET[ln] != i) { LSET[ln] = i; lanes++; if (lanes > 1) cross = 1; lane0 = ln }
+    }
+    if (cross) { defect("BATCH_CROSS_LANE", L[i] " spans lanes " lane0 " and another"); bad = 1 }
+    for (c = min; c <= max; c++) {
+      if (ECS[c] == i) continue
+      if (chunk_carried_only(c, i)) continue
+      nonc = 1; break
+    }
+    if (nonc) { defect("BATCH_NOT_CONSECUTIVE", L[i] " claims chunks " min " to " max " with a gap"); bad = 1 }
+    for (c = min; c <= max && !cross; c++) {
+      if (ECS[c] != i) continue
+      for (q = C_FIRST[c]; q <= C_LAST[c]; q++) {
+        s = S[q]
+        if (ETS[s] == i) continue
+        if (is_live_thread(s)) continue
+        defect("BATCH_PARTIAL_CHUNK", L[i] " does not claim all of chunk " c); bad = 1; break
+      }
+    }
+    for (c = min; c <= max; c++) {
+      if (ECS[c] != i) continue
+      for (q = C_FIRST[c]; q <= C_LAST[c]; q++) {
+        s = S[q]
+        if (ETS[s] == i) continue
+        if (!is_live_thread(s)) continue
+        if (!is_ref(p, s)) { defect("CARRIED_UNREFERENCED", L[i] " does not REF the carried open thread " s); bad = 1 }
+      }
+    }
+    B_FIRST[nb] = min; B_LAST[nb] = max; B_LANE[nb] = lane0; B_COUNT[nb] = nsct
+    anc0 = C_ANCHOR[min]
+    if (nsct > 12) { defect("CONSTITUENT_CAP", L[i] " folds " nsct " constituents (the cap is 12); split the batch by topic"); bad = 1 }
+    if (AC_N[anc0] > 1 && min == AC_FIRST[anc0] && max == AC_LAST[anc0]) { defect("WHOLE_ANCHOR_BATCH", L[i] " folds the whole anchor " anc0 " in one entry; split it by topic"); bad = 1 }
+    if (max - min + 1 > 2) { defect("MERGE_BEYOND_NEXT", L[i] " spans " (max - min + 1) " chunks; a merge covers only the next chunk"); bad = 1 }
+    if (max - min + 1 == 2 && W[i] !~ /\(merged: [^)]+\)/) { defect("MERGE_REASON_MISSING", L[i] " merges chunks " min " and " max " without a (merged: <reason>) in the WHAT"); bad = 1 }
+    B_VALID[nb] = (bad ? 0 : 1)
+    sig = ""
+    for (q = 1; q <= ns; q++) if (ETS[S[q]] == i) sig = sig " " S[q]
+    SIG_BY[L[i]] = sig
+    nrf = (T[p ".refs"] == "a") ? V[p ".refs"] + 0 : 0
+    for (r = 1; r <= nrf; r++) {
+      rf = sv(p ".refs." r)
+      if (rf ~ /^journal#/ && (substr(rf, 9) in ETS) && ETS[substr(rf, 9)] == i) continue
+      print L[i] "\t" rf > (dir "/external.tsv")
+    }
+    for (s in ETS) {
+      if (ETS[s] != i) continue
+      CLAIM[s]++
+      if (CLAIM[s] == 1) { CL1[s] = L[i] } else if (CLAIM[s] == 2) { CL2[s] = L[i] }
+    }
+  }
+  uncovered = 0; live_scoped = 0; carried = 0; covered = 0
+  for (i = 1; i <= ns; i++) {
+    s = S[i]
+    if (CLAIM[s] > 0) covered++
+    if (CLAIM[s] == 0) {
+      if (is_live_thread(s)) {
+        carried++
+        CARRY[s] = 1
+        print s "\t" AN_OF[s] "\t" TH_OF[s] > (dir "/carried.tsv")
+      } else {
+        uncovered++
+        if (LIVE[s]) { live_scoped++; if (mode == "full") defect("SCOPED_LIVE", s " is still live") }
+        else if (mode == "full") defect("CONSOLIDATION_NOT_LIVE", s " is closed but no live consolidation covers it")
+        GAP[SC[s]] = 1
+      }
+    }
+    if (CLAIM[s] > 1) {
+      e1 = CL1[s]; e2 = CL2[s]
+      if (e1 > e2) { q = e1; e1 = e2; e2 = q }
+      key = e1 SUBSEP e2
+      if (!(key in PAIR)) {
+        PAIR[key] = 1
+        if (SIG_BY[e1] == SIG_BY[e2])
+          defect("DOUBLE_CONSOLIDATION", e1 " and " e2 " claim the same batch (first " s ")")
+        else
+          defect("BATCH_OVERLAP", e1 " and " e2 " share " s)
+      }
+    }
+  }
+  if (mode == "full") for (c = 1; c <= nc; c++) if (GAP[c]) defect("BATCH_GAP", "chunk " c " is not covered by a live consolidation")
+  for (c = 1; c <= nc; c++) {
+    open = 0
+    for (i = C_FIRST[c]; i <= C_LAST[c]; i++) if (CLAIM[S[i]] == 0 && !CARRY[S[i]]) open = 1
+    print c "\t" open > (dir "/chunk_open.tsv")
+  }
+  valid = 0
+  for (b = 1; b <= nb; b++) {
+    if (B_VALID[b]) valid++
+    printf "%s\t%s\t%d\t%d\t%d\t%d\n", B_SLUG[b], B_LANE[b], B_FIRST[b], B_LAST[b], B_COUNT[b], B_VALID[b] > (dir "/batches.tsv")
+  }
+  printf "%d\t%d\t%d\t%d\t%d\t%d\n", uncovered, nb, valid, live_scoped, carried, covered > (dir "/summary")
+}
+AWK
+}
+write_progs
+
+has_payload=0
+: > "$VB_DIR/stdin"
+if [ ! -t 0 ]; then
+  cat > "$VB_DIR/stdin" || fold_fail "cannot read stdin"
+  [ -s "$VB_DIR/stdin" ] && has_payload=1
+fi
+[ "$has_payload" -eq 0 ] || fold_fail "fold takes no payload; write the consolidated entry with ctx session record"
+
+read_board() {
+  vb_call session.board "$unit"
+  [ "$VB_RC" -eq 0 ] || vb_through
+  LC_ALL=C awk -f "$VB_JSON" < "$VB_DIR/ans" > "$VB_DIR/board.flat" || fold_corrupt "cannot flatten the board answer"
+}
+
+plan_load() {
+  pl_mode=${1:-strict}
+  rm -f "$VB_DIR/plan.flat" "$VB_DIR/scope.txt" "$VB_DIR/chunks.tsv" "$VB_DIR/lanes.txt" "$VB_DIR/plan.meta" "$VB_DIR/carried_plan.txt"
+  LC_ALL=C awk -f "$VB_JSON" < "$VB_DIR/plan.json" > "$VB_DIR/plan.flat" || {
+    if [ "$pl_mode" = check ]; then
+      printf 'PLAN_DRIFT\t%s\n' "the fold start's plan is not JSON" > "$VB_DIR/defects"
+      print_defects
+      exit 1
+    fi
+    fold_corrupt "cannot flatten the plan"
+  }
+  LC_ALL=C awk -f "$VB_DIR/lib.awk" -f "$VB_DIR/plan_load.awk" -v dir="$VB_DIR" || {
+    if [ "$pl_mode" = check ]; then
+      printf 'PLAN_DRIFT\t%s\n' "the fold start's plan is malformed or does not partition its scope" > "$VB_DIR/defects"
+      print_defects
+      exit 1
+    fi
+    fold_corrupt "cannot load the plan"
+  }
+  scope_n=""; chunk_n=""; lane_n=""; covered=""; uncovered=""; plan_epoch=""; plan_unit=""
+  while IFS="$tab" read -r k v; do
+    case "$k" in
+      scope_n) scope_n=$v ;;
+      chunk_n) chunk_n=$v ;;
+      lane_n) lane_n=$v ;;
+      covered) covered=$v ;;
+      uncovered) uncovered=$v ;;
+      epoch) plan_epoch=$v ;;
+      unit) plan_unit=$v ;;
+    esac
+  done < "$VB_DIR/plan.meta"
+  [ -n "$scope_n" ] && [ -n "$chunk_n" ] && [ -n "$lane_n" ] || fold_corrupt "the plan is missing its counts"
+  [ "$uncovered" = 0 ] || fold_corrupt "the plan leaves $uncovered live entries uncovered"
+  if [ "$plan_unit" != "$unit" ]; then
+    if [ "$pl_mode" = check ]; then
+      printf 'PLAN_DRIFT\t%s\n' "the fold start's plan names unit $plan_unit" > "$VB_DIR/defects"
+      print_defects
+      exit 1
+    fi
+    fold_corrupt "the plan names unit $plan_unit"
+  fi
+}
+
+plan_gen() {
+  LC_ALL=C awk -f "$VB_DIR/lib.awk" -f "$VB_DIR/plan_gen.awk" -v dir="$VB_DIR" -v unit="$unit" -v epoch="$1"
+}
+
+lane_exists() {
+  le_l=$1
+  vb_call lane.get "$unit" "$le_l" journal
+  if [ "$VB_RC" -eq 0 ]; then return 0; fi
+  if vb_err_has "not found"; then return 1; fi
+  vb_through
+}
+
+choose_plan() {
+  cp_e=$(vb_epoch)
+  cp_tries=0
+  while [ "$cp_tries" -lt 50 ]; do
+    rm -f "$VB_DIR/plan.json"
+    plan_gen "$cp_e" || fold_corrupt "cannot compute the plan"
+    [ -s "$VB_DIR/plan.json" ] || return 0
+    plan_load
+    cp_collide=0
+    while IFS= read -r cp_l; do
+      [ -n "$cp_l" ] || continue
+      if lane_exists "$cp_l"; then cp_collide=1; break; fi
+    done < "$VB_DIR/lanes.txt"
+    if [ "$cp_collide" -eq 0 ]; then
+      FOLD_EPOCH_USED=$cp_e
+      return 0
+    fi
+    cp_e=$((cp_e + 1))
+    cp_tries=$((cp_tries + 1))
+  done
+  fold_corrupt "cannot choose unique fold lane names"
+}
+
+find_active() {
+  fold_slug=""; fold_plan=""; active_state=""
+  LC_ALL=C awk -f "$VB_DIR/lib.awk" -f "$VB_DIR/find_active.awk" -v dir="$VB_DIR" > "$VB_DIR/active"
+  IFS="$tab" read -r active_state fa_a fa_b fa_c < "$VB_DIR/active" || true
+  case "$active_state" in
+    ACTIVE) fold_slug=$fa_a; fold_plan=$fa_b ;;
+    FINISHED) receipt_slug=$fa_a; receipt_start=$fa_b; receipt_what=$fa_c ;;
+    MULTI) fold_corrupt "multiple live v4 fold starts (first $fa_a); the record is inconsistent" ;;
+    CORRUPT) active_state=CORRUPT; fold_slug=$fa_a ;;
+    V3) active_state=V3; v3_slug=$fa_a ;;
+    NONE) ;;
+    *) fold_corrupt "cannot read the active fold state" ;;
+  esac
+}
+
+v3_fail() {
+  printf 'V3_START_LIVE: the live v3 fold start %s parks the unit; close it with an ordinary entry (CLOSES: %s (done: the v3 run parked; the v4 consolidation fold replans)), then run the v4 plan\n' "$1" "$1" >&2
+  exit 1
+}
+
+active_load() {
+  [ -n "$fold_plan" ] || { printf 'PLAN_DRIFT\t%s\n' "the live fold start carries no plan JSON" > "$VB_DIR/defects"; print_defects; exit 1; }
+  printf '%s\n' "$fold_plan" > "$VB_DIR/plan.json"
+  plan_load check
+}
+
+set_chunk() {
+  set_c_line=$(LC_ALL=C awk -F'\t' -v id="$1" '$1==id{print; exit}' "$VB_DIR/chunks.tsv")
+  [ -n "$set_c_line" ] || fold_corrupt "chunk $1 not found in the plan"
+  c_id=$(printf '%s\n' "$set_c_line" | cut -f1)
+  c_anchor=$(printf '%s\n' "$set_c_line" | cut -f2)
+  c_lane=$(printf '%s\n' "$set_c_line" | cut -f3)
+  c_kind=$(printf '%s\n' "$set_c_line" | cut -f4)
+  c_first=$(printf '%s\n' "$set_c_line" | cut -f5)
+  c_last=$(printf '%s\n' "$set_c_line" | cut -f6)
+  c_from=$(printf '%s\n' "$set_c_line" | cut -f7)
+  c_to=$(printf '%s\n' "$set_c_line" | cut -f8)
+  c_count=$(printf '%s\n' "$set_c_line" | cut -f9)
+}
+
+print_plan() {
+  printf 'FOLD START v4 %s\n' "$unit"
+  printf 'fold start: %s (the state marker; group fold, thread none)\n' "$fold_slug"
+  printf 'scope: %s live entries\n' "$scope_n"
+  printf 'batch rule: the plan chunks are atomic; the fetch hands one at a time; a lane may merge only the next chunk with a recorded same-topic reason; at most 12 constituents; no whole-anchor batch\n'
+  : > "$VB_DIR/carried.tsv"
+  LC_ALL=C awk -f "$VB_DIR/lib.awk" -f "$VB_DIR/carried_scan.awk" -v dir="$VB_DIR"
+  if [ -s "$VB_DIR/carried.tsv" ]; then
+    pp_car=$(wc -l < "$VB_DIR/carried.tsv" | tr -d ' ')
+  else
+    pp_car=0
+  fi
+  printf 'carried open threads: %s (kept live; REF them as context, never close them)\n' "$pp_car"
+  while IFS="$tab" read -r pp_cs pp_ca pp_ct; do
+    [ -n "$pp_cs" ] || continue
+    printf '  %s [%s]: %s\n' "$pp_cs" "$pp_ca" "$pp_ct"
+  done < "$VB_DIR/carried.tsv"
+  printf 'partition: scope=%s chunks=%s covered=%s uncovered=0\n' "$scope_n" "$chunk_n" "$covered"
+  printf 'chunks:\n'
+  while IFS= read -r pp_line; do
+    [ -n "$pp_line" ] || continue
+    pp_id=$(printf '%s\n' "$pp_line" | cut -f1)
+    pp_anc=$(printf '%s\n' "$pp_line" | cut -f2)
+    pp_lane=$(printf '%s\n' "$pp_line" | cut -f3)
+    pp_kind=$(printf '%s\n' "$pp_line" | cut -f4)
+    pp_from=$(printf '%s\n' "$pp_line" | cut -f7)
+    pp_to=$(printf '%s\n' "$pp_line" | cut -f8)
+    pp_count=$(printf '%s\n' "$pp_line" | cut -f9)
+    if [ "$pp_count" = 1 ]; then pp_noun=entry; else pp_noun=entries; fi
+    printf '  %s  [%s] %-12s lane %s  from %s to %s (%s %s)\n' "$pp_id" "$pp_anc" "$pp_kind" "$pp_lane" "$pp_from" "$pp_to" "$pp_count" "$pp_noun"
+  done < "$VB_DIR/chunks.tsv"
+  printf 'lanes: %s (one per anchor)\n' "$lane_n"
+  set_chunk 1
+  printf 'position: chunk 1 of %s; next lane %s\n' "$chunk_n" "$c_lane"
+  printf 'NEXT: create the first lane with its manual below (if absent), then fetch:\n'
+  printf '  .contexture/ctx run .contexture/ctx lane create %s %s   (recipe: the manual below)\n' "$unit" "$c_lane"
+  printf '  .contexture/ctx run .contexture/ctx session fold %s --lane=%s\n' "$unit" "$c_lane"
+  print_manual "$c_lane"
+}
+
+print_manual() {
+  pm_lane=$1
+  printf '\n'
+  manual_text "$unit" "$pm_lane"
+  printf '\nYour chunks in this plan:\n'
+  LC_ALL=C awk -F'\t' -v l="$pm_lane" '$3==l { printf "  chunk %s [%s] %s: %s to %s (%s %s)\n", $1, $2, $4, $7, $8, $9, ($9 == 1 ? "entry" : "entries") }' "$VB_DIR/chunks.tsv"
+}
+
+print_chunk_entries() {
+  set_chunk "$1"
+  if [ "$c_count" = 1 ]; then pce_noun=entry; else pce_noun=entries; fi
+  printf 'CHUNK %s/%s [%s] %s  lane %s: %s to %s (%s %s)\n' "$c_id" "$chunk_n" "$c_anchor" "$c_kind" "$c_lane" "$c_from" "$c_to" "$c_count" "$pce_noun"
+  LC_ALL=C awk -F'\t' -v f="$c_first" -v l="$c_last" 'NR >= f && NR <= l { print }' "$VB_DIR/scope.txt" > "$VB_DIR/chunk_slugs"
+  while IFS= read -r pce_s; do
+    [ -n "$pce_s" ] || continue
+    vb_call entry.get "$unit" "$pce_s"
+    vb_ok
+    printf '\n'
+    vb_render entry_show
+  done < "$VB_DIR/chunk_slugs"
+  printf '\n'
+}
+
+print_remaining() {
+  pr_lane=$1
+  pr_next=$2
+  printf 'YOUR CHUNKS IN THIS PLAN (lane %s):\n' "$pr_lane"
+  while IFS= read -r pr_line; do
+    [ -n "$pr_line" ] || continue
+    pr_id=$(printf '%s\n' "$pr_line" | cut -f1)
+    pr_lane2=$(printf '%s\n' "$pr_line" | cut -f3)
+    [ "$pr_lane2" = "$pr_lane" ] || continue
+    pr_anc=$(printf '%s\n' "$pr_line" | cut -f2)
+    pr_kind=$(printf '%s\n' "$pr_line" | cut -f4)
+    pr_from=$(printf '%s\n' "$pr_line" | cut -f7)
+    pr_to=$(printf '%s\n' "$pr_line" | cut -f8)
+    pr_count=$(printf '%s\n' "$pr_line" | cut -f9)
+    pr_open=$(LC_ALL=C awk -F'\t' -v id="$pr_id" '$1==id{print $2; exit}' "$VB_DIR/chunk_open.tsv")
+    if [ "$pr_id" = "$pr_next" ]; then pr_mark=next
+    elif [ "$pr_open" = 1 ]; then pr_mark=open
+    else pr_mark=done
+    fi
+    printf '  chunk %s [%s] %s: %s to %s (%s %s) [%s]\n' "$pr_id" "$pr_anc" "$pr_kind" "$pr_from" "$pr_to" "$pr_count" "$([ "$pr_count" = 1 ] && printf entry || printf entries)" "$pr_mark"
+  done < "$VB_DIR/chunks.tsv"
+  printf '\n'
+  printf 'The fetch hands one chunk at a time; the entries of later chunks arrive only through a --merge fetch of the immediately following chunk.\n'
+  printf '\n'
+}
+
+print_merge() {
+  pm_cur=$1
+  pm_next=""
+  while IFS="$tab" read -r pm_c pm_open; do
+    [ "$pm_open" = 1 ] || continue
+    pm_cl=$(LC_ALL=C awk -F'\t' -v id="$pm_c" '$1==id{print $3; exit}' "$VB_DIR/chunks.tsv")
+    [ "$pm_cl" = "$lane" ] || continue
+    [ "$pm_c" -gt "$pm_cur" ] || continue
+    pm_next=$pm_c
+    break
+  done < "$VB_DIR/chunk_open.tsv"
+  if [ -z "$pm_next" ]; then
+    merge_next=""
+    printf 'MERGE: no following unclosed chunk in this lane; write the batch for chunk %s alone.\n' "$pm_cur"
+    return 0
+  fi
+  merge_next=$pm_next
+  printf 'MERGE: the only merge partner is the immediately following chunk %s; merge only if it continues this topic.\n' "$pm_next"
+  print_chunk_entries "$pm_next"
+  printf 'MERGE: the merged batch covers chunks %s and %s; append (merged: <the reason>) to the WHAT; never merge a third chunk.\n' "$pm_cur" "$pm_next"
+}
+
+print_record_hint() {
+  ph_id=$1
+  ph_second=${2:-}
+  set_chunk "$ph_id"
+  : > "$VB_DIR/hint_refs"; : > "$VB_DIR/hint_closers"; : > "$VB_DIR/hint_carried"
+  LC_ALL=C awk -f "$VB_DIR/lib.awk" -f "$VB_DIR/hint.awk" -v dir="$VB_DIR" -v first="$c_first" -v last="$c_last"
+  if [ -n "$ph_second" ]; then
+    set_chunk "$ph_second"
+    LC_ALL=C awk -f "$VB_DIR/lib.awk" -f "$VB_DIR/hint.awk" -v dir="$VB_DIR" -v first="$c_first" -v last="$c_last" -v append=1
+    set_chunk "$ph_id"
+  fi
+  if [ -n "$ph_second" ]; then
+    printf 'NEXT: write one ordinary entry for the merged batch of chunks %s and %s (append (merged: <the reason>) to the WHAT):\n' "$ph_id" "$ph_second"
+  else
+    printf 'NEXT: write one ordinary entry for this batch (a merge takes a --merge fetch of the next chunk):\n'
+  fi
+  printf '  .contexture/ctx run .contexture/ctx session record %s \\\n' "$unit"
+  printf '    --what="<the synthesis of the batch, one line>" \\\n'
+  printf '    --group=<optional topic token> \\\n'
+  printf '    --thread=none \\\n'
+  cat "$VB_DIR/hint_refs"
+  cat "$VB_DIR/hint_closers"
+  printf '\n'
+  if [ -s "$VB_DIR/hint_carried" ]; then
+    printf 'NOTE: carried open threads stay live: REF them as context, never close them:\n'
+    while IFS= read -r ph_s; do
+      [ -n "$ph_s" ] || continue
+      printf '  %s\n' "$ph_s"
+    done < "$VB_DIR/hint_carried"
+    printf '\n'
+  fi
+  printf 'Then re-fetch; a fetch never advances and reads the entry you wrote.\n'
+}
+
+next_open_chunk() {
+  no_lane=$1
+  no_id=""
+  no_lane_next=""
+  while IFS="$tab" read -r no_c no_open; do
+    [ "$no_open" = 1 ] || continue
+    no_cl=$(LC_ALL=C awk -F'\t' -v id="$no_c" '$1==id{print $3; exit}' "$VB_DIR/chunks.tsv")
+    if [ -n "$no_lane" ] && [ "$no_cl" != "$no_lane" ]; then continue; fi
+    no_id=$no_c
+    no_lane_next=$no_cl
+    break
+  done < "$VB_DIR/chunk_open.tsv"
+}
+
+partial_check() {
+  rm -f "$VB_DIR/defects" "$VB_DIR/batches.tsv" "$VB_DIR/chunk_open.tsv" "$VB_DIR/external.tsv" "$VB_DIR/summary"
+  : > "$VB_DIR/carried.tsv"
+  LC_ALL=C awk -f "$VB_DIR/lib.awk" -f "$VB_DIR/check_scan.awk" -v dir="$VB_DIR" -v fs="$fold_slug" -v mode=partial -v nscope="$scope_n" -v nchunk="$chunk_n"
+  if [ -s "$VB_DIR/defects" ]; then
+    print_defects
+    printf 'fold check: %s defect(s); repair with an ordinary entry (supersession) and re-run\n' "$(wc -l < "$VB_DIR/defects" | tr -d ' ')"
+    exit 1
+  fi
+  read_summary
+}
+
+print_defects() {
+  sed 's/	/: /' "$VB_DIR/defects"
+}
+
+read_summary() {
+  sum_uncovered=""; sum_batches=""; sum_valid=""; sum_live=""; sum_carried=""; sum_covered=""
+  if [ -s "$VB_DIR/summary" ]; then
+    IFS="$tab" read -r sum_uncovered sum_batches sum_valid sum_live sum_carried sum_covered < "$VB_DIR/summary" || true
+  fi
+  [ -n "$sum_uncovered" ] || sum_uncovered=0
+  [ -n "$sum_batches" ] || sum_batches=0
+  [ -n "$sum_valid" ] || sum_valid=0
+  [ -n "$sum_live" ] || sum_live=0
+  [ -n "$sum_carried" ] || sum_carried=0
+  [ -n "$sum_covered" ] || sum_covered=0
+}
+
+run_audit() {
+  audit_state=clean; audit_rc=0; audit_view=""
+  vb_call session.audit "$unit"
+  audit_rc=$VB_RC
+  if [ "$audit_rc" -eq 0 ]; then
+    audit_clean=$(vb_field clean)
+    [ "$audit_clean" = true ] || audit_rc=1
+  fi
+  if [ "$audit_rc" -eq 0 ]; then
+    audit_view=$(vb_render audit)
+  else
+    audit_state="red (rc $audit_rc; run .contexture/ctx run .contexture/ctx session audit $unit)"
+    printf 'AUDIT_RED\t%s\n' "the audit reports findings" >> "$VB_DIR/defects"
+  fi
+}
+
+print_batches() {
+  while IFS="$tab" read -r pb_slug pb_lane pb_first pb_last pb_count pb_valid; do
+    [ -n "$pb_slug" ] || continue
+    if [ "$pb_count" = 1 ]; then pb_noun=entry; else pb_noun=entries; fi
+    printf '  %s [%s] chunks %s-%s (%s %s)\n' "$pb_slug" "$pb_lane" "$pb_first" "$pb_last" "$pb_count" "$pb_noun"
+  done < "$VB_DIR/batches.tsv"
+}
+
+run_check_full() {
+  rm -f "$VB_DIR/defects" "$VB_DIR/batches.tsv" "$VB_DIR/chunk_open.tsv" "$VB_DIR/external.tsv" "$VB_DIR/summary"
+  : > "$VB_DIR/carried.tsv"
+  LC_ALL=C awk -f "$VB_DIR/lib.awk" -f "$VB_DIR/check_scan.awk" -v dir="$VB_DIR" -v fs="$fold_slug" -v mode=full -v nscope="$scope_n" -v nchunk="$chunk_n"
+  read_summary
+  run_audit
+  check_defects=0
+  [ -s "$VB_DIR/defects" ] && check_defects=$(wc -l < "$VB_DIR/defects" | tr -d ' ')
+}
+
+print_check() {
+  printf 'fold check: %s\n' "$unit"
+  printf 'fold start: %s\n' "$fold_slug"
+  printf 'scope: %s live entries; chunks: %s; lanes: %s\n' "$scope_n" "$chunk_n" "$lane_n"
+  printf 'batches: %s (%s valid)\n' "$sum_batches" "$sum_valid"
+  print_batches
+  if [ -s "$VB_DIR/external.tsv" ]; then
+    printf 'external refs:\n'
+    while IFS="$tab" read -r ex_slug ex_ref; do
+      [ -n "$ex_slug" ] || continue
+      printf '  %s %s\n' "$ex_slug" "$ex_ref"
+    done < "$VB_DIR/external.tsv"
+  fi
+  printf 'covered: %s closed receipts\n' "$sum_covered"
+  printf 'carried open threads: %s\n' "$sum_carried"
+  while IFS="$tab" read -r pc_s pc_a pc_t; do
+    [ -n "$pc_s" ] || continue
+    printf '  %s: %s\n' "$pc_s" "$pc_t"
+  done < "$VB_DIR/carried.tsv"
+  printf 'coverage: %s uncovered (the closed receipts are the scope minus the carried threads)\n' "$sum_uncovered"
+  printf 'audit: %s\n' "$audit_state"
+  [ -z "$audit_view" ] || printf '%s\n' "$audit_view"
+  if [ "$check_defects" -eq 0 ]; then
+    printf 'fold check: clean\n'
+  else
+    print_defects
+    printf 'fold check: %s defect(s); repair with an ordinary entry (supersession) and re-run\n' "$check_defects"
+  fi
+}
+
+print_receipt() {
+  printf '%s\n' "$receipt_what"
+  printf 'receipt: %s\n' "$receipt_slug"
+  printf 'fold complete: the fold start %s is closed; the consolidated entries are live\n' "$receipt_start"
+}
+
+finish() {
+  run_check_full
+  if [ "$check_defects" -ne 0 ]; then
+    print_defects
+    printf 'fold finish: %s defect(s); no receipt written\n' "$check_defects"
+    exit 1
+  fi
+  : > "$VB_DIR/pay"
+  vb_kv what "FOLD FINISH v4 $fold_slug batches=$sum_batches covered=$sum_covered carried=$sum_carried open threads :: coverage zero; audit clean"
+  vb_kv group fold
+  vb_kv thread none
+  vb_kv closers.count 1
+  vb_kv "closers.1.kind" CLOSES
+  vb_kv "closers.1.targets.count" 1
+  vb_kv "closers.1.targets.1" "$fold_slug"
+  vb_kv "closers.1.verdict" done
+  vb_kv "closers.1.reason" "the v4 consolidation fold complete"
+  vb_kv date "$(vb_today)"
+  vb_kv epoch "$(vb_epoch)"
+  VB_PAY="$VB_DIR/pay"
+  vb_call entry.record "$unit"
+  vb_ok
+  rec_slug=$(vb_field entry.slug)
+  printf 'FOLD FINISH v4 %s batches=%s covered=%s carried=%s open threads :: coverage zero; audit clean\n' "$fold_slug" "$sum_batches" "$sum_covered" "$sum_carried"
+  printf 'receipt: %s\n' "$rec_slug"
+  printf 'fold start: %s closed (done: the v4 consolidation fold complete)\n' "$fold_slug"
+  printf 'coverage: 0 uncovered\n'
+  printf 'carried: %s open threads stay live\n' "$sum_carried"
+  printf 'audit: clean\n'
+  [ -z "$audit_view" ] || printf '%s\n' "$audit_view"
+}
+
+progress() {
+  partial_check
+  printf 'FOLD START v4 %s\n' "$unit"
+  printf 'fold start: %s\n' "$fold_slug"
+  printf 'scope: %s live entries; chunks: %s; lanes: %s\n' "$scope_n" "$chunk_n" "$lane_n"
+  printf 'batches: %s\n' "$sum_batches"
+  print_batches
+  printf 'covered: %s closed receipts; carried: %s open threads\n' "$sum_covered" "$sum_carried"
+  printf 'coverage: %s uncovered\n' "$sum_uncovered"
+  if [ "$sum_uncovered" -eq 0 ]; then
+    printf 'position: all %s chunks are consolidated\n' "$chunk_n"
+    printf 'NEXT: run the check, then the finish:\n'
+    printf '  .contexture/ctx run .contexture/ctx session fold %s --check\n' "$unit"
+    printf '  .contexture/ctx run .contexture/ctx session fold %s --finish\n' "$unit"
+    exit 0
+  fi
+  next_open_chunk ""
+  printf 'position: chunk %s of %s is next; next lane %s\n' "$no_id" "$chunk_n" "$no_lane_next"
+  printf 'NEXT: fetch lane %s (create it with its manual if absent):\n' "$no_lane_next"
+  printf '  .contexture/ctx run .contexture/ctx session fold %s --lane=%s\n' "$unit" "$no_lane_next"
+  if ! lane_exists "$no_lane_next"; then
+    print_manual "$no_lane_next"
+  fi
+}
+
+fetch_lane() {
+  grep -Fxq -- "$lane" "$VB_DIR/lanes.txt" || fold_fail "lane '$lane' is not assigned by this fold plan"
+  partial_check
+  printf 'FOLD START v4 %s lane %s\n' "$unit" "$lane"
+  printf 'fold start: %s\n' "$fold_slug"
+  next_open_chunk "$lane"
+  if [ -z "$no_id" ]; then
+    next_open_chunk ""
+    if [ -z "$no_id" ]; then
+      printf 'LANE BOUNDARY: lane %s is done; all %s chunks are consolidated\n' "$lane" "$chunk_n"
+      printf 'NEXT: run the check, then the finish:\n'
+      printf '  .contexture/ctx run .contexture/ctx session fold %s --check\n' "$unit"
+      printf '  .contexture/ctx run .contexture/ctx session fold %s --finish\n' "$unit"
+      exit 0
+    fi
+    printf 'LANE BOUNDARY: lane %s is done; the next lane is %s; stop.\n' "$lane" "$no_lane_next"
+    printf 'The orchestrator creates %s with its manual below and dispatches it:\n' "$no_lane_next"
+    printf '  .contexture/ctx run .contexture/ctx lane create %s %s   (recipe: the manual below)\n' "$unit" "$no_lane_next"
+    printf '  .contexture/ctx run .contexture/ctx session fold %s --lane=%s\n' "$unit" "$no_lane_next"
+    print_manual "$no_lane_next"
+    exit 0
+  fi
+  printf 'position: chunk %s of %s; lane %s\n' "$no_id" "$chunk_n" "$lane"
+  printf 'NEXT BATCH: chunk %s of the plan\n' "$no_id"
+  print_chunk_entries "$no_id"
+  print_remaining "$lane" "$no_id"
+  merge_next=""
+  if [ "$do_merge" -eq 1 ]; then
+    print_merge "$no_id"
+  fi
+  print_record_hint "$no_id" "$merge_next"
+}
+
+read_board
+find_active
+
+case "$active_state" in
+  V3) v3_fail "$v3_slug" ;;
+  CORRUPT)
+    if [ "$do_check" -eq 1 ] || [ "$lane_given" -eq 1 ] || [ "$do_finish" -eq 1 ]; then
+      printf 'PLAN_DRIFT\t%s\n' "the live fold start $fold_slug carries no plan JSON" > "$VB_DIR/defects"
+      print_defects
+      exit 1
+    fi
+    fold_corrupt "the live fold start is malformed"
+    ;;
+  FINISHED)
+    if [ "$lane_given" -eq 1 ]; then
+      fold_fail "no active fold for unit '$unit'; the fold is complete (receipt $receipt_slug)"
+    fi
+    if [ "$do_check" -eq 1 ]; then
+      print_receipt
+      printf 'fold check: complete\n'
+      exit 0
+    fi
+    if [ "$do_finish" -eq 1 ]; then
+      print_receipt
+      printf 'fold finish: already complete; no second receipt\n'
+      exit 0
+    fi
+    print_receipt
+    exit 0
+    ;;
+  NONE)
+    if [ "$lane_given" -eq 1 ] || [ "$do_check" -eq 1 ] || [ "$do_finish" -eq 1 ]; then
+      fold_fail "no active fold for unit '$unit'; run 'ctx session fold $unit' without --lane to plan"
+    fi
+    choose_plan
+    if [ ! -s "$VB_DIR/plan.json" ]; then
+      printf 'consolidation fold: %s holds no live entries; nothing to fold\n' "$unit"
+      exit 0
+    fi
+    plan_json=$(cat "$VB_DIR/plan.json")
+    : > "$VB_DIR/pay"
+    printf 'what=FOLD START v4 %s scope=%s chunks=%s lanes=%s batch=one-or-more-chunks-per-entry :: %s\n' "$unit" "$scope_n" "$chunk_n" "$lane_n" "$plan_json" >> "$VB_DIR/pay"
+    printf 'group=fold\nthread=none\ndate=%s\nepoch=%s\n' "$(vb_today)" "$FOLD_EPOCH_USED" >> "$VB_DIR/pay"
+    VB_PAY="$VB_DIR/pay"
+    vb_call entry.record "$unit"
+    vb_ok
+    fold_slug=$(vb_field entry.slug)
+    print_plan
+    exit 0
+    ;;
+  ACTIVE)
+    active_load
+    if [ "$do_check" -eq 1 ]; then
+      run_check_full
+      print_check
+      [ "$check_defects" -eq 0 ] || exit 1
+      exit 0
+    fi
+    if [ "$do_finish" -eq 1 ]; then
+      finish
+      exit 0
+    fi
+    if [ "$lane_given" -eq 1 ]; then
+      fetch_lane
+      exit 0
+    fi
+    progress
+    exit 0
+    ;;
+esac
