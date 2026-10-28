@@ -1,6 +1,7 @@
 #!/usr/bin/env sh
 # storage-fts5 plugin suite: the named runner for tests/.
-# Suites: test-driver, test-schema, test-verbs, test-version, test-derive (each needs sqlite3).
+# Suites: test-driver, test-schema, test-verbs, test-version, test-derive, test-store,
+# test-store-compliance (each needs sqlite3).
 # A suite missing a need prints "SKIP: <need>" and exits 77.
 # Exit: 0 when all suites pass, 1 otherwise.
 
@@ -11,7 +12,7 @@ PASS=0
 FAIL=0
 SKIP=0
 
-printf 'storage-fts5 plugin suite: test-driver, test-schema, test-verbs, test-version, test-derive\n'
+printf 'storage-fts5 plugin suite: test-driver, test-schema, test-verbs, test-version, test-derive, test-store, test-store-compliance\n'
 printf 'needs: sqlite3\n\n'
 
 run_suite() {
@@ -37,6 +38,8 @@ run_suite test-schema "$SCRIPT_DIR/test-schema.sh"
 run_suite test-verbs "$SCRIPT_DIR/test-verbs.sh"
 run_suite test-version "$SCRIPT_DIR/test-version.sh"
 run_suite test-derive "$SCRIPT_DIR/test-derive.sh"
+run_suite test-store "$SCRIPT_DIR/test-store.sh"
+run_suite test-store-compliance "$SCRIPT_DIR/test-store-compliance.sh"
 
 printf 'storage-fts5 suite: %d passed, %d failed, %d skipped\n' "$PASS" "$FAIL" "$SKIP"
 [ "$FAIL" -eq 0 ]

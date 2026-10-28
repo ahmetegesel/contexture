@@ -10,7 +10,8 @@
 -- next, and liveness are derived by the reads, never stored. Two derived tables serve the
 -- search and are rebuilt per unit in the transaction of every write (derive.sql): lines
 -- (the exact rule) and search_documents (the ranked modes, through fts_prose and fts_code).
--- The corpus tables (docs, doc_changes) are carried unchanged from version 3.
+-- The corpus tables (docs, doc_changes) are carried unchanged from version 3 until the docs
+-- port, and the generic module store's tables (store, store_changes) are additive.
 -- A fresh store runs this file whole; db-init.sh sets user_version 4 after it.
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
@@ -379,3 +380,32 @@ CREATE TABLE IF NOT EXISTS doc_changes (
   prior TEXT NOT NULL CHECK(prior IN ('absent', 'present'))
 );
 CREATE INDEX IF NOT EXISTS idx_doc_changes_head ON doc_changes(head);
+
+-- The generic module store (the storage module's store contract): module-owned data keyed
+-- by (namespace, key), the value opaque bytes, updated_at the write time. The default
+-- BINARY text collation makes the primary key's order bytewise, the contract's list order.
+-- store_changes is the optional generic change log: one row per put and delete, never
+-- edited or pruned; head is the workspace git HEAD the verb passed (or none), prior the
+-- key's state before the change (absent or present), so a window of rows yields each
+-- key's net status. A schema 4 store created before these tables gains them on open
+-- (db-init.sh's idempotent twin of this block); the corpus tables above stay untouched
+-- and unread by the store until the docs port.
+CREATE TABLE IF NOT EXISTS store (
+  namespace TEXT NOT NULL,
+  key TEXT NOT NULL,
+  value BLOB NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (namespace, key)
+);
+
+CREATE TABLE IF NOT EXISTS store_changes (
+  seq INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  namespace TEXT NOT NULL,
+  key TEXT NOT NULL,
+  op TEXT NOT NULL,
+  head TEXT NOT NULL,
+  prior TEXT NOT NULL CHECK(prior IN ('absent', 'present'))
+);
+CREATE INDEX IF NOT EXISTS idx_store_changes_ns ON store_changes(namespace, seq);
+CREATE INDEX IF NOT EXISTS idx_store_changes_head ON store_changes(head);

@@ -2,18 +2,26 @@
 # store-compliance.sh: the generic module store compliance suite (contract 2, the storage
 # module's store contract). It stages the shipped base (the session module and its posix
 # driver, the storage module and its data reader) and the docs module's data file, then
-# holds the posix store to the five functions over a sandbox corpus at docs/workspace.
+# holds the configured store driver to the five functions over a sandbox corpus at
+# docs/workspace.
 #
 # The suite asserts returned data and bytes, never an exit code alone: the exact list
 # answer and order, the exact bytes of a document (a NUL and an invalid UTF-8 byte
 # included), the fixed stderr line of a refusal, the empty stdout of a refusal, the JSON
-# echo of put and delete, and the file the mapping lands. The key rule, the data file
-# grammar, the module pattern, the per-key lock, the atomic put, the change-log refusal,
-# and the no-base-to-docs census are each proven, the census and the pattern with a
-# planted difference.
+# echo of put and delete, and the row the mapping lands. The key rule, the data file
+# grammar, the module pattern, the per-key lock, the atomic put, and the no-base-to-docs
+# census are each proven, the census and the pattern with a planted difference. The
+# change log is the driver's own: the posix store keeps none and refuses store.changes;
+# the fts5 store keeps the generic log and its own suite (plugins/storage-fts5/tests/
+# test-store.sh) holds the rows, the refusal, and the transaction's atomicity.
 #
-# Usage: tests/store-compliance.sh [--keep]
-# Exit 0 when every case passes; 1 otherwise; 2 a staging or driver failure.
+# Usage: tests/store-compliance.sh [--driver=posix|fts5] [--driver-exec=<path>] [--keep]
+#   --driver runs the store over that driver's module (default: posix). fts5 stages the
+#   plugin's own module copy and checks sqlite3; --driver-exec names the exact driver
+#   executable (a plugin suite passes its own copy), skipping the staged path for the
+#   calls while the resolver checks still answer from the staged copy.
+# Exit 0 when every case passes; 1 otherwise; 2 a staging or driver failure; 77 when
+# sqlite3 is absent for the fts5 driver.
 
 set -u
 
@@ -22,22 +30,46 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
+FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
 DOCS_DATA="$ROOT/plugins/docs-discipline/.contexture/modules/docs/data"
 
+DRIVER_NAME=posix
+DRIVER_EXEC_ARG=""
 KEEP=0
 for a in "$@"; do
   case "$a" in
+    --driver=*) DRIVER_NAME="${a#--driver=}" ;;
+    --driver-exec=*) DRIVER_EXEC_ARG="${a#--driver-exec=}" ;;
     --keep) KEEP=1 ;;
     *) echo "store-compliance.sh: unknown argument: $a" >&2; exit 1 ;;
   esac
 done
 
+case "$DRIVER_NAME" in
+  posix) IS_POSIX=1 ;;
+  fts5|sqlite-fts5|storage-fts5) IS_POSIX=0; DRIVER_NAME=fts5 ;;
+  *) echo "store-compliance.sh: unknown driver: $DRIVER_NAME (posix or fts5)" >&2; exit 1 ;;
+esac
+
 for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_MOD/scripts/store-data" "$DOCS_DATA"; do
   [ -e "$f" ] || { echo "store-compliance.sh: missing $f" >&2; exit 2; }
 done
+if [ "$IS_POSIX" -eq 0 ]; then
+  for f in "$FTS5_MOD/drivers/fts5" "$FTS5_MOD/db-init.sh" "$FTS5_MOD/schema.sql"; do
+    [ -e "$f" ] || { echo "store-compliance.sh: missing $f" >&2; exit 2; }
+  done
+  if ! command -v sqlite3 >/dev/null 2>&1; then
+    echo "SKIP: sqlite3 not found on PATH"
+    exit 77
+  fi
+  if [ -n "$DRIVER_EXEC_ARG" ] && [ ! -x "$DRIVER_EXEC_ARG" ]; then
+    echo "store-compliance.sh: --driver-exec $DRIVER_EXEC_ARG is not executable" >&2
+    exit 2
+  fi
+fi
 
 export LC_ALL=C
-unset COMPACT_DISABLE COMPACT_DEBUG CTX_DIR CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_STORAGE_DRIVER
+unset COMPACT_DISABLE COMPACT_DEBUG CTX_DIR CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH
 
 tmp_root="${TMPDIR:-/tmp}"
 if mkdir -p "$ROOT/.contexture/tmp" 2>/dev/null && [ -d "$ROOT/.contexture/tmp" ] && [ -w "$ROOT/.contexture/tmp" ]; then
@@ -60,9 +92,20 @@ cp -R "$SESSION_MOD" "$SB/.contexture/modules/session"
 cp -R "$STORAGE_MOD" "$SB/.contexture/modules/storage"
 mkdir -p "$SB/.contexture/modules/docs"
 cp "$DOCS_DATA" "$SB/.contexture/modules/docs/data"
+if [ "$IS_POSIX" -eq 0 ]; then
+  cp -R "$FTS5_MOD" "$SB/.contexture/modules/storage-fts5"
+  printf 'storage.driver: fts5\n' > "$SB/.contexture/config"
+fi
 chmod +x "$SB/.contexture/modules/session/scripts/"* "$SB/.contexture/modules/storage/scripts/"*
 cd "$SB" || exit 2
-DRIVER="$SB/.contexture/modules/session/drivers/posix/driver"
+if [ "$IS_POSIX" -eq 1 ]; then
+  STAGED_DRIVER="$SB/.contexture/modules/session/drivers/posix/driver"
+else
+  STAGED_DRIVER="$SB/.contexture/modules/storage-fts5/drivers/fts5"
+  chmod +x "$STAGED_DRIVER"
+fi
+if [ -n "$DRIVER_EXEC_ARG" ]; then DRIVER="$DRIVER_EXEC_ARG"; else DRIVER="$STAGED_DRIVER"; fi
+RESOLVED_EXPECT="$STAGED_DRIVER"
 RESOLVER="$SB/.contexture/modules/session/scripts/driver-resolver"
 O="$SB/.out"; E="$SB/.err"
 : > "$O"; : > "$E"
@@ -115,7 +158,7 @@ store_list() { run store.list store.list "$@"; }
 # store_changes <ns> [args...]
 store_changes() { run store.changes store.changes "$@"; }
 
-printf 'store-compliance suite: the posix store over the docs data file (staged at %s)\n\n' "$SB"
+printf 'store-compliance suite: the %s store over the docs data file (staged at %s)\n\n' "$DRIVER_NAME" "$SB"
 
 # ==============================================================================
 # S1: the module store is installed and listed; the resolver answers the capabilities
@@ -131,16 +174,25 @@ case "$hall" in
   *) miss "ctx help --all carries no storage module summary" ;;
 esac
 resolved=$("$RESOLVER" resolve 2>/dev/null)
-[ "$resolved" = "$DRIVER" ] || miss "the session wrapper resolves [$resolved] want [$DRIVER]"
+[ "$resolved" = "$RESOLVED_EXPECT" ] || miss "the session wrapper resolves [$resolved] want [$RESOLVED_EXPECT]"
 "$RESOLVER" require store >/dev/null 2>&1
-[ "$?" -eq 0 ] || miss "require store refused the posix driver"
+[ "$?" -eq 0 ] || miss "require store refused the $DRIVER_NAME driver"
 "$RESOLVER" has store.changelog >/dev/null 2>&1
-[ "$?" -eq 1 ] || miss "has store.changelog did not answer 1 on posix"
+_hasc=$?
+if [ "$IS_POSIX" -eq 1 ]; then
+  [ "$_hasc" -eq 1 ] || miss "has store.changelog did not answer 1 on posix"
+else
+  [ "$_hasc" -eq 0 ] || miss "has store.changelog did not answer 0 on fts5"
+fi
 cap=$("$DRIVER" capability 2>/dev/null)
 case "$cap" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
-case "$cap" in *'"optional":["corpus.store","store"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
+if [ "$IS_POSIX" -eq 1 ]; then
+  case "$cap" in *'"optional":["corpus.store","store"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
+else
+  case "$cap" in *'"optional":["corpus.store","corpus.changelog","store","store.changelog"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
+fi
 # a planted descriptor without the store capability reads red at require
-planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/,"store"//')
+planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/,"store.changelog"//; s/,"store"//')
 mkdir -p .contexture/drivers/planted
 {
   printf '#!/bin/sh\n'
@@ -174,9 +226,23 @@ printf 'one segment\n' > 'docs/top.md'
 printf 'three segments\n' > 'docs/workspace/deep/x.md'
 printf 'wrong suffix\n' > 'docs/workspace/notes.txt'
 printf 'blank segment\n' > 'docs/workspace/bad name.md'
-store_list docs
-answer
-wantout '{"namespace":"docs","keys":["workspace/B","workspace/a","workspace/aa","workspace/binary","workspace/q\"uote","workspace/türkçe"]}'
+if [ "$IS_POSIX" -eq 1 ]; then
+  store_list docs
+  answer
+  wantout '{"namespace":"docs","keys":["workspace/B","workspace/a","workspace/aa","workspace/binary","workspace/q\"uote","workspace/türkçe"]}'
+else
+  # the fts5 store holds its keys in the database; seed the six through put, then plant
+  # three rows the pattern never admits (a one-segment key, a three-segment key, a blank)
+  # to prove list filters them out
+  for _k in B a aa binary 'q"uote' türkçe; do
+    store_put docs "workspace/$_k" "docs/workspace/$_k.md"
+    answer
+  done
+  sqlite3 "$SB/.contexture/sessions.db" "INSERT INTO store (namespace, key, value, updated_at) VALUES ('docs', 'top', x'78', 't'); INSERT INTO store (namespace, key, value, updated_at) VALUES ('docs', 'workspace/deep/x', x'78', 't'); INSERT INTO store (namespace, key, value, updated_at) VALUES ('docs', 'workspace/bad name', x'78', 't');"
+  store_list docs
+  answer
+  wantout '{"namespace":"docs","keys":["workspace/B","workspace/a","workspace/aa","workspace/binary","workspace/q\"uote","workspace/türkçe"]}'
+fi
 tc "S2: store.list answers the bytewise keys the docs pattern admits and only those"
 
 # ==============================================================================
@@ -198,7 +264,9 @@ printf 'no trailing newline' > "$SB/pay-nonl"
 store_put docs workspace/nonl "$SB/pay-nonl"
 answer
 wantout '{"namespace":"docs","key":"workspace/nonl","op":"write"}'
-[ -f docs/workspace/nonl.md ] || miss "the key did not land at docs/workspace/nonl.md"
+if [ "$IS_POSIX" -eq 1 ]; then
+  [ -f docs/workspace/nonl.md ] || miss "the key did not land at docs/workspace/nonl.md"
+fi
 store_get docs workspace/nonl
 rawok
 wantfile "$SB/pay-nonl"
@@ -277,13 +345,15 @@ run store.get store.get docs
 refused 1 ERR_INVALID_ARGUMENT "store.get takes the namespace and the key"
 run store.put store.put docs
 refused 1 ERR_INVALID_ARGUMENT "store.put takes the namespace, the key, and optional flags"
-store_changes docs
-refused 1 ERR_CAPABILITY_UNSUPPORTED "the posix store keeps no change log; namespace 'docs' reports its delta through its module (changes: true)"
+if [ "$IS_POSIX" -eq 1 ]; then
+  store_changes docs
+  refused 1 ERR_CAPABILITY_UNSUPPORTED "the posix store keeps no change log; namespace 'docs' reports its delta through its module (changes: true)"
+fi
 store_list nosuch
 refused 1 ERR_ENTITY_NOT_FOUND "namespace 'nosuch' is declared by no module data file"
 store_list 'Bad!'
 refused 1 ERR_INVALID_ARGUMENT "malformed namespace 'Bad!'"
-tc "S5: unknown flags, malformed op and head, bad argc, the change-log refusal, an unknown namespace, and a malformed namespace answer their fixed lines"
+tc "S5: unknown flags, malformed op and head, bad argc, an unknown namespace, and a malformed namespace answer their fixed lines"
 
 # ==============================================================================
 # S6: the data file grammar: a second namespace, duplicate refusal, malformed fields
@@ -293,10 +363,19 @@ mkdir -p .contexture/modules/probe probe-root/x/y
 printf 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/modules/probe/data
 printf 'probe\n' > probe-root/x/y.txt
 printf 'deep\n' > probe-root/x/y/z.txt
-store_list probe
-answer
-wantout '{"namespace":"probe","keys":["x/y"]}'
-tc "S6a: a second module's data file is read and its pattern and suffix filter the list"
+if [ "$IS_POSIX" -eq 1 ]; then
+  store_list probe
+  answer
+  wantout '{"namespace":"probe","keys":["x/y"]}'
+else
+  store_put probe x/y "$SB/pay-x"
+  answer
+  wantout '{"namespace":"probe","key":"x/y","op":"write"}'
+  store_list probe
+  answer
+  wantout '{"namespace":"probe","keys":["x/y"]}'
+fi
+tc "S6a: a second module's data file is read and its pattern filters the list"
 mkdir -p .contexture/modules/probe2
 printf 'namespace: probe\nroot: probe2-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: true\n' > .contexture/modules/probe2/data
 store_list probe
@@ -326,9 +405,11 @@ printf 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges:
 store_put probe x/y "$SB/pay-x"
 answer
 wantout '{"namespace":"probe","key":"x/y","op":"write"}'
-store_changes probe
-refused 1 ERR_CAPABILITY_UNSUPPORTED "the posix store keeps no change log; namespace 'probe' reports its delta through its module (changes: true)"
-tc "S6c: unknown, missing, and malformed fields refuse; a root escape refuses without writing outside; the changes refusal names the namespace"
+if [ "$IS_POSIX" -eq 1 ]; then
+  store_changes probe
+  refused 1 ERR_CAPABILITY_UNSUPPORTED "the posix store keeps no change log; namespace 'probe' reports its delta through its module (changes: true)"
+fi
+tc "S6c: unknown, missing, and malformed fields refuse; a root escape refuses without writing outside; a changes declaration answers its driver"
 
 # ==============================================================================
 # S7: the per-key lock is held during a put, and the put is atomic per key
@@ -353,22 +434,30 @@ exec 3>&-
 wait "$_lock_pid"
 [ "$_lock_ok" -eq 1 ] || miss "the per-key lock was not observed while the put read its payload"
 [ "$(cat "$SB/lock.rc" 2>/dev/null)" = 0 ] || miss "the locked put exited $(cat "$SB/lock.rc" 2>/dev/null)"
-[ -f docs/workspace/locked.md ] || miss "the locked put did not land its key"
-[ "$(cat docs/workspace/locked.md 2>/dev/null)" = "locked" ] || miss "the locked put did not land its payload"
+if [ "$IS_POSIX" -eq 1 ]; then
+  [ -f docs/workspace/locked.md ] || miss "the locked put did not land its key"
+  [ "$(cat docs/workspace/locked.md 2>/dev/null)" = "locked" ] || miss "the locked put did not land its payload"
+else
+  store_get docs workspace/locked
+  rawok
+  wantout 'locked'
+fi
 [ ! -d .contexture/tmp/locks/store-docs/workspace/locked.lock ] || miss "the lock remains after the put"
 rm -f "$SB/pay.fifo"
 tc "S7a: put holds a per-key lock while it reads and releases it after the key lands"
-chmod 500 docs/workspace
-store_put docs workspace/atomic "$SB/pay-new"
-refused 2 ERR_STORAGE_WRITE "the storage write of key 'workspace/atomic' failed"
-store_get docs workspace/atomic
-rawok
-wantfile "$SB/pay-old"
-chmod 700 docs/workspace
-tc "S7b: a put that cannot create its temp refuses rc2 and leaves the old key whole"
-_tmp_left=$(find docs/workspace -type f -name '*.md.??????' 2>/dev/null | wc -l | tr -d ' ')
-[ "$_tmp_left" = 0 ] || miss "$_tmp_left put temp file(s) remain under docs/workspace"
-tc "S7c: a landed put leaves no temp under the store root"
+if [ "$IS_POSIX" -eq 1 ]; then
+  chmod 500 docs/workspace
+  store_put docs workspace/atomic "$SB/pay-new"
+  refused 2 ERR_STORAGE_WRITE "the storage write of key 'workspace/atomic' failed"
+  store_get docs workspace/atomic
+  rawok
+  wantfile "$SB/pay-old"
+  chmod 700 docs/workspace
+  tc "S7b: a put that cannot create its temp refuses rc2 and leaves the old key whole"
+  _tmp_left=$(find docs/workspace -type f -name '*.md.??????' 2>/dev/null | wc -l | tr -d ' ')
+  [ "$_tmp_left" = 0 ] || miss "$_tmp_left put temp file(s) remain under docs/workspace"
+  tc "S7c: a landed put leaves no temp under the store root"
+fi
 
 # ==============================================================================
 # S8: the no-base-to-docs census (the storage module never calls the docs module)
@@ -388,6 +477,6 @@ rm -rf "$_plant"
 tc "S8: base carries no docs module or docs parser reference, and the census catches a plant"
 
 printf '\n== summary ==\n'
-printf 'store-compliance: pass=%d fail=%d\n' "$pass" "$fail"
+printf 'store-compliance (%s): pass=%d fail=%d\n' "$DRIVER_NAME" "$pass" "$fail"
 [ "$fail" -eq 0 ] || exit 1
 exit 0
