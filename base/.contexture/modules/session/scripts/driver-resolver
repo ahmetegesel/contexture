@@ -2,8 +2,8 @@
 # driver-resolver: the session module's compatibility wrapper around the storage
 # module's resolver. The storage module owns driver resolution and the capability
 # handshake; this path stays for the callers that name it (the session and lane verb
-# libraries, the docs module, and the suites), so every module resolves the configured
-# driver through the storage module.
+# libraries and the suites), so every module resolves the configured driver through the
+# storage module.
 #
 # Standardized exit codes:
 #   0: success

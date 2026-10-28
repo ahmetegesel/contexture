@@ -50,10 +50,10 @@
     instruction stack: <the files read whole>
     rule surfaces: <every surface found, one per line; each contradicts, overlaps, or complements the convention>
   @plan
-    copy: <the adoption set, derived from the tag: git archive <tag> base/ plugins/; never a hand-kept list>
+    copy: <the adoption set, derived from the tag: git archive <tag> base/; never a hand-kept list>
     overlay: <AGENTS.workspace.md @append blocks, which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
-    rhythms: <work patterns found in the stack: each becomes a rhythm file proposal; when none emerged by the plan's end, the starter-rhythms plugin is offered as the starting set; none states none>
+    rhythms: <work patterns found in the stack: each becomes a rhythm file proposal; none states none>
     sessions: <existing session folders: adopted, archived, or left; none states none>
     symlinks: <harness entry points to wire; none states none>
     gitignore: <the strategy per topology>
@@ -65,9 +65,8 @@
 @configure
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx session task add`; the pointer moves via `.contexture/ctx session next` (a task start writes it too: `.contexture/ctx session task start`); every task's completion journals its receipt (`.contexture/ctx session task complete`) and advances the pointer (`.contexture/ctx session next`); drift updates the backlog in the same breath via `.contexture/ctx session task update`
   base assets:
-    copy the adoption set: `git archive <tag> base/ plugins/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`) and the plugins alongside it (`cp -R <scratch>/plugins <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
+    copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
     set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk`
-    starting rhythms: when the confirmed plan carries no team rhythm, copy the offered starter-rhythms plugin (`cp plugins/starter-rhythms/.contexture/rhythms/*.md .contexture/rhythms/`); the copies are the team's to edit
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
@@ -104,4 +103,4 @@
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close
-  delete .contexture/ONBOARDING.md once the adoption closes: adoption material, not the convention; remove any ONBOARDING gitignore whitelist line with it; the plugins/ folder stays: the tracked catalog, installable into an existing setup
+  delete .contexture/ONBOARDING.md once the adoption closes: adoption material, not the convention; remove any ONBOARDING gitignore whitelist line with it

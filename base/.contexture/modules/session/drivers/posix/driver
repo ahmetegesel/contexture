@@ -12,7 +12,7 @@
 # the rendered text). Every item reads in the canonical layout; a file keeps its bytes until
 # a write touches one of its items. It answers the five generic module store functions
 # (store): store.list, store.get, store.put, store.delete, store.changes over a module's
-# declared data file, the docs corpus staying at docs/workspace.
+# declared data file and root.
 #
 # Writes: the unit lock (.contexture/tmp/locks/<unit>.lock) is held from the read to the
 # last rename, every changed file is staged beside the sessions folder and renamed into
@@ -131,8 +131,8 @@ name_valid() {
 # Five functions over a module's declared data file: store.list, store.get, store.put,
 # store.delete, store.changes. The data file (modules/<module>/data) is read and validated
 # by the storage module's private store-data script; the posix mapping is
-# <root>/<key><suffix> under the workspace root, the docs corpus staying at
-# docs/workspace. Keys are exact, ASCII-case-fold twins never coexist, list is bytewise
+# <root>/<key><suffix> under the workspace root, the module's declared root.
+# Keys are exact, ASCII-case-fold twins never coexist, list is bytewise
 # and filtered by the module pattern, put is a same-directory temp moved over the key
 # under a per-key lock, and the change log belongs to a store driver (posix keeps none).
 STORE_WS=""
@@ -181,7 +181,7 @@ store_lock() {
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
 # SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the caller's function name frames the
 # refusal. The storage module's store-data script owns the grammar (the storage module is
-# base, never the docs module: no module's parser enters base).
+# base, so no module's parser enters base).
 store_data() {
   FN=$1
   sd_ns=$2

@@ -4,7 +4,7 @@ contexture is a convention, not a tool: one commit, any harness, no dependencies
 
 ## Adoption in one breath
 
-What lands is a small set of plain files: `AGENTS.md` at the root, the `.contexture/` drawer beside it, and `plugins/` as reference. Nothing is installed: no dependency, no service, no runtime. The files are the system.
+What lands is a small set of plain files: `AGENTS.md` at the root and the `.contexture/` drawer beside it. Nothing is installed: no dependency, no service, no runtime. The files are the system. The plugin catalog is an optional addition, copied from the same tag when a workspace wants one of its overlays (the manual path below shows the copy).
 
 Adoption is a procedure, not the convention. `.contexture/ONBOARDING.md` carries it, an agent runs it, and it is deleted when the adoption closes. What remains is the convention itself: the record and the process.
 
@@ -12,7 +12,7 @@ Either path ends the same way: name your first unit of work and the record start
 
 ## The fast path, agentic onboarding
 
-Point an agent at `.contexture/ONBOARDING.md`. It runs five phases, and the proposal phase gates twice: the agent stops and waits for you there.
+Point an agent at `.contexture/ONBOARDING.md`. It adopts the base alone, and the proposal phase gates twice: the agent stops and waits for you there. The plugin catalog is optional; the manual path below lands its reference copy, and each plugin's README carries its adoption.
 
 1. ISOLATE: it creates a dedicated branch, never working on main, halts if the tree carries uncommitted changes, and bootstraps the adoption session. The record starts before the first edit, so the whole adoption history lands as it happens.
 2. ASSESS: it reads your instruction stack first and whole (the existing `AGENTS.md` and its derivations), then reads the base `AGENTS.md` and this project's README completely. It maps the convention's sections against your workspace one by one: what feeds each capability, what conflicts with it, what belongs there. Structure comes from listings; application code is out of scope; and it asks you what evidence cannot answer: resolutions, history, intent.

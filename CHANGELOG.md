@@ -4,6 +4,35 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.58.0] - 2026-10-28
+
+MINOR: the generic module store decouples module data from the record; the docs corpus lives on it, and fts5 serves it beside the record with a change log. Every break is named below.
+
+### Added
+
+- The base storage module and the generic module store contract: the five functions (`store.list`, `store.get`, `store.put`, `store.delete`, `store.changes`), the module data file (namespace, root, suffix, key pattern, changes), the exact-key rule with the ASCII case-twin refusal, the bytewise list, the atomic per-key put, the optional generic change log, the descriptor at 38 record plus 5 store functions, TC70, `tests/store-compliance.sh`, and the no-base-to-docs boundary. The session module's resolver becomes a compatibility wrapper over the storage module's resolver.
+- The docs corpus on the generic store: the docs module's data file, the `ctx docs` write verbs writing through the store, the logical address `docs/<repo>/<slug>.md`, and the docs suite capture parity (72 byte-identical captures plus 4 named store-mode verdicts).
+- The storage-fts5 store: the `store` and `store_changes` tables, the five store functions natively in SQL, the generic change log, and the schema 4 open path that adds the store tables to a store created before them without a version bump; the legacy docs tables stay untouched and unread.
+- The storage-fts5 module README: the module-folder map of the schema, the SQL layout, the store, and the plugin's cases; the plugin README stays the adoption guide.
+
+### Changed
+
+- The docs module reads and writes through the store; the six corpus methods and their tokens retire; a driver without the store still serves the record. The descriptor is the final 38 record plus 5 store functions with the optional `store` and `store.changelog`.
+- The posix driver maps a module's declared root under the workspace, so the docs corpus stays where it was and the logical addresses replace the display paths; fts5 holds the same bytes in its store with a change log per write.
+- The guides are trimmed to catalog level and link the module READMEs: the docs module and storage-fts5 internals live in their module READMEs; README lists `modules/storage` in the payload and states the logical corpus address; the workspace overlay points the corpus map at the module README; the released guides describe the posix and fts5 drivers only.
+- The base onboarding procedure adopts the base alone; the plugin catalog is the optional addition the adoption guide and the plugin READMEs describe.
+
+### Removed
+
+- The six corpus methods (`corpus.list`, `corpus.read`, `corpus.write`, `corpus.remove`, `corpus.mount`, `corpus.changes`) and the `corpus.store` and `corpus.changelog` tokens; a driver without the store still serves the record, and the old corpus tables are not read.
+- The driver resolver's `sqlite-fts5` and `storage-fts5` aliases for the `fts5` driver (breaking): configure the driver by the name the plugin declares (`fts5`).
+
+### Fixed
+
+- The review fixes on 25caa9a: the posix store refuses a key its case-insensitive root cannot represent exactly beside a stored key (F1); the docs edit engine no longer stores a blank line after a splice point and the docs audit tracks a block scalar's body indent (F3 and F4, exposed under mawk); the fold test anchors its receipt check (F5).
+
+Commits in the range: b3ffa5a (the base module store), 5d48a5e (the fts5 store), cbe0dc5 (the docs corpus port), 25caa9a (the review fixes), and the release commit.
+
 ## [0.57.0] - 2026-10-27
 
 MINOR: the consolidation fold consolidates a unit's live record into ordinary entries whose REFs name the batch, with the record as the state, the grain planned at the record's mechanical seams, and the open threads carried (a fold compacts history, never obligations).

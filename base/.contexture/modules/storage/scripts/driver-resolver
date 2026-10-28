@@ -160,16 +160,6 @@ find_driver_executable() {
     return 0
   fi
 
-  # Tier 4: Driver aliases fallback
-  alias_driver=""
-  case "$driver" in
-    sqlite-fts5|storage-fts5) alias_driver="fts5" ;;
-  esac
-  if [ -n "$alias_driver" ]; then
-    find_driver_executable "$ctx_dir" "$alias_driver"
-    return $?
-  fi
-
   return 1
 }
 
@@ -230,8 +220,8 @@ cap_prep() {
 cap_done() { [ -n "${CAP_ERR_FILE:-}" ] && rm -f "$CAP_ERR_FILE"; CAP_ERR_FILE=""; return 0; }
 
 # cap_refused <driver name> <rc>: the handshake's refusal, one line: the driver's own refusal
-# line when it printed one (a service driver's ERR_AUTH or ERR_STORAGE_UNAVAILABLE names what
-# failed; its code ends the line), else the handshake's ERR_DRIVER_PROTOCOL line
+# line when it printed one (it names what failed; its code ends the line), else the
+# handshake's ERR_DRIVER_PROTOCOL line
 cap_refused() {
   cr_line=""
   if [ -n "${CAP_ERR_FILE:-}" ]; then
@@ -317,8 +307,7 @@ desc_field() {
 
 # verdict_fresh <verdict file> <driver path>: a cached verdict stands while it is strictly
 # newer than the driver and, when the workspace carries one, than its configuration (a
-# driver that reads configuration, such as the service's URL and key, is verified again
-# after the configuration changes)
+# driver that reads configuration is verified again after the configuration changes)
 verdict_fresh() {
   [ -f "$1" ] && [ "$1" -nt "$2" ] || return 1
   if [ -f "$CTX_DIR/config" ] && [ ! "$1" -nt "$CTX_DIR/config" ]; then return 1; fi

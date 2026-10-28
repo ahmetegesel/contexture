@@ -15,8 +15,8 @@
 
 @append @layout
   .contexture/templates/doc.md: the corpus grammar, the authoring contract
-  docs/workspace/conventions.md: the universal rules for the corpus (the workspace conventions doc, read through ctx docs query workspace conventions under any driver)
-  .contexture/modules/docs/: the corpus module: the read verbs ctx docs query, audit, check, gate, nudge, changes and the write verbs new, write, header, rule, pitfall, entry, section, replace, remove, ids (ctx docs help lists them)
+  the corpus conventions (repo workspace, slug conventions): the universal rules for the corpus, read through ctx docs query workspace conventions under any driver
+  plugins/docs-discipline/.contexture/modules/docs/README.md: the corpus module's contract and verbs; adopt it from the docs-discipline plugin (ctx docs help lists them)
   .contexture/modules/storage/: the generic module store: the driver resolver and the store contract (list, get, put, delete, changes) over a module's data file; the record keeps its 38 typed functions
 
 @append @backlog
