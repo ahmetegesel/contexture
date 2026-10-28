@@ -2,9 +2,9 @@
 # write-verbs.sh <sandbox> <fixtures>: the write verbs' assertions, run by tests/run.sh inside
 # its staged sandbox on the configured driver (posix, or fts5 with the docs folder gone).
 #
-# Every success case: rc 0, the stored doc (read back through corpus.read) equal to its
+# Every success case: rc 0, the stored doc (read back through store.get) equal to its
 # fixture under tests/write/ byte for byte (so every untouched line is proven too), and on a
-# driver with a change log (corpus.changelog) exactly the expected new rows, the last one
+# driver with a change log (store.changelog) exactly the expected new rows, the last one
 # carrying the verb's op and the workspace git HEAD. Every refusal case: its rc, its message,
 # the stored doc byte-identical to before (or still absent), and no new change-log row.
 # Covered: ctx docs new, write (a doc without a final newline kept so; a --replace of the
@@ -29,32 +29,48 @@ FX=$2
 cd "$SB" || exit 1
 C="$SB/.contexture/ctx"
 R="$SB/.contexture/modules/session/scripts/driver-resolver"
+J="$SB/.contexture/modules/session/lib/json.awk"
 W="$SB/write-verbs.scratch"
 rm -rf "$W"
 mkdir -p "$W" || exit 1
 PASS=0
 FAIL=0
 LOG=0
-"$R" has corpus.changelog && LOG=1
+"$R" has store.changelog && LOG=1
 HEAD=$(git -C "$SB" rev-parse --verify -q HEAD 2>/dev/null) || HEAD=""
 [ -n "$HEAD" ] || HEAD=none
 SEEDHEAD=0000000
 
-put() { "$R" corpus.write wtest "$1" "--head=$SEEDHEAD" < "$2" > /dev/null 2>&1; }
+list_keys() { "$R" store.list docs 2>/dev/null | awk -f "$J" | sed -n 's/^keys\.[0-9][0-9]*=//p'; }
+put() { "$R" store.put docs "wtest/$1" "--head=$SEEDHEAD" < "$2" > /dev/null 2>&1; }
 seed() {
-  for k in $("$R" corpus.list wtest 2>/dev/null); do
+  for k in $(list_keys); do
     case "$k" in
       wtest/unit|wtest/conv|wtest/map) ;;
-      *) "$R" corpus.remove wtest "${k#*/}" "--head=$SEEDHEAD" > /dev/null 2>&1 ;;
+      wtest/*) "$R" store.delete docs "$k" "--head=$SEEDHEAD" > /dev/null 2>&1 ;;
     esac
   done
   put unit "$FX/unit.md"
   put conv "$FX/conv.md"
   put map "$FX/map.md"
 }
-rows() { printf 'head=%s\n' "$HEAD" | "$R" corpus.changes 2>/dev/null | awk 'END { print NR }'; }
-lastrow() { printf 'head=%s\n' "$HEAD" | "$R" corpus.changes 2>/dev/null | tail -n 1; }
-stored() { "$R" corpus.read wtest "$1" 2>/dev/null; }
+changes_json() { printf 'head=%s\n' "$HEAD" | "$R" store.changes docs 2>/dev/null; }
+rows() { changes_json | awk -f "$J" | grep -c '^changes\.[0-9][0-9]*\.seq:'; }
+lastrow() {
+  changes_json | awk -f "$J" | awk '
+    {
+      p = $0
+      if ((eq = index(p, "=")) > 0) { v = substr(p, eq + 1); p = substr(p, 1, eq - 1) }
+      else if ((cl = index(p, ":")) > 0) { v = substr(p, cl + 1); p = substr(p, 1, cl - 1) }
+      else next
+      if (p !~ /^changes\.[0-9]+\./) next
+      rest = substr(p, 9); dot = index(rest, ".")
+      n = substr(rest, 1, dot - 1) + 0; f = substr(rest, dot + 1)
+      row[n, f] = v; if (n > max) max = n
+    }
+    END { if (max) printf "%s\t%s\t%s\t%s\t%s\t%s\n", row[max, "seq"], row[max, "at"], row[max, "op"], row[max, "key"], row[max, "head"], row[max, "prior"] }'
+}
+stored() { "$R" store.get docs "wtest/$1" 2>/dev/null; }
 verdict() {
   if [ -z "$2" ]; then
     PASS=$((PASS + 1))

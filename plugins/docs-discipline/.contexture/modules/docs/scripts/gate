@@ -5,7 +5,7 @@
 # usage: ctx docs gate --stdin
 # usage: ctx docs gate --test-matrix
 # help: runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
-# help: under a store driver with a change log (corpus.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
+# help: under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
 # help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
 # help: example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
 #
@@ -208,9 +208,10 @@ check_drift_warnings() {
     fi
 }
 
-# The corpus the audit and the check read: the whole corpus mounted once through the
-# configured storage driver before any pipeline (so the scratch and its cleanup stay with
-# this shell); an empty corpus or a driver without one refuses
+# The corpus the audit and the check read: the whole corpus read once through the
+# configured driver's module store into the module's scratch before any pipeline (so the
+# scratch and its cleanup stay with this shell); an empty corpus or a driver without the
+# store refuses
 prepare_corpus() {
     if docs_corpus; then
         docs_delta_source
@@ -222,15 +223,15 @@ prepare_corpus() {
     exit "$pc_rc"
 }
 
-# run_engine_over_corpus <engine> [awk options]: the engine over every mounted doc (display
-# paths as the files driver prints them)
+# run_engine_over_corpus <engine> [awk options]: the engine over every materialized doc,
+# whose paths are the logical addresses docs/<repo>/<slug>.md
 run_engine_over_corpus() {
     eng="$1"
     shift
     while IFS= read -r doc_path; do
         set -- "$@" "$doc_path"
     done < "$DOCS_PATHS"
-    docs_run awk -f "$eng" "$@"
+    docs_engine_run awk -f "$eng" "$@"
 }
 
 # Run syntax/integrity audit across all typed documentation

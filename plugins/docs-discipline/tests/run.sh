@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # docs-discipline plugin suite: the named runner for tests/.
 # Drives the staging check; the corpus reads through the storage driver (keyed on the
-# declared corpus.store: the audit and the unit-form nudge against the backlog-file form
+# declared store: the audit and the unit-form nudge against the backlog-file form
 # and the write verbs (tests/write-verbs.sh over tests/write/) and the engine checks
 # (tests/engine-checks.sh) and the delta-source cases (tests/store-cases.sh) when declared,
 # every read verb's rc 2 refusal when not); on fts5 the stored bytes read back through the
@@ -159,9 +159,9 @@ seed_store() {
 # the corpus checks (a function, so the fts5 run can give them a sandbox of their own)
 corpus_checks() {
 # the corpus reads key on the declared capability, never on the driver name: a driver that
-# declares corpus.store serves the full checks; one that does not must refuse every read
+# declares store serves the full checks; one that does not must refuse every read
 # verb rc 2 naming the capability
-if ./.contexture/modules/session/scripts/driver-resolver has corpus.store; then
+if ./.contexture/modules/session/scripts/driver-resolver has store; then
     CORPUS_STORE=1
 else
     CORPUS_STORE=0
@@ -246,7 +246,7 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
     fi
     echo ""
 
-    # the delta sources (tests/store-cases.sh), keyed on the declared corpus.changelog: the
+    # the delta sources (tests/store-cases.sh), keyed on the declared store.changelog: the
     # check's store mode against its git mode, ctx docs changes (its window, --since, A, M, D,
     # its refusals) or its files-driver refusal, and the gate composing the code half from git
     # with the corpus half from the store (or from git under the files driver)
@@ -267,13 +267,13 @@ else
         # shellcheck disable=SC2086
         R_OUT=$("$SANDBOX/.contexture/ctx" docs $v 2>&1 < /dev/null)
         R_RC=$?
-        { [ "$R_RC" -eq 2 ] && printf '%s' "$R_OUT" | grep -q 'corpus.store (ERR_CAPABILITY_UNSUPPORTED)'; } || REFUSE_BAD="$REFUSE_BAD [$v rc=$R_RC]"
+        { [ "$R_RC" -eq 2 ] && printf '%s' "$R_OUT" | grep -q 'store (ERR_CAPABILITY_UNSUPPORTED)'; } || REFUSE_BAD="$REFUSE_BAD [$v rc=$R_RC]"
     done
     R_OUT=$(printf 'M\tx.ts\n' | "$SANDBOX/.contexture/ctx" docs check workspace 2>&1)
     R_RC=$?
-    { [ "$R_RC" -eq 2 ] && printf '%s' "$R_OUT" | grep -q 'corpus.store (ERR_CAPABILITY_UNSUPPORTED)'; } || REFUSE_BAD="$REFUSE_BAD [check rc=$R_RC]"
+    { [ "$R_RC" -eq 2 ] && printf '%s' "$R_OUT" | grep -q 'store (ERR_CAPABILITY_UNSUPPORTED)'; } || REFUSE_BAD="$REFUSE_BAD [check rc=$R_RC]"
     if [ -z "$REFUSE_BAD" ]; then
-        echo "[read-refusal] PASS (no corpus.store: audit, query, check, gate, nudge each refuse rc2 naming the capability)"
+        echo "[read-refusal] PASS (no store: audit, query, check, gate, nudge each refuse rc2 naming the capability)"
         PASS=$((PASS + 1))
     else
         echo "[read-refusal] FAIL:$REFUSE_BAD"

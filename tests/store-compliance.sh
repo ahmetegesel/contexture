@@ -187,12 +187,12 @@ fi
 cap=$("$DRIVER" capability 2>/dev/null)
 case "$cap" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
 if [ "$IS_POSIX" -eq 1 ]; then
-  case "$cap" in *'"optional":["corpus.store","store"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
+  case "$cap" in *'"optional":["store"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
 else
-  case "$cap" in *'"optional":["corpus.store","corpus.changelog","store","store.changelog"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
+  case "$cap" in *'"optional":["store","store.changelog"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
 fi
 # a planted descriptor without the store capability reads red at require
-planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/,"store.changelog"//; s/,"store"//')
+planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/"store.changelog"//; s/"store"//; s/,\]/]/; s/\[,/[/; s/,,/,/g')
 mkdir -p .contexture/drivers/planted
 {
   printf '#!/bin/sh\n'
@@ -207,8 +207,8 @@ chmod +x .contexture/drivers/planted/driver
 [ "$?" -eq 2 ] || miss "a planted descriptor missing store did not answer require store rc2"
 "$RESOLVER" --driver=planted has store >/dev/null 2>&1
 [ "$?" -eq 1 ] || miss "the planted descriptor did not answer has store rc1"
-"$RESOLVER" --driver=planted require corpus.store >/dev/null 2>&1
-[ "$?" -eq 0 ] || miss "the planted descriptor lost corpus.store"
+"$RESOLVER" --driver=planted require store.changelog >/dev/null 2>&1
+[ "$?" -eq 2 ] || miss "the planted descriptor did not answer require store.changelog rc2"
 tc "S1: the storage module is listed, the wrapper resolves through it, and the store capabilities answer"
 
 # ==============================================================================

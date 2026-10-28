@@ -10,8 +10,8 @@
 -- next, and liveness are derived by the reads, never stored. Two derived tables serve the
 -- search and are rebuilt per unit in the transaction of every write (derive.sql): lines
 -- (the exact rule) and search_documents (the ranked modes, through fts_prose and fts_code).
--- The corpus tables (docs, doc_changes) are carried unchanged from version 3 until the docs
--- port, and the generic module store's tables (store, store_changes) are additive.
+-- The legacy doc tables (docs, doc_changes) are carried unchanged and unread, and the
+-- generic module store's tables (store, store_changes) are additive.
 -- A fresh store runs this file whole; db-init.sh sets user_version 4 after it.
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
@@ -354,11 +354,10 @@ FROM (
 ) j;
 
 
--- The corpus (unchanged from schema version 3): the agent-facing docs beside the record, one
--- row per doc keyed by (repo, slug), the text verbatim; its canonical address is
--- docs/<repo>/<slug>.md. The corpus is not a unit: no row references units, so no cascade
--- ever reaches it, and no doc is indexed for search (the corpus search stays the docs
--- verbs' own pass).
+-- The legacy doc corpus (v0.54.0, unread after the docs port): the agent-facing docs beside
+-- the record, one row per doc keyed by (repo, slug), the text verbatim; its canonical
+-- address is docs/<repo>/<slug>.md. It is not a unit: no row references units, so no
+-- cascade ever reaches it, and no doc is indexed for search.
 CREATE TABLE IF NOT EXISTS docs (
   repo TEXT NOT NULL,
   slug TEXT NOT NULL,
@@ -367,7 +366,7 @@ CREATE TABLE IF NOT EXISTS docs (
   PRIMARY KEY (repo, slug)
 );
 
--- The corpus change log: one row per corpus.write and corpus.remove, never edited or pruned;
+-- The legacy corpus change log: one row per doc write and remove, never edited or pruned;
 -- head is the workspace git HEAD the verb passed (or none), prior the doc's state before
 -- the change (absent or present), so a window of rows yields each doc's net status
 CREATE TABLE IF NOT EXISTS doc_changes (
@@ -388,8 +387,8 @@ CREATE INDEX IF NOT EXISTS idx_doc_changes_head ON doc_changes(head);
 -- edited or pruned; head is the workspace git HEAD the verb passed (or none), prior the
 -- key's state before the change (absent or present), so a window of rows yields each
 -- key's net status. A schema 4 store created before these tables gains them on open
--- (db-init.sh's idempotent twin of this block); the corpus tables above stay untouched
--- and unread by the store until the docs port.
+-- (db-init.sh's idempotent twin of this block); the legacy doc tables above stay untouched
+-- and unread by the store.
 CREATE TABLE IF NOT EXISTS store (
   namespace TEXT NOT NULL,
   key TEXT NOT NULL,

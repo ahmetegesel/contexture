@@ -16,7 +16,7 @@ the workspace's boot, laws, or help.
 | `gate` | self-contained; uses `scripts/docs-audit.awk` and `scripts/docs-check.awk` |
 | `changes` | none: the corpus half of a delta from the store's change log, computed in `docs-io.sh` |
 | `new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `ids` | `scripts/docs-edit.awk` (the edit), then `scripts/docs-audit.awk` (the grammar check) |
-| `remove` | none: `corpus.remove` through `docs-io.sh` |
+| `remove` | none: `store.delete` through `docs-io.sh` |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
 
 - The `.awk` engines and `docs-io.sh` carry no `# summary:` line: discovery
@@ -26,19 +26,17 @@ the workspace's boot, laws, or help.
   wrappers over their engine: audit, check, and nudge hand it the corpus paths
   `docs-io.sh` resolved from their arguments, and query drives it with parsed
   options over the helper's paths.
-- `docs-io.sh` is the only file of the module that calls a corpus method or
+- `docs-io.sh` is the only file of the module that calls a store function or
   composes a doc's path (the census in `tests/census.sh` holds it there). It
-  asks `driver-resolver require corpus.store`, mounts the corpus with
-  `corpus.mount` (the files driver answers in place with the workspace root;
-  a store driver fills the scratch folder it is handed), lists it with
-  `corpus.list`, and applies the display-path rule: every doc path a verb
-  prints is the path the files driver prints for the same call (an explicit
-  path read in place passes as the caller's own string, while under the files
-  driver an existing file at a doc path outside the corpus folder, a draft,
-  refuses rc 1; a repo name or a bare
-  call reads `docs/<repo>/<slug>.md` inside the mount, any other doc from a
-  filled mount is mapped back by exact substitution). Driver calls run from
-  the workspace root with stdin from `/dev/null`; scratch lives under
+  asks `driver-resolver require store`, lists the docs namespace with
+  `store.list`, reads each key with `store.get` into the module's scratch at
+  `docs/<repo>/<slug>.md`, and runs the engines there; no driver parses a doc
+  and no mount is materialized by a driver. The store answer is flattened with
+  the session module's `lib/json.awk`. Every view prints the logical address
+  `docs/<repo>/<slug>.md`, whatever the caller's spelling and whatever the
+  driver; the old display-path mapping and the draft-path refusal retire
+  because the stored bytes are what a verb reads. Driver calls run from the
+  workspace root with stdin from `/dev/null`; scratch lives under
   `.contexture/tmp` and is removed on exit.
 - The nudge's unit form reads the active task through `ctx session task list
   <unit> --status=progress` and `ctx session resolve <unit> task#<slug>` (the
@@ -47,15 +45,16 @@ the workspace's boot, laws, or help.
 - The write verbs run one pipeline in `docs-io.sh`: the arguments parsed
   (`docs_parse`: the verb's control flags, every other `--<field>=` as a field
   action carried in the environment as `EDIT_A_<n>`, `EDIT_F_<n>`,
-  `EDIT_V_<n>`, a `--stdin=<field>` value kept in a scratch file the engine reads as its payload operand, so a body of any size meets no environment limit); the doc read by `corpus.read`; one edit by `docs-edit.awk`
+  `EDIT_V_<n>`, a `--stdin=<field>` value kept in a scratch file the engine reads as its payload operand, so a body of any size meets no environment limit); the doc read by `store.get`; one edit by `docs-edit.awk`
   (operands `part=1 <templates/doc.md> part=2 <doc> part=3 <payload>`; only the
   template's `#%` schema lines are read; the request through the environment,
   never `awk -v`; the whole new doc on stdout, the note or the refusal on
   stderr, rc 1 on a refusal); the result audited by `docs-audit.awk` over its
-  repo in a scratch copy of the corpus made from one mount (errors name
-  `docs/<repo>/<slug>.md`); then `corpus.write` with `--op=<verb>` and
-  `--head=<the workspace git HEAD>` (`--create` for new and for write without
-  `--replace`). A result equal to the stored doc writes nothing. `replace` and
+  repo in a scratch copy of the corpus made from one store pass (errors name
+  `docs/<repo>/<slug>.md`); then `store.put` with `--op=<verb>` and
+  `--head=<the workspace git HEAD>` (the module's own existence check covers
+  what the retired create flag did). A result equal to the stored doc writes
+  nothing. `replace` and
   `ids` run the edit over every doc of their scope first, check the counts
   (replace: the total must equal `--count`), audit every touched repo, then
   write one doc after another. The template resolves beside the module
@@ -76,13 +75,13 @@ the workspace's boot, laws, or help.
 - A bare `check` or `nudge` refuses loudly instead of reading standard input
   as an empty corpus; a bare `audit` reads the whole corpus through the
   driver.
-- The delta source: a driver declaring `corpus.changelog` (a store) records
+- The delta source: a driver declaring `store.changelog` (a store) records
   every doc write with the workspace git HEAD, so the corpus half of a delta
   comes from the store (`ctx docs changes`: the rows stamped with the current
   HEAD, or with `--since=<rev>` every commit from `<rev>` to HEAD, the
   boundary's leading dash stripped, one net status line per doc) while the
   code half stays on git. `check` and `gate` pick the mode by `driver-resolver
-  has corpus.changelog`, never by the driver's name, and run the check engine
+  has store.changelog`, never by the driver's name, and run the check engine
   with `-v delta_source=log`: the blanket is off (a doc refreshes only the code
   its own sources name) and the trackedness probe is off (every claimant can
   ride the delta, so `UNTRACKED CLAIMANT` never fires). Under the files driver
@@ -141,13 +140,13 @@ the corpus checks run in a second sandbox of the same staging and seed in the
 background, their lines printed after the chain in the same order; the
 delta-source cases (`tests/store-cases.sh`: the check's two modes, `ctx docs
 changes`, the gate's halves in a git workspace of its own, keyed on the
-declared `corpus.changelog`); the corpus reads keyed on the declared `corpus.store` (declared: the audit and the
+declared `store.changelog`); the corpus reads keyed on the declared `store` (declared: the audit and the
 unit-form nudge, the sample backlog's task entered into a unit through the session verbs and compared with the
 backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
 of `tests/write/`: every success's stored bytes, every refusal leaving the
 stored doc unchanged, the change-log rows under a store), and the engine
 checks (`tests/engine-checks.sh`: the id namespace, the pitfalls scoping and a doc-ending pitfall credited to its doc, the
-literal backslash search, the files driver's draft-path refusal); not declared: every read verb's rc 2 refusal); the
+literal backslash search, the explicit draft path reading the stored doc by its address); not declared: every read verb's rc 2 refusal); the
 single-door census (`tests/census.sh` over `tests/census-allow.txt`, with three
 planted bypasses); the gate matrix; and the grammar agreement check
 (`tests/grammar-agreement.awk`). `tests/captures.sh` is the capture set of the

@@ -126,9 +126,11 @@ function is_governed_guide(t_file) {
 # Trackedness signal for the freshness of a governed file: a claimant the repository does not
 # track cannot ride the delta, so it is never counted stale (reconciliation is process-owned).
 # Memoized per path; a non-repository run reads every claimant untracked.
-function claimant_is_tracked(path,   cmd, rc) {
+function claimant_is_tracked(path,   cmd, rc, root) {
     if (path in tracked_cache) return tracked_cache[path]
-    cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
+    root = ENVIRON["DOCS_GIT_ROOT"]
+    if (root != "") cmd = "git -C \"" root "\" ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
+    else cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
     rc = system(cmd)
     tracked_cache[path] = (rc == 0) ? 1 : 0
     return tracked_cache[path]

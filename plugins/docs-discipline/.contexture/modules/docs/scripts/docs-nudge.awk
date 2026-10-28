@@ -155,22 +155,22 @@ file_idx == 1 {
 
 file_idx >= 2 {
     if ($1 == "@doc") { doc_kind = $2; doc_slug = $3; next }
-    if (FNR <= 12 && /^[ ]{2}repo:[ ]*/) { doc_repo = $2; next }
-    if (FNR <= 12 && /^[ ]{2}description:[ ]*/) {
+    if (/^[ ]{2}repo:[ ]*/) { doc_repo = $2; next }
+    if (/^[ ]{2}description:[ ]*/) {
         doc_desc = $0
         sub(/^[ ]{2}description:[ ]*"/, "", doc_desc)
         sub(/"[ ]*$/, "", doc_desc)
         next
     }
-    if (FNR <= 12 && /^[ ]{2}keywords:[ ]*/) {
+    if (/^[ ]{2}keywords:[ ]*/) {
         doc_keywords = $0
         sub(/^[ ]{2}keywords:[ ]*\[/, "", doc_keywords)
         sub(/\][ ]*$/, "", doc_keywords)
         next
     }
 
-    # As soon as header finishes (at first subsequent block or FNR >= 12)
-    if (!header_checked && (/^@[a-z_]+/ || FNR >= 12)) {
+    # The header ends at the first block: the whole header is read, never a line window
+    if (!header_checked && /^@[a-z_]+/) {
         header_checked = 1
         forced_doc = 0
         if (setup_intent && doc_kind == "operational" && repo_in_task()) {

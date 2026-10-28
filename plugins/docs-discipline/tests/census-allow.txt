@@ -13,7 +13,8 @@
 # self-planted matrix, files by construction); false-positive (an instrument B pattern
 # inside a word or a string). A new corpus read or path print outside the helper lands here only by an
 # explicit edit, which is the point: it stays visible.
-claimant-probe	docs-check.awk	    cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
+claimant-probe	docs-check.awk	    if (root != "") cmd = "git -C \"" root "\" ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
+claimant-probe	docs-check.awk	    else cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
 claimant-probe	docs-check.awk	    rc = system(cmd)
 delta-read	docs-check.awk	    while ((getline raw_line < input_src) > 0) {
 engine-output	docs-audit.awk	    print file ":" line ": error: " msg > "/dev/stderr"
@@ -78,7 +79,7 @@ helper-output	check	  docs_exec "$dir/docs-check.awk" -v delta_source=log
 helper-output	changes	docs_changes "$@"
 helper-output	gate	        set -- "$@" "$doc_path"
 helper-output	gate	    done < "$DOCS_PATHS"
-helper-output	gate	    docs_run awk -f "$eng" "$@"
+helper-output	gate	    docs_engine_run awk -f "$eng" "$@"
 helper-output	nudge	  docs_args 0 1 "$@" || exit $?
 helper-output	nudge	  docs_exec "$dir/docs-nudge.awk" "$first"
 helper-output	nudge	docs_args 1 1 "$@" || exit $?
@@ -146,4 +147,4 @@ git-delta	gate	        aggregate_remote_drift_changes | sort -u | run_gate_check
 git-delta	gate	        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | run_gate_check
 git-delta	gate	        aggregate_git_changes | sort -u | run_gate_check
 false-positive	query	      if [ $# -gt 0 ] && [ "$(echo "$1" | cut -c 1-2)" != "--" ]; then
-helper-output	query	QUERY_OUT=$(docs_run awk -v mode="$MODE" \
+helper-output	query	QUERY_OUT=$(docs_engine_run awk -v mode="$MODE" \

@@ -13,10 +13,9 @@
 #                in @pitfalls and over follows it (the pending pitfall was once printed after
 #                the next doc's first line had turned the slug, as over.md)
 #   [draft-path] an explicit doc path to a file outside the corpus folder (a draft at
-#                .../docs/etest/esc.md, its kind broken): under the files driver (its
-#                corpus.mount answers in place) audit and check refuse rc 1 naming the path
-#                and ctx docs write, never silently reading the stored doc, while a path with
-#                no file behind it keeps the address rule; under a store the address rule holds
+#                .../docs/etest/esc.md, its kind broken): the verb reads the stored doc by
+#                its address, never the file, so audit and check stay clean; a path with no
+#                file behind it keeps the same address rule on every driver
 # Exit 0 when all five pass, 1 otherwise.
 
 set -u
@@ -38,7 +37,7 @@ printf '%s\n' '@doc overview over' '  repo: etest' '  description: "An overview 
 printf '%s\n' '@doc structural esc' '  repo: etest' '  description: "Carries a literal backslash sequence"' '  sources: [e/**]' '  keywords: [e]' '' \
   '@contract' '  - rule: "The marker reads zz\tqq on disk"' '    evidence: "escSym"' > "$W/esc.md"
 for d in idone idtwo over esc; do
-  "$R" corpus.write etest "$d" --head=0000000 < "$W/$d.md" > /dev/null 2>&1 || { echo "engine-checks: seeding etest/$d failed"; exit 1; }
+  "$R" store.put docs "etest/$d" --head=0000000 < "$W/$d.md" > /dev/null 2>&1 || { echo "engine-checks: seeding etest/$d failed"; exit 1; }
 done
 
 OUT=$("$C" docs audit etest 2>&1)
@@ -75,28 +74,20 @@ else
   FAIL=$((FAIL + 1))
 fi
 
-# a draft of etest/esc outside the corpus folder, its doc kind broken; the driver's own
-# corpus.mount answer tells the files driver (in place: the workspace root) from a store (the
-# folder it was handed filled)
-mkdir -p "$W/draft/docs/etest" "$W/mnt"
+# a draft of etest/esc outside the corpus folder, its doc kind broken: the address names the
+# stored doc, so audit and check stay clean and the file is never read
+mkdir -p "$W/draft/docs/etest"
 sed 's/^@doc structural esc$/@doc bogus esc/' "$W/esc.md" > "$W/draft/docs/etest/esc.md"
-MNT=$("$R" corpus.mount "$W/mnt" 2>/dev/null)
 DWHY=""
-if [ "$MNT" != "$W/mnt" ]; then
-  OUT=$("$C" docs audit "$W/draft/docs/etest/esc.md" 2>&1)
-  RC=$?
-  { [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -qF "not the corpus doc: $W/draft/docs/etest/esc.md" && printf '%s\n' "$OUT" | grep -qF 'ctx docs write'; } || DWHY="audit of the draft rc=$RC: $OUT"
-  OUT=$(printf '' | "$C" docs check "$W/draft/docs/etest/esc.md" 2>&1)
-  RC=$?
-  { [ "$RC" -eq 1 ] && printf '%s\n' "$OUT" | grep -qF 'not the corpus doc'; } || DWHY="$DWHY; check of the draft rc=$RC: $OUT"
-  OUT=$("$C" docs audit "$W/nofile/docs/etest/esc.md" 2>&1)
-  RC=$?
-  { [ "$RC" -eq 0 ] && [ -z "$OUT" ]; } || DWHY="$DWHY; a path with no file behind it rc=$RC: $OUT"
-else
-  OUT=$("$C" docs audit "$W/draft/docs/etest/esc.md" 2>&1)
-  RC=$?
-  { [ "$RC" -eq 0 ] && ! printf '%s\n' "$OUT" | grep -qF 'not the corpus doc'; } || DWHY="a store reads the address: audit rc=$RC: $OUT"
-fi
+OUT=$("$C" docs audit "$W/draft/docs/etest/esc.md" 2>&1)
+RC=$?
+{ [ "$RC" -eq 0 ] && [ -z "$OUT" ]; } || DWHY="audit of the draft rc=$RC: $OUT"
+OUT=$(printf '' | "$C" docs check "$W/draft/docs/etest/esc.md" 2>&1)
+RC=$?
+{ [ "$RC" -eq 0 ] && ! printf '%s\n' "$OUT" | grep -qF 'not the corpus doc'; } || DWHY="$DWHY; check of the draft rc=$RC: $OUT"
+OUT=$("$C" docs audit "$W/nofile/docs/etest/esc.md" 2>&1)
+RC=$?
+{ [ "$RC" -eq 0 ] && [ -z "$OUT" ]; } || DWHY="$DWHY; a path with no file behind it rc=$RC: $OUT"
 if [ -z "$DWHY" ]; then
   echo "  [draft-path] PASS"
 else
@@ -105,7 +96,7 @@ else
 fi
 
 for d in idone idtwo over esc; do
-  "$R" corpus.remove etest "$d" --head=0000000 > /dev/null 2>&1
+  "$R" store.delete docs "etest/$d" --head=0000000 > /dev/null 2>&1
 done
 rm -rf "$W"
 echo "engine-checks: $((5 - FAIL)) passed, $FAIL failed"

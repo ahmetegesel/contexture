@@ -1,35 +1,31 @@
 # docs-io.sh: the docs module's one door to the corpus (sourced by the read verbs query,
 # audit, check, gate, and nudge; never run, so it carries no summary line and discovery
-# ignores it). It is the only file of the module that calls a corpus method or composes a
+# ignores it). It is the only file of the module that calls a store function or composes a
 # doc's path: the verbs and their engines receive the paths it hands them.
 #
-# The corpus is served by the configured storage driver (the capability corpus.store,
-# asked of driver-resolver). A verb reads it through a mount: a folder under which every
-# doc sits at docs/<repo>/<slug>.md. The files driver answers in place with the workspace
-# root (nothing copied); a store driver fills the empty folder it is handed. Every driver
-# call runs with the workspace root as its cwd and CTX_ROOT, an inherited CTX_DIR unset,
-# and stdin from /dev/null (the check's delta on stdin stays the verb's).
+# The corpus is served by the configured storage driver through the generic module store
+# (the capability store, asked of driver-resolver). A verb reads it through store.list and
+# store.get: the docs module materializes the returned bytes into its own scratch at
+# docs/<repo>/<slug>.md and the engines parse those files. No driver parses a doc. Every
+# driver call runs with the workspace root as its cwd and CTX_ROOT, an inherited CTX_DIR
+# unset, and stdin from /dev/null (the check's delta on stdin stays the verb's).
 #
-# The display-path rule: every doc path a verb prints is the path the files driver prints
-# for the same call. An explicit doc path read in place passes as the caller's own string;
-# a repo name or a bare call reads docs/<repo>/<slug>.md relative to the mount (the
-# canonical address on every driver); any other doc read from a filled mount is mapped
-# back to the caller's form by exact string substitution (the pairs from a scratch file,
-# never awk -v). Scratch lives under the workspace's .contexture/tmp (the system temp
-# only when the drawer cannot be written) and is removed on exit.
+# The display rule: every doc path a verb prints is the logical address
+# docs/<repo>/<slug>.md, whatever the caller's spelling and whatever the driver. Scratch
+# lives under the workspace's .contexture/tmp (the system temp only when the drawer cannot
+# be written) and is removed on exit.
 
 DOCS_VERB=""
 DOCS_ROOT=""
 DOCS_ROOT_P=""
 DOCS_RESOLVER=""
+DOCS_JSON=""
 DOCS_SCRATCH=""
 DOCS_MOUNT=""
-DOCS_INPLACE=0
 DOCS_KEYS=""
 DOCS_ALL=""
 DOCS_CD=0
 DOCS_PATHS=""
-DOCS_MAP=""
 DOCS_ERR=""
 
 # docs_io_init <scripts dir> <verb>: the workspace root as the verbs resolve it
@@ -54,6 +50,10 @@ docs_io_init() {
       DOCS_RESOLVER="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
     fi
   fi
+  DOCS_JSON=""
+  if [ -n "$DOCS_RESOLVER" ] && [ -f "${DOCS_RESOLVER%/*}/../lib/json.awk" ]; then
+    DOCS_JSON="${DOCS_RESOLVER%/*}/../lib/json.awk"
+  fi
   return 0
 }
 
@@ -68,7 +68,7 @@ docs_call() {
   )
 }
 
-# docs_require: the configured driver serves the corpus (corpus.store), else rc 2 with the
+# docs_require: the configured driver serves the module store (store), else rc 2 with the
 # resolver's message and the verb's own line
 docs_require() {
   if [ -z "$DOCS_RESOLVER" ]; then
@@ -79,10 +79,10 @@ docs_require() {
     printf '%s: the workspace root is not a folder (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" >&2
     return 2
   fi
-  if docs_call require corpus.store; then
+  if docs_call require store; then
     return 0
   fi
-  printf '%s: the configured storage driver serves no corpus (corpus.store)\n' "$DOCS_VERB" >&2
+  printf '%s: the configured storage driver serves no module store (store)\n' "$DOCS_VERB" >&2
   return 2
 }
 
@@ -113,58 +113,41 @@ docs_scratch() {
   return 0
 }
 
-# docs_release: drop the scratch before an exec (an in-place mount needs none of it)
-docs_release() {
-  docs_io_cleanup
-  trap - EXIT HUP INT TERM
-  return 0
-}
-
-# docs_mount [<repo>]: the corpus mounted; DOCS_MOUNT is the root to read docs/<repo>/<slug>.md
-# under and DOCS_INPLACE is 1 when the driver answered in place (the workspace root); an
-# answer that is neither the root nor the folder handed over refuses rc 2
-docs_mount() {
-  docs_scratch || return 2
-  if ! mkdir "$DOCS_SCRATCH/mount" 2>/dev/null; then
-    printf '%s: cannot make its mount folder (ERR_STORAGE_WRITE)\n' "$DOCS_VERB" >&2
-    return 2
-  fi
-  if dm_ans=$(docs_call corpus.mount "$DOCS_SCRATCH/mount" ${1:+"$1"}); then
-    :
-  else
-    return $?
-  fi
-  if [ "$dm_ans" = "$DOCS_ROOT_P" ]; then
-    DOCS_INPLACE=1
-    DOCS_MOUNT=$DOCS_ROOT
-  elif [ "$dm_ans" = "$DOCS_SCRATCH/mount" ]; then
-    DOCS_INPLACE=0
-    DOCS_MOUNT=$dm_ans
-  else
-    printf '%s: the storage driver mounted the corpus outside this workspace and its scratch (ERR_DRIVER_PROTOCOL)\n' "$DOCS_VERB" >&2
-    return 2
-  fi
-  return 0
-}
-
-# docs_keys [<repo>]: DOCS_KEYS holds one <repo>/<slug> per line in the driver's order (the
-# bytewise order of the canonical addresses); rc 1 for a repo the corpus lacks (quiet: the
-# verb names it), rc 2 when the driver fails (its message kept)
+# docs_keys [<repo>]: DOCS_KEYS holds one <repo>/<slug> per line in the store's bytewise
+# order (the module pattern filters the list); rc 1 for a repo the corpus lacks (quiet: the
+# verb names it), rc 2 when the store fails (its message kept)
 docs_keys() {
-  if DOCS_KEYS=$(docs_call corpus.list ${1:+"$1"} 2>"$DOCS_SCRATCH/list.err"); then
-    return 0
-  else
+  docs_scratch || return 2
+  if ! docs_call store.list docs > "$DOCS_SCRATCH/list.json" 2> "$DOCS_SCRATCH/list.err"; then
     dk_rc=$?
+    DOCS_KEYS=""
+    cat "$DOCS_SCRATCH/list.err" >&2
+    return "$dk_rc"
   fi
-  DOCS_KEYS=""
-  [ "$dk_rc" -ne 1 ] && cat "$DOCS_SCRATCH/list.err" >&2
-  return "$dk_rc"
+  if [ -z "$DOCS_JSON" ]; then
+    printf '%s: the storage answer decoder is missing (need: the session module lib/json.awk) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    DOCS_KEYS=""
+    return 2
+  fi
+  if ! awk -f "$DOCS_JSON" < "$DOCS_SCRATCH/list.json" > "$DOCS_SCRATCH/list.flat" 2> "$DOCS_SCRATCH/json.err"; then
+    cat "$DOCS_SCRATCH/json.err" >&2
+    DOCS_KEYS=""
+    return 2
+  fi
+  DOCS_ALL=$(awk -F= '$1 ~ /^keys\.[0-9]+$/ { print substr($0, index($0, "=") + 1) }' "$DOCS_SCRATCH/list.flat")
+  if [ -n "${1:-}" ]; then
+    DOCS_KEYS=$(printf '%s\n' "$DOCS_ALL" | DOCS_SEL="$1/" awk 'NF && index($0, ENVIRON["DOCS_SEL"]) == 1')
+    [ -n "$DOCS_KEYS" ] && return 0
+    return 1
+  fi
+  DOCS_KEYS=$DOCS_ALL
+  return 0
 }
 
-# docs_select <repo>: DOCS_KEYS narrowed from the whole list (DOCS_ALL, one driver call per
+# docs_select <repo>: DOCS_KEYS narrowed from the whole list (DOCS_ALL, one store call per
 # verb) to that repo's docs, the order kept; rc 1 when the corpus holds none
 docs_select() {
-  DOCS_KEYS=$(printf '%s\n' "$DOCS_ALL" | DOCS_SEL="$1/" awk 'index($0, ENVIRON["DOCS_SEL"]) == 1')
+  DOCS_KEYS=$(printf '%s\n' "$DOCS_ALL" | DOCS_SEL="$1/" awk 'NF && index($0, ENVIRON["DOCS_SEL"]) == 1')
   [ -n "$DOCS_KEYS" ] && return 0
   return 1
 }
@@ -176,10 +159,36 @@ docs_key_valid() {
   return 0
 }
 
-# docs_corpus [<repo>]: the whole corpus (or one repo's docs) for a verb that composes
-# absolute paths (query, gate): require, keys, mount; DOCS_PATHS lists <mount>/docs/<key>.md
-# and a filled mount maps its prefix back to the workspace root. rc 1 leaves DOCS_ERR=repo
-# (an absent repo) or DOCS_ERR=empty (an empty corpus) for the verb to word
+# docs_materialize: every key of DOCS_KEYS read through store.get into the module's scratch
+# at DOCS_MOUNT/docs/<repo>/<slug>.md; the engines parse those bytes, never a driver
+docs_materialize() {
+  docs_scratch || return 2
+  DOCS_MOUNT="$DOCS_SCRATCH/corpus"
+  rm -rf "$DOCS_MOUNT"
+  mkdir -p "$DOCS_MOUNT/docs" || {
+    printf '%s: cannot make its corpus scratch (ERR_STORAGE_WRITE)\n' "$DOCS_VERB" >&2
+    return 2
+  }
+  printf '%s\n' "$DOCS_KEYS" > "$DOCS_SCRATCH/materialize.keys"
+  while IFS= read -r dm_k; do
+    [ -n "$dm_k" ] || continue
+    mkdir -p "$DOCS_MOUNT/docs/${dm_k%/*}" || {
+      printf '%s: cannot stage the corpus (ERR_STORAGE_WRITE)\n' "$DOCS_VERB" >&2
+      return 2
+    }
+    if ! docs_call store.get docs "$dm_k" > "$DOCS_MOUNT/docs/$dm_k.md" 2> "$DOCS_SCRATCH/get.err"; then
+      dm_rc=$?
+      cat "$DOCS_SCRATCH/get.err" >&2
+      return "$dm_rc"
+    fi
+  done < "$DOCS_SCRATCH/materialize.keys"
+  return 0
+}
+
+# docs_corpus [<repo>]: the whole corpus (or one repo's docs) for a verb that reads it as
+# data (query, gate): require, list, get into scratch; DOCS_PATHS lists the relative
+# logical addresses docs/<key>.md under DOCS_MOUNT. rc 1 leaves DOCS_ERR=repo (an absent
+# repo) or DOCS_ERR=empty (an empty corpus) for the verb to word
 docs_corpus() {
   DOCS_ERR=""
   docs_require || return 2
@@ -195,16 +204,13 @@ docs_corpus() {
     DOCS_ERR=empty
     return 1
   fi
-  docs_mount ${1:+"$1"} || return $?
+  docs_materialize || return $?
   DOCS_PATHS="$DOCS_SCRATCH/paths"
-  DOCS_MAP="$DOCS_SCRATCH/map"
-  : > "$DOCS_MAP"
+  : > "$DOCS_PATHS"
   printf '%s\n' "$DOCS_KEYS" | while IFS= read -r dc_k; do
-    [ -n "$dc_k" ] && printf '%s/docs/%s.md\n' "$DOCS_MOUNT" "$dc_k"
+    [ -n "$dc_k" ] && printf 'docs/%s.md\n' "$dc_k"
   done > "$DOCS_PATHS"
-  if [ "$DOCS_INPLACE" -eq 0 ]; then
-    printf '%s/\t%s/\n' "$DOCS_MOUNT" "$DOCS_ROOT" > "$DOCS_MAP"
-  fi
+  DOCS_CD=1
   return 0
 }
 
@@ -214,44 +220,30 @@ docs_not_a_doc() {
 }
 
 # docs_args <bare 0|1> <cwd 0|1> [<corpus argument>...]: the corpus a verb was handed,
-# resolved to engine paths in DOCS_PATHS (one per line) with the display pairs in DOCS_MAP.
-# Forms: a repo name (its docs); docs/<repo>/<slug>.md with any prefix (the doc at that
-# address); the files-driver patterns docs/*/*.md and docs/<repo>/*.md with any prefix,
-# expanded by the driver's list when the shell left them literal; no argument: the whole
-# corpus when <bare> is 1, none otherwise. Only repo names (or no argument) run the engine
-# inside the mount on relative paths (DOCS_CD=1), unless <cwd> is 1 (the verb keeps its
-# cwd); any path form keeps the caller's cwd. Under the files driver an existing file at a
-# doc path whose folder is not physically the corpus folder (a draft) refuses. rc 1 names a
-# doc, a repo, a draft, or an argument the corpus does not hold; rc 2 a driver failure.
+# resolved to engine paths in DOCS_PATHS (one per line). Forms: a repo name (its docs);
+# docs/<repo>/<slug>.md with any prefix (the doc at that address); the patterns
+# docs/*/*.md and docs/<repo>/*.md with any prefix, filtered by the store's list when the
+# shell left them literal; no argument: the whole corpus when <bare> is 1, none otherwise.
+# The corpus is materialized once into the module's scratch; relative logical addresses are
+# handed to an engine that runs inside it (DOCS_CD=1), absolute scratch paths when the verb
+# keeps its cwd (<cwd> 1, the nudge). Every view prints the logical address. rc 1 names a
+# doc, a repo, or an argument the corpus does not hold; rc 2 a store failure.
 docs_args() {
   da_bare=$1
   da_cwd=$2
   shift 2
   docs_require || return 2
   docs_scratch || return 2
-  docs_mount || return $?
   docs_keys || return $?
   DOCS_ALL=$DOCS_KEYS
   DOCS_PATHS="$DOCS_SCRATCH/paths"
-  DOCS_MAP="$DOCS_SCRATCH/map"
   : > "$DOCS_PATHS"
-  : > "$DOCS_MAP"
+  : > "$DOCS_SCRATCH/selected"
   DOCS_CD=1
   [ "$da_cwd" -eq 1 ] && DOCS_CD=0
-  for da_a in "$@"; do
-    case "$da_a" in
-      */*|*.md) DOCS_CD=0 ;;
-    esac
-  done
   if [ $# -eq 0 ]; then
     [ "$da_bare" -eq 1 ] || return 0
-    DOCS_KEYS=$DOCS_ALL
-    if [ -z "$DOCS_KEYS" ]; then
-      printf '%s: the corpus is empty\n' "$DOCS_VERB" >&2
-      return 1
-    fi
-    docs_args_emit ""
-    return 0
+    printf '%s\n' "$DOCS_ALL" > "$DOCS_SCRATCH/selected"
   fi
   for da_a in "$@"; do
     case "$da_a" in
@@ -262,10 +254,8 @@ docs_args() {
         case "$da_rest" in */*) da_up=${da_rest%/*} ;; *) da_up="" ;; esac
         da_d=${da_up##*/}
         [ "$da_d" = "docs" ] && [ -n "$da_r" ] || { docs_not_a_doc "$da_a"; return 1; }
-        da_prefix=${da_a%"docs/$da_r/$da_s"}
         if [ "$da_r" = "*" ] && [ "$da_s" = "*.md" ]; then
-          DOCS_KEYS=$DOCS_ALL
-          docs_args_emit "$da_prefix"
+          printf '%s\n' "$DOCS_ALL" >> "$DOCS_SCRATCH/selected"
         elif [ "$da_s" = "*.md" ] && docs_key_valid "$da_r"; then
           if docs_select "$da_r"; then
             :
@@ -274,39 +264,18 @@ docs_args() {
             [ "$da_rc" -eq 1 ] && printf '%s: no such repo: %s\n' "$DOCS_VERB" "$da_r" >&2
             return "$da_rc"
           fi
-          docs_args_emit "$da_prefix"
+          printf '%s\n' "$DOCS_KEYS" >> "$DOCS_SCRATCH/selected"
         else
           da_slug=${da_s%.md}
           if [ "$da_slug" = "$da_s" ] || ! docs_key_valid "$da_r" || ! docs_key_valid "$da_slug"; then
             docs_not_a_doc "$da_a"
             return 1
           fi
-          # under the files driver the corpus is the docs folder itself: an existing file at
-          # this spelling outside it (a draft) is not the corpus doc, so it refuses rather than
-          # read the stored doc in its place; a path with no file behind it keeps the address rule
-          if [ "$DOCS_INPLACE" -eq 1 ] && [ -f "$da_a" ] \
-            && [ "$(CDPATH= cd -- "$da_rest" 2>/dev/null && pwd -P)" != "$(CDPATH= cd -- "$DOCS_ROOT/docs/$da_r" 2>/dev/null && pwd -P)" ]; then
-            printf '%s: not the corpus doc: %s (the corpus reads docs/<repo>/<slug>.md; check a draft with ctx docs write <repo> <slug> [--replace] --dry-run < <draft>)\n' "$DOCS_VERB" "$da_a" >&2
-            return 1
-          fi
-          if docs_select "$da_r"; then
-            :
-          else
-            da_rc=$?
-            [ "$da_rc" -eq 1 ] && printf '%s: no such doc: %s/%s\n' "$DOCS_VERB" "$da_r" "$da_slug" >&2
-            return "$da_rc"
-          fi
-          if ! printf '%s\n' "$DOCS_KEYS" | grep -qxF -- "$da_r/$da_slug"; then
+          if ! printf '%s\n' "$DOCS_ALL" | grep -qxF -- "$da_r/$da_slug"; then
             printf '%s: no such doc: %s/%s\n' "$DOCS_VERB" "$da_r" "$da_slug" >&2
             return 1
           fi
-          if [ "$DOCS_INPLACE" -eq 1 ] && [ -f "$da_a" ] \
-            && [ "$(CDPATH= cd -- "$da_rest" 2>/dev/null && pwd -P)" = "$(CDPATH= cd -- "$DOCS_ROOT/docs/$da_r" 2>/dev/null && pwd -P)" ]; then
-            printf '%s\n' "$da_a" >> "$DOCS_PATHS"
-          else
-            printf '%s/docs/%s/%s.md\n' "$DOCS_MOUNT" "$da_r" "$da_slug" >> "$DOCS_PATHS"
-            printf '%s/docs/%s/%s.md\t%s\n' "$DOCS_MOUNT" "$da_r" "$da_slug" "$da_a" >> "$DOCS_MAP"
-          fi
+          printf '%s\n' "$da_r/$da_slug" >> "$DOCS_SCRATCH/selected"
         fi
         ;;
       *)
@@ -318,20 +287,22 @@ docs_args() {
           [ "$da_rc" -eq 1 ] && printf '%s: no such repo: %s\n' "$DOCS_VERB" "$da_a" >&2
           return "$da_rc"
         fi
-        docs_args_emit ""
+        printf '%s\n' "$DOCS_KEYS" >> "$DOCS_SCRATCH/selected"
         ;;
     esac
   done
-  if [ ! -s "$DOCS_PATHS" ]; then
+  DOCS_KEYS=$(awk 'NF' "$DOCS_SCRATCH/selected")
+  if [ -z "$DOCS_KEYS" ]; then
     printf '%s: the corpus is empty\n' "$DOCS_VERB" >&2
     return 1
   fi
+  docs_materialize || return $?
+  docs_args_emit
   return 0
 }
 
-# docs_args_emit <display prefix>: DOCS_KEYS appended to DOCS_PATHS; inside the mount
-# (DOCS_CD=1) as relative canonical addresses, else as mount paths displayed as
-# <prefix>docs/<key>.md (a pair only when the mount path differs from the display)
+# docs_args_emit: DOCS_KEYS appended to DOCS_PATHS, relative logical addresses inside the
+# materialized scratch (DOCS_CD=1) or absolute scratch paths for a verb that keeps its cwd
 docs_args_emit() {
   printf '%s\n' "$DOCS_KEYS" | while IFS= read -r de_k; do
     [ -n "$de_k" ] || continue
@@ -339,9 +310,6 @@ docs_args_emit() {
       printf 'docs/%s.md\n' "$de_k" >> "$DOCS_PATHS"
     else
       printf '%s/docs/%s.md\n' "$DOCS_MOUNT" "$de_k" >> "$DOCS_PATHS"
-      if [ "$DOCS_MOUNT/docs/$de_k.md" != "$1docs/$de_k.md" ]; then
-        printf '%s/docs/%s.md\t%sdocs/%s.md\n' "$DOCS_MOUNT" "$de_k" "$1" "$de_k" >> "$DOCS_MAP"
-      fi
     fi
   done
   return 0
@@ -356,9 +324,8 @@ docs_file_form() {
   return 1
 }
 
-# docs_no_display: the verb prints no doc path (the nudge), so no display pair is due
+# docs_no_display: the verb prints no doc path (the nudge), so no display work is due
 docs_no_display() {
-  [ -n "$DOCS_MAP" ] && : > "$DOCS_MAP"
   return 0
 }
 
@@ -409,13 +376,13 @@ docs_active_task() {
   fi
 }
 
-# docs_delta_source: DOCS_DELTA is log when the configured driver keeps a corpus change log
-# (corpus.changelog: the corpus half of a delta comes from the store), git otherwise (the
+# docs_delta_source: DOCS_DELTA is log when the configured driver keeps a store change log
+# (store.changelog: the corpus half of a delta comes from the store), git otherwise (the
 # files driver: the corpus rides the git delta as the code does); the check engine takes it
 # as its bounded delta_source token
 docs_delta_source() {
   DOCS_DELTA=git
-  if [ -n "$DOCS_RESOLVER" ] && docs_call has corpus.changelog; then
+  if [ -n "$DOCS_RESOLVER" ] && docs_call has store.changelog; then
     DOCS_DELTA=log
   fi
   return 0
@@ -428,6 +395,39 @@ docs_head() {
   printf '%s\n' "$dh_h"
 }
 
+# docs_store_changes_rows: the store.changes answer flattened into its six status fields,
+# <seq> TAB <at> TAB <op> TAB <key> TAB <head> TAB <prior>, oldest first
+docs_store_changes_rows() {
+  if [ -z "$DOCS_JSON" ]; then
+    printf '%s: the storage answer decoder is missing (need: the session module lib/json.awk) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    return 2
+  fi
+  if ! awk -f "$DOCS_JSON" < "$1" > "$2.flat" 2> "$2.err"; then
+    cat "$2.err" >&2
+    return 2
+  fi
+  awk '
+    {
+      p = $0
+      if ((eq = index(p, "=")) > 0) { v = substr(p, eq + 1); p = substr(p, 1, eq - 1) }
+      else if ((cl = index(p, ":")) > 0) { v = substr(p, cl + 1); p = substr(p, 1, cl - 1) }
+      else next
+      if (p !~ /^changes\.[0-9]+\./) next
+      rest = substr(p, 9)
+      dot = index(rest, ".")
+      if (dot < 2) next
+      n = substr(rest, 1, dot - 1) + 0
+      f = substr(rest, dot + 1)
+      row[n, f] = v
+      if (n > max) max = n
+    }
+    END {
+      for (i = 1; i <= max; i++)
+        printf "%s\t%s\t%s\t%s\t%s\t%s\n", row[i, "seq"], row[i, "at"], row[i, "op"], row[i, "key"], row[i, "head"], row[i, "prior"]
+    }' "$2.flat" > "$2"
+  return 0
+}
+
 # docs_changes [--since=<rev>]: the corpus half of a delta from the store's change log, one
 # status-prefixed line per doc, <status> TAB docs/<repo>/<slug>.md, bytewise by path. The
 # window is the rows stamped with the current HEAD; --since=<rev> widens it to the heads git
@@ -435,7 +435,7 @@ docs_head() {
 # and HEAD. Net status per doc, as git would report the same history: A when the doc was
 # absent before its first row in the window and exists now, M when it was present and
 # exists now, D when it was present and is gone now, no line when it was absent and is gone.
-# rc 1 on a driver without corpus.changelog (the files driver takes the corpus delta from
+# rc 1 on a driver without store.changelog (the files driver takes the corpus delta from
 # git), an unknown revision, or --since outside a repository; rc 2 a driver failure
 docs_changes() {
   dx_since=""
@@ -446,8 +446,8 @@ docs_changes() {
     esac
   done
   docs_require || return 2
-  if ! docs_call has corpus.changelog; then
-    printf '%s: the configured storage driver keeps no corpus change log (corpus.changelog); under the files driver the corpus delta comes from git\n' "$DOCS_VERB" >&2
+  if ! docs_call has store.changelog; then
+    printf '%s: the configured storage driver keeps no store change log (store.changelog); under the files driver the corpus delta comes from git\n' "$DOCS_VERB" >&2
     return 1
   fi
   docs_scratch || return 2
@@ -465,9 +465,10 @@ docs_changes() {
     printf 'head=%s\n' "$dx_rev" >> "$DOCS_SCRATCH/heads"
     git -C "$DOCS_ROOT" rev-list --boundary "$dx_rev..HEAD" 2>/dev/null | sed -e 's/^-//' -e 's/^/head=/' >> "$DOCS_SCRATCH/heads"
   fi
-  if ! (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" corpus.changes < "$DOCS_SCRATCH/heads") > "$DOCS_SCRATCH/rows"; then
+  if ! (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" store.changes docs < "$DOCS_SCRATCH/heads") > "$DOCS_SCRATCH/rows.json"; then
     return 2
   fi
+  docs_store_changes_rows "$DOCS_SCRATCH/rows.json" "$DOCS_SCRATCH/rows" || return $?
   docs_keys || return $?
   printf '%s\n' "$DOCS_KEYS" > "$DOCS_SCRATCH/now"
   DOCS_NOW_FILE="$DOCS_SCRATCH/now" awk -F '\t' '
@@ -513,78 +514,45 @@ docs_code_half() {
     { print }'
 }
 
-# docs_map: stdin to stdout with every display pair of DOCS_MAP applied (exact substrings,
-# the pair file named through the environment)
-docs_map() {
-  DOCS_MAP_FILE=$DOCS_MAP awk '
-    BEGIN {
-      f = ENVIRON["DOCS_MAP_FILE"]
-      n = 0
-      while ((getline l < f) > 0) {
-        t = index(l, "\t")
-        if (t > 1) { n++; from[n] = substr(l, 1, t - 1); to[n] = substr(l, t + 1) }
-      }
-      close(f)
-    }
-    function repl(s, a, b,    out, p) {
-      out = ""
-      while ((p = index(s, a)) > 0) {
-        out = out substr(s, 1, p - 1) b
-        s = substr(s, p + length(a))
-      }
-      return out s
-    }
-    { s = $0; for (i = 1; i <= n; i++) s = repl(s, from[i], to[i]); print s }'
+# docs_git_env: an engine that runs inside the scratch still probes the workspace's git
+# repository (the check's trackedness test) by its root, never by a scratch path
+docs_git_env() {
+  DOCS_GIT_ROOT="$DOCS_ROOT"
+  export DOCS_GIT_ROOT
+  return 0
 }
 
-# docs_run <command>...: the command with the display rule applied: straight through when
-# no pair is due, else stdout and stderr each mapped; its stdin is the verb's; returns its rc
-docs_run() {
-  if [ -z "$DOCS_MAP" ] || [ ! -s "$DOCS_MAP" ]; then
-    "$@"
-    return $?
-  fi
-  : > "$DOCS_SCRATCH/rc"
-  # the rc is taken inside an if, so a caller under set -e (the gate) still records it
-  { { if "$@" 2>&1 1>&3 3>&-; then dr_x=0; else dr_x=$?; fi; printf '%s\n' "$dr_x" > "$DOCS_SCRATCH/rc"; } | docs_map >&2 3>&-; } 3>&1 | docs_map
-  dr_rc=$(cat "$DOCS_SCRATCH/rc" 2>/dev/null)
-  return "${dr_rc:-2}"
+# docs_engine_run <command>...: the engine in the materialized corpus scratch, so every
+# path it prints is the relative logical address docs/<repo>/<slug>.md
+docs_engine_run() {
+  ( docs_git_env; cd "$DOCS_MOUNT" || exit 2; "$@" )
 }
 
-# docs_exec <command>...: the command over DOCS_PATHS (appended) as the verb's last act. In
-# place with nothing to map it execs as the verbs always did (inside the mount for the repo
-# and bare forms); otherwise, or when the verb keeps scratch input for the command
-# (DOCS_KEEP=1), it runs mapped and the scratch goes on exit.
+# docs_exec <command>...: the command over DOCS_PATHS (appended) as the verb's last act;
+# inside the materialized scratch for relative logical addresses, or from the verb's cwd
+# for a caller that keeps it (the nudge). The scratch goes on exit.
 docs_exec() {
   while IFS= read -r de_p; do
     set -- "$@" "$de_p"
   done < "$DOCS_PATHS"
-  if [ "$DOCS_INPLACE" -eq 1 ] && [ ! -s "$DOCS_MAP" ] && [ "${DOCS_KEEP:-0}" -eq 0 ]; then
-    de_dir=""
-    [ "$DOCS_CD" -eq 1 ] && de_dir=$DOCS_MOUNT
-    docs_release
-    if [ -n "$de_dir" ]; then
-      cd "$de_dir" || exit 2
-    fi
-    exec "$@"
-  fi
   if [ "$DOCS_CD" -eq 1 ]; then
-    cd "$DOCS_MOUNT" || exit 2
+    ( docs_git_env; cd "$DOCS_MOUNT" || exit 2; "$@" )
+    exit $?
   fi
-  docs_run "$@"
+  "$@"
   exit $?
 }
 
 # ---------------------------------------------------------------------------------------
 # The write side (ctx docs new, write, header, rule, pitfall, entry, section, replace,
 # remove, ids, and query --entry). Every write runs one pipeline: the arguments parsed and
-# refused early (an unknown flag); the doc read through corpus.read; one structural edit by
+# refused early (an unknown flag); the doc read through store.get; one structural edit by
 # docs-edit.awk against the grammar's #% schema (the template beside the module), which
 # refuses what the schema refuses (an unknown field, an enum value outside its set, a
 # missing required field, a duplicate key or id, a missing address, a newline in a one-line
 # field, a carriage return); the result audited by docs-audit.awk over its whole repo (the
 # stored docs with the edited ones in place, run from a scratch copy so errors name
-# docs/<repo>/<slug>.md); then corpus.write with --op=<verb> and --head=<the workspace git
+# docs/<repo>/<slug>.md); then store.put with --op=<verb> and --head=<the workspace git
 # HEAD>. A refusal at any step writes nothing. --dry-run stops before the store and prints
 # the changed lines.
 
@@ -745,9 +713,10 @@ docs_noeol() {
   [ "$(tail -c 1 "$1" | wc -l | tr -d ' ')" -eq 0 ]
 }
 
-# docs_read_doc <repo> <slug> <file>: the stored doc into <file>; rc 1 names an absent doc
+# docs_read_doc <repo> <slug> <file>: the stored doc into <file> through store.get; rc 1
+# names an absent doc
 docs_read_doc() {
-  if docs_call corpus.read "$1" "$2" > "$3" 2> "$DOCS_SCRATCH/read.err"; then
+  if docs_call store.get docs "$1/$2" > "$3" 2> "$DOCS_SCRATCH/read.err"; then
     return 0
   else
     dr_rc=$?
@@ -762,7 +731,7 @@ docs_read_doc() {
 
 # docs_exists <repo> <slug>: rc 0 when the corpus holds the doc, 1 when not, 2 on a failure
 docs_exists() {
-  if docs_call corpus.read "$1" "$2" > /dev/null 2> "$DOCS_SCRATCH/exists.err"; then
+  if docs_call store.get docs "$1/$2" > /dev/null 2> "$DOCS_SCRATCH/exists.err"; then
     return 0
   else
     de_rc=$?
@@ -803,13 +772,13 @@ docs_engine() {
 }
 
 # docs_grammar_put <repo> <slug> <file>: the grammar check's scratch copy of the corpus
-# (made once per verb from one mount), with <file> in the doc's place (an empty <file>
-# name removes it)
+# (made once per verb from one store.list and store.get pass), with <file> in the doc's
+# place (an empty <file> name removes it)
 docs_grammar_put() {
   if [ -z "$DOCS_GRAMMAR" ]; then
-    docs_mount || return $?
     docs_keys || return $?
     DOCS_ALL=$DOCS_KEYS
+    docs_materialize || return $?
     DOCS_GRAMMAR="$DOCS_SCRATCH/grammar"
     mkdir -p "$DOCS_GRAMMAR/docs" || return 2
     gp_list=$(printf '%s\n' "$DOCS_ALL")
@@ -840,11 +809,11 @@ docs_grammar_check() {
   return 1
 }
 
-# docs_store <repo> <slug> <op> <file> [--create]: corpus.write stamped with the op and the
-# workspace HEAD; the driver's message passes on a failure
+# docs_store <repo> <slug> <op> <file>: store.put stamped with the op and the workspace
+# HEAD; the driver's message passes on a failure
 docs_store() {
   ds_head=$(docs_head)
-  if (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" corpus.write "$1" "$2" ${5:+"$5"} "--op=$3" "--head=$ds_head" < "$4") > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+  if (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" store.put docs "$1/$2" "--op=$3" "--head=$ds_head" < "$4") > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     return 0
   else
     dst_rc=$?
@@ -877,7 +846,6 @@ docs_edit() {
   docs_template || return 2
   dd_old="$DOCS_SCRATCH/old"
   dd_new="$DOCS_SCRATCH/new"
-  dd_create=""
   : > "$dd_old"
   case "$dd_op" in
     new)
@@ -888,7 +856,6 @@ docs_edit() {
         dd_rc=$?
         [ "$dd_rc" -eq 1 ] || return "$dd_rc"
       fi
-      dd_create=--create
       ;;
     write)
       if docs_exists "$dd_repo" "$dd_slug"; then
@@ -910,7 +877,6 @@ docs_edit() {
           printf '%s: no such doc: %s/%s; --replace rewrites an existing doc (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$dd_repo" "$dd_slug" >&2
           return 1
         fi
-        dd_create=--create
       fi
       dd_old=$DOCS_PAYLOAD
       DOCS_PAYLOAD=""
@@ -932,7 +898,7 @@ docs_edit() {
     return 0
   fi
   # the change-log op is the verb's own (pitfall runs the engine's entry op)
-  docs_store "$dd_repo" "$dd_slug" "${DOCS_STORE_OP:-$dd_op}" "$dd_new" $dd_create || return $?
+  docs_store "$dd_repo" "$dd_slug" "${DOCS_STORE_OP:-$dd_op}" "$dd_new" || return $?
   docs_say "$dd_repo" "$dd_slug" "$dd_new.note"
   return 0
 }
@@ -954,7 +920,7 @@ docs_show() {
   cat "$DOCS_SCRATCH/new"
 }
 
-# docs_remove_doc <repo> <slug>: corpus.remove with op remove, stamped with the HEAD
+# docs_remove_doc <repo> <slug>: store.delete with op remove, stamped with the HEAD
 docs_remove_doc() {
   docs_keys_ok "$1" "$2" || return 1
   docs_require || return 2
@@ -965,7 +931,7 @@ docs_remove_doc() {
     return "$dx_rc"
   }
   dx_head=$(docs_head)
-  if (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" corpus.remove "$1" "$2" --op=remove "--head=$dx_head" < /dev/null) > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+  if (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" store.delete docs "$1/$2" --op=remove "--head=$dx_head" < /dev/null) > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     printf 'docs remove: %s/%s removed\n' "$1" "$2"
     return 0
   else

@@ -650,7 +650,6 @@ function op_write(    i, w, r, lastline) {
     }
     if (r != REPO) refuse("the header names repo '" r "', the address names '" REPO "' (ERR_SCHEMA_VIOLATION)")
     NOTE = "written (" n " lines)"
-    if (lastline > 12) NOTE = NOTE "; warning: a header field sits at line " lastline ", past the line-12 window the nudge reads"
 }
 
 function op_header(    t) {

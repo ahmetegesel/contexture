@@ -76,8 +76,7 @@ resolver, which resolves the configured driver (`CTX_STORAGE_DRIVER`, then
 `.contexture/config`, then posix), runs the contract 2 handshake at dispatch
 for every driver but the bundled posix one (the verdict cached under
 `.contexture/tmp/driver-verdicts/`), and answers `require` and `has` for the
-optional capabilities (`corpus.store`, `corpus.changelog`, `store`,
-`store.changelog`) and the search modes.
+optional capabilities (`store`, `store.changelog`) and the search modes.
 
 ## Hooks (implicit points)
 

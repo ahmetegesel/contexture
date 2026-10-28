@@ -360,7 +360,7 @@ handshake_at_dispatch() {
   return 0
 }
 
-# The optional capabilities (corpus.store, corpus.changelog) and the search modes stay
+# The optional capabilities (store, store.changelog) and the search modes stay
 # outside the dispatch handshake, so a record-only driver keeps serving every session verb;
 # a caller that needs one asks the resolver first (a search mode reads search.mode.<m>):
 #   require <capability>...  rc 0 when the configured driver declares every one; rc 2

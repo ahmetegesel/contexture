@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # store-cases.sh <sandbox>: the delta-source cases, run by tests/run.sh inside its staged sandbox
-# on the configured driver; every branch keys on the declared corpus.changelog, never on the
+# on the configured driver; every branch keys on the declared store.changelog, never on the
 # driver's name.
 #
 # check: the check's two modes over planted deltas on the sample corpus. With a change log
@@ -29,7 +29,7 @@ R="$SB/.contexture/modules/session/scripts/driver-resolver"
 PASS=0
 FAIL=0
 LOG=0
-"$R" has corpus.changelog && LOG=1
+"$R" has store.changelog && LOG=1
 O="$SB/store-cases.scratch"
 rm -rf "$O"
 mkdir -p "$O" || exit 1
