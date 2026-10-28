@@ -285,6 +285,34 @@ store_twin() {
     { t = ENVIRON["ST_TARGET"]; if ($0 != t && tolower($0) == tolower(t)) { print; exit } }'
 }
 
+# store_fold_twin <key> <path>: a stored key whose file the path resolves to while the exact
+# key is absent. A case-insensitive filesystem can fold more than ASCII (a Unicode case
+# variant), so a put that wrote without this check would replace the stored key and lose the
+# requested one; the exact key must always be the key the store lists.
+store_fold_twin() {
+  sft_key=$1
+  sft_path=$2
+  store_key_exists "$sft_key" && return 0
+  [ -e "$sft_path" ] || return 0
+  sft_ino=$(ls -di "$sft_path" 2>/dev/null | awk '{print $1}')
+  [ -n "$sft_ino" ] || return 0
+  store_list_keys | while IFS= read -r sft_k; do
+    [ "$sft_k" = "$sft_key" ] && continue
+    sft_p=$(store_path "$sft_k")
+    sft_kino=$(ls -di "$sft_p" 2>/dev/null | awk '{print $1}')
+    if [ -n "$sft_kino" ] && [ "$sft_kino" = "$sft_ino" ]; then
+      printf '%s\n' "$sft_k"
+      break
+    fi
+  done
+}
+
+# store_fold_refusal <namespace> <key> <stored key>: the fixed line for a key the filesystem
+# cannot hold exactly beside <stored key>
+store_fold_refusal() {
+  refuse 1 ERR_ENTITY_EXISTS "key '$2' cannot be represented exactly beside '$3' under the filesystem's case folding; the two keys never coexist in namespace '$1'"
+}
+
 # store_flags <function> <default op> [flags]: --op=<op> and --head=<sha|none>, bounded
 store_flags() {
   sf_fn=$1; SF_OP=$2
@@ -357,6 +385,11 @@ store_put() {
     refuse 1 ERR_ENTITY_EXISTS "key '$sp_key' folds onto '$sp_twin' under ASCII case; keys differing only by case never coexist in namespace '$sp_ns'"
   fi
   sp_path=$(store_path "$sp_key")
+  sp_fold=$(store_fold_twin "$sp_key" "$sp_path")
+  if [ -n "$sp_fold" ]; then
+    store_unlock
+    store_fold_refusal "$sp_ns" "$sp_key" "$sp_fold"
+  fi
   mkdir -p "$(dirname "$sp_path")" 2>/dev/null || {
     store_unlock
     refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
@@ -373,6 +406,14 @@ store_put() {
     refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
   fi
   STORE_TMP=""
+  # the write must list the key it echoes; a folded directory or file name is refused and
+  # the just-written file removed, so a successful put never loses its key
+  sp_fold=$(store_fold_twin "$sp_key" "$sp_path")
+  if [ -n "$sp_fold" ]; then
+    rm -f "$sp_path"
+    store_unlock
+    store_fold_refusal "$sp_ns" "$sp_key" "$sp_fold"
+  fi
   store_unlock
   printf '{"namespace":"%s","key":"%s","op":"%s"}\n' "$(escape_json "$sp_ns")" "$(escape_json "$sp_key")" "$(escape_json "$SF_OP")"
 }

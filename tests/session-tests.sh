@@ -2128,7 +2128,7 @@ for fc_s in "$TODAY-fc-01" "$TODAY-fc-03" "$TODAY-fc-04" "$TODAY-fc-05" "$TODAY-
 done
 a_match "$board" "@entry $TODAY-fc-02" "FC8: the carried open thread stays live"
 a_match "$board" "THREAD: the human's answer" "FC8: the carried thread keeps its obligation"
-a_not "$board" "@entry $fc_fs" "FC8: the fold start leaves the board"
+a_not "$board" "@entry $fc_fs\$" "FC8: the fold start leaves the board"
 a_not "$board" "CHAPTER FOLD" "FC8: no digest entry exists"
 audit=$($CTX session audit fc-unit 2>&1); a_eq "$?" "0" "FC8: the folded unit audits clean"
 a_match "$audit" "OPEN THREADS (awaiting resolution):" "FC8: the audit tail remains after the finish"

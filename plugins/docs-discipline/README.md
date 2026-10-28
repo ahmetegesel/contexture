@@ -66,6 +66,14 @@ What lands where:
 | `tests/grammar-agreement.awk` | the grammar agreement check the suite runs: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
 | `README.md` | this onboarding document | reference |
 
+The write verbs' edit engine is portable across BWK awk, mawk, gawk, and busybox awk: a splice
+point with no text already emits no separating blank line (mawk keeps a split leading empty
+field where BWK drops it), so a header, rule, entry, section, or ids write stores the same
+bytes on every awk; the suite's write cases hold under each in the container matrix. The
+audit's block scalar body is the opening field's indent plus two, so a sibling field or an id
+line after a block scalar is still audited under every awk; a blanket four-space body test
+would swallow it after a nested block scalar.
+
 ## Common shapes (reference rows)
 
 The verbs are the same everywhere; the layout and the docs mapping

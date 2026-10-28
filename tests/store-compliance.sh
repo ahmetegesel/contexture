@@ -328,12 +328,48 @@ store_delete docs workspace/Alpha
 answer
 wantout '{"namespace":"docs","key":"workspace/Alpha","op":"remove"}'
 tc "S4e: the exact key deletes after the twin refusal"
+# the filesystem may fold more than ASCII: a key the posix root cannot hold exactly beside a
+# stored key refuses instead of silently replacing it; an exact-key store holds both
+printf 'Sigma\n' > "$SB/pay-sigma"
+printf 'sigma\n' > "$SB/pay-sigma2"
+mkdir -p "$SB/foldprobe"
+: > "$SB/foldprobe/Σ"
+if [ -e "$SB/foldprobe/σ" ]; then FOLDS=1; else FOLDS=0; fi
+rm -rf "$SB/foldprobe"
+store_put docs workspace/Σ "$SB/pay-sigma"
+answer
+store_put docs workspace/σ "$SB/pay-sigma2"
+if [ "$IS_POSIX" -eq 1 ] && [ "$FOLDS" -eq 1 ]; then
+  refused 1 ERR_ENTITY_EXISTS "key 'workspace/σ' cannot be represented exactly beside 'workspace/Σ' under the filesystem's case folding; the two keys never coexist in namespace 'docs'"
+  store_get docs workspace/Σ
+  rawok
+  wantfile "$SB/pay-sigma"
+  store_get docs workspace/σ
+  refused 1 ERR_ENTITY_NOT_FOUND "key 'workspace/σ' not found in namespace 'docs'"
+  store_delete docs workspace/Σ
+  answer
+else
+  answer
+  store_get docs workspace/Σ
+  rawok
+  wantfile "$SB/pay-sigma"
+  store_get docs workspace/σ
+  rawok
+  wantfile "$SB/pay-sigma2"
+  store_delete docs workspace/Σ
+  answer
+  store_delete docs workspace/σ
+  answer
+fi
+tc "S4f: a key the filesystem folds refuses without losing the stored key; an exact-key store holds both"
 
 # ==============================================================================
 # S5: the flags, the namespace, and the change-log refusal
 # ==============================================================================
 printf '\n== S5: flags, namespaces, changes ==\n'
 store_put docs workspace/x "$SB/pay-x" --bogus
+refused 1 ERR_INVALID_ARGUMENT "unknown argument '--bogus'"
+store_put docs workspace "$SB/pay-x" --bogus
 refused 1 ERR_INVALID_ARGUMENT "unknown argument '--bogus'"
 store_put docs workspace/x "$SB/pay-x" '--op=bad/op'
 refused 1 ERR_INVALID_ARGUMENT "malformed op 'bad/op'"

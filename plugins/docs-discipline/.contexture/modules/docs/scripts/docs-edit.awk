@@ -514,7 +514,9 @@ function unit_name() {
 # after line i (BEFORE[n + 1] appends); a doc is rebuilt only from them
 function splice(s, e, t, has,    j) {
     for (j = s; j <= e; j++) DEL[j] = 1
-    if (has) BEFORE[s] = ((s in BEFORE) ? BEFORE[s] "\n" : "") t
+    # an empty text already at the point adds no separating newline (mawk keeps a split
+    # leading empty field where BWK drops it, so the empty point must not become a blank line)
+    if (has) BEFORE[s] = (((s in BEFORE) && BEFORE[s] != "") ? BEFORE[s] "\n" : "") t
 }
 
 function emit_text(t,    m, parts, i) {
@@ -931,7 +933,7 @@ function op_ids(    b, k, bn, j, id, cnt, head, line, parts) {
             # the id rides the line after the entry's first field (its whole extent)
             j = split(UL[1], parts, "\n")
             line = EST[k] + j - 1
-            AFT[line] = ((line in AFT) ? AFT[line] "\n" : "") "    id: " id
+            AFT[line] = (((line in AFT) && AFT[line] != "") ? AFT[line] "\n" : "") "    id: " id
             cnt++
             head = substr(L[EST[k]], 5)
             LISTING = LISTING (LISTING == "" ? "" : "\n") REPO "/" SLUG " " bn " #" k " " id " " substr(head, 1, 60)

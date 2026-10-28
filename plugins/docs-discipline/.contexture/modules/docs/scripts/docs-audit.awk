@@ -67,6 +67,7 @@ FNR == 1 {
     }
     prev_file = FILENAME
     in_block_scalar = 0
+    block_indent = 0
     current_block = ""
     has_doc = 0
     has_repo = 0
@@ -147,9 +148,11 @@ FNR == 1 {
     next
 }
 
-# Block scalar handling
+# Block scalar handling: the body sits at the opening field's indent plus two; a line
+# indented less ends the scalar, so a sibling field or an id line at the opening field's
+# indent is audited (a blanket four-space test swallowed such a line after a block scalar)
 in_block_scalar {
-    if (/^[ ]{4,}/) {
+    if (match($0, /^[ ]*/) && RLENGTH >= block_indent) {
         next
     } else {
         in_block_scalar = 0
@@ -165,6 +168,7 @@ in_block_scalar {
 # Track block scalar opening
 /::[ ]*$/ {
     in_block_scalar = 1
+    block_indent = match($0, /^[ ]*/) ? RLENGTH + 2 : 2
 }
 
 # Key-value checks
