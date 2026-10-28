@@ -996,7 +996,7 @@ kv query objective
 call search.query "$TUNIT" --mode=exact --limit=1
 answer; wantkeys @ "unit,query,mode,total_matches,results"; wantv mode '"exact"'; wantv total_matches 4; wantv results '[1]'
 wantkeys results.1 "entity_type,entity_id,section,snippet,score"
-wantv results.1.entity_type '"session"'; wantv results.1.snippet '"objective: \"Task verification session"'; wantv results.1.score 0
+wantv results.1.entity_type '"session"'; wantv results.1.snippet '"objective: \"Task verification session\""'; wantv results.1.score 0
 kv query objective
 call search.query "$TUNIT" --mode=exact --entity=task --limit=50
 answer; wantv total_matches 3; wantvals results entity_id '"task-keeper" "task-sample" "task-refs"'; wantvals results snippet '"Keeper objective" "Re-declared objective" "Refs task"'

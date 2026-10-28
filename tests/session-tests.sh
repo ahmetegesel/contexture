@@ -208,6 +208,13 @@ a_eq "$($CTX session help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [
 a_eq "$($CTX lane help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "4" "lane help lists the 4 verbs (create added)"
 out=$($CTX session index)
 a_match "$out" "probe (.*probe.md) | use when: the suite needs an index line | activation: propose" "index renders the rhythm line"
+# BG1: an absent rhythms directory answers an empty index rc0 (the base payload ships no
+# rhythms, so a bare base-only install completes boot step 6)
+mv .contexture/rhythms .contexture/rhythms.bg1
+out=$($CTX session index 2>&1); rc=$?
+a_eq "$rc" "0" "BG1: the absent rhythms directory answers rc0"
+a_eq "$out" "" "BG1: the absent rhythms directory answers an empty index, no stderr"
+mv .contexture/rhythms.bg1 .contexture/rhythms
 out=$($CTX session active)
 a_match "$out" "no sessions yet" "active on an empty drawer rc0"
 
@@ -1119,6 +1126,14 @@ a_not "$out" '"total_matches":0' "R1: search finds a literal backslash sequence"
 out=$($CTX session search y-unit 'Kept task' --mode=exact --json 2>&1)
 a_match "$out" '"snippet":"[^"]*Kept task' "R9: the exact search finds the task"
 a_not "$out" '\\n"}' "R9: an exact search snippet ends without a trailing newline"
+# BG2: a snippet strips a value's double quotes only as a pair, so a lowercase field line
+# keeps its closing quote (the state's next_action is the pre-fix case)
+$CTX session bootstrap bg2-unit "the quote pair unit" >/dev/null 2>&1
+$CTX session next bg2-unit 'task#probe-task' >/dev/null 2>&1
+a_eq "$?" "0" "BG2: next with a paired state line rc0"
+out=$($CTX session search bg2-unit 'task#probe-task' --mode=exact --json 2>&1)
+a_match "$out" '"snippet":"next_action: \\"task#probe-task\\""' "BG2: the snippet keeps the quote pair on a lowercase field line"
+a_not "$out" 'task#probe-task","score"' "BG2: the snippet no longer ends at the stripped trailing quote"
 # R2: the dialect is LF: a carriage return in a typed field refuses rc1 before any write,
 # so no verb poisons the record for the grammar verbs that refuse CR on read
 y_cr=$(printf 'carriage\rreturn')

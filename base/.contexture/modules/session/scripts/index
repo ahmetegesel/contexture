@@ -2,7 +2,8 @@
 # summary: the rhythm index from .contexture/rhythms/ as name (path) | use when | activation
 # usage: ctx session index
 # help: no arguments: reads .contexture/rhythms/*.md; an argument refuses rc=1
-# help: exit codes: 0 rhythm index printed; 1 unexpected argument passed
+# help: an absent rhythms directory answers an empty index rc=0 (the base payload ships no rhythms; a workspace may carry none)
+# help: exit codes: 0 rhythm index printed (empty when the directory is absent); 1 unexpected argument passed
 # help: example: ctx session index
 
 function usage() {
@@ -38,10 +39,8 @@ function process(path,   line) {
 
 BEGIN {
   if (ARGC > 1) usage()
-  if (system("test -d .contexture/rhythms") != 0) {
-    print "ERROR: missing rhythms directory: .contexture/rhythms" > "/dev/stderr"
-    exit 1
-  }
+  # an absent rhythms directory is an empty index, never an error: the base payload ships
+  # no rhythms, and a workspace may carry none (BG1, the base-only audit)
   cmd = "ls .contexture/rhythms/*.md 2>/dev/null"
   while ((cmd | getline fname) > 0) {
     process(fname)

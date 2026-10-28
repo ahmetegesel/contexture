@@ -30,15 +30,18 @@ FROM (
   WHERE s.mode = 'exact' AND l.unit = s.unit AND instr(lower(l.line), lower(s.q)) > 0 AND substr(l.line, 1, 1) <> '#'
     AND (s.entity = 'all' OR l.entity_type = s.entity)
 ) m WHERE m.rn = 1;
--- the snippet: trimmed, a leading label and colon with its spaces, then one leading quote with
--- its blanks and one trailing quote with its blanks
+-- the snippet: trimmed, a leading label and colon with its spaces, then the double quotes
+-- only as a pair (a line that does not open and close with the one quote pair keeps them,
+-- so a lowercase field line never loses its closing quote)
 CREATE TEMP TABLE sqs AS SELECT rk, entity_type, entity_id, section,
   trim(line, ' ' || char(9) || char(13) || char(10)) AS s0 FROM temp.sqx, temp.sqa WHERE rk <= temp.sqa.lim;
 ALTER TABLE temp.sqs ADD COLUMN s1 TEXT;
 UPDATE temp.sqs SET s1 = CASE WHEN instr(s0, ':') > 1 AND substr(s0, 1, instr(s0, ':') - 1) NOT GLOB '*[^A-Z_]*'
   THEN ltrim(substr(s0, instr(s0, ':') + 1), ' ') ELSE s0 END;
-UPDATE temp.sqs SET s1 = ltrim(substr(s1, 2), ' ' || char(9)) WHERE substr(s1, 1, 1) = '"';
-UPDATE temp.sqs SET s1 = rtrim(substr(s1, 1, length(s1) - 1), ' ' || char(9)) WHERE substr(s1, -1) = '"';
+UPDATE temp.sqs SET s1 = CASE WHEN substr(s1, 1, 1) = '"' AND substr(s1, -1) = '"'
+  THEN rtrim(substr(rtrim(ltrim(substr(s1, 2), ' ' || char(9))), 1,
+    length(rtrim(ltrim(substr(s1, 2), ' ' || char(9)))) - 1), ' ' || char(9))
+  ELSE s1 END;
 
 SELECT json_object('unit', s.unit, 'query', s.q, 'mode', s.mode, 'total_matches', (SELECT count(*) FROM temp.sqx),
   'results', json((SELECT json_group_array(json(json_object('entity_type', entity_type, 'entity_id', entity_id, 'section', section,

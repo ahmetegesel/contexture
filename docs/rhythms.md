@@ -44,7 +44,7 @@ One line per rhythm comes back, carrying what selection needs:
 work (.contexture/rhythms/work.md) | use when: a work request arrives and no other rhythm matches | activation: auto
 ```
 
-A rhythm with no `use when:` line prints `(missing)`; a rhythm with no `activation:` line defaults to `propose`, so proposal is the behavior unless the team opts into auto. The agent matches the trigger against the request, proposes or applies, and falls back to the default loop when nothing matches.
+A rhythm with no `use when:` line prints `(missing)`; a rhythm with no `activation:` line defaults to `propose`, so proposal is the behavior unless the team opts into auto. The agent matches the trigger against the request, proposes or applies, and falls back to the default loop when nothing matches. A workspace with no rhythms directory answers an empty index rc 0 (the base payload ships none), so a bare base-only install still boots.
 
 ## The invariant boundary
 

@@ -57,8 +57,13 @@ function s_line(t,   header, parts, ty, id, key, snippet) {
   snippet = trim(t)
   # a field line reads as its value
   sub(/^[A-Z_]+:[ ]*/, "", snippet)
-  sub(/^"[ \t]*/, "", snippet)
-  sub(/[ \t]*"$/, "", snippet)
+  # the value's double quotes strip only as a pair (BG2): a line that does not open and
+  # close with the one quote pair keeps them, so a lowercase field line (the state's
+  # next_action) never loses its closing quote
+  if (snippet ~ /^"/ && snippet ~ /"$/) {
+    sub(/^"[ \t]*/, "", snippet)
+    sub(/[ \t]*"$/, "", snippet)
+  }
   shown++
   res_type[shown] = cur_entity_type
   res_id[shown] = cur_entity_id

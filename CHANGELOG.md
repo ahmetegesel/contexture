@@ -30,6 +30,8 @@ MINOR: the generic module store decouples module data from the record; the docs 
 ### Fixed
 
 - The review fixes on 25caa9a: the posix store refuses a key its case-insensitive root cannot represent exactly beside a stored key (F1); the docs edit engine no longer stores a blank line after a splice point and the docs audit tracks a block scalar's body indent (F3 and F4, exposed under mawk); the fold test anchors its receipt check (F5).
+- The base-only fixes: `ctx session index` answers rc 0 with an empty index when `.contexture/rhythms/` is absent, so a bare base-only install completes its boot step (BG1); an exact-search snippet strips a field value's double quotes only as a pair, so a lowercase field line (the state's `next_action`) keeps its closing quote (BG2).
+- The base-only gate: `tests/base-only-tests.sh` stages `base/` alone and proves the shipped base with no plugin (the no-plugin help, the 43-function posix descriptor, the record, lane, and store smoke over a synthetic data module, the absent-rhythms index, the store refusals, the no-base-to-docs census with a plant, and the posix core suites); `tests/store-compliance.sh` gains `--data-file`, and `tests/run.sh` runs the gate.
 
 Commits in the range: b3ffa5a (the base module store), 5d48a5e (the fts5 store), cbe0dc5 (the docs corpus port), 25caa9a (the review fixes), and the release commit.
 

@@ -1,9 +1,9 @@
 #!/bin/sh
 # store-compliance.sh: the generic module store compliance suite (contract 2, the storage
 # module's store contract). It stages the shipped base (the session module and its posix
-# driver, the storage module and its data reader) and the docs module's data file, then
-# holds the configured store driver to the five functions over a sandbox corpus at
-# docs/workspace.
+# driver, the storage module and its data reader) and a module data file (the docs
+# plugin's by default, or the one --data-file names), then holds the configured store
+# driver to the five functions over a sandbox corpus at docs/workspace.
 #
 # The suite asserts returned data and bytes, never an exit code alone: the exact list
 # answer and order, the exact bytes of a document (a NUL and an invalid UTF-8 byte
@@ -15,11 +15,15 @@
 # the fts5 store keeps the generic log and its own suite (plugins/storage-fts5/tests/
 # test-store.sh) holds the rows, the refusal, and the transaction's atomicity.
 #
-# Usage: tests/store-compliance.sh [--driver=posix|fts5] [--driver-exec=<path>] [--keep]
+# Usage: tests/store-compliance.sh [--driver=posix|fts5] [--driver-exec=<path>] [--data-file=<path>] [--keep]
 #   --driver runs the store over that driver's module (default: posix). fts5 stages the
 #   plugin's own module copy and checks sqlite3; --driver-exec names the exact driver
 #   executable (a plugin suite passes its own copy), skipping the staged path for the
-#   calls while the resolver checks still answer from the staged copy.
+#   calls while the resolver checks still answer from the staged copy. --data-file names
+#   the module data file the suite stages (default: the docs plugin's); it must declare
+#   the suite's docs-shaped contract (namespace docs, root docs, suffix .md, key
+#   <repo>/<slug>, changes true), so the base-only gate runs the suite with a synthetic
+#   data file and no plugin.
 # Exit 0 when every case passes; 1 otherwise; 2 a staging or driver failure; 77 when
 # sqlite3 is absent for the fts5 driver.
 
@@ -31,7 +35,7 @@ CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
 FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
-DOCS_DATA="$ROOT/plugins/docs-discipline/.contexture/modules/docs/data"
+DATA_FILE="$ROOT/plugins/docs-discipline/.contexture/modules/docs/data"
 
 DRIVER_NAME=posix
 DRIVER_EXEC_ARG=""
@@ -40,6 +44,7 @@ for a in "$@"; do
   case "$a" in
     --driver=*) DRIVER_NAME="${a#--driver=}" ;;
     --driver-exec=*) DRIVER_EXEC_ARG="${a#--driver-exec=}" ;;
+    --data-file=*) DATA_FILE="${a#--data-file=}" ;;
     --keep) KEEP=1 ;;
     *) echo "store-compliance.sh: unknown argument: $a" >&2; exit 1 ;;
   esac
@@ -51,7 +56,7 @@ case "$DRIVER_NAME" in
   *) echo "store-compliance.sh: unknown driver: $DRIVER_NAME (posix or fts5)" >&2; exit 1 ;;
 esac
 
-for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_MOD/scripts/store-data" "$DOCS_DATA"; do
+for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_MOD/scripts/store-data" "$DATA_FILE"; do
   [ -e "$f" ] || { echo "store-compliance.sh: missing $f" >&2; exit 2; }
 done
 if [ "$IS_POSIX" -eq 0 ]; then
@@ -90,8 +95,9 @@ cp "$CTX_SRC" "$SB/.contexture/ctx"
 chmod +x "$SB/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SB/.contexture/modules/session"
 cp -R "$STORAGE_MOD" "$SB/.contexture/modules/storage"
+# the suite's cases are docs-shaped; --data-file supplies any file with that contract
 mkdir -p "$SB/.contexture/modules/docs"
-cp "$DOCS_DATA" "$SB/.contexture/modules/docs/data"
+cp "$DATA_FILE" "$SB/.contexture/modules/docs/data"
 if [ "$IS_POSIX" -eq 0 ]; then
   cp -R "$FTS5_MOD" "$SB/.contexture/modules/storage-fts5"
   printf 'storage.driver: fts5\n' > "$SB/.contexture/config"

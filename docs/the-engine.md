@@ -502,7 +502,7 @@ The audit is a repair instrument: fix what it flags and fill what is missing bef
 
 ### ctx session index: the selection index
 
-Returns one line per rhythm: the name, the path, its trigger, and its activation policy. It takes no arguments; it reads `.contexture/rhythms/`.
+Returns one line per rhythm: the name, the path, its trigger, and its activation policy. It takes no arguments; it reads `.contexture/rhythms/`. An absent rhythms directory answers an empty index rc 0: the base payload ships no rhythms, and a workspace may carry none, so a bare base-only install completes its boot step.
 
 ```bash
 .contexture/ctx session index
