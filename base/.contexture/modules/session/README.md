@@ -27,7 +27,7 @@ a static list in the engine: a call prints its replacement rc 1.
 ## Layout
 
 ```text
-scripts/          the 21 verbs (sh; index alone is awk) and the private driver-resolver
+scripts/          the 21 verbs (sh; index alone is awk) and the driver-resolver wrapper
 lib/verb.sh       the shared verb shell: input shape checks, the payload, one storage call, the scratch folder, hooks
 lib/json.awk      the one flattener: a function's JSON answer to path=value lines
 lib/render.awk    the one renderer: every text view from the flattened lines
@@ -37,9 +37,10 @@ drivers/posix/    the posix storage driver (contract 2): the only code that touc
 ## Verbs and the functions they call (contract 2, docs/the-engine.md)
 
 Every verb checks its input shape, calls exactly one storage function per
-record act through `scripts/driver-resolver`, and renders the answer through
-`lib/json.awk` and `lib/render.awk` (`--json` prints the answer unchanged).
-No verb opens a session artifact itself.
+record act through `scripts/driver-resolver` (the wrapper around the storage
+module's resolver), and renders the answer through `lib/json.awk` and
+`lib/render.awk` (`--json` prints the answer unchanged). No verb opens a
+session artifact itself.
 
 | script | functions |
 | --- | --- |
@@ -70,11 +71,13 @@ The lane verbs (`.contexture/modules/lane/scripts/`: `create`, `record`,
 `lane.record`, `lane.write_report`, and `lane.get`.
 
 `scripts/driver-resolver` carries no `# summary:` header, so discovery
-ignores it: it resolves the configured driver (`CTX_STORAGE_DRIVER`, then
+ignores it: it is a compatibility wrapper that execs the storage module's
+resolver, which resolves the configured driver (`CTX_STORAGE_DRIVER`, then
 `.contexture/config`, then posix), runs the contract 2 handshake at dispatch
 for every driver but the bundled posix one (the verdict cached under
 `.contexture/tmp/driver-verdicts/`), and answers `require` and `has` for the
-optional capabilities and the search modes.
+optional capabilities (`corpus.store`, `corpus.changelog`, `store`,
+`store.changelog`) and the search modes.
 
 ## Hooks (implicit points)
 

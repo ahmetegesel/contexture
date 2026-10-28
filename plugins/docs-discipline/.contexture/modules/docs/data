@@ -1,0 +1,6 @@
+# the docs module's store declaration: the corpus at docs/workspace, keyed by repo/slug
+namespace: docs
+root: docs
+suffix: .md
+key: <repo>/<slug>
+changes: true

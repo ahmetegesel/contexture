@@ -84,6 +84,7 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/templates" "$SANDB
 cp "$BASE_CTX" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$BASE_MODULES/session" "$SANDBOX/.contexture/modules/session"
+[ -d "$BASE_MODULES/storage" ] && cp -R "$BASE_MODULES/storage" "$SANDBOX/.contexture/modules/storage"
 [ -d "$BASE_MODULES/lane" ] && cp -R "$BASE_MODULES/lane" "$SANDBOX/.contexture/modules/lane"
 cp -R "$PLUGIN_ROOT/.contexture/modules/docs" "$SANDBOX/.contexture/modules/docs"
 cp "$PLUGIN_ROOT/.contexture/templates/doc.md" "$SANDBOX/.contexture/templates/doc.md"

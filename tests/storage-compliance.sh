@@ -1295,6 +1295,7 @@ printf '\n== Suite 13: The Resolver ==\n'
 RS="$SANDBOX/rs"
 mkdir -p "$RS/.contexture/modules"
 cp -R "$ROOT/base/.contexture/modules/session" "$RS/.contexture/modules/session"
+cp -R "$ROOT/base/.contexture/modules/storage" "$RS/.contexture/modules/storage"
 RSV="$RS/.contexture/modules/session/scripts/driver-resolver"
 FUNCS_JSON=$(printf '"%s",' $FUNCS38 | sed 's/,$//')
 FUNCS_NO_TASK_ADD=$(printf '"%s",' $FUNCS38 | sed 's/"task\.add",//; s/,$//')
@@ -1865,25 +1866,76 @@ done < "$FX/tc69-exact.answers"
 tc "TC69: the exact query set over legacy text answers its fixed results under --mode=exact"
 fi
 
-# TC70: the descriptor declares contract 2, every one of the 38 functions and nothing
-# retired (unit.export and unit.import among the retired), exact among the search modes,
-# and only known optional capabilities
+# TC70: the descriptor declares contract 2, every one of the 38 record functions, exact
+# among the search modes, and only the known function families and optional capabilities.
+# The transitional set (38 record + 6 corpus + 5 store) and the final set (38 + 5) are
+# both allowed; each family is all or none, and a capability token and its functions imply
+# each other. A driver without the store still serves the record. Planted descriptors prove
+# the checker discriminates (the final set passes, a store capability without its functions
+# fails, the store functions without their token fail).
+STORE5="store.list store.get store.put store.delete store.changes"
+t70_load() { printf '%s\n' "$1" > "$O"; awk -f "$JF" "$O" > "$F" 2>/dev/null; }
+t70_issues() {
+  _i=""
+  _fns=" $(vals functions | tr -d '"') "
+  _opt=" $(vals optional | tr -d '"') "
+  for _f in $FUNCS38; do
+    case "$_fns" in *" $_f "*) ;; *) _i="$_i; functions lacks $_f" ;; esac
+  done
+  for _f in $_fns; do
+    case " $FUNCS38 $CORPUS6 $STORE5 " in *" $_f "*) ;; *) _i="$_i; functions declares $_f, outside contract 2" ;; esac
+  done
+  _corpus=0
+  for _f in $CORPUS6; do case "$_fns" in *" $_f "*) _corpus=1 ;; esac; done
+  _store=0
+  for _f in $STORE5; do case "$_fns" in *" $_f "*) _store=1 ;; esac; done
+  if [ "$_corpus" -eq 1 ]; then
+    for _f in $CORPUS6; do
+      case "$_fns" in *" $_f "*) ;; *) _i="$_i; the corpus family is partial, missing $_f" ;; esac
+    done
+    case "$_opt" in *" corpus.store "*) ;; *) _i="$_i; optional lacks corpus.store while the corpus functions are declared" ;; esac
+  else
+    case "$_opt" in *" corpus.store "*) _i="$_i; optional declares corpus.store while the corpus functions are missing" ;; esac
+  fi
+  if [ "$_store" -eq 1 ]; then
+    for _f in $STORE5; do
+      case "$_fns" in *" $_f "*) ;; *) _i="$_i; the store family is partial, missing $_f" ;; esac
+    done
+    case "$_opt" in *" store "*) ;; *) _i="$_i; optional lacks store while the store functions are declared" ;; esac
+  else
+    case "$_opt" in *" store "*) _i="$_i; optional declares store while the store functions are missing" ;; esac
+  fi
+  for _f in $_opt; do
+    case "$_f" in corpus.store|corpus.changelog|store|store.changelog) ;; *) _i="$_i; optional declares $_f" ;; esac
+  done
+  case "$_opt" in *" corpus.changelog "*) [ "$_corpus" -eq 1 ] || _i="$_i; optional declares corpus.changelog without the corpus functions" ;; esac
+  case "$_opt" in *" store.changelog "*) [ "$_store" -eq 1 ] || _i="$_i; optional declares store.changelog without the store functions" ;; esac
+  printf '%s' "$_i"
+}
 call capability
 answer; wantkeys @ "driver,version,contract,functions,search_modes,optional"; wantv contract '"2"'
 case "$(jv version)" in '"'[0-9]*.[0-9]*.[0-9]*'"') ;; *) miss "version [$(jv version)]" ;; esac
 case "$(jv driver)" in '""'|'') miss "the descriptor names no driver" ;; esac
-_t70_fns=" $(vals functions | tr -d '"') "
-for _f in $FUNCS38; do
-  case "$_t70_fns" in *" $_f "*) ;; *) miss "functions lacks $_f" ;; esac
-done
-for _f in $_t70_fns; do
-  case " $FUNCS38 $CORPUS6 " in *" $_f "*) ;; *) miss "functions declares $_f, outside contract 2" ;; esac
-done
 case " $(vals search_modes) " in *' "exact" '*) ;; *) miss "search_modes lacks exact [$(vals search_modes)]" ;; esac
-for _f in $(vals optional | tr -d '"'); do
-  case "$_f" in corpus.store|corpus.changelog) ;; *) miss "optional declares $_f" ;; esac
-done
-tc "TC70: the descriptor declares contract 2 with the 38 functions and exact search"
+_t70=$(t70_issues); [ -z "$_t70" ] || miss "descriptor:$_t70"
+# the final set (38 record + 5 store, store and store.changelog) is allowed
+_t70_final=$(printf '"%s",' $FUNCS38 $STORE5 | sed 's/,$//')
+t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"search_modes\":[\"exact\"],\"optional\":[\"store\",\"store.changelog\"]}"
+_t70=$(t70_issues); [ -z "$_t70" ] || miss "the final 38 + 5 set refused:$_t70"
+# the transitional set (38 + 6 + 5) is allowed
+_t70_trans=$(printf '"%s",' $FUNCS38 $CORPUS6 $STORE5 | sed 's/,$//')
+t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_trans],\"search_modes\":[\"exact\"],\"optional\":[\"corpus.store\",\"corpus.changelog\",\"store\"]}"
+_t70=$(t70_issues); [ -z "$_t70" ] || miss "the transitional 38 + 6 + 5 set refused:$_t70"
+# a record-only driver (38 functions, no optional capability) still serves the record
+t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$FUNCS_JSON],\"search_modes\":[\"exact\"],\"optional\":[]}"
+_t70=$(t70_issues); [ -z "$_t70" ] || miss "a record-only driver refused:$_t70"
+# a store token without its functions, and the functions without their token, read red
+_t70_nostore=$(printf '"%s",' $FUNCS38 $STORE5 | sed 's/"store\.list",//; s/,$//')
+t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_nostore],\"search_modes\":[\"exact\"],\"optional\":[\"store\"]}"
+_t70=$(t70_issues); case "$_t70" in *"missing store.list"*) ;; *) miss "a store token without store.list passed [$_t70]" ;; esac
+t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"search_modes\":[\"exact\"],\"optional\":[\"store.changelog\"]}"
+_t70=$(t70_issues); case "$_t70" in *"optional lacks store"*) ;; *) miss "store functions without the store token passed [$_t70]" ;; esac
+tc "TC70: the descriptor declares contract 2 with the 38 record functions, exact search, and the transitional or final store family"
 
 # TC71: lane.create refuses an existing lane with the recipe unchanged; a lane without a
 # report answers content null and its empty journal preamble "" with no item (a journal

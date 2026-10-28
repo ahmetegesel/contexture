@@ -11,7 +11,8 @@
 #      in docs/adoption.md and docs/the-engine.md is one string, and every
 #      tracked path under base/ sits under a declared root, every declared root
 #      carries a tracked path, and the payload modules are exactly lane, run,
-#      and session (lib/ and every new verb script sit under modules/session);
+#      session, and storage (lib/ and every new verb script sit under
+#      modules/session);
 #   3. presence: every shipped session verb, hook point, and filter has a case
 #      in the committed suites (a new surface without one fails), and the ship
 #      gate lines live on the three declared surfaces.
@@ -26,6 +27,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
+STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
 
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
@@ -76,7 +78,8 @@ mkdir -p "$SANDBOX/.contexture/modules"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
-chmod +x "$SANDBOX/.contexture/modules/session/scripts/"*
+cp -R "$STORAGE_MOD" "$SANDBOX/.contexture/modules/storage"
+chmod +x "$SANDBOX/.contexture/modules/session/scripts/"* "$SANDBOX/.contexture/modules/storage/scripts/"*
 for form in help all session-help session-help-load; do
   case "$form" in
     help) out=$(cd "$SANDBOX" && ./.contexture/ctx help 2>&1);;
@@ -96,7 +99,7 @@ echo "== G2 payload path tables vs git ls-files =="
 decl_adoption=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/adoption.md" | head -n 1)
 decl_engine=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/the-engine.md" | head -n 1)
 a_eq "$decl_engine" "$decl_adoption" "payload declaration identical in adoption.md and the-engine.md"
-a_eq "$decl_adoption" 'base/.contexture/{ctx,modules/session,modules/run,modules/lane,templates,ONBOARDING.md}' "payload declaration reads the shipped set"
+a_eq "$decl_adoption" 'base/.contexture/{ctx,modules/session,modules/storage,modules/run,modules/lane,templates,ONBOARDING.md}' "payload declaration reads the shipped set"
 if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   prefix=${decl_adoption%%\{*}
   inner=${decl_adoption#*\{}
@@ -139,7 +142,7 @@ if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/nu
     fi
   done
   mods=$(printf '%s\n' "$tracked" | awk -F/ '$1 == "base" && $2 == ".contexture" && $3 == "modules" && NF > 4 { print $4 }' | LC_ALL=C sort -u | tr '\n' ' ')
-  a_eq "$mods" "lane run session " "payload modules are exactly lane, run, and session"
+  a_eq "$mods" "lane run session storage " "payload modules are exactly lane, run, session, and storage"
 else
   echo "SKIP governance payload table: git unavailable (need: git in the upstream checkout)"
 fi

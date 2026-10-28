@@ -11,7 +11,9 @@
 # append rule, a touched item rewritten canonical in place), search.awk (the exact rule over
 # the rendered text). Every item reads in the canonical layout; a file keeps its bytes until
 # a write touches one of its items. It keeps
-# the six corpus methods of v0.54.0 byte for byte (corpus.store).
+# the six corpus methods of v0.54.0 byte for byte (corpus.store) and answers the five
+# generic module store functions (store): store.list, store.get, store.put, store.delete,
+# store.changes over a module's declared data file, the docs corpus staying at docs/workspace.
 #
 # Writes: the unit lock (.contexture/tmp/locks/<unit>.lock) is held from the read to the
 # last rename, every changed file is staged beside the sessions folder and renamed into
@@ -358,6 +360,292 @@ name_valid() {
   return 0
 }
 
+# ==============================================================================
+# The generic module store (the storage module's store contract)
+# ==============================================================================
+# Five functions over a module's declared data file: store.list, store.get, store.put,
+# store.delete, store.changes. The data file (modules/<module>/data) is read and validated
+# by the storage module's private store-data script; the posix mapping is
+# <root>/<key><suffix> under the workspace root, the docs corpus staying at
+# docs/workspace. Keys are exact, ASCII-case-fold twins never coexist, list is bytewise
+# and filtered by the module pattern, put is a same-directory temp moved over the key
+# under a per-key lock, and the change log belongs to a store driver (posix keeps none).
+STORE_WS=""
+STORE_TMP=""
+STORE_LOCK=""
+
+store_cleanup() {
+  [ -n "${STORE_TMP:-}" ] && rm -f "$STORE_TMP" 2>/dev/null
+  STORE_TMP=""
+  store_unlock
+  return 0
+}
+
+store_unlock() {
+  [ -n "${STORE_LOCK:-}" ] || return 0
+  su_lock=$STORE_LOCK
+  STORE_LOCK=""
+  rmdir "$su_lock" 2>/dev/null
+  su_base=$(get_lock_dir)
+  su_p=$(dirname "$su_lock")
+  while [ "$su_p" != "$su_base" ] && [ "$su_p" != "/" ]; do
+    rmdir "$su_p" 2>/dev/null || break
+    su_p=$(dirname "$su_p")
+  done
+  return 0
+}
+
+# store_lock <namespace> <key>: the per-key lock, a folder under the drawer's lock folder,
+# held until store_unlock; five seconds of retries then rc 2 ERR_STORAGE_LOCKED
+store_lock() {
+  STORE_LOCK="$(get_lock_dir)/store-$1/$2.lock"
+  mkdir -p "$(dirname "$STORE_LOCK")" 2>/dev/null || {
+    STORE_LOCK=""
+    refuse 2 ERR_STORAGE_WRITE "cannot make the store lock folder"
+  }
+  sl_n=0
+  while [ "$sl_n" -lt 50 ]; do
+    if mkdir "$STORE_LOCK" 2>/dev/null; then return 0; fi
+    sl_n=$((sl_n + 1))
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+  STORE_LOCK=""
+  refuse 2 ERR_STORAGE_LOCKED "the store key '$2' in namespace '$1' is locked (5 s timeout)"
+}
+
+# store_data <function> <namespace>: the validated fields of the namespace's data file in
+# SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the caller's function name frames the
+# refusal. The storage module's store-data script owns the grammar (the storage module is
+# base, never the docs module: no module's parser enters base).
+store_data() {
+  FN=$1
+  sd_ns=$2
+  sd_ws=$(find_workspace_root)
+  sd_script=""
+  for sd_c in "$SCRIPT_DIR/../../../storage/scripts/store-data" \
+              "$sd_ws/.contexture/modules/storage/scripts/store-data" \
+              "$sd_ws/base/.contexture/modules/storage/scripts/store-data"; do
+    if [ -x "$sd_c" ]; then sd_script=$sd_c; break; fi
+  done
+  [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage module data reader is not installed"
+  sd_err=$(mktemp "$(get_tmp_dir)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  sd_out=$(CTX_STORE_WORKSPACE="$sd_ws" "$sd_script" "$sd_ns" 2>"$sd_err")
+  sd_rc=$?
+  sd_msg=$(head -n 1 "$sd_err" 2>/dev/null)
+  rm -f "$sd_err"
+  case "$sd_msg" in store-data:\ *) sd_msg=${sd_msg#store-data: } ;; esac
+  [ -n "$sd_msg" ] || sd_msg="the namespace '$sd_ns' is not declared by a usable data file"
+  case "$sd_rc" in
+    0) ;;
+    3) refuse 1 ERR_ENTITY_NOT_FOUND "$sd_msg" ;;
+    2) refuse 2 ERR_STORAGE_READ "$sd_msg" ;;
+    *) refuse 1 ERR_INVALID_ARGUMENT "$sd_msg" ;;
+  esac
+  SD_NS=$(printf '%s\n' "$sd_out" | sed -n '1p')
+  SD_ROOT=$(printf '%s\n' "$sd_out" | sed -n '2p')
+  SD_SUFFIX=$(printf '%s\n' "$sd_out" | sed -n '3p')
+  SD_KEYPAT=$(printf '%s\n' "$sd_out" | sed -n '4p')
+  SD_CHANGES=$(printf '%s\n' "$sd_out" | sed -n '5p')
+  STORE_WS=$sd_ws
+}
+
+# store_key_ok <key>: the generic key rule: no blanks, control characters, leading slash,
+# backslash, or . or .. segment, and every segment non-empty (exact, not folded)
+store_key_ok() {
+  SK_KEY="$1" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["SK_KEY"]
+    if (s == "") exit 1
+    if (substr(s, 1, 1) == "/" || substr(s, length(s), 1) == "/") exit 1
+    if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
+    n = split(s, p, "/")
+    for (i = 1; i <= n; i++) if (p[i] == "" || p[i] == "." || p[i] == "..") exit 1
+    exit 0
+  }'
+}
+
+# store_key_shape <pattern> <key>: the key's segment count equals the pattern's and every
+# pattern segment is a <name> placeholder
+store_key_shape() {
+  SSP_P="$1" SSP_K="$2" LC_ALL=C awk 'BEGIN {
+    m = split(ENVIRON["SSP_P"], p, "/")
+    n = split(ENVIRON["SSP_K"], k, "/")
+    if (m < 1 || n != m) exit 1
+    for (i = 1; i <= m; i++) {
+      if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
+      if (k[i] == "") exit 1
+    }
+    exit 0
+  }'
+}
+
+# store_key_for <function> <namespace> <key>: the key rule and the module pattern before a
+# key reaches the filesystem
+store_key_for() {
+  FN=$1
+  sk_key=$3
+  store_key_ok "$sk_key" || refuse 1 ERR_INVALID_ARGUMENT "malformed key '$sk_key'"
+  store_key_shape "$SD_KEYPAT" "$sk_key" || refuse 1 ERR_INVALID_ARGUMENT "key '$sk_key' does not match the namespace pattern '$SD_KEYPAT'"
+}
+
+# store_path <key>: the posix mapping of a validated key
+store_path() {
+  printf '%s/%s/%s%s\n' "$STORE_WS" "$SD_ROOT" "$1" "$SD_SUFFIX"
+}
+
+# store_list_keys: every key in the namespace, bytewise, only those the module pattern
+# admits; the folder entries are read as stored, so a case twin of a key never appears
+store_list_keys() {
+  sl_dir="$STORE_WS/$SD_ROOT"
+  [ -d "$sl_dir" ] || return 0
+  find "$sl_dir" -type f -print 2>/dev/null | while IFS= read -r sl_f; do
+    sl_rel=${sl_f#"$sl_dir"/}
+    case "$sl_rel" in
+      *"$SD_SUFFIX") sl_key=${sl_rel%"$SD_SUFFIX"} ;;
+      *) continue ;;
+    esac
+    store_key_ok "$sl_key" || continue
+    store_key_shape "$SD_KEYPAT" "$sl_key" || continue
+    printf '%s\n' "$sl_key"
+  done | LC_ALL=C sort
+}
+
+# store_key_exists <key>: the exact key the store lists (a case twin is absent)
+store_key_exists() {
+  store_list_keys | grep -F -q -x -e "$1"
+}
+
+# store_twin <key>: a stored key that folds onto <key> under ASCII case without matching it
+store_twin() {
+  store_list_keys | ST_TARGET="$1" LC_ALL=C awk '
+    { t = ENVIRON["ST_TARGET"]; if ($0 != t && tolower($0) == tolower(t)) { print; exit } }'
+}
+
+# store_flags <function> <default op> [flags]: --op=<op> and --head=<sha|none>, bounded
+store_flags() {
+  sf_fn=$1; SF_OP=$2
+  shift 2
+  SF_HEAD=none
+  for sf_a in "$@"; do
+    case "$sf_a" in
+      --op=*) SF_OP=${sf_a#--op=} ;;
+      --head=*) SF_HEAD=${sf_a#--head=} ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "unknown argument '$sf_a'" ;;
+    esac
+  done
+  case "$SF_OP" in
+    ''|*[!A-Za-z0-9._-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed op '$SF_OP'" ;;
+  esac
+  case "$SF_HEAD" in
+    none) ;;
+    ''|*[!0-9a-fA-F]*) refuse 1 ERR_INVALID_ARGUMENT "--head takes a commit id or none: '$SF_HEAD'" ;;
+  esac
+}
+
+store_list() {
+  FN=store.list
+  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes one argument, the namespace"
+  sn_ns=$1
+  store_data store.list "$sn_ns"
+  sn_tmp=$(mktemp "$(get_tmp_dir)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  store_list_keys > "$sn_tmp"
+  printf '{"namespace":"%s","keys":[' "$(escape_json "$sn_ns")"
+  sn_first=1
+  while IFS= read -r sn_key; do
+    [ -n "$sn_key" ] || continue
+    if [ "$sn_first" -eq 1 ]; then
+      printf '"%s"' "$(escape_json "$sn_key")"
+      sn_first=0
+    else
+      printf ',"%s"' "$(escape_json "$sn_key")"
+    fi
+  done < "$sn_tmp"
+  rm -f "$sn_tmp"
+  printf ']}\n'
+}
+
+store_get() {
+  FN=store.get
+  [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.get takes the namespace and the key"
+  sg_ns=$1; sg_key=$2
+  store_data store.get "$sg_ns"
+  store_key_for store.get "$sg_ns" "$sg_key"
+  store_key_exists "$sg_key" || refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
+  cat "$(store_path "$sg_key")" || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
+}
+
+store_put() {
+  FN=store.put
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.put takes the namespace, the key, and optional flags"
+  sp_ns=$1; sp_key=$2
+  shift 2
+  store_flags store.put write "$@"
+  store_data store.put "$sp_ns"
+  store_key_for store.put "$sp_ns" "$sp_key"
+  trap 'store_cleanup' EXIT
+  trap 'store_cleanup; exit 129' HUP
+  trap 'store_cleanup; exit 130' INT
+  trap 'store_cleanup; exit 143' TERM
+  store_lock "$sp_ns" "$sp_key"
+  sp_twin=$(store_twin "$sp_key")
+  if [ -n "$sp_twin" ]; then
+    store_unlock
+    refuse 1 ERR_ENTITY_EXISTS "key '$sp_key' folds onto '$sp_twin' under ASCII case; keys differing only by case never coexist in namespace '$sp_ns'"
+  fi
+  sp_path=$(store_path "$sp_key")
+  mkdir -p "$(dirname "$sp_path")" 2>/dev/null || {
+    store_unlock
+    refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
+  }
+  STORE_TMP=$(mktemp "$sp_path.XXXXXX" 2>/dev/null) || {
+    store_unlock
+    refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
+  }
+  chmod "$(umask -S | tr -d x)" "$STORE_TMP" 2>/dev/null || true
+  if ! cat > "$STORE_TMP" || ! mv -f "$STORE_TMP" "$sp_path" 2>/dev/null; then
+    rm -f "$STORE_TMP"
+    STORE_TMP=""
+    store_unlock
+    refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
+  fi
+  STORE_TMP=""
+  store_unlock
+  printf '{"namespace":"%s","key":"%s","op":"%s"}\n' "$(escape_json "$sp_ns")" "$(escape_json "$sp_key")" "$(escape_json "$SF_OP")"
+}
+
+store_delete() {
+  FN=store.delete
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.delete takes the namespace, the key, and optional flags"
+  sx_ns=$1; sx_key=$2
+  shift 2
+  store_flags store.delete remove "$@"
+  store_data store.delete "$sx_ns"
+  store_key_for store.delete "$sx_ns" "$sx_key"
+  trap 'store_cleanup' EXIT
+  trap 'store_cleanup; exit 129' HUP
+  trap 'store_cleanup; exit 130' INT
+  trap 'store_cleanup; exit 143' TERM
+  store_lock "$sx_ns" "$sx_key"
+  if ! store_key_exists "$sx_key"; then
+    store_unlock
+    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sx_key' not found in namespace '$sx_ns'"
+  fi
+  sx_path=$(store_path "$sx_key")
+  if ! rm -f "$sx_path" 2>/dev/null || [ -e "$sx_path" ]; then
+    store_unlock
+    refuse 2 ERR_STORAGE_WRITE "the storage remove of key '$sx_key' failed"
+  fi
+  store_unlock
+  printf '{"namespace":"%s","key":"%s","op":"%s"}\n' "$(escape_json "$sx_ns")" "$(escape_json "$sx_key")" "$(escape_json "$SF_OP")"
+}
+
+store_changes() {
+  FN=store.changes
+  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.changes takes one argument, the namespace"
+  sc_ns=$1
+  store_data store.changes "$sc_ns"
+  refuse 1 ERR_CAPABILITY_UNSUPPORTED "the posix store keeps no change log; namespace '$sc_ns' reports its delta through its module (changes: $SD_CHANGES)"
+}
+
 # px_mkdtemp <parent> <prefix>: a fresh private folder (mkdir is atomic; the name carries the
 # pid and a counter), POSIX tools alone, no mktemp
 px_mkdtemp() {
@@ -599,7 +887,7 @@ rec_write() {
 }
 
 capability() {
-  printf '{"driver":"posix","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","corpus.list","corpus.read","corpus.write","corpus.remove","corpus.mount","corpus.changes"],"search_modes":["exact"],"optional":["corpus.store"]}\n'
+  printf '{"driver":"posix","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","corpus.list","corpus.read","corpus.write","corpus.remove","corpus.mount","corpus.changes","store.list","store.get","store.put","store.delete","store.changes"],"search_modes":["exact"],"optional":["corpus.store","store"]}\n'
 }
 
 storage_health() {
@@ -775,6 +1063,11 @@ FN=$cmd
 
 case "$cmd" in
   capability) capability; exit 0 ;;
+  store.list) store_list "$@"; exit $? ;;
+  store.get) store_get "$@"; exit $? ;;
+  store.put) store_put "$@"; exit $? ;;
+  store.delete) store_delete "$@"; exit $? ;;
+  store.changes) store_changes "$@"; exit $? ;;
   corpus.list) corpus_list "$@"; exit $? ;;
   corpus.read) corpus_read "$@"; exit $? ;;
   corpus.write) corpus_write "$@"; exit $? ;;

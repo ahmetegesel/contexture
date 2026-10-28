@@ -47,6 +47,7 @@ WS="$SB/ws"
 mkdir -p "$WS/.contexture/modules" "$WS/.contexture/tmp"
 cp -p "$BASE/ctx" "$WS/.contexture/ctx"
 cp -Rp "$BASE/modules/session" "$WS/.contexture/modules/session"
+cp -Rp "$BASE/modules/storage" "$WS/.contexture/modules/storage"
 cp -Rp "$BASE/modules/lane" "$WS/.contexture/modules/lane"
 cp -Rp "$MOD" "$WS/.contexture/modules/storage-fts5"
 

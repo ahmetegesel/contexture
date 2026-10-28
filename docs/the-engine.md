@@ -123,7 +123,7 @@ The order of refusals: the argv shape first (`ERR_INVALID_ARGUMENT`), then the u
 
 #### The functions
 
-Thirty-eight record functions, each called by the verb in the last column; the corpus methods follow unchanged below. Schemas are in the data model. No function moves a record between backends: `unit.export`, `unit.import`, and the dump format left the contract with `ctx session migrate` (below, Moving a record between backends).
+Thirty-eight record functions, each called by the verb in the last column; the corpus methods follow unchanged below, and the five module store functions follow the corpus store. Schemas are in the data model. No function moves a record between backends: `unit.export`, `unit.import`, and the dump format left the contract with `ctx session migrate` (below, Moving a record between backends).
 
 | function | argv | payload | answer | called by |
 |---|---|---|---|---|
@@ -268,7 +268,7 @@ The exact rule, one text every backend implements natively: the searched text of
 
 #### The descriptor and the handshake
 
-`capability` answers `{"driver","version","contract":"2","functions":[...],"search_modes":[...],"optional":[...]}`: functions every function the driver serves (the 38 record functions, and the corpus methods of a corpus store), search_modes its modes (`exact` always), optional its optional capabilities (`corpus.store`, `corpus.changelog`). Posix declares `["exact"]` and `["corpus.store"]`; fts5 `["exact","hybrid","trigram"]` and both corpus capabilities; the service what its capability endpoint answers. No record function is optional: a backend serves all 38 or does not load.
+`capability` answers `{"driver","version","contract":"2","functions":[...],"search_modes":[...],"optional":[...]}`: functions every function the driver serves (the 38 record functions, the corpus methods of a corpus store, and the five store functions of a module store), search_modes its modes (`exact` always), optional its optional capabilities (`corpus.store`, `corpus.changelog`, `store`, `store.changelog`). Posix declares `["exact"]` and `["corpus.store","store"]`; fts5 `["exact","hybrid","trigram"]` and both corpus capabilities (the store joins it with the fts5 store task); the service what its capability endpoint answers. The transitional function set is 38 + 6 + 5 (the record, the six corpus methods, and the five store functions); the final set at the docs port is 38 + 5 with the optional tokens `store` and, where the driver keeps a log, `store.changelog`. Each family is all or none in a descriptor, a capability token and its functions imply each other, and a driver without the store still serves the record. No record function is optional: a backend serves all 38 or does not load.
 
 Before a driver serves a call the resolver runs its handshake (stdin from `/dev/null`): the descriptor must read contract `"2"` and list all 38 record functions, else the call halts rc 2 `ERR_DRIVER_PROTOCOL` naming what is missing, before the function runs. The handshake runs at dispatch for every driver except the bundled posix driver, and its verdict is cached in the scratch drawer (`.contexture/tmp/driver-verdicts/`, one file per driver path) and stays valid while strictly newer than the driver executable and than the workspace configuration (`.contexture/config`, when it exists), so a driver that reads configuration, such as the service's URL and key, is verified again after a configuration change; `driver-resolver capability` and `check` (and `ctx session diagnose`) run it afresh. A caller that needs an optional capability or a search mode asks first: `driver-resolver require <capability>...` exits 0 when the driver declares every one and 2 `ERR_CAPABILITY_UNSUPPORTED` naming the missing ones, `driver-resolver has <capability>` exits 0 or 1 and prints nothing; a search mode reads as `search.mode.<m>`. A passing `require` verdict is cached per driver path and capability set (sorted), apart from the dispatch verdict, which it never answers or overwrites; `has` reads such a verdict and writes none, so the cache names exactly the sets callers required.
 
@@ -278,7 +278,7 @@ Before a driver serves a call the resolver runs its handshake (stdin from `/dev/
 
 #### The corpus store
 
-The configured driver holds the agent-facing doc corpus beside the record: one setting (`storage.driver`) serves both. A doc is keyed by `(repo, slug)`, each a key of letters, digits, dot, underscore, and dash that starts with a letter or digit; its canonical address is `docs/<repo>/<slug>.md` under every driver, the name the docs verbs print and the check keys freshness on, never a storage location. A driver stores and hands back a doc's text verbatim and never parses it: the doc grammar stays in the docs verbs, as the record grammar stays in the session verbs. The canonical address is the posix layout: under the posix driver the corpus is the files at `<root>/docs/<repo>/<slug>.md`, exactly where the docs verbs read them. The corpus methods keep this v0.54.0 contract, their answers plain text rather than contract 2 JSON, until the docs corpus moves to doc-level functions.
+The configured driver holds the agent-facing doc corpus beside the record: one setting (`storage.driver`) serves both. A doc is keyed by `(repo, slug)`, each a key of letters, digits, dot, underscore, and dash that starts with a letter or digit; its canonical address is `docs/<repo>/<slug>.md` under every driver, the name the docs verbs print and the check keys freshness on, never a storage location. A driver stores and hands back a doc's text verbatim and never parses it: the doc grammar stays in the docs verbs, as the record grammar stays in the session verbs. The canonical address is the posix layout: under the posix driver the corpus is the files at `<root>/docs/<repo>/<slug>.md`, exactly where the docs verbs read them. The corpus methods keep this v0.54.0 contract, their answers plain text rather than contract 2 JSON, until the docs corpus moves to the module store (the docs corpus port).
 
 | method | argv | stdin | answer |
 |---|---|---|---|
@@ -293,9 +293,37 @@ Every corpus method acts on the exact key alone. A key that differs from a store
 
 A store driver records one change-log row per `corpus.write` and `corpus.remove` from `--op` (the verb that wrote) and `--head` (the workspace git HEAD the verb computed, or `none`), with the doc's prior state, in the same transaction as the doc itself, so a window of rows yields each doc's net status (added, modified, deleted, or gone again) the way git would report it; the posix driver checks both tokens and ignores them, since its corpus delta is git, and declares `corpus.store` alone. The corpus resolves against the workspace root whatever the caller's folder: a call from a subfolder lists and reads the workspace's docs.
 
+#### The module store
+
+The storage module (`.contexture/modules/storage/`) owns the driver resolver and the generic module store contract. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the storage module's resolver, so every module resolves the configured driver and asks its capability questions through the storage module. The store serves module-owned data only: the record keeps the 38 typed functions above, and the six corpus methods keep their v0.54.0 contract until the docs corpus moves to the store. Base storage reads and validates a module's data file; it never calls the module's code, and no module's parser enters base.
+
+A module declares its data in a `data` file beside its `module` file, one `field: value` line per field and a line starting with `#` a comment:
+
+```text
+namespace: docs
+root: docs
+suffix: .md
+key: <repo>/<slug>
+changes: true
+```
+
+The namespace is a lowercase token of letters, digits, dot, underscore, and hyphen; the root is a workspace-relative folder inside the workspace; the suffix is non-empty; the key pattern carries one `<name>` placeholder per slash-separated segment; and `changes` is `true` or `false`. The module directory beside the data file is the owner, and a second data file declaring the same namespace refuses. The docs data file ships at `plugins/docs-discipline/.contexture/modules/docs/data` with the values above, so a key `workspace/the-record` maps to `docs/workspace/the-record.md` and the corpus stays at `docs/workspace`.
+
+| function | argv | stdin | answer |
+|---|---|---|---|
+| `store.list` | `<namespace>` | none | `{"namespace","keys"}`: every key the module pattern admits, bytewise |
+| `store.get` | `<namespace> <key>` | none | the raw bytes of the key, no JSON; absent rc 1 `ERR_ENTITY_NOT_FOUND` |
+| `store.put` | `<namespace> <key> [--op=<op>] [--head=<sha>\|none]` | the raw bytes | `{"namespace","key","op"}`; atomic per key; the default op is `write` and the default head `none` |
+| `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha>\|none]` | none | `{"namespace","key","op"}`; the default op is `remove` |
+| `store.changes` | `<namespace>` | `head=<sha\|none>` lines | `{"namespace","changes":[{"seq","at","key","op","head","prior"}]}` oldest first, `prior` the key's state before the write |
+
+The five functions are optional behind the `store` capability; a driver without them keeps serving the record and the corpus. Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a control character, a leading slash, a backslash, or a `.` or `..` segment. The module pattern filters list and refuses a key outside it. The posix mapping is `<root>/<key><suffix>` under the workspace root, written by a same-directory temp moved over the key under a per-key lock, so a put lands whole or not at all. `store.changes` is optional per namespace: a namespace declaring `changes: false`, or a driver without the log, refuses rc 1 `ERR_CAPABILITY_UNSUPPORTED`. The posix driver keeps no change log (the module's delta is git); fts5 and the service keep the generic log.
+
+The descriptor carries the five functions with the corpus methods until the docs port (the transitional 38 + 6 + 5) and the final 38 + 5 with the optional tokens `store` and, where the driver keeps one, `store.changelog`; `tests/storage-compliance.sh` TC70 allows both sets and checks each family is all or none. `tests/store-compliance.sh` holds the posix store to the five functions over a sandbox corpus: the exact list answer and order, the raw bytes of a document, the key rule, the data file grammar, the per-key lock, the atomic put, the change-log refusal, and the no-base-to-docs census, each with a planted difference where the instrument needs a null check.
+
 #### Driver discovery hierarchy
 
-The driver resolver discovers storage drivers through a strict 3-tier hierarchy:
+The driver resolver (the storage module's `scripts/driver-resolver`; the session module's `scripts/driver-resolver` is its compatibility wrapper) discovers storage drivers through a strict 3-tier hierarchy:
 1. Workspace custom drivers: `.contexture/drivers/<name>/driver`
 2. Module-owned drivers: `.contexture/modules/<module>/drivers/<driver-name>/driver` or `.contexture/modules/session/drivers/<driver-name>/driver`
 3. PATH executables: system binaries named `ctx-storage-<name>`
@@ -319,7 +347,7 @@ If a non-posix driver is configured (such as `fts5` or the service) and its exec
 
 #### Available drivers
 
-- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver keeping each artifact as a markdown file under `.contexture/sessions/<unit>/` and each corpus doc as the file `docs/<repo>/<slug>.md` under the workspace root (`corpus.store`; no change log, the posix corpus delta is git). It runs on the system awk: BWK awk, mawk, gawk, and busybox awk each carry the full session suite green on both drivers, and every payload and JSON encoder doubles a backslash by concatenation, since a `gsub` replacement of four backslashes yields one backslash under busybox awk and `gawk --posix` (the authoring rule in `docs/modules.md`).
+- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver keeping each artifact as a markdown file under `.contexture/sessions/<unit>/`, each corpus doc as the file `docs/<repo>/<slug>.md` under the workspace root (`corpus.store`; no change log, the posix corpus delta is git), and each module's declared data file as files under its root (`store`; no change log, `store.changes` refuses and the module's delta is its own). It runs on the system awk: BWK awk, mawk, gawk, and busybox awk each carry the full session suite green on both drivers, and every payload and JSON encoder doubles a backslash by concatenation, since a `gsub` replacement of four backslashes yields one backslash under busybox awk and `gawk --posix` (the authoring rule in `docs/modules.md`).
 - SQLite FTS5 driver (`storage-fts5` plugin): one SQLite database with dual FTS5 virtual tables (Porter English stemming plus Trigram tokenization), unicode61 with `remove_diacritics 0` for Turkish and diacritics, and pure SQL Reciprocal Rank Fusion (RRF) search ranking behind the `hybrid` and `trigram` modes beside `exact`; it holds the corpus natively (`corpus.store` and `corpus.changelog`): each doc verbatim, a change-log row per write in the doc's own transaction, a mount that fills the folder it is handed. Its store is at schema version 4: the typed tables of the record data model holding the fields the functions write (units, preambles, tasks, findings, journal items, lanes, lane items, closers with their targets, item and finding refs), no stored text and no legacy field (no function writes one), beside two tables derived in the transaction of every write (the lines of the exact rule with their attribution, and the documents the ranked modes index), and the corpus tables. A new or empty database file gets the whole schema on its first write; a store at any other schema version refuses every function rc 2 `ERR_STORAGE_SCHEMA` naming its version and the way forward, and is never written: the plugin carries no upgrade path and no backup, so an older store is moved aside and its record re-entered into a fresh one through the ctx verbs (`storage.health` reports such a store as an error). Every one of the 38 record functions answers natively in SQL: one sh entry point checks the argv shape and stages the payload lines in a per-call scratch folder, and one sqlite3 run reads the function's own script (`sql/fn/<function>.sql`) over the shared pieces (`sql/lib/`: the payload decoded in SQL, the refusal checks in the posix refusal order, the derived fields and every answer built with `json_object` in the contract key order); every write is one transaction under the unit write lock, stores its typed values as the canonical lines read them back (a block value without its trailing whitespace-only lines, a quoted attention unquoted, a verdictless closer reason opening with a verdict word split into both), and rebuilds the unit's derived search rows before it commits; `exact` reads the lines table. No function reads markdown or calls another driver, so the store holds only what the functions write. The driver needs sqlite3 3.44 or later (below it every function refuses rc 2 `ERR_DRIVER_NOT_FOUND`). The plugin carries no verb of its own (the v0.54.0 `ctx storage-fts5 migrate` retired); a record reaches it through the ordinary verbs (below, Moving a record between backends) and its corpus through the `ctx docs` write verbs; see the plugin README.
 
 ### Semantic CLI verbs
@@ -556,7 +584,7 @@ Placement follows the class of the file, never convenience:
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/run,modules/lane,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/storage,modules/run,modules/lane,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
 | live workspace | the untracked root: `AGENTS.md`, `.contexture/` (sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 

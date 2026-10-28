@@ -23,6 +23,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
+STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
 
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
@@ -46,6 +47,7 @@ mkdir -p "$SANDBOX/.contexture/modules"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
+cp -R "$STORAGE_MOD" "$SANDBOX/.contexture/modules/storage"
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx

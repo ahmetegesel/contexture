@@ -49,6 +49,7 @@ trap cleanup EXIT
 mkdir -p "$SANDBOX/.contexture/modules"
 cp "$CTX" "$SANDBOX/.contexture/ctx"
 cp -R "$ROOT/base/.contexture/modules/session" "$SANDBOX/.contexture/modules/session"
+cp -R "$ROOT/base/.contexture/modules/storage" "$SANDBOX/.contexture/modules/storage"
 cp -R "$ROOT/base/.contexture/modules/run" "$SANDBOX/.contexture/modules/run"
 cp -R "$FIXTURE_MODULES"/. "$SANDBOX/.contexture/modules/"
 

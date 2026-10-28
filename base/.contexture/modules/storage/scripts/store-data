@@ -1,0 +1,203 @@
+#!/bin/sh
+# store-data: the storage module's private reader and validator of a module's data file
+# (no summary line, so discovery ignores it). It answers one namespace with the five
+# declared fields on five lines, in this order: namespace, root, suffix, key pattern,
+# changes.
+#
+# A module declares its store in `modules/<module>/data`, one `field: value` line per
+# field and a line starting with # a comment:
+#   namespace: <lowercase token: letters, digits, dot, underscore, hyphen>
+#   root: <workspace-relative folder, inside the workspace>
+#   suffix: <non-empty suffix>
+#   key: <pattern, one <name> placeholder per slash-separated segment>
+#   changes: true|false
+# The module directory beside the data file is the owner; a second data file declaring the
+# same namespace refuses. The script validates the fields before any store function maps a
+# key to a path.
+#
+# Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, or two
+# declarations of the namespace; 2 the module drawer is absent or unreadable; 3 the
+# namespace is declared nowhere. The one-line reason goes to stderr.
+
+set -u
+LC_ALL=C
+export LC_ALL
+
+SD_NAMESPACE="${1:-}"
+SD_CR=$(printf '\r')
+
+sd_fail() {
+  printf 'store-data: %s\n' "$1" >&2
+  exit 1
+}
+
+sd_env() {
+  printf 'store-data: %s\n' "$1" >&2
+  exit 2
+}
+
+# the namespace token: lowercase letters, digits, dot, underscore, hyphen
+case "$SD_NAMESPACE" in
+  ''|[!a-z0-9._-]*|*[!a-z0-9._-]*) sd_fail "malformed namespace '$SD_NAMESPACE'" ;;
+esac
+
+# the workspace root: CTX_STORE_WORKSPACE from the caller, else the walk up from PWD
+SD_WS="${CTX_STORE_WORKSPACE:-}"
+if [ -z "$SD_WS" ]; then
+  sd_curr="$PWD"
+  while [ -n "$sd_curr" ] && [ "$sd_curr" != "/" ]; do
+    if [ -d "$sd_curr/.contexture" ]; then SD_WS="$sd_curr"; break; fi
+    sd_curr=$(dirname "$sd_curr")
+  done
+  [ -n "$SD_WS" ] || SD_WS="$PWD"
+fi
+[ -d "$SD_WS/.contexture/modules" ] || sd_env "no module drawer at the workspace root"
+
+sd_modules="$SD_WS/.contexture/modules"
+
+# data_namespace <file>: the first namespace value of a data file, trimmed, or nothing
+data_namespace() {
+  dn_out=""
+  while IFS= read -r dn_line || [ -n "$dn_line" ];   do
+    dn_line=${dn_line%"$SD_CR"}
+    case "$dn_line" in
+      '#'*) continue ;;
+    esac
+    case "$dn_line" in
+      *[![:space:]]*) ;;
+      *) continue ;;
+    esac
+    dn_key=${dn_line%%:*}
+    dn_val=${dn_line#*:}
+    dn_key=$(printf '%s' "$dn_key" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    [ "$dn_key" = namespace ] || continue
+    dn_out=$(printf '%s' "$dn_val" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+    break
+  done < "$1"
+  printf '%s\n' "$dn_out"
+}
+
+sd_found=""
+sd_count=0
+for sd_file in "$sd_modules"/*/data; do
+  [ -f "$sd_file" ] || continue
+  sd_ns=$(data_namespace "$sd_file")
+  [ "$sd_ns" = "$SD_NAMESPACE" ] || continue
+  sd_count=$((sd_count + 1))
+  sd_found="$sd_file"
+done
+
+if [ "$sd_count" -eq 0 ]; then
+  printf 'store-data: namespace '\''%s'\'' is declared by no module data file\n' "$SD_NAMESPACE" >&2
+  exit 3
+fi
+if [ "$sd_count" -gt 1 ]; then
+  sd_owners=""
+  for sd_file in "$sd_modules"/*/data; do
+    [ -f "$sd_file" ] || continue
+    sd_ns=$(data_namespace "$sd_file")
+    [ "$sd_ns" = "$SD_NAMESPACE" ] || continue
+    sd_mod=${sd_file%/*}; sd_mod=${sd_mod##*/}
+    sd_owners="$sd_owners $sd_mod"
+  done
+  sd_fail "namespace '$SD_NAMESPACE' is declared by more than one module:$sd_owners"
+fi
+
+sd_ns=""
+sd_root=""
+sd_suffix=""
+sd_key=""
+sd_changes=""
+sd_seen_ns=0
+sd_seen_root=0
+sd_seen_suffix=0
+sd_seen_key=0
+sd_seen_changes=0
+sd_lineno=0
+
+while IFS= read -r sd_line || [ -n "$sd_line" ]; do
+  sd_lineno=$((sd_lineno + 1))
+  sd_line=${sd_line%"$SD_CR"}
+  case "$sd_line" in
+    '#'*) continue ;;
+  esac
+  case "$sd_line" in
+    *[![:space:]]*) ;;
+    *) continue ;;
+  esac
+  case "$sd_line" in
+    *:*) ;;
+    *) sd_fail "line $sd_lineno of ${sd_found##*/} is not a 'field: value' line" ;;
+  esac
+  sd_field=${sd_line%%:*}
+  sd_value=${sd_line#*:}
+  sd_field=$(printf '%s' "$sd_field" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  sd_value=$(printf '%s' "$sd_value" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+  case "$sd_field" in
+    namespace)
+      [ "$sd_seen_ns" -eq 0 ] || sd_fail "duplicate field 'namespace' in the data file"
+      sd_seen_ns=1; sd_ns=$sd_value ;;
+    root)
+      [ "$sd_seen_root" -eq 0 ] || sd_fail "duplicate field 'root' in the data file"
+      sd_seen_root=1; sd_root=$sd_value ;;
+    suffix)
+      [ "$sd_seen_suffix" -eq 0 ] || sd_fail "duplicate field 'suffix' in the data file"
+      sd_seen_suffix=1; sd_suffix=$sd_value ;;
+    key)
+      [ "$sd_seen_key" -eq 0 ] || sd_fail "duplicate field 'key' in the data file"
+      sd_seen_key=1; sd_key=$sd_value ;;
+    changes)
+      [ "$sd_seen_changes" -eq 0 ] || sd_fail "duplicate field 'changes' in the data file"
+      sd_seen_changes=1; sd_changes=$sd_value ;;
+    *)
+      sd_fail "unknown field '$sd_field' in the data file" ;;
+  esac
+done < "$sd_found"
+
+[ "$sd_seen_ns" -eq 1 ] || sd_fail "the data file declares no namespace"
+[ "$sd_seen_root" -eq 1 ] || sd_fail "the data file declares no root"
+[ "$sd_seen_suffix" -eq 1 ] || sd_fail "the data file declares no suffix"
+[ "$sd_seen_key" -eq 1 ] || sd_fail "the data file declares no key pattern"
+[ "$sd_seen_changes" -eq 1 ] || sd_fail "the data file declares no changes flag"
+
+case "$sd_ns" in
+  ''|[!a-z0-9._-]*|*[!a-z0-9._-]*) sd_fail "malformed namespace '$sd_ns'" ;;
+esac
+[ "$sd_ns" = "$SD_NAMESPACE" ] || sd_fail "the data file declares namespace '$sd_ns', not '$SD_NAMESPACE'"
+
+SR_ROOT="$sd_root" LC_ALL=C awk 'BEGIN {
+  r = ENVIRON["SR_ROOT"]
+  if (r == "" || r == ".") exit 1
+  if (substr(r, 1, 1) == "/" || substr(r, length(r), 1) == "/") exit 1
+  if (r ~ /[[:cntrl:]]/ || index(r, " ") || index(r, "\\")) exit 1
+  n = split(r, p, "/")
+  for (i = 1; i <= n; i++) if (p[i] == "" || p[i] == "." || p[i] == "..") exit 1
+  exit 0
+}' || sd_fail "malformed root '$sd_root' (a workspace-relative folder inside the workspace)"
+
+case "$sd_suffix" in
+  ''|.|..) sd_fail "malformed suffix '$sd_suffix'" ;;
+  */*|*' '*) sd_fail "malformed suffix '$sd_suffix'" ;;
+esac
+case "$sd_suffix" in
+  *[[:cntrl:]]*) sd_fail "malformed suffix '$sd_suffix'" ;;
+esac
+
+SP_KEY="$sd_key" LC_ALL=C awk 'BEGIN {
+  k = ENVIRON["SP_KEY"]
+  if (k == "") exit 1
+  n = split(k, p, "/")
+  if (n < 1) exit 1
+  for (i = 1; i <= n; i++) {
+    if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
+  }
+  exit 0
+}' || sd_fail "malformed key pattern '$sd_key' (a <name> placeholder per slash-separated segment)"
+
+case "$sd_changes" in
+  true|false) ;;
+  *) sd_fail "malformed changes flag '$sd_changes' (true or false)" ;;
+esac
+
+printf '%s\n' "$sd_ns" "$sd_root" "$sd_suffix" "$sd_key" "$sd_changes"
+exit 0

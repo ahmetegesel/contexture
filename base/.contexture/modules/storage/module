@@ -1,0 +1,1 @@
+# summary: the generic module store: the driver resolver and the store contract (list, get, put, delete, changes) over a module's data file; no verbs of its own

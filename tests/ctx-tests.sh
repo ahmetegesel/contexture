@@ -18,6 +18,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
+STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
 IDEAS_MOD="$ROOT/.contexture/modules/ideas"
 IDEAS_FIXTURE="$SCRIPT_DIR/fixtures/ideas/IDEAS.md"
@@ -44,6 +45,7 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/bin"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
+cp -R "$STORAGE_MOD" "$SANDBOX/.contexture/modules/storage"
 cp -R "$RUN_MOD" "$SANDBOX/.contexture/modules/run"
 
 # fixture modules: a good one, three broken shapes, a reserved name, a

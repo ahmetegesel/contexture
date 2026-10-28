@@ -32,6 +32,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
+STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
 FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
 DRIVER=posix
 GROUP=""
@@ -121,6 +122,7 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/rhythms"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
+cp -R "$STORAGE_MOD" "$SANDBOX/.contexture/modules/storage"
 [ -d "$ROOT/base/.contexture/modules/lane" ] && cp -R "$ROOT/base/.contexture/modules/lane" "$SANDBOX/.contexture/modules/lane"
 if [ "$DRIVER" = fts5 ]; then
   cp -R "$FTS5_MOD" "$SANDBOX/.contexture/modules/storage-fts5"
