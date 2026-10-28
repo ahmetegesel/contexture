@@ -578,7 +578,10 @@ DOCS_GRAMMAR=""
 # under ctx, the plugin's own copy in a suite sandbox)
 docs_template() {
   DOCS_TEMPLATE="$DOCS_DIR/../../../templates/doc.md"
-  [ -f "$DOCS_TEMPLATE" ] && return 0
+  if [ -f "$DOCS_TEMPLATE" ]; then
+    export DOCS_TEMPLATE
+    return 0
+  fi
   printf '%s: the grammar template (templates/doc.md beside the modules) is missing (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
   return 2
 }

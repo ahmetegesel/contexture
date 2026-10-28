@@ -7,7 +7,8 @@
 # every read verb's rc 2 refusal when not); on fts5 the stored bytes read back through the
 # write verb and the capture parity against the files driver at the sandbox path; the single-door census
 # (tests/census.sh over tests/census-allow.txt, with its three plants); the close-gate
-# matrix over tests/sample/; and the grammar agreement check
+# matrix over tests/sample/ with an empty TMPDIR watch proving the matrix scratches
+# inside the workspace; and the grammar agreement check
 # (tests/grammar-agreement.awk, with its two plants) in a staged
 # scratch workspace built from the shipped copies only: the runtime and the
 # session and lane modules from base/ (the repository that carries this plugin),
@@ -233,11 +234,12 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
 
     # the engines (tests/engine-checks.sh): one id namespace per repo in the audit, query
     # --pitfalls scoped to @pitfalls, a backslash search kept literal (free text through
-    # the environment, never awk -v), and a draft path refused under the files driver
+    # the environment, never awk -v), every query form refusing rc 1 on a miss, a draft
+    # path refused under the files driver, and the pitfall schema read from the grammar
     ENGINE_OUT=$(sh "$SCRIPT_DIR/engine-checks.sh" "$SANDBOX" 2>&1)
     ENGINE_RC=$?
     if [ "$ENGINE_RC" -eq 0 ]; then
-        echo "[engine-checks] PASS (duplicate id across kinds, pitfalls scoping, the doc a pitfall belongs to, backslash search, a draft path)"
+        echo "[engine-checks] PASS (duplicate id across kinds, pitfalls scoping, the doc a pitfall belongs to, backslash search, query misses refusing rc 1, a draft path, the pitfall schema)"
         PASS=$((PASS + 1))
     else
         echo "[engine-checks] FAIL (rc=$ENGINE_RC)"
@@ -458,16 +460,20 @@ else
 fi
 echo ""
 
-MATRIX_OUT="$("$SANDBOX/.contexture/ctx" docs gate --test-matrix 2>&1)"
+MATRIX_TMP=$(mktemp -d "$TMP_BASE/gate-tmp-watch.XXXXXX") || exit 1
+MATRIX_OUT=$(TMPDIR="$MATRIX_TMP" "$SANDBOX/.contexture/ctx" docs gate --test-matrix 2>&1)
 MATRIX_RC=$?
-if [ "$MATRIX_RC" -eq 0 ] && printf '%s' "$MATRIX_OUT" | grep -q "TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED"; then
-    echo "[gate-matrix] PASS (ALL 8 SCENARIOS PASSED)"
+MATRIX_WATCH_LEFT=$(find "$MATRIX_TMP" -mindepth 1 -print -quit)
+if [ "$MATRIX_RC" -eq 0 ] && printf '%s' "$MATRIX_OUT" | grep -q "TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED" && [ -z "$MATRIX_WATCH_LEFT" ]; then
+    echo "[gate-matrix] PASS (ALL 8 SCENARIOS PASSED; TMPDIR stayed empty)"
     PASS=$((PASS + 1))
 else
     echo "[gate-matrix] FAIL (rc=$MATRIX_RC)"
+    [ -n "$MATRIX_WATCH_LEFT" ] && echo "TMPDIR watch is not empty: $MATRIX_WATCH_LEFT"
     printf '%s\n' "$MATRIX_OUT" | tail -20
     FAIL=$((FAIL + 1))
 fi
+rm -rf "$MATRIX_TMP"
 echo ""
 
 # grammar agreement: the #% schema of doc.md, its prose shapes, and the audit's kind and

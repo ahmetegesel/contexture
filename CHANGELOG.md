@@ -4,6 +4,22 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.58.1] - 2026-10-29
+
+PATCH: the docs discipline closes its two latent read gaps, the gate matrix stays inside the workspace, and the agent corpus names the storage-fts5 driver.
+
+### Fixed
+
+- `ctx docs query` forms that match nothing now refuse rc 1 as the help states: a search term, a rule category, a pitfall severity, an edge channel, a section, and a file owner never answer a plausible-but-empty success.
+- The docs audit reads the grammar schema's pitfall fields and refuses a class outside its enum or a missing required field, so a hand edit cannot escape the read check the write verbs already enforce.
+- The docs gate matrix builds its fixtures under the workspace drawer's `.contexture/tmp` and the suite runs it with `TMPDIR` pointed at an empty watch folder, proving the watch stays empty.
+
+### Changed
+
+- The agent corpus's plugins doc names the storage-fts5 driver among the six bundles, with its record and store contract and its pitfall; the retired import wording is gone.
+
+Commits in the range: the release commit.
+
 ## [0.58.0] - 2026-10-28
 
 MINOR: the generic module store decouples module data from the record; the docs corpus lives on it, and fts5 serves it beside the record with a change log. Every break is named below.

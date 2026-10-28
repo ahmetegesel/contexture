@@ -146,7 +146,8 @@ backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
 of `tests/write/`: every success's stored bytes, every refusal leaving the
 stored doc unchanged, the change-log rows under a store), and the engine
 checks (`tests/engine-checks.sh`: the id namespace, the pitfalls scoping and a doc-ending pitfall credited to its doc, the
-literal backslash search, the explicit draft path reading the stored doc by its address); not declared: every read verb's rc 2 refusal); the
+literal backslash search, the query forms refusing rc 1 on a miss, the explicit draft path reading the stored doc by its address,
+and the pitfall schema read from the grammar); not declared: every read verb's rc 2 refusal); the
 single-door census (`tests/census.sh` over `tests/census-allow.txt`, with three
 planted bypasses); the gate matrix; and the grammar agreement check
 (`tests/grammar-agreement.awk`). `tests/captures.sh` is the capture set of the
@@ -157,10 +158,12 @@ trackedness probe), and for the fts5 run sqlite3 with FTS5 (skip 77 without).
 
 ## The gate's matrix
 
-`ctx docs gate --test-matrix` builds its fixtures with `mktemp`, plants a
-local repository inside them for the claimant trackedness probe, writes
-nothing outside them, and exercises the check over eight self-planted
-scenarios. The default gate run aggregates the live git delta (workspace root
+`ctx docs gate --test-matrix` builds its fixtures under the workspace
+drawer's `.contexture/tmp` (the system temp only when that drawer cannot hold
+it), plants a local repository inside them for the claimant trackedness probe,
+writes nothing outside them, and exercises the check over eight self-planted
+scenarios; the suite points `TMPDIR` at an empty watch folder and proves it
+stays empty. The default gate run aggregates the live git delta (workspace root
 plus every child repository), with the store's corpus half under a store
 driver; `--drift` evaluates the incoming remote delta; `--stdin` takes a piped
 name-status list. The matrix runs the engine in its git mode on every driver

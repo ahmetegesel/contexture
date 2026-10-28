@@ -29,7 +29,7 @@ owning repo's run, build, and test targets.
 | verb | what it is | engine (private) |
 |---|---|---|
 | `ctx docs query` | the retrieval CLI: index, projection, section, owner, search, rules, pitfalls, edges; `--entry <block>/<key>` prints one entry's raw lines | `docs-query.awk` (`--entry`: `docs-edit.awk`) |
-| `ctx docs audit` | the grammar and integrity audit: header, blocks, indentation, rule fields, symbol-only evidence, duplicate ids | `docs-audit.awk` |
+| `ctx docs audit` | the grammar and integrity audit: header, blocks, indentation, rule fields, the pitfall required fields and class/severity enums, symbol-only evidence, duplicate ids | `docs-audit.awk` |
 | `ctx docs check` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | `docs-check.awk` |
 | `ctx docs gate` | the close gate: audit then check over the aggregated delta (or the incoming remote delta with `--drift`), plus a self-planted eight-scenario matrix | self-contained |
 | `ctx docs nudge` | the task nudge: matched docs, top pitfalls, forced setup targets | `docs-nudge.awk` |
@@ -59,10 +59,10 @@ What lands where:
 | `AGENTS.workspace.md` | the overlay blocks: five docs laws, layout, boot, close | merge |
 | `.contexture/rhythms/work.md`, `.contexture/rhythms/docs-authoring.md`, `.contexture/rhythms/docs-drift.md` | the workspace's work rhythm (the canonical variant with the docs discipline) and the two procedure rhythms | copy (optional) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/run.sh` | the plugin's own suite: the staging check, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed through `ctx docs write`, the stored bytes read back through the write verb, and the capture parity against the files driver, with the corpus checks in a second sandbox running beside that chain | reference (never copied) |
+| `tests/run.sh` | the plugin's own suite: the staging check, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample with its empty `TMPDIR` watch, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed through `ctx docs write`, the stored bytes read back through the write verb, and the capture parity against the files driver, with the corpus checks in a second sandbox running beside that chain | reference (never copied) |
 | `tests/store-cases.sh` | the delta-source cases: the check's store mode against its git mode, `ctx docs changes` (its window, `--since`, A, M, D, its refusals), and the gate composing the code half from git with the corpus half from the store (or from git under the files driver) | reference (never copied) |
 | `tests/write-verbs.sh`, `tests/write/` | the write verbs' assertions and their fixtures: every verb's result byte for byte, every refusal leaving the stored doc unchanged, the change-log rows under a store | reference (never copied) |
-| `tests/engine-checks.sh` | the audit's one id namespace per repo, the pitfalls view scoped to `@pitfalls` with a doc-ending pitfall credited to its own doc, a backslash search kept literal, and an explicit draft path reading the stored doc by its address | reference (never copied) |
+| `tests/engine-checks.sh` | the audit's one id namespace per repo, the pitfalls view scoped to `@pitfalls` with a doc-ending pitfall credited to its own doc, a backslash search kept literal, every query form refusing rc 1 on a miss, an explicit draft path reading the stored doc by its address, and the pitfall schema (a class outside its enum or a missing required field red) | reference (never copied) |
 | `tests/grammar-agreement.awk` | the grammar agreement check the suite runs: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
 | `README.md` | this onboarding document | reference |
 
@@ -324,8 +324,10 @@ it walk below runs every one of these.
   the corpus doc (check a draft with `ctx docs write <repo> <slug>
   [--replace] --dry-run`). `ctx docs check` and `ctx docs nudge` refuse a bare
   invocation loudly instead of reading standard input as an empty corpus, an
-  argument naming no doc or repo refuses rc 1, and an empty corpus refuses
-  rc 1. A wrong invocation never returns a plausible-but-empty result.
+  argument naming no doc or repo refuses rc 1, a query form that matches
+  nothing refuses rc 1 (a search term, a rule category, a pitfall severity, an
+  edge channel, a section, an owner path), and an empty corpus refuses rc 1.
+  A wrong invocation never returns a plausible-but-empty result.
 - The glob forms (`docs/*/*.md`, `docs/<repo>/*.md`) are address patterns: sh
   and bash hand the verb a pattern no file matches, which it expands through
   the store's list, while zsh refuses an unmatched glob before the verb runs;
@@ -351,19 +353,23 @@ it walk below runs every one of these.
   a shared store is undesigned) and checks the incoming code delta alone.
 - The sample corpus is fictional and reference-only; the adopter's corpus is
   the real subject.
-- The gate's matrix is self-planted: it builds its fixtures with `mktemp`,
-  plants a local repository inside them for the claimant trackedness probe,
-  and writes nothing outside the fixture directory.
+- The gate's matrix is self-planted: it builds its fixtures under the
+  workspace drawer's `.contexture/tmp` (the system temp only when that drawer
+  cannot hold it), plants a local repository inside them for the claimant
+  trackedness probe, and writes nothing outside the fixture directory; the
+  suite points `TMPDIR` at an empty watch folder and proves it stays empty.
 - The single-repo mapping is documented, not scripted: the check maps
   non-workspace docs through `projects/<repo>/`. A corpus whose code sits at
   the root marks its docs `repo: workspace`, or the adoption calibrates the
   mapping on the spot and records the local delta.
 - The audit validates a subset: the doc header, the block vocabulary, the
-  indentation rule, the rule fields, symbol-only evidence, and duplicate
-  ids (one namespace per repo). Rule status and prevalence and most inner
-  fields are not validated on read (the write verbs validate every field they
-  write against the schema);
-  the corpus today is complete, so the blindness is latent, not violated.
+  indentation rule, the rule fields, the pitfall required fields and
+  class/severity enums, symbol-only evidence, and duplicate ids (one namespace
+  per repo). Rule status and prevalence and most inner fields (the pitfall's
+  summary, trigger, consequence, and evidence values among them) are not
+  validated on read (the write verbs validate every field they write against
+  the schema); the corpus today is complete, so the blindness is latent, not
+  violated.
 - The gate verifies change, never truth: passing it means the touched code
   has fresh docs, not that the corpus is correct.
 - The default run's drift warnings read the last-fetched remote refs, not the
@@ -449,8 +455,9 @@ through `ctx docs write` and reads every doc back unchanged through
 `ctx docs write --replace --dry-run`, byte for byte.
 `tests/write-verbs.sh` asserts every write verb against the expected docs
 under `tests/write/` (a changed rendering updates its fixture on purpose),
-`tests/engine-checks.sh` the id namespace, the pitfalls scoping (a doc-ending pitfall credited to its own doc), the
-literal backslash search and the explicit draft path reading the stored doc by its address, and `tests/store-cases.sh` the delta sources on
+  `tests/engine-checks.sh` the id namespace, the pitfalls scoping (a doc-ending pitfall credited to its own doc), the
+  literal backslash search, the query forms refusing rc 1 on a miss, the explicit draft path reading the stored doc by its address,
+  and the pitfall schema (a class outside its enum or a missing required field red), and `tests/store-cases.sh` the delta sources on
 either driver (the check's two modes, `ctx docs changes`, the gate's two
 halves in a git workspace of its own). Keep the grammar (`.contexture/templates/doc.md`), its
 machine-readable schema (section 6), and the audit in step: the suite's

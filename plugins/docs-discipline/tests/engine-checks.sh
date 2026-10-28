@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# engine-checks.sh <sandbox>: five engine behaviors asserted through the verbs on the
+# engine-checks.sh <sandbox>: seven engine behaviors asserted through the verbs on the
 # sandbox's configured driver, each with a discriminating input (a repo etest seeded through
 # the driver, removed again at the end):
 #   [dup-id]     the audit's one id namespace per repo: a contract rule's id line and a
@@ -12,11 +12,17 @@
 #   [pitfall-doc] query --pitfalls credits a pitfall that ends a doc to that doc: idtwo ends
 #                in @pitfalls and over follows it (the pending pitfall was once printed after
 #                the next doc's first line had turned the slug, as over.md)
+#   [query-miss] every query form that matches nothing refuses rc 1: a search term, a rule
+#                category, a pitfall severity, an edge channel, a file owner, and a section
+#                (query --search once printed nothing rc 0 while its help said rc 1)
 #   [draft-path] an explicit doc path to a file outside the corpus folder (a draft at
 #                .../docs/etest/esc.md, its kind broken): the verb reads the stored doc by
 #                its address, never the file, so audit and check stay clean; a path with no
 #                file behind it keeps the same address rule on every driver
-# Exit 0 when all five pass, 1 otherwise.
+#   [pitfall-schema] the audit refuses a pitfall whose class is outside the schema's enum or
+#                whose required fields are missing (the audit once validated the rule fields
+#                but not the pitfalls, so a hand edit escaped it)
+# Exit 0 when all seven pass, 1 otherwise.
 
 set -u
 SB=$1
@@ -36,9 +42,12 @@ printf '%s\n' '@doc overview over' '  repo: etest' '  description: "An overview 
   '@caveats' '  - id: over-c1' '    text: "A caveat, never a pitfall"' > "$W/over.md"
 printf '%s\n' '@doc structural esc' '  repo: etest' '  description: "Carries a literal backslash sequence"' '  sources: [e/**]' '  keywords: [e]' '' \
   '@contract' '  - rule: "The marker reads zz\tqq on disk"' '    evidence: "escSym"' > "$W/esc.md"
+printf '%s\n' '@doc structural badpf' '  repo: ebad' '  description: "A malformed pitfall"' '  sources: [x/**]' '  keywords: [x]' '' \
+  '@pitfalls' '  - id: badpf-p1' '    summary: "A malformed pitfall"' '    class: urgent' '    severity: low' '    consequence: "c"' '    evidence: "badSym"' > "$W/badpf.md"
 for d in idone idtwo over esc; do
   "$R" store.put docs "etest/$d" --head=0000000 < "$W/$d.md" > /dev/null 2>&1 || { echo "engine-checks: seeding etest/$d failed"; exit 1; }
 done
+"$R" store.put docs "ebad/badpf" --head=0000000 < "$W/badpf.md" > /dev/null 2>&1 || { echo "engine-checks: seeding ebad/badpf failed"; exit 1; }
 
 OUT=$("$C" docs audit etest 2>&1)
 RC=$?
@@ -74,6 +83,27 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+QM_FAIL=0
+for q in "search zz_no_such_term" "rules nosuchcategory" "pitfalls --severity=critical" "edge nosuchchannel" "file no/such/path" "section nosuchsection"; do
+  set -- $q
+  qmode=$1
+  shift
+  case "$qmode" in
+    search) OUT=$("$C" docs query etest --search "$1" 2>&1); RC=$? ;;
+    rules) OUT=$("$C" docs query etest --rules "$1" 2>&1); RC=$? ;;
+    pitfalls) OUT=$("$C" docs query etest --pitfalls "$1" 2>&1); RC=$? ;;
+    edge) OUT=$("$C" docs query etest --edge "$1" 2>&1); RC=$? ;;
+    file) OUT=$("$C" docs query etest --file "$1" 2>&1); RC=$? ;;
+    section) OUT=$("$C" docs query etest idone --section "$1" 2>&1); RC=$? ;;
+  esac
+  [ "$RC" -eq 1 ] || { QM_FAIL=1; echo "  [query-miss] FAIL ($qmode rc=$RC): $OUT"; }
+done
+if [ "$QM_FAIL" -eq 0 ]; then
+  echo "  [query-miss] PASS"
+else
+  FAIL=$((FAIL + 1))
+fi
+
 # a draft of etest/esc outside the corpus folder, its doc kind broken: the address names the
 # stored doc, so audit and check stay clean and the file is never read
 mkdir -p "$W/draft/docs/etest"
@@ -95,9 +125,21 @@ else
   FAIL=$((FAIL + 1))
 fi
 
+OUT=$("$C" docs audit ebad 2>&1)
+RC=$?
+if [ "$RC" -eq 1 ] \
+  && printf '%s\n' "$OUT" | grep -q "class must be one of: bug tech-debt gotcha drift-risk (got 'urgent')" \
+  && printf '%s\n' "$OUT" | grep -q "missing 'trigger:'"; then
+  echo "  [pitfall-schema] PASS"
+else
+  echo "  [pitfall-schema] FAIL (rc=$RC): $OUT"
+  FAIL=$((FAIL + 1))
+fi
+
 for d in idone idtwo over esc; do
   "$R" store.delete docs "etest/$d" --head=0000000 > /dev/null 2>&1
 done
+"$R" store.delete docs "ebad/badpf" --head=0000000 > /dev/null 2>&1
 rm -rf "$W"
-echo "engine-checks: $((5 - FAIL)) passed, $FAIL failed"
+echo "engine-checks: $((7 - FAIL)) passed, $FAIL failed"
 [ "$FAIL" -eq 0 ]

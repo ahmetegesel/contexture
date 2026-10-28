@@ -93,7 +93,7 @@ helper-source	check	. "$dir/docs-io.sh"
 helper-source	gate	. "$dir/docs-io.sh"
 helper-source	nudge	. "$dir/docs-io.sh"
 helper-source	query	. "$dir/docs-io.sh"
-matrix-fixture	gate	    FIXTURE_DIR="$(mktemp -d)" || { echo "ctx docs gate: mktemp -d failed" >&2; return 1; }
+matrix-fixture	gate	    FIXTURE_DIR="$(mktemp -d "$FIXTURE_BASE/docs-gate-matrix.XXXXXX")" || { echo "ctx docs gate: mktemp -d failed" >&2; return 1; }
 matrix-fixture	gate	    trap 'rm -rf "$FIXTURE_DIR"' EXIT INT TERM
 matrix-fixture	gate	    mkdir -p "$FIXTURE_DIR/docs/demo"
 matrix-fixture	gate	    cat > "$FIXTURE_DIR/docs/demo/widgets.md" <<'FIXTURE'
@@ -102,6 +102,12 @@ matrix-fixture	gate	  description: "Shared platform services."
 matrix-fixture	gate	    command -v git >/dev/null 2>&1 || {
 matrix-fixture	gate	        echo "ctx docs gate: the matrix needs git for the claimant trackedness probe" >&2
 matrix-fixture	gate	    git -C "$FIXTURE_DIR" init -q
+grammar-template	docs-audit.awk	        while ((getline schema_line < tpl) > 0) {
+grammar-template	docs-audit.awk	                vals = ""
+grammar-template	docs-audit.awk	                for (i = 7; i <= n; i++) vals = vals (vals == "" ? "" : " ") sw[i]
+grammar-template	docs-audit.awk	        err(FILENAME, FNR, "pitfall entry must start with 'id:'")
+matrix-fixture	gate	    if ! mkdir -p "$FIXTURE_BASE" 2>/dev/null || [ ! -w "$FIXTURE_BASE" ]; then
+query-miss	query	    pitfalls) echo "ctx docs query: no pitfalls match${SEVERITY:+ at severity '$SEVERITY'}" >&2 ;;
 matrix-fixture	gate	    git -C "$FIXTURE_DIR" add docs/demo/widgets.md docs/demo/platform.md
 matrix-fixture	gate	        out="$(printf '%s' "$input" | (cd "$FIXTURE_DIR" && awk -f "$AWK_CHECK" docs/demo/*.md) 2>&1)" || code=$?
 matrix-fixture	gate	docs/demo/widgets.md"

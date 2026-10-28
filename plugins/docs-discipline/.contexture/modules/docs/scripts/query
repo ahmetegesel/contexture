@@ -158,9 +158,28 @@ QUERY_OUT=$(docs_engine_run awk -v mode="$MODE" \
     -v repo="$REPO" \
     -f "$AWK_SCRIPT" "$@")
 AWK_RC=$?
-if [ -z "$QUERY_OUT" ] && [ -z "$MODE" ] && [ -n "$REPO" ] && [ -n "$SLUG" ]; then
-  echo "ctx docs query: no doc matches $REPO/$SLUG" >&2
+if [ "$AWK_RC" -ne 0 ]; then
+  exit "$AWK_RC"
+fi
+# a query form that produces no answer is a miss: rc 1 as the help says, never a
+# plausible-but-empty success (--index always prints its completion marker)
+if [ -z "$QUERY_OUT" ] && [ "$MODE" != "index" ]; then
+  case "$MODE" in
+    search) echo "ctx docs query: no match for '$SEARCH'" >&2 ;;
+    rules) echo "ctx docs query: no rules match${CATEGORY:+ in category '$CATEGORY'}" >&2 ;;
+    pitfalls) echo "ctx docs query: no pitfalls match${SEVERITY:+ at severity '$SEVERITY'}" >&2 ;;
+    edge) echo "ctx docs query: no edges match channel '$CHANNEL'" >&2 ;;
+    file) echo "ctx docs query: no doc owns '$FILE'" >&2 ;;
+    "")
+      if [ -n "$SECTION" ]; then
+        echo "ctx docs query: no '$SECTION' section in $REPO/$SLUG" >&2
+      else
+        echo "ctx docs query: no doc matches $REPO/$SLUG" >&2
+      fi
+      ;;
+    *) echo "ctx docs query: no match" >&2 ;;
+  esac
   exit 1
 fi
 [ -n "$QUERY_OUT" ] && printf '%s\n' "$QUERY_OUT"
-exit $AWK_RC
+exit 0
