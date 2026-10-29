@@ -91,6 +91,60 @@ refused() { # <rc> <message...>: one line on stderr, nothing on stdout, the exac
 }
 
 # ==============================================================================
+# B6 launch: the seven nested posix suites run while B1 to B5 execute
+# ==============================================================================
+# the nested suites are docs-shaped; the synthetic data file supplies that contract
+printf 'namespace: docs\nroot: docs\nsuffix: .md\nkey: <repo>/<slug>\nchanges: true\n' > "$SB/base-only-data"
+NESTED="$SB/nested"
+mkdir -p "$NESTED"
+NESTED_JOBS=3
+NESTED_PID=""
+
+run_core_cmd() { # <index>: the original seven commands and arguments, in order
+  case "$1" in
+    1) sh "$ROOT/tests/filter-tests.sh" ;;
+    2) sh "$ROOT/tests/ctx-tests.sh" ;;
+    3) sh "$ROOT/tests/session-tests.sh" --driver=posix ;;
+    4) sh "$ROOT/tests/hook-tests.sh" ;;
+    5) sh "$ROOT/tests/record-audit-tests.sh" ;;
+    6) sh "$ROOT/tests/storage-compliance.sh" "--driver-exec=$ROOT/base/.contexture/modules/session/drivers/posix/driver" ;;
+    7) sh "$ROOT/tests/store-compliance.sh" "--data-file=$SB/base-only-data" ;;
+  esac
+}
+
+launch_core() { # <index>: one output and rc file per suite, the rc atomically renamed
+  _lc_idx=$1
+  ( run_core_cmd "$_lc_idx" > "$NESTED/$_lc_idx.out" 2>&1; printf '%s\n' "$?" > "$NESTED/$_lc_idx.rc.part"; mv "$NESTED/$_lc_idx.rc.part" "$NESTED/$_lc_idx.rc" ) &
+  printf '%s\n' "$!" > "$NESTED/$_lc_idx.pid"
+}
+
+run_nested() { # the gate's rc-file poll idiom (tests/run.sh lines 128-180), cap 3
+  nq="1 2 3 4 5 6 7"
+  nr=""
+  while :; do
+    still=""
+    for j in $nr; do
+      [ -f "$NESTED/$j.rc" ] || still="$still $j"
+    done
+    nr=$still
+    while [ -n "$nq" ]; do
+      set -- $nr
+      [ $# -ge "$NESTED_JOBS" ] && break
+      set -- $nq
+      launch_core "$1"
+      nr="$nr $1"
+      shift
+      nq="$*"
+    done
+    [ -z "$nr" ] && [ -z "$nq" ] && break
+    sleep 1
+  done
+}
+
+run_nested &
+NESTED_PID=$!
+
+# ==============================================================================
 # B1: the no-plugin boot and help surface
 # ==============================================================================
 printf '== B1: the no-plugin boot and help surface ==\n'
@@ -359,26 +413,31 @@ rm -rf "$plantdir"
 # B6: the posix core suites (no plugin)
 # ==============================================================================
 printf '\n== B6: the posix core suites ==\n'
-# the suite's cases are docs-shaped; the synthetic data file supplies that contract
-printf 'namespace: docs\nroot: docs\nsuffix: .md\nkey: <repo>/<slug>\nchanges: true\n' > "$SB/base-only-data"
-run_core() { # <label> <suite> [args...]
-  rc_label=$1; rc_suite=$2; shift 2
-  if sh "$ROOT/tests/$rc_suite" "$@" > "$SB/suite.out" 2>&1; then
-    ok "suite: $rc_label"
+# the seven suites were launched before B1; wait for the poll loop, then print in order
+if [ -n "$NESTED_PID" ]; then wait "$NESTED_PID"; fi
+collect_core() { # <index> <label>
+  _cc_idx=$1; _cc_label=$2
+  if [ -f "$NESTED/$_cc_idx.rc" ]; then
+    _cc_rc=$(cat "$NESTED/$_cc_idx.rc")
   else
-    bad "suite: $rc_label (rc $?)"
-    printf '%s\n' "--- tail of $rc_label ---"
-    tail -n 25 "$SB/suite.out"
-    printf '%s\n' "--- end of $rc_label ---"
+    _cc_rc=2
+  fi
+  if [ "$_cc_rc" -eq 0 ]; then
+    ok "suite: $_cc_label"
+  else
+    bad "suite: $_cc_label (rc $_cc_rc)"
+    printf '%s\n' "--- tail of $_cc_label ---"
+    [ -f "$NESTED/$_cc_idx.out" ] && tail -n 25 "$NESTED/$_cc_idx.out"
+    printf '%s\n' "--- end of $_cc_label ---"
   fi
 }
-run_core "filter-tests.sh" "filter-tests.sh"
-run_core "ctx-tests.sh" "ctx-tests.sh"
-run_core "session-tests.sh (posix)" "session-tests.sh" "--driver=posix"
-run_core "hook-tests.sh" "hook-tests.sh"
-run_core "record-audit-tests.sh" "record-audit-tests.sh"
-run_core "storage-compliance.sh (base posix driver)" "storage-compliance.sh" "--driver-exec=$ROOT/base/.contexture/modules/session/drivers/posix/driver"
-run_core "store-compliance.sh (--data-file)" "store-compliance.sh" "--data-file=$SB/base-only-data"
+collect_core 1 "filter-tests.sh"
+collect_core 2 "ctx-tests.sh"
+collect_core 3 "session-tests.sh (posix)"
+collect_core 4 "hook-tests.sh"
+collect_core 5 "record-audit-tests.sh"
+collect_core 6 "storage-compliance.sh (base posix driver)"
+collect_core 7 "store-compliance.sh (--data-file)"
 
 printf '\n== summary ==\n'
 printf 'base-only-tests: pass=%d fail=%d\n' "$pass" "$fail"
