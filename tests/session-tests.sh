@@ -1354,6 +1354,7 @@ mkdir -p .contexture/tmp/locks
 ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort > k-before.lst
 k_new() { ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort | LC_ALL=C comm -13 k-before.lst -; }
 mkdir -p "$k_lock"
+printf '%s\n' "$$" > "$k_lock/pid"
 printf 'pointer=k-a IN_PROGRESS\n' | "$RESOLVER" task.start k-unit k-a >/dev/null 2>&1 &
 k_pid=$!
 k_n=0
@@ -1361,10 +1362,62 @@ while [ "$k_n" -lt 50 ] && [ -z "$(k_new)" ]; do sleep 0.1; k_n=$((k_n + 1)); do
 k_seen=$(k_new | grep -c '')
 kill -TERM "$k_pid" 2>/dev/null
 wait "$k_pid" 2>/dev/null
-rmdir "$k_lock" 2>/dev/null
+rm -rf "$k_lock" 2>/dev/null
 if [ "$k_seen" -ge 1 ]; then ok "R8: the waiting method had staged its scratch when interrupted"; else bad "R8: the waiting method had staged its scratch when interrupted (new entries: $k_seen)"; fi
 a_eq "$(k_new)" "" "R8: TERM on a waiting driver method leaves no scratch"
 rm -f k-before.lst
+
+echo "== KR a SIGKILLed writer is recoverable (backlog#kill-residue-recovery) =="
+# the unit lock folder carries its holder's pid: a waiter removes a lock whose pid is gone
+# (kill -0) and proceeds, while a live holder still ends in ERR_STORAGE_LOCKED; a writer
+# killed -9 leaves its per-verb scratch root, and the next ctx dispatch sweeps it
+$CTX session bootstrap kr-unit "kill residue unit" >/dev/null 2>&1 </dev/null
+$CTX session task add kr-unit kr-a --objective="Task A" >/dev/null 2>&1 </dev/null
+if [ "$DRIVER" = fts5 ]; then kr_lock=.contexture/tmp/locks/fts5-kr-unit.lock; else kr_lock=.contexture/tmp/locks/kr-unit.lock; fi
+mkdir -p .contexture/tmp/locks
+# a holder takes the lock with its pid, then kill -9 leaves the folder behind
+sh -c 'mkdir "$1"; printf "%s\n" "$$" > "$1/pid"; sleep 30' kr-holder "$kr_lock" &
+kr_holder=$!
+kr_n=0
+while [ ! -f "$kr_lock/pid" ] && [ "$kr_n" -lt 50 ]; do sleep 0.1; kr_n=$((kr_n + 1)); done
+a_eq "$(cat "$kr_lock/pid" 2>/dev/null)" "$kr_holder" "KR: the lock folder carries its holder pid"
+kill -9 "$kr_holder" 2>/dev/null
+wait "$kr_holder" 2>/dev/null
+kr_alive=0
+kill -0 "$kr_holder" 2>/dev/null && kr_alive=1
+a_eq "$kr_alive" "0" "KR: the killed holder pid is gone"
+$CTX session task start kr-unit kr-a --pointer="kr-a IN_PROGRESS" >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "KR: a waiter removes the stale lock and the write lands"
+a_match "$($CTX session task show kr-unit kr-a 2>/dev/null </dev/null)" "IN_PROGRESS" "KR: the stale-lock writer's effect reads back"
+# a live holder still refuses the next writer, after the driver's timeout
+mkdir -p "$kr_lock"
+printf '%s\n' "$$" > "$kr_lock/pid"
+kr_out=$($CTX session task complete kr-unit kr-a --evidence="never lands" 2>&1 </dev/null); kr_rc=$?
+a_eq "$kr_rc" "2" "KR: a live holder still refuses the next writer rc2"
+a_match "$kr_out" "ERR_STORAGE_LOCKED" "KR: the live-holder refusal names ERR_STORAGE_LOCKED"
+rm -rf "$kr_lock"
+# a writer waiting on a live lock is killed -9: its per-verb scratch root stays, and the
+# next verb sweeps it (the root's holder pid is gone)
+mkdir -p "$kr_lock"
+printf '%s\n' "$$" > "$kr_lock/pid"
+ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort > kr-before.lst
+kr_new() { ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort | LC_ALL=C comm -13 kr-before.lst -; }
+$CTX session task start kr-unit kr-a --pointer="kr-a IN_PROGRESS" >/dev/null 2>&1 &
+kr_pid=$!
+kr_n=0
+while [ "$kr_n" -lt 50 ] && [ -z "$(kr_new)" ]; do sleep 0.1; kr_n=$((kr_n + 1)); done
+kr_seen=$(kr_new | grep -c '')
+# kill the verb and its resolver child: the verb shell runs the resolver as a child, so a
+# kill of the shell alone would leave the driver to finish once the lock goes
+kr_kids=$(ps -eo pid=,ppid= 2>/dev/null | awk -v r="$kr_pid" '$2 == r { print $1 }')
+kill -9 $kr_pid $kr_kids 2>/dev/null
+wait "$kr_pid" 2>/dev/null
+rm -rf "$kr_lock"
+if [ "$kr_seen" -ge 1 ]; then ok "KR: the killed writer had staged its scratch"; else bad "KR: the killed writer had staged its scratch (new entries: $kr_seen)"; fi
+a_eq "$(kr_new | grep -c '^verb\.')" "1" "KR: the killed writer left one per-verb scratch root"
+$CTX session task show kr-unit kr-a >/dev/null 2>&1 </dev/null
+a_eq "$(kr_new)" "" "KR: the next ctx dispatch swept the killed writer's scratch root"
+rm -f kr-before.lst
 
 echo "== Q one-line typed fields and the append quote rule (lanes/routing-review/report finding R3) =="
 # a typed single-line field is written as one line of its block; an embedded newline would
@@ -1530,6 +1583,18 @@ p2_residue=0
 p2_incomplete=0
 p2_both=0
 p2_iters=5
+# every residue pattern stands alone: ls over several missing operands exits 1, so the old
+# one-line probe saw a leak only when all the patterns held one (lanes/gate-speed/report @open 1)
+p2_patterns='.contexture/sessions/p2/.tmp* .contexture/sessions/p2/*.XXXXXX .contexture/tmp/rec.* .contexture/tmp/fts5-ws.* .contexture/tmp/posix.* .contexture/tmp/verb.*'
+p2_residue_hits() {
+  p2h=0
+  for p2p in $p2_patterns; do
+    for p2f in $p2p; do
+      if [ -e "$p2f" ]; then p2h=$((p2h + 1)); break; fi
+    done
+  done
+  printf '%s\n' "$p2h"
+}
 i=1
 while [ "$i" -le "$p2_iters" ]; do
   $CTX session record p2 --what="x $i" --slug="$today-probe-x-$i" >/dev/null 2>&1 &
@@ -1542,9 +1607,7 @@ while [ "$i" -le "$p2_iters" ]; do
   [ "$ra" -ne 0 ] && p2_rc_bad=$((p2_rc_bad + 1))
   [ "$rb" -ne 0 ] && p2_rc_bad=$((p2_rc_bad + 1))
   # no temp residue beside the posix files, no scratch left by a verb or the fts5 store
-  if ls .contexture/sessions/p2/.tmp* .contexture/sessions/p2/*.XXXXXX .contexture/tmp/rec.* .contexture/tmp/fts5-ws.* >/dev/null 2>&1; then
-    p2_residue=$((p2_residue + 1))
-  fi
+  [ "$(p2_residue_hits)" -eq 0 ] || p2_residue=$((p2_residue + 1))
   # no torn block: on posix every entry of the file closes with its THREAD line; on every
   # driver both entries read back whole through entry show
   if [ "$DRIVER" = posix ]; then
@@ -1570,6 +1633,17 @@ a_eq "$p2_incomplete" "0" "P2 same-target concurrency: no torn journal block"
 # records of every iteration landed; a lost write reads as fewer (lanes/si-b5-base-review/report,
 # the retired last-writer-wins note of B4 @open 4)
 a_eq "$p2_both" "$p2_iters" "P2 same-target concurrency: both writes landed every iteration (the writers serialize)"
+# each pattern on its own: one planted leak reads as residue, while the retired one-line
+# ls probe reads the same drawer clean (the null check that proves the instrument changed)
+p2_plants='.contexture/sessions/p2/.tmpplant .contexture/sessions/p2/plant.XXXXXX .contexture/tmp/rec.plant .contexture/tmp/fts5-ws.plant .contexture/tmp/posix.plant .contexture/tmp/verb.plant'
+for p2_plant in $p2_plants; do
+  mkdir -p "$(dirname "$p2_plant")"
+  : > "$p2_plant"
+  a_eq "$(p2_residue_hits)" "1" "P2 residue: a single planted leak is seen: ${p2_plant##*/}"
+  if ls $p2_patterns >/dev/null 2>&1; then p2_old_seen=1; else p2_old_seen=0; fi
+  a_eq "$p2_old_seen" "0" "P2 residue: the retired one-ls probe misses that single leak"
+  rm -f "$p2_plant"
+done
 
 echo "== RF shared ref fixes =="
 # finding update --ref stores the ref (a REF line added when the finding had none, the

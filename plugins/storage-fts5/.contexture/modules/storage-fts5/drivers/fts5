@@ -76,6 +76,17 @@ if ! mkdir -p "$DB_TMP" 2>/dev/null || [ ! -w "$DB_TMP" ]; then
   DB_TMP="${TMPDIR:-/tmp}"
 fi
 
+# scratch_base: the per-verb root ctx exported (created on first use), else the drawer;
+# every transient file stages here so a killed verb's root holds its residue
+scratch_base() {
+  if [ -n "${CTX_SCRATCH_ROOT:-}" ] && mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null \
+    && [ -d "$CTX_SCRATCH_ROOT" ] && [ -w "$CTX_SCRATCH_ROOT" ]; then
+    printf '%s\n' "$CTX_SCRATCH_ROOT"
+  else
+    printf '%s\n' "$DB_TMP"
+  fi
+}
+
 # the open path (a fresh schema; a store at another schema refused)
 . "$MODULE_DIR/db-init.sh"
 
@@ -127,7 +138,7 @@ trap 'exit 143' TERM
 
 scratch() {
   if [ -z "$SCRATCH" ]; then
-    SCRATCH=$(mktemp -d "$DB_TMP/fts5-ws.XXXXXX") || {
+    SCRATCH=$(mktemp -d "$(scratch_base)/fts5-ws.XXXXXX") || {
       printf '%s: error: cannot create a scratch folder (ERR_STORAGE_WRITE)\n' "$CMD" >&2
       exit 2
     }
@@ -135,12 +146,28 @@ scratch() {
 }
 
 # the unit write lock: the writers of one unit serialize (beside the transaction itself, so a
-# held lock is the one lever a probe can hold them with)
+# held lock is the one lever a probe can hold them with). The folder carries its holder pid;
+# a waiter removes a lock whose pid is gone (a SIGKILLed writer), and gives a lock with no
+# pid file a second's grace for its holder to write one; a live holder still refuses after
+# ten seconds.
 acquire_lock() {
   mkdir -p "$DB_TMP/locks" 2>/dev/null || true
   lk="$DB_TMP/locks/fts5-$1.lock"
   lk_n=0
+  lk_miss=0
   while ! mkdir "$lk" 2>/dev/null; do
+    lk_pid=$(cat "$lk/pid" 2>/dev/null)
+    case "$lk_pid" in
+      ""|*[!0-9]*)
+        lk_miss=$((lk_miss + 1))
+        if [ "$lk_miss" -ge 10 ]; then rm -rf "$lk" 2>/dev/null; lk_miss=0; continue; fi
+        ;;
+      *)
+        if kill -0 "$lk_pid" 2>/dev/null; then lk_miss=0
+        else rm -rf "$lk" 2>/dev/null; continue
+        fi
+        ;;
+    esac
     lk_n=$((lk_n + 1))
     if [ "$lk_n" -ge 100 ]; then
       printf "%s: error: failed to acquire the write lock of unit '%s' after 10s (ERR_STORAGE_LOCKED)\n" "$CMD" "$1" >&2
@@ -148,6 +175,11 @@ acquire_lock() {
     fi
     sleep 0.1 2>/dev/null || sleep 1
   done
+  printf '%s\n' "$$" > "$lk/pid" 2>/dev/null || {
+    rm -rf "$lk" 2>/dev/null
+    printf "%s: error: cannot write the unit lock holder pid (ERR_STORAGE_WRITE)\n" "$CMD" >&2
+    exit 2
+  }
   LOCK_DIR="$lk"
 }
 
@@ -187,7 +219,7 @@ store_unlock() {
   [ -n "${STORE_LOCK:-}" ] || return 0
   su_lock=$STORE_LOCK
   STORE_LOCK=""
-  rmdir "$su_lock" 2>/dev/null
+  rm -rf "$su_lock" 2>/dev/null
   su_base="$DB_TMP/locks"
   su_p=$(dirname "$su_lock")
   while [ "$su_p" != "$su_base" ] && [ "$su_p" != "/" ]; do
@@ -198,7 +230,9 @@ store_unlock() {
 }
 
 # store_lock <namespace> <key>: the per-key lock, a folder under the drawer's lock folder,
-# held until store_unlock; five seconds of retries then rc 2 ERR_STORAGE_LOCKED
+# held until store_unlock; five seconds of retries then rc 2 ERR_STORAGE_LOCKED. The folder
+# carries its holder pid; a waiter removes a lock whose pid is gone, and gives a lock with no
+# pid file a second's grace for its holder to write one.
 store_lock() {
   STORE_LOCK="$DB_TMP/locks/store-$1/$2.lock"
   mkdir -p "$(dirname "$STORE_LOCK")" 2>/dev/null || {
@@ -206,8 +240,28 @@ store_lock() {
     refuse 2 ERR_STORAGE_WRITE "cannot make the store lock folder"
   }
   sl_n=0
+  sl_miss=0
   while [ "$sl_n" -lt 50 ]; do
-    if mkdir "$STORE_LOCK" 2>/dev/null; then return 0; fi
+    if mkdir "$STORE_LOCK" 2>/dev/null; then
+      printf '%s\n' "$$" > "$STORE_LOCK/pid" 2>/dev/null || {
+        rm -rf "$STORE_LOCK" 2>/dev/null
+        STORE_LOCK=""
+        refuse 2 ERR_STORAGE_WRITE "cannot write the store lock holder pid"
+      }
+      return 0
+    fi
+    sl_pid=$(cat "$STORE_LOCK/pid" 2>/dev/null)
+    case "$sl_pid" in
+      ""|*[!0-9]*)
+        sl_miss=$((sl_miss + 1))
+        if [ "$sl_miss" -ge 10 ]; then rm -rf "$STORE_LOCK" 2>/dev/null; sl_miss=0; continue; fi
+        ;;
+      *)
+        if kill -0 "$sl_pid" 2>/dev/null; then sl_miss=0
+        else rm -rf "$STORE_LOCK" 2>/dev/null; continue
+        fi
+        ;;
+    esac
     sl_n=$((sl_n + 1))
     sleep 0.1 2>/dev/null || sleep 1
   done
@@ -229,7 +283,7 @@ store_data() {
     if [ -x "$sd_c" ]; then sd_script=$sd_c; break; fi
   done
   [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage module data reader is not installed"
-  sd_err=$(mktemp "$DB_TMP/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  sd_err=$(mktemp "$(scratch_base)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   sd_out=$(CTX_STORE_WORKSPACE="$ROOT" "$sd_script" "$sd_ns" 2>"$sd_err")
   sd_rc=$?
   sd_msg=$(head -n 1 "$sd_err" 2>/dev/null)
@@ -331,7 +385,7 @@ store_list() {
   [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes one argument, the namespace"
   sn_ns=$1
   store_data store.list "$sn_ns"
-  sn_tmp=$(mktemp "$DB_TMP/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  sn_tmp=$(mktemp "$(scratch_base)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   if [ -f "$DB_PATH" ]; then
     db_init
     if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = '$(sql_escape "$sn_ns")' ORDER BY key COLLATE BINARY;" > "$sn_tmp" 2>/dev/null; then

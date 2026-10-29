@@ -22,7 +22,8 @@
 # ctx <module> (module table, rc0). Dispatch validates the verb engine-side
 # (unknown rc1, module help on stderr), chdirs to the workspace root, and
 # execs scripts/<verb> with the remaining argv, exporting CTX_ROOT,
-# CTX_MODULE_DIR, CTX_BIN, and LC_ALL=C. Hooks are files under
+# CTX_MODULE_DIR, CTX_BIN, CTX_SCRATCH_ROOT (one per-verb scratch root under
+# the drawer; a dead root is swept on the next dispatch), and LC_ALL=C. Hooks are files under
 # modules/*/hooks/ declaring "# ctx-hook: <point>" and optionally
 # "# ctx-hook-mode: block"; the engine runs them in module-name (LC_ALL=C)
 # then file-name order. Filters live under modules/run/filters/ (scanned
@@ -38,6 +39,28 @@ ctx_bin="$dir/ctx"
 
 ctx_err() {
   printf 'ctx: %s\n' "$*" >&2
+}
+
+# ---------------------------------------------------------------------------
+# per-verb scratch: every dispatch names one root under the drawer and exports
+# it as CTX_SCRATCH_ROOT; a verb's scratch lives inside it and the verb removes
+# it on return. A root left by a SIGKILLed verb is swept by the next dispatch
+# when the pid in its name is gone (kill -0).
+verb_scratch() {
+  vs_base="$root/.contexture/tmp"
+  mkdir -p "$vs_base" 2>/dev/null || return 0
+  for vs_d in "$vs_base"/verb.*; do
+    [ -d "$vs_d" ] || continue
+    vs_n=${vs_d##*/}
+    vs_p=${vs_n#verb.}
+    vs_p=${vs_p%%.*}
+    case "$vs_p" in
+      ""|*[!0-9]*) continue ;;
+    esac
+    kill -0 "$vs_p" 2>/dev/null || rm -rf "$vs_d" 2>/dev/null
+  done
+  CTX_SCRATCH_ROOT="$vs_base/verb.$$.$(date +%s 2>/dev/null || printf '%s' "$$")"
+  export CTX_SCRATCH_ROOT
 }
 
 header_field() {
@@ -1093,4 +1116,5 @@ CTX_BIN="$ctx_bin"
 export CTX_ROOT CTX_MODULE_DIR CTX_BIN
 LC_ALL=C
 export LC_ALL
+verb_scratch
 exec "$md/scripts/$verb" "$@"

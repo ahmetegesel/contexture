@@ -108,15 +108,19 @@ rc=1.
 - cwd: the verbs run from the workspace root (the engine chdirs there before
   dispatch); the posix driver finds its workspace by walking up from its
   working folder, never from `CTX_ROOT`.
-- scratch: each verb makes one folder `.contexture/tmp/rec.<random>` on first
-  use and removes it at exit and on HUP, INT, TERM.
+- scratch: the engine names one per-verb root `.contexture/tmp/verb.<pid>.<epoch>`
+  and exports `CTX_SCRATCH_ROOT`; the verb and the driver stage inside it, remove
+  it at exit and on HUP, INT, TERM, and the next dispatch sweeps a root whose
+  holder pid is gone (a SIGKILLed verb). A verb run outside the engine falls
+  back to a folder of its own under the drawer.
 - free text: every value reaches awk through the environment or a file,
   never through `awk -v`; payload values are escaped on the wire.
 - byte semantics: the engine exports `LC_ALL=C` on dispatch, so `load`'s
   `length()` stays byte-oriented on every awk (the page byte budget).
 - write safety (posix driver): every changed file is staged in a dot folder
   inside the sessions folder (the same filesystem) and renamed into place under the unit lock
-  (`.contexture/tmp/locks/<unit>.lock`); every file a rename replaces is
+  (`.contexture/tmp/locks/<unit>.lock`; the folder carries its holder pid, and a waiter removes
+  a lock whose pid is gone); every file a rename replaces is
   hard-linked into the stage first, so a failed rename or an interrupt
   (HUP, INT, TERM) among the renames rolls the earlier ones back and a
   failed write leaves the record whole.

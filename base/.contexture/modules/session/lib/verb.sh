@@ -12,8 +12,10 @@
 # return as \\, \n, \t, \r), a list as <key>.count and <key>.1 to <key>.N. Values reach
 # awk through the environment, never through awk -v (knowledge#FREE_TEXT_NEVER_THROUGH_AWK_V).
 #
-# Scratch: one folder under the workspace drawer (.contexture/tmp/rec.<random>), made on
-# first use and removed at exit, on an interrupt too.
+# Scratch: ctx names one per-verb root under the drawer and exports CTX_SCRATCH_ROOT; the
+# verb's scratch lives there, made on first use and removed at exit, on an interrupt too;
+# a root left by a SIGKILLed verb is swept by the next dispatch. A verb run outside ctx
+# falls back to a folder of its own under the drawer.
 
 VB_LIB=$(CDPATH= cd -- "$(dirname -- "${VB_SELF:-$0}")/../../session/lib" 2>/dev/null && pwd)
 [ -n "$VB_LIB" ] && [ -f "$VB_LIB/verb.sh" ] || VB_LIB=$(CDPATH= cd -- "$(dirname -- "${VB_SELF:-$0}")/../lib" 2>/dev/null && pwd)
@@ -41,8 +43,14 @@ trap 'exit 143' TERM
 # vb_tmp: the verb's scratch folder
 vb_tmp() {
   if [ -z "$VB_DIR" ]; then
-    mkdir -p .contexture/tmp 2>/dev/null
-    VB_DIR=$(mktemp -d .contexture/tmp/rec.XXXXXX 2>/dev/null) || VB_DIR=""
+    if [ -n "${CTX_SCRATCH_ROOT:-}" ]; then
+      mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null
+      [ -d "$CTX_SCRATCH_ROOT" ] && [ -w "$CTX_SCRATCH_ROOT" ] && VB_DIR=$CTX_SCRATCH_ROOT
+    fi
+    if [ -z "$VB_DIR" ]; then
+      mkdir -p .contexture/tmp 2>/dev/null
+      VB_DIR=$(mktemp -d .contexture/tmp/rec.XXXXXX 2>/dev/null) || VB_DIR=""
+    fi
     if [ -z "$VB_DIR" ]; then
       printf 'ERROR: cannot create a scratch folder under .contexture/tmp\n' >&2
       exit 2

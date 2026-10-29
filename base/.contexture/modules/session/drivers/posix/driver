@@ -14,12 +14,13 @@
 # (store): store.list, store.get, store.put, store.delete, store.changes over a module's
 # declared data file and root.
 #
-# Writes: the unit lock (.contexture/tmp/locks/<unit>.lock) is held from the read to the
-# last rename, every changed file is staged beside the sessions folder and renamed into
-# place (one mv per file, each replaced file hard-linked into the stage first so a failed
-# rename or an interrupt rolls the earlier ones back), and the answer prints only after
-# every file landed; a refusal stages nothing. Every awk runs in the C locale (bytes) and takes every value through the
-# environment or a file, never through awk -v.
+# Writes: the unit lock (.contexture/tmp/locks/<unit>.lock, carrying its holder pid) is
+# held from the read to the last rename, every changed file is staged beside the sessions
+# folder and renamed into place (one mv per file, each replaced file hard-linked into the
+# stage first so a failed rename or an interrupt rolls the earlier ones back), and the
+# answer prints only after every file landed; a refusal stages nothing. Every awk runs in
+# the C locale (bytes) and takes every value through the environment or a file, never
+# through awk -v.
 
 set -u
 
@@ -56,6 +57,17 @@ get_lock_dir() {
   tmp_d=$(get_tmp_dir)
   mkdir -p "$tmp_d/locks" 2>/dev/null || true
   printf '%s/locks\n' "$tmp_d"
+}
+
+# scratch_dir: the per-verb root ctx exported (created on first use), else the drawer;
+# every transient file stages here so a killed verb's root holds its residue
+scratch_dir() {
+  if [ -n "${CTX_SCRATCH_ROOT:-}" ] && mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null \
+    && [ -d "$CTX_SCRATCH_ROOT" ] && [ -w "$CTX_SCRATCH_ROOT" ]; then
+    printf '%s\n' "$CTX_SCRATCH_ROOT"
+  else
+    get_tmp_dir
+  fi
 }
 
 escape_json() {
@@ -150,7 +162,7 @@ store_unlock() {
   [ -n "${STORE_LOCK:-}" ] || return 0
   su_lock=$STORE_LOCK
   STORE_LOCK=""
-  rmdir "$su_lock" 2>/dev/null
+  rm -rf "$su_lock" 2>/dev/null
   su_base=$(get_lock_dir)
   su_p=$(dirname "$su_lock")
   while [ "$su_p" != "$su_base" ] && [ "$su_p" != "/" ]; do
@@ -161,7 +173,9 @@ store_unlock() {
 }
 
 # store_lock <namespace> <key>: the per-key lock, a folder under the drawer's lock folder,
-# held until store_unlock; five seconds of retries then rc 2 ERR_STORAGE_LOCKED
+# held until store_unlock; five seconds of retries then rc 2 ERR_STORAGE_LOCKED. The folder
+# carries its holder pid; a waiter removes a lock whose pid is gone, and gives a lock with no
+# pid file a second's grace for its holder to write one.
 store_lock() {
   STORE_LOCK="$(get_lock_dir)/store-$1/$2.lock"
   mkdir -p "$(dirname "$STORE_LOCK")" 2>/dev/null || {
@@ -169,8 +183,28 @@ store_lock() {
     refuse 2 ERR_STORAGE_WRITE "cannot make the store lock folder"
   }
   sl_n=0
+  sl_miss=0
   while [ "$sl_n" -lt 50 ]; do
-    if mkdir "$STORE_LOCK" 2>/dev/null; then return 0; fi
+    if mkdir "$STORE_LOCK" 2>/dev/null; then
+      printf '%s\n' "$$" > "$STORE_LOCK/pid" 2>/dev/null || {
+        rm -rf "$STORE_LOCK" 2>/dev/null
+        STORE_LOCK=""
+        refuse 2 ERR_STORAGE_WRITE "cannot write the store lock holder pid"
+      }
+      return 0
+    fi
+    sl_pid=$(cat "$STORE_LOCK/pid" 2>/dev/null)
+    case "$sl_pid" in
+      ""|*[!0-9]*)
+        sl_miss=$((sl_miss + 1))
+        if [ "$sl_miss" -ge 10 ]; then rm -rf "$STORE_LOCK" 2>/dev/null; sl_miss=0; continue; fi
+        ;;
+      *)
+        if kill -0 "$sl_pid" 2>/dev/null; then sl_miss=0
+        else rm -rf "$STORE_LOCK" 2>/dev/null; continue
+        fi
+        ;;
+    esac
     sl_n=$((sl_n + 1))
     sleep 0.1 2>/dev/null || sleep 1
   done
@@ -193,7 +227,7 @@ store_data() {
     if [ -x "$sd_c" ]; then sd_script=$sd_c; break; fi
   done
   [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage module data reader is not installed"
-  sd_err=$(mktemp "$(get_tmp_dir)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  sd_err=$(mktemp "$(scratch_dir)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   sd_out=$(CTX_STORE_WORKSPACE="$sd_ws" "$sd_script" "$sd_ns" 2>"$sd_err")
   sd_rc=$?
   sd_msg=$(head -n 1 "$sd_err" 2>/dev/null)
@@ -339,7 +373,7 @@ store_list() {
   [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes one argument, the namespace"
   sn_ns=$1
   store_data store.list "$sn_ns"
-  sn_tmp=$(mktemp "$(get_tmp_dir)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  sn_tmp=$(mktemp "$(scratch_dir)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   store_list_keys > "$sn_tmp"
   printf '{"namespace":"%s","keys":[' "$(escape_json "$sn_ns")"
   sn_first=1
@@ -467,8 +501,7 @@ px_mkdtemp() {
 px_init() {
   WS=$(find_workspace_root)
   SESS="$WS/.contexture/sessions"
-  tmp_d=$(get_tmp_dir)
-  SCR=$(px_mkdtemp "$tmp_d" posix) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
+  SCR=$(px_mkdtemp "$(scratch_dir)" posix) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
   : > "$SCR/man"
   : > "$SCR/files"
   : > "$SCR/err"
@@ -563,12 +596,35 @@ px_awk() {
   fi
 }
 
+# px_lock <unit>: the unit lock folder, held until px_cleanup; its pid file names the
+# holder. A waiter removes a lock whose pid is gone (a SIGKILLed writer), and gives a lock
+# with no pid file a second's grace for its holder to write one; a live holder still ends
+# in ERR_STORAGE_LOCKED after five seconds.
 px_lock() {
   pl_dir=$(get_lock_dir)
   pl_t="$pl_dir/$1.lock"
   pl_n=0
+  pl_miss=0
   while [ "$pl_n" -lt 50 ]; do
-    if mkdir "$pl_t" 2>/dev/null; then PX_LOCK="$pl_t"; return 0; fi
+    if mkdir "$pl_t" 2>/dev/null; then
+      printf '%s\n' "$$" > "$pl_t/pid" 2>/dev/null || {
+        rm -rf "$pl_t" 2>/dev/null
+        refuse 2 ERR_STORAGE_WRITE "cannot write the unit lock holder pid"
+      }
+      PX_LOCK="$pl_t"; return 0
+    fi
+    pl_pid=$(cat "$pl_t/pid" 2>/dev/null)
+    case "$pl_pid" in
+      ""|*[!0-9]*)
+        pl_miss=$((pl_miss + 1))
+        if [ "$pl_miss" -ge 10 ]; then rm -rf "$pl_t" 2>/dev/null; pl_miss=0; continue; fi
+        ;;
+      *)
+        if kill -0 "$pl_pid" 2>/dev/null; then pl_miss=0
+        else rm -rf "$pl_t" 2>/dev/null; continue
+        fi
+        ;;
+    esac
     pl_n=$((pl_n + 1))
     sleep 0.1 2>/dev/null || sleep 1
   done
