@@ -146,7 +146,7 @@ case "${1:-}" in
     ;;
   plugin)
     case "${2:-}" in
-      ""|*/*) echo "fast.sh: plugin needs a plugin name (plugins/<name>/tests/run.sh)" >&2; exit 1 ;;
+      ""|*/*|.|..) echo "fast.sh: plugin needs a plugin name (plugins/<name>/tests/run.sh)" >&2; exit 1 ;;
     esac
     [ -f "$ROOT/plugins/$2/tests/run.sh" ] || { echo "fast.sh: no suite at plugins/$2/tests/run.sh" >&2; exit 1; }
     AREA="plugin $2"
