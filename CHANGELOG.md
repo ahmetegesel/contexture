@@ -4,6 +4,27 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.58.2] - 2026-10-29
+
+PATCH: the test suites regroup into a fast inner loop and the full pre-land gate, the slow jobs run concurrently, and every check stays.
+
+### Added
+
+- `tests/fast.sh`: the fast inner loop with nine area selectors (`unit`, `engine`, `record <group>`, `driver posix|fts5`, `docs`, `docs-fts5`, `plugin <name>`, `base`); it is POSIX sh and awk, adds no dependency, treats 77 as a skip, and never replaces the full gate. `tests/README.md` documents the three layers, the pre-commit and pre-push sets, and the layer map.
+- `tests/base-only-tests.sh --skip-core`: the B1 to B5 payload checks alone (145 assertions), keeping the full run at 152.
+
+### Changed
+
+- The session suite's fold section runs as group 4, so the old three groups and FC run at once; the counts stay 1,151 posix and 1,062 fts5.
+- The base-only suite launches its seven nested posix suites before B1 to B5 behind a capped rc-file poll, and the storage-fts5 suite runs its seven sub-suites the same way; the verdicts, counts, and fixed output order are unchanged.
+- The operations corpus documents the four session groups and adds the fast inner loop step.
+
+### Fixed
+
+- `tests/fast.sh` refuses the `.` and `..` plugin names that resolved outside `plugins/`.
+
+Commits in the range: f5aff16 (storage-fts5 sub-suites concurrent), 208a3d0 (session group 4), 19c139b (base-only nested concurrent), 87e85fd (the fast loop and layer docs), 11b8d51 (the plugin dot-name refusal), and the release commit.
+
 ## [0.58.1] - 2026-10-29
 
 PATCH: the docs discipline closes its two latent read gaps, the gate matrix stays inside the workspace, and the agent corpus names the storage-fts5 driver.
