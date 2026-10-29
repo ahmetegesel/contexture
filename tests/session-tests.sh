@@ -18,12 +18,12 @@
 # as posix files (rcat, rput, rappend) and run on posix alone, each saying so, as do the
 # cases that read the posix files' bytes (W's read-only files, WA's renames).
 #
-# The sections fall into three groups that share no unit (a unit a section creates is
-# named only by sections of its own group): by default the three groups run at once,
+# The sections fall into four groups that share no unit (a unit a section creates is
+# named only by sections of its own group): by default the four groups run at once,
 # each in a sandbox of its own, their output printed in group order under one summary;
-# --group=1|2|3 runs one group, --group=all runs every section in one sandbox, in order.
+# --group=1|2|3|4 runs one group, --group=all runs every section in one sandbox, in order.
 #
-# Usage: tests/session-tests.sh [--driver=posix|fts5] [--group=1|2|3|all]
+# Usage: tests/session-tests.sh [--driver=posix|fts5] [--group=1|2|3|4|all]
 # Exit 0 when every case passes; 1 otherwise; 77 when the fts5 need is absent.
 
 set -u
@@ -39,7 +39,7 @@ GROUP=""
 for a in "$@"; do
   case "$a" in
     --driver=posix|--driver=fts5) DRIVER=${a#--driver=} ;;
-    --group=1|--group=2|--group=3|--group=all) GROUP=${a#--group=} ;;
+    --group=1|--group=2|--group=3|--group=4|--group=all) GROUP=${a#--group=} ;;
     *) echo "session-tests.sh: unknown argument: $a" >&2; exit 1 ;;
   esac
 done
@@ -64,7 +64,7 @@ if mkdir -p "$ROOT/.contexture/tmp" 2>/dev/null && [ -d "$ROOT/.contexture/tmp" 
   tmp_root="$ROOT/.contexture/tmp"
 fi
 
-# no --group: the three groups at once, each a run of this suite in its own sandbox; the
+# no --group: the four groups at once, each a run of this suite in its own sandbox; the
 # exit code of each group is read from the group itself, its counts from its summary line
 if [ -z "$GROUP" ]; then
   GROUPS_DIR=$(mktemp -d "$tmp_root/session-groups.XXXXXX") || exit 1
@@ -72,7 +72,7 @@ if [ -z "$GROUP" ]; then
   trap 'rm -rf "$GROUPS_DIR"' EXIT
   trap '[ -n "$group_pids" ] && kill $group_pids 2>/dev/null; exit 130' INT
   trap '[ -n "$group_pids" ] && kill $group_pids 2>/dev/null; exit 143' TERM
-  for g in 1 2 3; do
+  for g in 1 2 3 4; do
     ( sh "$SCRIPT_DIR/session-tests.sh" "--driver=$DRIVER" "--group=$g" > "$GROUPS_DIR/$g.out" 2>&1 < /dev/null
       printf '%s\n' "$?" > "$GROUPS_DIR/$g.rc" ) &
     group_pids="$group_pids $!"
@@ -81,7 +81,7 @@ if [ -z "$GROUP" ]; then
   pass=0
   fail=0
   broken=""
-  for g in 1 2 3; do
+  for g in 1 2 3 4; do
     g_sum="session-tests ($DRIVER, group $g): pass="
     grep -v -F "$g_sum" "$GROUPS_DIR/$g.out"
     g_line=$(grep "^session-tests ($DRIVER, group $g): pass=[0-9][0-9]* fail=[0-9][0-9]*\$" "$GROUPS_DIR/$g.out")
@@ -1914,7 +1914,9 @@ a_match "$diag_json" '"workspace_root"' "session diagnose --json carries workspa
 a_match "$diag_json" '"descriptor":{"driver":"' "session diagnose --json carries the capability descriptor (@rendering diagnose)"
 $CTX session --diagnose >/dev/null 2>&1
 a_eq "$?" "0" "session --diagnose flag rc0"
+fi # group 3
 
+if in_group 4; then
 echo "== FC the consolidation fold =="
 # FC1 the command surface and the help manual
 $CTX session fold >/dev/null 2>&1; a_eq "$?" "1" "FC1: fold no args rc1"
@@ -2497,7 +2499,7 @@ $CTX session record fc-anchor --what="Batch two: the second chunk" --thread=none
   --supersedes="$ga_bad (superseded: split)" >/dev/null 2>&1
 fc_clean_check fc-anchor "FC17: the split batches"
 
-fi # group 3
+fi # group 4
 
 echo "== summary =="
 if [ "$GROUP" = all ]; then
