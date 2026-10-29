@@ -4,6 +4,18 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.58.3] - 2026-10-29
+
+PATCH: a SIGKILLed writer no longer poisons the workspace: a stale unit or store lock is recovered from its holder pid, and a killed verb's per-verb scratch is swept by the next dispatch.
+
+### Fixed
+
+- The posix and fts5 unit and store locks carry their holder's pid; a waiter removes a lock whose pid is gone and proceeds, while a live holder still refuses ERR_STORAGE_LOCKED.
+- `ctx` names one per-verb scratch root and exports `CTX_SCRATCH_ROOT`; the verb library and both drivers stage under it and remove it on return, and the next dispatch sweeps a root left by a SIGKILLed verb.
+- The session suite's P2 residue case tests each pattern on its own with a planted single leak, and the new KR section proves the stale-lock recovery, the live-holder refusal, and the scratch sweep on both drivers.
+
+Commits in the range: cfb9a43 (the recovery) and the release commit.
+
 ## [0.58.2] - 2026-10-29
 
 PATCH: the test suites regroup into a fast inner loop and the full pre-land gate, the slow jobs run concurrently, and every check stays.
