@@ -14,7 +14,10 @@
 # the instruments below (the 43-function descriptor check and the census, both
 # null-checked by a planted difference).
 #
-# Usage: tests/base-only-tests.sh [--keep]
+# Usage: tests/base-only-tests.sh [--keep] [--skip-core]
+#   --keep       preserve the sandbox
+#   --skip-core  skip B6's seven nested posix suites and their launches, running B1 to B5
+#                alone (pass=145); the full run stays pass=152
 # Exit 0 when every case passes; 1 otherwise; 2 a staging failure.
 
 set -u
@@ -28,9 +31,11 @@ LANE_MOD="$ROOT/base/.contexture/modules/lane"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
 
 KEEP=0
+SKIP_CORE=0
 for a in "$@"; do
   case "$a" in
     --keep) KEEP=1 ;;
+    --skip-core) SKIP_CORE=1 ;;
     *) echo "base-only-tests.sh: unknown argument: $a" >&2; exit 1 ;;
   esac
 done
@@ -93,6 +98,8 @@ refused() { # <rc> <message...>: one line on stderr, nothing on stdout, the exac
 # ==============================================================================
 # B6 launch: the seven nested posix suites run while B1 to B5 execute
 # ==============================================================================
+# --skip-core skips the launches and the B6 section, leaving B1 to B5 alone
+if [ "$SKIP_CORE" -eq 0 ]; then
 # the nested suites are docs-shaped; the synthetic data file supplies that contract
 printf 'namespace: docs\nroot: docs\nsuffix: .md\nkey: <repo>/<slug>\nchanges: true\n' > "$SB/base-only-data"
 NESTED="$SB/nested"
@@ -143,6 +150,7 @@ run_nested() { # the gate's rc-file poll idiom (tests/run.sh lines 128-180), cap
 
 run_nested &
 NESTED_PID=$!
+fi
 
 # ==============================================================================
 # B1: the no-plugin boot and help surface
@@ -412,6 +420,7 @@ rm -rf "$plantdir"
 # ==============================================================================
 # B6: the posix core suites (no plugin)
 # ==============================================================================
+if [ "$SKIP_CORE" -eq 0 ]; then
 printf '\n== B6: the posix core suites ==\n'
 # the seven suites were launched before B1; wait for the poll loop, then print in order
 if [ -n "$NESTED_PID" ]; then wait "$NESTED_PID"; fi
@@ -438,6 +447,7 @@ collect_core 4 "hook-tests.sh"
 collect_core 5 "record-audit-tests.sh"
 collect_core 6 "storage-compliance.sh (base posix driver)"
 collect_core 7 "store-compliance.sh (--data-file)"
+fi
 
 printf '\n== summary ==\n'
 printf 'base-only-tests: pass=%d fail=%d\n' "$pass" "$fail"
