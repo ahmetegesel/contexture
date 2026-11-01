@@ -24,7 +24,7 @@ A module is a directory under `.contexture/modules/`:
 - Declarations are `# key: value` comment lines in the file they govern, placed in the file's header.
 - `scripts/` files and `hooks/` files are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
 
-The builtin modules `session`, `lane`, `storage`, and `run` ship with the base; a module you add is workspace-owned. See Payload.
+The builtin modules `session`, `lane`, and `run` ship with the base; the storage core at `.contexture/storage/` is not a module but rides the same payload; a module you add is workspace-owned. See Payload.
 
 ## Declarations
 
@@ -38,7 +38,7 @@ That one line is the module's entry in `ctx help`. The module name is the direct
 
 ### The data file
 
-A module that stores data through the generic module store ships a `data` file beside its `module` file: one `field: value` line per field and a line starting with `#` a comment, declaring `namespace`, `root`, `suffix`, `key`, and `changes`. The storage module reads and validates it; a module with no `data` file uses no store. The grammar, the key rule, and the five store functions are in [The engine](the-engine.md) (The module store); the docs module's file is the worked declaration.
+A module that stores data through the generic module store ships a `data` file beside its `module` file: one `field: value` line per field and a line starting with `#` a comment, declaring `namespace`, `root`, `suffix`, `key`, and `changes`. The storage core reads and validates it; a module with no `data` file uses no store. The grammar, the key rule, and the five store functions are in [The engine](the-engine.md) (The module store); the docs module's file is the worked declaration.
 
 ### Verb scripts
 
@@ -239,13 +239,13 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
 ## Worked examples
 
-### storage: the base module with no verbs
+### the storage core: not a module
 
-The builtin storage module, `.contexture/modules/storage/`. Its `module` carries one summary line and it has no public verb: `ctx help` lists it and its verb table is empty. It owns the driver resolver (`scripts/driver-resolver`, a private script: it carries no summary) and the private `scripts/store-data` reader that validates a module's data file. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs this resolver, so the session and lane verbs, the docs module, and the plugin suites keep their old path while every module resolves the configured driver through the storage module. The five store functions and the data file grammar are in [The engine](the-engine.md) (The module store).
+The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file, the module-facing `scripts/library` (the store five, `store_require` and `store_has`, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the core's resolver, so the session and lane verbs, the docs module, and the plugin suites keep their old path while every caller resolves the configured driver through the core. The five store functions, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
 
 ### session: thin verbs over a shared library and a storage driver
 
-The builtin record engine, `.contexture/modules/session/`. Its `module` carries one summary line; its twenty-two extension-less verbs are sh scripts that source `lib/verb.sh`, check the input shape, make one call to the configured storage driver through the storage module's resolver (the session `scripts/driver-resolver` wraps it; a private script either way: neither carries a summary), and render the answer through `lib/json.awk` and `lib/render.awk`; `index` alone is an awk verb, since it reads the rhythm files rather than the record. `fold` is the one composite maintenance verb: it reads the live board, records the fold start and the finish receipt as journal entries, carries the live open threads (REF'd, never closed), and checks the lanes' ordinary consolidated entries, which the lanes write with the record verb; the plan divides the live scope at the mechanical seams and coalesces the series, splitting an over-12 chunk only as the last resort, the fetch hands one chunk at a time, an optional `--merge` adds only the next chunk for a recorded same-topic merge, and the check refuses a whole-anchor batch. `refresh` is the one composite verb: it runs the board and the audit and then fires the refresh point. The posix driver under `drivers/posix/` is the only code that touches the record's files. Off-path detail (the verb to function map, the helpers, the hook call sites) is in `.contexture/modules/session/README.md`.
+The builtin record engine, `.contexture/modules/session/`. Its `module` carries one summary line; its twenty-two extension-less verbs are sh scripts that source `lib/verb.sh`, check the input shape, make one call to the configured storage driver through the storage core's resolver (the session `scripts/driver-resolver` wraps it; a private script either way: neither carries a summary), and render the answer through `lib/json.awk` and `lib/render.awk`; `index` alone is an awk verb, since it reads the rhythm files rather than the record. `fold` is the one composite maintenance verb: it reads the live board, records the fold start and the finish receipt as journal entries, carries the live open threads (REF'd, never closed), and checks the lanes' ordinary consolidated entries, which the lanes write with the record verb; the plan divides the live scope at the mechanical seams and coalesces the series, splitting an over-12 chunk only as the last resort, the fetch hands one chunk at a time, an optional `--merge` adds only the next chunk for a recorded same-topic merge, and the check refuses a whole-anchor batch. `refresh` is the one composite verb: it runs the board and the audit and then fires the refresh point. The posix driver in the storage core (`base/.contexture/storage/drivers/posix/`) is the only code that touches the record's files. Off-path detail (the verb to function map, the helpers, the hook call sites) is in `.contexture/modules/session/README.md`.
 
 ### ideas: a private engine with an environment override
 
@@ -257,7 +257,7 @@ The builtin run module, `.contexture/modules/run/`. It has no module file and no
 
 ## Payload
 
-A module you add is workspace-owned: updates never touch it. The builtin `session`, `lane`, `storage`, and `run` modules ride the update payload: the source repository tracks them mirrored under `base/`, and an update applies them onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
+A module you add is workspace-owned: updates never touch it. The builtin `session`, `lane`, and `run` modules and the storage core ride the update payload: the source repository tracks them mirrored under `base/`, and an update applies them onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
 
 ## Where the rest lives
 

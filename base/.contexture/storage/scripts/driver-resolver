@@ -1,9 +1,9 @@
 #!/bin/sh
-# driver-resolver: the storage module's driver resolver: it resolves module-owned
-# storage drivers, validates capability handshakes, and dispatches storage operations
-# for every module (the record, the corpus, and the generic module store). The session
-# module keeps a compatibility wrapper at its old path, so every caller reaches the one
-# resolver here.
+# driver-resolver: the storage core's driver resolver: it resolves storage drivers,
+# validates capability handshakes, and dispatches storage operations for every module
+# (the record, the corpus, and the generic module store). The core's posix driver sits
+# beside this script under storage/drivers; the session module keeps a compatibility
+# wrapper at its old path, so every caller reaches the one resolver here.
 #
 # Standardized exit codes:
 #   0: success
@@ -93,7 +93,10 @@ read_conf_driver() {
   return 1
 }
 
-# Locate driver executable across 3-tier discovery hierarchy
+# Locate driver executable: the storage core's drivers first, then the transitional
+# locations (workspace drivers, module-owned drivers, the base mirror, PATH). The core
+# drivers and the extension root are the settled end shape; the module tree carries the
+# fts5 driver until the module system moves it to the extension root.
 find_driver_executable() {
   ctx_dir="$1"
   driver="$2"
@@ -107,7 +110,7 @@ find_driver_executable() {
       ;;
   esac
 
-  # Tier 1: Workspace custom drivers
+  # Tier 1: Workspace custom drivers (transitional)
   if [ -x "$ctx_dir/drivers/$driver/driver" ]; then
     printf '%s/drivers/%s/driver\n' "$ctx_dir" "$driver"
     return 0
@@ -117,11 +120,18 @@ find_driver_executable() {
     return 0
   fi
 
-  # Tier 2: Module-owned drivers
-  if [ -x "$ctx_dir/modules/session/drivers/$driver/driver" ]; then
-    printf '%s/modules/session/drivers/%s/driver\n' "$ctx_dir" "$driver"
+  # Tier 2: The storage core's drivers
+  if [ -x "$ctx_dir/storage/drivers/$driver/driver" ]; then
+    printf '%s/storage/drivers/%s/driver\n' "$ctx_dir" "$driver"
     return 0
   fi
+  if [ -f "$ctx_dir/storage/drivers/$driver" ] && [ -x "$ctx_dir/storage/drivers/$driver" ]; then
+    printf '%s/storage/drivers/%s\n' "$ctx_dir" "$driver"
+    return 0
+  fi
+
+  # Tier 3: Module-owned drivers (transitional; the extension root follows with the
+  # module system)
   for mod_dir in "$ctx_dir"/modules/*; do
     [ -d "$mod_dir" ] || continue
     if [ -x "$mod_dir/drivers/$driver/driver" ]; then
@@ -134,11 +144,11 @@ find_driver_executable() {
     fi
   done
 
-  # Tier 2b: Base mirror fallback
+  # Tier 4: Base mirror fallback (transitional)
   base_ctx="$ctx_dir/../base/.contexture"
   if [ -d "$base_ctx" ]; then
-    if [ -x "$base_ctx/modules/session/drivers/$driver/driver" ]; then
-      printf '%s/modules/session/drivers/%s/driver\n' "$base_ctx" "$driver"
+    if [ -x "$base_ctx/storage/drivers/$driver/driver" ]; then
+      printf '%s/storage/drivers/%s/driver\n' "$base_ctx" "$driver"
       return 0
     fi
     for mod_dir in "$base_ctx"/modules/*; do
@@ -154,7 +164,7 @@ find_driver_executable() {
     done
   fi
 
-  # Tier 3: External binary on PATH
+  # Tier 5: External binary on PATH (transitional)
   if command -v "ctx-storage-$driver" >/dev/null 2>&1; then
     command -v "ctx-storage-$driver"
     return 0
@@ -200,13 +210,13 @@ resolve_target_driver() {
     return 0
   fi
 
-  # Canonical default path for posix baseline driver
+  # Canonical default path for the core posix baseline driver
   if [ "$target_name" = "posix" ]; then
-    printf '%s/modules/session/drivers/posix/driver\n' "$ctx_dir"
+    printf '%s/storage/drivers/posix/driver\n' "$ctx_dir"
     return 0
   fi
 
-  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' not found in workspace drivers, builtin drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
+  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' not found in the core drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
   return 2
 }
 
@@ -314,7 +324,7 @@ verdict_fresh() {
   return 0
 }
 
-# The handshake at dispatch: a driver other than the bundled posix driver proves its
+# The handshake at dispatch: a driver other than the bundled core posix driver proves its
 # descriptor (contract "2" and all 38 record functions) before it serves any function, and
 # a driver that fails halts the call rc 2 ERR_DRIVER_PROTOCOL with the gap named. The
 # verdict is cached in the scratch drawer, one file per driver path, valid while fresh
@@ -325,7 +335,7 @@ verdict_fresh() {
 handshake_at_dispatch() {
   hd_path="$1"
   hd_name="$2"
-  [ "$hd_path" = "$CTX_DIR/modules/session/drivers/posix/driver" ] && return 0
+  [ "$hd_path" = "$CTX_DIR/storage/drivers/posix/driver" ] && return 0
   hd_key=""
   hd_rest=$hd_path
   while :; do

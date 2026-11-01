@@ -33,7 +33,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
-STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
+STORAGE_CORE="$ROOT/base/.contexture/storage"
 FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
 DATA_FILE="$ROOT/plugins/docs-discipline/.contexture/modules/docs/data"
 
@@ -56,7 +56,7 @@ case "$DRIVER_NAME" in
   *) echo "store-compliance.sh: unknown driver: $DRIVER_NAME (posix or fts5)" >&2; exit 1 ;;
 esac
 
-for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_MOD/scripts/store-data" "$DATA_FILE"; do
+for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/drivers/posix/driver" "$DATA_FILE"; do
   [ -e "$f" ] || { echo "store-compliance.sh: missing $f" >&2; exit 2; }
 done
 if [ "$IS_POSIX" -eq 0 ]; then
@@ -94,7 +94,7 @@ mkdir -p "$SB/.contexture/modules" "$SB/.contexture/tmp" "$SB/docs/workspace"
 cp "$CTX_SRC" "$SB/.contexture/ctx"
 chmod +x "$SB/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SB/.contexture/modules/session"
-cp -R "$STORAGE_MOD" "$SB/.contexture/modules/storage"
+cp -R "$STORAGE_CORE" "$SB/.contexture/storage"
 # the suite's cases are docs-shaped; --data-file supplies any file with that contract
 mkdir -p "$SB/.contexture/modules/docs"
 cp "$DATA_FILE" "$SB/.contexture/modules/docs/data"
@@ -102,10 +102,10 @@ if [ "$IS_POSIX" -eq 0 ]; then
   cp -R "$FTS5_MOD" "$SB/.contexture/modules/storage-fts5"
   printf 'storage.driver: fts5\n' > "$SB/.contexture/config"
 fi
-chmod +x "$SB/.contexture/modules/session/scripts/"* "$SB/.contexture/modules/storage/scripts/"*
+chmod +x "$SB/.contexture/modules/session/scripts/"* "$SB/.contexture/storage/scripts/"* "$SB/.contexture/storage/drivers/posix/driver"
 cd "$SB" || exit 2
 if [ "$IS_POSIX" -eq 1 ]; then
-  STAGED_DRIVER="$SB/.contexture/modules/session/drivers/posix/driver"
+  STAGED_DRIVER="$SB/.contexture/storage/drivers/posix/driver"
 else
   STAGED_DRIVER="$SB/.contexture/modules/storage-fts5/drivers/fts5"
   chmod +x "$STAGED_DRIVER"
@@ -169,16 +169,14 @@ printf 'store-compliance suite: the %s store over the docs data file (staged at 
 # ==============================================================================
 # S1: the module store is installed and listed; the resolver answers the capabilities
 # ==============================================================================
-printf '== S1: the storage module and the resolver ==\n'
+printf '== S1: the storage core and the resolver ==\n'
 hall=$("$SB/.contexture/ctx" help --all 2>/dev/null)
 case "$hall" in
-  *"module storage:"*) ;;
-  *) miss "ctx help --all does not list the storage module" ;;
+  *"module storage:"*) miss "ctx help --all still lists the retired storage module" ;;
 esac
-case "$hall" in
-  *"the generic module store"*) ;;
-  *) miss "ctx help --all carries no storage module summary" ;;
-esac
+[ -x "$SB/.contexture/storage/scripts/driver-resolver" ] || miss "the storage core resolver is not installed"
+[ -f "$SB/.contexture/storage/scripts/library" ] || miss "the storage core library is not installed"
+[ -x "$SB/.contexture/storage/drivers/posix/driver" ] || miss "the storage core posix driver is not installed"
 resolved=$("$RESOLVER" resolve 2>/dev/null)
 [ "$resolved" = "$RESOLVED_EXPECT" ] || miss "the session wrapper resolves [$resolved] want [$RESOLVED_EXPECT]"
 "$RESOLVER" require store >/dev/null 2>&1
@@ -215,7 +213,7 @@ chmod +x .contexture/drivers/planted/driver
 [ "$?" -eq 1 ] || miss "the planted descriptor did not answer has store rc1"
 "$RESOLVER" --driver=planted require store.changelog >/dev/null 2>&1
 [ "$?" -eq 2 ] || miss "the planted descriptor did not answer require store.changelog rc2"
-tc "S1: the storage module is listed, the wrapper resolves through it, and the store capabilities answer"
+tc "S1: the storage core is not a module, the wrapper resolves through it, and the store capabilities answer"
 
 # ==============================================================================
 # S2: the docs data file maps the corpus to docs/workspace and list is bytewise and filtered
@@ -517,6 +515,110 @@ _p_hits=$(census_hits "$_plant/base")
 [ "$_p_hits" = 1 ] || miss "the census read $_p_hits on a planted reference"
 rm -rf "$_plant"
 tc "S8: base carries no docs module or docs parser reference, and the census catches a plant"
+
+# ==============================================================================
+# S9: the module-facing library: the store five, data_get/data_emit, depth and cycle
+# ==============================================================================
+printf '\n== S9: the module-facing library ==\n'
+. "$SB/.contexture/storage/scripts/library"
+export CTX_STORE_ROOT="$SB"
+unset CTX_STORE_RESOLVER
+mkdir -p .contexture/modules/libprobe libprobe-root/x
+printf 'namespace: libprobe\nroot: libprobe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/modules/libprobe/data
+printf 'library-value\n' > "$SB/pay-lib"
+FN=store.put
+store_put libprobe x/y < "$SB/pay-lib" > "$O" 2> "$E"; RC=$?
+answer
+wantout '{"namespace":"libprobe","key":"x/y","op":"write"}'
+FN=store.get
+store_get libprobe x/y < /dev/null > "$O" 2> "$E"; RC=$?
+rawok
+wantfile "$SB/pay-lib"
+FN=store.list
+store_list libprobe < /dev/null > "$O" 2> "$E"; RC=$?
+answer
+wantout '{"namespace":"libprobe","keys":["x/y"]}'
+FN=store.delete
+store_delete libprobe x/y < /dev/null > "$O" 2> "$E"; RC=$?
+answer
+wantout '{"namespace":"libprobe","key":"x/y","op":"remove"}'
+tc "S9a: the library's store five answer through the core resolver on the $DRIVER_NAME driver"
+
+mkdir -p .contexture/modules/fixture/scripts
+printf 'namespace: fixture\nroot: fixture-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/modules/fixture/data
+cat > .contexture/modules/fixture/scripts/data <<'FIXTURE'
+#!/bin/sh
+# the fixture module's data script: data_get answers a few refs through data_emit
+. "${CTX_STORE_ROOT:-$PWD}/.contexture/storage/scripts/library"
+case "${1:-}" in
+  data_get)
+    case "${2:-}" in
+      fixture#item) data_emit "$2" '{"name":"item","value":"one"}' ;;
+      fixture#depth:[1-8])
+        n=${2##*:}
+        if [ "$n" -lt 8 ]; then
+          data_get "fixture#depth:$((n + 1))" || exit $?
+        else
+          data_emit "$2" '{"name":"depth","value":"8"}'
+        fi
+        ;;
+      fixture#deep:[0-9]*)
+        n=${2##*:}
+        data_get "fixture#deep:$((n + 1))" || exit $?
+        ;;
+      fixture#cycle:*)
+        data_get "$2" || exit $?
+        ;;
+      *)
+        printf 'data_get: error: item '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "${2#fixture#}" >&2
+        exit 1
+        ;;
+    esac
+    ;;
+  *) exit 1 ;;
+esac
+FIXTURE
+chmod +x .contexture/modules/fixture/scripts/data
+
+FN=data_emit
+data_emit fixture#item '{"x":1}' > "$O" 2> "$E"; RC=$?
+rawok
+wantout '{"ref":"fixture#item","data":{"x":1}}'
+tc "S9b: data_emit prints the one-line envelope"
+
+FN=data_get
+data_get fixture#item > "$O" 2> "$E"; RC=$?
+rawok
+wantout '{"ref":"fixture#item","data":{"name":"item","value":"one"}}'
+data_get fixture#depth:1 > "$O" 2> "$E"; RC=$?
+rawok
+wantout '{"ref":"fixture#depth:8","data":{"name":"depth","value":"8"}}'
+tc "S9c: data_get resolves a module ref and follows a chain to the eighth hop"
+
+data_get fixture#deep:1 > "$O" 2> "$E"; RC=$?
+[ "$RC" -eq 1 ] || miss "depth: rc $RC want 1"
+[ -s "$O" ] && miss "depth printed stdout [$(head -c 120 "$O")]"
+[ "$(wc -l < "$E" | tr -d ' ')" = 1 ] || miss "depth wrote $(wc -l < "$E") stderr lines, want one"
+grep -q 'ref depth over the limit 8 (ERR_INVALID_ARGUMENT)' "$E" || miss "depth stderr [$(head -c 200 "$E")]"
+data_get fixture#cycle:a > "$O" 2> "$E"; RC=$?
+[ "$RC" -eq 1 ] || miss "cycle: rc $RC want 1"
+[ -s "$O" ] && miss "cycle printed stdout [$(head -c 120 "$O")]"
+grep -q 'ref cycle (ERR_INVALID_ARGUMENT)' "$E" || miss "cycle stderr [$(head -c 200 "$E")]"
+tc "S9d: a ref chain over 8 hops and a ref cycle refuse without an answer"
+
+data_get fixture#absent > "$O" 2> "$E"; RC=$?
+[ "$RC" -eq 1 ] || miss "absent: rc $RC want 1"
+[ -s "$O" ] && miss "absent printed stdout"
+[ "$(cat "$E")" = "data_get: error: ref 'fixture#absent': item 'absent' not found (ERR_ENTITY_NOT_FOUND)" ] || miss "absent stderr [$(cat "$E")]"
+data_get ghost#x > "$O" 2> "$E"; RC=$?
+[ "$RC" -eq 1 ] || miss "missing module: rc $RC want 1"
+[ -s "$O" ] && miss "missing module printed stdout"
+[ "$(cat "$E")" = "data_get: error: ref 'ghost#x': module 'ghost' not found (ERR_ENTITY_NOT_FOUND)" ] || miss "missing module stderr [$(cat "$E")]"
+data_get nohash > "$O" 2> "$E"; RC=$?
+[ "$RC" -eq 1 ] || miss "malformed ref: rc $RC want 1"
+[ -s "$O" ] && miss "malformed ref printed stdout"
+[ "$(cat "$E")" = "data_get: error: ref 'nohash': a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)" ] || miss "malformed ref stderr [$(cat "$E")]"
+tc "S9e: a missing item, a missing module, and a malformed ref refuse their fixed lines"
 
 printf '\n== summary ==\n'
 printf 'store-compliance (%s): pass=%d fail=%d\n' "$DRIVER_NAME" "$pass" "$fail"

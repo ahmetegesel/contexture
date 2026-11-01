@@ -90,7 +90,7 @@ for entry in $CORE_SUITES; do
   fi
   case "$entry" in
     # the SPI harness defaults to the installed driver; the gate pins the shipped one
-    storage-compliance.sh) add_job "core:$entry" run "$SCRIPT_DIR/$s" "--driver-exec=$ROOT/base/.contexture/modules/session/drivers/posix/driver" ;;
+    storage-compliance.sh) add_job "core:$entry" run "$SCRIPT_DIR/$s" "--driver-exec=$ROOT/base/.contexture/storage/drivers/posix/driver" ;;
     # the second session run: the same assertions on the fts5 driver
     session-tests.sh:fts5) add_job "core:$entry" run "$SCRIPT_DIR/$s" "--driver=fts5" ;;
     *) add_job "core:$entry" run "$SCRIPT_DIR/$s" ;;

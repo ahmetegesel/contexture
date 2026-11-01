@@ -18,7 +18,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
-STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
+STORAGE_CORE="$ROOT/base/.contexture/storage"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
 IDEAS_MOD="$ROOT/.contexture/modules/ideas"
 IDEAS_FIXTURE="$SCRIPT_DIR/fixtures/ideas/IDEAS.md"
@@ -45,7 +45,7 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/bin"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
-cp -R "$STORAGE_MOD" "$SANDBOX/.contexture/modules/storage"
+cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
 cp -R "$RUN_MOD" "$SANDBOX/.contexture/modules/run"
 
 # fixture modules: a good one, three broken shapes, a reserved name, a
@@ -102,7 +102,7 @@ printf '#!/bin/sh\necho shadow\n' > "$SANDBOX/.contexture/modules/load/scripts/y
   echo 'echo "hi there famcmd output line"'
 } > "$SANDBOX/bin/famcmd"
 
-chmod +x "$SANDBOX/.contexture/modules/session/scripts/"* "$SANDBOX/.contexture/modules/good/scripts/"* "$SANDBOX/.contexture/modules/scriptsonly/scripts/orphan" "$SANDBOX/.contexture/modules/filteronly/filters/probe.awk" "$SANDBOX/.contexture/modules/hookonly/hooks/10-emit.sh" "$SANDBOX/bin/famcmd"
+chmod +x "$SANDBOX/.contexture/modules/session/scripts/"* "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver" "$SANDBOX/.contexture/modules/good/scripts/"* "$SANDBOX/.contexture/modules/scriptsonly/scripts/orphan" "$SANDBOX/.contexture/modules/filteronly/filters/probe.awk" "$SANDBOX/.contexture/modules/hookonly/hooks/10-emit.sh" "$SANDBOX/bin/famcmd"
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx

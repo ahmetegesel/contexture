@@ -282,7 +282,7 @@ The docs module reads its namespace and writes each doc through the store, stamp
 
 #### The module store
 
-The storage module (`.contexture/modules/storage/`) owns the driver resolver and the generic module store contract. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the storage module's resolver, so every module resolves the configured driver and asks its capability questions through the storage module. The store serves module-owned data only: the record keeps the 38 typed functions above, and the docs corpus reaches the store through the docs module's own typed layer. Base storage reads and validates a module's data file; it never calls the module's code, and no module's parser enters base.
+The storage core (`.contexture/storage/`) owns the driver resolver, the generic module store contract, the module-facing library, and the posix driver; it is not a module, so `ctx help` does not list it. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the core's resolver, so every caller resolves the configured driver and asks its capability questions through the core. The store serves module-owned data only: the record keeps the 38 typed functions above, and the docs corpus reaches the store through the docs module's own typed layer. The core reads and validates a module's data file; it never calls the module's code, and no module's parser enters base.
 
 A module declares its data in a `data` file beside its `module` file, one `field: value` line per field and a line starting with `#` a comment:
 
@@ -296,6 +296,8 @@ changes: true
 
 The namespace is a lowercase token of letters, digits, dot, underscore, and hyphen; the root is a workspace-relative folder inside the workspace; the suffix is non-empty; the key pattern carries one `<name>` placeholder per slash-separated segment; and `changes` is `true` or `false`. The module directory beside the data file is the owner, and a second data file declaring the same namespace refuses. A module's data file ships beside its module file; the docs module's values and root are in its module README.
 
+A module's script sources `.contexture/storage/scripts/library` and calls the store through it (`store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_require`, `store_has`); the module never names the driver. The library also carries the module data interface: `data_get <ref>` resolves a `<module>#<symbol>` reference by running the target module's data script (`modules/<module>/scripts/data`) and printing the envelope that script emits through `data_emit <ref> <data>`; a ref chain is bounded at 8 hops and a repeated ref in the chain refuses as a cycle. The source write's validation of a new ref is the unit module's later. The docs module reads its corpus through the library.
+
 | function | argv | stdin | answer |
 |---|---|---|---|
 | `store.list` | `<namespace>` | none | `{"namespace","keys"}`: every key the module pattern admits, bytewise |
@@ -306,22 +308,24 @@ The namespace is a lowercase token of letters, digits, dot, underscore, and hyph
 
 The five functions are optional behind the `store` capability; a driver without them keeps serving the record. Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a control character, a leading slash, a backslash, or a `.` or `..` segment. The module pattern filters list and refuses a key outside it. The bounded `--op` and `--head` flags are checked before the module data file and the key, so a malformed argv answers the same first refusal on every driver. The posix mapping is `<root>/<key><suffix>` under the workspace root, written by a same-directory temp moved over the key under a per-key lock, so a put lands whole or not at all. A filesystem can fold more than ASCII (a Unicode case variant): the posix store refuses a key its root cannot represent exactly beside a stored key, and removes what it just wrote, so a successful put always lists the key it echoes; fts5 holds the two exact keys. `store.changes` is optional per namespace: a namespace declaring `changes: false`, or a driver without the log, refuses rc 1 `ERR_CAPABILITY_UNSUPPORTED`. The posix driver keeps no change log (the module's delta is git); fts5 keeps the generic log.
 
-The descriptor carries the 38 record plus the five store functions with the optional tokens `store` and, where the driver keeps one, `store.changelog`; `tests/storage-compliance.sh` TC70 pins that final set and checks each family is all or none. `tests/store-compliance.sh` holds the store driver to the five functions over a sandbox corpus (the posix store, and the plugin suite runs the same checks on the fts5 store with `--driver=fts5`): the exact list answer and order, the raw bytes of a document, the key rule, the data file grammar, the per-key lock, the atomic put, and the no-base-to-docs census, each with a planted difference where the instrument needs a null check; the fts5 module README carries the plugin's own store cases.
+The descriptor carries the 38 record plus the five store functions with the optional tokens `store` and, where the driver keeps one, `store.changelog`; `tests/storage-compliance.sh` TC70 pins that final set and checks each family is all or none. `tests/store-compliance.sh` holds the store driver to the five functions over a sandbox corpus (the posix store, and the plugin suite runs the same checks on the fts5 store with `--driver=fts5`): the exact list answer and order, the raw bytes of a document, the key rule, the data file grammar, the per-key lock, the atomic put, and the no-base-to-docs census, each with a planted difference where the instrument needs a null check; the fts5 module README carries the plugin's own store cases. The same suite proves the library's store five and its ref interface (`data_get` and `data_emit`, the depth-8 and cycle refusals) over a fixture module on both drivers.
 
 #### Driver discovery hierarchy
 
-The driver resolver (the storage module's `scripts/driver-resolver`; the session module's `scripts/driver-resolver` is its compatibility wrapper) discovers storage drivers through a strict 3-tier hierarchy:
-1. Workspace custom drivers: `.contexture/drivers/<name>/driver`
-2. Module-owned drivers: `.contexture/modules/<module>/drivers/<driver-name>/driver` or `.contexture/modules/session/drivers/<driver-name>/driver`
-3. PATH executables: system binaries named `ctx-storage-<name>`
+The driver resolver (the storage core's `scripts/driver-resolver`; the session module's `scripts/driver-resolver` is its compatibility wrapper) discovers storage drivers through this hierarchy:
+1. Workspace custom drivers: `.contexture/drivers/<name>/driver` (transitional)
+2. The storage core's drivers: `.contexture/storage/drivers/<name>/driver`
+3. Module-owned drivers: `.contexture/modules/<module>/drivers/<driver-name>/driver` (transitional; the fts5 driver lives here until the module system moves it to the extension root)
+4. The base mirror's core and module drivers (transitional)
+5. PATH executables: system binaries named `ctx-storage-<name>` (transitional)
 
-The resolver passes stdin through to the driver untouched.
+The resolver passes stdin through to the driver untouched. The extension root's `storage/drivers` search arrives with the module system; the adoption retires the transitional tiers.
 
 #### Configuration precedence
 
 Driver selection follows deterministic precedence:
 1. `CTX_STORAGE_DRIVER` environment variable
-2. Workspace configuration file (`.contexture/config` or `.contexture/storage.conf`, key `session.storage.driver` or `storage.driver`)
+2. `.contexture/config` key `storage.driver` (the contract; the legacy `session.storage.driver` key and `.contexture/storage.conf` read as transitional compatibility)
 3. Default baseline: `posix`
 
 #### Exit tiers, atomicity, and interruption
@@ -334,7 +338,7 @@ If a non-posix driver is configured (such as `fts5`) and its executable cannot b
 
 #### Available drivers
 
-- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver keeping each artifact as a markdown file under `.contexture/sessions/<unit>/` and each module's declared data file as files under its root (`store`; no change log, `store.changes` refuses and the module's delta is its own). A module's declared data file maps its keys under its root through the store, so the module's verbs read and write the same files they always did; the module's delta stays on its own source (git under posix). It runs on the system awk: BWK awk, mawk, gawk, and busybox awk each carry the full session suite green on both drivers, and every payload and JSON encoder doubles a backslash by concatenation, since a `gsub` replacement of four backslashes yields one backslash under busybox awk and `gawk --posix` (the authoring rule in `docs/modules.md`).
+- Baseline POSIX driver (`posix`): zero-dependency POSIX sh and awk driver in the storage core at `.contexture/storage/drivers/posix/`, keeping each artifact as a markdown file under `.contexture/sessions/<unit>/` and each module's declared data file as files under its root (`store`; no change log, `store.changes` refuses and the module's delta is its own). A module's declared data file maps its keys under its root through the store, so the module's verbs read and write the same files they always did; the module's delta stays on its own source (git under posix). It runs on the system awk: BWK awk, mawk, gawk, and busybox awk each carry the full session suite green on both drivers, and every payload and JSON encoder doubles a backslash by concatenation, since a `gsub` replacement of four backslashes yields one backslash under busybox awk and `gawk --posix` (the authoring rule in `docs/modules.md`).
 - SQLite FTS5 driver (`storage-fts5` plugin): a SQLite-backed store answering the record and the module data natively, with dual full-text indexing and ranked search beside `exact`; it needs the system sqlite3 with FTS5 and carries no verb of its own (the v0.54.0 `ctx storage-fts5 migrate` retired); a record reaches it through the ordinary verbs and its corpus through the `ctx docs` write verbs. The [plugin README](../plugins/storage-fts5/README.md) carries adoption and needs; the [module README](../plugins/storage-fts5/.contexture/modules/storage-fts5/README.md) carries the schema, the SQL layout, and the store cases.
 
 ### Semantic CLI verbs
@@ -571,7 +575,7 @@ Placement follows the class of the file, never convenience:
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,modules/session,modules/storage,modules/run,modules/lane,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,storage,modules/session,modules/run,modules/lane,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
 | live workspace | the untracked root: `AGENTS.md`, `.contexture/` (sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 

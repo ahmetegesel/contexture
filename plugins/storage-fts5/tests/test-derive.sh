@@ -23,7 +23,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../../.." && pwd)
 MOD="$SCRIPT_DIR/../.contexture/modules/storage-fts5"
 DRV="$MOD/drivers/fts5"
-POSIX="$ROOT/base/.contexture/modules/session/drivers/posix/driver"
+POSIX="$ROOT/base/.contexture/storage/drivers/posix/driver"
 
 command -v sqlite3 >/dev/null 2>&1 || { printf 'SKIP: sqlite3 not found on PATH\n'; exit 77; }
 

@@ -78,7 +78,8 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
-    ├── config            Optional workspace configuration (session.storage.driver: posix)
+    ├── config            Optional workspace configuration (storage.driver: posix)
+    ├── storage/          The storage core: the driver resolver, the store contract, the library, and the posix driver
     ├── modules/          The modules: session (the record engine), run (stream filters), and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
     ├── templates/        Shape grammars ensuring structured writes without guesswork
@@ -165,7 +166,7 @@ The interaction toolbox is the typed semantic verbs (`task`, `record`, `entry`, 
 
 ## Maintaining contexture
 
-This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,modules/session,modules/storage,modules/run,modules/lane,templates,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the store alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
+This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,storage,modules/session,modules/run,modules/lane,templates,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the store alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
 
 The dev loop:
 

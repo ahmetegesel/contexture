@@ -51,9 +51,10 @@ done
 WS_ROOT="$(cd "$PLUGIN_ROOT/../.." && pwd)"
 BASE_CTX="$WS_ROOT/base/.contexture/ctx"
 BASE_MODULES="$WS_ROOT/base/.contexture/modules"
+BASE_STORAGE="$WS_ROOT/base/.contexture/storage"
 FTS5_MOD="$WS_ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
-if [ ! -f "$BASE_CTX" ] || [ ! -d "$BASE_MODULES/session" ]; then
-    echo "SKIP: the shipped core (base/.contexture/ctx and its session module) not found under $WS_ROOT"
+if [ ! -f "$BASE_CTX" ] || [ ! -d "$BASE_MODULES/session" ] || [ ! -d "$BASE_STORAGE" ]; then
+    echo "SKIP: the shipped core (base/.contexture/ctx, its session module, and the storage core) not found under $WS_ROOT"
     echo "docs-discipline suite: 0 passed, 0 failed, 1 skipped"
     exit 77
 fi
@@ -85,7 +86,8 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/templates" "$SANDB
 cp "$BASE_CTX" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$BASE_MODULES/session" "$SANDBOX/.contexture/modules/session"
-[ -d "$BASE_MODULES/storage" ] && cp -R "$BASE_MODULES/storage" "$SANDBOX/.contexture/modules/storage"
+cp -R "$BASE_STORAGE" "$SANDBOX/.contexture/storage"
+chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
 [ -d "$BASE_MODULES/lane" ] && cp -R "$BASE_MODULES/lane" "$SANDBOX/.contexture/modules/lane"
 cp -R "$PLUGIN_ROOT/.contexture/modules/docs" "$SANDBOX/.contexture/modules/docs"
 cp "$PLUGIN_ROOT/.contexture/templates/doc.md" "$SANDBOX/.contexture/templates/doc.md"
@@ -109,7 +111,7 @@ echo ""
 # staging: the runtime is base's copy byte for byte and the resolver answers the
 # configured driver with the staged copy (posix: the session module's, fts5: the plugin's)
 case "$DRIVER" in
-    posix) WANT_DRIVER="$SANDBOX/.contexture/modules/session/drivers/posix/driver" ;;
+    posix) WANT_DRIVER="$SANDBOX/.contexture/storage/drivers/posix/driver" ;;
     fts5) WANT_DRIVER="$SANDBOX/.contexture/modules/storage-fts5/drivers/fts5" ;;
 esac
 GOT_DRIVER=$(./.contexture/modules/session/scripts/driver-resolver resolve 2>&1)

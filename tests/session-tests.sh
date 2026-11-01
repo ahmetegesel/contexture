@@ -32,7 +32,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
-STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
+STORAGE_CORE="$ROOT/base/.contexture/storage"
 FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
 DRIVER=posix
 GROUP=""
@@ -122,7 +122,8 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/rhythms"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
-cp -R "$STORAGE_MOD" "$SANDBOX/.contexture/modules/storage"
+cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
+chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
 [ -d "$ROOT/base/.contexture/modules/lane" ] && cp -R "$ROOT/base/.contexture/modules/lane" "$SANDBOX/.contexture/modules/lane"
 if [ "$DRIVER" = fts5 ]; then
   cp -R "$FTS5_MOD" "$SANDBOX/.contexture/modules/storage-fts5"
@@ -1505,7 +1506,7 @@ echo "== Z the capability handshake at dispatch (lanes/routing-review/report fin
 # docs/the-engine.md); a planted driver lacking task.add is refused rc2 with the function
 # named; a complete one is verified once and served from the cached verdict until the
 # driver changes. Both plants delegate every function to this sandbox's posix driver.
-z_posix="$PWD/.contexture/modules/session/drivers/posix/driver"
+z_posix="$PWD/.contexture/storage/drivers/posix/driver"
 z_log="$PWD/z-handshakes.log"
 : > "$z_log"
 z_fns='capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query'

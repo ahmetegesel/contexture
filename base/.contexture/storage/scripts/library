@@ -1,0 +1,190 @@
+#!/bin/sh
+# library: the storage core's module-facing interface, sourced by a module's scripts and
+# data script (no summary line, so the engine never lists it). It is the one door from a
+# module to the configured storage driver, and the one door from a source module to a
+# target module's data script:
+#
+#   store.list <namespace>
+#   store.get <namespace> <key>
+#   store.put <namespace> <key> [--op=<op>] [--head=<sha|none>]     (payload on stdin)
+#   store.delete <namespace> <key> [--op=<op>] [--head=<sha|none>]
+#   store.changes <namespace>                                        (heads on stdin)
+#   store.require <capability>...
+#   store.has <capability>
+#   data.get <ref>
+#   data.emit <ref> <data>
+#
+# The first five and the two probes reach the configured driver through the storage
+# core's resolver; the caller uses the shell function names store_list, store_get,
+# store_put, store_delete, store_changes, store_require, and store_has. The caller sets
+# CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which serves when
+# CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact resolver path; the
+# core resolver is found under the drawer, then the base mirror, then the session
+# module's compatibility wrapper.
+#
+# data_get <ref> resolves a module reference <module>#<symbol>: it finds the target
+# module's data script (modules/<module>/scripts/data), runs it with data_get, and prints
+# the envelope the script emits through data_emit. A ref chain is bounded at 8 hops and a
+# repeated ref in the chain refuses as a cycle. data_emit <ref> <data> is the target data
+# script's helper: it prints one compact JSON envelope {"ref":"<ref>","data":<data>} and
+# the data must already be compact JSON. The source write's validation of a new ref is
+# the unit module's later; this library is the mechanism it calls.
+#
+# A refusal is one stderr line with a fixed code (ERR_INVALID_ARGUMENT,
+# ERR_ENTITY_NOT_FOUND, or the target's own code re-framed with the ref). The resolver's
+# own driver-resolver: line is passed through unchanged, the one shape exception.
+
+# store_lib_root: the workspace root the store calls run in
+store_lib_root() {
+  if [ -n "${CTX_STORE_ROOT:-}" ]; then
+    printf '%s\n' "$CTX_STORE_ROOT"
+    return 0
+  fi
+  if [ -n "${CTX_ROOT:-}" ]; then
+    printf '%s\n' "$CTX_ROOT"
+    return 0
+  fi
+  printf '%s\n' "$PWD"
+}
+
+# store_lib_resolver: the resolver path, CTX_STORE_RESOLVER when set, else the core under
+# the drawer, the base mirror, or the session module's compatibility wrapper
+store_lib_resolver() {
+  if [ -n "${CTX_STORE_RESOLVER:-}" ]; then
+    printf '%s\n' "$CTX_STORE_RESOLVER"
+    return 0
+  fi
+  slr_root=$(store_lib_root)
+  for slr_c in "$slr_root/.contexture/storage/scripts/driver-resolver" \
+               "$slr_root/base/.contexture/storage/scripts/driver-resolver" \
+               "$slr_root/.contexture/modules/session/scripts/driver-resolver"; do
+    if [ -x "$slr_c" ]; then
+      printf '%s\n' "$slr_c"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# store_lib_call <function label> <resolver arguments...>: one resolver call from the
+# workspace root, stdin passed through, CTX_DIR unset, CTX_ROOT exported
+store_lib_call() {
+  slc_fn=$1
+  shift
+  slc_root=$(store_lib_root)
+  slc_resolver=$(store_lib_resolver) || {
+    printf '%s: error: the storage core resolver is not installed (ERR_DRIVER_NOT_FOUND)\n' "$slc_fn" >&2
+    return 2
+  }
+  if [ ! -d "$slc_root/.contexture" ]; then
+    printf '%s: error: the workspace root is not a folder (ERR_INVALID_ARGUMENT)\n' "$slc_fn" >&2
+    return 2
+  fi
+  (
+    unset CTX_DIR
+    CTX_ROOT=$slc_root
+    export CTX_ROOT
+    cd "$slc_root" || exit 2
+    exec "$slc_resolver" "$@"
+  )
+}
+
+store_list() { store_lib_call store.list store.list "$@"; }
+store_get() { store_lib_call store.get store.get "$@"; }
+store_put() { store_lib_call store.put store.put "$@"; }
+store_delete() { store_lib_call store.delete store.delete "$@"; }
+store_changes() { store_lib_call store.changes store.changes "$@"; }
+store_require() { store_lib_call store.require require "$@"; }
+store_has() { store_lib_call store.has has "$@"; }
+
+# data_lib_ref_ok <ref>: one <module>#<symbol> token, both sides non-empty, no blank or
+# control character
+data_lib_ref_ok() {
+  case "$1" in
+    ''|*'#'*'#'*) return 1 ;;
+    '#'*|*'#') return 1 ;;
+    *'#'*) ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    *' '*) return 1 ;;
+    *[[:cntrl:]]*) return 1 ;;
+  esac
+  return 0
+}
+
+# data_lib_module <ref>: the target module name, the text before the #
+data_lib_module() {
+  dlr_mod=${1%%#*}
+  printf '%s\n' "$dlr_mod"
+}
+
+# data_get <ref>: resolve a module reference through the target module's data script
+data_get() {
+  dg_ref=$1
+  if ! data_lib_ref_ok "$dg_ref"; then
+    printf 'data_get: error: ref '\''%s'\'': a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)\n' "$dg_ref" >&2
+    return 1
+  fi
+  dg_depth=$((${CTX_DATA_DEPTH:-0} + 1))
+  if [ "$dg_depth" -gt 8 ]; then
+    printf 'data_get: error: ref '\''%s'\'': ref depth over the limit 8 (ERR_INVALID_ARGUMENT)\n' "$dg_ref" >&2
+    return 1
+  fi
+  case " ${CTX_DATA_CHAIN:-} " in
+    *" $dg_ref "*)
+      printf 'data_get: error: ref '\''%s'\'': ref cycle (ERR_INVALID_ARGUMENT)\n' "$dg_ref" >&2
+      return 1
+      ;;
+  esac
+  dg_mod=$(data_lib_module "$dg_ref")
+  dg_root=$(store_lib_root)
+  dg_script=""
+  for dg_c in "$dg_root/.contexture/modules/$dg_mod/scripts/data" \
+              "$dg_root/base/.contexture/modules/$dg_mod/scripts/data"; do
+    if [ -x "$dg_c" ]; then dg_script=$dg_c; break; fi
+  done
+  if [ -z "$dg_script" ]; then
+    printf 'data_get: error: ref '\''%s'\'': module '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$dg_ref" "$dg_mod" >&2
+    return 1
+  fi
+  dg_tmp="${TMPDIR:-/tmp}"
+  if [ -d "$dg_root/.contexture" ] && mkdir -p "$dg_root/.contexture/tmp" 2>/dev/null && [ -w "$dg_root/.contexture/tmp" ]; then
+    dg_tmp="$dg_root/.contexture/tmp"
+  fi
+  dg_err=$(mktemp "$dg_tmp/data-get.XXXXXX" 2>/dev/null) || dg_err=""
+  dg_out=$(CTX_STORE_ROOT="$dg_root" CTX_DATA_DEPTH=$dg_depth CTX_DATA_CHAIN="${CTX_DATA_CHAIN:-}$dg_ref " "$dg_script" data_get "$dg_ref" 2>"${dg_err:-/dev/null}")
+  dg_rc=$?
+  if [ "$dg_rc" -ne 0 ]; then
+    dg_msg=""
+    [ -n "$dg_err" ] && dg_msg=$(head -n 1 "$dg_err" 2>/dev/null)
+    [ -n "$dg_err" ] && rm -f "$dg_err"
+    case "$dg_msg" in
+      data_get:\ error:\ *) dg_msg=${dg_msg#data_get: error: } ;;
+    esac
+    [ -n "$dg_msg" ] || dg_msg="the target module refused the reference"
+    printf 'data_get: error: ref '\''%s'\'': %s\n' "$dg_ref" "$dg_msg" >&2
+    return "$dg_rc"
+  fi
+  [ -n "$dg_err" ] && rm -f "$dg_err"
+  printf '%s\n' "$dg_out"
+  return 0
+}
+
+# data_emit <ref> <data>: the target data script's one-line envelope, data compact JSON
+data_emit() {
+  de_ref=$1
+  de_data=${2:-}
+  if ! data_lib_ref_ok "$de_ref"; then
+    printf 'data_emit: error: ref '\''%s'\'': a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)\n' "$de_ref" >&2
+    return 1
+  fi
+  case "$de_data" in
+    ''|*[[:cntrl:]]*)
+      printf 'data_emit: error: the data for ref '\''%s'\'' must be one compact JSON value (ERR_INVALID_ARGUMENT)\n' "$de_ref" >&2
+      return 1
+      ;;
+  esac
+  printf '{"ref":"%s","data":%s}\n' "$de_ref" "$de_data"
+  return 0
+}

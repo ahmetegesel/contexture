@@ -113,7 +113,7 @@ else
   printf '  workspace root:  %s\n' "$root"
   printf '  configuration:   %s' "$config_status"
   if [ -n "$config_driver" ]; then
-    printf ' (session.storage.driver = %s)\n' "$config_driver"
+    printf ' (storage.driver = %s)\n' "$config_driver"
   else
     printf '\n'
   fi

@@ -4,8 +4,8 @@
 # doc's path: the verbs and their engines receive the paths it hands them.
 #
 # The corpus is served by the configured storage driver through the generic module store
-# (the capability store, asked of driver-resolver). A verb reads it through store.list and
-# store.get: the docs module materializes the returned bytes into its own scratch at
+# (the capability store, asked through the storage core library). A verb reads it through
+# the library's store_list and store_get: the docs module materializes the returned bytes into its own scratch at
 # docs/<repo>/<slug>.md and the engines parse those files. No driver parses a doc. Every
 # driver call runs with the workspace root as its cwd and CTX_ROOT, an inherited CTX_DIR
 # unset, and stdin from /dev/null (the check's delta on stdin stays the verb's).
@@ -19,6 +19,7 @@ DOCS_VERB=""
 DOCS_ROOT=""
 DOCS_ROOT_P=""
 DOCS_RESOLVER=""
+DOCS_LIB=""
 DOCS_JSON=""
 DOCS_SCRATCH=""
 DOCS_MOUNT=""
@@ -50,36 +51,40 @@ docs_io_init() {
       DOCS_RESOLVER="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
     fi
   fi
+  DOCS_LIB="$1/../../../storage/scripts/library"
+  if [ ! -f "$DOCS_LIB" ]; then
+    DOCS_LIB=""
+    if [ -n "${CTX_ROOT:-}" ] && [ -f "$CTX_ROOT/.contexture/storage/scripts/library" ]; then
+      DOCS_LIB="$CTX_ROOT/.contexture/storage/scripts/library"
+    elif [ -n "${CTX_ROOT:-}" ] && [ -f "$CTX_ROOT/base/.contexture/storage/scripts/library" ]; then
+      DOCS_LIB="$CTX_ROOT/base/.contexture/storage/scripts/library"
+    fi
+  fi
   DOCS_JSON=""
   if [ -n "$DOCS_RESOLVER" ] && [ -f "${DOCS_RESOLVER%/*}/../lib/json.awk" ]; then
     DOCS_JSON="${DOCS_RESOLVER%/*}/../lib/json.awk"
   fi
+  if [ -n "$DOCS_LIB" ]; then
+    CTX_STORE_ROOT="$DOCS_ROOT"
+    CTX_STORE_RESOLVER="$DOCS_RESOLVER"
+    export CTX_STORE_ROOT CTX_STORE_RESOLVER
+    . "$DOCS_LIB"
+  fi
   return 0
-}
-
-# docs_call <resolver arguments>: one resolver call from the workspace root
-docs_call() {
-  (
-    unset CTX_DIR
-    CTX_ROOT=$DOCS_ROOT
-    export CTX_ROOT
-    cd "$DOCS_ROOT" 2>/dev/null || exit 2
-    exec "$DOCS_RESOLVER" "$@" < /dev/null
-  )
 }
 
 # docs_require: the configured driver serves the module store (store), else rc 2 with the
 # resolver's message and the verb's own line
 docs_require() {
-  if [ -z "$DOCS_RESOLVER" ]; then
-    printf '%s: no storage driver resolver beside the docs module (need: the session module) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+  if [ -z "$DOCS_LIB" ] || [ -z "$DOCS_RESOLVER" ]; then
+    printf '%s: the storage core library is not installed (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
     return 2
   fi
   if [ -z "$DOCS_ROOT_P" ]; then
     printf '%s: the workspace root is not a folder (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" >&2
     return 2
   fi
-  if docs_call require store; then
+  if store_require store < /dev/null; then
     return 0
   fi
   printf '%s: the configured storage driver serves no module store (store)\n' "$DOCS_VERB" >&2
@@ -118,7 +123,7 @@ docs_scratch() {
 # verb names it), rc 2 when the store fails (its message kept)
 docs_keys() {
   docs_scratch || return 2
-  if ! docs_call store.list docs > "$DOCS_SCRATCH/list.json" 2> "$DOCS_SCRATCH/list.err"; then
+  if ! store_list docs < /dev/null > "$DOCS_SCRATCH/list.json" 2> "$DOCS_SCRATCH/list.err"; then
     dk_rc=$?
     DOCS_KEYS=""
     cat "$DOCS_SCRATCH/list.err" >&2
@@ -176,7 +181,7 @@ docs_materialize() {
       printf '%s: cannot stage the corpus (ERR_STORAGE_WRITE)\n' "$DOCS_VERB" >&2
       return 2
     }
-    if ! docs_call store.get docs "$dm_k" > "$DOCS_MOUNT/docs/$dm_k.md" 2> "$DOCS_SCRATCH/get.err"; then
+    if ! store_get docs "$dm_k" < /dev/null > "$DOCS_MOUNT/docs/$dm_k.md" 2> "$DOCS_SCRATCH/get.err"; then
       dm_rc=$?
       cat "$DOCS_SCRATCH/get.err" >&2
       return "$dm_rc"
@@ -382,7 +387,7 @@ docs_active_task() {
 # as its bounded delta_source token
 docs_delta_source() {
   DOCS_DELTA=git
-  if [ -n "$DOCS_RESOLVER" ] && docs_call has store.changelog; then
+  if [ -n "$DOCS_LIB" ] && store_has store.changelog < /dev/null; then
     DOCS_DELTA=log
   fi
   return 0
@@ -446,7 +451,7 @@ docs_changes() {
     esac
   done
   docs_require || return 2
-  if ! docs_call has store.changelog; then
+  if ! store_has store.changelog < /dev/null; then
     printf '%s: the configured storage driver keeps no store change log (store.changelog); under the files driver the corpus delta comes from git\n' "$DOCS_VERB" >&2
     return 1
   fi
@@ -465,7 +470,7 @@ docs_changes() {
     printf 'head=%s\n' "$dx_rev" >> "$DOCS_SCRATCH/heads"
     git -C "$DOCS_ROOT" rev-list --boundary "$dx_rev..HEAD" 2>/dev/null | sed -e 's/^-//' -e 's/^/head=/' >> "$DOCS_SCRATCH/heads"
   fi
-  if ! (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" store.changes docs < "$DOCS_SCRATCH/heads") > "$DOCS_SCRATCH/rows.json"; then
+  if ! store_changes docs < "$DOCS_SCRATCH/heads" > "$DOCS_SCRATCH/rows.json"; then
     return 2
   fi
   docs_store_changes_rows "$DOCS_SCRATCH/rows.json" "$DOCS_SCRATCH/rows" || return $?
@@ -719,7 +724,7 @@ docs_noeol() {
 # docs_read_doc <repo> <slug> <file>: the stored doc into <file> through store.get; rc 1
 # names an absent doc
 docs_read_doc() {
-  if docs_call store.get docs "$1/$2" > "$3" 2> "$DOCS_SCRATCH/read.err"; then
+  if store_get docs "$1/$2" < /dev/null > "$3" 2> "$DOCS_SCRATCH/read.err"; then
     return 0
   else
     dr_rc=$?
@@ -734,7 +739,7 @@ docs_read_doc() {
 
 # docs_exists <repo> <slug>: rc 0 when the corpus holds the doc, 1 when not, 2 on a failure
 docs_exists() {
-  if docs_call store.get docs "$1/$2" > /dev/null 2> "$DOCS_SCRATCH/exists.err"; then
+  if store_get docs "$1/$2" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/exists.err"; then
     return 0
   else
     de_rc=$?
@@ -816,7 +821,7 @@ docs_grammar_check() {
 # HEAD; the driver's message passes on a failure
 docs_store() {
   ds_head=$(docs_head)
-  if (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" store.put docs "$1/$2" "--op=$3" "--head=$ds_head" < "$4") > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+  if store_put docs "$1/$2" "--op=$3" "--head=$ds_head" < "$4" > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     return 0
   else
     dst_rc=$?
@@ -934,7 +939,7 @@ docs_remove_doc() {
     return "$dx_rc"
   }
   dx_head=$(docs_head)
-  if (unset CTX_DIR; CTX_ROOT=$DOCS_ROOT; export CTX_ROOT; cd "$DOCS_ROOT" && exec "$DOCS_RESOLVER" store.delete docs "$1/$2" --op=remove "--head=$dx_head" < /dev/null) > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+  if store_delete docs "$1/$2" --op=remove "--head=$dx_head" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     printf 'docs remove: %s/%s removed\n' "$1" "$2"
     return 0
   else

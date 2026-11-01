@@ -270,19 +270,19 @@ store_lock() {
 }
 
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
-# SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the storage module's store-data script
-# owns the grammar (the storage module is base, never the docs module: no module's parser
+# SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the storage core's store-data script
+# owns the grammar (the core is base, never the docs module: no module's parser
 # enters base)
 store_data() {
   FN=$1
   sd_ns=$2
   sd_script=""
-  for sd_c in "$MODULE_DIR/../storage/scripts/store-data" \
-              "$ROOT/.contexture/modules/storage/scripts/store-data" \
-              "$ROOT/base/.contexture/modules/storage/scripts/store-data"; do
+  for sd_c in "$MODULE_DIR/../../storage/scripts/store-data" \
+              "$ROOT/.contexture/storage/scripts/store-data" \
+              "$ROOT/base/.contexture/storage/scripts/store-data"; do
     if [ -x "$sd_c" ]; then sd_script=$sd_c; break; fi
   done
-  [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage module data reader is not installed"
+  [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage core data reader is not installed"
   sd_err=$(mktemp "$(scratch_base)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   sd_out=$(CTX_STORE_WORKSPACE="$ROOT" "$sd_script" "$sd_ns" 2>"$sd_err")
   sd_rc=$?

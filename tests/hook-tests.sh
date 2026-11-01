@@ -49,13 +49,13 @@ trap cleanup EXIT
 mkdir -p "$SANDBOX/.contexture/modules"
 cp "$CTX" "$SANDBOX/.contexture/ctx"
 cp -R "$ROOT/base/.contexture/modules/session" "$SANDBOX/.contexture/modules/session"
-cp -R "$ROOT/base/.contexture/modules/storage" "$SANDBOX/.contexture/modules/storage"
+cp -R "$ROOT/base/.contexture/storage" "$SANDBOX/.contexture/storage"
 cp -R "$ROOT/base/.contexture/modules/run" "$SANDBOX/.contexture/modules/run"
 cp -R "$FIXTURE_MODULES"/. "$SANDBOX/.contexture/modules/"
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
-chmod +x "$CTX" .contexture/modules/session/scripts/* .contexture/modules/*/hooks/*.sh
+chmod +x "$CTX" .contexture/modules/session/scripts/* .contexture/storage/scripts/* .contexture/storage/drivers/posix/driver .contexture/modules/*/hooks/*.sh
 
 pass=0
 fail=0

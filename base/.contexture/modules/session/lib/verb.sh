@@ -20,6 +20,7 @@
 VB_LIB=$(CDPATH= cd -- "$(dirname -- "${VB_SELF:-$0}")/../../session/lib" 2>/dev/null && pwd)
 [ -n "$VB_LIB" ] && [ -f "$VB_LIB/verb.sh" ] || VB_LIB=$(CDPATH= cd -- "$(dirname -- "${VB_SELF:-$0}")/../lib" 2>/dev/null && pwd)
 VB_SESSION=$(CDPATH= cd -- "$VB_LIB/.." && pwd)
+# the session wrapper stays the compatibility path; it execs the storage core's resolver
 VB_RESOLVER="$VB_SESSION/scripts/driver-resolver"
 VB_JSON="$VB_LIB/json.awk"
 VB_RENDER="$VB_LIB/render.awk"

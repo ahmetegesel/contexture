@@ -1,5 +1,5 @@
 #!/bin/sh
-# store-data: the storage module's private reader and validator of a module's data file
+# store-data: the storage core's private reader and validator of a module's data file
 # (no summary line, so discovery ignores it). It answers one namespace with the five
 # declared fields on five lines, in this order: namespace, root, suffix, key pattern,
 # changes.

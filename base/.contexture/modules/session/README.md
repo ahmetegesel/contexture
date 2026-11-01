@@ -71,9 +71,9 @@ The lane verbs (`.contexture/modules/lane/scripts/`: `create`, `record`,
 `lane.record`, `lane.write_report`, and `lane.get`.
 
 `scripts/driver-resolver` carries no `# summary:` header, so discovery
-ignores it: it is a compatibility wrapper that execs the storage module's
+ignores it: it is a compatibility wrapper that execs the storage core's
 resolver, which resolves the configured driver (`CTX_STORAGE_DRIVER`, then
-`.contexture/config`, then posix), runs the contract 2 handshake at dispatch
+`.contexture/config` with the legacy keys read as transitional, then posix), runs the contract 2 handshake at dispatch
 for every driver but the bundled posix one (the verdict cached under
 `.contexture/tmp/driver-verdicts/`), and answers `require` and `has` for the
 optional capabilities (`store`, `store.changelog`) and the search modes.

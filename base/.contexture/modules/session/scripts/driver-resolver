@@ -1,9 +1,8 @@
 #!/bin/sh
-# driver-resolver: the session module's compatibility wrapper around the storage
-# module's resolver. The storage module owns driver resolution and the capability
-# handshake; this path stays for the callers that name it (the session and lane verb
-# libraries and the suites), so every module resolves the configured driver through the
-# storage module.
+# driver-resolver: the session module's compatibility wrapper around the storage core's
+# resolver. The storage core owns driver resolution and the capability handshake; this
+# path stays for the callers that name it (the session and lane verb libraries and the
+# suites), so every module resolves the configured driver through the storage core.
 #
 # Standardized exit codes:
 #   0: success
@@ -13,15 +12,15 @@
 set -u
 
 WDIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
-WRESOLVER="$WDIR/../../storage/scripts/driver-resolver"
+WRESOLVER="$WDIR/../../../storage/scripts/driver-resolver"
 if [ -x "$WRESOLVER" ]; then
   exec "$WRESOLVER" "$@"
 fi
-if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/storage/scripts/driver-resolver" ]; then
-  exec "$CTX_ROOT/.contexture/modules/storage/scripts/driver-resolver" "$@"
+if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/storage/scripts/driver-resolver" ]; then
+  exec "$CTX_ROOT/.contexture/storage/scripts/driver-resolver" "$@"
 fi
-if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/storage/scripts/driver-resolver" ]; then
-  exec "$CTX_ROOT/base/.contexture/modules/storage/scripts/driver-resolver" "$@"
+if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/storage/scripts/driver-resolver" ]; then
+  exec "$CTX_ROOT/base/.contexture/storage/scripts/driver-resolver" "$@"
 fi
-printf 'driver-resolver: ERROR: the storage module resolver is not installed beside the session module (ERR_DRIVER_NOT_FOUND)\n' >&2
+printf 'driver-resolver: ERROR: the storage core resolver is not installed beside the session module (ERR_DRIVER_NOT_FOUND)\n' >&2
 exit 2

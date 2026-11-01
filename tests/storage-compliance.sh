@@ -188,7 +188,11 @@ if [ -z "$DRIVER_EXEC" ] || [ ! -x "$DRIVER_EXEC" ]; then
   # Direct location fallback checks
   check_driver="$DRIVER_NAME"
   [ -n "$alias_driver" ] && check_driver="$alias_driver"
-  if [ -x "$ROOT/.contexture/modules/session/drivers/$check_driver/driver" ]; then
+  if [ -x "$ROOT/.contexture/storage/drivers/$check_driver/driver" ]; then
+    DRIVER_EXEC="$ROOT/.contexture/storage/drivers/$check_driver/driver"
+  elif [ -x "$ROOT/base/.contexture/storage/drivers/$check_driver/driver" ]; then
+    DRIVER_EXEC="$ROOT/base/.contexture/storage/drivers/$check_driver/driver"
+  elif [ -x "$ROOT/.contexture/modules/session/drivers/$check_driver/driver" ]; then
     DRIVER_EXEC="$ROOT/.contexture/modules/session/drivers/$check_driver/driver"
   elif [ -x "$ROOT/base/.contexture/modules/session/drivers/$check_driver/driver" ]; then
     DRIVER_EXEC="$ROOT/base/.contexture/modules/session/drivers/$check_driver/driver"
@@ -1056,7 +1060,8 @@ printf '\n== Suite 12: The Resolver ==\n'
 RS="$SANDBOX/rs"
 mkdir -p "$RS/.contexture/modules"
 cp -R "$ROOT/base/.contexture/modules/session" "$RS/.contexture/modules/session"
-cp -R "$ROOT/base/.contexture/modules/storage" "$RS/.contexture/modules/storage"
+cp -R "$ROOT/base/.contexture/storage" "$RS/.contexture/storage"
+chmod +x "$RS/.contexture/storage/scripts/"* "$RS/.contexture/storage/drivers/posix/driver"
 RSV="$RS/.contexture/modules/session/scripts/driver-resolver"
 FUNCS_JSON=$(printf '"%s",' $FUNCS38 | sed 's/,$//')
 FUNCS_NO_TASK_ADD=$(printf '"%s",' $FUNCS38 | sed 's/"task\.add",//; s/,$//')

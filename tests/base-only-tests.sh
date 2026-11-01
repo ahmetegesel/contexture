@@ -26,7 +26,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
-STORAGE_MOD="$ROOT/base/.contexture/modules/storage"
+STORAGE_CORE="$ROOT/base/.contexture/storage"
 LANE_MOD="$ROOT/base/.contexture/modules/lane"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
 
@@ -40,7 +40,7 @@ for a in "$@"; do
   esac
 done
 
-for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_MOD/scripts/store-data" "$LANE_MOD/scripts/record" "$RUN_MOD"; do
+for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/drivers/posix/driver" "$LANE_MOD/scripts/record" "$RUN_MOD"; do
   [ -e "$f" ] || { echo "base-only-tests.sh: missing $f" >&2; exit 2; }
 done
 
@@ -64,12 +64,12 @@ trap cleanup EXIT INT TERM
 # stage base alone: no docs/, no plugins/, no config, no rhythms directory
 cp -R "$ROOT/base/." "$SB/" || { echo "base-only-tests.sh: cannot stage base" >&2; exit 2; }
 mkdir -p "$SB/.contexture/tmp"
-chmod +x "$SB/.contexture/ctx" "$SB/.contexture/modules/"*/scripts/* 2>/dev/null || true
+chmod +x "$SB/.contexture/ctx" "$SB/.contexture/modules/"*/scripts/* "$SB/.contexture/storage/scripts/"* "$SB/.contexture/storage/drivers/posix/driver" 2>/dev/null || true
 cd "$SB" || exit 2
 
 CTX=./.contexture/ctx
-RESOLVER=.contexture/modules/storage/scripts/driver-resolver
-STORE_DATA=.contexture/modules/storage/scripts/store-data
+RESOLVER=.contexture/storage/scripts/driver-resolver
+STORE_DATA=.contexture/storage/scripts/store-data
 O="$SB/.out"; E="$SB/.err"
 : > "$O"; : > "$E"
 RC=0
@@ -114,7 +114,7 @@ run_core_cmd() { # <index>: the original seven commands and arguments, in order
     3) sh "$ROOT/tests/session-tests.sh" --driver=posix ;;
     4) sh "$ROOT/tests/hook-tests.sh" ;;
     5) sh "$ROOT/tests/record-audit-tests.sh" ;;
-    6) sh "$ROOT/tests/storage-compliance.sh" "--driver-exec=$ROOT/base/.contexture/modules/session/drivers/posix/driver" ;;
+    6) sh "$ROOT/tests/storage-compliance.sh" "--driver-exec=$ROOT/base/.contexture/storage/drivers/posix/driver" ;;
     7) sh "$ROOT/tests/store-compliance.sh" "--data-file=$SB/base-only-data" ;;
   esac
 }
@@ -162,8 +162,10 @@ printf '== B1: the no-plugin boot and help surface ==\n'
 out=$($CTX help 2>&1); a_rc "$?" "0" "boot: ctx help rc0"
 out=$($CTX help --all 2>&1); rc=$?
 a_rc "$rc" "0" "boot: ctx help --all rc0"
-a_match "$out" "module storage:" "help: the storage module is listed"
-a_match "$out" "the generic module store" "help: the storage module carries its summary"
+a_not "$out" "module storage:" "help: the storage core is not listed as a module"
+[ -x .contexture/storage/scripts/driver-resolver ] && ok "core: the storage core resolver is installed" || bad "core: the storage core resolver is missing"
+[ -f .contexture/storage/scripts/library ] && ok "core: the storage core library is installed" || bad "core: the storage core library is missing"
+[ -x .contexture/storage/drivers/posix/driver ] && ok "core: the posix driver sits in the storage core" || bad "core: the posix driver is missing"
 a_match "$out" "module session:" "help: the session module is listed"
 a_match "$out" "module lane:" "help: the lane module is listed"
 out=$($CTX run --help 2>&1); a_rc "$?" "0" "help: ctx run answers its help rc0"
