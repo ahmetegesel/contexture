@@ -164,6 +164,9 @@ a_not() { if printf '%s\n' "$1" | grep -q "$2"; then bad "$3 (unwanted: $2)"; el
 
 if in_group 1; then
 echo "== V verb surface and no-arg rc contract =="
+if [ "$DRIVER" = fts5 ]; then
+  a_not "$($CTX help --all 2>/dev/null)" "storage-fts5" "driver: the fts5 driver is not listed as a module"
+fi
 # v0.55.0: append, amend, query, flip, drop retired (D1, D14; their names reserved in ctx
 # and each call printing its replacement, below); units, refs-to added (D42); migrate, added
 # on this branch and never released, left the contract with unit.export and unit.import

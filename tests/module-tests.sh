@@ -69,6 +69,8 @@ a_exec() { if [ -x "$1" ]; then ok "$2"; else bad "$2 (not executable: $1)"; fi;
 a_noexec() { if [ -x "$1" ]; then bad "$2 (unexpectedly executable: $1)"; else ok "$2"; fi; }
 a_contains() { if grep -Fq "$2" "$1" 2>/dev/null; then ok "$3"; else bad "$3 (no [$2] in $(basename "$1"))"; fi; }
 
+FIXTURE_VERSION=1.0.0
+
 new_pkg() { # <path>
   np=$1
   mkdir -p "$np/.contexture/extensions" "$np/tests" "$np/docs/workspace"
@@ -76,6 +78,53 @@ new_pkg() { # <path>
   printf '#!/bin/sh\nexit 0\n' > "$np/tests/run.sh"
   printf '@append @laws\n  fixture-law: a fixture law\n' > "$np/AGENTS.workspace.md"
   printf '# seed\n' > "$np/docs/workspace/conventions.md"
+}
+manifest_pkg() { # <path>: write the package manifest from the fixture payload
+  mp=$1
+  mp_ext=$mp/.contexture/extensions
+  mp_kind=feature
+  mp_driver=""
+  : > "$mp/.parts"
+  if [ -d "$mp_ext/storage/drivers" ]; then
+    for mp_d in "$mp_ext/storage/drivers"/*; do
+      [ -e "$mp_d" ] || continue
+      mp_n=${mp_d##*/}
+      mp_kind=driver
+      mp_driver=$mp_n
+      printf 'driver storage/drivers/%s\n' "$mp_n" >> "$mp/.parts"
+      break
+    done
+  fi
+  if [ -d "$mp_ext/modules" ]; then
+    for mp_d in "$mp_ext/modules"/*; do
+      [ -d "$mp_d" ] || continue
+      mp_n=${mp_d##*/}
+      if [ -f "$mp_d/module" ] || [ -d "$mp_d/scripts" ]; then
+        printf 'module modules/%s\n' "$mp_n" >> "$mp/.parts"
+      else
+        [ -d "$mp_d/filters" ] && printf 'filters modules/%s/filters\n' "$mp_n" >> "$mp/.parts"
+        [ -d "$mp_d/hooks" ] && printf 'hooks modules/%s/hooks\n' "$mp_n" >> "$mp/.parts"
+        [ -f "$mp_d/laws" ] && printf 'laws modules/%s/laws\n' "$mp_n" >> "$mp/.parts"
+      fi
+    done
+  fi
+  for mp_t in rhythms templates; do
+    [ -e "$mp_ext/$mp_t" ] && printf '%s %s\n' "$mp_t" "$mp_t" >> "$mp/.parts"
+  done
+  if [ -d "$mp_ext/laws" ] && find "$mp_ext/laws" -type f 2>/dev/null | grep -q .; then
+    printf 'laws laws\n' >> "$mp/.parts"
+  fi
+  [ -s "$mp/.parts" ] || printf 'templates templates\n' >> "$mp/.parts"
+  {
+    printf '# summary: fixture package %s\n' "${mp##*/}"
+    printf '# version: %s\n' "$FIXTURE_VERSION"
+    printf '# kind: %s\n' "$mp_kind"
+    [ -n "$mp_driver" ] && printf '# driver: %s\n' "$mp_driver"
+    while IFS=' ' read -r mp_pt mp_pp; do
+      printf '# part: %s %s\n' "$mp_pt" "$mp_pp"
+    done < "$mp/.parts"
+  } > "$mp/manifest"
+  rm -f "$mp/.parts"
 }
 add_module() { # <pkg> <module> [<namespace>]
   am_p=$1
@@ -107,11 +156,15 @@ add_file() { # <pkg> <relative extension path> <text>
   printf '%s\n' "$af_text" > "$af_p/.contexture/extensions/$af_rel"
 }
 
-install_pkg() { # <package root>
+install_pkg_raw() { # <package root>: install exactly the manifest it carries
   ( cd "$SB" && ./.contexture/package-install "$1" ) > "$SB/.out" 2> "$SB/.err"
   RC=$?
   OUT=$(cat "$SB/.out")
   ERR=$(cat "$SB/.err")
+}
+install_pkg() { # <package root>: write the fixture manifest, then install
+  manifest_pkg "$1"
+  install_pkg_raw "$1"
 }
 uninstall_pkg() { # <package root or name>
   ( cd "$SB" && ./.contexture/package-uninstall "$1" ) > "$SB/.out" 2> "$SB/.err"
@@ -120,6 +173,78 @@ uninstall_pkg() { # <package root or name>
   ERR=$(cat "$SB/.err")
 }
 STATE="$SB/.contexture/extensions/.state"
+pkgv() { ./.contexture/ctx _package "$@"; }
+
+echo "== PM the package manifest grammar =="
+mkdir -p "$SB/pkgmf"
+{
+  printf '# summary: a feature fixture package\n'
+  printf '# version: 1.2.3\n'
+  printf '# kind: feature\n'
+  printf '# part: module modules/alpha\n'
+  printf '# part: laws modules/alpha/laws\n'
+  printf '# part: rhythms rhythms\n'
+} > "$SB/pkgmf/feature"
+pkgv "$SB/pkgmf/feature" validate >/dev/null 2>&1
+a_rc "$?" 0 "PM: a feature manifest validates rc0"
+a_eq "$(pkgv "$SB/pkgmf/feature" summary)" "a feature fixture package" "PM: the summary reads"
+a_eq "$(pkgv "$SB/pkgmf/feature" version)" "1.2.3" "PM: the package version reads"
+a_eq "$(pkgv "$SB/pkgmf/feature" kind)" "feature" "PM: the feature kind reads"
+a_eq "$(pkgv "$SB/pkgmf/feature" driver)" "" "PM: a feature package names no driver"
+a_eq "$(pkgv "$SB/pkgmf/feature" parts)" "module modules/alpha
+laws modules/alpha/laws
+rhythms rhythms" "PM: the parts read type and path"
+{
+  printf '# summary: a driver fixture package\n'
+  printf '# version: 2.0.0\n'
+  printf '# kind: driver\n'
+  printf '# driver: fakedrv\n'
+  printf '# part: driver storage/drivers/fakedrv\n'
+} > "$SB/pkgmf/driver"
+pkgv "$SB/pkgmf/driver" validate >/dev/null 2>&1
+a_rc "$?" 0 "PM: a driver manifest validates rc0"
+a_eq "$(pkgv "$SB/pkgmf/driver" kind)" "driver" "PM: the driver kind reads"
+a_eq "$(pkgv "$SB/pkgmf/driver" driver)" "fakedrv" "PM: the driver name reads"
+badm() { # <file> <label>
+  pkgv "$1" validate >/dev/null 2>&1
+  a_rc "$?" 1 "PM: $2 refuses rc1"
+}
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/x\n# requires: base>=1\n' > "$SB/pkgmf/requires"
+badm "$SB/pkgmf/requires" "a requires line"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/x\n# unknown: y\n' > "$SB/pkgmf/unknown"
+badm "$SB/pkgmf/unknown" "an unknown field"
+printf '# version: 1.0.0\n# kind: feature\n# part: module modules/x\n' > "$SB/pkgmf/nosummary"
+badm "$SB/pkgmf/nosummary" "a missing summary"
+printf '# summary: x\n# kind: feature\n# part: module modules/x\n' > "$SB/pkgmf/noversion"
+badm "$SB/pkgmf/noversion" "a missing version"
+printf '# summary: x\n# version: 1.0.0\n# part: module modules/x\n' > "$SB/pkgmf/nokind"
+badm "$SB/pkgmf/nokind" "a missing kind"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n' > "$SB/pkgmf/nopart"
+badm "$SB/pkgmf/nopart" "a manifest with no part"
+printf '# summary: x\n# version: 1.0.0\n# kind: other\n# part: module modules/x\n' > "$SB/pkgmf/badkind"
+badm "$SB/pkgmf/badkind" "an unknown kind"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# driver: fakedrv\n# part: module modules/x\n' > "$SB/pkgmf/featuredriver"
+badm "$SB/pkgmf/featuredriver" "a feature package with a driver line"
+printf '# summary: x\n# version: 1.0.0\n# kind: driver\n# part: driver storage/drivers/fakedrv\n' > "$SB/pkgmf/nodriver"
+badm "$SB/pkgmf/nodriver" "a driver package without a driver line"
+printf '# summary: x\n# version: 1.0.0\n# kind: driver\n# driver: fakedrv\n# part: driver storage/drivers/other\n' > "$SB/pkgmf/drivermismatch"
+badm "$SB/pkgmf/drivermismatch" "a driver part that does not match the name"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: other modules/x\n' > "$SB/pkgmf/badpart"
+badm "$SB/pkgmf/badpart" "an unknown part type"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/x\n# part: module modules/x\n' > "$SB/pkgmf/duppart"
+badm "$SB/pkgmf/duppart" "a duplicate part path"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/../x\n' > "$SB/pkgmf/dotdot"
+badm "$SB/pkgmf/dotdot" "a part path with .."
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module /modules/x\n' > "$SB/pkgmf/abs"
+badm "$SB/pkgmf/abs" "an absolute part path"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/x/y\n' > "$SB/pkgmf/deepmodule"
+badm "$SB/pkgmf/deepmodule" "a module part deeper than one folder"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: rhythms other/x\n' > "$SB/pkgmf/badrhythm"
+badm "$SB/pkgmf/badrhythm" "a rhythms part outside rhythms/"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: templates other/x\n' > "$SB/pkgmf/badtemplate"
+badm "$SB/pkgmf/badtemplate" "a templates part outside templates/"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/x\n# requires:\n' > "$SB/pkgmf/bare-requires"
+badm "$SB/pkgmf/bare-requires" "a bare requires line"
 
 echo "== RO the read-only refusal =="
 RO=$SB/catalog/pkgro
@@ -170,10 +295,128 @@ OUTV=$(./.contexture/ctx alpha hello 2>/dev/null)
 a_eq "$OUTV" "hello from alpha" "IN: the installed verb dispatches"
 a_noexec "$SB/.contexture/extensions/modules/alpha/module" "IN: the manifest is not executable"
 
+echo "== SH the six package shapes =="
+S1=$SB/catalog/shape-module
+new_pkg "$S1"
+add_module "$S1" shaped
+install_pkg "$S1"
+a_rc "$RC" 0 "SH: a module-only feature package installs rc0"
+a_match "$(./.contexture/ctx help 2>/dev/null)" "the shaped fixture module" "SH: the module-only package lists its module"
+a_contains "$STATE/shape-module.files" "kind feature" "SH: the module-only package records its kind"
+S2=$SB/catalog/shape-docs
+new_pkg "$S2"
+add_module "$S2" shapedocs
+add_file "$S2" rhythms/shapedocs.md "a shaped rhythm"
+add_file "$S2" templates/shapedocs.md "a shaped template"
+install_pkg "$S2"
+a_rc "$RC" 0 "SH: a module + laws + rhythms + templates package installs rc0"
+a_file "$SB/.contexture/extensions/modules/shapedocs/module" "SH: the docs-shape module lands"
+a_file "$SB/.contexture/extensions/rhythms/shapedocs.md" "SH: the docs-shape rhythm lands"
+a_file "$SB/.contexture/extensions/templates/shapedocs.md" "SH: the docs-shape template lands"
+S3=$SB/catalog/shape-driver
+new_pkg "$S3"
+mkdir -p "$S3/.contexture/extensions/storage/drivers/shapedrv"
+printf '#!/bin/sh\nexit 0\n' > "$S3/.contexture/extensions/storage/drivers/shapedrv/driver"
+chmod +x "$S3/.contexture/extensions/storage/drivers/shapedrv/driver"
+install_pkg "$S3"
+a_rc "$RC" 0 "SH: a driver package installs rc0"
+a_contains "$STATE/shape-driver.files" "kind driver" "SH: the driver package records its kind"
+a_contains "$STATE/shape-driver.files" "driver shapedrv" "SH: the driver package records its driver name"
+a_exec "$SB/.contexture/extensions/storage/drivers/shapedrv/driver" "SH: the driver part lands executable"
+SHGOT=$(cd "$SB" && CTX_STORAGE_DRIVER=shapedrv ./.contexture/storage/scripts/driver-resolver resolve 2>&1)
+a_eq "$SHGOT" "$SB/.contexture/extensions/storage/drivers/shapedrv/driver" "SH: storage.driver maps the driver name to the package driver"
+a_not "$(./.contexture/ctx help --all 2>/dev/null)" "shapedrv" "SH: the engine does not list the driver as a module"
+S4=$SB/catalog/shape-filters
+new_pkg "$S4"
+mkdir -p "$S4/.contexture/extensions/modules/shapefilters/filters"
+printf '#!/usr/bin/awk -f\n# command: ^shapefilters$\n{ print }\n' > "$S4/.contexture/extensions/modules/shapefilters/filters/shape.awk"
+chmod +x "$S4/.contexture/extensions/modules/shapefilters/filters/shape.awk"
+install_pkg "$S4"
+a_rc "$RC" 0 "SH: a filters-only package installs rc0"
+a_file "$SB/.contexture/extensions/modules/shapefilters/filters/shape.awk" "SH: the filter part lands"
+a_not "$(./.contexture/ctx help 2>/dev/null)" "shapefilters" "SH: a filter-only folder stays unlisted (no module file)"
+S5=$SB/catalog/shape-rhythms
+new_pkg "$S5"
+add_file "$S5" rhythms/shaped-ritual.md "a shaped-only rhythm"
+install_pkg "$S5"
+a_rc "$RC" 0 "SH: a rhythms-only package installs rc0"
+a_file "$SB/.contexture/extensions/rhythms/shaped-ritual.md" "SH: the rhythm part lands"
+S6=$SB/catalog/shape-laws
+new_pkg "$S6"
+mkdir -p "$S6/.contexture/extensions/laws"
+printf '@append @laws\n  shaped-law: a shaped-only law\n' > "$S6/.contexture/extensions/laws/shaped.law"
+install_pkg "$S6"
+a_rc "$RC" 0 "SH: a laws-only package installs rc0"
+a_file "$SB/.contexture/extensions/laws/shaped.law" "SH: the law part lands"
+a_contains "$STATE/shape-laws.files" "law .contexture/extensions/laws/shaped.law" "SH: the laws-only package records its law fragment"
+
+echo "== MF the manifest refusals at install =="
+NM=$SB/catalog/pkg-nomanifest
+new_pkg "$NM"
+add_module "$NM" nomf
+install_pkg_raw "$NM"
+a_rc "$RC" 1 "MF: a package without a manifest refuses rc1"
+a_match "$ERR" "no package manifest" "MF: the refusal names the missing manifest"
+BMF=$SB/catalog/pkg-badmanifest
+new_pkg "$BMF"
+add_module "$BMF" badmf
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/badmf\n# requires: base>=1\n' > "$BMF/manifest"
+install_pkg_raw "$BMF"
+a_rc "$RC" 1 "MF: a manifest with requires refuses rc1"
+a_match "$ERR" "requires is reserved and refused" "MF: the manifest refusal names the requires rule"
+UC=$SB/catalog/pkg-uncovered
+new_pkg "$UC"
+add_module "$UC" covered
+manifest_pkg "$UC"
+mkdir -p "$UC/.contexture/extensions/extra"
+printf 'x\n' > "$UC/.contexture/extensions/extra/x"
+install_pkg_raw "$UC"
+a_rc "$RC" 1 "MF: a payload path outside the declared parts refuses rc1"
+a_match "$ERR" "payload path outside the declared parts" "MF: the refusal names the uncovered path"
+MP=$SB/catalog/pkg-missingpart
+new_pkg "$MP"
+add_module "$MP" missingpart
+{
+  printf '# summary: missing part fixture\n'
+  printf '# version: 1.0.0\n'
+  printf '# kind: feature\n'
+  printf '# part: module modules/missingpart\n'
+  printf '# part: rhythms rhythms\n'
+} > "$MP/manifest"
+install_pkg_raw "$MP"
+a_rc "$RC" 1 "MF: a declared part that is absent refuses rc1"
+a_match "$ERR" "declared part is missing: rhythms rhythms" "MF: the refusal names the missing part"
+ND=$SB/catalog/pkg-nomoduledecl
+new_pkg "$ND"
+add_module "$ND" undeclared
+{
+  printf '# summary: undeclared module fixture\n'
+  printf '# version: 1.0.0\n'
+  printf '# kind: feature\n'
+  printf '# part: filters modules/undeclared\n'
+} > "$ND/manifest"
+install_pkg_raw "$ND"
+a_rc "$RC" 1 "MF: a module folder not declared as a module part refuses rc1"
+a_match "$ERR" "is not declared as a module part" "MF: the refusal names the undeclared module"
+FD=$SB/catalog/pkg-featuredriver
+new_pkg "$FD"
+mkdir -p "$FD/.contexture/extensions/storage/drivers/hidden"
+printf '#!/bin/sh\nexit 0\n' > "$FD/.contexture/extensions/storage/drivers/hidden/driver"
+chmod +x "$FD/.contexture/extensions/storage/drivers/hidden/driver"
+{
+  printf '# summary: feature with a driver path\n'
+  printf '# version: 1.0.0\n'
+  printf '# kind: feature\n'
+  printf '# part: laws storage/drivers/hidden/driver\n'
+} > "$FD/manifest"
+install_pkg_raw "$FD"
+a_rc "$RC" 1 "MF: a feature package carrying a driver path refuses rc1"
+a_match "$ERR" "a feature package carries no driver part" "MF: the refusal names the feature/driver mismatch"
+
 echo "== UP the re-install and upgrade =="
 {
   printf '# summary: the alpha fixture module, updated\n'
-  printf '# version: 1.1.0\n'
+  printf '# version: 9.9.9\n'
   printf '# description:\n'
   printf '# The updated fixture module.\n'
 } > "$PA/.contexture/extensions/modules/alpha/module"
@@ -185,6 +428,7 @@ echo "== UP the re-install and upgrade =="
 chmod +x "$PA/.contexture/extensions/modules/alpha/scripts/bye"
 rm -f "$PA/.contexture/extensions/rhythms/alpha.md"
 add_file "$PA" rhythms/beta.md "the beta rhythm"
+FIXTURE_VERSION=1.1.0
 install_pkg "$PA"
 a_rc "$RC" 0 "UP: re-install over the recorded files rc0"
 a_match "$(./.contexture/ctx help 2>/dev/null)" "the alpha fixture module, updated" "UP: the updated summary lists"
@@ -192,7 +436,8 @@ OUTV=$(./.contexture/ctx alpha bye 2>/dev/null)
 a_eq "$OUTV" "bye from alpha" "UP: the new verb dispatches"
 a_no_file "$SB/.contexture/extensions/rhythms/alpha.md" "UP: a stale unchanged file is removed"
 a_file "$SB/.contexture/extensions/rhythms/beta.md" "UP: the new file lands"
-a_contains "$STATE/pkga.files" "version 1.1.0" "UP: the record carries the new version"
+a_contains "$STATE/pkga.files" "version 1.1.0" "UP: the record carries the package manifest's version, not the module file's"
+a_contains "$STATE/pkga.files" "kind feature" "UP: the record carries the package kind"
 a_not "$(cat "$STATE/pkga.files")" "rhythms/alpha.md" "UP: the record drops the removed file"
 add_file "$PA" rhythms/keep.md "the kept rhythm"
 install_pkg "$PA"
@@ -204,6 +449,7 @@ a_rc "$RC" 0 "UP: a re-install that drops a changed file rc0"
 a_match "$OUT" "preserved .contexture/extensions/rhythms/keep.md" "UP: the changed stale file is reported preserved"
 a_eq "$(cat "$SB/.contexture/extensions/rhythms/keep.md")" "locally edited" "UP: the changed stale file keeps its bytes"
 a_contains "$STATE/pkga.files" "rhythms/keep.md" "UP: the preserved stale file stays recorded"
+FIXTURE_VERSION=1.0.0
 
 echo "== CO the collision classes =="
 PC=$SB/catalog/pkgcore
@@ -377,6 +623,9 @@ a_rc "$RC" 0 "DR: a driver package installs rc0"
 a_exec "$SB/.contexture/extensions/storage/drivers/fakedrv/driver" "DR: the driver lands executable in the extension root"
 GOT=$(cd "$SB" && CTX_STORAGE_DRIVER=fakedrv ./.contexture/storage/scripts/driver-resolver resolve 2>&1)
 a_eq "$GOT" "$SB/.contexture/extensions/storage/drivers/fakedrv/driver" "DR: the resolver finds the installed driver in the extension root"
+a_contains "$STATE/pkgdrv.files" "kind driver" "DR: the record carries the driver kind"
+a_contains "$STATE/pkgdrv.files" "driver fakedrv" "DR: the record carries the driver name"
+a_not "$(./.contexture/ctx help --all 2>/dev/null)" "fakedrv" "DR: the engine does not list the driver as a module"
 uninstall_pkg "$PD2"
 a_rc "$RC" 0 "DR: the driver package uninstall rc0"
 ( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/docs-discipline/install" ) > "$SB/.out" 2> "$SB/.err"
@@ -384,6 +633,28 @@ RC=$?
 ERR=$(cat "$SB/.err")
 a_rc "$RC" 1 "DR: the real package wrapper reaches the installer and refuses the old shape rc1"
 a_match "$ERR" "core path refused" "DR: the old-shape refusal names the core path"
+
+echo "== RM the real package manifests =="
+for p in docs-discipline ast-doc-graph storage-fts5 toolchain-filters starter-rhythms; do
+  mf="$ROOT/plugins/$p/manifest"
+  a_file "$mf" "RM: $p carries its package manifest"
+  ./.contexture/ctx _package "$mf" validate >/dev/null 2>&1
+  a_rc "$?" 0 "RM: $p's manifest validates"
+done
+a_eq "$(./.contexture/ctx _package "$ROOT/plugins/docs-discipline/manifest" kind)" "feature" "RM: docs-discipline is a feature package"
+a_eq "$(./.contexture/ctx _package "$ROOT/plugins/ast-doc-graph/manifest" kind)" "feature" "RM: ast-doc-graph is a feature package"
+a_eq "$(./.contexture/ctx _package "$ROOT/plugins/toolchain-filters/manifest" parts)" "filters modules/toolchain-filters/filters" "RM: toolchain-filters is a filters-only package"
+a_eq "$(./.contexture/ctx _package "$ROOT/plugins/starter-rhythms/manifest" parts)" "rhythms rhythms" "RM: starter-rhythms is a rhythms-only package"
+a_eq "$(./.contexture/ctx _package "$ROOT/plugins/storage-fts5/manifest" kind)" "driver" "RM: storage-fts5 is a driver package"
+a_eq "$(./.contexture/ctx _package "$ROOT/plugins/storage-fts5/manifest" driver)" "fts5" "RM: storage-fts5 maps to the driver name fts5"
+a_eq "$(./.contexture/ctx _package "$ROOT/plugins/storage-fts5/manifest" parts)" "driver storage/drivers/fts5" "RM: storage-fts5 declares its driver part"
+a_no_file "$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5/module" "RM: the fts5 module file is retired"
+CAP=$(sh "$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5/drivers/fts5" capability)
+a_match "$CAP" '"driver":"fts5"' "RM: the driver descriptor names fts5"
+a_match "$CAP" '"version":"3.0.0"' "RM: the driver descriptor version is 3.0.0"
+a_match "$CAP" '"contract":"2"' "RM: the storage contract is 2"
+a_no_file "$ROOT/plugins/lane-isolation/manifest" "RM: lane-isolation retires into the lane laws (no package manifest)"
+a_match "$(cat "$ROOT/base/.contexture/extensions/modules/lane/laws")" "branch/worktree" "RM: the lane module laws carry the lane-isolation clauses"
 
 echo "== RS the engine's reserved reader =="
 ( cd "$SB" && ./.contexture/ctx _reserved refresh ) >/dev/null 2>&1

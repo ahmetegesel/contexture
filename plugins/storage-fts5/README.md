@@ -23,14 +23,14 @@ The storage-fts5 plugin serves as an indexed storage backend: the single store o
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/modules/storage-fts5/module` | the module summary line | copy |
+| `manifest` | the package manifest at the plugin root: summary, version, kind driver, driver fts5, and the driver part | reference (the module file retired; a driver is not a module) |
 | `.contexture/modules/storage-fts5/schema.sql` | the schema version 4 DDL: the typed tables, the canonical renderer views, the derived search tables with the dual FTS5 virtual tables and their triggers, the corpus tables, and the generic module store's tables | copy |
 | `.contexture/modules/storage-fts5/sql/` | the SQL beside the driver: `fn/` one script per record function, `lib/` the pieces they share, `derive.sql`, `split.sql` | copy |
 | `.contexture/modules/storage-fts5/drivers/fts5` | the driver executable: the contract 2 entry point over `sql/`, the generic module store among its methods | copy |
 | `.contexture/modules/storage-fts5/db-init.sh` | the database open path: the sqlite3 3.44 minimum, the fresh schema in a new or empty file, the version 4 open that adds the module store's four tables and the store FTS indexes to a store created before them, the refusal of any other version, the per-connection busy timeout | copy |
 | `tests/test-driver.sh` | the contract 2 compliance suite against the plugin's own driver | reference |
 | `tests/test-schema.sh` | schema 4 laid in an absent or empty file with no backup, a read leaving a version 4 store byte for byte, and a version 3, 0, or 5 file refused naming its version, the file untouched, no backup, `storage.health` reporting error | reference |
-| `tests/test-verbs.sh` | one verb sequence on posix and on this driver in a workspace staged from the shipped core: the views equal on both drivers, liveness through two closer lines, supersession, exact and hybrid search, the typed fields without a trailing newline, and `ctx storage-fts5 migrate` and `ctx session migrate` answering unknown verbs | reference |
+| `tests/test-verbs.sh` | one verb sequence on posix and on this driver in a workspace staged from the shipped core: the views equal on both drivers, liveness through two closer lines, supersession, exact and hybrid search, the typed fields without a trailing newline, the driver answering as an unknown command (not a module), and `ctx session migrate` answering an unknown verb | reference |
 | `tests/test-version.sh` | the sqlite3 3.44 guard under a fake sqlite3: below it a record function refuses rc 2 naming the version and `storage.health` reports `error` naming it; at 3.44 both serve | reference |
 | `tests/test-derive.sh` | the narrowed derive: a write sequence over every part of two function-built units leaves the same lines and search documents as a whole rebuild, and the lines equal the posix files the same writes leave; both comparators read a planted difference | reference |
 | `tests/test-store.sh` | the generic module store on this driver: the five single-key functions, the byte round-trip, the change log's row order and head window, a refused write logging nothing, the atomic put's rollback under a planted trigger, the schema 4 open path (with the fresh/upgraded table shapes compared), the legacy doc tables staying untouched and unread, and the split descriptor (version 3.0.0, the 38 record functions, the seven store data names, the optional tokens) | reference |
@@ -178,7 +178,7 @@ The docs plugin suite runs in full against this driver (it declares `store` and 
 
 | file | provenance |
 |---|---|
-| `.contexture/modules/storage-fts5/module` | authored fresh: module summary line |
+| `manifest` | authored fresh: the package summary, version, kind driver, driver fts5, and the driver part; the module file retired |
 | `.contexture/modules/storage-fts5/schema.sql` | authored fresh: the schema version 4 typed tables, views, search tables, and FTS5 tables |
 | `.contexture/modules/storage-fts5/sql/` | authored fresh: the record functions, the derived tables, the line splitter |
 | `tests/test-schema.sh` | authored fresh: the schema version suite (it replaces the upgrade suite, whose live checks it carries) |

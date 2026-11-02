@@ -16,7 +16,8 @@
 #      derived; exact and hybrid search find the written text on fts5
 #   3. the typed fields of the fts5 store carry no trailing newline and keep their interior
 #      newlines
-#   4. ctx storage-fts5 migrate and ctx session migrate answer unknown verbs
+#   4. the driver is not a module (ctx storage-fts5 answers as an unknown command) and
+#      ctx session migrate answers as an unknown verb
 # Exit: 0 all pass, 1 a failure, 77 without sqlite3 FTS5.
 set -u
 
@@ -167,7 +168,7 @@ else bad "3: field values [$vals] want [$want]"; fi
 # ------------------------------------------------------------------------------
 # 4. no migrate verb anywhere
 xf storage-fts5 migrate --from=posix --to=fts5
-if [ "$RC" -eq 1 ] && [ ! -s "$SB/out" ] && grep -q '^ctx: unknown verb: migrate$' "$SB/err"; then ok "4: ctx storage-fts5 migrate answers an unknown verb rc 1"
+if [ "$RC" -eq 1 ] && [ ! -s "$SB/out" ] && grep -q '^ctx: unknown command: storage-fts5$' "$SB/err"; then ok "4: the driver is not a module (ctx storage-fts5 is an unknown command rc 1)"
 else bad "4: ctx storage-fts5 migrate: rc $RC [$(cat "$SB/out")] [$(head -c 200 "$SB/err")]"; fi
 xf session migrate --from=posix --to=fts5
 if [ "$RC" -eq 1 ] && [ ! -s "$SB/out" ] && grep -q '^ctx: unknown verb: migrate$' "$SB/err"; then ok "4: ctx session migrate answers an unknown verb rc 1"

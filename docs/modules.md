@@ -48,14 +48,14 @@ The module file is the standard folder's manifest. Its fields and their readers:
 | field | grammar | reader |
 |---|---|---|
 | `# summary:` | one line, required | the engine: discovery and the `ctx help` listing (`header_field`) |
-| `# version:` | one token of letters, digits, dot, underscore, plus, or hyphen | the installer: install and upgrade |
+| `# version:` | one token of letters, digits, dot, underscore, plus, or hyphen | the module's own version; a package's install version comes from the package manifest (below) |
 | `# description:` | a hash block: the `# description:` line and every `# <text>` line after it, to the end of the file; a bare `#` is a blank line | the compose: the module preamble in the generated `AGENTS.md` |
 | `# requires:` | reserved and refused | the reader refuses it; a silently ignored requires is a defect |
 
 - The block order is summary, version, description; the description stands last because its block runs to the end of the file.
 - The module name is the directory name; the summary is the only field the engine reads.
 - A plain `# comment` never opens with `# <token>:` — that shape is a field, and an unknown field refuses.
-- The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose and the installer call the field reads, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid: the session module and the driver modules carry one, and the version and description are for the modules that ship as packages.
+- The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose calls the field reads and the package installer validates every module part, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid: the session module carries one, and the version and description are for the modules that ship as packages.
 
 ### The laws file
 
@@ -65,15 +65,38 @@ A module that contributes law clauses ships a `laws` file beside its manifest: a
 
 A module that stores data through the generic module store ships a `data` file beside its `module` file: one `field: value` line per field and a line starting with `#` a comment. `namespace` and `key` are required; `root` (default: the namespace), `suffix` (default: empty), `changes` (default: false), `search` (`flat` or `documents`), `format`, `fields`, `title`, `snippet`, `modes`, and the repeatable `document` rule are optional. A key pattern carries one `<name>` placeholder per slash-separated segment, and its final segment may be a multi-segment `<name...>` placeholder, so a module's main and deeper keys share one pattern (the unit module's `<unit>/<path...>`; the docs module's fixed `<repo>/<slug>`). An unknown field refuses. The storage core reads and validates the declaration at every store call; a module with no `data` file uses no store. The grammar, the key rule, the seven store functions, and the search schema are in [The engine](the-engine.md) (The module store); the docs module's file is the worked declaration.
 
+### The package manifest
+
+Every package carries a `manifest` at its root, beside `install`, `uninstall`, `README.md`, and `tests/`: the package's declaration, separate from the module folder's `module`. The grammar is `# <field>: <value>` header lines:
+
+```text
+# summary: one line naming the package
+# version: 1.0.0
+# kind: feature|driver
+# part: <type> <path>              one line per part; at least one
+# driver: <name>                   required exactly when kind is driver
+# requires: ...                    reserved; refused
+```
+
+- The package version is the install version: the installer, a re-install (upgrade), and the generated law hash read it. The module file's `# version:` is the module's own version and is not the package version; a single-module package usually carries the same value in both places, but the package manifest is authoritative.
+- The two kinds: `feature` (no driver; any non-driver parts, including a module-less package) and `driver` (a storage-driver package: exactly one `driver` part and a `# driver:` name). A feature package may be a module package or carry only rhythms, filters, templates, or a law fragment. A driver package ships no module file.
+- A `# part:` line names a part type and the path it installs, relative to the package's `.contexture/extensions/` tree (the package source mirrors that tree). The types are `module`, `driver`, `laws`, `rhythms`, `hooks`, `filters`, and `templates`. A module part is one folder under `modules/`; a driver part is `storage/drivers/<driver>`; a rhythms part is under `rhythms/`; a templates part is under `templates/`; a laws part is a law-fragment file or a folder of fragments. The installer overlays only the declared parts and refuses a payload file outside them, so the manifest is the install's coverage declaration, not a comment.
+- The module file stays the manifest for a module package: the package manifest declares the package, the module's manifest declares the module. A module-less package has the package manifest and no module file.
+- The driver package (`storage-fts5` is the shipped one) declares its driver name (`fts5`), not a module: it ships no module file, so `ctx help` never lists a driver as a module; its driver part installs at `storage/drivers/<name>`, and `storage.driver: <name>` resolves it through the extension tier. The package name may differ from the driver name: package `storage-fts5` declares driver `fts5`. The driver's own `capability` answer carries its descriptor version (`3.0.0`) and capabilities; the package version is separate.
+- The three version lines are distinct: the package version (this manifest: install, upgrade, the generated law hash), the driver descriptor version (the driver's `capability`, `3.0.0` at the storage core's split descriptor), and the storage contract (`2` today; the unit module's contract 3 store-only card later). The record-only driver stays valid under contract 2; the contract 3 card is what invalidates it, at the unit module, never here.
+- The private reader `ctx _package <manifest> validate|summary|version|kind|parts|driver` is the one parser; the installer refuses a package without a manifest and a malformed one. The reader refuses an unknown field, a duplicate field or part path, a bad part type or path, a feature/driver mismatch, and a `# requires:` line.
+
+The shipped catalog's shapes: `docs-discipline` (a module, its laws inside it, rhythms, and a template), `ast-doc-graph` (a module), `storage-fts5` (a driver), `toolchain-filters` (filters only), and `starter-rhythms` (rhythms only); the retired `lane-isolation` folder's clauses live in the lane module's laws and it carries no manifest.
+
 ### The install and uninstall part hooks
 
 A module may ship `install` and `uninstall` executables beside its manifest: optional part hooks that own the module's work beyond the file overlay. They are private files (no `# summary:`), not verbs, and the engine never runs them.
 
-A package is the extension-root overlay: its source mirrors `.contexture/extensions/` (the module folders, the driver folders, the rhythms, the templates), and its root carries the `install` and `uninstall` entry scripts, the README, the tests, and its reference material (the seed and the root overlay fragments never install). The package's `install` execs the core's private `.contexture/package-install`; the order, on the human's go:
+A package is the extension-root overlay: its source mirrors `.contexture/extensions/` (the module folders, the driver folders, the rhythms, the templates), and its root carries the `manifest`, the `install` and `uninstall` entry scripts, the README, the tests, and its reference material (the seed and the root overlay fragments never install). The package's `install` execs the core's private `.contexture/package-install`; the order, on the human's go:
 
-1. refuse the collision classes before writing anything: a payload path outside `.contexture/extensions/`, a core path, an existing non-recorded file, a file another package recorded, a module name against a builtin (`session`, `run`, `lane`), a workspace module, or a reserved name, a driver name against the core `posix` driver or a driver that already resolves ahead of the extension root, a duplicate namespace, a malformed manifest, and a payload path that escapes or carries blanks;
-2. overlay every package part into `.contexture/extensions/`;
-3. record every installed path with its mode and checksum under `.contexture/extensions/.state/<package>.files`, plus a `law` line per installed law fragment (the compose's input) and the package and version lines;
+1. read the package `manifest` (a missing or malformed one refuses) and refuse the collision classes before writing anything: a payload path outside `.contexture/extensions/`, a core path, an existing non-recorded file, a file another package recorded, a module name against a builtin (`session`, `run`, `lane`), a workspace module, or a reserved name, a driver name against the core `posix` driver or a driver that already resolves ahead of the extension root, a duplicate namespace, a malformed module manifest, a payload path that escapes or carries blanks, a declared part that is absent, a payload file outside the declared parts, a module folder not declared as a module part, and a feature package carrying a driver path;
+2. overlay every declared part into `.contexture/extensions/`;
+3. record every installed path with its mode and checksum under `.contexture/extensions/.state/<package>.files`, plus a `law` line per installed law fragment (the compose's input) and the package, version, kind, and driver lines;
 4. run every installed module folder's `install`, in module-name order, after the overlay and the record.
 
 A re-install of the package's recorded files is an update: changed files update, a file the new source drops is removed when unchanged and preserved (and kept recorded) when changed. An install into a read-only extension root refuses rc 2 and writes nothing; a collision refuses rc 1.
@@ -262,7 +285,8 @@ The steps below use the workspace modules root; a package installs its feature m
 1. `mkdir -p .contexture/modules/<name>/scripts` (or `.contexture/extensions/modules/<name>/scripts` for a package module).
 2. Write `module` with the summary, the version, and the description block last; add `laws` when the module contributes law clauses and `data` when it stores module data.
 3. Add verb scripts; add `hooks/` and `filters/` when the module needs them; add `install` and `uninstall` part hooks when the module owns work beyond the overlay.
-4. Prove it end to end: `ctx help` lists it; bare `ctx <name>` prints its help rc0; `ctx <name> help` lists the verbs; dispatch works; an unknown verb exits rc1 with the module help on stderr; `ctx _module .contexture/modules/<name>/module validate` is silent rc0.
+4. Packaged? Write the package root's `manifest` declaring the summary, the package version, `kind: feature` (or `kind: driver` with a `# driver:` line and a driver part at `storage/drivers/<name>`), and one `# part:` line per part.
+5. Prove it end to end: `ctx help` lists it; bare `ctx <name>` prints its help rc0; `ctx <name> help` lists the verbs; dispatch works; an unknown verb exits rc1 with the module help on stderr; `ctx _module .contexture/modules/<name>/module validate` and, when packaged, `ctx _package <package>/manifest validate` are silent rc0.
 
 ## Checklist
 
@@ -272,7 +296,9 @@ The steps below use the workspace modules root; a package installs its feature m
 | awk syntax smoke | `awk -f <filter> </dev/null` | parses and runs its BEGIN block |
 | executable bits | `chmod +x <script> <hook> <install> <uninstall>` | the engine and the installer exec directly |
 | manifest grammar | `ctx _module <module> validate` | silent rc0; a `# requires:` line, a duplicate field, an unknown field, or a description not last refuses rc1 |
-| manifest fields | `ctx _module <module> summary` / `version` / `description` | the values the engine, the installer, and the compose read |
+| manifest fields | `ctx _module <module> summary` / `version` / `description` | the values the engine and the compose read |
+| package manifest grammar | `ctx _package <package>/manifest validate` | silent rc0; a missing summary, version, kind, or part, a bad kind, part, or driver, a duplicate field or part path, or a `# requires:` line refuses rc1 |
+| package manifest fields | `ctx _package <package>/manifest summary` / `version` / `kind` / `parts` / `driver` | the values the installer reads |
 | install hook | run it with `CTX_ROOT` and `CTX_PACKAGE_ROOT` in a scratch workspace | rc0 and its effect observed; a second run leaves it unchanged |
 | module listed | `ctx help` | the module name with its summary |
 | module help | `ctx <module>` and `ctx <module> help` | rc0; the verb table |

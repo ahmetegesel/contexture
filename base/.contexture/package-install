@@ -7,18 +7,29 @@
 # The overlay scope: the package's .contexture/extensions tree, and nothing
 # else. A package path under .contexture outside extensions refuses as a core
 # path; a path outside the extension root refuses; the core is never written.
-# The installed set is recorded under
+# The package manifest at the package root (the file "manifest", read through
+# the private ctx _package reader) declares the summary, the package version,
+# the kind (feature|driver), the parts, and, for a driver package, its driver
+# name. The installer refuses a package without a manifest and a manifest whose
+# declared parts do not match the payload: every declared part must exist, every
+# payload file must sit under a declared part, every module folder with a
+# manifest or scripts must be declared as a module part, and a driver path must
+# match the declared driver. The installed set is recorded under
 # .contexture/extensions/.state/<package>.files: one "file <mode> <cksum>
 # <workspace path>" line per installed path, a "law <workspace path>" line per
-# installed law fragment, and the package and version lines.
+# installed law fragment, and the package, version, kind, and driver lines.
 #
-# Refusals (rc 1): a malformed package, module, or driver name; a path that
-# escapes or carries blanks; a payload file outside the extension root; a core
-# path; an existing file no package recorded; a path another package recorded;
-# a module name against a builtin (session, run, lane), a workspace module, or
-# a reserved name; a driver name against the core posix driver or a driver that
-# already resolves ahead of the extension root; a duplicate namespace; a
-# malformed module manifest; a driver part without an executable.
+# Refusals (rc 1): a malformed package, module, or driver name; a missing or
+# malformed package manifest; a declared part missing or outside the payload; a
+# payload file outside the declared parts; a module folder not declared as a
+# module part; a feature package carrying a driver path; a driver path not
+# matching the manifest; a path that escapes or carries blanks; a payload file
+# outside the extension root; a core path; an existing file no package recorded;
+# a path another package recorded; a module name against a builtin (session,
+# run, lane), a workspace module, or a reserved name; a driver name against the
+# core posix driver or a driver that already resolves ahead of the extension
+# root; a duplicate namespace; a malformed module manifest; a driver part
+# without an executable.
 # A re-install of this package's recorded files is an update: changed files
 # update, files the new source drops are removed when unchanged and preserved
 # (and kept recorded) when changed. Part hooks run after the overlay and the
@@ -159,6 +170,18 @@ trap 'rm -rf "$scratch"' EXIT
 trap 'rm -rf "$scratch"; exit 130' INT
 trap 'rm -rf "$scratch"; exit 143' TERM
 
+pkg_manifest=$pkg_root/manifest
+[ -f "$pkg_manifest" ] || die 1 "no package manifest at $pkg_root/manifest (a package declares summary, version, kind, and parts)"
+if ! "$ctx_bin" _package "$pkg_manifest" validate >/dev/null 2>"$scratch/pkgmf.err"; then
+  die 1 "malformed package manifest: $(cat "$scratch/pkgmf.err")"
+fi
+pkg_summary=$("$ctx_bin" _package "$pkg_manifest" summary) || die 1 "cannot read the package summary"
+pkg_version=$("$ctx_bin" _package "$pkg_manifest" version) || die 1 "cannot read the package version"
+pkg_kind=$("$ctx_bin" _package "$pkg_manifest" kind) || die 1 "cannot read the package kind"
+pkg_driver=$("$ctx_bin" _package "$pkg_manifest" driver) || die 1 "cannot read the package driver name"
+"$ctx_bin" _package "$pkg_manifest" parts > "$scratch/parts" || die 1 "cannot read the package parts"
+[ -s "$scratch/parts" ] || die 1 "the package manifest declares no parts"
+
 if ( cd "$payload_root" && find . ! -type d ! -type f -print ) > "$scratch/specials" 2>/dev/null; then
   [ -s "$scratch/specials" ] && die 1 "the package carries a non-regular file: $(head -n 1 "$scratch/specials") (only files and directories install)"
 else
@@ -179,8 +202,34 @@ case "$(awk -F/ '$1 == "storage" && NF < 3 { print; exit }' "$scratch/files")" i
   *) die 1 "malformed payload path: $(awk -F/ '$1 == "storage" && NF < 3 { print; exit }' "$scratch/files") (a driver sits under storage/drivers/)" ;;
 esac
 
+while IFS=' ' read -r ptype ppath; do
+  [ -n "$ppath" ] || die 1 "the package manifest carries an empty part"
+  pp_src=$payload_root/$ppath
+  [ -e "$pp_src" ] || die 1 "declared part is missing: $ptype $ppath"
+  case "$ptype" in
+    module) [ -d "$pp_src" ] || die 1 "the module part is not a folder: $ppath" ;;
+    laws) [ -f "$pp_src" ] || [ -d "$pp_src" ] || die 1 "the laws part is neither a file nor a folder: $ppath" ;;
+  esac
+done < "$scratch/parts"
+
+while IFS= read -r rel; do
+  covered=0
+  while IFS=' ' read -r ptype ppath; do
+    case "$rel" in
+      "$ppath"|"$ppath"/*) covered=1; break ;;
+    esac
+  done < "$scratch/parts"
+  [ "$covered" -eq 1 ] || die 1 "payload path outside the declared parts: $rel"
+done < "$scratch/files"
+
 awk -F/ '$1 == "modules" && NF >= 3 { print $2 }' "$scratch/files" | LC_ALL=C sort -u > "$scratch/modules"
 awk -F/ '$1 == "storage" && $2 == "drivers" && NF >= 3 { print $3 }' "$scratch/files" | LC_ALL=C sort -u > "$scratch/drivers"
+
+if [ "$pkg_kind" = driver ]; then
+  [ "$(cat "$scratch/drivers" 2>/dev/null)" = "$pkg_driver" ] || die 1 "the driver part storage/drivers/$pkg_driver does not match the payload"
+else
+  [ -s "$scratch/drivers" ] && die 1 "a feature package carries no driver part"
+fi
 
 while IFS= read -r mname; do
   case "$mname" in
@@ -190,11 +239,14 @@ while IFS= read -r mname; do
     *[!A-Za-z0-9._-]*) die 1 "malformed module name '$mname' (letters, digits, dot, underscore, hyphen)" ;;
   esac
   case "$mname" in
-    _hooks|_module|_reserved) die 1 "malformed module name '$mname' (an engine-private name)" ;;
+    _hooks|_module|_package|_reserved) die 1 "malformed module name '$mname' (an engine-private name)" ;;
   esac
   case "$mname" in
     session|run|lane) die 1 "module name '$mname' collides with a builtin" ;;
   esac
+  if [ -f "$payload_root/modules/$mname/module" ] || [ -d "$payload_root/modules/$mname/scripts" ]; then
+    grep -Fqx "module modules/$mname" "$scratch/parts" || die 1 "module '$mname' is not declared as a module part"
+  fi
   if "$ctx_bin" _reserved "$mname" >/dev/null 2>&1; then
     die 1 "module name '$mname' is a reserved name"
   fi
@@ -315,17 +367,6 @@ while IFS= read -r rel; do
   printf '%s\n' "$rel_ws" >> "$scratch/newpaths"
 done < "$scratch/files"
 
-version=""
-while IFS= read -r mname; do
-  mf=$payload_root/modules/$mname/module
-  [ -f "$mf" ] || continue
-  v=$("$ctx_bin" _module "$mf" version 2>/dev/null) || v=""
-  if [ -n "$v" ]; then
-    version=$v
-    break
-  fi
-done < "$scratch/modules"
-
 mkdir -p "$state_root" || die 2 "cannot create .contexture/extensions/.state"
 stage=$state_root/.stage.$$
 rm -rf "$stage"
@@ -377,6 +418,18 @@ while IFS= read -r mname; do
     printf '.contexture/extensions/modules/%s/laws\n' "$mname" >> "$scratch/laws"
   fi
 done < "$scratch/modules"
+while IFS=' ' read -r ptype ppath; do
+  [ "$ptype" = laws ] || continue
+  law_src=$payload_root/$ppath
+  if [ -f "$law_src" ]; then
+    printf '.contexture/extensions/%s\n' "$ppath" >> "$scratch/laws"
+  else
+    find "$law_src" -type f 2>/dev/null | LC_ALL=C sort | while IFS= read -r lf; do
+      printf '.contexture/extensions/%s\n' "${lf#"$payload_root/"}"
+    done >> "$scratch/laws"
+  fi
+done < "$scratch/parts"
+LC_ALL=C sort -u "$scratch/laws" -o "$scratch/laws"
 
 added=0
 updated=0
@@ -449,9 +502,9 @@ fi
 record_phase=1
 {
   printf 'package %s\n' "$pkg_name"
-  if [ -n "$version" ]; then
-    printf 'version %s\n' "$version"
-  fi
+  printf 'version %s\n' "$pkg_version"
+  printf 'kind %s\n' "$pkg_kind"
+  [ -n "$pkg_driver" ] && printf 'driver %s\n' "$pkg_driver"
   while read -r rel _m _c; do
     printf 'file %s %s .contexture/extensions/%s\n' "$_m" "$_c" "$rel"
   done < "$scratch/plan"
@@ -480,6 +533,6 @@ while IFS= read -r mname; do
   [ "$_hr" -eq 0 ] || die 2 "the '$mname' module's install hook failed (rc $_hr); the overlay and its record are in place"
 done < "$scratch/modules"
 
-printf 'package-install: installed %s into .contexture/extensions (%s files: %s added, %s updated; %s stale removed, %s preserved)\n' \
-  "$pkg_name" "$((added + updated))" "$added" "$updated" "$stale_removed" "$stale_kept"
+printf 'package-install: installed %s (%s) into .contexture/extensions (%s files: %s added, %s updated; %s stale removed, %s preserved)\n' \
+  "$pkg_name" "$pkg_summary" "$((added + updated))" "$added" "$updated" "$stale_removed" "$stale_kept"
 exit 0

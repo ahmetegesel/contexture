@@ -17,7 +17,10 @@
 # "# version: <token>" (the installer's), and a "# description:" hash block
 # last (the compose's preamble); a "# requires:" line is reserved and refused.
 # The private reader ctx _module <file> validate|summary|version|description
-# is the one parser; ctx _reserved <name> answers the engine's reserved set
+# is the one module-file parser; ctx _package <file> validate|summary|version|kind|parts|driver
+# is the one package-manifest parser (the package root's manifest: summary, version,
+# kind feature|driver, the repeated part lines, and a driver name for the driver kind;
+# requires is reserved and refused); ctx _reserved <name> answers the engine's reserved set
 # (rc0 reserved, rc1 not) for the package installer; discovery validates every
 # manifest and skips a malformed one with a warning. scripts/<verb> files are verbs named by file name,
 # marked by their own "# summary:" header, with repeatable "# usage:" and
@@ -219,6 +222,235 @@ module_reader() {
 }
 
 # ---------------------------------------------------------------------------
+# package-file: the package root's manifest reader. The grammar:
+#   # summary: <one line>              required; the package's one-line description
+#   # version: <one token>             required; the package version (install, upgrade)
+#   # kind: feature|driver             required; the two package kinds
+#   # part: <type> <path>              repeatable; at least one
+#   # driver: <name>                   required exactly when kind is driver
+#   # requires: ...                    reserved; refused
+# The part types are module, driver, laws, rhythms, hooks, filters, and templates;
+# a part path is relative to the package's .contexture/extensions tree (the install
+# path). A module part is one folder under modules/, a driver part is
+# storage/drivers/<name>, a rhythms part is under rhythms/, and a templates part is
+# under templates/. A bare # line is a comment; any other "# <key>:" line is an
+# unknown field and refuses. ctx _package answers validate, summary, version, kind,
+# parts, and driver; the package installer is the only caller.
+
+package_file_parse() {
+  pf_file=$1
+  pf_summary=""
+  pf_version=""
+  pf_kind=""
+  pf_driver=""
+  pf_parts=""
+  pf_seen_summary=0
+  pf_seen_version=0
+  pf_seen_kind=0
+  pf_seen_driver=0
+  pf_part_count=0
+  PF_ERROR=""
+  pf_lineno=0
+  pf_cr=$(printf '\r')
+  if [ ! -f "$pf_file" ]; then
+    PF_ERROR="no package manifest at $pf_file"
+    return 1
+  fi
+  while IFS= read -r pf_line || [ -n "$pf_line" ]; do
+    pf_lineno=$((pf_lineno + 1))
+    pf_line=${pf_line%"$pf_cr"}
+    case "$pf_line" in
+      ''|[[:space:]]*)
+        continue
+        ;;
+      '# summary: '*)
+        [ "$pf_seen_summary" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # summary:"; return 1; }
+        pf_summary=${pf_line#'# summary: '}
+        pf_summary=$(printf '%s' "$pf_summary" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [ -n "$pf_summary" ] || { PF_ERROR="line $pf_lineno: the summary is empty"; return 1; }
+        pf_seen_summary=1
+        ;;
+      '# summary:')
+        PF_ERROR="line $pf_lineno: the summary is empty"
+        return 1
+        ;;
+      '# version: '*)
+        [ "$pf_seen_version" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # version:"; return 1; }
+        pf_version=${pf_line#'# version: '}
+        pf_version=$(printf '%s' "$pf_version" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        case "$pf_version" in
+          ''|*[!A-Za-z0-9._+-]*)
+            PF_ERROR="line $pf_lineno: malformed version '$pf_version' (one token of letters, digits, dot, underscore, plus, or hyphen)"
+            return 1
+            ;;
+        esac
+        pf_seen_version=1
+        ;;
+      '# version:')
+        PF_ERROR="line $pf_lineno: the version is empty"
+        return 1
+        ;;
+      '# kind: '*)
+        [ "$pf_seen_kind" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # kind:"; return 1; }
+        pf_kind=${pf_line#'# kind: '}
+        pf_kind=$(printf '%s' "$pf_kind" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        case "$pf_kind" in
+          feature|driver) ;;
+          *) PF_ERROR="line $pf_lineno: kind '$pf_kind' is not feature or driver"; return 1 ;;
+        esac
+        pf_seen_kind=1
+        ;;
+      '# kind:')
+        PF_ERROR="line $pf_lineno: the kind is empty"
+        return 1
+        ;;
+      '# part: '*)
+        pf_rest=${pf_line#'# part: '}
+        case "$pf_rest" in
+          *' '*) pf_ptype=${pf_rest%% *}; pf_ppath=${pf_rest#* } ;;
+          *) PF_ERROR="line $pf_lineno: a part line takes <type> <path>"; return 1 ;;
+        esac
+        case "$pf_ppath" in
+          *' '*) PF_ERROR="line $pf_lineno: a part path is one token"; return 1 ;;
+        esac
+        case "$pf_ptype" in
+          module|driver|laws|rhythms|hooks|filters|templates) ;;
+          *) PF_ERROR="line $pf_lineno: unknown part type '$pf_ptype'"; return 1 ;;
+        esac
+        case "$pf_ppath" in
+          ""|/*) PF_ERROR="line $pf_lineno: a part path is relative to .contexture/extensions"; return 1 ;;
+        esac
+        case "$pf_ppath" in
+          *[!A-Za-z0-9._/-]*) PF_ERROR="line $pf_lineno: malformed part path '$pf_ppath'"; return 1 ;;
+        esac
+        case "/$pf_ppath/" in
+          */../*|*/./*) PF_ERROR="line $pf_lineno: a part path holds no . or .. segment"; return 1 ;;
+        esac
+        case "$pf_ptype" in
+          module)
+            case "$pf_ppath" in
+              modules/*/*) PF_ERROR="line $pf_lineno: a module part is one folder under modules/"; return 1 ;;
+              modules/*) ;;
+              *) PF_ERROR="line $pf_lineno: a module part is modules/<name>"; return 1 ;;
+            esac
+            ;;
+          driver)
+            case "$pf_ppath" in
+              storage/drivers/*/*) PF_ERROR="line $pf_lineno: a driver part is one folder under storage/drivers/"; return 1 ;;
+              storage/drivers/*) ;;
+              *) PF_ERROR="line $pf_lineno: a driver part is storage/drivers/<name>"; return 1 ;;
+            esac
+            ;;
+          rhythms)
+            case "$pf_ppath" in
+              rhythms|rhythms/*) ;;
+              *) PF_ERROR="line $pf_lineno: a rhythms part is under rhythms/"; return 1 ;;
+            esac
+            ;;
+          templates)
+            case "$pf_ppath" in
+              templates|templates/*) ;;
+              *) PF_ERROR="line $pf_lineno: a templates part is under templates/"; return 1 ;;
+            esac
+            ;;
+        esac
+        if printf '%s\n' "$pf_parts" | awk -v p="$pf_ppath" '$2 == p { found = 1 } END { exit(found ? 0 : 1) }'; then
+          PF_ERROR="line $pf_lineno: duplicate part path '$pf_ppath'"
+          return 1
+        fi
+        pf_parts="$pf_parts$pf_ptype $pf_ppath
+"
+        pf_part_count=$((pf_part_count + 1))
+        ;;
+      '# part:')
+        PF_ERROR="line $pf_lineno: a part line takes <type> <path>"
+        return 1
+        ;;
+      '# driver: '*)
+        [ "$pf_seen_driver" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # driver:"; return 1; }
+        pf_driver=${pf_line#'# driver: '}
+        pf_driver=$(printf '%s' "$pf_driver" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        case "$pf_driver" in
+          ''|.*|*[!A-Za-z0-9._-]*)
+            PF_ERROR="line $pf_lineno: malformed driver name '$pf_driver' (letters, digits, dot, underscore, hyphen; not starting with a dot)"
+            return 1
+            ;;
+        esac
+        pf_seen_driver=1
+        ;;
+      '# driver:')
+        PF_ERROR="line $pf_lineno: the driver name is empty"
+        return 1
+        ;;
+      '# requires:'*)
+        PF_ERROR="line $pf_lineno: requires is reserved and refused"
+        return 1
+        ;;
+      '# summary:'*|'# version:'*|'# kind:'*|'# part:'*|'# driver:'*|'# description:'*)
+        PF_ERROR="line $pf_lineno: malformed field line (expected '# <field>: <value>')"
+        return 1
+        ;;
+      '# '*)
+        pf_key=${pf_line#'# '}
+        case "$pf_key" in
+          [A-Za-z]*:*)
+            pf_key=${pf_key%%:*}
+            case "$pf_key" in
+              *[!A-Za-z0-9_-]*) ;;
+              *) PF_ERROR="line $pf_lineno: unknown field '$pf_key'"; return 1 ;;
+            esac
+            ;;
+        esac
+        ;;
+      '#')
+        continue
+        ;;
+      *)
+        PF_ERROR="line $pf_lineno: not a # header line"
+        return 1
+        ;;
+    esac
+  done < "$pf_file"
+  [ "$pf_seen_summary" -eq 1 ] || { PF_ERROR="the package manifest carries no # summary: line"; return 1; }
+  [ "$pf_seen_version" -eq 1 ] || { PF_ERROR="the package manifest carries no # version: line"; return 1; }
+  [ "$pf_seen_kind" -eq 1 ] || { PF_ERROR="the package manifest carries no # kind: line"; return 1; }
+  [ "$pf_part_count" -ge 1 ] || { PF_ERROR="the package manifest declares no # part: line"; return 1; }
+  if [ "$pf_kind" = driver ]; then
+    [ "$pf_seen_driver" -eq 1 ] || { PF_ERROR="a driver package carries no # driver: line"; return 1; }
+    pf_dcount=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { n++ } END { print n + 0 }')
+    [ "$pf_dcount" -eq 1 ] || { PF_ERROR="a driver package declares exactly one driver part"; return 1; }
+    pf_dpath=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { print $2; exit }')
+    [ "$pf_dpath" = "storage/drivers/$pf_driver" ] || { PF_ERROR="the driver part is storage/drivers/$pf_driver"; return 1; }
+  else
+    [ "$pf_seen_driver" -eq 0 ] || { PF_ERROR="a feature package carries no # driver: line"; return 1; }
+    pf_dcount=$(printf '%s\n' "$pf_parts" | awk '$1 == "driver" { n++ } END { print n + 0 }')
+    [ "$pf_dcount" -eq 0 ] || { PF_ERROR="a feature package carries no driver part"; return 1; }
+  fi
+  return 0
+}
+
+package_reader() {
+  if [ $# -ne 2 ]; then
+    ctx_err "_package: usage: ctx _package <file> validate|summary|version|kind|parts|driver"
+    exit 1
+  fi
+  if ! package_file_parse "$1"; then
+    printf 'package-file: error: %s\n' "$PF_ERROR" >&2
+    exit 1
+  fi
+  case "$2" in
+    validate) exit 0 ;;
+    summary) printf '%s\n' "$pf_summary" ;;
+    version) printf '%s\n' "$pf_version" ;;
+    kind) printf '%s\n' "$pf_kind" ;;
+    driver) printf '%s\n' "$pf_driver" ;;
+    parts) printf '%s' "$pf_parts" ;;
+    *) ctx_err "_package: unknown field: $2"; exit 1 ;;
+  esac
+  exit 0
+}
+
+# ---------------------------------------------------------------------------
 # reserved names: the session verb set (its scripts own the list) plus
 # refresh, run, and hooks, and the verbs retired in v0.55.0 (append, amend,
 # query, flip, drop: a static list, so no module can claim a retired name and
@@ -295,7 +527,7 @@ scan_module_dirs() {
       bn=${d%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_reserved)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved)
           continue
           ;;
       esac
@@ -312,7 +544,7 @@ scan_module_dirs() {
       bn=${d%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_reserved|session|run)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|session|run)
           continue
           ;;
       esac
@@ -343,7 +575,7 @@ module_names() {
       n=${d%/}
       n=${n##*/}
       case "$n" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_reserved)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved)
           continue
           ;;
       esac
@@ -379,7 +611,7 @@ module_names() {
       n=${d%/}
       n=${n##*/}
       case "$n" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_reserved)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved)
           continue
           ;;
       esac
@@ -702,7 +934,7 @@ run_body() {
         bn=${fd%/}
         bn=${bn##*/}
         case "$bn" in
-          ""|.*|*[[:space:]]*|run|_hooks|_module|_reserved)
+          ""|.*|*[[:space:]]*|run|_hooks|_module|_package|_reserved)
             continue
             ;;
         esac
@@ -719,7 +951,7 @@ run_body() {
         bn=${fd%/}
         bn=${bn##*/}
         case "$bn" in
-          ""|.*|*[[:space:]]*|_hooks|_module|_reserved|session|run)
+          ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|session|run)
             continue
             ;;
         esac
@@ -1295,6 +1527,10 @@ case "$1" in
   _module)
     shift
     module_reader "$@"
+    ;;
+  _package)
+    shift
+    package_reader "$@"
     ;;
   _reserved)
     shift

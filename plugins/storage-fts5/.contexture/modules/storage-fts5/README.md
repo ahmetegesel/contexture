@@ -1,8 +1,9 @@
 # storage-fts5 module: internals
 
-The storage-fts5 plugin ships this module; adoption copies the directory to
-`<workspace>/.contexture/modules/storage-fts5/`. The engine discovers no verb here: the
-module file carries the summary, and the driver answers the storage contract. The plugin
+The storage-fts5 plugin ships this driver tree; adoption installs it at the package's
+declared driver part. The engine discovers no verb here: the package manifest declares
+the driver, the module file retired so the engine never lists a driver as a module, and
+the driver answers the storage contract. The plugin
 README at `plugins/storage-fts5/README.md` is the adoption guide and reference; this page
 is the off-path maintainer map.
 

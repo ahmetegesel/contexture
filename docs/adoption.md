@@ -44,7 +44,7 @@ Then configure the choices the agent would have proposed: the gitignore posture 
 sh plugins/starter-rhythms/install
 ```
 
-A plugin install overlays only `.contexture/extensions/`, records every installed path and mode under `.contexture/extensions/.state/<package>.files`, refuses a collision (a path outside the extension root, a core path, an existing non-recorded file, another package's file, a module or driver name collision, a duplicate namespace), and runs the module part hooks after the record. A re-install of the recorded files is an update; `sh plugins/<name>/uninstall` removes the unchanged recorded files and preserves and reports a file changed after install.
+A plugin install reads the package `manifest` (summary, version, kind, parts, and the driver name for a driver package), overlays only the declared parts under `.contexture/extensions/`, records every installed path and mode under `.contexture/extensions/.state/<package>.files`, refuses a collision (a path outside the extension root, a core path, an existing non-recorded file, another package's file, a module or driver name collision, a duplicate namespace, a declared part that is absent, a payload path outside the declared parts), and runs the module part hooks after the record. A re-install of the recorded files is an update; `sh plugins/<name>/uninstall` removes the unchanged recorded files and preserves and reports a file changed after install.
 
 Then name the first unit of work; the agent bootstraps its folder and the record starts.
 

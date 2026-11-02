@@ -1,0 +1,4 @@
+# summary: the AST symbol graph linked with centralized documentation
+# version: 1.0.0
+# kind: feature
+# part: module modules/ast-doc-graph

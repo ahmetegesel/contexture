@@ -1,0 +1,6 @@
+# summary: the corpus-first documentation discipline: the docs module, its rhythms, and its grammar template
+# version: 1.0.0
+# kind: feature
+# part: module modules/docs
+# part: rhythms rhythms
+# part: templates templates
