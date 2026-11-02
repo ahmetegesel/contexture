@@ -14,8 +14,8 @@
 # (tests/grammar-agreement.awk, with its two plants) in a staged
 # scratch workspace built from the shipped copies only: the runtime and the
 # session and lane modules from base/ (the repository that carries this plugin),
-# the docs module and the grammar template (.contexture/extensions/templates/doc.md)
-# from this plugin, never a workspace's adopted drawer, so the suite proves what ships
+# the docs module (its grammar asset rides inside scripts/) from this plugin,
+# never a workspace's adopted drawer, so the suite proves what ships
 # (the gate pins the shipped copies). Needs: POSIX awk/sh, base/.contexture/ctx
 # beside plugins/ (the plugin ships the module, not the engine), and git for the
 # matrix's tracked-claimant fixture.
@@ -85,7 +85,7 @@ SANDBOX=$(mktemp -d "$TMP_BASE/docs-plugin-tests.XXXXXX") || exit 1
 trap 'rm -rf "$SANDBOX"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/extensions/modules" "$SANDBOX/.contexture/extensions/templates" "$SANDBOX/docs"
+mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/extensions/modules" "$SANDBOX/docs"
 cp "$BASE_CTX" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$BASE_MODULES/session" "$SANDBOX/.contexture/modules/session"
@@ -93,7 +93,6 @@ cp -R "$BASE_STORAGE" "$SANDBOX/.contexture/storage"
 chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
 [ -d "$BASE_EXT_MODULES/lane" ] && cp -R "$BASE_EXT_MODULES/lane" "$SANDBOX/.contexture/extensions/modules/lane"
 cp -R "$PLUGIN_ROOT/.contexture/extensions/modules/docs" "$SANDBOX/.contexture/extensions/modules/docs"
-cp "$PLUGIN_ROOT/.contexture/extensions/templates/doc.md" "$SANDBOX/.contexture/extensions/templates/doc.md"
 if [ "$DRIVER" = fts5 ]; then
     mkdir -p "$SANDBOX/.contexture/extensions/storage/drivers"
     cp -R "$FTS5_MOD" "$SANDBOX/.contexture/extensions/storage/drivers/fts5"
@@ -119,8 +118,10 @@ case "$DRIVER" in
     fts5) WANT_DRIVER="$SANDBOX/.contexture/extensions/storage/drivers/fts5/driver" ;;
 esac
 GOT_DRIVER=$(./.contexture/modules/session/scripts/driver-resolver resolve 2>&1)
-if cmp -s "$BASE_CTX" "$SANDBOX/.contexture/ctx" && [ "$GOT_DRIVER" = "$WANT_DRIVER" ]; then
-    echo "[staging] PASS (base runtime; the $DRIVER driver resolves to the staged copy)"
+if cmp -s "$BASE_CTX" "$SANDBOX/.contexture/ctx" && [ "$GOT_DRIVER" = "$WANT_DRIVER" ] \
+    && [ -f "$SANDBOX/.contexture/extensions/modules/docs/scripts/doc.grammar" ] \
+    && [ ! -e "$SANDBOX/.contexture/extensions/templates" ]; then
+    echo "[staging] PASS (base runtime; the $DRIVER driver resolves to the staged copy; the grammar rides inside the module, no shared templates folder)"
     PASS=$((PASS + 1))
 else
     echo "[staging] FAIL (driver resolved: $GOT_DRIVER; want $WANT_DRIVER)"
@@ -135,12 +136,11 @@ echo ""
 # separate hook workspace (the posix driver) keeps the hook cases independent of the
 # suite's driver and of the main sandbox.
 HOOKWS="$SANDBOX/hookws"
-mkdir -p "$HOOKWS/.contexture/modules" "$HOOKWS/.contexture/extensions/modules" "$HOOKWS/.contexture/extensions/templates" "$HOOKWS/docs/workspace"
+mkdir -p "$HOOKWS/.contexture/modules" "$HOOKWS/.contexture/extensions/modules" "$HOOKWS/docs/workspace"
 cp "$BASE_CTX" "$HOOKWS/.contexture/ctx"
 cp -R "$SANDBOX/.contexture/modules/session" "$HOOKWS/.contexture/modules/session"
 cp -R "$SANDBOX/.contexture/extensions/modules/docs" "$HOOKWS/.contexture/extensions/modules/docs"
 cp -R "$BASE_STORAGE" "$HOOKWS/.contexture/storage"
-cp "$PLUGIN_ROOT/.contexture/extensions/templates/doc.md" "$HOOKWS/.contexture/extensions/templates/doc.md"
 chmod +x "$HOOKWS/.contexture/ctx" "$HOOKWS/.contexture/storage/scripts/"* \
     "$HOOKWS/.contexture/storage/drivers/posix/driver" "$HOOKWS/.contexture/modules/session/scripts/"* \
     "$HOOKWS/.contexture/extensions/modules/docs/install" "$HOOKWS/.contexture/extensions/modules/docs/uninstall"
@@ -563,11 +563,12 @@ fi
 rm -rf "$MATRIX_TMP"
 echo ""
 
-# grammar agreement: the #% schema of doc.md, its prose shapes, and the audit's kind and
-# block lists agree (tests/grammar-agreement.awk); two plants prove the check can fail: an
-# extra field in the prose and an extra enum value in the schema each read DISAGREE
+# grammar agreement: the #% schema of the module's doc.grammar, its prose shapes, and the
+# audit's kind and block lists agree (tests/grammar-agreement.awk); two plants prove the
+# check can fail: an extra field in the prose and an extra enum value in the schema each
+# read DISAGREE
 AGREE_AWK="$SCRIPT_DIR/grammar-agreement.awk"
-S_DOC="$SANDBOX/.contexture/extensions/templates/doc.md"
+S_DOC="$SANDBOX/.contexture/extensions/modules/docs/scripts/doc.grammar"
 S_AUD="$SANDBOX/.contexture/extensions/modules/docs/scripts/docs-audit.awk"
 AGREE_OUT=$(awk -f "$AGREE_AWK" "$S_DOC" "$S_AUD" 2>&1)
 AGREE_RC=$?

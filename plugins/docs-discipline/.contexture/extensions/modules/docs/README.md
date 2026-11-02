@@ -7,7 +7,7 @@ map: it is not linked from the workspace's boot, laws, or help.
 
 ## Layout
 
-The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the eight docs laws; `data` is the store declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs and their private engines; this README is off-path.
+The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the eight docs laws; `data` is the store declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; this README is off-path.
 
 | verb | engine |
 |---|---|
@@ -21,9 +21,11 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 | `remove` | none: `store.delete` through `docs-io.sh` |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
 
-- The `.awk` engines, `docs-io.sh`, `install`, and `uninstall` carry no
-  `# summary:` line: discovery ignores them, they are private files, and they
-  never appear in help.
+- The `.awk` engines, `docs-io.sh`, `doc.grammar`, `install`, and `uninstall`
+  carry no `# summary:` line: discovery ignores them, they are private files,
+  and they never appear in help. `doc.grammar` is the corpus grammar asset the
+  write verbs and the audit enforce; it rides inside the module and is never a
+  shared drawer file.
 - `gate` carries the whole close-gate logic (git aggregation, drift warnings,
   and the self-planted eight-scenario matrix); the other four verbs are thin
   wrappers over their engine: audit, check, and nudge hand it the corpus paths
@@ -48,9 +50,9 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 - The write verbs run one pipeline in `docs-io.sh`: the arguments parsed
   (`docs_parse`: the verb's control flags, every other `--<field>=` as a field
   action carried in the environment as `EDIT_A_<n>`, `EDIT_F_<n>`,
-  `EDIT_V_<n>`, a `--stdin=<field>` value kept in a scratch file the engine reads as its payload operand, so a body of any size meets no environment limit); the doc read by `store.get`; one edit by `docs-edit.awk`
-  (operands `part=1 <templates/doc.md> part=2 <doc> part=3 <payload>`; only the
-  template's `#%` schema lines are read; the request through the environment,
+  `EDIT_V_<n>`, a `--stdin=<field>` value kept in a scratch file the engine reads as its payload operand, so a body of any size meets no environment limit); the   doc read by `store.get`; one edit by `docs-edit.awk`
+  (operands `part=1 <scripts/doc.grammar> part=2 <doc> part=3 <payload>`; only
+  the grammar's `#%` schema lines are read; the request through the environment,
   never `awk -v`; the whole new doc on stdout, the note or the refusal on
   stderr, rc 1 on a refusal); the result audited by `docs-audit.awk` over its
   repo in a scratch copy of the corpus made from one store pass (errors name
@@ -60,10 +62,9 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   nothing. `replace` and
   `ids` run the edit over every doc of their scope first, check the counts
   (replace: the total must equal `--count`), audit every touched repo, then
-  write one doc after another. The template resolves from `CTX_ROOT`, never a
-   relative climb: `.contexture/extensions/templates/doc.md` first (the package
-   overlay's home), then `.contexture/templates/doc.md`; the plugin's own copy
-   in the suite sandbox is staged under `.contexture/extensions/templates/`.
+  write one doc after another. The grammar asset resolves beside the module
+   (`$DOCS_DIR/doc.grammar`), never from `CTX_ROOT`; the plugin's module copy
+   carries it in the suite sandbox, so no separate staging exists.
 - `docs-edit.awk` addresses what the schema names: an entry by its key (the
   id of an id-keyed block, the first field's value, `<from>><to>` for
   data_flow, `<direction>:<key>` for edges, or `#<N>`), a rule by
@@ -108,11 +109,11 @@ The instruments resolve the workspace root in this order:
 
 `docs-io.sh` resolves it once for every verb and hands the same root to the
 storage driver (as its cwd and `CTX_ROOT`), so the corpus the driver serves
-and the root the verb reports agree. The storage core's resolver and library,
-the session module's JSON decoder, and the grammar template resolve from that
-same `CTX_ROOT` (the core drawer, the base mirror, or the extension template),
-never by a relative climb from the module folder, so the docs module works
-under the modules root and the extension root alike. The gate's git
+and the root the verb reports agree. The storage core's resolver and library
+and the session module's JSON decoder resolve from that same `CTX_ROOT` (the
+core drawer or the base mirror), never by a relative climb from the module
+folder, so the docs module works under the modules root and the extension root
+alike; the grammar asset is the one path resolved beside the module. The gate's git
 aggregation reads from that root; the corpus reads go through the driver
 (under the files driver the corpus is `<root>/docs/<repo>/<slug>.md`).
 `DOCS_PRODUCT_REPOS_DIR` (default `projects/`) selects the multi-repo product
@@ -120,10 +121,9 @@ directory.
 
 ## Grammar and sample
 
-- The corpus grammar: `.contexture/extensions/templates/doc.md` when the docs
-  module installs under the extension root, else `.contexture/templates/doc.md`;
-  the suite stages the plugin's copy under the extension root, resolved from
-  `CTX_ROOT`.
+- The corpus grammar: `scripts/doc.grammar`, a private asset inside the module;
+  the write verbs and the audit enforce it, and no agent-facing surface points
+  at a shared template. The suite stages the module whole, carrying the asset.
 - The seed conventions: the plugin's `docs/workspace/conventions.md`, written
   into the corpus by adoption through `ctx docs write workspace conventions`
   (under the files driver the doc lands at that same path).
@@ -137,8 +137,8 @@ directory.
 workspace under the workspace's `.contexture/tmp/` (made on demand; the system
 temp only when it cannot be), copies the shipped core's runtime and its session
 module from `base/` and the lane module from `base/.contexture/extensions/`,
-this module, and the grammar template (with
-`--driver=fts5`, the storage-fts5 plugin's module and `storage.driver: fts5`),
+this module (its grammar asset riding inside it), and with
+`--driver=fts5`, the storage-fts5 plugin's module and `storage.driver: fts5`,
 seeds `tests/sample/docs/` plus `docs/`, and drives the staging check; on
 fts5 the capture set first run on the files driver at the sandbox path (the
 config set aside), then the store seed (every staged doc written through `ctx

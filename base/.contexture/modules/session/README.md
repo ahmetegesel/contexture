@@ -55,7 +55,7 @@ session artifact itself.
 | `scripts/index` | none: reads `.contexture/rhythms/` and `.contexture/extensions/rhythms/` |
 | `scripts/load` | `session.load`, or `session.refload` for the refs form; base pages the rendered text |
 | `scripts/next` | `session.next`, then `task.list` for the hook's slugs |
-| `scripts/record` | `entry.record` |
+| `scripts/record` | `entry.record` (the RHYTHM stamp resolves the workspace rhythms root, then the extension rhythms root) |
 | `scripts/refresh` | the board and audit verbs, then the refresh hooks (the one composite verb) |
 | `scripts/refs` | `session.refs` |
 | `scripts/refs-to` | `session.refs_to` |

@@ -9,10 +9,9 @@ plugins/<name>/
   manifest               the package declaration: summary, version, kind, parts; a driver package adds its driver name
   .contexture/
     extensions/          the overlay: the extension-root tree the package installs
-      modules/<name>/    a standard module folder: manifest, laws, data, part hooks, verbs, hooks, filters
+      modules/<name>/    a standard module folder: manifest, laws, data, part hooks, verbs, hooks, filters, and its private assets
       storage/drivers/<name>/  a storage driver (the driver kind)
       rhythms/           rhythm files
-      templates/         grammar templates
   install                the package installer entry (overlays the declared parts into .contexture/extensions)
   uninstall              the package remover (runs the part hooks, removes the recorded files)
   README.md              plugin-meta: adoption, the plugin's needs, contribution
@@ -29,7 +28,7 @@ A plugin's name says what it offers, and adopters address it as "the <name> plug
 
 ## Kinds and parts
 
-Every package carries the package manifest `manifest` at its root: `# summary:`, `# version:`, `# kind: feature|driver`, one `# part: <type> <path>` per part, and, for a driver package, `# driver: <name>`. The parts are `module`, `driver`, `laws`, `rhythms`, `hooks`, `filters`, and `templates`; each path is relative to the package's `.contexture/extensions/` tree (the install path). The installer overlays only the declared parts and refuses a payload file outside them; the module file stays the manifest for a module part.
+Every package carries the package manifest `manifest` at its root: `# summary:`, `# version:`, `# kind: feature|driver`, one `# part: <type> <path>` per part, and, for a driver package, `# driver: <name>`. The parts are `module`, `driver`, `laws`, `rhythms`, `hooks`, and `filters`; each path is relative to the package's `.contexture/extensions/` tree (the install path). The installer overlays only the declared parts and refuses a payload file outside them; the module file stays the manifest for a module part. A `templates` part is not a type: an internal asset rides in its module (see The interface rule).
 
 The two kinds:
 
@@ -37,6 +36,10 @@ The two kinds:
 - A **storage-driver package** declares and installs its driver: exactly one `driver` part at `storage/drivers/<name>` and a `# driver: <name>` line. The driver package ships no module file, so the engine never lists the driver as a module; its package name may differ from the driver name: `storage-fts5` declares `fts5`. `storage.driver: fts5` resolves the installed driver through the extension tier.
 
 The three version lines are distinct: the package version (the manifest; install, upgrade, the generated law hash), the driver descriptor version (the driver's `capability`, `3.0.0` at the storage core's split descriptor), and the storage contract (`2` today; the unit module's contract 3 store-only card later). The record-only driver stays valid under contract 2; the contract 3 card is what invalidates it, at the unit module. A `# requires:` line is reserved and refused, as in the module file.
+
+### The interface rule
+
+The ctx interface is the only user/agent-facing surface: a package's verbs, its module summaries, and the help they declare. Anything a package does not serve through that interface stays module-private inside the module folder, a private script or a private asset without a `# summary:` line (the docs module's corpus grammar is the worked case: `scripts/doc.grammar`). Agents address the interface, never a file path. No standard shared folder exists for such assets: a module that needs one carries it in its own folder, so the extension root has no `templates/` part, no package declares one, and an internal asset is never shipped into a shared drawer location. The overlay ships only the extension-root tree; package meta and reference material (README, tests, manifest, install and uninstall scripts, the seed, the root overlay fragments) never install.
 
 ## Adopt
 
@@ -71,7 +74,7 @@ Upstream contribution and workspace extension are the same story. Build the mech
 - `starter-rhythms`: a feature package, rhythms only (`part: rhythms rhythms`); the work and debug rhythms to start from.
 - `toolchain-filters`: a feature package, filters only (`part: filters modules/toolchain-filters/filters`); test runner and compiler filters, discovered by `ctx run`.
 - `lane-isolation`: retired into the lane module's laws (the lane module is the base's extension-root module); the folder is removed from the catalog and it carried no package manifest.
-- `docs-discipline`: a feature package with a module part, its laws inside the module, rhythms, and a template (the `docs` module: the read verbs `ctx docs query|audit|check|gate|nudge|changes` and the write verbs `ctx docs new|write|header|rule|pitfall|entry|section|replace|remove|ids`); every verb reaches the corpus through the configured storage driver's module store and prints the logical address `docs/<repo>/<slug>.md`, and each write is checked against the grammar before it is stored. The [module README](plugins/docs-discipline/.contexture/extensions/modules/docs/README.md) carries the corpus contract and the [plugin README](plugins/docs-discipline/README.md) carries adoption.
+- `docs-discipline`: a feature package with a module part (its laws and its private corpus grammar inside the module) and rhythms (the `docs` module: the read verbs `ctx docs query|audit|check|gate|nudge|changes` and the write verbs `ctx docs new|write|header|rule|pitfall|entry|section|replace|remove|ids`); every verb reaches the corpus through the configured storage driver's module store and prints the logical address `docs/<repo>/<slug>.md`, and each write is checked against the grammar before it is stored. The [module README](plugins/docs-discipline/.contexture/extensions/modules/docs/README.md) carries the corpus contract and the [plugin README](plugins/docs-discipline/README.md) carries adoption.
 - `ast-doc-graph`: a feature package with a module part (`part: module modules/ast-doc-graph`); an AST symbol graph linked with centralized documentation.
 - `storage-fts5`: a storage-driver package (`kind: driver`, `driver: fts5`, `part: driver storage/drivers/fts5`): a SQLite FTS5 storage driver holding the record and the module data in one database, with dual full-text indexing and ranked search beside `exact` (the record's typed tables and the store's derived document index, declared by the module's search schema); it answers the record and the module store natively, ships no module file (so the engine never lists it as a module), carries no verb of its own (its v0.54.0 migrate verb retired), and a record reaches it through the ordinary verbs and a corpus through the `ctx docs` write verbs. The [plugin README](plugins/storage-fts5/README.md) carries adoption and needs; the [driver README](plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/README.md) carries the schema, the SQL layout, and the store cases.
 

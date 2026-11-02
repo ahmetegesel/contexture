@@ -583,26 +583,16 @@ DOCS_STDIN_FIELD=""
 DOCS_FLAGS=""
 DOCS_GRAMMAR=""
 
-# docs_template: the grammar template absolute from CTX_ROOT: the extension root's
-# templates folder first (the package overlay's home), then the core drawer's, then the
-# base mirror's; never a relative climb from the module folder
+# docs_template: the grammar asset inside the module (scripts/doc.grammar): the schema
+# the write verbs and the audit enforce, private to the module, never a shared drawer file
 docs_template() {
-  DOCS_TEMPLATE=""
-  dt_root="${CTX_ROOT:-$DOCS_ROOT}"
-  if [ -n "$dt_root" ]; then
-    for dt in "$dt_root/.contexture/extensions/templates/doc.md" \
-              "$dt_root/.contexture/templates/doc.md" \
-              "$dt_root/base/.contexture/extensions/templates/doc.md" \
-              "$dt_root/base/.contexture/templates/doc.md"; do
-      if [ -f "$dt" ]; then
-        DOCS_TEMPLATE=$dt
-        export DOCS_TEMPLATE
-        return 0
-      fi
-    done
+  DOCS_TEMPLATE="$DOCS_DIR/doc.grammar"
+  if [ ! -f "$DOCS_TEMPLATE" ]; then
+    printf '%s: the corpus grammar asset scripts/doc.grammar is missing; reinstall the docs module (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    return 2
   fi
-  printf '%s: the grammar template (extensions/templates/doc.md or templates/doc.md under the drawer) is missing (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
-  return 2
+  export DOCS_TEMPLATE
+  return 0
 }
 
 # docs_act <set|unset|add|remove> <field> <value>: one field action for the edit engine,

@@ -6,7 +6,7 @@
 # help:   --what="..."         event description (required)
 # help:   --group=...          topic group token
 # help:   --thread=...         what the unit awaits (default: none)
-# help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of .contexture/rhythms/<name>.md
+# help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of <name>.md under .contexture/rhythms/ or .contexture/extensions/rhythms/
 # help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes; repeatable, one REF line each
 # help:   --closes="<slug> (<verdict>: <reason>)"   closes journal entry targets (one or more slugs before the parenthesis); the verdict done, superseded, dropped, or folded; repeatable, one CLOSES line each
 # help:   --supersedes="<slug> (<verdict>: <reason>)"   supersedes journal entry targets, the same form; repeatable, one SUPERSEDES line each
@@ -108,7 +108,8 @@ dateslug_ok() {
 }
 
 if [ -n "$rhythm" ]; then
-  # <name> <N> <GATE>: the step and its gate as .contexture/rhythms/<name>.md declares them
+  # <name> <N> <GATE>: the step and its gate as <name>.md declares them in the workspace
+  # rhythms root, or the extension rhythms root when the workspace carries no copy
   set -f
   # shellcheck disable=SC2086
   set -- $rhythm
@@ -120,7 +121,8 @@ if [ -n "$rhythm" ]; then
   [ "$rstep" -ge 1 ] || fail "ERROR: RHYTHM step malformed: $rstep"
   printf '%s\n' "$rgate" | grep -Eq '^[A-Z][A-Z_+]*$' || fail "ERROR: RHYTHM gate malformed: $rgate"
   rpath=".contexture/rhythms/$rname.md"
-  [ -f "$rpath" ] || fail "ERROR: no such rhythm: $rpath"
+  [ -f "$rpath" ] || rpath=".contexture/extensions/rhythms/$rname.md"
+  [ -f "$rpath" ] || fail "ERROR: no such rhythm: $rname (looked under .contexture/rhythms/ and .contexture/extensions/rhythms/)"
   g=$(RS_STEP=$rstep awk '
     /^[ \t]*[0-9]+\.[ \t]*[A-Z][A-Z_+]*[ \t]*:/ {
       s = $0; sub(/^[ \t]+/, "", s); n = s; sub(/\..*$/, "", n)

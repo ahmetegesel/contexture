@@ -134,11 +134,15 @@ cat > "$SANDBOX/.contexture/rhythms/probe.md" <<'EOF'
 @rhythm probe
   use when: the suite needs an index line
   activation: propose
+  1. OPEN: the workspace probe gate
+  2. CLOSE: the workspace probe close gate
 EOF
 cat > "$SANDBOX/.contexture/extensions/rhythms/extprobe.md" <<'EOF'
 @rhythm extprobe
   use when: the suite needs an extension index line
   activation: propose
+  1. OPEN: the extension probe gate
+  2. CLOSE: the extension probe close gate
 EOF
 
 cd "$SANDBOX" || exit 1
@@ -261,6 +265,34 @@ $CTX session refs u1 nosuch >/dev/null 2>&1; a_eq "$?" "1" "refs naming a missin
 $CTX session next u1 >/dev/null 2>&1; a_eq "$?" "1" "next without a pointer rc1"
 # flip retired (D1): its status vocabulary lives in task list --status
 $CTX session task list u1 --status=bogus >/dev/null 2>&1; a_eq "$?" "1" "task list with a bogus status rc1 (the former flip bogus status)"
+
+echo "== RH the record's rhythm resolution over both roots (backlog rhythm-root) =="
+$CTX session bootstrap rh-unit "rhythm resolution unit" >/dev/null 2>&1
+a_eq "$?" "0" "RH: the rhythm fixture unit bootstraps rc0"
+$CTX session record rh-unit --what="the extension rhythm resolves" --rhythm="extprobe 1 OPEN" >/dev/null 2>&1
+a_eq "$?" "0" "RH: an extension-root rhythm records rc0 (the bug case)"
+out=$($CTX session board rh-unit 2>/dev/null)
+a_match "$out" "RHYTHM: extprobe 1 OPEN" "RH: the entry carries the stamped extension rhythm"
+err=$($CTX session record rh-unit --what="the wrong gate refuses" --rhythm="probe 1 WRONG" 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "RH: a wrong gate refuses rc1"
+a_match "$err" "RHYTHM step 1 of probe reads OPEN, not WRONG" "RH: the wrong-gate refusal names the gate the rhythm reads"
+# the workspace root shadows the extension root: the same name resolves workspace first
+cat > .contexture/rhythms/extprobe.md <<'EOF'
+@rhythm extprobe
+  use when: the suite needs a shadow copy
+  activation: propose
+  1. SHADOW: the workspace shadow gate
+  2. CLOSE: the workspace shadow close gate
+EOF
+$CTX session record rh-unit --what="the workspace copy shadows" --rhythm="extprobe 1 SHADOW" >/dev/null 2>&1
+a_eq "$?" "0" "RH: the workspace copy of a rhythm records rc0 (workspace first)"
+err=$($CTX session record rh-unit --what="the shadow refuses the extension gate" --rhythm="extprobe 1 OPEN" 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "RH: the extension gate refuses once a workspace copy shadows the name"
+a_match "$err" "RHYTHM step 1 of extprobe reads SHADOW, not OPEN" "RH: the shadow refusal names the workspace gate"
+rm -f .contexture/rhythms/extprobe.md
+err=$($CTX session record rh-unit --what="a missing rhythm refuses" --rhythm="nosuch 1 OPEN" 2>&1 >/dev/null); rc=$?
+a_eq "$rc" "1" "RH: a missing rhythm refuses rc1"
+a_match "$err" "no such rhythm: nosuch (looked under .contexture/rhythms/ and .contexture/extensions/rhythms/)" "RH: the missing-rhythm refusal names both roots"
 
 echo "== S state rewrite safety and reopen =="
 $CTX session bootstrap rw-unit "rewrite unit" >/dev/null 2>&1

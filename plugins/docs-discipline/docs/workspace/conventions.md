@@ -1,7 +1,7 @@
 @doc conventions conventions
   repo: workspace
   description: "Universal workspace conventions: documentation discipline, git, and security invariants"
-  sources: [AGENTS.workspace.md, .contexture/extensions/**, .contexture/extensions/templates/doc.md]
+  sources: [AGENTS.workspace.md, .contexture/extensions/**]
   keywords: [conventions, git, secrets, evidence, laws, prompt-to-doc, stop-gate, authoring, drift]
 
 @rule git/conventional-commits
@@ -81,16 +81,16 @@
 
 @rule docs/authoring
   directive: must
-  statement: "New documentation is authored map-first: the codebase is mapped to coherent units with scoped sources globs (never a folder-by-folder mirror), each unit is drafted per .contexture/extensions/templates/doc.md and written through the ctx docs write verbs (ctx docs write for a whole draft, ctx docs new and the block verbs for the rest), and the draft is verified before it lands (ctx docs audit for integrity, ctx docs check for coverage, ctx docs query for the projected read)."
+  statement: "New documentation is authored map-first: the codebase is mapped to coherent units with scoped sources globs (never a folder-by-folder mirror), each unit is drafted per the docs module's grammar (a private asset the write verbs enforce) and written through the ctx docs write verbs (ctx docs write for a whole draft, ctx docs new and the block verbs for the rest), and the draft is verified before it lands (ctx docs audit for integrity, ctx docs check for coverage, ctx docs query for the projected read)."
   status: followed
   prevalence: universal
   layer: workspace
   provenance: ratified
   scope: "Authoring or bootstrapping a documentation corpus."
-  evidence: ".contexture/extensions/templates/doc.md"
+  evidence: "ctx docs write"
   caution: "A corpus authored from folder names mirrors the tree and hides the units readers actually need."
   anti: "One doc per source folder with a glob for every leaf"
-  good: "Coherent units mapped by domain and intent, with the grammar template as the shape authority"
+  good: "Coherent units mapped by domain and intent, with the docs module's grammar (enforced by the write verbs) as the shape authority"
 
 @rule docs/drift
   directive: must

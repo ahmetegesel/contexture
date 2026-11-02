@@ -111,13 +111,12 @@ manifest_pkg() { # <path>: write the package manifest from the fixture payload
       fi
     done
   fi
-  for mp_t in rhythms templates; do
+  for mp_t in rhythms; do
     [ -e "$mp_ext/$mp_t" ] && printf '%s %s\n' "$mp_t" "$mp_t" >> "$mp/.parts"
   done
   if [ -d "$mp_ext/laws" ] && find "$mp_ext/laws" -type f 2>/dev/null | grep -q .; then
     printf 'laws laws\n' >> "$mp/.parts"
   fi
-  [ -s "$mp/.parts" ] || printf 'templates templates\n' >> "$mp/.parts"
   {
     printf '# summary: fixture package %s\n' "${mp##*/}"
     printf '# version: %s\n' "$FIXTURE_VERSION"
@@ -242,14 +241,17 @@ printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module /modules
 badm "$SB/pkgmf/abs" "an absolute part path"
 printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: rhythms rhythms/\n' > "$SB/pkgmf/trailslash"
 badm "$SB/pkgmf/trailslash" "a trailing-slash part path"
-printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: templates templates//x\n' > "$SB/pkgmf/doubleslash"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: rhythms rhythms//x\n' > "$SB/pkgmf/doubleslash"
 badm "$SB/pkgmf/doubleslash" "a doubled-slash part path"
 printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/x/y\n' > "$SB/pkgmf/deepmodule"
 badm "$SB/pkgmf/deepmodule" "a module part deeper than one folder"
 printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: rhythms other/x\n' > "$SB/pkgmf/badrhythm"
 badm "$SB/pkgmf/badrhythm" "a rhythms part outside rhythms/"
-printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: templates other/x\n' > "$SB/pkgmf/badtemplate"
-badm "$SB/pkgmf/badtemplate" "a templates part outside templates/"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: templates templates\n' > "$SB/pkgmf/retiredtemplate"
+pkgv "$SB/pkgmf/retiredtemplate" validate >/dev/null 2>&1
+a_rc "$?" 1 "PM: a templates part refuses (the type retired) rc1"
+err=$(pkgv "$SB/pkgmf/retiredtemplate" validate 2>&1 >/dev/null)
+a_match "$err" "unknown part type 'templates'" "PM: the refusal names the retired templates type"
 printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/x\n# requires:\n' > "$SB/pkgmf/bare-requires"
 badm "$SB/pkgmf/bare-requires" "a bare requires line"
 
@@ -277,7 +279,6 @@ PA=$SB/catalog/pkga
 new_pkg "$PA"
 add_module "$PA" alpha docs
 add_file "$PA" rhythms/alpha.md "the alpha rhythm"
-add_file "$PA" templates/alpha.md "the alpha template"
 install_pkg "$PA"
 a_rc "$RC" 0 "IN: install rc0"
 a_match "$OUT" "installed pkga" "IN: the summary names the package"
@@ -314,12 +315,11 @@ S2=$SB/catalog/shape-docs
 new_pkg "$S2"
 add_module "$S2" shapedocs
 add_file "$S2" rhythms/shapedocs.md "a shaped rhythm"
-add_file "$S2" templates/shapedocs.md "a shaped template"
 install_pkg "$S2"
-a_rc "$RC" 0 "SH: a module + laws + rhythms + templates package installs rc0"
+a_rc "$RC" 0 "SH: a module + laws + rhythms package installs rc0"
 a_file "$SB/.contexture/extensions/modules/shapedocs/module" "SH: the docs-shape module lands"
 a_file "$SB/.contexture/extensions/rhythms/shapedocs.md" "SH: the docs-shape rhythm lands"
-a_file "$SB/.contexture/extensions/templates/shapedocs.md" "SH: the docs-shape template lands"
+a_no_file "$SB/.contexture/extensions/templates" "SH: no shared templates folder lands"
 S3=$SB/catalog/shape-driver
 new_pkg "$S3"
 mkdir -p "$S3/.contexture/extensions/storage/drivers/shapedrv"
@@ -504,6 +504,7 @@ FIXTURE_VERSION=1.0.0
 echo "== CO the collision classes =="
 PC=$SB/catalog/pkgcore
 new_pkg "$PC"
+add_file "$PC" rhythms/core.md "the core-path fixture rhythm"
 mkdir -p "$PC/.contexture/modules/x"
 printf '# summary: x\n' > "$PC/.contexture/modules/x/module"
 install_pkg "$PC"
@@ -512,6 +513,7 @@ a_match "$ERR" "core path refused" "CO: the core path names its class"
 a_no_file "$SB/.contexture/modules/x" "CO: the core path writes nothing"
 PO=$SB/catalog/pkgout
 new_pkg "$PO"
+add_file "$PO" rhythms/out.md "the outside-path fixture rhythm"
 mkdir -p "$PO/.contexture/other"
 printf 'x\n' > "$PO/.contexture/other/x"
 install_pkg "$PO"
@@ -703,8 +705,12 @@ RC=$?
 ERR=$(cat "$SB/.err")
 a_rc "$RC" 0 "DR: the real docs-discipline wrapper installs the extension-root package shape rc0"
 a_file "$SB/.contexture/extensions/modules/docs/module" "DR: the real docs module lands under the extension root"
-a_file "$SB/.contexture/extensions/templates/doc.md" "DR: the real grammar template lands under the extension root"
-a_file "$SB/.contexture/extensions/rhythms/work.md" "DR: the real docs rhythm lands under the extension root"
+a_file "$SB/.contexture/extensions/modules/docs/scripts/doc.grammar" "DR: the grammar rides inside the module as its private asset"
+a_no_file "$SB/.contexture/extensions/templates/doc.md" "DR: no shared grammar template lands"
+a_no_file "$SB/.contexture/extensions/templates" "DR: no shared templates folder exists"
+a_file "$SB/.contexture/extensions/rhythms/docs-authoring.md" "DR: the docs-authoring rhythm lands under the extension root"
+a_file "$SB/.contexture/extensions/rhythms/docs-drift.md" "DR: the docs-drift rhythm lands under the extension root"
+a_no_file "$SB/.contexture/extensions/rhythms/work.md" "DR: docs-discipline ships no work.md (starter-rhythms owns it)"
 a_file "$SB/docs/workspace/conventions.md" "DR: the install hook seeds the corpus through ctx docs write"
 SD=$(cd "$SB" && ./.contexture/storage/scripts/store-data docs 2>/dev/null)
 a_eq "$(printf '%s\n' "$SD" | sed -n '1,5p')" "docs
@@ -715,6 +721,15 @@ true" "DR: the store-data owner scan reads the installed docs data file under th
 a_eq "$(printf '%s\n' "$SD" | sed -n '6p')" "$SB/.contexture/extensions/modules/docs/data" "DR: the docs declaration's owner is the extension-root data file"
 DOCQ=$(cd "$SB" && ./.contexture/ctx docs query workspace conventions 2>/dev/null)
 a_match "$DOCQ" "conventions: conventions" "DR: the installed docs module reads its corpus through the store"
+( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/starter-rhythms/install" ) > "$SB/.out" 2> "$SB/.err"
+RC=$?
+a_rc "$RC" 0 "DR: the starter-rhythms install beside docs rc0 (one work.md owner, no collision)"
+a_file "$SB/.contexture/extensions/rhythms/work.md" "DR: the starter work rhythm lands under the extension root"
+a_contains "$SB/.contexture/extensions/rhythms/work.md" "a work request arrives" "DR: the landed work rhythm is the starter variant"
+( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/starter-rhythms/uninstall" ) > "$SB/.out" 2> "$SB/.err"
+RC=$?
+a_rc "$RC" 0 "DR: the starter-rhythms uninstall rc0"
+a_no_file "$SB/.contexture/extensions/rhythms/work.md" "DR: the starter work rhythm leaves on uninstall"
 ( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/docs-discipline/uninstall" ) > "$SB/.out" 2> "$SB/.err"
 RC=$?
 a_rc "$RC" 0 "DR: the real docs-discipline wrapper uninstalls rc0"
@@ -728,6 +743,8 @@ for p in docs-discipline ast-doc-graph storage-fts5 toolchain-filters starter-rh
   a_rc "$?" 0 "RM: $p's manifest validates"
 done
 a_eq "$(./.contexture/ctx _package "$ROOT/plugins/docs-discipline/manifest" kind)" "feature" "RM: docs-discipline is a feature package"
+a_eq "$(./.contexture/ctx _package "$ROOT/plugins/docs-discipline/manifest" parts)" "module modules/docs
+rhythms rhythms" "RM: docs-discipline declares the module and its rhythms, not a templates part"
 a_eq "$(./.contexture/ctx _package "$ROOT/plugins/ast-doc-graph/manifest" kind)" "feature" "RM: ast-doc-graph is a feature package"
 a_eq "$(./.contexture/ctx _package "$ROOT/plugins/toolchain-filters/manifest" parts)" "filters modules/toolchain-filters/filters" "RM: toolchain-filters is a filters-only package"
 a_eq "$(./.contexture/ctx _package "$ROOT/plugins/starter-rhythms/manifest" parts)" "rhythms rhythms" "RM: starter-rhythms is a rhythms-only package"

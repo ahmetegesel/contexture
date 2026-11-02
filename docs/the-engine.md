@@ -595,7 +595,7 @@ plugins/             the tracked catalog of packaged overlays: copied into a wor
   package-install    the package overlay installer: overlays a package's .contexture/extensions tree, records it, runs the part hooks
   package-uninstall  the package overlay remover: runs the part hooks, removes the recorded files, preserves a changed file
   modules/           session (the record engine), run (stream filters), and workspace additions
-  extensions/        the package overlay root: modules/ (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms, templates/ for package grammars, .state/ for the installed-path records
+  extensions/        the package overlay root: modules/ (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms, .state/ for the installed-path records
   rhythms/           your process patterns
   sessions/          the units of work
   tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand; each verb stages under its own root, removed on return and swept by the next dispatch after a kill)

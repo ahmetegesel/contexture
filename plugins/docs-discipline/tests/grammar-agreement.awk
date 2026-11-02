@@ -1,7 +1,7 @@
 #!/usr/bin/awk -f
 # grammar-agreement.awk: the agreement check of the corpus grammar (plugin suite material,
 # never shipped into a workspace). Reads the grammar template and the audit engine and
-# asserts that the machine-readable schema (the #% lines of doc.md), the prose shapes above
+# asserts that the machine-readable schema (the #% lines of doc.grammar), the prose shapes above
 # it, and the audit's kind and block lists say the same thing: every prose block and field
 # is in the schema and back, every enum's values are equal on both sides, the header
 # fields and the kinds agree, the requires and allows lines name known kinds, fields, and
@@ -11,7 +11,7 @@
 # Refuses an empty side as a pass: no schema, no prose blocks, or no audit lists is a
 # disagreement.
 #
-# usage: awk -f grammar-agreement.awk <doc.md> <docs-audit.awk>
+# usage: awk -f grammar-agreement.awk <doc.grammar> <docs-audit.awk>
 # exit: 0 when everything agrees (one AGREE line); 1 with one DISAGREE line per difference
 
 function bad(msg) { print "DISAGREE: " msg; nbad++ }
@@ -111,7 +111,7 @@ fileno == 2 && match($0, /valid_kinds\["[^"]+"\]/) { au_kind[substr($0, RSTART +
 fileno == 2 && match($0, /valid_blocks\["@[^"]+"\]/) { au_block[substr($0, RSTART + 15, RLENGTH - 17)] = 1 }
 
 END {
-    if (fileno != 2) { print "DISAGREE: usage: awk -f grammar-agreement.awk <doc.md> <docs-audit.awk>"; exit 1 }
+    if (fileno != 2) { print "DISAGREE: usage: awk -f grammar-agreement.awk <doc.grammar> <docs-audit.awk>"; exit 1 }
     for (k in s_kind) nsk++
     for (k in s_block) nsb++
     for (k in p_block) npb++

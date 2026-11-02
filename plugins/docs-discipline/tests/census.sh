@@ -30,7 +30,16 @@ allow=$2
 
 set --
 for f in "$dir"/*; do
-  [ -f "$f" ] && set -- "$@" "$f"
+  [ -f "$f" ] || continue
+  # the census covers scripts and engines, never a private data asset: a verb or an
+  # engine carries a shebang, the sourced IO helper carries the .sh suffix, and the
+  # grammar asset is neither, so its prose is not read as shell code
+  case "${f##*/}" in
+    *.sh|*.awk) set -- "$@" "$f"; continue ;;
+  esac
+  case "$(sed -n '1p' "$f")" in
+    '#!'*) set -- "$@" "$f" ;;
+  esac
 done
 [ $# -gt 0 ] || { echo "census.sh: no scripts under $dir" >&2; exit 1; }
 

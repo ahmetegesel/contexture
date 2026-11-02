@@ -229,13 +229,13 @@ module_reader() {
 #   # part: <type> <path>              repeatable; at least one
 #   # driver: <name>                   required exactly when kind is driver
 #   # requires: ...                    reserved; refused
-# The part types are module, driver, laws, rhythms, hooks, filters, and templates;
-# a part path is relative to the package's .contexture/extensions tree (the install
-# path). A module part is one folder under modules/, a driver part is
-# storage/drivers/<name>, a rhythms part is under rhythms/, and a templates part is
-# under templates/. A bare # line is a comment; any other "# <key>:" line is an
-# unknown field and refuses. ctx _package answers validate, summary, version, kind,
-# parts, and driver; the package installer is the only caller.
+# The part types are module, driver, laws, rhythms, hooks, and filters; a part path
+# is relative to the package's .contexture/extensions tree (the install path). A
+# module part is one folder under modules/, a driver part is storage/drivers/<name>,
+# and a rhythms part is under rhythms/. A bare # line is a comment; any other
+# "# <key>:" line is an unknown field and refuses. ctx _package answers validate,
+# summary, version, kind, parts, and driver; the package installer is the only
+# caller.
 
 package_file_parse() {
   pf_file=$1
@@ -314,7 +314,7 @@ package_file_parse() {
           *' '*) PF_ERROR="line $pf_lineno: a part path is one token"; return 1 ;;
         esac
         case "$pf_ptype" in
-          module|driver|laws|rhythms|hooks|filters|templates) ;;
+          module|driver|laws|rhythms|hooks|filters) ;;
           *) PF_ERROR="line $pf_lineno: unknown part type '$pf_ptype'"; return 1 ;;
         esac
         case "$pf_ppath" in
@@ -348,12 +348,6 @@ package_file_parse() {
             case "$pf_ppath" in
               rhythms|rhythms/*) ;;
               *) PF_ERROR="line $pf_lineno: a rhythms part is under rhythms/"; return 1 ;;
-            esac
-            ;;
-          templates)
-            case "$pf_ppath" in
-              templates|templates/*) ;;
-              *) PF_ERROR="line $pf_lineno: a templates part is under templates/"; return 1 ;;
             esac
             ;;
         esac

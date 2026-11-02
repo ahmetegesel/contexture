@@ -1,6 +1,6 @@
 /**
  * Docs Corpus Extractor
- * Parses docs-discipline markdown files strictly according to .contexture/extensions/templates/doc.md grammar.
+ * Parses docs-discipline markdown files strictly according to the docs module's private corpus grammar.
  * Emits intermediate JSONL conforming to plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/spec.md.
  */
 

@@ -3,8 +3,8 @@
 # helper docs-io.sh runs it for ctx docs new, write, header, rule, pitfall, entry, section,
 # replace, ids, and query --entry).
 #
-# Operands: part=1 <the grammar template> part=2 <the doc> [part=3 <a payload>]. Only the
-# grammar's #% schema lines are read; the doc is empty for a new doc; the payload is the
+# Operands: part=1 <the module's grammar asset> part=2 <the doc> [part=3 <a payload>]. Only
+# the grammar's #% schema lines are read; the doc is empty for a new doc; the payload is the
 # --stdin field value or the block of a section write. The part=N operands are bounded
 # tokens; the request itself comes through the environment only, never awk -v, so free
 # text keeps its bytes:

@@ -4,6 +4,30 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.61.0] - 2026-11-02
+
+MINOR: the templates part retires and the record resolves installed rhythms. The break: a package manifest's `templates` part is now an unknown part type and refuses, and there is no shared templates folder; an internal asset rides inside its module. The rhythm fix resolves a RHYTHM stamp against the workspace rhythms root, then the extension rhythms root, and the docs-discipline package stops shipping work.md (starter-rhythms owns it).
+
+### Added
+
+- The docs module's grammar asset `scripts/doc.grammar`, private to the module; the write verbs and the audit resolve it beside the module, and no shared template is read.
+- The interface rule in the module and plugin guides: the ctx interface is the only user/agent-facing surface, anything not served there stays module-private inside the extension folder, and no standard shared templates part or folder exists.
+- The record's RHYTHM stamp resolves both rhythm roots, workspace first; an installed extension rhythm stamps without a workspace copy, and the docs-shaped work rhythm stays as reference material at `plugins/docs-discipline/docs/work.md`.
+
+### Changed
+
+- The docs suite's census scans scripts and engines only, so a private data asset is not read as shell code.
+- The docs-discipline package declares the module and its rhythms only; its grammar rides inside the module, and its installed rhythms are `docs-authoring` and `docs-drift`.
+
+### Removed
+
+- The shared `.contexture/extensions/templates` tree and the docs package's templates part; the docs corpus grammar moves into the docs module.
+- The docs-discipline package's installed `work.md`; starter-rhythms owns the installed generic `work`, and the two packages no longer collide.
+
+### Fixed
+
+- `ctx session record --rhythm=<name> <N> <GATE>` resolves an installed extension-root rhythm, and a workspace copy shadows it; a missing rhythm names both roots.
+
 ## [0.60.0] - 2026-11-02
 
 MINOR: the module system lands: the standard module folder and its manifest grammar, the extension root as the packages' overlay target and the core's second read root, the package installer and uninstaller with the extension-root-only overlay and its collision checks, the package manifest's feature and driver kinds, the catalog mirrored into the extension root, the authoring guide, and the module suite. The storage stays the core's; the session and the unit module follow.
