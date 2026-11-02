@@ -292,7 +292,7 @@ a_rc "$?" "1" "record: a write into a CLOSED unit refuses rc1"
 $CTX session reopen baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: reopen rc0"
 $CTX session record baseonly --what="the unit writes again" >/dev/null 2>&1
 a_rc "$?" "0" "record: a write after reopen rc0"
-# the descriptor: 38 record plus 5 store functions and the store search, exact and store, no store log on posix
+# the descriptor: 38 record plus 7 store functions and the store search, exact and store, no store log on posix
 out=$($CTX session diagnose --json 2>&1); rc=$?
 a_rc "$rc" "0" "descriptor: diagnose rc0"
 a_match "$out" '"name":"posix"' "descriptor: the driver is posix"
@@ -303,7 +303,7 @@ a_match "$out" '"health":"ok"' "descriptor: the health is ok after bootstrap"
 fn_list() { printf '%s' "$1" | sed -n 's/.*"functions":\[\([^]]*\)\].*/\1/p'; }
 fn_count() { fn_list "$1" | tr ',' '\n' | grep -c .; }
 fns=$(fn_list "$out" | tr -d '"')
-a_eq "$(printf '%s\n' "$fns" | tr ',' '\n' | grep -c .)" "44" "descriptor: 44 functions (38 record plus 5 store plus the store search)"
+a_eq "$(printf '%s\n' "$fns" | tr ',' '\n' | grep -c .)" "46" "descriptor: 46 functions (38 record plus 7 store plus the store search)"
 for f in task.add entry.record finding.get lane.create search.query store.list store.get store.put store.delete store.changes store.search; do
   case ",$fns," in
     *",$f,"*) ok "descriptor: carries $f" ;;

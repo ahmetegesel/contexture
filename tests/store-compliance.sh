@@ -1,19 +1,22 @@
 #!/bin/sh
 # store-compliance.sh: the generic module store compliance suite (contract 2, the storage
-# module's store contract). It stages the shipped base (the session module and its posix
-# driver, the storage module and its data reader) and a module data file (the docs
-# plugin's by default, or the one --data-file names), then holds the configured store
-# driver to the five functions over a sandbox corpus at docs/workspace.
+# core's store contract). It stages the shipped base (the session module and its posix
+# driver, the storage core and its data reader and library) and a module data file (the
+# docs plugin's by default, or the one --data-file names), then holds the configured store
+# driver to the seven functions over a sandbox corpus at docs/workspace: list, get, put,
+# delete, changes, batch, and scan, plus the search entry.
 #
 # The suite asserts returned data and bytes, never an exit code alone: the exact list
 # answer and order, the exact bytes of a document (a NUL and an invalid UTF-8 byte
 # included), the fixed stderr line of a refusal, the empty stdout of a refusal, the JSON
-# echo of put and delete, and the row the mapping lands. The key rule, the data file
-# grammar, the module pattern, the per-key lock, the atomic put, and the no-base-to-docs
-# census are each proven, the census and the pattern with a planted difference. The
-# change log is the driver's own: the posix store keeps none and refuses store.changes;
-# the fts5 store keeps the generic log and its own suite (plugins/storage-fts5/tests/
-# test-store.sh) holds the rows, the refusal, and the transaction's atomicity.
+# echo of put and delete, the batch answer and its first-failure line, the scan answer and
+# its decoded bytes, and the row the mapping lands. The key rule, the data file grammar,
+# the module pattern, the namespace lock, the atomic put, the all-or-none batch, and the
+# no-base-to-docs census are each proven, the census and the pattern with a planted
+# difference. The change log is the driver's own: the posix store keeps none and refuses
+# store.changes; the fts5 store keeps the generic log and its own suite
+# (plugins/storage-fts5/tests/test-store.sh) holds the rows, the refusal, and the
+# transaction's atomicity.
 #
 # Usage: tests/store-compliance.sh [--driver=posix|fts5] [--driver-exec=<path>] [--data-file=<path>] [--keep]
 #   --driver runs the store over that driver's module (default: posix). fts5 stages the
@@ -163,6 +166,13 @@ store_delete() { _sd_ns=$1; _sd_key=$2; shift 2; run store.delete store.delete "
 store_list() { run store.list store.list "$@"; }
 # store_changes <ns> [args...]
 store_changes() { run store.changes store.changes "$@"; }
+# b64file <path>: a file's bytes as one base64 line (the batch's put value wire)
+b64file() { base64 < "$1" | tr -d '\n'; }
+# b64decode <string> <out>: a base64 value decoded to <out>
+b64decode() {
+  printf '%s' "$1" | base64 -d > "$2" 2>/dev/null && return 0
+  printf '%s' "$1" | base64 -D > "$2" 2>/dev/null
+}
 
 printf 'store-compliance suite: the %s store over the docs data file (staged at %s)\n\n' "$DRIVER_NAME" "$SB"
 
@@ -196,14 +206,16 @@ else
   [ "$_hass" -eq 0 ] || miss "has search.schema did not answer 0 on fts5"
 fi
 cap=$("$DRIVER" capability 2>/dev/null)
-case "$cap" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*'"store.search"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
+case "$cap" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*'"store.batch"'*'"store.scan"'*'"store.search"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
 if [ "$IS_POSIX" -eq 1 ]; then
   case "$cap" in *'"optional":["store"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
 else
   case "$cap" in *'"optional":["store","store.changelog","search.schema"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
 fi
+_cap_fns=$(printf '%s' "$cap" | sed 's/.*"functions":\[//; s/\].*//' | tr ',' '\n' | grep -c .)
+[ "$_cap_fns" = 46 ] || miss "the descriptor declares $_cap_fns functions, want 46 (38 record plus 7 store plus the store search)"
 # a planted descriptor without the store capability reads red at require
-planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/,"store.search"//; s/"store.changelog"//; s/"search.schema"//; s/"store"//; s/,\]/]/; s/\[,/[/; s/,,/,/g')
+planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/,"store.batch","store.scan"//; s/,"store.search"//; s/"store.changelog"//; s/"search.schema"//; s/"store"//; s/,\]/]/; s/\[,/[/; s/,,/,/g')
 mkdir -p .contexture/drivers/planted
 {
   printf '#!/bin/sh\n'
@@ -529,7 +541,7 @@ fi
 tc "S6f: the unit module's <unit>/<path...> key admits the main and the lane keys and filters the list; the fixed-depth docs key stays fixed"
 
 # ==============================================================================
-# S7: the per-key lock is held during a put, and the put is atomic per key
+# S7: the namespace lock is held during a put, and the put is atomic per key
 # ==============================================================================
 printf '\n== S7: the lock and the atomic put ==\n'
 printf 'atomic-old\n' > "$SB/pay-old"
@@ -543,13 +555,13 @@ exec 3> "$SB/pay.fifo"
 _lock_ok=0
 _i=0
 while [ "$_i" -lt 50 ]; do
-  if [ -d .contexture/tmp/locks/store-docs/workspace/locked.lock ]; then _lock_ok=1; break; fi
+  if [ -d .contexture/tmp/locks/store-docs.lock ]; then _lock_ok=1; break; fi
   _i=$((_i + 1)); sleep 0.1 2>/dev/null || sleep 1
 done
 printf 'locked\n' >&3
 exec 3>&-
 wait "$_lock_pid"
-[ "$_lock_ok" -eq 1 ] || miss "the per-key lock was not observed while the put read its payload"
+[ "$_lock_ok" -eq 1 ] || miss "the namespace lock was not observed while the put read its payload"
 [ "$(cat "$SB/lock.rc" 2>/dev/null)" = 0 ] || miss "the locked put exited $(cat "$SB/lock.rc" 2>/dev/null)"
 if [ "$IS_POSIX" -eq 1 ]; then
   [ -f docs/workspace/locked.md ] || miss "the locked put did not land its key"
@@ -559,9 +571,9 @@ else
   rawok
   wantout 'locked'
 fi
-[ ! -d .contexture/tmp/locks/store-docs/workspace/locked.lock ] || miss "the lock remains after the put"
+[ ! -d .contexture/tmp/locks/store-docs.lock ] || miss "the lock remains after the put"
 rm -f "$SB/pay.fifo"
-tc "S7a: put holds a per-key lock while it reads and releases it after the key lands"
+tc "S7a: put holds the namespace lock while it reads and releases it after the key lands"
 if [ "$IS_POSIX" -eq 1 ]; then
   chmod 500 docs/workspace
   store_put docs workspace/atomic "$SB/pay-new"
@@ -620,6 +632,19 @@ store_delete libprobe x/y < /dev/null > "$O" 2> "$E"; RC=$?
 answer
 wantout '{"namespace":"libprobe","key":"x/y","op":"remove"}'
 tc "S9a: the library's store five answer through the core resolver on the $DRIVER_NAME driver"
+
+# the library's batch and scan travel the same resolver door
+printf 'action=put\nkey=x/y\nhead=none\nvalue_b64=%s\n' "$(b64file "$SB/pay-lib")" > "$SB/lib-batch"
+FN=store.batch
+store_batch libprobe < "$SB/lib-batch" > "$O" 2> "$E"; RC=$?
+answer
+wantout '{"namespace":"libprobe","actions":1}'
+FN=store.scan
+store_scan libprobe < /dev/null > "$O" 2> "$E"; RC=$?
+answer
+_s9_b=$(b64file "$SB/pay-lib")
+wantout "{\"namespace\":\"libprobe\",\"items\":[{\"key\":\"x/y\",\"value_b64\":\"$_s9_b\"}]}"
+tc "S9a2: the library's store batch and scan answer through the core resolver"
 
 mkdir -p .contexture/modules/fixture/scripts
 printf 'namespace: fixture\nroot: fixture-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/modules/fixture/data
@@ -847,6 +872,141 @@ printf 'namespace: badsearch\nroot: bad-root\nsuffix: .txt\nkey: <a>/<b>\nchange
 slist badsearch
 refused 1 ERR_INVALID_ARGUMENT "the modes must include exact"
 tc "S10h: the search schema's shape refusals name the rule (a document form without a rule, a flat field with a document rule, a three-token rule, a repeated mode, modes without exact)"
+
+# ==============================================================================
+# S11: the transactional batch: all or none, the first-failure line, the change rows
+# ==============================================================================
+printf '\n== S11: the batch ==\n'
+# S9 sourced the library, whose store_put and store_get own those names; S11 and S12
+# drive the driver directly so the suite's own run/answer helpers stay authoritative
+s11_put() { run store.put store.put "$1" "$2" < "$3"; }
+s11_get() { run store.get store.get "$1" "$2"; }
+printf 'one\n' > "$SB/bat-one"
+printf 'two\n' > "$SB/bat-two"
+printf 'three\n' > "$SB/bat-three"
+s11_put docs workspace/bat1 "$SB/bat-one"; answer
+s11_put docs workspace/bat2 "$SB/bat-two"; answer
+if [ "$IS_POSIX" -eq 0 ]; then
+  _s11_seq=$(sqlite3 "$SB/.contexture/sessions.db" "SELECT coalesce(max(seq), 0) FROM store_changes;")
+fi
+{
+  printf 'action=put\nkey=workspace/bat3\nhead=0123abcd\nvalue_b64=%s\n' "$(b64file "$SB/bat-three")"
+  printf 'action=delete\nkey=workspace/bat1\nhead=none\n'
+  printf 'action=put\nkey=workspace/bat2\nhead=none\nvalue_b64=%s\n' "$(b64file "$SB/bat-one")"
+} > "$SB/batch-ok"
+run store.batch store.batch docs < "$SB/batch-ok"
+answer
+wantout '{"namespace":"docs","actions":3}'
+s11_get docs workspace/bat3; rawok; wantfile "$SB/bat-three"
+s11_get docs workspace/bat1
+refused 1 ERR_ENTITY_NOT_FOUND "key 'workspace/bat1' not found in namespace 'docs'"
+s11_get docs workspace/bat2; rawok; wantfile "$SB/bat-one"
+tc "S11a: the batch applies puts and deletes in order and answers its action count"
+if [ "$IS_POSIX" -eq 0 ]; then
+  _s11_rows=$(sqlite3 "$SB/.contexture/sessions.db" "SELECT op || '|' || key || '|' || prior || '|' || head FROM store_changes WHERE seq > $_s11_seq ORDER BY seq;")
+  _s11_want='put|workspace/bat3|absent|0123abcd
+delete|workspace/bat1|present|none
+put|workspace/bat2|present|none'
+  [ "$_s11_rows" = "$_s11_want" ] || miss "the batch change rows [$_s11_rows] want [$_s11_want]"
+  tc "S11b: the fts5 batch lands one change row per action in order, prior at its position"
+fi
+
+# a semantic failure at action 2: only that line, and action 1 never lands
+{
+  printf 'action=put\nkey=workspace/bat4\nhead=none\nvalue_b64=%s\n' "$(b64file "$SB/bat-two")"
+  printf 'action=delete\nkey=workspace/bat9\nhead=none\n'
+} > "$SB/batch-sem"
+run store.batch store.batch docs < "$SB/batch-sem"
+refused 1 ERR_ENTITY_NOT_FOUND "action 2 (delete 'workspace/bat9'): key 'workspace/bat9' not found in namespace 'docs'"
+s11_get docs workspace/bat4
+refused 1 ERR_ENTITY_NOT_FOUND "key 'workspace/bat4' not found in namespace 'docs'"
+tc "S11c: a semantic failure at action 2 names it and leaves action 1 unwritten"
+
+# a planted storage failure at action 2 rolls action 1 back and names action 2
+if [ "$IS_POSIX" -eq 1 ]; then
+  mkdir -p docs/ro
+  printf 'ro\n' > "$SB/bat-ro"
+  {
+    printf 'action=put\nkey=a/new\nhead=none\nvalue_b64=%s\n' "$(b64file "$SB/bat-one")"
+    printf 'action=put\nkey=ro/x\nhead=none\nvalue_b64=%s\n' "$(b64file "$SB/bat-ro")"
+  } > "$SB/batch-plant"
+  chmod 500 docs/ro
+  run store.batch store.batch docs < "$SB/batch-plant"
+  chmod 700 docs/ro
+  refused 2 ERR_STORAGE_WRITE "action 2 (put 'ro/x'): the storage write of key 'ro/x' failed"
+  s11_get docs a/new
+  refused 1 ERR_ENTITY_NOT_FOUND "key 'a/new' not found in namespace 'docs'"
+  [ ! -d docs/a ] || miss "the rollback left the folder action 1 created"
+  tc "S11d: a planted second-action write failure rolls the first back and names action 2"
+else
+  _s11_seq=$(sqlite3 "$SB/.contexture/sessions.db" "SELECT coalesce(max(seq), 0) FROM store_changes;")
+  sqlite3 "$SB/.contexture/sessions.db" "CREATE TRIGGER plant_store BEFORE INSERT ON store WHEN NEW.key = 'workspace/boom' BEGIN SELECT RAISE(ABORT, 'planted'); END;"
+  {
+    printf 'action=put\nkey=workspace/bat5\nhead=none\nvalue_b64=%s\n' "$(b64file "$SB/bat-one")"
+    printf 'action=put\nkey=workspace/boom\nhead=none\nvalue_b64=%s\n' "$(b64file "$SB/bat-two")"
+  } > "$SB/batch-plant"
+  run store.batch store.batch docs < "$SB/batch-plant"
+  sqlite3 "$SB/.contexture/sessions.db" "DROP TRIGGER plant_store;"
+  refused 2 ERR_STORAGE_WRITE "action 2 (put 'workspace/boom'): the storage write of key 'workspace/boom' failed"
+  s11_get docs workspace/bat5
+  refused 1 ERR_ENTITY_NOT_FOUND "key 'workspace/bat5' not found in namespace 'docs'"
+  _s11_after=$(sqlite3 "$SB/.contexture/sessions.db" "SELECT count(*) FROM store_changes WHERE seq > $_s11_seq;")
+  [ "$_s11_after" = 0 ] || miss "the rolled-back batch left $_s11_after change rows"
+  tc "S11d: a planted second-action write failure rolls the first back and names action 2"
+fi
+
+# malformed payloads: the action and key context is named, nothing written
+printf 'action=bogus\nkey=workspace/bat6\n' > "$SB/batch-bad-op"
+run store.batch store.batch docs < "$SB/batch-bad-op"
+refused 1 ERR_INVALID_ARGUMENT "action 1 (bogus '?'): unknown action 'bogus' (put or delete)"
+printf 'action=put\nkey=workspace/bat6\n' > "$SB/batch-no-val"
+run store.batch store.batch docs < "$SB/batch-no-val"
+refused 1 ERR_INVALID_ARGUMENT "action 1 (put 'workspace/bat6'): a put carries no value"
+printf 'action=delete\nkey=workspace/bat2\nvalue_b64=aGk=\n' > "$SB/batch-del-val"
+run store.batch store.batch docs < "$SB/batch-del-val"
+refused 1 ERR_INVALID_ARGUMENT "action 1 (delete 'workspace/bat2'): a delete carries no value"
+: > "$SB/batch-empty"
+run store.batch store.batch docs < "$SB/batch-empty"
+refused 1 ERR_INVALID_ARGUMENT "action 1 (? '?'): the batch carries no actions"
+tc "S11e: a malformed action, a missing put value, a delete value, and an empty list refuse with the action context"
+
+# ==============================================================================
+# S12: the scan: the module pattern, bytewise order, the raw bytes in base64, empty
+# ==============================================================================
+printf '\n== S12: the scan ==\n'
+mkdir -p .contexture/modules/scanprobe scan-root/x
+printf 'namespace: scanprobe\nroot: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/modules/scanprobe/data
+printf 'B\n' > scan-root/x/B.txt
+printf 'a\n' > scan-root/x/a.txt
+printf 'aa\n' > scan-root/x/aa.txt
+printf 'a\000b\377' > scan-root/x/bin.txt
+mkdir -p scan-root/x/y
+printf 'three segments\n' > scan-root/x/y/z.txt
+printf 'one segment\n' > scan-root/top.txt
+if [ "$IS_POSIX" -eq 0 ]; then
+  for _k in B a aa bin; do
+    s11_put scanprobe "x/$_k" "scan-root/x/$_k.txt"
+    answer
+  done
+  sqlite3 "$SB/.contexture/sessions.db" "INSERT INTO store (namespace, key, value, updated_at) VALUES ('scanprobe', 'top', x'78', 't'); INSERT INTO store (namespace, key, value, updated_at) VALUES ('scanprobe', 'x/y/z', x'78', 't');"
+fi
+run store.scan store.scan scanprobe
+answer
+_s12_b=$(b64file scan-root/x/B.txt)
+_s12_a=$(b64file scan-root/x/a.txt)
+_s12_aa=$(b64file scan-root/x/aa.txt)
+_s12_bin=$(b64file scan-root/x/bin.txt)
+wantout "{\"namespace\":\"scanprobe\",\"items\":[{\"key\":\"x/B\",\"value_b64\":\"$_s12_b\"},{\"key\":\"x/a\",\"value_b64\":\"$_s12_a\"},{\"key\":\"x/aa\",\"value_b64\":\"$_s12_aa\"},{\"key\":\"x/bin\",\"value_b64\":\"$_s12_bin\"}]}"
+_s12_got=$(sed -n 's/.*"key":"x\/bin","value_b64":"\([^"]*\)".*/\1/p' "$O")
+b64decode "$_s12_got" "$SB/scan-bin.out" || miss "the scanned binary value did not decode"
+cmp -s "$SB/scan-bin.out" scan-root/x/bin.txt || miss "the scanned binary value differs from the stored bytes"
+tc "S12a: the scan answers every admitted key bytewise with its raw value in base64 (a binary value included)"
+mkdir -p .contexture/modules/emptyprobe
+printf 'namespace: emptyprobe\nroot: empty-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/modules/emptyprobe/data
+run store.scan store.scan emptyprobe
+answer
+wantout '{"namespace":"emptyprobe","items":[]}'
+tc "S12b: an empty namespace answers an empty item list"
 
 printf '\n== summary ==\n'
 printf 'store-compliance (%s): pass=%d fail=%d\n' "$DRIVER_NAME" "$pass" "$fail"

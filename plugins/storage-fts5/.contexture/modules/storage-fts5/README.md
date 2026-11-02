@@ -41,12 +41,15 @@ The generic module store serves module data only: `store` holds a namespace and 
 the value as opaque bytes, `store_changes` holds the optional generic change log (seq,
 at, namespace, key, op, head, prior), and `store_docs` holds the documents the search
 schema derives at write time (`store_docs_schema` stores each namespace's schema
-signature). The six functions answer natively over those tables: `store.list` is bytewise
-and pattern-filtered, `store.get` returns the raw bytes, `store.put` and `store.delete` are
-one transaction with their change-log row, and `store.changes` answers the rows of the
-heads it is given oldest first. A refused write logs nothing. The key rule is the posix
-driver's; the docs corpus reaches this store through the docs module, and this module never
-parses a doc.
+signature). The seven data functions answer natively over those tables: `store.list` is
+bytewise and pattern-filtered, `store.get` returns the raw bytes, `store.put` and
+`store.delete` are one transaction with their change-log row, `store.changes` answers the
+rows of the heads it is given oldest first, `store.batch` runs its whole action list in
+one `BEGIN IMMEDIATE` transaction with one change row per action (all or none; the first
+failure names the 1-based action and key and leaves nothing written), and `store.scan`
+answers every admitted key bytewise with its raw value in base64. A refused write logs
+nothing. The key rule is the posix driver's; the docs corpus reaches this store through
+the docs module, and this module never parses a doc.
 
 `store.search` answers the module search schema. `exact` is the record rule over the raw
 values, computed by the storage core's shared engine on every driver. A ranked mode reads

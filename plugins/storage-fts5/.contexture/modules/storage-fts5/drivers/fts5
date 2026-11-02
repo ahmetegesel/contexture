@@ -21,8 +21,9 @@
 #
 # Writes: one transaction each (BEGIN IMMEDIATE to COMMIT, whole or nothing), under the unit
 # write lock (.contexture/tmp/locks/fts5-<unit>.lock) so writers of one unit serialize; the
-# answer prints only after the commit. Module data is served by the five generic store
-# functions over the module data files; the docs corpus reaches this driver through them.
+# answer prints only after the commit. Module data is served by the seven generic store
+# functions over the module data files (list, get, put, delete, changes, batch, scan) plus
+# the store search entry; the docs corpus reaches this driver through them.
 
 set -u
 
@@ -195,14 +196,18 @@ shift
 # ==============================================================================
 # The generic module store (the storage module's store contract)
 # ==============================================================================
-# Five functions over a module's declared data file: store.list, store.get, store.put,
-# store.delete, store.changes. The data file (modules/<module>/data) is read and validated
-# by the storage module's private store-data script; the value is opaque bytes in the
-# `store` table keyed by (namespace, key), and every put and delete lands its row in
-# `store_changes` in the same transaction. Keys are exact, ASCII-case-fold twins never
-# coexist, list is bytewise and filtered by the module pattern, put is one transaction,
+# Seven data functions over a module's declared data file: store.list, store.get,
+# store.put, store.delete, store.changes, store.batch, and store.scan. The data file
+# (modules/<module>/data) is read and validated by the storage module's private store-data
+# script; the value is opaque bytes in the `store` table keyed by (namespace, key), and
+# every put and delete lands its row in `store_changes` in the same transaction. Keys are
+# exact, ASCII-case-fold twins never coexist, list is bytewise and filtered by the module
+# pattern, put is one transaction,
 # and the change log is optional per namespace (a namespace declaring changes: false
-# refuses store.changes). The legacy docs tables stay untouched and unread by the store.
+# refuses store.changes). The batch takes one namespace scope lock, validates its whole
+# action list, and runs every action in one BEGIN IMMEDIATE transaction with one
+# store_changes row per action; the scan answers every admitted key with its raw value in
+# base64. The legacy docs tables stay untouched and unread by the store.
 # The posix driver's messages and exit tiers are kept, so a caller never branches.
 STORE_LOCK=""
 STORE_TMP=""
@@ -229,12 +234,13 @@ store_unlock() {
   return 0
 }
 
-# store_lock <namespace> <key>: the per-key lock, a folder under the drawer's lock folder,
-# held until store_unlock; five seconds of retries then rc 2 ERR_STORAGE_LOCKED. The folder
+# store_lock <namespace>: one namespace scope lock shared by store.put, store.delete, and
+# store.batch, a folder under the drawer's lock folder, held until store_unlock; five
+# seconds of retries then rc 2 ERR_STORAGE_LOCKED. The folder
 # carries its holder pid; a waiter removes a lock whose pid is gone, and gives a lock with no
 # pid file a second's grace for its holder to write one.
 store_lock() {
-  STORE_LOCK="$DB_TMP/locks/store-$1/$2.lock"
+  STORE_LOCK="$DB_TMP/locks/store-$1.lock"
   mkdir -p "$(dirname "$STORE_LOCK")" 2>/dev/null || {
     STORE_LOCK=""
     refuse 2 ERR_STORAGE_WRITE "cannot make the store lock folder"
@@ -266,7 +272,7 @@ store_lock() {
     sleep 0.1 2>/dev/null || sleep 1
   done
   STORE_LOCK=""
-  refuse 2 ERR_STORAGE_LOCKED "the store key '$2' in namespace '$1' is locked (5 s timeout)"
+  refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (5 s timeout)"
 }
 
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
@@ -462,7 +468,7 @@ store_put() {
   trap 'store_cleanup; exit 129' HUP
   trap 'store_cleanup; exit 130' INT
   trap 'store_cleanup; exit 143' TERM
-  store_lock "$sp_ns" "$sp_key"
+  store_lock "$sp_ns"
   scratch
   cat > "$SCRATCH/value" || {
     store_cleanup
@@ -520,7 +526,7 @@ store_delete() {
   trap 'store_cleanup; exit 129' HUP
   trap 'store_cleanup; exit 130' INT
   trap 'store_cleanup; exit 143' TERM
-  store_lock "$sx_ns" "$sx_key"
+  store_lock "$sx_ns"
   db_init
   store_docs_ensure "$sx_ns" "$SD_SIG"
   scratch
@@ -580,6 +586,259 @@ store_changes() {
 # store_sqlq <value>: a single-quoted SQL string
 store_sqlq() {
   printf "'%s'" "$(sql_escape "$1")"
+}
+
+# ==============================================================================
+# The transactional batch and the scan
+# ==============================================================================
+# The batch wire (stdin, the escaped payload format): an action=put or action=delete line
+# opens an action, then key=<escaped key>, head=<sha|none> (default none), and, for a put,
+# value_b64=<base64>. The action list is validated whole under the namespace lock, then
+# every action runs in one BEGIN IMMEDIATE transaction with one store_changes row per
+# action; the first failure prints store.batch: error: action <n> (<op> '<key>'): <message>
+# (<CODE>), 1-based, and the transaction leaves nothing written.
+batch_unescape() {
+  BU_RAW="$1" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["BU_RAW"]; out = ""
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c == "\\") {
+        i++
+        c = substr(s, i, 1)
+        if (c == "n") out = out "\n"
+        else if (c == "t") out = out "\t"
+        else if (c == "r") out = out "\r"
+        else out = out c
+      } else out = out c
+    }
+    printf "%s", out
+  }'
+}
+
+# batch_decode <base64> <out>: decode one value; the base64 command differs only in its
+# decode flag, so the GNU/Darwin spelling is tried first and the BSD one second
+batch_decode() {
+  printf '%s' "$1" | base64 -d > "$2" 2>/dev/null && return 0
+  printf '%s' "$1" | base64 -D > "$2" 2>/dev/null && return 0
+  rm -f "$2" 2>/dev/null
+  return 1
+}
+
+# batch_refuse <rc> <n> <op> <key> <CODE> <message>: the batch's one failure line
+batch_refuse() {
+  printf 'store.batch: error: action %s (%s '\''%s'\''): %s (%s)\n' "$2" "$3" "$4" "$6" "$5" >&2
+  exit "$1"
+}
+
+# batch_key_for <n> <op> <key>: the key rule and the module pattern, framed by the action
+batch_key_for() {
+  bk_key=$3
+  store_key_ok "$bk_key" || batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "malformed key '$bk_key'"
+  store_key_shape "$SD_KEYPAT" "$bk_key" || batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "key '$bk_key' does not match the namespace pattern '$SD_KEYPAT'"
+}
+
+# batch_close_action: validate the action being parsed and append it to the manifest
+# (n, op, key, head, value path, tab separated; a key never holds a tab)
+batch_close_action() {
+  [ "$sb_open" -eq 1 ] || return 0
+  sb_open=0
+  sb_n=$((sb_n + 1))
+  [ "$sb_seen_key" -eq 1 ] && [ -n "$sb_key" ] || batch_refuse 1 "$sb_n" "$sb_op" "?" ERR_INVALID_ARGUMENT "the action carries no key"
+  batch_key_for "$sb_n" "$sb_op" "$sb_key"
+  case "$sb_head" in
+    none) ;;
+    ''|*[!0-9a-fA-F]*) batch_refuse 1 "$sb_n" "$sb_op" "$sb_key" ERR_INVALID_ARGUMENT "--head takes a commit id or none: '$sb_head'" ;;
+  esac
+  case "$sb_op" in
+    put)
+      [ "$sb_seen_val" -eq 1 ] || batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "a put carries no value"
+      sb_v="$SCRATCH/batch-val.$sb_n"
+      batch_decode "$sb_val" "$sb_v" || batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "malformed base64 value"
+      printf '%s\t%s\t%s\t%s\t%s\n' "$sb_n" put "$sb_key" "$sb_head" "$sb_v" >> "$SCRATCH/man"
+      ;;
+    delete)
+      [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$sb_n" delete "$sb_key" ERR_INVALID_ARGUMENT "a delete carries no value"
+      printf '%s\t%s\t%s\t%s\t\n' "$sb_n" delete "$sb_key" "$sb_head" >> "$SCRATCH/man"
+      ;;
+  esac
+}
+
+# batch_parse: read the action payload from stdin into the manifest; values stage in the
+# per-call scratch folder
+batch_parse() {
+  : > "$SCRATCH/man"
+  sb_n=0
+  sb_open=0
+  sb_op=""; sb_key=""; sb_head=""; sb_val=""; sb_seen_key=0; sb_seen_head=0; sb_seen_val=0
+  while IFS= read -r sb_l || [ -n "$sb_l" ]; do
+    sb_l=${sb_l%"$cr_byte"}
+    case "$sb_l" in
+      '') continue ;;
+      action=*)
+        batch_close_action
+        sb_open=1
+        sb_op=${sb_l#action=}
+        case "$sb_op" in
+          put|delete) ;;
+          *) batch_refuse 1 "$((sb_n + 1))" "$sb_op" "?" ERR_INVALID_ARGUMENT "unknown action '$sb_op' (put or delete)" ;;
+        esac
+        sb_key=""; sb_head=none; sb_val=""; sb_seen_key=0; sb_seen_head=0; sb_seen_val=0
+        ;;
+      key=*)
+        [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
+        [ "$sb_seen_key" -eq 0 ] || batch_refuse 1 "$sb_n" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'key='"
+        sb_seen_key=1
+        sb_key=$(batch_unescape "${sb_l#key=}")
+        ;;
+      head=*)
+        [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
+        [ "$sb_seen_head" -eq 0 ] || batch_refuse 1 "$sb_n" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'head='"
+        sb_seen_head=1
+        sb_head=${sb_l#head=}
+        ;;
+      value_b64=*)
+        [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
+        [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$sb_n" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'value_b64='"
+        sb_seen_val=1
+        sb_val=${sb_l#value_b64=}
+        ;;
+      *) batch_refuse 1 "$sb_n" "${sb_op:-?}" "${sb_key:-?}" ERR_INVALID_ARGUMENT "unknown payload line '$sb_l'" ;;
+    esac
+  done
+  if [ "$sb_open" -eq 1 ]; then batch_close_action; fi
+  [ "$sb_n" -gt 0 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "the batch carries no actions"
+}
+
+# batch_validate: the whole action list against the live key set, under the namespace lock;
+# a delete must find the key present at its place in the order, and a put never coexists
+# with an ASCII case twin
+batch_validate() {
+  : > "$SCRATCH/live"
+  if [ -f "$DB_PATH" ]; then
+    db_init
+    if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sb_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/live" 2>/dev/null; then
+      refuse 2 ERR_STORAGE_READ "the storage read failed"
+    fi
+  fi
+  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
+    case "$sb_op" in
+      put)
+        sb_twin=$(SB_T="$sb_key" LC_ALL=C awk 'BEGIN { t = ENVIRON["SB_T"] } { if ($0 != t && tolower($0) == tolower(t)) { print; exit } }' "$SCRATCH/live")
+        [ -z "$sb_twin" ] || batch_refuse 1 "$sb_i" put "$sb_key" ERR_ENTITY_EXISTS "key '$sb_key' folds onto '$sb_twin' under ASCII case; keys differing only by case never coexist in namespace '$sb_ns'"
+        printf '%s\n' "$sb_key" >> "$SCRATCH/live"
+        LC_ALL=C sort -u "$SCRATCH/live" -o "$SCRATCH/live"
+        ;;
+      delete)
+        grep -F -q -x -e "$sb_key" "$SCRATCH/live" || batch_refuse 1 "$sb_i" delete "$sb_key" ERR_ENTITY_NOT_FOUND "key '$sb_key' not found in namespace '$sb_ns'"
+        grep -F -v -x -e "$sb_key" "$SCRATCH/live" > "$SCRATCH/live.next" || true
+        mv -f "$SCRATCH/live.next" "$SCRATCH/live"
+        ;;
+    esac
+  done < "$SCRATCH/man"
+}
+
+# batch_sql: the one transaction script; each action's first statement line is recorded so
+# a sqlite3 failure names the action that failed
+batch_sql() {
+  sbs_core=$(store_search_core) || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
+  sbs_now=$(now_utc)
+  : > "$SCRATCH/store.sql"
+  : > "$SCRATCH/action-lines"
+  printf 'BEGIN IMMEDIATE;\n' >> "$SCRATCH/store.sql"
+  while IFS='	' read -r sbs_i sbs_op sbs_key sbs_head sbs_val; do
+    sbs_start=$(( $(wc -l < "$SCRATCH/store.sql") + 1 ))
+    printf '%s\t%s\n' "$sbs_start" "$sbs_i" >> "$SCRATCH/action-lines"
+    printf "INSERT INTO store_changes (at, namespace, key, op, head, prior) VALUES ('%s', '%s', '%s', '%s', '%s', CASE WHEN EXISTS (SELECT 1 FROM store WHERE namespace = '%s' AND key = '%s') THEN 'present' ELSE 'absent' END);\n" \
+      "$sbs_now" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" "$(sql_escape "$sbs_op")" "$(sql_escape "$sbs_head")" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" >> "$SCRATCH/store.sql"
+    case "$sbs_op" in
+      put)
+        printf "INSERT INTO store (namespace, key, value, updated_at) VALUES ('%s', '%s', readfile('%s'), '%s') ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;\n" \
+          "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" "$(sql_escape "$sbs_val")" "$sbs_now" >> "$SCRATCH/store.sql"
+        printf "DELETE FROM store_docs WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" >> "$SCRATCH/store.sql"
+        if ! "$sbs_core" docs "$SD_FILE" "$sb_ns" "$sbs_key" "$sbs_val" "$SD_SIG" >> "$SCRATCH/store.sql"; then
+          batch_refuse 2 "$sbs_i" put "$sbs_key" ERR_STORAGE_WRITE "cannot derive the store search documents"
+        fi
+        ;;
+      delete)
+        printf "DELETE FROM store WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" >> "$SCRATCH/store.sql"
+        printf "DELETE FROM store_docs WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" >> "$SCRATCH/store.sql"
+        ;;
+    esac
+  done < "$SCRATCH/man"
+  printf 'COMMIT;\n' >> "$SCRATCH/store.sql"
+}
+
+store_batch() {
+  FN=store.batch
+  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.batch takes one argument, the namespace"
+  sb_ns=$1
+  store_data store.batch "$sb_ns"
+  trap 'store_cleanup' EXIT
+  trap 'store_cleanup; exit 129' HUP
+  trap 'store_cleanup; exit 130' INT
+  trap 'store_cleanup; exit 143' TERM
+  scratch
+  batch_parse
+  store_lock "$sb_ns"
+  batch_validate
+  db_init
+  store_docs_ensure "$sb_ns" "$SD_SIG"
+  batch_sql
+  if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2> "$SCRATCH/err"; then
+    sb_line=$(sed -n 's/.*near line \([0-9][0-9]*\):.*/\1/p' "$SCRATCH/err" | head -n 1)
+    [ -n "$sb_line" ] || sb_line=999999999
+    sb_act=$(awk -v n="$sb_line" '$1 <= n { a = $2 } END { if (a == "") a = 1; printf "%s", a }' "$SCRATCH/action-lines")
+    sb_meta=$(awk -F '	' -v a="$sb_act" '$1 == a { print $2 "\t" $3; exit }' "$SCRATCH/man")
+    sb_op=${sb_meta%%	*}
+    sb_key=${sb_meta#*	}
+    if [ "$sb_op" = delete ]; then
+      batch_refuse 2 "$sb_act" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
+    fi
+    batch_refuse 2 "$sb_act" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
+  fi
+  store_cleanup
+  printf '{"namespace":"%s","actions":%s}\n' "$(store_json "$sb_ns")" "$sb_n"
+  exit 0
+}
+
+# store_scan: every key the module pattern admits with its raw value in base64, bytewise,
+# one compact JSON answer; no limit (the module stops after the keys it needs)
+store_scan() {
+  FN=store.scan
+  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.scan takes one argument, the namespace"
+  sns_ns=$1
+  store_data store.scan "$sns_ns"
+  sns_b64=""
+  for sns_c in "$MODULE_DIR/../../storage/scripts/store-b64" \
+               "$ROOT/.contexture/storage/scripts/store-b64" \
+               "$ROOT/base/.contexture/storage/scripts/store-b64"; do
+    if [ -x "$sns_c" ]; then sns_b64=$sns_c; break; fi
+  done
+  [ -n "$sns_b64" ] || refuse 2 ERR_STORAGE_READ "the storage core base64 encoder is not installed"
+  scratch
+  if [ -f "$DB_PATH" ]; then
+    db_init
+    if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sns_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys" 2>/dev/null; then
+      refuse 2 ERR_STORAGE_READ "the storage read failed"
+    fi
+  else
+    : > "$SCRATCH/keys"
+  fi
+  printf '{"namespace":"%s","items":[' "$(store_json "$sns_ns")"
+  sns_first=1
+  while IFS= read -r sns_key || [ -n "$sns_key" ]; do
+    [ -n "$sns_key" ] || continue
+    store_key_ok "$sns_key" || continue
+    store_key_shape "$SD_KEYPAT" "$sns_key" || continue
+    if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$SCRATCH/value"), value) FROM store WHERE namespace = $(store_sqlq "$sns_ns") AND key = $(store_sqlq "$sns_key");" > /dev/null 2>&1; then
+      refuse 2 ERR_STORAGE_READ "cannot read key '$sns_key' in namespace '$sns_ns'"
+    fi
+    sns_v=$("$sns_b64" "$SCRATCH/value") || refuse 2 ERR_STORAGE_READ "cannot read key '$sns_key' in namespace '$sns_ns'"
+    if [ "$sns_first" -eq 1 ]; then sns_first=0; else printf ','; fi
+    printf '{"key":"%s","value_b64":"%s"}' "$(store_json "$sns_key")" "$sns_v"
+  done < "$SCRATCH/keys"
+  printf ']}\n'
+  exit 0
 }
 
 # store_search_core: the storage core's private search engine
@@ -914,7 +1173,7 @@ want_lane() {
 }
 
 capability() {
-  printf '{"driver":"fts5","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","store.list","store.get","store.put","store.delete","store.changes","store.search"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n'
+  printf '{"driver":"fts5","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","store.list","store.get","store.put","store.delete","store.changes","store.batch","store.scan","store.search"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n'
 }
 
 # storage.health: a probe, never a write: an absent database reports degraded with store
@@ -1033,6 +1292,8 @@ case "$CMD" in
   store.put) store_put "$@" ;;
   store.delete) store_delete "$@" ;;
   store.changes) store_changes "$@" ;;
+  store.batch) store_batch "$@" ;;
+  store.scan) store_scan "$@" ;;
   store.search) store_search "$@" ;;
 
   storage.health)

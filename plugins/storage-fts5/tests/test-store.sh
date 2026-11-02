@@ -1,6 +1,6 @@
 #!/bin/sh
 # test-store.sh: the generic module store on the plugin's own fts5 driver (the storage
-# module's store contract): the five functions over one database, the change log's row
+# module's store contract): the five single-key functions over one database, the change log's row
 # order and fields, a refused write logging nothing, the one-transaction put's atomicity
 # (a planted trigger aborts the write and rolls its change row back), the schema 4 open
 # path that adds the store tables to a store created before them, and the old corpus
@@ -56,9 +56,9 @@ putf() { _p=$1; shift; f "$DB" store.put "$@" < "$_p"; }
 printf 'first\n' > "$SB/v1"; printf 'second\n' > "$SB/v2"; printf 'third\n' > "$SB/v3"
 
 # ==============================================================================
-# 1. a fresh store serves the five functions; bytes round-trip; the answer wire is exact
+# 1. a fresh store serves the five single-key functions; bytes round-trip; the answer wire is exact
 # ==============================================================================
-printf '== the five functions ==\n'
+printf '== the five single-key functions ==\n'
 f "$DB" store.list docs
 answer "fresh list"; wantout '{"namespace":"docs","keys":[]}' "fresh list"
 f "$DB" store.get docs workspace/x
@@ -87,7 +87,7 @@ f "$DB" store.get docs workspace/bin
 refused 1 "deleted get" "store.get: error: key 'workspace/bin' not found in namespace 'docs' (ERR_ENTITY_NOT_FOUND)"
 f "$DB" store.delete docs workspace/bin
 refused 1 "absent delete" "store.delete: error: key 'workspace/bin' not found in namespace 'docs' (ERR_ENTITY_NOT_FOUND)"
-ok "the five functions serve a fresh store: list, get, put, the update echo, delete, and the absent refusals"
+ok "the five single-key functions serve a fresh store: list, get, put, the update echo, delete, and the absent refusals"
 
 # ==============================================================================
 # 2. the change log: seq, at, key, op, head, prior in order; the head window; the refusals
@@ -229,14 +229,14 @@ f "$DB" store.get docs workspace/empty
 ok "an empty payload stores as a zero-length blob and reads back empty"
 
 # ==============================================================================
-# 8. the descriptor: 38 record + 5 store + the store search; store, store.changelog, search.schema
+# 8. the descriptor: 38 record + 7 store + the store search; store, store.changelog, search.schema
 # ==============================================================================
 printf '\n== the descriptor ==\n'
 "$DRV" capability > "$O" 2> "$E"; _caprc=$?
 [ "$_caprc" -eq 0 ] || miss "capability: rc $_caprc [$(cat "$E")]"
-case "$(cat "$O")" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*'"store.search"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
+case "$(cat "$O")" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*'"store.batch"'*'"store.scan"'*'"store.search"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
 case "$(cat "$O")" in *'"optional":["store","store.changelog","search.schema"]'*) ;; *) miss "the descriptor optional set [$(sed 's/.*"optional"://' "$O")]" ;; esac
-ok "the descriptor declares the five store functions, the store search, and the optional tokens"
+ok "the descriptor declares the seven store data functions, the store search, and the optional tokens"
 
 printf '\ntest-store: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

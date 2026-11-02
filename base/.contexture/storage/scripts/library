@@ -9,15 +9,18 @@
 #   store.put <namespace> <key> [--op=<op>] [--head=<sha|none>]     (payload on stdin)
 #   store.delete <namespace> <key> [--op=<op>] [--head=<sha|none>]
 #   store.changes <namespace>                                        (heads on stdin)
+#   store.batch <namespace>                                          (actions on stdin)
+#   store.scan <namespace>
 #   store.search <namespace> <query> <mode> [<limit>]                (query on stdin)
 #   store.require <capability>...
 #   store.has <capability>
 #   data.get <ref>
 #   data.emit <ref> <data>
 #
-# The first six and the two probes reach the configured driver through the storage
+# The store functions and the two probes reach the configured driver through the storage
 # core's resolver; the caller uses the shell function names store_list, store_get,
-# store_put, store_delete, store_changes, store_search, store_require, and store_has. The
+# store_put, store_delete, store_changes, store_batch, store_scan, store_search,
+# store_require, and store_has. The
 # caller sets CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which
 # serves when CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact
 # resolver path; the core resolver is found under the drawer, then the base mirror, then
@@ -97,6 +100,17 @@ store_delete() { store_lib_call store.delete store.delete "$@"; }
 store_changes() { store_lib_call store.changes store.changes "$@"; }
 store_require() { store_lib_call store.require require "$@"; }
 store_has() { store_lib_call store.has has "$@"; }
+
+# store_batch <namespace>: the transactional batch; the action list travels on stdin as
+# the driver's escaped payload lines (action=<put|delete>, key=<escaped key>,
+# head=<sha|none>, value_b64=<base64> for a put), and the driver answers one compact JSON
+# line {"namespace","actions":N} or the first failure's one line with the action and key.
+store_batch() { store_lib_call store.batch store.batch "$@"; }
+
+# store_scan <namespace>: every key the module pattern admits with its raw value, bytewise,
+# as one compact JSON line {"namespace","items":[{"key","value_b64"}]}; the caller decodes
+# the base64 value.
+store_scan() { store_lib_call store.scan store.scan "$@"; }
 
 # store_lib_escape <value>: the payload escape (backslash, newline, tab, carriage return)
 store_lib_escape() {

@@ -11,6 +11,7 @@ storage/
   scripts/store-data        the private reader and validator of a module's data file
   scripts/store-search      the private exact and document-derivation search engine
   scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
+  scripts/store-b64         the private base64 encoder of a stored value
   scripts/library           the module-facing interface, sourced by a module's scripts
   drivers/posix/            the zero-dependency baseline driver (sh and awk)
   README.md                 this contract
@@ -19,7 +20,7 @@ storage/
 ## The store contract
 
 The store serves module data only; the record keeps its 38 typed driver functions in
-this stage. Six functions, called through the resolver:
+this stage. Seven data functions, plus the search entry, called through the resolver:
 
 | function | argv | stdin | answer |
 |---|---|---|---|
@@ -28,14 +29,21 @@ this stage. Six functions, called through the resolver:
 | `store.put` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | the raw bytes | `{"namespace","key","op"}`; atomic per key |
 | `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | none | `{"namespace","key","op"}` |
 | `store.changes` | `<namespace>` | `head=<sha\|none>` lines | `{"namespace","changes":[...]}` oldest first |
+| `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `head=<sha\|none>`, `value_b64=<base64>` for a put) | `{"namespace","actions":N}`; all or none |
+| `store.scan` | `<namespace>` | none | `{"namespace","items":[{"key","value_b64"}]}`: every admitted key, bytewise, its raw value in base64 |
 | `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,section,snippet,score}]}` |
 
 Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a
 read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a
 control character, a leading slash, a backslash, or a `.` or `..` segment. The module
-pattern filters list and refuses a key outside it. The posix mapping is
+pattern filters list and scan and refuses a key outside it. The posix mapping is
 `<root>/<key><suffix>` under the workspace root, written by a same-directory temp moved
-over the key under a per-key lock, so a put lands whole or not at all. The change log is
+over the key under one namespace scope lock, so a put lands whole or not at all. The
+batch holds that lock once, validates the whole action list against the live keys, stages
+a value per put, and commits every key under one store-scope undo log; its first failure
+prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and
+nothing is written. The scan answers the namespace's admitted keys with the raw value in
+base64, no limit; the module decodes and stops after the keys it needs. The change log is
 optional per namespace; a namespace declaring `changes: false`, or a driver without the
 log, refuses `store.changes` rc 1 `ERR_CAPABILITY_UNSUPPORTED`.
 
@@ -105,7 +113,8 @@ adoption retires the transitional tiers.
 A module's script sources `.contexture/storage/scripts/library` and calls the store
 through it; the module never names the driver. The library exports:
 
-- `store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_search`;
+- `store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_batch`,
+  `store_scan`, `store_search`;
 - `store_require <capability>...` and `store_has <capability>`;
 - `data_get <ref>` and `data_emit <ref> <data>`.
 
