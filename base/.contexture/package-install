@@ -521,6 +521,23 @@ record_phase=1
 mv -f "$stage/.record" "$state_file" || rollback "cannot write the install record"
 rm -rf "$stage"
 
+# prune the folders the stale removals emptied (bottom-up), stopping at the extension
+# root: a later re-install of a dropped module must not collide with its empty folders,
+# while a preserved file or any content outside the package keeps its folder
+: > "$scratch/prune"
+while IFS= read -r _p; do
+  printf '%s\n' "$(dirname "$ws_root/$_p")" >> "$scratch/prune"
+done < "$scratch/stale_remove"
+if [ -s "$scratch/prune" ]; then
+  LC_ALL=C sort -ru "$scratch/prune" | while IFS= read -r _d; do
+    _dd=$_d
+    while [ -n "$_dd" ] && [ "$_dd" != "/" ] && [ "$_dd" != "$ext_root" ] && [ "$_dd" != "$state_root" ]; do
+      rmdir "$_dd" 2>/dev/null || break
+      _dd=$(dirname "$_dd")
+    done
+  done
+fi
+
 while IFS= read -r _p; do
   printf 'package-install: preserved %s (changed since install; still recorded)\n' "$_p"
 done < "$scratch/stale_keep"

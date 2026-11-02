@@ -90,6 +90,31 @@ while read -r kind a b c; do
   rm_mode=$a
   rm_crc=$b
   rm_path=$c
+  # the extension root is the uninstall's whole scope: a record line naming a core
+  # path or another location is preserved and reported, never acted on, and the
+  # install record area itself is never a package file
+  case "$rm_path" in
+    .contexture/extensions/*) ;;
+    *)
+      printf 'package-uninstall: preserved %s (outside the extension root; never a package file)\n' "$rm_path"
+      preserved=$((preserved + 1))
+      continue
+      ;;
+  esac
+  case "/$rm_path/" in
+    */../*|*/./*|*//*)
+      printf 'package-uninstall: preserved %s (a path with an empty or dot segment; never a package file)\n' "$rm_path"
+      preserved=$((preserved + 1))
+      continue
+      ;;
+  esac
+  case "$rm_path" in
+    .contexture/extensions/.state/*)
+      printf 'package-uninstall: preserved %s (the install record area; never a package file)\n' "$rm_path"
+      preserved=$((preserved + 1))
+      continue
+      ;;
+  esac
   target=$ws_root/$rm_path
   if [ ! -e "$target" ]; then
     absent=$((absent + 1))

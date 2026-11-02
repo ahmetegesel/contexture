@@ -240,6 +240,10 @@ printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/
 badm "$SB/pkgmf/dotdot" "a part path with .."
 printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module /modules/x\n' > "$SB/pkgmf/abs"
 badm "$SB/pkgmf/abs" "an absolute part path"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: rhythms rhythms/\n' > "$SB/pkgmf/trailslash"
+badm "$SB/pkgmf/trailslash" "a trailing-slash part path"
+printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: templates templates//x\n' > "$SB/pkgmf/doubleslash"
+badm "$SB/pkgmf/doubleslash" "a doubled-slash part path"
 printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: module modules/x/y\n' > "$SB/pkgmf/deepmodule"
 badm "$SB/pkgmf/deepmodule" "a module part deeper than one folder"
 printf '# summary: x\n# version: 1.0.0\n# kind: feature\n# part: rhythms other/x\n' > "$SB/pkgmf/badrhythm"
@@ -479,6 +483,22 @@ a_rc "$RC" 0 "UP: a re-install that drops a changed file rc0"
 a_match "$OUT" "preserved .contexture/extensions/rhythms/keep.md" "UP: the changed stale file is reported preserved"
 a_eq "$(cat "$SB/.contexture/extensions/rhythms/keep.md")" "locally edited" "UP: the changed stale file keeps its bytes"
 a_contains "$STATE/pkga.files" "rhythms/keep.md" "UP: the preserved stale file stays recorded"
+# a re-install that drops a whole module prunes its emptied folders, so a later
+# re-add is an update, not a collision on an empty directory
+add_module "$PA" gamma
+manifest_pkg "$PA"
+install_pkg "$PA"
+a_rc "$RC" 0 "UP: a module added in an upgrade rc0"
+rm -rf "$PA/.contexture/extensions/modules/gamma"
+manifest_pkg "$PA"
+install_pkg "$PA"
+a_rc "$RC" 0 "UP: an upgrade dropping a whole module rc0"
+a_no_file "$SB/.contexture/extensions/modules/gamma" "UP: the dropped module's emptied folders are pruned"
+add_module "$PA" gamma
+manifest_pkg "$PA"
+install_pkg "$PA"
+a_rc "$RC" 0 "UP: a later re-add of the dropped module rc0"
+a_eq "$(./.contexture/ctx gamma hello 2>/dev/null)" "hello from gamma" "UP: the re-added module dispatches"
 FIXTURE_VERSION=1.0.0
 
 echo "== CO the collision classes =="
@@ -626,8 +646,28 @@ add_file "$PU" rhythms/u.md "the u rhythm"
 install_pkg "$PU"
 a_rc "$RC" 0 "UN: install rc0"
 printf 'edited after install\n' > "$SB/.contexture/extensions/rhythms/u.md"
+# the record names the overlay; a forged line outside the extension root or into the
+# record area must be preserved and reported, never acted on (the core is never touched)
+printf 'keep me\n' > "$SB/victim"
+victim_mode=$(ls -ld "$SB/victim" | awk '{print $1}' | cut -c2-10)
+victim_cksum=$(cksum < "$SB/victim" | awk '{print $1 ":" $2}')
+printf 'package other\n' > "$STATE/other.files"
+other_mode=$(ls -ld "$STATE/other.files" | awk '{print $1}' | cut -c2-10)
+other_cksum=$(cksum < "$STATE/other.files" | awk '{print $1 ":" $2}')
+printf 'file %s %s victim\n' "$victim_mode" "$victim_cksum" >> "$STATE/pkgu.files"
+printf 'file %s %s .contexture/extensions/.state/other.files\n' "$other_mode" "$other_cksum" >> "$STATE/pkgu.files"
+printf 'keep me too\n' > "$SB/.contexture/victim2"
+victim2_mode=$(ls -ld "$SB/.contexture/victim2" | awk '{print $1}' | cut -c2-10)
+victim2_cksum=$(cksum < "$SB/.contexture/victim2" | awk '{print $1 ":" $2}')
+printf 'file %s %s .contexture/extensions/../victim2\n' "$victim2_mode" "$victim2_cksum" >> "$STATE/pkgu.files"
 uninstall_pkg "$PU"
 a_rc "$RC" 0 "UN: uninstall rc0"
+a_match "$OUT" "preserved victim (outside the extension root" "UN: a forged record line outside the extension root is reported"
+a_file "$SB/victim" "UN: a path outside the extension root is never removed"
+a_match "$OUT" "preserved .contexture/extensions/.state/other.files (the install record area" "UN: a forged record line into the record area is reported"
+a_file "$STATE/other.files" "UN: another package's record is never removed"
+a_match "$OUT" "preserved .contexture/extensions/../victim2 (a path with an empty or dot segment" "UN: a forged record line with a dot segment is reported"
+a_file "$SB/.contexture/victim2" "UN: a dot-segment record path never escapes the extension root"
 a_match "$OUT" "preserved .contexture/extensions/rhythms/u.md" "UN: the changed file is reported preserved"
 a_eq "$(cat "$SB/.contexture/extensions/rhythms/u.md")" "edited after install" "UN: the changed file keeps its bytes"
 a_no_file "$SB/.contexture/extensions/modules/u/module" "UN: the unchanged overlay is removed"

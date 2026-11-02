@@ -326,6 +326,9 @@ package_file_parse() {
         case "/$pf_ppath/" in
           */../*|*/./*) PF_ERROR="line $pf_lineno: a part path holds no . or .. segment"; return 1 ;;
         esac
+        case "$pf_ppath" in
+          */|*//*) PF_ERROR="line $pf_lineno: a part path holds no empty segment"; return 1 ;;
+        esac
         case "$pf_ptype" in
           module)
             case "$pf_ppath" in
