@@ -1,0 +1,45 @@
+#!/bin/sh
+# docs module install part hook (optional; private: no summary line). The
+# package installer runs it after the package overlay and the installed-state
+# record, with CTX_ROOT and CTX_PACKAGE_ROOT exported and cwd at the workspace
+# root. It seeds the corpus conventions doc once; an existing doc is never
+# overwritten. A failed seed fails the install, never a silent skip.
+set -u
+
+if [ -z "${CTX_ROOT:-}" ]; then
+  echo 'docs install: CTX_ROOT is not set (the package installer exports it)' >&2
+  exit 2
+fi
+if [ -z "${CTX_PACKAGE_ROOT:-}" ]; then
+  echo 'docs install: CTX_PACKAGE_ROOT is not set (the package installer exports it)' >&2
+  exit 2
+fi
+ctx=${CTX_BIN:-$CTX_ROOT/.contexture/ctx}
+seed=$CTX_PACKAGE_ROOT/docs/workspace/conventions.md
+if [ ! -f "$seed" ]; then
+  echo "docs install: seed not found: $seed" >&2
+  exit 2
+fi
+
+"$ctx" docs query workspace conventions >/dev/null 2>&1
+qrc=$?
+case "$qrc" in
+  0)
+    echo 'docs install: workspace conventions already present; left unchanged'
+    exit 0
+    ;;
+  1)
+    ;;
+  *)
+    echo "docs install: cannot read the corpus (ctx docs query rc $qrc)" >&2
+    exit 2
+    ;;
+esac
+
+if "$ctx" docs write workspace conventions < "$seed"; then
+  echo 'docs install: seeded workspace conventions'
+else
+  rc=$?
+  echo "docs install: seeding workspace conventions failed (rc $rc)" >&2
+  exit 2
+fi

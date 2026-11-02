@@ -7,6 +7,8 @@ the workspace's boot, laws, or help.
 
 ## Layout
 
+The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the eight docs laws; `data` is the store declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs and their private engines; this README is off-path.
+
 | verb | engine |
 |---|---|
 | `audit` | `scripts/docs-audit.awk` |
@@ -19,8 +21,9 @@ the workspace's boot, laws, or help.
 | `remove` | none: `store.delete` through `docs-io.sh` |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
 
-- The `.awk` engines and `docs-io.sh` carry no `# summary:` line: discovery
-  ignores them, they are private files, and they never appear in help.
+- The `.awk` engines, `docs-io.sh`, `install`, and `uninstall` carry no
+  `# summary:` line: discovery ignores them, they are private files, and they
+  never appear in help.
 - `gate` carries the whole close-gate logic (git aggregation, drift warnings,
   and the self-planted eight-scenario matrix); the other four verbs are thin
   wrappers over their engine: audit, check, and nudge hand it the corpus paths

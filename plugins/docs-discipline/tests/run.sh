@@ -1,8 +1,10 @@
 #!/usr/bin/env sh
 # docs-discipline plugin suite: the named runner for tests/.
-# Drives the staging check; the corpus reads through the storage driver (keyed on the
-# declared store: the audit and the unit-form nudge against the backlog-file form
-# and the write verbs (tests/write-verbs.sh over tests/write/) and the engine checks
+# Drives the staging check; the module's install and uninstall part hooks (the seed
+# once, never an overwrite, the data left on uninstall); the corpus reads through the
+# storage driver (keyed on the declared store: the audit and the unit-form nudge against
+# the backlog-file form and the write verbs (tests/write-verbs.sh over tests/write/) and
+# the engine checks
 # (tests/engine-checks.sh) and the delta-source cases (tests/store-cases.sh) when declared,
 # every read verb's rc 2 refusal when not); on fts5 the stored bytes read back through the
 # write verb and the capture parity against the files driver at the sandbox path; the single-door census
@@ -105,7 +107,7 @@ cd "$SANDBOX" || exit 1
 unset CTX_DIR CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH
 export LC_ALL=C
 
-echo "docs-discipline plugin suite: staging, corpus reads, census, gate matrix, grammar agreement (driver: $DRIVER; staged at $SANDBOX)"
+echo "docs-discipline plugin suite: staging, module hooks, corpus reads, census, gate matrix, grammar agreement (driver: $DRIVER; staged at $SANDBOX)"
 echo ""
 
 # staging: the runtime is base's copy byte for byte and the resolver answers the
@@ -120,6 +122,87 @@ if cmp -s "$BASE_CTX" "$SANDBOX/.contexture/ctx" && [ "$GOT_DRIVER" = "$WANT_DRI
     PASS=$((PASS + 1))
 else
     echo "[staging] FAIL (driver resolved: $GOT_DRIVER; want $WANT_DRIVER)"
+    FAIL=$((FAIL + 1))
+fi
+echo ""
+
+# [module-hooks] the standard folder's optional install and uninstall part hooks: the
+# package installer runs install after the overlay and the record, with CTX_ROOT and
+# CTX_PACKAGE_ROOT exported; install seeds the corpus conventions through ctx docs write
+# once and never overwrites a present doc, and uninstall leaves the corpus data. A
+# separate hook workspace (the posix driver) keeps the hook cases independent of the
+# suite's driver and of the main sandbox.
+HOOKWS="$SANDBOX/hookws"
+mkdir -p "$HOOKWS/.contexture/modules" "$HOOKWS/.contexture/templates" "$HOOKWS/docs/workspace"
+cp "$BASE_CTX" "$HOOKWS/.contexture/ctx"
+cp -R "$SANDBOX/.contexture/modules/session" "$HOOKWS/.contexture/modules/session"
+cp -R "$SANDBOX/.contexture/modules/docs" "$HOOKWS/.contexture/modules/docs"
+cp -R "$BASE_STORAGE" "$HOOKWS/.contexture/storage"
+cp "$PLUGIN_ROOT/.contexture/templates/doc.md" "$HOOKWS/.contexture/templates/doc.md"
+chmod +x "$HOOKWS/.contexture/ctx" "$HOOKWS/.contexture/storage/scripts/"* \
+    "$HOOKWS/.contexture/storage/drivers/posix/driver" "$HOOKWS/.contexture/modules/session/scripts/"* \
+    "$HOOKWS/.contexture/modules/docs/install" "$HOOKWS/.contexture/modules/docs/uninstall"
+HOOK_CTX="$HOOKWS/.contexture/ctx"
+HOOK_INSTALL="$HOOKWS/.contexture/modules/docs/install"
+HOOK_UNINSTALL="$HOOKWS/.contexture/modules/docs/uninstall"
+
+HK_OUT=$( cd "$HOOKWS" && CTX_ROOT="$HOOKWS" CTX_PACKAGE_ROOT="$PLUGIN_ROOT" "$HOOK_INSTALL" 2>&1 )
+HK_RC=$?
+if [ "$HK_RC" -eq 0 ] && printf '%s\n' "$HK_OUT" | grep -q 'seeded workspace conventions'; then
+    echo "[module-hooks] PASS (install seeds the corpus conventions once)"
+    PASS=$((PASS + 1))
+else
+    echo "[module-hooks] FAIL (install rc=$HK_RC): $HK_OUT"
+    FAIL=$((FAIL + 1))
+fi
+HK_OUT=$("$HOOK_CTX" docs query workspace conventions 2>&1)
+HK_RC=$?
+if [ "$HK_RC" -eq 0 ] && printf '%s\n' "$HK_OUT" | grep -q 'Universal workspace conventions'; then
+    echo "[module-hooks] PASS (the seeded doc reads back through ctx docs query)"
+    PASS=$((PASS + 1))
+else
+    echo "[module-hooks] FAIL (query rc=$HK_RC): $HK_OUT"
+    FAIL=$((FAIL + 1))
+fi
+"$HOOK_CTX" docs header workspace conventions --description="A locally kept description" >/dev/null 2>&1
+HK_OUT=$( cd "$HOOKWS" && CTX_ROOT="$HOOKWS" CTX_PACKAGE_ROOT="$PLUGIN_ROOT" "$HOOK_INSTALL" 2>&1 )
+HK_RC=$?
+HK_AFTER=$("$HOOK_CTX" docs query workspace conventions 2>&1)
+if [ "$HK_RC" -eq 0 ] && printf '%s\n' "$HK_OUT" | grep -q 'already present; left unchanged' \
+    && printf '%s\n' "$HK_AFTER" | grep -q 'A locally kept description'; then
+    echo "[module-hooks] PASS (a second install leaves a present doc byte for byte)"
+    PASS=$((PASS + 1))
+else
+    echo "[module-hooks] FAIL (second install rc=$HK_RC): $HK_OUT"
+    FAIL=$((FAIL + 1))
+fi
+HK_OUT=$( cd "$HOOKWS" && CTX_ROOT="$HOOKWS" CTX_PACKAGE_ROOT="$PLUGIN_ROOT" "$HOOK_UNINSTALL" 2>&1 )
+HK_RC=$?
+HK_AFTER=$("$HOOK_CTX" docs query workspace conventions 2>&1)
+if [ "$HK_RC" -eq 0 ] && printf '%s\n' "$HK_OUT" | grep -q 'stays in the configured store' \
+    && printf '%s\n' "$HK_AFTER" | grep -q 'A locally kept description'; then
+    echo "[module-hooks] PASS (uninstall leaves the corpus data readable)"
+    PASS=$((PASS + 1))
+else
+    echo "[module-hooks] FAIL (uninstall rc=$HK_RC): $HK_OUT"
+    FAIL=$((FAIL + 1))
+fi
+HK_OUT=$( cd "$HOOKWS" && env -u CTX_PACKAGE_ROOT CTX_ROOT="$HOOKWS" "$HOOK_INSTALL" 2>&1 )
+HK_RC=$?
+if [ "$HK_RC" -eq 2 ] && printf '%s\n' "$HK_OUT" | grep -q 'CTX_PACKAGE_ROOT is not set'; then
+    echo "[module-hooks] PASS (install refuses without the package root context)"
+    PASS=$((PASS + 1))
+else
+    echo "[module-hooks] FAIL (install without CTX_PACKAGE_ROOT rc=$HK_RC): $HK_OUT"
+    FAIL=$((FAIL + 1))
+fi
+HK_OUT=$( cd "$HOOKWS" && env -u CTX_ROOT "$HOOK_UNINSTALL" 2>&1 )
+HK_RC=$?
+if [ "$HK_RC" -eq 2 ] && printf '%s\n' "$HK_OUT" | grep -q 'CTX_ROOT is not set'; then
+    echo "[module-hooks] PASS (uninstall refuses without the workspace root context)"
+    PASS=$((PASS + 1))
+else
+    echo "[module-hooks] FAIL (uninstall without CTX_ROOT rc=$HK_RC): $HK_OUT"
     FAIL=$((FAIL + 1))
 fi
 echo ""

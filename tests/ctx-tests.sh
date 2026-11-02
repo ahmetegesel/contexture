@@ -2,7 +2,9 @@
 # ctx-tests.sh: the engine suite, staged from the shipped core
 # (base/.contexture/ctx plus the base session and run modules). Covers module
 # discovery (summary, warn+skip shapes, filter-only/hook-only legality, the
-# reserved-name refusal), assembly (help forms, module and verb detail,
+# reserved-name refusal), the module-file grammar (summary, version, the
+# description hash block, refused requires, and the discovery validation),
+# assembly (help forms, module and verb detail,
 # engine-owned help), dispatch (cwd, environment, argv, streams, rc), the run
 # mechanics (explicit filter, stream signature, raw passthrough, filter merge
 # with shadow and priority-over, the module default, COMPACT_DISABLE), the
@@ -146,6 +148,74 @@ $CTX nosuch >/dev/null 2>&1
 a_eq "$?" "1" "unknown top name rc1"
 err=$($CTX nosuch 2>&1 >/dev/null)
 a_match "$err" "unknown command: nosuch" "unknown top name names the command"
+
+echo "== MF the module-file grammar =="
+# the standard manifest: summary, version, and the description hash block last;
+# summary-only stays valid; requires, a duplicate, an unknown field, a malformed
+# version, and a description that does not run to EOF are refused
+mkdir -p .contexture/modules/fullmod .contexture/modules/sumonly .contexture/modules/reqmod \
+  .contexture/modules/dupmod .contexture/modules/unkmod .contexture/modules/badvermod \
+  .contexture/modules/baddescmod
+printf '# summary: a full manifest\n# version: 1.2.3\n# description:\n# The corpus preamble.\n#\n# A second paragraph.\n' > .contexture/modules/fullmod/module
+printf '# summary: a summary-only manifest\n' > .contexture/modules/sumonly/module
+printf '# summary: a requires manifest\n# requires: base>=1.0.0\n' > .contexture/modules/reqmod/module
+printf '# summary: the first\n# summary: the second\n' > .contexture/modules/dupmod/module
+printf '# summary: an unknown field\n# parts: module\n' > .contexture/modules/unkmod/module
+printf '# summary: a bad version\n# version: 1.0 beta\n' > .contexture/modules/badvermod/module
+printf '# summary: a description not last\n# description:\n# text\nnot-a-comment\n' > .contexture/modules/baddescmod/module
+
+$CTX _module .contexture/modules/fullmod/module validate >/dev/null 2>&1
+a_eq "$?" "0" "MF: a full manifest validates"
+mf=$($CTX _module .contexture/modules/fullmod/module summary 2>/dev/null)
+a_eq "$mf" "a full manifest" "MF: the summary reader"
+mf=$($CTX _module .contexture/modules/fullmod/module version 2>/dev/null)
+a_eq "$mf" "1.2.3" "MF: the version reader"
+mf=$($CTX _module .contexture/modules/fullmod/module description 2>/dev/null)
+a_eq "$mf" "$(printf 'The corpus preamble.\n\nA second paragraph.')" "MF: the description reader keeps blank lines"
+$CTX _module .contexture/modules/sumonly/module validate >/dev/null 2>&1
+a_eq "$?" "0" "MF: a summary-only manifest stays valid"
+mf=$($CTX _module .contexture/modules/sumonly/module version 2>/dev/null)
+a_eq "$mf" "" "MF: an absent version reads empty"
+mf=$($CTX _module .contexture/modules/sumonly/module description 2>/dev/null)
+a_eq "$mf" "" "MF: an absent description reads empty"
+mf=$($CTX _module .contexture/modules/reqmod/module validate 2>&1)
+a_eq "$?" "1" "MF: requires refuses validate rc1"
+a_match "$mf" "requires is reserved and refused" "MF: requires names its refusal"
+mf=$($CTX _module .contexture/modules/reqmod/module summary 2>&1)
+a_eq "$?" "1" "MF: a field read refuses a requires manifest too"
+a_match "$mf" "requires is reserved and refused" "MF: the field read carries the requires refusal"
+mf=$($CTX _module .contexture/modules/dupmod/module validate 2>&1)
+a_eq "$?" "1" "MF: a duplicate summary refuses"
+a_match "$mf" "duplicate # summary:" "MF: the duplicate summary names the field"
+mf=$($CTX _module .contexture/modules/unkmod/module validate 2>&1)
+a_eq "$?" "1" "MF: an unknown field refuses"
+a_match "$mf" "unknown field 'parts'" "MF: the unknown field names itself"
+mf=$($CTX _module .contexture/modules/badvermod/module validate 2>&1)
+a_eq "$?" "1" "MF: a malformed version refuses"
+a_match "$mf" "malformed version" "MF: the malformed version names itself"
+mf=$($CTX _module .contexture/modules/baddescmod/module validate 2>&1)
+a_eq "$?" "1" "MF: a description that does not run to EOF refuses"
+a_match "$mf" "description block takes only # lines" "MF: the broken description names its rule"
+$CTX _module .contexture/modules/fullmod/module nosuch >/dev/null 2>&1
+a_eq "$?" "1" "MF: an unknown field word refuses"
+mf=$($CTX _module 2>&1); a_eq "$?" "1" "MF: a missing argument refuses"
+a_match "$mf" "_module: usage:" "MF: a missing argument prints the usage"
+
+h=$($CTX help 2>mf.err)
+a_match "$h" "a full manifest" "MF: a valid manifest lists"
+a_match "$h" "a summary-only manifest" "MF: a summary-only manifest lists"
+a_not "$h" "reqmod" "MF: a requires module stays unlisted"
+a_not "$h" "dupmod" "MF: a duplicate-summary module stays unlisted"
+a_not "$h" "unkmod" "MF: an unknown-field module stays unlisted"
+a_not "$h" "badvermod" "MF: a malformed-version module stays unlisted"
+a_not "$h" "baddescmod" "MF: a broken-description module stays unlisted"
+errs=$(cat mf.err)
+a_match "$errs" "skipping module reqmod: line 2: requires is reserved and refused" "MF: discovery warns the requires refusal"
+a_match "$errs" "skipping module dupmod: line 2: duplicate # summary:" "MF: discovery warns the duplicate summary"
+a_match "$errs" "skipping module unkmod: line 2: unknown field 'parts'" "MF: discovery warns the unknown field"
+a_match "$errs" "skipping module badvermod: line 2: malformed version" "MF: discovery warns the malformed version"
+a_match "$errs" "skipping module baddescmod: line 4: the description block takes only # lines" "MF: discovery warns the broken description"
+a_not "$h" "unknown command: summary" "MF: a field read never falls through to dispatch"
 
 echo "== A module and verb help =="
 out=$($CTX good 2>/dev/null)

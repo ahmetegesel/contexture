@@ -7,7 +7,7 @@ A plugin is a packaged, optional extension for a workspace. Modules are the mech
 ```text
 plugins/<name>/
   .contexture/          the overlay: the drawer subtree the plugin contributes
-    modules/<name>/     a ctx module: verbs, hooks, filters
+    modules/<name>/     the standard module folder: manifest, laws, data, part hooks, verbs, hooks, filters
     rhythms/            rhythm files
     templates/          grammar templates
     ...                 any drawer path

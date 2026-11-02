@@ -6,23 +6,28 @@ This page is the authoring contract: what to write, where it goes, and how to pr
 
 ## Anatomy
 
-A module is a directory under `.contexture/modules/`:
+The standard module folder is a directory under `.contexture/modules/`:
 
 ```text
 .contexture/modules/<name>/
-  module        the module file: literally named "module", one "# summary:" line
+  module        the manifest: # summary, # version, and a # description block
+  laws          the typed-block law fragment the compose reads           (optional)
+  data          the module's store declaration (see The data file)      (optional)
+  install       the install part hook the package installer runs after the overlay   (optional)
+  uninstall     the uninstall part hook the package installer runs before the overlay is removed (optional)
   scripts/      the verbs: extension-less files, file name = verb
-  data          the module's store declaration (optional; see The module store)
-  hooks/        hook files, each declaring one "# ctx-hook:" point   (optional)
-  filters/      stream-compaction filters                            (optional)
-  README.md     off-path maintainer notes; the engine ignores it     (optional)
+  hooks/        hook files, each declaring one "# ctx-hook:" point       (optional)
+  filters/      stream-compaction filters                                (optional)
+  README.md     off-path maintainer notes; the engine ignores it         (optional)
 ```
 
 - The directory name is the module name.
-- A module file without a `# summary:` line warns and is skipped. A `scripts/` directory without a module file warns and is skipped.
+- The manifest is the engine's declaration: the summary lists the module in `ctx help`, and a malformed manifest (no summary, a `# requires:` line, a duplicate field, an unknown field, or a description block that does not run to the end of the file) warns and is skipped. A `scripts/` directory without a module file warns and is skipped.
 - A directory with neither a module file nor `scripts/` — a filter-only or hook-only module — is legal: silent and unlisted.
+- The `laws`, `data`, `install`, and `uninstall` files are read by the compose, the storage core, and the package installer, never by the engine; a module that uses none of them is complete with the manifest and its scripts.
 - Declarations are `# key: value` comment lines in the file they govern, placed in the file's header.
-- `scripts/` files and `hooks/` files are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
+- `scripts/`, `hooks/`, `install`, and `uninstall` are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
+- A package ships this folder as its module part; the package overlay installs it whole, and the folder is the single source for the engine, the compose, the storage, and the installer.
 
 The builtin modules `session`, `lane`, and `run` ship with the base; the storage core at `.contexture/storage/` is not a module but rides the same payload; a module you add is workspace-owned. See Payload.
 
@@ -32,13 +37,45 @@ The builtin modules `session`, `lane`, and `run` ship with the base; the storage
 
 ```text
 # summary: one line naming the module
+# version: 1.0.0
+# description:
+# The module's preamble: what it is, why it matters, and what it holds.
+# A bare # line is a paragraph break; the block runs to the end of the file.
 ```
 
-That one line is the module's entry in `ctx help`. The module name is the directory name; the summary is the only line the engine reads from this file.
+The module file is the standard folder's manifest. Its fields and their readers:
+
+| field | grammar | reader |
+|---|---|---|
+| `# summary:` | one line, required | the engine: discovery and the `ctx help` listing (`header_field`) |
+| `# version:` | one token of letters, digits, dot, underscore, plus, or hyphen | the installer: install and upgrade |
+| `# description:` | a hash block: the `# description:` line and every `# <text>` line after it, to the end of the file; a bare `#` is a blank line | the compose: the module preamble in the generated `AGENTS.md` |
+| `# requires:` | reserved and refused | the reader refuses it; a silently ignored requires is a defect |
+
+- The block order is summary, version, description; the description stands last because its block runs to the end of the file.
+- The module name is the directory name; the summary is the only field the engine reads.
+- A plain `# comment` never opens with `# <token>:` — that shape is a field, and an unknown field refuses.
+- The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose and the installer call the field reads, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid: the session module and the driver modules carry one, and the version and description are for the modules that ship as packages.
+
+### The laws file
+
+A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the eight docs laws; the lane module's file carries the lane-isolation subagent and git clauses.
 
 ### The data file
 
 A module that stores data through the generic module store ships a `data` file beside its `module` file: one `field: value` line per field and a line starting with `#` a comment. `namespace` and `key` are required; `root` (default: the namespace), `suffix` (default: empty), `changes` (default: false), `search` (`flat` or `documents`), `format`, `fields`, `title`, `snippet`, `modes`, and the repeatable `document` rule are optional. A key pattern carries one `<name>` placeholder per slash-separated segment, and its final segment may be a multi-segment `<name...>` placeholder, so a module's main and deeper keys share one pattern (the unit module's `<unit>/<path...>`; the docs module's fixed `<repo>/<slug>`). An unknown field refuses. The storage core reads and validates the declaration at every store call; a module with no `data` file uses no store. The grammar, the key rule, the seven store functions, and the search schema are in [The engine](the-engine.md) (The module store); the docs module's file is the worked declaration.
+
+### The install and uninstall part hooks
+
+A module may ship `install` and `uninstall` executables beside its manifest: optional part hooks that own the module's work beyond the file overlay. They are private files (no `# summary:`), not verbs, and the engine never runs them.
+
+The package installer owns the order, on the human's go:
+
+1. overlay every package part into the install root;
+2. record the installed paths and modes under `.contexture/extensions/.state/<package>.files`;
+3. run every installed module folder's `install`, in module-name order, after the overlay and the record.
+
+The uninstall runs every module folder's `uninstall` before it removes the recorded overlay files. A hook runs with `CTX_ROOT`, `CTX_PACKAGE_ROOT`, and `CTX_BIN` exported and cwd at the workspace root; rc 0 is success, any other exit fails the install or uninstall, and a hook that cannot run (missing context, a refusal from its verbs) fails loudly rather than skipping. The module part hook is for the module's own data, never for the overlay: the docs module's install seeds the corpus conventions through `ctx docs write` only when the doc is absent (an upgrade never overwrites the corpus), and its uninstall leaves the store data alone, since the corpus is user data (remove a doc with `ctx docs remove`).
 
 ### Verb scripts
 
@@ -180,7 +217,7 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
 ### Add a verb
 
-1. New module? `mkdir -p .contexture/modules/<name>` and write `module` with its `# summary:` line.
+1. New module? `mkdir -p .contexture/modules/<name>` and write the manifest with its `# summary:` line (add `# version:` and a `# description:` block when the module ships as a package).
 2. Write `scripts/<verb>`; the header carries the declarations:
 
    ```sh
@@ -217,9 +254,9 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 ### Add a whole module
 
 1. `mkdir -p .contexture/modules/<name>/scripts`.
-2. Write `module` with one `# summary:` line.
-3. Add verb scripts; add `hooks/` and `filters/` when the module needs them.
-4. Prove it end to end: `ctx help` lists it; bare `ctx <name>` prints its help rc0; `ctx <name> help` lists the verbs; dispatch works; an unknown verb exits rc1 with the module help on stderr.
+2. Write `module` with the summary, the version, and the description block last; add `laws` when the module contributes law clauses and `data` when it stores module data.
+3. Add verb scripts; add `hooks/` and `filters/` when the module needs them; add `install` and `uninstall` part hooks when the module owns work beyond the overlay.
+4. Prove it end to end: `ctx help` lists it; bare `ctx <name>` prints its help rc0; `ctx <name> help` lists the verbs; dispatch works; an unknown verb exits rc1 with the module help on stderr; `ctx _module .contexture/modules/<name>/module validate` is silent rc0.
 
 ## Checklist
 
@@ -227,7 +264,10 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 |---|---|---|
 | shell syntax | `sh -n <file>` on every sh verb and hook | silent rc0 |
 | awk syntax smoke | `awk -f <filter> </dev/null` | parses and runs its BEGIN block |
-| executable bits | `chmod +x <script> <hook>` | the engine execs directly |
+| executable bits | `chmod +x <script> <hook> <install> <uninstall>` | the engine and the installer exec directly |
+| manifest grammar | `ctx _module <module> validate` | silent rc0; a `# requires:` line, a duplicate field, an unknown field, or a description not last refuses rc1 |
+| manifest fields | `ctx _module <module> summary` / `version` / `description` | the values the engine, the installer, and the compose read |
+| install hook | run it with `CTX_ROOT` and `CTX_PACKAGE_ROOT` in a scratch workspace | rc0 and its effect observed; a second run leaves it unchanged |
 | module listed | `ctx help` | the module name with its summary |
 | module help | `ctx <module>` and `ctx <module> help` | rc0; the verb table |
 | verb detail | `ctx <module> help <verb>` | the usage and help lines |

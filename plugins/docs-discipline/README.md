@@ -53,7 +53,7 @@ What lands where:
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/modules/docs/` | the docs module: the sixteen verbs and their private engines | copy |
+| `.contexture/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the sixteen verbs and their private engines | copy |
 | `.contexture/templates/doc.md` | the corpus grammar: eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema (section 6, the `#%` lines) | copy |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed |
 | `AGENTS.workspace.md` | the overlay blocks: five docs laws, layout, boot, close | merge |

@@ -1,0 +1,13 @@
+#!/bin/sh
+# docs module uninstall part hook (optional; private: no summary line). The
+# package installer runs it before it removes the recorded overlay files, with
+# CTX_ROOT and CTX_PACKAGE_ROOT exported and cwd at the workspace root. The
+# corpus is user data in the configured store, never an overlay file: an
+# uninstall leaves it whole; remove a doc with ctx docs remove.
+set -u
+
+if [ -z "${CTX_ROOT:-}" ]; then
+  echo 'docs uninstall: CTX_ROOT is not set (the package installer exports it)' >&2
+  exit 2
+fi
+echo 'docs uninstall: the corpus data stays in the configured store; remove docs with ctx docs remove'

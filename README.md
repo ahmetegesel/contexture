@@ -80,7 +80,7 @@ The workspace couples root governance with a dedicated convention drawer:
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
     ├── config            Optional workspace configuration (storage.driver: posix)
     ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
-    ├── modules/          The modules: session (the record engine), run (stream filters), and workspace additions
+    ├── modules/          The standard module folders: session (the record engine), lane (subagent dispatch), run (stream filters), and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
     ├── templates/        Shape grammars ensuring structured writes without guesswork
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
@@ -115,7 +115,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 
 - [The record](docs/the-record.md): Artifacts, liveness, and closure
 - [The engine](docs/the-engine.md): AGENTS.md, shape grammars, and awk scripts
-- [Modules](docs/modules.md): The module contract: anatomy, declarations, hooks, and filters
+- [Modules](docs/modules.md): The module contract: the standard folder, the manifest, laws, data, part hooks, verbs, hooks, and filters
 - [Plugins](docs/plugins.md): Packaging, adoption, and the plugin test convention
 - [Units and subagents](docs/units-and-lanes.md): Folder lifecycles and delegated subagent work
 - [Rhythms](docs/rhythms.md): Procedure grammar, activation, and the default loop

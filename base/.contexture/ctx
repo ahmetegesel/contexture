@@ -7,8 +7,15 @@
 #
 # Maintainer note (off-path, never taught by help or top docs):
 # discovery reads .contexture/modules/<name>/; the directory name is the
-# module name. The module file is literally named "module" and carries
-# "# summary: <line>"; scripts/<verb> files are verbs named by file name,
+# module name. The standard module folder is the manifest ("module"), the
+# typed-block law fragment ("laws"), the store declaration ("data"), the
+# optional part hooks ("install" and "uninstall"), scripts/, hooks/, and
+# filters/. The manifest carries "# summary: <line>" (the engine's listing),
+# "# version: <token>" (the installer's), and a "# description:" hash block
+# last (the compose's preamble); a "# requires:" line is reserved and refused.
+# The private reader ctx _module <file> validate|summary|version|description
+# is the one parser; discovery validates every manifest and skips a malformed
+# one with a warning. scripts/<verb> files are verbs named by file name,
 # marked by their own "# summary:" header, with repeatable "# usage:" and
 # "# help:" detail lines. A scripts file without a summary is private and
 # ignored. A module file without a summary warns and skips; a scripts/
@@ -71,6 +78,139 @@ header_field() {
 header_values() {
   # every value of a header line, in file order, trimmed
   sed -n "s/^# $2: //p" "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+}
+
+# ---------------------------------------------------------------------------
+# module-file: the standard folder's manifest reader. The grammar:
+#   # summary: <one line>              required; the engine's listing
+#   # version: <one token>             optional; the installer's
+#   # description:                     optional; the compose's preamble
+#   # <text>                           the description body, to the end of the file
+#   # requires: ...                    reserved; refused
+# A bare # line before the description is a comment; any other "# <key>:"
+# line is an unknown field and refuses. The description block runs to EOF and
+# takes only "#" and "# <text>" lines, so it must stand last. ctx _module
+# answers validate, summary, version, and description for the compose and the
+# installer; discovery calls the same parser on every module file.
+
+module_file_parse() {
+  mf_file=$1
+  mf_summary=""
+  mf_version=""
+  mf_desc=""
+  mf_seen_summary=0
+  mf_seen_version=0
+  mf_seen_desc=0
+  mf_lineno=0
+  MF_ERROR=""
+  mf_cr=$(printf '\r')
+  if [ ! -f "$mf_file" ]; then
+    MF_ERROR="no module file at $mf_file"
+    return 1
+  fi
+  while IFS= read -r mf_line || [ -n "$mf_line" ]; do
+    mf_lineno=$((mf_lineno + 1))
+    mf_line=${mf_line%"$mf_cr"}
+    if [ "$mf_seen_desc" -eq 1 ]; then
+      case "$mf_line" in
+        '#') mf_desc="$mf_desc
+" ;;
+        '# '*) mf_desc="$mf_desc${mf_line#'# '}
+" ;;
+        *) MF_ERROR="line $mf_lineno: the description block takes only # lines to the end of the file"
+           return 1 ;;
+      esac
+      continue
+    fi
+    case "$mf_line" in
+      ''|[[:space:]]*)
+        continue
+        ;;
+      '# summary: '*)
+        [ "$mf_seen_summary" -eq 0 ] || { MF_ERROR="line $mf_lineno: duplicate # summary:"; return 1; }
+        mf_summary=${mf_line#'# summary: '}
+        mf_summary=$(printf '%s' "$mf_summary" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [ -n "$mf_summary" ] || { MF_ERROR="line $mf_lineno: the summary is empty"; return 1; }
+        mf_seen_summary=1
+        ;;
+      '# summary:')
+        MF_ERROR="line $mf_lineno: the summary is empty"
+        return 1
+        ;;
+      '# version: '*)
+        [ "$mf_seen_version" -eq 0 ] || { MF_ERROR="line $mf_lineno: duplicate # version:"; return 1; }
+        mf_version=${mf_line#'# version: '}
+        mf_version=$(printf '%s' "$mf_version" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        case "$mf_version" in
+          ''|*[!A-Za-z0-9._+-]*)
+            MF_ERROR="line $mf_lineno: malformed version '$mf_version' (one token of letters, digits, dot, underscore, plus, or hyphen)"
+            return 1
+            ;;
+        esac
+        mf_seen_version=1
+        ;;
+      '# version:')
+        MF_ERROR="line $mf_lineno: the version is empty"
+        return 1
+        ;;
+      '# requires:'*)
+        MF_ERROR="line $mf_lineno: requires is reserved and refused"
+        return 1
+        ;;
+      '# description:')
+        [ "$mf_seen_desc" -eq 0 ] || { MF_ERROR="line $mf_lineno: duplicate # description:"; return 1; }
+        mf_seen_desc=1
+        ;;
+      '# description: '*)
+        MF_ERROR="line $mf_lineno: the description marker carries no value"
+        return 1
+        ;;
+      '# summary:'*|'# version:'*|'# requires:'*|'# description:'*)
+        MF_ERROR="line $mf_lineno: malformed field line (expected '# <field>: <value>')"
+        return 1
+        ;;
+      '# '*)
+        mf_key=${mf_line#'# '}
+        case "$mf_key" in
+          [A-Za-z]*:*)
+            mf_key=${mf_key%%:*}
+            case "$mf_key" in
+              *[!A-Za-z0-9_-]*) ;;
+              *) MF_ERROR="line $mf_lineno: unknown field '$mf_key'"; return 1 ;;
+            esac
+            ;;
+        esac
+        ;;
+      '#')
+        continue
+        ;;
+      *)
+        MF_ERROR="line $mf_lineno: not a # header line"
+        return 1
+        ;;
+    esac
+  done < "$mf_file"
+  [ "$mf_seen_summary" -eq 1 ] || { MF_ERROR="the module file carries no # summary: line"; return 1; }
+  return 0
+}
+
+module_reader() {
+  if [ $# -ne 2 ]; then
+    ctx_err "_module: usage: ctx _module <file> validate|summary|version|description"
+    exit 1
+  fi
+  if ! module_file_parse "$1"; then
+    printf 'module-file: error: %s\n' "$MF_ERROR" >&2
+    exit 1
+  fi
+  case "$2" in
+    validate) exit 0 ;;
+    summary) printf '%s\n' "$mf_summary" ;;
+    version) printf '%s\n' "$mf_version" ;;
+    description) printf '%s' "$mf_desc" ;;
+    *) ctx_err "_module: unknown field: $2"; exit 1 ;;
+  esac
+  exit 0
 }
 
 # ---------------------------------------------------------------------------
@@ -145,7 +285,7 @@ scan_module_dirs() {
     bn=${d%/}
     bn=${bn##*/}
     case "$bn" in
-      ""|.*|*[[:space:]]*|_hooks)
+      ""|.*|*[[:space:]]*|_hooks|_module)
         continue
         ;;
     esac
@@ -166,7 +306,7 @@ module_names() {
     n=${d%/}
     n=${n##*/}
     case "$n" in
-      ""|.*|*[[:space:]]*|_hooks)
+      ""|.*|*[[:space:]]*|_hooks|_module)
         continue
         ;;
     esac
@@ -177,6 +317,10 @@ module_names() {
     if [ -f "$d/module" ]; then
       if [ -z "$(header_field "$d/module" summary)" ]; then
         ctx_err "skipping module $n: module file has no summary"
+        continue
+      fi
+      if ! module_file_parse "$d/module"; then
+        ctx_err "skipping module $n: $MF_ERROR"
         continue
       fi
     elif [ -d "$d/scripts" ]; then
@@ -451,7 +595,7 @@ run_body() {
       bn=${fd%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|.*|*[[:space:]]*|run|_hooks)
+        ""|.*|*[[:space:]]*|run|_hooks|_module)
           continue
           ;;
       esac
@@ -1012,6 +1156,10 @@ case "$1" in
     shift
     run_hooks "$@"
     exit 0
+    ;;
+  _module)
+    shift
+    module_reader "$@"
     ;;
 esac
 
