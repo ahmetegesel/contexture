@@ -4,9 +4,9 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
-## [0.61.0] - 2026-11-02
+## [0.60.1] - 2026-11-02
 
-MINOR: the templates part retires and the record resolves installed rhythms. The break: a package manifest's `templates` part is now an unknown part type and refuses, and there is no shared templates folder; an internal asset rides inside its module. The rhythm fix resolves a RHYTHM stamp against the workspace rhythms root, then the extension rhythms root, and the docs-discipline package stops shipping work.md (starter-rhythms owns it).
+PATCH: the templates part retires and the record resolves installed rhythms. The break: a package manifest's `templates` part is now an unknown part type and refuses, and there is no shared templates folder; an internal asset rides inside its module. The rhythm fix resolves a RHYTHM stamp against the workspace rhythms root, then the extension rhythms root, and the docs-discipline package stops shipping work.md (starter-rhythms owns it).
 
 ### Added
 
