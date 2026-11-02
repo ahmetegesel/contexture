@@ -396,7 +396,8 @@ refused 1 ERR_INVALID_ARGUMENT "malformed namespace 'Bad!'"
 tc "S5: unknown flags, malformed op and head, bad argc, an unknown namespace, and a malformed namespace answer their fixed lines"
 
 # ==============================================================================
-# S6: the data file grammar: a second namespace, duplicate refusal, malformed fields
+# S6: the data file grammar: the minimum and its defaults, duplicate refusal, malformed
+# fields, the variable-depth key, and the search keys the reader accepts
 # ==============================================================================
 printf '\n== S6: the data file grammar ==\n'
 mkdir -p .contexture/modules/probe probe-root/x/y
@@ -425,9 +426,6 @@ tc "S6b: a second data file declaring the same namespace refuses"
 printf 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\nmode: fast\nchanges: true\n' > .contexture/modules/probe/data
 store_list probe
 refused 1 ERR_INVALID_ARGUMENT "unknown field 'mode' in the data file"
-printf 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\n' > .contexture/modules/probe/data
-store_list probe
-refused 1 ERR_INVALID_ARGUMENT "the data file declares no changes flag"
 printf 'namespace: probe\nroot: ../outside\nsuffix: .txt\nkey: <a>/<b>\nchanges: true\n' > .contexture/modules/probe/data
 store_list probe
 refused 1 ERR_INVALID_ARGUMENT "malformed root '../outside' (a workspace-relative folder inside the workspace)"
@@ -437,7 +435,10 @@ store_list probe
 refused 1 ERR_INVALID_ARGUMENT "malformed root '/abs' (a workspace-relative folder inside the workspace)"
 printf 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: a/b\nchanges: true\n' > .contexture/modules/probe/data
 store_list probe
-refused 1 ERR_INVALID_ARGUMENT "malformed key pattern 'a/b' (a <name> placeholder per slash-separated segment)"
+refused 1 ERR_INVALID_ARGUMENT "malformed key pattern 'a/b' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"
+printf 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b...>/<c>\nchanges: true\n' > .contexture/modules/probe/data
+store_list probe
+refused 1 ERR_INVALID_ARGUMENT "malformed key pattern '<a>/<b...>/<c>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"
 printf 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: maybe\n' > .contexture/modules/probe/data
 store_list probe
 refused 1 ERR_INVALID_ARGUMENT "malformed changes flag 'maybe' (true or false)"
@@ -449,7 +450,74 @@ if [ "$IS_POSIX" -eq 1 ]; then
   store_changes probe
   refused 1 ERR_CAPABILITY_UNSUPPORTED "the posix store keeps no change log; namespace 'probe' reports its delta through its module (changes: true)"
 fi
-tc "S6c: unknown, missing, and malformed fields refuse; a root escape refuses without writing outside; a changes declaration answers its driver"
+tc "S6c: unknown and malformed fields refuse; a root escape refuses without writing outside; a changes declaration answers its driver"
+
+# the minimum declaration: namespace and key alone; root defaults to the namespace, suffix
+# to empty, changes to false, and the posix mapping proves the defaults
+mkdir -p .contexture/modules/minimal
+printf 'namespace: minimal\nkey: <a>/<b>\n' > .contexture/modules/minimal/data
+store_put minimal a/b "$SB/pay-x"
+answer
+wantout '{"namespace":"minimal","key":"a/b","op":"write"}'
+store_get minimal a/b
+rawok
+wantfile "$SB/pay-x"
+store_list minimal
+answer
+wantout '{"namespace":"minimal","keys":["a/b"]}'
+if [ "$IS_POSIX" -eq 1 ]; then
+  [ -f minimal/a/b ] || miss "the default root and empty suffix did not map to minimal/a/b"
+fi
+store_changes minimal
+[ "$RC" -eq 1 ] || miss "the default changes flag did not refuse the log (rc $RC)"
+case "$(cat "$E")" in
+  *"changes: false"*) ;;
+  *) miss "the default changes refusal [$(cat "$E")]" ;;
+esac
+tc "S6d: a declaration of namespace and key alone is valid; root defaults to the namespace, suffix to empty, changes to false"
+
+# the optional format and search keys are accepted (the search schema is a later task);
+# a duplicate search key refuses like any other duplicate field
+mkdir -p .contexture/modules/searchy
+printf 'namespace: searchy\nroot: searchy-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\nmodes: exact\n' > .contexture/modules/searchy/data
+store_list searchy
+answer
+wantout '{"namespace":"searchy","keys":[]}'
+printf 'namespace: searchy\nroot: searchy-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nformat: text\nformat: json\n' > .contexture/modules/searchy/data
+store_list searchy
+refused 1 ERR_INVALID_ARGUMENT "duplicate field 'format' in the data file"
+printf 'namespace: searchy\nroot: searchy-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\nmodes: exact\n' > .contexture/modules/searchy/data
+tc "S6e: a declaration carrying the optional format and search keys is valid; a duplicate search key refuses"
+
+# the unit module's declaration, expressible but not installed: its variable-depth final
+# placeholder admits the main files and the deeper lane files, while docs's fixed depth
+# still refuses an extra segment (S4d)
+printf 'unit-lane\n' > "$SB/pay-unit"
+mkdir -p .contexture/modules/unit
+printf 'namespace: unit\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n' > .contexture/modules/unit/data
+store_put unit storage/state "$SB/pay-x"
+answer
+wantout '{"namespace":"unit","key":"storage/state","op":"write"}'
+store_put unit storage/lanes/foo/report "$SB/pay-unit"
+answer
+wantout '{"namespace":"unit","key":"storage/lanes/foo/report","op":"write"}'
+store_list unit
+answer
+wantout '{"namespace":"unit","keys":["storage/lanes/foo/report","storage/state"]}'
+store_get unit storage/lanes/foo/report
+rawok
+wantfile "$SB/pay-unit"
+store_put unit storage "$SB/pay-x"
+refused 1 ERR_INVALID_ARGUMENT "key 'storage' does not match the namespace pattern '<unit>/<path...>'"
+if [ "$IS_POSIX" -eq 1 ]; then
+  [ -f .contexture/sessions/storage/state.md ] || miss "the unit main key did not map under its root and suffix"
+  [ -f .contexture/sessions/storage/lanes/foo/report.md ] || miss "the unit lane key did not map under its root and suffix"
+  printf 'stray\n' > .contexture/sessions/stray.md
+  store_list unit
+  answer
+  wantout '{"namespace":"unit","keys":["storage/lanes/foo/report","storage/state"]}'
+fi
+tc "S6f: the unit module's <unit>/<path...> key admits the main and the lane keys and filters the list; the fixed-depth docs key stays fixed"
 
 # ==============================================================================
 # S7: the per-key lock is held during a put, and the put is atomic per key

@@ -325,6 +325,27 @@ out=$($STORE_DATA probe 2> "$E"); RC=$?
 a_rc "$RC" "0" "store: store-data answers rc0"
 a_eq "$out" "$(printf 'probe\nprobe-data\n.txt\n<a>/<b>\nfalse')" "store: store-data prints the five validated fields"
 a_eq "$(cat "$E")" "" "store: store-data writes no stderr"
+mkdir -p .contexture/modules/minimal
+printf 'namespace: minimal\nkey: <a>/<b>\n' > .contexture/modules/minimal/data
+out=$($STORE_DATA minimal 2> "$E"); RC=$?
+a_rc "$RC" "0" "store: the minimum declaration (namespace and key) answers rc0"
+a_eq "$out" "$(printf 'minimal\nminimal\n\n<a>/<b>\nfalse')" "store: the omitted root defaults to the namespace, the suffix to empty, changes to false"
+mkdir -p .contexture/modules/nokey
+printf 'namespace: nokey\nroot: r\nsuffix: .txt\n' > .contexture/modules/nokey/data
+run "store-data no key" "$STORE_DATA" nokey
+refused 1 "store-data: the data file declares no key pattern"
+mkdir -p .contexture/modules/nonamespace
+printf 'key: <a>/<b>\n' > .contexture/modules/nonamespace/data
+run "store-data no namespace" "$STORE_DATA" nonamespace
+refused 3 "store-data: namespace 'nonamespace' is declared by no module data file"
+mkdir -p .contexture/modules/variable
+printf 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n' > .contexture/modules/variable/data
+out=$($STORE_DATA variable 2> "$E"); RC=$?
+a_rc "$RC" "0" "store: a variable-depth <unit>/<path...> pattern answers rc0"
+a_eq "$out" "$(printf 'variable\n.contexture/sessions\n.md\n<unit>/<path...>\nfalse')" "store: the variable-depth declaration prints its five fields"
+printf 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit...>/<path>\nchanges: false\n' > .contexture/modules/variable/data
+run "store-data non-final multi" "$STORE_DATA" variable
+refused 1 "store-data: malformed key pattern '<unit...>/<path>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"
 run "store-data nosuch" "$STORE_DATA" nosuch
 refused 3 "store-data: namespace 'nosuch' is declared by no module data file"
 run "store-data Bad!" "$STORE_DATA" 'Bad!'

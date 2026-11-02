@@ -1,16 +1,21 @@
 #!/bin/sh
 # store-data: the storage core's private reader and validator of a module's data file
-# (no summary line, so discovery ignores it). It answers one namespace with the five
-# declared fields on five lines, in this order: namespace, root, suffix, key pattern,
-# changes.
+# (no summary line, so discovery ignores it). It answers one namespace with the effective
+# five fields on five lines, in this order: namespace, root, suffix, key pattern, changes.
 #
 # A module declares its store in `modules/<module>/data`, one `field: value` line per
 # field and a line starting with # a comment:
-#   namespace: <lowercase token: letters, digits, dot, underscore, hyphen>
-#   root: <workspace-relative folder, inside the workspace>
-#   suffix: <non-empty suffix>
-#   key: <pattern, one <name> placeholder per slash-separated segment>
-#   changes: true|false
+#   namespace: <lowercase token: letters, digits, dot, underscore, hyphen>   (required)
+#   key: <pattern, a <name> placeholder per slash-separated segment; the final
+#         segment may be a multi-segment <name...> placeholder>              (required)
+#   root: <workspace-relative folder, inside the workspace>                  (optional;
+#         default the namespace)
+#   suffix: <suffix; may be empty>                                           (optional;
+#         default empty)
+#   changes: true|false                                                      (optional;
+#         default false)
+#   format: <value format> and the search keys fields, title, snippet, modes
+#         (optional; reserved for the search schema, accepted and not consumed here)
 # The module directory beside the data file is the owner; a second data file declaring the
 # same namespace refuses. The script validates the fields before any store function maps a
 # key to a path.
@@ -113,6 +118,11 @@ sd_seen_root=0
 sd_seen_suffix=0
 sd_seen_key=0
 sd_seen_changes=0
+sd_seen_format=0
+sd_seen_fields=0
+sd_seen_title=0
+sd_seen_snippet=0
+sd_seen_modes=0
 sd_lineno=0
 
 while IFS= read -r sd_line || [ -n "$sd_line" ]; do
@@ -149,16 +159,31 @@ while IFS= read -r sd_line || [ -n "$sd_line" ]; do
     changes)
       [ "$sd_seen_changes" -eq 0 ] || sd_fail "duplicate field 'changes' in the data file"
       sd_seen_changes=1; sd_changes=$sd_value ;;
+    format)
+      [ "$sd_seen_format" -eq 0 ] || sd_fail "duplicate field 'format' in the data file"
+      sd_seen_format=1 ;;
+    fields)
+      [ "$sd_seen_fields" -eq 0 ] || sd_fail "duplicate field 'fields' in the data file"
+      sd_seen_fields=1 ;;
+    title)
+      [ "$sd_seen_title" -eq 0 ] || sd_fail "duplicate field 'title' in the data file"
+      sd_seen_title=1 ;;
+    snippet)
+      [ "$sd_seen_snippet" -eq 0 ] || sd_fail "duplicate field 'snippet' in the data file"
+      sd_seen_snippet=1 ;;
+    modes)
+      [ "$sd_seen_modes" -eq 0 ] || sd_fail "duplicate field 'modes' in the data file"
+      sd_seen_modes=1 ;;
     *)
       sd_fail "unknown field '$sd_field' in the data file" ;;
   esac
 done < "$sd_found"
 
 [ "$sd_seen_ns" -eq 1 ] || sd_fail "the data file declares no namespace"
-[ "$sd_seen_root" -eq 1 ] || sd_fail "the data file declares no root"
-[ "$sd_seen_suffix" -eq 1 ] || sd_fail "the data file declares no suffix"
 [ "$sd_seen_key" -eq 1 ] || sd_fail "the data file declares no key pattern"
-[ "$sd_seen_changes" -eq 1 ] || sd_fail "the data file declares no changes flag"
+[ "$sd_seen_root" -eq 1 ] || sd_root=$sd_ns
+[ "$sd_seen_suffix" -eq 1 ] || sd_suffix=""
+[ "$sd_seen_changes" -eq 1 ] || sd_changes=false
 
 case "$sd_ns" in
   ''|[!a-z0-9._-]*|*[!a-z0-9._-]*) sd_fail "malformed namespace '$sd_ns'" ;;
@@ -176,10 +201,9 @@ SR_ROOT="$sd_root" LC_ALL=C awk 'BEGIN {
 }' || sd_fail "malformed root '$sd_root' (a workspace-relative folder inside the workspace)"
 
 case "$sd_suffix" in
-  ''|.|..) sd_fail "malformed suffix '$sd_suffix'" ;;
+  '') ;;
+  .|..) sd_fail "malformed suffix '$sd_suffix'" ;;
   */*|*' '*) sd_fail "malformed suffix '$sd_suffix'" ;;
-esac
-case "$sd_suffix" in
   *[[:cntrl:]]*) sd_fail "malformed suffix '$sd_suffix'" ;;
 esac
 
@@ -189,10 +213,11 @@ SP_KEY="$sd_key" LC_ALL=C awk 'BEGIN {
   n = split(k, p, "/")
   if (n < 1) exit 1
   for (i = 1; i <= n; i++) {
+    if (i == n && p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/) continue
     if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
   }
   exit 0
-}' || sd_fail "malformed key pattern '$sd_key' (a <name> placeholder per slash-separated segment)"
+}' || sd_fail "malformed key pattern '$sd_key' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"
 
 case "$sd_changes" in
   true|false) ;;

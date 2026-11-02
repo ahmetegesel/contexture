@@ -37,21 +37,27 @@ optional per namespace; a namespace declaring `changes: false`, or a driver with
 log, refuses `store.changes` rc 1 `ERR_CAPABILITY_UNSUPPORTED`.
 
 A module declares its data in a `data` file beside its `module` file, one `field: value`
-line per field and a line starting with `#` a comment:
+line per field and a line starting with `#` a comment. Only `namespace` and `key` are
+required; `root`, `suffix`, `changes`, `format`, and the search keys (`fields`, `title`,
+`snippet`, `modes`) are optional:
 
 ```text
 namespace: <name>
-root: <workspace-relative folder>
-suffix: <suffix>
-key: <segment>/<segment>
-changes: true
+key: <segment>/<segment>            # or a final <segment...> for a variable-depth key
+root: <workspace-relative folder>   # optional; default: the namespace
+suffix: <suffix>                    # optional; default: empty
+changes: true                       # optional; default: false
 ```
 
 The namespace is a lowercase token of letters, digits, dot, underscore, and hyphen; the
-root is a workspace-relative folder inside the workspace; the suffix is non-empty; the
-key pattern carries one `<name>` placeholder per slash-separated segment; and `changes`
-is `true` or `false`. The module directory beside the data file is the owner, and a
-second data file declaring the same namespace refuses.
+key pattern carries one `<name>` placeholder per slash-separated segment, and its final
+segment may instead be `<name...>`, which admits one or more key segments (a module's main
+and deeper keys share one pattern: `key: <unit>/<path...>` admits `unit/state` and
+`unit/lanes/x/report`). The root is a workspace-relative folder inside the workspace and
+defaults to the namespace; the suffix defaults to empty; `changes` is `true` or `false`
+and defaults to `false`. `format` and the search keys are accepted and reserved for the
+search schema; the reader refuses an unknown field. The module directory beside the data
+file is the owner, and a second data file declaring the same namespace refuses.
 
 ## Discovery and selection
 

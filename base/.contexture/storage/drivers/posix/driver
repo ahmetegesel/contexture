@@ -262,16 +262,26 @@ store_key_ok() {
   }'
 }
 
-# store_key_shape <pattern> <key>: the key's segment count equals the pattern's and every
-# pattern segment is a <name> placeholder
+# store_key_shape <pattern> <key>: the key's segments match the module's pattern; every
+# pattern segment is a <name> placeholder and the key's segment count equals the pattern's,
+# except that a final <name...> placeholder admits one or more segments (the variable-depth
+# key that lets a module's main files and its deeper lane files share one pattern)
 store_key_shape() {
   SSP_P="$1" SSP_K="$2" LC_ALL=C awk 'BEGIN {
     m = split(ENVIRON["SSP_P"], p, "/")
     n = split(ENVIRON["SSP_K"], k, "/")
-    if (m < 1 || n != m) exit 1
-    for (i = 1; i <= m; i++) {
+    if (m < 1) exit 1
+    multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    if (multi) { if (n < m) exit 1 } else { if (n != m) exit 1 }
+    for (i = 1; i < m; i++) {
       if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
       if (k[i] == "") exit 1
+    }
+    if (multi) {
+      for (i = m; i <= n; i++) if (k[i] == "") exit 1
+    } else {
+      if (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
+      if (k[m] == "") exit 1
     }
     exit 0
   }'

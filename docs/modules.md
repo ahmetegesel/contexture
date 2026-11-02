@@ -38,7 +38,7 @@ That one line is the module's entry in `ctx help`. The module name is the direct
 
 ### The data file
 
-A module that stores data through the generic module store ships a `data` file beside its `module` file: one `field: value` line per field and a line starting with `#` a comment, declaring `namespace`, `root`, `suffix`, `key`, and `changes`. The storage core reads and validates it; a module with no `data` file uses no store. The grammar, the key rule, and the five store functions are in [The engine](the-engine.md) (The module store); the docs module's file is the worked declaration.
+A module that stores data through the generic module store ships a `data` file beside its `module` file: one `field: value` line per field and a line starting with `#` a comment. `namespace` and `key` are required; `root` (default: the namespace), `suffix` (default: empty), `changes` (default: false), `format`, and the search keys (`fields`, `title`, `snippet`, `modes`) are optional. A key pattern carries one `<name>` placeholder per slash-separated segment, and its final segment may be a multi-segment `<name...>` placeholder, so a module's main and deeper keys share one pattern (the unit module's `<unit>/<path...>`; the docs module's fixed `<repo>/<slug>`). An unknown field refuses. The storage core reads and validates the declaration at every store call; a module with no `data` file uses no store. The grammar, the key rule, and the five store functions are in [The engine](the-engine.md) (The module store); the docs module's file is the worked declaration.
 
 ### Verb scripts
 
