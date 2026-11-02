@@ -145,7 +145,7 @@ A subagent that cannot write its report returns the artifact verbatim: nothing b
 
 ### The recipe and report grammar
 
-The lane verbs store and return the two documents raw; no parser enforces their shape. These are the blocks they carry, in the shared dialect: typed blocks at column 0, fields indented two spaces, tasks four.
+The lane verbs store and return the two documents raw; no parser enforces their shape. The canonical blocks, in the shared dialect, are: typed blocks at column 0, fields indented two spaces, tasks four.
 
 ```text
 # recipe
@@ -187,7 +187,8 @@ OUTPUTS
 @claim <name>
   VERDICT: "the claim's conclusion"
   EVIDENCE: <file:line or ref> ("exact verbatim quote or exit code")
-  MARK: VERIFIED | INFERRED | ABSENT  # mandatory
+  MARK: VERIFIED | INFERRED | ABSENT  # mandatory; ABSENT = case-insensitive,
+                                      # all spellings, checked place it lives
   [DETAILS ::
     structural observations the dispatcher needs to re-verify and decide;
     omit ornament, never substance]

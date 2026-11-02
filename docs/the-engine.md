@@ -10,7 +10,7 @@ The division of labor is deliberate. The model does the work; the machinery hold
 
 A coding harness reads its repository instruction file before it acts. In a contexture workspace that file is AGENTS.md, and it is the only file guaranteed to be in front of the agent every turn: everything else loads on demand. The guarantee is a convention, not a harness feature, and it shapes the file. It has to fit one read, and every line in it is paid for on every turn, so it carries only what governs and what navigates.
 
-Its two jobs are exactly that: govern and navigate. It carries the laws and the pointers to everything else. It carries no schemas (those live in `@record` and the record page), no provenance (that lives in the journal), and no rhythm names beyond the one default loop.
+Its two jobs are exactly that: govern and navigate. It carries the laws and the pointers to everything else. It carries no schemas (those live in `@record` and the guides), no provenance (that lives in the journal), and no rhythm names beyond the one default loop.
 
 The sections are a tour of the convention:
 
@@ -63,9 +63,9 @@ The shapes live in the laws and the guides, never in a separate template file:
 | a subagent's recipe and report | [Units and subagents](units-and-lanes.md) |
 | the overlays | [Overlays](overlays.md) |
 
-Writing is filling, never inventing: an artifact is written by filling its shape directly, with the schema in hand as the complete form. The laws carry every valid variation and the documents carry the filled samples, so the shape can be read without concrete content to copy.
+Writing is filling, never inventing: an artifact is written by filling its shape directly, with the schema in hand as the complete form. The laws pin the record shapes and the guides carry the rest, so the shape is read without concrete content to copy.
 
-That last property is the drift control. Shapes pinned in the delivered laws and the guides stay exact as long as the verbs write them and the audit reads them, and the fix for drift is navigation, not memory: AGENTS.md points at the shape, and the write path demands a match.
+The drift control is the write path where one exists: the record shapes stay exact because the verbs write them and the audit reads them. The overlay, recipe, and report shapes have no parser: the guide is their only home, and the agent holds them by reading it. The fix for drift is navigation, not memory: AGENTS.md points at the shape.
 
 ### The shared dialect
 
@@ -522,7 +522,7 @@ The classes, and what each one asks for:
 | slugless closer | a closer carries no valid date-slug target | point it at real entries |
 | dateless entry slug | an entry name does not match the date-slug grammar | fix the entry's slug to the date-slug grammar |
 | inline marker | `THREAD:` or `KNOWLEDGE:` sits on the `@entry` line | move it to its own field line |
-| bracketed field | a field line wrapped in brackets, as a template's optional marker copied verbatim | write the field bare, or omit it |
+| bracketed field | a field line wrapped in brackets, as a shape's optional marker copied verbatim | write the field bare, or omit it |
 | missing thread | a post-era `@entry` with no `THREAD` line | declare the `THREAD` line: what it awaits, or `none` |
 | unharvested knowledge | a `KNOWLEDGE: true` entry that no closer names | harvest it at the next refresh; the entry then closes by reference |
 | done without event | a `STATUS: DONE` task with no `backlog/<slug>: DONE` line in the journal | record the completion event |
