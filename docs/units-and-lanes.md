@@ -143,6 +143,62 @@ The report is the dispatcher's only window into the dispatch, landed with `ctx l
 
 A subagent that cannot write its report returns the artifact verbatim: nothing before it, nothing after it, and the dispatcher persists it byte-clean.
 
+### The recipe and report grammar
+
+The lane verbs store and return the two documents raw; no parser enforces their shape. These are the blocks they carry, in the shared dialect: typed blocks at column 0, fields indented two spaces, tasks four.
+
+```text
+# recipe
+@context: "what this subagent is"
+
+MISSION
+  GOAL: "the deliverable or decision"
+  TASKS:
+    1. <name>: <the task's intent>; exit: "<verifiable condition>"
+
+GROUND_AND_REFS
+  SOURCE_OF_TRUTH: <file#symbol-or-lines>
+  BRANCH: <the active branch the subagent works on>  # required
+  [UNIT: <unit-slug>]               # session unit name for ctx lane commands
+  [LANE: <lane-slug>]               # subagent lane name for ctx lane commands
+  REFS: [<file#symbol>, <journal#entry>, <knowledge#finding>]
+  [FACTS ::
+    exact isolated constraints from parent attention; one statement per line;
+    verbatim quotes or conditions; never conversational prose]
+  WRITE_SCOPE: [., <explicit target files or dirs>]
+  drift: stop + report; never improvise
+  COMMAND_POLICY: execute all shell commands through .contexture/ctx run <cmd>
+
+OUTPUTS
+  JOURNAL: ctx lane record <unit> <lane>
+  REPORT: ctx lane report <unit> <lane>
+  RETURN: summary only: verdicts + residual risks
+  RESUME: ctx lane show <unit> <lane> recipe, then journal; continue from the last uncompleted task
+```
+
+```text
+# report
+@orientation
+  STATUS: COMPLETE | PARTIAL | DRIFTED
+  TASKS:
+    1. <task-name>: DONE | DRIFTED | BLOCKED (exit: "<proven-condition>")
+  LOAD_BEARING: [<claim-name>, ...]   # claims the dispatcher must re-verify
+
+@claim <name>
+  VERDICT: "the claim's conclusion"
+  EVIDENCE: <file:line or ref> ("exact verbatim quote or exit code")
+  MARK: VERIFIED | INFERRED | ABSENT  # mandatory
+  [DETAILS ::
+    structural observations the dispatcher needs to re-verify and decide;
+    omit ornament, never substance]
+
+@risks
+  UNVERIFIED: <what was skipped or unprovable; one line per condition>
+  THIN: <areas relying on inference rather than hard tool verification>
+```
+
+The recipe slices the parent's attention into exact references and isolated facts; the report is the dispatcher's only window, so every claim carries its evidence and its mark.
+
 ### Dispatch discipline
 
 - The dispatcher reads the report, never the subagent journal. A thin report triggers a re-dispatch, never journal-mining.

@@ -4,6 +4,29 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.60.2] - 2026-11-03
+
+PATCH: the core record-shape templates retire. The break: `base/.contexture/templates/` and its seven files leave the payload, so an adopter on v0.60.1 or earlier deletes `.contexture/templates` from the live drawer by hand; nothing at runtime read them, since the verbs write the shapes and the audit parses them. The release also repairs the AGENTS.md header that v0.60.1 left at v0.60.0.
+
+### Added
+
+- The exact recipe and report block grammar in `docs/units-and-lanes.md`, beside the content contract: the replacement home for the two documents the lane verbs store and return raw, with no parser enforcing their shape.
+
+### Changed
+
+- The payload declaration drops `,templates` in `README.md`, `docs/adoption.md`, `docs/the-engine.md`, `docs/workspace/operations.md`, and `docs/workspace/system-map.md`, the last brought to the full canonical set with `package-install` and `package-uninstall`.
+- The engine page's templates section becomes the artifact shapes, pointing at `@record`, `docs/the-record.md`, `docs/units-and-lanes.md`, and `docs/overlays.md`; `docs/overlays.md` states the inline block is the whole grammar; the README and drawer-layout tree rows drop.
+- The corpus reconciles through the `ctx docs` verbs: the record page's sources and its grammar claim, the system map's record stack, sources, payload, and grammar wording, and the module page's part-type list.
+
+### Removed
+
+- `base/.contexture/templates/` and its seven files: `backlog.md`, `journal.md`, `knowledge.md`, `overlay.md`, `recipe.md`, `report.md`, and `state.md`.
+- The governance suite's template glob loop and its payload assertion's `,templates`; the package installer's core-path case entry for `templates` (the generic outside-root refusal still covers the path).
+
+### Fixed
+
+- `base/AGENTS.md` and the root `AGENTS.md` header read v0.60.2; v0.60.1 shipped without bumping the header, so the installed-version read stayed at v0.60.0.
+
 ## [0.60.1] - 2026-11-02
 
 PATCH: the templates part retires and the record resolves installed rhythms. The break: a package manifest's `templates` part is now an unknown part type and refuses, and there is no shared templates folder; an internal asset rides inside its module. The rhythm fix resolves a RHYTHM stamp against the workspace rhythms root, then the extension rhythms root, and the docs-discipline package stops shipping work.md (starter-rhythms owns it).

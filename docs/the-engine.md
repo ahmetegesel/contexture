@@ -10,7 +10,7 @@ The division of labor is deliberate. The model does the work; the machinery hold
 
 A coding harness reads its repository instruction file before it acts. In a contexture workspace that file is AGENTS.md, and it is the only file guaranteed to be in front of the agent every turn: everything else loads on demand. The guarantee is a convention, not a harness feature, and it shapes the file. It has to fit one read, and every line in it is paid for on every turn, so it carries only what governs and what navigates.
 
-Its two jobs are exactly that: govern and navigate. It carries the laws and the pointers to everything else. It carries no schemas (those live in the templates), no provenance (that lives in the journal), and no rhythm names beyond the one default loop.
+Its two jobs are exactly that: govern and navigate. It carries the laws and the pointers to everything else. It carries no schemas (those live in `@record` and the record page), no provenance (that lives in the journal), and no rhythm names beyond the one default loop.
 
 The sections are a tour of the convention:
 
@@ -53,23 +53,19 @@ Slug addressing is what lets the set grow and the overlays extend it. A position
 
 AGENTS.workspace.md and AGENTS.local.md sit beside the base and extend it, by section, with `@append` or `@replace`. The workspace overlay is shared and tracked with the work; the local file is personal and yields to the workspace when they disagree. Both amend; neither may contradict a law. They have their own page; here it matters only that the base plus its overlays is what the agent actually reads.
 
-## The templates
+## The artifact shapes
 
-The grammars live in `.contexture/templates/`, one per artifact:
+The shapes live in the laws and the guides, never in a separate template file:
 
-| grammar | the artifact it shapes |
+| artifact | its shape |
 |---|---|
-| `state.md` | the live pointer |
-| `backlog.md` | the unit's tasks |
-| `journal.md` | the events |
-| `knowledge.md` | the settled findings |
-| `recipe.md` | a subagent's brief |
-| `report.md` | a subagent's report |
-| `overlay.md` | AGENTS.workspace.md and AGENTS.local.md |
+| the state, backlog, journal, and knowledge | `@record` and [The record](the-record.md); the session verbs write them and the session audit parses them |
+| a subagent's recipe and report | [Units and subagents](units-and-lanes.md) |
+| the overlays | [Overlays](overlays.md) |
 
-Writing is filling, never inventing: an artifact is written by filling its grammar directly, with the template in hand as the complete shape. Each grammar carries every valid variation and a filled sample at its foot, written in template syntax with angle-bracket placeholders, so the shape can be read without concrete content to copy.
+Writing is filling, never inventing: an artifact is written by filling its shape directly, with the schema in hand as the complete form. The laws carry every valid variation and the documents carry the filled samples, so the shape can be read without concrete content to copy.
 
-That last property is the drift control. Templates in a tracked folder stay exact as long as something applies them, and the fix for drift is navigation, not memory: AGENTS.md points at them, and the artifact grammar demands a match.
+That last property is the drift control. Shapes pinned in the delivered laws and the guides stay exact as long as the verbs write them and the audit reads them, and the fix for drift is navigation, not memory: AGENTS.md points at the shape, and the write path demands a match.
 
 ### The shared dialect
 
@@ -590,7 +586,6 @@ AGENTS.local.md      your amendments
 plugins/             the tracked catalog of packaged overlays: copied into a workspace when wanted
 .contexture/
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
-  templates/         the grammars every artifact fills
   ctx                the runtime: discovery, help assembly, dispatch, the run engine, and hooks
   package-install    the package overlay installer: overlays a package's .contexture/extensions tree, records it, runs the part hooks
   package-uninstall  the package overlay remover: runs the part hooks, removes the recorded files, preserves a changed file
@@ -609,7 +604,7 @@ Placement follows the class of the file, never convenience:
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
 | live workspace | the untracked root: `AGENTS.md`, `.contexture/` (sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 

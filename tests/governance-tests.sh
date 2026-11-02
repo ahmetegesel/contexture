@@ -4,7 +4,7 @@
 # census, below the three):
 #   1. the main-surface forbid grep: no invocable raw tool path (session.sh,
 #      compact.sh, session-*.awk, .contexture/scripts/) on any main surface
-#      (base AGENTS, base ONBOARDING, base templates, the overlays, the top
+#      (base AGENTS, base ONBOARDING, the overlays, the top
 #      README, the docs pages, the plugin READMEs, tests/README.md) or in any
 #      ctx help output;
 #   2. the payload path tables re-derived against git ls-files: the declaration
@@ -58,11 +58,6 @@ FORBID='session\.sh|compact\.sh|session-[a-z]+\.awk|\.contexture/scripts/'
 
 echo "== G1 main-surface forbid grep =="
 SURFACES="base/AGENTS.md base/.contexture/ONBOARDING.md AGENTS.workspace.md README.md docs/the-engine.md docs/units-and-lanes.md docs/the-record.md docs/adoption.md docs/rhythms.md docs/overlays.md docs/modules.md docs/plugins.md plugins/starter-rhythms/README.md plugins/toolchain-filters/README.md plugins/toolchain-filters/tests/README.md plugins/docs-discipline/README.md plugins/ast-doc-graph/README.md plugins/storage-fts5/README.md tests/README.md"
-for f in "$ROOT"/base/.contexture/templates/*.md; do
-  [ -f "$f" ] || continue
-  rel=${f#"$ROOT"/}
-  SURFACES="$SURFACES $rel"
-done
 for rel in $SURFACES; do
   [ -f "$ROOT/$rel" ] || continue
   hits=$(grep -nE "$FORBID" "$ROOT/$rel" 2>/dev/null)
@@ -99,7 +94,7 @@ echo "== G2 payload path tables vs git ls-files =="
 decl_adoption=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/adoption.md" | head -n 1)
 decl_engine=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/the-engine.md" | head -n 1)
 a_eq "$decl_engine" "$decl_adoption" "payload declaration identical in adoption.md and the-engine.md"
-a_eq "$decl_adoption" 'base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}' "payload declaration reads the shipped set"
+a_eq "$decl_adoption" 'base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,extensions,ONBOARDING.md}' "payload declaration reads the shipped set"
 if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   prefix=${decl_adoption%%\{*}
   inner=${decl_adoption#*\{}

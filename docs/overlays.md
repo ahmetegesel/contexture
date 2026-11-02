@@ -35,7 +35,7 @@ An overlay is a sequence of addresses. Each block names a base section and eithe
   <the workspace's lines>
 ```
 
-`@append` adds lines after the named base section. `@replace` makes the workspace's version stand in for the base section. The full grammar template rides the payload at `base/.contexture/templates/overlay.md`.
+`@append` adds lines after the named base section. `@replace` makes the workspace's version stand in for the base section. The block above is the whole grammar; no separate template file ships.
 
 Overlays speak the house dialect: typed blocks at column 0, bodies indented two spaces, one statement per line. Keep the lines terse and structural; an overlay is read by an agent at boot, not studied by a human.
 
