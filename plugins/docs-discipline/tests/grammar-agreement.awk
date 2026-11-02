@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 # grammar-agreement.awk: the agreement check of the corpus grammar (plugin suite material,
-# never shipped into a workspace). Reads the grammar template and the audit engine and
+# never shipped into a workspace). Reads the grammar asset and the audit engine and
 # asserts that the machine-readable schema (the #% lines of doc.grammar), the prose shapes above
 # it, and the audit's kind and block lists say the same thing: every prose block and field
 # is in the schema and back, every enum's values are equal on both sides, the header
@@ -117,8 +117,8 @@ END {
     for (k in p_block) npb++
     for (k in au_block) nab++
     for (k in au_kind) nak++
-    if (!nsk || !nsb) bad("the template carries no schema (no #% kinds or block lines)")
-    if (!npb) bad("the template carries no prose blocks")
+    if (!nsk || !nsb) bad("the grammar carries no schema (no #% kinds or block lines)")
+    if (!npb) bad("the grammar carries no prose blocks")
     if (!nab || !nak) bad("the audit engine carries no valid_kinds or valid_blocks lists")
     # kinds: the schema, the prose @doc lines, the audit
     for (k in s_kind) { if (!(k in p_kind)) bad("kind " k ": in the schema, not in the prose"); if (!(k in au_kind)) bad("kind " k ": in the schema, not in the audit") }

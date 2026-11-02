@@ -50,7 +50,7 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 - The write verbs run one pipeline in `docs-io.sh`: the arguments parsed
   (`docs_parse`: the verb's control flags, every other `--<field>=` as a field
   action carried in the environment as `EDIT_A_<n>`, `EDIT_F_<n>`,
-  `EDIT_V_<n>`, a `--stdin=<field>` value kept in a scratch file the engine reads as its payload operand, so a body of any size meets no environment limit); the   doc read by `store.get`; one edit by `docs-edit.awk`
+  `EDIT_V_<n>`, a `--stdin=<field>` value kept in a scratch file the engine reads as its payload operand, so a body of any size meets no environment limit); the doc read by `store.get`; one edit by `docs-edit.awk`
   (operands `part=1 <scripts/doc.grammar> part=2 <doc> part=3 <payload>`; only
   the grammar's `#%` schema lines are read; the request through the environment,
   never `awk -v`; the whole new doc on stdout, the note or the refusal on

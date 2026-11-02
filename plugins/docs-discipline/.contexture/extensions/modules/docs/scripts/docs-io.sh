@@ -556,7 +556,7 @@ docs_exec() {
 # The write side (ctx docs new, write, header, rule, pitfall, entry, section, replace,
 # remove, ids, and query --entry). Every write runs one pipeline: the arguments parsed and
 # refused early (an unknown flag); the doc read through store.get; one structural edit by
-# docs-edit.awk against the grammar's #% schema (the template beside the module), which
+# docs-edit.awk against the grammar's #% schema (the module's grammar asset), which
 # refuses what the schema refuses (an unknown field, an enum value outside its set, a
 # missing required field, a duplicate key or id, a missing address, a newline in a one-line
 # field, a carriage return); the result audited by docs-audit.awk over its whole repo (the

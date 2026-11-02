@@ -40,10 +40,10 @@ BEGIN {
     valid_blocks["@areas"] = 1
     valid_blocks["@caveats"] = 1
 
-    # the grammar template's pitfall schema (the same #% lines the write verbs
+    # the grammar's pitfall schema (the same #% lines the write verbs
     # read): the required fields and the class/severity enums drive the read
     # validation; the audit keeps its kind and block lists because the grammar
-    # agreement check reads them, and the template path arrives from docs-io
+    # agreement check reads them, and the grammar asset path arrives from docs-io
     tpl = ENVIRON["DOCS_TEMPLATE"]
     if (tpl != "") {
         while ((getline schema_line < tpl) > 0) {

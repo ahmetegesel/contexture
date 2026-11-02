@@ -59,7 +59,7 @@ What lands where:
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
 | `docs/work.md` | the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW | reference (copy it into the workspace's own `.contexture/rhythms/` to own it; the starter-rhythms plugin owns the installed generic `work`) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/run.sh` | the plugin's own suite: the staging check, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample with its empty `TMPDIR` watch, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed through `ctx docs write`, the stored bytes read back through the write verb, and the capture parity against the files driver, with the corpus checks in a second sandbox running beside that chain | reference (never copied) |
+| `tests/run.sh` | the plugin's own suite: the staging check, the missing-grammar refusal, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample with its empty `TMPDIR` watch, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed through `ctx docs write`, the stored bytes read back through the write verb, and the capture parity against the files driver, with the corpus checks in a second sandbox running beside that chain | reference (never copied) |
 | `tests/store-cases.sh` | the delta-source cases: the check's store mode against its git mode, `ctx docs changes` (its window, `--since`, A, M, D, its refusals), and the gate composing the code half from git with the corpus half from the store (or from git under the files driver) | reference (never copied) |
 | `tests/write-verbs.sh`, `tests/write/` | the write verbs' assertions and their fixtures: every verb's result byte for byte, every refusal leaving the stored doc unchanged, the change-log rows under a store | reference (never copied) |
 | `tests/engine-checks.sh` | the audit's one id namespace per repo, the pitfalls view scoped to `@pitfalls` with a doc-ending pitfall credited to its own doc, a backslash search kept literal, every query form refusing rc 1 on a miss, an explicit draft path reading the stored doc by its address, and the pitfall schema (a class outside its enum or a missing required field red) | reference (never copied) |
@@ -208,8 +208,8 @@ into an existing file; `seed` means it is starting content to adapt; and
    grammar and audit it before the configured driver stores it: the
    conventions first (`ctx docs write workspace conventions <
    <plugin>/docs/workspace/conventions.md`), then a workspace map for the tree
-    (`ctx docs write` for a whole draft, or `ctx docs new` and the block verbs,
-    per the module's grammar), then one unit doc per repository, then the
+   (`ctx docs write` for a whole draft, or `ctx docs new` and the block verbs,
+   per the module's grammar), then one unit doc per repository, then the
    operational doc for the repository whose setup targets the nudge should
    force. Under the files driver each write lands as `docs/<repo>/<slug>.md`.
 

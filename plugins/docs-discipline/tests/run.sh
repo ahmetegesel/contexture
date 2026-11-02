@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # docs-discipline plugin suite: the named runner for tests/.
-# Drives the staging check; the module's install and uninstall part hooks (the seed
+# Drives the staging check; the missing-grammar refusal; the module's install and uninstall part hooks (the seed
 # once, never an overwrite, the data left on uninstall); the corpus reads through the
 # storage driver (keyed on the declared store: the audit and the unit-form nudge against
 # the backlog-file form and the write verbs (tests/write-verbs.sh over tests/write/) and
@@ -108,7 +108,7 @@ cd "$SANDBOX" || exit 1
 unset CTX_DIR CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH
 export LC_ALL=C
 
-echo "docs-discipline plugin suite: staging, module hooks, corpus reads, census, gate matrix, grammar agreement (driver: $DRIVER; staged at $SANDBOX)"
+echo "docs-discipline plugin suite: staging, grammar asset, module hooks, corpus reads, census, gate matrix, grammar agreement (driver: $DRIVER; staged at $SANDBOX)"
 echo ""
 
 # staging: the runtime is base's copy byte for byte and the resolver answers the
@@ -125,6 +125,25 @@ if cmp -s "$BASE_CTX" "$SANDBOX/.contexture/ctx" && [ "$GOT_DRIVER" = "$WANT_DRI
     PASS=$((PASS + 1))
 else
     echo "[staging] FAIL (driver resolved: $GOT_DRIVER; want $WANT_DRIVER)"
+    FAIL=$((FAIL + 1))
+fi
+echo ""
+
+# [grammar-asset] the module's private grammar is the one path: a missing asset refuses
+# rc2 naming the asset and the reinstall fix, and no shared template is read in its place
+GA_DOC="$SANDBOX/.contexture/extensions/modules/docs/scripts/doc.grammar"
+mv "$GA_DOC" "$SANDBOX/plant-doc.grammar"
+GA_OUT=$(printf '@doc probe probe\n  repo: workspace\n' | ./.contexture/ctx docs write workspace probe 2>&1)
+GA_RC=$?
+mv "$SANDBOX/plant-doc.grammar" "$GA_DOC"
+if [ "$GA_RC" -eq 2 ] \
+    && printf '%s' "$GA_OUT" | grep -q 'the corpus grammar asset scripts/doc.grammar is missing' \
+    && printf '%s' "$GA_OUT" | grep -q 'reinstall the docs module'; then
+    echo "[grammar-asset] PASS (a missing module grammar refuses rc2 naming the asset and the reinstall fix)"
+    PASS=$((PASS + 1))
+else
+    echo "[grammar-asset] FAIL (rc=$GA_RC)"
+    printf '%s\n' "$GA_OUT" | head -5
     FAIL=$((FAIL + 1))
 fi
 echo ""
