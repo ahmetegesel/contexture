@@ -7,6 +7,8 @@
 # duplicate namespace); the re-install and upgrade cases; the uninstall with its
 # record and the changed-file preservation; the executable-bit modes; the part
 # hooks' order and their failure; the read-only refusal that writes nothing; the
+# rhythm index over the extension root and the law-fragment record; the
+# store-data owner scan and the docs store read under the extension root; the
 # installed driver resolving from the extension root; the engine's _reserved
 # reader; a real package wrapper's refusal of the old package shape; and the
 # worked example package's own test (tests/fixtures/worked-package/tests/run.sh).
@@ -330,11 +332,12 @@ a_not "$(./.contexture/ctx help --all 2>/dev/null)" "shapedrv" "SH: the engine d
 S4=$SB/catalog/shape-filters
 new_pkg "$S4"
 mkdir -p "$S4/.contexture/extensions/modules/shapefilters/filters"
-printf '#!/usr/bin/awk -f\n# command: ^shapefilters$\n{ print }\n' > "$S4/.contexture/extensions/modules/shapefilters/filters/shape.awk"
+printf '#!/usr/bin/awk -f\n# command: ^shapefilters$\n# format-only: shape\n{ print "SHAPED" }\n' > "$S4/.contexture/extensions/modules/shapefilters/filters/shape.awk"
 chmod +x "$S4/.contexture/extensions/modules/shapefilters/filters/shape.awk"
 install_pkg "$S4"
 a_rc "$RC" 0 "SH: a filters-only package installs rc0"
 a_file "$SB/.contexture/extensions/modules/shapefilters/filters/shape.awk" "SH: the filter part lands"
+a_eq "SHAPED" "$(printf 'shapefilters fixture\n' | ./.contexture/ctx run --filter=shape 2>/dev/null)" "SH: the installed filter resolves from the extension root"
 a_not "$(./.contexture/ctx help 2>/dev/null)" "shapefilters" "SH: a filter-only folder stays unlisted (no module file)"
 S5=$SB/catalog/shape-rhythms
 new_pkg "$S5"
@@ -350,6 +353,32 @@ install_pkg "$S6"
 a_rc "$RC" 0 "SH: a laws-only package installs rc0"
 a_file "$SB/.contexture/extensions/laws/shaped.law" "SH: the law part lands"
 a_contains "$STATE/shape-laws.files" "law .contexture/extensions/laws/shaped.law" "SH: the laws-only package records its law fragment"
+
+echo "== RI the rhythm index and the law record =="
+RI=$SB/catalog/pkgri
+new_pkg "$RI"
+add_module "$RI" rifixture
+add_file "$RI" rhythms/fixture-ritual.md '@rhythm fixture-ritual
+  use when: a fixture needs the rhythm index
+  activation: propose'
+install_pkg "$RI"
+a_rc "$RC" 0 "RI: a package carrying a ritual rhythm installs rc0"
+IDX=$(./.contexture/ctx session index 2>/dev/null)
+a_eq "$IDX" "fixture-ritual (.contexture/extensions/rhythms/fixture-ritual.md) | use when: a fixture needs the rhythm index | activation: propose" "RI: the rhythm index reads the extension root"
+a_contains "$STATE/pkgri.files" "law .contexture/extensions/modules/rifixture/laws" "RI: the record carries the module law fragment"
+LAWFILE=$(sed -n 's/^law //p' "$STATE/pkgri.files" | head -n 1)
+a_file "$SB/$LAWFILE" "RI: the recorded law fragment path exists"
+a_contains "$SB/$LAWFILE" "rifixture-law" "RI: the recorded law fragment carries its clause"
+mkdir -p .contexture/rhythms
+printf '@rhythm workspace-ritual\n  use when: the workspace half is proven\n' > .contexture/rhythms/workspace-ritual.md
+IDX=$(./.contexture/ctx session index 2>/dev/null)
+a_eq "$(printf '%s\n' "$IDX" | head -n 1)" "workspace-ritual (.contexture/rhythms/workspace-ritual.md) | use when: the workspace half is proven | activation: propose" "RI: the workspace rhythm lists before the extension rhythm"
+a_eq "$(printf '%s\n' "$IDX" | tail -n 1)" "fixture-ritual (.contexture/extensions/rhythms/fixture-ritual.md) | use when: a fixture needs the rhythm index | activation: propose" "RI: the extension rhythm lists after the workspace rhythm"
+rm -rf .contexture/rhythms
+uninstall_pkg "$RI"
+a_rc "$RC" 0 "RI: the rhythm package uninstalls rc0"
+IDX=$(./.contexture/ctx session index 2>/dev/null)
+a_not "$IDX" "fixture-ritual" "RI: the uninstalled extension rhythm leaves the index"
 
 echo "== MF the manifest refusals at install =="
 NM=$SB/catalog/pkg-nomanifest
@@ -637,6 +666,15 @@ a_file "$SB/.contexture/extensions/modules/docs/module" "DR: the real docs modul
 a_file "$SB/.contexture/extensions/templates/doc.md" "DR: the real grammar template lands under the extension root"
 a_file "$SB/.contexture/extensions/rhythms/work.md" "DR: the real docs rhythm lands under the extension root"
 a_file "$SB/docs/workspace/conventions.md" "DR: the install hook seeds the corpus through ctx docs write"
+SD=$(cd "$SB" && ./.contexture/storage/scripts/store-data docs 2>/dev/null)
+a_eq "$(printf '%s\n' "$SD" | sed -n '1,5p')" "docs
+docs
+.md
+<repo>/<slug>
+true" "DR: the store-data owner scan reads the installed docs data file under the extension root"
+a_eq "$(printf '%s\n' "$SD" | sed -n '6p')" "$SB/.contexture/extensions/modules/docs/data" "DR: the docs declaration's owner is the extension-root data file"
+DOCQ=$(cd "$SB" && ./.contexture/ctx docs query workspace conventions 2>/dev/null)
+a_match "$DOCQ" "conventions: conventions" "DR: the installed docs module reads its corpus through the store"
 ( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/docs-discipline/uninstall" ) > "$SB/.out" 2> "$SB/.err"
 RC=$?
 a_rc "$RC" 0 "DR: the real docs-discipline wrapper uninstalls rc0"

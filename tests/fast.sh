@@ -12,6 +12,7 @@
 #                    and the session suite on posix
 #   driver fts5      the storage-fts5 plugin's own driver and store compliance
 #   fuzz             the differential store fuzzer (posix against fts5)
+#   module           the package overlay installer suite (module-tests.sh)
 #   docs             the docs-discipline suite on the files driver
 #   docs-fts5        the docs-discipline suite on fts5
 #   plugin <name>    plugins/<name>/tests/run.sh
@@ -33,6 +34,7 @@ usage: tests/fast.sh <area> [<arg>]
                    and the session suite on posix
   driver fts5      the storage-fts5 plugin's own driver and store compliance
   fuzz             the differential store fuzzer (posix against fts5)
+  module           the package overlay installer suite (module-tests.sh)
   docs             the docs-discipline suite on the files driver
   docs-fts5        the docs-discipline suite on fts5
   plugin <name>    plugins/<name>/tests/run.sh
@@ -141,6 +143,10 @@ case "${1:-}" in
   fuzz)
     AREA="fuzz"
     run_suite "store-fuzz.sh (posix against fts5)" sh "$ROOT/tests/store-fuzz.sh"
+    ;;
+  module)
+    AREA="module"
+    run_suite "module-tests.sh" sh "$ROOT/tests/module-tests.sh"
     ;;
   docs)
     AREA="docs"
