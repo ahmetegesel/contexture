@@ -1,0 +1,485 @@
+#!/bin/sh
+# package-install: the package overlay installer (a private core script, never a
+# verb; the package's own install script execs it). Run it only on the human's
+# go at the act. Usage: package-install <package-root>; CTX_ROOT names the
+# workspace (default: the package root's ../..).
+#
+# The overlay scope: the package's .contexture/extensions tree, and nothing
+# else. A package path under .contexture outside extensions refuses as a core
+# path; a path outside the extension root refuses; the core is never written.
+# The installed set is recorded under
+# .contexture/extensions/.state/<package>.files: one "file <mode> <cksum>
+# <workspace path>" line per installed path, a "law <workspace path>" line per
+# installed law fragment, and the package and version lines.
+#
+# Refusals (rc 1): a malformed package, module, or driver name; a path that
+# escapes or carries blanks; a payload file outside the extension root; a core
+# path; an existing file no package recorded; a path another package recorded;
+# a module name against a builtin (session, run, lane), a workspace module, or
+# a reserved name; a driver name against the core posix driver or a driver that
+# already resolves ahead of the extension root; a duplicate namespace; a
+# malformed module manifest; a driver part without an executable.
+# A re-install of this package's recorded files is an update: changed files
+# update, files the new source drops are removed when unchanged and preserved
+# (and kept recorded) when changed. Part hooks run after the overlay and the
+# record, in module-name order. rc 2: no workspace or engine, a read-only
+# extension root (nothing is written), an I/O failure, or a failing part hook.
+set -u
+
+err() { printf 'package-install: %s\n' "$*" >&2; }
+die() { _die_rc=$1; shift; err "$*"; exit "$_die_rc"; }
+
+mode_of() { ls -ld "$1" 2>/dev/null | awk '{print $1}' | cut -c2-10; }
+cksum_of() { cksum < "$1" 2>/dev/null | awk '{print $1 ":" $2}'; }
+
+record_has() {
+  [ "${have_record:-0}" -eq 1 ] || return 1
+  awk -v p="$1" '$1 == "file" && $4 == p { found = 1 } END { exit(found ? 0 : 1) }' "$state_file"
+}
+
+record_has_prefix() {
+  [ "${have_record:-0}" -eq 1 ] || return 1
+  awk -v p="$1" '$1 == "file" && index($4, p) == 1 { found = 1 } END { exit(found ? 0 : 1) }' "$state_file"
+}
+
+record_field() {
+  [ "${have_record:-0}" -eq 1 ] || return 1
+  awk -v p="$1" -v n="$2" '$1 == "file" && $4 == p { print $n; exit }' "$state_file"
+}
+
+other_has() {
+  [ -d "$state_root" ] || return 1
+  for _oh in "$state_root"/*.files; do
+    [ -f "$_oh" ] || continue
+    [ "$_oh" = "$state_file" ] && continue
+    if awk -v p="$1" '$1 == "file" && $4 == p { found = 1 } END { exit(found ? 0 : 1) }' "$_oh"; then
+      _ohn=${_oh##*/}
+      printf '%s\n' "${_ohn%.files}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+other_has_prefix() {
+  [ -d "$state_root" ] || return 1
+  for _op in "$state_root"/*.files; do
+    [ -f "$_op" ] || continue
+    [ "$_op" = "$state_file" ] && continue
+    if awk -v p="$1" '$1 == "file" && index($4, p) == 1 { found = 1 } END { exit(found ? 0 : 1) }' "$_op"; then
+      _opn=${_op##*/}
+      printf '%s\n' "${_opn%.files}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+data_namespace() {
+  awk '
+    /^[[:space:]]*#/ { next }
+    {
+      k = $0
+      sub(/:.*/, "", k)
+      gsub(/[[:space:]]/, "", k)
+      if (k != "namespace") next
+      v = $0
+      sub(/^[^:]*:[[:space:]]*/, "", v)
+      sub(/[[:space:]]*$/, "", v)
+      print v
+      exit
+    }' "$1"
+}
+
+[ $# -eq 1 ] || { err "usage: package-install <package-root>"; exit 1; }
+[ -d "$1" ] || die 1 "no package root at $1"
+pkg_root=$(CDPATH= cd -- "$1" 2>/dev/null && pwd) || die 2 "cannot resolve $1"
+pkg_name=${pkg_root##*/}
+case "$pkg_name" in
+  ""|.*) die 1 "malformed package name '$pkg_name' (letters, digits, dot, underscore, hyphen; not starting with a dot)" ;;
+esac
+case "$pkg_name" in
+  *[!A-Za-z0-9._-]*) die 1 "malformed package name '$pkg_name' (letters, digits, dot, underscore, hyphen; not starting with a dot)" ;;
+esac
+
+if [ -n "${CTX_ROOT:-}" ]; then
+  [ -d "$CTX_ROOT" ] || die 2 "CTX_ROOT names no directory: $CTX_ROOT"
+  ws_root=$(CDPATH= cd -- "$CTX_ROOT" 2>/dev/null && pwd) || die 2 "cannot resolve CTX_ROOT"
+else
+  ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run plugins/<package>/install or set CTX_ROOT)"
+fi
+ctx_bin=$ws_root/.contexture/ctx
+[ -x "$ctx_bin" ] || die 2 "no engine at $ctx_bin (adopt the base first)"
+ext_root=$ws_root/.contexture/extensions
+state_root=$ext_root/.state
+state_file=$state_root/$pkg_name.files
+
+if [ -e "$pkg_root/.contexture" ] && [ ! -d "$pkg_root/.contexture" ]; then
+  die 1 "malformed package: .contexture is not a directory"
+fi
+if [ -d "$pkg_root/.contexture" ]; then
+  for _e in "$pkg_root/.contexture"/* "$pkg_root/.contexture"/.[!.]* "$pkg_root/.contexture"/..?*; do
+    [ -e "$_e" ] || continue
+    _b=${_e##*/}
+    [ "$_b" = extensions ] && continue
+    case "$_b" in
+      ctx|storage|modules|templates|rhythms|sessions|tmp|ONBOARDING.md)
+        die 1 "core path refused: .contexture/$_b (a package overlays .contexture/extensions/ only)" ;;
+      *)
+        die 1 "path outside the extension root: .contexture/$_b (a package overlays .contexture/extensions/ only)" ;;
+    esac
+  done
+fi
+payload_root=$pkg_root/.contexture/extensions
+[ -d "$payload_root" ] || die 1 "no .contexture/extensions payload in $pkg_root"
+
+if [ -d "$ext_root" ]; then
+  [ -w "$ext_root" ] && [ -x "$ext_root" ] || die 2 "the extension root is not writable: .contexture/extensions (nothing written)"
+else
+  [ -d "$ws_root/.contexture" ] || die 2 "no .contexture drawer at $ws_root (adopt the base first)"
+  [ -w "$ws_root/.contexture" ] && [ -x "$ws_root/.contexture" ] || die 2 "the drawer is not writable, so the extension root cannot be created (nothing written)"
+fi
+if [ -e "$state_root" ]; then
+  [ -d "$state_root" ] || die 1 "the install record area is not a directory: .contexture/extensions/.state"
+  [ -w "$state_root" ] && [ -x "$state_root" ] || die 2 "the install record area is not writable: .contexture/extensions/.state (nothing written)"
+fi
+
+have_record=0
+if [ -e "$state_file" ]; then
+  [ -f "$state_file" ] || die 1 "the install record is not a regular file: .contexture/extensions/.state/$pkg_name.files"
+  have_record=1
+fi
+
+tmp_base=${TMPDIR:-/tmp}
+if mkdir -p "$ws_root/.contexture/tmp" 2>/dev/null && [ -d "$ws_root/.contexture/tmp" ] && [ -w "$ws_root/.contexture/tmp" ]; then
+  tmp_base=$ws_root/.contexture/tmp
+fi
+scratch=$(mktemp -d "$tmp_base/pkg-install.XXXXXX") || die 2 "cannot create a scratch folder"
+trap 'rm -rf "$scratch"' EXIT
+trap 'rm -rf "$scratch"; exit 130' INT
+trap 'rm -rf "$scratch"; exit 143' TERM
+
+if ( cd "$payload_root" && find . ! -type d ! -type f -print ) > "$scratch/specials" 2>/dev/null; then
+  [ -s "$scratch/specials" ] && die 1 "the package carries a non-regular file: $(head -n 1 "$scratch/specials") (only files and directories install)"
+else
+  die 2 "cannot read the package payload"
+fi
+if ! ( cd "$payload_root" && find . -type f -print ) > "$scratch/files.raw" 2>/dev/null; then
+  die 2 "cannot list the package payload"
+fi
+sed 's|^\./||' "$scratch/files.raw" | LC_ALL=C sort > "$scratch/files" || die 2 "cannot list the package payload"
+[ -s "$scratch/files" ] || die 1 "the .contexture/extensions payload is empty"
+
+case "$(awk -F/ '$1 == "modules" && NF == 2 { print; exit }' "$scratch/files")" in
+  "") ;;
+  *) die 1 "malformed payload path: $(awk -F/ '$1 == "modules" && NF == 2 { print; exit }' "$scratch/files") (a module is a folder)" ;;
+esac
+case "$(awk -F/ '$1 == "storage" && NF < 3 { print; exit }' "$scratch/files")" in
+  "") ;;
+  *) die 1 "malformed payload path: $(awk -F/ '$1 == "storage" && NF < 3 { print; exit }' "$scratch/files") (a driver sits under storage/drivers/)" ;;
+esac
+
+awk -F/ '$1 == "modules" && NF >= 3 { print $2 }' "$scratch/files" | LC_ALL=C sort -u > "$scratch/modules"
+awk -F/ '$1 == "storage" && $2 == "drivers" && NF >= 3 { print $3 }' "$scratch/files" | LC_ALL=C sort -u > "$scratch/drivers"
+
+while IFS= read -r mname; do
+  case "$mname" in
+    ""|.*) die 1 "malformed module name '$mname'" ;;
+  esac
+  case "$mname" in
+    *[!A-Za-z0-9._-]*) die 1 "malformed module name '$mname' (letters, digits, dot, underscore, hyphen)" ;;
+  esac
+  case "$mname" in
+    _hooks|_module|_reserved) die 1 "malformed module name '$mname' (an engine-private name)" ;;
+  esac
+  case "$mname" in
+    session|run|lane) die 1 "module name '$mname' collides with a builtin" ;;
+  esac
+  if "$ctx_bin" _reserved "$mname" >/dev/null 2>&1; then
+    die 1 "module name '$mname' is a reserved name"
+  fi
+  if [ -e "$ws_root/.contexture/modules/$mname" ]; then
+    die 1 "module name '$mname' collides with a workspace module"
+  fi
+  if [ -e "$ext_root/modules/$mname" ]; then
+    if record_has_prefix ".contexture/extensions/modules/$mname/"; then
+      :
+    elif other=$(other_has_prefix ".contexture/extensions/modules/$mname/"); then
+      die 1 "another package's module: .contexture/extensions/modules/$mname (recorded by $other)"
+    else
+      die 1 "existing non-recorded file: .contexture/extensions/modules/$mname (uninstall or remove it first)"
+    fi
+  fi
+  mdir=$payload_root/modules/$mname
+  if [ -f "$mdir/module" ]; then
+    if ! "$ctx_bin" _module "$mdir/module" validate >/dev/null 2>"$scratch/moderr"; then
+      die 1 "malformed module '$mname': $(cat "$scratch/moderr")"
+    fi
+  elif [ -d "$mdir/scripts" ]; then
+    die 1 "module '$mname' ships scripts/ without a module file"
+  fi
+done < "$scratch/modules"
+
+while IFS= read -r dname; do
+  case "$dname" in
+    ""|.*) die 1 "malformed driver name '$dname'" ;;
+  esac
+  case "$dname" in
+    *[!A-Za-z0-9._-]*) die 1 "malformed driver name '$dname' (letters, digits, dot, underscore, hyphen)" ;;
+  esac
+  [ "$dname" = posix ] && die 1 "driver name 'posix' collides with the core posix driver"
+  if [ -e "$ws_root/.contexture/storage/drivers/$dname" ]; then
+    die 1 "driver name '$dname' already resolves in the core"
+  fi
+  if [ -e "$ws_root/.contexture/drivers/$dname" ]; then
+    die 1 "driver name '$dname' already resolves in the workspace"
+  fi
+  for _md in "$ws_root"/.contexture/modules/*/drivers/"$dname"; do
+    [ -e "$_md" ] || continue
+    die 1 "driver name '$dname' already resolves in a module"
+  done
+  if [ -e "$ext_root/storage/drivers/$dname" ]; then
+    if record_has_prefix ".contexture/extensions/storage/drivers/$dname/"; then
+      :
+    elif other=$(other_has_prefix ".contexture/extensions/storage/drivers/$dname/"); then
+      die 1 "another package's driver: .contexture/extensions/storage/drivers/$dname (recorded by $other)"
+    else
+      die 1 "existing non-recorded file: .contexture/extensions/storage/drivers/$dname (uninstall or remove it first)"
+    fi
+  fi
+  if [ -f "$payload_root/storage/drivers/$dname" ]; then
+    [ -x "$payload_root/storage/drivers/$dname" ] || die 1 "driver '$dname' has no executable at storage/drivers/$dname"
+  else
+    [ -x "$payload_root/storage/drivers/$dname/driver" ] || die 1 "driver '$dname' has no executable at storage/drivers/$dname/driver"
+  fi
+done < "$scratch/drivers"
+
+: > "$scratch/ns_seen"
+while IFS= read -r mname; do
+  df=$payload_root/modules/$mname/data
+  [ -f "$df" ] || continue
+  ns=$(data_namespace "$df")
+  [ -n "$ns" ] || die 1 "module '$mname' declares no namespace in its data file"
+  if grep -Fqx "$ns" "$scratch/ns_seen" 2>/dev/null; then
+    die 1 "namespace '$ns' is declared by more than one module in this package"
+  fi
+  printf '%s\n' "$ns" >> "$scratch/ns_seen"
+  for _df in "$ws_root"/.contexture/modules/*/data "$ext_root"/modules/*/data; do
+    [ -f "$_df" ] || continue
+    _rel_ws=${_df#"$ws_root"/}
+    record_has "$_rel_ws" && continue
+    _ns=$(data_namespace "$_df")
+    [ -n "$_ns" ] || continue
+    [ "$_ns" = "$ns" ] || continue
+    _owner=${_df%/*}
+    _owner=${_owner##*/}
+    die 1 "namespace '$ns' is already declared by module '$_owner' ($_rel_ws)"
+  done
+done < "$scratch/modules"
+
+: > "$scratch/newpaths"
+while IFS= read -r rel; do
+  case "$rel" in
+    ""|/*) die 1 "malformed payload path '$rel'" ;;
+  esac
+  case "$rel" in
+    *[[:space:]]*|*[[:cntrl:]]*) die 1 "malformed payload path '$rel' (no blanks or control characters)" ;;
+  esac
+  case "/$rel/" in
+    */../*|*/./*) die 1 "malformed payload path '$rel' (no . or .. segment)" ;;
+    */.state/*) die 1 "the install record area is reserved: $rel" ;;
+  esac
+  rel_ws=.contexture/extensions/$rel
+  target=$ext_root/$rel
+  p=$target
+  while :; do
+    p=$(dirname "$p")
+    [ "$p" = "$ext_root" ] && break
+    [ "$p" = "$ws_root" ] && break
+    if [ -e "$p" ] && [ ! -d "$p" ]; then
+      die 1 "path conflict: ${p#"$ws_root"/} is not a directory"
+    fi
+  done
+  if [ -e "$target" ]; then
+    if [ -d "$target" ]; then
+      die 1 "path conflict: $rel_ws is a directory (the package installs a file there)"
+    fi
+    if record_has "$rel_ws"; then
+      :
+    elif other=$(other_has "$rel_ws"); then
+      die 1 "another package's file: $rel_ws (recorded by $other)"
+    else
+      die 1 "existing non-recorded file: $rel_ws (uninstall or remove it first)"
+    fi
+  fi
+  printf '%s\n' "$rel_ws" >> "$scratch/newpaths"
+done < "$scratch/files"
+
+version=""
+while IFS= read -r mname; do
+  mf=$payload_root/modules/$mname/module
+  [ -f "$mf" ] || continue
+  v=$("$ctx_bin" _module "$mf" version 2>/dev/null) || v=""
+  if [ -n "$v" ]; then
+    version=$v
+    break
+  fi
+done < "$scratch/modules"
+
+mkdir -p "$state_root" || die 2 "cannot create .contexture/extensions/.state"
+stage=$state_root/.stage.$$
+rm -rf "$stage"
+mkdir -p "$stage" || die 2 "cannot create the install staging folder"
+
+: > "$scratch/plan"
+while IFS= read -r rel; do
+  mkdir -p "$stage/$(dirname "$rel")" || { rm -rf "$stage"; die 2 "cannot stage $rel"; }
+  cp -p "$payload_root/$rel" "$stage/$rel" || { rm -rf "$stage"; die 2 "cannot stage $rel"; }
+  m=$(mode_of "$stage/$rel")
+  c=$(cksum_of "$stage/$rel")
+  if [ -z "$m" ] || [ -z "$c" ]; then
+    rm -rf "$stage"
+    die 2 "cannot read the mode or checksum of $rel"
+  fi
+  printf '%s %s %s\n' "$rel" "$m" "$c" >> "$scratch/plan"
+done < "$scratch/files"
+
+: > "$scratch/stale"
+if [ "$have_record" -eq 1 ]; then
+  awk '$1 == "file" { print $4 }' "$state_file" | while IFS= read -r _p; do
+    grep -Fqx "$_p" "$scratch/newpaths" && continue
+    printf '%s\n' "$_p"
+  done > "$scratch/stale"
+fi
+: > "$scratch/stale_remove"
+: > "$scratch/stale_keep"
+while IFS= read -r _p; do
+  _t=$ws_root/$_p
+  [ -e "$_t" ] || continue
+  if [ -d "$_t" ] || [ ! -f "$_t" ]; then
+    printf '%s\n' "$_p" >> "$scratch/stale_keep"
+    continue
+  fi
+  _om=$(record_field "$_p" 2)
+  _oc=$(record_field "$_p" 3)
+  _cm=$(mode_of "$_t")
+  _cc=$(cksum_of "$_t")
+  if [ "$_cm" = "$_om" ] && [ "$_cc" = "$_oc" ]; then
+    printf '%s\n' "$_p" >> "$scratch/stale_remove"
+  else
+    printf '%s\n' "$_p" >> "$scratch/stale_keep"
+  fi
+done < "$scratch/stale"
+
+: > "$scratch/laws"
+while IFS= read -r mname; do
+  if grep -Fqx "modules/$mname/laws" "$scratch/files" 2>/dev/null; then
+    printf '.contexture/extensions/modules/%s/laws\n' "$mname" >> "$scratch/laws"
+  fi
+done < "$scratch/modules"
+
+added=0
+updated=0
+while read -r rel _m _c; do
+  if record_has ".contexture/extensions/$rel"; then
+    updated=$((updated + 1))
+  else
+    added=$((added + 1))
+  fi
+done < "$scratch/plan"
+stale_removed=$(grep -c . "$scratch/stale_remove" 2>/dev/null || true)
+stale_kept=$(grep -c . "$scratch/stale_keep" 2>/dev/null || true)
+[ -n "$stale_removed" ] || stale_removed=0
+[ -n "$stale_kept" ] || stale_kept=0
+
+record_phase=0
+rollback() {
+  _rb=$1
+  if [ -f "$scratch/moved" ]; then
+    while IFS= read -r _t; do
+      _p=${_t#"$ws_root"/}
+      if [ -f "$stage/.backup/$_p" ]; then
+        mv -f "$stage/.backup/$_p" "$_t" 2>/dev/null
+      else
+        rm -f "$_t" 2>/dev/null
+      fi
+    done < "$scratch/moved"
+  fi
+  if [ -f "$scratch/removed" ]; then
+    while IFS= read -r _t; do
+      _p=${_t#"$ws_root"/}
+      [ -f "$stage/.backup/$_p" ] && mv -f "$stage/.backup/$_p" "$_t" 2>/dev/null
+    done < "$scratch/removed"
+  fi
+  if [ "$record_phase" -eq 1 ]; then
+    if [ -f "$stage/.backup/.record" ]; then
+      mv -f "$stage/.backup/.record" "$state_file" 2>/dev/null
+    else
+      rm -f "$state_file" 2>/dev/null
+    fi
+  fi
+  rm -rf "$stage" 2>/dev/null
+  die 2 "$_rb"
+}
+
+mkdir -p "$stage/.backup"
+: > "$scratch/moved"
+: > "$scratch/removed"
+while read -r rel _m _c; do
+  t=$ext_root/$rel
+  mkdir -p "$(dirname "$t")" || rollback "cannot create the directory for $rel"
+  if [ -e "$t" ]; then
+    mkdir -p "$stage/.backup/.contexture/extensions/$(dirname "$rel")" || rollback "cannot back up $rel"
+    cp -p "$t" "$stage/.backup/.contexture/extensions/$rel" || rollback "cannot back up $rel"
+  fi
+  mv -f "$stage/$rel" "$t" || rollback "cannot install $rel"
+  printf '%s\n' "$t" >> "$scratch/moved"
+done < "$scratch/plan"
+while IFS= read -r _p; do
+  _t=$ws_root/$_p
+  mkdir -p "$stage/.backup/$(dirname "$_p")" || rollback "cannot back up $_p"
+  cp -p "$_t" "$stage/.backup/$_p" || rollback "cannot back up $_p"
+  rm -f "$_t" || rollback "cannot remove the stale file $_p"
+  printf '%s\n' "$_t" >> "$scratch/removed"
+done < "$scratch/stale_remove"
+
+if [ "$have_record" -eq 1 ]; then
+  cp -p "$state_file" "$stage/.backup/.record" || rollback "cannot back up the install record"
+fi
+record_phase=1
+{
+  printf 'package %s\n' "$pkg_name"
+  if [ -n "$version" ]; then
+    printf 'version %s\n' "$version"
+  fi
+  while read -r rel _m _c; do
+    printf 'file %s %s .contexture/extensions/%s\n' "$_m" "$_c" "$rel"
+  done < "$scratch/plan"
+  while IFS= read -r _p; do
+    awk -v p="$_p" '$1 == "file" && $4 == p { print; exit }' "$state_file"
+  done < "$scratch/stale_keep"
+  while IFS= read -r _law; do
+    printf 'law %s\n' "$_law"
+  done < "$scratch/laws"
+  while IFS= read -r _p; do
+    awk -v p="$_p" '$1 == "law" && $2 == p { print; exit }' "$state_file"
+  done < "$scratch/stale_keep"
+} > "$stage/.record" || rollback "cannot write the install record"
+mv -f "$stage/.record" "$state_file" || rollback "cannot write the install record"
+rm -rf "$stage"
+
+while IFS= read -r _p; do
+  printf 'package-install: preserved %s (changed since install; still recorded)\n' "$_p"
+done < "$scratch/stale_keep"
+
+while IFS= read -r mname; do
+  hook=$ext_root/modules/$mname/install
+  [ -f "$hook" ] || continue
+  ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=$pkg_root CTX_BIN=$ctx_bin sh "$hook" )
+  _hr=$?
+  [ "$_hr" -eq 0 ] || die 2 "the '$mname' module's install hook failed (rc $_hr); the overlay and its record are in place"
+done < "$scratch/modules"
+
+printf 'package-install: installed %s into .contexture/extensions (%s files: %s added, %s updated; %s stale removed, %s preserved)\n' \
+  "$pkg_name" "$((added + updated))" "$added" "$updated" "$stale_removed" "$stale_kept"
+exit 0

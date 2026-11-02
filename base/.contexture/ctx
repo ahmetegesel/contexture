@@ -17,8 +17,9 @@
 # "# version: <token>" (the installer's), and a "# description:" hash block
 # last (the compose's preamble); a "# requires:" line is reserved and refused.
 # The private reader ctx _module <file> validate|summary|version|description
-# is the one parser; discovery validates every manifest and skips a malformed
-# one with a warning. scripts/<verb> files are verbs named by file name,
+# is the one parser; ctx _reserved <name> answers the engine's reserved set
+# (rc0 reserved, rc1 not) for the package installer; discovery validates every
+# manifest and skips a malformed one with a warning. scripts/<verb> files are verbs named by file name,
 # marked by their own "# summary:" header, with repeatable "# usage:" and
 # "# help:" detail lines. A scripts file without a summary is private and
 # ignored. A module file without a summary warns and skips; a scripts/
@@ -294,7 +295,7 @@ scan_module_dirs() {
       bn=${d%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|.*|*[[:space:]]*|_hooks|_module)
+        ""|.*|*[[:space:]]*|_hooks|_module|_reserved)
           continue
           ;;
       esac
@@ -311,7 +312,7 @@ scan_module_dirs() {
       bn=${d%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|.*|*[[:space:]]*|_hooks|_module|session|run)
+        ""|.*|*[[:space:]]*|_hooks|_module|_reserved|session|run)
           continue
           ;;
       esac
@@ -342,7 +343,7 @@ module_names() {
       n=${d%/}
       n=${n##*/}
       case "$n" in
-        ""|.*|*[[:space:]]*|_hooks|_module)
+        ""|.*|*[[:space:]]*|_hooks|_module|_reserved)
           continue
           ;;
       esac
@@ -378,7 +379,7 @@ module_names() {
       n=${d%/}
       n=${n##*/}
       case "$n" in
-        ""|.*|*[[:space:]]*|_hooks|_module)
+        ""|.*|*[[:space:]]*|_hooks|_module|_reserved)
           continue
           ;;
       esac
@@ -701,7 +702,7 @@ run_body() {
         bn=${fd%/}
         bn=${bn##*/}
         case "$bn" in
-          ""|.*|*[[:space:]]*|run|_hooks|_module)
+          ""|.*|*[[:space:]]*|run|_hooks|_module|_reserved)
             continue
             ;;
         esac
@@ -718,7 +719,7 @@ run_body() {
         bn=${fd%/}
         bn=${bn##*/}
         case "$bn" in
-          ""|.*|*[[:space:]]*|_hooks|_module|session|run)
+          ""|.*|*[[:space:]]*|_hooks|_module|_reserved|session|run)
             continue
             ;;
         esac
@@ -1294,6 +1295,18 @@ case "$1" in
   _module)
     shift
     module_reader "$@"
+    ;;
+  _reserved)
+    shift
+    if [ $# -ne 1 ]; then
+      ctx_err "_reserved: usage: ctx _reserved <name>"
+      exit 1
+    fi
+    load_session_verbs
+    if is_reserved "$1"; then
+      exit 0
+    fi
+    exit 1
     ;;
 esac
 

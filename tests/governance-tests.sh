@@ -99,7 +99,7 @@ echo "== G2 payload path tables vs git ls-files =="
 decl_adoption=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/adoption.md" | head -n 1)
 decl_engine=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/the-engine.md" | head -n 1)
 a_eq "$decl_engine" "$decl_adoption" "payload declaration identical in adoption.md and the-engine.md"
-a_eq "$decl_adoption" 'base/.contexture/{ctx,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}' "payload declaration reads the shipped set"
+a_eq "$decl_adoption" 'base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}' "payload declaration reads the shipped set"
 if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   prefix=${decl_adoption%%\{*}
   inner=${decl_adoption#*\{}

@@ -69,13 +69,16 @@ A module that stores data through the generic module store ships a `data` file b
 
 A module may ship `install` and `uninstall` executables beside its manifest: optional part hooks that own the module's work beyond the file overlay. They are private files (no `# summary:`), not verbs, and the engine never runs them.
 
-The package installer owns the order, on the human's go:
+A package is the extension-root overlay: its source mirrors `.contexture/extensions/` (the module folders, the driver folders, the rhythms, the templates), and its root carries the `install` and `uninstall` entry scripts, the README, the tests, and its reference material (the seed and the root overlay fragments never install). The package's `install` execs the core's private `.contexture/package-install`; the order, on the human's go:
 
-1. overlay every package part into the install root;
-2. record the installed paths and modes under `.contexture/extensions/.state/<package>.files`;
-3. run every installed module folder's `install`, in module-name order, after the overlay and the record.
+1. refuse the collision classes before writing anything: a payload path outside `.contexture/extensions/`, a core path, an existing non-recorded file, a file another package recorded, a module name against a builtin (`session`, `run`, `lane`), a workspace module, or a reserved name, a driver name against the core `posix` driver or a driver that already resolves ahead of the extension root, a duplicate namespace, a malformed manifest, and a payload path that escapes or carries blanks;
+2. overlay every package part into `.contexture/extensions/`;
+3. record every installed path with its mode and checksum under `.contexture/extensions/.state/<package>.files`, plus a `law` line per installed law fragment (the compose's input) and the package and version lines;
+4. run every installed module folder's `install`, in module-name order, after the overlay and the record.
 
-The uninstall runs every module folder's `uninstall` before it removes the recorded overlay files. A hook runs with `CTX_ROOT`, `CTX_PACKAGE_ROOT`, and `CTX_BIN` exported and cwd at the workspace root; rc 0 is success, any other exit fails the install or uninstall, and a hook that cannot run (missing context, a refusal from its verbs) fails loudly rather than skipping. The module part hook is for the module's own data, never for the overlay: the docs module's install seeds the corpus conventions through `ctx docs write` only when the doc is absent (an upgrade never overwrites the corpus), and its uninstall leaves the store data alone, since the corpus is user data (remove a doc with `ctx docs remove`).
+A re-install of the package's recorded files is an update: changed files update, a file the new source drops is removed when unchanged and preserved (and kept recorded) when changed. An install into a read-only extension root refuses rc 2 and writes nothing; a collision refuses rc 1.
+
+The uninstall runs every installed module folder's `uninstall` before it removes the recorded overlay files, then removes the record. A file changed after install is preserved and reported, never removed. A hook runs with `CTX_ROOT`, `CTX_PACKAGE_ROOT`, and `CTX_BIN` exported and cwd at the workspace root; rc 0 is success, any other exit fails the install or uninstall, and a hook that cannot run (missing context, a refusal from its verbs) fails loudly rather than skipping. The module part hook is for the module's own data, never for the overlay: the docs module's install seeds the corpus conventions through `ctx docs write` only when the doc is absent (an upgrade never overwrites the corpus), and its uninstall leaves the store data alone, since the corpus is user data (remove a doc with `ctx docs remove`).
 
 ### Verb scripts
 

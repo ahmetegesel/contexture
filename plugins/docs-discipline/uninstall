@@ -1,0 +1,29 @@
+#!/bin/sh
+# uninstall this package from the workspace's extension root: the package
+# uninstaller runs the module part hooks, removes the recorded overlay files,
+# and preserves any file changed after install. Run it on the human's go at the
+# act.
+# Usage: uninstall [--help]
+set -u
+case "${1:-}" in
+  -h|--help)
+    printf 'usage: uninstall\n'
+    exit 0
+    ;;
+  "") ;;
+  *)
+    echo "uninstall: unexpected argument: $1" >&2
+    exit 1
+    ;;
+esac
+pkg=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd) || exit 2
+if [ -n "${CTX_ROOT:-}" ]; then
+  root=$(CDPATH= cd -- "$CTX_ROOT" 2>/dev/null && pwd) || { echo "uninstall: CTX_ROOT is not a directory: $CTX_ROOT" >&2; exit 2; }
+else
+  root=$(CDPATH= cd -- "$pkg/../.." 2>/dev/null && pwd) || { echo "uninstall: cannot locate the workspace root (set CTX_ROOT)" >&2; exit 2; }
+fi
+if [ ! -x "$root/.contexture/package-uninstall" ]; then
+  echo "uninstall: the package uninstaller is not at $root/.contexture/package-uninstall (adopt the base first)" >&2
+  exit 2
+fi
+exec "$root/.contexture/package-uninstall" "$pkg"

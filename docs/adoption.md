@@ -4,7 +4,7 @@ contexture is a convention, not a tool: one commit, any harness, no dependencies
 
 ## Adoption in one breath
 
-What lands is a small set of plain files: `AGENTS.md` at the root and the `.contexture/` drawer beside it. Nothing is installed: no dependency, no service, no runtime. The files are the system. The plugin catalog is an optional addition, copied from the same tag when a workspace wants one of its overlays (the manual path below shows the copy).
+What lands is a small set of plain files: `AGENTS.md` at the root and the `.contexture/` drawer beside it. Nothing is installed: no dependency, no service, no runtime. The files are the system. The plugin catalog is an optional addition, shipped with the same tag and installed into the extension root with the package installer when a workspace wants one of its overlays (the manual path below shows the install).
 
 Adoption is a procedure, not the convention. `.contexture/ONBOARDING.md` carries it, an agent runs it, and it is deleted when the adoption closes. What remains is the convention itself: the record and the process.
 
@@ -12,7 +12,7 @@ Either path ends the same way: name your first unit of work and the record start
 
 ## The fast path, agentic onboarding
 
-Point an agent at `.contexture/ONBOARDING.md`. It adopts the base alone, and the proposal phase gates twice: the agent stops and waits for you there. The plugin catalog is optional; the manual path below lands its reference copy, and each plugin's README carries its adoption.
+Point an agent at `.contexture/ONBOARDING.md`. It adopts the base alone, and the proposal phase gates twice: the agent stops and waits for you there. The plugin catalog is optional; the manual path below lands its reference copy, and each plugin's README carries its adoption through the package installer.
 
 1. ISOLATE: it creates a dedicated branch, never working on main, halts if the tree carries uncommitted changes, and bootstraps the adoption session. The record starts before the first edit, so the whole adoption history lands as it happens.
 2. ASSESS: it reads your instruction stack first and whole (the existing `AGENTS.md` and its derivations), then reads the base `AGENTS.md` and this project's README completely. It maps the convention's sections against your workspace one by one: what feeds each capability, what conflicts with it, what belongs there. Structure comes from listings; application code is out of scope; and it asks you what evidence cannot answer: resolutions, history, intent.
@@ -33,16 +33,18 @@ git archive <tag> base/ plugins/ | tar -x -C .adopt-contexture
 cp -R .adopt-contexture/base/. .
 cp -R .adopt-contexture/plugins .
 rm -rf .adopt-contexture
-chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
+chmod +x .contexture/ctx .contexture/package-install .contexture/package-uninstall .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* plugins/*/install plugins/*/uninstall 2>/dev/null || true
 ```
 
 `base/` mirrors the target tree, so its content copies into place: `AGENTS.md` lands at the root, the drawer alongside it; `plugins/` lands at the root as the catalog to install from. The copy carries a semantic version: MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections or features, PATCH fixes wording. The installed version is the header line of `AGENTS.md`.
 
-Then configure the choices the agent would have proposed: the gitignore posture for your topology, your overlays, and the harness symlinks. If no team rhythm emerged from your instruction stack, the starter-rhythms plugin is the starting set: copy its overlay into place and edit the copies freely.
+Then configure the choices the agent would have proposed: the gitignore posture for your topology, your overlays, and the harness symlinks. If no team rhythm emerged from your instruction stack, the starter-rhythms plugin is the starting set: install it on the human's go and edit the installed copies freely.
 
 ```
-cp plugins/starter-rhythms/.contexture/rhythms/*.md .contexture/rhythms/
+sh plugins/starter-rhythms/install
 ```
+
+A plugin install overlays only `.contexture/extensions/`, records every installed path and mode under `.contexture/extensions/.state/<package>.files`, refuses a collision (a path outside the extension root, a core path, an existing non-recorded file, another package's file, a module or driver name collision, a duplicate namespace), and runs the module part hooks after the record. A re-install of the recorded files is an update; `sh plugins/<name>/uninstall` removes the unchanged recorded files and preserves and reports a file changed after install.
 
 Then name the first unit of work; the agent bootstraps its folder and the record starts.
 
@@ -126,8 +128,8 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
-| catalog | `plugins/` | copied when wanted; shipped with every tag, never deleted at adoption close |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| catalog | `plugins/` | installed into the extension root when wanted; shipped with every tag, never deleted at adoption close |
 | workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/` | never touched |
 
 The synced set is derived, never declared: `base/` is the payload; `git archive <tag> base/` copies it, `git ls-tree` enumerates it, and a `cmp` per file verifies it. No manifest exists to drift; the tag's index is the declaration. Overlays are never in `base/`, and they survive every sync untouched. `.contexture/ONBOARDING.md` rides the payload as adoption material: used once, deleted at close, redelivered by a later apply and deleted again.

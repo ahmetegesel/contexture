@@ -592,8 +592,10 @@ plugins/             the tracked catalog of packaged overlays: copied into a wor
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
   templates/         the grammars every artifact fills
   ctx                the runtime: discovery, help assembly, dispatch, the run engine, and hooks
+  package-install    the package overlay installer: overlays a package's .contexture/extensions tree, records it, runs the part hooks
+  package-uninstall  the package overlay remover: runs the part hooks, removes the recorded files, preserves a changed file
   modules/           session (the record engine), run (stream filters), and workspace additions
-  extensions/        the package overlay root: modules/ (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms, templates/ for package grammars
+  extensions/        the package overlay root: modules/ (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms, templates/ for package grammars, .state/ for the installed-path records
   rhythms/           your process patterns
   sessions/          the units of work
   tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand; each verb stages under its own root, removed on return and swept by the next dispatch after a kill)
@@ -607,7 +609,7 @@ Placement follows the class of the file, never convenience:
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
 | live workspace | the untracked root: `AGENTS.md`, `.contexture/` (sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 

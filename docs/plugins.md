@@ -1,22 +1,26 @@
 # Plugins: packaged extensions
 
-A plugin is a packaged, optional extension for a workspace. Modules are the mechanism (the authoring contract lives in `docs/modules.md`); a plugin is the packaged unit: the exact drawer overlay a workspace copies, plus the material that explains and tests it. The core stays zero-dependency: a plugin declares its own needs and brings nothing the base must install.
+A plugin is a packaged, optional extension for a workspace. Modules are the mechanism (the authoring contract lives in `docs/modules.md`); a plugin is the packaged unit: the exact extension-root overlay a workspace installs, plus the material that explains and tests it. The core stays zero-dependency: a plugin declares its own needs and brings nothing the base must install.
 
 ## Anatomy
 
 ```text
 plugins/<name>/
-  .contexture/          the overlay: the drawer subtree the plugin contributes
-    modules/<name>/     the standard module folder: manifest, laws, data, part hooks, verbs, hooks, filters
-    rhythms/            rhythm files
-    templates/          grammar templates
-    ...                 any drawer path
-  AGENTS.workspace.md   root-overlay fragments, when the plugin adds laws or layout
-  README.md             plugin-meta: adoption, the plugin's needs, contribution
-  tests/                plugin-meta: the plugin's own suite, never copied
+  .contexture/
+    extensions/          the overlay: the extension-root tree the package installs
+      modules/<name>/    a standard module folder: manifest, laws, data, part hooks, verbs, hooks, filters
+      storage/drivers/<name>/  a storage driver (the driver kind)
+      rhythms/           rhythm files
+      templates/         grammar templates
+  install                the package installer entry (overlays this tree into .contexture/extensions)
+  uninstall              the package remover (runs the part hooks, removes the recorded files)
+  README.md              plugin-meta: adoption, the plugin's needs, contribution
+  tests/                 plugin-meta: the plugin's own suite, never installed
+  AGENTS.workspace.md    root fragments and seeds: reference material, never installed
+  docs/workspace/...     the corpus seed: reference material, applied with ctx docs write
 ```
 
-The plugin root mirrors the target tree: everything except `README.md` and `tests/` lands in a workspace at the same relative path it has here. Adoption copies the `.contexture/` subtree as-is, merges the root fragments where the target already carries such files, and merges gitignore lines where the target denies by default.
+The plugin root mirrors the extension root: `.contexture/extensions/` installs at the same relative path it has here. Every other path is package meta or reference material: the README, the tests, the `install` and `uninstall` scripts, the seed, and the root overlay fragments never install. The root fragments' laws belong in the module's `laws` file, which the compose reads; the seed is applied with `ctx docs write`.
 
 ## Naming
 
@@ -25,13 +29,15 @@ A plugin's name says what it offers, and adopters address it as "the <name> plug
 ## Adopt
 
 1. Read the plugin's `README.md` whole: it carries the adoption flow, the plugin's needs, and the verification walk.
-2. Copy the mirrored tree into the workspace: the `.contexture/` subtree lands as-is; root fragments (`AGENTS.workspace.md`) merge into the workspace overlay; gitignore lines merge where the target denies by default.
-3. Declare the plugin's needs: install nothing the README does not name; a plugin's dependencies are its own, never the core's.
-4. Run the README's verification walk before any real work depends on the plugin.
+2. Ensure the base is adopted; its `.contexture/package-install` and `.contexture/package-uninstall` do the work.
+3. On the human's go at the act, run the package's install from the workspace root: `sh plugins/<name>/install`. It overlays only `.contexture/extensions/`, records every installed path and its mode under `.contexture/extensions/.state/<name>.files` (with the law fragments the compose reads), refuses the collision classes, and runs the installed module folders' `install` part hooks after the record. A re-install of the recorded files is an update.
+4. Apply the reference material by hand: the seed goes in through `ctx docs write`; the root overlay fragments' laws live in the module's `laws` file.
+5. Declare the plugin's needs: install nothing the README does not name; a plugin's dependencies are its own, never the core's.
+6. Run the README's verification walk before any real work depends on the plugin.
 
-The plugin's `tests/` folder never lands in a workspace: tests live with the plugin, at the plugin root.
+The plugin's `tests/` folder never lands in a workspace: tests live with the plugin, at the plugin root. Uninstall with `sh plugins/<name>/uninstall`: it runs the module `uninstall` part hooks, removes the unchanged recorded files, preserves and reports a file changed after install, and removes the record.
 
-A plugin installs into an existing setup the same way: the mirrored tree copies into any workspace, whenever it wants the overlay, adopted already or not.
+A plugin installs into an existing setup the same way: the extension-root overlay installs into any adopted workspace, whenever it wants it.
 
 ## The test convention
 

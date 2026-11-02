@@ -1,0 +1,130 @@
+#!/bin/sh
+# package-uninstall: the package overlay remover (a private core script, never a
+# verb; the package's own uninstall script execs it). Run it on the human's go
+# at the act. Usage: package-uninstall <package-root|package-name>; CTX_ROOT
+# names the workspace (default: the package root's ../.., or the current
+# directory for a bare package name).
+#
+# The uninstall runs the installed module folders' uninstall part hooks in
+# module-name order, then removes the overlay files the package's record
+# (.contexture/extensions/.state/<package>.files) lists, removes the empty
+# directories they leave, and removes the record. A file changed after install
+# (content, mode, type, or one already gone) is preserved and reported, never
+# removed; the record is removed all the same, so a later install refuses the
+# preserved path as an existing non-recorded file. The core is never touched.
+# Exit codes: 0 removed; 1 a refusal (no record); 2 an environment or I/O
+# failure (a read-only root removes nothing; a failing part hook removes
+# nothing).
+set -u
+
+err() { printf 'package-uninstall: %s\n' "$*" >&2; }
+die() { _die_rc=$1; shift; err "$*"; exit "$_die_rc"; }
+
+mode_of() { ls -ld "$1" 2>/dev/null | awk '{print $1}' | cut -c2-10; }
+cksum_of() { cksum < "$1" 2>/dev/null | awk '{print $1 ":" $2}'; }
+
+[ $# -eq 1 ] || { err "usage: package-uninstall <package-root|package-name>"; exit 1; }
+pkg_root=""
+if [ -d "$1" ]; then
+  pkg_root=$(CDPATH= cd -- "$1" 2>/dev/null && pwd) || die 2 "cannot resolve $1"
+  pkg_name=${pkg_root##*/}
+else
+  pkg_name=$1
+fi
+case "$pkg_name" in
+  ""|.*) die 1 "malformed package name '$pkg_name' (letters, digits, dot, underscore, hyphen; not starting with a dot)" ;;
+esac
+case "$pkg_name" in
+  *[!A-Za-z0-9._-]*) die 1 "malformed package name '$pkg_name' (letters, digits, dot, underscore, hyphen; not starting with a dot)" ;;
+esac
+
+if [ -n "${CTX_ROOT:-}" ]; then
+  [ -d "$CTX_ROOT" ] || die 2 "CTX_ROOT names no directory: $CTX_ROOT"
+  ws_root=$(CDPATH= cd -- "$CTX_ROOT" 2>/dev/null && pwd) || die 2 "cannot resolve CTX_ROOT"
+elif [ -n "$pkg_root" ]; then
+  ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run plugins/<package>/uninstall or set CTX_ROOT)"
+else
+  ws_root=$(pwd) || die 2 "cannot resolve the workspace root"
+fi
+ctx_bin=$ws_root/.contexture/ctx
+[ -x "$ctx_bin" ] || die 2 "no engine at $ctx_bin (adopt the base first)"
+ext_root=$ws_root/.contexture/extensions
+state_root=$ext_root/.state
+state_file=$state_root/$pkg_name.files
+
+[ -f "$state_file" ] || die 1 "package '$pkg_name' is not installed (no record at .contexture/extensions/.state/$pkg_name.files)"
+[ -w "$state_root" ] && [ -x "$state_root" ] || die 2 "the install record area is not writable: .contexture/extensions/.state (nothing removed)"
+[ -w "$ext_root" ] && [ -x "$ext_root" ] || die 2 "the extension root is not writable: .contexture/extensions (nothing removed)"
+
+tmp_base=${TMPDIR:-/tmp}
+if mkdir -p "$ws_root/.contexture/tmp" 2>/dev/null && [ -d "$ws_root/.contexture/tmp" ] && [ -w "$ws_root/.contexture/tmp" ]; then
+  tmp_base=$ws_root/.contexture/tmp
+fi
+scratch=$(mktemp -d "$tmp_base/pkg-uninstall.XXXXXX") || die 2 "cannot create a scratch folder"
+trap 'rm -rf "$scratch"' EXIT
+trap 'rm -rf "$scratch"; exit 130' INT
+trap 'rm -rf "$scratch"; exit 143' TERM
+
+awk '$1 == "file" {
+  p = $4
+  n = split(p, a, "/")
+  if (n == 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && a[5] == "uninstall")
+    print a[4]
+}' "$state_file" | LC_ALL=C sort -u > "$scratch/hooks"
+
+while IFS= read -r mname; do
+  [ -n "$mname" ] || continue
+  hook=$ext_root/modules/$mname/uninstall
+  [ -f "$hook" ] || continue
+  ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=${pkg_root:-} CTX_BIN=$ctx_bin sh "$hook" )
+  _hr=$?
+  [ "$_hr" -eq 0 ] || die 2 "the '$mname' module's uninstall hook failed (rc $_hr); nothing removed"
+done < "$scratch/hooks"
+
+removed=0
+preserved=0
+absent=0
+: > "$scratch/dirs"
+while read -r kind a b c; do
+  [ "$kind" = file ] || continue
+  rm_mode=$a
+  rm_crc=$b
+  rm_path=$c
+  target=$ws_root/$rm_path
+  if [ ! -e "$target" ]; then
+    absent=$((absent + 1))
+    continue
+  fi
+  if [ -d "$target" ] || [ ! -f "$target" ]; then
+    printf 'package-uninstall: preserved %s (changed since install: no longer a file)\n' "$rm_path"
+    preserved=$((preserved + 1))
+    continue
+  fi
+  cm=$(mode_of "$target")
+  cc=$(cksum_of "$target")
+  if [ "$cm" != "$rm_mode" ] || [ "$cc" != "$rm_crc" ]; then
+    printf 'package-uninstall: preserved %s (changed since install)\n' "$rm_path"
+    preserved=$((preserved + 1))
+    continue
+  fi
+  rm -f "$target" || die 2 "cannot remove $rm_path"
+  dirname "$target" >> "$scratch/dirs"
+  removed=$((removed + 1))
+done < "$state_file"
+
+if [ -s "$scratch/dirs" ]; then
+  LC_ALL=C sort -ru "$scratch/dirs" | while IFS= read -r _d; do
+    dd=$_d
+    while [ -n "$dd" ] && [ "$dd" != "/" ] && [ "$dd" != "$ext_root" ]; do
+      rmdir "$dd" 2>/dev/null || break
+      dd=$(dirname "$dd")
+    done
+  done
+fi
+
+rm -f "$state_file" || die 2 "cannot remove the install record"
+rmdir "$state_root" 2>/dev/null || true
+
+printf 'package-uninstall: removed %s from .contexture/extensions (%s removed, %s preserved, %s already absent)\n' \
+  "$pkg_name" "$removed" "$preserved" "$absent"
+exit 0
