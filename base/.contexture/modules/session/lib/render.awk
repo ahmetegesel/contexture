@@ -722,10 +722,12 @@ function v_lane_journal(   n, i, t, o) {
 
 # ------------------------------------------------------------------------------
 # diagnose (changed): the descriptor as lines; the base lines arrive in the environment
-function v_diagnose(   m) {
+function v_diagnose(   m, s) {
   m = list_join("search_modes", ", ")
+  s = list_join("store", ", ")
   printf "  contract:        %s (%s %s)\n", sv("contract"), sv("driver"), sv("version")
   printf "  functions:       %d declared\n", nn("functions")
+  printf "  store:           %d declared (%s)\n", nn("store"), (s == "" ? "none" : s)
   printf "  search modes:    %s\n", (m == "" ? "none" : m)
   m = list_join("optional", ", ")
   printf "  optional:        %s\n", (m == "" ? "none" : m)

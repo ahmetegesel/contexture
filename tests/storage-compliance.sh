@@ -1054,8 +1054,8 @@ tc "TC39: --mode=exact answers one row per matching entity and section, the same
 # alike on every driver: require and has answer the optional capabilities and the search
 # modes (search.mode.<m>), their verdict cached per driver path and capability set apart
 # from the dispatch verdict; the dispatch handshake refuses a descriptor that is not
-# contract 2 or lacks one of the 38 functions (a driver without store serves the
-# record)
+# contract 2, lacks one of the 38 functions or carries a function outside them, or breaks
+# the store family's agreement (a driver without store serves the record)
 printf '\n== Suite 12: The Resolver ==\n'
 RS="$SANDBOX/rs"
 mkdir -p "$RS/.contexture/modules"
@@ -1065,9 +1065,13 @@ chmod +x "$RS/.contexture/storage/scripts/"* "$RS/.contexture/storage/drivers/po
 RSV="$RS/.contexture/modules/session/scripts/driver-resolver"
 FUNCS_JSON=$(printf '"%s",' $FUNCS38 | sed 's/,$//')
 FUNCS_NO_TASK_ADD=$(printf '"%s",' $FUNCS38 | sed 's/"task\.add",//; s/,$//')
-# wrap <file> <optional list items> [<functions list>] [<contract>]
+FUNCS_STORE_EXTRA=$(printf '"%s",' $FUNCS38 "store.list" | sed 's/,$//')
+STORE_JSON=$(printf '"%s",' list get put delete changes batch scan | sed 's/,$//')
+STORE_NO_BATCH=$(printf '"%s",' list get put delete changes scan | sed 's/,$//')
+STORE_EXTRA=$(printf '"%s",' list get put delete changes batch scan store.search | sed 's/,$//')
+# wrap <file> <optional list items> [<functions list>] [<contract>] [<store list>]
 wrap() {
-  w_desc="{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"${4:-2}\",\"functions\":[${3:-$FUNCS_JSON}],\"search_modes\":[\"exact\"],\"optional\":[$2]}"
+  w_desc="{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"${4:-2}\",\"functions\":[${3:-$FUNCS_JSON}],\"store\":[${5:-}],\"search_modes\":[\"exact\"],\"optional\":[$2]}"
   {
     printf '#!/bin/sh\n'
     printf 'if [ "${1:-}" = capability ]; then\n'
@@ -1083,10 +1087,22 @@ W_NO="$RS/w-nostore"
 W_YES="$RS/w-store"
 W_BAD="$RS/w-broken"
 W_V1="$RS/w-contract1"
+W_TOKEN="$RS/w-storetoken"
+W_FAMILY="$RS/w-storefamily"
+W_NOBATCH="$RS/w-nobatch"
+W_EXTRA="$RS/w-storeextra"
+W_SCHEMA="$RS/w-schema"
+W_FNEXTRA="$RS/w-fnextra"
 wrap "$W_NO" ""
-wrap "$W_YES" '"store"'
+wrap "$W_YES" '"store"' "" "" "$STORE_JSON"
 wrap "$W_BAD" "" "$FUNCS_NO_TASK_ADD"
 wrap "$W_V1" "" "" 1
+wrap "$W_TOKEN" '"store"'
+wrap "$W_FAMILY" '"store.changelog"' "" "" "$STORE_JSON"
+wrap "$W_NOBATCH" '"store"' "" "" "$STORE_NO_BATCH"
+wrap "$W_EXTRA" '"store"' "" "" "$STORE_EXTRA"
+wrap "$W_SCHEMA" '"search.schema"'
+wrap "$W_FNEXTRA" "" "$FUNCS_STORE_EXTRA"
 rsv() { (cd "$RS" && unset CTX_DIR CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH && CTX_ROOT="$RS" "$RSV" "$@"); }
 # rcall <resolver args>: one resolver call with the pending payload, answer flattened
 rcall() {
@@ -1113,6 +1129,13 @@ if [ -s "$O" ] || [ -s "$E" ]; then miss "require printed [$(cat "$O" "$E")]"; f
 rcall "--driver=$W_YES" has store
 wantrc "$RC" 0
 if [ -s "$O" ] || [ -s "$E" ]; then miss "has printed [$(cat "$O" "$E")]"; fi
+# the store array implies the store token: a family without the optional store answers
+rcall "--driver=$W_FAMILY" require store
+wantrc "$RC" 0
+rcall "--driver=$W_FAMILY" has store
+wantrc "$RC" 0
+rcall "--driver=$W_FAMILY" require store.changelog
+wantrc "$RC" 0
 rcall "--driver=$W_YES" require store store.changelog
 wantrc "$RC" 2
 grep -q 'store.changelog' "$E" || miss "require names no store.changelog"; if grep -q 'store ' "$E"; then miss "require named store"; fi
@@ -1170,8 +1193,11 @@ rm -f c-disp.txt
 tc "TC48: the require verdict is cached per driver path and capability set, apart from the dispatch verdict"
 
 # TC49: the dispatch handshake: a contract 2 descriptor with all 38 functions and no
-# store serves the record through the resolver; a descriptor lacking task.add or
-# declaring contract 1 is halted rc2 ERR_DRIVER_PROTOCOL naming the gap, serving nothing
+# store serves the record through the resolver, and so does a store family without the
+# optional store token; a descriptor lacking task.add or declaring contract 1 is halted
+# rc2 ERR_DRIVER_PROTOCOL naming the gap, and so are the split violations: a function
+# outside the 38, a store token without the family, a search.schema or store.changelog
+# token without it, and a store array that is not the seven in the fixed order
 kv objective "served"; kv attention "resolver fixture"
 rcall "--driver=$W_NO" session.create rs-unit
 answer; wantv unit '"rs-unit"'; wantv state.status '"ACTIVE"'
@@ -1186,7 +1212,19 @@ rcall "--driver=$W_BAD" session.list
 wantrc "$RC" 2; grep -q 'task.add' "$E" || miss "the halt names no task.add"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the halt names no ERR_DRIVER_PROTOCOL"; wantno 'rs-unit'
 rcall "--driver=$W_V1" session.list
 wantrc "$RC" 2; grep -q 'contract' "$E" || miss "the halt names no contract"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the halt names no ERR_DRIVER_PROTOCOL"; wantno 'rs-unit'
-tc "TC49: the handshake serves a complete contract 2 driver and halts a missing function or contract"
+rcall "--driver=$W_FNEXTRA" session.list
+wantrc "$RC" 2; grep -q 'outside the 38' "$E" || miss "the halt names no function outside the 38"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the outside-function halt names no ERR_DRIVER_PROTOCOL"
+rcall "--driver=$W_TOKEN" session.list
+wantrc "$RC" 2; grep -q 'store token without the store family' "$E" || miss "the halt names no store token without the family"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the token halt names no ERR_DRIVER_PROTOCOL"
+rcall "--driver=$W_SCHEMA" session.list
+wantrc "$RC" 2; grep -q 'store-derived capability' "$E" || miss "the halt names no store-derived capability"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the schema halt names no ERR_DRIVER_PROTOCOL"
+rcall "--driver=$W_NOBATCH" session.list
+wantrc "$RC" 2; grep -q 'store family' "$E" || miss "the halt names no store family"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the partial-family halt names no ERR_DRIVER_PROTOCOL"
+rcall "--driver=$W_EXTRA" session.list
+wantrc "$RC" 2; grep -q 'store family' "$E" || miss "the halt names no store family"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the outside-name halt names no ERR_DRIVER_PROTOCOL"
+rcall "--driver=$W_FAMILY" session.list
+wantrc "$RC" 0; answer; wantvals units unit '"rs-unit"'
+tc "TC49: the handshake serves the record-only and family-only drivers and halts the split violations"
 
 # ==============================================================================
 # Suite 13: Record Rules (8 test cases)
@@ -1632,81 +1670,84 @@ done < "$FX/tc69-exact.answers"
 tc "TC69: the exact query set over legacy text answers its fixed results under --mode=exact"
 fi
 
-# TC70: the descriptor declares contract 2, every one of the 38 record functions, exact
-# among the search modes, and only the final function families and optional capabilities:
-# the 38 record plus the seven store data functions (list, get, put, delete, changes,
-# batch, scan) and the store search, with store, and store.changelog where the driver
-# keeps a change log, and search.schema where the driver consumes a declared search
-# schema. Each family is all or none, and a capability token and its functions imply each
-# other. A driver without the store still serves the record.
-# Planted descriptors prove the checker discriminates (the final set passes, a store
-# capability without its functions fails, the store functions without their token fail, a
-# family missing batch fails, a search.schema without the store search fails, and a
-# transitional corpus family reads red).
-STORE7="store.list store.get store.put store.delete store.changes store.batch store.scan"
-STORESEARCH="store.search"
+# TC70: the descriptor declares contract 2 at driver version 3.0.0 with the split
+# families: functions exactly the 38 record names, store exactly the seven data names in
+# the fixed order (list, get, put, delete, changes, batch, scan, unprefixed), search_modes
+# with exact, and only the final optional capabilities (store, store.changelog where the
+# driver keeps a change log, search.schema where the driver consumes a declared search
+# schema). The store family is all or none and implies the store token; a store token
+# without the family, a search.schema or store.changelog without it, a store name outside
+# the seven, a family out of order, and a function outside the 38 all read red. A driver
+# with no store array and no store token still serves the record.
+STORE7=" list get put delete changes batch scan "
 t70_load() { printf '%s\n' "$1" > "$O"; awk -f "$JF" "$O" > "$F" 2>/dev/null; }
 t70_issues() {
   _i=""
   _fns=" $(vals functions | tr -d '"') "
+  _store=" $(vals store | tr -d '"') "
   _opt=" $(vals optional | tr -d '"') "
   for _f in $FUNCS38; do
     case "$_fns" in *" $_f "*) ;; *) _i="$_i; functions lacks $_f" ;; esac
   done
   for _f in $_fns; do
-    case " $FUNCS38 $STORE7 $STORESEARCH " in *" $_f "*) ;; *) _i="$_i; functions declares $_f, outside contract 2" ;; esac
+    case " $FUNCS38 " in *" $_f "*) ;; *) _i="$_i; functions declares $_f, outside the 38 record functions" ;; esac
   done
-  _store=0
-  for _f in $STORE7 $STORESEARCH; do case "$_fns" in *" $_f "*) _store=1 ;; esac; done
-  if [ "$_store" -eq 1 ]; then
-    for _f in $STORE7 $STORESEARCH; do
-      case "$_fns" in *" $_f "*) ;; *) _i="$_i; the store family is partial, missing $_f" ;; esac
-    done
-    case "$_opt" in *" store "*) ;; *) _i="$_i; optional lacks store while the store functions are declared" ;; esac
-  else
-    case "$_opt" in *" store "*) _i="$_i; optional declares store while the store functions are missing" ;; esac
+  _has_store=0
+  if [ "$_store" != "  " ]; then
+    _has_store=1
+    [ "$_store" = "$STORE7" ] || _i="$_i; the store family is not the seven in the fixed order"
   fi
   for _f in $_opt; do
     case "$_f" in store|store.changelog|search.schema) ;; *) _i="$_i; optional declares $_f" ;; esac
   done
-  case "$_opt" in *" store.changelog "*) [ "$_store" -eq 1 ] || _i="$_i; optional declares store.changelog without the store functions" ;; esac
-  case "$_opt" in *" search.schema "*) case "$_fns" in *" $STORESEARCH "*) ;; *) _i="$_i; optional declares search.schema without the store search" ;; esac ;; esac
+  if [ "$_has_store" -eq 0 ]; then
+    case "$_opt" in *" store "*) _i="$_i; optional declares store without the store family" ;; esac
+    case "$_opt" in *" store.changelog "*|*" search.schema "*) _i="$_i; optional declares a store-derived capability without the store family" ;; esac
+  fi
   printf '%s' "$_i"
 }
 call capability
-answer; wantkeys @ "driver,version,contract,functions,search_modes,optional"; wantv contract '"2"'
-case "$(jv version)" in '"'[0-9]*.[0-9]*.[0-9]*'"') ;; *) miss "version [$(jv version)]" ;; esac
+answer; wantkeys @ "driver,version,contract,functions,store,search_modes,optional"; wantv contract '"2"'
+[ "$(jv version)" = '"3.0.0"' ] || miss "version [$(jv version)] want [\"3.0.0\"]"
 case "$(jv driver)" in '""'|'') miss "the descriptor names no driver" ;; esac
 case " $(vals search_modes) " in *' "exact" '*) ;; *) miss "search_modes lacks exact [$(vals search_modes)]" ;; esac
 _t70=$(t70_issues); [ -z "$_t70" ] || miss "descriptor:$_t70"
-# the final set (38 record + 7 store + the store search, store and store.changelog and
-# search.schema) is the only set allowed
-_t70_final=$(printf '"%s",' $FUNCS38 $STORE7 $STORESEARCH | sed 's/,$//')
-t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"search_modes\":[\"exact\"],\"optional\":[\"store\",\"store.changelog\",\"search.schema\"]}"
-_t70=$(t70_issues); [ -z "$_t70" ] || miss "the final 38 + 7 + search set refused:$_t70"
-# a function outside the final families reads red
-_t70_extra=$(printf '"%s",' $FUNCS38 $STORE7 $STORESEARCH "retired.method" | sed 's/,$//')
-t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_extra],\"search_modes\":[\"exact\"],\"optional\":[\"store\"]}"
-_t70=$(t70_issues); case "$_t70" in *"outside contract 2"*) ;; *) miss "a function outside the final families passed [$_t70]" ;; esac
-# a record-only driver (38 functions, no optional capability) still serves the record
-t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$FUNCS_JSON],\"search_modes\":[\"exact\"],\"optional\":[]}"
+# the final set (functions 38, store the seven, store and store.changelog and
+# search.schema) passes
+_t70_final=$(printf '"%s",' $FUNCS38 | sed 's/,$//')
+t70_load "{\"driver\":\"planted\",\"version\":\"3.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[\"list\",\"get\",\"put\",\"delete\",\"changes\",\"batch\",\"scan\"],\"search_modes\":[\"exact\"],\"optional\":[\"store\",\"store.changelog\",\"search.schema\"]}"
+_t70=$(t70_issues); [ -z "$_t70" ] || miss "the final 38 + seven set refused:$_t70"
+# the store array implies the store token: the family with no store token passes
+t70_load "{\"driver\":\"planted\",\"version\":\"3.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[\"list\",\"get\",\"put\",\"delete\",\"changes\",\"batch\",\"scan\"],\"search_modes\":[\"exact\"],\"optional\":[\"store.changelog\"]}"
+_t70=$(t70_issues); [ -z "$_t70" ] || miss "the family without the store token refused:$_t70"
+# a function outside the 38 reads red, a store name in functions included
+_t70_extra=$(printf '"%s",' $FUNCS38 "retired.method" | sed 's/,$//')
+t70_load "{\"driver\":\"planted\",\"version\":\"3.0.0\",\"contract\":\"2\",\"functions\":[$_t70_extra],\"store\":[],\"search_modes\":[\"exact\"],\"optional\":[]}"
+_t70=$(t70_issues); case "$_t70" in *"outside the 38"*) ;; *) miss "a function outside the 38 passed [$_t70]" ;; esac
+_t70_stfn=$(printf '"%s",' $FUNCS38 "store.list" | sed 's/,$//')
+t70_load "{\"driver\":\"planted\",\"version\":\"3.0.0\",\"contract\":\"2\",\"functions\":[$_t70_stfn],\"store\":[],\"search_modes\":[\"exact\"],\"optional\":[]}"
+_t70=$(t70_issues); case "$_t70" in *"outside the 38"*) ;; *) miss "a store function in functions passed [$_t70]" ;; esac
+# a record-only driver (38 functions, no store array, no token) still serves the record
+t70_load "{\"driver\":\"planted\",\"version\":\"2.5.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[],\"search_modes\":[\"exact\"],\"optional\":[]}"
 _t70=$(t70_issues); [ -z "$_t70" ] || miss "a record-only driver refused:$_t70"
-# a store token without its functions, the functions without their token, a family
-# missing batch, and a search.schema without the store search read red
-_t70_nostore=$(printf '"%s",' $FUNCS38 $STORE7 $STORESEARCH | sed 's/"store\.list",//; s/,$//')
-t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_nostore],\"search_modes\":[\"exact\"],\"optional\":[\"store\"]}"
-_t70=$(t70_issues); case "$_t70" in *"missing store.list"*) ;; *) miss "a store token without store.list passed [$_t70]" ;; esac
-t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"search_modes\":[\"exact\"],\"optional\":[\"store.changelog\"]}"
-_t70=$(t70_issues); case "$_t70" in *"optional lacks store"*) ;; *) miss "store functions without the store token passed [$_t70]" ;; esac
-_t70_nobatch=$(printf '"%s",' $FUNCS38 $STORE7 $STORESEARCH | sed 's/"store\.batch",//; s/,$//')
-t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_nobatch],\"search_modes\":[\"exact\"],\"optional\":[\"store\"]}"
-_t70=$(t70_issues); case "$_t70" in *"missing store.batch"*) ;; *) miss "a store family without store.batch passed [$_t70]" ;; esac
-_t70_nosearch=$(printf '"%s",' $FUNCS38 $STORE7 | sed 's/,$//')
-t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_nosearch],\"search_modes\":[\"exact\"],\"optional\":[\"store\",\"search.schema\"]}"
-_t70=$(t70_issues); case "$_t70" in *"missing store.search"*) ;; *) miss "a store family without store.search passed [$_t70]" ;; esac
-t70_load "{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"search_modes\":[\"exact\"],\"optional\":[\"store\",\"search.schema\"]}"
-_t70=$(t70_issues); [ -z "$_t70" ] || miss "the final set with search.schema refused:$_t70"
-tc "TC70: the descriptor declares contract 2 with the 38 record functions, exact search, and only the final 38 + 7 + search family"
+# a store token without the family reads red
+t70_load "{\"driver\":\"planted\",\"version\":\"2.5.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[],\"search_modes\":[\"exact\"],\"optional\":[\"store\"]}"
+_t70=$(t70_issues); case "$_t70" in *"store without the store family"*) ;; *) miss "a store token without the family passed [$_t70]" ;; esac
+# a family missing batch, a family out of order, and a name outside the seven read red
+t70_load "{\"driver\":\"planted\",\"version\":\"3.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[\"list\",\"get\",\"put\",\"delete\",\"changes\",\"scan\"],\"search_modes\":[\"exact\"],\"optional\":[\"store\"]}"
+_t70=$(t70_issues); case "$_t70" in *"not the seven"*) ;; *) miss "a family without batch passed [$_t70]" ;; esac
+t70_load "{\"driver\":\"planted\",\"version\":\"3.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[\"get\",\"list\",\"put\",\"delete\",\"changes\",\"batch\",\"scan\"],\"search_modes\":[\"exact\"],\"optional\":[\"store\"]}"
+_t70=$(t70_issues); case "$_t70" in *"not the seven"*) ;; *) miss "a family out of the fixed order passed [$_t70]" ;; esac
+t70_load "{\"driver\":\"planted\",\"version\":\"3.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[\"list\",\"get\",\"put\",\"delete\",\"changes\",\"batch\",\"scan\",\"store.search\"],\"search_modes\":[\"exact\"],\"optional\":[\"store\"]}"
+_t70=$(t70_issues); case "$_t70" in *"not the seven"*) ;; *) miss "a store name outside the seven passed [$_t70]" ;; esac
+# search.schema and store.changelog without the family read red
+t70_load "{\"driver\":\"planted\",\"version\":\"2.5.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[],\"search_modes\":[\"exact\"],\"optional\":[\"search.schema\"]}"
+_t70=$(t70_issues); case "$_t70" in *"store-derived capability"*) ;; *) miss "a search.schema without the family passed [$_t70]" ;; esac
+t70_load "{\"driver\":\"planted\",\"version\":\"2.5.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[],\"search_modes\":[\"exact\"],\"optional\":[\"store.changelog\"]}"
+_t70=$(t70_issues); case "$_t70" in *"store-derived capability"*) ;; *) miss "a store.changelog without the family passed [$_t70]" ;; esac
+t70_load "{\"driver\":\"planted\",\"version\":\"3.0.0\",\"contract\":\"2\",\"functions\":[$_t70_final],\"store\":[\"list\",\"get\",\"put\",\"delete\",\"changes\",\"batch\",\"scan\"],\"search_modes\":[\"exact\"],\"optional\":[\"store\",\"search.schema\"]}"
+_t70=$(t70_issues); [ -z "$_t70" ] || miss "the family with search.schema refused:$_t70"
+tc "TC70: the descriptor declares contract 2 at 3.0.0 with the 38 record functions and the seven store data names split as their own family"
 
 # TC71: lane.create refuses an existing lane with the recipe unchanged; a lane without a
 # report answers content null and its empty journal preamble "" with no item (a journal

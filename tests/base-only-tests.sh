@@ -292,28 +292,36 @@ a_rc "$?" "1" "record: a write into a CLOSED unit refuses rc1"
 $CTX session reopen baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: reopen rc0"
 $CTX session record baseonly --what="the unit writes again" >/dev/null 2>&1
 a_rc "$?" "0" "record: a write after reopen rc0"
-# the descriptor: 38 record plus 7 store functions and the store search, exact and store, no store log on posix
+# the descriptor: version 3.0.0 under contract 2, the 38 record functions apart from the
+# seven store data names, exact and store, no store log or search schema on posix
 out=$($CTX session diagnose --json 2>&1); rc=$?
 a_rc "$rc" "0" "descriptor: diagnose rc0"
 a_match "$out" '"name":"posix"' "descriptor: the driver is posix"
+a_match "$out" '"version":"3.0.0"' "descriptor: driver version 3.0.0"
 a_match "$out" '"contract":"2"' "descriptor: contract 2"
 a_match "$out" '"search_modes":\["exact"\]' "descriptor: search modes exact"
 a_match "$out" '"optional":\["store"\]' "descriptor: the optional set is store alone on posix"
 a_match "$out" '"health":"ok"' "descriptor: the health is ok after bootstrap"
 fn_list() { printf '%s' "$1" | sed -n 's/.*"functions":\[\([^]]*\)\].*/\1/p'; }
 fn_count() { fn_list "$1" | tr ',' '\n' | grep -c .; }
+store_list() { printf '%s' "$1" | sed -n 's/.*"store":\[\([^]]*\)\].*/\1/p'; }
 fns=$(fn_list "$out" | tr -d '"')
-a_eq "$(printf '%s\n' "$fns" | tr ',' '\n' | grep -c .)" "46" "descriptor: 46 functions (38 record plus 7 store plus the store search)"
-for f in task.add entry.record finding.get lane.create search.query store.list store.get store.put store.delete store.changes store.search; do
+a_eq "$(printf '%s\n' "$fns" | tr ',' '\n' | grep -c .)" "38" "descriptor: 38 record functions"
+a_eq "$(store_list "$out")" '"list","get","put","delete","changes","batch","scan"' "descriptor: the seven store data names in the fixed order"
+for f in task.add entry.record finding.get lane.create search.query; do
   case ",$fns," in
     *",$f,"*) ok "descriptor: carries $f" ;;
     *) bad "descriptor: lacks $f" ;;
   esac
 done
+case ",$fns," in
+  *",store."*) bad "descriptor: the record family carries a store function" ;;
+  *) ok "descriptor: the record family carries no store function" ;;
+esac
 plant_record=$(printf '%s' "$out" | sed 's/,"task.add"//')
-if [ "$(fn_count "$plant_record")" -ne 44 ]; then ok "descriptor null check: a planted missing record function fails the 44-function check"; else bad "descriptor null check: a planted missing record function passed"; fi
-plant_store=$(printf '%s' "$out" | sed 's/,"store.put"//')
-if [ "$(fn_count "$plant_store")" -ne 44 ]; then ok "descriptor null check: a planted missing store function fails the 44-function check"; else bad "descriptor null check: a planted missing store function passed"; fi
+if [ "$(fn_count "$plant_record")" -eq 37 ]; then ok "descriptor null check: a planted missing record function reads 37 against the 38 check"; else bad "descriptor null check: a planted missing record function did not read 37"; fi
+plant_store=$(printf '%s' "$out" | sed 's/"batch",//')
+if [ "$(store_list "$plant_store")" = '"list","get","put","delete","changes","scan"' ]; then ok "descriptor null check: a planted missing store name reads six against the seven-name check"; else bad "descriptor null check: a planted missing store name did not read six"; fi
 
 # ==============================================================================
 # B4: the store smoke over a synthetic data module

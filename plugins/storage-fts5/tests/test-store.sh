@@ -229,14 +229,21 @@ f "$DB" store.get docs workspace/empty
 ok "an empty payload stores as a zero-length blob and reads back empty"
 
 # ==============================================================================
-# 8. the descriptor: 38 record + 7 store + the store search; store, store.changelog, search.schema
+# 8. the descriptor: version 3.0.0 under contract 2, functions the 38 record names,
+# store the seven data names, optional store, store.changelog, search.schema
 # ==============================================================================
 printf '\n== the descriptor ==\n'
 "$DRV" capability > "$O" 2> "$E"; _caprc=$?
 [ "$_caprc" -eq 0 ] || miss "capability: rc $_caprc [$(cat "$E")]"
-case "$(cat "$O")" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*'"store.batch"'*'"store.scan"'*'"store.search"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
+case "$(cat "$O")" in *'"version":"3.0.0"'*) ;; *) miss "the descriptor version [$(sed 's/.*"version":"//; s/".*//' "$O")]" ;; esac
+case "$(cat "$O")" in *'"contract":"2"'*) ;; *) miss "the descriptor contract" ;; esac
+case "$(cat "$O")" in *'"store":["list","get","put","delete","changes","batch","scan"]'*) ;; *) miss "the descriptor store family [$(sed 's/.*"store":\[//; s/\].*//' "$O")]" ;; esac
 case "$(cat "$O")" in *'"optional":["store","store.changelog","search.schema"]'*) ;; *) miss "the descriptor optional set [$(sed 's/.*"optional"://' "$O")]" ;; esac
-ok "the descriptor declares the seven store data functions, the store search, and the optional tokens"
+_cap_fns_s=$(sed 's/.*"functions":\[//; s/\].*//' "$O")
+case "$_cap_fns_s" in *'"store.'*) miss "the record functions carry a store function" ;; esac
+_cap_fns=$(printf '%s' "$_cap_fns_s" | tr ',' '\n' | grep -c .)
+[ "$_cap_fns" = 38 ] || miss "the record family declares $_cap_fns functions, want 38"
+ok "the descriptor declares version 3.0.0 under contract 2 with the 38 record functions apart from the seven store data names"
 
 printf '\ntest-store: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

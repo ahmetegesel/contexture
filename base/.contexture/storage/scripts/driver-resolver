@@ -265,8 +265,9 @@ verify_capabilities() {
     return 2
   fi
 
-  # descriptor v2 (docs/the-engine.md, The descriptor and the handshake): contract "2" and
-  # every one of the 38 record functions; no record function is optional
+  # descriptor v3 (docs/the-engine.md, The descriptor and the handshake): contract "2", the
+  # 38 record functions exactly, and the conditional store family; no record function is
+  # optional and no function outside the 38 joins the record list
   check_result=$(printf '%s\n' "$cap_json" | desc_field contract)
   if [ "$check_result" != 2 ]; then
     printf 'driver-resolver: ERROR: driver '\''%s'\'' declares contract '\''%s'\'', not 2 (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$check_result" >&2
@@ -284,6 +285,48 @@ verify_capabilities() {
     printf 'driver-resolver: ERROR: driver '\''%s'\'' lacks contract 2 function(s):%s (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$missing_fns" >&2
     return 2
   fi
+  extra_fns=""
+  for cap_f in $cap_have; do
+    case " $CONTRACT_FUNCTIONS " in
+      *" $cap_f "*) ;;
+      *) extra_fns="$extra_fns $cap_f" ;;
+    esac
+  done
+  if [ -n "$extra_fns" ]; then
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares function(s) outside the 38 record functions:%s (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$extra_fns" >&2
+    return 2
+  fi
+
+  # the store family is all seven data names in the fixed order and implies the store
+  # token; a store token without the family refuses, and so does store.changelog or
+  # search.schema without it; a driver with neither the array nor the token serves the
+  # record alone and stays valid under contract 2
+  cap_store=$(printf '%s\n' "$cap_json" | desc_field store | tr '\n' ' ')
+  cap_opt=" $(printf '%s\n' "$cap_json" | desc_field optional | tr '\n' ' ') "
+  cap_has_store=0
+  if [ -n "$cap_store" ]; then
+    cap_has_store=1
+    if [ "$cap_store" != "$STORE_FUNCTIONS " ]; then
+      printf 'driver-resolver: ERROR: driver '\''%s'\'' declares the store family '\''%s'\'', not the seven data names in the fixed order (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_store" >&2
+      return 2
+    fi
+  fi
+  case "$cap_opt" in
+    *" store "*)
+      if [ "$cap_has_store" -eq 0 ]; then
+        printf 'driver-resolver: ERROR: driver '\''%s'\'' declares the store token without the store family (ERR_DRIVER_PROTOCOL)\n' "$driver_name" >&2
+        return 2
+      fi
+      ;;
+  esac
+  if [ "$cap_has_store" -eq 0 ]; then
+    case "$cap_opt" in
+      *" store.changelog "*|*" search.schema "*)
+        printf 'driver-resolver: ERROR: driver '\''%s'\'' declares a store-derived capability without the store family (ERR_DRIVER_PROTOCOL)\n' "$driver_name" >&2
+        return 2
+        ;;
+    esac
+  fi
 
   printf '%s\n' "$cap_json"
   return 0
@@ -291,6 +334,8 @@ verify_capabilities() {
 
 # the 38 record functions of contract 2 (unit.export and unit.import left it with the dump)
 CONTRACT_FUNCTIONS="capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query"
+# the seven store data names of contract 2's store family, in the descriptor's fixed order
+STORE_FUNCTIONS="list get put delete changes batch scan"
 
 # desc_field <key>: the value of one descriptor key on stdin: a string, or each element of
 # a list of strings on its own line (the descriptor is one compact JSON object; a legacy
@@ -325,8 +370,9 @@ verdict_fresh() {
 }
 
 # The handshake at dispatch: a driver other than the bundled core posix driver proves its
-# descriptor (contract "2" and all 38 record functions) before it serves any function, and
-# a driver that fails halts the call rc 2 ERR_DRIVER_PROTOCOL with the gap named. The
+# descriptor (contract "2", the 38 record functions, and the store family and token
+# agreement when a store is declared) before it serves any function, and a driver that
+# fails halts the call rc 2 ERR_DRIVER_PROTOCOL with the gap named. The
 # verdict is cached in the scratch drawer, one file per driver path, valid while fresh
 # (verdict_fresh), so the handshake runs once per driver change, never once per call; a
 # driver changed in the second of its verdict is verified again until a later verdict
@@ -359,9 +405,10 @@ handshake_at_dispatch() {
   return 0
 }
 
-# The optional capabilities (store, store.changelog) and the search modes stay
-# outside the dispatch handshake, so a record-only driver keeps serving every session verb;
-# a caller that needs one asks the resolver first (a search mode reads search.mode.<m>):
+# The optional capabilities (store, store.changelog) and the search modes stay outside
+# the dispatch handshake, so a record-only driver keeps serving every session verb; the
+# store family's array implies the store capability even when the token is omitted, and a
+# caller that needs one asks the resolver first (a search mode reads search.mode.<m>):
 #   require <capability>...  rc 0 when the configured driver declares every one; rc 2
 #                            ERR_CAPABILITY_UNSUPPORTED naming the missing ones otherwise
 #   has <capability>         rc 0 declared, rc 1 not declared, no message
@@ -379,10 +426,17 @@ cap_token_valid() {
 }
 
 # driver_caps: the capabilities a descriptor on stdin declares, one per line: its optional
-# capabilities, then each search mode as search.mode.<m>
+# capabilities, then the store capability the store family implies, then each search mode
+# as search.mode.<m>
 driver_caps() {
   dc_json=$(cat)
-  printf '%s\n' "$dc_json" | desc_field optional
+  dc_opt=$(printf '%s\n' "$dc_json" | desc_field optional)
+  printf '%s\n' "$dc_opt"
+  dc_store=$(printf '%s\n' "$dc_json" | desc_field store)
+  case " $(printf '%s\n' "$dc_opt" | tr '\n' ' ') " in
+    *" store "*) ;;
+    *) [ -n "$dc_store" ] && printf 'store\n' ;;
+  esac
   printf '%s\n' "$dc_json" | desc_field search_modes | sed 's/^/search.mode./'
 }
 

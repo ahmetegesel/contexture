@@ -1111,7 +1111,7 @@ rec_write() {
 }
 
 capability() {
-  printf '{"driver":"posix","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","store.list","store.get","store.put","store.delete","store.changes","store.batch","store.scan","store.search"],"search_modes":["exact"],"optional":["store"]}\n'
+  printf '{"driver":"posix","version":"3.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query"],"store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store"]}\n'
 }
 
 storage_health() {

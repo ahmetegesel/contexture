@@ -206,16 +206,17 @@ else
   [ "$_hass" -eq 0 ] || miss "has search.schema did not answer 0 on fts5"
 fi
 cap=$("$DRIVER" capability 2>/dev/null)
-case "$cap" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*'"store.batch"'*'"store.scan"'*'"store.search"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
+case "$cap" in *'"version":"3.0.0"'*) ;; *) miss "the descriptor version [$(printf '%s' "$cap" | sed 's/.*"version":"//; s/".*//')]" ;; esac
+case "$cap" in *'"store":["list","get","put","delete","changes","batch","scan"]'*) ;; *) miss "the descriptor store family [$(printf '%s' "$cap" | sed 's/.*"store":\[//; s/\].*//')]" ;; esac
 if [ "$IS_POSIX" -eq 1 ]; then
   case "$cap" in *'"optional":["store"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
 else
   case "$cap" in *'"optional":["store","store.changelog","search.schema"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
 fi
 _cap_fns=$(printf '%s' "$cap" | sed 's/.*"functions":\[//; s/\].*//' | tr ',' '\n' | grep -c .)
-[ "$_cap_fns" = 46 ] || miss "the descriptor declares $_cap_fns functions, want 46 (38 record plus 7 store plus the store search)"
-# a planted descriptor without the store capability reads red at require
-planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/,"store.batch","store.scan"//; s/,"store.search"//; s/"store.changelog"//; s/"search.schema"//; s/"store"//; s/,\]/]/; s/\[,/[/; s/,,/,/g')
+[ "$_cap_fns" = 38 ] || miss "the record family declares $_cap_fns functions, want 38"
+# a planted record-only descriptor (no store family, no store token) reads red at require
+planted=$(printf '%s' "$cap" | sed 's/,"store":\[[^]]*\]//; s/"store.changelog"//; s/"search.schema"//; s/"store"//; s/,\]/]/; s/\[,/[/; s/,,/,/g')
 mkdir -p .contexture/drivers/planted
 {
   printf '#!/bin/sh\n'
