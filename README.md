@@ -124,7 +124,6 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [Adoption](docs/adoption.md): Onboarding flows, topology choices, and upgrading
 - [Starter rhythms](plugins/starter-rhythms/): The work and debug rhythms to start from
 - [Toolchain filters](plugins/toolchain-filters/): Test runner and compiler filters
-- [Lane isolation](plugins/lane-isolation/): On-demand worktree isolation for subagents
 - [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
 - [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
 - [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and the generic module store with its change log and search schema

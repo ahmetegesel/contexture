@@ -15,18 +15,18 @@ set: copy them, and edit the copies into your own.
 
 ## Adoption
 
-The plugin mirrors the target tree, so its `.contexture/` subtree lands as-is.
-Copy the rhythm files into the workspace drawer:
+The package installs its rhythms part into the extension root on the human's
+go at the act:
 
 ```sh
-mkdir -p .contexture/rhythms
-cp plugins/starter-rhythms/.contexture/rhythms/work.md \
-   plugins/starter-rhythms/.contexture/rhythms/debug.md \
-   .contexture/rhythms/
+sh plugins/starter-rhythms/install
 ```
 
-The copies are your team's to edit. Onboarding offers this plugin when a team
-brings no rhythm of its own, and removes the plugins folder with ONBOARDING at
+The install lands `work.md` and `debug.md` under
+`.contexture/extensions/rhythms/`, where the rhythm index reads them. To own
+and edit a rhythm, copy it into the workspace's own `.contexture/rhythms/`:
+those copies are your team's. Onboarding offers this plugin when a team brings
+no rhythm of its own, and removes the plugins folder with ONBOARDING at
 adoption close. The upstream copy stays the distributable one: workspace edits
 never travel back.
 
@@ -118,7 +118,7 @@ the suite.
 
 None beyond the base: the plugin is plain markdown, with no scripts and no
 dependencies. `ctx session index` reads whatever rhythm files land in
-`.contexture/rhythms/`.
+`.contexture/rhythms/` and `.contexture/extensions/rhythms/`.
 
 ## Contributing
 
@@ -132,5 +132,6 @@ naming, and the test convention are in `docs/plugins.md`.
   journal event is a defect the audit prints.
 - The record (state, backlog, journal, knowledge) is the source of truth,
   never the conversation.
-- This README is the plugin's explanation; your team's live rhythms belong in
+- This README is the plugin's explanation; the package lands its rhythms under
+  `.contexture/extensions/rhythms/`, and your team's own live rhythms belong in
   `.contexture/rhythms/`.

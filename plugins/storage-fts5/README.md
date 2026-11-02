@@ -15,7 +15,7 @@ The storage-fts5 plugin serves as an indexed storage backend: the single store o
 2. The derived tables: every write derives, in its own transaction, the `lines` table (every line of the unit's searched text in the exact rule's order with the entity the head rule attributes it to) and the `search_documents` the FTS5 tables index (`sql/derive.sql`), rebuilding only the parts the write names. Texts split into lines in SQL through one JSON array (`sql/split.sql`), linear in the text.
 3. Dual FTS5 indexing: natural language prose is indexed with `porter unicode61 remove_diacritics 0` to preserve Turkish characters and diacritics, while exact code identifiers and symbols are indexed with `trigram` tokenization; triggers keep `search_documents` and both tables in step with the index. Each document carries its section, the artifact it came from: `state`, `backlog`, `knowledge`, `journal`, `lane_recipe`, `lane_report`, `lane_journal`.
 4. Search: `search.query` returns the shape every driver shares (`{unit, query, mode, total_matches, results: [{entity_type, entity_id, section, snippet, score}]}`). Modes (every search names one, `--mode` being required by the verb): `exact` (the mode every driver implements, `sql/fn/search.query.sql`: the `lines` table read in the exact rule's order, a line matching when it holds the query after ASCII case folding, a column-0 comment never matching, one result per entity and section with the first matching line as its snippet, every score 0, so the rows and totals equal the posix driver's), `hybrid` (RRF over both FTS5 tables, `1.0 / (60.0 + rank)`, in a two-stage CTE, `sql/fn/search.ranked.sql`) and `trigram` (the trigram table alone), their score the fused rank; `--limit` (default 20) and `--entity` apply in SQL; an empty query refuses rc 1 `ERR_INVALID_ARGUMENT`, an undeclared mode rc 1 `ERR_CAPABILITY_UNSUPPORTED` naming `exact, hybrid, trigram`.
-5. The record functions (contract 2, all 38 native in SQL): one sh entry point (`drivers/fts5`) checks the argv shape with the posix driver's messages, stages the payload lines in a per-call scratch folder under the workspace `.contexture/tmp` (inside the per-verb root ctx exports), and runs one sqlite3 process over the call header, `sql/lib/prelude.sql` (the payload decoded in SQL: the wire escapes are a subset of the JSON string escapes), and the function's script `sql/fn/<function>.sql`; `capability` and `storage.health` answer from the sh. Every answer is built with `json_object` in the contract key order (`sql/lib/model.sql`: the derived fields ordinal, seq, occurrence, next, the positional closure, superseded_by, and the JSON of every schema); every refusal is a row the script checks in the posix refusal order and `sql/lib/stop.sql` prints as the one stderr line. Every write runs in one transaction (`BEGIN IMMEDIATE` to `COMMIT`, whole or nothing) under the unit write lock, adds an item at the next position (`sql/lib/jappend.sql`, `tappend.sql`, `fappend.sql`) or sets the typed fields of the item it touches, stores every value as the canonical lines read it back (the block value rule in `sql/lib/prelude.sql`: a DESCRIPTION, ACCEPTANCE CRITERIA, IMPLEMENTATION DETAILS, or SUMMARY value drops its trailing whitespace-only lines; a quoted attention unquoted; a verdictless closer reason opening with a verdict word split into both, an empty one null), and rebuilds the unit's derived search rows (`derive.sql`) before it commits; its answer prints only after the commit. Every connection waits up to ten seconds on a busy writer (`.timeout`, set per connection because `busy_timeout` never persists); a read never creates the database, and `storage.health` reports `degraded` until a unit is stored.
+5. The record functions (contract 2, all 38 native in SQL): one sh entry point (`driver`) checks the argv shape with the posix driver's messages, stages the payload lines in a per-call scratch folder under the workspace `.contexture/tmp` (inside the per-verb root ctx exports), and runs one sqlite3 process over the call header, `sql/lib/prelude.sql` (the payload decoded in SQL: the wire escapes are a subset of the JSON string escapes), and the function's script `sql/fn/<function>.sql`; `capability` and `storage.health` answer from the sh. Every answer is built with `json_object` in the contract key order (`sql/lib/model.sql`: the derived fields ordinal, seq, occurrence, next, the positional closure, superseded_by, and the JSON of every schema); every refusal is a row the script checks in the posix refusal order and `sql/lib/stop.sql` prints as the one stderr line. Every write runs in one transaction (`BEGIN IMMEDIATE` to `COMMIT`, whole or nothing) under the unit write lock, adds an item at the next position (`sql/lib/jappend.sql`, `tappend.sql`, `fappend.sql`) or sets the typed fields of the item it touches, stores every value as the canonical lines read it back (the block value rule in `sql/lib/prelude.sql`: a DESCRIPTION, ACCEPTANCE CRITERIA, IMPLEMENTATION DETAILS, or SUMMARY value drops its trailing whitespace-only lines; a quoted attention unquoted; a verdictless closer reason opening with a verdict word split into both, an empty one null), and rebuilds the unit's derived search rows (`derive.sql`) before it commits; its answer prints only after the commit. Every connection waits up to ten seconds on a busy writer (`.timeout`, set per connection because `busy_timeout` never persists); a read never creates the database, and `storage.health` reports `degraded` until a unit is stored.
 6. Moving a record: no command moves a record between backends (a move can need judgment a verb would hide), and the plugin carries no migrate verb (the v0.54.0 `ctx storage-fts5 migrate` retired with its `scripts/migrate`, `index.sh`, and `closer.awk`; the base `ctx session migrate`, `unit.export`, `unit.import`, and the dump format built for v0.55.0 left the contract before it shipped). A record reaches this store through the agent re-entering it with the ordinary verbs under this driver, so the store holds only what the verbs write: the legacy shapes a hand-written posix file can hold (a repeated slug, a CRLF line, a file outside the record) are the agent's to judge as it re-enters the record, never carried by a command. The corpus goes in through the `ctx docs` write verbs (`ctx docs write <repo> <slug> < docs/<repo>/<slug>.md`), each doc checked by the verb's grammar check and its repo's audit, each write landing its change-log row.
 7. The schema version: a new or empty database file gets the whole schema 4 on its first write (`db-init.sh`, one transaction); a store at version 4 opens with one read, and a version 4 store created before the generic module store gains its `store` and `store_changes` tables on open by idempotent `CREATE TABLE IF NOT EXISTS` (the version stays 4); a store at any other version (an older release's store, or a later one) refuses every function rc 2 `ERR_STORAGE_SCHEMA` (`the store is at schema <v>; this driver reads 4 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs`) and is never written, no backup made; `storage.health` reports it `error` naming the version. No store to keep existed when the upgrade path was dropped: the plugin had never been a workspace's configured driver.
 8. The docs corpus over the generic module store (`store` and `store.changelog`): the agent-facing docs live in the store table under the docs namespace, one value per doc keyed by `<repo>/<slug>` with its bytes verbatim, and the docs module reads them with `store.list` and `store.get` and writes them with `store.put` and `store.delete`; it keeps its own parser and renders every view, and no doc is indexed for search. Keys are exact and a case twin refuses, as the posix driver answers it. The legacy docs tables stay untouched and unread. Every store put and delete lands its generic change-log row in `store_changes` inside the same transaction (`BEGIN IMMEDIATE` and `COMMIT`): the op and the git HEAD the verb passed, and `prior`, the key's state before the change (`absent` or `present`). `store.changes` answers the rows of the heads it is given on stdin, oldest first, as one JSON object with `seq`, `at`, `key`, `op`, `head`, and `prior`.
@@ -24,10 +24,10 @@ The storage-fts5 plugin serves as an indexed storage backend: the single store o
 | piece | what it is | lands as |
 |---|---|---|
 | `manifest` | the package manifest at the plugin root: summary, version, kind driver, driver fts5, and the driver part | reference (the module file retired; a driver is not a module) |
-| `.contexture/modules/storage-fts5/schema.sql` | the schema version 4 DDL: the typed tables, the canonical renderer views, the derived search tables with the dual FTS5 virtual tables and their triggers, the corpus tables, and the generic module store's tables | copy |
-| `.contexture/modules/storage-fts5/sql/` | the SQL beside the driver: `fn/` one script per record function, `lib/` the pieces they share, `derive.sql`, `split.sql` | copy |
-| `.contexture/modules/storage-fts5/drivers/fts5` | the driver executable: the contract 2 entry point over `sql/`, the generic module store among its methods | copy |
-| `.contexture/modules/storage-fts5/db-init.sh` | the database open path: the sqlite3 3.44 minimum, the fresh schema in a new or empty file, the version 4 open that adds the module store's four tables and the store FTS indexes to a store created before them, the refusal of any other version, the per-connection busy timeout | copy |
+| `.contexture/extensions/storage/drivers/fts5/schema.sql` | the schema version 4 DDL: the typed tables, the canonical renderer views, the derived search tables with the dual FTS5 virtual tables and their triggers, the corpus tables, and the generic module store's tables | install (driver part) |
+| `.contexture/extensions/storage/drivers/fts5/sql/` | the SQL beside the driver: `fn/` one script per record function, `lib/` the pieces they share, `derive.sql`, `split.sql` | install (driver part) |
+| `.contexture/extensions/storage/drivers/fts5/driver` | the driver executable: the contract 2 entry point over `sql/`, the generic module store among its methods | install (driver part) |
+| `.contexture/extensions/storage/drivers/fts5/db-init.sh` | the database open path: the sqlite3 3.44 minimum, the fresh schema in a new or empty file, the version 4 open that adds the module store's four tables and the store FTS indexes to a store created before them, the refusal of any other version, the per-connection busy timeout | install (driver part) |
 | `tests/test-driver.sh` | the contract 2 compliance suite against the plugin's own driver | reference |
 | `tests/test-schema.sh` | schema 4 laid in an absent or empty file with no backup, a read leaving a version 4 store byte for byte, and a version 3, 0, or 5 file refused naming its version, the file untouched, no backup, `storage.health` reporting error | reference |
 | `tests/test-verbs.sh` | one verb sequence on posix and on this driver in a workspace staged from the shipped core: the views equal on both drivers, liveness through two closer lines, supersession, exact and hybrid search, the typed fields without a trailing newline, the driver answering as an unknown command (not a module), and `ctx session migrate` answering an unknown verb | reference |
@@ -63,7 +63,7 @@ The storage architecture honors these non-negotiable invariants:
                                |
                                v
 +-------------------------------------------------------------+
-|            SQLite FTS5 Driver (drivers/fts5)                |
+|            SQLite FTS5 Driver (driver)                      |
 +-------------------------------------------------------------+
           |                                        |
           v                                        v
@@ -99,32 +99,30 @@ Before adopting `storage-fts5` in a repository, verify:
 
 When proposing `storage-fts5` adoption to the repository maintainer:
 
-* Present the destination: the plugin module copies to `.contexture/modules/storage-fts5/`.
+* Present the destination: the package installs its driver at `.contexture/extensions/storage/drivers/fts5/`.
 * Explain concurrency and indexing benefits: dual FTS5 tables with automatic trigger synchronization and WAL mode concurrency.
 * Highlight the ranked modes: 12-token snippets with highlight markers instead of whole session files in context (`exact`, the default on every driver, answers the first matching line).
 * Confirm the cutover plan: no command moves the record; the agent re-enters the units worth carrying through the ordinary verbs and the corpus through `ctx docs write`, and the posix files stay where they are until the maintainer removes them, so switching `storage.driver` back to posix reads them again.
 
 ## Execute
 
-### Step 1: Copy Module Tree
+### Step 1: Install the Package
 
-Copy the module tree into the workspace:
-
-```sh
-mkdir -p <repo-root>/.contexture/modules
-cp -R plugins/storage-fts5/.contexture/modules/storage-fts5 <repo-root>/.contexture/modules/
-chmod +x <repo-root>/.contexture/modules/storage-fts5/drivers/fts5
-```
-
-A workspace that adopted an earlier release removes the files this release no longer ships (a copy never deletes one, and a stale `scripts/migrate` would still list as a verb; the `sql/lib` pieces of the stored-text model, which no script reads any more, go too):
+Install the driver into the extension root, on the maintainer's go at the act:
 
 ```sh
-M=<repo-root>/.contexture/modules/storage-fts5
-rm -f "$M/scripts/migrate" "$M/index.sh" "$M/closer.awk" "$M/sql/unit.export.sql" "$M/sql/dump.load.sql" "$M/sql/dump.check.sql" "$M/sql/dump.import.sql"
-rm -rf "$M/upgrade"
-for f in settle trim ed scan splice stedit reblock nextline tstatus idrop; do rm -f "$M/sql/lib/$f.sql"; done
-rmdir "$M/scripts" 2>/dev/null
+sh plugins/storage-fts5/install
 ```
+
+The installer overlays the package's driver part at
+`.contexture/extensions/storage/drivers/fts5/` (the executable named `driver`
+with `schema.sql`, `sql/`, and `db-init.sh` beside it), records every installed
+path under `.contexture/extensions/.state/storage-fts5.files`, and refuses the
+collision classes before writing. A re-install is an update: files the new
+source drops are removed when unchanged and preserved when changed. A
+workspace that adopted the earlier module-tree copy removes that copy
+(`.contexture/modules/storage-fts5/`) at the same act, after the extension-root
+install proves the driver resolves.
 
 ### Step 2: Configure Git Ignore
 
@@ -179,14 +177,14 @@ The docs plugin suite runs in full against this driver (it declares `store` and 
 | file | provenance |
 |---|---|
 | `manifest` | authored fresh: the package summary, version, kind driver, driver fts5, and the driver part; the module file retired |
-| `.contexture/modules/storage-fts5/schema.sql` | authored fresh: the schema version 4 typed tables, views, search tables, and FTS5 tables |
-| `.contexture/modules/storage-fts5/sql/` | authored fresh: the record functions, the derived tables, the line splitter |
+| `.contexture/extensions/storage/drivers/fts5/schema.sql` | authored fresh: the schema version 4 typed tables, views, search tables, and FTS5 tables |
+| `.contexture/extensions/storage/drivers/fts5/sql/` | authored fresh: the record functions, the derived tables, the line splitter |
 | `tests/test-schema.sh` | authored fresh: the schema version suite (it replaces the upgrade suite, whose live checks it carries) |
 | `tests/test-verbs.sh` | authored fresh: the verb path on both drivers, carrying every live check of the retired migrate suite |
 | `tests/test-version.sh` | authored fresh: the sqlite3 version guard suite |
 | `tests/test-derive.sh` | authored fresh: the narrowed derive against a whole rebuild |
-| `.contexture/modules/storage-fts5/drivers/fts5` | authored fresh: the contract 2 entry point (the record functions native in SQL under `sql/fn/` and `sql/lib/`, pure SQL RRF ranking, the generic module store) |
-| `.contexture/modules/storage-fts5/db-init.sh` | authored fresh: the open path at version 4, adding the module store's four tables and the store FTS indexes to a store created before them, refusing every other version |
+| `.contexture/extensions/storage/drivers/fts5/driver` | authored fresh: the contract 2 entry point (the record functions native in SQL under `sql/fn/` and `sql/lib/`, pure SQL RRF ranking, the generic module store) |
+| `.contexture/extensions/storage/drivers/fts5/db-init.sh` | authored fresh: the open path at version 4, adding the module store's four tables and the store FTS indexes to a store created before them, refusing every other version |
 | `tests/test-driver.sh` | authored fresh: SPI compliance test runner |
 | `tests/test-store.sh` | authored fresh: the generic module store suite (change log, atomicity, schema 4 open path, the corpus tables untouched and unread) |
 | `tests/test-store-compliance.sh` | authored fresh: the shared store compliance harness against the plugin's own driver |

@@ -11,4 +11,4 @@
   8. REVIEW+HARDEN+VERIFY: one fresh subagent; independent review, findings hardened, the docs gate re-proven (ctx docs audit, ctx docs check, ctx docs gate)
   9. LAND: one act after the gates green, the human's sign-off first (the shape lives in @git)
   10. REFRESH: run @refresh
-  ground: the rules live in the workspace conventions (ctx docs query workspace --rules); the grammar in .contexture/templates/doc.md
+  ground: the rules live in the workspace conventions (ctx docs query workspace --rules); the grammar in .contexture/extensions/templates/doc.md

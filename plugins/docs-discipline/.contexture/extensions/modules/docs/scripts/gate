@@ -9,7 +9,7 @@
 # help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
 # help: example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
 #
-# Layout: lives at <workspace>/.contexture/modules/docs/scripts/gate. The
+# Layout: lives at <workspace>/.contexture/extensions/modules/docs/scripts/gate. The
 # workspace root resolves from CTX_ROOT (the engine's dispatch environment) or
 # the DOCS_WORKSPACE_ROOT override; run standalone it walks up from the script
 # to the .contexture drawer's parent. Product repositories live under

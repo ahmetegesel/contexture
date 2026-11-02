@@ -33,7 +33,7 @@ if ! command -v sqlite3 >/dev/null 2>&1; then
 fi
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
-MODULE_DIR=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
+MODULE_DIR=$SCRIPT_DIR
 SCHEMA_SQL="$MODULE_DIR/schema.sql"
 SQL_DIR="$MODULE_DIR/sql"
 LC_ALL=C

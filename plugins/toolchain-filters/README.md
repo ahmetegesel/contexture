@@ -16,7 +16,7 @@ The investigation that produced this menu is the worked example: a multi-project
 
 ## How Discovery Works
 
-`ctx run` discovers every filter placed in the builtin run module (`.contexture/modules/run/filters/*.awk`) and in any module's `filters/` directory (e.g. `.contexture/modules/toolchain-filters/filters/*.awk`); the run module scans first, then the other modules by name.
+`ctx run` discovers every filter placed in the builtin run module (`.contexture/modules/run/filters/*.awk`) and in any module's `filters/` directory (`.contexture/modules/<name>/filters/*.awk` or `.contexture/extensions/modules/<name>/filters/*.awk`); the run module scans first, then the other modules by name.
 
 - Runner mode (`ctx run <cmd>`) selects by command identity: the `# command: <regex>` header is matched against the reconstructed command line (the basename of the command plus its arguments). First match wins, and two filters claiming one command raise a shadow warning.
 - Stdin mode (`<cmd> | ctx run`) selects by stream signature: the `# match: <regex>` header is tested against a sample of the first 40 lines. `# default` marks the fallback, `log.awk`.
@@ -47,23 +47,27 @@ Each filter's header carries the exact `# match:` and `# command:` regexes; the 
 
 ## Adoption
 
-Copy the filters the inventory matched into a workspace module, e.g. `.contexture/modules/toolchain-filters/filters/`:
+Install the pack into the extension root, on the human's go at the act:
 
 ```sh
-# One filter:
-cp plugins/toolchain-filters/.contexture/modules/toolchain-filters/filters/vitest.awk .contexture/modules/toolchain-filters/filters/
+sh plugins/toolchain-filters/install
+```
 
-# A matched subset, one line per filter:
-cp plugins/toolchain-filters/.contexture/modules/toolchain-filters/filters/vitest.awk .contexture/modules/toolchain-filters/filters/
-cp plugins/toolchain-filters/.contexture/modules/toolchain-filters/filters/compiler-errors.awk .contexture/modules/toolchain-filters/filters/
+The install lands every filter at
+`.contexture/extensions/modules/toolchain-filters/filters/`, where `ctx run`
+discovers it. The installed module is workspace-owned: remove the filters the
+inventory did not match, because each one joins the discovery scan and can
+claim a command identity. To adopt a single filter without the pack, copy it
+into a workspace module (`.contexture/modules/toolchain-filters/filters/`)
+instead:
 
-# Ensure executable permissions:
+```sh
+mkdir -p .contexture/modules/toolchain-filters/filters
+cp plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters/vitest.awk .contexture/modules/toolchain-filters/filters/
 chmod +x .contexture/modules/toolchain-filters/filters/*.awk
 ```
 
 The filters' test material stays upstream, under `plugins/toolchain-filters/tests/`: the upstream harness pins the plugin's filters, and the adopted copies are byte-identical, so they are pinned too. A workspace carries no test material: the `tests/` folder lives with the plugin, is never copied, and the upstream runner may invoke it.
-
-Do not copy the whole directory by reflex. Each adopted filter joins the discovery scan and can claim a command identity, so the bulk copy is the one adoption path this plugin advises against.
 
 ## Tests
 
@@ -84,7 +88,7 @@ It pipes each input through the runner (`ctx run --filter=<filter>`) and byte-co
 
 ## Writing Custom Filters
 
-1. Create `.contexture/modules/toolchain-filters/filters/<your-tool>.awk`.
+1. Create `.contexture/extensions/modules/toolchain-filters/filters/<your-tool>.awk`.
 2. Add `# match: <regex>` for the stdin signature and `# command: <regex>` for runner identity.
 3. Add the optional headers: `# default` (the fallback filter), `# stream: merged` (merge the command's stderr into the filtered stream, for compiler-style tools whose diagnostics land on stderr), `# format-only: <why>` (declare marker-less reductions as layout, not lost content).
 4. Buffer lines and process them in the `END` block.

@@ -14,8 +14,8 @@
 # (tests/grammar-agreement.awk, with its two plants) in a staged
 # scratch workspace built from the shipped copies only: the runtime and the
 # session and lane modules from base/ (the repository that carries this plugin),
-# the docs module and the grammar template (.contexture/templates/doc.md) from
-# this plugin, never a workspace's adopted drawer, so the suite proves what ships
+# the docs module and the grammar template (.contexture/extensions/templates/doc.md)
+# from this plugin, never a workspace's adopted drawer, so the suite proves what ships
 # (the gate pins the shipped copies). Needs: POSIX awk/sh, base/.contexture/ctx
 # beside plugins/ (the plugin ships the module, not the engine), and git for the
 # matrix's tracked-claimant fixture.
@@ -55,7 +55,7 @@ BASE_CTX="$WS_ROOT/base/.contexture/ctx"
 BASE_MODULES="$WS_ROOT/base/.contexture/modules"
 BASE_EXT_MODULES="$WS_ROOT/base/.contexture/extensions/modules"
 BASE_STORAGE="$WS_ROOT/base/.contexture/storage"
-FTS5_MOD="$WS_ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
+FTS5_MOD="$WS_ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5"
 if [ ! -f "$BASE_CTX" ] || [ ! -d "$BASE_MODULES/session" ] || [ ! -d "$BASE_STORAGE" ]; then
     echo "SKIP: the shipped core (base/.contexture/ctx, its session module, and the storage core) not found under $WS_ROOT"
     echo "docs-discipline suite: 0 passed, 0 failed, 1 skipped"
@@ -85,17 +85,18 @@ SANDBOX=$(mktemp -d "$TMP_BASE/docs-plugin-tests.XXXXXX") || exit 1
 trap 'rm -rf "$SANDBOX"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/extensions/modules" "$SANDBOX/.contexture/templates" "$SANDBOX/docs"
+mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/extensions/modules" "$SANDBOX/.contexture/extensions/templates" "$SANDBOX/docs"
 cp "$BASE_CTX" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$BASE_MODULES/session" "$SANDBOX/.contexture/modules/session"
 cp -R "$BASE_STORAGE" "$SANDBOX/.contexture/storage"
 chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
 [ -d "$BASE_EXT_MODULES/lane" ] && cp -R "$BASE_EXT_MODULES/lane" "$SANDBOX/.contexture/extensions/modules/lane"
-cp -R "$PLUGIN_ROOT/.contexture/modules/docs" "$SANDBOX/.contexture/modules/docs"
-cp "$PLUGIN_ROOT/.contexture/templates/doc.md" "$SANDBOX/.contexture/templates/doc.md"
+cp -R "$PLUGIN_ROOT/.contexture/extensions/modules/docs" "$SANDBOX/.contexture/extensions/modules/docs"
+cp "$PLUGIN_ROOT/.contexture/extensions/templates/doc.md" "$SANDBOX/.contexture/extensions/templates/doc.md"
 if [ "$DRIVER" = fts5 ]; then
-    cp -R "$FTS5_MOD" "$SANDBOX/.contexture/modules/storage-fts5"
+    mkdir -p "$SANDBOX/.contexture/extensions/storage/drivers"
+    cp -R "$FTS5_MOD" "$SANDBOX/.contexture/extensions/storage/drivers/fts5"
     printf 'storage.driver: fts5\n' > "$SANDBOX/.contexture/config"
 fi
 cp -R "$PLUGIN_ROOT/docs/." "$SANDBOX/docs/"
@@ -115,7 +116,7 @@ echo ""
 # configured driver with the staged copy (posix: the session module's, fts5: the plugin's)
 case "$DRIVER" in
     posix) WANT_DRIVER="$SANDBOX/.contexture/storage/drivers/posix/driver" ;;
-    fts5) WANT_DRIVER="$SANDBOX/.contexture/modules/storage-fts5/drivers/fts5" ;;
+    fts5) WANT_DRIVER="$SANDBOX/.contexture/extensions/storage/drivers/fts5/driver" ;;
 esac
 GOT_DRIVER=$(./.contexture/modules/session/scripts/driver-resolver resolve 2>&1)
 if cmp -s "$BASE_CTX" "$SANDBOX/.contexture/ctx" && [ "$GOT_DRIVER" = "$WANT_DRIVER" ]; then
@@ -134,18 +135,18 @@ echo ""
 # separate hook workspace (the posix driver) keeps the hook cases independent of the
 # suite's driver and of the main sandbox.
 HOOKWS="$SANDBOX/hookws"
-mkdir -p "$HOOKWS/.contexture/modules" "$HOOKWS/.contexture/templates" "$HOOKWS/docs/workspace"
+mkdir -p "$HOOKWS/.contexture/modules" "$HOOKWS/.contexture/extensions/modules" "$HOOKWS/.contexture/extensions/templates" "$HOOKWS/docs/workspace"
 cp "$BASE_CTX" "$HOOKWS/.contexture/ctx"
 cp -R "$SANDBOX/.contexture/modules/session" "$HOOKWS/.contexture/modules/session"
-cp -R "$SANDBOX/.contexture/modules/docs" "$HOOKWS/.contexture/modules/docs"
+cp -R "$SANDBOX/.contexture/extensions/modules/docs" "$HOOKWS/.contexture/extensions/modules/docs"
 cp -R "$BASE_STORAGE" "$HOOKWS/.contexture/storage"
-cp "$PLUGIN_ROOT/.contexture/templates/doc.md" "$HOOKWS/.contexture/templates/doc.md"
+cp "$PLUGIN_ROOT/.contexture/extensions/templates/doc.md" "$HOOKWS/.contexture/extensions/templates/doc.md"
 chmod +x "$HOOKWS/.contexture/ctx" "$HOOKWS/.contexture/storage/scripts/"* \
     "$HOOKWS/.contexture/storage/drivers/posix/driver" "$HOOKWS/.contexture/modules/session/scripts/"* \
-    "$HOOKWS/.contexture/modules/docs/install" "$HOOKWS/.contexture/modules/docs/uninstall"
+    "$HOOKWS/.contexture/extensions/modules/docs/install" "$HOOKWS/.contexture/extensions/modules/docs/uninstall"
 HOOK_CTX="$HOOKWS/.contexture/ctx"
-HOOK_INSTALL="$HOOKWS/.contexture/modules/docs/install"
-HOOK_UNINSTALL="$HOOKWS/.contexture/modules/docs/uninstall"
+HOOK_INSTALL="$HOOKWS/.contexture/extensions/modules/docs/install"
+HOOK_UNINSTALL="$HOOKWS/.contexture/extensions/modules/docs/uninstall"
 
 HK_OUT=$( cd "$HOOKWS" && CTX_ROOT="$HOOKWS" CTX_PACKAGE_ROOT="$PLUGIN_ROOT" "$HOOK_INSTALL" 2>&1 )
 HK_RC=$?
@@ -515,7 +516,7 @@ fi
 # allow-list (tests/census-allow.txt), remainder zero; three plants prove it can fail: a cat
 # of a composed corpus path in a verb, a getline over a computed path in an engine, and a
 # quote-split corpus path read by awk without -f in a verb
-S_SCRIPTS="$SANDBOX/.contexture/modules/docs/scripts"
+S_SCRIPTS="$SANDBOX/.contexture/extensions/modules/docs/scripts"
 CENSUS_OUT=$(sh "$SCRIPT_DIR/census.sh" "$S_SCRIPTS" "$SCRIPT_DIR/census-allow.txt" 2>&1)
 CENSUS_RC=$?
 mkdir -p "$SANDBOX/census-plant"
@@ -566,8 +567,8 @@ echo ""
 # block lists agree (tests/grammar-agreement.awk); two plants prove the check can fail: an
 # extra field in the prose and an extra enum value in the schema each read DISAGREE
 AGREE_AWK="$SCRIPT_DIR/grammar-agreement.awk"
-S_DOC="$SANDBOX/.contexture/templates/doc.md"
-S_AUD="$SANDBOX/.contexture/modules/docs/scripts/docs-audit.awk"
+S_DOC="$SANDBOX/.contexture/extensions/templates/doc.md"
+S_AUD="$SANDBOX/.contexture/extensions/modules/docs/scripts/docs-audit.awk"
 AGREE_OUT=$(awk -f "$AGREE_AWK" "$S_DOC" "$S_AUD" 2>&1)
 AGREE_RC=$?
 awk '{ print } $0 == "    nature: internal | external" { print "    planted_field: \"x\"" }' "$S_DOC" > "$SANDBOX/plant-prose.md"

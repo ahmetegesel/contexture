@@ -59,7 +59,7 @@ The module file is the standard folder's manifest. Its fields and their readers:
 
 ### The laws file
 
-A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the eight docs laws; the lane module's file carries the lane-isolation subagent and git clauses.
+A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the eight docs laws; the lane module's file carries the lane-isolation subagent and git clauses it absorbed.
 
 ### The data file
 
@@ -86,7 +86,7 @@ Every package carries a `manifest` at its root, beside `install`, `uninstall`, `
 - The three version lines are distinct: the package version (this manifest: install, upgrade, the generated law hash), the driver descriptor version (the driver's `capability`, `3.0.0` at the storage core's split descriptor), and the storage contract (`2` today; the unit module's contract 3 store-only card later). The record-only driver stays valid under contract 2; the contract 3 card is what invalidates it, at the unit module, never here.
 - The private reader `ctx _package <manifest> validate|summary|version|kind|parts|driver` is the one parser; the installer refuses a package without a manifest and a malformed one. The reader refuses an unknown field, a duplicate field or part path, a bad part type or path, a feature/driver mismatch, and a `# requires:` line.
 
-The shipped catalog's shapes: `docs-discipline` (a module, its laws inside it, rhythms, and a template), `ast-doc-graph` (a module), `storage-fts5` (a driver), `toolchain-filters` (filters only), and `starter-rhythms` (rhythms only); the retired `lane-isolation` folder's clauses live in the lane module's laws and it carries no manifest.
+The shipped catalog's shapes: `docs-discipline` (a module, its laws inside it, rhythms, and a template), `ast-doc-graph` (a module), `storage-fts5` (a driver), `toolchain-filters` (filters only), and `starter-rhythms` (rhythms only); the `lane-isolation` folder is removed and its clauses live in the lane module's laws.
 
 ### The install and uninstall part hooks
 

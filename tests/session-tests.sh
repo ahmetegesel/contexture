@@ -33,7 +33,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
-FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
+FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5"
 DRIVER=posix
 GROUP=""
 for a in "$@"; do
@@ -126,7 +126,8 @@ cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
 chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
 [ -d "$ROOT/base/.contexture/extensions/modules/lane" ] && cp -R "$ROOT/base/.contexture/extensions/modules/lane" "$SANDBOX/.contexture/extensions/modules/lane"
 if [ "$DRIVER" = fts5 ]; then
-  cp -R "$FTS5_MOD" "$SANDBOX/.contexture/modules/storage-fts5"
+  mkdir -p "$SANDBOX/.contexture/extensions/storage/drivers"
+  cp -R "$FTS5_MOD" "$SANDBOX/.contexture/extensions/storage/drivers/fts5"
   printf 'storage.driver: fts5\n' > "$SANDBOX/.contexture/config"
 fi
 cat > "$SANDBOX/.contexture/rhythms/probe.md" <<'EOF'

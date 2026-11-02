@@ -1,9 +1,9 @@
 # docs module: internals
 
-The docs module ships with the docs-discipline plugin. Adoption copies this
-directory to `<workspace>/.contexture/modules/docs/`; the engine discovers its
-sixteen verbs. This page is the off-path maintainer map: it is not linked from
-the workspace's boot, laws, or help.
+The docs module ships with the docs-discipline plugin. The package install
+overlays this directory at `<workspace>/.contexture/extensions/modules/docs/`;
+the engine discovers its sixteen verbs. This page is the off-path maintainer
+map: it is not linked from the workspace's boot, laws, or help.
 
 ## Layout
 
@@ -61,9 +61,9 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   `ids` run the edit over every doc of their scope first, check the counts
   (replace: the total must equal `--count`), audit every touched repo, then
   write one doc after another. The template resolves from `CTX_ROOT`, never a
-  relative climb: `.contexture/extensions/templates/doc.md` first (the package
-  overlay's home), then `.contexture/templates/doc.md`; the plugin's own copy
-  in the suite sandbox is staged under `.contexture/templates/`.
+   relative climb: `.contexture/extensions/templates/doc.md` first (the package
+   overlay's home), then `.contexture/templates/doc.md`; the plugin's own copy
+   in the suite sandbox is staged under `.contexture/extensions/templates/`.
 - `docs-edit.awk` addresses what the schema names: an entry by its key (the
   id of an id-keyed block, the first field's value, `<from>><to>` for
   data_flow, `<direction>:<key>` for edges, or `#<N>`), a rule by
@@ -121,8 +121,8 @@ directory.
 ## Grammar and sample
 
 - The corpus grammar: `.contexture/extensions/templates/doc.md` when the docs
-  module installs under the extension root, else `.contexture/templates/doc.md`
-  (the suite stages the plugin's copy under the latter), resolved from
+  module installs under the extension root, else `.contexture/templates/doc.md`;
+  the suite stages the plugin's copy under the extension root, resolved from
   `CTX_ROOT`.
 - The seed conventions: the plugin's `docs/workspace/conventions.md`, written
   into the corpus by adoption through `ctx docs write workspace conventions`

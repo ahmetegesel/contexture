@@ -13,10 +13,10 @@ set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../../.." && pwd)
-MOD="$SCRIPT_DIR/../.contexture/modules/storage-fts5"
-DRV="$MOD/drivers/fts5"
+MOD="$SCRIPT_DIR/../.contexture/extensions/storage/drivers/fts5"
+DRV="$MOD/driver"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
-DOCS_DATA="$ROOT/plugins/docs-discipline/.contexture/modules/docs/data"
+DOCS_DATA="$ROOT/plugins/docs-discipline/.contexture/extensions/modules/docs/data"
 
 command -v sqlite3 >/dev/null 2>&1 || { printf 'SKIP: sqlite3 not found on PATH\n'; exit 77; }
 for f in "$DRV" "$MOD/schema.sql" "$MOD/db-init.sh" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/drivers/posix/driver" "$DOCS_DATA"; do
@@ -27,9 +27,9 @@ tmp_root="${TMPDIR:-/tmp}"
 if mkdir -p "$ROOT/.contexture/tmp" 2>/dev/null && [ -w "$ROOT/.contexture/tmp" ]; then tmp_root="$ROOT/.contexture/tmp"; fi
 SB=$(mktemp -d "$tmp_root/fts5-store-test.XXXXXX") || exit 1
 trap 'rm -rf "$SB"' EXIT INT TERM
-mkdir -p "$SB/.contexture/modules/docs" "$SB/.contexture/tmp" "$SB/db"
+mkdir -p "$SB/.contexture/modules" "$SB/.contexture/extensions/modules/docs" "$SB/.contexture/tmp" "$SB/db"
 cp -R "$STORAGE_CORE" "$SB/.contexture/storage"
-cp "$DOCS_DATA" "$SB/.contexture/modules/docs/data"
+cp "$DOCS_DATA" "$SB/.contexture/extensions/modules/docs/data"
 chmod +x "$SB/.contexture/storage/scripts/"* "$SB/.contexture/storage/drivers/posix/driver"
 
 pass=0

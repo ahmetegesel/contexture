@@ -4,8 +4,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-INDEX_DRIVER="$SCRIPT_DIR/../.contexture/modules/ast-doc-graph/bin/ast-doc-index"
-GRAPH_QUERY="$SCRIPT_DIR/../.contexture/modules/ast-doc-graph/bin/graph-query"
+INDEX_DRIVER="$SCRIPT_DIR/../.contexture/extensions/modules/ast-doc-graph/bin/ast-doc-index"
+GRAPH_QUERY="$SCRIPT_DIR/../.contexture/extensions/modules/ast-doc-graph/bin/graph-query"
 
 # needs: the pilot repository, sqlite3, and a Node/tsx runner
 if [[ ! -x /usr/bin/sqlite3 ]] && ! command -v sqlite3 >/dev/null 2>&1; then

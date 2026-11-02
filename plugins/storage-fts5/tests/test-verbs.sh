@@ -23,8 +23,8 @@ set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../../.." && pwd)
-# the plugin's own module copy, never the workspace's adopted one: the two drift
-MOD="$SCRIPT_DIR/../.contexture/modules/storage-fts5"
+# the plugin's own driver copy, never the workspace's adopted one: the two drift
+MOD="$SCRIPT_DIR/../.contexture/extensions/storage/drivers/fts5"
 BASE="$ROOT/base/.contexture"
 
 if ! command -v sqlite3 >/dev/null 2>&1 || ! sqlite3 :memory: "CREATE VIRTUAL TABLE t USING fts5(x);" >/dev/null 2>&1; then
@@ -50,7 +50,9 @@ cp -p "$BASE/ctx" "$WS/.contexture/ctx"
 cp -Rp "$BASE/modules/session" "$WS/.contexture/modules/session"
 cp -Rp "$BASE/storage" "$WS/.contexture/storage"
 cp -Rp "$BASE/extensions/modules/lane" "$WS/.contexture/extensions/modules/lane"
-cp -Rp "$MOD" "$WS/.contexture/modules/storage-fts5"
+mkdir -p "$WS/.contexture/extensions/storage/drivers"
+cp -Rp "$MOD" "$WS/.contexture/extensions/storage/drivers/fts5"
+chmod +x "$WS/.contexture/extensions/storage/drivers/fts5/driver"
 
 pass=0
 fail=0

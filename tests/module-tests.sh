@@ -631,8 +631,15 @@ a_rc "$RC" 0 "DR: the driver package uninstall rc0"
 ( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/docs-discipline/install" ) > "$SB/.out" 2> "$SB/.err"
 RC=$?
 ERR=$(cat "$SB/.err")
-a_rc "$RC" 1 "DR: the real package wrapper reaches the installer and refuses the old shape rc1"
-a_match "$ERR" "core path refused" "DR: the old-shape refusal names the core path"
+a_rc "$RC" 0 "DR: the real docs-discipline wrapper installs the extension-root package shape rc0"
+a_file "$SB/.contexture/extensions/modules/docs/module" "DR: the real docs module lands under the extension root"
+a_file "$SB/.contexture/extensions/templates/doc.md" "DR: the real grammar template lands under the extension root"
+a_file "$SB/.contexture/extensions/rhythms/work.md" "DR: the real docs rhythm lands under the extension root"
+a_file "$SB/docs/workspace/conventions.md" "DR: the install hook seeds the corpus through ctx docs write"
+( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/docs-discipline/uninstall" ) > "$SB/.out" 2> "$SB/.err"
+RC=$?
+a_rc "$RC" 0 "DR: the real docs-discipline wrapper uninstalls rc0"
+a_no_file "$SB/.contexture/extensions/modules/docs/module" "DR: the real docs module is removed after uninstall"
 
 echo "== RM the real package manifests =="
 for p in docs-discipline ast-doc-graph storage-fts5 toolchain-filters starter-rhythms; do
@@ -648,13 +655,42 @@ a_eq "$(./.contexture/ctx _package "$ROOT/plugins/starter-rhythms/manifest" part
 a_eq "$(./.contexture/ctx _package "$ROOT/plugins/storage-fts5/manifest" kind)" "driver" "RM: storage-fts5 is a driver package"
 a_eq "$(./.contexture/ctx _package "$ROOT/plugins/storage-fts5/manifest" driver)" "fts5" "RM: storage-fts5 maps to the driver name fts5"
 a_eq "$(./.contexture/ctx _package "$ROOT/plugins/storage-fts5/manifest" parts)" "driver storage/drivers/fts5" "RM: storage-fts5 declares its driver part"
-a_no_file "$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5/module" "RM: the fts5 module file is retired"
-CAP=$(sh "$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5/drivers/fts5" capability)
+a_no_file "$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/module" "RM: the fts5 module file is retired"
+a_exec "$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/driver" "RM: the fts5 driver lands at the extension-relative driver path"
+CAP=$(sh "$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/driver" capability)
 a_match "$CAP" '"driver":"fts5"' "RM: the driver descriptor names fts5"
 a_match "$CAP" '"version":"3.0.0"' "RM: the driver descriptor version is 3.0.0"
 a_match "$CAP" '"contract":"2"' "RM: the storage contract is 2"
-a_no_file "$ROOT/plugins/lane-isolation/manifest" "RM: lane-isolation retires into the lane laws (no package manifest)"
+a_no_file "$ROOT/plugins/lane-isolation" "RM: the lane-isolation package folder retires into the lane laws"
 a_match "$(cat "$ROOT/base/.contexture/extensions/modules/lane/laws")" "branch/worktree" "RM: the lane module laws carry the lane-isolation clauses"
+
+echo "== RC the real catalog's resolver precedence =="
+( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/storage-fts5/install" ) > "$SB/.out" 2> "$SB/.err"
+RC=$?
+a_rc "$RC" 0 "RC: the real storage-fts5 package installs rc0"
+a_exec "$SB/.contexture/extensions/storage/drivers/fts5/driver" "RC: the real fts5 driver lands in the extension root"
+mkdir -p "$SB/.contexture/modules/storage-fts5/drivers"
+printf '#!/bin/sh\nexit 0\n' > "$SB/.contexture/modules/storage-fts5/drivers/fts5"
+chmod +x "$SB/.contexture/modules/storage-fts5/drivers/fts5"
+FTS5_GOT=$(cd "$SB" && CTX_STORAGE_DRIVER=fts5 ./.contexture/storage/scripts/driver-resolver resolve 2>&1)
+a_eq "$FTS5_GOT" "$SB/.contexture/extensions/storage/drivers/fts5/driver" "RC: storage.driver: fts5 resolves from the extension root, not the transitional module tier"
+rm -rf "$SB/.contexture/modules/storage-fts5"
+a_not "$(./.contexture/ctx help --all 2>/dev/null)" "storage-fts5" "RC: the module listing carries no fts5 driver"
+( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/storage-fts5/uninstall" ) > "$SB/.out" 2> "$SB/.err"
+RC=$?
+a_rc "$RC" 0 "RC: the real storage-fts5 package uninstalls rc0"
+a_no_file "$SB/.contexture/extensions/storage/drivers/fts5/driver" "RC: the real fts5 driver is removed after uninstall"
+for p in ast-doc-graph toolchain-filters starter-rhythms; do
+  ( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/$p/install" ) > "$SB/.out" 2> "$SB/.err"
+  RC=$?
+  a_rc "$RC" 0 "RC: the real $p package installs rc0"
+  ( cd "$SB" && CTX_ROOT="$SB" sh "$ROOT/plugins/$p/uninstall" ) > "$SB/.out" 2> "$SB/.err"
+  RC=$?
+  a_rc "$RC" 0 "RC: the real $p package uninstalls rc0"
+done
+a_no_file "$SB/.contexture/extensions/modules/ast-doc-graph/module" "RC: the real ast-doc-graph module is removed after uninstall"
+a_no_file "$SB/.contexture/extensions/modules/toolchain-filters/filters" "RC: the real toolchain filters are removed after uninstall"
+a_no_file "$SB/.contexture/extensions/rhythms/work.md" "RC: the real starter rhythms are removed after uninstall"
 
 echo "== RS the engine's reserved reader =="
 ( cd "$SB" && ./.contexture/ctx _reserved refresh ) >/dev/null 2>&1

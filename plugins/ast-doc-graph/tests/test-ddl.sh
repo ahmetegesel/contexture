@@ -5,7 +5,7 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-SCHEMA_FILE="${SCRIPT_DIR}/../.contexture/modules/ast-doc-graph/schema.sql"
+SCHEMA_FILE="${SCRIPT_DIR}/../.contexture/extensions/modules/ast-doc-graph/schema.sql"
 
 # need: sqlite3
 SQLITE_BIN="/usr/bin/sqlite3"

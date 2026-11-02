@@ -57,7 +57,7 @@ a_match() { if printf '%s\n' "$1" | grep -q "$2"; then ok "$3"; else bad "$3 (no
 FORBID='session\.sh|compact\.sh|session-[a-z]+\.awk|\.contexture/scripts/'
 
 echo "== G1 main-surface forbid grep =="
-SURFACES="base/AGENTS.md base/.contexture/ONBOARDING.md AGENTS.workspace.md README.md docs/the-engine.md docs/units-and-lanes.md docs/the-record.md docs/adoption.md docs/rhythms.md docs/overlays.md docs/modules.md docs/plugins.md plugins/starter-rhythms/README.md plugins/toolchain-filters/README.md plugins/toolchain-filters/tests/README.md plugins/lane-isolation/README.md plugins/docs-discipline/README.md plugins/ast-doc-graph/README.md tests/README.md"
+SURFACES="base/AGENTS.md base/.contexture/ONBOARDING.md AGENTS.workspace.md README.md docs/the-engine.md docs/units-and-lanes.md docs/the-record.md docs/adoption.md docs/rhythms.md docs/overlays.md docs/modules.md docs/plugins.md plugins/starter-rhythms/README.md plugins/toolchain-filters/README.md plugins/toolchain-filters/tests/README.md plugins/docs-discipline/README.md plugins/ast-doc-graph/README.md plugins/storage-fts5/README.md tests/README.md"
 for f in "$ROOT"/base/.contexture/templates/*.md; do
   [ -f "$f" ] || continue
   rel=${f#"$ROOT"/}
@@ -196,7 +196,7 @@ check_filter_pairs() {
   fi
 }
 check_filter_pairs "$ROOT/base/.contexture/modules/run/filters" "$SCRIPT_DIR" "core"
-check_filter_pairs "$ROOT/plugins/toolchain-filters/.contexture/modules/toolchain-filters/filters" "$ROOT/plugins/toolchain-filters/tests" "toolchain-filters"
+check_filter_pairs "$ROOT/plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters" "$ROOT/plugins/toolchain-filters/tests" "toolchain-filters"
 
 for s in filter-tests.sh ctx-tests.sh session-tests.sh hook-tests.sh record-audit-tests.sh governance-tests.sh; do
   if [ -f "$SCRIPT_DIR/$s" ]; then ok "suite present: $s"; else bad "suite missing: $s"; fi
@@ -218,10 +218,10 @@ if grep -q "the run green" "$ROOT/AGENTS.workspace.md"; then
 else
   bad "gate: AGENTS.workspace.md ship breath lacks the run green"
 fi
-if grep -q "ship breath" "$ROOT/plugins/lane-isolation/README.md" 2>/dev/null; then
-  bad "gate: lane-isolation carries a ship-breath clause that must stay consistent"
+if [ -e "$ROOT/plugins/lane-isolation" ]; then
+  bad "gate: the lane-isolation package folder retires into the lane laws"
 else
-  ok "gate: lane-isolation carries no ship-breath clause (consistent)"
+  ok "gate: the lane-isolation package folder is retired into the lane laws"
 fi
 
 echo "== G5 awk replacement strings portable to every awk (the review lane si-e5, F3) =="

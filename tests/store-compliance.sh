@@ -37,8 +37,8 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
-FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
-DATA_FILE="$ROOT/plugins/docs-discipline/.contexture/modules/docs/data"
+FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5"
+DATA_FILE="$ROOT/plugins/docs-discipline/.contexture/extensions/modules/docs/data"
 
 DRIVER_NAME=posix
 DRIVER_EXEC_ARG=""
@@ -63,7 +63,7 @@ for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_CORE/script
   [ -e "$f" ] || { echo "store-compliance.sh: missing $f" >&2; exit 2; }
 done
 if [ "$IS_POSIX" -eq 0 ]; then
-  for f in "$FTS5_MOD/drivers/fts5" "$FTS5_MOD/db-init.sh" "$FTS5_MOD/schema.sql"; do
+  for f in "$FTS5_MOD/driver" "$FTS5_MOD/db-init.sh" "$FTS5_MOD/schema.sql"; do
     [ -e "$f" ] || { echo "store-compliance.sh: missing $f" >&2; exit 2; }
   done
   if ! command -v sqlite3 >/dev/null 2>&1; then
@@ -93,16 +93,17 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-mkdir -p "$SB/.contexture/modules" "$SB/.contexture/tmp" "$SB/docs/workspace"
+mkdir -p "$SB/.contexture/modules" "$SB/.contexture/extensions/modules" "$SB/.contexture/tmp" "$SB/docs/workspace"
 cp "$CTX_SRC" "$SB/.contexture/ctx"
 chmod +x "$SB/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SB/.contexture/modules/session"
 cp -R "$STORAGE_CORE" "$SB/.contexture/storage"
 # the suite's cases are docs-shaped; --data-file supplies any file with that contract
-mkdir -p "$SB/.contexture/modules/docs"
-cp "$DATA_FILE" "$SB/.contexture/modules/docs/data"
+mkdir -p "$SB/.contexture/extensions/modules/docs"
+cp "$DATA_FILE" "$SB/.contexture/extensions/modules/docs/data"
 if [ "$IS_POSIX" -eq 0 ]; then
-  cp -R "$FTS5_MOD" "$SB/.contexture/modules/storage-fts5"
+  mkdir -p "$SB/.contexture/extensions/storage/drivers"
+  cp -R "$FTS5_MOD" "$SB/.contexture/extensions/storage/drivers/fts5"
   printf 'storage.driver: fts5\n' > "$SB/.contexture/config"
 fi
 chmod +x "$SB/.contexture/modules/session/scripts/"* "$SB/.contexture/storage/scripts/"* "$SB/.contexture/storage/drivers/posix/driver"
@@ -110,7 +111,7 @@ cd "$SB" || exit 2
 if [ "$IS_POSIX" -eq 1 ]; then
   STAGED_DRIVER="$SB/.contexture/storage/drivers/posix/driver"
 else
-  STAGED_DRIVER="$SB/.contexture/modules/storage-fts5/drivers/fts5"
+  STAGED_DRIVER="$SB/.contexture/extensions/storage/drivers/fts5/driver"
   chmod +x "$STAGED_DRIVER"
 fi
 if [ -n "$DRIVER_EXEC_ARG" ]; then DRIVER="$DRIVER_EXEC_ARG"; else DRIVER="$STAGED_DRIVER"; fi

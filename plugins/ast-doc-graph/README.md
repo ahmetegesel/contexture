@@ -30,20 +30,20 @@ Two ctx verbs drive it: `ctx ast-doc-graph index` runs the pipeline, and
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/modules/ast-doc-graph/module` | the module summary line | copy |
-| `.contexture/modules/ast-doc-graph/scripts/index` | the indexing verb: a thin wrapper over `bin/ast-doc-index` | copy |
-| `.contexture/modules/ast-doc-graph/scripts/query` | the retrieval verb: a thin wrapper over `bin/graph-query`, the seven subcommands ride as arguments | copy |
-| `.contexture/modules/ast-doc-graph/bin/ast-doc-index` | the unified pipeline driver: multi-directory discovery, full and --delta incremental indexing, SQLite compilation | copy |
-| `.contexture/modules/ast-doc-graph/bin/graph-query` | the retrieval CLI: zero-daemon JIT micro-sync, symbols, callers, callees, dual FTS5 search, rules, pitfalls, stats | copy |
-| `.contexture/modules/ast-doc-graph/extractors/ts/extract-ts.sh` | the TypeScript AST extractor launcher: dynamically locates `tsx` or `node`, executes parser | copy |
-| `.contexture/modules/ast-doc-graph/extractors/ts/extract-ts.ts` | the TypeScript Compiler API parser: extracts symbols, object methods, call expressions, definitions | copy |
-| `.contexture/modules/ast-doc-graph/extractors/docs/extract-docs.sh` | the docs extractor launcher: locates runner, executes markdown corpus parser | copy |
-| `.contexture/modules/ast-doc-graph/extractors/docs/extract-docs.ts` | the docs-discipline corpus parser: extracts units, sources globs, contract rules, pitfalls | copy |
-| `.contexture/modules/ast-doc-graph/loader/index-graph.sh` | the graph database loader launcher: executes SQLite ingestion engine | copy |
-| `.contexture/modules/ast-doc-graph/loader/index-graph.ts` | the ingestion loader: populates tables, resolves GOVERNS, WARNS, COVERS edges, compiles FTS5 | copy |
-| `.contexture/modules/ast-doc-graph/schema.sql` | the SQLite relational DDL: table definitions, foreign keys, triggers, FTS5 virtual tables | copy |
-| `.contexture/modules/ast-doc-graph/spec.md` | the comprehensive data contract specification: JSONL schemas, edge linking rules, CTE patterns | reference |
-| `.contexture/modules/ast-doc-graph/README.md` | the off-path module map | reference |
+| `.contexture/extensions/modules/ast-doc-graph/module` | the module summary line | copy |
+| `.contexture/extensions/modules/ast-doc-graph/scripts/index` | the indexing verb: a thin wrapper over `bin/ast-doc-index` | copy |
+| `.contexture/extensions/modules/ast-doc-graph/scripts/query` | the retrieval verb: a thin wrapper over `bin/graph-query`, the seven subcommands ride as arguments | copy |
+| `.contexture/extensions/modules/ast-doc-graph/bin/ast-doc-index` | the unified pipeline driver: multi-directory discovery, full and --delta incremental indexing, SQLite compilation | copy |
+| `.contexture/extensions/modules/ast-doc-graph/bin/graph-query` | the retrieval CLI: zero-daemon JIT micro-sync, symbols, callers, callees, dual FTS5 search, rules, pitfalls, stats | copy |
+| `.contexture/extensions/modules/ast-doc-graph/extractors/ts/extract-ts.sh` | the TypeScript AST extractor launcher: dynamically locates `tsx` or `node`, executes parser | copy |
+| `.contexture/extensions/modules/ast-doc-graph/extractors/ts/extract-ts.ts` | the TypeScript Compiler API parser: extracts symbols, object methods, call expressions, definitions | copy |
+| `.contexture/extensions/modules/ast-doc-graph/extractors/docs/extract-docs.sh` | the docs extractor launcher: locates runner, executes markdown corpus parser | copy |
+| `.contexture/extensions/modules/ast-doc-graph/extractors/docs/extract-docs.ts` | the docs-discipline corpus parser: extracts units, sources globs, contract rules, pitfalls | copy |
+| `.contexture/extensions/modules/ast-doc-graph/loader/index-graph.sh` | the graph database loader launcher: executes SQLite ingestion engine | copy |
+| `.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts` | the ingestion loader: populates tables, resolves GOVERNS, WARNS, COVERS edges, compiles FTS5 | copy |
+| `.contexture/extensions/modules/ast-doc-graph/schema.sql` | the SQLite relational DDL: table definitions, foreign keys, triggers, FTS5 virtual tables | copy |
+| `.contexture/extensions/modules/ast-doc-graph/spec.md` | the comprehensive data contract specification: JSONL schemas, edge linking rules, CTE patterns | reference |
+| `.contexture/extensions/modules/ast-doc-graph/README.md` | the off-path module map | reference |
 | `tests/test-ddl.sh` | the DDL/CTE verification suite: needs `sqlite3` | reference |
 | `tests/verify-pilot.sh` | the end-to-end pilot suite: needs the pilot repository, `sqlite3`, and node/tsx | reference |
 | `tests/run.sh` | the named runner over both suites: declares the needs and skips cleanly | reference |
@@ -53,7 +53,7 @@ Two ctx verbs drive it: `ctx ast-doc-graph index` runs the pipeline, and
 
 The architecture is built around six non-negotiable invariants:
 
-* Zero dependency in Contexture core: plugin files live strictly under `plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/`. No dependencies or node modules are installed in the Contexture root repository.
+* Zero dependency in Contexture core: plugin files live strictly under `plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/`. No dependencies or node modules are installed in the Contexture root repository.
 * Decoupled intermediate streams: Extractors emit standard line-delimited JSON (JSONL). The ingestion loader consumes intermediate JSONL streams without knowing or caring what language extractor produced them.
 * Instant retrieval: Retrieval queries execute directly against system `/usr/bin/sqlite3` using prepared queries and Common Table Expressions (CTEs), eliminating Node.js or Python process startup latency.
 * Cycle safety: Recursive call graph traversals enforce depth boundaries and string path tracking (`INSTR(d.path, e.target) > 0`) to guarantee termination across recursive or mutually recursive functions.
@@ -125,22 +125,25 @@ Before adopting `ast-doc-graph` in a repository, answer these questions:
 
 When proposing `ast-doc-graph` adoption to the repository maintainer:
 
-* Present the proposed destination: the plugin's module tree copies to `.contexture/modules/ast-doc-graph/`, and the verbs run through the workspace's `ctx`.
+* Present the proposed destination: the package installs its module at `.contexture/extensions/modules/ast-doc-graph/`, and the verbs run through the workspace's `ctx`.
 * Name the target source directories to index (for example, `backend/` or `src/`).
 * Explain the database storage strategy: `graph.db` generated locally or in CI, added to `.gitignore` to avoid repository bloat.
 * Highlight the agent retrieval gains: sub-millisecond call hierarchy navigation and automatic rule surfacing without speculative grep sweeps.
 
 ## Execute
 
-### Step 1: Copy the Module Tree into Target Repository
+### Step 1: Install the Package into the Target Repository
 
-Copy the plugin's module tree into the repository's drawer (the plugin mirrors the target tree, so the `.contexture/` subtree lands as-is):
+Install the package into the extension root, on the maintainer's go at the act:
 
 ```sh
-mkdir -p <repo-root>/.contexture/modules
-cp -R plugins/ast-doc-graph/.contexture/modules/ast-doc-graph <repo-root>/.contexture/modules/
-chmod +x <repo-root>/.contexture/modules/ast-doc-graph/bin/ast-doc-index <repo-root>/.contexture/modules/ast-doc-graph/bin/graph-query <repo-root>/.contexture/modules/ast-doc-graph/scripts/index <repo-root>/.contexture/modules/ast-doc-graph/scripts/query
+sh plugins/ast-doc-graph/install
 ```
+
+The installer overlays the module part at `.contexture/extensions/modules/ast-doc-graph/`,
+preserving the executable bits of `bin/ast-doc-index`, `bin/graph-query`,
+`scripts/index`, and `scripts/query`, and records every installed path under
+`.contexture/extensions/.state/ast-doc-graph.files`.
 
 The verbs run through the workspace's `ctx` (the base runtime ships at
 `.contexture/ctx`): `ctx ast-doc-graph index` and `ctx ast-doc-graph query`
@@ -366,7 +369,7 @@ ctx ast-doc-graph query stats
 
 * Static call graph approximation: The AST extractor identifies direct invocations, method calls on identifiers, and property access calls. Dynamic calls (`obj[fnName]()`), indirect callback dispatches, and heavily polymorphic reflection are not statically resolvable.
 * TypeScript Compiler API resolution: The extractor dynamically searches for `typescript` in target project `node_modules` or parent directories. If `typescript` is absent, the launcher attempts execution via Node 22+ with `--experimental-strip-types`.
-* Documentation grammar compliance: The docs extractor parses documents adhering to `.contexture/templates/doc.md`. Documents lacking typed headers (`@doc <kind> <id>`) are skipped during rule extraction. The id line a migrated contract rule or responsibility carries on its second line (`id: <slug>-r<N>`, `id: <slug>-o<N>`) is skipped as an unknown field, so the extracted rules and pitfalls stay the same.
+* Documentation grammar compliance: The docs extractor parses documents adhering to `.contexture/extensions/templates/doc.md`. Documents lacking typed headers (`@doc <kind> <id>`) are skipped during rule extraction. The id line a migrated contract rule or responsibility carries on its second line (`id: <slug>-r<N>`, `id: <slug>-o<N>`) is skipped as an unknown field, so the extracted rules and pitfalls stay the same.
 * Files-only corpus reader: The docs extractor reads the corpus as files under `docs/` (the pipeline driver scans the folder, the parser reads each file), never through `ctx docs`. Under the docs-discipline files driver that folder is the corpus; under a store driver (the storage-fts5 plugin, or any driver whose corpus lives outside the files) the folder holds no corpus, so the graph indexes no docs, rules, or pitfalls while code indexing works unchanged. Routing the extraction through `ctx docs` is a later change; until then, index docs only in a workspace on the files driver.
 * Incremental delta lifecycle: Single-file and partial-batch delta updates are fully supported via `ctx ast-doc-graph index --delta` and lazy JIT micro-sync in the query verb. Re-parsing is scoped strictly to modified files with automatic cascading edge purging and dynamic governance re-linking.
 * Zero em-dash and zero spaced hyphen compliance: In accordance with Contexture repository typography laws, all authored tools, scripts, and documentation strictly avoid em-dashes and spaced hyphens.
@@ -375,7 +378,7 @@ ctx ast-doc-graph query stats
 
 - Node with the TypeScript Compiler API reachable from the target repository: `typescript` in its `node_modules`, or `tsx`, or Node 22+ with `--experimental-strip-types`; the extractor launcher locates one.
 - System `sqlite3` with FTS5 (standard on macOS and modern Linux distributions).
-- The docs-discipline corpus grammar (`.contexture/templates/doc.md`) when documentation is extracted; code-only indexing needs TypeScript alone.
+- The docs-discipline corpus grammar (`.contexture/extensions/templates/doc.md`) when documentation is extracted; code-only indexing needs TypeScript alone.
 - The plugin's tests live with the plugin (`tests/`), are never copied into a workspace, and the upstream runner may invoke them through `tests/run.sh`: `test-ddl.sh` needs only `sqlite3`; `verify-pilot.sh` additionally needs its pilot repository (passed as the first argument or `AST_DOC_GRAPH_PILOT`) and node/tsx. A suite missing a need prints `SKIP: <need>` and exits 77; the runner reports it as skipped, never failed.
 
 ## Contributing
@@ -432,9 +435,9 @@ from that run:
 ```sh
 scratch="../../.contexture/tmp/ast-doc-graph-walk"
 rm -rf "$scratch"
-mkdir -p "$scratch/.contexture/modules" "$scratch/docs"
+mkdir -p "$scratch/.contexture/extensions/modules" "$scratch/docs"
 cp ../../.contexture/ctx "$scratch/.contexture/ctx"
-cp -R .contexture/modules/ast-doc-graph "$scratch/.contexture/modules/"
+cp -R .contexture/extensions/modules/ast-doc-graph "$scratch/.contexture/extensions/modules/"
 cp -R ../docs-discipline/tests/sample/docs/. "$scratch/docs/"
 cd "$scratch"
 
@@ -468,20 +471,20 @@ gets retrieval without the TypeScript toolchain.
 
 | file | provenance |
 |---|---|
-| `.contexture/modules/ast-doc-graph/module` | authored fresh: the module summary line |
-| `.contexture/modules/ast-doc-graph/scripts/index` | authored fresh: the indexing verb, a pass-through wrapper over `bin/ast-doc-index` |
-| `.contexture/modules/ast-doc-graph/scripts/query` | authored fresh: the retrieval verb, a pass-through wrapper over `bin/graph-query` |
-| `.contexture/modules/ast-doc-graph/README.md` | authored fresh: the off-path module map (layout, pipeline, tests) |
-| `.contexture/modules/ast-doc-graph/bin/ast-doc-index` | authored fresh: unified bash pipeline driver coordinating discovery, AST extraction, doc extraction, and SQLite compilation |
-| `.contexture/modules/ast-doc-graph/bin/graph-query` | authored fresh: zero-dependency bash retrieval CLI wrapping system `/usr/bin/sqlite3` with CTEs and FTS5 search |
-| `.contexture/modules/ast-doc-graph/extractors/ts/extract-ts.sh` | authored fresh: launcher resolving project-local `tsx` or Node with fallback search paths |
-| `.contexture/modules/ast-doc-graph/extractors/ts/extract-ts.ts` | authored fresh: TypeScript Compiler API parser extracting symbols, object methods, call expressions, and signatures |
-| `.contexture/modules/ast-doc-graph/extractors/docs/extract-docs.sh` | authored fresh: launcher resolving runner for docs extractor |
-| `.contexture/modules/ast-doc-graph/extractors/docs/extract-docs.ts` | authored fresh: docs-discipline markdown parser extracting units, sources globs, contract rules, and pitfalls |
-| `.contexture/modules/ast-doc-graph/loader/index-graph.sh` | authored fresh: launcher resolving runner for database loader |
-| `.contexture/modules/ast-doc-graph/loader/index-graph.ts` | authored fresh: database ingestion loader building relational tables, resolving GOVERNS/WARNS/COVERS, and compiling FTS5 |
-| `.contexture/modules/ast-doc-graph/schema.sql` | authored fresh: relational SQLite schema and FTS5 virtual table definitions with foreign keys and trigram tokenizers |
-| `.contexture/modules/ast-doc-graph/spec.md` | authored fresh: data contract specification for intermediate JSONL streams, recursive CTEs, and edge linking |
+| `.contexture/extensions/modules/ast-doc-graph/module` | authored fresh: the module summary line |
+| `.contexture/extensions/modules/ast-doc-graph/scripts/index` | authored fresh: the indexing verb, a pass-through wrapper over `bin/ast-doc-index` |
+| `.contexture/extensions/modules/ast-doc-graph/scripts/query` | authored fresh: the retrieval verb, a pass-through wrapper over `bin/graph-query` |
+| `.contexture/extensions/modules/ast-doc-graph/README.md` | authored fresh: the off-path module map (layout, pipeline, tests) |
+| `.contexture/extensions/modules/ast-doc-graph/bin/ast-doc-index` | authored fresh: unified bash pipeline driver coordinating discovery, AST extraction, doc extraction, and SQLite compilation |
+| `.contexture/extensions/modules/ast-doc-graph/bin/graph-query` | authored fresh: zero-dependency bash retrieval CLI wrapping system `/usr/bin/sqlite3` with CTEs and FTS5 search |
+| `.contexture/extensions/modules/ast-doc-graph/extractors/ts/extract-ts.sh` | authored fresh: launcher resolving project-local `tsx` or Node with fallback search paths |
+| `.contexture/extensions/modules/ast-doc-graph/extractors/ts/extract-ts.ts` | authored fresh: TypeScript Compiler API parser extracting symbols, object methods, call expressions, and signatures |
+| `.contexture/extensions/modules/ast-doc-graph/extractors/docs/extract-docs.sh` | authored fresh: launcher resolving runner for docs extractor |
+| `.contexture/extensions/modules/ast-doc-graph/extractors/docs/extract-docs.ts` | authored fresh: docs-discipline markdown parser extracting units, sources globs, contract rules, and pitfalls |
+| `.contexture/extensions/modules/ast-doc-graph/loader/index-graph.sh` | authored fresh: launcher resolving runner for database loader |
+| `.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts` | authored fresh: database ingestion loader building relational tables, resolving GOVERNS/WARNS/COVERS, and compiling FTS5 |
+| `.contexture/extensions/modules/ast-doc-graph/schema.sql` | authored fresh: relational SQLite schema and FTS5 virtual table definitions with foreign keys and trigram tokenizers |
+| `.contexture/extensions/modules/ast-doc-graph/spec.md` | authored fresh: data contract specification for intermediate JSONL streams, recursive CTEs, and edge linking |
 | `tests/test-ddl.sh` | authored fresh: SQLite DDL/FTS5/trigger/CTE verification, needs declared |
 | `tests/verify-pilot.sh` | authored fresh: end-to-end pipeline and ten retrieval assertions against a declared pilot, needs declared |
 | `tests/run.sh` | authored fresh: the named runner over both suites with declared needs and clean skips |

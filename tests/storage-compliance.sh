@@ -198,10 +198,12 @@ if [ -z "$DRIVER_EXEC" ] || [ ! -x "$DRIVER_EXEC" ]; then
     DRIVER_EXEC="$ROOT/base/.contexture/modules/session/drivers/$check_driver/driver"
   elif [ -x "$ROOT/.contexture/drivers/$check_driver/driver" ]; then
     DRIVER_EXEC="$ROOT/.contexture/drivers/$check_driver/driver"
+  elif [ -x "$ROOT/.contexture/extensions/storage/drivers/$check_driver/driver" ]; then
+    DRIVER_EXEC="$ROOT/.contexture/extensions/storage/drivers/$check_driver/driver"
+  elif [ -x "$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/$check_driver/driver" ]; then
+    DRIVER_EXEC="$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/$check_driver/driver"
   elif [ -x "$ROOT/.contexture/modules/storage-fts5/drivers/$check_driver" ]; then
     DRIVER_EXEC="$ROOT/.contexture/modules/storage-fts5/drivers/$check_driver"
-  elif [ -x "$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5/drivers/$check_driver" ]; then
-    DRIVER_EXEC="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5/drivers/$check_driver"
   elif command -v "ctx-storage-$DRIVER_NAME" >/dev/null 2>&1; then
     DRIVER_EXEC=$(command -v "ctx-storage-$DRIVER_NAME")
   fi

@@ -6,8 +6,8 @@ set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../../.." && pwd)
-# the plugin's own module copy, never the workspace's adopted one: the two drift
-PLUGIN_MODULE="$SCRIPT_DIR/../.contexture/modules/storage-fts5"
+# the plugin's own driver copy, never the workspace's adopted one: the two drift
+PLUGIN_MODULE="$SCRIPT_DIR/../.contexture/extensions/storage/drivers/fts5"
 
 if ! command -v sqlite3 >/dev/null 2>&1; then
   printf 'SKIP: sqlite3 not found on PATH\n'
@@ -21,4 +21,4 @@ if [ ! -x "$COMPLIANCE" ]; then
 fi
 
 # the plugin's own driver alone: it answers every function natively, no other driver runs
-"$COMPLIANCE" --driver=fts5 --driver-exec="$PLUGIN_MODULE/drivers/fts5"
+"$COMPLIANCE" --driver=fts5 --driver-exec="$PLUGIN_MODULE/driver"

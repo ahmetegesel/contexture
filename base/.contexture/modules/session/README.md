@@ -52,7 +52,7 @@ session artifact itself.
 | `scripts/diagnose` | `capability` (the resolver's handshake read) and `storage.health` |
 | `scripts/entry` | `entry.get`, `entry.list`, `entry.closure` |
 | `scripts/finding` | `finding.add`, `get`, `update`, `supersede`, `drop`, `list` |
-| `scripts/index` | none: reads `.contexture/rhythms/` |
+| `scripts/index` | none: reads `.contexture/rhythms/` and `.contexture/extensions/rhythms/` |
 | `scripts/load` | `session.load`, or `session.refload` for the refs form; base pages the rendered text |
 | `scripts/next` | `session.next`, then `task.list` for the hook's slugs |
 | `scripts/record` | `entry.record` |

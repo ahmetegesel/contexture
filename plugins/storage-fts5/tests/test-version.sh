@@ -13,8 +13,8 @@ set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../../.." && pwd)
-MOD="$SCRIPT_DIR/../.contexture/modules/storage-fts5"
-DRV="$MOD/drivers/fts5"
+MOD="$SCRIPT_DIR/../.contexture/extensions/storage/drivers/fts5"
+DRV="$MOD/driver"
 
 REAL=$(command -v sqlite3 2>/dev/null) || { printf 'SKIP: sqlite3 not found on PATH\n'; exit 77; }
 

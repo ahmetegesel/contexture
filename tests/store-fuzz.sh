@@ -33,7 +33,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
-FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
+FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5"
 
 SEED=20261102
 CALLS=16
@@ -57,7 +57,7 @@ case "$CALLS" in ''|*[!0-9]*) echo "store-fuzz.sh: --calls takes a positive numb
 [ "$SEED" -ge 1 ] || { echo "store-fuzz.sh: --seed takes a positive number" >&2; exit 1; }
 [ "$CALLS" -ge 4 ] || { echo "store-fuzz.sh: --calls takes at least 4" >&2; exit 1; }
 
-for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/scripts/store-search" "$STORAGE_CORE/drivers/posix/driver" "$FTS5_MOD/drivers/fts5" "$FTS5_MOD/db-init.sh" "$FTS5_MOD/schema.sql"; do
+for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/scripts/store-search" "$STORAGE_CORE/drivers/posix/driver" "$FTS5_MOD/driver" "$FTS5_MOD/db-init.sh" "$FTS5_MOD/schema.sql"; do
   [ -e "$f" ] || { echo "store-fuzz.sh: missing $f" >&2; exit 2; }
 done
 if ! command -v sqlite3 >/dev/null 2>&1; then
@@ -102,9 +102,10 @@ stage_side() { # <dir> <posix|fts5>
   printf 'namespace: fuzz\nroot: fuzz-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\nmodes: exact\n' > "$ss_dir/.contexture/modules/fuzz/data"
   chmod +x "$ss_dir/.contexture/modules/session/scripts/"* "$ss_dir/.contexture/storage/scripts/"* "$ss_dir/.contexture/storage/drivers/posix/driver"
   if [ "$ss_kind" = fts5 ]; then
-    cp -R "$FTS5_MOD" "$ss_dir/.contexture/modules/storage-fts5"
+    mkdir -p "$ss_dir/.contexture/extensions/storage/drivers"
+    cp -R "$FTS5_MOD" "$ss_dir/.contexture/extensions/storage/drivers/fts5"
     printf 'storage.driver: fts5\n' > "$ss_dir/.contexture/config"
-    chmod +x "$ss_dir/.contexture/modules/storage-fts5/drivers/fts5"
+    chmod +x "$ss_dir/.contexture/extensions/storage/drivers/fts5/driver"
   fi
 }
 
@@ -328,7 +329,7 @@ fz_compare() { # <posix capture dir> <fts5 capture dir> <total>
 }
 
 plant_driver() { # <sandbox>: wrap the fts5 driver so store.list answers one byte more
-  pd_drv="$1/.contexture/modules/storage-fts5/drivers/fts5"
+  pd_drv="$1/.contexture/extensions/storage/drivers/fts5/driver"
   mv "$pd_drv" "$pd_drv.real"
   {
     printf '#!/bin/sh\n'
@@ -353,7 +354,7 @@ if [ "$PLANT" -eq 1 ]; then
   POSIX_ROOT="$SB/plant/posix"
   FTS5_ROOT="$SB/plant/fts5"
   POSIX_DRIVER="$POSIX_ROOT/.contexture/storage/drivers/posix/driver"
-  FTS5_DRIVER="$FTS5_ROOT/.contexture/modules/storage-fts5/drivers/fts5"
+  FTS5_DRIVER="$FTS5_ROOT/.contexture/extensions/storage/drivers/fts5/driver"
   CAP="$SB/plant/cap"
   mkdir -p "$CAP/posix" "$CAP/fts5"
   printf 'store-fuzz: planted divergence, seed %s, %s steps\n' "$SEED" "$PLANT_CALLS"
@@ -377,7 +378,7 @@ stage_side "$SB/fts5" fts5
 POSIX_ROOT="$SB/posix"
 FTS5_ROOT="$SB/fts5"
 POSIX_DRIVER="$POSIX_ROOT/.contexture/storage/drivers/posix/driver"
-FTS5_DRIVER="$FTS5_ROOT/.contexture/modules/storage-fts5/drivers/fts5"
+FTS5_DRIVER="$FTS5_ROOT/.contexture/extensions/storage/drivers/fts5/driver"
 CAP="$SB/cap"
 mkdir -p "$CAP/posix" "$CAP/fts5"
 printf 'store-fuzz: seed %s, %s steps, posix against fts5\n' "$SEED" "$CALLS"

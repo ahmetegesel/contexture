@@ -1,7 +1,7 @@
 @doc conventions conventions
   repo: workspace
   description: "Universal workspace conventions: documentation discipline, git, and security invariants"
-  sources: [AGENTS.workspace.md, .contexture/modules/**, .contexture/templates/doc.md]
+  sources: [AGENTS.workspace.md, .contexture/extensions/**, .contexture/extensions/templates/doc.md]
   keywords: [conventions, git, secrets, evidence, laws, prompt-to-doc, stop-gate, authoring, drift]
 
 @rule git/conventional-commits
@@ -49,7 +49,7 @@
   layer: workspace
   provenance: ratified
   scope: "All changes affecting public APIs, contracts, behaviors, or dependencies."
-  evidence: ".contexture/modules/docs/scripts/docs-audit.awk"
+  evidence: ".contexture/extensions/modules/docs/scripts/docs-audit.awk"
   anti: "Refactoring an API contract without updating the unit's corpus doc"
   good: "Updating the endpoint signature in code and, with ctx docs entry on the matching contract rule, the unit's corpus doc in the same change"
 
@@ -61,7 +61,7 @@
   layer: workspace
   provenance: ratified
   scope: "All task initiations, feature developments, refactorings, and investigations."
-  evidence: ".contexture/modules/docs/scripts/query"
+  evidence: ".contexture/extensions/modules/docs/scripts/query"
   caution: "Reading code files before querying docs causes hallucinated assumptions and misses documented contracts and pitfalls."
   anti: "Reading source files directly before querying the corpus"
   good: "Querying the corpus first (search or file owner), then reading the owning doc and its pitfalls"
@@ -74,20 +74,20 @@
   layer: workspace
   provenance: ratified
   scope: "All session completion checkpoints and close transactions."
-  evidence: ".contexture/modules/docs/scripts/gate"
+  evidence: ".contexture/extensions/modules/docs/scripts/gate"
   caution: "A failing close gate indicates uncovered code files, doc updates missing from the delta, or doc syntax errors that break downstream readers."
   anti: "Closing a task or ending a session with modified code but unupdated documentation"
   good: "Chaining the audit and the check via ctx docs gate to verify coverage and zero stale docs before closing"
 
 @rule docs/authoring
   directive: must
-  statement: "New documentation is authored map-first: the codebase is mapped to coherent units with scoped sources globs (never a folder-by-folder mirror), each unit is drafted per .contexture/templates/doc.md and written through the ctx docs write verbs (ctx docs write for a whole draft, ctx docs new and the block verbs for the rest), and the draft is verified before it lands (ctx docs audit for integrity, ctx docs check for coverage, ctx docs query for the projected read)."
+  statement: "New documentation is authored map-first: the codebase is mapped to coherent units with scoped sources globs (never a folder-by-folder mirror), each unit is drafted per .contexture/extensions/templates/doc.md and written through the ctx docs write verbs (ctx docs write for a whole draft, ctx docs new and the block verbs for the rest), and the draft is verified before it lands (ctx docs audit for integrity, ctx docs check for coverage, ctx docs query for the projected read)."
   status: followed
   prevalence: universal
   layer: workspace
   provenance: ratified
   scope: "Authoring or bootstrapping a documentation corpus."
-  evidence: ".contexture/templates/doc.md"
+  evidence: ".contexture/extensions/templates/doc.md"
   caution: "A corpus authored from folder names mirrors the tree and hides the units readers actually need."
   anti: "One doc per source folder with a glob for every leaf"
   good: "Coherent units mapped by domain and intent, with the grammar template as the shape authority"
@@ -100,8 +100,8 @@
   layer: workspace
   provenance: ratified
   scope: "Any code change inside a documented repository."
-  evidence: ".contexture/modules/docs/scripts/docs-check.awk"
-  enforced_at: [.contexture/modules/docs/scripts/docs-check.awk, .contexture/modules/docs/scripts/gate, .contexture/rhythms/docs-drift.md]
+  evidence: ".contexture/extensions/modules/docs/scripts/docs-check.awk"
+  enforced_at: [.contexture/extensions/modules/docs/scripts/docs-check.awk, .contexture/extensions/modules/docs/scripts/gate, .contexture/extensions/rhythms/docs-drift.md]
   caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: the check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered. Under a store driver the check runs in its store mode: a doc refreshes only the code its own sources name, and every doc can ride the driver-fed delta."
   anti: "Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone, which cannot exit 0 by construction"
   good: "Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline"
@@ -114,7 +114,7 @@
   layer: workspace
   provenance: ratified
   scope: "All @rule, @contract, @stages, and @pitfalls evidence fields."
-  evidence: ".contexture/modules/docs/scripts/docs-audit.awk"
+  evidence: ".contexture/extensions/modules/docs/scripts/docs-audit.awk"
   anti: "evidence: 'controllers/feed.cs:42'"
   good: "evidence: 'OrderController.ListOrders'"
 
@@ -138,7 +138,7 @@
   layer: workspace
   provenance: ratified
   scope: "Every @pitfalls block of the corpus."
-  evidence: ".contexture/modules/docs/scripts/docs-audit.awk"
+  evidence: ".contexture/extensions/modules/docs/scripts/docs-audit.awk"
   caution: "A pitfall morphed in class to keep its journal anchor describes behavior that no longer exists."
   anti: "Reclassifying a fixed bug as a gotcha to preserve its journal anchor."
   good: "Remove the fixed pitfall with ctx docs pitfall <id> --remove (the id retires), land the behavior as a contract @rule, and re-point refs from a fresh journal entry."
@@ -151,7 +151,7 @@
   layer: workspace
   provenance: ratified
   scope: "All cross-references inside the docs corpus."
-  evidence: ".contexture/modules/docs/scripts/query"
+  evidence: ".contexture/extensions/modules/docs/scripts/query"
   caution: "Block-level prose like 'see contract' resolves to nothing; narrative 'above/below' mentions stay prose."
   anti: "(see contract) with no block address"
   good: "(see #contract); (see order-flow.md#pitfalls)"
