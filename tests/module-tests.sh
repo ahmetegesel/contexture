@@ -8,7 +8,8 @@
 # record and the changed-file preservation; the executable-bit modes; the part
 # hooks' order and their failure; the read-only refusal that writes nothing; the
 # installed driver resolving from the extension root; the engine's _reserved
-# reader; and a real package wrapper's refusal of the old package shape.
+# reader; a real package wrapper's refusal of the old package shape; and the
+# worked example package's own test (tests/fixtures/worked-package/tests/run.sh).
 # Every case stages its package under the sandbox catalog; nothing touches the
 # live drawer, the real catalog, or the record.
 #
@@ -703,6 +704,19 @@ a_rc "$?" 1 "RS: session is a builtin, not a reserved word"
 a_rc "$?" 1 "RS: a free name answers rc1"
 ( cd "$SB" && ./.contexture/ctx _reserved ) >/dev/null 2>&1
 a_rc "$?" 1 "RS: a missing name refuses rc1"
+
+echo "== WX the worked example package =="
+WX="$ROOT/tests/fixtures/worked-package"
+a_file "$WX/manifest" "WX: the worked example carries its package manifest"
+a_file "$WX/tests/run.sh" "WX: the worked example carries its test"
+( sh "$WX/tests/run.sh" ) > "$SB/.wx.out" 2> "$SB/.wx.err"
+WXRC=$?
+if [ "$WXRC" -ne 0 ]; then
+  cat "$SB/.wx.out" >&2
+  cat "$SB/.wx.err" >&2
+fi
+a_rc "$WXRC" 0 "WX: the worked example's own test passes"
+a_match "$(cat "$SB/.wx.out")" "worked-package: pass=[0-9][0-9]* fail=0" "WX: the test reports its clean summary"
 
 printf '\n== summary ==\n'
 printf 'module-tests: pass=%d fail=%d\n' "$pass" "$fail"

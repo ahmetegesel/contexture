@@ -1,0 +1,5 @@
+#!/bin/sh
+# summary: print a note stored under <owner>/<slug>
+# usage: ctx notes show <owner>/<slug>
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/notes" show "$@"

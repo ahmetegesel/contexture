@@ -1,0 +1,5 @@
+#!/bin/sh
+# summary: save a note from stdin under <owner>/<slug>
+# usage: ctx notes put <owner>/<slug> < text
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/notes" put "$@"

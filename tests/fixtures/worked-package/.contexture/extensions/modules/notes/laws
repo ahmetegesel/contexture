@@ -1,0 +1,3 @@
+# the notes module's law fragment: one clause the compose merges into @laws
+@append @laws
+  notes-are-module-data: a note is the notes module's data: it reaches the configured store only through the notes verbs, and the module never names or reads the driver

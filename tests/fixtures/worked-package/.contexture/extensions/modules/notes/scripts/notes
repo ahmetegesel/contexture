@@ -1,0 +1,77 @@
+#!/bin/sh
+# notes: the private implementation behind the put, show, and keys wrappers. It
+# carries no summary line, so discovery ignores it and the engine never lists it
+# as a verb. It owns the input shape and the one store call per verb; the one
+# door to the store is the storage core's library, so the module never names the
+# configured driver.
+set -u
+
+verb=${1:-}
+if [ -n "$verb" ]; then
+  shift
+fi
+
+if [ -z "${CTX_ROOT:-}" ]; then
+  echo "notes: run this module through the engine (CTX_ROOT is not set)" >&2
+  exit 2
+fi
+lib=$CTX_ROOT/.contexture/storage/scripts/library
+if [ ! -f "$lib" ]; then
+  printf 'notes %s: the storage core library is not installed (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n' "$verb" >&2
+  exit 2
+fi
+CTX_STORE_ROOT=$CTX_ROOT
+export CTX_STORE_ROOT
+. "$lib"
+
+notes_refuse() {
+  printf 'notes %s: %s (ERR_INVALID_ARGUMENT)\n' "$verb" "$1" >&2
+  exit 1
+}
+
+# notes_key <key>: one <owner>/<slug> token, no blank; the store holds the full
+# key rule, so the shape check here is the courtesy the guide describes
+notes_key() {
+  case "$1" in
+    ''|/*|*/|*/*/*) notes_refuse 'a key is <owner>/<slug>, two non-empty segments' ;;
+    *' '*) notes_refuse 'a key holds no blank' ;;
+  esac
+  case "$1" in
+    */*) ;;
+    *) notes_refuse 'a key is <owner>/<slug>, two non-empty segments' ;;
+  esac
+}
+
+notes_require() {
+  if ! store_require store >/dev/null; then
+    printf 'notes %s: the configured storage driver serves no module store (store)\n' "$verb" >&2
+    exit 2
+  fi
+}
+
+case "$verb" in
+  put)
+    [ $# -eq 1 ] || notes_refuse 'usage: ctx notes put <owner>/<slug> < text'
+    notes_key "$1"
+    notes_require
+    store_put notes "$1" >/dev/null
+    rc=$?
+    [ "$rc" -eq 0 ] || exit "$rc"
+    printf 'saved %s\n' "$1"
+    ;;
+  show)
+    [ $# -eq 1 ] || notes_refuse 'usage: ctx notes show <owner>/<slug>'
+    notes_key "$1"
+    notes_require
+    store_get notes "$1"
+    ;;
+  keys)
+    [ $# -eq 0 ] || notes_refuse 'usage: ctx notes keys'
+    notes_require
+    store_list notes
+    ;;
+  *)
+    printf 'notes: unknown verb '\''%s'\'' (ERR_INVALID_ARGUMENT)\n' "$verb" >&2
+    exit 1
+    ;;
+esac

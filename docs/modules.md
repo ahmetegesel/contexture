@@ -311,6 +311,26 @@ The steps below use the workspace modules root; a package installs its feature m
 
 ## Worked examples
 
+### the worked example package: notes, from manifest to test
+
+[`tests/fixtures/worked-package/`](../tests/fixtures/worked-package/README.md) is this guide's worked example: a feature package that carries one module and nothing else. It is authoring material, never a catalog entry, and its test is the proof the checklist describes. Read it beside this page:
+
+- `manifest`: the package manifest, with the summary, the package version, `# kind: feature`, and one `# part: module modules/notes` line.
+- `.contexture/extensions/modules/notes/module`: the module manifest, with the summary, the version, and the `# description:` block last.
+- `.contexture/extensions/modules/notes/laws`: one `@append @laws` clause, the fragment the compose merges.
+- `.contexture/extensions/modules/notes/data`: only `namespace: notes` and `key: <owner>/<slug>`; the root defaults to the namespace, the suffix is empty, and the change log is off.
+- `.contexture/extensions/modules/notes/install`: the install part hook. The package installer runs it after the overlay and the record; it seeds one welcome note through the module's own verb and leaves a present note unchanged.
+- `.contexture/extensions/modules/notes/scripts/`: the private `notes` implementation (no summary line, so it is not a verb) and the `put`, `show`, and `keys` wrappers. The implementation sources the storage core's library, so the module never names the configured driver.
+- `install`, `uninstall`, `README.md`, `tests/`: the package entry scripts, the package prose, and the test; none of them installs.
+
+The test stages the shipped base in a sandbox, installs the package there, and proves the manifests, the landed laws and data files, the install hook's seed, the store roundtrip through the verbs, the malformed key refusal, the re-install's no-overwrite rule, and the uninstall leaving the store data:
+
+```sh
+sh tests/fixtures/worked-package/tests/run.sh
+```
+
+The module suite (`tests/module-tests.sh`) runs the same test in the gate. The package shows the whole path the sections above describe: a module part under the extension root, a module that calls the library and never the driver, a part hook that uses its own verbs, and a test that stages the shipped core rather than the live drawer.
+
 ### the storage core: not a module
 
 The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file (in the workspace modules and the extension modules alike), the module-facing `scripts/library` (the store seven, `store_require` and `store_has`, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the core's resolver, so the session verbs, the docs module, and the plugin suites keep their old path while every caller resolves the configured driver through the core; the lane module, under the extension root, sources the session lib from `CTX_ROOT`. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.

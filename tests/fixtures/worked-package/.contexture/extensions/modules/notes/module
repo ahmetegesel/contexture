@@ -1,0 +1,10 @@
+# summary: the worked example notes module: put, show, and keys over the module store
+# version: 0.1.0
+# description:
+# The notes module is the worked example of the module authoring guide. It is a
+# feature module: a package part the engine discovers and dispatches.
+#
+# The module owns three verbs and one store declaration. Its verbs source the
+# storage core's library and call the store, so the module never names the
+# configured driver. Its data file declares only the namespace and the key
+# pattern; the root, the suffix, and the change-log flag take the core defaults.

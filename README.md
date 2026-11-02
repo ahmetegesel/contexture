@@ -117,6 +117,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [The record](docs/the-record.md): Artifacts, liveness, and closure
 - [The engine](docs/the-engine.md): AGENTS.md, shape grammars, and awk scripts
 - [Modules](docs/modules.md): The module contract: the standard folder, the module manifest, the package manifest, laws, data, part hooks, verbs, hooks, and filters
+- [Worked package example](tests/fixtures/worked-package/README.md): The notes module from the module authoring guide, from its manifests through its test
 - [Plugins](docs/plugins.md): Packaging, the feature and storage-driver package kinds, adoption, and the plugin test convention
 - [Units and subagents](docs/units-and-lanes.md): Folder lifecycles and delegated subagent work
 - [Rhythms](docs/rhythms.md): Procedure grammar, activation, and the default loop

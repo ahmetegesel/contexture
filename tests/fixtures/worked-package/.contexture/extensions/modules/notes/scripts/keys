@@ -1,0 +1,5 @@
+#!/bin/sh
+# summary: print the store's key list for the notes namespace
+# usage: ctx notes keys
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/notes" keys "$@"

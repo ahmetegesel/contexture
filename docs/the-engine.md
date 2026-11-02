@@ -346,7 +346,7 @@ The driver resolver (the storage core's `scripts/driver-resolver`; the session m
 1. Workspace custom drivers: `.contexture/drivers/<name>/driver` (transitional)
 2. The storage core's drivers: `.contexture/storage/drivers/<name>/driver`
 3. The extension root's package drivers: `.contexture/extensions/storage/drivers/<name>/driver`
-4. Module-owned drivers: `.contexture/modules/<module>/drivers/<driver-name>/driver` (transitional; the fts5 driver lives here until the module system moves it to the extension root)
+4. Module-owned drivers: `.contexture/modules/<module>/drivers/<driver-name>/driver` (transitional; the module system moved the fts5 driver to the extension root, and the tier stays for a workspace driver a module still carries)
 5. The base mirror's core, extension, and module drivers (transitional)
 6. PATH executables: system binaries named `ctx-storage-<name>` (transitional)
 
