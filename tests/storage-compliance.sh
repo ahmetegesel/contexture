@@ -1054,8 +1054,8 @@ tc "TC39: --mode=exact answers one row per matching entity and section, the same
 # alike on every driver: require and has answer the optional capabilities and the search
 # modes (search.mode.<m>), their verdict cached per driver path and capability set apart
 # from the dispatch verdict; the dispatch handshake refuses a descriptor that is not
-# contract 2, lacks one of the 38 functions or carries a function outside them, or breaks
-# the store family's agreement (a driver without store serves the record)
+# contract 2, does not carry the 38 functions exactly once, does not declare exact, or
+# breaks the store family's agreement (a driver without store serves the record)
 printf '\n== Suite 12: The Resolver ==\n'
 RS="$SANDBOX/rs"
 mkdir -p "$RS/.contexture/modules"
@@ -1066,12 +1066,13 @@ RSV="$RS/.contexture/modules/session/scripts/driver-resolver"
 FUNCS_JSON=$(printf '"%s",' $FUNCS38 | sed 's/,$//')
 FUNCS_NO_TASK_ADD=$(printf '"%s",' $FUNCS38 | sed 's/"task\.add",//; s/,$//')
 FUNCS_STORE_EXTRA=$(printf '"%s",' $FUNCS38 "store.list" | sed 's/,$//')
+FUNCS_DUP=$(printf '"%s",' $FUNCS38 capability | sed 's/,$//')
 STORE_JSON=$(printf '"%s",' list get put delete changes batch scan | sed 's/,$//')
 STORE_NO_BATCH=$(printf '"%s",' list get put delete changes scan | sed 's/,$//')
 STORE_EXTRA=$(printf '"%s",' list get put delete changes batch scan store.search | sed 's/,$//')
-# wrap <file> <optional list items> [<functions list>] [<contract>] [<store list>]
+# wrap <file> <optional list items> [<functions list>] [<contract>] [<store list>] [<search mode>]
 wrap() {
-  w_desc="{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"${4:-2}\",\"functions\":[${3:-$FUNCS_JSON}],\"store\":[${5:-}],\"search_modes\":[\"exact\"],\"optional\":[$2]}"
+  w_desc="{\"driver\":\"planted\",\"version\":\"2.0.0\",\"contract\":\"${4:-2}\",\"functions\":[${3:-$FUNCS_JSON}],\"store\":[${5:-}],\"search_modes\":[\"${6:-exact}\"],\"optional\":[$2]}"
   {
     printf '#!/bin/sh\n'
     printf 'if [ "${1:-}" = capability ]; then\n'
@@ -1093,6 +1094,8 @@ W_NOBATCH="$RS/w-nobatch"
 W_EXTRA="$RS/w-storeextra"
 W_SCHEMA="$RS/w-schema"
 W_FNEXTRA="$RS/w-fnextra"
+W_FNDUP="$RS/w-fndup"
+W_NOEXACT="$RS/w-noexact"
 wrap "$W_NO" ""
 wrap "$W_YES" '"store"' "" "" "$STORE_JSON"
 wrap "$W_BAD" "" "$FUNCS_NO_TASK_ADD"
@@ -1103,6 +1106,8 @@ wrap "$W_NOBATCH" '"store"' "" "" "$STORE_NO_BATCH"
 wrap "$W_EXTRA" '"store"' "" "" "$STORE_EXTRA"
 wrap "$W_SCHEMA" '"search.schema"'
 wrap "$W_FNEXTRA" "" "$FUNCS_STORE_EXTRA"
+wrap "$W_FNDUP" "" "$FUNCS_DUP"
+wrap "$W_NOEXACT" "" "" "" "" "hybrid"
 rsv() { (cd "$RS" && unset CTX_DIR CTX_STORAGE_DRIVER CTX_STORAGE_SQLITE_PATH && CTX_ROOT="$RS" "$RSV" "$@"); }
 # rcall <resolver args>: one resolver call with the pending payload, answer flattened
 rcall() {
@@ -1214,6 +1219,10 @@ rcall "--driver=$W_V1" session.list
 wantrc "$RC" 2; grep -q 'contract' "$E" || miss "the halt names no contract"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the halt names no ERR_DRIVER_PROTOCOL"; wantno 'rs-unit'
 rcall "--driver=$W_FNEXTRA" session.list
 wantrc "$RC" 2; grep -q 'outside the 38' "$E" || miss "the halt names no function outside the 38"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the outside-function halt names no ERR_DRIVER_PROTOCOL"
+rcall "--driver=$W_FNDUP" session.list
+wantrc "$RC" 2; grep -q 'not the 38 exactly' "$E" || miss "the duplicate-function halt names no 38 count"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the duplicate-function halt names no ERR_DRIVER_PROTOCOL"
+rcall "--driver=$W_NOEXACT" session.list
+wantrc "$RC" 2; grep -q 'exact' "$E" || miss "the no-exact halt names no exact"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the no-exact halt names no ERR_DRIVER_PROTOCOL"
 rcall "--driver=$W_TOKEN" session.list
 wantrc "$RC" 2; grep -q 'store token without the store family' "$E" || miss "the halt names no store token without the family"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the token halt names no ERR_DRIVER_PROTOCOL"
 rcall "--driver=$W_SCHEMA" session.list
@@ -1224,7 +1233,7 @@ rcall "--driver=$W_EXTRA" session.list
 wantrc "$RC" 2; grep -q 'store family' "$E" || miss "the halt names no store family"; grep -q 'ERR_DRIVER_PROTOCOL' "$E" || miss "the outside-name halt names no ERR_DRIVER_PROTOCOL"
 rcall "--driver=$W_FAMILY" session.list
 wantrc "$RC" 0; answer; wantvals units unit '"rs-unit"'
-tc "TC49: the handshake serves the record-only and family-only drivers and halts the split violations"
+tc "TC49: the handshake serves the record-only and family-only drivers and halts the split violations, a repeated function, and a missing exact"
 
 # TC81: the resolver's own diagnostic is the one line outside the protocol: uppercase
 # ERROR, no <function>: error: prefix, one stderr line, nothing on stdout; every public

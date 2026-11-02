@@ -900,6 +900,22 @@ if [ "$DRIVER" = "$STAGED_DRIVER" ]; then
   tc "S10i: a search-engine failure prints the store.search line and code alone, nothing on stdout"
 fi
 
+# F1: a query holding a double quote answers one JSON line and no stderr; the lone quote
+# answers zero rows (the ranked path stages its answer and captures the sqlite stderr)
+if [ "$IS_POSIX" -eq 0 ]; then
+  ssearch searchdoc hybrid 20 'needle"'; answer
+  case "$(cat "$O")" in
+    '{"namespace":"searchdoc","query":"needle\"","mode":"hybrid","total_matches":3,'*) ;;
+    *) miss "the quoted hybrid answer [$(cat "$O")]" ;;
+  esac
+  ssearch searchdoc hybrid 20 '"'; answer
+  case "$(cat "$O")" in
+    '{"namespace":"searchdoc","query":"\"","mode":"hybrid","total_matches":0,'*) ;;
+    *) miss "the lone-quote hybrid answer [$(cat "$O")]" ;;
+  esac
+  tc "S10j: a query holding a double quote answers one JSON line and no stderr (the lone quote: zero rows)"
+fi
+
 # ==============================================================================
 # S11: the transactional batch: all or none, the first-failure line, the change rows
 # ==============================================================================
@@ -996,6 +1012,27 @@ refused 1 ERR_INVALID_ARGUMENT "action 1 (delete 'workspace/bat2'): a delete car
 run store.batch store.batch docs < "$SB/batch-empty"
 refused 1 ERR_INVALID_ARGUMENT "action 1 (? '?'): the batch carries no actions"
 tc "S11e: a malformed action, a missing put value, a delete value, and an empty list refuse with the action context"
+
+# F2: two concurrent deletes of one key (the namespace lock serializes them): one success,
+# one not found, never two successes
+printf 'x\n' > "$SB/bat-conc"
+s11_put docs workspace/conc "$SB/bat-conc"; answer
+( "$DRIVER" store.delete docs workspace/conc > "$SB/conc-1.out" 2> "$SB/conc-1.err"; echo $? > "$SB/conc-1.rc" ) &
+( "$DRIVER" store.delete docs workspace/conc > "$SB/conc-2.out" 2> "$SB/conc-2.err"; echo $? > "$SB/conc-2.rc" ) &
+wait
+_s11f_ok=0
+_s11f_nf=0
+for _i in 1 2; do
+  case "$(cat "$SB/conc-$_i.rc")" in
+    0) _s11f_ok=$((_s11f_ok + 1))
+       [ -s "$SB/conc-$_i.err" ] && miss "the delete winner wrote stderr" ;;
+    1) _s11f_nf=$((_s11f_nf + 1))
+       [ "$(cat "$SB/conc-$_i.err")" = "store.delete: error: key 'workspace/conc' not found in namespace 'docs' (ERR_ENTITY_NOT_FOUND)" ] || miss "the delete loser stderr [$(cat "$SB/conc-$_i.err")]" ;;
+    *) miss "the delete rc [$(cat "$SB/conc-$_i.rc")]" ;;
+  esac
+done
+[ "$_s11f_ok" -eq 1 ] && [ "$_s11f_nf" -eq 1 ] || miss "the concurrent deletes read ok=$_s11f_ok not-found=$_s11f_nf, want one and one"
+tc "S11f: two concurrent deletes of one key answer one success and one not found (the lock serializes)"
 
 # ==============================================================================
 # S12: the scan: the module pattern, bytewise order, the raw bytes in base64, empty

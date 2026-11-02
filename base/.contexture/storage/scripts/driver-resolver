@@ -266,8 +266,8 @@ verify_capabilities() {
   fi
 
   # descriptor v3 (docs/the-engine.md, The descriptor and the handshake): contract "2", the
-  # 38 record functions exactly, and the conditional store family; no record function is
-  # optional and no function outside the 38 joins the record list
+  # 38 record functions exactly with exact among the search modes, and the conditional store
+  # family; no record function is optional and no function outside the 38 joins the list
   check_result=$(printf '%s\n' "$cap_json" | desc_field contract)
   if [ "$check_result" != 2 ]; then
     printf 'driver-resolver: ERROR: driver '\''%s'\'' declares contract '\''%s'\'', not 2 (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$check_result" >&2
@@ -296,6 +296,16 @@ verify_capabilities() {
     printf 'driver-resolver: ERROR: driver '\''%s'\'' declares function(s) outside the 38 record functions:%s (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$extra_fns" >&2
     return 2
   fi
+  cap_fns_n=$(printf '%s\n' "$cap_have" | wc -w | tr -d ' ')
+  if [ "$cap_fns_n" -ne 38 ]; then
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares %s record functions, not the 38 exactly (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_fns_n" >&2
+    return 2
+  fi
+  cap_modes=$(printf '%s\n' "$cap_json" | desc_field search_modes | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+  case " $cap_modes " in
+    *" exact "*) ;;
+    *) printf 'driver-resolver: ERROR: driver '\''%s'\'' declares no exact search mode among [%s] (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_modes" >&2; return 2 ;;
+  esac
 
   # the store family is all seven data names in the fixed order and implies the store
   # token; a store token without the family refuses, and so does store.changelog or

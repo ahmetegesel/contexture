@@ -395,7 +395,7 @@ store_exists() {
 # store_twin <namespace> <key>: a stored key that folds onto <key> under ASCII case without
 # matching it, else nothing; SQLite's lower() folds ASCII only, as the posix rule does
 store_twin() {
-  sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = '$(sql_escape "$1")' AND lower(key) = lower('$(sql_escape "$2")') AND key <> '$(sql_escape "$2")' ORDER BY key COLLATE BINARY LIMIT 1;"
+  sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = '$(sql_escape "$1")' AND lower(key) = lower('$(sql_escape "$2")') AND key <> '$(sql_escape "$2")' ORDER BY key COLLATE BINARY LIMIT 1;" 2>/dev/null
 }
 
 # store_json <value>: a JSON string body for the bounded store identifiers (a key may hold
@@ -444,7 +444,11 @@ store_get() {
   sg_ns=$1; sg_key=$2
   store_data store.get "$sg_ns"
   store_key_for store.get "$sg_ns" "$sg_key"
-  if [ ! -f "$DB_PATH" ] || ! store_exists "$sg_ns" "$sg_key"; then
+  if [ ! -f "$DB_PATH" ]; then
+    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
+  fi
+  db_init
+  if ! store_exists "$sg_ns" "$sg_key"; then
     refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
   fi
   scratch
@@ -519,15 +523,20 @@ store_delete() {
   store_flags store.delete remove "$@"
   store_data store.delete "$sx_ns"
   store_key_for store.delete "$sx_ns" "$sx_key"
-  if [ ! -f "$DB_PATH" ] || ! store_exists "$sx_ns" "$sx_key"; then
-    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sx_key' not found in namespace '$sx_ns'"
-  fi
   trap 'store_cleanup' EXIT
   trap 'store_cleanup; exit 129' HUP
   trap 'store_cleanup; exit 130' INT
   trap 'store_cleanup; exit 143' TERM
   store_lock "$sx_ns"
+  if [ ! -f "$DB_PATH" ]; then
+    store_cleanup
+    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sx_key' not found in namespace '$sx_ns'"
+  fi
   db_init
+  if ! store_exists "$sx_ns" "$sx_key"; then
+    store_cleanup
+    refuse 1 ERR_ENTITY_NOT_FOUND "key '$sx_key' not found in namespace '$sx_ns'"
+  fi
   store_docs_ensure "$sx_ns" "$SD_SIG"
   scratch
   {
@@ -577,9 +586,10 @@ store_changes() {
   db_init
   printf "SELECT '{\"namespace\":' || json_quote('%s') || ',\"changes\":' || coalesce(json_group_array(json_object('seq', seq, 'at', at, 'key', key, 'op', op, 'head', head, 'prior', prior)), '[]') || '}' FROM (SELECT seq, at, key, op, head, prior FROM store_changes WHERE namespace = '%s' AND head IN (SELECT head FROM want_heads) ORDER BY seq);\n" \
     "$(sql_escape "$sc_ns")" "$(sql_escape "$sc_ns")" >> "$SCRATCH/changes.sql"
-  if ! sq -bail "$DB_PATH" < "$SCRATCH/changes.sql"; then
+  if ! sq -bail "$DB_PATH" < "$SCRATCH/changes.sql" > "$SCRATCH/changes.out" 2> "$SCRATCH/changes.err"; then
     refuse 2 ERR_STORAGE_READ "the storage read failed"
   fi
+  cat "$SCRATCH/changes.out"
   exit 0
 }
 
@@ -931,8 +941,8 @@ store_search_ranked() {
     printf 'BEGIN;\n'
     printf "CREATE TEMP TABLE ssr AS SELECT %s AS ns, %s AS q, %s AS mode, %d AS lim;\n" \
       "$(store_sqlq "$sr_ns")" "$(store_sqlq "$sr_q")" "$(store_sqlq "$sr_mode")" "$sr_lim"
-    printf "CREATE TEMP TABLE sst AS SELECT group_concat('\"' || replace(t.value, '\"', '\"\"') || '\"', ' ' ORDER BY t.key) AS m FROM json_each('[\"' || replace(replace(replace(replace(replace(replace((SELECT q FROM temp.ssr), '\\', '\\\\'), '\"', '\\\"'), char(9), ' '), char(10), ' '), char(13), ' '), ' ', '\",\"') || '\"]') t WHERE t.value <> '';\n"
     cat <<'RANKED'
+CREATE TEMP TABLE sst AS SELECT group_concat('"' || replace(t.value, '"', '""') || '"', ' ' ORDER BY t.key) AS m FROM json_each('["' || replace(replace(replace(replace(replace(replace((SELECT q FROM temp.ssr), '\', '\\'), '"', '\"'), char(9), ' '), char(10), ' '), char(13), ' '), ' ', '","') || '"]') t WHERE t.value <> '';
 CREATE TEMP TABLE ssres (doc_id INTEGER, key TEXT, section TEXT, score REAL, snippet TEXT);
 INSERT INTO temp.ssres
 WITH
@@ -957,9 +967,10 @@ FROM temp.ssr s;
 COMMIT;
 RANKED
   } > "$SCRATCH/store-search.sql"
-  if ! sq -bail "$DB_PATH" < "$SCRATCH/store-search.sql"; then
+  if ! sq -bail "$DB_PATH" < "$SCRATCH/store-search.sql" > "$SCRATCH/search.out" 2> "$SCRATCH/search.err"; then
     refuse 2 ERR_STORAGE_READ "the storage search failed"
   fi
+  cat "$SCRATCH/search.out"
 }
 
 # store_search <namespace> <mode> [<limit>]: exact over the raw stored values, and the

@@ -193,7 +193,14 @@ cmp -s "$SB/t-fresh-store" "$SB/t-old-store" || miss "the fresh and upgraded sto
 sqlite3 "$DB" "PRAGMA table_info(store_changes);" > "$SB/t-fresh-changes"
 sqlite3 "$OLD" "PRAGMA table_info(store_changes);" > "$SB/t-old-changes"
 cmp -s "$SB/t-fresh-changes" "$SB/t-old-changes" || miss "the fresh and upgraded store_changes shapes differ"
-ok "a pre-store schema 4 database gains store and store_changes on open, its version stays 4, and the shapes match a fresh store"
+OLD5="$SB/db/old-v5.db"
+cp "$OLD" "$OLD5"
+sqlite3 "$OLD5" "PRAGMA user_version = 5;"
+f "$OLD5" store.get docs workspace/old-path
+refused 2 "old v5 get" "store.get: error: the store is at schema 5; this driver reads 4 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)"
+f "$OLD5" store.list docs
+refused 2 "old v5 list" "store.list: error: the store is at schema 5; this driver reads 4 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)"
+ok "a pre-store schema 4 database gains store and store_changes on open, its version stays 4, the shapes match a fresh store, and a store at another schema refuses get and list"
 
 # ==============================================================================
 # 6. the old corpus tables stay untouched and unread
