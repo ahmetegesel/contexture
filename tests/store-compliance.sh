@@ -723,6 +723,18 @@ data_get nohash > "$O" 2> "$E"; RC=$?
 [ "$(cat "$E")" = "data_get: error: ref 'nohash': a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)" ] || miss "malformed ref stderr [$(cat "$E")]"
 tc "S9e: a missing item, a missing module, and a malformed ref refuse their fixed lines"
 
+# the library's store functions keep the driver's one line: an absent key through store_get
+# and a batch whose action fails through store_batch print the same fixed lines a direct
+# driver call prints, with the batch's action context intact
+FN=store.get
+store_get libprobe x/absent < /dev/null > "$O" 2> "$E"; RC=$?
+refused 1 ERR_ENTITY_NOT_FOUND "key 'x/absent' not found in namespace 'libprobe'"
+printf 'action=delete\nkey=x/absent\nhead=none\n' > "$SB/lib-batch-bad"
+FN=store.batch
+store_batch libprobe < "$SB/lib-batch-bad" > "$O" 2> "$E"; RC=$?
+refused 1 ERR_ENTITY_NOT_FOUND "action 1 (delete 'x/absent'): key 'x/absent' not found in namespace 'libprobe'"
+tc "S9f: the library's store and batch refusals keep the one line and the batch's action context"
+
 # ==============================================================================
 # S10: the search schema: the flat and document-set forms, the exact rule, the ranked
 # modes, and the generic fallback
@@ -874,6 +886,20 @@ slist badsearch
 refused 1 ERR_INVALID_ARGUMENT "the modes must include exact"
 tc "S10h: the search schema's shape refusals name the rule (a document form without a rule, a flat field with a document rule, a three-token rule, a repeated mode, modes without exact)"
 
+# a failure inside the private search engine is re-framed with the public function and its
+# code, one stderr line and nothing on stdout (the engine's own line is internal); the
+# staged driver only, since a plugin copy resolves the core from its own tree
+if [ "$DRIVER" = "$STAGED_DRIVER" ]; then
+  cp "$SB/.contexture/storage/scripts/store-search" "$SB/store-search.real"
+  printf '#!/bin/sh\nprintf "store-search: error: planted search read failure (ERR_STORAGE_READ)\\n" >&2\nexit 2\n' > "$SB/.contexture/storage/scripts/store-search"
+  chmod +x "$SB/.contexture/storage/scripts/store-search"
+  ssearch searchdoc exact 20 needle
+  cp "$SB/store-search.real" "$SB/.contexture/storage/scripts/store-search"
+  chmod +x "$SB/.contexture/storage/scripts/store-search"
+  refused 2 ERR_STORAGE_READ "planted search read failure"
+  tc "S10i: a search-engine failure prints the store.search line and code alone, nothing on stdout"
+fi
+
 # ==============================================================================
 # S11: the transactional batch: all or none, the first-failure line, the change rows
 # ==============================================================================
@@ -1008,6 +1034,39 @@ run store.scan store.scan emptyprobe
 answer
 wantout '{"namespace":"emptyprobe","items":[]}'
 tc "S12b: an empty namespace answers an empty item list"
+
+# the scan's refusals use the store's existing codes: the argv shape, a malformed
+# namespace, and a namespace no data file declares, each one line and nothing on stdout
+run store.scan store.scan
+refused 1 ERR_INVALID_ARGUMENT "store.scan takes one argument, the namespace"
+run store.scan store.scan 'Bad!'
+refused 1 ERR_INVALID_ARGUMENT "malformed namespace 'Bad!'"
+run store.scan store.scan nosuch
+refused 1 ERR_ENTITY_NOT_FOUND "namespace 'nosuch' is declared by no module data file"
+tc "S12c: a missing argument, a malformed namespace, and an undeclared namespace refuse their fixed lines"
+
+# a read failure midway prints no partial answer: the encoder is replaced once by a stub
+# that fails with its own line, which the driver suppresses; the call is the one store.scan
+# line, rc 2, and nothing on stdout (the staged driver only; a plugin copy resolves the
+# encoder from its own tree)
+if [ "$DRIVER" = "$STAGED_DRIVER" ]; then
+  cp "$SB/.contexture/storage/scripts/store-b64" "$SB/store-b64.real"
+  printf '#!/bin/sh\nprintf "store-b64: planted encoder failure\\n" >&2\nexit 2\n' > "$SB/.contexture/storage/scripts/store-b64"
+  chmod +x "$SB/.contexture/storage/scripts/store-b64"
+  run store.scan store.scan scanprobe
+  cp "$SB/store-b64.real" "$SB/.contexture/storage/scripts/store-b64"
+  chmod +x "$SB/.contexture/storage/scripts/store-b64"
+  refused 2 ERR_STORAGE_READ "cannot read key 'x/B' in namespace 'scanprobe'"
+  if [ "$IS_POSIX" -eq 1 ]; then
+    printf 'unreadable\n' > scan-root/x/ro.txt
+    chmod 000 scan-root/x/ro.txt
+    run store.scan store.scan scanprobe
+    chmod 600 scan-root/x/ro.txt
+    rm -f scan-root/x/ro.txt
+    refused 2 ERR_STORAGE_READ "cannot read key 'x/ro' in namespace 'scanprobe'"
+  fi
+  tc "S12d: a read failure midway leaves no partial scan answer; the one line names the key"
+fi
 
 printf '\n== summary ==\n'
 printf 'store-compliance (%s): pass=%d fail=%d\n' "$DRIVER_NAME" "$pass" "$fail"

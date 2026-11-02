@@ -802,7 +802,9 @@ store_batch() {
 }
 
 # store_scan: every key the module pattern admits with its raw value in base64, bytewise,
-# one compact JSON answer; no limit (the module stops after the keys it needs)
+# one compact JSON answer; no limit (the module stops after the keys it needs). The answer
+# is staged and printed whole, so a read failure mid-scan prints nothing on stdout: the
+# refusal is the one stderr line and the call is all or none.
 store_scan() {
   FN=store.scan
   [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.scan takes one argument, the namespace"
@@ -824,7 +826,8 @@ store_scan() {
   else
     : > "$SCRATCH/keys"
   fi
-  printf '{"namespace":"%s","items":[' "$(store_json "$sns_ns")"
+  : > "$SCRATCH/scan-out"
+  printf '{"namespace":"%s","items":[' "$(store_json "$sns_ns")" >> "$SCRATCH/scan-out"
   sns_first=1
   while IFS= read -r sns_key || [ -n "$sns_key" ]; do
     [ -n "$sns_key" ] || continue
@@ -833,11 +836,12 @@ store_scan() {
     if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$SCRATCH/value"), value) FROM store WHERE namespace = $(store_sqlq "$sns_ns") AND key = $(store_sqlq "$sns_key");" > /dev/null 2>&1; then
       refuse 2 ERR_STORAGE_READ "cannot read key '$sns_key' in namespace '$sns_ns'"
     fi
-    sns_v=$("$sns_b64" "$SCRATCH/value") || refuse 2 ERR_STORAGE_READ "cannot read key '$sns_key' in namespace '$sns_ns'"
-    if [ "$sns_first" -eq 1 ]; then sns_first=0; else printf ','; fi
-    printf '{"key":"%s","value_b64":"%s"}' "$(store_json "$sns_key")" "$sns_v"
+    sns_v=$("$sns_b64" "$SCRATCH/value" 2>/dev/null) || refuse 2 ERR_STORAGE_READ "cannot read key '$sns_key' in namespace '$sns_ns'"
+    if [ "$sns_first" -eq 1 ]; then sns_first=0; else printf ',' >> "$SCRATCH/scan-out"; fi
+    printf '{"key":"%s","value_b64":"%s"}' "$(store_json "$sns_key")" "$sns_v" >> "$SCRATCH/scan-out"
   done < "$SCRATCH/keys"
-  printf ']}\n'
+  printf ']}\n' >> "$SCRATCH/scan-out"
+  cat "$SCRATCH/scan-out"
   exit 0
 }
 
@@ -908,7 +912,7 @@ store_docs_ensure() {
     if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$sde_val"), value) FROM store WHERE namespace = $(store_sqlq "$sde_ns") AND key = $(store_sqlq "$sde_key");" > /dev/null 2>&1; then
       refuse 2 ERR_STORAGE_READ "cannot read the store values"
     fi
-    if ! "$sde_core" docs "$SD_FILE" "$sde_ns" "$sde_key" "$sde_val" "$sde_sig" >> "$sde_sql"; then
+    if ! "$sde_core" docs "$SD_FILE" "$sde_ns" "$sde_key" "$sde_val" "$sde_sig" >> "$sde_sql" 2>/dev/null; then
       refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
     fi
   done < "$SCRATCH/keys"
@@ -986,6 +990,7 @@ store_search() {
     ss_core=$(store_search_core) || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
     scratch
     : > "$SCRATCH/man"
+    ss_err="$SCRATCH/search-err"
     if [ -f "$DB_PATH" ]; then
       db_init
       mkdir -p "$SCRATCH/values" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
@@ -1003,8 +1008,26 @@ store_search() {
         printf '%s\t%s\n' "$ss_k" "$ss_v" >> "$SCRATCH/man"
       done < "$SCRATCH/keys"
     fi
-    "$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$SCRATCH/man"
-    exit $?
+    ss_out=$("$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$SCRATCH/man" 2>"$ss_err")
+    ss_rc=$?
+    if [ "$ss_rc" -ne 0 ]; then
+      ss_msg=$(head -n 1 "$ss_err" 2>/dev/null)
+      case "$ss_msg" in store-search:\ error:\ *) ss_msg=${ss_msg#store-search: error: } ;; esac
+      [ -n "$ss_msg" ] || ss_msg="the store search failed"
+      ss_code=""
+      case "$ss_msg" in
+        *' ('*')')
+          ss_code=${ss_msg##*' ('}
+          ss_code=${ss_code%)}
+          ss_msg=${ss_msg%' ('*}
+          ;;
+      esac
+      [ -n "$ss_code" ] || ss_code=ERR_STORAGE_READ
+      [ "$ss_rc" -eq 1 ] || ss_rc=2
+      refuse "$ss_rc" "$ss_code" "$ss_msg"
+    fi
+    printf '%s\n' "$ss_out"
+    exit 0
   fi
   if [ ! -f "$DB_PATH" ]; then
     printf '{"namespace":"%s","query":"%s","mode":"%s","total_matches":0,"results":[]}\n' \

@@ -745,7 +745,9 @@ store_batch() {
 }
 
 # store_scan: every key the module pattern admits with its raw value in base64, bytewise,
-# one compact JSON answer; no limit (the module stops after the keys it needs)
+# one compact JSON answer; no limit (the module stops after the keys it needs). The answer
+# is staged and printed whole, so a read failure mid-scan prints nothing on stdout: the
+# refusal is the one stderr line and the call is all or none.
 store_scan() {
   FN=store.scan
   [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.scan takes one argument, the namespace"
@@ -757,19 +759,22 @@ store_scan() {
   done
   [ -n "$sc_b64" ] || refuse 2 ERR_STORAGE_READ "the storage core base64 encoder is not installed"
   sc_keys=$(mktemp "$(scratch_dir)/store-scan.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  sc_out=$(mktemp "$(scratch_dir)/store-scan-out.XXXXXX" 2>/dev/null) || { rm -f "$sc_keys"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
   store_list_keys > "$sc_keys"
-  printf '{"namespace":"%s","items":[' "$(escape_json "$sc_ns")"
+  printf '{"namespace":"%s","items":[' "$(escape_json "$sc_ns")" > "$sc_out"
   sc_first=1
   while IFS= read -r sc_key; do
     [ -n "$sc_key" ] || continue
     sc_path=$(store_path "$sc_key")
     [ -f "$sc_path" ] || continue
-    sc_v=$("$sc_b64" "$sc_path") || { rm -f "$sc_keys"; refuse 2 ERR_STORAGE_READ "cannot read key '$sc_key' in namespace '$sc_ns'"; }
-    if [ "$sc_first" -eq 1 ]; then sc_first=0; else printf ','; fi
-    printf '{"key":"%s","value_b64":"%s"}' "$(escape_json "$sc_key")" "$sc_v"
+    sc_v=$("$sc_b64" "$sc_path" 2>/dev/null) || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_READ "cannot read key '$sc_key' in namespace '$sc_ns'"; }
+    if [ "$sc_first" -eq 1 ]; then sc_first=0; else printf ',' >> "$sc_out"; fi
+    printf '{"key":"%s","value_b64":"%s"}' "$(escape_json "$sc_key")" "$sc_v" >> "$sc_out"
   done < "$sc_keys"
   rm -f "$sc_keys"
-  printf ']}\n'
+  printf ']}\n' >> "$sc_out"
+  cat "$sc_out"
+  rm -f "$sc_out"
 }
 
 # store_query_read: the query payload line, decoded (backslash, n, t, r), with a sentinel
@@ -833,6 +838,7 @@ store_search() {
   done
   [ -n "$ss_core" ] || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
   ss_keytmp=$(mktemp "$(scratch_dir)/store-search.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  ss_err=$(mktemp "$(scratch_dir)/store-search-err.XXXXXX" 2>/dev/null) || { rm -f "$ss_keytmp"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
   ss_man="${ss_keytmp}.man"
   store_list_keys > "$ss_keytmp"
   : > "$ss_man"
@@ -842,10 +848,28 @@ store_search() {
     [ -f "$ss_p" ] && printf '%s\t%s\n' "$ss_k" "$ss_p" >> "$ss_man"
   done < "$ss_keytmp"
   rm -f "$ss_keytmp"
-  "$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$ss_man"
+  ss_out=$("$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$ss_man" 2>"$ss_err")
   ss_rc=$?
-  rm -f "$ss_man"
-  exit "$ss_rc"
+  if [ "$ss_rc" -ne 0 ]; then
+    ss_msg=$(head -n 1 "$ss_err" 2>/dev/null)
+    rm -f "$ss_err" "$ss_man"
+    case "$ss_msg" in store-search:\ error:\ *) ss_msg=${ss_msg#store-search: error: } ;; esac
+    [ -n "$ss_msg" ] || ss_msg="the store search failed"
+    ss_code=""
+    case "$ss_msg" in
+      *' ('*')')
+        ss_code=${ss_msg##*' ('}
+        ss_code=${ss_code%)}
+        ss_msg=${ss_msg%' ('*}
+        ;;
+    esac
+    [ -n "$ss_code" ] || ss_code=ERR_STORAGE_READ
+    [ "$ss_rc" -eq 1 ] || ss_rc=2
+    refuse "$ss_rc" "$ss_code" "$ss_msg"
+  fi
+  rm -f "$ss_err" "$ss_man"
+  printf '%s\n' "$ss_out"
+  exit 0
 }
 
 # px_mkdtemp <parent> <prefix>: a fresh private folder (mkdir is atomic; the name carries the

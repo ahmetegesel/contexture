@@ -59,6 +59,27 @@ ranked mode answers only where the configured driver declares it (fts5: `hybrid`
 `trigram`); posix declares exact alone and refuses a ranked mode by name. The driver
 declares the optional `search.schema` token when it consumes a declared schema.
 
+## Errors
+
+Every store function answers one compact JSON line on success. A refusal is rc 1 (the
+caller's input or the module's rules) or rc 2 (storage or driver failure), nothing on
+stdout, and exactly one stderr line `<function>: error: <message> (<CODE>)` over the
+existing core codes. The batch names its 1-based failing action:
+`store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`; only the first failure
+prints, and nothing is written. The scan uses the store's codes (a malformed namespace or
+data declaration is `ERR_INVALID_ARGUMENT`, an undeclared namespace
+`ERR_ENTITY_NOT_FOUND`, an unreadable key or store `ERR_STORAGE_READ`) and stages its
+answer, so a read failure midway prints no partial line. The library's ref interface
+re-frames a target refusal as `data_get: error: ref '<ref>': <message> (<CODE>)`; a chain
+over 8 hops or a cycle refuses `ERR_INVALID_ARGUMENT`; the source write's re-frame and its
+refusal before writing are the unit module's later. A module may mint its own tier 1 code
+(the docs module's `ERR_SCHEMA_VIOLATION` is the precedent); core codes are never
+redefined. The resolver's `driver-resolver: ERROR: ...` line is the one shape exception,
+and the library passes it through unchanged.
+
+The interrupt rule: rc 0 means the write landed; after an interrupt any other exit means
+check with a read before writing again.
+
 A module declares its data in a `data` file beside its `module` file, one `field: value`
 line per field and a line starting with `#` a comment. Only `namespace` and `key` are
 required; `root`, `suffix`, `changes`, and the search keys are optional:

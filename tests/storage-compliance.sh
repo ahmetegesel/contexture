@@ -17,7 +17,7 @@
 # returned (a key and its JSON value, a whole answer, a stderr line, the bytes of a
 # document), never an exit code alone; the census (--census) lists any case that would.
 #
-# Suites and cases (65 on posix, 59 on every other backend, whose store holds no legacy
+# Suites and cases (66 on posix, 60 on every other backend, whose store holds no legacy
 # text):
 #    0 the fresh store: TC74
 #    1 session lifecycle: TC01 to TC04
@@ -31,7 +31,7 @@
 #    9 journal integrity: TC26, TC27
 #   10 the store and the transport: TC28, TC31 to TC33, TC80
 #   11 uniform answers: TC34, TC35, TC37 to TC39
-#   12 the resolver: TC47 to TC49
+#   12 the resolver: TC47 to TC49, TC81
 #   13 record rules: TC52 to TC59
 #   14 the data model: TC60 (posix), TC61, TC76
 #   15 the audit: TC63, TC64 (posix), TC77 (posix)
@@ -1225,6 +1225,17 @@ wantrc "$RC" 2; grep -q 'store family' "$E" || miss "the halt names no store fam
 rcall "--driver=$W_FAMILY" session.list
 wantrc "$RC" 0; answer; wantvals units unit '"rs-unit"'
 tc "TC49: the handshake serves the record-only and family-only drivers and halts the split violations"
+
+# TC81: the resolver's own diagnostic is the one line outside the protocol: uppercase
+# ERROR, no <function>: error: prefix, one stderr line, nothing on stdout; every public
+# storage surface prints the one line, the resolver keeps its own
+rcall resolve no-such-driver
+wantrc "$RC" 2
+if [ -s "$O" ]; then miss "resolver printed stdout on a miss [$(head -c 200 "$O")]"; fi
+_rn=$(wc -l < "$E" | tr -d ' ')
+[ "$_rn" = 1 ] || miss "resolver wrote $_rn stderr lines, want one"
+[ "$(cat "$E")" = "driver-resolver: ERROR: storage driver 'no-such-driver' not found in the core drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)" ] || miss "resolver line [$(cat "$E")]"
+tc "TC81: the resolver keeps its own ERROR line as the one shape exception"
 
 # ==============================================================================
 # Suite 13: Record Rules (8 test cases)

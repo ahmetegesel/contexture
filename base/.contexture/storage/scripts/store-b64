@@ -6,7 +6,7 @@
 # decimal byte values, so no external base64 command and no locale folding is involved.
 #
 # Usage: store-b64 <file>
-# Exit codes: 0 the encoded answer; 1 a missing argument or file.
+# Exit codes: 0 the encoded answer; 1 a missing argument or an unreadable file.
 
 set -u
 LC_ALL=C
@@ -18,6 +18,10 @@ export LC_ALL
 }
 [ -f "$1" ] || {
   printf 'store-b64: error: file not found (ERR_ENTITY_NOT_FOUND)\n' >&2
+  exit 1
+}
+[ -r "$1" ] || {
+  printf 'store-b64: error: file is not readable (ERR_STORAGE_READ)\n' >&2
   exit 1
 }
 
