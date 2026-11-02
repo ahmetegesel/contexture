@@ -4,6 +4,40 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.59.0] - 2026-11-02
+
+MINOR: the storage core lands as a core mechanism, not a module: the resolver, the store contract, the module-facing library, the optional search schema, the transactional batch and the scan, the split descriptor, the error shape, and the committed differential fuzzer, with the storage module retired and the driver at version 3.0.0. The record's 38 typed functions stay on the driver until the unit module moves them; the batch and the scan are additive.
+
+### Added
+
+- The storage core at `.contexture/storage`: the driver resolver, the store-data reader, the `store-search` engine, the module-facing library (`store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_batch`, `store_scan`, `store_search`, `store_require`, `store_has`, `data_get`, `data_emit`), the store contract README, and the posix driver.
+- The store family: the transactional batch (an ordered put/delete list in one namespace over the stdin payload, all or none, the first failure naming the 1-based action and key) and the scan (the namespace's items under the module pattern, bytewise, the raw value in base64, no limit) beside the five.
+- The optional search schema in the data file in the flat and the document-set forms; the exact rule over the raw stored value on every driver; the ranked extraction where the driver declares `search.schema` (the fts5 store FTS index, the write-time derivation, the schema-signature rederive); the generic value fallback.
+- The module storage declaration's minimum: the namespace and the key pattern required; the root, suffix, changes, format, and search keys optional with the posix defaults (the root = the namespace, the suffix empty, the changes false); the variable-depth final placeholder shared by the docs's `<repo>/<slug>` and the unit module's `<unit>/<path...>`.
+- `tests/store-fuzz.sh`: the committed differential fuzzer (a seeded write sequence into posix and the fts5 plugin's own copy, every answer and read compared byte for byte, a coverage guard, and a `--plant` mode), a 15th gate job.
+- The split descriptor's `store` array and the `search.schema` token.
+
+### Changed
+
+- The descriptor splits: `functions` is exactly the 38 record names, `store` is the seven data names in fixed order, and the driver version is 3.0.0 under contract 2; the handshake keeps a record-only driver valid and refuses a partial store family, a token without the family, an outside name, and a function outside the 38, and requires `exact` among the search modes.
+- The error shape is one line across every storage surface (`<function>: error: <message> (<CODE>`) with the batch's action context, the scan's staged answer, the ref re-frame, the module codes at tier 1, and the resolver's exception; no new core code.
+- The docs module reaches the corpus through the core library, not the resolver; the session wrapper stays as the compatibility path.
+- The resolver's tiers gain `.contexture/storage/drivers`; `storage.driver` in `.contexture/config` is the contract, and the legacy `session.storage.driver` and `.contexture/storage.conf` reads stay transitional.
+
+### Removed
+
+- The storage feature module (`.contexture/modules/storage`): the storage is a core mechanism, not a module, and `ctx help` no longer lists it.
+- The posix driver's old home under the session module's `drivers/`: it moves to the storage core.
+
+### Fixed
+
+- The scan stages its answer, so a mid-scan read failure prints nothing on stdout and the encoder's stderr is suppressed; the search re-frames the private engine's refusal as `store.search` with the same code; `store-b64` refuses a missing or unreadable file.
+- The fts5 ranked search encodes a query holding a double quote correctly and stages its answer, capturing the sqlite stderr.
+- The fts5 `store.delete` takes the namespace lock before the existence check, so two concurrent deletes answer one success and one not found.
+- The handshake requires `exact` among the search modes and each of the 38 record functions once; the fts5 `store.get` refuses a schema-5 database; the fts5 `store.changes` and `store.twin` print one stderr line.
+
+Commits in the range: ce9ea82 (the storage core's foundation), 5dac510 (the data declaration), 9371679 (the search schema), 6ea8523 (the batch and the scan), a0a08e9 (the descriptor split), ce9ec51 (the error shape), 9d0c16c (the differential fuzzer), ad3eabf (the independent review and its six hardened findings), and the release commit.
+
 ## [0.58.3] - 2026-10-29
 
 PATCH: a SIGKILLed writer no longer poisons the workspace: a stale unit or store lock is recovered from its holder pid, and a killed verb's per-verb scratch is swept by the next dispatch.
