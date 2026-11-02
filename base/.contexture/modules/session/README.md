@@ -66,8 +66,9 @@ session artifact itself.
 | `scripts/task` | `task.add`, `update`, `start`, `complete`, `reopen`, `drop`, `list`, `get` |
 | `scripts/units` | `session.units` |
 
-The lane verbs (`.contexture/modules/lane/scripts/`: `create`, `record`,
-`report`, `show`) source the same `lib/verb.sh` and call `lane.create`,
+The lane verbs (`.contexture/extensions/modules/lane/scripts/`: `create`, `record`,
+`report`, `show`) source the same `lib/verb.sh` through `CTX_ROOT` (the lane
+module sits under the extension root) and call `lane.create`,
 `lane.record`, `lane.write_report`, and `lane.get`.
 
 `scripts/driver-resolver` carries no `# summary:` header, so discovery

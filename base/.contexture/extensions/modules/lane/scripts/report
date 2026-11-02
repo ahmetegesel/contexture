@@ -9,7 +9,10 @@
 # help: a write prints one line with the stored size; a write into a CLOSED unit refuses rc 1; a body holding a NUL byte or bytes that are not valid UTF-8 refuses rc 1 (ERR_INVALID_ARGUMENT) before any write
 # help: scripted reads: ctx lane show <unit> <lane-slug> report never reads stdin; with no --body, report reads stdin whenever stdin is not a terminal, so under an open pipe it waits for the writer to close
 
-. "$(CDPATH= cd -- "$(dirname -- "$0")/../../session/lib" && pwd)/verb.sh"
+session_lib="${CTX_ROOT:-.}/.contexture/modules/session/lib/verb.sh"
+[ -f "$session_lib" ] || session_lib="${CTX_ROOT:-.}/base/.contexture/modules/session/lib/verb.sh"
+VB_SELF="$session_lib"
+. "$session_lib"
 
 if [ $# -lt 2 ]; then
   if [ $# -gt 0 ]; then

@@ -99,7 +99,7 @@ echo "== G2 payload path tables vs git ls-files =="
 decl_adoption=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/adoption.md" | head -n 1)
 decl_engine=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/the-engine.md" | head -n 1)
 a_eq "$decl_engine" "$decl_adoption" "payload declaration identical in adoption.md and the-engine.md"
-a_eq "$decl_adoption" 'base/.contexture/{ctx,storage,modules/session,modules/run,modules/lane,templates,ONBOARDING.md}' "payload declaration reads the shipped set"
+a_eq "$decl_adoption" 'base/.contexture/{ctx,storage,modules/session,modules/run,extensions,templates,ONBOARDING.md}' "payload declaration reads the shipped set"
 if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   prefix=${decl_adoption%%\{*}
   inner=${decl_adoption#*\{}
@@ -141,8 +141,11 @@ if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/nu
       bad "payload root empty or absent: $r"
     fi
   done
-  mods=$(printf '%s\n' "$tracked" | awk -F/ '$1 == "base" && $2 == ".contexture" && $3 == "modules" && NF > 4 { print $4 }' | LC_ALL=C sort -u | tr '\n' ' ')
-  a_eq "$mods" "lane run session " "payload modules are exactly lane, run, and session; the storage core is not a module"
+  mods=$(printf '%s\n' "$tracked" | awk -F/ '
+    $1 == "base" && $2 == ".contexture" && $3 == "modules" && NF > 4 { print $4; next }
+    $1 == "base" && $2 == ".contexture" && $3 == "extensions" && $4 == "modules" && NF > 5 { print $5 }
+  ' | LC_ALL=C sort -u | tr '\n' ' ')
+  a_eq "$mods" "lane run session " "payload modules are exactly lane, run, and session (the lane module in the extension root); the storage core is not a module"
 else
   echo "SKIP governance payload table: git unavailable (need: git in the upstream checkout)"
 fi

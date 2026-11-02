@@ -1243,7 +1243,7 @@ wantrc "$RC" 2
 if [ -s "$O" ]; then miss "resolver printed stdout on a miss [$(head -c 200 "$O")]"; fi
 _rn=$(wc -l < "$E" | tr -d ' ')
 [ "$_rn" = 1 ] || miss "resolver wrote $_rn stderr lines, want one"
-[ "$(cat "$E")" = "driver-resolver: ERROR: storage driver 'no-such-driver' not found in the core drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)" ] || miss "resolver line [$(cat "$E")]"
+[ "$(cat "$E")" = "driver-resolver: ERROR: storage driver 'no-such-driver' not found in the core drivers, the extension drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)" ] || miss "resolver line [$(cat "$E")]"
 tc "TC81: the resolver keeps its own ERROR line as the one shape exception"
 
 # ==============================================================================

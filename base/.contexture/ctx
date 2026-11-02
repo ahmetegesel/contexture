@@ -6,8 +6,11 @@
 # The help output is the contract surface; this header never prints.
 #
 # Maintainer note (off-path, never taught by help or top docs):
-# discovery reads .contexture/modules/<name>/; the directory name is the
-# module name. The standard module folder is the manifest ("module"), the
+# discovery reads .contexture/modules/<name>/ and .contexture/extensions/modules/<name>/;
+# the directory name is the module name. The workspace modules list first, then the
+# extension modules; an extension name colliding with a workspace module, a builtin
+# (session, run), or a reserved name is warned and skipped, never a silent shadow (the
+# package installer refuses the collision; the engine only reports it). The standard module folder is the manifest ("module"), the
 # typed-block law fragment ("laws"), the store declaration ("data"), the
 # optional part hooks ("install" and "uninstall"), scripts/, hooks/, and
 # filters/. The manifest carries "# summary: <line>" (the engine's listing),
@@ -42,6 +45,7 @@
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$dir/.." && pwd)
 modules_root="$dir/modules"
+extension_modules_root="$dir/extensions/modules"
 ctx_bin="$dir/ctx"
 
 ctx_err() {
@@ -276,61 +280,158 @@ is_reserved() {
 # discovery
 
 scan_module_dirs() {
-  # every module candidate directory, name-sorted; reserved and hidden names
-  # stay out silently (the listing path owns the warnings)
-  [ -d "$modules_root" ] || return 0
+  # every module candidate directory in discovery order: the workspace modules
+  # (name-sorted), then the extension modules (name-sorted); reserved and
+  # hidden names stay out silently (the listing path owns the warnings); an
+  # extension name that collides with a workspace module or a builtin is
+  # never scanned twice
+  [ -d "$modules_root" ] || [ -d "$extension_modules_root" ] || return 0
   load_session_verbs
-  for d in "$modules_root"/*/; do
-    [ -d "$d" ] || continue
-    bn=${d%/}
-    bn=${bn##*/}
-    case "$bn" in
-      ""|.*|*[[:space:]]*|_hooks|_module)
+  ws=""
+  if [ -d "$modules_root" ]; then
+    for d in "$modules_root"/*/; do
+      [ -d "$d" ] || continue
+      bn=${d%/}
+      bn=${bn##*/}
+      case "$bn" in
+        ""|.*|*[[:space:]]*|_hooks|_module)
+          continue
+          ;;
+      esac
+      if is_reserved "$bn" && [ "$bn" != "session" ] && [ "$bn" != "run" ]; then
         continue
-        ;;
-    esac
-    if is_reserved "$bn" && [ "$bn" != "session" ] && [ "$bn" != "run" ]; then
-      continue
-    fi
-    printf '%s\n' "$bn"
-  done | LC_ALL=C sort
+      fi
+      ws="$ws $bn"
+    done
+  fi
+  ext=""
+  if [ -d "$extension_modules_root" ]; then
+    for d in "$extension_modules_root"/*/; do
+      [ -d "$d" ] || continue
+      bn=${d%/}
+      bn=${bn##*/}
+      case "$bn" in
+        ""|.*|*[[:space:]]*|_hooks|_module|session|run)
+          continue
+          ;;
+      esac
+      case " $ws " in
+        *" $bn "*) continue ;;
+      esac
+      is_reserved "$bn" && continue
+      ext="$ext $bn"
+    done
+  fi
+  [ -z "$ws" ] || printf '%s\n' $ws | LC_ALL=C sort
+  [ -z "$ext" ] || printf '%s\n' $ext | LC_ALL=C sort
 }
 
 module_names() {
-  # listed modules: a module file with a "# summary:" line; broken shapes
-  # warn and skip, filter-only and hook-only directories stay unlisted
-  [ -d "$modules_root" ] || return 0
+  # listed modules in discovery order: the workspace modules first, then the
+  # extension modules; a broken shape warns and skips; an extension module
+  # colliding with a workspace module, a builtin, or a reserved name warns and
+  # skips (the package installer refuses the collision; the engine never
+  # shadows silently)
+  [ -d "$modules_root" ] || [ -d "$extension_modules_root" ] || return 0
   load_session_verbs
-  for d in "$modules_root"/*/; do
-    [ -d "$d" ] || continue
-    n=${d%/}
-    n=${n##*/}
-    case "$n" in
-      ""|.*|*[[:space:]]*|_hooks|_module)
-        continue
-        ;;
-    esac
-    if is_reserved "$n" && [ "$n" != "session" ] && [ "$n" != "run" ]; then
-      ctx_err "reserved name refused (shadow): $n"
-      continue
-    fi
-    if [ -f "$d/module" ]; then
-      if [ -z "$(header_field "$d/module" summary)" ]; then
-        ctx_err "skipping module $n: module file has no summary"
+  ws=""
+  ws_all=""
+  if [ -d "$modules_root" ]; then
+    for d in "$modules_root"/*/; do
+      [ -d "$d" ] || continue
+      n=${d%/}
+      n=${n##*/}
+      case "$n" in
+        ""|.*|*[[:space:]]*|_hooks|_module)
+          continue
+          ;;
+      esac
+      if is_reserved "$n" && [ "$n" != "session" ] && [ "$n" != "run" ]; then
+        ctx_err "reserved name refused (shadow): $n"
         continue
       fi
-      if ! module_file_parse "$d/module"; then
-        ctx_err "skipping module $n: $MF_ERROR"
+      # every workspace candidate holds the name, even a broken or unlisted one,
+      # so an extension module can never take it and then resolve to this directory
+      ws_all="$ws_all $n"
+      if [ -f "$d/module" ]; then
+        if [ -z "$(header_field "$d/module" summary)" ]; then
+          ctx_err "skipping module $n: module file has no summary"
+          continue
+        fi
+        if ! module_file_parse "$d/module"; then
+          ctx_err "skipping module $n: $MF_ERROR"
+          continue
+        fi
+      elif [ -d "$d/scripts" ]; then
+        ctx_err "skipping module $n: scripts/ without a module file"
+        continue
+      else
         continue
       fi
-    elif [ -d "$d/scripts" ]; then
-      ctx_err "skipping module $n: scripts/ without a module file"
-      continue
-    else
-      continue
-    fi
-    printf '%s\n' "$n"
-  done | LC_ALL=C sort
+      ws="$ws $n"
+    done
+  fi
+  ext=""
+  if [ -d "$extension_modules_root" ]; then
+    for d in "$extension_modules_root"/*/; do
+      [ -d "$d" ] || continue
+      n=${d%/}
+      n=${n##*/}
+      case "$n" in
+        ""|.*|*[[:space:]]*|_hooks|_module)
+          continue
+          ;;
+      esac
+      case "$n" in
+        session|run)
+          ctx_err "skipping extension module $n: collides with a builtin"
+          continue
+          ;;
+      esac
+      case " $ws_all " in
+        *" $n "*)
+          ctx_err "skipping extension module $n: collides with a workspace module"
+          continue
+          ;;
+      esac
+      if is_reserved "$n"; then
+        ctx_err "reserved name refused (shadow): $n"
+        continue
+      fi
+      if [ -f "$d/module" ]; then
+        if [ -z "$(header_field "$d/module" summary)" ]; then
+          ctx_err "skipping module $n: module file has no summary"
+          continue
+        fi
+        if ! module_file_parse "$d/module"; then
+          ctx_err "skipping module $n: $MF_ERROR"
+          continue
+        fi
+      elif [ -d "$d/scripts" ]; then
+        ctx_err "skipping module $n: scripts/ without a module file"
+        continue
+      else
+        continue
+      fi
+      ext="$ext $n"
+    done
+  fi
+  [ -z "$ws" ] || printf '%s\n' $ws | LC_ALL=C sort
+  [ -z "$ext" ] || printf '%s\n' $ext | LC_ALL=C sort
+}
+
+module_dir() {
+  # the directory of a listed module: the workspace root shadows the extension
+  # root, so a name in both resolves to the workspace module
+  if [ -d "$modules_root/$1" ]; then
+    printf '%s\n' "$modules_root/$1"
+    return 0
+  fi
+  if [ -d "$extension_modules_root/$1" ]; then
+    printf '%s\n' "$extension_modules_root/$1"
+    return 0
+  fi
+  return 1
 }
 
 verb_names() {
@@ -418,7 +519,7 @@ EOF
   fi
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    printf '  %-10s %s\n' "$n" "$(module_summary "$modules_root/$n")"
+    printf '  %-10s %s\n' "$n" "$(module_summary "$(module_dir "$n")")"
   done <<EOF
 $mods
 EOF
@@ -426,7 +527,7 @@ EOF
 }
 
 show_module_help() {
-  m="$modules_root/$1"
+  m=$(module_dir "$1") || m="$modules_root/$1"
   printf 'ctx %s: %s\n\n' "$1" "$(module_summary "$m")"
   printf 'usage:\n'
   printf '  ctx %s <verb> [args...]\n' "$1"
@@ -448,7 +549,7 @@ EOF
 }
 
 show_verb_help() {
-  m="$modules_root/$1"
+  m=$(module_dir "$1") || m="$modules_root/$1"
   printf 'ctx %s %s: %s\n' "$1" "$2" "$(verb_summary "$m" "$2")"
   usages=$(verb_detail "$m" "$2" usage)
   if [ -n "$usages" ]; then
@@ -536,9 +637,10 @@ run_body() {
     fi
     mf_count=0
     for bn in $(filter_module_names); do
-      if [ -d "$MODULES_DIR/$bn/filters" ]; then
+      fd=$(module_dir "$bn") || continue
+      if [ -d "$fd/filters" ]; then
         wf=""
-        for f in "$MODULES_DIR/$bn/filters"/*; do
+        for f in "$fd/filters"/*; do
           [ -f "$f" ] || continue
           name=$(basename "$f")
           name=${name%.awk}
@@ -585,25 +687,52 @@ run_body() {
     sed -n "s/^# $1: //p" "$2" | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
   }
 
-  # Name-sorted module directories (LC_ALL=C) other than run, whose filters/
-  # folders merge after the run module's own; whitespace names never form
+  # Module directories whose filters/ folders merge after the run module's own:
+  # the workspace modules first (name-sorted, LC_ALL=C), then the extension
+  # modules; whitespace names never form; an extension name colliding with a
+  # workspace module or a builtin is skipped, never scanned twice
   filter_module_names() {
-    [ -d "$MODULES_DIR" ] || return 0
+    [ -d "$modules_root" ] || [ -d "$extension_modules_root" ] || return 0
     load_session_verbs
-    for fd in "$MODULES_DIR"/*/; do
-      [ -d "$fd" ] || continue
-      bn=${fd%/}
-      bn=${bn##*/}
-      case "$bn" in
-        ""|.*|*[[:space:]]*|run|_hooks|_module)
+    ws=""
+    if [ -d "$modules_root" ]; then
+      for fd in "$modules_root"/*/; do
+        [ -d "$fd" ] || continue
+        bn=${fd%/}
+        bn=${bn##*/}
+        case "$bn" in
+          ""|.*|*[[:space:]]*|run|_hooks|_module)
+            continue
+            ;;
+        esac
+        if is_reserved "$bn"; then
           continue
-          ;;
-      esac
-      if is_reserved "$bn"; then
-        continue
-      fi
-      printf '%s\n' "$bn"
-    done | LC_ALL=C sort
+        fi
+        ws="$ws $bn"
+      done
+    fi
+    ext=""
+    if [ -d "$extension_modules_root" ]; then
+      for fd in "$extension_modules_root"/*/; do
+        [ -d "$fd" ] || continue
+        bn=${fd%/}
+        bn=${bn##*/}
+        case "$bn" in
+          ""|.*|*[[:space:]]*|_hooks|_module|session|run)
+            continue
+            ;;
+        esac
+        case " $ws " in
+          *" $bn "*) continue ;;
+        esac
+        if is_reserved "$bn"; then
+          continue
+        fi
+        ext="$ext $bn"
+      done
+    fi
+    [ -z "$ws" ] || printf '%s\n' $ws | LC_ALL=C sort
+    [ -z "$ext" ] || printf '%s\n' $ext | LC_ALL=C sort
     return 0
   }
 
@@ -621,12 +750,13 @@ run_body() {
       fi
     fi
     for bn in $(filter_module_names); do
-      if [ -f "$MODULES_DIR/$bn/filters/$1.awk" ]; then
-        printf '%s\n' "$MODULES_DIR/$bn/filters/$1.awk"
+      fd=$(module_dir "$bn") || continue
+      if [ -f "$fd/filters/$1.awk" ]; then
+        printf '%s\n' "$fd/filters/$1.awk"
         return 0
       fi
-      if [ -f "$MODULES_DIR/$bn/filters/$1" ]; then
-        printf '%s\n' "$MODULES_DIR/$bn/filters/$1"
+      if [ -f "$fd/filters/$1" ]; then
+        printf '%s\n' "$fd/filters/$1"
         return 0
       fi
     done
@@ -795,9 +925,10 @@ run_body() {
       # first match wins; a later module match warns as shadow unless its
       # header carries "# ctx-filter-priority: over", which replaces the
       # selection
-      if [ -d "$MODULES_DIR" ]; then
+      if [ -d "$modules_root" ] || [ -d "$extension_modules_root" ]; then
         for bn in $(filter_module_names); do
-          for f in "$MODULES_DIR/$bn/filters"/*.awk; do
+          fd=$(module_dir "$bn") || continue
+          for f in "$fd/filters"/*.awk; do
             [ -f "$f" ] || continue
             pat=$(directive_value command "$f")
             [ -n "$pat" ] || continue
@@ -851,9 +982,10 @@ run_body() {
 
       # Module signature merge after the run module's own: same first-match,
       # shadow, and priority rules as the command loop
-      if [ -d "$MODULES_DIR" ]; then
+      if [ -d "$modules_root" ] || [ -d "$extension_modules_root" ]; then
         for bn in $(filter_module_names); do
-          for f in "$MODULES_DIR/$bn/filters"/*.awk; do
+          fd=$(module_dir "$bn") || continue
+          for f in "$fd/filters"/*.awk; do
             [ -f "$f" ] || continue
             pat=$(directive_value match "$f")
             [ -n "$pat" ] || continue
@@ -887,9 +1019,10 @@ run_body() {
 
       # Module default fallback: fills an empty selection only; defaults
       # never shadow a match, so priority does not apply here
-      if [ -z "$selected_filter" ] && [ -d "$MODULES_DIR" ]; then
+      if [ -z "$selected_filter" ] && { [ -d "$modules_root" ] || [ -d "$extension_modules_root" ]; }; then
         for bn in $(filter_module_names); do
-          for f in "$MODULES_DIR/$bn/filters"/*.awk; do
+          fd=$(module_dir "$bn") || continue
+          for f in "$fd/filters"/*.awk; do
             [ -f "$f" ] || continue
             if grep -q '^# default' "$f" 2>/dev/null; then
               selected_filter="$f"
@@ -1071,7 +1204,8 @@ run_hooks() {
 
   for n in $(scan_module_dirs); do
     [ -n "$n" ] || continue
-    hd="$modules_root/$n/hooks"
+    nd=$(module_dir "$n") || continue
+    hd="$nd/hooks"
     [ -d "$hd" ] || continue
     for h in $(hook_files "$hd"); do
       [ -n "$h" ] || continue
@@ -1191,7 +1325,10 @@ if [ -z "$found_target" ]; then
   exit 1
 fi
 
-md="$modules_root/$found_target"
+md=$(module_dir "$found_target") || {
+  ctx_err "unknown command: $target"
+  exit 1
+}
 
 # bare ctx <module> prints the module help rc0
 if [ $# -eq 0 ]; then

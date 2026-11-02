@@ -66,7 +66,7 @@
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx session task add`; the pointer moves via `.contexture/ctx session next` (a task start writes it too: `.contexture/ctx session task start`); every task's completion journals its receipt (`.contexture/ctx session task complete`) and advances the pointer (`.contexture/ctx session next`); drift updates the backlog in the same breath via `.contexture/ctx session task update`
   base assets:
     copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
-    set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk`
+    set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking

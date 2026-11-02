@@ -7,7 +7,9 @@
 # tab-separated values: the key pattern, the section, the entity type, and the head marker
 # (or - for none).
 #
-# A module declares its store in `modules/<module>/data`, one `field: value` line per
+# A module declares its store in `<root>/<module>/data`, where <root> is the workspace
+# modules root (`.contexture/modules`) or the extension root
+# (`.contexture/extensions/modules`); one `field: value` line per
 # field and a line starting with # a comment:
 #   namespace: <lowercase token: letters, digits, dot, underscore, hyphen>   (required)
 #   key: <pattern, a <name> placeholder per slash-separated segment; the final
@@ -32,8 +34,8 @@
 #   document: <key-pattern> <section> <entity-type> <head-marker|->          (optional;
 #         repeatable; the document-set search schema)
 # The module directory beside the data file is the owner; a second data file declaring the
-# same namespace refuses. The script validates the fields before any store function maps a
-# key to a path.
+# same namespace, in either root, refuses. The script validates the fields before any
+# store function maps a key to a path.
 #
 # Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, or two
 # declarations of the namespace; 2 the module drawer is absent or unreadable; 3 the
@@ -128,6 +130,7 @@ fi
 [ -d "$SD_WS/.contexture/modules" ] || sd_env "no module drawer at the workspace root"
 
 sd_modules="$SD_WS/.contexture/modules"
+sd_extension_modules="$SD_WS/.contexture/extensions/modules"
 
 # data_namespace <file>: the first namespace value of a data file, trimmed, or nothing
 data_namespace() {
@@ -153,13 +156,20 @@ data_namespace() {
 
 sd_found=""
 sd_count=0
-for sd_file in "$sd_modules"/*/data; do
-  [ -f "$sd_file" ] || continue
-  sd_ns=$(data_namespace "$sd_file")
-  [ "$sd_ns" = "$SD_NAMESPACE" ] || continue
-  sd_count=$((sd_count + 1))
-  sd_found="$sd_file"
-done
+
+# the owner scan reads both module roots: the workspace modules, then the extension
+# modules (the package overlay's install root); an absent extension root is silent
+sd_scan_root() {
+  for sd_file in "$1"/*/data; do
+    [ -f "$sd_file" ] || continue
+    sd_ns=$(data_namespace "$sd_file")
+    [ "$sd_ns" = "$SD_NAMESPACE" ] || continue
+    sd_count=$((sd_count + 1))
+    sd_found="$sd_file"
+  done
+}
+sd_scan_root "$sd_modules"
+[ -d "$sd_extension_modules" ] && sd_scan_root "$sd_extension_modules"
 
 if [ "$sd_count" -eq 0 ]; then
   printf 'store-data: namespace '\''%s'\'' is declared by no module data file\n' "$SD_NAMESPACE" >&2
@@ -167,13 +177,17 @@ if [ "$sd_count" -eq 0 ]; then
 fi
 if [ "$sd_count" -gt 1 ]; then
   sd_owners=""
-  for sd_file in "$sd_modules"/*/data; do
-    [ -f "$sd_file" ] || continue
-    sd_ns=$(data_namespace "$sd_file")
-    [ "$sd_ns" = "$SD_NAMESPACE" ] || continue
-    sd_mod=${sd_file%/*}; sd_mod=${sd_mod##*/}
-    sd_owners="$sd_owners $sd_mod"
-  done
+  sd_owner_root() {
+    for sd_file in "$1"/*/data; do
+      [ -f "$sd_file" ] || continue
+      sd_ns=$(data_namespace "$sd_file")
+      [ "$sd_ns" = "$SD_NAMESPACE" ] || continue
+      sd_mod=${sd_file%/*}; sd_mod=${sd_mod##*/}
+      sd_owners="$sd_owners $sd_mod"
+    done
+  }
+  sd_owner_root "$sd_modules"
+  [ -d "$sd_extension_modules" ] && sd_owner_root "$sd_extension_modules"
   sd_fail "namespace '$SD_NAMESPACE' is declared by more than one module:$sd_owners"
 fi
 

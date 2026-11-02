@@ -1,9 +1,9 @@
 #!/usr/bin/awk -f
-# summary: the rhythm index from .contexture/rhythms/ as name (path) | use when | activation
+# summary: the rhythm index from .contexture/rhythms/ and .contexture/extensions/rhythms/ as name (path) | use when | activation
 # usage: ctx session index
-# help: no arguments: reads .contexture/rhythms/*.md; an argument refuses rc=1
+# help: no arguments: reads .contexture/rhythms/*.md then .contexture/extensions/rhythms/*.md; an argument refuses rc=1
 # help: an absent rhythms directory answers an empty index rc=0 (the base payload ships no rhythms; a workspace may carry none)
-# help: exit codes: 0 rhythm index printed (empty when the directory is absent); 1 unexpected argument passed
+# help: exit codes: 0 rhythm index printed (empty when the directories are absent); 1 unexpected argument passed
 # help: example: ctx session index
 
 function usage() {
@@ -40,8 +40,14 @@ function process(path,   line) {
 BEGIN {
   if (ARGC > 1) usage()
   # an absent rhythms directory is an empty index, never an error: the base payload ships
-  # no rhythms, and a workspace may carry none (BG1, the base-only audit)
+  # no rhythms, and a workspace may carry none (BG1, the base-only audit); the extension
+  # root's rhythms list after the workspace's
   cmd = "ls .contexture/rhythms/*.md 2>/dev/null"
+  while ((cmd | getline fname) > 0) {
+    process(fname)
+  }
+  close(cmd)
+  cmd = "ls .contexture/extensions/rhythms/*.md 2>/dev/null"
   while ((cmd | getline fname) > 0) {
     process(fname)
   }

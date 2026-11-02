@@ -6,7 +6,7 @@ This page is the authoring contract: what to write, where it goes, and how to pr
 
 ## Anatomy
 
-The standard module folder is a directory under `.contexture/modules/`:
+The standard module folder is a directory under `.contexture/modules/` (the workspace modules root) or `.contexture/extensions/modules/` (the extension root, where a package installs a feature module):
 
 ```text
 .contexture/modules/<name>/
@@ -29,7 +29,7 @@ The standard module folder is a directory under `.contexture/modules/`:
 - `scripts/`, `hooks/`, `install`, and `uninstall` are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
 - A package ships this folder as its module part; the package overlay installs it whole, and the folder is the single source for the engine, the compose, the storage, and the installer.
 
-The builtin modules `session`, `lane`, and `run` ship with the base; the storage core at `.contexture/storage/` is not a module but rides the same payload; a module you add is workspace-owned. See Payload.
+The builtin `session` and `run` modules ship with the base under `.contexture/modules/`; the builtin `lane` module ships under `.contexture/extensions/modules/`, the base's first extension-root module; the storage core at `.contexture/storage/` is not a module but rides the same payload; a module you add is workspace-owned. See Payload.
 
 ## Declarations
 
@@ -104,7 +104,8 @@ Filters declare themselves with their own header vocabulary; see Filters.
 
 ## Engine assembly
 
-- Discovery root: `.contexture/modules/`. The engine resolves the workspace root from its own location, so `ctx` works from any directory.
+- Discovery roots: `.contexture/modules/` and `.contexture/extensions/modules/`. The workspace modules list first, then the extension modules, each root in byte order; an absent extension root is silent. The engine resolves the workspace root from its own location, so `ctx` works from any directory.
+- An extension module whose name collides with a workspace module, a builtin (`session`, `run`), or a reserved name is warned and skipped: the engine never shadows silently. The package installer refuses the same collision at install.
 - `ctx help` lists every module with its summary.
 - `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines.
 - `ctx help --all` prints the top summary plus every module's block.
@@ -134,7 +135,7 @@ ctx <module> <verb> [args...]
 
 ## Hooks
 
-A hook is a file under `modules/<name>/hooks/` declaring `# ctx-hook: <point>`. The engine runs the declared hooks implicitly when that point fires — there is no `ctx hooks` verb to call, and `hooks` is a reserved name.
+A hook is a file under `<root>/<name>/hooks/` declaring `# ctx-hook: <point>`, where `<root>` is `.contexture/modules/` or `.contexture/extensions/modules/`. The engine runs the declared hooks implicitly when that point fires — there is no `ctx hooks` verb to call, and `hooks` is a reserved name. The workspace modules' hooks run first (name order), then the extension modules' (name order).
 
 Six points ship:
 
@@ -192,7 +193,7 @@ One home for the logic and its validation; a clean verb table. The ideas module 
 
 ## Filters
 
-Filters live under `.contexture/modules/<name>/filters/`. The run module's filters scan first, then every other module in name order, so a workspace module can add an ecosystem filter without editing the base.
+Filters live under `.contexture/modules/<name>/filters/` or `.contexture/extensions/modules/<name>/filters/`. The run module's filters scan first, then every other module, the workspace modules before the extension modules (name order in each root), so a workspace or package module can add an ecosystem filter without editing the base.
 
 A filter declares itself in its header:
 
@@ -215,9 +216,11 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
 ## Walkthrough
 
+The steps below use the workspace modules root; a package installs its feature module as the same folder under `.contexture/extensions/modules/`, the extension root. The engine discovers both.
+
 ### Add a verb
 
-1. New module? `mkdir -p .contexture/modules/<name>` and write the manifest with its `# summary:` line (add `# version:` and a `# description:` block when the module ships as a package).
+1. New module? `mkdir -p .contexture/modules/<name>` (or `.contexture/extensions/modules/<name>` for a package module) and write the manifest with its `# summary:` line (add `# version:` and a `# description:` block when the module ships as a package).
 2. Write `scripts/<verb>`; the header carries the declarations:
 
    ```sh
@@ -240,7 +243,7 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
 ### Add a hook
 
-1. `mkdir -p .contexture/modules/<name>/hooks`.
+1. `mkdir -p .contexture/modules/<name>/hooks` (or the extension root's modules path).
 2. Write a hook file declaring `# ctx-hook: <point>` and, when the point must stop on failure, `# ctx-hook-mode: block`. The body reads the context variables above.
 3. `chmod +x hooks/<file>`.
 4. Probe at a real point: a stamp hook is the cheapest: run `ctx session stamp <unit>` on a scratch unit and watch the side effect.
@@ -253,7 +256,7 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
 ### Add a whole module
 
-1. `mkdir -p .contexture/modules/<name>/scripts`.
+1. `mkdir -p .contexture/modules/<name>/scripts` (or `.contexture/extensions/modules/<name>/scripts` for a package module).
 2. Write `module` with the summary, the version, and the description block last; add `laws` when the module contributes law clauses and `data` when it stores module data.
 3. Add verb scripts; add `hooks/` and `filters/` when the module needs them; add `install` and `uninstall` part hooks when the module owns work beyond the overlay.
 4. Prove it end to end: `ctx help` lists it; bare `ctx <name>` prints its help rc0; `ctx <name> help` lists the verbs; dispatch works; an unknown verb exits rc1 with the module help on stderr; `ctx _module .contexture/modules/<name>/module validate` is silent rc0.
@@ -281,7 +284,7 @@ The filter guards (fail-safe passthrough, notice-only, format-only recovery) bel
 
 ### the storage core: not a module
 
-The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file, the module-facing `scripts/library` (the store seven, `store_require` and `store_has`, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the core's resolver, so the session and lane verbs, the docs module, and the plugin suites keep their old path while every caller resolves the configured driver through the core. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
+The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file (in the workspace modules and the extension modules alike), the module-facing `scripts/library` (the store seven, `store_require` and `store_has`, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the core's resolver, so the session verbs, the docs module, and the plugin suites keep their old path while every caller resolves the configured driver through the core; the lane module, under the extension root, sources the session lib from `CTX_ROOT`. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
 
 ### session: thin verbs over a shared library and a storage driver
 
@@ -297,7 +300,7 @@ The builtin run module, `.contexture/modules/run/`. It has no module file and no
 
 ## Payload
 
-A module you add is workspace-owned: updates never touch it. The builtin `session`, `lane`, and `run` modules and the storage core ride the update payload: the source repository tracks them mirrored under `base/`, and an update applies them onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
+A module you add is workspace-owned: updates never touch it. The builtin `session` and `run` modules and the storage core ride the update payload under `.contexture/modules/` and `.contexture/storage/`; the builtin `lane` module rides it under `.contexture/extensions/modules/`, the base's first extension-root module; a package's installed files live under the same extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
 
 ## Where the rest lives
 

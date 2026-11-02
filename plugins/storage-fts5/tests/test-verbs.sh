@@ -44,11 +44,11 @@ unset CTX_DIR CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_STORAGE_DRIVER CTX_STORAGE_SQL
 export LC_ALL=C
 
 WS="$SB/ws"
-mkdir -p "$WS/.contexture/modules" "$WS/.contexture/tmp"
+mkdir -p "$WS/.contexture/modules" "$WS/.contexture/tmp" "$WS/.contexture/extensions/modules"
 cp -p "$BASE/ctx" "$WS/.contexture/ctx"
 cp -Rp "$BASE/modules/session" "$WS/.contexture/modules/session"
 cp -Rp "$BASE/storage" "$WS/.contexture/storage"
-cp -Rp "$BASE/modules/lane" "$WS/.contexture/modules/lane"
+cp -Rp "$BASE/extensions/modules/lane" "$WS/.contexture/extensions/modules/lane"
 cp -Rp "$MOD" "$WS/.contexture/modules/storage-fts5"
 
 pass=0

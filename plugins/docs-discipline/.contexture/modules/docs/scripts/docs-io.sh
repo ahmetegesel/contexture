@@ -31,7 +31,9 @@ DOCS_ERR=""
 
 # docs_io_init <scripts dir> <verb>: the workspace root as the verbs resolve it
 # (DOCS_WORKSPACE_ROOT, then CTX_ROOT, then the walk up to the .contexture drawer's
-# parent) and the resolver as ctx lane show finds it
+# parent) and the storage core's resolver, library, and JSON decoder, all absolute from
+# CTX_ROOT (the core drawer, then the base mirror), never a relative climb from the
+# module folder
 docs_io_init() {
   DOCS_VERB="ctx docs $2"
   DOCS_DIR=$1
@@ -42,28 +44,30 @@ docs_io_init() {
   [ -n "$di_root" ] || di_root=$(CDPATH= cd -- "$1/../../.." && pwd)
   DOCS_ROOT="${DOCS_WORKSPACE_ROOT:-${CTX_ROOT:-$di_root}}"
   DOCS_ROOT_P=$(CDPATH= cd -- "$DOCS_ROOT" 2>/dev/null && pwd) || DOCS_ROOT_P=""
-  DOCS_RESOLVER="$1/../../session/scripts/driver-resolver"
-  if [ ! -x "$DOCS_RESOLVER" ]; then
-    DOCS_RESOLVER=""
-    if [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver" ]; then
-      DOCS_RESOLVER="$CTX_ROOT/.contexture/modules/session/scripts/driver-resolver"
-    elif [ -n "${CTX_ROOT:-}" ] && [ -x "$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver" ]; then
-      DOCS_RESOLVER="$CTX_ROOT/base/.contexture/modules/session/scripts/driver-resolver"
-    fi
-  fi
-  DOCS_LIB="$1/../../../storage/scripts/library"
-  if [ ! -f "$DOCS_LIB" ]; then
-    DOCS_LIB=""
-    if [ -n "${CTX_ROOT:-}" ] && [ -f "$CTX_ROOT/.contexture/storage/scripts/library" ]; then
-      DOCS_LIB="$CTX_ROOT/.contexture/storage/scripts/library"
-    elif [ -n "${CTX_ROOT:-}" ] && [ -f "$CTX_ROOT/base/.contexture/storage/scripts/library" ]; then
-      DOCS_LIB="$CTX_ROOT/base/.contexture/storage/scripts/library"
-    fi
-  fi
+  # the storage core and the session lib resolve from CTX_ROOT, never a relative walk:
+  # the docs module may sit under the extension root, one level deeper than the
+  # workspace modules root, so a relative climb would leave the core's tree. The core
+  # resolver, the session wrapper, the base mirror, and the core library are tried in
+  # that order; the JSON decoder stays the session module's (the resolver's sibling
+  # lib is not the decoder's home).
+  di_ctx="${CTX_ROOT:-$DOCS_ROOT}"
+  DOCS_RESOLVER=""
+  for di_c in "$di_ctx/.contexture/storage/scripts/driver-resolver" \
+              "$di_ctx/.contexture/modules/session/scripts/driver-resolver" \
+              "$di_ctx/base/.contexture/storage/scripts/driver-resolver" \
+              "$di_ctx/base/.contexture/modules/session/scripts/driver-resolver"; do
+    if [ -x "$di_c" ]; then DOCS_RESOLVER=$di_c; break; fi
+  done
+  DOCS_LIB=""
+  for di_c in "$di_ctx/.contexture/storage/scripts/library" \
+              "$di_ctx/base/.contexture/storage/scripts/library"; do
+    if [ -f "$di_c" ]; then DOCS_LIB=$di_c; break; fi
+  done
   DOCS_JSON=""
-  if [ -n "$DOCS_RESOLVER" ] && [ -f "${DOCS_RESOLVER%/*}/../lib/json.awk" ]; then
-    DOCS_JSON="${DOCS_RESOLVER%/*}/../lib/json.awk"
-  fi
+  for di_c in "$di_ctx/.contexture/modules/session/lib/json.awk" \
+              "$di_ctx/base/.contexture/modules/session/lib/json.awk"; do
+    if [ -f "$di_c" ]; then DOCS_JSON=$di_c; break; fi
+  done
   if [ -n "$DOCS_LIB" ]; then
     CTX_STORE_ROOT="$DOCS_ROOT"
     CTX_STORE_RESOLVER="$DOCS_RESOLVER"
@@ -579,15 +583,25 @@ DOCS_STDIN_FIELD=""
 DOCS_FLAGS=""
 DOCS_GRAMMAR=""
 
-# docs_template: the grammar template beside the module (the drawer's templates folder
-# under ctx, the plugin's own copy in a suite sandbox)
+# docs_template: the grammar template absolute from CTX_ROOT: the extension root's
+# templates folder first (the package overlay's home), then the core drawer's, then the
+# base mirror's; never a relative climb from the module folder
 docs_template() {
-  DOCS_TEMPLATE="$DOCS_DIR/../../../templates/doc.md"
-  if [ -f "$DOCS_TEMPLATE" ]; then
-    export DOCS_TEMPLATE
-    return 0
+  DOCS_TEMPLATE=""
+  dt_root="${CTX_ROOT:-$DOCS_ROOT}"
+  if [ -n "$dt_root" ]; then
+    for dt in "$dt_root/.contexture/extensions/templates/doc.md" \
+              "$dt_root/.contexture/templates/doc.md" \
+              "$dt_root/base/.contexture/extensions/templates/doc.md" \
+              "$dt_root/base/.contexture/templates/doc.md"; do
+      if [ -f "$dt" ]; then
+        DOCS_TEMPLATE=$dt
+        export DOCS_TEMPLATE
+        return 0
+      fi
+    done
   fi
-  printf '%s: the grammar template (templates/doc.md beside the modules) is missing (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+  printf '%s: the grammar template (extensions/templates/doc.md or templates/doc.md under the drawer) is missing (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
   return 2
 }
 

@@ -118,13 +118,13 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/rhythms"
+mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/rhythms" "$SANDBOX/.contexture/extensions/modules" "$SANDBOX/.contexture/extensions/rhythms"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
 cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
 chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
-[ -d "$ROOT/base/.contexture/modules/lane" ] && cp -R "$ROOT/base/.contexture/modules/lane" "$SANDBOX/.contexture/modules/lane"
+[ -d "$ROOT/base/.contexture/extensions/modules/lane" ] && cp -R "$ROOT/base/.contexture/extensions/modules/lane" "$SANDBOX/.contexture/extensions/modules/lane"
 if [ "$DRIVER" = fts5 ]; then
   cp -R "$FTS5_MOD" "$SANDBOX/.contexture/modules/storage-fts5"
   printf 'storage.driver: fts5\n' > "$SANDBOX/.contexture/config"
@@ -134,10 +134,15 @@ cat > "$SANDBOX/.contexture/rhythms/probe.md" <<'EOF'
   use when: the suite needs an index line
   activation: propose
 EOF
+cat > "$SANDBOX/.contexture/extensions/rhythms/extprobe.md" <<'EOF'
+@rhythm extprobe
+  use when: the suite needs an extension index line
+  activation: propose
+EOF
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
-chmod +x .contexture/modules/*/scripts/* 2>/dev/null || true
+chmod +x .contexture/modules/*/scripts/* .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
 
 # the record through the verbs and the storage functions: rsum reads a unit through its
 # read functions on every driver; rcat, rput, rappend read and plant legacy text as posix
@@ -209,12 +214,20 @@ a_eq "$($CTX session help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [
 a_eq "$($CTX lane help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "4" "lane help lists the 4 verbs (create added)"
 out=$($CTX session index)
 a_match "$out" "probe (.*probe.md) | use when: the suite needs an index line | activation: propose" "index renders the rhythm line"
+a_match "$out" "extprobe (.*extprobe.md) | use when: the suite needs an extension index line | activation: propose" "index renders the extension rhythm line"
+a_eq "$(printf '%s\n' "$out" | awk -F'[ (]' '{print $1}' | tr '\n' ' ')" "probe extprobe " "index: the workspace rhythm lists before the extension rhythm"
 # BG1: an absent rhythms directory answers an empty index rc0 (the base payload ships no
-# rhythms, so a bare base-only install completes boot step 6)
+# rhythms, so a bare base-only install completes boot step 6); both roots absent is the
+# empty index, one present lists only its own
 mv .contexture/rhythms .contexture/rhythms.bg1
 out=$($CTX session index 2>&1); rc=$?
-a_eq "$rc" "0" "BG1: the absent rhythms directory answers rc0"
-a_eq "$out" "" "BG1: the absent rhythms directory answers an empty index, no stderr"
+a_eq "$rc" "0" "BG1: the absent workspace rhythms directory answers rc0"
+a_eq "$(printf '%s\n' "$out" | awk -F'[ (]' '{print $1}')" "extprobe" "BG1: only the extension rhythm remains when the workspace rhythms are gone"
+mv .contexture/extensions/rhythms .contexture/extensions/rhythms.bg1
+out=$($CTX session index 2>&1); rc=$?
+a_eq "$rc" "0" "BG1: both absent rhythms directories answer rc0"
+a_eq "$out" "" "BG1: both absent rhythms directories answer an empty index, no stderr"
+mv .contexture/extensions/rhythms.bg1 .contexture/extensions/rhythms
 mv .contexture/rhythms.bg1 .contexture/rhythms
 out=$($CTX session active)
 a_match "$out" "no sessions yet" "active on an empty drawer rc0"
@@ -1883,7 +1896,7 @@ if [ "$DRIVER" = posix ]; then
   a_eq "$(rcat up-crdoc lane/up-cr/recipe | grep -c "$(printf '\r')\$")" "1" "F2-CR: the posix file keeps the recipe's CR byte"
 fi
 # no verb script names a sessions path in any warning or error it can print
-up_static=$(grep -n 'contexture/sessions' .contexture/modules/session/scripts/* .contexture/modules/lane/scripts/* | grep -v ':[0-9]*:#' | grep -v 'WRITE SCOPE')
+up_static=$(grep -n 'contexture/sessions' .contexture/modules/session/scripts/* .contexture/extensions/modules/lane/scripts/* | grep -v ':[0-9]*:#' | grep -v 'WRITE SCOPE')
 a_eq "$up_static" "" "UP: no verb script prints a sessions path in a message"
 # the finding update usage: --summary and --ref are both optional (either alone works)
 out=$($CTX session finding update --help 2>&1 </dev/null)

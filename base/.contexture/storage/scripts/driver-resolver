@@ -93,10 +93,11 @@ read_conf_driver() {
   return 1
 }
 
-# Locate driver executable: the storage core's drivers first, then the transitional
-# locations (workspace drivers, module-owned drivers, the base mirror, PATH). The core
-# drivers and the extension root are the settled end shape; the module tree carries the
-# fts5 driver until the module system moves it to the extension root.
+# Locate driver executable: the storage core's drivers first, then the extension root's
+# package drivers, then the transitional locations (workspace drivers, module-owned
+# drivers, the base mirror, PATH). The core drivers and the extension root are the
+# settled end shape; the module tree carries the fts5 driver until the module system
+# moves it to the extension root.
 find_driver_executable() {
   ctx_dir="$1"
   driver="$2"
@@ -130,8 +131,19 @@ find_driver_executable() {
     return 0
   fi
 
-  # Tier 3: Module-owned drivers (transitional; the extension root follows with the
-  # module system)
+  # Tier 3: The extension root's package drivers (the settled home of a package's
+  # driver; the core's drivers above stay beside it, the transitional tiers below)
+  if [ -x "$ctx_dir/extensions/storage/drivers/$driver/driver" ]; then
+    printf '%s/extensions/storage/drivers/%s/driver\n' "$ctx_dir" "$driver"
+    return 0
+  fi
+  if [ -f "$ctx_dir/extensions/storage/drivers/$driver" ] && [ -x "$ctx_dir/extensions/storage/drivers/$driver" ]; then
+    printf '%s/extensions/storage/drivers/%s\n' "$ctx_dir" "$driver"
+    return 0
+  fi
+
+  # Tier 4: Module-owned drivers (transitional; the fts5 driver lives here until the
+  # module system moves it to the extension root)
   for mod_dir in "$ctx_dir"/modules/*; do
     [ -d "$mod_dir" ] || continue
     if [ -x "$mod_dir/drivers/$driver/driver" ]; then
@@ -144,11 +156,15 @@ find_driver_executable() {
     fi
   done
 
-  # Tier 4: Base mirror fallback (transitional)
+  # Tier 5: Base mirror fallback (transitional)
   base_ctx="$ctx_dir/../base/.contexture"
   if [ -d "$base_ctx" ]; then
     if [ -x "$base_ctx/storage/drivers/$driver/driver" ]; then
       printf '%s/storage/drivers/%s/driver\n' "$base_ctx" "$driver"
+      return 0
+    fi
+    if [ -x "$base_ctx/extensions/storage/drivers/$driver/driver" ]; then
+      printf '%s/extensions/storage/drivers/%s/driver\n' "$base_ctx" "$driver"
       return 0
     fi
     for mod_dir in "$base_ctx"/modules/*; do
@@ -164,7 +180,7 @@ find_driver_executable() {
     done
   fi
 
-  # Tier 5: External binary on PATH (transitional)
+  # Tier 6: External binary on PATH (transitional)
   if command -v "ctx-storage-$driver" >/dev/null 2>&1; then
     command -v "ctx-storage-$driver"
     return 0
@@ -216,7 +232,7 @@ resolve_target_driver() {
     return 0
   fi
 
-  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' not found in the core drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
+  printf 'driver-resolver: ERROR: storage driver '\''%s'\'' not found in the core drivers, the extension drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n' "$target_name" >&2
   return 2
 }
 

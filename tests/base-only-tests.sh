@@ -17,7 +17,7 @@
 # Usage: tests/base-only-tests.sh [--keep] [--skip-core]
 #   --keep       preserve the sandbox
 #   --skip-core  skip B6's seven nested posix suites and their launches, running B1 to B5
-#                alone (pass=145); the full run stays pass=152
+#                alone (pass=169); the full run stays pass=176
 # Exit 0 when every case passes; 1 otherwise; 2 a staging failure.
 
 set -u
@@ -27,7 +27,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
-LANE_MOD="$ROOT/base/.contexture/modules/lane"
+LANE_MOD="$ROOT/base/.contexture/extensions/modules/lane"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
 
 KEEP=0
@@ -64,7 +64,7 @@ trap cleanup EXIT INT TERM
 # stage base alone: no docs/, no plugins/, no config, no rhythms directory
 cp -R "$ROOT/base/." "$SB/" || { echo "base-only-tests.sh: cannot stage base" >&2; exit 2; }
 mkdir -p "$SB/.contexture/tmp"
-chmod +x "$SB/.contexture/ctx" "$SB/.contexture/modules/"*/scripts/* "$SB/.contexture/storage/scripts/"* "$SB/.contexture/storage/drivers/posix/driver" 2>/dev/null || true
+chmod +x "$SB/.contexture/ctx" "$SB/.contexture/modules/"*/scripts/* "$SB/.contexture/extensions/modules/"*/scripts/* "$SB/.contexture/storage/scripts/"* "$SB/.contexture/storage/drivers/posix/driver" 2>/dev/null || true
 cd "$SB" || exit 2
 
 CTX=./.contexture/ctx
@@ -168,6 +168,21 @@ a_not "$out" "module storage:" "help: the storage core is not listed as a module
 [ -x .contexture/storage/drivers/posix/driver ] && ok "core: the posix driver sits in the storage core" || bad "core: the posix driver is missing"
 a_match "$out" "module session:" "help: the session module is listed"
 a_match "$out" "module lane:" "help: the lane module is listed"
+# the lane module ships under the extension root: discovery reaches it there, the
+# workspace module lists before the extension module, dispatch resolves its own dir,
+# and an absent extension root is silent and lists no extension module
+out=$($CTX lane help 2>&1); a_rc "$?" "0" "extension root: ctx lane help rc0 from the extension module"
+a_match "$out" "create" "extension root: the lane verb table renders"
+out=$($CTX help 2>/dev/null)
+ord=$(printf '%s\n' "$out" | awk '/^modules:/{on=1;next} on && /^  [a-z]/{print $1}' | tr '\n' ' ')
+a_eq "$ord" "session lane " "extension root: the workspace module lists before the extension module"
+mv .contexture/extensions .contexture/extensions.b1
+out=$($CTX help 2>"ext.err"); rc=$?
+a_rc "$rc" "0" "extension root: ctx help rc0 with the extension root absent"
+a_not "$out" "module lane:" "extension root: an absent root lists no extension module"
+a_eq "$(cat ext.err)" "" "extension root: an absent root is silent"
+mv .contexture/extensions.b1 .contexture/extensions
+rm -f ext.err
 out=$($CTX run --help 2>&1); a_rc "$?" "0" "help: ctx run answers its help rc0"
 err=$($CTX docs help 2>&1 >/dev/null); rc=$?
 a_rc "$rc" "1" "help: ctx docs is unknown without the plugin"
@@ -363,6 +378,23 @@ printf 'namespace: probe\nroot: probe2-root\nsuffix: .txt\nkey: <a>/<b>\nchanges
 run "store-data duplicate" "$STORE_DATA" probe
 refused 1 "store-data: namespace 'probe' is declared by more than one module: probe probe2"
 rm -rf .contexture/modules/probe2
+# the owner scan reads the extension modules too, and an absent extension root is silent
+mkdir -p .contexture/extensions/modules/extprobe
+printf 'namespace: extprobe\nroot: ext-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/extensions/modules/extprobe/data
+out=$($STORE_DATA extprobe 2> "$E"); RC=$?
+a_rc "$RC" "0" "store: an extension module's data file answers rc0"
+a_eq "$(printf '%s\n' "$out" | sed -n '1,5p')" "$(printf 'extprobe\next-data\n.txt\n<a>/<b>\nfalse')" "store: the extension declaration prints its five fields"
+mkdir -p .contexture/extensions/modules/probe2
+printf 'namespace: probe\nroot: ext-probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: true\n' > .contexture/extensions/modules/probe2/data
+run "store-data duplicate across roots" "$STORE_DATA" probe
+refused 1 "store-data: namespace 'probe' is declared by more than one module: probe probe2"
+rm -rf .contexture/extensions/modules/probe2
+mv .contexture/extensions .contexture/extensions.b4
+out=$($STORE_DATA probe 2> "$E"); RC=$?
+a_rc "$RC" "0" "store: an absent extension root is silent"
+a_eq "$(cat "$E")" "" "store: an absent extension root writes no stderr"
+mv .contexture/extensions.b4 .contexture/extensions
+rm -rf .contexture/extensions/modules/extprobe
 mkdir -p .contexture/modules/badfield
 printf 'namespace: badfield\nroot: r\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nbogus: x\n' > .contexture/modules/badfield/data
 run "store-data unknown field" "$STORE_DATA" badfield
@@ -380,6 +412,15 @@ printf 'namespace: probe\nroot: probe-data\nsuffix: .txt\nkey: <a>/<b>\nchanges:
 DRIVER=$($RESOLVER resolve 2> "$E"); RC=$?
 a_rc "$RC" "0" "store: the resolver resolves the posix driver"
 a_match "$DRIVER" "/drivers/posix/driver$" "store: the resolved driver is the posix driver"
+# the resolver's extension tier: a driver under .contexture/extensions/storage/drivers
+# resolves beside the core drivers, before the transitional module tier
+mkdir -p .contexture/extensions/storage/drivers
+cp -R .contexture/storage/drivers/posix .contexture/extensions/storage/drivers/extposix
+chmod +x .contexture/extensions/storage/drivers/extposix/driver
+EXT_DRIVER=$(CTX_STORAGE_DRIVER=extposix $RESOLVER resolve 2> "$E"); RC=$?
+a_rc "$RC" "0" "store: the resolver resolves an extension driver"
+a_match "$EXT_DRIVER" "/extensions/storage/drivers/extposix/driver$" "store: the extension driver path is the extension root's"
+rm -rf .contexture/extensions/storage/drivers/extposix
 $RESOLVER require store >/dev/null 2>&1; a_rc "$?" "0" "store: require store rc0"
 $RESOLVER has store.changelog >/dev/null 2>&1; a_rc "$?" "1" "store: has store.changelog answers 1 on posix"
 err=$($RESOLVER require store.changelog 2>&1 >/dev/null); rc=$?

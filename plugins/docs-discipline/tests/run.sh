@@ -53,6 +53,7 @@ done
 WS_ROOT="$(cd "$PLUGIN_ROOT/../.." && pwd)"
 BASE_CTX="$WS_ROOT/base/.contexture/ctx"
 BASE_MODULES="$WS_ROOT/base/.contexture/modules"
+BASE_EXT_MODULES="$WS_ROOT/base/.contexture/extensions/modules"
 BASE_STORAGE="$WS_ROOT/base/.contexture/storage"
 FTS5_MOD="$WS_ROOT/plugins/storage-fts5/.contexture/modules/storage-fts5"
 if [ ! -f "$BASE_CTX" ] || [ ! -d "$BASE_MODULES/session" ] || [ ! -d "$BASE_STORAGE" ]; then
@@ -84,13 +85,13 @@ SANDBOX=$(mktemp -d "$TMP_BASE/docs-plugin-tests.XXXXXX") || exit 1
 trap 'rm -rf "$SANDBOX"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
-mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/templates" "$SANDBOX/docs"
+mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/extensions/modules" "$SANDBOX/.contexture/templates" "$SANDBOX/docs"
 cp "$BASE_CTX" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$BASE_MODULES/session" "$SANDBOX/.contexture/modules/session"
 cp -R "$BASE_STORAGE" "$SANDBOX/.contexture/storage"
 chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
-[ -d "$BASE_MODULES/lane" ] && cp -R "$BASE_MODULES/lane" "$SANDBOX/.contexture/modules/lane"
+[ -d "$BASE_EXT_MODULES/lane" ] && cp -R "$BASE_EXT_MODULES/lane" "$SANDBOX/.contexture/extensions/modules/lane"
 cp -R "$PLUGIN_ROOT/.contexture/modules/docs" "$SANDBOX/.contexture/modules/docs"
 cp "$PLUGIN_ROOT/.contexture/templates/doc.md" "$SANDBOX/.contexture/templates/doc.md"
 if [ "$DRIVER" = fts5 ]; then

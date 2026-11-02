@@ -60,9 +60,10 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   nothing. `replace` and
   `ids` run the edit over every doc of their scope first, check the counts
   (replace: the total must equal `--count`), audit every touched repo, then
-  write one doc after another. The template resolves beside the module
-  (`scripts/../../../templates/doc.md`: the drawer's copy under ctx, the
-  plugin's own copy in the suite sandbox).
+  write one doc after another. The template resolves from `CTX_ROOT`, never a
+  relative climb: `.contexture/extensions/templates/doc.md` first (the package
+  overlay's home), then `.contexture/templates/doc.md`; the plugin's own copy
+  in the suite sandbox is staged under `.contexture/templates/`.
 - `docs-edit.awk` addresses what the schema names: an entry by its key (the
   id of an id-keyed block, the first field's value, `<from>><to>` for
   data_flow, `<direction>:<key>` for edges, or `#<N>`), a rule by
@@ -107,15 +108,22 @@ The instruments resolve the workspace root in this order:
 
 `docs-io.sh` resolves it once for every verb and hands the same root to the
 storage driver (as its cwd and `CTX_ROOT`), so the corpus the driver serves
-and the root the verb reports agree. The gate's git aggregation reads from
-that root; the corpus reads go through the driver (under the files driver the
-corpus is `<root>/docs/<repo>/<slug>.md`). `DOCS_PRODUCT_REPOS_DIR` (default
-`projects/`) selects the multi-repo product directory.
+and the root the verb reports agree. The storage core's resolver and library,
+the session module's JSON decoder, and the grammar template resolve from that
+same `CTX_ROOT` (the core drawer, the base mirror, or the extension template),
+never by a relative climb from the module folder, so the docs module works
+under the modules root and the extension root alike. The gate's git
+aggregation reads from that root; the corpus reads go through the driver
+(under the files driver the corpus is `<root>/docs/<repo>/<slug>.md`).
+`DOCS_PRODUCT_REPOS_DIR` (default `projects/`) selects the multi-repo product
+directory.
 
 ## Grammar and sample
 
-- The corpus grammar: `.contexture/templates/doc.md` (adopted beside the
-  module).
+- The corpus grammar: `.contexture/extensions/templates/doc.md` when the docs
+  module installs under the extension root, else `.contexture/templates/doc.md`
+  (the suite stages the plugin's copy under the latter), resolved from
+  `CTX_ROOT`.
 - The seed conventions: the plugin's `docs/workspace/conventions.md`, written
   into the corpus by adoption through `ctx docs write workspace conventions`
   (under the files driver the doc lands at that same path).
@@ -128,7 +136,8 @@ corpus is `<root>/docs/<repo>/<slug>.md`). `DOCS_PRODUCT_REPOS_DIR` (default
 `tests/run.sh [--driver=posix|fts5]` at the plugin root stages a scratch
 workspace under the workspace's `.contexture/tmp/` (made on demand; the system
 temp only when it cannot be), copies the shipped core's runtime and its session
-and lane modules from `base/`, this module, and the grammar template (with
+module from `base/` and the lane module from `base/.contexture/extensions/`,
+this module, and the grammar template (with
 `--driver=fts5`, the storage-fts5 plugin's module and `storage.driver: fts5`),
 seeds `tests/sample/docs/` plus `docs/`, and drives the staging check; on
 fts5 the capture set first run on the files driver at the sandbox path (the
