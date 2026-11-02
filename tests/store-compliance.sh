@@ -188,15 +188,22 @@ if [ "$IS_POSIX" -eq 1 ]; then
 else
   [ "$_hasc" -eq 0 ] || miss "has store.changelog did not answer 0 on fts5"
 fi
+"$RESOLVER" has search.schema >/dev/null 2>&1
+_hass=$?
+if [ "$IS_POSIX" -eq 1 ]; then
+  [ "$_hass" -eq 1 ] || miss "has search.schema did not answer 1 on posix"
+else
+  [ "$_hass" -eq 0 ] || miss "has search.schema did not answer 0 on fts5"
+fi
 cap=$("$DRIVER" capability 2>/dev/null)
-case "$cap" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
+case "$cap" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*'"store.search"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
 if [ "$IS_POSIX" -eq 1 ]; then
   case "$cap" in *'"optional":["store"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
 else
-  case "$cap" in *'"optional":["store","store.changelog"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
+  case "$cap" in *'"optional":["store","store.changelog","search.schema"]'*) ;; *) miss "the descriptor optional set [$(printf '%s' "$cap" | sed 's/.*"optional"://')]" ;; esac
 fi
 # a planted descriptor without the store capability reads red at require
-planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/"store.changelog"//; s/"store"//; s/,\]/]/; s/\[,/[/; s/,,/,/g')
+planted=$(printf '%s' "$cap" | sed 's/,"store.list","store.get","store.put","store.delete","store.changes"//; s/,"store.search"//; s/"store.changelog"//; s/"search.schema"//; s/"store"//; s/,\]/]/; s/\[,/[/; s/,,/,/g')
 mkdir -p .contexture/drivers/planted
 {
   printf '#!/bin/sh\n'
@@ -213,6 +220,8 @@ chmod +x .contexture/drivers/planted/driver
 [ "$?" -eq 1 ] || miss "the planted descriptor did not answer has store rc1"
 "$RESOLVER" --driver=planted require store.changelog >/dev/null 2>&1
 [ "$?" -eq 2 ] || miss "the planted descriptor did not answer require store.changelog rc2"
+"$RESOLVER" --driver=planted require search.schema >/dev/null 2>&1
+[ "$?" -eq 2 ] || miss "the planted descriptor did not answer require search.schema rc2"
 tc "S1: the storage core is not a module, the wrapper resolves through it, and the store capabilities answer"
 
 # ==============================================================================
@@ -687,6 +696,157 @@ data_get nohash > "$O" 2> "$E"; RC=$?
 [ -s "$O" ] && miss "malformed ref printed stdout"
 [ "$(cat "$E")" = "data_get: error: ref 'nohash': a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)" ] || miss "malformed ref stderr [$(cat "$E")]"
 tc "S9e: a missing item, a missing module, and a malformed ref refuse their fixed lines"
+
+# ==============================================================================
+# S10: the search schema: the flat and document-set forms, the exact rule, the ranked
+# modes, and the generic fallback
+# ==============================================================================
+printf '\n== S10: the search schema ==\n'
+mkdir -p "$SB/payloads" .contexture/modules/searchdoc .contexture/modules/flatdoc .contexture/modules/genericdoc .contexture/modules/exactonly .contexture/modules/jsondoc
+cat > .contexture/modules/searchdoc/data <<'EOF'
+namespace: searchdoc
+root: sd-root
+suffix: .txt
+key: <unit>/<path...>
+changes: false
+search: documents
+modes: exact, hybrid, trigram
+document: <unit>/state state session -
+document: <unit>/backlog backlog session -
+document: <unit>/backlog backlog task @task
+document: <unit>/journal journal session -
+document: <unit>/journal journal entry @entry
+document: <unit>/journal journal session @anchor
+document: <unit>/lanes/<lane>/recipe lane_recipe lane -
+document: <unit>/lanes/<lane>/journal lane_journal lane -
+document: <unit>/lanes/<lane>/journal lane_journal lane_entry @entry
+document: <unit>/lanes/<lane>/report lane_report lane -
+EOF
+printf 'namespace: flatdoc\nroot: flat-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\nmodes: exact, hybrid\n' > .contexture/modules/flatdoc/data
+printf 'namespace: genericdoc\nroot: generic-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nmodes: exact, hybrid\n' > .contexture/modules/genericdoc/data
+printf 'namespace: exactonly\nroot: exact-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nmodes: exact\n' > .contexture/modules/exactonly/data
+printf 'namespace: jsondoc\nroot: json-root\nsuffix: .json\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: json\nfields: title, body\ntitle: title\nmodes: exact, hybrid\n' > .contexture/modules/jsondoc/data
+
+printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "work"\nobjective: "test"\nrepos: []\n' > "$SB/payloads/state"
+cat > "$SB/payloads/backlog" <<'EOF'
+# period note
+
+@task alpha
+  STATUS: TODO
+  OBJECTIVE: "First thing"
+
+@task beta
+  STATUS: TODO
+  OBJECTIVE: "Second needle"
+EOF
+cat > "$SB/payloads/journal" <<'EOF'
+@anchor A1 2026-11-02
+
+@entry 2026-11-02-event-1
+  ANCHOR: A1
+  WHAT: "needle in the journal"
+  THREAD: none
+EOF
+cat > "$SB/payloads/report" <<'EOF'
+Report about a needle
+second line
+EOF
+printf 'flat needle value\n' > "$SB/payloads/flat"
+printf 'generic needle value\n' > "$SB/payloads/generic"
+printf '{"title":"Needle title","body":"body needle"}\n' > "$SB/payloads/json"
+
+# ssearch <namespace> <mode> <limit> <query>: the store.search call through the driver
+ssearch() {
+  FN=store.search
+  printf 'query=%s\n' "$4" | "$DRIVER" store.search "$1" "$2" "$3" > "$O" 2> "$E"
+  RC=$?
+}
+# S9 sources the library, whose store_put and store_list own those names; S10 drives the
+# driver directly so the suite's own run/answer helpers stay authoritative
+sput() { run store.put store.put "$1" "$2" < "$3"; }
+slist() { run store.list store.list "$@"; }
+
+sput searchdoc u1/state "$SB/payloads/state"; answer
+sput searchdoc u1/backlog "$SB/payloads/backlog"; answer
+sput searchdoc u1/journal "$SB/payloads/journal"; answer
+sput searchdoc u1/lanes/l1/report "$SB/payloads/report"; answer
+sput flatdoc f1/x "$SB/payloads/flat"; answer
+sput genericdoc g1/x "$SB/payloads/generic"; answer
+sput exactonly e1/x "$SB/payloads/flat"; answer
+sput jsondoc j1/x "$SB/payloads/json"; answer
+
+needle_exact='{"namespace":"searchdoc","query":"needle","mode":"exact","total_matches":3,"results":[{"key":"u1/backlog","section":"backlog","snippet":"Second needle","score":0},{"key":"u1/journal","section":"journal","snippet":"needle in the journal","score":0},{"key":"u1/lanes/l1/report","section":"lane_report","snippet":"Report about a needle","score":0}]}'
+alpha_exact='{"namespace":"searchdoc","query":"alpha","mode":"exact","total_matches":1,"results":[{"key":"u1/backlog","section":"backlog","snippet":"@task alpha","score":0}]}'
+status_exact='{"namespace":"searchdoc","query":"status","mode":"exact","total_matches":3,"results":[{"key":"u1/backlog","section":"backlog","snippet":"TODO","score":0},{"key":"u1/backlog","section":"backlog","snippet":"TODO","score":0},{"key":"u1/state","section":"state","snippet":"status: ACTIVE","score":0}]}'
+ssearch searchdoc exact 20 needle; answer; wantout "$needle_exact"
+tc "S10a: the exact rule over the document set: one row per entity and section, the first matching line, bytewise key order"
+ssearch searchdoc exact 20 alpha; answer; wantout "$alpha_exact"
+ssearch searchdoc exact 20 status; answer; wantout "$status_exact"
+tc "S10b: two entities in one key and section answer two rows; the state section is its own row"
+ssearch searchdoc exact 20 period; answer; wantout '{"namespace":"searchdoc","query":"period","mode":"exact","total_matches":0,"results":[]}'
+tc "S10c: a column-0 comment line never matches"
+ssearch searchdoc exact 20 ''
+refused 1 ERR_INVALID_ARGUMENT "the search query is empty"
+tc "S10c2: an empty search query refuses before any result"
+ssearch flatdoc exact 20 needle; answer
+wantout '{"namespace":"flatdoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"f1/x","section":"body","snippet":"flat needle value","score":0}]}'
+tc "S10d: the flat form searches the raw value as one document in section body"
+ssearch genericdoc exact 20 needle; answer
+wantout '{"namespace":"genericdoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"g1/x","section":"body","snippet":"generic needle value","score":0}]}'
+tc "S10e: a module with no search schema still searches exact through the generic fallback"
+ssearch jsondoc exact 20 needle; answer
+wantout '{"namespace":"jsondoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"j1/x","section":"body","snippet":"{\"title\":\"Needle title\",\"body\":\"body needle\"}","score":0}]}'
+tc "S10f: exact over a flat JSON schema still matches the raw value, never the extracted fields"
+if [ "$IS_POSIX" -eq 1 ]; then
+  ssearch searchdoc hybrid 20 needle
+  refused 1 ERR_CAPABILITY_UNSUPPORTED "mode 'hybrid' is not supported; declared modes: exact"
+  ssearch exactonly hybrid 20 needle
+  refused 1 ERR_CAPABILITY_UNSUPPORTED "mode 'hybrid' is not declared by namespace 'exactonly'; declared modes: exact"
+  tc "S10g: posix refuses a ranked mode, and a mode the module does not declare refuses by name"
+else
+  ssearch searchdoc hybrid 20 needle; answer
+  case "$(cat "$O")" in
+    '{"namespace":"searchdoc","query":"needle","mode":"hybrid","total_matches":3,'*) ;;
+    *) miss "the hybrid answer [$(cat "$O")]" ;;
+  esac
+  grep -q '"key":"u1/backlog"' "$O" || miss "the hybrid answer lacks the backlog key"
+  grep -q '"score":0\.' "$O" || miss "the hybrid answer lacks a positive score"
+  ssearch searchdoc trigram 20 needle; answer
+  case "$(cat "$O")" in
+    '{"namespace":"searchdoc","query":"needle","mode":"trigram","total_matches":3,'*) ;;
+    *) miss "the trigram answer [$(cat "$O")]" ;;
+  esac
+  ssearch flatdoc hybrid 20 needle; answer
+  case "$(cat "$O")" in *'"section":"body"'*'"score":0.'*) ;; *) miss "the flat hybrid answer [$(cat "$O")]" ;; esac
+  ssearch genericdoc hybrid 20 needle; answer
+  case "$(cat "$O")" in *'"key":"g1/x"'*'"section":"body"'*'"score":0.'*) ;; *) miss "the generic hybrid answer [$(cat "$O")]" ;; esac
+  ssearch jsondoc hybrid 20 needle; answer
+  case "$(cat "$O")" in *'"key":"j1/x"'*'"section":"body"'*'"score":0.'*) ;; *) miss "the JSON hybrid answer [$(cat "$O")]" ;; esac
+  ssearch exactonly hybrid 20 needle
+  refused 1 ERR_CAPABILITY_UNSUPPORTED "mode 'hybrid' is not declared by namespace 'exactonly'; declared modes: exact"
+  tc "S10g: the ranked modes answer from the fts5 store index; the generic raw fallback ranks a schema-less module; an undeclared mode refuses by name"
+fi
+# the schema's shape refusals
+mkdir -p .contexture/modules/badsearch
+printf 'namespace: badsearch\nroot: bad-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: documents\n' > .contexture/modules/badsearch/data
+slist badsearch
+refused 1 ERR_INVALID_ARGUMENT "the document-set search form takes at least one document rule"
+printf 'namespace: badsearch\nroot: bad-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: documents\nformat: text\ndocument: <a>/<b> body document -\n' > .contexture/modules/badsearch/data
+slist badsearch
+refused 1 ERR_INVALID_ARGUMENT "the document-set search form takes no format or fields"
+printf 'namespace: badsearch\nroot: bad-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\ndocument: <a>/<b> body document -\n' > .contexture/modules/badsearch/data
+slist badsearch
+refused 1 ERR_INVALID_ARGUMENT "a document rule needs the document-set search form"
+printf 'namespace: badsearch\nroot: bad-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: documents\ndocument: <a>/<b> body document\n' > .contexture/modules/badsearch/data
+slist badsearch
+refused 1 ERR_INVALID_ARGUMENT "line 7: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)"
+printf 'namespace: badsearch\nroot: bad-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nmodes: exact, exact\n' > .contexture/modules/badsearch/data
+slist badsearch
+refused 1 ERR_INVALID_ARGUMENT "duplicate mode 'exact'"
+printf 'namespace: badsearch\nroot: bad-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nmodes: hybrid\n' > .contexture/modules/badsearch/data
+slist badsearch
+refused 1 ERR_INVALID_ARGUMENT "the modes must include exact"
+tc "S10h: the search schema's shape refusals name the rule (a document form without a rule, a flat field with a document rule, a three-token rule, a repeated mode, modes without exact)"
 
 printf '\n== summary ==\n'
 printf 'store-compliance (%s): pass=%d fail=%d\n' "$DRIVER_NAME" "$pass" "$fail"

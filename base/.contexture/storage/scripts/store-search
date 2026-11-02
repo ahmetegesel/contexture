@@ -1,0 +1,51 @@
+#!/bin/sh
+# store-search: the storage core's private search engine (no summary line, so discovery
+# ignores it). It answers the store's two search paths over a module's declared data
+# file: exact, the record rule over the raw stored value on every driver, and the
+# write-time document derivation the fts5 driver indexes for its ranked modes. It reads
+# the data file itself; the driver has already validated it with store-data.
+#
+# Usage:
+#   store-search exact <data-file> <namespace> <query> <limit> <manifest>
+#     manifest lines are <key><TAB><value-path>, in bytewise key order; the answer is one
+#     compact JSON line {namespace, query, mode, total_matches, results:[{key, section,
+#     snippet, score}]}
+#   store-search docs <data-file> <namespace> <key> <value-path> <sig>
+#     the answer is the SQL that replaces the key's derived documents in store_docs
+#     (DELETE and one INSERT per document), for the fts5 driver's transaction; sig is the
+#     search schema's signature, stored with each row.
+#
+# The schema grammar is store-data's: search flat|documents, format text|json (flat),
+# fields (flat), title, snippet, modes, and the repeatable document rule
+# <key-pattern> <section> <entity-type> <head-marker|->. The exact rule is one line of the
+# raw value, ASCII-case folded, a column-0 comment never matching, one result per entity
+# and section, the first matching line as the snippet. A key no document rule covers
+# stays searchable through the generic one-document fallback (section body).
+
+set -u
+LC_ALL=C
+export LC_ALL
+
+SS_SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
+SS_AWK="$SS_SCRIPT_DIR/store-search.awk"
+[ -f "$SS_AWK" ] || { printf 'store-search: error: the search engine is not installed (ERR_STORAGE_READ)\n' >&2; exit 2; }
+
+ss_mode="${1:-}"
+case "$ss_mode" in
+  exact)
+    [ $# -eq 6 ] || { printf 'store-search: error: exact takes the data file, the namespace, the query, the limit, and the manifest (ERR_INVALID_ARGUMENT)\n' >&2; exit 1; }
+    ss_data=$2; ss_ns=$3; ss_q=$4; ss_lim=$5; ss_man=$6
+    SS_MODE=exact SS_DATA="$ss_data" SS_NS="$ss_ns" SS_QUERY="$ss_q" SS_LIMIT="$ss_lim" SS_MANIFEST="$ss_man" \
+      awk -f "$SS_AWK"
+    ;;
+  docs)
+    [ $# -eq 6 ] || { printf 'store-search: error: docs takes the data file, the namespace, the key, the value path, and the schema signature (ERR_INVALID_ARGUMENT)\n' >&2; exit 1; }
+    ss_data=$2; ss_ns=$3; ss_key=$4; ss_val=$5; ss_sig=$6
+    SS_MODE=docs SS_DATA="$ss_data" SS_NS="$ss_ns" SS_KEY="$ss_key" SS_VALUE="$ss_val" SS_SIG="$ss_sig" \
+      awk -f "$SS_AWK"
+    ;;
+  *)
+    printf 'store-search: error: unknown mode %s (ERR_INVALID_ARGUMENT)\n' "${ss_mode:-}" >&2
+    exit 1
+    ;;
+esac

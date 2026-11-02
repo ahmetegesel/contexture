@@ -11,7 +11,7 @@
 #
 # The gate reads red on BG1 before the index fix and green after; a missing record
 # function, a missing store function, and a base-to-docs reference each read red through
-# the instruments below (the 43-function descriptor check and the census, both
+# the instruments below (the 44-function descriptor check and the census, both
 # null-checked by a planted difference).
 #
 # Usage: tests/base-only-tests.sh [--keep] [--skip-core]
@@ -292,7 +292,7 @@ a_rc "$?" "1" "record: a write into a CLOSED unit refuses rc1"
 $CTX session reopen baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: reopen rc0"
 $CTX session record baseonly --what="the unit writes again" >/dev/null 2>&1
 a_rc "$?" "0" "record: a write after reopen rc0"
-# the descriptor: 38 record plus 5 store functions, exact and store, no store log on posix
+# the descriptor: 38 record plus 5 store functions and the store search, exact and store, no store log on posix
 out=$($CTX session diagnose --json 2>&1); rc=$?
 a_rc "$rc" "0" "descriptor: diagnose rc0"
 a_match "$out" '"name":"posix"' "descriptor: the driver is posix"
@@ -303,17 +303,17 @@ a_match "$out" '"health":"ok"' "descriptor: the health is ok after bootstrap"
 fn_list() { printf '%s' "$1" | sed -n 's/.*"functions":\[\([^]]*\)\].*/\1/p'; }
 fn_count() { fn_list "$1" | tr ',' '\n' | grep -c .; }
 fns=$(fn_list "$out" | tr -d '"')
-a_eq "$(printf '%s\n' "$fns" | tr ',' '\n' | grep -c .)" "43" "descriptor: 43 functions (38 record plus 5 store)"
-for f in task.add entry.record finding.get lane.create search.query store.list store.get store.put store.delete store.changes; do
+a_eq "$(printf '%s\n' "$fns" | tr ',' '\n' | grep -c .)" "44" "descriptor: 44 functions (38 record plus 5 store plus the store search)"
+for f in task.add entry.record finding.get lane.create search.query store.list store.get store.put store.delete store.changes store.search; do
   case ",$fns," in
     *",$f,"*) ok "descriptor: carries $f" ;;
     *) bad "descriptor: lacks $f" ;;
   esac
 done
 plant_record=$(printf '%s' "$out" | sed 's/,"task.add"//')
-if [ "$(fn_count "$plant_record")" -ne 43 ]; then ok "descriptor null check: a planted missing record function fails the 43-function check"; else bad "descriptor null check: a planted missing record function passed"; fi
+if [ "$(fn_count "$plant_record")" -ne 44 ]; then ok "descriptor null check: a planted missing record function fails the 44-function check"; else bad "descriptor null check: a planted missing record function passed"; fi
 plant_store=$(printf '%s' "$out" | sed 's/,"store.put"//')
-if [ "$(fn_count "$plant_store")" -ne 43 ]; then ok "descriptor null check: a planted missing store function fails the 43-function check"; else bad "descriptor null check: a planted missing store function passed"; fi
+if [ "$(fn_count "$plant_store")" -ne 44 ]; then ok "descriptor null check: a planted missing store function fails the 44-function check"; else bad "descriptor null check: a planted missing store function passed"; fi
 
 # ==============================================================================
 # B4: the store smoke over a synthetic data module
@@ -323,13 +323,13 @@ mkdir -p .contexture/modules/probe probe-data/x
 printf 'namespace: probe\nroot: probe-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/modules/probe/data
 out=$($STORE_DATA probe 2> "$E"); RC=$?
 a_rc "$RC" "0" "store: store-data answers rc0"
-a_eq "$out" "$(printf 'probe\nprobe-data\n.txt\n<a>/<b>\nfalse')" "store: store-data prints the five validated fields"
+a_eq "$(printf '%s\n' "$out" | sed -n '1,5p')" "$(printf 'probe\nprobe-data\n.txt\n<a>/<b>\nfalse')" "store: store-data prints the five validated fields"
 a_eq "$(cat "$E")" "" "store: store-data writes no stderr"
 mkdir -p .contexture/modules/minimal
 printf 'namespace: minimal\nkey: <a>/<b>\n' > .contexture/modules/minimal/data
 out=$($STORE_DATA minimal 2> "$E"); RC=$?
 a_rc "$RC" "0" "store: the minimum declaration (namespace and key) answers rc0"
-a_eq "$out" "$(printf 'minimal\nminimal\n\n<a>/<b>\nfalse')" "store: the omitted root defaults to the namespace, the suffix to empty, changes to false"
+a_eq "$(printf '%s\n' "$out" | sed -n '1,5p')" "$(printf 'minimal\nminimal\n\n<a>/<b>\nfalse')" "store: the omitted root defaults to the namespace, the suffix to empty, changes to false"
 mkdir -p .contexture/modules/nokey
 printf 'namespace: nokey\nroot: r\nsuffix: .txt\n' > .contexture/modules/nokey/data
 run "store-data no key" "$STORE_DATA" nokey
@@ -342,7 +342,7 @@ mkdir -p .contexture/modules/variable
 printf 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n' > .contexture/modules/variable/data
 out=$($STORE_DATA variable 2> "$E"); RC=$?
 a_rc "$RC" "0" "store: a variable-depth <unit>/<path...> pattern answers rc0"
-a_eq "$out" "$(printf 'variable\n.contexture/sessions\n.md\n<unit>/<path...>\nfalse')" "store: the variable-depth declaration prints its five fields"
+a_eq "$(printf '%s\n' "$out" | sed -n '1,5p')" "$(printf 'variable\n.contexture/sessions\n.md\n<unit>/<path...>\nfalse')" "store: the variable-depth declaration prints its five fields"
 printf 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit...>/<path>\nchanges: false\n' > .contexture/modules/variable/data
 run "store-data non-final multi" "$STORE_DATA" variable
 refused 1 "store-data: malformed key pattern '<unit...>/<path>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"

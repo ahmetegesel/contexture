@@ -9,18 +9,19 @@
 #   store.put <namespace> <key> [--op=<op>] [--head=<sha|none>]     (payload on stdin)
 #   store.delete <namespace> <key> [--op=<op>] [--head=<sha|none>]
 #   store.changes <namespace>                                        (heads on stdin)
+#   store.search <namespace> <query> <mode> [<limit>]                (query on stdin)
 #   store.require <capability>...
 #   store.has <capability>
 #   data.get <ref>
 #   data.emit <ref> <data>
 #
-# The first five and the two probes reach the configured driver through the storage
+# The first six and the two probes reach the configured driver through the storage
 # core's resolver; the caller uses the shell function names store_list, store_get,
-# store_put, store_delete, store_changes, store_require, and store_has. The caller sets
-# CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which serves when
-# CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact resolver path; the
-# core resolver is found under the drawer, then the base mirror, then the session
-# module's compatibility wrapper.
+# store_put, store_delete, store_changes, store_search, store_require, and store_has. The
+# caller sets CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which
+# serves when CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact
+# resolver path; the core resolver is found under the drawer, then the base mirror, then
+# the session module's compatibility wrapper.
 #
 # data_get <ref> resolves a module reference <module>#<symbol>: it finds the target
 # module's data script (modules/<module>/scripts/data), runs it with data_get, and prints
@@ -96,6 +97,30 @@ store_delete() { store_lib_call store.delete store.delete "$@"; }
 store_changes() { store_lib_call store.changes store.changes "$@"; }
 store_require() { store_lib_call store.require require "$@"; }
 store_has() { store_lib_call store.has has "$@"; }
+
+# store_lib_escape <value>: the payload escape (backslash, newline, tab, carriage return)
+store_lib_escape() {
+  SLE_S=$1 LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["SLE_S"]; out = ""
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c == "\\") out = out "\\" "\\"
+      else if (c == "\n") out = out "\\n"
+      else if (c == "\t") out = out "\\t"
+      else if (c == "\r") out = out "\\r"
+      else out = out c
+    }
+    printf "%s", out
+  }'
+}
+
+# store_search <namespace> <query> <mode> [<limit>]: the library's search entry; the query
+# travels on stdin as the escaped query= payload line and the driver answers the store's
+# one result shape
+store_search() {
+  ss_ns=${1:-}; ss_q=${2:-}; ss_mode=${3:-}; ss_lim=${4:-20}
+  printf 'query=%s\n' "$(store_lib_escape "$ss_q")" | store_lib_call store.search store.search "$ss_ns" "$ss_mode" "$ss_lim"
+}
 
 # data_lib_ref_ok <ref>: one <module>#<symbol> token, both sides non-empty, no blank or
 # control character

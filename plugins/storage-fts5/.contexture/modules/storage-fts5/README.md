@@ -11,8 +11,8 @@ is the off-path maintainer map.
 | piece | what it is |
 |---|---|
 | `module` | the module summary line: the driver name, its contract, and no verbs |
-| `schema.sql` | the schema version 4 DDL: the typed record tables, the canonical renderer views, the derived `lines` and `search_documents` tables with the dual FTS5 tables and their triggers, the legacy docs tables, and the generic module store's `store` and `store_changes` tables |
-| `db-init.sh` | the open path, sourced by the driver: the sqlite3 3.44 minimum, the fresh schema in a new or empty file, the version 4 open that adds the module store's tables to a store created before them, and the refusal of any other version |
+| `schema.sql` | the schema version 4 DDL: the typed record tables, the canonical renderer views, the derived `lines` and `search_documents` tables with the dual FTS5 tables and their triggers, the legacy docs tables, and the generic module store's tables (`store`, `store_changes`, `store_docs`, `store_docs_schema`) with the dual store FTS5 tables and their triggers |
+| `db-init.sh` | the open path, sourced by the driver: the sqlite3 3.44 minimum, the fresh schema in a new or empty file, the version 4 open that adds the module store's four tables and the store FTS5 indexes to a store created before them, and the refusal of any other version |
 | `drivers/fts5` | the contract 2 entry point: the record functions' argv and payload checks, the one sqlite3 run per call over `sql/`, the descriptor, and `storage.health` |
 | `sql/fn/` | one SQL script per record function; each reads the call's payload and returns the function's answer or refusal |
 | `sql/lib/` | the shared pieces: the payload decoded in SQL, the refusal order, the derived fields, the answer builders (`json_object` in the contract key order), the append and find helpers, the anchor and slug rules, and the stop line |
@@ -38,19 +38,32 @@ The descriptor declares `exact`, `hybrid`, and `trigram`, and every search names
 ## The store
 
 The generic module store serves module data only: `store` holds a namespace and key with
-the value as opaque bytes, and `store_changes` holds the optional generic change log (seq,
-at, namespace, key, op, head, prior). The five functions answer natively over those tables:
-`store.list` is bytewise and pattern-filtered, `store.get` returns the raw bytes, `store.put`
-and `store.delete` are one transaction with their change-log row, and `store.changes` answers
-the rows of the heads it is given oldest first. A refused write logs nothing. The key rule is
-the posix driver's; the docs corpus reaches this store through the docs module, and this
-module never parses a doc.
+the value as opaque bytes, `store_changes` holds the optional generic change log (seq,
+at, namespace, key, op, head, prior), and `store_docs` holds the documents the search
+schema derives at write time (`store_docs_schema` stores each namespace's schema
+signature). The six functions answer natively over those tables: `store.list` is bytewise
+and pattern-filtered, `store.get` returns the raw bytes, `store.put` and `store.delete` are
+one transaction with their change-log row, and `store.changes` answers the rows of the
+heads it is given oldest first. A refused write logs nothing. The key rule is the posix
+driver's; the docs corpus reaches this store through the docs module, and this module never
+parses a doc.
+
+`store.search` answers the module search schema. `exact` is the record rule over the raw
+values, computed by the storage core's shared engine on every driver. A ranked mode reads
+`store_fts_prose` (Porter prose) and `store_fts_code` (Trigram code) over `store_docs`:
+`hybrid` fuses them by reciprocal rank, `trigram` reads the Trigram table alone. A flat
+schema writes one document per key in section `body` (the raw value for text, the declared
+JSON fields for JSON); a document-set schema writes one document per entity at write time,
+from the data file's document rules. A namespace whose stored schema signature differs is
+re-derived whole before a ranked search, and a module with no schema ranks the generic raw
+value. A mode the module does not declare or the driver does not serve refuses rc 1
+`ERR_CAPABILITY_UNSUPPORTED` naming the declared modes.
 
 ## Schema and open path
 
 The store is at schema version 4 (`PRAGMA user_version`). A new or empty database gets the
 whole schema on its first write. A version 4 store opens with one read, and a version 4
-store created before the generic module store gains its two tables on open by idempotent
+store created before the generic module store gains its four tables on open by idempotent
 `CREATE TABLE IF NOT EXISTS` (the version stays 4). A store at any other version refuses
 every function rc 2 `ERR_STORAGE_SCHEMA` naming its version and the way forward, is never
 written, and gets no backup: the plugin carries no upgrade path, so an older store is moved

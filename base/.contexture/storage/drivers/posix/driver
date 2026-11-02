@@ -245,6 +245,14 @@ store_data() {
   SD_SUFFIX=$(printf '%s\n' "$sd_out" | sed -n '3p')
   SD_KEYPAT=$(printf '%s\n' "$sd_out" | sed -n '4p')
   SD_CHANGES=$(printf '%s\n' "$sd_out" | sed -n '5p')
+  SD_FILE=$(printf '%s\n' "$sd_out" | sed -n '6p')
+  SD_FORM=$(printf '%s\n' "$sd_out" | sed -n '7p')
+  SD_FORMAT=$(printf '%s\n' "$sd_out" | sed -n '8p')
+  SD_FIELDS=$(printf '%s\n' "$sd_out" | sed -n '9p')
+  SD_TITLE=$(printf '%s\n' "$sd_out" | sed -n '10p')
+  SD_SNIPPET=$(printf '%s\n' "$sd_out" | sed -n '11p')
+  SD_MODES=$(printf '%s\n' "$sd_out" | sed -n '12p')
+  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '13,$p')
   STORE_WS=$sd_ws
 }
 
@@ -494,6 +502,82 @@ store_changes() {
   sc_ns=$1
   store_data store.changes "$sc_ns"
   refuse 1 ERR_CAPABILITY_UNSUPPORTED "the posix store keeps no change log; namespace '$sc_ns' reports its delta through its module (changes: $SD_CHANGES)"
+}
+
+# store_query_read: the query payload line, decoded (backslash, n, t, r), with a sentinel
+# so a trailing newline survives the command substitution
+cr_byte=$(printf '\r')
+store_query_read() {
+  sq_seen=0; sq_raw=""
+  while IFS= read -r sq_l || [ -n "$sq_l" ]; do
+    sq_l=${sq_l%"$cr_byte"}
+    case "$sq_l" in
+      query=*)
+        [ "$sq_seen" -eq 0 ] || refuse 1 ERR_INVALID_ARGUMENT "duplicate payload line 'query='"
+        sq_seen=1; sq_raw=${sq_l#query=} ;;
+      '') ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "unknown payload line '$sq_l' (query= only)" ;;
+    esac
+  done
+  [ "$sq_seen" -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "missing the query payload"
+  SQ_RAW="$sq_raw" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["SQ_RAW"]; out = ""
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c == "\\") {
+        i++
+        c = substr(s, i, 1)
+        if (c == "n") out = out "\n"
+        else if (c == "t") out = out "\t"
+        else if (c == "r") out = out "\r"
+        else out = out c
+      } else out = out c
+    }
+    printf "%sX", out
+  }'
+}
+
+# store_search <namespace> <mode> [<limit>]: the exact rule over the raw stored values; the
+# query travels on stdin as a query= payload line. A ranked mode refuses here (posix
+# declares exact alone), and a mode the module does not declare refuses too.
+store_search() {
+  FN=store.search
+  [ $# -ge 2 ] && [ $# -le 3 ] || refuse 1 ERR_INVALID_ARGUMENT "store.search takes the namespace, the mode, and an optional limit"
+  ss_ns=$1; ss_mode=$2; ss_lim=${3:-20}
+  case "$ss_mode" in
+    ''|[!a-z]*|*[!a-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$ss_mode'" ;;
+  esac
+  case "$ss_lim" in
+    ''|*[!0-9]*|0) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$ss_lim'" ;;
+  esac
+  store_data store.search "$ss_ns"
+  case ",$SD_MODES," in
+    *",$ss_mode,"*) ;;
+    *) refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not declared by namespace '$ss_ns'; declared modes: $SD_MODES" ;;
+  esac
+  [ "$ss_mode" = exact ] || refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not supported; declared modes: exact"
+  ss_q=$(store_query_read) || exit $?
+  ss_q=${ss_q%X}
+  case "$ss_q" in *[![:space:]]*) ;; *) refuse 1 ERR_INVALID_ARGUMENT "the search query is empty" ;; esac
+  ss_core=""
+  for ss_c in "$SCRIPT_DIR/../../scripts/store-search" "$STORE_WS/.contexture/storage/scripts/store-search" "$STORE_WS/base/.contexture/storage/scripts/store-search"; do
+    if [ -x "$ss_c" ]; then ss_core=$ss_c; break; fi
+  done
+  [ -n "$ss_core" ] || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
+  ss_keytmp=$(mktemp "$(scratch_dir)/store-search.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  ss_man="${ss_keytmp}.man"
+  store_list_keys > "$ss_keytmp"
+  : > "$ss_man"
+  while IFS= read -r ss_k; do
+    [ -n "$ss_k" ] || continue
+    ss_p=$(store_path "$ss_k")
+    [ -f "$ss_p" ] && printf '%s\t%s\n' "$ss_k" "$ss_p" >> "$ss_man"
+  done < "$ss_keytmp"
+  rm -f "$ss_keytmp"
+  "$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$ss_man"
+  ss_rc=$?
+  rm -f "$ss_man"
+  exit "$ss_rc"
 }
 
 # px_mkdtemp <parent> <prefix>: a fresh private folder (mkdir is atomic; the name carries the
@@ -759,7 +843,7 @@ rec_write() {
 }
 
 capability() {
-  printf '{"driver":"posix","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","store.list","store.get","store.put","store.delete","store.changes"],"search_modes":["exact"],"optional":["store"]}\n'
+  printf '{"driver":"posix","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","store.list","store.get","store.put","store.delete","store.changes","store.search"],"search_modes":["exact"],"optional":["store"]}\n'
 }
 
 storage_health() {
@@ -940,6 +1024,7 @@ case "$cmd" in
   store.put) store_put "$@"; exit $? ;;
   store.delete) store_delete "$@"; exit $? ;;
   store.changes) store_changes "$@"; exit $? ;;
+  store.search) store_search "$@"; exit $? ;;
 esac
 
 px_init

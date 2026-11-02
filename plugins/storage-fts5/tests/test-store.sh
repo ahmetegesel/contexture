@@ -229,14 +229,14 @@ f "$DB" store.get docs workspace/empty
 ok "an empty payload stores as a zero-length blob and reads back empty"
 
 # ==============================================================================
-# 8. the descriptor: 38 record + 5 store; store and store.changelog
+# 8. the descriptor: 38 record + 5 store + the store search; store, store.changelog, search.schema
 # ==============================================================================
 printf '\n== the descriptor ==\n'
 "$DRV" capability > "$O" 2> "$E"; _caprc=$?
 [ "$_caprc" -eq 0 ] || miss "capability: rc $_caprc [$(cat "$E")]"
-case "$(cat "$O")" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
-case "$(cat "$O")" in *'"optional":["store","store.changelog"]'*) ;; *) miss "the descriptor optional set [$(sed 's/.*"optional"://' "$O")]" ;; esac
-ok "the descriptor declares the five store functions and store and store.changelog"
+case "$(cat "$O")" in *'"store.list"'*'"store.get"'*'"store.put"'*'"store.delete"'*'"store.changes"'*'"store.search"'*) ;; *) miss "the descriptor lacks a store function" ;; esac
+case "$(cat "$O")" in *'"optional":["store","store.changelog","search.schema"]'*) ;; *) miss "the descriptor optional set [$(sed 's/.*"optional"://' "$O")]" ;; esac
+ok "the descriptor declares the five store functions, the store search, and the optional tokens"
 
 printf '\ntest-store: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

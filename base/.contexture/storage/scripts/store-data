@@ -1,7 +1,11 @@
 #!/bin/sh
 # store-data: the storage core's private reader and validator of a module's data file
 # (no summary line, so discovery ignores it). It answers one namespace with the effective
-# five fields on five lines, in this order: namespace, root, suffix, key pattern, changes.
+# store fields on twelve lines, in this order: namespace, root, suffix, key pattern,
+# changes, the data file path, the search form, the format, the fields, the title, the
+# snippet, and the modes. The search form's document rules follow, one per line, as four
+# tab-separated values: the key pattern, the section, the entity type, and the head marker
+# (or - for none).
 #
 # A module declares its store in `modules/<module>/data`, one `field: value` line per
 # field and a line starting with # a comment:
@@ -14,8 +18,19 @@
 #         default empty)
 #   changes: true|false                                                      (optional;
 #         default false)
-#   format: <value format> and the search keys fields, title, snippet, modes
-#         (optional; reserved for the search schema, accepted and not consumed here)
+#   search: flat|documents                                                   (optional)
+#   format: text|json                                                        (optional;
+#         flat only; default text)
+#   fields: <comma-separated field names>                                    (optional;
+#         flat only; the JSON fields the typed search extracts)
+#   title: <field name|key|head>                                             (optional;
+#         flat default key; documents default head)
+#   snippet: line                                                            (optional;
+#         default line)
+#   modes: <comma-separated modes>                                           (optional;
+#         default exact; exact is required)
+#   document: <key-pattern> <section> <entity-type> <head-marker|->          (optional;
+#         repeatable; the document-set search schema)
 # The module directory beside the data file is the owner; a second data file declaring the
 # same namespace refuses. The script validates the fields before any store function maps a
 # key to a path.
@@ -39,6 +54,60 @@ sd_fail() {
 sd_env() {
   printf 'store-data: %s\n' "$1" >&2
   exit 2
+}
+
+# sd_pattern_ok <pattern>: one <name> placeholder per slash-separated segment; the final
+# segment may be a multi-segment <name...> placeholder
+sd_pattern_ok() {
+  SP_KEY="$1" LC_ALL=C awk 'BEGIN {
+    k = ENVIRON["SP_KEY"]
+    if (k == "") exit 1
+    n = split(k, p, "/")
+    if (n < 1) exit 1
+    for (i = 1; i <= n; i++) {
+      if (i == n && p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/) continue
+      if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
+    }
+    exit 0
+  }'
+}
+
+# sd_doc_pattern_ok <pattern>: a document rule's key pattern: a <name> placeholder or a
+# literal token per slash-separated segment; the final segment may be a <name...> placeholder
+sd_doc_pattern_ok() {
+  SP_KEY="$1" LC_ALL=C awk 'BEGIN {
+    k = ENVIRON["SP_KEY"]
+    if (k == "") exit 1
+    n = split(k, p, "/")
+    if (n < 1) exit 1
+    for (i = 1; i <= n; i++) {
+      if (i == n && p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/) continue
+      if (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*>$/) continue
+      if (p[i] !~ /^[A-Za-z0-9._-]+$/) exit 1
+    }
+    exit 0
+  }'
+}
+
+sd_section_ok() {  case "$1" in
+    ''|[!a-z]*|*[!a-z0-9_]*) return 1 ;;
+  esac
+  return 0
+}
+
+sd_entity_ok() {
+  case "$1" in
+    ''|[!a-z]*|*[!a-z0-9_]*) return 1 ;;
+  esac
+  return 0
+}
+
+sd_marker_ok() {
+  case "$1" in
+    -) return 0 ;;
+    @[A-Za-z]*) case "${1#@}" in *[!A-Za-z0-9_-]*) return 1 ;; esac; return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 # the namespace token: lowercase letters, digits, dot, underscore, hyphen
@@ -113,11 +182,20 @@ sd_root=""
 sd_suffix=""
 sd_key=""
 sd_changes=""
+sd_search=""
+sd_format=""
+sd_fields=""
+sd_title=""
+sd_snippet=""
+sd_modes=""
+sd_docs=""
+sd_doc_count=0
 sd_seen_ns=0
 sd_seen_root=0
 sd_seen_suffix=0
 sd_seen_key=0
 sd_seen_changes=0
+sd_seen_search=0
 sd_seen_format=0
 sd_seen_fields=0
 sd_seen_title=0
@@ -159,21 +237,37 @@ while IFS= read -r sd_line || [ -n "$sd_line" ]; do
     changes)
       [ "$sd_seen_changes" -eq 0 ] || sd_fail "duplicate field 'changes' in the data file"
       sd_seen_changes=1; sd_changes=$sd_value ;;
+    search)
+      [ "$sd_seen_search" -eq 0 ] || sd_fail "duplicate field 'search' in the data file"
+      sd_seen_search=1; sd_search=$sd_value ;;
     format)
       [ "$sd_seen_format" -eq 0 ] || sd_fail "duplicate field 'format' in the data file"
-      sd_seen_format=1 ;;
+      sd_seen_format=1; sd_format=$sd_value ;;
     fields)
       [ "$sd_seen_fields" -eq 0 ] || sd_fail "duplicate field 'fields' in the data file"
-      sd_seen_fields=1 ;;
+      sd_seen_fields=1; sd_fields=$sd_value ;;
     title)
       [ "$sd_seen_title" -eq 0 ] || sd_fail "duplicate field 'title' in the data file"
-      sd_seen_title=1 ;;
+      sd_seen_title=1; sd_title=$sd_value ;;
     snippet)
       [ "$sd_seen_snippet" -eq 0 ] || sd_fail "duplicate field 'snippet' in the data file"
-      sd_seen_snippet=1 ;;
+      sd_seen_snippet=1; sd_snippet=$sd_value ;;
     modes)
       [ "$sd_seen_modes" -eq 0 ] || sd_fail "duplicate field 'modes' in the data file"
-      sd_seen_modes=1 ;;
+      sd_seen_modes=1; sd_modes=$sd_value ;;
+    document)
+      sd_doc_count=$((sd_doc_count + 1))
+      set -f
+      set -- $sd_value
+      set +f
+      [ $# -eq 4 ] || sd_fail "line $sd_lineno: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)"
+      sd_dpat=$1; sd_dsec=$2; sd_dent=$3; sd_dmark=$4
+      sd_doc_pattern_ok "$sd_dpat" || sd_fail "line $sd_lineno: malformed document key pattern '$sd_dpat'"
+      sd_section_ok "$sd_dsec" || sd_fail "line $sd_lineno: malformed document section '$sd_dsec'"
+      sd_entity_ok "$sd_dent" || sd_fail "line $sd_lineno: malformed document entity type '$sd_dent'"
+      sd_marker_ok "$sd_dmark" || sd_fail "line $sd_lineno: malformed document head marker '$sd_dmark'"
+      sd_docs="$sd_docs$sd_dpat	$sd_dsec	$sd_dent	$sd_dmark
+" ;;
     *)
       sd_fail "unknown field '$sd_field' in the data file" ;;
   esac
@@ -207,22 +301,94 @@ case "$sd_suffix" in
   *[[:cntrl:]]*) sd_fail "malformed suffix '$sd_suffix'" ;;
 esac
 
-SP_KEY="$sd_key" LC_ALL=C awk 'BEGIN {
-  k = ENVIRON["SP_KEY"]
-  if (k == "") exit 1
-  n = split(k, p, "/")
-  if (n < 1) exit 1
-  for (i = 1; i <= n; i++) {
-    if (i == n && p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/) continue
-    if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
-  }
-  exit 0
-}' || sd_fail "malformed key pattern '$sd_key' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"
+sd_pattern_ok "$sd_key" || sd_fail "malformed key pattern '$sd_key' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"
 
 case "$sd_changes" in
   true|false) ;;
   *) sd_fail "malformed changes flag '$sd_changes' (true or false)" ;;
 esac
 
-printf '%s\n' "$sd_ns" "$sd_root" "$sd_suffix" "$sd_key" "$sd_changes"
+# the search form: explicit or implied by the optional keys; a flat key and a document
+# rule never mix
+sd_form=""
+if [ "$sd_seen_search" -eq 1 ]; then
+  case "$sd_search" in
+    flat|documents) sd_form=$sd_search ;;
+    *) sd_fail "malformed search form '$sd_search' (flat or documents)" ;;
+  esac
+elif [ "$sd_doc_count" -gt 0 ] || [ "$sd_seen_format" -eq 1 ] || [ "$sd_seen_fields" -eq 1 ] \
+  || [ "$sd_seen_title" -eq 1 ] || [ "$sd_seen_snippet" -eq 1 ]; then
+  if [ "$sd_doc_count" -gt 0 ]; then sd_form=documents; else sd_form=flat; fi
+fi
+if [ "$sd_form" = documents ] && [ "$sd_doc_count" -eq 0 ]; then
+  sd_fail "the document-set search form takes at least one document rule"
+fi
+if [ "$sd_form" = documents ] && { [ "$sd_seen_format" -eq 1 ] || [ "$sd_seen_fields" -eq 1 ]; }; then
+  sd_fail "the document-set search form takes no format or fields"
+fi
+if [ "$sd_form" != documents ] && [ "$sd_doc_count" -gt 0 ]; then
+  sd_fail "a document rule needs the document-set search form"
+fi
+
+case "$sd_format" in
+  '') [ "$sd_form" = flat ] && sd_format=text ;;
+  text|json) [ "$sd_form" = flat ] || sd_fail "format is a flat-form field" ;;
+  *) sd_fail "malformed format '$sd_format' (text or json)" ;;
+esac
+if [ "$sd_form" != flat ] && [ "$sd_seen_fields" -eq 1 ]; then
+  sd_fail "fields is a flat-form field"
+fi
+if [ "$sd_seen_fields" -eq 1 ]; then
+  sd_fields=$(printf '%s' "$sd_fields" | tr -d '[:space:]')
+  case "$sd_fields" in
+    ''|,*|*,|*,,*) sd_fail "malformed fields '$sd_fields'" ;;
+  esac
+  set -f
+  set -- $(printf '%s' "$sd_fields" | tr ',' ' ')
+  set +f
+  for sd_f in "$@"; do
+    case "$sd_f" in
+      [!A-Za-z0-9_.-]*|*[!A-Za-z0-9_.-]*) sd_fail "malformed field name '$sd_f'" ;;
+    esac
+  done
+fi
+if [ "$sd_seen_title" -eq 1 ]; then
+  case "$sd_form" in
+    documents) case "$sd_title" in head|key) ;; *) sd_fail "malformed document title '$sd_title' (head or key)" ;; esac ;;
+    *) case "$sd_title" in [!A-Za-z0-9_.-]*|*[!A-Za-z0-9_.-]*) sd_fail "malformed title '$sd_title'" ;; esac ;;
+  esac
+else
+  case "$sd_form" in documents) sd_title=head ;; *) sd_title=key ;; esac
+fi
+if [ "$sd_seen_snippet" -eq 1 ] && [ "$sd_snippet" != line ]; then
+  sd_fail "malformed snippet '$sd_snippet' (line)"
+fi
+[ "$sd_seen_snippet" -eq 1 ] || sd_snippet=line
+if [ "$sd_seen_modes" -eq 1 ]; then
+  sd_modes=$(printf '%s' "$sd_modes" | tr -d '[:space:]')
+  case "$sd_modes" in
+    ''|,*|*,|*,,*) sd_fail "malformed modes '$sd_modes'" ;;
+  esac
+  sd_modes_norm=""
+  sd_modes_seen=" "
+  for sd_m in $(printf '%s' "$sd_modes" | tr ',' ' '); do
+    case "$sd_m" in
+      [!a-z]*|*[!a-z0-9_-]*) sd_fail "malformed mode '$sd_m'" ;;
+    esac
+    case "$sd_modes_seen" in *" $sd_m "*) sd_fail "duplicate mode '$sd_m'" ;; esac
+    sd_modes_seen="$sd_modes_seen$sd_m "
+    sd_modes_norm="$sd_modes_norm${sd_modes_norm:+,}$sd_m"
+  done
+  case "$sd_modes_seen" in
+    *" exact "*) ;;
+    *) sd_fail "the modes must include exact" ;;
+  esac
+  sd_modes=$sd_modes_norm
+else
+  sd_modes=exact
+fi
+
+printf '%s\n' "$sd_ns" "$sd_root" "$sd_suffix" "$sd_key" "$sd_changes" "$sd_found" \
+  "$sd_form" "$sd_format" "$sd_fields" "$sd_title" "$sd_snippet" "$sd_modes"
+[ -z "$sd_docs" ] || printf '%s' "$sd_docs"
 exit 0

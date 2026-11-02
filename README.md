@@ -79,7 +79,7 @@ The workspace couples root governance with a dedicated convention drawer:
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
     ├── config            Optional workspace configuration (storage.driver: posix)
-    ├── storage/          The storage core: the driver resolver, the store contract, the library, and the posix driver
+    ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
     ├── modules/          The modules: session (the record engine), run (stream filters), and workspace additions
     ├── rhythms/          Reusable workflow patterns governing task progression
     ├── templates/        Shape grammars ensuring structured writes without guesswork
@@ -126,7 +126,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [Lane isolation](plugins/lane-isolation/): On-demand worktree isolation for subagents
 - [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
 - [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
-- [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and the generic module store with its change log
+- [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and the generic module store with its change log and search schema
 - [Tests](tests/): The filter test material, upstream only; see [tests/README.md](tests/README.md)
 - [Maintaining contexture](#maintaining-contexture): The `base/` dev loop: edit, ship, apply
 

@@ -34,6 +34,51 @@ CREATE TABLE IF NOT EXISTS store_changes (
 );
 CREATE INDEX IF NOT EXISTS idx_store_changes_ns ON store_changes(namespace, seq);
 CREATE INDEX IF NOT EXISTS idx_store_changes_head ON store_changes(head);
+CREATE TABLE IF NOT EXISTS store_docs (
+  namespace TEXT NOT NULL,
+  key TEXT NOT NULL,
+  section TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  ord INTEGER NOT NULL,
+  sig TEXT NOT NULL,
+  PRIMARY KEY (namespace, key, ord)
+);
+CREATE INDEX IF NOT EXISTS idx_store_docs_ns ON store_docs(namespace, key);
+CREATE TABLE IF NOT EXISTS store_docs_schema (
+  namespace TEXT PRIMARY KEY,
+  sig TEXT NOT NULL
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS store_fts_prose USING fts5(
+  title,
+  body,
+  content='store_docs',
+  content_rowid='rowid',
+  tokenize='porter unicode61 remove_diacritics 0'
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS store_fts_code USING fts5(
+  title,
+  body,
+  content='store_docs',
+  content_rowid='rowid',
+  tokenize='trigram'
+);
+CREATE TRIGGER IF NOT EXISTS trg_store_docs_ai AFTER INSERT ON store_docs BEGIN
+  INSERT INTO store_fts_prose(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+  INSERT INTO store_fts_code(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_store_docs_ad AFTER DELETE ON store_docs BEGIN
+  INSERT INTO store_fts_prose(store_fts_prose, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO store_fts_code(store_fts_code, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+END;
+CREATE TRIGGER IF NOT EXISTS trg_store_docs_au AFTER UPDATE ON store_docs BEGIN
+  INSERT INTO store_fts_prose(store_fts_prose, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO store_fts_prose(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+  INSERT INTO store_fts_code(store_fts_code, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO store_fts_code(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
 DDL
 }
 
@@ -50,8 +95,8 @@ DB_SQLITE_MIN=3044000
 db_init() {
   mkdir -p "$(dirname "$DB_PATH")"
   # one read answers the fast path: the schema version, whether any table exists, whether
-  # the generic store tables exist (both), the SQLite version number
-  db_probe=$(sq "$DB_PATH" "SELECT (SELECT user_version FROM pragma_user_version) || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table') || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('store', 'store_changes')) || '|' || sqlite_version();" 2>/dev/null) || {
+  # the generic store tables exist (all four), the SQLite version number
+  db_probe=$(sq "$DB_PATH" "SELECT (SELECT user_version FROM pragma_user_version) || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table') || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('store', 'store_changes', 'store_docs', 'store_docs_schema')) || '|' || sqlite_version();" 2>/dev/null) || {
     printf '%s: error: cannot read the store at %s (ERR_STORAGE_READ)\n' "${CMD:-storage-fts5}" "$DB_PATH" >&2
     exit 2
   }
@@ -68,9 +113,9 @@ db_init() {
   fi
   case "$db_version" in ""|*[!0-9]*) db_version=0 ;; esac
   if [ "$db_version" -eq "$DB_SCHEMA_VERSION" ]; then
-    # a version 4 store created before the generic module store gains its two tables here,
+    # a version 4 store created before the generic module store gains its tables here,
     # idempotent and inside one transaction; a store that already holds them is untouched
-    if [ "$db_store" != "2" ]; then
+    if [ "$db_store" != "4" ]; then
       { printf 'BEGIN IMMEDIATE;\n'; store_ddl; printf 'COMMIT;\n'; } | sq -bail "$DB_PATH" >/dev/null 2>&1 || {
         printf '%s: error: cannot add the module store tables to the store at %s (ERR_STORAGE_WRITE)\n' "${CMD:-storage-fts5}" "$DB_PATH" >&2
         exit 2

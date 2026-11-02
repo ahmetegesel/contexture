@@ -9,6 +9,8 @@ library, and the posix driver.
 storage/
   scripts/driver-resolver   the resolver: selection, the capability handshake, dispatch
   scripts/store-data        the private reader and validator of a module's data file
+  scripts/store-search      the private exact and document-derivation search engine
+  scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
   scripts/library           the module-facing interface, sourced by a module's scripts
   drivers/posix/            the zero-dependency baseline driver (sh and awk)
   README.md                 this contract
@@ -17,7 +19,7 @@ storage/
 ## The store contract
 
 The store serves module data only; the record keeps its 38 typed driver functions in
-this stage. Five functions, called through the resolver:
+this stage. Six functions, called through the resolver:
 
 | function | argv | stdin | answer |
 |---|---|---|---|
@@ -26,6 +28,7 @@ this stage. Five functions, called through the resolver:
 | `store.put` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | the raw bytes | `{"namespace","key","op"}`; atomic per key |
 | `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | none | `{"namespace","key","op"}` |
 | `store.changes` | `<namespace>` | `head=<sha\|none>` lines | `{"namespace","changes":[...]}` oldest first |
+| `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,section,snippet,score}]}` |
 
 Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a
 read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a
@@ -36,10 +39,21 @@ over the key under a per-key lock, so a put lands whole or not at all. The chang
 optional per namespace; a namespace declaring `changes: false`, or a driver without the
 log, refuses `store.changes` rc 1 `ERR_CAPABILITY_UNSUPPORTED`.
 
+Search answers one shape on every driver: `{"namespace","query","mode","total_matches",
+"results":[{"key","section","snippet","score"}]}`. `exact` is the record rule over the raw
+stored value: a line matches when the query is a substring of it after ASCII case folding,
+a column-0 comment never matches, one row per entity and section, the snippet the first
+matching line with its label and quote pair trimmed, every score 0. The document set comes
+from the search schema: the flat form indexes one document per key (section `body`), the
+document-set form derives one document per entity at write time and ranks those documents
+in the fts5 store index; a module with no schema falls back to the generic raw value. A
+ranked mode answers only where the configured driver declares it (fts5: `hybrid` and
+`trigram`); posix declares exact alone and refuses a ranked mode by name. The driver
+declares the optional `search.schema` token when it consumes a declared schema.
+
 A module declares its data in a `data` file beside its `module` file, one `field: value`
 line per field and a line starting with `#` a comment. Only `namespace` and `key` are
-required; `root`, `suffix`, `changes`, `format`, and the search keys (`fields`, `title`,
-`snippet`, `modes`) are optional:
+required; `root`, `suffix`, `changes`, and the search keys are optional:
 
 ```text
 namespace: <name>
@@ -47,6 +61,13 @@ key: <segment>/<segment>            # or a final <segment...> for a variable-dep
 root: <workspace-relative folder>   # optional; default: the namespace
 suffix: <suffix>                    # optional; default: empty
 changes: true                       # optional; default: false
+search: flat|documents              # optional; the search schema form
+format: text|json                   # optional; flat only; default text
+fields: <field>, <field>            # optional; flat only; the JSON fields to rank
+title: <field>|key|head             # optional; flat default key, documents default head
+snippet: line                       # optional; default line
+modes: exact, hybrid, trigram       # optional; default exact; exact is required
+document: <key-pattern> <section> <entity-type> <head-marker|->   # repeatable
 ```
 
 The namespace is a lowercase token of letters, digits, dot, underscore, and hyphen; the
@@ -55,9 +76,12 @@ segment may instead be `<name...>`, which admits one or more key segments (a mod
 and deeper keys share one pattern: `key: <unit>/<path...>` admits `unit/state` and
 `unit/lanes/x/report`). The root is a workspace-relative folder inside the workspace and
 defaults to the namespace; the suffix defaults to empty; `changes` is `true` or `false`
-and defaults to `false`. `format` and the search keys are accepted and reserved for the
-search schema; the reader refuses an unknown field. The module directory beside the data
-file is the owner, and a second data file declaring the same namespace refuses.
+and defaults to `false`. The search form is `flat` (one document per key, section `body`;
+`format`, `fields`, and `title` shape the ranked document) or `documents` (the repeated
+`document` rule names the key pattern, the section, the entity type, and the optional
+column-0 head marker that starts an entity; a key no rule covers stays searchable as one
+generic document). The reader refuses an unknown field. The module directory beside the
+data file is the owner, and a second data file declaring the same namespace refuses.
 
 ## Discovery and selection
 
@@ -81,7 +105,7 @@ adoption retires the transitional tiers.
 A module's script sources `.contexture/storage/scripts/library` and calls the store
 through it; the module never names the driver. The library exports:
 
-- `store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`;
+- `store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_search`;
 - `store_require <capability>...` and `store_has <capability>`;
 - `data_get <ref>` and `data_emit <ref> <data>`.
 

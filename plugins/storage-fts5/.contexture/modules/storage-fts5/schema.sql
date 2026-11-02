@@ -408,3 +408,60 @@ CREATE TABLE IF NOT EXISTS store_changes (
 );
 CREATE INDEX IF NOT EXISTS idx_store_changes_ns ON store_changes(namespace, seq);
 CREATE INDEX IF NOT EXISTS idx_store_changes_head ON store_changes(head);
+
+-- The derived store documents (the search schema): one row per entity the module's data
+-- file declares, rebuilt for a key in the transaction of every put and delete. The sig is
+-- the search schema's signature; a namespace whose stored signature differs is re-derived
+-- whole before a ranked search. The FTS5 tables index the documents through the triggers;
+-- the exact rule is computed over the raw values, never here.
+CREATE TABLE IF NOT EXISTS store_docs (
+  namespace TEXT NOT NULL,
+  key TEXT NOT NULL,
+  section TEXT NOT NULL,
+  entity_type TEXT NOT NULL,
+  entity_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  body TEXT NOT NULL,
+  ord INTEGER NOT NULL,
+  sig TEXT NOT NULL,
+  PRIMARY KEY (namespace, key, ord)
+);
+CREATE INDEX IF NOT EXISTS idx_store_docs_ns ON store_docs(namespace, key);
+
+CREATE TABLE IF NOT EXISTS store_docs_schema (
+  namespace TEXT PRIMARY KEY,
+  sig TEXT NOT NULL
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS store_fts_prose USING fts5(
+  title,
+  body,
+  content='store_docs',
+  content_rowid='rowid',
+  tokenize='porter unicode61 remove_diacritics 0'
+);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS store_fts_code USING fts5(
+  title,
+  body,
+  content='store_docs',
+  content_rowid='rowid',
+  tokenize='trigram'
+);
+
+CREATE TRIGGER IF NOT EXISTS trg_store_docs_ai AFTER INSERT ON store_docs BEGIN
+  INSERT INTO store_fts_prose(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+  INSERT INTO store_fts_code(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_store_docs_ad AFTER DELETE ON store_docs BEGIN
+  INSERT INTO store_fts_prose(store_fts_prose, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO store_fts_code(store_fts_code, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_store_docs_au AFTER UPDATE ON store_docs BEGIN
+  INSERT INTO store_fts_prose(store_fts_prose, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO store_fts_prose(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+  INSERT INTO store_fts_code(store_fts_code, rowid, title, body) VALUES ('delete', old.rowid, old.title, old.body);
+  INSERT INTO store_fts_code(rowid, title, body) VALUES (new.rowid, new.title, new.body);
+END;

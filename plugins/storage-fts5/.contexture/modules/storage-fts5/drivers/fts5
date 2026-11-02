@@ -301,6 +301,15 @@ store_data() {
   SD_SUFFIX=$(printf '%s\n' "$sd_out" | sed -n '3p')
   SD_KEYPAT=$(printf '%s\n' "$sd_out" | sed -n '4p')
   SD_CHANGES=$(printf '%s\n' "$sd_out" | sed -n '5p')
+  SD_FILE=$(printf '%s\n' "$sd_out" | sed -n '6p')
+  SD_FORM=$(printf '%s\n' "$sd_out" | sed -n '7p')
+  SD_FORMAT=$(printf '%s\n' "$sd_out" | sed -n '8p')
+  SD_FIELDS=$(printf '%s\n' "$sd_out" | sed -n '9p')
+  SD_TITLE=$(printf '%s\n' "$sd_out" | sed -n '10p')
+  SD_SNIPPET=$(printf '%s\n' "$sd_out" | sed -n '11p')
+  SD_MODES=$(printf '%s\n' "$sd_out" | sed -n '12p')
+  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '13,$p')
+  SD_SIG=$(printf '%s\n' "$SD_FORM" "$SD_FORMAT" "$SD_FIELDS" "$SD_TITLE" "$SD_SNIPPET" "$SD_MODES" "$SD_DOCS" | cksum | awk '{ print $1 "-" $2 }')
 }
 
 # store_key_ok <key>: the generic key rule: no blanks, control characters, leading slash,
@@ -460,6 +469,7 @@ store_put() {
     refuse 2 ERR_STORAGE_READ "cannot read the value"
   }
   db_init
+  store_docs_ensure "$sp_ns" "$SD_SIG"
   if ! sp_twin=$(store_twin "$sp_ns" "$sp_key"); then
     store_cleanup
     refuse 2 ERR_STORAGE_READ "the storage read failed"
@@ -468,6 +478,14 @@ store_put() {
     store_cleanup
     refuse 1 ERR_ENTITY_EXISTS "key '$sp_key' folds onto '$sp_twin' under ASCII case; keys differing only by case never coexist in namespace '$sp_ns'"
   fi
+  sp_core=$(store_search_core) || {
+    store_cleanup
+    refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
+  }
+  if ! "$sp_core" docs "$SD_FILE" "$sp_ns" "$sp_key" "$SCRATCH/value" "$SD_SIG" > "$SCRATCH/docs.sql"; then
+    store_cleanup
+    refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
+  fi
   sp_now=$(now_utc)
   {
     printf 'BEGIN IMMEDIATE;\n'
@@ -475,6 +493,7 @@ store_put() {
       "$sp_now" "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")" "$(sql_escape "$SF_OP")" "$(sql_escape "$SF_HEAD")" "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")"
     printf "INSERT INTO store (namespace, key, value, updated_at) VALUES ('%s', '%s', readfile('%s'), '%s') ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;\n" \
       "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")" "$(sql_escape "$SCRATCH/value")" "$sp_now"
+    cat "$SCRATCH/docs.sql"
     printf 'COMMIT;\n'
   } > "$SCRATCH/store.sql"
   if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2>&1; then
@@ -503,12 +522,14 @@ store_delete() {
   trap 'store_cleanup; exit 143' TERM
   store_lock "$sx_ns" "$sx_key"
   db_init
+  store_docs_ensure "$sx_ns" "$SD_SIG"
   scratch
   {
     printf 'BEGIN IMMEDIATE;\n'
     printf "INSERT INTO store_changes (at, namespace, key, op, head, prior) VALUES ('%s', '%s', '%s', '%s', '%s', 'present');\n" \
       "$(now_utc)" "$(sql_escape "$sx_ns")" "$(sql_escape "$sx_key")" "$(sql_escape "$SF_OP")" "$(sql_escape "$SF_HEAD")"
     printf "DELETE FROM store WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sx_ns")" "$(sql_escape "$sx_key")"
+    printf 'DELETE FROM store_docs WHERE namespace = %s AND key = %s;\n' "$(store_sqlq "$sx_ns")" "$(store_sqlq "$sx_key")"
     printf 'COMMIT;\n'
   } > "$SCRATCH/store.sql"
   if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2>&1; then
@@ -555,6 +576,187 @@ store_changes() {
   fi
   exit 0
 }
+
+# store_sqlq <value>: a single-quoted SQL string
+store_sqlq() {
+  printf "'%s'" "$(sql_escape "$1")"
+}
+
+# store_search_core: the storage core's private search engine
+store_search_core() {
+  for ssc_c in "$MODULE_DIR/../../storage/scripts/store-search" \
+               "$ROOT/.contexture/storage/scripts/store-search" \
+               "$ROOT/base/.contexture/storage/scripts/store-search"; do
+    if [ -x "$ssc_c" ]; then printf '%s\n' "$ssc_c"; return 0; fi
+  done
+  return 1
+}
+
+# store_query_read: the query payload line, decoded, with a sentinel so a trailing newline
+# survives the command substitution
+cr_byte=$(printf '\r')
+store_query_read() {
+  sq_seen=0; sq_raw=""
+  while IFS= read -r sq_l || [ -n "$sq_l" ]; do
+    sq_l=${sq_l%"$cr_byte"}
+    case "$sq_l" in
+      query=*)
+        [ "$sq_seen" -eq 0 ] || refuse 1 ERR_INVALID_ARGUMENT "duplicate payload line 'query='"
+        sq_seen=1; sq_raw=${sq_l#query=} ;;
+      '') ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "unknown payload line '$sq_l' (query= only)" ;;
+    esac
+  done
+  [ "$sq_seen" -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "missing the query payload"
+  SQ_RAW="$sq_raw" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["SQ_RAW"]; out = ""
+    for (i = 1; i <= length(s); i++) {
+      c = substr(s, i, 1)
+      if (c == "\\") {
+        i++
+        c = substr(s, i, 1)
+        if (c == "n") out = out "\n"
+        else if (c == "t") out = out "\t"
+        else if (c == "r") out = out "\r"
+        else out = out c
+      } else out = out c
+    }
+    printf "%sX", out
+  }'
+}
+
+# store_docs_ensure <namespace> <sig>: the derived documents are current for the search
+# schema; a namespace whose stored signature differs is re-derived whole from its values
+store_docs_ensure() {
+  sde_ns=$1; sde_sig=$2
+  [ -f "$DB_PATH" ] || return 0
+  db_init
+  sde_now=$(sq "$DB_PATH" "SELECT sig FROM store_docs_schema WHERE namespace = $(store_sqlq "$sde_ns");" 2>/dev/null)
+  [ "$sde_now" = "$sde_sig" ] && return 0
+  sde_core=$(store_search_core) || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
+  scratch
+  mkdir -p "$SCRATCH/values" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
+  sde_sql="$SCRATCH/docs-ensure.sql"
+  printf 'BEGIN IMMEDIATE;\nDELETE FROM store_docs WHERE namespace = %s;\n' "$(store_sqlq "$sde_ns")" > "$sde_sql"
+  if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sde_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys" 2>/dev/null; then
+    refuse 2 ERR_STORAGE_READ "the storage read failed"
+  fi
+  sde_n=0
+  while IFS= read -r sde_key || [ -n "$sde_key" ]; do
+    [ -n "$sde_key" ] || continue
+    sde_n=$((sde_n + 1))
+    sde_val="$SCRATCH/values/$sde_n"
+    if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$sde_val"), value) FROM store WHERE namespace = $(store_sqlq "$sde_ns") AND key = $(store_sqlq "$sde_key");" > /dev/null 2>&1; then
+      refuse 2 ERR_STORAGE_READ "cannot read the store values"
+    fi
+    if ! "$sde_core" docs "$SD_FILE" "$sde_ns" "$sde_key" "$sde_val" "$sde_sig" >> "$sde_sql"; then
+      refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
+    fi
+  done < "$SCRATCH/keys"
+  printf "INSERT INTO store_docs_schema (namespace, sig) VALUES (%s, %s) ON CONFLICT(namespace) DO UPDATE SET sig = excluded.sig;\nCOMMIT;\n" \
+    "$(store_sqlq "$sde_ns")" "$(store_sqlq "$sde_sig")" >> "$sde_sql"
+  if ! sq -bail "$DB_PATH" < "$sde_sql" > /dev/null 2>&1; then
+    refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
+  fi
+}
+
+# store_search_ranked <namespace> <query> <mode> <limit>
+store_search_ranked() {
+  sr_ns=$1; sr_q=$2; sr_mode=$3; sr_lim=$4
+  scratch
+  {
+    printf 'BEGIN;\n'
+    printf "CREATE TEMP TABLE ssr AS SELECT %s AS ns, %s AS q, %s AS mode, %d AS lim;\n" \
+      "$(store_sqlq "$sr_ns")" "$(store_sqlq "$sr_q")" "$(store_sqlq "$sr_mode")" "$sr_lim"
+    printf "CREATE TEMP TABLE sst AS SELECT group_concat('\"' || replace(t.value, '\"', '\"\"') || '\"', ' ' ORDER BY t.key) AS m FROM json_each('[\"' || replace(replace(replace(replace(replace(replace((SELECT q FROM temp.ssr), '\\', '\\\\'), '\"', '\\\"'), char(9), ' '), char(10), ' '), char(13), ' '), ' ', '\",\"') || '\"]') t WHERE t.value <> '';\n"
+    cat <<'RANKED'
+CREATE TEMP TABLE ssres (doc_id INTEGER, key TEXT, section TEXT, score REAL, snippet TEXT);
+INSERT INTO temp.ssres
+WITH
+  raw_prose AS (SELECT d.rowid AS doc_id, d.key AS key, d.section AS section, f.rank AS rank,
+      snippet(store_fts_prose, -1, '<b>', '</b>', '...', 12) AS snip
+    FROM store_fts_prose f JOIN store_docs d ON d.rowid = f.rowid, temp.ssr s
+    WHERE s.mode = 'hybrid' AND f.store_fts_prose MATCH (SELECT m FROM temp.sst) AND d.namespace = s.ns),
+  ranked_prose AS (SELECT doc_id, key, section, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_prose),
+  raw_code AS (SELECT d.rowid AS doc_id, d.key AS key, d.section AS section, f.rank AS rank,
+      snippet(store_fts_code, -1, '<b>', '</b>', '...', 12) AS snip
+    FROM store_fts_code f JOIN store_docs d ON d.rowid = f.rowid, temp.ssr s
+    WHERE s.mode IN ('hybrid', 'trigram') AND f.store_fts_code MATCH (SELECT m FROM temp.sst) AND d.namespace = s.ns),
+  ranked_code AS (SELECT doc_id, key, section, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_code),
+  combined AS (SELECT doc_id, key, section, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_prose
+    UNION ALL SELECT doc_id, key, section, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_code),
+  fused AS (SELECT doc_id, key, section, round(sum(score), 6) AS score, max(snip) AS snippet FROM combined GROUP BY doc_id, key, section)
+SELECT doc_id, key, section, score, snippet FROM fused;
+SELECT json_object('namespace', s.ns, 'query', s.q, 'mode', s.mode, 'total_matches', (SELECT count(*) FROM temp.ssres),
+  'results', json((SELECT json_group_array(json(json_object('key', key, 'section', section, 'snippet', snippet, 'score', score)) ORDER BY score DESC, doc_id)
+    FROM (SELECT * FROM temp.ssres ORDER BY score DESC, doc_id LIMIT (SELECT lim FROM temp.ssr)))))
+FROM temp.ssr s;
+COMMIT;
+RANKED
+  } > "$SCRATCH/store-search.sql"
+  if ! sq -bail "$DB_PATH" < "$SCRATCH/store-search.sql"; then
+    refuse 2 ERR_STORAGE_READ "the storage search failed"
+  fi
+}
+
+# store_search <namespace> <mode> [<limit>]: exact over the raw stored values, and the
+# ranked modes over the derived store documents when the driver declares search.schema.
+store_search() {
+  FN=store.search
+  [ $# -ge 2 ] && [ $# -le 3 ] || refuse 1 ERR_INVALID_ARGUMENT "store.search takes the namespace, the mode, and an optional limit"
+  ss_ns=$1; ss_mode=$2; ss_lim=${3:-20}
+  case "$ss_mode" in
+    ''|[!a-z]*|*[!a-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$ss_mode'" ;;
+  esac
+  case "$ss_lim" in
+    ''|*[!0-9]*|0) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$ss_lim'" ;;
+  esac
+  store_data store.search "$ss_ns"
+  case ",$SD_MODES," in
+    *",$ss_mode,"*) ;;
+    *) refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not declared by namespace '$ss_ns'; declared modes: $SD_MODES" ;;
+  esac
+  case "$ss_mode" in
+    exact|hybrid|trigram) ;;
+    *) refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not supported; declared modes: exact, hybrid, trigram" ;;
+  esac
+  ss_q=$(store_query_read) || exit $?
+  ss_q=${ss_q%X}
+  case "$ss_q" in *[![:space:]]*) ;; *) refuse 1 ERR_INVALID_ARGUMENT "the search query is empty" ;; esac
+  if [ "$ss_mode" = exact ]; then
+    ss_core=$(store_search_core) || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
+    scratch
+    : > "$SCRATCH/man"
+    if [ -f "$DB_PATH" ]; then
+      db_init
+      mkdir -p "$SCRATCH/values" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
+      if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$ss_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys" 2>/dev/null; then
+        refuse 2 ERR_STORAGE_READ "the storage read failed"
+      fi
+      ss_n=0
+      while IFS= read -r ss_k || [ -n "$ss_k" ]; do
+        [ -n "$ss_k" ] || continue
+        ss_n=$((ss_n + 1))
+        ss_v="$SCRATCH/values/$ss_n"
+        if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$ss_v"), value) FROM store WHERE namespace = $(store_sqlq "$ss_ns") AND key = $(store_sqlq "$ss_k");" > /dev/null 2>&1; then
+          refuse 2 ERR_STORAGE_READ "cannot read the store values"
+        fi
+        printf '%s\t%s\n' "$ss_k" "$ss_v" >> "$SCRATCH/man"
+      done < "$SCRATCH/keys"
+    fi
+    "$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$SCRATCH/man"
+    exit $?
+  fi
+  if [ ! -f "$DB_PATH" ]; then
+    printf '{"namespace":"%s","query":"%s","mode":"%s","total_matches":0,"results":[]}\n' \
+      "$(store_json "$ss_ns")" "$(store_json "$ss_q")" "$(store_json "$ss_mode")"
+    exit 0
+  fi
+  store_docs_ensure "$ss_ns" "$SD_SIG"
+  store_search_ranked "$ss_ns" "$ss_q" "$ss_mode" "$ss_lim"
+  exit 0
+}
+
 # ==============================================================================
 # The refusal and the unit checks every record function shares
 # ==============================================================================
@@ -712,7 +914,7 @@ want_lane() {
 }
 
 capability() {
-  printf '{"driver":"fts5","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","store.list","store.get","store.put","store.delete","store.changes"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog"]}\n'
+  printf '{"driver":"fts5","version":"2.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query","store.list","store.get","store.put","store.delete","store.changes","store.search"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n'
 }
 
 # storage.health: a probe, never a write: an absent database reports degraded with store
@@ -831,6 +1033,7 @@ case "$CMD" in
   store.put) store_put "$@" ;;
   store.delete) store_delete "$@" ;;
   store.changes) store_changes "$@" ;;
+  store.search) store_search "$@" ;;
 
   storage.health)
     px_extra 0 "$@"
