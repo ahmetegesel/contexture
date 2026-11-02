@@ -4,6 +4,38 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.60.0] - 2026-11-02
+
+MINOR: the module system lands: the standard module folder and its manifest grammar, the extension root as the packages' overlay target and the core's second read root, the package installer and uninstaller with the extension-root-only overlay and its collision checks, the package manifest's feature and driver kinds, the catalog mirrored into the extension root, the authoring guide, and the module suite. The storage stays the core's; the session and the unit module follow.
+
+### Added
+
+- The standard module folder: the module file's grammar (the summary, the version, the description hash block last, the refused requires) with the private `ctx _module` reader and the discovery validation; the laws fragment, the data declaration, and the install and uninstall part hooks.
+- The extension root `.contexture/extensions`: the packages' overlay target and the core's second read root, with the engine's workspace-first discovery and the collision warnings, the resolver's extension driver tier, the two-root store-data owner scan, the extension rhythm index, and the `CTX_ROOT`-absolute docs library and template.
+- The package installer and uninstaller: the extension-root-only overlay, the `.state/<package>.files` record of paths, modes, checksums, and law fragments, the collision table (an outside or core path, an unrecorded or another package's file, a module name against a builtin, a workspace module, or a reserved name, a driver name against posix or ahead of the extension root, a duplicate namespace, a malformed manifest), the re-install as an update, the read-only refusal, the part hooks' order, and the uninstall's preservation.
+- The package manifest's two kinds: the feature package and the storage-driver package, with the typed parts and their extension-relative paths, the driver name and the `storage.driver` mapping, the three version lines, and the refused requires; the private `ctx _package` reader enforces it.
+- The five packages' manifests and the mirror: the docs module, its rhythms and template, the fts5 driver, the ast-doc-graph module, the toolchain filters, and the starter rhythms under `.contexture/extensions`.
+- The authoring guide and the worked example at `tests/fixtures/worked-package`, with its own 33-assertion test.
+- `tests/module-tests.sh` as the 16th gate job (241 assertions) and the fast loop's module selector.
+
+### Changed
+
+- The fts5 driver is a storage-driver package part, not a module: the engine never lists it, and `storage.driver: fts5` resolves from the extension root ahead of the transitional module tier.
+- The session wrapper, the docs module, the runner, and the lanes reach the core through the extension root's contract; the docs module's corpus writes go through the library and the store.
+- The overlay's docs laws move into the docs module's fragment; the lane-isolation clauses live in the lane module's laws.
+
+### Removed
+
+- The storage-fts5 module file (the driver is a package part); the lane-isolation package (its clauses are the lane module's laws); the old `.contexture/modules` homes of the docs module, the fts5 driver, the ast-doc-graph, the toolchain filters, the starter rhythms, and the lane (the live drawer adopts the extension root).
+
+### Fixed
+
+- The installer prunes the folders a stale-file removal empties, so a dropped module can be re-added.
+- The package-manifest reader refuses a part path with an empty segment.
+- The uninstaller preserves and reports any record path outside the extension root, under the state area, or carrying a dot segment.
+
+Commits in the range: b7a07b6 (the standard folder), e597152 (the extension root), 518854c (the package overlay), 5e27a9e (the manifests), 9a49737 (the catalog), 784c288 (the guide), 1809058 (the module tests), 401d833 (the review and its three hardened findings), and the release commit.
+
 ## [0.59.0] - 2026-11-02
 
 MINOR: the storage core lands as a core mechanism, not a module: the resolver, the store contract, the module-facing library, the optional search schema, the transactional batch and the scan, the split descriptor, the error shape, and the committed differential fuzzer, with the storage module retired and the driver at version 3.0.0. The record's 38 typed functions stay on the driver until the unit module moves them; the batch and the scan are additive.
