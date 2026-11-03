@@ -93,13 +93,20 @@ u_want_unit() {
   u_ident_valid "$1" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed unit '$1'"
 }
 
-# u_scratch: the per-run folder under the workspace's .contexture/tmp
+# u_scratch: the per-run folder under the verb's scratch root when ctx exported one (the
+# engine sweeps a root a killed verb leaves), else the workspace's .contexture/tmp
 u_scratch() {
   [ -n "$U_SCR" ] && return 0
-  us_root=$(store_lib_root)
-  us_tmp="$us_root/.contexture/tmp"
-  mkdir -p "$us_tmp" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the workspace scratch folder"
-  [ -d "$us_tmp" ] && [ -w "$us_tmp" ] || u_refuse 2 ERR_STORAGE_WRITE "the workspace scratch folder is not writable"
+  us_tmp=""
+  if [ -n "${CTX_SCRATCH_ROOT:-}" ] && mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null \
+    && [ -d "$CTX_SCRATCH_ROOT" ] && [ -w "$CTX_SCRATCH_ROOT" ]; then
+    us_tmp=$CTX_SCRATCH_ROOT
+  else
+    us_root=$(store_lib_root)
+    us_tmp="$us_root/.contexture/tmp"
+    mkdir -p "$us_tmp" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the workspace scratch folder"
+    [ -d "$us_tmp" ] && [ -w "$us_tmp" ] || u_refuse 2 ERR_STORAGE_WRITE "the workspace scratch folder is not writable"
+  fi
   U_SCR=$(mktemp -d "$us_tmp/unit.XXXXXX" 2>/dev/null) || u_refuse 2 ERR_STORAGE_WRITE "cannot create the data script's scratch folder"
 }
 

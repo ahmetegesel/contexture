@@ -19,8 +19,10 @@ storage/
 
 ## The store contract
 
-The store serves module data only; the record keeps its 38 typed driver functions in
-this stage. Seven data functions, plus the search entry, called through the resolver:
+The store-only driver card is contract 3: the driver answers `capability` and
+`storage.health` as its own methods and the seven data functions plus the search entry,
+and the record's 35 operations live in the unit module's data script over the store.
+Seven data functions, called through the resolver:
 
 | function | argv | stdin | answer |
 |---|---|---|---|

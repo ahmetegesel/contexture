@@ -47,11 +47,12 @@ mkdir -p "$SANDBOX/.contexture/modules"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
+cp -R "$ROOT/base/.contexture/modules/unit" "$SANDBOX/.contexture/modules/unit"
 cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
-chmod +x .contexture/modules/session/scripts/* .contexture/storage/scripts/* .contexture/storage/drivers/posix/driver
+chmod +x .contexture/modules/session/scripts/* .contexture/modules/unit/scripts/data .contexture/storage/scripts/* .contexture/storage/drivers/posix/driver
 UNIT=aud-unit
 JOURNAL=".contexture/sessions/$UNIT/journal.md"
 BACKLOG=".contexture/sessions/$UNIT/backlog.md"

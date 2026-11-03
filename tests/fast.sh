@@ -98,7 +98,7 @@ unit_suites() {
   run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
   run_suite "record-audit-tests.sh" sh "$ROOT/tests/record-audit-tests.sh"
   run_suite "store-compliance.sh (posix)" sh "$ROOT/tests/store-compliance.sh"
-  run_suite "storage-compliance.sh (base posix driver)" sh "$ROOT/tests/storage-compliance.sh" "--driver-exec=$ROOT/base/.contexture/storage/drivers/posix/driver"
+  run_suite "storage-compliance.sh (unit module over posix)" sh "$ROOT/tests/storage-compliance.sh" "--data=unit"
   run_suite "ast-doc-graph test-ddl.sh" sh "$ROOT/plugins/ast-doc-graph/tests/test-ddl.sh"
 }
 
@@ -125,7 +125,7 @@ case "${1:-}" in
     case "${2:-}" in
       posix)
         AREA="driver posix"
-        run_suite "storage-compliance.sh (base posix driver)" sh "$ROOT/tests/storage-compliance.sh" "--driver-exec=$ROOT/base/.contexture/storage/drivers/posix/driver"
+        run_suite "storage-compliance.sh (unit module over posix)" sh "$ROOT/tests/storage-compliance.sh" "--data=unit"
         run_suite "store-compliance.sh (posix)" sh "$ROOT/tests/store-compliance.sh"
         run_suite "session-tests.sh (posix)" sh "$ROOT/tests/session-tests.sh" --driver=posix
         ;;

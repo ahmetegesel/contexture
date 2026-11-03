@@ -1,13 +1,13 @@
 #!/bin/sh
-# test-driver.sh: the contract 2 compliance suite (tests/storage-compliance.sh) against the
-# plugin's own fts5 driver.
+# test-driver.sh: the record compliance suite through the unit module data script over the
+# plugin's own fts5 copy (tests/storage-compliance.sh --data=unit --driver=fts5). The record
+# is the unit module's data over the store; the driver keeps capability, storage.health, the
+# store seven, and store.search.
 
 set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/../../.." && pwd)
-# the plugin's own driver copy, never the workspace's adopted one: the two drift
-PLUGIN_MODULE="$SCRIPT_DIR/../.contexture/extensions/storage/drivers/fts5"
 
 if ! command -v sqlite3 >/dev/null 2>&1; then
   printf 'SKIP: sqlite3 not found on PATH\n'
@@ -20,5 +20,6 @@ if [ ! -x "$COMPLIANCE" ]; then
   exit 1
 fi
 
-# the plugin's own driver alone: it answers every function natively, no other driver runs
-"$COMPLIANCE" --driver=fts5 --driver-exec="$PLUGIN_MODULE/driver"
+# the plugin's own driver alone (the suite stages this plugin copy), the record through the
+# unit module data script over it
+"$COMPLIANCE" --data=unit --driver=fts5

@@ -1,11 +1,12 @@
-# verb.sh: the shared shell of the session and lane verbs (contract 2, docs/the-engine.md,
-# The storage contract). A verb sources this file, checks its input shape, calls exactly
-# one storage function per record act through the resolver, and renders the answer with
-# lib/json.awk (the one flattener) and lib/render.awk (the one renderer). No verb reads
-# or writes a session artifact itself: the configured backend is the single store, and
-# its record rules (a CLOSED unit, a repeated key, the status moves, the pointer rule)
-# are the backend's; a refusal of the backend passes through as its one fixed stderr line
-# with its rc.
+# verb.sh: the shared shell of the session and lane verbs (contract 3, docs/the-engine.md,
+# The descriptor and the handshake). A verb sources this file, checks its input shape, calls
+# exactly one function per record act, and renders the answer with lib/json.awk (the one
+# flattener) and lib/render.awk (the one renderer). No verb reads or writes a session
+# artifact itself: the record's 35 operations are the unit module data script's over the
+# configured store, and its record rules (a CLOSED unit, a repeated key, the status moves,
+# the pointer rule) are the module's; capability and storage.health stay the driver's,
+# reached through the resolver. A refusal passes through as its one fixed stderr line with
+# its rc.
 #
 # The wire: argv carries the function and its bounded identifiers; every free-text value
 # travels on stdin as payload lines key=value, escaped (backslash, newline, tab, carriage
@@ -22,6 +23,14 @@ VB_LIB=$(CDPATH= cd -- "$(dirname -- "${VB_SELF:-$0}")/../../session/lib" 2>/dev
 VB_SESSION=$(CDPATH= cd -- "$VB_LIB/.." && pwd)
 # the session wrapper stays the compatibility path; it execs the storage core's resolver
 VB_RESOLVER="$VB_SESSION/scripts/driver-resolver"
+# the unit module's data script is the record's call path; the workspace module wins, then
+# the base mirror (the session module may be staged from base alone)
+VB_UNIT_DATA=""
+for vb_ud in "$VB_SESSION/../unit/scripts/data" \
+             "${CTX_ROOT:-$PWD}/.contexture/modules/unit/scripts/data" \
+             "${CTX_ROOT:-$PWD}/base/.contexture/modules/unit/scripts/data"; do
+  if [ -x "$vb_ud" ]; then VB_UNIT_DATA=$vb_ud; break; fi
+done
 VB_JSON="$VB_LIB/json.awk"
 VB_RENDER="$VB_LIB/render.awk"
 VB_DIR=""
@@ -157,27 +166,42 @@ vb_list() {
   done
 }
 
-# vb_call <function> [<argv>...]: one storage function through the resolver, the pending
-# payload on stdin; the answer and the stderr land in the scratch folder; VB_RC its rc
+# vb_call <function> [<argv>...]: one record function through the unit module data script
+# over the store; capability and storage.health stay the driver's and go through the
+# resolver. The pending payload is on stdin; the answer and the stderr land in the scratch
+# folder; VB_RC its rc
 vb_call() {
   vb_tmp
+  vb_exec=$VB_UNIT_DATA
+  case "${1:-}" in
+    capability|storage.health) vb_exec=$VB_RESOLVER ;;
+  esac
+  if [ -z "$vb_exec" ]; then
+    printf '%s: error: the unit module data script is not installed (ERR_DRIVER_NOT_FOUND)\n' "$(vb_label)" >&2
+    exit 2
+  fi
   if [ -n "$VB_PAY" ]; then
-    "$VB_RESOLVER" "$@" < "$VB_PAY" > "$VB_DIR/ans" 2> "$VB_DIR/err"
+    "$vb_exec" "$@" < "$VB_PAY" > "$VB_DIR/ans" 2> "$VB_DIR/err"
     VB_RC=$?
   else
-    "$VB_RESOLVER" "$@" < /dev/null > "$VB_DIR/ans" 2> "$VB_DIR/err"
+    "$vb_exec" "$@" < /dev/null > "$VB_DIR/ans" 2> "$VB_DIR/err"
     VB_RC=$?
   fi
   VB_PAY=""
   return "$VB_RC"
 }
 
-# vb_call_doc <file> <function> [<argv>...]: a function taking a raw document on stdin
+# vb_call_doc <file> <function> [<argv>...]: a record function taking a raw document on
+# stdin (a recipe, a report), through the unit module data script
 vb_call_doc() {
   vb_tmp
   vd_f=$1
   shift
-  "$VB_RESOLVER" "$@" < "$vd_f" > "$VB_DIR/ans" 2> "$VB_DIR/err"
+  if [ -z "$VB_UNIT_DATA" ]; then
+    printf '%s: error: the unit module data script is not installed (ERR_DRIVER_NOT_FOUND)\n' "$(vb_label)" >&2
+    exit 2
+  fi
+  "$VB_UNIT_DATA" "$@" < "$vd_f" > "$VB_DIR/ans" 2> "$VB_DIR/err"
   VB_RC=$?
   VB_PAY=""
   return "$VB_RC"

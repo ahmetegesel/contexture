@@ -22,6 +22,9 @@
 #                              too: the picture a refused write must leave as it was
 
 PLANT_DRIVER=${PLANT_DRIVER:-posix}
+# the record read calls go to the unit module data script when the suite sets it; the
+# resolver remains the fallback for a suite that reads through a driver
+RECORD_EXEC=${RECORD_EXEC:-$RESOLVER}
 
 # pl_posix <verb>: rc 0 on the posix driver, else rc 3 with one line naming the rule
 pl_posix() {
@@ -68,16 +71,16 @@ rsum() {
   shift
   {
     for rs_call in "session.load $rs_u" "task.list $rs_u all" "entry.list $rs_u" "finding.list $rs_u all"; do
-      "$RESOLVER" $rs_call < /dev/null 2>&1
+      "$RECORD_EXEC" $rs_call < /dev/null 2>&1
       printf 'rc=%s\n' "$?"
     done
-    for rs_s in $("$RESOLVER" entry.list "$rs_u" < /dev/null 2>/dev/null | tr ',' '\n' | sed -n 's/^.*"slug":"\([^"]*\)"$/\1/p' | LC_ALL=C sort -u); do
-      "$RESOLVER" entry.get "$rs_u" "$rs_s" < /dev/null 2>&1
+    for rs_s in $("$RECORD_EXEC" entry.list "$rs_u" < /dev/null 2>/dev/null | tr ',' '\n' | sed -n 's/^.*"slug":"\([^"]*\)"$/\1/p' | LC_ALL=C sort -u); do
+      "$RECORD_EXEC" entry.get "$rs_u" "$rs_s" < /dev/null 2>&1
       printf 'rc=%s\n' "$?"
     done
     for rs_l in "$@"; do
       for rs_a in recipe journal report; do
-        "$RESOLVER" lane.get "$rs_u" "$rs_l" "$rs_a" < /dev/null 2>&1
+        "$RECORD_EXEC" lane.get "$rs_u" "$rs_l" "$rs_a" < /dev/null 2>&1
         printf 'rc=%s\n' "$?"
       done
     done

@@ -1,29 +1,24 @@
 #!/bin/sh
-# drivers/fts5: the SQLite FTS5 storage driver (contract 2, docs/the-engine.md, The storage
-# contract). One sh entry point over the sqlite3 command line: the store is one database at
-# schema version 4 (schema.sql, the typed tables of the record data model holding the fields
-# the functions write, no stored text; db-init.sh opens it, lays the schema in a new or empty
-# file, and refuses a store at any other schema), and every one of the 38 record functions
-# answers natively in SQL, one script per function under sql/fn/ over the shared pieces of
-# sql/lib/ (the call prelude and the payload, the refusal point, the derived fields and the
-# JSON of the schemas), beside the search tables derive.sql rebuilds in the transaction of
-# every write. No function reads markdown or reaches another driver; the store holds only
-# what the functions write, and every read renders it in the canonical layout.
+# drivers/fts5: the SQLite FTS5 storage driver (contract 3, docs/the-engine.md, The
+# descriptor and the handshake). One sh entry point over the sqlite3 command line: the
+# store is one database at schema version 5 (schema.sql, the generic module store's tables
+# and the derived store documents with their FTS5 indexes; db-init.sh opens it, lays the
+# schema in a new or empty file, and refuses a store at any other schema). The driver is
+# store-only: it answers capability and storage.health as its own methods and the seven
+# generic store functions (list, get, put, delete, changes, batch, scan) plus the
+# store.search entry; the record's 35 operations live in the unit module's data script over
+# this store, and the docs corpus reaches the driver through the store too.
 #
-# The wire: argv carries the function and its bounded identifiers, checked here with the
-# posix driver's messages in its refusal order (the argv shape, the unit, CLOSED, then the
-# function's own rules, those in SQL); the free-text fields arrive on stdin as escaped
-# key=value payload lines, staged in a per-call scratch folder under the workspace's
-# .contexture/tmp and read by the SQL with readfile(); a document (a recipe, a report)
-# arrives raw. The answer is one compact JSON line built with json_object in the
+# The wire: argv carries the function and its bounded identifiers; values arrive on stdin as
+# escaped key=value payload lines (or raw bytes for a put), staged in a per-call scratch
+# folder under the workspace's .contexture/tmp. The answer is one compact JSON line in the
 # contract key order; a refusal is one stderr line "<function>: error: <message> (<CODE>)"
 # with nothing on stdout. Exit tiers: 0 ok, 1 semantic, 2 storage or driver.
 #
-# Writes: one transaction each (BEGIN IMMEDIATE to COMMIT, whole or nothing), under the unit
-# write lock (.contexture/tmp/locks/fts5-<unit>.lock) so writers of one unit serialize; the
-# answer prints only after the commit. Module data is served by the seven generic store
-# functions over the module data files (list, get, put, delete, changes, batch, scan) plus
-# the store search entry; the docs corpus reaches this driver through them.
+# Writes: one transaction each (BEGIN IMMEDIATE to COMMIT, whole or nothing) under the
+# namespace store lock (.contexture/tmp/locks/store-<namespace>.lock); the answer prints
+# only after the commit. The derived store documents are rebuilt for a key in the
+# transaction of its put or delete, and the FTS5 tables index them.
 
 set -u
 
@@ -99,34 +94,9 @@ now_utc() {
   date -u +"%Y-%m-%dT%H:%M:%SZ"
 }
 
-# a written unit, task, lane slug: ^[A-Za-z0-9][A-Za-z0-9_-]*$
-slug_valid() {
-  case "$1" in
-    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
-  esac
-  return 0
-}
-
-# the entry slug and the finding NAME a read addresses: the legacy shapes stay addressable
-name_valid() {
-  case "$1" in
-    ""|[!A-Za-z0-9_]*|*[!A-Za-z0-9_.-]*) return 1 ;;
-  esac
-  return 0
-}
-
-# a read never creates the store: without a database file there is nothing to read
-db_open_read() {
-  [ -f "$DB_PATH" ] || return 1
-  db_init
-  return 0
-}
-
 SCRATCH=""
-LOCK_DIR=""
 cleanup() {
-  [ -n "$SCRATCH" ] && rm -rf "$SCRATCH"
-  [ -n "$LOCK_DIR" ] && rm -rf "$LOCK_DIR"
+  [ -n "" ] && rm -rf ""
   return 0
 }
 trap cleanup EXIT
@@ -144,44 +114,6 @@ scratch() {
       exit 2
     }
   fi
-}
-
-# the unit write lock: the writers of one unit serialize (beside the transaction itself, so a
-# held lock is the one lever a probe can hold them with). The folder carries its holder pid;
-# a waiter removes a lock whose pid is gone (a SIGKILLed writer), and gives a lock with no
-# pid file a second's grace for its holder to write one; a live holder still refuses after
-# ten seconds.
-acquire_lock() {
-  mkdir -p "$DB_TMP/locks" 2>/dev/null || true
-  lk="$DB_TMP/locks/fts5-$1.lock"
-  lk_n=0
-  lk_miss=0
-  while ! mkdir "$lk" 2>/dev/null; do
-    lk_pid=$(cat "$lk/pid" 2>/dev/null)
-    case "$lk_pid" in
-      ""|*[!0-9]*)
-        lk_miss=$((lk_miss + 1))
-        if [ "$lk_miss" -ge 10 ]; then rm -rf "$lk" 2>/dev/null; lk_miss=0; continue; fi
-        ;;
-      *)
-        if kill -0 "$lk_pid" 2>/dev/null; then lk_miss=0
-        else rm -rf "$lk" 2>/dev/null; continue
-        fi
-        ;;
-    esac
-    lk_n=$((lk_n + 1))
-    if [ "$lk_n" -ge 100 ]; then
-      printf "%s: error: failed to acquire the write lock of unit '%s' after 10s (ERR_STORAGE_LOCKED)\n" "$CMD" "$1" >&2
-      exit 2
-    fi
-    sleep 0.1 2>/dev/null || sleep 1
-  done
-  printf '%s\n' "$$" > "$lk/pid" 2>/dev/null || {
-    rm -rf "$lk" 2>/dev/null
-    printf "%s: error: cannot write the unit lock holder pid (ERR_STORAGE_WRITE)\n" "$CMD" >&2
-    exit 2
-  }
-  LOCK_DIR="$lk"
 }
 
 if [ $# -eq 0 ]; then
@@ -1069,9 +1001,8 @@ store_search() {
   store_search_ranked "$ss_ns" "$ss_q" "$ss_mode" "$ss_lim"
   exit 0
 }
-
 # ==============================================================================
-# The refusal and the unit checks every record function shares
+# The refusal, the descriptor, the health, and the dispatch
 # ==============================================================================
 # A refusal is one stderr line "<function>: error: <message> (<CODE>)" with nothing on
 # stdout.
@@ -1081,159 +1012,18 @@ refuse() {
   exit "$1"
 }
 
-want_unit() {
-  [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the unit"
-  slug_valid "$1" || refuse 1 ERR_INVALID_ARGUMENT "malformed unit '$1'"
-}
-
-# unit_held <unit>: the store holds the unit (its state row)
-unit_held() {
-  [ "$(sq "$DB_PATH" "SELECT count(*) FROM units WHERE unit = '$(sql_escape "$1")';" 2>/dev/null)" = "1" ]
-}
-
-# ==============================================================================
-# The record functions (contract 2): the argv shape here, every record rule in SQL
-# ==============================================================================
-# A call runs one sqlite3 process over one script: the call header (temp.arg: the function,
-# the unit, the other argv tokens a1..aN, the staged payload and document files), then
-# sql/lib/prelude.sql and sql/fn/<function>.sql, with sqlite3 working in sql/ so the scripts
-# read their pieces by relative path. A script refuses by printing one ERR|<rc>|<code>|<msg>
-# line and stopping (sql/lib/stop.sql); a write prints its answer inside its transaction
-# and commits after, so an answer reaches stdout only when sqlite3 exits 0.
-CALL=""
-call_begin() {
-  scratch
-  CALL="$SCRATCH/call.sql"
-  printf 'PRAGMA foreign_keys = ON;\nCREATE TEMP TABLE arg (k TEXT PRIMARY KEY, v TEXT);\n' > "$CALL"
-  call_arg fn "$CMD"
-}
-
-call_arg() {
-  printf "INSERT INTO temp.arg VALUES ('%s', '%s');\n" "$1" "$(sql_escape "$2")" >> "$CALL"
-}
-
-# call_argv <token...>: the argv after the unit as a1..aN, na their count
-call_argv() {
-  ca_i=0
-  for ca_v in "$@"; do
-    ca_i=$((ca_i + 1))
-    call_arg "a$ca_i" "$ca_v"
-  done
-  call_arg na "$ca_i"
-}
-
-# the payload lines, staged whole; the SQL decodes them
-call_payload() {
-  cat > "$SCRATCH/pay" || refuse 2 ERR_STORAGE_READ "cannot read the payload"
-  call_arg pay "$SCRATCH/pay"
-}
-
-# a raw document (a recipe, a report), staged whole with its byte count
-call_doc() {
-  cat > "$SCRATCH/doc" || refuse 2 ERR_STORAGE_READ "cannot read the document"
-  call_arg doc "$SCRATCH/doc"
-  call_arg docsize "$(wc -c < "$SCRATCH/doc" | tr -d ' ')"
-}
-
-# call_run <function script> <read|write>: the script over the store; its refusal, a storage
-# failure, or its answer
-call_run() {
-  printf '.read lib/prelude.sql\n.read fn/%s.sql\n' "$1" >> "$CALL"
-  (cd "$SQL_DIR" && sq -bail "$DB_PATH" < "$CALL" > "$SCRATCH/out" 2> "$SCRATCH/err")
-  cr_rc=$?
-  case "$(sed -n '1p' "$SCRATCH/out")" in
-    'ERR|'*)
-      cr_l=$(cat "$SCRATCH/out")
-      cr_l=${cr_l#ERR|}
-      cr_t=${cr_l%%|*}
-      cr_l=${cr_l#*|}
-      cr_c=${cr_l%%|*}
-      cr_m=${cr_l#*|}
-      printf '%s: error: %s (%s)\n' "$CMD" "$cr_m" "$cr_c" >&2
-      exit "$cr_t"
-      ;;
-  esac
-  if [ "$cr_rc" -ne 0 ]; then
-    cr_e=$(sed -n '1p' "$SCRATCH/err")
-    # a signal ended the sqlite3 (rc above 128): its first stderr line is the shell's job
-    # line, which names the plugin's files; the message names the interruption instead
-    [ "$cr_rc" -gt 128 ] && cr_e="sqlite3 was interrupted (exit $cr_rc); the transaction rolled back"
-    case "$cr_e" in
-      *"database is locked"*|*"database table is locked"*) refuse 2 ERR_STORAGE_LOCKED "the store is locked by another writer" ;;
-    esac
-    [ "$2" = write ] && refuse 2 ERR_STORAGE_WRITE "the storage write failed: $cr_e"
-    refuse 2 ERR_STORAGE_READ "the storage read failed: $cr_e"
-  fi
-  cat "$SCRATCH/out"
-  exit 0
-}
-
-# px_extra <n> <argv...>: no argument beyond the n the function takes
-px_extra() {
-  pe_n=$1
-  shift
-  [ $# -le "$pe_n" ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$(eval "printf '%s' \"\${$((pe_n + 1))}\"")'"
-}
-
-# want_held <unit>: a well formed unit the store holds (a read of a store without a database
-# file finds no unit)
-want_held() {
-  want_unit "${1:-}"
-  db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
-  unit_held "$1" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
-}
-
-# rec_read <function> <unit> <argv after the unit...>: a read of one unit (the held check in
-# SQL, lib/held.sql)
-rec_read() {
-  rr_f=$1
-  rr_u=$2
-  shift 2
-  db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$rr_u' not found"
-  call_begin
-  call_arg unit "$rr_u"
-  call_argv "$@"
-  call_run "$rr_f" read
-}
-
-# rec_write <function> <unit> <payload|doc|none> <argv after the unit...>: a write of one unit,
-# its input staged, under the unit write lock, in one transaction
-rec_write() {
-  rw_f=$1
-  rw_u=$2
-  rw_in=$3
-  shift 3
-  [ -f "$DB_PATH" ] || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$rw_u' not found"
-  call_begin
-  call_arg unit "$rw_u"
-  call_argv "$@"
-  case "$rw_in" in
-    payload) call_payload ;;
-    doc) call_doc ;;
-  esac
-  acquire_lock "$rw_u"
-  db_init
-  call_run "$rw_f" write
-}
-
-want_task_slug() {
-  [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the task slug"
-  slug_valid "$1" || refuse 1 ERR_INVALID_ARGUMENT "malformed task slug '$1'"
-}
-
-want_lane() {
-  [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
-  slug_valid "$1" || refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$1'"
-}
-
+# capability: the contract 3 store-only card at driver version 3.0.0: the driver, the
+# version, contract 3, the seven data names in the fixed order, the search modes, and the
+# optional tokens. The card carries no record function family; capability and
+# storage.health are the driver's own methods the handshake and the diagnose call.
 capability() {
-  printf '{"driver":"fts5","version":"3.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query"],"store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n'
+  printf '{"driver":"fts5","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n'
 }
 
 # storage.health: a probe, never a write, and the backend's own health alone (no record
 # count: the record's active listing is the unit module's). An absent database reports
-# degraded with store absent (the store starts at the first bootstrap), and a store at
-# another schema reports error
+# degraded with store absent (the store starts at the first write), a store holding no key
+# reports degraded, and a store at another schema reports error
 storage_health() {
   # an sqlite3 older than the driver's minimum serves no function (db_init refuses each), so
   # the probe reports error naming it, never ok (lanes/si-f5-fts5-review/report F3)
@@ -1246,7 +1036,7 @@ storage_health() {
     exit 0
   fi
   if [ ! -f "$DB_PATH" ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database not created yet (will be initialized on bootstrap)","store":"absent"}\n'
+    printf '{"driver":"fts5","health":"degraded","detail":"database not created yet (will be initialized on the first write)","store":"absent"}\n'
     exit 0
   fi
   sh_p=$(sq "$DB_PATH" "SELECT (SELECT user_version FROM pragma_user_version) || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table');" 2>/dev/null) || {
@@ -1256,7 +1046,7 @@ storage_health() {
   sh_v=${sh_p%%|*}
   sh_t=${sh_p#*|}
   if [ "$sh_t" = 0 ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database present, no unit stored yet","store":"absent"}\n'
+    printf '{"driver":"fts5","health":"degraded","detail":"database present, no key stored yet","store":"absent"}\n'
     exit 0
   fi
   if [ "$sh_v" != "$DB_SCHEMA_VERSION" ]; then
@@ -1265,9 +1055,9 @@ storage_health() {
     printf '{"driver":"fts5","health":"error","detail":"database at schema %s; this driver reads %s and has no upgrade path","store":"present"}\n' "$sh_v" "$DB_SCHEMA_VERSION"
     exit 0
   fi
-  sh_n=$(sq "$DB_PATH" "SELECT count(*) FROM units;" 2>/dev/null) || sh_n=0
+  sh_n=$(sq "$DB_PATH" "SELECT count(*) FROM store;" 2>/dev/null) || sh_n=0
   if [ "$sh_n" = 0 ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database present, no unit stored yet","store":"absent"}\n'
+    printf '{"driver":"fts5","health":"degraded","detail":"database present, no key stored yet","store":"absent"}\n'
   elif [ ! -w "$DB_PATH" ]; then
     printf '{"driver":"fts5","health":"error","detail":"database file not writable","store":"present"}\n'
   elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
@@ -1276,62 +1066,6 @@ storage_health() {
     printf '{"driver":"fts5","health":"ok","detail":"database present and writable","store":"present"}\n'
   fi
   exit 0
-}
-
-# search.query <unit> [--limit=N] [--entity=T] [--mode=M] | query: the shapes here, the
-# exact rule over the lines table and the ranked modes over the FTS5 tables in SQL
-search_query() {
-  want_unit "${1:-}"
-  sq_u=$1
-  shift
-  sq_limit=20
-  sq_entity=all
-  sq_mode=exact
-  for sq_a in "$@"; do
-    case "$sq_a" in
-      --limit=*) sq_limit="${sq_a#--limit=}" ;;
-      --entity=*) sq_entity="${sq_a#--entity=}" ;;
-      --mode=*) sq_mode="${sq_a#--mode=}" ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$sq_a'" ;;
-    esac
-  done
-  case "$sq_limit" in
-    ""|*[!0-9]*|0) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$sq_limit'" ;;
-  esac
-  case "$sq_entity" in
-    all|session|task|entry|finding|lane|lane_entry) ;;
-    *) refuse 1 ERR_INVALID_ARGUMENT "unknown entity type '$sq_entity' (session, task, entry, finding, lane, lane_entry, all)" ;;
-  esac
-  case "$sq_mode" in
-    ""|[!a-z]*|*[!a-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$sq_mode'" ;;
-  esac
-  db_open_read || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sq_u' not found"
-  call_begin
-  call_arg unit "$sq_u"
-  call_arg limit "$sq_limit"
-  call_arg entity "$sq_entity"
-  call_arg mode "$sq_mode"
-  call_payload
-  case "$sq_mode" in
-    hybrid|trigram) call_run search.ranked read ;;
-    *) call_run search.query read ;;
-  esac
-}
-
-# session.refload <unit>...: every named unit well formed and held, in argv order
-session_refload() {
-  [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "missing the unit"
-  db_open_read || { want_unit "$1"; refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"; }
-  sr_held=" $(sq "$DB_PATH" "SELECT group_concat(unit, ' ') FROM units;" 2>/dev/null) "
-  for sr_u in "$@"; do
-    want_unit "$sr_u"
-    case "$sr_held" in *" $sr_u "*) ;; *) refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sr_u' not found" ;; esac
-  done
-  call_begin
-  call_arg unit "$1"
-  shift
-  call_argv "$@"
-  call_run session.refload read
 }
 
 case "$CMD" in
@@ -1346,188 +1080,9 @@ case "$CMD" in
   store.search) store_search "$@" ;;
 
   storage.health)
-    px_extra 0 "$@"
+    [ $# -eq 0 ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$1'"
     storage_health
     ;;
-  session.create)
-    want_unit "${1:-}"
-    px_extra 1 "$@"
-    call_begin
-    call_arg unit "$1"
-    call_payload
-    acquire_lock "$1"
-    db_init
-    call_run session.create write
-    ;;
-  session.list)
-    px_extra 0 "$@"
-    if [ ! -f "$DB_PATH" ]; then
-      printf '{"store":"absent","units":[]}\n'
-      exit 0
-    fi
-    db_init
-    call_begin
-    call_run session.list read
-    ;;
-  session.load)
-    [ $# -gt 1 ] && want_held "${1:-}"
-    want_unit "${1:-}"
-    px_extra 1 "$@"
-    rec_read session.load "$1"
-    ;;
-  session.refload) session_refload "$@" ;;
-  session.board|session.audit)
-    px_extra 1 "$@"
-    want_unit "${1:-}"
-    rec_read "$CMD" "$1"
-    ;;
-  session.stamp|session.next|session.close|session.reopen)
-    px_extra 1 "$@"
-    want_unit "${1:-}"
-    rec_write "$CMD" "$1" payload
-    ;;
-  session.refs)
-    want_unit "${1:-}"
-    sf_u=$1
-    shift
-    sf_bad=""
-    for sf_r in "$@"; do
-      if [ -z "$sf_bad" ] && ! slug_valid "$sf_r"; then sf_bad=$sf_r; sf_badset=1; fi
-    done
-    [ -f "$DB_PATH" ] || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sf_u' not found"
-    call_begin
-    call_arg unit "$sf_u"
-    call_argv "$@"
-    [ -n "${sf_badset:-}" ] && call_arg badref "$sf_bad"
-    call_payload
-    acquire_lock "$sf_u"
-    db_init
-    call_run session.refs write
-    ;;
-  session.units)
-    [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the repo"
-    case "$1" in
-      [!A-Za-z0-9._-]*|*[!A-Za-z0-9._/-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed repo '$1'" ;;
-    esac
-    px_extra 1 "$@"
-    if [ ! -f "$DB_PATH" ]; then
-      printf '{"repo":"%s","units":[],"known_repos":[]}\n' "$1"
-      exit 0
-    fi
-    db_init
-    call_begin
-    call_arg unit "$1"
-    call_run session.units read
-    ;;
-  session.refs_to)
-    want_unit "${1:-}"
-    px_extra 1 "$@"
-    if [ ! -f "$DB_PATH" ]; then
-      printf '{"unit":"%s","referrers":[]}\n' "$1"
-      exit 0
-    fi
-    db_init
-    call_begin
-    call_arg unit "$1"
-    call_run session.refs_to read
-    ;;
-  task.add|task.update|task.start|task.complete|task.reopen|task.drop|task.get)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    want_task_slug "${2:-}"
-    case "$CMD" in
-      task.get) rec_read "$CMD" "$1" "$2" ;;
-      *) rec_write "$CMD" "$1" payload "$2" ;;
-    esac
-    ;;
-  task.list)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    case "${2:-}" in
-      TODO|IN_PROGRESS|DONE|all) ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "task.list takes TODO, IN_PROGRESS, DONE, or all: '${2:-}'" ;;
-    esac
-    rec_read "$CMD" "$1" "$2"
-    ;;
-  entry.record)
-    px_extra 1 "$@"
-    want_unit "${1:-}"
-    rec_write "$CMD" "$1" payload
-    ;;
-  entry.get|entry.closure)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the entry slug"
-    name_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed entry slug '$2'"
-    rec_read "$CMD" "$1" "$2"
-    ;;
-  entry.list)
-    want_unit "${1:-}"
-    el_u=$1
-    shift
-    for el_a in "$@"; do
-      case "$el_a" in
-        --anchor=A[0-9]*) case "${el_a#--anchor=A}" in *[!0-9]*) refuse 1 ERR_INVALID_ARGUMENT "--anchor takes A<N>: '$el_a'" ;; esac ;;
-        --group=?*) case "${el_a#--group=}" in [!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed group in '$el_a'" ;; esac ;;
-        *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$el_a'" ;;
-      esac
-    done
-    rec_read "$CMD" "$el_u" "$@"
-    ;;
-  finding.add|finding.update|finding.drop|finding.get)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the finding NAME"
-    name_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$2'"
-    case "$CMD" in
-      finding.get) rec_read "$CMD" "$1" "$2" ;;
-      *) rec_write "$CMD" "$1" payload "$2" ;;
-    esac
-    ;;
-  finding.supersede)
-    px_extra 3 "$@"
-    want_unit "${1:-}"
-    for fs_n in "${2:-}" "${3:-}"; do
-      [ -n "$fs_n" ] || refuse 1 ERR_INVALID_ARGUMENT "finding.supersede takes the unit, OLD, and NEW"
-      name_valid "$fs_n" || refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$fs_n'"
-    done
-    rec_write "$CMD" "$1" payload "$2" "$3"
-    ;;
-  finding.list)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    case "${2:-}" in
-      active|all) ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "finding.list takes active or all: '${2:-}'" ;;
-    esac
-    rec_read "$CMD" "$1" "$2"
-    ;;
-  lane.create|lane.write_report)
-    px_extra 2 "$@"
-    want_held "${1:-}"
-    want_lane "${2:-}"
-    rec_write "$CMD" "$1" doc "$2"
-    ;;
-  lane.record)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    want_lane "${2:-}"
-    rec_write "$CMD" "$1" payload "$2"
-    ;;
-  lane.get)
-    px_extra 3 "$@"
-    want_unit "${1:-}"
-    want_lane "${2:-}"
-    case "${3:-}" in
-      recipe|journal|report) ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "lane.get takes recipe, journal, or report: '${3:-}'" ;;
-    esac
-    rec_read "$CMD" "$1" "$2" "$3"
-    ;;
-  search.query) search_query "$@" ;;
-
-  *)
-    refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$CMD'"
-    ;;
+  *) refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$CMD'" ;;
 esac
 exit 0

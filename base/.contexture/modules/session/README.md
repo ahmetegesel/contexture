@@ -31,14 +31,14 @@ scripts/          the 21 verbs (sh; index alone is awk) and the driver-resolver 
 lib/verb.sh       the shared verb shell: input shape checks, the payload, one storage call, the scratch folder, hooks
 lib/json.awk      the one flattener: a function's JSON answer to path=value lines
 lib/render.awk    the one renderer: every text view from the flattened lines
-drivers/posix/    the posix storage driver (contract 2): the only code that touches the record's files
+drivers/posix/    the store-only posix driver (contract 3): the core store beside the resolver
 ```
 
-## Verbs and the functions they call (contract 2, docs/the-engine.md)
+## Verbs and the functions they call (the unit module data script, docs/the-engine.md)
 
-Every verb checks its input shape, calls exactly one storage function per
-record act through `scripts/driver-resolver` (the wrapper around the storage
-module's resolver), and renders the answer through `lib/json.awk` and
+Every verb checks its input shape, calls exactly one record function per act through
+the unit module's data script (`modules/unit/scripts/data`; capability and
+`storage.health` still go through `scripts/driver-resolver`), and renders the answer through `lib/json.awk` and
 `lib/render.awk` (`--json` prints the answer unchanged). No verb opens a
 session artifact itself.
 
@@ -74,7 +74,7 @@ module sits under the extension root) and call `lane.create`,
 `scripts/driver-resolver` carries no `# summary:` header, so discovery
 ignores it: it is a compatibility wrapper that execs the storage core's
 resolver, which resolves the configured driver (`CTX_STORAGE_DRIVER`, then
-`.contexture/config` with the legacy keys read as transitional, then posix), runs the contract 2 handshake at dispatch
+`.contexture/config` with the legacy keys read as transitional, then posix), runs the contract 3 handshake at dispatch
 for every driver but the bundled posix one (the verdict cached under
 `.contexture/tmp/driver-verdicts/`), and answers `require` and `has` for the
 optional capabilities (`store`, `store.changelog`) and the search modes.

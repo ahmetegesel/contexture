@@ -17,7 +17,7 @@
 @append @layout
   the corpus conventions (repo workspace, slug conventions): the universal rules for the corpus, read through ctx docs query workspace conventions under any driver
   plugins/docs-discipline/.contexture/extensions/modules/docs/README.md: the corpus module's contract and verbs; adopt it from the docs-discipline plugin (ctx docs help lists them)
-  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library (the store five and the data_get/data_emit refs), the store contract, and the posix driver; the record keeps its 38 typed functions
+  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library (the store five and the data_get/data_emit refs), the store contract, and the posix driver; the store-only driver card (contract 3) with the record in the unit module
 
 @append @backlog
   ideas: the upstream idea and need dump is managed and queried strictly through the ideas module (ctx ideas list, show, add, pick, drop); ideas land as light @idea entries and are picked up from there; dump freely, the agent appends on the human's word and proposes a dump when a discovery would otherwise die in conversation; loaded on demand only via ctx ideas show <slug>, never at boot; picking up = bootstrap the unit and flip the entry to PICKED <unit>; entries are never deleted

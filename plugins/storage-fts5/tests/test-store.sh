@@ -1,10 +1,10 @@
 #!/bin/sh
 # test-store.sh: the generic module store on the plugin's own fts5 driver (the storage
-# module's store contract): the five single-key functions over one database, the change log's row
-# order and fields, a refused write logging nothing, the one-transaction put's atomicity
-# (a planted trigger aborts the write and rolls its change row back), the schema 4 open
-# path that adds the store tables to a store created before them, and the old corpus
-# tables (docs, doc_changes) staying untouched and unread.
+# core's store contract): the five single-key functions over one database, the change log's
+# row order and fields, a refused write logging nothing, the one-transaction put's atomicity
+# (a planted trigger aborts the write and rolls its change row back), a store at another
+# schema refused with no upgrade path, the store-only schema (no old corpus or record
+# table), and the contract 3 descriptor.
 #
 # The sandbox stages base's storage module and the docs data file; the driver is the
 # plugin's own copy, and its database is the sandbox's own store.
@@ -173,54 +173,31 @@ wantfile "$SB/new" "atomic new after drop"
 ok "an aborted put leaves the old value and no change row (the log insert rolls back with it); the retry lands"
 
 # ==============================================================================
-# 5. the schema 4 open path adds the store tables without a version bump
+# 5. a store at another schema refuses with no upgrade path
 # ==============================================================================
-printf '\n== the schema 4 open path ==\n'
+printf '\n== a store at another schema refuses ==\n'
 OLD="$SB/db/old-v4.db"
-sqlite3 "$OLD" "CREATE TABLE units (unit TEXT PRIMARY KEY, status TEXT, current_anchor TEXT, next_action TEXT, objective TEXT, repos TEXT, ref_sessions TEXT); PRAGMA user_version = 4;" || miss "the pre-store schema 4 database did not land"
+sqlite3 "$OLD" "CREATE TABLE units (unit TEXT PRIMARY KEY, status TEXT, current_anchor TEXT, next_action TEXT, objective TEXT, repos TEXT, ref_sessions TEXT); PRAGMA user_version = 4;" || miss "the record-era schema 4 database did not land"
+f "$OLD" store.get docs workspace/x
+refused 2 "old v4 get" "store.get: error: the store is at schema 4; this driver reads 5 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)"
 f "$OLD" store.list docs
-answer "open old v4"; wantout '{"namespace":"docs","keys":[]}' "open old v4"
-[ "$(sqlite3 "$OLD" "PRAGMA user_version;")" = 4 ] || miss "the open path bumped the schema version"
-[ "$(sqlite3 "$OLD" "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('store', 'store_changes');")" = 2 ] || miss "the open path did not add both store tables"
-putf2() { _p=$1; shift; f "$OLD" store.put "$@" < "$_p"; }
-putf2 "$SB/v1" docs workspace/old-path
-answer "old v4 put"
-f "$OLD" store.get docs workspace/old-path
-wantfile "$SB/v1" "old v4 get"
-sqlite3 "$DB" "PRAGMA table_info(store);" > "$SB/t-fresh-store"
-sqlite3 "$OLD" "PRAGMA table_info(store);" > "$SB/t-old-store"
-cmp -s "$SB/t-fresh-store" "$SB/t-old-store" || miss "the fresh and upgraded store table shapes differ"
-sqlite3 "$DB" "PRAGMA table_info(store_changes);" > "$SB/t-fresh-changes"
-sqlite3 "$OLD" "PRAGMA table_info(store_changes);" > "$SB/t-old-changes"
-cmp -s "$SB/t-fresh-changes" "$SB/t-old-changes" || miss "the fresh and upgraded store_changes shapes differ"
-OLD5="$SB/db/old-v5.db"
-cp "$OLD" "$OLD5"
-sqlite3 "$OLD5" "PRAGMA user_version = 5;"
-f "$OLD5" store.get docs workspace/old-path
-refused 2 "old v5 get" "store.get: error: the store is at schema 5; this driver reads 4 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)"
-f "$OLD5" store.list docs
-refused 2 "old v5 list" "store.list: error: the store is at schema 5; this driver reads 4 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)"
-ok "a pre-store schema 4 database gains store and store_changes on open, its version stays 4, the shapes match a fresh store, and a store at another schema refuses get and list"
+refused 2 "old v4 list" "store.list: error: the store is at schema 4; this driver reads 5 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)"
+[ "$(sqlite3 "$OLD" "PRAGMA user_version;")" = 4 ] || miss "the refused open changed the schema version"
+[ "$(sqlite3 "$OLD" "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('store', 'store_changes');")" = 0 ] || miss "the refused open added store tables"
+OLD6="$SB/db/old-v6.db"
+cp "$OLD" "$OLD6"
+sqlite3 "$OLD6" "PRAGMA user_version = 6;"
+f "$OLD6" store.get docs workspace/x
+refused 2 "old v6 get" "store.get: error: the store is at schema 6; this driver reads 5 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)"
+ok "a store at schema 4 or 6 refuses get and list with no upgrade path, the file untouched"
 
 # ==============================================================================
-# 6. the old corpus tables stay untouched and unread
+# 6. the schema is store-only: no old corpus or record tables
 # ==============================================================================
-printf '\n== the corpus tables stay untouched ==\n'
-sqlite3 "$DB" "INSERT INTO docs (repo, slug, body, updated_at) VALUES ('workspace', 'old-doc', 'old body', 't'); INSERT INTO doc_changes (at, op, repo, slug, head, prior) VALUES ('t', 'write', 'workspace', 'old-doc', 'feed', 'absent');" || miss "the old corpus rows did not land"
-f "$DB" store.list docs
-answer "old docs unread"
-case "$(cat "$O")" in *'"workspace/old-doc"'*) miss "store.list read the old docs table" ;; esac
-case "$(cat "$O")" in *'"workspace/x"'*) ;; *) miss "store.list lost the store's own rows [$(cat "$O")]" ;; esac
-f "$DB" store.get docs workspace/old-doc
-refused 1 "old doc get" "store.get: error: key 'workspace/old-doc' not found in namespace 'docs' (ERR_ENTITY_NOT_FOUND)"
-printf 'head=feed\n' > "$SB/heads-feed"
-f "$DB" store.changes docs < "$SB/heads-feed"
-answer "old doc log unread"; wantout '{"namespace":"docs","changes":[]}' "old doc log unread"
-putf "$SB/v3" docs workspace/new-doc
-answer "new doc put"
-[ "$(sqlite3 "$DB" "SELECT count(*) || '|' || (SELECT body FROM docs WHERE repo = 'workspace' AND slug = 'old-doc') FROM docs;")" = "1|old body" ] || miss "the store write changed the docs table"
-[ "$(sqlite3 "$DB" "SELECT count(*) FROM doc_changes;")" = 1 ] || miss "the store write changed the doc_changes table"
-ok "the store never reads docs/doc_changes and never writes them; its own rows answer alone"
+printf '\n== the schema is store-only ==\n'
+[ "$(sqlite3 "$DB" "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('docs', 'doc_changes');")" = 0 ] || miss "schema 5 carries the old docs corpus tables"
+[ "$(sqlite3 "$DB" "SELECT count(*) FROM sqlite_master WHERE type = 'table' AND name IN ('units', 'tasks', 'findings', 'journal_items', 'lane_items', 'lanes', 'preambles', 'search_documents', 'lines');")" = 0 ] || miss "schema 5 carries a record typed table"
+ok "schema 5 is store-only: no old corpus table and no record typed table"
 
 # ==============================================================================
 # 7. an empty payload stores as a zero-length blob
@@ -236,21 +213,18 @@ f "$DB" store.get docs workspace/empty
 ok "an empty payload stores as a zero-length blob and reads back empty"
 
 # ==============================================================================
-# 8. the descriptor: version 3.0.0 under contract 2, functions the 38 record names,
-# store the seven data names, optional store, store.changelog, search.schema
+# 8. the descriptor: the contract 3 store-only card at version 3.0.0, the seven store data
+# names, optional store, store.changelog, search.schema, and no record function family
 # ==============================================================================
 printf '\n== the descriptor ==\n'
 "$DRV" capability > "$O" 2> "$E"; _caprc=$?
 [ "$_caprc" -eq 0 ] || miss "capability: rc $_caprc [$(cat "$E")]"
 case "$(cat "$O")" in *'"version":"3.0.0"'*) ;; *) miss "the descriptor version [$(sed 's/.*"version":"//; s/".*//' "$O")]" ;; esac
-case "$(cat "$O")" in *'"contract":"2"'*) ;; *) miss "the descriptor contract" ;; esac
+case "$(cat "$O")" in *'"contract":"3"'*) ;; *) miss "the descriptor contract" ;; esac
 case "$(cat "$O")" in *'"store":["list","get","put","delete","changes","batch","scan"]'*) ;; *) miss "the descriptor store family [$(sed 's/.*"store":\[//; s/\].*//' "$O")]" ;; esac
 case "$(cat "$O")" in *'"optional":["store","store.changelog","search.schema"]'*) ;; *) miss "the descriptor optional set [$(sed 's/.*"optional"://' "$O")]" ;; esac
-_cap_fns_s=$(sed 's/.*"functions":\[//; s/\].*//' "$O")
-case "$_cap_fns_s" in *'"store.'*) miss "the record functions carry a store function" ;; esac
-_cap_fns=$(printf '%s' "$_cap_fns_s" | tr ',' '\n' | grep -c .)
-[ "$_cap_fns" = 38 ] || miss "the record family declares $_cap_fns functions, want 38"
-ok "the descriptor declares version 3.0.0 under contract 2 with the 38 record functions apart from the seven store data names"
+case "$(cat "$O")" in *'"functions"'*) miss "the contract 3 card carries a record function family" ;; esac
+ok "the descriptor is the contract 3 store-only card at 3.0.0: the seven store data names, the optional tokens, and no record function family"
 
 printf '\ntest-store: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ]

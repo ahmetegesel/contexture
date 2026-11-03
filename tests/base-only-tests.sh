@@ -114,7 +114,7 @@ run_core_cmd() { # <index>: the original seven commands and arguments, in order
     3) sh "$ROOT/tests/session-tests.sh" --driver=posix ;;
     4) sh "$ROOT/tests/hook-tests.sh" ;;
     5) sh "$ROOT/tests/record-audit-tests.sh" ;;
-    6) sh "$ROOT/tests/storage-compliance.sh" "--driver-exec=$ROOT/base/.contexture/storage/drivers/posix/driver" ;;
+    6) sh "$ROOT/tests/storage-compliance.sh" "--data=unit" ;;
     7) sh "$ROOT/tests/store-compliance.sh" "--data-file=$SB/base-only-data" ;;
   esac
 }
@@ -307,36 +307,30 @@ a_rc "$?" "1" "record: a write into a CLOSED unit refuses rc1"
 $CTX session reopen baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: reopen rc0"
 $CTX session record baseonly --what="the unit writes again" >/dev/null 2>&1
 a_rc "$?" "0" "record: a write after reopen rc0"
-# the descriptor: version 3.0.0 under contract 2, the 38 record functions apart from the
-# seven store data names, exact and store, no store log or search schema on posix
+# the descriptor: the contract 3 store-only card at version 3.0.0: the seven store data
+# names, exact, and store alone on posix; no record function family (capability and
+# storage.health are the driver's own methods)
 out=$($CTX session diagnose --json 2>&1); rc=$?
 a_rc "$rc" "0" "descriptor: diagnose rc0"
 a_match "$out" '"name":"posix"' "descriptor: the driver is posix"
 a_match "$out" '"version":"3.0.0"' "descriptor: driver version 3.0.0"
-a_match "$out" '"contract":"2"' "descriptor: contract 2"
+a_match "$out" '"contract":"3"' "descriptor: contract 3"
 a_match "$out" '"search_modes":\["exact"\]' "descriptor: search modes exact"
 a_match "$out" '"optional":\["store"\]' "descriptor: the optional set is store alone on posix"
 a_match "$out" '"health":"ok"' "descriptor: the health is ok after bootstrap"
-fn_list() { printf '%s' "$1" | sed -n 's/.*"functions":\[\([^]]*\)\].*/\1/p'; }
-fn_count() { fn_list "$1" | tr ',' '\n' | grep -c .; }
 store_list() { printf '%s' "$1" | sed -n 's/.*"store":\[\([^]]*\)\].*/\1/p'; }
-fns=$(fn_list "$out" | tr -d '"')
-a_eq "$(printf '%s\n' "$fns" | tr ',' '\n' | grep -c .)" "38" "descriptor: 38 record functions"
 a_eq "$(store_list "$out")" '"list","get","put","delete","changes","batch","scan"' "descriptor: the seven store data names in the fixed order"
-for f in task.add entry.record finding.get lane.create search.query; do
-  case ",$fns," in
-    *",$f,"*) ok "descriptor: carries $f" ;;
-    *) bad "descriptor: lacks $f" ;;
-  esac
-done
-case ",$fns," in
-  *",store."*) bad "descriptor: the record family carries a store function" ;;
-  *) ok "descriptor: the record family carries no store function" ;;
+case "$out" in
+  *'"functions"'*) bad "descriptor: the card carries a record function family" ;;
+  *) ok "descriptor: the card carries no record function family" ;;
 esac
-plant_record=$(printf '%s' "$out" | sed 's/,"task.add"//')
-if [ "$(fn_count "$plant_record")" -eq 37 ]; then ok "descriptor null check: a planted missing record function reads 37 against the 38 check"; else bad "descriptor null check: a planted missing record function did not read 37"; fi
 plant_store=$(printf '%s' "$out" | sed 's/"batch",//')
 if [ "$(store_list "$plant_store")" = '"list","get","put","delete","changes","scan"' ]; then ok "descriptor null check: a planted missing store name reads six against the seven-name check"; else bad "descriptor null check: a planted missing store name did not read six"; fi
+plant_fns=$(printf '%s' "$out" | sed 's/"search_modes"/"functions":["session.list"],"search_modes"/')
+case "$plant_fns" in
+  *'"functions"'*) ok "descriptor null check: a planted functions field reads against the no-family check" ;;
+  *) bad "descriptor null check: a planted functions field did not read" ;;
+esac
 
 # ==============================================================================
 # B4: the store smoke over a synthetic data module

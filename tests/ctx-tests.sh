@@ -47,6 +47,7 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/bin"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
+cp -R "$ROOT/base/.contexture/modules/unit" "$SANDBOX/.contexture/modules/unit"
 cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
 cp -R "$RUN_MOD" "$SANDBOX/.contexture/modules/run"
 
@@ -143,7 +144,7 @@ printf '# summary: the extension filter fixture\n' > "$SANDBOX/.contexture/exten
   echo '/EXTMARK/ { print "EXTFILTER" }'
 } > "$SANDBOX/.contexture/extensions/modules/filterext/filters/ext.awk"
 
-chmod +x "$SANDBOX/.contexture/modules/session/scripts/"* "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver" "$SANDBOX/.contexture/modules/good/scripts/"* "$SANDBOX/.contexture/modules/scriptsonly/scripts/orphan" "$SANDBOX/.contexture/modules/filteronly/filters/probe.awk" "$SANDBOX/.contexture/modules/hookonly/hooks/10-emit.sh" "$SANDBOX/bin/famcmd" "$SANDBOX/.contexture/extensions/modules/aaaext/scripts/hi" "$SANDBOX/.contexture/extensions/modules/good/scripts/hi" "$SANDBOX/.contexture/extensions/modules/hookext/hooks/10-ext.sh" "$SANDBOX/.contexture/extensions/modules/filterext/filters/ext.awk"
+chmod +x "$SANDBOX/.contexture/modules/session/scripts/"* "$SANDBOX/.contexture/modules/unit/scripts/data" "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver" "$SANDBOX/.contexture/modules/good/scripts/"* "$SANDBOX/.contexture/modules/scriptsonly/scripts/orphan" "$SANDBOX/.contexture/modules/filteronly/filters/probe.awk" "$SANDBOX/.contexture/modules/hookonly/hooks/10-emit.sh" "$SANDBOX/bin/famcmd" "$SANDBOX/.contexture/extensions/modules/aaaext/scripts/hi" "$SANDBOX/.contexture/extensions/modules/good/scripts/hi" "$SANDBOX/.contexture/extensions/modules/hookext/hooks/10-ext.sh" "$SANDBOX/.contexture/extensions/modules/filterext/filters/ext.awk"
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
@@ -195,7 +196,7 @@ a_not "$h" "the extension good that must not shadow" "XR: a workspace-name colli
 a_not "$h" "a reserved extension module" "XR: a reserved extension name stays unlisted"
 a_not "$h" "a builtin collision" "XR: a builtin-named extension module stays unlisted"
 ord=$(printf '%s\n' "$h" | awk '/^modules:/{on=1;next} on && /^  [a-z]/{print $1}' | tr '\n' ' ')
-a_eq "$ord" "good session aaaext filterext hookext " "XR: the workspace modules list before the extension modules"
+a_eq "$ord" "good session unit aaaext filterext hookext " "XR: the workspace modules list before the extension modules"
 err=$($CTX help 2>&1 >/dev/null)
 a_match "$err" "skipping extension module good: collides with a workspace module" "XR: the workspace-name collision warns"
 a_match "$err" "skipping extension module session: collides with a builtin" "XR: the builtin collision warns"

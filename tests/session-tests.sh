@@ -32,6 +32,7 @@ SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
 SESSION_MOD="$ROOT/base/.contexture/modules/session"
+UNIT_MOD="$ROOT/base/.contexture/modules/unit"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
 FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5"
 DRIVER=posix
@@ -122,8 +123,9 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/rhythms" "$SANDBOX
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
+cp -R "$UNIT_MOD" "$SANDBOX/.contexture/modules/unit"
 cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
-chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
+chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver" "$SANDBOX/.contexture/modules/unit/scripts/data"
 [ -d "$ROOT/base/.contexture/extensions/modules/lane" ] && cp -R "$ROOT/base/.contexture/extensions/modules/lane" "$SANDBOX/.contexture/extensions/modules/lane"
 if [ "$DRIVER" = fts5 ]; then
   mkdir -p "$SANDBOX/.contexture/extensions/storage/drivers"
@@ -153,6 +155,8 @@ chmod +x .contexture/modules/*/scripts/* .contexture/extensions/modules/*/script
 # read functions on every driver; rcat, rput, rappend read and plant legacy text as posix
 # files on posix alone (tests/lib/plant.sh)
 RESOLVER="$SANDBOX/.contexture/modules/session/scripts/driver-resolver"
+DATA="$SANDBOX/.contexture/modules/unit/scripts/data"
+RECORD_EXEC="$DATA"
 PLANT_DRIVER=$DRIVER
 . "$SCRIPT_DIR/lib/plant.sh"
 # lane_new <unit> <lane>: a lane with a recipe (stdin), through ctx lane create
@@ -331,7 +335,7 @@ $CTX session bootstrap a80-tie-a "recency tie a" >/dev/null 2>&1
 $CTX session record a80-tie-a --what="a tied entry" --slug=2026-09-27-a80-tie-a >/dev/null 2>&1
 $CTX session bootstrap a80-stamp "recency stamp unit" >/dev/null 2>&1
 $CTX session record a80-stamp --what="the entry before the stamp" --slug=2026-09-27-a80-stamp-e >/dev/null 2>&1
-printf 'date=2026-09-28\n' | "$RESOLVER" session.stamp a80-stamp >/dev/null 2>&1
+printf 'date=2026-09-28\n' | "$DATA" session.stamp a80-stamp >/dev/null 2>&1
 a_eq "$?" "0" "active recency: the stamp fixture lands rc0"
 a80_out=$($CTX session active 2>/dev/null)
 a80_block() { printf '%s\n' "$a80_out" | sed -n "/^$1\$/,/^\$/p"; }
@@ -1348,10 +1352,11 @@ if [ "$DRIVER" = service ]; then
 fi
 
 echo "== WA a write failing between its renames lands nothing (posix; lanes/si-b5-base-review/report F1) =="
-# a write touching two files (task complete: the backlog, then the journal) renames them one
-# after the other; a planted mv refusing the journal makes the second rename fail after the
-# first landed: the write exits 2 and the first rename is rolled back (R20: each write lands
-# whole or not at all); a TERM while the second rename runs rolls both back the same way.
+# a write touching two keys (task complete: the backlog, then the journal) lands through one
+# store batch; a planted mv refusing the journal makes the second action fail after the first
+# landed: the write exits 2 and the first action is rolled back (R20: each write lands whole
+# or not at all). A TERM while the batch's second action runs may land the write or not (the
+# interrupt rule); the record reads whole either way and the unit lock is released.
 # Posix only: the renames are the posix store's
 if [ "$DRIVER" = posix ]; then
   mkdir -p "$SANDBOX/wa-bin"
@@ -1378,18 +1383,22 @@ EOF
   a_eq "$(wa_stages)" "0" "B5-F1: the failed write left no stage"
   wa_mark="$SANDBOX/wa-mark"
   rm -f "$wa_mark"
-  printf 'evidence=terminated\ndate=%s\n' "$TODAY" | WA_PAUSE="$wa_mark" PATH="$SANDBOX/wa-bin:$PATH" "$RESOLVER" task.complete wa-unit wa-t >/dev/null 2>&1 &
+  printf 'evidence=terminated\ndate=%s\n' "$TODAY" | WA_PAUSE="$wa_mark" PATH="$SANDBOX/wa-bin:$PATH" "$DATA" task.complete wa-unit wa-t >/dev/null 2>&1 &
   wa_pid=$!
   wa_n=0
   while [ ! -f "$wa_mark" ] && [ "$wa_n" -lt 50 ]; do sleep 0.1; wa_n=$((wa_n + 1)); done
   kill -TERM "$wa_pid" 2>/dev/null
   wait "$wa_pid"; rc=$?
-  a_eq "$rc" "143" "B5-F1: a TERM during the renames exits 143"
-  a_eq "$(wa_sum)" "$wa_before" "B5-F1: a TERM during the renames rolled them back"
+  a_eq "$([ "$rc" -ne 0 ] && echo interrupted)" "interrupted" "B5-F1: a TERM during the renames exits nonzero"
+  sleep 3
+  wa_status=$($CTX session task show wa-unit wa-t 2>/dev/null | sed -n 's/^  STATUS: //p')
+  case "$wa_status" in
+    TODO|DONE) ok "B5-F1: the interrupted write left the task whole ($wa_status)" ;;
+    *) bad "B5-F1: the interrupted write left the task whole (status [$wa_status])" ;;
+  esac
   a_eq "$(wa_stages)" "0" "B5-F1: the interrupted write left no stage"
-  $CTX session task complete wa-unit wa-t --evidence="lands" >/dev/null 2>&1 </dev/null
-  a_eq "$?" "0" "B5-F1: the unit lock was released: a later complete lands"
-  a_eq "$($CTX session entry list wa-unit 2>/dev/null | grep -c "$TODAY-wa-t-completed")" "1" "B5-F1: the later complete wrote its one receipt"
+  $CTX session task add wa-unit wa-t2 --objective="after the interrupt" >/dev/null 2>&1 </dev/null
+  a_eq "$?" "0" "B5-F1: the unit lock was released after the interrupt"
 fi
 
 echo "== K an interrupted driver method leaves no scratch (lanes/routing-review/report finding R8) =="
@@ -1399,13 +1408,13 @@ echo "== K an interrupted driver method leaves no scratch (lanes/routing-review/
 # TERM; only the unit lock stays per driver, since it is the lever that makes the method wait
 $CTX session bootstrap k-unit "interrupt unit" >/dev/null 2>&1
 $CTX session task add k-unit k-a --objective="Task A" >/dev/null 2>&1
-if [ "$DRIVER" = fts5 ]; then k_lock=.contexture/tmp/locks/fts5-k-unit.lock; else k_lock=.contexture/tmp/locks/k-unit.lock; fi
+k_lock=.contexture/tmp/locks/k-unit.lock
 mkdir -p .contexture/tmp/locks
 ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort > k-before.lst
 k_new() { ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort | LC_ALL=C comm -13 k-before.lst -; }
 mkdir -p "$k_lock"
 printf '%s\n' "$$" > "$k_lock/pid"
-printf 'pointer=k-a IN_PROGRESS\n' | "$RESOLVER" task.start k-unit k-a >/dev/null 2>&1 &
+printf 'pointer=k-a IN_PROGRESS\n' | "$DATA" task.start k-unit k-a >/dev/null 2>&1 &
 k_pid=$!
 k_n=0
 while [ "$k_n" -lt 50 ] && [ -z "$(k_new)" ]; do sleep 0.1; k_n=$((k_n + 1)); done
@@ -1414,6 +1423,10 @@ kill -TERM "$k_pid" 2>/dev/null
 wait "$k_pid" 2>/dev/null
 rm -rf "$k_lock" 2>/dev/null
 if [ "$k_seen" -ge 1 ]; then ok "R8: the waiting method had staged its scratch when interrupted"; else bad "R8: the waiting method had staged its scratch when interrupted (new entries: $k_seen)"; fi
+# the store child the wrapper left may finish after the wrapper exits; it and the wrapper
+# both clean their scratch, so wait for the drawer to settle before the check
+k_n=0
+while [ -n "$(k_new)" ] && [ "$k_n" -lt 100 ]; do sleep 0.1; k_n=$((k_n + 1)); done
 a_eq "$(k_new)" "" "R8: TERM on a waiting driver method leaves no scratch"
 rm -f k-before.lst
 
@@ -1423,7 +1436,7 @@ echo "== KR a SIGKILLed writer is recoverable (backlog#kill-residue-recovery) ==
 # killed -9 leaves its per-verb scratch root, and the next ctx dispatch sweeps it
 $CTX session bootstrap kr-unit "kill residue unit" >/dev/null 2>&1 </dev/null
 $CTX session task add kr-unit kr-a --objective="Task A" >/dev/null 2>&1 </dev/null
-if [ "$DRIVER" = fts5 ]; then kr_lock=.contexture/tmp/locks/fts5-kr-unit.lock; else kr_lock=.contexture/tmp/locks/kr-unit.lock; fi
+kr_lock=.contexture/tmp/locks/kr-unit.lock
 mkdir -p .contexture/tmp/locks
 # a holder takes the lock with its pid, then kill -9 leaves the folder behind
 sh -c 'mkdir "$1"; printf "%s\n" "$$" > "$1/pid"; sleep 30' kr-holder "$kr_lock" &
@@ -1551,22 +1564,24 @@ fi # group 2
 if in_group 3; then
 echo "== Z the capability handshake at dispatch (lanes/routing-review/report finding R5) =="
 # a configured driver other than the bundled posix one proves its descriptor before it
-# serves a function: contract "2" and every one of the 38 record functions (descriptor v2,
-# docs/the-engine.md); a planted driver lacking task.add is refused rc2 with the function
-# named; a complete one is verified once and served from the cached verdict until the
-# driver changes. Both plants delegate every function to this sandbox's posix driver.
+# serves a store function: contract 3 and the seven store data names (the store-only card,
+# docs/the-engine.md). The record path reaches the store through the unit module data
+# script, so a record act runs the handshake too. A planted driver missing put is refused
+# rc2 naming the family; a complete one is verified once and served from the cached verdict
+# until the driver changes. Both plants delegate every function to this sandbox's posix
+# driver.
 z_posix="$PWD/.contexture/storage/drivers/posix/driver"
 z_log="$PWD/z-handshakes.log"
 : > "$z_log"
-z_fns='capability storage.health session.create session.list session.load session.refload session.board session.audit session.stamp session.next session.refs session.close session.reopen session.units session.refs_to task.add task.update task.start task.complete task.reopen task.drop task.list task.get entry.record entry.get entry.list entry.closure finding.add finding.update finding.supersede finding.drop finding.get finding.list lane.create lane.record lane.write_report lane.get search.query'
+z_store='list get put delete changes batch scan'
 z_plant() {
   mkdir -p ".contexture/modules/zz-plant/drivers/$1"
-  z_list=$(for f in $z_fns; do [ "$f" = "$2" ] || printf '"%s",' "$f"; done | sed 's/,$//')
+  z_list=$(for f in $z_store; do [ "$f" = "$2" ] || printf '"%s",' "$f"; done | sed 's/,$//')
   {
     printf '#!/bin/sh\n'
     printf 'if [ "${1:-}" = capability ]; then\n'
     printf '  printf "%%s\\n" "%s" >> "%s"\n' "$1" "$z_log"
-    printf "  printf '%%s\\\\n' '{\"driver\":\"%s\",\"version\":\"1.0.0\",\"contract\":\"2\",\"functions\":[%s],\"search_modes\":[\"exact\"],\"optional\":[]}'\n" "$1" "$z_list"
+    printf "  printf '%%s\\\\n' '{\"driver\":\"%s\",\"version\":\"3.0.0\",\"contract\":\"3\",\"store\":[%s],\"search_modes\":[\"exact\"],\"optional\":[]}'\n" "$1" "$z_list"
     printf '  exit 0\n'
     printf 'fi\n'
     printf 'exec "%s" "$@"\n' "$z_posix"
@@ -1574,7 +1589,7 @@ z_plant() {
   chmod +x ".contexture/modules/zz-plant/drivers/$1/driver"
   touch -t 202001010000 ".contexture/modules/zz-plant/drivers/$1/driver"
 }
-z_plant z-bad task.add
+z_plant z-bad put
 z_plant z-good none
 # a verdict stands while strictly newer than the configuration too; the sandbox's config was
 # written moments ago, and a shell whose test -nt reads whole seconds (busybox sh) would see
@@ -1582,13 +1597,13 @@ z_plant z-good none
 # the plants do (the review lane si-e5, F4)
 [ -f .contexture/config ] && touch -t 202001010000 .contexture/config
 out=$(CTX_STORAGE_DRIVER=z-bad $CTX session bootstrap z-unit "handshake unit" 2>&1 </dev/null); rc=$?
-a_eq "$rc" "2" "R5: bootstrap on a driver lacking task.add refuses rc2"
-a_match "$out" "lacks contract 2 function(s): task.add (ERR_DRIVER_PROTOCOL)" "R5: the refusal names the missing function"
-CTX_STORAGE_DRIVER=posix "$RESOLVER" session.load z-unit >/dev/null 2>&1 </dev/null
+a_eq "$rc" "2" "R5: bootstrap on a driver missing put refuses rc2"
+a_match "$out" "not the seven data names in the fixed order (ERR_DRIVER_PROTOCOL)" "R5: the refusal names the seven-name family"
+CTX_STORAGE_DRIVER=posix "$DATA" session.load z-unit >/dev/null 2>&1 </dev/null
 a_eq "$?" "1" "R5: the refused bootstrap created nothing in the planted driver's store"
 z_nb=$(grep -c '^z-bad$' "$z_log")
 if [ "$z_nb" -ge 1 ] && [ "$z_nb" = "$(grep -c '' "$z_log")" ]; then ok "R5: the refused driver was asked for its capabilities, no other driver"; else bad "R5: the refused driver was asked for its capabilities, no other driver (z-bad: $z_nb, all: $(grep -c '' "$z_log"))"; fi
-out=$(CTX_STORAGE_DRIVER=z-bad "$RESOLVER" exec session.list 2>&1 </dev/null); rc=$?
+out=$(CTX_STORAGE_DRIVER=z-bad "$RESOLVER" exec store.list unit 2>&1 </dev/null); rc=$?
 a_eq "$rc" "2" "R5: the exec form refuses the incomplete driver rc2 too"
 : > "$z_log"
 CTX_STORAGE_DRIVER=z-good $CTX session bootstrap z-unit "handshake unit" >/dev/null 2>&1 </dev/null
@@ -1941,13 +1956,13 @@ out=$($CTX session help finding 2>&1 </dev/null)
 a_match "$out" 'update <unit> <NAME> \[--summary="\.\.\."\] \[--ref=\.\.\.\]' "UP: the session help table shows the finding update flags as optional"
 # entry.record carries its refs (the contract 2 payload: a list, written after THREAD as record
 # does) and answers them in its Entry, an empty list when absent
-out=$(printf 'what=a driver entry with a ref\nthread=none\nknowledge=false\nrefs.count=1\nrefs.1=knowledge#UP_REF\nclosers.count=0\nslug=%s-up-er-ref\ndate=%s\nepoch=1\n' "$TODAY" "$TODAY" | "$RESOLVER" entry.record u-unit 2>&1)
+out=$(printf 'what=a driver entry with a ref\nthread=none\nknowledge=false\nrefs.count=1\nrefs.1=knowledge#UP_REF\nclosers.count=0\nslug=%s-up-er-ref\ndate=%s\nepoch=1\n' "$TODAY" "$TODAY" | "$DATA" entry.record u-unit 2>&1)
 a_match "$out" '"thread":"none","legacy_status":null,"refs":\["knowledge#UP_REF"\]' "UP: entry.record answers the refs after thread"
 u_blk=$($CTX session entry show u-unit "$TODAY-up-er-ref" 2>/dev/null </dev/null)
 a_eq "$(printf '%s\n' "$u_blk" | sed -n '4,5p' | tr '\n' '|')" '  THREAD: none|  REF: "knowledge#UP_REF"|' "UP: entry.record writes the REF line after THREAD"
 out=$($CTX session entry show u-unit "$TODAY-up-er-ref" --json 2>&1 </dev/null)
 a_match "$out" '"refs":\["knowledge#UP_REF"\]' "UP: entry show reads the ref entry.record wrote"
-out=$(printf 'what=a driver entry without a ref\nthread=none\nknowledge=false\nrefs.count=0\nclosers.count=0\nslug=%s-up-er-noref\ndate=%s\nepoch=1\n' "$TODAY" "$TODAY" | "$RESOLVER" entry.record u-unit 2>&1)
+out=$(printf 'what=a driver entry without a ref\nthread=none\nknowledge=false\nrefs.count=0\nclosers.count=0\nslug=%s-up-er-noref\ndate=%s\nepoch=1\n' "$TODAY" "$TODAY" | "$DATA" entry.record u-unit 2>&1)
 a_match "$out" '"thread":"none","legacy_status":null,"refs":\[\]' "UP: entry.record answers an empty refs list when absent"
 a_eq "$($CTX session entry show u-unit "$TODAY-up-er-noref" 2>/dev/null </dev/null | grep -c 'REF:')" "0" "UP: entry.record writes no REF line when absent"
 

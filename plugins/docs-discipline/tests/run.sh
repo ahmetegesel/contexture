@@ -89,8 +89,9 @@ mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/extensions/modules
 cp "$BASE_CTX" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
 cp -R "$BASE_MODULES/session" "$SANDBOX/.contexture/modules/session"
+cp -R "$BASE_MODULES/unit" "$SANDBOX/.contexture/modules/unit"
 cp -R "$BASE_STORAGE" "$SANDBOX/.contexture/storage"
-chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
+chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver" "$SANDBOX/.contexture/modules/unit/scripts/data"
 [ -d "$BASE_EXT_MODULES/lane" ] && cp -R "$BASE_EXT_MODULES/lane" "$SANDBOX/.contexture/extensions/modules/lane"
 cp -R "$PLUGIN_ROOT/.contexture/extensions/modules/docs" "$SANDBOX/.contexture/extensions/modules/docs"
 if [ "$DRIVER" = fts5 ]; then
@@ -158,10 +159,12 @@ HOOKWS="$SANDBOX/hookws"
 mkdir -p "$HOOKWS/.contexture/modules" "$HOOKWS/.contexture/extensions/modules" "$HOOKWS/docs/workspace"
 cp "$BASE_CTX" "$HOOKWS/.contexture/ctx"
 cp -R "$SANDBOX/.contexture/modules/session" "$HOOKWS/.contexture/modules/session"
+cp -R "$SANDBOX/.contexture/modules/unit" "$HOOKWS/.contexture/modules/unit"
 cp -R "$SANDBOX/.contexture/extensions/modules/docs" "$HOOKWS/.contexture/extensions/modules/docs"
 cp -R "$BASE_STORAGE" "$HOOKWS/.contexture/storage"
 chmod +x "$HOOKWS/.contexture/ctx" "$HOOKWS/.contexture/storage/scripts/"* \
     "$HOOKWS/.contexture/storage/drivers/posix/driver" "$HOOKWS/.contexture/modules/session/scripts/"* \
+    "$HOOKWS/.contexture/modules/unit/scripts/data" \
     "$HOOKWS/.contexture/extensions/modules/docs/install" "$HOOKWS/.contexture/extensions/modules/docs/uninstall"
 HOOK_CTX="$HOOKWS/.contexture/ctx"
 HOOK_INSTALL="$HOOKWS/.contexture/extensions/modules/docs/install"

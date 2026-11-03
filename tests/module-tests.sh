@@ -756,7 +756,7 @@ a_exec "$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/d
 CAP=$(sh "$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/driver" capability)
 a_match "$CAP" '"driver":"fts5"' "RM: the driver descriptor names fts5"
 a_match "$CAP" '"version":"3.0.0"' "RM: the driver descriptor version is 3.0.0"
-a_match "$CAP" '"contract":"2"' "RM: the storage contract is 2"
+a_match "$CAP" '"contract":"3"' "RM: the storage contract is 3"
 a_no_file "$ROOT/plugins/lane-isolation" "RM: the lane-isolation package folder retires into the lane laws"
 a_match "$(cat "$ROOT/base/.contexture/extensions/modules/lane/laws")" "branch/worktree" "RM: the lane module laws carry the lane-isolation clauses"
 

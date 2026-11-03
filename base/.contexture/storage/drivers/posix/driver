@@ -1,29 +1,19 @@
 #!/bin/sh
-# driver: the zero-dependency POSIX storage driver (contract 2, docs/the-engine.md, The
-# storage contract). The record lives as markdown files under .contexture/sessions/<unit>/
-# (state.md, backlog.md, knowledge.md, journal.md, lanes/<lane>/recipe.md, journal.md,
-# report.md), and this driver is the only code that touches them. It answers the 38 record
-# functions (argv identifiers, the escaped key=value payload on stdin with indexed list
-# keys, one compact JSON answer in the contract key order, one fixed stderr line per
-# refusal) through awk programs beside it: canon.awk (the canonical renderer and the JSON
-# string form), model.awk (the parse rules into typed items holding all of their content,
-# the derived fields, the JSON of the schemas), ops.awk (the functions: the record rules, the
-# append rule, a touched item rewritten canonical in place), search.awk (the exact rule over
-# the rendered text). Every item reads in the canonical layout; a file keeps its bytes until
-# a write touches one of its items. It answers the seven generic module store functions
-# (store): store.list, store.get, store.put, store.delete, store.changes, store.batch, and
-# store.scan over a module's declared data file and root, plus the store.search entry.
-# store.list takes an optional literal key prefix; store.search carries the document
-# rules' entity_type and entity_id, collects every match, and applies the limit (0 = all)
-# after the walk.
+# driver: the zero-dependency POSIX storage driver (contract 3, docs/the-engine.md, The
+# descriptor and the handshake). The driver is store-only: it answers capability and
+# storage.health as its own methods and the seven generic module store functions
+# (store.list, store.get, store.put, store.delete, store.changes, store.batch, store.scan)
+# over a module's declared data file and root, plus the store.search entry. The record's
+# 35 operations live in the unit module's data script over this store; the driver keeps no
+# record function. store.list takes an optional literal key prefix; store.search carries
+# the document rules' entity_type and entity_id, collects every match, and applies the
+# limit (0 = all) after the walk.
 #
-# Writes: the unit lock (.contexture/tmp/locks/<unit>.lock, carrying its holder pid) is
-# held from the read to the last rename, every changed file is staged beside the sessions
-# folder and renamed into place (one mv per file, each replaced file hard-linked into the
-# stage first so a failed rename or an interrupt rolls the earlier ones back), and the
-# answer prints only after every file landed; a refusal stages nothing. Every awk runs in
-# the C locale (bytes) and takes every value through the environment or a file, never
-# through awk -v.
+# Writes: the namespace lock (.contexture/tmp/locks/store-<namespace>.lock, carrying its
+# holder pid) is held across the batch or put, each put is a same-directory temp renamed
+# over the key, and a batch commits every key under one store-scope undo log so a failed
+# step restores the earlier ones; a refusal stages nothing. Every awk runs in the C locale
+# (bytes) and takes every value through the environment or a file, never through awk -v.
 
 set -u
 
@@ -95,49 +85,14 @@ escape_json() {
 
 
 # ==============================================================================
-# The record functions (contract 2)
+# The store contract
 # ==============================================================================
 FN=""
-SCR=""
-STAGE=""
-PX_LOCK=""
-PC_ON=0
-PC_N=0
-px_cleanup() {
-  # a commit cut short (a failed rename, an interrupt) rolls back what it renamed, so a
-  # write lands whole or not at all (R20); the backups live in the stage, removed after
-  [ "$PC_ON" -eq 1 ] && pc_rollback
-  [ -n "$SCR" ] && rm -rf "$SCR"
-  [ -n "$STAGE" ] && rm -rf "$STAGE"
-  [ -n "$PX_LOCK" ] && rm -rf "$PX_LOCK" 2>/dev/null
-  [ -n "$PAYLOAD_FILE" ] && rm -f "$PAYLOAD_FILE"
-  return 0
-}
-PAYLOAD_FILE=""
-trap px_cleanup EXIT
-trap 'exit 129' HUP
-trap 'exit 130' INT
-trap 'exit 143' TERM
 
 # refuse <rc> <CODE> <message>: the one fixed stderr line of a refusal
 refuse() {
   printf '%s: error: %s (%s)\n' "$FN" "$3" "$2" >&2
   exit "$1"
-}
-
-ident_valid() {
-  case "$1" in
-    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
-  esac
-  return 0
-}
-
-# the entry slug and the finding NAME a read addresses: the legacy shapes stay addressable
-name_valid() {
-  case "$1" in
-    ""|[!A-Za-z0-9_]*|*[!A-Za-z0-9_.-]*) return 1 ;;
-  esac
-  return 0
 }
 
 # ==============================================================================
@@ -712,13 +667,17 @@ sb_dir() {
 }
 
 # sb_backup <path>: a hard link of the file about to be replaced or removed, kept in the
-# stage (the same filesystem), a copy where the link is refused; prints the backup path
+# stage (the same filesystem), a copy where the link is refused; sets SB_BAK to the backup
+# path (empty when the file was new). The counter advances in this shell, not a
+# substitution, so every action gets its own backup file
 sb_backup() {
-  [ -f "$1" ] || { printf '\n'; return 0; }
+  SB_BAK=""
+  [ -f "$1" ] || return 0
   SB_BAK_N=$((SB_BAK_N + 1))
   sb_b="$STORE_BATCH_STAGE/bak.$SB_BAK_N"
   ln "$1" "$sb_b" 2>/dev/null || cp -p "$1" "$sb_b" 2>/dev/null || return 1
-  printf '%s\n' "$sb_b"
+  SB_BAK=$sb_b
+  return 0
 }
 
 # batch_commit: every action applied in order under one undo log; any failure prints its
@@ -731,14 +690,14 @@ batch_commit() {
     case "$sb_op" in
       put)
         sb_dir "$(dirname "$sb_path")" || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
-        sb_bak=$(sb_backup "$sb_path") || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
-        sb_note f "$sb_path" "$sb_bak"
+        sb_backup "$sb_path" || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
+        sb_note f "$sb_path" "$SB_BAK"
         mv -f "$sb_val" "$sb_path" 2>/dev/null || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
         ;;
       delete)
         [ -f "$sb_path" ] || continue
-        sb_bak=$(sb_backup "$sb_path") || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
-        sb_note f "$sb_path" "$sb_bak"
+        sb_backup "$sb_path" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
+        sb_note f "$sb_path" "$SB_BAK"
         rm -f "$sb_path" 2>/dev/null && [ ! -f "$sb_path" ] || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
         ;;
     esac
@@ -897,225 +856,44 @@ store_search() {
   exit 0
 }
 
-# px_mkdtemp <parent> <prefix>: a fresh private folder (mkdir is atomic; the name carries the
-# pid and a counter), POSIX tools alone, no mktemp
-px_mkdtemp() {
-  pm_n=0
-  while [ "$pm_n" -lt 100 ]; do
-    pm_d="$1/$2.$$.$pm_n"
-    if mkdir -m 700 "$pm_d" 2>/dev/null; then printf '%s\n' "$pm_d"; return 0; fi
-    pm_n=$((pm_n + 1))
-  done
-  return 1
+
+# ==============================================================================
+# The descriptor, the health, and the dispatch
+# ==============================================================================
+# capability: the contract 3 store-only card at driver version 3.0.0: the driver, the
+# version, contract 3, the seven data names in the fixed order, the search modes, and the
+# optional tokens. The card carries no record function family; capability and
+# storage.health are the driver's own methods the handshake and the diagnose call.
+capability() {
+  printf '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store"]}\n'
 }
 
-px_init() {
-  WS=$(find_workspace_root)
-  SESS="$WS/.contexture/sessions"
-  SCR=$(px_mkdtemp "$(scratch_dir)" posix) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
-  : > "$SCR/man"
-  : > "$SCR/files"
-  : > "$SCR/err"
-}
-
-want_unit() {
-  [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the unit"
-  ident_valid "$1" || refuse 1 ERR_INVALID_ARGUMENT "malformed unit '$1'"
-}
-
-# held <unit>: the store holds the unit (its folder holds a state)
-held() { [ -f "$SESS/$1/state.md" ]; }
-
-want_held() {
-  want_unit "$1"
-  held "$1" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
-}
-
-# the manifest: F lines (key, path) with the sizes one wc answers, U lines per unit held,
-# L lines per lane of a unit (a lane folder holding at least one artifact), in bytewise
-# order (the C locale's glob)
-man_file() {
-  if [ -f "$2" ]; then
-    printf 'F\t%s\t%s\n' "$1" "$2" >> "$SCR/man"
-    printf '%s\n' "$2" >> "$SCR/files"
-  fi
-}
-
-man_unit() {
-  mu_d="$SESS/$1"
-  [ -f "$mu_d/state.md" ] || return 0
-  printf 'U\t%s\n' "$1" >> "$SCR/man"
-  man_file "$1|state" "$mu_d/state.md"
-  case " $2 " in *" backlog "*) man_file "$1|backlog" "$mu_d/backlog.md" ;; esac
-  case " $2 " in *" knowledge "*) man_file "$1|knowledge" "$mu_d/knowledge.md" ;; esac
-  case " $2 " in *" journal "*) man_file "$1|journal" "$mu_d/journal.md" ;; esac
-  if [ -d "$mu_d/lanes" ]; then
-    for mu_l in "$mu_d"/lanes/*; do
-      [ -d "$mu_l" ] || continue
-      mu_n=${mu_l##*/}
-      ident_valid "$mu_n" || continue
-      # a lane is its artifacts (end review item 8): a folder holding no recipe, journal,
-      # or report is no lane, whatever other files it holds (lane.get refuses it, every
-      # listing skips it, lane.create of the name lands beside those files)
-      [ -f "$mu_l/recipe.md" ] || [ -f "$mu_l/journal.md" ] || [ -f "$mu_l/report.md" ] || continue
-      printf 'L\t%s\t%s\n' "$1" "$mu_n" >> "$SCR/man"
-      case " $2 " in
-        *" lanes "*|*" lane:$mu_n "*)
-          man_file "$1|lane/$mu_n/recipe" "$mu_l/recipe.md"
-          man_file "$1|lane/$mu_n/journal" "$mu_l/journal.md"
-          man_file "$1|lane/$mu_n/report" "$mu_l/report.md"
-          ;;
-      esac
-    done
-  fi
-}
-
-# man_all_units [<parts>]: every unit the store holds, bytewise
-man_all_units() {
-  [ -d "$SESS" ] || return 0
-  for ma_d in "$SESS"/*; do
-    [ -d "$ma_d" ] || continue
-    ma_u=${ma_d##*/}
-    ident_valid "$ma_u" || continue
-    man_unit "$ma_u" "${1:-}"
-  done
-}
-
-man_sizes() {
-  : > "$SCR/sizes"
-  [ -s "$SCR/files" ] || return 0
-  set --
-  while IFS= read -r ms_p; do set -- "$@" "$ms_p"; done < "$SCR/files"
-  wc -c "$@" > "$SCR/sizes" 2>/dev/null || refuse 2 ERR_STORAGE_READ "cannot read the unit's artifacts"
-}
-
-payload_stage() {
-  PAYLOAD_FILE="$SCR/payload"
-  cat > "$PAYLOAD_FILE" || refuse 2 ERR_STORAGE_READ "cannot read the payload"
-}
-
-# px_awk <program files...>: one awk run over the manifest; its refusal passes through
-px_awk() {
-  man_sizes
-  PX_FN="$FN" PX_UNIT="${PX_UNIT:-}" PX_MAN="$SCR/man" PX_SIZES="$SCR/sizes" PX_PAY="${PAYLOAD_FILE:-}" \
-    PX_ERR="$SCR/err" PX_STAGE="${STAGE:-}" PX_OUT="${PX_OUT:-}" \
-    awk -f "$SCRIPT_DIR/canon.awk" -f "$SCRIPT_DIR/model.awk" -f "$SCRIPT_DIR/ops.awk"
-  pa_rc=$?
-  if [ "$pa_rc" -ne 0 ]; then
-    if [ -s "$SCR/err" ]; then cat "$SCR/err" >&2; else printf '%s: error: the record engine failed (rc %s) (ERR_STORAGE_READ)\n' "$FN" "$pa_rc" >&2; pa_rc=2; fi
-    exit "$pa_rc"
-  fi
-}
-
-# px_lock <unit>: the unit lock folder, held until px_cleanup; its pid file names the
-# holder. A waiter removes a lock whose pid is gone (a SIGKILLed writer), and gives a lock
-# with no pid file a second's grace for its holder to write one; a live holder still ends
-# in ERR_STORAGE_LOCKED after five seconds.
-px_lock() {
-  pl_dir=$(get_lock_dir)
-  pl_t="$pl_dir/$1.lock"
-  pl_n=0
-  pl_miss=0
-  while [ "$pl_n" -lt 50 ]; do
-    if mkdir "$pl_t" 2>/dev/null; then
-      printf '%s\n' "$$" > "$pl_t/pid" 2>/dev/null || {
-        rm -rf "$pl_t" 2>/dev/null
-        refuse 2 ERR_STORAGE_WRITE "cannot write the unit lock holder pid"
-      }
-      PX_LOCK="$pl_t"; return 0
+# storage.health: a probe, never a write, and the backend's own health alone (no record
+# count: the record's active listing is the unit module's). The sessions drawer is the
+# record namespace's root; a drawer holding no artifact reports store absent, and an
+# unwritable drawer reports error
+storage_health() {
+  sh_ws=$(find_workspace_root)
+  sh_sess="$sh_ws/.contexture/sessions"
+  sh_health="ok"
+  sh_store="absent"
+  if [ ! -d "$sh_sess" ]; then
+    sh_health="degraded"
+    sh_detail="sessions directory does not exist yet (will be created on bootstrap)"
+  elif [ ! -w "$sh_sess" ]; then
+    sh_health="error"
+    sh_detail="sessions directory is not writable"
+  elif [ -n "$(ls -A "$sh_sess" 2>/dev/null)" ]; then
+    sh_store="present"
+    sh_detail="sessions directory writable, unlocked"
+    if [ -d "$sh_sess/.lock" ]; then
+      sh_health="locked"
+      sh_detail="storage lock active"
     fi
-    pl_pid=$(cat "$pl_t/pid" 2>/dev/null)
-    case "$pl_pid" in
-      ""|*[!0-9]*)
-        pl_miss=$((pl_miss + 1))
-        if [ "$pl_miss" -ge 10 ]; then rm -rf "$pl_t" 2>/dev/null; pl_miss=0; continue; fi
-        ;;
-      *)
-        if kill -0 "$pl_pid" 2>/dev/null; then pl_miss=0
-        else rm -rf "$pl_t" 2>/dev/null; continue
-        fi
-        ;;
-    esac
-    pl_n=$((pl_n + 1))
-    sleep 0.1 2>/dev/null || sleep 1
-  done
-  refuse 2 ERR_STORAGE_LOCKED "the unit lock of '$1' is held (5 s timeout)"
-}
-
-px_stage() {
-  mkdir -p "$SESS" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the sessions folder"
-  STAGE=$(px_mkdtemp "$SESS" .stage) || refuse 2 ERR_STORAGE_WRITE "cannot stage the write"
-  PX_OUT="$SCR/answer"
-}
-
-# the commit's undo log: PC_K_<n> (f a file replaced or created, d a folder created),
-# PC_P_<n> its path, PC_B_<n> the backup of the file it replaced ("" when it was new)
-pc_note() {
-  PC_N=$((PC_N + 1))
-  eval "PC_K_$PC_N=\$1; PC_P_$PC_N=\$2; PC_B_$PC_N=\${3:-}"
-}
-
-# pc_dir <folder>: the folder made when absent, noted so a rollback removes it again
-pc_dir() {
-  [ -d "$1" ] && return 0
-  pd_up=$(dirname "$1")
-  pc_dir "$pd_up" || return 1
-  pc_note d "$1"
-  mkdir "$1" 2>/dev/null || [ -d "$1" ] || return 1
-}
-
-# pc_backup <path>: a hard link of the file about to be replaced or removed, kept in the
-# stage (the same filesystem), a copy where the link is refused; prints the backup path
-pc_backup() {
-  [ -f "$1" ] || { printf '\n'; return 0; }
-  pb_b="$STAGE/.bak.$((PC_N + 1))"
-  ln "$1" "$pb_b" 2>/dev/null || cp -p "$1" "$pb_b" 2>/dev/null || return 1
-  printf '%s\n' "$pb_b"
-}
-
-# pc_rollback: every noted step undone, the last first: a replaced file gets its backup
-# back, a created file and a created folder go
-pc_rollback() {
-  PC_ON=0
-  while [ "$PC_N" -gt 0 ]; do
-    eval "pr_k=\$PC_K_$PC_N; pr_p=\$PC_P_$PC_N; pr_b=\$PC_B_$PC_N"
-    case "$pr_k" in
-      f) if [ -n "$pr_b" ]; then mv -f "$pr_b" "$pr_p" 2>/dev/null; else rm -f "$pr_p" 2>/dev/null; fi ;;
-      d) rmdir "$pr_p" 2>/dev/null ;;
-    esac
-    PC_N=$((PC_N - 1))
-  done
-}
-
-# px_commit <unit folder>: every staged step applied in manifest order (one mv per file, a
-# removal, a folder), then the answer; each replaced or removed file is backed up first, so a
-# failed step (rc 2 ERR_STORAGE_WRITE, no answer) or an interrupt rolls every earlier step
-# back and the unit reads as before (R20)
-px_commit() {
-  pc_ud=$1
-  PC_ON=1
-  if [ -f "$STAGE/manifest" ]; then
-    while IFS='	' read -r pc_src pc_rel; do
-      case "$pc_src" in
-        d) pc_dir "$pc_ud/$pc_rel" || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed" ;;
-        -)
-          [ -f "$pc_ud/$pc_rel" ] || continue
-          pc_b=$(pc_backup "$pc_ud/$pc_rel") || refuse 2 ERR_STORAGE_WRITE "the storage removal of $pc_rel failed"
-          # noted before the step: an interrupt landing right after it still undoes it
-          pc_note f "$pc_ud/$pc_rel" "$pc_b"
-          rm -f "$pc_ud/$pc_rel" 2>/dev/null && [ ! -f "$pc_ud/$pc_rel" ] || refuse 2 ERR_STORAGE_WRITE "the storage removal of $pc_rel failed"
-          ;;
-        *)
-          pc_dir "$(dirname "$pc_ud/$pc_rel")" || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed"
-          pc_b=$(pc_backup "$pc_ud/$pc_rel") || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed"
-          pc_note f "$pc_ud/$pc_rel" "$pc_b"
-          mv -f "$STAGE/$pc_src" "$pc_ud/$pc_rel" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "the storage write of $pc_rel failed"
-          ;;
-      esac
-    done < "$STAGE/manifest"
+  else
+    sh_detail="sessions directory writable, no artifact stored yet"
   fi
-  PC_ON=0
-  cat "$SCR/answer"
+  printf '{"driver":"posix","health":"%s","detail":"%s","store":"%s"}\n' "$sh_health" "$sh_detail" "$sh_store"
 }
 
 # px_extra <n> <argv...>: no argument beyond the n the function takes
@@ -1123,211 +901,6 @@ px_extra() {
   pe_n=$1
   shift
   [ $# -le "$pe_n" ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$(eval "printf '%s' \"\${$((pe_n + 1))}\"")'"
-}
-
-px_args() {
-  PX_NA=0
-  export PX_NA
-  for pa_a in "$@"; do
-    PX_NA=$((PX_NA + 1))
-    eval "PX_A$PX_NA=\$pa_a; export PX_A$PX_NA"
-  done
-}
-
-# rec_read <function> <unit> <parts> <argv after the unit...>: a read of one held unit
-rec_read() {
-  FN=$1; want_held "$2"
-  PX_UNIT=$2; export PX_UNIT
-  man_unit "$2" "$3"
-  shift 3
-  px_args "$@"
-  px_awk
-}
-
-# rec_write <function> <unit> <parts> <argv after the unit...>: a write of one held unit
-rec_write() {
-  FN=$1; want_held "$2"
-  PX_UNIT=$2; export PX_UNIT
-  rw_parts=$3
-  shift 3
-  px_args "$@"
-  payload_stage
-  px_lock "$PX_UNIT"
-  px_stage
-  man_unit "$PX_UNIT" "$rw_parts"
-  px_awk
-  px_commit "$SESS/$PX_UNIT"
-}
-
-capability() {
-  printf '{"driver":"posix","version":"3.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query"],"store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store"]}\n'
-}
-
-storage_health() {
-  sh_health="ok"
-  if [ ! -d "$SESS" ]; then
-    sh_health="degraded"
-    sh_detail="sessions directory does not exist yet (will be created on bootstrap)"
-  elif [ ! -w "$SESS" ]; then
-    sh_health="error"
-    sh_detail="sessions directory is not writable"
-  else
-    sh_detail="sessions directory writable, unlocked"
-    if [ -d "$SESS/.lock" ]; then
-      sh_health="locked"
-      sh_detail="storage lock active"
-    fi
-  fi
-  man_all_units ""
-  PX_HEALTH=$sh_health PX_DETAIL=$sh_detail px_awk
-}
-
-search_query() {
-  want_unit "${1:-}"
-  sq_u=$1
-  shift
-  sq_limit=20
-  sq_entity=all
-  sq_mode=exact
-  for sq_a in "$@"; do
-    case "$sq_a" in
-      --limit=*) sq_limit="${sq_a#--limit=}" ;;
-      --entity=*) sq_entity="${sq_a#--entity=}" ;;
-      --mode=*) sq_mode="${sq_a#--mode=}" ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$sq_a'" ;;
-    esac
-  done
-  case "$sq_limit" in
-    ""|*[!0-9]*|0) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$sq_limit'" ;;
-  esac
-  case "$sq_entity" in
-    all|session|task|entry|finding|lane|lane_entry) ;;
-    *) refuse 1 ERR_INVALID_ARGUMENT "unknown entity type '$sq_entity' (session, task, entry, finding, lane, lane_entry, all)" ;;
-  esac
-  case "$sq_mode" in
-    ""|[!a-z]*|*[!a-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$sq_mode'" ;;
-  esac
-  held "$sq_u" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sq_u' not found"
-  payload_stage
-  # the searched text is the rendered one: the unit parsed whole, every item's canonical span
-  man_unit "$sq_u" "backlog knowledge journal lanes"
-  man_sizes
-  PX_PAY="$PAYLOAD_FILE" PX_ERR="$SCR/err" PX_MAN="$SCR/man" PX_SIZES="$SCR/sizes" SQ_UNIT="$sq_u" SQ_LIMIT="$sq_limit" SQ_ENTITY="$sq_entity" SQ_MODE="$sq_mode" \
-    awk -f "$SCRIPT_DIR/canon.awk" -f "$SCRIPT_DIR/model.awk" -f "$SCRIPT_DIR/search.awk" < /dev/null > "$SCR/answer"
-  sq_rc=$?
-  if [ "$sq_rc" -ne 0 ]; then
-    if [ -s "$SCR/err" ]; then cat "$SCR/err" >&2; else printf '%s: error: the search failed (rc %s) (ERR_STORAGE_READ)\n' "$FN" "$sq_rc" >&2; sq_rc=2; fi
-    exit "$sq_rc"
-  fi
-  cat "$SCR/answer"
-}
-
-# session.create <unit> | objective, repos (list), attention
-session_create() {
-  FN=session.create
-  want_unit "${1:-}"
-  px_extra 1 "$@"
-  PX_UNIT=$1; export PX_UNIT
-  payload_stage
-  px_lock "$PX_UNIT"
-  [ -e "$SESS/$PX_UNIT" ] && refuse 1 ERR_ENTITY_EXISTS "unit '$PX_UNIT' already exists"
-  px_stage
-  px_awk
-  mkdir "$SESS/$PX_UNIT" 2>/dev/null || refuse 1 ERR_ENTITY_EXISTS "unit '$PX_UNIT' already exists"
-  pc_note d "$SESS/$PX_UNIT"
-  px_commit "$SESS/$PX_UNIT"
-}
-
-# session.load <unit>: the unit and every unit its ref_sessions name
-session_load() {
-  FN=session.load
-  want_held "${1:-}"
-  px_extra 1 "$@"
-  PX_UNIT=$1; export PX_UNIT
-  man_unit "$1" ""
-  FN=state.refs
-  sl_refs=$(px_awk)
-  FN=session.load
-  : > "$SCR/man"; : > "$SCR/files"
-  man_unit "$1" "backlog knowledge journal"
-  for sl_r in $sl_refs; do
-    ident_valid "$sl_r" || continue
-    [ "$sl_r" = "$1" ] && continue
-    man_unit "$sl_r" "backlog knowledge journal"
-  done
-  px_awk
-}
-
-session_refload() {
-  FN=session.refload
-  [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "missing the unit"
-  for sr_u in "$@"; do
-    want_unit "$sr_u"
-    held "$sr_u" || refuse 1 ERR_ENTITY_NOT_FOUND "unit '$sr_u' not found"
-  done
-  PX_UNIT=$1; export PX_UNIT
-  for sr_u in "$@"; do
-    grep -q "^U	$sr_u\$" "$SCR/man" || man_unit "$sr_u" "backlog knowledge journal"
-  done
-  shift
-  px_args "$@"
-  px_awk
-}
-
-session_refs() {
-  FN=session.refs
-  want_held "${1:-}"
-  sf_u=$1
-  shift
-  for sf_r in "$@"; do
-    ident_valid "$sf_r" || refuse 1 ERR_INVALID_ARGUMENT "malformed unit '$sf_r'"
-  done
-  PX_UNIT=$sf_u; export PX_UNIT
-  px_args "$@"
-  payload_stage
-  px_lock "$sf_u"
-  px_stage
-  man_all_units ""
-  px_awk
-  px_commit "$SESS/$sf_u"
-}
-
-session_units() {
-  FN=session.units
-  [ -n "${1:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the repo"
-  case "$1" in
-    [!A-Za-z0-9._-]*|*[!A-Za-z0-9._/-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed repo '$1'" ;;
-  esac
-  px_extra 1 "$@"
-  PX_UNIT=$1; export PX_UNIT
-  man_all_units ""
-  px_awk
-}
-
-session_refs_to() {
-  FN=session.refs_to
-  want_unit "${1:-}"
-  px_extra 1 "$@"
-  PX_UNIT=$1; export PX_UNIT
-  man_all_units ""
-  px_awk
-}
-
-# lane_doc <function> <unit> <lane> <recipe|report>: lane.create or lane.write_report, the
-# document raw on stdin
-lane_doc() {
-  FN=$1; want_held "${2:-}"
-  [ -n "${3:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
-  ident_valid "$3" || refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$3'"
-  PX_UNIT=$2; export PX_UNIT
-  px_args "$3"
-  px_lock "$PX_UNIT"
-  px_stage
-  cat > "$STAGE/doc" || refuse 2 ERR_STORAGE_READ "cannot read the document"
-  PX_DOCSIZE=$(wc -c < "$STAGE/doc" | tr -d ' '); export PX_DOCSIZE
-  man_unit "$PX_UNIT" ""
-  px_awk
-  px_commit "$SESS/$PX_UNIT"
 }
 
 cmd="${1:-}"
@@ -1344,146 +917,11 @@ case "$cmd" in
   store.batch) store_batch "$@"; exit $? ;;
   store.scan) store_scan "$@"; exit $? ;;
   store.search) store_search "$@"; exit $? ;;
-esac
-
-px_init
-
-case "$cmd" in
   storage.health)
     px_extra 0 "$@"
     storage_health
+    exit 0
     ;;
-  session.create) session_create "$@" ;;
-  session.list)
-    px_extra 0 "$@"
-    man_all_units journal
-    px_awk
-    ;;
-  session.load) session_load "$@" ;;
-  session.refload) session_refload "$@" ;;
-  session.board)
-    px_extra 1 "$@"
-    rec_read "$cmd" "${1:-}" "backlog journal"
-    ;;
-  session.audit)
-    px_extra 1 "$@"
-    rec_read "$cmd" "${1:-}" "backlog journal"
-    ;;
-  session.stamp)
-    px_extra 1 "$@"
-    rec_write "$cmd" "${1:-}" "journal"
-    ;;
-  session.next)
-    px_extra 1 "$@"
-    rec_write "$cmd" "${1:-}" "backlog"
-    ;;
-  session.close)
-    px_extra 1 "$@"
-    rec_write "$cmd" "${1:-}" "backlog journal"
-    ;;
-  session.reopen)
-    px_extra 1 "$@"
-    rec_write "$cmd" "${1:-}" ""
-    ;;
-  session.refs) session_refs "$@" ;;
-  session.units) session_units "$@" ;;
-  session.refs_to) session_refs_to "$@" ;;
-  task.add|task.update|task.start|task.complete|task.reopen|task.drop|task.get)
-    px_extra 2 "$@"
-    FN=$cmd
-    want_unit "${1:-}"
-    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the task slug"
-    ident_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed task slug '$2'"
-    case "$cmd" in
-      task.get) rec_read "$cmd" "$1" "backlog" "$2" ;;
-      task.complete|task.drop) rec_write "$cmd" "$1" "backlog journal" "$2" ;;
-      *) rec_write "$cmd" "$1" "backlog" "$2" ;;
-    esac
-    ;;
-  task.list)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    case "${2:-}" in
-      TODO|IN_PROGRESS|DONE|all) ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "task.list takes TODO, IN_PROGRESS, DONE, or all: '${2:-}'" ;;
-    esac
-    rec_read "$cmd" "$1" "backlog" "$2"
-    ;;
-  entry.record)
-    px_extra 1 "$@"
-    rec_write "$cmd" "${1:-}" "journal"
-    ;;
-  entry.get|entry.closure)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the entry slug"
-    name_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed entry slug '$2'"
-    rec_read "$cmd" "$1" "journal" "$2"
-    ;;
-  entry.list)
-    want_unit "${1:-}"
-    el_u=$1
-    shift
-    for el_a in "$@"; do
-      case "$el_a" in
-        --anchor=A[0-9]*) case "${el_a#--anchor=A}" in *[!0-9]*) refuse 1 ERR_INVALID_ARGUMENT "--anchor takes A<N>: '$el_a'" ;; esac ;;
-        --group=?*) case "${el_a#--group=}" in [!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed group in '$el_a'" ;; esac ;;
-        *) refuse 1 ERR_INVALID_ARGUMENT "unknown option '$el_a'" ;;
-      esac
-    done
-    rec_read "$cmd" "$el_u" "journal" "$@"
-    ;;
-  finding.add|finding.update|finding.drop|finding.get)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the finding NAME"
-    name_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$2'"
-    case "$cmd" in
-      finding.get) rec_read "$cmd" "$1" "knowledge" "$2" ;;
-      *) rec_write "$cmd" "$1" "knowledge" "$2" ;;
-    esac
-    ;;
-  finding.supersede)
-    px_extra 3 "$@"
-    want_unit "${1:-}"
-    for fs_n in "${2:-}" "${3:-}"; do
-      [ -n "$fs_n" ] || refuse 1 ERR_INVALID_ARGUMENT "finding.supersede takes the unit, OLD, and NEW"
-      name_valid "$fs_n" || refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$fs_n'"
-    done
-    rec_write "$cmd" "$1" "knowledge" "$2" "$3"
-    ;;
-  finding.list)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    case "${2:-}" in
-      active|all) ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "finding.list takes active or all: '${2:-}'" ;;
-    esac
-    rec_read "$cmd" "$1" "knowledge" "$2"
-    ;;
-  lane.create|lane.write_report)
-    px_extra 2 "$@"
-    lane_doc "$cmd" "${1:-}" "${2:-}"
-    ;;
-  lane.record)
-    px_extra 2 "$@"
-    want_unit "${1:-}"
-    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
-    ident_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
-    rec_write "$cmd" "$1" "lane:$2" "$2"
-    ;;
-  lane.get)
-    px_extra 3 "$@"
-    want_unit "${1:-}"
-    [ -n "${2:-}" ] || refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
-    ident_valid "$2" || refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
-    case "${3:-}" in
-      recipe|journal|report) ;;
-      *) refuse 1 ERR_INVALID_ARGUMENT "lane.get takes recipe, journal, or report: '${3:-}'" ;;
-    esac
-    rec_read "$cmd" "$1" "lane:$2" "$2" "$3"
-    ;;
-  search.query) search_query "$@" ;;
   *) refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$cmd'" ;;
 esac
 exit 0
