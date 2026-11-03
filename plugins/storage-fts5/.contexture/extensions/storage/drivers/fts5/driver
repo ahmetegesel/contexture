@@ -357,6 +357,21 @@ store_key_shape() {
   }'
 }
 
+# store_prefix_ok <prefix>: the optional store.list prefix: one literal bytewise key
+# prefix, possibly ending mid-segment or on a slash; no blank, control character,
+# backslash, leading slash, or . or .. segment (a prefix is a filter, not a stored key)
+store_prefix_ok() {
+  SP_PREFIX="$1" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["SP_PREFIX"]
+    if (s == "") exit 1
+    if (substr(s, 1, 1) == "/") exit 1
+    if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
+    n = split(s, p, "/")
+    for (i = 1; i <= n; i++) if (p[i] == "." || p[i] == "..") exit 1
+    exit 0
+  }'
+}
+
 # store_key_for <function> <namespace> <key>: the key rule and the module pattern before a
 # key reaches the database
 store_key_for() {
@@ -407,8 +422,12 @@ store_json() {
 
 store_list() {
   FN=store.list
-  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes one argument, the namespace"
+  [ $# -ge 1 ] && [ $# -le 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes the namespace and an optional key prefix"
   sn_ns=$1
+  sn_prefix=${2:-}
+  if [ -n "$sn_prefix" ]; then
+    store_prefix_ok "$sn_prefix" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sn_prefix'"
+  fi
   store_data store.list "$sn_ns"
   sn_tmp=$(mktemp "$(scratch_base)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   if [ -f "$DB_PATH" ]; then
@@ -426,6 +445,7 @@ store_list() {
     [ -n "$sn_key" ] || continue
     store_key_ok "$sn_key" || continue
     store_key_shape "$SD_KEYPAT" "$sn_key" || continue
+    [ -z "$sn_prefix" ] || [ "${sn_key#"$sn_prefix"}" != "$sn_key" ] || continue
     if [ "$sn_first" -eq 1 ]; then
       printf '"%s"' "$(store_json "$sn_key")"
       sn_first=0
@@ -943,26 +963,26 @@ store_search_ranked() {
       "$(store_sqlq "$sr_ns")" "$(store_sqlq "$sr_q")" "$(store_sqlq "$sr_mode")" "$sr_lim"
     cat <<'RANKED'
 CREATE TEMP TABLE sst AS SELECT group_concat('"' || replace(t.value, '"', '""') || '"', ' ' ORDER BY t.key) AS m FROM json_each('["' || replace(replace(replace(replace(replace(replace((SELECT q FROM temp.ssr), '\', '\\'), '"', '\"'), char(9), ' '), char(10), ' '), char(13), ' '), ' ', '","') || '"]') t WHERE t.value <> '';
-CREATE TEMP TABLE ssres (doc_id INTEGER, key TEXT, section TEXT, score REAL, snippet TEXT);
+CREATE TEMP TABLE ssres (doc_id INTEGER, key TEXT, entity_type TEXT, entity_id TEXT, section TEXT, score REAL, snippet TEXT);
 INSERT INTO temp.ssres
 WITH
-  raw_prose AS (SELECT d.rowid AS doc_id, d.key AS key, d.section AS section, f.rank AS rank,
+  raw_prose AS (SELECT d.rowid AS doc_id, d.key AS key, d.entity_type AS entity_type, d.entity_id AS entity_id, d.section AS section, f.rank AS rank,
       snippet(store_fts_prose, -1, '<b>', '</b>', '...', 12) AS snip
     FROM store_fts_prose f JOIN store_docs d ON d.rowid = f.rowid, temp.ssr s
     WHERE s.mode = 'hybrid' AND f.store_fts_prose MATCH (SELECT m FROM temp.sst) AND d.namespace = s.ns),
-  ranked_prose AS (SELECT doc_id, key, section, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_prose),
-  raw_code AS (SELECT d.rowid AS doc_id, d.key AS key, d.section AS section, f.rank AS rank,
+  ranked_prose AS (SELECT doc_id, key, entity_type, entity_id, section, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_prose),
+  raw_code AS (SELECT d.rowid AS doc_id, d.key AS key, d.entity_type AS entity_type, d.entity_id AS entity_id, d.section AS section, f.rank AS rank,
       snippet(store_fts_code, -1, '<b>', '</b>', '...', 12) AS snip
     FROM store_fts_code f JOIN store_docs d ON d.rowid = f.rowid, temp.ssr s
     WHERE s.mode IN ('hybrid', 'trigram') AND f.store_fts_code MATCH (SELECT m FROM temp.sst) AND d.namespace = s.ns),
-  ranked_code AS (SELECT doc_id, key, section, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_code),
-  combined AS (SELECT doc_id, key, section, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_prose
-    UNION ALL SELECT doc_id, key, section, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_code),
-  fused AS (SELECT doc_id, key, section, round(sum(score), 6) AS score, max(snip) AS snippet FROM combined GROUP BY doc_id, key, section)
-SELECT doc_id, key, section, score, snippet FROM fused;
+  ranked_code AS (SELECT doc_id, key, entity_type, entity_id, section, row_number() OVER (ORDER BY rank) AS rnk, snip FROM raw_code),
+  combined AS (SELECT doc_id, key, entity_type, entity_id, section, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_prose
+    UNION ALL SELECT doc_id, key, entity_type, entity_id, section, 1.0 / (60.0 + rnk) AS score, snip FROM ranked_code),
+  fused AS (SELECT doc_id, key, entity_type, entity_id, section, round(sum(score), 6) AS score, max(snip) AS snippet FROM combined GROUP BY doc_id, key, entity_type, entity_id, section)
+SELECT doc_id, key, entity_type, entity_id, section, score, snippet FROM fused;
 SELECT json_object('namespace', s.ns, 'query', s.q, 'mode', s.mode, 'total_matches', (SELECT count(*) FROM temp.ssres),
-  'results', json((SELECT json_group_array(json(json_object('key', key, 'section', section, 'snippet', snippet, 'score', score)) ORDER BY score DESC, doc_id)
-    FROM (SELECT * FROM temp.ssres ORDER BY score DESC, doc_id LIMIT (SELECT lim FROM temp.ssr)))))
+  'results', json((SELECT json_group_array(json(json_object('key', key, 'entity_type', entity_type, 'entity_id', entity_id, 'section', section, 'snippet', snippet, 'score', score)) ORDER BY score DESC, doc_id)
+    FROM (SELECT * FROM temp.ssres ORDER BY score DESC, doc_id LIMIT (SELECT CASE WHEN lim = 0 THEN -1 ELSE lim END FROM temp.ssr)))))
 FROM temp.ssr s;
 COMMIT;
 RANKED
@@ -983,7 +1003,7 @@ store_search() {
     ''|[!a-z]*|*[!a-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$ss_mode'" ;;
   esac
   case "$ss_lim" in
-    ''|*[!0-9]*|0) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$ss_lim'" ;;
+    ''|*[!0-9]*) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a number, 0 for every result: '$ss_lim'" ;;
   esac
   store_data store.search "$ss_ns"
   case ",$SD_MODES," in
@@ -1210,55 +1230,50 @@ capability() {
   printf '{"driver":"fts5","version":"3.0.0","contract":"2","functions":["capability","storage.health","session.create","session.list","session.load","session.refload","session.board","session.audit","session.stamp","session.next","session.refs","session.close","session.reopen","session.units","session.refs_to","task.add","task.update","task.start","task.complete","task.reopen","task.drop","task.list","task.get","entry.record","entry.get","entry.list","entry.closure","finding.add","finding.update","finding.supersede","finding.drop","finding.get","finding.list","lane.create","lane.record","lane.write_report","lane.get","search.query"],"store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n'
 }
 
-# storage.health: a probe, never a write: an absent database reports degraded with store
-# absent (the store starts at the first bootstrap), and a store at another schema reports
-# error
+# storage.health: a probe, never a write, and the backend's own health alone (no record
+# count: the record's active listing is the unit module's). An absent database reports
+# degraded with store absent (the store starts at the first bootstrap), and a store at
+# another schema reports error
 storage_health() {
   # an sqlite3 older than the driver's minimum serves no function (db_init refuses each), so
   # the probe reports error naming it, never ok (lanes/si-f5-fts5-review/report F3)
   sh_sv=$(sq :memory: "SELECT sqlite_version();" 2>/dev/null)
   sh_svn=$(printf '%s\n' "$sh_sv" | awk -F. '{ printf "%d", ($1 * 1000000) + ($2 * 1000) + $3 }')
   if [ "${sh_svn:-0}" -lt "$DB_SQLITE_MIN" ]; then
-    sh_st=absent; sh_a=0
-    if [ -f "$DB_PATH" ]; then
-      sh_st=present
-      sh_a=$(sq "$DB_PATH" "SELECT count(*) FROM units WHERE status = 'ACTIVE';" 2>/dev/null) || sh_a=0
-      case "$sh_a" in ""|*[!0-9]*) sh_a=0 ;; esac
-    fi
-    printf '{"driver":"fts5","health":"error","detail":"sqlite3 %s is older than the 3.44 the driver needs","store":"%s","active_units":%s}\n' "${sh_sv:-unknown}" "$sh_st" "$sh_a"
+    sh_st=absent
+    [ -f "$DB_PATH" ] && sh_st=present
+    printf '{"driver":"fts5","health":"error","detail":"sqlite3 %s is older than the 3.44 the driver needs","store":"%s"}\n' "${sh_sv:-unknown}" "$sh_st"
     exit 0
   fi
   if [ ! -f "$DB_PATH" ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database not created yet (will be initialized on bootstrap)","store":"absent","active_units":0}\n'
+    printf '{"driver":"fts5","health":"degraded","detail":"database not created yet (will be initialized on bootstrap)","store":"absent"}\n'
     exit 0
   fi
   sh_p=$(sq "$DB_PATH" "SELECT (SELECT user_version FROM pragma_user_version) || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table');" 2>/dev/null) || {
-    printf '{"driver":"fts5","health":"error","detail":"database unreadable","store":"absent","active_units":0}\n'
+    printf '{"driver":"fts5","health":"error","detail":"database unreadable","store":"absent"}\n'
     exit 0
   }
   sh_v=${sh_p%%|*}
   sh_t=${sh_p#*|}
   if [ "$sh_t" = 0 ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database present, no unit stored yet","store":"absent","active_units":0}\n'
+    printf '{"driver":"fts5","health":"degraded","detail":"database present, no unit stored yet","store":"absent"}\n'
     exit 0
   fi
   if [ "$sh_v" != "$DB_SCHEMA_VERSION" ]; then
     # a store at another schema serves no function (db_init refuses each), so the probe
     # reports error naming its version, never degraded or ok
-    printf '{"driver":"fts5","health":"error","detail":"database at schema %s; this driver reads %s and has no upgrade path","store":"present","active_units":0}\n' "$sh_v" "$DB_SCHEMA_VERSION"
+    printf '{"driver":"fts5","health":"error","detail":"database at schema %s; this driver reads %s and has no upgrade path","store":"present"}\n' "$sh_v" "$DB_SCHEMA_VERSION"
     exit 0
   fi
-  sh_c=$(sq "$DB_PATH" "SELECT count(*) || '|' || (SELECT count(*) FROM units WHERE status = 'ACTIVE') FROM units;" 2>/dev/null) || sh_c="0|0"
-  sh_n=${sh_c%%|*}
-  sh_a=${sh_c#*|}
+  sh_n=$(sq "$DB_PATH" "SELECT count(*) FROM units;" 2>/dev/null) || sh_n=0
   if [ "$sh_n" = 0 ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database present, no unit stored yet","store":"absent","active_units":0}\n'
+    printf '{"driver":"fts5","health":"degraded","detail":"database present, no unit stored yet","store":"absent"}\n'
   elif [ ! -w "$DB_PATH" ]; then
-    printf '{"driver":"fts5","health":"error","detail":"database file not writable","store":"present","active_units":%s}\n' "$sh_a"
+    printf '{"driver":"fts5","health":"error","detail":"database file not writable","store":"present"}\n'
   elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
-    printf '{"driver":"fts5","health":"error","detail":"database integrity check failed","store":"present","active_units":%s}\n' "$sh_a"
+    printf '{"driver":"fts5","health":"error","detail":"database integrity check failed","store":"present"}\n'
   else
-    printf '{"driver":"fts5","health":"ok","detail":"database present and writable","store":"present","active_units":%s}\n' "$sh_a"
+    printf '{"driver":"fts5","health":"ok","detail":"database present and writable","store":"present"}\n'
   fi
   exit 0
 }

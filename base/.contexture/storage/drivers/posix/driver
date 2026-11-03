@@ -13,6 +13,9 @@
 # a write touches one of its items. It answers the seven generic module store functions
 # (store): store.list, store.get, store.put, store.delete, store.changes, store.batch, and
 # store.scan over a module's declared data file and root, plus the store.search entry.
+# store.list takes an optional literal key prefix; store.search carries the document
+# rules' entity_type and entity_id, collects every match, and applies the limit (0 = all)
+# after the walk.
 #
 # Writes: the unit lock (.contexture/tmp/locks/<unit>.lock, carrying its holder pid) is
 # held from the read to the last rename, every changed file is staged beside the sessions
@@ -307,6 +310,21 @@ store_key_shape() {
   }'
 }
 
+# store_prefix_ok <prefix>: the optional store.list prefix: one literal bytewise key
+# prefix, possibly ending mid-segment or on a slash; no blank, control character,
+# backslash, leading slash, or . or .. segment (a prefix is a filter, not a stored key)
+store_prefix_ok() {
+  SP_PREFIX="$1" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["SP_PREFIX"]
+    if (s == "") exit 1
+    if (substr(s, 1, 1) == "/") exit 1
+    if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
+    n = split(s, p, "/")
+    for (i = 1; i <= n; i++) if (p[i] == "." || p[i] == "..") exit 1
+    exit 0
+  }'
+}
+
 # store_key_for <function> <namespace> <key>: the key rule and the module pattern before a
 # key reaches the filesystem
 store_key_for() {
@@ -321,9 +339,11 @@ store_path() {
   printf '%s/%s/%s%s\n' "$STORE_WS" "$SD_ROOT" "$1" "$SD_SUFFIX"
 }
 
-# store_list_keys: every key in the namespace, bytewise, only those the module pattern
-# admits; the folder entries are read as stored, so a case twin of a key never appears
+# store_list_keys [<prefix>]: every key in the namespace, bytewise, only those the module
+# pattern admits and, when a prefix is given, those that start with it; the folder entries
+# are read as stored, so a case twin of a key never appears
 store_list_keys() {
+  sl_prefix=${1:-}
   sl_dir="$STORE_WS/$SD_ROOT"
   [ -d "$sl_dir" ] || return 0
   find "$sl_dir" -type f -print 2>/dev/null | while IFS= read -r sl_f; do
@@ -334,6 +354,7 @@ store_list_keys() {
     esac
     store_key_ok "$sl_key" || continue
     store_key_shape "$SD_KEYPAT" "$sl_key" || continue
+    [ -z "$sl_prefix" ] || [ "${sl_key#"$sl_prefix"}" != "$sl_key" ] || continue
     printf '%s\n' "$sl_key"
   done | LC_ALL=C sort
 }
@@ -400,11 +421,15 @@ store_flags() {
 
 store_list() {
   FN=store.list
-  [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes one argument, the namespace"
+  [ $# -ge 1 ] && [ $# -le 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes the namespace and an optional key prefix"
   sn_ns=$1
+  sn_prefix=${2:-}
+  if [ -n "$sn_prefix" ]; then
+    store_prefix_ok "$sn_prefix" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sn_prefix'"
+  fi
   store_data store.list "$sn_ns"
   sn_tmp=$(mktemp "$(scratch_dir)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
-  store_list_keys > "$sn_tmp"
+  store_list_keys "$sn_prefix" > "$sn_tmp"
   printf '{"namespace":"%s","keys":[' "$(escape_json "$sn_ns")"
   sn_first=1
   while IFS= read -r sn_key; do
@@ -821,7 +846,7 @@ store_search() {
     ''|[!a-z]*|*[!a-z0-9_-]*) refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$ss_mode'" ;;
   esac
   case "$ss_lim" in
-    ''|*[!0-9]*|0) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$ss_lim'" ;;
+    ''|*[!0-9]*) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a number, 0 for every result: '$ss_lim'" ;;
   esac
   store_data store.search "$ss_ns"
   case ",$SD_MODES," in

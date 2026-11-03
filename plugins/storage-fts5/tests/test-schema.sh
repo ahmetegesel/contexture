@@ -82,7 +82,7 @@ for v in 3 0 5; do
   nobak "$DB" && ok "version $v: no backup beside the store" || bad "version $v: no backup beside the store (files [$(ls "$SB/db" | tr '\n' ' ')])"
   if [ "$v" = 3 ]; then
     f "$DB" storage.health < /dev/null
-    [ "$(cat "$SB/out")" = '{"driver":"fts5","health":"error","detail":"database at schema 3; this driver reads 4 and has no upgrade path","store":"present","active_units":0}' ] \
+    [ "$(cat "$SB/out")" = '{"driver":"fts5","health":"error","detail":"database at schema 3; this driver reads 4 and has no upgrade path","store":"present"}' ] \
       && ok "version 3: storage.health reports error naming the version" \
       || bad "version 3: storage.health reports error naming the version (got [$(cat "$SB/out")])"
   fi

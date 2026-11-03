@@ -74,12 +74,14 @@ else
   driver_err=$(cat "$VB_DIR/caperr" "$VB_DIR/cap")
 fi
 
-# 4. Storage health: the driver reports its own backend (storage.health)
+# 4. Storage health: the driver reports its own backend (storage.health); the ACTIVE unit
+# count is the record's own listing (session.list), never part of the backend's health
+# answer
 vb_call storage.health
 if [ "$VB_RC" -eq 0 ]; then
   health_line=$(vb_render health)
 else
-  health_line=$(printf 'error\tthe storage driver did not report its health\tabsent\t0')
+  health_line=$(printf 'error\tthe storage driver did not report its health\tabsent')
 fi
 tab=$(printf '\t')
 health_status=${health_line%%"$tab"*}
@@ -87,7 +89,11 @@ rest=${health_line#*"$tab"}
 health_detail=${rest%%"$tab"*}
 rest=${rest#*"$tab"}
 health_store=${rest%%"$tab"*}
-active_count=${rest#*"$tab"}
+active_count=0
+vb_call session.list
+if [ "$VB_RC" -eq 0 ]; then
+  active_count=$(awk '{ n += gsub(/"status":"ACTIVE"/, ""); } END { print n + 0 }' "$VB_DIR/ans")
+fi
 
 # jstr <text>: one JSON string in the contract form
 jstr() {

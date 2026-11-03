@@ -4,14 +4,14 @@
 # module to the configured storage driver, and the one door from a source module to a
 # target module's data script:
 #
-#   store.list <namespace>
+#   store.list <namespace> [<prefix>]
 #   store.get <namespace> <key>
 #   store.put <namespace> <key> [--op=<op>] [--head=<sha|none>]     (payload on stdin)
 #   store.delete <namespace> <key> [--op=<op>] [--head=<sha|none>]
 #   store.changes <namespace>                                        (heads on stdin)
 #   store.batch <namespace>                                          (actions on stdin)
 #   store.scan <namespace>
-#   store.search <namespace> <query> <mode> [<limit>]                (query on stdin)
+#   store.search <namespace> <query> <mode> [<limit>]                (query on stdin; 0 = all)
 #   store.require <capability>...
 #   store.has <capability>
 #   data.get <ref>
@@ -27,8 +27,10 @@
 # the session module's compatibility wrapper.
 #
 # data_get <ref> resolves a module reference <module>#<symbol>: it finds the target
-# module's data script (modules/<module>/scripts/data), runs it with data_get, and prints
-# the envelope the script emits through data_emit. A ref chain is bounded at 8 hops and a
+# module's data script in the workspace modules, the workspace extensions, or the base
+# mirror of either (modules/<module>/scripts/data and
+# extensions/modules/<module>/scripts/data), runs it with data_get, and prints the
+# envelope the script emits through data_emit. A ref chain is bounded at 8 hops and a
 # repeated ref in the chain refuses as a cycle. data_emit <ref> <data> is the target data
 # script's helper: it prints one compact JSON envelope {"ref":"<ref>","data":<data>} and
 # the data must already be compact JSON. The source write's validation of a new ref is
@@ -180,7 +182,9 @@ data_get() {
   dg_root=$(store_lib_root)
   dg_script=""
   for dg_c in "$dg_root/.contexture/modules/$dg_mod/scripts/data" \
-              "$dg_root/base/.contexture/modules/$dg_mod/scripts/data"; do
+              "$dg_root/.contexture/extensions/modules/$dg_mod/scripts/data" \
+              "$dg_root/base/.contexture/modules/$dg_mod/scripts/data" \
+              "$dg_root/base/.contexture/extensions/modules/$dg_mod/scripts/data"; do
     if [ -x "$dg_c" ]; then dg_script=$dg_c; break; fi
   done
   if [ -z "$dg_script" ]; then

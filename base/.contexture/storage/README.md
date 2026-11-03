@@ -24,19 +24,21 @@ this stage. Seven data functions, plus the search entry, called through the reso
 
 | function | argv | stdin | answer |
 |---|---|---|---|
-| `store.list` | `<namespace>` | none | `{"namespace","keys"}`: every key the module pattern admits, bytewise |
+| `store.list` | `<namespace> [<prefix>]` | none | `{"namespace","keys"}`: every key the module pattern admits, bytewise; the optional literal key prefix narrows it |
 | `store.get` | `<namespace> <key>` | none | the raw bytes of the key, no JSON; absent rc 1 `ERR_ENTITY_NOT_FOUND` |
 | `store.put` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | the raw bytes | `{"namespace","key","op"}`; atomic per key |
 | `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | none | `{"namespace","key","op"}` |
 | `store.changes` | `<namespace>` | `head=<sha\|none>` lines | `{"namespace","changes":[...]}` oldest first |
 | `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `head=<sha\|none>`, `value_b64=<base64>` for a put) | `{"namespace","actions":N}`; all or none |
 | `store.scan` | `<namespace>` | none | `{"namespace","items":[{"key","value_b64"}]}`: every admitted key, bytewise, its raw value in base64 |
-| `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,section,snippet,score}]}` |
+| `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,entity_type,entity_id,section,snippet,score}]}`; limit 0 answers every result |
 
 Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a
 read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a
 control character, a leading slash, a backslash, or a `.` or `..` segment. The module
-pattern filters list and scan and refuses a key outside it. The posix mapping is
+pattern filters list and scan and refuses a key outside it; `store.list` takes an optional
+literal bytewise key prefix (possibly ending on a slash) so a module reads its own keys
+without walking the namespace. The posix mapping is
 `<root>/<key><suffix>` under the workspace root, written by a same-directory temp moved
 over the key under one namespace scope lock, so a put lands whole or not at all. The
 batch holds that lock once, validates the whole action list against the live keys, stages
@@ -48,16 +50,24 @@ optional per namespace; a namespace declaring `changes: false`, or a driver with
 log, refuses `store.changes` rc 1 `ERR_CAPABILITY_UNSUPPORTED`.
 
 Search answers one shape on every driver: `{"namespace","query","mode","total_matches",
-"results":[{"key","section","snippet","score"}]}`. `exact` is the record rule over the raw
-stored value: a line matches when the query is a substring of it after ASCII case folding,
-a column-0 comment never matches, one row per entity and section, the snippet the first
-matching line with its label and quote pair trimmed, every score 0. The document set comes
-from the search schema: the flat form indexes one document per key (section `body`), the
-document-set form derives one document per entity at write time and ranks those documents
-in the fts5 store index; a module with no schema falls back to the generic raw value. A
-ranked mode answers only where the configured driver declares it (fts5: `hybrid` and
-`trigram`); posix declares exact alone and refuses a ranked mode by name. The driver
-declares the optional `search.schema` token when it consumes a declared schema.
+"results":[{"key","entity_type","entity_id","section","snippet","score"}]}`. `exact` is
+the record rule over the raw stored value: a line matches when the query is a substring of
+it after ASCII case folding, a column-0 comment never matches, one row per entity and
+section, the snippet the first matching line with its label and quote pair trimmed, every
+score 0. The answer carries the entity identity the document rules derive; the flat and
+generic fallbacks answer the one document with its key as the id. The exact walk collects
+every match before printing, so `total_matches` counts every pair and the limit applies
+after the walk, in bytewise key then line order; a limit of 0 answers every result, the
+unlimited read a module uses to sort into its own text order and cap there. The searched
+text is the stored value: the canonical source is the module's canonical render, which the
+module writes through the store, and the core never re-renders a module's grammar (a
+legacy value is searched as stored). The document set comes from the search schema: the
+flat form indexes one document per key (section `body`), the document-set form derives one
+document per entity at write time and ranks those documents in the fts5 store index; a
+module with no schema falls back to the generic raw value. A ranked mode answers only
+where the configured driver declares it (fts5: `hybrid` and `trigram`); posix declares
+exact alone and refuses a ranked mode by name. The driver declares the optional
+`search.schema` token when it consumes a declared schema.
 
 ## Errors
 
@@ -121,13 +131,14 @@ searches, in order:
 
 1. the workspace custom drivers, `.contexture/drivers/<name>/driver` (transitional);
 2. the storage core's drivers, `.contexture/storage/drivers/<name>/driver`;
-3. the module-owned drivers, `.contexture/modules/*/drivers/<name>/driver` (transitional;
-   the fts5 driver lives here until the module system moves it to the extension root);
-4. the base mirror's core and module drivers (transitional);
-5. PATH executables named `ctx-storage-<name>` (transitional).
+3. the extension root's package drivers,
+   `.contexture/extensions/storage/drivers/<name>/driver` (the settled home; the fts5
+   driver is installed there);
+4. the module-owned drivers, `.contexture/modules/*/drivers/<name>/driver` (transitional);
+5. the base mirror's core, extension, and module drivers (transitional);
+6. PATH executables named `ctx-storage-<name>` (transitional).
 
-The extension root's `storage/drivers` search arrives with the module system, and the
-adoption retires the transitional tiers.
+The adoption retires the transitional tiers.
 
 ## The library
 
@@ -140,8 +151,10 @@ through it; the module never names the driver. The library exports:
 - `data_get <ref>` and `data_emit <ref> <data>`.
 
 `data_get` resolves a module reference `<module>#<symbol>`: it finds the target module's
-data script at `modules/<module>/scripts/data`, runs it with `data_get <ref>`, and prints
-the envelope the script emits through `data_emit`. A ref chain is bounded at 8 hops; a
+data script in the workspace modules, the workspace extensions, or the base mirror of
+either (`modules/<module>/scripts/data` and `extensions/modules/<module>/scripts/data`),
+runs it with `data_get <ref>`, and prints the envelope the script emits through
+`data_emit`. A ref chain is bounded at 8 hops; a
 repeated ref in the chain refuses as a cycle. The target data script calls
 `data_emit <ref> <data>` to print one compact JSON envelope
 `{"ref":"<ref>","data":<data>}`. The source write's validation of a new ref is the unit

@@ -734,7 +734,7 @@ function v_diagnose(   m, s) {
 }
 
 function v_health() {
-  printf "%s\t%s\t%s\t%s\n", sv("health"), sv("detail"), sv("store"), V["active_units"] + 0
+  printf "%s\t%s\t%s\n", sv("health"), sv("detail"), sv("store")
 }
 
 # state: the state text of an answer's state (bootstrap prints it)

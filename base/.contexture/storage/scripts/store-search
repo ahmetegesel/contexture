@@ -8,8 +8,9 @@
 # Usage:
 #   store-search exact <data-file> <namespace> <query> <limit> <manifest>
 #     manifest lines are <key><TAB><value-path>, in bytewise key order; the answer is one
-#     compact JSON line {namespace, query, mode, total_matches, results:[{key, section,
-#     snippet, score}]}
+#     compact JSON line {namespace, query, mode, total_matches, results:[{key,
+#     entity_type, entity_id, section, snippet, score}]}; the walk collects every match
+#     and the limit (0 = all) applies after it, so total_matches counts every pair
 #   store-search docs <data-file> <namespace> <key> <value-path> <sig>
 #     the answer is the SQL that replaces the key's derived documents in store_docs
 #     (DELETE and one INSERT per document), for the fts5 driver's transaction; sig is the

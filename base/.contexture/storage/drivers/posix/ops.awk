@@ -192,10 +192,10 @@ function f_session_list(   u, first, n, i) {
   answer("]}")
 }
 
-function f_storage_health(   i, n, act) {
-  n = 0; act = 0
-  for (i = 1; i <= NUNITS; i++) { parse_state(UL[i]); n++; if (ST[UL[i], "status"] == "ACTIVE") act++ }
-  answer("{\"driver\":\"posix\",\"health\":" jstr(ENVIRON["PX_HEALTH"]) ",\"detail\":" jstr(ENVIRON["PX_DETAIL"]) ",\"store\":" jstr(n > 0 ? "present" : "absent") ",\"active_units\":" act "}")
+function f_storage_health(   i, n) {
+  n = 0
+  for (i = 1; i <= NUNITS; i++) { parse_state(UL[i]); n++ }
+  answer("{\"driver\":\"posix\",\"health\":" jstr(ENVIRON["PX_HEALTH"]) ",\"detail\":" jstr(ENVIRON["PX_DETAIL"]) ",\"store\":" jstr(n > 0 ? "present" : "absent") "}")
 }
 
 function f_state_refs(   i) {

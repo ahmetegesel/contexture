@@ -438,11 +438,12 @@ FUNCS38="capability storage.health session.create session.list session.load sess
 printf '\n== Suite 0: The Fresh Store ==\n'
 
 # TC74: before any write the store is absent: session.list answers store absent and no
-# unit, storage.health store absent with no active unit, naming the descriptor's driver
+# unit, storage.health store absent with backend health alone (no record count), naming
+# the descriptor's driver
 call session.list
 answer; wantout '{"store":"absent","units":[]}'
 call storage.health
-answer; wantkeys @ "driver,health,detail,store,active_units"; wantv store '"absent"'; wantv active_units 0
+answer; wantkeys @ "driver,health,detail,store"; wantv store '"absent"'
 case "$(jv health)" in '"ok"'|'"degraded"'|'"locked"'|'"error"') ;; *) miss "storage.health health [$(jv health)]" ;; esac
 _drv_name=$(printf '%s\n' "$cap_out" | awk -f "$JF" | awk 'index($0, "driver=") == 1 { print substr($0, 8); exit }')
 wantv driver "$_drv_name"
@@ -809,7 +810,8 @@ printf '\n== Suite 10: The Store and the Transport ==\n'
 SUNIT="compliance-store"
 
 # TC28: session.create refuses a unit the store holds; storage.health answers its keys
-# and the active count session.list shows; a function on an absent unit refuses rc1
+# with the backend alone (the active count is the record's listing); a function on an
+# absent unit refuses rc1
 mk "$SUNIT" store
 answer; wantv state.unit '"compliance-store"'
 mk "$SUNIT" store
@@ -819,7 +821,7 @@ answer
 _t28_act=$(vals units status | tr ' ' '\n' | grep -c '"ACTIVE"')
 wantv store '"present"'
 call storage.health
-answer; wantkeys @ "driver,health,detail,store,active_units"; wantv store '"present"'; wantv active_units "$_t28_act"
+answer; wantkeys @ "driver,health,detail,store"; wantv store '"present"'
 [ "$_t28_act" = 2 ] || miss "session.list shows $_t28_act ACTIVE units, want 2"
 for _t28_f in "session.load" "session.board" "session.audit" "task.list no-such-unit all" "entry.list" "finding.list no-such-unit all" "task.get no-such-unit t1"; do
   set -- $_t28_f
@@ -829,7 +831,7 @@ done
 kv objective "never lands"
 call task.add no-such-unit t1
 refused 1 ERR_ENTITY_NOT_FOUND "unit 'no-such-unit' not found"
-tc "TC28: session.create refuses a held unit; storage.health counts the active units; an absent unit refuses rc1"
+tc "TC28: session.create refuses a held unit; session.list counts the active units; an absent unit refuses rc1"
 
 # TC31: a 2 MB report travels on stdin through lane.write_report and reads back whole
 printf '# recipe grammar\nMISSION\n  GOAL: "store lane"\n' > "$SANDBOX/lane-in.txt"

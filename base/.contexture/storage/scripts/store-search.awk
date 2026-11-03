@@ -3,7 +3,15 @@
 # matcher, and one write-time SQL deriver for the fts5 store index. The exact rule is the
 # record rule: one line of the raw stored value, ASCII-case folded, a column-0 comment
 # never matching, one result per entity and section, the first matching line as the
-# snippet, results in bytewise key and source order.
+# snippet, results in bytewise key and line order.
+#
+# The exact answer carries the entity identity the document rules derive: entity_type and
+# entity_id beside the key (the flat and generic fallbacks answer the one document, its
+# id the key). The exact walk collects every match before printing, so the limit applies
+# after the walk and the answer's total_matches counts every pair; a limit of 0 answers
+# every match (the unlimited read a module uses for its own text order and cap). The
+# searched text is the stored value: the canonical source is what the module's canonical
+# render writes through the store, and the core never re-renders a module's grammar.
 #
 # Inputs: SS_MODE exact|docs, SS_DATA (the data file), SS_NS, SS_QUERY, SS_LIMIT,
 # SS_MANIFEST (exact); SS_KEY, SS_VALUE, SS_SIG (docs).
@@ -187,7 +195,8 @@ function collect_rules(key,    i, sec, def, nd) {
   return 1
 }
 
-# match_line(key, section, type, id, ord, line): the exact rule's match and dedupe
+# match_line(key, section, type, id, ord, line): the exact rule's match and dedupe; every
+# pair is collected and the limit is applied when the answer prints
 function match_line(key, sec, typ, id, ord, line,    g, snip) {
   if (substr(line, 1, 1) == "#") return
   if (index(tolower(line), qlower) == 0) return
@@ -195,7 +204,6 @@ function match_line(key, sec, typ, id, ord, line,    g, snip) {
   if (g in seen) return
   seen[g] = 1
   total++
-  if (shown >= limit) return
   snip = trim(line)
   sub(/^[A-Z_]+:[ ]*/, "", snip)
   if (length(snip) >= 2 && substr(snip, 1, 1) == "\"" && substr(snip, length(snip), 1) == "\"") {
@@ -206,7 +214,7 @@ function match_line(key, sec, typ, id, ord, line,    g, snip) {
     sub(/[ \t]*$/, "", snip)
   }
   shown++
-  rkey[shown] = key; rsec[shown] = sec; rsnip[shown] = snip
+  rkey[shown] = key; rsec[shown] = sec; rtyp[shown] = typ; rid[shown] = id; rsnip[shown] = snip
 }
 
 # emit_doc(key, section, type, id, title, body, ord): the fts5 store_docs row
@@ -315,12 +323,12 @@ function process_value(key, path, mode,    text, body, tv, line, ord, cur, defdo
   }
 }
 
-function exact(    man, mline, t, k, p) {
+function exact(    man, mline, t, k, p, cap) {
   ns = ENVIRON["SS_NS"]
   query = ENVIRON["SS_QUERY"]
   limit = ENVIRON["SS_LIMIT"] + 0
   if (trim(query) == "") die("the search query is empty")
-  if (limit < 1) limit = 20
+  if (limit < 0) die("the search limit is not a number")
   qlower = tolower(query)
   total = 0; shown = 0
   man = ENVIRON["SS_MANIFEST"]
@@ -334,12 +342,13 @@ function exact(    man, mline, t, k, p) {
     process_value(k, p, "exact")
   }
   close(man)
+  cap = (limit > 0 && shown > limit) ? limit : shown
   printf "{\"namespace\":\"%s\",\"query\":\"%s\",\"mode\":\"exact\",\"total_matches\":%d,\"results\":[", \
     json_escape(ns), json_escape(query), total
-  for (i = 1; i <= shown; i++) {
+  for (i = 1; i <= cap; i++) {
     if (i > 1) printf ","
-    printf "{\"key\":\"%s\",\"section\":\"%s\",\"snippet\":\"%s\",\"score\":0}", \
-      json_escape(rkey[i]), json_escape(rsec[i]), json_escape(rsnip[i])
+    printf "{\"key\":\"%s\",\"entity_type\":\"%s\",\"entity_id\":\"%s\",\"section\":\"%s\",\"snippet\":\"%s\",\"score\":0}", \
+      json_escape(rkey[i]), json_escape(rtyp[i]), json_escape(rid[i]), json_escape(rsec[i]), json_escape(rsnip[i])
   }
   printf "]}\n"
 }

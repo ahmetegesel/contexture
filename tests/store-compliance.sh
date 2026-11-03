@@ -272,6 +272,20 @@ else
 fi
 tc "S2: store.list answers the bytewise keys the docs pattern admits and only those"
 
+store_list docs workspace/a
+answer
+wantout '{"namespace":"docs","keys":["workspace/a","workspace/aa"]}'
+store_list docs workspace/aa
+answer
+wantout '{"namespace":"docs","keys":["workspace/aa"]}'
+store_list docs nothing/
+answer
+wantout '{"namespace":"docs","keys":[]}'
+store_list docs ''
+answer
+wantout '{"namespace":"docs","keys":["workspace/B","workspace/a","workspace/aa","workspace/binary","workspace/q\"uote","workspace/türkçe"]}'
+tc "S2b: store.list narrows to an optional literal key prefix; an empty prefix lists every key"
+
 # ==============================================================================
 # S3: get and put carry raw bytes; the JSON echo is exact
 # ==============================================================================
@@ -402,8 +416,14 @@ store_put docs workspace/x "$SB/pay-x" '--op=bad/op'
 refused 1 ERR_INVALID_ARGUMENT "malformed op 'bad/op'"
 store_put docs workspace/x "$SB/pay-x" '--head=zz'
 refused 1 ERR_INVALID_ARGUMENT "--head takes a commit id or none: 'zz'"
-store_list docs extra
-refused 1 ERR_INVALID_ARGUMENT "store.list takes one argument, the namespace"
+store_list docs extra another
+refused 1 ERR_INVALID_ARGUMENT "store.list takes the namespace and an optional key prefix"
+store_list docs 'bad prefix'
+refused 1 ERR_INVALID_ARGUMENT "malformed key prefix 'bad prefix'"
+store_list docs '/workspace'
+refused 1 ERR_INVALID_ARGUMENT "malformed key prefix '/workspace'"
+store_list docs 'workspace/../x'
+refused 1 ERR_INVALID_ARGUMENT "malformed key prefix 'workspace/../x'"
 run store.get store.get docs
 refused 1 ERR_INVALID_ARGUMENT "store.get takes the namespace and the key"
 run store.put store.put docs
@@ -699,6 +719,51 @@ rawok
 wantout '{"ref":"fixture#depth:8","data":{"name":"depth","value":"8"}}'
 tc "S9c: data_get resolves a module ref and follows a chain to the eighth hop"
 
+# the module interface reaches the extension root and its base mirror, the homes the
+# module system moved the feature modules to
+mkdir -p .contexture/extensions/modules/extprobe/scripts
+printf 'namespace: extprobe\nroot: extprobe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > .contexture/extensions/modules/extprobe/data
+cat > .contexture/extensions/modules/extprobe/scripts/data <<'EXTPROBE'
+#!/bin/sh
+. "${CTX_STORE_ROOT:-$PWD}/.contexture/storage/scripts/library"
+case "${1:-}" in
+  data_get)
+    case "${2:-}" in
+      extprobe#item) data_emit "$2" '{"name":"extension","value":"one"}' ;;
+      *) printf 'data_get: error: item '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "${2#extprobe#}" >&2; exit 1 ;;
+    esac
+    ;;
+  *) exit 1 ;;
+esac
+EXTPROBE
+chmod +x .contexture/extensions/modules/extprobe/scripts/data
+FN=data_get
+data_get extprobe#item > "$O" 2> "$E"; RC=$?
+rawok
+wantout '{"ref":"extprobe#item","data":{"name":"extension","value":"one"}}'
+tc "S9c2: data_get resolves a module under the workspace extension root"
+
+mkdir -p base/.contexture/extensions/modules/baseprobe/scripts
+printf 'namespace: baseprobe\nroot: baseprobe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n' > base/.contexture/extensions/modules/baseprobe/data
+cat > base/.contexture/extensions/modules/baseprobe/scripts/data <<'BASEPROBE'
+#!/bin/sh
+. "${CTX_STORE_ROOT:-$PWD}/.contexture/storage/scripts/library"
+case "${1:-}" in
+  data_get)
+    case "${2:-}" in
+      baseprobe#item) data_emit "$2" '{"name":"base","value":"one"}' ;;
+      *) printf 'data_get: error: item '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "${2#baseprobe#}" >&2; exit 1 ;;
+    esac
+    ;;
+  *) exit 1 ;;
+esac
+BASEPROBE
+chmod +x base/.contexture/extensions/modules/baseprobe/scripts/data
+data_get baseprobe#item > "$O" 2> "$E"; RC=$?
+rawok
+wantout '{"ref":"baseprobe#item","data":{"name":"base","value":"one"}}'
+tc "S9c3: data_get resolves an extension module through the base mirror"
+
 data_get fixture#deep:1 > "$O" 2> "$E"; RC=$?
 [ "$RC" -eq 1 ] || miss "depth: rc $RC want 1"
 [ -s "$O" ] && miss "depth printed stdout [$(head -c 120 "$O")]"
@@ -814,11 +879,15 @@ sput genericdoc g1/x "$SB/payloads/generic"; answer
 sput exactonly e1/x "$SB/payloads/flat"; answer
 sput jsondoc j1/x "$SB/payloads/json"; answer
 
-needle_exact='{"namespace":"searchdoc","query":"needle","mode":"exact","total_matches":3,"results":[{"key":"u1/backlog","section":"backlog","snippet":"Second needle","score":0},{"key":"u1/journal","section":"journal","snippet":"needle in the journal","score":0},{"key":"u1/lanes/l1/report","section":"lane_report","snippet":"Report about a needle","score":0}]}'
-alpha_exact='{"namespace":"searchdoc","query":"alpha","mode":"exact","total_matches":1,"results":[{"key":"u1/backlog","section":"backlog","snippet":"@task alpha","score":0}]}'
-status_exact='{"namespace":"searchdoc","query":"status","mode":"exact","total_matches":3,"results":[{"key":"u1/backlog","section":"backlog","snippet":"TODO","score":0},{"key":"u1/backlog","section":"backlog","snippet":"TODO","score":0},{"key":"u1/state","section":"state","snippet":"status: ACTIVE","score":0}]}'
+needle_exact='{"namespace":"searchdoc","query":"needle","mode":"exact","total_matches":3,"results":[{"key":"u1/backlog","entity_type":"task","entity_id":"beta","section":"backlog","snippet":"Second needle","score":0},{"key":"u1/journal","entity_type":"entry","entity_id":"2026-11-02-event-1","section":"journal","snippet":"needle in the journal","score":0},{"key":"u1/lanes/l1/report","entity_type":"lane","entity_id":"u1/lanes/l1/report","section":"lane_report","snippet":"Report about a needle","score":0}]}'
+alpha_exact='{"namespace":"searchdoc","query":"alpha","mode":"exact","total_matches":1,"results":[{"key":"u1/backlog","entity_type":"task","entity_id":"alpha","section":"backlog","snippet":"@task alpha","score":0}]}'
+status_exact='{"namespace":"searchdoc","query":"status","mode":"exact","total_matches":3,"results":[{"key":"u1/backlog","entity_type":"task","entity_id":"alpha","section":"backlog","snippet":"TODO","score":0},{"key":"u1/backlog","entity_type":"task","entity_id":"beta","section":"backlog","snippet":"TODO","score":0},{"key":"u1/state","entity_type":"session","entity_id":"u1/state","section":"state","snippet":"status: ACTIVE","score":0}]}'
 ssearch searchdoc exact 20 needle; answer; wantout "$needle_exact"
-tc "S10a: the exact rule over the document set: one row per entity and section, the first matching line, bytewise key order"
+tc "S10a: the exact rule over the document set: one row per entity and section, the first matching line, bytewise key order, the entity identity from the rules"
+ssearch searchdoc exact 1 needle; answer
+wantout '{"namespace":"searchdoc","query":"needle","mode":"exact","total_matches":3,"results":[{"key":"u1/backlog","entity_type":"task","entity_id":"beta","section":"backlog","snippet":"Second needle","score":0}]}'
+ssearch searchdoc exact 0 needle; answer; wantout "$needle_exact"
+tc "S10a2: the limit applies after the complete walk (total_matches counts every pair); limit 0 answers every result"
 ssearch searchdoc exact 20 alpha; answer; wantout "$alpha_exact"
 ssearch searchdoc exact 20 status; answer; wantout "$status_exact"
 tc "S10b: two entities in one key and section answer two rows; the state section is its own row"
@@ -828,13 +897,13 @@ ssearch searchdoc exact 20 ''
 refused 1 ERR_INVALID_ARGUMENT "the search query is empty"
 tc "S10c2: an empty search query refuses before any result"
 ssearch flatdoc exact 20 needle; answer
-wantout '{"namespace":"flatdoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"f1/x","section":"body","snippet":"flat needle value","score":0}]}'
-tc "S10d: the flat form searches the raw value as one document in section body"
+wantout '{"namespace":"flatdoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"f1/x","entity_type":"document","entity_id":"f1/x","section":"body","snippet":"flat needle value","score":0}]}'
+tc "S10d: the flat form searches the raw value as one document in section body, its id the key"
 ssearch genericdoc exact 20 needle; answer
-wantout '{"namespace":"genericdoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"g1/x","section":"body","snippet":"generic needle value","score":0}]}'
+wantout '{"namespace":"genericdoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"g1/x","entity_type":"document","entity_id":"g1/x","section":"body","snippet":"generic needle value","score":0}]}'
 tc "S10e: a module with no search schema still searches exact through the generic fallback"
 ssearch jsondoc exact 20 needle; answer
-wantout '{"namespace":"jsondoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"j1/x","section":"body","snippet":"{\"title\":\"Needle title\",\"body\":\"body needle\"}","score":0}]}'
+wantout '{"namespace":"jsondoc","query":"needle","mode":"exact","total_matches":1,"results":[{"key":"j1/x","entity_type":"document","entity_id":"j1/x","section":"body","snippet":"{\"title\":\"Needle title\",\"body\":\"body needle\"}","score":0}]}'
 tc "S10f: exact over a flat JSON schema still matches the raw value, never the extracted fields"
 if [ "$IS_POSIX" -eq 1 ]; then
   ssearch searchdoc hybrid 20 needle
@@ -849,18 +918,23 @@ else
     *) miss "the hybrid answer [$(cat "$O")]" ;;
   esac
   grep -q '"key":"u1/backlog"' "$O" || miss "the hybrid answer lacks the backlog key"
+  grep -q '"entity_type":"task","entity_id":"beta"' "$O" || miss "the hybrid answer lacks the backlog entity identity [$(cat "$O")]"
   grep -q '"score":0\.' "$O" || miss "the hybrid answer lacks a positive score"
   ssearch searchdoc trigram 20 needle; answer
   case "$(cat "$O")" in
     '{"namespace":"searchdoc","query":"needle","mode":"trigram","total_matches":3,'*) ;;
     *) miss "the trigram answer [$(cat "$O")]" ;;
   esac
+  grep -q '"entity_type":"task","entity_id":"beta"' "$O" || miss "the trigram answer lacks the entity identity"
   ssearch flatdoc hybrid 20 needle; answer
   case "$(cat "$O")" in *'"section":"body"'*'"score":0.'*) ;; *) miss "the flat hybrid answer [$(cat "$O")]" ;; esac
+  grep -q '"entity_type":"document","entity_id":"f1/x"' "$O" || miss "the flat hybrid answer lacks the entity identity"
   ssearch genericdoc hybrid 20 needle; answer
   case "$(cat "$O")" in *'"key":"g1/x"'*'"section":"body"'*'"score":0.'*) ;; *) miss "the generic hybrid answer [$(cat "$O")]" ;; esac
+  grep -q '"entity_type":"document","entity_id":"g1/x"' "$O" || miss "the generic hybrid answer lacks the entity identity"
   ssearch jsondoc hybrid 20 needle; answer
   case "$(cat "$O")" in *'"key":"j1/x"'*'"section":"body"'*'"score":0.'*) ;; *) miss "the JSON hybrid answer [$(cat "$O")]" ;; esac
+  grep -q '"entity_type":"document","entity_id":"j1/x"' "$O" || miss "the JSON hybrid answer lacks the entity identity"
   ssearch exactonly hybrid 20 needle
   refused 1 ERR_CAPABILITY_UNSUPPORTED "mode 'hybrid' is not declared by namespace 'exactonly'; declared modes: exact"
   tc "S10g: the ranked modes answer from the fts5 store index; the generic raw fallback ranks a schema-less module; an undeclared mode refuses by name"
