@@ -2,7 +2,7 @@
 # test-version.sh: the sqlite3 version guard on the plugin's own module copy. The driver's SQL
 # needs SQLite 3.44 or later (ORDER BY inside an aggregate, strict json_valid): below it every
 # store function refuses rc 2 ERR_DRIVER_NOT_FOUND naming the version, and storage.health
-# (what ctx session diagnose prints) reports health error naming it too, never ok while no
+# (what ctx unit diagnose prints) reports health error naming it too, never ok while no
 # function can serve (lanes/si-f5-fts5-review/report F3). A fake sqlite3 on PATH reports the
 # version under test for sqlite_version() and runs the real one for everything else.
 #   1. 3.43.2: store.put refuses rc 2 with the one fixed line, nothing on stdout;

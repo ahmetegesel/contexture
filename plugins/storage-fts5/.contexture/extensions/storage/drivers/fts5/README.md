@@ -11,30 +11,18 @@ is the off-path maintainer map.
 
 | piece | what it is |
 |---|---|
-| `module` | the module summary line: the driver name, its contract, and no verbs |
-| `schema.sql` | the schema version 4 DDL: the typed record tables, the canonical renderer views, the derived `lines` and `search_documents` tables with the dual FTS5 tables and their triggers, the legacy docs tables, and the generic module store's tables (`store`, `store_changes`, `store_docs`, `store_docs_schema`) with the dual store FTS5 tables and their triggers |
-| `db-init.sh` | the open path, sourced by the driver: the sqlite3 3.44 minimum, the fresh schema in a new or empty file, the version 4 open that adds the module store's four tables and the store FTS5 indexes to a store created before them, and the refusal of any other version |
-| `drivers/fts5` | the contract 2 entry point: the record functions' argv and payload checks, the one sqlite3 run per call over `sql/`, the descriptor, and `storage.health` |
-| `sql/fn/` | one SQL script per record function; each reads the call's payload and returns the function's answer or refusal |
-| `sql/lib/` | the shared pieces: the payload decoded in SQL, the refusal order, the derived fields, the answer builders (`json_object` in the contract key order), the append and find helpers, the anchor and slug rules, and the stop line |
-| `sql/derive.sql` | the per-part derive of the exact `lines` and the ranked `search_documents` a write rebuilds in its transaction |
-| `sql/split.sql` | the text splitter the derive uses, linear in the text |
+| `schema.sql` | the schema version 5 store-only DDL: `store`, `store_changes`, `store_docs`, `store_docs_schema`, and the dual store FTS5 tables with their triggers |
+| `db-init.sh` | the open path, sourced by the driver: the sqlite3 3.44 minimum, the whole schema 5 in a new or empty file, the version 5 open, and the refusal of any other version with no upgrade path |
+| `drivers/fts5` | the contract 3 store-only entry point: the seven store functions, the store search, `capability`, and `storage.health` |
 
 ## The record
 
-The module answers the 38 record functions of contract 2 natively in SQL: one sqlite3 run
-per call, the payload decoded in SQL, the refusal checks in the posix driver's order, and
-the answer built with `json_object` in the contract key order. Every write is one
-`BEGIN IMMEDIATE` transaction under the unit write lock, whole or nothing; the answer prints
-only after the commit. The tables hold the typed fields the functions write, never stored
-markdown: every read renders an item in the one canonical layout, so the views
-(`v_state_text`, `v_task_span`, `v_finding_span`, `v_closer_line`, `v_journal_span`) are
-the renderer, and liveness is positional over the closers table.
-
-Search answers the shared result shape. `exact` reads the derived `lines` table (the one
-exact rule, one row per entity and section, score 0); `hybrid` fuses the two FTS5 tables
-(Porter prose and Trigram code) by reciprocal rank; `trigram` reads the Trigram table alone.
-The descriptor declares `exact`, `hybrid`, and `trigram`, and every search names its mode.
+The unit module owns the record: its data script stores one value per artifact under the
+namespace `unit`, parses and renders the canonical record text, and reaches this driver
+only through the generic store. The driver never parses markdown; it keeps the bytes
+opaque and derives the search documents from the module's declared search schema at write
+time. The record's 35 operations, its rules, and its canonical layout are the unit
+module's, not this driver's.
 
 ## The store
 
@@ -65,14 +53,12 @@ value. A mode the module does not declare or the driver does not serve refuses r
 
 ## Schema and open path
 
-The store is at schema version 4 (`PRAGMA user_version`). A new or empty database gets the
-whole schema on its first write. A version 4 store opens with one read, and a version 4
-store created before the generic module store gains its four tables on open by idempotent
-`CREATE TABLE IF NOT EXISTS` (the version stays 4). A store at any other version refuses
-every function rc 2 `ERR_STORAGE_SCHEMA` naming its version and the way forward, is never
-written, and gets no backup: the plugin carries no upgrade path, so an older store is moved
-aside and its record re-entered into a fresh one through the ctx verbs. The legacy docs and
-doc_changes tables stay untouched and unread.
+The store is at schema version 5 (`PRAGMA user_version`). A new or empty database gets the
+whole schema on its first write. A version 5 store opens with one read. A store at any
+other version refuses every function rc 2 `ERR_STORAGE_SCHEMA` naming its version and the
+way forward, is never written, and gets no backup: the plugin carries no upgrade path, so
+an older store is moved aside and its record re-entered into a fresh one through the ctx
+verbs.
 
 ## Tests
 

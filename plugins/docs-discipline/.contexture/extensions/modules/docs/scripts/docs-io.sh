@@ -44,18 +44,15 @@ docs_io_init() {
   [ -n "$di_root" ] || di_root=$(CDPATH= cd -- "$1/../../.." && pwd)
   DOCS_ROOT="${DOCS_WORKSPACE_ROOT:-${CTX_ROOT:-$di_root}}"
   DOCS_ROOT_P=$(CDPATH= cd -- "$DOCS_ROOT" 2>/dev/null && pwd) || DOCS_ROOT_P=""
-  # the storage core and the session lib resolve from CTX_ROOT, never a relative walk:
+  # the storage core and the unit lib resolve from CTX_ROOT, never a relative walk:
   # the docs module may sit under the extension root, one level deeper than the
   # workspace modules root, so a relative climb would leave the core's tree. The core
-  # resolver, the session wrapper, the base mirror, and the core library are tried in
-  # that order; the JSON decoder stays the session module's (the resolver's sibling
-  # lib is not the decoder's home).
+  # resolver and the base mirror are tried in that order; the JSON decoder is the unit
+  # module's (the resolver's sibling lib is not the decoder's home).
   di_ctx="${CTX_ROOT:-$DOCS_ROOT}"
   DOCS_RESOLVER=""
   for di_c in "$di_ctx/.contexture/storage/scripts/driver-resolver" \
-              "$di_ctx/.contexture/modules/session/scripts/driver-resolver" \
-              "$di_ctx/base/.contexture/storage/scripts/driver-resolver" \
-              "$di_ctx/base/.contexture/modules/session/scripts/driver-resolver"; do
+              "$di_ctx/base/.contexture/storage/scripts/driver-resolver"; do
     if [ -x "$di_c" ]; then DOCS_RESOLVER=$di_c; break; fi
   done
   DOCS_LIB=""
@@ -64,8 +61,8 @@ docs_io_init() {
     if [ -f "$di_c" ]; then DOCS_LIB=$di_c; break; fi
   done
   DOCS_JSON=""
-  for di_c in "$di_ctx/.contexture/modules/session/lib/json.awk" \
-              "$di_ctx/base/.contexture/modules/session/lib/json.awk"; do
+  for di_c in "$di_ctx/.contexture/modules/unit/lib/json.awk" \
+              "$di_ctx/base/.contexture/modules/unit/lib/json.awk"; do
     if [ -f "$di_c" ]; then DOCS_JSON=$di_c; break; fi
   done
   if [ -n "$DOCS_LIB" ]; then
@@ -134,7 +131,7 @@ docs_keys() {
     return "$dk_rc"
   fi
   if [ -z "$DOCS_JSON" ]; then
-    printf '%s: the storage answer decoder is missing (need: the session module lib/json.awk) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    printf '%s: the storage answer decoder is missing (need: the unit module lib/json.awk) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
     DOCS_KEYS=""
     return 2
   fi
@@ -340,7 +337,7 @@ docs_no_display() {
 
 # docs_record_file <path>: rc 0 when the path lies inside the record's sessions drawer (by
 # its spelling, or physically under the workspace's drawer): a record artifact is read
-# through ctx session, never as a file (the single store)
+# through ctx unit, never as a file (the single store)
 docs_record_file() {
   case "$1" in
     .contexture/sessions/*|*/.contexture/sessions/*) return 0 ;;
@@ -354,9 +351,9 @@ docs_record_file() {
 }
 
 # docs_active_task <unit>: the unit's first IN_PROGRESS task (backlog order) through ctx
-# session task list, its block verbatim through ctx session resolve task# (task show's text
+# unit task list, its block verbatim through ctx unit resolve task# (task show's text
 # view drops REFS) into scratch: DOCS_TASK names the file, empty when no task is active;
-# the session verbs' rc and messages pass through
+# the unit verbs' rc and messages pass through
 docs_active_task() {
   DOCS_TASK=""
   at_ctx=""
@@ -370,14 +367,14 @@ docs_active_task() {
     return 2
   fi
   docs_scratch || return 2
-  if at_list=$( (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$at_ctx" session task list "$1" --status=progress < /dev/null) ); then
+  if at_list=$( (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$at_ctx" unit task list "$1" --status=progress < /dev/null) ); then
     :
   else
     return $?
   fi
   at_slug=$(printf '%s\n' "$at_list" | awk '$1 == "[IN_PROGRESS]" { s = $2; sub(/:$/, "", s); print s; exit }')
   [ -n "$at_slug" ] || return 0
-  if (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$at_ctx" session resolve "$1" "task#$at_slug" < /dev/null) > "$DOCS_SCRATCH/task"; then
+  if (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$at_ctx" unit resolve "$1" "task#$at_slug" < /dev/null) > "$DOCS_SCRATCH/task"; then
     DOCS_TASK="$DOCS_SCRATCH/task"
     return 0
   else
@@ -408,7 +405,7 @@ docs_head() {
 # <seq> TAB <at> TAB <op> TAB <key> TAB <head> TAB <prior>, oldest first
 docs_store_changes_rows() {
   if [ -z "$DOCS_JSON" ]; then
-    printf '%s: the storage answer decoder is missing (need: the session module lib/json.awk) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    printf '%s: the storage answer decoder is missing (need: the unit module lib/json.awk) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
     return 2
   fi
   if ! awk -f "$DOCS_JSON" < "$1" > "$2.flat" 2> "$2.err"; then

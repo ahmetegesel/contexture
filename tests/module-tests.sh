@@ -22,7 +22,7 @@ set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
-SESSION_MOD="$ROOT/base/.contexture/modules/session"
+UNIT_MOD="$ROOT/base/.contexture/modules/unit"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
 LANE_MOD="$ROOT/base/.contexture/extensions/modules/lane"
@@ -48,12 +48,12 @@ mkdir -p "$SB/.contexture/modules" "$SB/.contexture/extensions/modules" "$SB/cat
 cp -p "$CTX_SRC" "$SB/.contexture/ctx"
 cp -p "$INSTALL_CORE" "$SB/.contexture/package-install"
 cp -p "$UNINSTALL_CORE" "$SB/.contexture/package-uninstall"
-cp -R "$SESSION_MOD" "$SB/.contexture/modules/session"
+cp -R "$UNIT_MOD" "$SB/.contexture/modules/unit"
 cp -R "$RUN_MOD" "$SB/.contexture/modules/run"
 cp -R "$STORAGE_CORE" "$SB/.contexture/storage"
 cp -R "$LANE_MOD" "$SB/.contexture/extensions/modules/lane"
 chmod +x "$SB/.contexture/ctx" "$SB/.contexture/package-install" "$SB/.contexture/package-uninstall" \
-  "$SB/.contexture/modules/session/scripts/"* "$SB/.contexture/storage/scripts/"* \
+  "$SB/.contexture/modules/unit/scripts/"* "$SB/.contexture/storage/scripts/"* \
   "$SB/.contexture/storage/drivers/posix/driver" "$SB/.contexture/extensions/modules/lane/scripts/"* 2>/dev/null || true
 cd "$SB" || exit 2
 SB_REAL=$(pwd)
@@ -367,7 +367,7 @@ add_file "$RI" rhythms/fixture-ritual.md '@rhythm fixture-ritual
   activation: propose'
 install_pkg "$RI"
 a_rc "$RC" 0 "RI: a package carrying a ritual rhythm installs rc0"
-IDX=$(./.contexture/ctx session index 2>/dev/null)
+IDX=$(./.contexture/ctx unit index 2>/dev/null)
 a_eq "$IDX" "fixture-ritual (.contexture/extensions/rhythms/fixture-ritual.md) | use when: a fixture needs the rhythm index | activation: propose" "RI: the rhythm index reads the extension root"
 a_contains "$STATE/pkgri.files" "law .contexture/extensions/modules/rifixture/laws" "RI: the record carries the module law fragment"
 LAWFILE=$(sed -n 's/^law //p' "$STATE/pkgri.files" | head -n 1)
@@ -375,13 +375,13 @@ a_file "$SB/$LAWFILE" "RI: the recorded law fragment path exists"
 a_contains "$SB/$LAWFILE" "rifixture-law" "RI: the recorded law fragment carries its clause"
 mkdir -p .contexture/rhythms
 printf '@rhythm workspace-ritual\n  use when: the workspace half is proven\n' > .contexture/rhythms/workspace-ritual.md
-IDX=$(./.contexture/ctx session index 2>/dev/null)
+IDX=$(./.contexture/ctx unit index 2>/dev/null)
 a_eq "$(printf '%s\n' "$IDX" | head -n 1)" "workspace-ritual (.contexture/rhythms/workspace-ritual.md) | use when: the workspace half is proven | activation: propose" "RI: the workspace rhythm lists before the extension rhythm"
 a_eq "$(printf '%s\n' "$IDX" | tail -n 1)" "fixture-ritual (.contexture/extensions/rhythms/fixture-ritual.md) | use when: a fixture needs the rhythm index | activation: propose" "RI: the extension rhythm lists after the workspace rhythm"
 rm -rf .contexture/rhythms
 uninstall_pkg "$RI"
 a_rc "$RC" 0 "RI: the rhythm package uninstalls rc0"
-IDX=$(./.contexture/ctx session index 2>/dev/null)
+IDX=$(./.contexture/ctx unit index 2>/dev/null)
 a_not "$IDX" "fixture-ritual" "RI: the uninstalled extension rhythm leaves the index"
 
 echo "== MF the manifest refusals at install =="
@@ -543,7 +543,7 @@ a_match "$ERR" "pkgshared1" "CO: the refusal names the recording package"
 a_eq "$(cat "$SB/.contexture/extensions/rhythms/shared.md")" "from package one" "CO: another package's file keeps its bytes"
 PB=$SB/catalog/pkgbuiltin
 new_pkg "$PB"
-add_module "$PB" session
+add_module "$PB" unit
 install_pkg "$PB"
 a_rc "$RC" 1 "CO: a builtin module name refuses rc1"
 a_match "$ERR" "collides with a builtin" "CO: the builtin names its class"
@@ -792,9 +792,9 @@ echo "== RS the engine's reserved reader =="
 ( cd "$SB" && ./.contexture/ctx _reserved refresh ) >/dev/null 2>&1
 a_rc "$?" 0 "RS: refresh is reserved"
 ( cd "$SB" && ./.contexture/ctx _reserved record ) >/dev/null 2>&1
-a_rc "$?" 0 "RS: a session verb is reserved"
-( cd "$SB" && ./.contexture/ctx _reserved session ) >/dev/null 2>&1
-a_rc "$?" 1 "RS: session is a builtin, not a reserved word"
+a_rc "$?" 0 "RS: a unit verb is reserved"
+( cd "$SB" && ./.contexture/ctx _reserved unit ) >/dev/null 2>&1
+a_rc "$?" 1 "RS: unit is a builtin, not a reserved word"
 ( cd "$SB" && ./.contexture/ctx _reserved zzz ) >/dev/null 2>&1
 a_rc "$?" 1 "RS: a free name answers rc1"
 ( cd "$SB" && ./.contexture/ctx _reserved ) >/dev/null 2>&1

@@ -1,6 +1,6 @@
 #!/bin/sh
 # summary: finding operations (add, show, update, supersede, drop, list)
-# usage: ctx session finding <subcommand> <unit> [args...]
+# usage: ctx unit finding <subcommand> <unit> [args...]
 # help: subcommands:
 # help:   add <unit> <NAME> --summary="..." [--ref=...]... [--supersedes=...]
 # help:   show <unit> <NAME> [--json]
@@ -15,7 +15,7 @@
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 help_table() {
-  printf 'usage: ctx session finding <subcommand> <unit> [args...]\n'
+  printf 'usage: ctx unit finding <subcommand> <unit> [args...]\n'
   printf 'subcommands:\n'
   printf '  add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]\n'
   printf '  show <unit> <NAME> [--json]\n'
@@ -47,7 +47,7 @@ read_name() {
 }
 
 if [ $# -eq 0 ]; then
-  printf 'usage: ctx session finding <subcommand> <unit> [args...]\n' >&2
+  printf 'usage: ctx unit finding <subcommand> <unit> [args...]\n' >&2
   printf 'subcommands: add, show, update, supersede, drop, list\n' >&2
   exit 1
 fi

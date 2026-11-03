@@ -28,8 +28,8 @@ SB=$1
 FX=$2
 cd "$SB" || exit 1
 C="$SB/.contexture/ctx"
-R="$SB/.contexture/modules/session/scripts/driver-resolver"
-J="$SB/.contexture/modules/session/lib/json.awk"
+R="$SB/.contexture/storage/scripts/driver-resolver"
+J="$SB/.contexture/modules/unit/lib/json.awk"
 W="$SB/write-verbs.scratch"
 rm -rf "$W"
 mkdir -p "$W" || exit 1

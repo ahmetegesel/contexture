@@ -25,7 +25,7 @@ set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
-SESSION_MOD="$ROOT/base/.contexture/modules/session"
+UNIT_MOD="$ROOT/base/.contexture/modules/unit"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
 LANE_MOD="$ROOT/base/.contexture/extensions/modules/lane"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
@@ -40,7 +40,7 @@ for a in "$@"; do
   esac
 done
 
-for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/drivers/posix/driver" "$LANE_MOD/scripts/record" "$RUN_MOD"; do
+for f in "$CTX_SRC" "$UNIT_MOD/scripts/data" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/drivers/posix/driver" "$LANE_MOD/scripts/record" "$RUN_MOD"; do
   [ -e "$f" ] || { echo "base-only-tests.sh: missing $f" >&2; exit 2; }
 done
 
@@ -166,7 +166,7 @@ a_not "$out" "module storage:" "help: the storage core is not listed as a module
 [ -x .contexture/storage/scripts/driver-resolver ] && ok "core: the storage core resolver is installed" || bad "core: the storage core resolver is missing"
 [ -f .contexture/storage/scripts/library ] && ok "core: the storage core library is installed" || bad "core: the storage core library is missing"
 [ -x .contexture/storage/drivers/posix/driver ] && ok "core: the posix driver sits in the storage core" || bad "core: the posix driver is missing"
-a_match "$out" "module session:" "help: the session module is listed"
+a_match "$out" "module unit:" "help: the unit module is listed"
 a_match "$out" "module lane:" "help: the lane module is listed"
 # the lane module ships under the extension root: discovery reaches it there, the
 # workspace module lists before the extension module, dispatch resolves its own dir,
@@ -175,7 +175,7 @@ out=$($CTX lane help 2>&1); a_rc "$?" "0" "extension root: ctx lane help rc0 fro
 a_match "$out" "create" "extension root: the lane verb table renders"
 out=$($CTX help 2>/dev/null)
 ord=$(printf '%s\n' "$out" | awk '/^modules:/{on=1;next} on && /^  [a-z]/{print $1}' | tr '\n' ' ')
-a_eq "$ord" "session unit lane " "extension root: the workspace module lists before the extension module"
+a_eq "$ord" "unit lane " "extension root: the workspace module lists before the extension module"
 mv .contexture/extensions .contexture/extensions.b1
 out=$($CTX help 2>"ext.err"); rc=$?
 a_rc "$rc" "0" "extension root: ctx help rc0 with the extension root absent"
@@ -190,63 +190,63 @@ a_eq "$err" "ctx: unknown command: docs" "help: ctx docs names the unknown comma
 err=$($CTX storage-fts5 help 2>&1 >/dev/null); rc=$?
 a_rc "$rc" "1" "help: ctx storage-fts5 is unknown without the plugin"
 a_eq "$err" "ctx: unknown command: storage-fts5" "help: ctx storage-fts5 names the unknown command"
-out=$($CTX session active 2>&1); rc=$?
-a_rc "$rc" "0" "boot: ctx session active rc0 on an empty drawer"
+out=$($CTX unit active 2>&1); rc=$?
+a_rc "$rc" "0" "boot: ctx unit active rc0 on an empty drawer"
 a_match "$out" "no sessions yet" "boot: an empty drawer reads no sessions yet"
 
 # ==============================================================================
 # B2: the absent-rhythms index (BG1)
 # ==============================================================================
 printf '\n== B2: the absent-rhythms index (BG1) ==\n'
-out=$($CTX session index 2> "$E"); RC=$?
+out=$($CTX unit index 2> "$E"); RC=$?
 a_rc "$RC" "0" "BG1: the absent rhythms directory answers rc0"
 a_eq "$out" "" "BG1: the absent rhythms directory answers an empty index"
 a_eq "$(cat "$E")" "" "BG1: the absent rhythms directory writes no stderr"
 mkdir -p .contexture/rhythms
-out=$($CTX session index 2> "$E"); RC=$?
+out=$($CTX unit index 2> "$E"); RC=$?
 a_rc "$RC" "0" "BG1: an empty rhythms directory answers rc0"
 a_eq "$out" "" "BG1: an empty rhythms directory answers an empty index"
 a_eq "$(cat "$E")" "" "BG1: an empty rhythms directory writes no stderr"
 rmdir .contexture/rhythms
-err=$($CTX session index extra 2>&1 >/dev/null); rc=$?
+err=$($CTX unit index extra 2>&1 >/dev/null); rc=$?
 a_rc "$rc" "1" "BG1: an argument still refuses rc1"
-a_match "$err" "^Usage: ctx session index$" "BG1: the argument refusal prints the usage"
+a_match "$err" "^Usage: ctx unit index$" "BG1: the argument refusal prints the usage"
 
 # ==============================================================================
 # B3: the base-only record smoke and the posix descriptor
 # ==============================================================================
 printf '\n== B3: the record smoke and the descriptor ==\n'
-out=$($CTX session bootstrap baseonly "the base-only probe unit" 2>&1); rc=$?
+out=$($CTX unit bootstrap baseonly "the base-only probe unit" 2>&1); rc=$?
 a_rc "$rc" "0" "record: bootstrap rc0"
 TODAY=$(date +%F)
-$CTX session task add baseonly base-t1 --objective="the base-only task" --desc="one line" --criteria="the gate is green" --details="staged base alone" --refs="./AGENTS.md" >/dev/null 2>&1
+$CTX unit task add baseonly base-t1 --objective="the base-only task" --desc="one line" --criteria="the gate is green" --details="staged base alone" --refs="./AGENTS.md" >/dev/null 2>&1
 a_rc "$?" "0" "record: task add with every field rc0"
-$CTX session task add baseonly base-t2 --objective="a task to drop" >/dev/null 2>&1
+$CTX unit task add baseonly base-t2 --objective="a task to drop" >/dev/null 2>&1
 a_rc "$?" "0" "record: the second task add rc0"
-out=$($CTX session task list baseonly --status=all 2>&1)
+out=$($CTX unit task list baseonly --status=all 2>&1)
 a_match "$out" "base-t1" "record: task list reads the added task"
-out=$($CTX session task show baseonly base-t1 2>&1)
+out=$($CTX unit task show baseonly base-t1 2>&1)
 a_match "$out" 'OBJECTIVE: "the base-only task"' "record: task show reads the objective"
-$CTX session task start baseonly base-t1 --pointer="base-t1 IN_PROGRESS: run the base-only smoke" >/dev/null 2>&1
+$CTX unit task start baseonly base-t1 --pointer="base-t1 IN_PROGRESS: run the base-only smoke" >/dev/null 2>&1
 a_rc "$?" "0" "record: task start with a pointer rc0"
-out=$($CTX session task show baseonly base-t1 2>&1)
+out=$($CTX unit task show baseonly base-t1 2>&1)
 a_match "$out" "STATUS: IN_PROGRESS" "record: task start moves the status"
-$CTX session task update baseonly base-t1 --desc="two words" >/dev/null 2>&1
+$CTX unit task update baseonly base-t1 --desc="two words" >/dev/null 2>&1
 a_rc "$?" "0" "record: task update rc0"
-$CTX session task complete baseonly base-t1 --evidence="the smoke passed" >/dev/null 2>&1
+$CTX unit task complete baseonly base-t1 --evidence="the smoke passed" >/dev/null 2>&1
 a_rc "$?" "0" "record: task complete with evidence rc0"
-$CTX session task drop baseonly base-t2 --reason="not needed" >/dev/null 2>&1
+$CTX unit task drop baseonly base-t2 --reason="not needed" >/dev/null 2>&1
 a_rc "$?" "0" "record: task drop with a reason rc0"
 S1="$TODAY-base-probe-1"
-$CTX session record baseonly --slug="$S1" --what="the first probe entry" --group=base-only >/dev/null 2>&1
+$CTX unit record baseonly --slug="$S1" --what="the first probe entry" --group=base-only >/dev/null 2>&1
 a_rc "$?" "0" "record: a given entry slug rc0"
-$CTX session record baseonly --what="the second probe entry" --group=base-only --closes="$S1 (done: closed by the smoke)" >/dev/null 2>&1
+$CTX unit record baseonly --what="the second probe entry" --group=base-only --closes="$S1 (done: closed by the smoke)" >/dev/null 2>&1
 a_rc "$?" "0" "record: a closer in the explicit form rc0"
-$CTX session finding add baseonly BASE_OLD --summary="the old finding" --ref="journal#$S1" >/dev/null 2>&1
+$CTX unit finding add baseonly BASE_OLD --summary="the old finding" --ref="journal#$S1" >/dev/null 2>&1
 a_rc "$?" "0" "record: finding add with a ref rc0"
-$CTX session finding supersede baseonly BASE_OLD BASE_NEW --summary="the new finding" >/dev/null 2>&1
+$CTX unit finding supersede baseonly BASE_OLD BASE_NEW --summary="the new finding" >/dev/null 2>&1
 a_rc "$?" "0" "record: finding supersede rc0"
-out=$($CTX session finding list baseonly --active-only 2>&1)
+out=$($CTX unit finding list baseonly --active-only 2>&1)
 a_match "$out" "BASE_NEW" "record: the active finding list reads the successor"
 a_not "$out" "BASE_OLD" "record: the active finding list hides the predecessor"
 printf '# probe lane\n\n@claim probe-claim\n  VERDICT: "the lane claim"\n' | $CTX lane create baseonly base-lane >/dev/null 2>&1
@@ -259,58 +259,58 @@ out=$($CTX lane show baseonly base-lane journal 2>&1)
 a_match "$out" "a lane event" "record: lane show reads the journal"
 out=$($CTX lane show baseonly base-lane report 2>&1)
 a_match "$out" "@claim probe-claim" "record: lane show reads the report"
-out=$($CTX session board baseonly 2>&1); a_rc "$?" "0" "record: board rc0"
+out=$($CTX unit board baseonly 2>&1); a_rc "$?" "0" "record: board rc0"
 out=""; p=1
 while [ "$p" -le 40 ]; do
-  page=$($CTX session load baseonly "$p" 2>&1)
+  page=$($CTX unit load baseonly "$p" 2>&1)
   out="$out
 $page"
   printf '%s\n' "$page" | grep -qi 'load complete' && break
   p=$((p + 1))
 done
 a_match "$out" "load complete" "record: load reaches its complete page"
-$CTX session audit baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: audit rc0"
-err=$($CTX session search baseonly "probe" 2>&1 >/dev/null); rc=$?
+$CTX unit audit baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: audit rc0"
+err=$($CTX unit search baseonly "probe" 2>&1 >/dev/null); rc=$?
 a_rc "$rc" "1" "record: search without --mode refuses rc1"
 a_match "$err" "exact" "record: the mode refusal names exact"
-out=$($CTX session search baseonly "base-only task" --mode=exact 2>&1)
+out=$($CTX unit search baseonly "base-only task" --mode=exact 2>&1)
 a_rc "$?" "0" "record: search --mode=exact rc0"
 a_match "$out" "base-t1" "record: the exact search finds the task"
 # BG2: a snippet strips the double quotes only as a pair, so a lowercase field line keeps
 # its closing quote (the state's next_action is the pre-fix case)
-$CTX session next baseonly 'task#probe-task' >/dev/null 2>&1
+$CTX unit next baseonly 'task#probe-task' >/dev/null 2>&1
 a_rc "$?" "0" "BG2: next with a paired state line rc0"
-out=$($CTX session search baseonly "task#probe-task" --mode=exact --json 2>&1)
+out=$($CTX unit search baseonly "task#probe-task" --mode=exact --json 2>&1)
 a_match "$out" '"snippet":"next_action: \\"task#probe-task\\""' "BG2: the exact snippet keeps the quote pair on a lowercase field line"
 a_not "$out" 'task#probe-task","score"' "BG2: the snippet no longer ends at the stripped trailing quote"
-out=$($CTX session resolve baseonly task#base-t1 2>&1); rc=$?
+out=$($CTX unit resolve baseonly task#base-t1 2>&1); rc=$?
 a_rc "$rc" "0" "record: resolve task# rc0"
 a_match "$out" "^@task base-t1" "record: resolve prints the task block"
-out=$($CTX session resolve baseonly "entry#$S1" 2>&1); rc=$?
+out=$($CTX unit resolve baseonly "entry#$S1" 2>&1); rc=$?
 a_rc "$rc" "0" "record: resolve entry# rc0"
 a_match "$out" "the first probe entry" "record: resolve prints the entry block"
-out=$($CTX session resolve baseonly finding#BASE_NEW 2>&1); rc=$?
+out=$($CTX unit resolve baseonly finding#BASE_NEW 2>&1); rc=$?
 a_rc "$rc" "0" "record: resolve finding# rc0"
 a_match "$out" "^@finding BASE_NEW" "record: resolve prints the finding block"
-out=$($CTX session resolve baseonly lane#base-lane/report#probe-claim 2>&1); rc=$?
+out=$($CTX unit resolve baseonly lane#base-lane/report#probe-claim 2>&1); rc=$?
 a_rc "$rc" "0" "record: resolve lane#/report# rc0"
 a_match "$out" "^@claim probe-claim" "record: resolve prints the claim block"
-out=$($CTX session entry closure baseonly "$S1" 2>&1); rc=$?
+out=$($CTX unit entry closure baseonly "$S1" 2>&1); rc=$?
 a_rc "$rc" "0" "record: entry closure rc0"
-out=$($CTX session fold baseonly 2>&1); rc=$?
+out=$($CTX unit fold baseonly 2>&1); rc=$?
 a_rc "$rc" "0" "record: the fold plan rc0"
-$CTX session stamp baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: stamp rc0"
-$CTX session refresh baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: refresh rc0"
-$CTX session close baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: close rc0"
-$CTX session record baseonly --what="a write into a closed unit" >/dev/null 2>&1
+$CTX unit stamp baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: stamp rc0"
+$CTX unit refresh baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: refresh rc0"
+$CTX unit close baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: close rc0"
+$CTX unit record baseonly --what="a write into a closed unit" >/dev/null 2>&1
 a_rc "$?" "1" "record: a write into a CLOSED unit refuses rc1"
-$CTX session reopen baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: reopen rc0"
-$CTX session record baseonly --what="the unit writes again" >/dev/null 2>&1
+$CTX unit reopen baseonly >/dev/null 2>&1; a_rc "$?" "0" "record: reopen rc0"
+$CTX unit record baseonly --what="the unit writes again" >/dev/null 2>&1
 a_rc "$?" "0" "record: a write after reopen rc0"
 # the descriptor: the contract 3 store-only card at version 3.0.0: the seven store data
 # names, exact, and store alone on posix; no record function family (capability and
 # storage.health are the driver's own methods)
-out=$($CTX session diagnose --json 2>&1); rc=$?
+out=$($CTX unit diagnose --json 2>&1); rc=$?
 a_rc "$rc" "0" "descriptor: diagnose rc0"
 a_match "$out" '"name":"posix"' "descriptor: the driver is posix"
 a_match "$out" '"version":"3.0.0"' "descriptor: driver version 3.0.0"

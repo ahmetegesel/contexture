@@ -5,10 +5,10 @@
 # help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1; a recipe holding a NUL byte or bytes that are not valid UTF-8 refuses rc 1 (ERR_INVALID_ARGUMENT) before any write
 # help: example: ctx lane create my-unit my-lane < recipe.md
 
-session_lib="${CTX_ROOT:-.}/.contexture/modules/session/lib/verb.sh"
-[ -f "$session_lib" ] || session_lib="${CTX_ROOT:-.}/base/.contexture/modules/session/lib/verb.sh"
-VB_SELF="$session_lib"
-. "$session_lib"
+unit_lib="${CTX_ROOT:-.}/.contexture/modules/unit/lib/verb.sh"
+[ -f "$unit_lib" ] || unit_lib="${CTX_ROOT:-.}/base/.contexture/modules/unit/lib/verb.sh"
+VB_SELF="$unit_lib"
+. "$unit_lib"
 
 usage() {
   printf 'usage: ctx lane create <unit> <lane-slug>  (stdin: the recipe)\n' >&2

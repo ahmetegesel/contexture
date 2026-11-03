@@ -1,12 +1,12 @@
-# verb.sh: the shared shell of the session and lane verbs (contract 3, docs/the-engine.md,
+# verb.sh: the shared shell of the unit and lane verbs (contract 3, docs/the-engine.md,
 # The descriptor and the handshake). A verb sources this file, checks its input shape, calls
 # exactly one function per record act, and renders the answer with lib/json.awk (the one
-# flattener) and lib/render.awk (the one renderer). No verb reads or writes a session
+# flattener) and lib/render.awk (the one renderer). No verb reads or writes a record
 # artifact itself: the record's 35 operations are the unit module data script's over the
 # configured store, and its record rules (a CLOSED unit, a repeated key, the status moves,
 # the pointer rule) are the module's; capability and storage.health stay the driver's,
-# reached through the resolver. A refusal passes through as its one fixed stderr line with
-# its rc.
+# reached through the storage core's resolver. A refusal passes through as its one fixed
+# stderr line with its rc.
 #
 # The wire: argv carries the function and its bounded identifiers; every free-text value
 # travels on stdin as payload lines key=value, escaped (backslash, newline, tab, carriage
@@ -18,15 +18,18 @@
 # a root left by a SIGKILLed verb is swept by the next dispatch. A verb run outside ctx
 # falls back to a folder of its own under the drawer.
 
-VB_LIB=$(CDPATH= cd -- "$(dirname -- "${VB_SELF:-$0}")/../../session/lib" 2>/dev/null && pwd)
-[ -n "$VB_LIB" ] && [ -f "$VB_LIB/verb.sh" ] || VB_LIB=$(CDPATH= cd -- "$(dirname -- "${VB_SELF:-$0}")/../lib" 2>/dev/null && pwd)
-VB_SESSION=$(CDPATH= cd -- "$VB_LIB/.." && pwd)
-# the session wrapper stays the compatibility path; it execs the storage core's resolver
-VB_RESOLVER="$VB_SESSION/scripts/driver-resolver"
+VB_LIB=$(CDPATH= cd -- "$(dirname -- "${VB_SELF:-$0}")/../lib" 2>/dev/null && pwd)
+# the storage core's resolver is the one path for capability and storage.health
+VB_RESOLVER=""
+for vb_rd in "$VB_LIB/../../../storage/scripts/driver-resolver" \
+             "${CTX_ROOT:-$PWD}/.contexture/storage/scripts/driver-resolver" \
+             "${CTX_ROOT:-$PWD}/base/.contexture/storage/scripts/driver-resolver"; do
+  if [ -x "$vb_rd" ]; then VB_RESOLVER=$vb_rd; break; fi
+done
 # the unit module's data script is the record's call path; the workspace module wins, then
-# the base mirror (the session module may be staged from base alone)
+# the base mirror (the module may be staged from base alone)
 VB_UNIT_DATA=""
-for vb_ud in "$VB_SESSION/../unit/scripts/data" \
+for vb_ud in "$VB_LIB/../scripts/data" \
              "${CTX_ROOT:-$PWD}/.contexture/modules/unit/scripts/data" \
              "${CTX_ROOT:-$PWD}/base/.contexture/modules/unit/scripts/data"; do
   if [ -x "$vb_ud" ]; then VB_UNIT_DATA=$vb_ud; break; fi

@@ -1,7 +1,7 @@
 #!/bin/sh
 # hook-tests.sh: the implicit hook engine suite (promoted from the r1 hook
 # fixture). Runs in a hermetic sandbox under the workspace scratch drawer,
-# staged from the shipped core (base/.contexture/ctx and its session and run
+# staged from the shipped core (base/.contexture/ctx and its unit and run
 # modules) plus the committed hook fixture modules under fixtures/hooks/.
 #
 # It proves the six shipped points end to end: stamp (order, context, stdout
@@ -48,7 +48,6 @@ trap cleanup EXIT
 
 mkdir -p "$SANDBOX/.contexture/modules"
 cp "$CTX" "$SANDBOX/.contexture/ctx"
-cp -R "$ROOT/base/.contexture/modules/session" "$SANDBOX/.contexture/modules/session"
 cp -R "$ROOT/base/.contexture/modules/unit" "$SANDBOX/.contexture/modules/unit"
 cp -R "$ROOT/base/.contexture/storage" "$SANDBOX/.contexture/storage"
 cp -R "$ROOT/base/.contexture/modules/run" "$SANDBOX/.contexture/modules/run"
@@ -56,7 +55,7 @@ cp -R "$FIXTURE_MODULES"/. "$SANDBOX/.contexture/modules/"
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
-chmod +x "$CTX" .contexture/modules/session/scripts/* .contexture/modules/unit/scripts/data .contexture/storage/scripts/* .contexture/storage/drivers/posix/driver .contexture/modules/*/hooks/*.sh
+chmod +x "$CTX" .contexture/modules/unit/scripts/* .contexture/modules/unit/scripts/data .contexture/storage/scripts/* .contexture/storage/drivers/posix/driver .contexture/modules/*/hooks/*.sh
 
 pass=0
 fail=0
@@ -68,12 +67,12 @@ a_not() { if printf '%s\n' "$1" | grep -q "$2"; then bad "$3 (unwanted match: $2
 
 echo "== S0 bootstrap =="
 rm -rf .contexture/sessions
-$CTX session bootstrap zz-unit "hooks fixture unit"
+$CTX unit bootstrap zz-unit "hooks fixture unit"
 a_eq "$?" "0" "S0 bootstrap rc0"
 
 echo "== S1 stamp: order, context, stdout position =="
 : > marker.log
-out=$($CTX session stamp zz-unit)
+out=$($CTX unit stamp zz-unit)
 rc=$?
 a_eq "$rc" "0" "S1 stamp rc0"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "5" "S1 five stamp hooks ran (az a, az b, zc warn, zc after, zz)"
@@ -87,7 +86,7 @@ a_eq "$(printf '%s\n' "$out" | tail -n 1)" "transition: A1 -> A2" "S1 transition
 
 echo "== S2 stamp warn-continue =="
 : > marker.log
-err=$(FORCE_FAIL=1 $CTX session stamp zz-unit 2>&1 >/dev/null)
+err=$(FORCE_FAIL=1 $CTX unit stamp zz-unit 2>&1 >/dev/null)
 rc=$?
 a_eq "$rc" "0" "S2 warn-continue rc0 (point unaffected)"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "5" "S2 five hooks: failing zc warned, remaining ran"
@@ -99,15 +98,15 @@ a_match "$err" "hook failed at stamp: zc-warn-test: 10-stamp-fail.sh (rc=3); con
 echo "== S2b standalone worker skips hooks when CTX_BIN unset/nonexec =="
 : > marker.log
 # the verbs are sh scripts since v0.55.0 (the awk stamp retired with the record engine)
-sh .contexture/modules/session/scripts/stamp zz-unit >/dev/null
+sh .contexture/modules/unit/scripts/stamp zz-unit >/dev/null
 a_eq "$?" "0" "S2b direct sh stamp rc0"
-CTX_BIN=/nonexistent-ctx sh .contexture/modules/session/scripts/stamp zz-unit >/dev/null
+CTX_BIN=/nonexistent-ctx sh .contexture/modules/unit/scripts/stamp zz-unit >/dev/null
 a_eq "$?" "0" "S2b non-exec CTX_BIN skipped silently"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S2b zero hooks fired standalone"
 
 echo "== S3 load main: pre before banner, post after =="
 : > marker.log
-out=$($CTX session load zz-unit)
+out=$($CTX unit load zz-unit)
 rc=$?
 a_eq "$rc" "0" "S3 load rc0"
 a_eq "$(printf '%s\n' "$out" | sed -n 1p)" "HOOK zb-second point=load-pre unit=zz-unit anchor=none act=none slugs=none form=main page=1" "S3 first stdout line is a load-pre hook"
@@ -126,7 +125,7 @@ a_eq "$(grep 'point=load-post' marker.log | sed -n 1p)" "az-load-post point=load
 
 echo "== S4 load refs: neither hook fires =="
 : > marker.log
-out=$($CTX session load refs zz-unit)
+out=$($CTX unit load refs zz-unit)
 rc=$?
 a_eq "$rc" "0" "S4 load refs rc0"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S4 refs form fires zero load hooks"
@@ -134,7 +133,7 @@ a_not "$out" '^HOOK ' "S4 refs stdout has no hook lines"
 
 echo "== S5 refresh verb: board + audit + refresh hooks =="
 : > marker.log
-out=$($CTX session refresh zz-unit)
+out=$($CTX unit refresh zz-unit)
 rc=$?
 a_eq "$rc" "0" "S5 refresh rc0 (audit rc)"
 a_match "$out" "anchor" "S5 board output present"
@@ -145,7 +144,7 @@ a_match "$out" "^HOOK az-refresh point=refresh" "S5 refresh hook stdout flows th
 
 echo "== S5b refresh block hook fails the verb (audit was clean) =="
 : > marker.log
-err=$(FORCE_FAIL=1 $CTX session refresh zz-unit 2>&1 >/dev/null)
+err=$(FORCE_FAIL=1 $CTX unit refresh zz-unit 2>&1 >/dev/null)
 rc=$?
 a_eq "$rc" "1" "S5b refresh rc1 from the block hook"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "3" "S5b az + zz ran, zzz block failed"
@@ -156,42 +155,42 @@ echo "== S6 task-landing gate =="
 # v0.55.0 (D34): the task-landing acts are the typed task writes and next; append, flip, and
 # amend retired, and task update fires none (amend's replacement)
 : > marker.log
-$CTX session task add zz-unit fix-1 --objective="fixture task" --desc="fixture body" --criteria="fixture criterion" --details="fixture detail" >/dev/null
+$CTX unit task add zz-unit fix-1 --objective="fixture task" --desc="fixture body" --criteria="fixture criterion" --details="fixture detail" >/dev/null
 a_eq "$?" "0" "S6 task add rc0"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "2" "S6 task-landing fires two hooks"
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=add slugs=fix-1 form=none page=none" "S6 add act+slugs context"
 a_eq "$(sed -n 2p marker.log)" "zz-task point=task-landing unit=zz-unit anchor=none act=add slugs=fix-1 form=none page=none" "S6 add zz module"
 : > marker.log
-$CTX session next zz-unit "fix-1 is next" >/dev/null
+$CTX unit next zz-unit "fix-1 is next" >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=next slugs=none form=none page=none" "S6 next act fires with empty slugs"
 : > marker.log
-$CTX session task start zz-unit fix-1 >/dev/null
+$CTX unit task start zz-unit fix-1 >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=start slugs=fix-1 form=none page=none" "S6 start act+slugs context"
 : > marker.log
-$CTX session next zz-unit "fix-1 IN_PROGRESS: next names it" >/dev/null
+$CTX unit next zz-unit "fix-1 IN_PROGRESS: next names it" >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=next slugs=fix-1 form=none page=none" "S6 next act carries the IN_PROGRESS task"
 : > marker.log
-$CTX session task complete zz-unit fix-1 --evidence="fixture evidence" >/dev/null
+$CTX unit task complete zz-unit fix-1 --evidence="fixture evidence" >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=complete slugs=fix-1 form=none page=none" "S6 complete act+slugs context"
 : > marker.log
-$CTX session task reopen zz-unit fix-1 >/dev/null
+$CTX unit task reopen zz-unit fix-1 >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=reopen slugs=fix-1 form=none page=none" "S6 reopen act+slugs context"
 : > marker.log
-$CTX session refs zz-unit >/dev/null
+$CTX unit refs zz-unit >/dev/null
 a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 refs act fires no task-landing"
 : > marker.log
-$CTX session task update zz-unit fix-1 --objective="fixture task amended" >/dev/null
+$CTX unit task update zz-unit fix-1 --objective="fixture task amended" >/dev/null
 a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 task update (amend's replacement) fires no task-landing"
 : > marker.log
-$CTX session task drop zz-unit fix-1 --reason="fixture drop" >/dev/null
+$CTX unit task drop zz-unit fix-1 --reason="fixture drop" >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=drop slugs=fix-1 form=none page=none" "S6 drop act+slugs context"
 : > marker.log
-$CTX session task start zz-unit no-such-task >/dev/null 2>&1
+$CTX unit task start zz-unit no-such-task >/dev/null 2>&1
 a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 a refused task write fires no task-landing"
 
 echo "== S7 close: close hooks only, no refresh hooks =="
 : > marker.log
-out=$($CTX session close zz-unit 2>/dev/null)
+out=$($CTX unit close zz-unit 2>/dev/null)
 rc=$?
 a_eq "$rc" "0" "S7 close rc0"
 a_eq "$(wc -l < marker.log | tr -d ' ')" "2" "S7 two close hooks"
@@ -202,7 +201,7 @@ a_match "$out" "^CLOSED: zz-unit$" "S7 close output intact"
 
 echo "== S8 block mode: first failing block hook stops the point =="
 : > marker.log
-err=$(FORCE_FAIL=1 $CTX session load zz-unit 2>&1 >out-s8.txt)
+err=$(FORCE_FAIL=1 $CTX unit load zz-unit 2>&1 >out-s8.txt)
 rc=$?
 out=$(cat out-s8.txt)
 a_eq "$rc" "1" "S8 block failure rc1"
@@ -216,13 +215,13 @@ echo "== S9 help surface: no hooks verb, no boot point, refresh listed =="
 h=$($CTX help)
 a_not "$h" "_hooks" "S9 help hides the internal runner"
 a_not "$h" "hooks" "S9 help names no hooks verb"
-sh=$($CTX session help)
-a_match "$sh" "close" "S9 session table lists close"
-a_match "$sh" "refresh" "S9 session table lists refresh"
+sh=$($CTX unit help)
+a_match "$sh" "close" "S9 unit table lists close"
+a_match "$sh" "refresh" "S9 unit table lists refresh"
 hall=$($CTX help --all)
 a_not "$hall" "_hooks" "S9 help --all hides the internal runner"
 a_not "$hall" "ctx-hook" "S9 help --all carries no hook declarations"
-a_match "$hall" "module session:" "S9 help --all renders the session module block"
+a_match "$hall" "module unit:" "S9 help --all renders the unit module block"
 # the boot point is deferred: the word boot never stands alone in any help
 boot_hits=$(printf '%s\n' "$h
 $sh

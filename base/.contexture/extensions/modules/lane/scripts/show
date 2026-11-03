@@ -8,10 +8,10 @@
 # help:   [artifact]    artifact name: report (default), recipe, or journal
 # help:   --json        output JSON format
 
-session_lib="${CTX_ROOT:-.}/.contexture/modules/session/lib/verb.sh"
-[ -f "$session_lib" ] || session_lib="${CTX_ROOT:-.}/base/.contexture/modules/session/lib/verb.sh"
-VB_SELF="$session_lib"
-. "$session_lib"
+unit_lib="${CTX_ROOT:-.}/.contexture/modules/unit/lib/verb.sh"
+[ -f "$unit_lib" ] || unit_lib="${CTX_ROOT:-.}/base/.contexture/modules/unit/lib/verb.sh"
+VB_SELF="$unit_lib"
+. "$unit_lib"
 
 if [ $# -lt 2 ]; then
   if [ $# -gt 0 ]; then

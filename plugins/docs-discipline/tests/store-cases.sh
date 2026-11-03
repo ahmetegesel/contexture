@@ -25,7 +25,7 @@
 set -u
 SB=$1
 cd "$SB" || exit 1
-R="$SB/.contexture/modules/session/scripts/driver-resolver"
+R="$SB/.contexture/storage/scripts/driver-resolver"
 PASS=0
 FAIL=0
 LOG=0

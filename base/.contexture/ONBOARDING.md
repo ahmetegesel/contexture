@@ -15,8 +15,8 @@
   1. inspect git: `git status -s`; halt if uncommitted changes exist
   2. branch: `git checkout -b adopt-contexture` (or team branch convention)
   3. never execute onboarding directly on main/master/production branches
-  4. bootstrap the adoption session: `.contexture/ctx session bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
-  5. journal the phase (`.contexture/ctx session record`): the branch and the starting git state
+  4. bootstrap the adoption session: `.contexture/ctx unit bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
+  5. journal the phase (`.contexture/ctx unit record`): the branch and the starting git state
 
 @assess
   topology:
@@ -63,7 +63,7 @@
     <every open question beside the plan: resolutions, history, intent the evidence cannot answer; none states none>
 
 @configure
-  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx session task add`; the pointer moves via `.contexture/ctx session next` (a task start writes it too: `.contexture/ctx session task start`); every task's completion journals its receipt (`.contexture/ctx session task complete`) and advances the pointer (`.contexture/ctx session next`); drift updates the backlog in the same breath via `.contexture/ctx session task update`
+  strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx unit task add`; the pointer moves via `.contexture/ctx unit next` (a task start writes it too: `.contexture/ctx unit task start`); every task's completion journals its receipt (`.contexture/ctx unit task complete`) and advances the pointer (`.contexture/ctx unit next`); drift updates the backlog in the same breath via `.contexture/ctx unit task update`
   base assets:
     copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
     set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
@@ -98,8 +98,8 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. run boot load: `.contexture/ctx session load adopt-contexture` (read every page the map reports)
-  2. run audit: `.contexture/ctx session audit adopt-contexture` (must exit 0)
+  1. run boot load: `.contexture/ctx unit load adopt-contexture` (read every page the map reports)
+  2. run audit: `.contexture/ctx unit audit adopt-contexture` (must exit 0)
   3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close

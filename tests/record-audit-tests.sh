@@ -1,8 +1,8 @@
 #!/bin/sh
-# record-audit-tests.sh: the session audit's planted-defect matrix, staged
-# from the shipped core (base/.contexture/ctx and the base session module).
+# record-audit-tests.sh: the record audit"s planted-defect matrix, staged
+# from the shipped core (base/.contexture/ctx and the base unit module).
 # Bootstraps a clean unit, proves the audit rc0, then plants each defect class
-# the audit owns (per ctx session help audit) one at a time, proves rc1 with
+# the audit owns (per ctx unit help audit) one at a time, proves rc1 with
 # the named finding, repairs, and proves rc0 again:
 #   1. dangling closer          (the seed case, from the review-harden probe)
 #   2. slugless closer
@@ -22,7 +22,6 @@ set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
-SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
 
 export LC_ALL=C
@@ -46,13 +45,12 @@ trap cleanup EXIT
 mkdir -p "$SANDBOX/.contexture/modules"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
-cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
 cp -R "$ROOT/base/.contexture/modules/unit" "$SANDBOX/.contexture/modules/unit"
 cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
-chmod +x .contexture/modules/session/scripts/* .contexture/modules/unit/scripts/data .contexture/storage/scripts/* .contexture/storage/drivers/posix/driver
+chmod +x .contexture/modules/unit/scripts/* .contexture/modules/unit/scripts/data .contexture/storage/scripts/* .contexture/storage/drivers/posix/driver
 UNIT=aud-unit
 JOURNAL=".contexture/sessions/$UNIT/journal.md"
 BACKLOG=".contexture/sessions/$UNIT/backlog.md"
@@ -65,12 +63,12 @@ a_eq() { if [ "$1" = "$2" ]; then ok "$3"; else bad "$3 (want [$1] got [$2])"; f
 a_match() { if printf '%s\n' "$1" | grep -q "$2"; then ok "$3"; else bad "$3 (no match: $2)"; fi; }
 
 run_audit() {
-  audit_out=$($CTX session audit "$UNIT" 2>&1)
+  audit_out=$($CTX unit audit "$UNIT" 2>&1)
   audit_rc=$?
 }
 
 echo "== baseline =="
-$CTX session bootstrap "$UNIT" "audit matrix unit" >/dev/null 2>&1
+$CTX unit bootstrap "$UNIT" "audit matrix unit" >/dev/null 2>&1
 a_eq "$?" "0" "bootstrap rc0"
 run_audit
 a_eq "$audit_rc" "0" "clean audit rc0"

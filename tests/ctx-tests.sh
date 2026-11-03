@@ -1,6 +1,6 @@
 #!/bin/sh
 # ctx-tests.sh: the engine suite, staged from the shipped core
-# (base/.contexture/ctx plus the base session and run modules). Covers module
+# (base/.contexture/ctx plus the base unit and run modules). Covers module
 # discovery (summary, warn+skip shapes, filter-only/hook-only legality, the
 # reserved-name refusal), the module-file grammar (summary, version, the
 # description hash block, refused requires, and the discovery validation),
@@ -19,7 +19,6 @@ set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
-SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
 IDEAS_MOD="$ROOT/.contexture/modules/ideas"
@@ -46,7 +45,6 @@ trap cleanup EXIT
 mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/bin"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
-cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
 cp -R "$ROOT/base/.contexture/modules/unit" "$SANDBOX/.contexture/modules/unit"
 cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
 cp -R "$RUN_MOD" "$SANDBOX/.contexture/modules/run"
@@ -111,7 +109,7 @@ printf '#!/bin/sh\necho shadow\n' > "$SANDBOX/.contexture/modules/load/scripts/y
 mkdir -p "$SANDBOX/.contexture/extensions/modules/aaaext/scripts" \
   "$SANDBOX/.contexture/extensions/modules/good/scripts" \
   "$SANDBOX/.contexture/extensions/modules/load/scripts" \
-  "$SANDBOX/.contexture/extensions/modules/session/scripts" \
+  "$SANDBOX/.contexture/extensions/modules/unit/scripts" \
   "$SANDBOX/.contexture/extensions/modules/hookext/hooks" \
   "$SANDBOX/.contexture/extensions/modules/filterext/filters"
 printf '# summary: an extension fixture module\n' > "$SANDBOX/.contexture/extensions/modules/aaaext/module"
@@ -128,7 +126,7 @@ printf '# summary: the extension good that must not shadow\n' > "$SANDBOX/.conte
   echo 'echo "ext shadow"'
 } > "$SANDBOX/.contexture/extensions/modules/good/scripts/hi"
 printf '# summary: a reserved extension module\n' > "$SANDBOX/.contexture/extensions/modules/load/module"
-printf '# summary: a builtin collision\n' > "$SANDBOX/.contexture/extensions/modules/session/module"
+printf '# summary: a builtin collision\n' > "$SANDBOX/.contexture/extensions/modules/unit/module"
 printf '# summary: the extension hook fixture\n' > "$SANDBOX/.contexture/extensions/modules/hookext/module"
 {
   echo '#!/bin/sh'
@@ -144,7 +142,7 @@ printf '# summary: the extension filter fixture\n' > "$SANDBOX/.contexture/exten
   echo '/EXTMARK/ { print "EXTFILTER" }'
 } > "$SANDBOX/.contexture/extensions/modules/filterext/filters/ext.awk"
 
-chmod +x "$SANDBOX/.contexture/modules/session/scripts/"* "$SANDBOX/.contexture/modules/unit/scripts/data" "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver" "$SANDBOX/.contexture/modules/good/scripts/"* "$SANDBOX/.contexture/modules/scriptsonly/scripts/orphan" "$SANDBOX/.contexture/modules/filteronly/filters/probe.awk" "$SANDBOX/.contexture/modules/hookonly/hooks/10-emit.sh" "$SANDBOX/bin/famcmd" "$SANDBOX/.contexture/extensions/modules/aaaext/scripts/hi" "$SANDBOX/.contexture/extensions/modules/good/scripts/hi" "$SANDBOX/.contexture/extensions/modules/hookext/hooks/10-ext.sh" "$SANDBOX/.contexture/extensions/modules/filterext/filters/ext.awk"
+chmod +x "$SANDBOX/.contexture/modules/unit/scripts/"* "$SANDBOX/.contexture/modules/unit/scripts/data" "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver" "$SANDBOX/.contexture/modules/good/scripts/"* "$SANDBOX/.contexture/modules/scriptsonly/scripts/orphan" "$SANDBOX/.contexture/modules/filteronly/filters/probe.awk" "$SANDBOX/.contexture/modules/hookonly/hooks/10-emit.sh" "$SANDBOX/bin/famcmd" "$SANDBOX/.contexture/extensions/modules/aaaext/scripts/hi" "$SANDBOX/.contexture/extensions/modules/good/scripts/hi" "$SANDBOX/.contexture/extensions/modules/hookext/hooks/10-ext.sh" "$SANDBOX/.contexture/extensions/modules/filterext/filters/ext.awk"
 
 cd "$SANDBOX" || exit 1
 CTX=./.contexture/ctx
@@ -182,7 +180,7 @@ hall=$($CTX help --all 2>/dev/null)
 rc=$?
 a_eq "$rc" "0" "ctx help --all rc0"
 a_match "$hall" "module good:" "help --all renders the good module block"
-a_match "$hall" "module session:" "help --all renders the session module block"
+a_match "$hall" "module unit:" "help --all renders the unit module block"
 a_match "$hall" "say hi" "help --all carries the verb summary"
 $CTX nosuch >/dev/null 2>&1
 a_eq "$?" "1" "unknown top name rc1"
@@ -196,10 +194,10 @@ a_not "$h" "the extension good that must not shadow" "XR: a workspace-name colli
 a_not "$h" "a reserved extension module" "XR: a reserved extension name stays unlisted"
 a_not "$h" "a builtin collision" "XR: a builtin-named extension module stays unlisted"
 ord=$(printf '%s\n' "$h" | awk '/^modules:/{on=1;next} on && /^  [a-z]/{print $1}' | tr '\n' ' ')
-a_eq "$ord" "good session unit aaaext filterext hookext " "XR: the workspace modules list before the extension modules"
+a_eq "$ord" "good unit aaaext filterext hookext " "XR: the workspace modules list before the extension modules"
 err=$($CTX help 2>&1 >/dev/null)
 a_match "$err" "skipping extension module good: collides with a workspace module" "XR: the workspace-name collision warns"
-a_match "$err" "skipping extension module session: collides with a builtin" "XR: the builtin collision warns"
+a_match "$err" "skipping extension module unit: collides with a builtin" "XR: the builtin collision warns"
 a_match "$err" "reserved name refused (shadow): load" "XR: the reserved extension name warns"
 out=$($CTX aaaext hi 2>/dev/null)
 a_match "$out" "ext hi" "XR: dispatch reaches the extension verb"
@@ -389,9 +387,9 @@ err=$(COMPACT_DISABLE=1 COMPACT_DEBUG=1 $CTX run sh -c 'exit 0' 2>&1 >/dev/null)
 a_match "$err" "debug: bypassed (COMPACT_DISABLE=1)" "COMPACT_DISABLE debug notice"
 
 echo "== H hook-only module discovery =="
-$CTX session bootstrap u1 "ctx suite unit" >/dev/null 2>&1
+$CTX unit bootstrap u1 "ctx suite unit" >/dev/null 2>&1
 : > marker.log
-$CTX session load u1 >/dev/null 2>&1
+$CTX unit load u1 >/dev/null 2>&1
 a_eq "$(cat marker.log)" "$(printf 'HOOK hookonly\nHOOK ext')" "hook-only module hook fires at load-pre (workspace then extension)"
 
 echo "== I ideas workspace module =="

@@ -117,7 +117,7 @@ the suite.
 ## Needs
 
 None beyond the base: the plugin is plain markdown, with no scripts and no
-dependencies. `ctx session index` reads whatever rhythm files land in
+dependencies. `ctx unit index` reads whatever rhythm files land in
 `.contexture/rhythms/` and `.contexture/extensions/rhythms/`.
 
 ## Contributing

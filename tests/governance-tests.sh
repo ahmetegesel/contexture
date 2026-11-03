@@ -11,9 +11,9 @@
 #      in docs/adoption.md and docs/the-engine.md is one string, and every
 #      tracked path under base/ sits under a declared root, every declared root
 #      carries a tracked path, and the payload modules are exactly lane, run,
-#      and session (the storage core sits beside them and is not a module; lib/
-#      and every new verb script sit under modules/session);
-#   3. presence: every shipped session verb, hook point, and filter has a case
+#      and unit (the storage core sits beside them and is not a module; lib/
+#      and every new verb script sit under modules/unit);
+#   3. presence: every shipped unit verb, hook point, and filter has a case
 #      in the committed suites (a new surface without one fails), and the ship
 #      gate lines live on the three declared surfaces.
 #
@@ -26,7 +26,7 @@ set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
-SESSION_MOD="$ROOT/base/.contexture/modules/session"
+UNIT_MOD="$ROOT/base/.contexture/modules/unit"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
 
 export LC_ALL=C
@@ -72,15 +72,15 @@ done
 mkdir -p "$SANDBOX/.contexture/modules"
 cp "$CTX_SRC" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
-cp -R "$SESSION_MOD" "$SANDBOX/.contexture/modules/session"
+cp -R "$UNIT_MOD" "$SANDBOX/.contexture/modules/unit"
 cp -R "$STORAGE_CORE" "$SANDBOX/.contexture/storage"
-chmod +x "$SANDBOX/.contexture/modules/session/scripts/"* "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
-for form in help all session-help session-help-load; do
+chmod +x "$SANDBOX/.contexture/modules/unit/scripts/"* "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver"
+for form in help all unit-help unit-help-load; do
   case "$form" in
     help) out=$(cd "$SANDBOX" && ./.contexture/ctx help 2>&1);;
     all) out=$(cd "$SANDBOX" && ./.contexture/ctx help --all 2>&1);;
-    session-help) out=$(cd "$SANDBOX" && ./.contexture/ctx session help 2>&1);;
-    session-help-load) out=$(cd "$SANDBOX" && ./.contexture/ctx session help load 2>&1);;
+    unit-help) out=$(cd "$SANDBOX" && ./.contexture/ctx unit help 2>&1);;
+    unit-help-load) out=$(cd "$SANDBOX" && ./.contexture/ctx unit help load 2>&1);;
   esac
   hits=$(printf '%s\n' "$out" | grep -nE "$FORBID")
   if [ -z "$hits" ]; then
@@ -94,7 +94,7 @@ echo "== G2 payload path tables vs git ls-files =="
 decl_adoption=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/adoption.md" | head -n 1)
 decl_engine=$(grep -oE 'base/\.contexture/\{[^}]*\}' "$ROOT/docs/the-engine.md" | head -n 1)
 a_eq "$decl_engine" "$decl_adoption" "payload declaration identical in adoption.md and the-engine.md"
-a_eq "$decl_adoption" 'base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,modules/unit,extensions,ONBOARDING.md}' "payload declaration reads the shipped set"
+a_eq "$decl_adoption" 'base/.contexture/{ctx,package-install,package-uninstall,storage,modules/run,modules/unit,extensions,ONBOARDING.md}' "payload declaration reads the shipped set"
 if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/null 2>&1; then
   prefix=${decl_adoption%%\{*}
   inner=${decl_adoption#*\{}
@@ -140,13 +140,13 @@ if command -v git >/dev/null 2>&1 && git -C "$ROOT" rev-parse --git-dir >/dev/nu
     $1 == "base" && $2 == ".contexture" && $3 == "modules" && NF > 4 { print $4; next }
     $1 == "base" && $2 == ".contexture" && $3 == "extensions" && $4 == "modules" && NF > 5 { print $5 }
   ' | LC_ALL=C sort -u | tr '\n' ' ')
-  a_eq "$mods" "lane run session unit " "payload modules are exactly lane, run, session, and unit (the lane module in the extension root); the storage core is not a module"
+  a_eq "$mods" "lane run unit " "payload modules are exactly lane, run, and unit (the lane module in the extension root); the storage core is not a module"
 else
   echo "SKIP governance payload table: git unavailable (need: git in the upstream checkout)"
 fi
 
 echo "== G3 presence: verbs, hook points, filters =="
-disk_verbs=$(for f in "$ROOT"/base/.contexture/modules/session/scripts/*; do
+disk_verbs=$(for f in "$ROOT"/base/.contexture/modules/unit/scripts/*; do
   [ -f "$f" ] || continue
   b=${f##*/}
   printf '%s\n' "$b" | grep -q '^\.' && continue
@@ -154,15 +154,15 @@ disk_verbs=$(for f in "$ROOT"/base/.contexture/modules/session/scripts/*; do
   printf '%s\n' "$b"
 done | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
 suite_verbs=$(sed -n 's/^DECLARED="\(.*\)"$/\1/p' "$SCRIPT_DIR/session-tests.sh" | head -n 1)
-a_eq "$suite_verbs" "$disk_verbs" "presence: every shipped session verb is declared in the session suite"
+a_eq "$suite_verbs" "$disk_verbs" "presence: every shipped unit verb is declared in the unit suite"
 for v in $disk_verbs; do
   grep -q "$v" "$SCRIPT_DIR/session-tests.sh" || bad "presence: verb $v has no suite reference"
 done
-ok "presence: each verb name appears in the session suite"
+ok "presence: each verb name appears in the unit suite"
 
 # the points: the awk fire_hooks of load, the sh vb_hook of the verbs over lib/verb.sh
 # (v0.55.0), and the refresh runner
-disk_points=$( { grep -ho 'fire_hooks("[a-z-]*"' "$ROOT"/base/.contexture/modules/session/scripts/*; grep -ho 'vb_hook [a-z-]*' "$ROOT"/base/.contexture/modules/session/scripts/*; grep -ho '_hooks [a-z-]*' "$ROOT"/base/.contexture/modules/session/scripts/refresh; } | sed 's/fire_hooks("//; s/vb_hook //; s/_hooks //; s/"//' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')
+disk_points=$( { grep -ho 'fire_hooks("[a-z-]*"' "$ROOT"/base/.contexture/modules/unit/scripts/*; grep -ho 'vb_hook [a-z-]*' "$ROOT"/base/.contexture/modules/unit/scripts/*; grep -ho '_hooks [a-z-]*' "$ROOT"/base/.contexture/modules/unit/scripts/refresh; } | sed 's/fire_hooks("//; s/vb_hook //; s/_hooks //; s/"//' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')
 a_eq "$disk_points" "close load-post load-pre refresh stamp task-landing" "presence: the derived hook points are the shipped six"
 for p in $disk_points; do
   grep -q "$p" "$SCRIPT_DIR/hook-tests.sh" || bad "presence: hook point $p has no case in the hook suite"

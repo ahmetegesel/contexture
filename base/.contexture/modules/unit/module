@@ -5,7 +5,6 @@
 # and the lanes, one store value per artifact under the namespace unit. Its data script
 # answers the 35 record operations over the store's get, list, and batch, keeping the
 # current file shapes so every legacy record reads unchanged; its data file declares the
-# artifact keys and the document-set search rules. The record's verb surface is the
-# session module's until the ctx unit namespace lands; the data script is the record's
-# module-side implementation and the storage core's ref interface reaches it by
-# unit#... references.
+# artifact keys and the document-set search rules. Its scripts are the record's public
+# verb surface, dispatched as ctx unit; the data script is the record's module-side
+# implementation and the storage core's ref interface reaches it by unit#... references.

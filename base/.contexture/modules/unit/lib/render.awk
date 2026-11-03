@@ -487,7 +487,7 @@ function v_close(   n, i, u, o) {
   u = sv("unit")
   if (!bv("audit.clean")) {
     n = nn("audit.findings")
-    if (n == 0) warn("WARNING: audit failed rc=1 (run: ctx session audit " u ")")
+    if (n == 0) warn("WARNING: audit failed rc=1 (run: ctx unit audit " u ")")
     for (i = 1; i <= n; i++) warn("WARNING: " audit_line("audit.findings." i))
   }
   if (nn("open_tasks") > 0) warn("WARNING: open tasks: " list_join("open_tasks", ", "))

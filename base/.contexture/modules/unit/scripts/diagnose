@@ -1,6 +1,6 @@
 #!/bin/sh
 # summary: session diagnostics: configuration, storage driver, and storage health
-# usage: ctx session diagnose [--json]
+# usage: ctx unit diagnose [--json]
 # help: inspect workspace session configuration, the resolved storage driver and its
 # help: capability descriptor (the contract, the functions, the search modes, the
 # help: optional capabilities), and the storage backend health (storage.health).
@@ -14,19 +14,19 @@ for arg in "$@"; do
       format="json"
       ;;
     --help|-h)
-      printf 'usage: ctx session diagnose [--json]\n'
+      printf 'usage: ctx unit diagnose [--json]\n'
       printf 'inspect session configuration, resolved storage driver, capabilities, and health\n'
       exit 0
       ;;
     *)
-      printf 'ctx session diagnose: unrecognized option: %s\n' "$arg" >&2
+      printf 'ctx unit diagnose: unrecognized option: %s\n' "$arg" >&2
       exit 1
       ;;
   esac
 done
 
 if [ ! -x "$VB_RESOLVER" ]; then
-  printf 'ctx session diagnose: driver-resolver not found at %s\n' "$VB_RESOLVER" >&2
+  printf 'ctx unit diagnose: driver-resolver not found at %s\n' "$VB_RESOLVER" >&2
   exit 2
 fi
 
@@ -115,7 +115,7 @@ if [ "$format" = "json" ]; then
     "$(jstr "$driver_name")" "$(jstr "$driver_source")" "$(jstr "$driver_status")" "$desc" \
     "$(jstr "$health_status")" "$(jstr "$health_detail")" "$(jstr "$health_store")" "${active_count:-0}"
 else
-  printf 'ctx session: storage and configuration diagnostics\n'
+  printf 'ctx unit: storage and configuration diagnostics\n'
   printf '  workspace root:  %s\n' "$root"
   printf '  configuration:   %s' "$config_status"
   if [ -n "$config_driver" ]; then

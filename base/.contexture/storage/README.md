@@ -170,9 +170,9 @@ use the one-line shape `data_get: error: ref '<ref>': <message> (<CODE>)` and
 `data_emit: error: ...`; the public write that calls them re-frames with its own function
 name and the ref, and writes nothing.
 
-## Transitional
+## The retirements
 
-The session module's `scripts/driver-resolver` is the compatibility wrapper that execs
-this resolver, so the session and lane verbs, the docs module, and the plugin suites keep
-their old path. The wrapper retires with the unit module. The storage module's `module`
-file and its `ctx help` listing retired with this move; the core is not a module.
+The session module's `scripts/driver-resolver` compatibility wrapper retired with the
+unit module: the unit and lane verbs, the docs module, and the plugin suites reach this
+resolver directly. The storage module's `module` file and its `ctx help` listing retired
+with the core move; the core is not a module.

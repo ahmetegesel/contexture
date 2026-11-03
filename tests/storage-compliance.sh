@@ -70,8 +70,8 @@ set -u
 
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
-RESOLVER="$ROOT/.contexture/modules/session/scripts/driver-resolver"
-BASE_RESOLVER="$ROOT/base/.contexture/modules/session/scripts/driver-resolver"
+RESOLVER="$ROOT/.contexture/storage/scripts/driver-resolver"
+BASE_RESOLVER="$ROOT/base/.contexture/storage/scripts/driver-resolver"
 JF="$SCRIPT_DIR/lib/jflat.awk"
 FX="$SCRIPT_DIR/fixtures/compliance"
 
@@ -201,10 +201,6 @@ if [ -z "$DRIVER_EXEC" ] || [ ! -x "$DRIVER_EXEC" ]; then
     DRIVER_EXEC="$ROOT/.contexture/storage/drivers/$check_driver/driver"
   elif [ -x "$ROOT/base/.contexture/storage/drivers/$check_driver/driver" ]; then
     DRIVER_EXEC="$ROOT/base/.contexture/storage/drivers/$check_driver/driver"
-  elif [ -x "$ROOT/.contexture/modules/session/drivers/$check_driver/driver" ]; then
-    DRIVER_EXEC="$ROOT/.contexture/modules/session/drivers/$check_driver/driver"
-  elif [ -x "$ROOT/base/.contexture/modules/session/drivers/$check_driver/driver" ]; then
-    DRIVER_EXEC="$ROOT/base/.contexture/modules/session/drivers/$check_driver/driver"
   elif [ -x "$ROOT/.contexture/drivers/$check_driver/driver" ]; then
     DRIVER_EXEC="$ROOT/.contexture/drivers/$check_driver/driver"
   elif [ -x "$ROOT/.contexture/extensions/storage/drivers/$check_driver/driver" ]; then
@@ -1131,11 +1127,10 @@ tc "TC39: --mode=exact answers one row per matching entity and section, the same
 printf '\n== Suite 12: The Resolver ==\n'
 RS="$SANDBOX/rs"
 mkdir -p "$RS/.contexture/modules"
-cp -R "$ROOT/base/.contexture/modules/session" "$RS/.contexture/modules/session"
 cp -R "$ROOT/base/.contexture/modules/unit" "$RS/.contexture/modules/unit"
 cp -R "$ROOT/base/.contexture/storage" "$RS/.contexture/storage"
-chmod +x "$RS/.contexture/storage/scripts/"* "$RS/.contexture/storage/drivers/posix/driver" "$RS/.contexture/modules/unit/scripts/data"
-RSV="$RS/.contexture/modules/session/scripts/driver-resolver"
+chmod +x "$RS/.contexture/storage/scripts/"* "$RS/.contexture/storage/drivers/posix/driver" "$RS/.contexture/modules/unit/scripts/"*
+RSV="$RS/.contexture/storage/scripts/driver-resolver"
 STORE_JSON=$(printf '"%s",' list get put delete changes batch scan | sed 's/,$//')
 STORE_NO_BATCH=$(printf '"%s",' list get put delete changes scan | sed 's/,$//')
 STORE_EXTRA=$(printf '"%s",' list get put delete changes batch scan store.search | sed 's/,$//')
@@ -1252,13 +1247,15 @@ cmp -s c-disp.txt "$VD/$c_disp" || miss "the dispatch verdict changed"
 rcall "--driver=$W_YES" require store.changelog
 wantrc "$RC" 2
 # the cache answers an unchanged driver: the descriptor loses store, the mtime stays old
-wrap "$W_YES" ""
+wrap "$W_YES" "" "" ""
 rcall "--driver=$W_YES" require store
 wantrc "$RC" 0
 # a changed driver (newer than its verdict) is read afresh
 touch -t 203001010000 "$W_YES"
 rcall "--driver=$W_YES" require store
 wantrc "$RC" 2
+# restore the store descriptor for the dispatch cases (a refused require is never cached)
+wrap "$W_YES" ""
 rm -f c-disp.txt
 tc "TC48: the require verdict is cached per driver path and capability set, apart from the dispatch verdict"
 

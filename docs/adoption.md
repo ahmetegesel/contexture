@@ -112,8 +112,8 @@ Where symlinks are not possible, duplicate `AGENTS.md` or reference it.
 Three checks before the branch merges:
 
 ```
-.contexture/ctx session load adopt-contexture
-.contexture/ctx session audit adopt-contexture
+.contexture/ctx unit load adopt-contexture
+.contexture/ctx unit audit adopt-contexture
 git status
 git diff
 ```
@@ -128,7 +128,7 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/` | installed into the extension root when wanted; shipped with every tag, never deleted at adoption close |
 | workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/` | never touched |
 
@@ -150,7 +150,7 @@ The base evolves upstream, and updating is judgment, not a script: the changes a
 3. Read the CHANGELOG from your installed version to the target: what changed and why.
 4. Read your workspace: the overlay's `@replace` blocks, live sessions, in-flight artifacts.
 5. Decide: adopt now, migrate first, or wait.
-6. Copy the payload: `git archive <tag> base/ | tar -x --strip-components=1 -C <your-repo>`; the archive carries only payload paths, so workspace-owned paths are never touched. The archive adds and replaces files but never removes one, so delete every payload path the target tag no longer carries (`git diff --name-status --diff-filter=D <installed-tag> <tag> -- base/` lists them): v0.55.0, for one, removes the session verbs `append`, `amend`, `query`, `flip`, and `drop` and three posix driver awk files, and a removed verb file left behind still lists in `ctx session help` though its call prints the replacement.
+6. Copy the payload: `git archive <tag> base/ | tar -x --strip-components=1 -C <your-repo>`; the archive carries only payload paths, so workspace-owned paths are never touched. The archive adds and replaces files but never removes one, so delete every payload path the target tag no longer carries (`git diff --name-status --diff-filter=D <installed-tag> <tag> -- base/` lists them): v0.55.0, for one, removes the session verbs `append`, `amend`, `query`, `flip`, and `drop` and three posix driver awk files, and a removed verb file left behind still lists in `ctx unit help` though its call prints the replacement.
 7. Verify it: `git ls-tree -r --name-only <tag> -- base/` plus a `cmp` per file against the applied paths.
 8. Review the staged diff before committing; it shows you the changed base.
 9. Run your instruments against the result: the boot query, the audit, the ground check. After a MAJOR tag, review the overlay: its rules were written against the old shape.

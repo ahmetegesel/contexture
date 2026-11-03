@@ -1,16 +1,16 @@
 #!/bin/sh
 # summary: set the read-only reference sessions; zero sessions clears
-# usage: ctx session refs <slug> [<session> ...]
+# usage: ctx unit refs <slug> [<session> ...]
 # help: the storage driver sets ref_sessions (session.refs); every named session must exist and differ from the unit, no name twice; zero sessions clears to an empty list
 # help: exit codes: 0 reference sessions updated; 1 target session does not exist or matches the unit, or a CLOSED unit
-# help: example: ctx session refs my-unit ref-session-1 ref-session-2
-# help: example: ctx session refs my-unit
+# help: example: ctx unit refs my-unit ref-session-1 ref-session-2
+# help: example: ctx unit refs my-unit
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
-  printf 'Usage: ctx session refs <session-slug> [<session> ...]\n' >&2
-  printf 'help: ctx session help\n' >&2
+  printf 'Usage: ctx unit refs <unit> [<session> ...]\n' >&2
+  printf 'help: ctx unit help\n' >&2
   exit 1
 }
 
@@ -20,7 +20,7 @@ fail() {
 }
 
 case "${1:-}" in
-  --help|-h|help) printf 'usage: ctx session refs <session-slug> [<session> ...]\n'; exit 0 ;;
+  --help|-h|help) printf 'usage: ctx unit refs <unit> [<session> ...]\n'; exit 0 ;;
 esac
 [ $# -ge 1 ] || usage
 unit=$1

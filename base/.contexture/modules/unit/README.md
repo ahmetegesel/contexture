@@ -1,8 +1,8 @@
 # unit: off-path module map
 
 Low-level maintainer notes for the core-shipped unit module. Main workflow surfaces teach
-the record through the session verbs until the `ctx unit` namespace lands; nothing here is
-linked from boot, laws, `ctx help`, or the top README.
+the record through `ctx unit`; nothing here is linked from boot, laws, `ctx help`, or the
+top README.
 
 ## Module contract
 
@@ -14,8 +14,8 @@ linked from boot, laws, `ctx help`, or the top README.
 
 The engine discovers `.contexture/modules/unit/`, reads the summary for `ctx help`, and
 builds the verb table from `scripts/*`: an extension-less file with a `# summary:` header
-is a verb. `scripts/data` carries no summary, so the module has no verbs yet; the record's
-verb surface stays in the session module until the namespace move.
+is a verb. `scripts/data` carries no summary and is private; the 22 verbs are the record's
+public surface, and `ctx session` is retired (a line naming `ctx unit`).
 
 ## Layout
 
@@ -25,12 +25,16 @@ laws              the record clauses: @record, @journal, @backlog, @query, @refr
                   @close, @handoff (the law compose fragment)
 data              the store declaration: namespace unit, root .contexture/sessions,
                   suffix .md, key <unit>/<path...>, changes false, the document rules
-scripts/data      the 35 record operations over the store (sh)
+scripts/<verb>    the 22 record verbs (sh), each sourcing lib/verb.sh
+scripts/data      the 35 record operations over the store (sh, private)
+lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
+lib/json.awk      the one flattener: a function's JSON answer to path=value lines
+lib/render.awk    the one renderer of every text view
 lib/canon.awk     the canonical renderer and the JSON string form
 lib/model.awk     the legacy parse, the typed items, the derived fields, the schema JSON
 lib/ops.awk       the record rules: the writes, the reads, the audit, the liveness
 lib/search.awk    the exact search over the canonical render
-lib/json.awk      the one flattener for the store.search ranked answer
+lib/store-json.awk the flattener for the store.search ranked answer
 lib/ranked.awk    the store ranked answer mapped into the record's search shape
 lib/refs.awk      the refs of a write payload
 lib/payfield.awk  one decoded payload value

@@ -37,14 +37,14 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   `store.list`, reads each key with `store.get` into the module's scratch at
   `docs/<repo>/<slug>.md`, and runs the engines there; no driver parses a doc
   and no mount is materialized by a driver. The store answer is flattened with
-  the session module's `lib/json.awk`. Every view prints the logical address
+  the unit module's `lib/json.awk`. Every view prints the logical address
   `docs/<repo>/<slug>.md`, whatever the caller's spelling and whatever the
   driver; the old display-path mapping and the draft-path refusal retire
   because the stored bytes are what a verb reads. Driver calls run from the
   workspace root with stdin from `/dev/null`; scratch lives under
   `.contexture/tmp` and is removed on exit.
-- The nudge's unit form reads the active task through `ctx session task list
-  <unit> --status=progress` and `ctx session resolve <unit> task#<slug>` (the
+- The nudge's unit form reads the active task through `ctx unit task list
+  <unit> --status=progress` and `ctx unit resolve <unit> task#<slug>` (the
   text view of task show drops REFS, which the engine scores); the
   backlog-file form refuses a path inside the sessions drawer.
 - The write verbs run one pipeline in `docs-io.sh`: the arguments parsed
@@ -110,7 +110,7 @@ The instruments resolve the workspace root in this order:
 `docs-io.sh` resolves it once for every verb and hands the same root to the
 storage driver (as its cwd and `CTX_ROOT`), so the corpus the driver serves
 and the root the verb reports agree. The storage core's resolver and library
-and the session module's JSON decoder resolve from that same `CTX_ROOT` (the
+and the unit module's JSON decoder resolve from that same `CTX_ROOT` (the
 core drawer or the base mirror), never by a relative climb from the module
 folder, so the docs module works under the modules root and the extension root
 alike; the grammar asset is the one path resolved beside the module. The gate's git
@@ -153,7 +153,7 @@ background, their lines printed after the chain in the same order; the
 delta-source cases (`tests/store-cases.sh`: the check's two modes, `ctx docs
 changes`, the gate's halves in a git workspace of its own, keyed on the
 declared `store.changelog`); the corpus reads keyed on the declared `store` (declared: the audit and the
-unit-form nudge, the sample backlog's task entered into a unit through the session verbs and compared with the
+unit-form nudge, the sample backlog's task entered into a unit through the unit verbs and compared with the
 backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
 of `tests/write/`: every success's stored bytes, every refusal leaving the
 stored doc unchanged, the change-log rows under a store), and the engine

@@ -614,7 +614,7 @@ u_search() {
     printf '%s: error: %s\n' "$FN" "$sq_msg" >&2
     exit "$sq_rc"
   fi
-  awk -f "$ULIB/json.awk" < "$U_SCR/store.ans" > "$U_SCR/flat" 2> "$U_SCR/flat.err" || {
+  awk -f "$ULIB/store-json.awk" < "$U_SCR/store.ans" > "$U_SCR/flat" 2> "$U_SCR/flat.err" || {
     sq_rc=$?
     [ -s "$U_SCR/flat.err" ] && cat "$U_SCR/flat.err" >&2
     printf '%s: error: the store search answer is malformed (ERR_STORAGE_READ)\n' "$FN" >&2

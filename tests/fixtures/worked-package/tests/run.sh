@@ -36,7 +36,7 @@ trap cleanup EXIT INT TERM
 mkdir -p "$SB/.contexture"
 cp -R "$BASE/.contexture/." "$SB/.contexture/"
 chmod +x "$SB/.contexture/ctx" "$SB/.contexture/package-install" "$SB/.contexture/package-uninstall" \
-  "$SB/.contexture/modules/session/scripts/"* "$SB/.contexture/storage/scripts/"* \
+  "$SB/.contexture/modules/unit/scripts/"* "$SB/.contexture/storage/scripts/"* \
   "$SB/.contexture/storage/drivers/posix/driver" "$SB/.contexture/extensions/modules/lane/scripts/"* 2>/dev/null || true
 cd "$SB" || exit 2
 CTX_ROOT=$SB

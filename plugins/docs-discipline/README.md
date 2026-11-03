@@ -281,7 +281,7 @@ it walk below runs every one of these.
   evaluates the incoming remote delta (the merge-base form) instead of the
   local one.
 - Setup tasks: run `ctx docs nudge <unit>` when the unit's active task names
-  setup verbs; it reads the first IN_PROGRESS task through `ctx session` (the
+  setup verbs; it reads the first IN_PROGRESS task through `ctx unit` (the
   record's own store, never the backlog as a file) and prints the owning
   operational doc's run, build, and test targets plus the top pitfalls.
 
@@ -422,9 +422,9 @@ it walk below runs every one of these.
 
 ## Needs
 
-POSIX awk/sh, the base `ctx` runtime and its session module (the plugin ships
-the module, not the engine; the verbs reach the corpus through the session
-module's `driver-resolver`, and the configured storage driver must serve the
+POSIX awk/sh, the base `ctx` runtime and its unit module (the plugin ships
+the module, not the engine; the verbs reach the corpus through the storage
+core's resolver, and the configured storage driver must serve the
 module store: the capability `store`, which the base posix driver declares
 from the release that carries the generic store; an older base makes every
 read verb refuse rc 2), and git for the close gate's delta, the check's claimant trackedness
@@ -474,8 +474,8 @@ this plugin beside `base/`, and was run as written; the outputs are verbatim
 from that run (long ones abbreviated with `...` where the full output repeats
 the shown shape; `<scratch>` in an output line stands for the absolute path of
 the scratch workspace; a nonzero exit shows as `(exit N)`). The staging builds
-a scratch workspace from the shipped copies: the base runtime, its session
-module (the storage driver the verbs reach the corpus through), and this
+a scratch workspace from the shipped copies: the base runtime, its unit
+module (the record and storage driver the verbs reach the corpus through), and this
 plugin's module (its grammar rides inside); it commits the corpus in a repository of its own,
 since the check reads a claimant outside git as untracked (the process-owned
 verdict) and never as stale. The commands then run through the staged `ctx`
@@ -487,7 +487,7 @@ scratch="../../.contexture/tmp/docs-walk"
 rm -rf "$scratch"
 mkdir -p "$scratch/.contexture/modules" "$scratch/.contexture/extensions/modules" "$scratch/docs/workspace"
 cp ../../base/.contexture/ctx "$scratch/.contexture/ctx"
-cp -R ../../base/.contexture/modules/session "$scratch/.contexture/modules/"
+cp -R ../../base/.contexture/modules/unit "$scratch/.contexture/modules/"
 cp -R .contexture/extensions/modules/docs "$scratch/.contexture/extensions/modules/"
 cp -R docs/workspace/. "$scratch/docs/workspace/"
 cp -R tests/sample/docs/. "$scratch/docs/"
@@ -614,7 +614,7 @@ The edge view:
 
 The nudge over the demo backlog, the corpus named by its repos (in a
 workspace with a record, `ctx docs nudge <unit>` reads the active task
-through `ctx session` instead):
+through `ctx unit` instead):
 
 ```sh
 ./.contexture/ctx docs nudge backlog.md demo-orders demo-web workspace
@@ -965,7 +965,7 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `.contexture/extensions/modules/docs/scripts/query` | reworked from the source CLI: the workspace root and the corpus from the IO helper (`CTX_ROOT`, the `DOCS_WORKSPACE_ROOT` override), the usage strings are ctx forms, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, an empty-corpus refusal, a no-match note on an empty projection, the help forms moved into the declarations, the free-text options exported to the engine's environment, and `--entry` through the edit engine |
 | `.contexture/extensions/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and delegation to `docs-check.awk` over the corpus the IO helper resolved, in the engine's store mode (`-v delta_source=log`) when the driver keeps a change log |
 | `.contexture/extensions/modules/docs/scripts/changes` | authored fresh: the corpus half of a delta from the store's change log (the net status computed in the IO helper), refusing under the files driver |
-| `.contexture/extensions/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, the unit form (the active task through `ctx session task list` and `ctx session resolve task#`), the backlog-file form refusing a record path, and delegation to `docs-nudge.awk` over the corpus the IO helper resolved |
+| `.contexture/extensions/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, the unit form (the active task through `ctx unit task list` and `ctx unit resolve task#`), the backlog-file form refusing a record path, and delegation to `docs-nudge.awk` over the corpus the IO helper resolved |
 | `.contexture/extensions/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (from the IO helper: `DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the corpus read once through the IO helper into its scratch, the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, the help moved into the declarations, and the store mode (the git half without the workspace root's corpus paths plus `ctx docs changes`, the check's store mode, the drift deferral notice) |
 | `.contexture/extensions/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `store` requirement, the list and get materialized into the module's scratch, the logical address rule, the store mode's delta source, change window, and code-half filter, and the write side (the argument parser, the field actions in the environment, the grammar check over a scratch copy of the corpus, the store put stamped with the op and the HEAD, the multi-doc pipeline of replace and ids) |
 | `.contexture/extensions/modules/docs/scripts/new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `remove`, `ids` | authored fresh: the write verbs, each a thin script over the IO helper's write pipeline with its help in the declarations |

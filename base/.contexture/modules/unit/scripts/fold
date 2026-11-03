@@ -1,8 +1,8 @@
 #!/bin/sh
 # summary: the consolidation fold: plan, fetch, check, finish, progress
-# usage: ctx session fold <unit> [--lane=<lane> [--merge] | --check | --finish]
+# usage: ctx unit fold <unit> [--lane=<lane> [--merge] | --check | --finish]
 # help: the plan (the first no-lane call) freezes the live scope, partitions it once in journal order into chunks, records the fold start (the plan JSON), and prints the plan (the carried open threads included), the first lane's manual, and the first act
-# help: a lane fetch (--lane, no payload) returns the lane's next unclosed chunk, its entries, the lane's remaining chunks (no other chunk's entries), and the next act; --merge adds the immediately following chunk's entries only, for a recorded same-topic merge; a fetch never advances and the lane writes the consolidated entry with the ordinary ctx session record verb; a carried open thread is REF'd as context, never closed
+# help: a lane fetch (--lane, no payload) returns the lane's next unclosed chunk, its entries, the lane's remaining chunks (no other chunk's entries), and the next act; --merge adds the immediately following chunk's entries only, for a recorded same-topic merge; a fetch never advances and the lane writes the consolidated entry with the ordinary ctx unit record verb; a carried open thread is REF'd as context, never closed
 # help: --check reads the batches from the live post-plan entries' closers and refs, proves the closed receipts are the scope minus the carried open threads (whole consecutive chunks in one lane), no non-thread scoped entry remains live, and the audit is clean; it writes nothing
 # help: --finish re-runs the check and, when clean, writes the receipt FOLD FINISH v4 with the covered and carried counts and closes the fold start done; a live receipt refuses a second one
 # help: rules: the consolidated entry is an ordinary entry (the WHAT is the synthesis, the REFs name the batch, the CLOSES fold the batch's non-thread constituents); a fold compacts history, never obligations: open threads stay live and are carried; the lane may merge consecutive chunks inside its anchor; no digest, no checkpoint, no marker; the record is the state
@@ -24,13 +24,13 @@ manual_text() {
 # Consolidation fold lane: @LANE@
 
 You are the consolidation lane for unit @UNIT@. The fold command plans the batches;
-you write one ordinary journal entry per batch with ctx session record. The record is
+you write one ordinary journal entry per batch with ctx unit record. The record is
 the state; there is no digest, no checkpoint, and no marker.
 
 ## The loop
 
 1. Fetch your next batch:
-   .contexture/ctx run .contexture/ctx session fold @UNIT@ --lane=@LANE@
+   .contexture/ctx run .contexture/ctx unit fold @UNIT@ --lane=@LANE@
    The answer carries the next unclosed chunk, its entries, your remaining chunks and
    entries, and the next act. A fetch never advances; re-run it after a repair.
 
@@ -48,7 +48,7 @@ the state; there is no digest, no checkpoint, and no marker.
    detail and the originals stay fetchable.
 
 3. Write the entry, every command through the runner:
-   .contexture/ctx run .contexture/ctx session record @UNIT@ \
+   .contexture/ctx run .contexture/ctx unit record @UNIT@ \
      --what="<the synthesis, one line>" \
      --group=<optional topic token> \
      --thread=none \
@@ -64,7 +64,7 @@ the state; there is no digest, no checkpoint, and no marker.
 
 5. Repair. A defect from the check is repaired with the ordinary supersession: a new
    entry with the same batch refs and closers closes the prior one:
-   .contexture/ctx run .contexture/ctx session record @UNIT@ \
+   .contexture/ctx run .contexture/ctx unit record @UNIT@ \
      --what="<the corrected synthesis, one line>" \
      --thread=none \
      --ref="journal#<slug>" ... \
@@ -73,8 +73,8 @@ the state; there is no digest, no checkpoint, and no marker.
    The prior entry closes; the new live entry is the batch. Never edit an entry.
 
 6. The finish (the orchestrator): when every lane is done, run
-   .contexture/ctx run .contexture/ctx session fold @UNIT@ --check
-   .contexture/ctx run .contexture/ctx session fold @UNIT@ --finish
+   .contexture/ctx run .contexture/ctx unit fold @UNIT@ --check
+   .contexture/ctx run .contexture/ctx unit fold @UNIT@ --finish
    The check proves the batches partition the scope and the audit is clean; the finish
    writes the receipt and closes the fold start.
 
@@ -98,7 +98,7 @@ EOF
 }
 
 help_table() {
-  printf 'usage: ctx session fold <unit> [--lane=<lane> [--merge] | --check | --finish]\n'
+  printf 'usage: ctx unit fold <unit> [--lane=<lane> [--merge] | --check | --finish]\n'
   printf '\n'
   manual_text '<unit>' '<lane>'
   printf '\nThe plan and each lane boundary print this manual with the actual lane name.\n'
@@ -620,7 +620,7 @@ if [ ! -t 0 ]; then
   cat > "$VB_DIR/stdin" || fold_fail "cannot read stdin"
   [ -s "$VB_DIR/stdin" ] && has_payload=1
 fi
-[ "$has_payload" -eq 0 ] || fold_fail "fold takes no payload; write the consolidated entry with ctx session record"
+[ "$has_payload" -eq 0 ] || fold_fail "fold takes no payload; write the consolidated entry with ctx unit record"
 
 read_board() {
   vb_call session.board "$unit"
@@ -782,7 +782,7 @@ print_plan() {
   printf 'position: chunk 1 of %s; next lane %s\n' "$chunk_n" "$c_lane"
   printf 'NEXT: create the first lane with its manual below (if absent), then fetch:\n'
   printf '  .contexture/ctx run .contexture/ctx lane create %s %s   (recipe: the manual below)\n' "$unit" "$c_lane"
-  printf '  .contexture/ctx run .contexture/ctx session fold %s --lane=%s\n' "$unit" "$c_lane"
+  printf '  .contexture/ctx run .contexture/ctx unit fold %s --lane=%s\n' "$unit" "$c_lane"
   print_manual "$c_lane"
 }
 
@@ -873,7 +873,7 @@ print_record_hint() {
   else
     printf 'NEXT: write one ordinary entry for this batch (a merge takes a --merge fetch of the next chunk):\n'
   fi
-  printf '  .contexture/ctx run .contexture/ctx session record %s \\\n' "$unit"
+  printf '  .contexture/ctx run .contexture/ctx unit record %s \\\n' "$unit"
   printf '    --what="<the synthesis of the batch, one line>" \\\n'
   printf '    --group=<optional topic token> \\\n'
   printf '    --thread=none \\\n'
@@ -945,7 +945,7 @@ run_audit() {
   if [ "$audit_rc" -eq 0 ]; then
     audit_view=$(vb_render audit)
   else
-    audit_state="red (rc $audit_rc; run .contexture/ctx run .contexture/ctx session audit $unit)"
+    audit_state="red (rc $audit_rc; run .contexture/ctx run .contexture/ctx unit audit $unit)"
     printf 'AUDIT_RED\t%s\n' "the audit reports findings" >> "$VB_DIR/defects"
   fi
 }
@@ -1048,14 +1048,14 @@ progress() {
   if [ "$sum_uncovered" -eq 0 ]; then
     printf 'position: all %s chunks are consolidated\n' "$chunk_n"
     printf 'NEXT: run the check, then the finish:\n'
-    printf '  .contexture/ctx run .contexture/ctx session fold %s --check\n' "$unit"
-    printf '  .contexture/ctx run .contexture/ctx session fold %s --finish\n' "$unit"
+    printf '  .contexture/ctx run .contexture/ctx unit fold %s --check\n' "$unit"
+    printf '  .contexture/ctx run .contexture/ctx unit fold %s --finish\n' "$unit"
     exit 0
   fi
   next_open_chunk ""
   printf 'position: chunk %s of %s is next; next lane %s\n' "$no_id" "$chunk_n" "$no_lane_next"
   printf 'NEXT: fetch lane %s (create it with its manual if absent):\n' "$no_lane_next"
-  printf '  .contexture/ctx run .contexture/ctx session fold %s --lane=%s\n' "$unit" "$no_lane_next"
+  printf '  .contexture/ctx run .contexture/ctx unit fold %s --lane=%s\n' "$unit" "$no_lane_next"
   if ! lane_exists "$no_lane_next"; then
     print_manual "$no_lane_next"
   fi
@@ -1072,14 +1072,14 @@ fetch_lane() {
     if [ -z "$no_id" ]; then
       printf 'LANE BOUNDARY: lane %s is done; all %s chunks are consolidated\n' "$lane" "$chunk_n"
       printf 'NEXT: run the check, then the finish:\n'
-      printf '  .contexture/ctx run .contexture/ctx session fold %s --check\n' "$unit"
-      printf '  .contexture/ctx run .contexture/ctx session fold %s --finish\n' "$unit"
+      printf '  .contexture/ctx run .contexture/ctx unit fold %s --check\n' "$unit"
+      printf '  .contexture/ctx run .contexture/ctx unit fold %s --finish\n' "$unit"
       exit 0
     fi
     printf 'LANE BOUNDARY: lane %s is done; the next lane is %s; stop.\n' "$lane" "$no_lane_next"
     printf 'The orchestrator creates %s with its manual below and dispatches it:\n' "$no_lane_next"
     printf '  .contexture/ctx run .contexture/ctx lane create %s %s   (recipe: the manual below)\n' "$unit" "$no_lane_next"
-    printf '  .contexture/ctx run .contexture/ctx session fold %s --lane=%s\n' "$unit" "$no_lane_next"
+    printf '  .contexture/ctx run .contexture/ctx unit fold %s --lane=%s\n' "$unit" "$no_lane_next"
     print_manual "$no_lane_next"
     exit 0
   fi
@@ -1126,7 +1126,7 @@ case "$active_state" in
     ;;
   NONE)
     if [ "$lane_given" -eq 1 ] || [ "$do_check" -eq 1 ] || [ "$do_finish" -eq 1 ]; then
-      fold_fail "no active fold for unit '$unit'; run 'ctx session fold $unit' without --lane to plan"
+      fold_fail "no active fold for unit '$unit'; run 'ctx unit fold $unit' without --lane to plan"
     fi
     choose_plan
     if [ ! -s "$VB_DIR/plan.json" ]; then

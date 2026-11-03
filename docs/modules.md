@@ -29,7 +29,7 @@ The standard module folder is a directory under `.contexture/modules/` (the work
 - `scripts/`, `hooks/`, `install`, and `uninstall` are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
 - A package ships this folder as its module part; the package overlay installs it whole, and the folder is the single source for the engine, the compose, the storage, and the installer.
 
-The builtin `session` and `run` modules ship with the base under `.contexture/modules/`; the builtin `lane` module ships under `.contexture/extensions/modules/`, the base's first extension-root module; the storage core at `.contexture/storage/` is not a module but rides the same payload; a module you add is workspace-owned. See Payload.
+The builtin `unit` and `run` modules ship with the base under `.contexture/modules/`; the builtin `lane` module ships under `.contexture/extensions/modules/`, the base's first extension-root module; the storage core at `.contexture/storage/` is not a module but rides the same payload; a module you add is workspace-owned. See Payload.
 
 ### The interface rule
 
@@ -59,7 +59,7 @@ The module file is the standard folder's manifest. Its fields and their readers:
 - The block order is summary, version, description; the description stands last because its block runs to the end of the file.
 - The module name is the directory name; the summary is the only field the engine reads.
 - A plain `# comment` never opens with `# <token>:` — that shape is a field, and an unknown field refuses.
-- The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose calls the field reads and the package installer validates every module part, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid: the session module carries one, and the version and description are for the modules that ship as packages.
+- The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose calls the field reads and the package installer validates every module part, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid: the unit module carries one, and the version and description are for the modules that ship as packages.
 
 ### The laws file
 
@@ -98,7 +98,7 @@ A module may ship `install` and `uninstall` executables beside its manifest: opt
 
 A package is the extension-root overlay: its source mirrors `.contexture/extensions/` (the module folders, the driver folders, the rhythms), and its root carries the `manifest`, the `install` and `uninstall` entry scripts, the README, the tests, and its reference material (the seed and the root overlay fragments never install; a module-owned asset rides inside its module folder). The package's `install` execs the core's private `.contexture/package-install`; the order, on the human's go:
 
-1. read the package `manifest` (a missing or malformed one refuses) and refuse the collision classes before writing anything: a payload path outside `.contexture/extensions/`, a core path, an existing non-recorded file, a file another package recorded, a module name against a builtin (`session`, `run`, `lane`), a workspace module, or a reserved name, a driver name against the core `posix` driver or a driver that already resolves ahead of the extension root, a duplicate namespace, a malformed module manifest, a payload path that escapes or carries blanks, a declared part that is absent, a payload file outside the declared parts, a module folder not declared as a module part, and a feature package carrying a driver path;
+1. read the package `manifest` (a missing or malformed one refuses) and refuse the collision classes before writing anything: a payload path outside `.contexture/extensions/`, a core path, an existing non-recorded file, a file another package recorded, a module name against a builtin (`unit`, `run`, `lane`), a workspace module, or a reserved name, a driver name against the core `posix` driver or a driver that already resolves ahead of the extension root, a duplicate namespace, a malformed module manifest, a payload path that escapes or carries blanks, a declared part that is absent, a payload file outside the declared parts, a module folder not declared as a module part, and a feature package carrying a driver path;
 2. overlay every declared part into `.contexture/extensions/`;
 3. record every installed path with its mode and checksum under `.contexture/extensions/.state/<package>.files`, plus a `law` line per installed law fragment (the compose's input) and the package, version, kind, and driver lines;
 4. run every installed module folder's `install`, in module-name order, after the overlay and the record.
@@ -135,12 +135,12 @@ Filters declare themselves with their own header vocabulary; see Filters.
 ## Engine assembly
 
 - Discovery roots: `.contexture/modules/` and `.contexture/extensions/modules/`. The workspace modules list first, then the extension modules, each root in byte order; an absent extension root is silent. The engine resolves the workspace root from its own location, so `ctx` works from any directory.
-- An extension module whose name collides with a workspace module, a builtin (`session`, `run`), or a reserved name is warned and skipped: the engine never shadows silently. The package installer refuses the same collision at install.
+- An extension module whose name collides with a workspace module, a builtin (`unit`, `run`), or a reserved name is warned and skipped: the engine never shadows silently. The package installer refuses the same collision at install.
 - `ctx help` lists every module with its summary.
 - `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines.
 - `ctx help --all` prints the top summary plus every module's block.
 - A duplicate verb name inside one module shadows: the engine warns and the first file name in byte order wins.
-- Reserved names cannot be module names: the session verb set (its twenty-two verbs plus `help`, so twenty-three names), plus `run` and `hooks`, plus the five session verbs retired in v0.55.0 (`append`, `amend`, `query`, `flip`, `drop`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `session` and `run` directories are exempt.
+- Reserved names cannot be module names: the unit verb set (its twenty-two verbs plus `help`, so twenty-three names), plus `run` and `hooks`, plus the five record verbs retired in v0.55.0 (`append`, `amend`, `query`, `flip`, `drop`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `unit` and `run` directories are exempt.
 - Help is engine-owned: no module ships a help script.
 
 ## Dispatch
@@ -171,14 +171,14 @@ Six points ship:
 
 | point | fires |
 |---|---|
-| `stamp` | after `ctx session stamp` appends the new period's anchor |
-| `task-landing` | after a `ctx session task add\|start\|complete\|reopen\|drop` or `ctx session next` act lands (`task update` fires none); a refusal never fires |
-| `close` | at the end of `ctx session close` |
-| `load-pre` | in the main form of `ctx session load`, before the load map |
-| `load-post` | in the main form of `ctx session load`, after the load banner |
-| `refresh` | after `ctx session refresh` runs its board and audit |
+| `stamp` | after `ctx unit stamp` appends the new period's anchor |
+| `task-landing` | after a `ctx unit task add\|start\|complete\|reopen\|drop` or `ctx unit next` act lands (`task update` fires none); a refusal never fires |
+| `close` | at the end of `ctx unit close` |
+| `load-pre` | in the main form of `ctx unit load`, before the load map |
+| `load-post` | in the main form of `ctx unit load`, after the load banner |
+| `refresh` | after `ctx unit refresh` runs its board and audit |
 
-Boot is not a point. The refs form of `ctx session load` fires no load hooks.
+Boot is not a point. The refs form of `ctx unit load` fires no load hooks.
 
 Every hook runs with:
 
@@ -219,7 +219,7 @@ dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/ideas" list "$@"
 ```
 
-One home for the logic and its validation; a clean verb table. The ideas module is built this way (see Worked examples); the session module shares its logic through a sourced library instead, since each of its verbs is one storage call and one render.
+One home for the logic and its validation; a clean verb table. The ideas module is built this way (see Worked examples); the unit module shares its logic through a sourced library instead, since each of its verbs is one storage call and one render.
 
 ## Filters
 
@@ -276,7 +276,7 @@ The steps below use the workspace modules root; a package installs its feature m
 1. `mkdir -p .contexture/modules/<name>/hooks` (or the extension root's modules path).
 2. Write a hook file declaring `# ctx-hook: <point>` and, when the point must stop on failure, `# ctx-hook-mode: block`. The body reads the context variables above.
 3. `chmod +x hooks/<file>`.
-4. Probe at a real point: a stamp hook is the cheapest: run `ctx session stamp <unit>` on a scratch unit and watch the side effect.
+4. Probe at a real point: a stamp hook is the cheapest: run `ctx unit stamp <unit>` on a scratch unit and watch the side effect.
 
 ### Add a filter
 
@@ -310,7 +310,7 @@ The steps below use the workspace modules root; a package installs its feature m
 | dispatch | `ctx <module> <verb> ...` | argv, streams, rc pass through |
 | unknown verb | `ctx <module> <unknown>; echo $?` | `1`, module help on stderr |
 | bare module | `ctx <module>; echo $?` | `0` |
-| hook probe | run a real point, e.g. `ctx session stamp` on a scratch unit | the hook's side effect observed |
+| hook probe | run a real point, e.g. `ctx unit stamp` on a scratch unit | the hook's side effect observed |
 | filter selection | `ctx run --filter=<name> <cmd>` | the filter selected, no shadow warning |
 
 ## Worked examples
@@ -337,15 +337,15 @@ The module suite (`tests/module-tests.sh`) runs the same test in the gate. The p
 
 ### the storage core: not a module
 
-The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file (in the workspace modules and the extension modules alike), the module-facing `scripts/library` (the store seven, `store_require` and `store_has`, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the core's resolver, so the session verbs, the docs module, and the plugin suites keep their old path while every caller resolves the configured driver through the core; the lane module, under the extension root, sources the session lib from `CTX_ROOT`. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
+The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file (in the workspace modules and the extension modules alike), the module-facing `scripts/library` (the store seven, `store_require` and `store_has`, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The unit verbs, the docs module, and the plugin suites reach the core resolver directly; the lane module, under the extension root, sources the unit lib from `CTX_ROOT`. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
 
 ### unit: the record's data module
 
-The record's core feature module, `.contexture/modules/unit/`. Its `data` file declares the record as one store value per artifact: namespace `unit`, root `.contexture/sessions`, suffix `.md`, the variable-depth key `<unit>/<path...>`, and the document-set search rules (the state, the backlog and its tasks, the knowledge and its findings, the journal and its entries, and each lane's recipe, journal, entries, and report). Its `scripts/data` answers the 35 record operations over the store's `get`, `list`, and `batch`, keeping the current file shapes so every legacy record reads unchanged; the record rules and the canonical render are the module's own (`lib/canon.awk`, `lib/model.awk`, `lib/ops.awk`, `lib/search.awk`), and a multi-key write lands through one `store.batch`, all or none. The exact search is the record rule over the canonical render; a ranked mode is the store's document-set search, filtered to the unit. The module's ref interface resolves the canonical `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, and `unit#<unit>/lane/<lane>/<recipe|journal|report>` forms through `data_get` and `data_emit`; a new write validates a canonical unit ref before it lands, while a legacy record target and a file pointer stay as stored. The `session` verbs remain the record's surface until the `ctx unit` namespace move; the unit module is the record's module-side implementation, and the data script's cases (the 66/60 record compliance through it, plus the module's own cases) are `tests/unit-data-tests.sh`. Off-path detail is in `.contexture/modules/unit/README.md`.
+The record's core feature module, `.contexture/modules/unit/`. Its `data` file declares the record as one store value per artifact: namespace `unit`, root `.contexture/sessions`, suffix `.md`, the variable-depth key `<unit>/<path...>`, and the document-set search rules (the state, the backlog and its tasks, the knowledge and its findings, the journal and its entries, and each lane's recipe, journal, entries, and report). Its `scripts/data` answers the 35 record operations over the store's `get`, `list`, and `batch`, keeping the current file shapes so every legacy record reads unchanged; the record rules and the canonical render are the module's own (`lib/canon.awk`, `lib/model.awk`, `lib/ops.awk`, `lib/search.awk`), and a multi-key write lands through one `store.batch`, all or none. The exact search is the record rule over the canonical render; a ranked mode is the store's document-set search, filtered to the unit. The module's ref interface resolves the canonical `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, and `unit#<unit>/lane/<lane>/<recipe|journal|report>` forms through `data_get` and `data_emit`; a new write validates a canonical unit ref before it lands, while a legacy record target and a file pointer stay as stored. The unit module's 22 scripts are the record's public surface; `ctx session` is retired naming `ctx unit`, and the data script's cases (the 66/60 record compliance through it, plus the module's own cases) are `tests/unit-data-tests.sh`. Off-path detail is in `.contexture/modules/unit/README.md`.
 
-### session: thin verbs over a shared library and a storage driver
+### unit: thin verbs over a shared library and a storage driver
 
-The builtin record engine, `.contexture/modules/session/`. Its `module` carries one summary line; its twenty-two extension-less verbs are sh scripts that source `lib/verb.sh`, check the input shape, make one call to the configured storage driver through the storage core's resolver (the session `scripts/driver-resolver` wraps it; a private script either way: neither carries a summary), and render the answer through `lib/json.awk` and `lib/render.awk`; `index` alone is an awk verb, since it reads the rhythm files rather than the record. `fold` is the one composite maintenance verb: it reads the live board, records the fold start and the finish receipt as journal entries, carries the live open threads (REF'd, never closed), and checks the lanes' ordinary consolidated entries, which the lanes write with the record verb; the plan divides the live scope at the mechanical seams and coalesces the series, splitting an over-12 chunk only as the last resort, the fetch hands one chunk at a time, an optional `--merge` adds only the next chunk for a recorded same-topic merge, and the check refuses a whole-anchor batch. `refresh` is the one composite verb: it runs the board and the audit and then fires the refresh point. The posix driver in the storage core (`base/.contexture/storage/drivers/posix/`) is the only code that touches the record's files. Off-path detail (the verb to function map, the helpers, the hook call sites) is in `.contexture/modules/session/README.md`.
+The builtin record engine, `.contexture/modules/unit/`. Its `module` carries one summary line; its twenty-two extension-less verbs are sh scripts that source `lib/verb.sh`, check the input shape, make one call to the configured storage driver through the storage core's resolver (the unit data script is private and carries no summary), and render the answer through `lib/json.awk` and `lib/render.awk`; `index` alone is an awk verb, since it reads the rhythm files rather than the record. `fold` is the one composite maintenance verb: it reads the live board, records the fold start and the finish receipt as journal entries, carries the live open threads (REF'd, never closed), and checks the lanes' ordinary consolidated entries, which the lanes write with the record verb; the plan divides the live scope at the mechanical seams and coalesces the series, splitting an over-12 chunk only as the last resort, the fetch hands one chunk at a time, an optional `--merge` adds only the next chunk for a recorded same-topic merge, and the check refuses a whole-anchor batch. `refresh` is the one composite verb: it runs the board and the audit and then fires the refresh point. The posix driver in the storage core (`base/.contexture/storage/drivers/posix/`) is the only code that touches the record's files. Off-path detail (the verb to function map, the helpers, the hook call sites) is in `.contexture/modules/unit/README.md`.
 
 ### ideas: a private engine with an environment override
 
@@ -357,7 +357,7 @@ The builtin run module, `.contexture/modules/run/`. It has no module file and no
 
 ## Payload
 
-A module you add is workspace-owned: updates never touch it. The builtin `session`, `run`, and `unit` modules and the storage core ride the update payload under `.contexture/modules/` and `.contexture/storage/`; the builtin `lane` module rides it under `.contexture/extensions/modules/`, the base's first extension-root module; a package's installed files live under the same extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
+A module you add is workspace-owned: updates never touch it. The builtin `unit` and `run` modules and the storage core ride the update payload under `.contexture/modules/` and `.contexture/storage/`; the builtin `lane` module rides it under `.contexture/extensions/modules/`, the base's first extension-root module; a package's installed files live under the same extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
 
 ## Where the rest lives
 
@@ -365,5 +365,5 @@ A module you add is workspace-owned: updates never touch it. The builtin `sessio
 - The record grammars (state, backlog, journal, knowledge) — `docs/the-record.md`.
 - Drawer layout, the three payload classes, and update mechanics — `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing, Updating).
 - Packaging a module as a plugin for reuse or contribution: `docs/plugins.md`.
-- Session module internals — `.contexture/modules/session/README.md`, off-path.
+- Session module internals — `.contexture/modules/unit/README.md`, off-path.
 - Unit module internals — `.contexture/modules/unit/README.md`, off-path.

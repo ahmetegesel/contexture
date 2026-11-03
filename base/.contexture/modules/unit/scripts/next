@@ -1,16 +1,16 @@
 #!/bin/sh
 # summary: overwrite next_action with the pointer
-# usage: ctx session next <slug> "<pointer>"
+# usage: ctx unit next <slug> "<pointer>"
 # help: the storage driver overwrites next_action with the given pointer (session.next); the pointer must name every IN_PROGRESS task, else it refuses rc 1 (ERR_POINTER_INCOMPLETE) and nothing is written; an embedded double quote is text, an embedded newline or carriage return refuses
 # help: then the task-landing hooks fire (CTX_ACT next, CTX_SLUGS the IN_PROGRESS tasks)
 # help: exit codes: 0 pointer updated; 1 missing argument, a CLOSED unit, or an IN_PROGRESS task the pointer omits
-# help: example: ctx session next my-unit "my-task IN_PROGRESS: implement driver interface"
+# help: example: ctx unit next my-unit "my-task IN_PROGRESS: implement driver interface"
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
-  printf 'Usage: ctx session next <session-slug> "<pointer>"\n' >&2
-  printf 'help: ctx session help\n' >&2
+  printf 'Usage: ctx unit next <unit> "<pointer>"\n' >&2
+  printf 'help: ctx unit help\n' >&2
   exit 1
 }
 
@@ -20,10 +20,10 @@ fail() {
 }
 
 case "${1:-}" in
-  --help|-h|help) printf 'usage: ctx session next <session-slug> "<pointer>"\n'; exit 0 ;;
+  --help|-h|help) printf 'usage: ctx unit next <unit> "<pointer>"\n'; exit 0 ;;
 esac
 case "${2:-}" in
-  --help|-h|help) [ $# -eq 2 ] && { printf 'usage: ctx session next <session-slug> "<pointer>"\n'; exit 0; } ;;
+  --help|-h|help) [ $# -eq 2 ] && { printf 'usage: ctx unit next <unit> "<pointer>"\n'; exit 0; } ;;
 esac
 [ $# -eq 2 ] || usage
 unit=$1

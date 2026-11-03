@@ -1,6 +1,6 @@
 #!/bin/sh
 # store-compliance.sh: the generic module store compliance suite (contract 2, the storage
-# core's store contract). It stages the shipped base (the session module and its posix
+# core's store contract). It stages the shipped base (the unit module and its posix
 # driver, the storage core and its data reader and library) and a module data file (the
 # docs plugin's by default, or the one --data-file names), then holds the configured store
 # driver to the seven functions over a sandbox corpus at docs/workspace: list, get, put,
@@ -35,7 +35,6 @@ set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
-SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
 FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5"
 DATA_FILE="$ROOT/plugins/docs-discipline/.contexture/extensions/modules/docs/data"
@@ -59,7 +58,7 @@ case "$DRIVER_NAME" in
   *) echo "store-compliance.sh: unknown driver: $DRIVER_NAME (posix or fts5)" >&2; exit 1 ;;
 esac
 
-for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/drivers/posix/driver" "$DATA_FILE"; do
+for f in "$CTX_SRC" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/drivers/posix/driver" "$DATA_FILE"; do
   [ -e "$f" ] || { echo "store-compliance.sh: missing $f" >&2; exit 2; }
 done
 if [ "$IS_POSIX" -eq 0 ]; then
@@ -96,7 +95,6 @@ trap cleanup EXIT INT TERM
 mkdir -p "$SB/.contexture/modules" "$SB/.contexture/extensions/modules" "$SB/.contexture/tmp" "$SB/docs/workspace"
 cp "$CTX_SRC" "$SB/.contexture/ctx"
 chmod +x "$SB/.contexture/ctx"
-cp -R "$SESSION_MOD" "$SB/.contexture/modules/session"
 cp -R "$STORAGE_CORE" "$SB/.contexture/storage"
 # the suite's cases are docs-shaped; --data-file supplies any file with that contract
 mkdir -p "$SB/.contexture/extensions/modules/docs"
@@ -106,7 +104,7 @@ if [ "$IS_POSIX" -eq 0 ]; then
   cp -R "$FTS5_MOD" "$SB/.contexture/extensions/storage/drivers/fts5"
   printf 'storage.driver: fts5\n' > "$SB/.contexture/config"
 fi
-chmod +x "$SB/.contexture/modules/session/scripts/"* "$SB/.contexture/storage/scripts/"* "$SB/.contexture/storage/drivers/posix/driver"
+chmod +x "$SB/.contexture/storage/scripts/"* "$SB/.contexture/storage/drivers/posix/driver"
 cd "$SB" || exit 2
 if [ "$IS_POSIX" -eq 1 ]; then
   STAGED_DRIVER="$SB/.contexture/storage/drivers/posix/driver"
@@ -116,7 +114,7 @@ else
 fi
 if [ -n "$DRIVER_EXEC_ARG" ]; then DRIVER="$DRIVER_EXEC_ARG"; else DRIVER="$STAGED_DRIVER"; fi
 RESOLVED_EXPECT="$STAGED_DRIVER"
-RESOLVER="$SB/.contexture/modules/session/scripts/driver-resolver"
+RESOLVER="$SB/.contexture/storage/scripts/driver-resolver"
 O="$SB/.out"; E="$SB/.err"
 : > "$O"; : > "$E"
 RC=0
@@ -189,7 +187,7 @@ esac
 [ -f "$SB/.contexture/storage/scripts/library" ] || miss "the storage core library is not installed"
 [ -x "$SB/.contexture/storage/drivers/posix/driver" ] || miss "the storage core posix driver is not installed"
 resolved=$("$RESOLVER" resolve 2>/dev/null)
-[ "$resolved" = "$RESOLVED_EXPECT" ] || miss "the session wrapper resolves [$resolved] want [$RESOLVED_EXPECT]"
+[ "$resolved" = "$RESOLVED_EXPECT" ] || miss "the core resolver resolves [$resolved] want [$RESOLVED_EXPECT]"
 "$RESOLVER" require store >/dev/null 2>&1
 [ "$?" -eq 0 ] || miss "require store refused the $DRIVER_NAME driver"
 "$RESOLVER" has store.changelog >/dev/null 2>&1

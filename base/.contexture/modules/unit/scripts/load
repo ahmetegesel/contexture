@@ -1,24 +1,24 @@
 #!/bin/sh
 # summary: the load map plus one page; keep calling until a page reads complete
-# usage: ctx session load <slug> [<page>]
-# usage: ctx session load refs <ref_1> ... <ref_N> [<page>]
+# usage: ctx unit load <slug> [<page>]
+# usage: ctx unit load refs <ref_1> ... <ref_N> [<page>]
 # help: sections in BIOS order: state, backlog, knowledge, the live journal (the board view), declared ref_sessions read-only, then the write-scope trailer; a page ends before the block that would pass the line target (about 500) or the byte budget (about 40KB), never mid-body; a single over-budget block renders whole on its own page; the backlog section renders DONE task blocks compactly (the @task line, STATUS, OBJECTIVE, DESCRIPTION; REFS, ACCEPTANCE CRITERIA, and IMPLEMENTATION DETAILS drop; the record is never edited); a unit the store lacks is fatal rc=1 with zero stdout; missing backlog, knowledge, or journal warns on stderr (the artifact and its unit named, never a storage location) and prints a placeholder; the refs form streams the named sessions alone, read-only, and fires no load hooks
 # help: the storage driver answers the unit whole (session.load, or session.refload for the refs form) and base renders and pages it
 # help: exit codes: 0 page loaded; 1 missing unit or invalid argument
-# help: example: ctx session load my-unit
-# help: example: ctx session load my-unit 2
+# help: example: ctx unit load my-unit
+# help: example: ctx unit load my-unit 2
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
-  printf 'Usage: ctx session load <session-slug> [<page>]\n' >&2
-  printf '       ctx session load refs <ref_1> ... <ref_N> [<page>]\n' >&2
-  printf 'help: ctx session help\n' >&2
+  printf 'Usage: ctx unit load <unit> [<page>]\n' >&2
+  printf '       ctx unit load refs <ref_1> ... <ref_N> [<page>]\n' >&2
+  printf 'help: ctx unit help\n' >&2
   exit 1
 }
 
 ref_hint() {
-  printf 'to read a reference session: ctx session load refs <ref-slug>\n' >&2
+  printf 'to read a reference session: ctx unit load refs <ref-slug>\n' >&2
   usage
 }
 
@@ -28,7 +28,7 @@ is_num() {
 }
 
 case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && { vb_verb_help session "$0"; exit 0; } ;;
+  --help|-h) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
 esac
 [ $# -ge 1 ] || usage
 
@@ -220,7 +220,7 @@ BEGIN {
     print ""
     page_header("refs", page)
     page_body(page)
-    if (page < npages) printf "keep reading: ctx session load refs %s %d (%d pages remain)\n", refstr, page + 1, npages - page
+    if (page < npages) printf "keep reading: ctx unit load refs %s %d (%d pages remain)\n", refstr, page + 1, npages - page
     else printf "ref load complete: pages %d/%d\n", npages, npages
     exit 0
   }
@@ -231,7 +231,7 @@ BEGIN {
   if (page < npages) {
     printf "LOAD INCOMPLETE (page %d of %d): keep calling until a page reads complete; do not start work from a partial record\n", page, npages
   } else {
-    printf "LOAD COMPLETE: pages %d/%d; stamp the new period: ctx session stamp %s\n", npages, npages, slug
+    printf "LOAD COMPLETE: pages %d/%d; stamp the new period: ctx unit stamp %s\n", npages, npages, slug
   }
   fflush()
   if (fire_hooks("load-post", " CTX_UNIT \"" slug "\" CTX_LOAD_FORM main CTX_LOAD_PAGE " page) != 0)
@@ -242,7 +242,7 @@ BEGIN {
   print ""
   page_header(slug, page)
   page_body(page)
-  if (page < npages) printf "keep reading: ctx session load %s %d (%d pages remain)\n", slug, page + 1, npages - page
+  if (page < npages) printf "keep reading: ctx unit load %s %d (%d pages remain)\n", slug, page + 1, npages - page
   else printf "load complete: pages %d/%d\n", npages, npages
   exit 0
 }' < "$VB_DIR/lines"

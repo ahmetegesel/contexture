@@ -96,7 +96,7 @@ now_utc() {
 
 SCRATCH=""
 cleanup() {
-  [ -n "" ] && rm -rf ""
+  [ -n "${SCRATCH:-}" ] && rm -rf "$SCRATCH"
   return 0
 }
 trap cleanup EXIT

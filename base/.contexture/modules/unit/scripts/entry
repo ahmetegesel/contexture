@@ -1,6 +1,6 @@
 #!/bin/sh
 # summary: journal entry operations (show, list, closure)
-# usage: ctx session entry <subcommand> <unit> [args...]
+# usage: ctx unit entry <subcommand> <unit> [args...]
 # help: subcommands:
 # help:   show <unit> <slug> [--json]
 # help:   list <unit> [--anchor=A<N>] [--group=...] [--json]
@@ -10,7 +10,7 @@
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 help_table() {
-  printf 'usage: ctx session entry <subcommand> <unit> [args...]\n'
+  printf 'usage: ctx unit entry <subcommand> <unit> [args...]\n'
   printf 'subcommands:\n'
   printf '  show <unit> <slug> [--json]\n'
   printf '  list <unit> [--anchor=A<N>] [--group=...] [--json]\n'
@@ -18,7 +18,7 @@ help_table() {
 }
 
 if [ $# -eq 0 ]; then
-  printf 'usage: ctx session entry <subcommand> <unit> [args...]\n' >&2
+  printf 'usage: ctx unit entry <subcommand> <unit> [args...]\n' >&2
   printf 'subcommands: show, list, closure\n' >&2
   exit 1
 fi

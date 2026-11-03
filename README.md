@@ -63,7 +63,7 @@ Once confirmed, start your first unit of work:
 
 1. **The agent creates the unit:** It initializes `.contexture/sessions/<your-task>/` with active tasks (`backlog.md`) and an append-only event log (`journal.md`).
 2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates tasks, logs test proofs, and records decisions through semantic CLI verbs. You never manage the files manually.
-3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `ctx session load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
+3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `ctx unit load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
 
 For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
 
@@ -80,7 +80,7 @@ The workspace couples root governance with a dedicated convention drawer:
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
     ├── config            Optional workspace configuration (storage.driver: posix)
     ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
-    ├── modules/          The standard module folders: session (the record engine), run (stream filters), and workspace additions
+    ├── modules/          The standard module folders: unit (the record engine), run (stream filters), and workspace additions
     ├── extensions/       The package overlay root: modules/ for package feature modules (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
@@ -132,32 +132,32 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 
 | command | what it returns |
 |---|---|
-| ctx help | The runtime summary: `ctx run`, `ctx session` with its verbs, and every discovered module with its summary line |
-| ctx session help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
-| ctx session active | The field: each ACTIVE unit newest last_event first, with its slug, anchor, next action, objective, and last_event date when known, then the closed count |
-| ctx session bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the next move |
-| ctx session load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
-| ctx session load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
-| ctx session stamp <unit> | Stamps the new period: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with its number and date (@anchor A<N> <date>), no receipt text; a text argument refuses rc 1 |
-| ctx session board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
-| ctx session audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
-| ctx session fold <unit> [--lane=<lane> \| --check \| --finish] | The consolidation fold: the first no-lane call plans the live scope, records the fold start, and prints the plan (the carried open threads included), the first lane's manual, and the first act; a lane call fetches the next unclosed chunk, its entries, and the lane's remaining chunks; the lane writes an ordinary entry whose REFs name the batch and whose CLOSES fold its non-thread constituents, while open threads stay live and are carried; --check proves the closed receipts are the scope minus the carried threads and the audit is clean; --finish writes the receipt and closes the fold start (docs/the-record.md) |
-| ctx session index | One line per rhythm: name, path, use when, activation |
-| ctx session task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags; the driver enforces the status moves (start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop refused for the task next_action names) and writes the completion or drop receipt in the same write; show prints the canonical block |
-| ctx session record <unit> --what="..." [--flags] | Append an immutable journal event (--group, --thread, --rhythm, --knowledge, --slug, and the repeatable --ref, --closes, --supersedes); the driver injects the active anchor and composes the slug from the local date and time |
-| ctx session entry show <unit> <slug> | The entry's canonical block (the last occurrence of a repeated legacy slug) |
-| ctx session entry list <unit> [--anchor=A<N>] [--group=<token>] | One line per entry occurrence (anchor, slug, WHAT), open or closed; `--group` is the topic thread, `--anchor` one period |
-| ctx session entry closure <unit> <slug> | Open, or closed with the verdict of the first closer, then every later closer naming it with its line |
-| ctx session finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list; `--ref` repeats |
-| ctx session search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet, score); --mode is required, no default: exact on every driver or a mode the configured driver declares (ctx session diagnose lists them); a search without it refuses rc 1 naming the declared modes |
-| ctx session resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) and the legacy file forms to the entity block |
-| ctx session units <repo> | Each unit touching the repo: slug, status, anchor, next action |
-| ctx session refs-to <session> | Each unit referencing the session |
+| ctx help | The runtime summary: `ctx run`, `ctx unit` with its verbs, and every discovered module with its summary line |
+| ctx unit help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
+| ctx unit active | The field: each ACTIVE unit newest last_event first, with its slug, anchor, next action, objective, and last_event date when known, then the closed count |
+| ctx unit bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the next move |
+| ctx unit load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
+| ctx unit load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
+| ctx unit stamp <unit> | Stamps the new period: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with its number and date (@anchor A<N> <date>), no receipt text; a text argument refuses rc 1 |
+| ctx unit board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
+| ctx unit audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
+| ctx unit fold <unit> [--lane=<lane> \| --check \| --finish] | The consolidation fold: the first no-lane call plans the live scope, records the fold start, and prints the plan (the carried open threads included), the first lane's manual, and the first act; a lane call fetches the next unclosed chunk, its entries, and the lane's remaining chunks; the lane writes an ordinary entry whose REFs name the batch and whose CLOSES fold its non-thread constituents, while open threads stay live and are carried; --check proves the closed receipts are the scope minus the carried threads and the audit is clean; --finish writes the receipt and closes the fold start (docs/the-record.md) |
+| ctx unit index | One line per rhythm: name, path, use when, activation |
+| ctx unit task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags; the driver enforces the status moves (start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop refused for the task next_action names) and writes the completion or drop receipt in the same write; show prints the canonical block |
+| ctx unit record <unit> --what="..." [--flags] | Append an immutable journal event (--group, --thread, --rhythm, --knowledge, --slug, and the repeatable --ref, --closes, --supersedes); the driver injects the active anchor and composes the slug from the local date and time |
+| ctx unit entry show <unit> <slug> | The entry's canonical block (the last occurrence of a repeated legacy slug) |
+| ctx unit entry list <unit> [--anchor=A<N>] [--group=<token>] | One line per entry occurrence (anchor, slug, WHAT), open or closed; `--group` is the topic thread, `--anchor` one period |
+| ctx unit entry closure <unit> <slug> | Open, or closed with the verdict of the first closer, then every later closer naming it with its line |
+| ctx unit finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list; `--ref` repeats |
+| ctx unit search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet, score); --mode is required, no default: exact on every driver or a mode the configured driver declares (ctx unit diagnose lists them); a search without it refuses rc 1 naming the declared modes |
+| ctx unit resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) and the legacy file forms to the entity block |
+| ctx unit units <repo> | Each unit touching the repo: slug, status, anchor, next action |
+| ctx unit refs-to <session> | Each unit referencing the session |
 | ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from parent session journals: create (the dispatcher's act, the recipe on stdin), record, report, show |
-| ctx session next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
-| ctx session refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
-| ctx session close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
-| ctx session reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
+| ctx unit next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
+| ctx unit refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
+| ctx unit close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
+| ctx unit reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
 | ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw; capture files are unlinked before the command runs |
 
 The named looks (`entry show`, `entry closure`, `units`, `refs-to`, `resolve`) and search answer questions over the record, so agents never improvise greps that over-read: a look that misses is loud, rc=1 with a named error, never an empty success; search prints its zero count. The lists (`entry list` with `--group` or `--anchor`, `task list`, `finding list`) print nothing with rc 0 when nothing matches.
@@ -166,7 +166,7 @@ The interaction toolbox is the typed semantic verbs (`task`, `record`, `entry`, 
 
 ## Maintaining contexture
 
-This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,modules/unit,extensions,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the store alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
+This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/unit,modules/run,modules/unit,extensions,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the store alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
 
 The dev loop:
 

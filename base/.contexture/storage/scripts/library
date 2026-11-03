@@ -23,8 +23,7 @@
 # store_require, and store_has. The
 # caller sets CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which
 # serves when CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact
-# resolver path; the core resolver is found under the drawer, then the base mirror, then
-# the session module's compatibility wrapper.
+# resolver path; the core resolver is found under the drawer, then the base mirror.
 #
 # data_get <ref> resolves a module reference <module>#<symbol>: it finds the target
 # module's data script in the workspace modules, the workspace extensions, or the base
@@ -54,7 +53,7 @@ store_lib_root() {
 }
 
 # store_lib_resolver: the resolver path, CTX_STORE_RESOLVER when set, else the core under
-# the drawer, the base mirror, or the session module's compatibility wrapper
+# the drawer or the base mirror
 store_lib_resolver() {
   if [ -n "${CTX_STORE_RESOLVER:-}" ]; then
     printf '%s\n' "$CTX_STORE_RESOLVER"
@@ -62,8 +61,7 @@ store_lib_resolver() {
   fi
   slr_root=$(store_lib_root)
   for slr_c in "$slr_root/.contexture/storage/scripts/driver-resolver" \
-               "$slr_root/base/.contexture/storage/scripts/driver-resolver" \
-               "$slr_root/.contexture/modules/session/scripts/driver-resolver"; do
+               "$slr_root/base/.contexture/storage/scripts/driver-resolver"; do
     if [ -x "$slr_c" ]; then
       printf '%s\n' "$slr_c"
       return 0

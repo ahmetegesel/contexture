@@ -1,6 +1,6 @@
 #!/bin/sh
 # summary: task operations (add, update, start, complete, reopen, drop, list, show)
-# usage: ctx session task <subcommand> <unit> [args...]
+# usage: ctx unit task <subcommand> <unit> [args...]
 # help: subcommands:
 # help:   add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
 # help:   update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
@@ -19,7 +19,7 @@
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 help_table() {
-  printf 'usage: ctx session task <subcommand> <unit> [args...]\n'
+  printf 'usage: ctx unit task <subcommand> <unit> [args...]\n'
   printf 'subcommands:\n'
   printf '  add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
   printf '  update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
@@ -75,7 +75,7 @@ refs_payload() {
 }
 
 if [ $# -eq 0 ]; then
-  printf 'usage: ctx session task <subcommand> <unit> [args...]\n' >&2
+  printf 'usage: ctx unit task <subcommand> <unit> [args...]\n' >&2
   printf 'subcommands: add, update, start, complete, reopen, drop, list, show\n' >&2
   exit 1
 fi

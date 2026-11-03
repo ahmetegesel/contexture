@@ -1,6 +1,6 @@
 #!/bin/sh
 # summary: resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim)
-# usage: ctx session resolve <unit> <ref> [--json]
+# usage: ctx unit resolve <unit> <ref> [--json]
 # help: resolves domain references and normalizes legacy file-based references
 # help: arguments:
 # help:   <unit>      session unit slug
@@ -14,7 +14,7 @@ if [ $# -lt 2 ]; then
   if [ $# -gt 0 ]; then
     case "$1" in
       --help|-h|help)
-        printf 'usage: ctx session resolve <unit> <ref> [--json]\n'
+        printf 'usage: ctx unit resolve <unit> <ref> [--json]\n'
         printf 'resolves abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim)\n'
         printf 'options:\n'
         printf '  --json      output JSON format\n'
@@ -22,7 +22,7 @@ if [ $# -lt 2 ]; then
         ;;
     esac
   fi
-  printf 'usage: ctx session resolve <unit> <ref> [--json]\n' >&2
+  printf 'usage: ctx unit resolve <unit> <ref> [--json]\n' >&2
   exit 1
 fi
 

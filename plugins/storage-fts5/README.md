@@ -44,8 +44,8 @@ The storage architecture honors these non-negotiable invariants:
 * Pure SQL RRF ranking: combines natural language stem matching and trigram substring matching using Reciprocal Rank Fusion (`1.0 / (60.0 + rank)`).
 * Two-stage CTE execution: separates raw cursor snippet evaluation from outer rank window computation, preventing FTS5 cursor stepping errors.
 * Contextual snippet extraction: the ranked modes return token-dense excerpts (12 tokens) with `<b>` highlight delimiters, and `exact` the first matching line, instead of whole records (the saving against whole records is unmeasured here; backlog#driver-benchmark measures it).
-* Concurrency and WAL mode: the database runs in `PRAGMA journal_mode = WAL;` and every connection waits up to ten seconds for a busy writer (`sqlite3 -cmd ".timeout 10000"`), enabling concurrent readers alongside serialized writes without database locking errors; every write also holds its unit write lock (`.contexture/tmp/locks/fts5-<unit>.lock`) around its one transaction; an interrupted function (HUP, INT, TERM) removes its scratch and releases the lock through its exit cleanup (an open transaction rolls back with its connection), a SIGKILL cannot, but the lock folder carries its holder pid, so a waiter removes a lock whose pid is gone and proceeds while a live holder still refuses after the timeout; a killed verb's per-verb scratch root is swept by the next dispatch.
-* No markdown in the store: the store holds typed rows and the canonical renderer is SQL; no function reads markdown or calls another driver (no unit is written out to files for another driver to read), and no function moves a record in or out: the store holds only what the verbs write. The generic module store holds module-owned bytes opaquely and never parses them; the module's grammar stays in the module.
+* Concurrency and WAL mode: the database runs in `PRAGMA journal_mode = WAL;` and every connection waits up to ten seconds for a busy writer (`sqlite3 -cmd ".timeout 10000"`), enabling concurrent readers alongside serialized writes without database locking errors; every write also holds one namespace store lock (`.contexture/tmp/locks/store-<namespace>.lock`) around its one transaction; an interrupted function (HUP, INT, TERM) removes its scratch and releases the lock through its exit cleanup (an open transaction rolls back with its connection), a SIGKILL cannot, but the lock folder carries its holder pid, so a waiter removes a lock whose pid is gone and proceeds while a live holder still refuses after the timeout; a killed verb's per-verb scratch root is swept by the next dispatch.
+* No markdown in the store: the store holds module-owned bytes opaquely and never parses them; the record's canonical render is the unit module data script's, never SQL; no function reads markdown or calls another driver (no unit is written out to files for another driver to read), and no function moves a record in or out: the store holds only what the verbs write. The module's grammar stays in the module.
 * Zero em-dash and zero spaced hyphen compliance: all documentation, scripts, and error diagnostics strictly avoid em-dashes and spaced hyphens.
 
 ```
@@ -65,15 +65,16 @@ The storage architecture honors these non-negotiable invariants:
           |                                        |
           v                                        v
 +------------------------+             +------------------------+
-|    Relational Model    |             |  Dual FTS5 Indexing    |
-|  * units, preambles    |             |  * fts_prose (porter)  |
-|  * tasks, findings     |--triggers-->|  * fts_code (trigram)  |
-|  * journal_items       |             |  * search_documents    |
-|  * lanes, lane_items   |             +------------------------+
-|  * closers, refs       |                         |
-|  * lines (exact)       |                         v
-|  * docs, doc_changes   |             +------------------------+
-+------------------------+             |  Pure SQL RRF Engine   |
+|     Generic Store      |             |  Dual FTS5 Indexing    |
+|  * store (namespace,   |             |  * store_fts_prose     |
+|    key, opaque bytes)  |--triggers-->|    (porter)            |
+|  * store_changes       |             |  * store_fts_code      |
+|  * store_docs          |             |    (trigram)           |
+|  * store_docs_schema   |             +------------------------+
++------------------------+                         |
+                                                   v
+                                       +------------------------+
+                                       |  Pure SQL RRF Engine   |
                                        |  * 1.0 / (60.0 + rank) |
                                        |  * contextual snippets |
                                        +------------------------+
@@ -87,7 +88,7 @@ To resolve the SQLite FTS5 cursor stepping conflict where window functions and a
 
 Before adopting `storage-fts5` in a repository, verify:
 
-* SQLite CLI availability: verify that `/usr/bin/sqlite3` or `sqlite3` is on PATH with FTS5 support, version 3.44 or later (below it every function refuses rc 2 `ERR_DRIVER_NOT_FOUND` naming the version found, and `storage.health`, which `ctx session diagnose` prints, reports `error` naming it).
+* SQLite CLI availability: verify that `/usr/bin/sqlite3` or `sqlite3` is on PATH with FTS5 support, version 3.44 or later (below it every function refuses rc 2 `ERR_DRIVER_NOT_FOUND` naming the version found, and `storage.health`, which `ctx unit diagnose` prints, reports `error` naming it).
 * An older store: a database written by an earlier release of this plugin is refused naming its schema version (item 7); move it aside, since the driver lays a fresh store in its place only once the path holds no file or an empty one.
 * Workspace storage configuration: determine whether the database lives at default `.contexture/sessions.db` or a custom path configured in `.contexture/config` (`storage.database`) or `.contexture/storage.conf`.
 * The cutover: once `storage.driver: fts5` is configured, every verb reads and writes the database alone, so a unit or a doc left in files is invisible to it; the units carried forward and the corpus are re-entered through the verbs (Step 3). A corpus tracked in git moves only from a committed state, and fts5 is a single-machine store: a team sharing its corpus through git keeps the posix driver.
@@ -134,11 +135,11 @@ Add the database files to `.gitignore`:
 
 ### Step 3: Re-enter the Record
 
-The maintainer sets the driver; then the agent re-enters each unit worth carrying forward through the ordinary verbs under fts5, reading it under posix (`CTX_STORAGE_DRIVER=posix ctx session load <unit>`) and judging each legacy shape as it goes, and writes each doc of the corpus through the docs write verb:
+The maintainer sets the driver; then the agent re-enters each unit worth carrying forward through the ordinary verbs under fts5, reading it under posix (`CTX_STORAGE_DRIVER=posix ctx unit load <unit>`) and judging each legacy shape as it goes, and writes each doc of the corpus through the docs write verb:
 
 ```sh
 printf 'storage.driver: fts5\n' >> <repo-root>/.contexture/config
-ctx session bootstrap <unit> "<objective>"          # then task add, finding add, record, lane create, ...
+ctx unit bootstrap <unit> "<objective>"          # then task add, finding add, record, lane create, ...
 ctx docs write <repo> <slug> < docs/<repo>/<slug>.md
 ```
 
@@ -160,9 +161,9 @@ tests/store-compliance.sh --driver=fts5
 
 The plugin suite runs the same suite against its own copy (`tests/test-store-compliance.sh`) and adds `tests/test-store.sh`: the five single-key functions, the change log's row order and head window, a refused write logging nothing, the atomic put's rollback, a store at another schema refused with no upgrade path, and the store-only schema; the batch and the scan are proven by the store-compliance suite on both drivers.
 
-Verify the re-entered record with the read verbs (`ctx session board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) against the same reads under posix, and each doc with `ctx docs write <repo> <slug> --replace --dry-run < docs/<repo>/<slug>.md`, which answers `unchanged (nothing written)` exactly when the store holds the doc byte for byte.
+Verify the re-entered record with the read verbs (`ctx unit board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) against the same reads under posix, and each doc with `ctx docs write <repo> <slug> --replace --dry-run < docs/<repo>/<slug>.md`, which answers `unchanged (nothing written)` exactly when the store holds the doc byte for byte.
 
-The docs plugin suite runs in full against this driver (it declares `store` and `store.changelog`), the capture parity and the change-log cases included; the record's cross-driver verb parity runs in the session suite (posix and fts5) through the unit module.
+The docs plugin suite runs in full against this driver (it declares `store` and `store.changelog`), the capture parity and the change-log cases included; the record's cross-driver verb parity runs in the unit suite (posix and fts5) through the unit module.
 
 ## Needs
 
@@ -174,12 +175,11 @@ The docs plugin suite runs in full against this driver (it declares `store` and 
 | file | provenance |
 |---|---|
 | `manifest` | authored fresh: the package summary, version, kind driver, driver fts5, and the driver part; the module file retired |
-| `.contexture/extensions/storage/drivers/fts5/schema.sql` | authored fresh: the schema version 4 typed tables, views, search tables, and FTS5 tables |
-| `.contexture/extensions/storage/drivers/fts5/sql/` | authored fresh: the record functions, the derived tables, the line splitter |
+| `.contexture/extensions/storage/drivers/fts5/schema.sql` | authored fresh: the schema version 5 store-only tables, the derived store documents, and the two FTS5 tables |
 | `tests/test-schema.sh` | authored fresh: the schema version suite (it replaces the upgrade suite, whose live checks it carries) |
 | `tests/test-version.sh` | authored fresh: the sqlite3 version guard suite |
 | `.contexture/extensions/storage/drivers/fts5/driver` | authored fresh: the contract 3 store-only entry point (the seven store functions, the store search, pure SQL RRF ranking) |
-| `.contexture/extensions/storage/drivers/fts5/db-init.sh` | authored fresh: the open path at version 4, adding the module store's four tables and the store FTS indexes to a store created before them, refusing every other version |
+| `.contexture/extensions/storage/drivers/fts5/db-init.sh` | authored fresh: the open path at version 5 (fresh schema, version 5 open, every other version refused with no upgrade path) |
 | `tests/test-driver.sh` | authored fresh: SPI compliance test runner |
 | `tests/test-store.sh` | authored fresh: the generic module store suite (change log, atomicity, a store at another schema refused, the store-only schema, the contract 3 descriptor) |
 | `tests/test-store-compliance.sh` | authored fresh: the shared store compliance harness against the plugin's own driver |

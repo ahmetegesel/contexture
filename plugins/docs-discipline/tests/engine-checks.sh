@@ -28,7 +28,7 @@ set -u
 SB=$1
 cd "$SB" || exit 1
 C="$SB/.contexture/ctx"
-R="$SB/.contexture/modules/session/scripts/driver-resolver"
+R="$SB/.contexture/storage/scripts/driver-resolver"
 W="$SB/engine-checks.scratch"
 rm -rf "$W"
 mkdir -p "$W" || exit 1

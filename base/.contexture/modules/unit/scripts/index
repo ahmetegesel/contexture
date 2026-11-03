@@ -1,14 +1,14 @@
 #!/usr/bin/awk -f
 # summary: the rhythm index from .contexture/rhythms/ and .contexture/extensions/rhythms/ as name (path) | use when | activation
-# usage: ctx session index
+# usage: ctx unit index
 # help: no arguments: reads .contexture/rhythms/*.md then .contexture/extensions/rhythms/*.md; an argument refuses rc=1
 # help: an absent rhythms directory answers an empty index rc=0 (the base payload ships no rhythms; a workspace may carry none)
 # help: exit codes: 0 rhythm index printed (empty when the directories are absent); 1 unexpected argument passed
-# help: example: ctx session index
+# help: example: ctx unit index
 
 function usage() {
-  print "Usage: ctx session index" > "/dev/stderr"
-  print "help: ctx session help" > "/dev/stderr"
+  print "Usage: ctx unit index" > "/dev/stderr"
+  print "help: ctx unit help" > "/dev/stderr"
   exit 1
 }
 

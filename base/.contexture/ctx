@@ -9,7 +9,7 @@
 # discovery reads .contexture/modules/<name>/ and .contexture/extensions/modules/<name>/;
 # the directory name is the module name. The workspace modules list first, then the
 # extension modules; an extension name colliding with a workspace module, a builtin
-# (session, run), or a reserved name is warned and skipped, never a silent shadow (the
+# (unit, run), or a reserved name is warned and skipped, never a silent shadow (the
 # package installer refuses the collision; the engine only reports it). The standard module folder is the manifest ("module"), the
 # typed-block law fragment ("laws"), the store declaration ("data"), the
 # optional part hooks ("install" and "uninstall"), scripts/, hooks/, and
@@ -28,9 +28,9 @@
 # ignored. A module file without a summary warns and skips; a scripts/
 # directory without a module file warns and skips; a directory with neither
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
-# Reserved names are the session verb set plus refresh, run, hooks, and the
+# Reserved names are the unit verb set plus refresh, run, hooks, and the
 # verbs retired in v0.55.0 (append, amend, query, flip, drop, which print their
-# replacement); the builtin session and run are allowed. A duplicate verb shadows: first file name
+# replacement); the builtin unit and run are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
 # ctx help --all, ctx <module> help, ctx <module> help <verb>, and bare
 # ctx <module> (module table, rc0). Dispatch validates the verb engine-side
@@ -448,13 +448,13 @@ package_reader() {
 }
 
 # ---------------------------------------------------------------------------
-# reserved names: the session verb set (its scripts own the list) plus
+# reserved names: the unit verb set (its scripts own the list) plus
 # refresh, run, and hooks, and the verbs retired in v0.55.0 (append, amend,
 # query, flip, drop: a static list, so no module can claim a retired name and
-# a retired call prints its replacement); the builtin session and run are
+# a retired call prints its replacement); the builtin unit and run are
 # allowed
 
-# retired_replacement <verb>: the replacement of a retired session verb
+# retired_replacement <verb>: the replacement of a retired record verb
 retired_replacement() {
   case "$1" in
     append) printf 'use record, task add, finding add' ;;
@@ -466,16 +466,16 @@ retired_replacement() {
   esac
 }
 
-session_verbs=""
-session_verbs_loaded=0
+unit_verbs=""
+unit_verbs_loaded=0
 
-load_session_verbs() {
-  if [ "$session_verbs_loaded" -eq 1 ]; then
+load_unit_verbs() {
+  if [ "$unit_verbs_loaded" -eq 1 ]; then
     return 0
   fi
-  session_verbs_loaded=1
+  unit_verbs_loaded=1
   verbs=""
-  sd="$modules_root/session/scripts"
+  sd="$modules_root/unit/scripts"
   if [ -d "$sd" ]; then
     for f in "$sd"/*; do
       [ -f "$f" ] || continue
@@ -489,7 +489,7 @@ load_session_verbs() {
       verbs="$verbs $b"
     done
   fi
-  session_verbs="help${verbs}"
+  unit_verbs="help${verbs}"
 }
 
 is_reserved() {
@@ -498,7 +498,7 @@ is_reserved() {
       return 0
       ;;
   esac
-  case " $session_verbs " in
+  case " $unit_verbs " in
     *" $1 "*)
       return 0
       ;;
@@ -516,7 +516,7 @@ scan_module_dirs() {
   # extension name that collides with a workspace module or a builtin is
   # never scanned twice
   [ -d "$modules_root" ] || [ -d "$extension_modules_root" ] || return 0
-  load_session_verbs
+  load_unit_verbs
   ws=""
   if [ -d "$modules_root" ]; then
     for d in "$modules_root"/*/; do
@@ -528,7 +528,7 @@ scan_module_dirs() {
           continue
           ;;
       esac
-      if is_reserved "$bn" && [ "$bn" != "session" ] && [ "$bn" != "run" ]; then
+      if is_reserved "$bn" && [ "$bn" != "unit" ] && [ "$bn" != "run" ]; then
         continue
       fi
       ws="$ws $bn"
@@ -541,7 +541,7 @@ scan_module_dirs() {
       bn=${d%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|session|run)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|unit|run)
           continue
           ;;
       esac
@@ -563,7 +563,7 @@ module_names() {
   # skips (the package installer refuses the collision; the engine never
   # shadows silently)
   [ -d "$modules_root" ] || [ -d "$extension_modules_root" ] || return 0
-  load_session_verbs
+  load_unit_verbs
   ws=""
   ws_all=""
   if [ -d "$modules_root" ]; then
@@ -576,7 +576,7 @@ module_names() {
           continue
           ;;
       esac
-      if is_reserved "$n" && [ "$n" != "session" ] && [ "$n" != "run" ]; then
+      if is_reserved "$n" && [ "$n" != "unit" ] && [ "$n" != "run" ]; then
         ctx_err "reserved name refused (shadow): $n"
         continue
       fi
@@ -613,7 +613,7 @@ module_names() {
           ;;
       esac
       case "$n" in
-        session|run)
+        unit|run)
           ctx_err "skipping extension module $n: collides with a builtin"
           continue
           ;;
@@ -923,7 +923,7 @@ run_body() {
   # workspace module or a builtin is skipped, never scanned twice
   filter_module_names() {
     [ -d "$modules_root" ] || [ -d "$extension_modules_root" ] || return 0
-    load_session_verbs
+    load_unit_verbs
     ws=""
     if [ -d "$modules_root" ]; then
       for fd in "$modules_root"/*/; do
@@ -948,7 +948,7 @@ run_body() {
         bn=${fd%/}
         bn=${bn##*/}
         case "$bn" in
-          ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|session|run)
+          ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|unit|run)
             continue
             ;;
         esac
@@ -1535,7 +1535,7 @@ case "$1" in
       ctx_err "_reserved: usage: ctx _reserved <name>"
       exit 1
     fi
-    load_session_verbs
+    load_unit_verbs
     if is_reserved "$1"; then
       exit 0
     fi
@@ -1548,6 +1548,13 @@ shift
 
 # discovery warnings (reserved, broken shapes) surface on every dispatch attempt
 mods=$(module_names)
+
+# the record's namespace moved at the unit module: the old target is gone, never an
+# alias (the break is named; the help lists ctx unit)
+if [ "$target" = "session" ]; then
+  printf 'ctx session retired: use ctx unit\n' >&2
+  exit 1
+fi
 
 # ctx adopts the workspace root before dispatch (the engine contract)
 if ! cd "$root"; then
@@ -1593,8 +1600,8 @@ case "$1" in
       show_verb_help "$found_target" "$1"
       exit 0
     fi
-    if [ $# -eq 1 ] && [ "$found_target" = session ] && repl=$(retired_replacement "$1"); then
-      printf 'ctx session %s retired in v0.55.0: %s\n' "$1" "$repl" >&2
+    if [ $# -eq 1 ] && [ "$found_target" = unit ] && repl=$(retired_replacement "$1"); then
+      printf 'ctx unit %s retired in v0.55.0: %s\n' "$1" "$repl" >&2
       exit 1
     fi
     ctx_err "unknown verb: $1"
@@ -1618,8 +1625,8 @@ case "$1" in
 esac
 
 verb=$1
-if [ "$found_target" = session ] && repl=$(retired_replacement "$verb"); then
-  printf 'ctx session %s retired in v0.55.0: %s\n' "$verb" "$repl" >&2
+if [ "$found_target" = unit ] && repl=$(retired_replacement "$verb"); then
+  printf 'ctx unit %s retired in v0.55.0: %s\n' "$verb" "$repl" >&2
   exit 1
 fi
 if ! verb_exists "$md" "$verb"; then

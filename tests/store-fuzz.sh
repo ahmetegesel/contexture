@@ -1,6 +1,6 @@
 #!/bin/sh
 # store-fuzz.sh: the differential store fuzzer, the standing proof beside the fixed store
-# compliance. It stages the shipped base (the session module, the storage core with its
+# compliance. It stages the shipped base (the unit module, the storage core with its
 # resolver, reader, search engine, encoder, library, and posix driver) and the fts5
 # plugin's own module copy into two hermetic sandboxes, writes one seeded sequence of
 # store puts, deletes, and batches to both, and compares every answer and every read
@@ -31,7 +31,6 @@ set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 CTX_SRC="$ROOT/base/.contexture/ctx"
-SESSION_MOD="$ROOT/base/.contexture/modules/session"
 STORAGE_CORE="$ROOT/base/.contexture/storage"
 FTS5_MOD="$ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5"
 
@@ -57,7 +56,7 @@ case "$CALLS" in ''|*[!0-9]*) echo "store-fuzz.sh: --calls takes a positive numb
 [ "$SEED" -ge 1 ] || { echo "store-fuzz.sh: --seed takes a positive number" >&2; exit 1; }
 [ "$CALLS" -ge 4 ] || { echo "store-fuzz.sh: --calls takes at least 4" >&2; exit 1; }
 
-for f in "$CTX_SRC" "$SESSION_MOD/scripts/driver-resolver" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/scripts/store-search" "$STORAGE_CORE/drivers/posix/driver" "$FTS5_MOD/driver" "$FTS5_MOD/db-init.sh" "$FTS5_MOD/schema.sql"; do
+for f in "$CTX_SRC" "$STORAGE_CORE/scripts/store-data" "$STORAGE_CORE/scripts/library" "$STORAGE_CORE/scripts/store-search" "$STORAGE_CORE/drivers/posix/driver" "$FTS5_MOD/driver" "$FTS5_MOD/db-init.sh" "$FTS5_MOD/schema.sql"; do
   [ -e "$f" ] || { echo "store-fuzz.sh: missing $f" >&2; exit 2; }
 done
 if ! command -v sqlite3 >/dev/null 2>&1; then
@@ -96,11 +95,10 @@ stage_side() { # <dir> <posix|fts5>
   mkdir -p "$ss_dir/.contexture/modules" "$ss_dir/.contexture/tmp" "$ss_dir/fuzz-root"
   cp "$CTX_SRC" "$ss_dir/.contexture/ctx"
   chmod +x "$ss_dir/.contexture/ctx"
-  cp -R "$SESSION_MOD" "$ss_dir/.contexture/modules/session"
   cp -R "$STORAGE_CORE" "$ss_dir/.contexture/storage"
   mkdir -p "$ss_dir/.contexture/modules/fuzz"
   printf 'namespace: fuzz\nroot: fuzz-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\nmodes: exact\n' > "$ss_dir/.contexture/modules/fuzz/data"
-  chmod +x "$ss_dir/.contexture/modules/session/scripts/"* "$ss_dir/.contexture/storage/scripts/"* "$ss_dir/.contexture/storage/drivers/posix/driver"
+  chmod +x "$ss_dir/.contexture/storage/scripts/"* "$ss_dir/.contexture/storage/drivers/posix/driver"
   if [ "$ss_kind" = fts5 ]; then
     mkdir -p "$ss_dir/.contexture/extensions/storage/drivers"
     cp -R "$FTS5_MOD" "$ss_dir/.contexture/extensions/storage/drivers/fts5"

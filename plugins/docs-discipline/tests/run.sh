@@ -13,7 +13,7 @@
 # inside the workspace; and the grammar agreement check
 # (tests/grammar-agreement.awk, with its two plants) in a staged
 # scratch workspace built from the shipped copies only: the runtime and the
-# session and lane modules from base/ (the repository that carries this plugin),
+# unit and lane modules from base/ (the repository that carries this plugin),
 # the docs module (its grammar asset rides inside scripts/) from this plugin,
 # never a workspace's adopted drawer, so the suite proves what ships
 # (the gate pins the shipped copies). Needs: POSIX awk/sh, base/.contexture/ctx
@@ -56,8 +56,8 @@ BASE_MODULES="$WS_ROOT/base/.contexture/modules"
 BASE_EXT_MODULES="$WS_ROOT/base/.contexture/extensions/modules"
 BASE_STORAGE="$WS_ROOT/base/.contexture/storage"
 FTS5_MOD="$WS_ROOT/plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5"
-if [ ! -f "$BASE_CTX" ] || [ ! -d "$BASE_MODULES/session" ] || [ ! -d "$BASE_STORAGE" ]; then
-    echo "SKIP: the shipped core (base/.contexture/ctx, its session module, and the storage core) not found under $WS_ROOT"
+if [ ! -f "$BASE_CTX" ] || [ ! -d "$BASE_MODULES/unit" ] || [ ! -d "$BASE_STORAGE" ]; then
+    echo "SKIP: the shipped core (base/.contexture/ctx, its unit module, and the storage core) not found under $WS_ROOT"
     echo "docs-discipline suite: 0 passed, 0 failed, 1 skipped"
     exit 77
 fi
@@ -88,7 +88,6 @@ trap 'exit 143' TERM
 mkdir -p "$SANDBOX/.contexture/modules" "$SANDBOX/.contexture/extensions/modules" "$SANDBOX/docs"
 cp "$BASE_CTX" "$SANDBOX/.contexture/ctx"
 chmod +x "$SANDBOX/.contexture/ctx"
-cp -R "$BASE_MODULES/session" "$SANDBOX/.contexture/modules/session"
 cp -R "$BASE_MODULES/unit" "$SANDBOX/.contexture/modules/unit"
 cp -R "$BASE_STORAGE" "$SANDBOX/.contexture/storage"
 chmod +x "$SANDBOX/.contexture/storage/scripts/"* "$SANDBOX/.contexture/storage/drivers/posix/driver" "$SANDBOX/.contexture/modules/unit/scripts/data"
@@ -113,12 +112,12 @@ echo "docs-discipline plugin suite: staging, grammar asset, module hooks, corpus
 echo ""
 
 # staging: the runtime is base's copy byte for byte and the resolver answers the
-# configured driver with the staged copy (posix: the session module's, fts5: the plugin's)
+# configured driver with the staged copy (posix: the core resolver, fts5: the plugin's)
 case "$DRIVER" in
     posix) WANT_DRIVER="$SANDBOX/.contexture/storage/drivers/posix/driver" ;;
     fts5) WANT_DRIVER="$SANDBOX/.contexture/extensions/storage/drivers/fts5/driver" ;;
 esac
-GOT_DRIVER=$(./.contexture/modules/session/scripts/driver-resolver resolve 2>&1)
+GOT_DRIVER=$(./.contexture/storage/scripts/driver-resolver resolve 2>&1)
 if cmp -s "$BASE_CTX" "$SANDBOX/.contexture/ctx" && [ "$GOT_DRIVER" = "$WANT_DRIVER" ] \
     && [ -f "$SANDBOX/.contexture/extensions/modules/docs/scripts/doc.grammar" ] \
     && [ ! -e "$SANDBOX/.contexture/extensions/templates" ]; then
@@ -158,12 +157,11 @@ echo ""
 HOOKWS="$SANDBOX/hookws"
 mkdir -p "$HOOKWS/.contexture/modules" "$HOOKWS/.contexture/extensions/modules" "$HOOKWS/docs/workspace"
 cp "$BASE_CTX" "$HOOKWS/.contexture/ctx"
-cp -R "$SANDBOX/.contexture/modules/session" "$HOOKWS/.contexture/modules/session"
 cp -R "$SANDBOX/.contexture/modules/unit" "$HOOKWS/.contexture/modules/unit"
 cp -R "$SANDBOX/.contexture/extensions/modules/docs" "$HOOKWS/.contexture/extensions/modules/docs"
 cp -R "$BASE_STORAGE" "$HOOKWS/.contexture/storage"
 chmod +x "$HOOKWS/.contexture/ctx" "$HOOKWS/.contexture/storage/scripts/"* \
-    "$HOOKWS/.contexture/storage/drivers/posix/driver" "$HOOKWS/.contexture/modules/session/scripts/"* \
+    "$HOOKWS/.contexture/storage/drivers/posix/driver" "$HOOKWS/.contexture/modules/unit/scripts/"* \
     "$HOOKWS/.contexture/modules/unit/scripts/data" \
     "$HOOKWS/.contexture/extensions/modules/docs/install" "$HOOKWS/.contexture/extensions/modules/docs/uninstall"
 HOOK_CTX="$HOOKWS/.contexture/ctx"
@@ -271,7 +269,7 @@ corpus_checks() {
 # the corpus reads key on the declared capability, never on the driver name: a driver that
 # declares store serves the full checks; one that does not must refuse every read
 # verb rc 2 naming the capability
-if ./.contexture/modules/session/scripts/driver-resolver has store; then
+if ./.contexture/storage/scripts/driver-resolver has store; then
     CORPUS_STORE=1
 else
     CORPUS_STORE=0
@@ -296,15 +294,15 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
     # byte); the nudge through the unit equal to the backlog-file form byte for byte; the
     # backlog-file form refuses a path inside the sessions drawer rc 1
     NUDGE_NOTE=""
-    "$SANDBOX/.contexture/ctx" session bootstrap nudge-demo "the sample nudge task" > /dev/null 2>&1 || NUDGE_NOTE="bootstrap failed"
-    "$SANDBOX/.contexture/ctx" session task add nudge-demo install-and-run-local \
+    "$SANDBOX/.contexture/ctx" unit bootstrap nudge-demo "the sample nudge task" > /dev/null 2>&1 || NUDGE_NOTE="bootstrap failed"
+    "$SANDBOX/.contexture/ctx" unit task add nudge-demo install-and-run-local \
         --objective="Install the local toolchain and run the demo-orders service before the pricing change lands" \
         --refs="docs/demo-orders/operational.md" \
         --desc="Set up the environment, run the build, and test the checkout path on demo-orders." \
         --criteria="- the suite is green" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }task add failed"
-    "$SANDBOX/.contexture/ctx" session task start nudge-demo install-and-run-local \
+    "$SANDBOX/.contexture/ctx" unit task start nudge-demo install-and-run-local \
         --pointer="install-and-run-local IN_PROGRESS: the sample nudge" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }task start failed"
-    TASK_BLOCK=$("$SANDBOX/.contexture/ctx" session resolve nudge-demo 'task#install-and-run-local' 2>&1)
+    TASK_BLOCK=$("$SANDBOX/.contexture/ctx" unit resolve nudge-demo 'task#install-and-run-local' 2>&1)
     printf '%s\n' "$TASK_BLOCK" > "$SANDBOX/nudge-task.out"
     cmp -s "$SANDBOX/nudge-task.out" "$PLUGIN_ROOT/tests/sample/backlog.md" || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }resolve task# differs from the sample block"
     "$SANDBOX/.contexture/ctx" docs nudge nudge-demo > "$SANDBOX/nudge-unit.out" 2>&1
