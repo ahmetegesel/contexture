@@ -1,0 +1,882 @@
+#!/bin/sh
+# data: the unit module's data script (no summary line, so discovery lists no verb). It
+# answers the record's 35 operations over the storage core's generic module store, one
+# store value per artifact: <unit>/state, <unit>/backlog, <unit>/knowledge,
+# <unit>/journal, and <unit>/lanes/<lane>/<recipe|journal|report>. The artifact values are
+# the current file shapes, so the record order, the preambles, the anchors, the opaque
+# items, the legacy shapes, and the positional liveness survive unchanged. The parse,
+# the canonical render, and the record rules are the module's own (lib/canon.awk,
+# lib/model.awk, lib/ops.awk); the data script maps the artifacts onto the store's get,
+# list, and batch, and the writes land all or none through one store.batch.
+#
+# The cross-unit reads use store.list with the per-unit key prefix; the active listing
+# (session.list) reads every unit's state and journal. The exact search is the record
+# rule over the canonical render (lib/search.awk); a ranked mode is the store's search
+# over the document-set schema, filtered to the unit and capped after the walk, its
+# default-document identity (the artifact key) mapped to the record id (the unit or the
+# lane, a lane entry keeping its lane prefix).
+#
+# The ref interface: data_get resolves a canonical unit ref
+#   unit#<unit>/task/<slug> | unit#<unit>/entry/<slug> | unit#<unit>/finding/<NAME> |
+#   unit#<unit>/lane/<lane>/<recipe|journal|report>
+# and data_emit prints the envelope the storage core's library reads. A new write
+# validates its canonical unit refs through data_get before anything lands; a legacy
+# record target (journal#<slug>, task#<slug>, knowledge#<NAME>, lanes/<lane>/report#<claim>)
+# and a file pointer stay as stored, the forward-only rule of the two ref shapes.
+#
+# Usage: data <function> [<args>...]   (the function wire of the storage contract)
+# Exit codes: 0 the answer; 1 a semantic refusal; 2 a storage or driver failure.
+
+set -u
+LC_ALL=C
+export LC_ALL
+
+UDIR=$(CDPATH="" cd -- "$(dirname -- "$0")/.." && pwd)
+ULIB="$UDIR/lib"
+U_NS=unit
+
+U_LIB=""
+for ul_c in "${CTX_STORE_ROOT:-${CTX_ROOT:-$PWD}}/.contexture/storage/scripts/library" \
+            "$UDIR/../../storage/scripts/library" \
+            "$UDIR/../../../base/.contexture/storage/scripts/library"; do
+  if [ -f "$ul_c" ]; then
+    . "$ul_c"
+    U_LIB=$ul_c
+    break
+  fi
+done
+if [ -z "$U_LIB" ]; then
+  printf 'unit: error: the storage core library is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+  exit 2
+fi
+
+U_SCR=""
+U_LOCK=""
+U_STAGE=""
+U_PAY=""
+U_UNIT=""
+U_PARTS=""
+U_WRITE=0
+U_OUT=""
+
+u_cleanup() {
+  [ -n "$U_LOCK" ] && rm -rf "$U_LOCK" 2>/dev/null
+  [ -n "$U_SCR" ] && rm -rf "$U_SCR" 2>/dev/null
+  return 0
+}
+trap u_cleanup EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+u_refuse() {
+  printf '%s: error: %s (%s)\n' "${FN:-unit}" "$3" "$2" >&2
+  exit "$1"
+}
+
+u_ident_valid() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
+  esac
+  return 0
+}
+
+u_name_valid() {
+  case "$1" in
+    ""|[!A-Za-z0-9_]*|*[!A-Za-z0-9_.-]*) return 1 ;;
+  esac
+  return 0
+}
+
+u_want_unit() {
+  [ -n "${1:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the unit"
+  u_ident_valid "$1" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed unit '$1'"
+}
+
+# u_scratch: the per-run folder under the workspace's .contexture/tmp
+u_scratch() {
+  [ -n "$U_SCR" ] && return 0
+  us_root=$(store_lib_root)
+  us_tmp="$us_root/.contexture/tmp"
+  mkdir -p "$us_tmp" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the workspace scratch folder"
+  [ -d "$us_tmp" ] && [ -w "$us_tmp" ] || u_refuse 2 ERR_STORAGE_WRITE "the workspace scratch folder is not writable"
+  U_SCR=$(mktemp -d "$us_tmp/unit.XXXXXX" 2>/dev/null) || u_refuse 2 ERR_STORAGE_WRITE "cannot create the data script's scratch folder"
+}
+
+# u_lock <unit>: the unit lock folder, held from the read to the batch commit; the same
+# path the posix driver uses, so the record's writers serialize across the two surfaces
+u_lock() {
+  u_tmp=$(store_lib_root)/.contexture/tmp
+  mkdir -p "$u_tmp/locks" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the lock folder"
+  U_LT="$u_tmp/locks/$1.lock"
+  U_LN=0
+  U_LM=0
+  while [ "$U_LN" -lt 50 ]; do
+    if mkdir "$U_LT" 2>/dev/null; then
+      printf '%s\n' "$$" > "$U_LT/pid" 2>/dev/null || {
+        rm -rf "$U_LT" 2>/dev/null
+        u_refuse 2 ERR_STORAGE_WRITE "cannot write the unit lock holder pid"
+      }
+      U_LOCK="$U_LT"
+      return 0
+    fi
+    U_LP=$(cat "$U_LT/pid" 2>/dev/null)
+    case "$U_LP" in
+      ""|*[!0-9]*)
+        U_LM=$((U_LM + 1))
+        if [ "$U_LM" -ge 10 ]; then rm -rf "$U_LT" 2>/dev/null; U_LM=0; continue; fi
+        ;;
+      *)
+        if kill -0 "$U_LP" 2>/dev/null; then U_LM=0
+        else rm -rf "$U_LT" 2>/dev/null; continue
+        fi
+        ;;
+    esac
+    U_LN=$((U_LN + 1))
+    sleep 0.1 2>/dev/null || sleep 1
+  done
+  u_refuse 2 ERR_STORAGE_LOCKED "the unit lock of '$1' is held (5 s timeout)"
+}
+
+# u_keys_parse: the keys of store.list's answer, one per line
+u_keys_parse() {
+  LC_ALL=C awk '
+    {
+      if (!match($0, /"keys":\[/)) next
+      s = substr($0, RSTART + 8)
+      sub(/\].*$/, "", s)
+      n = split(s, P, /","/)
+      for (i = 1; i <= n; i++) {
+        k = P[i]
+        sub(/^"/, "", k)
+        sub(/"$/, "", k)
+        if (k != "") print k
+      }
+    }'
+}
+
+u_keys_all() {
+  store_list "$U_NS" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
+  case $? in
+    0) u_keys_parse < "$U_SCR/list.ans" ;;
+    *) [ -s "$U_SCR/list.err" ] && cat "$U_SCR/list.err" >&2
+       printf '%s: error: the store list failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
+       exit 2 ;;
+  esac
+}
+
+u_keys_prefix() {
+  store_list "$U_NS" "$1" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
+  case $? in
+    0) u_keys_parse < "$U_SCR/list.ans" ;;
+    *) [ -s "$U_SCR/list.err" ] && cat "$U_SCR/list.err" >&2
+       printf '%s: error: the store list failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
+       exit 2 ;;
+  esac
+}
+
+# u_add_key <manifest key> <store key>: fetch the raw value to a scratch file and add its
+# manifest line; a key that vanished between the list and the get is absent
+u_add_key() {
+  U_NART=$((U_NART + 1))
+  U_ART="$U_SCR/art.$U_NART"
+  store_get "$U_NS" "$2" > "$U_ART" 2> "$U_SCR/get.err" < /dev/null
+  U_GRC=$?
+  case "$U_GRC" in
+    0) ;;
+    1) rm -f "$U_ART"; U_NART=$((U_NART - 1)); return 0 ;;
+    *) [ -s "$U_SCR/get.err" ] && cat "$U_SCR/get.err" >&2
+       printf '%s: error: the store read failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
+       exit "$U_GRC" ;;
+  esac
+  printf 'F\t%s\t%s\n' "$1" "$U_ART" >> "$U_SCR/man"
+  printf '%s\n' "$U_ART" >> "$U_SCR/files"
+}
+
+u_manifest_reset() {
+  : > "$U_SCR/man"
+  : > "$U_SCR/files"
+  U_NART=0
+}
+
+# u_fetch_unit <unit> <parts>: the unit's artifacts into the manifest; state always, the
+# other parts on request ("all" takes every artifact, "lanes" or "lane:<l>" the lanes)
+u_fetch_unit() {
+  uf_u=$1
+  uf_parts=" $2 "
+  uf_state=0
+  uf_lanes=""
+  u_keys_prefix "$uf_u/" > "$U_SCR/keys"
+  while IFS= read -r uf_k; do
+    [ -n "$uf_k" ] || continue
+    uf_r=${uf_k#"$uf_u/"}
+    case "$uf_r" in
+      state)
+        uf_state=1
+        u_add_key "$uf_u|state" "$uf_k"
+        ;;
+      backlog|knowledge|journal)
+        case "$uf_parts" in
+          *" all "*|*" $uf_r "*) u_add_key "$uf_u|$uf_r" "$uf_k" ;;
+        esac
+        ;;
+      lanes/*/*)
+        uf_rest=${uf_r#lanes/}
+        uf_lane=${uf_rest%%/*}
+        uf_art=${uf_rest#*/}
+        case "$uf_art" in recipe|journal|report) ;; *) continue ;; esac
+        u_ident_valid "$uf_lane" || continue
+        case " $uf_lanes " in
+          *" $uf_lane "*) ;;
+          *) uf_lanes="$uf_lanes $uf_lane" ;;
+        esac
+        case "$uf_parts" in
+          *" all "*|*" lanes "*|*" lane:$uf_lane "*) u_add_key "$uf_u|lane/$uf_lane/$uf_art" "$uf_k" ;;
+        esac
+        ;;
+    esac
+  done < "$U_SCR/keys"
+  if [ "$uf_state" -eq 1 ]; then
+    printf 'U\t%s\n' "$uf_u" >> "$U_SCR/man"
+  fi
+  for uf_l in $uf_lanes; do
+    printf 'L\t%s\t%s\n' "$uf_u" "$uf_l" >> "$U_SCR/man"
+  done
+}
+
+# u_fetch_all <with_journal 0|1>: every held unit's state (and journal for the listing)
+u_fetch_all() {
+  fa_j=$1
+  : > "$U_SCR/units"
+  u_keys_all > "$U_SCR/keys"
+  while IFS= read -r fa_k; do
+    [ -n "$fa_k" ] || continue
+    case "$fa_k" in
+      */state) ;;
+      *) continue ;;
+    esac
+    fa_u=${fa_k%/state}
+    case "$fa_u" in */*) continue ;; esac
+    u_ident_valid "$fa_u" || continue
+    printf '%s\n' "$fa_u" >> "$U_SCR/units"
+    u_add_key "$fa_u|state" "$fa_k"
+    printf 'U\t%s\n' "$fa_u" >> "$U_SCR/man"
+  done < "$U_SCR/keys"
+  if [ "$fa_j" -eq 1 ]; then
+    while IFS= read -r fa_u; do
+      [ -n "$fa_u" ] || continue
+      if grep -qxF "$fa_u/journal" "$U_SCR/keys"; then
+        u_add_key "$fa_u|journal" "$fa_u/journal"
+      fi
+    done < "$U_SCR/units"
+  fi
+}
+
+u_payload() {
+  cat > "$U_SCR/pay" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the payload"
+  U_PAY="$U_SCR/pay"
+}
+
+# u_args: the function's argv after the unit, as PX_A1..PX_AN for ops.awk
+u_args() {
+  PX_NA=0
+  export PX_NA
+  for ua_a in "$@"; do
+    PX_NA=$((PX_NA + 1))
+    eval "PX_A$PX_NA=\$ua_a; export PX_A$PX_NA"
+  done
+}
+
+u_sizes() {
+  : > "$U_SCR/sizes"
+  [ -s "$U_SCR/files" ] || return 0
+  set --
+  while IFS= read -r us_p; do set -- "$@" "$us_p"; done < "$U_SCR/files"
+  wc -c "$@" > "$U_SCR/sizes" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the unit's artifacts"
+}
+
+u_stage_start() {
+  U_STAGE="$U_SCR/stage"
+  mkdir -p "$U_STAGE" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot stage the write"
+}
+
+# u_awk: one record engine run over the manifest; a refusal passes through
+u_awk() {
+  u_sizes
+  if [ "${U_CAPTURE:-0}" -eq 1 ]; then
+    ua_out=""
+  else
+    ua_out="$U_SCR/answer"
+  fi
+  PX_FN="$FN" PX_UNIT="${U_UNIT:-}" PX_MAN="$U_SCR/man" PX_SIZES="$U_SCR/sizes" \
+    PX_PAY="${U_PAY:-}" PX_ERR="$U_SCR/err" PX_STAGE="${U_STAGE:-}" \
+    PX_OUT="$ua_out" PX_NA="${PX_NA:-0}" PX_DOCSIZE="${PX_DOCSIZE:-0}" \
+    awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/ops.awk"
+  ua_rc=$?
+  if [ "$ua_rc" -ne 0 ]; then
+    if [ -s "$U_SCR/err" ]; then
+      cat "$U_SCR/err" >&2
+    else
+      printf '%s: error: the record engine failed (rc %s) (ERR_STORAGE_READ)\n' "$FN" "$ua_rc" >&2
+      ua_rc=2
+    fi
+    exit "$ua_rc"
+  fi
+  return 0
+}
+
+# u_commit: one store.batch, every staged artifact all or none, then the answer
+u_commit() {
+  if [ ! -f "$U_STAGE/manifest" ]; then
+    cat "$U_SCR/answer"
+    return 0
+  fi
+  : > "$U_SCR/batch"
+  while IFS='	' read -r uc_n uc_rel; do
+    [ -n "$uc_n" ] || continue
+    uc_src="$U_STAGE/$uc_n"
+    [ -f "$uc_src" ] || u_refuse 2 ERR_STORAGE_WRITE "the staged write of $uc_rel is missing"
+    uc_key="$U_UNIT/${uc_rel%.md}"
+    uc_b64=$("$ULIB/b64" "$uc_src") || u_refuse 2 ERR_STORAGE_WRITE "cannot encode $uc_rel"
+    {
+      printf 'action=put\n'
+      printf 'key=%s\n' "$(store_lib_escape "$uc_key")"
+      printf 'head=none\n'
+      printf 'value_b64=%s\n' "$uc_b64"
+    } >> "$U_SCR/batch"
+  done < "$U_STAGE/manifest"
+  store_batch "$U_NS" < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
+  uc_rc=$?
+  if [ "$uc_rc" -ne 0 ]; then
+    uc_msg=$(head -n 1 "$U_SCR/batch.err" 2>/dev/null)
+    case "$uc_msg" in
+      store.batch:\ error:\ *) uc_msg=${uc_msg#store.batch: error: } ;;
+    esac
+    [ -n "$uc_msg" ] || uc_msg="the store batch failed (ERR_STORAGE_WRITE)"
+    printf '%s: error: %s\n' "$FN" "$uc_msg" >&2
+    exit "$uc_rc"
+  fi
+  cat "$U_SCR/answer"
+}
+
+# u_refs_validate: a new write's canonical unit refs resolve through data_get before
+# anything lands; a legacy record target and a file pointer stay as stored
+u_refs_validate() {
+  [ -n "$U_PAY" ] && [ -f "$U_PAY" ] || return 0
+  PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/refs.awk" \
+    > "$U_SCR/refs" 2> "$U_SCR/refs.err"
+  case $? in
+    0) ;;
+    *) [ -s "$U_SCR/refs.err" ] && cat "$U_SCR/refs.err" >&2
+       u_refuse 2 ERR_STORAGE_READ "cannot read the write's references" ;;
+  esac
+  while IFS= read -r ur_ref; do
+    [ -n "$ur_ref" ] || continue
+    case "$ur_ref" in
+      unit#?*) ;;
+      *) continue ;;
+    esac
+    ur_err=$(data_get "$ur_ref" 2>&1 >/dev/null)
+    ur_rc=$?
+    [ "$ur_rc" -eq 0 ] && continue
+    case "$ur_err" in
+      "data_get: error: ref '$ur_ref': "*) ur_err=${ur_err#"data_get: error: ref '$ur_ref': "} ;;
+    esac
+    printf '%s: error: ref '\''%s'\'': %s\n' "$FN" "$ur_ref" "$ur_err" >&2
+    exit "$ur_rc"
+  done < "$U_SCR/refs"
+}
+
+# u_unit_call <function> <unit> <parts> <write> [<args>...]
+u_unit_call() {
+  FN=$1
+  U_UNIT=$2
+  U_PARTS=$3
+  U_WRITE=$4
+  shift 4
+  u_scratch
+  u_manifest_reset
+  u_payload
+  if [ "$U_WRITE" -eq 1 ]; then
+    u_lock "$U_UNIT"
+    u_stage_start
+  fi
+  u_fetch_unit "$U_UNIT" "$U_PARTS"
+  u_args "$@"
+  u_awk
+  if [ "$U_WRITE" -eq 1 ]; then
+    u_refs_validate
+    u_commit
+  else
+    cat "$U_SCR/answer"
+  fi
+}
+
+# u_lane_doc <function> <unit> <lane>: lane.create or lane.write_report, the document raw
+u_lane_doc() {
+  FN=$1
+  U_UNIT=$2
+  U_LANE=$3
+  u_scratch
+  u_manifest_reset
+  U_PAY=""
+  u_lock "$U_UNIT"
+  u_stage_start
+  cat > "$U_STAGE/doc" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the document"
+  PX_DOCSIZE=$(wc -c < "$U_STAGE/doc" | tr -d ' ')
+  u_fetch_unit "$U_UNIT" ""
+  u_args "$U_LANE"
+  u_awk
+  u_refs_validate
+  u_commit
+}
+
+# u_load <unit>: the unit and every unit its ref_sessions name
+u_load() {
+  FN=session.load
+  u_scratch
+  U_UNIT=$1
+  u_manifest_reset
+  u_payload
+  u_fetch_unit "$1" ""
+  FN=state.refs
+  U_CAPTURE=1
+  u_lrefs=$(u_awk) || exit $?
+  U_CAPTURE=0
+  FN=session.load
+  u_manifest_reset
+  u_fetch_unit "$1" "backlog knowledge journal"
+  for u_lr in $u_lrefs; do
+    u_ident_valid "$u_lr" || continue
+    [ "$u_lr" = "$1" ] && continue
+    if u_held "$u_lr"; then
+      u_fetch_unit "$u_lr" "backlog knowledge journal"
+    fi
+  done
+  u_awk
+  cat "$U_SCR/answer"
+}
+
+# u_refload <unit> [<unit>...]
+u_refload() {
+  FN=session.refload
+  [ $# -ge 1 ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the unit"
+  U_UNIT=$1
+  u_scratch
+  for u_rr in "$@"; do
+    u_want_unit "$u_rr"
+    u_held "$u_rr" || u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$u_rr' not found"
+  done
+  u_manifest_reset
+  u_payload
+  for u_rr in "$@"; do
+    u_fetch_unit "$u_rr" "backlog knowledge journal"
+  done
+  shift
+  u_args "$@"
+  u_awk
+  cat "$U_SCR/answer"
+}
+
+# u_refs <unit> [<unit>...]: set ref_sessions
+u_refs() {
+  FN=session.refs
+  U_UNIT=$1
+  u_scratch
+  u_want_unit "$U_UNIT"
+  u_held "$U_UNIT" || u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$U_UNIT' not found"
+  shift
+  for u_r in "$@"; do
+    u_ident_valid "$u_r" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed unit '$u_r'"
+  done
+  u_manifest_reset
+  u_payload
+  u_lock "$U_UNIT"
+  u_stage_start
+  u_fetch_all 0
+  u_args "$@"
+  u_awk
+  u_commit
+}
+
+# u_held <unit>: the unit's state key exists
+u_held() {
+  store_get "$U_NS" "$1/state" > /dev/null 2> "$U_SCR/held.err" < /dev/null
+  uh_rc=$?
+  case "$uh_rc" in
+    0) return 0 ;;
+    1) return 1 ;;
+    *) [ -s "$U_SCR/held.err" ] && cat "$U_SCR/held.err" >&2
+       printf '%s: error: the store read failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
+       exit "$uh_rc" ;;
+  esac
+}
+
+u_want_held() {
+  u_want_unit "$1"
+  u_held "$1" || u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$1' not found"
+}
+
+u_extra() {
+  ue_n=$1
+  shift
+  [ $# -le "$ue_n" ] || u_refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$(eval "printf '%s' \"\${$((ue_n + 1))}\"")'"
+}
+
+# u_pay_field <key>: one decoded payload value
+u_pay_field() {
+  PK=$1 PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" \
+    awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/payfield.awk"
+}
+
+# u_search <unit> [flags]
+u_search() {
+  FN=search.query
+  U_UNIT=$1
+  shift
+  sq_limit=20
+  sq_entity=all
+  sq_mode=exact
+  for sq_a in "$@"; do
+    case "$sq_a" in
+      --limit=*) sq_limit="${sq_a#--limit=}" ;;
+      --entity=*) sq_entity="${sq_a#--entity=}" ;;
+      --mode=*) sq_mode="${sq_a#--mode=}" ;;
+      *) u_refuse 1 ERR_INVALID_ARGUMENT "unknown option '$sq_a'" ;;
+    esac
+  done
+  case "$sq_limit" in
+    ""|*[!0-9]*|0) u_refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$sq_limit'" ;;
+  esac
+  case "$sq_entity" in
+    all|session|task|entry|finding|lane|lane_entry) ;;
+    *) u_refuse 1 ERR_INVALID_ARGUMENT "unknown entity type '$sq_entity' (session, task, entry, finding, lane, lane_entry, all)" ;;
+  esac
+  case "$sq_mode" in
+    ""|[!a-z]*|*[!a-z0-9_-]*) u_refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$sq_mode'" ;;
+  esac
+  u_scratch
+  u_want_held "$U_UNIT"
+  u_payload
+  u_sq_modes=$(store_lib_call capability capability 2>/dev/null | LC_ALL=C awk '
+    {
+      if (!match($0, /"search_modes":\[/)) next
+      s = substr($0, RSTART + RLENGTH)
+      sub(/\].*$/, "", s)
+      n = split(s, P, /","/)
+      o = ""
+      for (i = 1; i <= n; i++) { v = P[i]; gsub(/"/, "", v); o = o (i > 1 ? ", " : "") v }
+      print o
+    }')
+  if [ -n "$u_sq_modes" ]; then
+    u_sq_ok=0
+    for u_sq_m in $(printf '%s' "$u_sq_modes" | tr ',' ' '); do
+      [ "$u_sq_m" = "$sq_mode" ] && u_sq_ok=1
+    done
+    if [ "$u_sq_ok" -eq 0 ]; then
+      printf '%s: error: mode '\''%s'\'' is not supported; declared modes: %s (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$sq_mode" "$u_sq_modes" >&2
+      exit 1
+    fi
+  fi
+  if [ "$sq_mode" = "exact" ]; then
+    u_manifest_reset
+    u_fetch_unit "$U_UNIT" "all"
+    u_sizes
+    PX_MAN="$U_SCR/man" PX_SIZES="$U_SCR/sizes" PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" \
+      SQ_UNIT="$U_UNIT" SQ_LIMIT="$sq_limit" SQ_ENTITY="$sq_entity" SQ_MODE="$sq_mode" \
+      awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/search.awk" > "$U_SCR/answer"
+    sq_rc=$?
+    if [ "$sq_rc" -ne 0 ]; then
+      if [ -s "$U_SCR/err" ]; then cat "$U_SCR/err" >&2; else
+        printf '%s: error: the search failed (rc %s) (ERR_STORAGE_READ)\n' "$FN" "$sq_rc" >&2
+        sq_rc=2
+      fi
+      exit "$sq_rc"
+    fi
+    cat "$U_SCR/answer"
+    return 0
+  fi
+  sq_q=$(u_pay_field query)
+  if ! store_search "$U_NS" "$sq_q" "$sq_mode" 0 > "$U_SCR/store.ans" 2> "$U_SCR/store.err"; then
+    sq_rc=$?
+    sq_msg=$(head -n 1 "$U_SCR/store.err" 2>/dev/null)
+    case "$sq_msg" in
+      store.search:\ error:\ *) sq_msg=${sq_msg#store.search: error: } ;;
+    esac
+    [ -n "$sq_msg" ] || sq_msg="the store search failed (ERR_STORAGE_READ)"
+    printf '%s: error: %s\n' "$FN" "$sq_msg" >&2
+    exit "$sq_rc"
+  fi
+  awk -f "$ULIB/json.awk" < "$U_SCR/store.ans" > "$U_SCR/flat" 2> "$U_SCR/flat.err" || {
+    sq_rc=$?
+    [ -s "$U_SCR/flat.err" ] && cat "$U_SCR/flat.err" >&2
+    printf '%s: error: the store search answer is malformed (ERR_STORAGE_READ)\n' "$FN" >&2
+    exit 2
+  }
+  RQ_UNIT="$U_UNIT" RQ_QUERY="$sq_q" RQ_MODE="$sq_mode" RQ_LIMIT="$sq_limit" RQ_ENTITY="$sq_entity" \
+    awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/ranked.awk" < "$U_SCR/flat" > "$U_SCR/answer"
+  sq_rc=$?
+  [ "$sq_rc" -eq 0 ] || exit "$sq_rc"
+  cat "$U_SCR/answer"
+}
+
+# u_data_get <ref>: the canonical unit ref's entity, emitted through data_emit
+u_data_get() {
+  ud_ref=${1:-}
+  case "$ud_ref" in
+    unit#?*) ;;
+    *) u_refuse 1 ERR_INVALID_ARGUMENT "a reference is <module>#<symbol>" ;;
+  esac
+  ud_sym=${ud_ref#unit#}
+  case "$ud_sym" in
+    */*) ;;
+    *) u_refuse 1 ERR_INVALID_ARGUMENT "malformed unit ref '$ud_ref'" ;;
+  esac
+  ud_u=${ud_sym%%/*}
+  ud_rest=${ud_sym#*/}
+  case "$ud_rest" in
+    task/*) ud_fn=task.get; ud_a1=${ud_rest#task/}; ud_a2="" ;;
+    entry/*) ud_fn=entry.get; ud_a1=${ud_rest#entry/}; ud_a2="" ;;
+    finding/*) ud_fn=finding.get; ud_a1=${ud_rest#finding/}; ud_a2="" ;;
+    lane/*/*)
+      ud_l=${ud_rest#lane/}
+      ud_a1=${ud_l%%/*}
+      ud_a2=${ud_l#*/}
+      case "$ud_a2" in recipe|journal|report) ;; *) u_refuse 1 ERR_INVALID_ARGUMENT "lane ref takes recipe, journal, or report: '$ud_ref'" ;; esac
+      ud_fn=lane.get
+      ;;
+    *) u_refuse 1 ERR_INVALID_ARGUMENT "the ref names no record entity: '$ud_ref'" ;;
+  esac
+  u_scratch
+  if [ -n "$ud_a2" ]; then
+    ud_ans=$("$0" "$ud_fn" "$ud_u" "$ud_a1" "$ud_a2" < /dev/null 2> "$U_SCR/dg.err")
+  else
+    ud_ans=$("$0" "$ud_fn" "$ud_u" "$ud_a1" < /dev/null 2> "$U_SCR/dg.err")
+  fi
+  ud_rc=$?
+  if [ "$ud_rc" -ne 0 ]; then
+    ud_msg=$(head -n 1 "$U_SCR/dg.err" 2>/dev/null)
+    case "$ud_msg" in
+      *": error: "*) ud_msg=${ud_msg#*": error: "} ;;
+    esac
+    [ -n "$ud_msg" ] || ud_msg="the target refused the reference"
+    printf 'data_get: error: %s\n' "$ud_msg" >&2
+    exit "$ud_rc"
+  fi
+  data_emit "$ud_ref" "$ud_ans"
+}
+
+cmd=${1:-}
+[ $# -gt 0 ] && shift
+FN=$cmd
+
+case "$cmd" in
+  data_get)
+    u_data_get "${1:-}"
+    exit 0
+    ;;
+  capability|storage.health)
+    printf '%s: error: unknown function '\''%s'\'' (ERR_CAPABILITY_UNSUPPORTED)\n' "$cmd" "$cmd" >&2
+    exit 2
+    ;;
+esac
+
+u_scratch
+
+case "$cmd" in
+  session.create)
+    u_extra 1 "$@"
+    u_want_unit "${1:-}"
+    u_manifest_reset
+    u_payload
+    u_lock "${1:-}"
+    if u_keys_prefix "${1:-}/" > "$U_SCR/keys" && [ -s "$U_SCR/keys" ]; then
+      u_refuse 1 ERR_ENTITY_EXISTS "unit '$1' already exists"
+    fi
+    u_stage_start
+    U_UNIT=$1
+    u_awk
+    u_refs_validate
+    u_commit
+    ;;
+  session.list)
+    u_extra 0 "$@"
+    u_manifest_reset
+    u_fetch_all 1
+    u_awk
+    cat "$U_SCR/answer"
+    ;;
+  session.load)
+    u_extra 1 "$@"
+    u_want_held "${1:-}"
+    u_load "${1:-}"
+    ;;
+  session.refload)
+    u_refload "$@"
+    ;;
+  session.board)
+    u_extra 1 "$@"
+    u_want_held "${1:-}"
+    u_unit_call "$cmd" "$1" "backlog journal" 0
+    ;;
+  session.audit)
+    u_extra 1 "$@"
+    u_want_held "${1:-}"
+    u_unit_call "$cmd" "$1" "backlog journal" 0
+    ;;
+  session.stamp)
+    u_extra 1 "$@"
+    u_want_held "${1:-}"
+    u_unit_call "$cmd" "$1" "journal" 1
+    ;;
+  session.next)
+    u_extra 1 "$@"
+    u_want_held "${1:-}"
+    u_unit_call "$cmd" "$1" "backlog" 1
+    ;;
+  session.close)
+    u_extra 1 "$@"
+    u_want_held "${1:-}"
+    u_unit_call "$cmd" "$1" "backlog journal" 1
+    ;;
+  session.reopen)
+    u_extra 1 "$@"
+    u_want_held "${1:-}"
+    u_unit_call "$cmd" "$1" "" 1
+    ;;
+  session.refs)
+    u_extra 99 "$@"
+    u_refs "$@"
+    ;;
+  session.units)
+    u_extra 1 "$@"
+    [ -n "${1:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the repo"
+    case "$1" in
+      [!A-Za-z0-9._-]*|*[!A-Za-z0-9._/-]*) u_refuse 1 ERR_INVALID_ARGUMENT "malformed repo '$1'" ;;
+    esac
+    U_UNIT=$1
+    u_manifest_reset
+    u_fetch_all 0
+    u_awk
+    cat "$U_SCR/answer"
+    ;;
+  session.refs_to)
+    u_extra 1 "$@"
+    u_want_unit "${1:-}"
+    U_UNIT=$1
+    u_manifest_reset
+    u_fetch_all 0
+    u_awk
+    cat "$U_SCR/answer"
+    ;;
+  task.add|task.update|task.start|task.complete|task.reopen|task.drop|task.get)
+    u_extra 2 "$@"
+    FN=$cmd
+    u_want_held "${1:-}"
+    [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the task slug"
+    u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed task slug '$2'"
+    case "$cmd" in
+      task.get) u_unit_call "$cmd" "$1" "backlog" 0 "$2" ;;
+      task.complete|task.drop) u_unit_call "$cmd" "$1" "backlog journal" 1 "$2" ;;
+      *) u_unit_call "$cmd" "$1" "backlog" 1 "$2" ;;
+    esac
+    ;;
+  task.list)
+    u_extra 2 "$@"
+    u_want_held "${1:-}"
+    case "${2:-}" in
+      TODO|IN_PROGRESS|DONE|all) ;;
+      *) u_refuse 1 ERR_INVALID_ARGUMENT "task.list takes TODO, IN_PROGRESS, DONE, or all: '${2:-}'" ;;
+    esac
+    u_unit_call "$cmd" "$1" "backlog" 0 "$2"
+    ;;
+  entry.record)
+    u_extra 1 "$@"
+    FN=$cmd
+    u_want_held "${1:-}"
+    u_unit_call "$cmd" "$1" "journal" 1
+    ;;
+  entry.get|entry.closure)
+    u_extra 2 "$@"
+    u_want_held "${1:-}"
+    [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the entry slug"
+    u_name_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed entry slug '$2'"
+    u_unit_call "$cmd" "$1" "journal" 0 "$2"
+    ;;
+  entry.list)
+    u_want_held "${1:-}"
+    el_u=$1
+    shift
+    for el_a in "$@"; do
+      case "$el_a" in
+        --anchor=A[0-9]*) case "${el_a#--anchor=A}" in *[!0-9]*) u_refuse 1 ERR_INVALID_ARGUMENT "--anchor takes A<N>: '$el_a'" ;; esac ;;
+        --group=?*) case "${el_a#--group=}" in [!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) u_refuse 1 ERR_INVALID_ARGUMENT "malformed group in '$el_a'" ;; esac ;;
+        *) u_refuse 1 ERR_INVALID_ARGUMENT "unknown option '$el_a'" ;;
+      esac
+    done
+    u_unit_call "$cmd" "$el_u" "journal" 0 "$@"
+    ;;
+  finding.add|finding.update|finding.drop|finding.get)
+    u_extra 2 "$@"
+    u_want_held "${1:-}"
+    [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the finding NAME"
+    u_name_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$2'"
+    case "$cmd" in
+      finding.get) u_unit_call "$cmd" "$1" "knowledge" 0 "$2" ;;
+      *) u_unit_call "$cmd" "$1" "knowledge" 1 "$2" ;;
+    esac
+    ;;
+  finding.supersede)
+    u_extra 3 "$@"
+    u_want_held "${1:-}"
+    for fs_n in "${2:-}" "${3:-}"; do
+      [ -n "$fs_n" ] || u_refuse 1 ERR_INVALID_ARGUMENT "finding.supersede takes the unit, OLD, and NEW"
+      u_name_valid "$fs_n" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$fs_n'"
+    done
+    u_unit_call "$cmd" "$1" "knowledge" 1 "$2" "$3"
+    ;;
+  finding.list)
+    u_extra 2 "$@"
+    u_want_held "${1:-}"
+    case "${2:-}" in
+      active|all) ;;
+      *) u_refuse 1 ERR_INVALID_ARGUMENT "finding.list takes active or all: '${2:-}'" ;;
+    esac
+    u_unit_call "$cmd" "$1" "knowledge" 0 "$2"
+    ;;
+  lane.create|lane.write_report)
+    u_extra 2 "$@"
+    FN=$cmd
+    u_want_held "${1:-}"
+    [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
+    u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
+    u_lane_doc "$cmd" "$1" "$2"
+    ;;
+  lane.record)
+    u_extra 2 "$@"
+    FN=$cmd
+    u_want_held "${1:-}"
+    [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
+    u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
+    u_unit_call "$cmd" "$1" "lane:$2" 1 "$2"
+    ;;
+  lane.get)
+    u_extra 3 "$@"
+    u_want_held "${1:-}"
+    [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
+    u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
+    case "${3:-}" in
+      recipe|journal|report) ;;
+      *) u_refuse 1 ERR_INVALID_ARGUMENT "lane.get takes recipe, journal, or report: '${3:-}'" ;;
+    esac
+    u_unit_call "$cmd" "$1" "lane:$2" 0 "$2" "$3"
+    ;;
+  search.query)
+    u_search "$@"
+    ;;
+  *)
+    printf '%s: error: unknown function '\''%s'\'' (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$cmd" >&2
+    exit 2
+    ;;
+esac
+exit 0

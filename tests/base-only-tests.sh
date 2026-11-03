@@ -175,7 +175,7 @@ out=$($CTX lane help 2>&1); a_rc "$?" "0" "extension root: ctx lane help rc0 fro
 a_match "$out" "create" "extension root: the lane verb table renders"
 out=$($CTX help 2>/dev/null)
 ord=$(printf '%s\n' "$out" | awk '/^modules:/{on=1;next} on && /^  [a-z]/{print $1}' | tr '\n' ' ')
-a_eq "$ord" "session lane " "extension root: the workspace module lists before the extension module"
+a_eq "$ord" "session unit lane " "extension root: the workspace module lists before the extension module"
 mv .contexture/extensions .contexture/extensions.b1
 out=$($CTX help 2>"ext.err"); rc=$?
 a_rc "$rc" "0" "extension root: ctx help rc0 with the extension root absent"

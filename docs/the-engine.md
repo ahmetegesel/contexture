@@ -294,7 +294,7 @@ The docs module reads its namespace and writes each doc through the store, stamp
 
 #### The module store
 
-The storage core (`.contexture/storage/`) owns the driver resolver, the generic module store contract, the module-facing library, and the posix driver; it is not a module, so `ctx help` does not list it. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the core's resolver, so every caller resolves the configured driver and asks its capability questions through the core. The store serves module-owned data only: the record keeps the 38 typed functions above, and the docs corpus reaches the store through the docs module's own typed layer. The core reads and validates a module's data file; it never calls the module's code, and no module's parser enters base.
+The storage core (`.contexture/storage/`) owns the driver resolver, the generic module store contract, the module-facing library, and the posix driver; it is not a module, so `ctx help` does not list it. The session module's `scripts/driver-resolver` is a compatibility wrapper that execs the core's resolver, so every caller resolves the configured driver and asks its capability questions through the core. The store serves module-owned data only: the docs corpus reaches the store through the docs module's own typed layer, and the record's module-side implementation is the unit module at `.contexture/modules/unit`. Its data file declares the record as one store value per artifact (namespace `unit`, root `.contexture/sessions`, suffix `.md`, the key `<unit>/<path...>`, and the document-set search rules), and its data script answers the 35 record operations over the store's `get`, `list`, and `batch` with the module's own parser and canonical render: the values are the current file shapes, a multi-key write lands through one `store.batch`, the exact search is the record rule over the canonical render, a ranked mode is the store's document-set search filtered to the unit, and the canonical `unit#<unit>/...` refs resolve through the module's `data_get`. The driver still carries the 38 typed functions under contract 2 and keeps capability and `storage.health`; the session verbs remain the record's surface until the `ctx unit` namespace move. The core reads and validates a module's data file; it never calls the module's code, and no module's parser enters base.
 
 A module declares its data in a `data` file beside its `module` file, one `field: value` line per field and a line starting with `#` a comment. Only `namespace` and `key` are required; `root`, `suffix`, `changes`, and the search keys are optional:
 
@@ -604,7 +604,7 @@ Placement follows the class of the file, never convenience:
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/session,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
 | live workspace | the untracked root: `AGENTS.md`, `.contexture/` (sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 

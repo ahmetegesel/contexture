@@ -1,0 +1,20 @@
+# the unit module's store declaration: the record as one value per artifact file
+namespace: unit
+root: .contexture/sessions
+suffix: .md
+key: <unit>/<path...>
+changes: false
+search: documents
+modes: exact, hybrid, trigram
+document: <unit>/state state session -
+document: <unit>/backlog backlog session -
+document: <unit>/backlog backlog task @task
+document: <unit>/knowledge knowledge session -
+document: <unit>/knowledge knowledge finding @finding
+document: <unit>/journal journal session -
+document: <unit>/journal journal entry @entry
+document: <unit>/journal journal session @anchor
+document: <unit>/lanes/<lane>/recipe lane_recipe lane -
+document: <unit>/lanes/<lane>/journal lane_journal lane -
+document: <unit>/lanes/<lane>/journal lane_journal lane_entry @entry
+document: <unit>/lanes/<lane>/report lane_report lane -
