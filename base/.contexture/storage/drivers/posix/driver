@@ -296,27 +296,81 @@ store_path() {
 
 # store_list_keys [<prefix>]: every key in the namespace, bytewise, only those the module
 # pattern admits and, when a prefix is given, those that start with it; the folder entries
-# are read as stored, so a case twin of a key never appears
+# are read as stored, so a case twin of a key never appears. The key rule and the module
+# pattern run in one awk pass, and a prefix ending on a slash starts the walk at that
+# directory, so a per-unit read does not pay for the namespace.
 store_list_keys() {
   sl_prefix=${1:-}
   sl_dir="$STORE_WS/$SD_ROOT"
   [ -d "$sl_dir" ] || return 0
-  find "$sl_dir" -type f -print 2>/dev/null | while IFS= read -r sl_f; do
-    sl_rel=${sl_f#"$sl_dir"/}
-    case "$sl_rel" in
-      *"$SD_SUFFIX") sl_key=${sl_rel%"$SD_SUFFIX"} ;;
-      *) continue ;;
+  sl_scan=$sl_dir
+  if [ -n "$sl_prefix" ]; then
+    case "$sl_prefix" in
+      */)
+        sl_sub=${sl_prefix%/}
+        [ -d "$sl_dir/$sl_sub" ] && sl_scan="$sl_dir/$sl_sub"
+        ;;
     esac
-    store_key_ok "$sl_key" || continue
-    store_key_shape "$SD_KEYPAT" "$sl_key" || continue
-    [ -z "$sl_prefix" ] || [ "${sl_key#"$sl_prefix"}" != "$sl_key" ] || continue
-    printf '%s\n' "$sl_key"
-  done | LC_ALL=C sort
+  fi
+  find "$sl_scan" -type f -print 2>/dev/null | SL_DIR="$sl_dir" SL_SUFFIX="$SD_SUFFIX" SL_KEYPAT="$SD_KEYPAT" SL_PREFIX="$sl_prefix" LC_ALL=C awk '
+    BEGIN {
+      dir = ENVIRON["SL_DIR"]; sfx = ENVIRON["SL_SUFFIX"]; pre = ENVIRON["SL_PREFIX"]
+      m = split(ENVIRON["SL_KEYPAT"], p, "/")
+      for (i = 1; i <= m; i++) multi[i] = (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    }
+    {
+      f = $0
+      if (substr(f, 1, length(dir) + 1) != dir "/") next
+      key = substr(f, length(dir) + 2)
+      if (sfx != "") {
+        if (length(key) < length(sfx) || substr(key, length(key) - length(sfx) + 1) != sfx) next
+        key = substr(key, 1, length(key) - length(sfx))
+      }
+      if (key == "") next
+      if (substr(key, 1, 1) == "/" || substr(key, length(key), 1) == "/") next
+      if (key ~ /[[:cntrl:]]/ || index(key, " ") || index(key, "\\")) next
+      n = split(key, k, "/")
+      ok = 1
+      for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") { ok = 0; break }
+      if (!ok) next
+      if (m < 1) next
+      if (multi[m]) { if (n < m) next } else { if (n != m) next }
+      for (i = 1; i < m; i++) {
+        if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) next
+        if (k[i] == "") next
+      }
+      if (multi[m]) {
+        for (i = m; i <= n; i++) if (k[i] == "") next
+      } else {
+        if (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) next
+        if (k[m] == "") next
+      }
+      if (pre != "" && substr(key, 1, length(pre)) != pre) next
+      print key
+    }' | LC_ALL=C sort
 }
 
-# store_key_exists <key>: the exact key the store lists (a case twin is absent)
+# store_key_exists <key>: the exact key the store lists (a case twin is absent). The walk
+# checks each path segment's stored spelling at its own directory, so a case fold in any
+# ancestor is refused and the namespace is never listed.
 store_key_exists() {
-  store_list_keys | grep -F -q -x -e "$1"
+  ske_key=$1
+  ske_dir="$STORE_WS/$SD_ROOT"
+  [ -d "$ske_dir" ] || return 1
+  ske_rest=$ske_key
+  while :; do
+    case "$ske_rest" in
+      */*) ske_seg=${ske_rest%%/*}; ske_rest=${ske_rest#*/} ;;
+      *) ske_seg=$ske_rest; ske_rest= ;;
+    esac
+    if [ -z "$ske_rest" ]; then
+      ls -A "$ske_dir" 2>/dev/null | grep -F -x -q -e "$ske_seg$SD_SUFFIX" || return 1
+      return 0
+    fi
+    ls -A "$ske_dir" 2>/dev/null | grep -F -x -q -e "$ske_seg" || return 1
+    ske_dir="$ske_dir/$ske_seg"
+    [ -d "$ske_dir" ] || return 1
+  done
 }
 
 # store_twin <key>: a stored key that folds onto <key> under ASCII case without matching it
