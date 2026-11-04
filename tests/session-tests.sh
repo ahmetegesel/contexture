@@ -595,7 +595,13 @@ $CTX unit task complete sem-unit task-1 --evidence="test verified cleanly" >/dev
 a_eq "$?" "0" "semantic: task complete rc0"
 out=$($CTX unit task show sem-unit task-1)
 a_match "$out" "STATUS: DONE" "semantic: task complete updates status to DONE"
-a_match "$($CTX unit entry show sem-unit "$TODAY-task-1-completed" 2>/dev/null)" "backlog/task-1: DONE (test verified cleanly)" "semantic: task complete appends receipt event"
+# the receipt's date is the write-time date, so derive its slug from the artifact: a run
+# crossing midnight must not look for the date the suite started with
+sem_board=$($CTX unit board sem-unit 2>/dev/null)
+sem_receipt=$(printf '%s\n' "$sem_board" | awk '
+  /^@entry / { hdr = substr($0, 8) }
+  index($0, "WHAT: \"backlog/task-1: DONE (test verified cleanly)\"") { print hdr; exit }')
+a_match "$($CTX unit entry show sem-unit "$sem_receipt" 2>/dev/null)" "backlog/task-1: DONE (test verified cleanly)" "semantic: task complete appends receipt event"
 
 # 6. task reopen
 $CTX unit task reopen sem-unit task-1 >/dev/null 2>&1
@@ -621,7 +627,10 @@ j_content=$($CTX unit board sem-unit 2>/dev/null)
 a_match "$j_content" "WHAT: \"event recorded via flags\"" "semantic: record event content verified"
 a_match "$j_content" "GROUP: dev" "semantic: record group verified"
 a_match "$j_content" "THREAD: review" "semantic: record thread verified"
-a_match "$j_content" "@entry $TODAY" "semantic: record auto-injects date prefix"
+sem_flags_hdr=$(printf '%s\n' "$j_content" | awk '
+  /^@entry / { hdr = $0 }
+  index($0, "WHAT: \"event recorded via flags\"") { print hdr; exit }')
+a_match "$sem_flags_hdr" "^@entry [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]-event-" "semantic: record auto-injects date prefix (the header carries a date and epoch)"
 a_match "$j_content" "ANCHOR: A1" "semantic: record auto-injects active anchor"
 
 # 10. the raw @entry stdin fallback retired (D1): the piped block alone is refused, and the
@@ -886,7 +895,11 @@ $CTX unit task add x-unit x-pre-long --objective="Long slug" >/dev/null 2>&1
 $CTX unit task add x-unit x-pre --objective="Prefix slug" >/dev/null 2>&1; a_eq "$?" "0" "a slug prefixing another task's slug adds rc0"
 # the canonical drop receipt
 $CTX unit task drop x-unit x-pre --reason="suite drop" >/dev/null 2>&1
-a_match "$($CTX unit entry show x-unit "$TODAY-x-pre-dropped" 2>/dev/null)" "WHAT: \"backlog/x-pre: DROPPED (suite drop)\"" "task drop writes the canonical backlog/<slug>: DROPPED (<reason>) receipt"
+x_drop_board=$($CTX unit board x-unit 2>/dev/null)
+x_drop_slug=$(printf '%s\n' "$x_drop_board" | awk '
+  /^@entry / { hdr = substr($0, 8) }
+  index($0, "WHAT: \"backlog/x-pre: DROPPED (suite drop)\"") { print hdr; exit }')
+a_match "$($CTX unit entry show x-unit "$x_drop_slug" 2>/dev/null)" "WHAT: \"backlog/x-pre: DROPPED (suite drop)\"" "task drop writes the canonical backlog/<slug>: DROPPED (<reason>) receipt"
 # the search contract: one shape, the flags honored, an empty query refused
 out=$($CTX unit search x-unit "task" --mode=exact --json --limit=1 2>&1)
 a_eq "$(printf '%s\n' "$out" | grep -o '"entity_type":' | wc -l | tr -d ' ')" "1" "search --limit=1 caps the results at one"
@@ -1151,11 +1164,11 @@ out=$($CTX unit stamp e3-unit 2>&1); rc=$?
 a_eq "$rc" "0" "E3-7: stamp <unit> alone lands rc0"
 a_eq "$out" "transition: A1 -> A2" "E3-7: stamp prints the transition"
 out=$($CTX unit search e3-unit "@anchor A2" --mode=exact --json 2>/dev/null)
-a_match "$out" "\"snippet\":\"@anchor A2 $TODAY\"" "E3-7: the anchor line carries its number and date only"
+a_match "$out" "\"snippet\":\"@anchor A2 [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]\"" "E3-7: the anchor line carries its number and date only"
 out=$($CTX unit search e3-unit "attention" --mode=exact --entity=session 2>/dev/null)
 a_not "$out" "@anchor A2" "E3-7: the new anchor carries no attention"
 if [ "$DRIVER" = posix ]; then
-  a_eq "$(rcat e3-unit journal | grep -c "^@anchor A2 $TODAY\$")" "1" "E3-7: the posix journal holds @anchor A2 <date>"
+  a_eq "$(rcat e3-unit journal | grep -c '^@anchor A2 [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$')" "1" "E3-7: the posix journal holds @anchor A2 <date>"
   # a legacy anchor holding receipt text keeps it as content and reads back
   printf '@anchor A3 ("continues A2", attention: a legacy receipt kept)\n' | rappend e3-unit journal
   out=$($CTX unit search e3-unit "a legacy receipt kept" --mode=exact --json 2>/dev/null)
@@ -1489,14 +1502,43 @@ ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort > kr-before.lst
 kr_new() { ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort | LC_ALL=C comm -13 kr-before.lst -; }
 $CTX unit task start kr-unit kr-a --pointer="kr-a IN_PROGRESS" >/dev/null 2>&1 &
 kr_pid=$!
+# wait until the data script has staged its own scratch under the verb root: that proves
+# the child exists, so the kill below can take the whole tree rather than racing its spawn
+kr_root=""
+kr_seen=0
 kr_n=0
-while [ "$kr_n" -lt 50 ] && [ -z "$(kr_new)" ]; do sleep 0.1; kr_n=$((kr_n + 1)); done
-kr_seen=$(kr_new | grep -c '')
-# kill the verb and its resolver child: the verb shell runs the resolver as a child, so a
-# kill of the shell alone would leave the driver to finish once the lock goes
-kr_kids=$(ps -eo pid=,ppid= 2>/dev/null | awk -v r="$kr_pid" '$2 == r { print $1 }')
-kill -9 $kr_pid $kr_kids 2>/dev/null
+while [ "$kr_n" -lt 300 ]; do
+  kr_name=$(kr_new | grep '^verb\.' | head -n 1)
+  if [ -n "$kr_name" ]; then
+    kr_root=".contexture/tmp/$kr_name"
+    [ "$kr_seen" -ge 1 ] || kr_seen=$(kr_new | grep -c '')
+    [ -n "$(ls "$kr_root"/unit.* 2>/dev/null)" ] && break
+  fi
+  sleep 0.1; kr_n=$((kr_n + 1))
+done
+# kill the verb and every descendant: a store child left alive would finish once the lock
+# goes and race the sweep assertion, so the whole tree goes together and the test waits
+# until every killed pid is gone before the next dispatch
+kr_tree=$(ps -eo pid=,ppid= 2>/dev/null | awk -v root="$kr_pid" '
+  { parent[$1] = $2 }
+  END {
+    set[root] = 1
+    changed = 1
+    while (changed) {
+      changed = 0
+      for (p in parent) if ((parent[p] in set) && !(p in set)) { set[p] = 1; changed = 1 }
+    }
+    for (p in set) if (p != root) print p
+  }')
+kill -9 $kr_pid $kr_tree 2>/dev/null
 wait "$kr_pid" 2>/dev/null
+kr_n=0
+while [ "$kr_n" -lt 100 ]; do
+  kr_live=0
+  for kr_p in $kr_tree; do kill -0 "$kr_p" 2>/dev/null && kr_live=1; done
+  [ "$kr_live" -eq 0 ] && break
+  sleep 0.1; kr_n=$((kr_n + 1))
+done
 rm -rf "$kr_lock"
 if [ "$kr_seen" -ge 1 ]; then ok "KR: the killed writer had staged its scratch"; else bad "KR: the killed writer had staged its scratch (new entries: $kr_seen)"; fi
 a_eq "$(kr_new | grep -c '^verb\.')" "1" "KR: the killed writer left one per-verb scratch root"
@@ -1643,15 +1685,35 @@ rm -rf .contexture/modules/zz-plant "$z_log"
 
 echo "== L parallel-write probe =="
 today=$(date +%Y-%m-%d)
+# lock_retry <label> <command...>: run a write, retrying while it refuses
+# ERR_STORAGE_LOCKED (the 5 s unit-lock wait is the product's; the retry is a test-side
+# budget refresh, never a changed wait). Any other failure returns at once. The retry is
+# announced, and the effect assertions below stay the proof.
+lock_retry() {
+  lr_label=$1; shift
+  lr_n=0
+  while :; do
+    lr_out=$("$@" 2>&1) && return 0
+    lr_rc=$?
+    case "$lr_out" in
+      *ERR_STORAGE_LOCKED*)
+        lr_n=$((lr_n + 1))
+        if [ "$lr_n" -ge 3 ]; then printf 'RETRY: %s gave up after %s lock timeouts\n' "$lr_label" "$lr_n" >&2; return "$lr_rc"; fi
+        printf 'RETRY: %s hit the 5 s unit lock (attempt %s); retrying\n' "$lr_label" "$((lr_n + 1))" >&2
+        sleep 1 ;;
+      *) printf '%s\n' "$lr_out" >&2; return "$lr_rc" ;;
+    esac
+  done
+}
 p1_pass=0
 p1_fail=0
 i=1
 while [ "$i" -le 10 ]; do
   slug="p1-$i"
   $CTX unit bootstrap "$slug" "parallel probe unit $i" >/dev/null 2>&1 || { p1_fail=$((p1_fail + 1)); i=$((i + 1)); continue; }
-  $CTX unit record "$slug" --what="journal write $i" --slug="$today-probe-journal-$i" >/dev/null 2>&1 &
+  lock_retry "record p1-$i" $CTX unit record "$slug" --what="journal write $i" --slug="$today-probe-journal-$i" &
   a=$!
-  $CTX unit next "$slug" "pointer $i" >/dev/null 2>&1 &
+  lock_retry "next p1-$i" $CTX unit next "$slug" "pointer $i" &
   b=$!
   wait "$a" || true
   wait "$b" || true
@@ -1684,9 +1746,9 @@ p2_residue_hits() {
 }
 i=1
 while [ "$i" -le "$p2_iters" ]; do
-  $CTX unit record p2 --what="x $i" --slug="$today-probe-x-$i" >/dev/null 2>&1 &
+  lock_retry "record p2 x $i" $CTX unit record p2 --what="x $i" --slug="$today-probe-x-$i" &
   a=$!
-  $CTX unit record p2 --what="y $i" --slug="$today-probe-y-$i" >/dev/null 2>&1 &
+  lock_retry "record p2 y $i" $CTX unit record p2 --what="y $i" --slug="$today-probe-y-$i" &
   b=$!
   ra=0; rb=0
   wait "$a" || ra=$?

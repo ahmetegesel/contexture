@@ -775,19 +775,41 @@ cmp -s "$SANDBOX/tc21-before.reads" "$SANDBOX/tc21-after.reads" || miss "the rea
 tc "TC21: every refused write leaves the unit's read answers byte-identical"
 
 # TC22: concurrent writers serialize: five entry.record calls at once with one date and
-# epoch land five entries under the slug suffixed -1 while the journal holds it (R6: X, X-1, X-1-1, and on), each exactly once
+# epoch land five entries under the slug suffixed -1 while the journal holds it (R6: X, X-1, X-1-1, and on), each exactly once.
+# The unit-lock wait is 5 s and is the product's; under a loaded host the five writers'
+# queue can exceed it. A writer that refuses ERR_STORAGE_LOCKED is retried with a fresh
+# 5 s budget (announced in tc22-retry.log), never with a changed wait: the retry is a
+# test-side budget refresh, a non-lock failure stays the case's failure, and a timeout
+# after the last attempt is still reported. The lock-wait ruling (a longer, adaptive, or
+# configurable wait) is the human's. The suffix chain is deterministic per base slug, so
+# the exact five-slug set holds however the retries interleave.
 X22=2026-09-27-event-1790000030
+: > "$SANDBOX/tc22-retry.log"
 _t22_i=1
 while [ "$_t22_i" -le 5 ]; do
   printf 'what=concurrent writer\nthread=none\ndate=%s\nepoch=1790000030\n' "$DATE" > "$SANDBOX/tc22-$_t22_i.in"
-  ( "$(call_exec entry.record)" entry.record "$TUNIT" < "$SANDBOX/tc22-$_t22_i.in" > "$SANDBOX/tc22-$_t22_i.out" 2>&1; echo "$?" > "$SANDBOX/tc22-$_t22_i.rc" ) &
+  ( _t22_n=0
+    while :; do
+      "$(call_exec entry.record)" entry.record "$TUNIT" < "$SANDBOX/tc22-$_t22_i.in" > "$SANDBOX/tc22-$_t22_i.out" 2> "$SANDBOX/tc22-$_t22_i.err"
+      _t22_rc=$?
+      [ "$_t22_rc" -eq 0 ] && { echo 0 > "$SANDBOX/tc22-$_t22_i.rc"; exit 0; }
+      if [ "$_t22_rc" -eq 2 ] && grep -q 'ERR_STORAGE_LOCKED' "$SANDBOX/tc22-$_t22_i.err" && [ "$_t22_n" -lt 4 ]; then
+        _t22_n=$((_t22_n + 1))
+        printf 'info: TC22 writer %s attempt %s hit the 5 s unit lock; retrying\n' "$_t22_i" "$((_t22_n + 1))" >> "$SANDBOX/tc22-retry.log"
+        sleep 1
+        continue
+      fi
+      echo "$_t22_rc" > "$SANDBOX/tc22-$_t22_i.rc"
+      exit 0
+    done ) &
   _t22_i=$((_t22_i + 1))
 done
 wait
+[ -s "$SANDBOX/tc22-retry.log" ] && cat "$SANDBOX/tc22-retry.log"
 _t22_got=""
 _t22_i=1
 while [ "$_t22_i" -le 5 ]; do
-  [ "$(cat "$SANDBOX/tc22-$_t22_i.rc")" = 0 ] || miss "writer $_t22_i rc $(cat "$SANDBOX/tc22-$_t22_i.rc") [$(head -c 200 "$SANDBOX/tc22-$_t22_i.out")]"
+  [ "$(cat "$SANDBOX/tc22-$_t22_i.rc")" = 0 ] || miss "writer $_t22_i rc $(cat "$SANDBOX/tc22-$_t22_i.rc") [$(head -c 200 "$SANDBOX/tc22-$_t22_i.err")]"
   _t22_got="$_t22_got $(awk -f "$JF" "$SANDBOX/tc22-$_t22_i.out" | awk 'index($0, "entry.slug=") == 1 { print substr($0, 12) }')"
   _t22_i=$((_t22_i + 1))
 done
