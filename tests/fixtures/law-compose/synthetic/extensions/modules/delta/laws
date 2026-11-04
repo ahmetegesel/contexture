@@ -1,0 +1,4 @@
+@append @journal
+  delta-journal: delta's journal clause
+@append @custom
+  delta-custom: delta's custom clause

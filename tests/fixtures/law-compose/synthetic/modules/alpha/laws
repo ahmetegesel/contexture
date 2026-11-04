@@ -1,0 +1,5 @@
+# alpha fragment
+@append @laws
+  alpha-law: alpha contributes a law
+@append @custom
+  alpha-custom: alpha's custom clause

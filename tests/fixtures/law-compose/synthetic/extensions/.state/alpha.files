@@ -1,0 +1,4 @@
+package alpha
+version 1.0.0
+law .contexture/modules/alpha/laws
+law .contexture/extensions/laws/alpha-extra

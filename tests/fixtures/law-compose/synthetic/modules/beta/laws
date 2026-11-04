@@ -1,0 +1,6 @@
+@append @record
+  beta-record: beta's record clause
+@append @notes
+  beta-notes: beta's notes clause
+@append @custom
+  beta-custom: beta's custom clause

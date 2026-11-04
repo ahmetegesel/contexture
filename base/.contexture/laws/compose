@@ -1,0 +1,361 @@
+#!/bin/sh
+# compose: compose the generated law layer from the core law source, the installed
+# modules, and the standalone law parts; verify or recompose at install and boot.
+# Usage: compose [--check]; exit 0 current or composed, 1 a content refusal, 2 I/O.
+set -u
+
+LC_ALL=C
+export LC_ALL
+
+dir=$(CDPATH="" cd -- "$(dirname -- "$0")" && pwd) || exit 2
+root=$(CDPATH="" cd -- "$dir/../.." && pwd) || exit 2
+core=$dir/core.md
+out=$dir/AGENTS.generated.md
+ctx_bin=$root/.contexture/ctx
+tab=$(printf '\t')
+
+EXPECTED_BLOCKS="laws layout record journal backlog query boot interact rhythms subagents refresh close handoff git update"
+
+check_only=0
+case "${1:-}" in
+  "") ;;
+  --check) check_only=1 ;;
+  *) printf 'compose: error: usage: compose [--check]\n' >&2; exit 1 ;;
+esac
+[ $# -le 1 ] || { printf 'compose: error: usage: compose [--check]\n' >&2; exit 1; }
+
+err() { printf 'compose: error: %s\n' "$*" >&2; }
+die() { _rc=$1; shift; err "$*"; exit "$_rc"; }
+
+[ -f "$core" ] || die 2 "missing core law source: .contexture/laws/core.md"
+[ -r "$core" ] || die 2 "unreadable core law source: .contexture/laws/core.md"
+[ -x "$ctx_bin" ] || die 2 "missing engine: .contexture/ctx"
+
+core_version=$(awk 'NR == 1 { if (match($0, /v[0-9]+\.[0-9]+\.[0-9]+/)) print substr($0, RSTART, RLENGTH); exit }' "$core")
+[ -n "$core_version" ] || die 1 "the core law source .contexture/laws/core.md carries no version"
+
+mkdir -p "$root/.contexture/tmp" 2>/dev/null || die 2 "cannot create the workspace scratch drawer"
+for _stale in "$root/.contexture/tmp"/law-compose.*; do
+  [ -d "$_stale" ] || continue
+  _n=${_stale##*/}
+  _p=${_n#law-compose.}
+  _p=${_p%%.*}
+  case "$_p" in
+    ""|*[!0-9]*) continue ;;
+  esac
+  kill -0 "$_p" 2>/dev/null || rm -rf "$_stale" 2>/dev/null
+done
+work=$(mktemp -d "$root/.contexture/tmp/law-compose.$$.XXXXXX" 2>/dev/null) || die 2 "cannot create the compose scratch"
+trap 'rm -rf "$work"' EXIT INT TERM
+
+parse_stream() {
+  awk -v mode="$2" '
+    BEGIN { cur = "" }
+    { sub(/\r$/, "") }
+    /^[[:space:]]*$/ { next }
+    /^#/ { next }
+    /^@/ {
+      if ($0 ~ /^@append @[A-Za-z0-9._-]+$/) {
+        if (mode == "core") { print "E\t" $0; exit 1 }
+        cur = $0
+        sub(/^@append @/, "", cur)
+        print "A\t" cur
+        next
+      }
+      if ($0 ~ /^@replace/) { print "R\t" $0; exit 1 }
+      if ($0 ~ /^@[A-Za-z0-9._-]+$/) {
+        if (mode != "core") { print "E\t" $0; exit 1 }
+        cur = $0
+        sub(/^@/, "", cur)
+        print "B\t" cur
+        next
+      }
+      print "E\t" $0
+      exit 1
+    }
+    /^  / {
+      if (cur == "") { print "E\t" $0; exit 1 }
+      print "C\t" cur "\t" $0
+      next
+    }
+    { print "E\t" $0; exit 1 }
+  ' "$1"
+}
+
+parse_stream "$core" core > "$work/core.stream" 2> "$work/core.parse.err"
+_rc=$?
+if [ "$_rc" -ne 0 ]; then
+  _line=$(awk -F'\t' '$1 == "E" { print $2; exit }' "$work/core.stream")
+  [ -n "$_line" ] || _line=$(cat "$work/core.parse.err")
+  die 1 "the core law source .contexture/laws/core.md is malformed: $_line"
+fi
+
+core_blocks=""
+while IFS= read -r _line; do
+  case "$_line" in
+    "B$tab"*)
+      _kw=${_line#"B$tab"}
+      core_blocks="$core_blocks $_kw"
+      : > "$work/core.$_kw"
+      ;;
+    "C$tab"*)
+      _rest=${_line#"C$tab"}
+      _kw=${_rest%%"$tab"*}
+      _clause=${_rest#*"$tab"}
+      printf '%s\n' "$_clause" >> "$work/core.$_kw"
+      ;;
+    *)
+      die 1 "the core law source .contexture/laws/core.md is malformed"
+      ;;
+  esac
+done < "$work/core.stream"
+core_blocks=${core_blocks# }
+[ "$core_blocks" = "$EXPECTED_BLOCKS" ] || die 1 "the core law source .contexture/laws/core.md has a broken block skeleton: expected '$EXPECTED_BLOCKS', found '$core_blocks'"
+
+: > "$work/modules"
+seen_names=" "
+add_module() {
+  _name=$1
+  _dir=$2
+  case "$seen_names" in
+    *" $_name "*) return ;;
+  esac
+  seen_names="$seen_names$_name "
+  printf '%s\t%s\n' "$_name" "$_dir" >> "$work/modules"
+}
+
+for _d in "$root"/.contexture/modules/*; do
+  [ -d "$_d" ] || continue
+  [ -f "$_d/module" ] || continue
+  _name=${_d##*/}
+  add_module "$_name" "$_d"
+done
+for _d in "$root"/.contexture/extensions/modules/*; do
+  [ -d "$_d" ] || continue
+  [ -f "$_d/module" ] || continue
+  _name=${_d##*/}
+  case "$_name" in
+    unit|run) continue ;;
+  esac
+  add_module "$_name" "$_d"
+done
+
+: > "$work/laws"
+module_law_paths=" "
+while IFS="$tab" read -r _name _moddir; do
+  if ! "$ctx_bin" _module "$_moddir/module" validate > "$work/module.parse.err" 2>&1; then
+    die 1 "module '$_name': $(cat "$work/module.parse.err")"
+  fi
+  "$ctx_bin" _module "$_moddir/module" summary > "$work/module.$_name.summary" || die 2 "module '$_name': cannot read the summary"
+  "$ctx_bin" _module "$_moddir/module" version > "$work/module.$_name.version" || die 2 "module '$_name': cannot read the version"
+  "$ctx_bin" _module "$_moddir/module" description > "$work/module.$_name.description" || die 2 "module '$_name': cannot read the description"
+  _lawfile=$_moddir/laws
+  if [ -e "$_lawfile" ] || [ -L "$_lawfile" ]; then
+    [ -f "$_lawfile" ] || die 2 "module '$_name': the laws fragment is not a file: ${_lawfile#"$root"/}"
+    [ -r "$_lawfile" ] || die 2 "module '$_name': unreadable laws fragment: ${_lawfile#"$root"/}"
+    _rel=${_lawfile#"$root"/}
+    printf 'module:%s\t%s\t%s\n' "$_name" "$_rel" "$_lawfile" >> "$work/laws"
+    module_law_paths="$module_law_paths$_rel "
+  fi
+done < "$work/modules"
+
+: > "$work/standalone.candidates"
+if [ -e "$root/.contexture/extensions/laws" ] || [ -L "$root/.contexture/extensions/laws" ]; then
+  if [ -f "$root/.contexture/extensions/laws" ]; then
+    printf '%s\t%s\n' ".contexture/extensions/laws" "$root/.contexture/extensions/laws" >> "$work/standalone.candidates"
+  elif [ -d "$root/.contexture/extensions/laws" ]; then
+    find "$root/.contexture/extensions/laws" -type f 2>/dev/null | LC_ALL=C sort > "$work/standalone.files"
+    while IFS= read -r _abs; do
+      [ -n "$_abs" ] || continue
+      printf '%s\t%s\n' "${_abs#"$root"/}" "$_abs" >> "$work/standalone.candidates"
+    done < "$work/standalone.files"
+  else
+    die 2 "the standalone laws part is neither a file nor a folder: .contexture/extensions/laws"
+  fi
+fi
+if [ -d "$root/.contexture/extensions/.state" ]; then
+  for _sf in "$root"/.contexture/extensions/.state/*.files; do
+    [ -f "$_sf" ] || continue
+    awk '$1 == "law" { print $2 }' "$_sf" >> "$work/state.laws"
+  done
+  if [ -f "$work/state.laws" ]; then
+    LC_ALL=C sort -u "$work/state.laws" > "$work/state.laws.sorted"
+    while IFS= read -r _rel; do
+      [ -n "$_rel" ] || continue
+      case "$_rel" in
+        /*|..|../*|*/../*|*/..) die 2 "malformed law path in the install record: $_rel" ;;
+      esac
+      printf '%s\t%s\n' "$_rel" "$root/$_rel" >> "$work/standalone.candidates"
+    done < "$work/state.laws.sorted"
+  fi
+fi
+
+if [ -s "$work/standalone.candidates" ]; then
+  LC_ALL=C sort -u "$work/standalone.candidates" > "$work/standalone.sorted"
+  : > "$work/standalone.added"
+  while IFS="$tab" read -r _rel _abs; do
+    case "$module_law_paths" in
+      *" $_rel "*) continue ;;
+    esac
+    if grep -Fqx "$_rel" "$work/standalone.added" 2>/dev/null; then
+      continue
+    fi
+    [ -f "$_abs" ] && [ -r "$_abs" ] || die 2 "missing or unreadable standalone law fragment: $_rel"
+    printf '%s\n' "$_rel" >> "$work/standalone.added"
+    printf 'law:%s\t%s\t%s\n' "$_rel" "$_rel" "$_abs" >> "$work/laws"
+  done < "$work/standalone.sorted"
+fi
+
+: > "$work/packages"
+custom_order=""
+if [ -d "$root/.contexture/extensions/.state" ]; then
+  for _sf in "$root"/.contexture/extensions/.state/*.files; do
+    [ -f "$_sf" ] || continue
+    _pkg=$(awk '$1 == "package" { print $2; exit }' "$_sf")
+    _ver=$(awk '$1 == "version" { print $2; exit }' "$_sf")
+    [ -n "$_pkg" ] || _pkg=${_sf##*/}
+    _pkg=${_pkg%.files}
+    [ -n "$_ver" ] && printf '%s %s\n' "$_pkg" "$_ver" >> "$work/packages"
+  done
+fi
+
+: > "$work/hashstream"
+printf 'core\n' >> "$work/hashstream"
+cat "$core" >> "$work/hashstream"
+while IFS="$tab" read -r _name _moddir; do
+  printf 'module %s %s\n' "$_name" "$(cat "$work/module.$_name.version")" >> "$work/hashstream"
+  cat "$work/module.$_name.description" >> "$work/hashstream"
+done < "$work/modules"
+while IFS=' ' read -r _pkg _ver; do
+  [ -n "$_pkg" ] || continue
+  printf 'package %s %s\n' "$_pkg" "$_ver" >> "$work/hashstream"
+done < "$work/packages"
+while IFS="$tab" read -r _label _rel _abs; do
+  printf 'law %s\n' "$_label" >> "$work/hashstream"
+  cat "$_abs" >> "$work/hashstream"
+done < "$work/laws"
+
+: > "$work/app"
+while IFS="$tab" read -r _label _rel _abs; do
+  parse_stream "$_abs" fragment > "$work/stream" 2> "$work/parse.err"
+  _rc=$?
+  if [ "$_rc" -ne 0 ]; then
+    _line=$(awk -F'\t' '$1 == "E" || $1 == "R" { print $2; exit }' "$work/stream")
+    case "$_line" in
+      @replace*) die 1 "a law fragment may only @append; @replace refuses: $_rel" ;;
+    esac
+    [ -n "$_line" ] || _line=$(cat "$work/parse.err")
+    die 1 "law fragment $_rel is malformed: $_line"
+  fi
+  while IFS= read -r _l; do
+    case "$_l" in
+      "A$tab"*)
+        _kw=${_l#"A$tab"}
+        case " $core_blocks " in
+          *" $_kw "*) ;;
+          *)
+            case " $custom_order " in
+              *" $_kw "*) ;;
+              *) custom_order="$custom_order $_kw" ;;
+            esac
+            ;;
+        esac
+        ;;
+      "C$tab"*)
+        _rest=${_l#"C$tab"}
+        _kw=${_rest%%"$tab"*}
+        _clause=${_rest#*"$tab"}
+        printf '%s\n' "$_clause" >> "$work/app.$_kw"
+        ;;
+      "E$tab"*)
+        die 1 "law fragment $_rel: unexpected line: ${_l#"E$tab"}"
+        ;;
+      "R$tab"*)
+        die 1 "a law fragment may only @append; @replace refuses: $_rel"
+        ;;
+    esac
+  done < "$work/stream"
+done < "$work/laws"
+
+core_ck=$(cksum < "$core" | awk '{ print $1 "-" $2 }') || die 2 "cannot checksum the core law source"
+src_ck=$(cksum < "$work/hashstream" | awk '{ print $1 "-" $2 }') || die 2 "cannot checksum the composed sources"
+[ -n "$core_ck" ] || die 2 "cannot checksum the core law source"
+[ -n "$src_ck" ] || die 2 "cannot checksum the composed sources"
+
+header="# contexture $core_version: generated law layer; core cksum $core_ck; sources $src_ck; never edit"
+
+: > "$work/generated"
+printf '%s\n' "$header" >> "$work/generated"
+first=1
+for _kw in $core_blocks; do
+  [ "$first" -eq 1 ] || printf '\n' >> "$work/generated"
+  first=0
+  printf '@%s\n' "$_kw" >> "$work/generated"
+  [ -f "$work/core.$_kw" ] && cat "$work/core.$_kw" >> "$work/generated"
+  [ -f "$work/app.$_kw" ] && cat "$work/app.$_kw" >> "$work/generated"
+  if [ "$_kw" = "layout" ]; then
+    while IFS="$tab" read -r _name _moddir; do
+      printf '\n@module %s\n' "$_name" >> "$work/generated"
+      printf '  summary: %s\n' "$(cat "$work/module.$_name.summary")" >> "$work/generated"
+      if [ -s "$work/module.$_name.description" ]; then
+        while IFS= read -r _dl || [ -n "$_dl" ]; do
+          if [ -n "$_dl" ]; then
+            printf '  %s\n' "$_dl" >> "$work/generated"
+          else
+            printf '\n' >> "$work/generated"
+          fi
+        done < "$work/module.$_name.description"
+      fi
+      printf '  help: ctx %s help\n' "$_name" >> "$work/generated"
+    done < "$work/modules"
+  fi
+done
+for _kw in $custom_order; do
+  printf '\n@%s\n' "$_kw" >> "$work/generated"
+  cat "$work/app.$_kw" >> "$work/generated"
+done
+
+: > "$work/slugs"
+awk '
+  /^@/ { inlaws = ($0 == "@laws"); next }
+  inlaws && /^  [A-Za-z0-9][A-Za-z0-9_-]*:/ {
+    line = $0
+    sub(/^  /, "", line)
+    sub(/:.*/, "", line)
+    print line "\tgenerated"
+  }
+' "$work/generated" >> "$work/slugs"
+for _ov in "$root/AGENTS.workspace.md" "$root/AGENTS.local.md"; do
+  [ -f "$_ov" ] || continue
+  _src=${_ov##*/}
+  awk -v src="$_src" '
+    /^@/ { inlaws = ($0 == "@append @laws" || $0 == "@replace @laws"); next }
+    inlaws && /^  [A-Za-z0-9][A-Za-z0-9_-]*:/ {
+      line = $0
+      sub(/^  /, "", line)
+      sub(/:.*/, "", line)
+      print line "\t" src
+    }
+  ' "$_ov" >> "$work/slugs"
+done
+_dup=$(awk -F'\t' 'NF >= 2 { if (seen[$1]) { print $1 "\t" seen[$1] "\t" $2; exit } seen[$1] = $2 }' "$work/slugs")
+if [ -n "$_dup" ]; then
+  _slug=$(printf '%s' "$_dup" | cut -f1)
+  _first=$(printf '%s' "$_dup" | cut -f2)
+  _second=$(printf '%s' "$_dup" | cut -f3)
+  die 1 "duplicate law slug '$_slug' in $_first and $_second"
+fi
+
+if [ "$check_only" -eq 1 ]; then
+  if [ -f "$out" ] && cmp -s "$work/generated" "$out"; then
+    exit 0
+  fi
+  printf 'compose: stale: .contexture/laws/AGENTS.generated.md\n' >&2
+  exit 1
+fi
+if [ -f "$out" ] && cmp -s "$work/generated" "$out"; then
+  exit 0
+fi
+mv -f "$work/generated" "$out" || die 2 "cannot write .contexture/laws/AGENTS.generated.md"
+printf 'compose: composed .contexture/laws/AGENTS.generated.md\n' >&2
+exit 0

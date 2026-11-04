@@ -2,17 +2,17 @@
 
 ## What the engine is
 
-The engine is the part of contexture that runs and checks: AGENTS.md, the grammars, and the scripts. It is plain files and plain awk all the way down: no service, no database, no runtime.
+The engine is the part of contexture that runs and checks: the instruction files, the grammars, and the scripts. It is plain files and plain awk all the way down: no service, no database, no runtime.
 
 The division of labor is deliberate. The model does the work; the machinery holds the line. A record kept by memory drifts, so the parts that must not drift are mechanical instead: the shapes are pinned in files, the searches are plain shell tools, and the checks are small scripts that run at fixed points. Quality comes from the machinery, not from the model remembering.
 
-## AGENTS.md, delivered every turn
+## The instruction files, delivered every turn
 
-A coding harness reads its repository instruction file before it acts. In a contexture workspace that file is AGENTS.md, and it is the only file guaranteed to be in front of the agent every turn: everything else loads on demand. The guarantee is a convention, not a harness feature, and it shapes the file. It has to fit one read, and every line in it is paid for on every turn, so it carries only what governs and what navigates.
+A coding harness reads its repository instruction file before it acts. In a contexture workspace `AGENTS.md` is the loader: the only file guaranteed to be in front of the agent every turn, and deliberately a few lines. Its first instruction runs the compose (which composes or verifies the generated layer), then loads `.contexture/laws/AGENTS.generated.md` whole, then chains `AGENTS.workspace.md` and `AGENTS.local.md`.
 
-Its two jobs are exactly that: govern and navigate. It carries the laws and the pointers to everything else. It carries no schemas (those live in `@record` and the guides), no provenance (that lives in the journal), and no rhythm names beyond the one default loop.
+The four delivery files split by ownership. `AGENTS.md` is the base loader; the generated layer is the composed law set, the core law source plus the installed modules' preambles and clauses; the workspace overlay is the shared, tracked amendment; the local file is the personal amendment. The loader is the every-turn cost, under a kilobyte; the generated layer and the overlays are boot reads. The generated layer is gitignored and built at install and boot, never edited.
 
-The sections are a tour of the convention:
+The sections below are the blocks the generated layer carries, in the order the core law source fixes:
 
 | section | what it carries |
 |---|---|
@@ -32,9 +32,11 @@ The sections are a tour of the convention:
 | `@git` | the gitignore strategy for the workspace |
 | `@update` | how the base evolves upstream |
 
+The core law source fixes the block order; the installed modules' law fragments append under these keywords, and a new keyword creates a custom section after `@update`. The module preambles stand after `@layout`.
+
 ### The laws
 
-The laws are the spine of the whole system, and they ride with the agent every turn. Each law reads `slug: statement`, and a reference addresses the slug, as in `@laws#verify-before-close`. Core laws include:
+The laws are the spine of the whole system, loaded whole at boot in the generated layer. Each law reads `slug: statement`, and a reference addresses the slug, as in `@laws#verify-before-close`. Core laws include:
 
 - `source-of-truth`: session records are the only source of truth, never the conversation.
 - `load-only-needed`: load only what the work needs; closed sessions stay untouched unless the task calls for them.
@@ -47,11 +49,11 @@ The laws are the spine of the whole system, and they ride with the agent every t
 - `workspace-confinement`: the workspace is the boundary; the agent never roams outside it.
 - `cli-doorway`: the CLI (`.contexture/ctx`) is the single doorway to the runtime and the record: contracts are discovered through `ctx help`, the record is reached strictly through `ctx unit` and `ctx lane`, and stderr is the diagnostic, with `--diagnose` on the engine subcommands for the runtime and storage state.
 
-Slug addressing is what lets the set grow and the overlays extend it. A positional name would force every reference to chase every insertion; a slug is stable for life, and an overlay can append its own laws at the end without renumbering anything.
+Slug addressing is what lets the set grow and the modules and overlays extend it. A positional name would force every reference to chase every insertion; a slug is stable for life, and a module or overlay can append its own laws at the end without renumbering anything. The core laws are the source's own; the docs module appends its laws and clauses, the lane module its dispatch and git clauses, and the workspace and local overlays append their own. Slugs are unique across the generated layer and both overlays; the compose refuses a duplicate at boot.
 
 ### The overlays beside it
 
-AGENTS.workspace.md and AGENTS.local.md sit beside the base and extend it, by section, with `@append` or `@replace`. The workspace overlay is shared and tracked with the work; the local file is personal and yields to the workspace when they disagree. Both amend; neither may contradict a law. They have their own page; here it matters only that the base plus its overlays is what the agent actually reads.
+`AGENTS.workspace.md` and `AGENTS.local.md` sit beside the loader and extend the generated layer, by section, with `@append` or `@replace`. The workspace overlay is shared and tracked with the work; the local file is personal and yields to the workspace when they disagree. Both amend; neither may contradict a law. The order is the loader, the generated layer, the workspace overlay, then the local one; the compose checks the law slugs across the generated layer and both overlays at boot, and a duplicate refuses. They have their own page; here it matters only that the generated layer plus its overlays is what the agent actually reads.
 
 ## The artifact shapes
 
@@ -580,7 +582,7 @@ Why this holds together:
 Everything the convention installs or uses lives under `.contexture/`, except the files a harness must find at the repository root:
 
 ```text
-AGENTS.md            the laws, delivered every turn
+AGENTS.md            the loader: compose or verify, then load the generated layer whole; delivered every turn
 AGENTS.workspace.md  the shared overlay
 AGENTS.local.md      your amendments
 plugins/             the tracked catalog of packaged overlays: copied into a workspace when wanted
@@ -589,7 +591,8 @@ plugins/             the tracked catalog of packaged overlays: copied into a wor
   ctx                the runtime: discovery, help assembly, dispatch, the run engine, and hooks
   package-install    the package overlay installer: overlays a package's .contexture/extensions tree, records it, runs the part hooks
   package-uninstall  the package overlay remover: runs the part hooks, removes the recorded files, preserves a changed file
-  modules/           session (the record engine), run (stream filters), and workspace additions
+  laws/              the law layer: core.md the core law source, compose the composer, AGENTS.generated.md the generated whole (built at install and boot; gitignored)
+  modules/           unit (the record engine), run (stream filters), and workspace additions
   extensions/        the package overlay root: modules/ (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms, .state/ for the installed-path records
   rhythms/           your process patterns
   sessions/          the units of work

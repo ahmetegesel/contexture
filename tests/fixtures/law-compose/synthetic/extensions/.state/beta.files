@@ -1,0 +1,3 @@
+package beta
+version 0.0.1
+law .contexture/extensions/laws/beta-extra

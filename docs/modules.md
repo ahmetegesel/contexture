@@ -63,7 +63,25 @@ The module file is the standard folder's manifest. Its fields and their readers:
 
 ### The laws file
 
-A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the eight docs laws; the lane module's file carries the lane-isolation subagent and git clauses it absorbed.
+A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the eight docs laws and its layout, boot, and close clauses; the lane module's file carries the lane-isolation subagent and git clauses it absorbed.
+
+### The law layer and the compose
+
+The agent's laws are one generated layer, assembled from the core law source, the installed modules, and the standalone law parts. The four delivery files are the base loader (`AGENTS.md`), the generated layer (`.contexture/laws/AGENTS.generated.md`), the workspace overlay (`AGENTS.workspace.md`), and the local overlay (`AGENTS.local.md`).
+
+The core law source is `.contexture/laws/core.md`. It carries the 15-block skeleton in order, `@laws` through `@update`: the general laws, the layout, the boot sequence, the interaction rules, the rhythm contract, the dispatch contract, the refresher, the close and handoff steps, the gitignore rule, and the update rule. The seven record sections (`@record`, `@journal`, `@backlog`, `@query`, `@refresh`, `@close`, `@handoff`) are skeletons there: their clauses are the unit module's laws file.
+
+The merge is keyed by block keyword. A module's clause under an existing keyword appends to that block; a new keyword creates a custom section after the last core block (`@update`), in first-occurrence order. A module's laws fragment may only `@append`; a `@replace` there refuses. Each effective module contributes one `@module` preamble after the `@layout` block: its summary, its description, and the `ctx <module> help` pointer. The summary is the same line the engine lists; a summary-only module gets a summary and the pointer.
+
+The effective module set is the engine's discovery: the workspace modules first, then the extension modules, each root in byte order; a colliding extension module is skipped. The compose reads a module's laws file beside its manifest and its manifest fields through `ctx _module`. The standalone law parts are the extension root's `laws/` files and the law fragments the package installer records in `.contexture/extensions/.state/<package>.files`; a standalone part carries clauses, never a preamble. The overlays are not inputs to the composition.
+
+`.contexture/laws/compose` is the composer: a POSIX sh and awk script, not an engine verb. It writes `.contexture/laws/AGENTS.generated.md`, a gitignored file built at install and boot; the base ships the core source and the composer, never a tracked generated layer. The header is one deterministic line carrying the core version, the core cksum, and a sources hash over the core source, the package versions, the module versions and descriptions, and the law fragment bytes; no timestamp. Two compositions of the same inputs are byte-identical.
+
+The composer verifies and recomposes. With `--check` it writes nothing and exits 1 on a stale generated layer; by default it recomposes only when the bytes differ. It refuses rather than composes a doubtful layer: an edited core (a block missing, extra, or reordered), a fragment carrying `@replace`, a module manifest carrying `# requires:`, a missing or unreadable law fragment, a duplicate law slug across the generated layer and either overlay, and a missing core source or engine. The law slugs are unique across the generated layer and both overlays; the overlays stay separate files, checked, never merged. A duplicate is the boot refusal a workspace meets after an upgrade that moves laws from an overlay into a module.
+
+The loader is the base `AGENTS.md`: its first instruction runs the compose (compose or verify), then loads the generated layer whole and chains the workspace overlay and the local one. The generated layer is the lean what of the installed modules; the `ctx <module> help` pointers, the law workflows, and the rhythms carry the how. In a parent workspace, a deny line for `.contexture/laws/AGENTS.generated.md` follows any `.contexture/` whitelist.
+
+The merger's suite is `tests/law-tests.sh`: the synthetic fixture, the base-only golden (the base's unit and lane modules, no docs), the manifest reader cases, and the planted failures (an edited core, a duplicate slug, a `@replace` fragment, a `requires` line, a missing or unreadable fragment, a stale generated layer, a changed package version, and a nondeterministic input). The full stage adds the boot and docs-law cases and the gate wiring.
 
 ### The data file
 
