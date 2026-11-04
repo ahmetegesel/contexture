@@ -108,6 +108,9 @@ declare refuses with the store's line, re-framed as `search.query`.
 
 `tests/storage-compliance.sh --data=unit --driver=posix|fts5` runs the record compliance
 (the same 66 posix and 60 other-backend cases) through this data script over the store.
-`tests/unit-data-tests.sh` runs that case set on both drivers and adds the module's own
-cases: the canonical refs and the write refusal, the file-pointer exemption, the legacy
-ref, the ranked search identity, the active listing, and the per-unit read.
+`tests/unit-data-tests.sh` runs that case set on both drivers (or one with `--driver`) and
+adds the module's own cases: the canonical refs and the write refusal, the file-pointer
+exemption, the legacy ref, the ranked search identity, the active listing, the per-unit
+read, and the `--smoke` sequence the fast inner loop uses. The gate runs the two driver
+halves as separate concurrent jobs, and `tests/record-fuzz.sh` is the seeded differential
+proof of the module's writes and reads across posix and fts5.

@@ -1,12 +1,14 @@
 #!/bin/sh
 # run.sh: the upstream test runner. Runs the core suites (filters, ctx, session, hooks,
-# record-audit, governance, storage-compliance, store-compliance, store-fuzz, base-only,
-# module-tests, the package overlay installer suite), each hermetic
-# and staged from the shipped core (storage compliance runs against base's posix driver by
-# path, never the live drawer's copy; store compliance stages the storage core and the
-# docs module's data file, and store-fuzz stages the storage core and the fts5 plugin's own
-# module copy; the base-only gate stages base alone and runs the posix core
-# suites with a synthetic data file); the session suite runs twice, once on the posix driver and once
+# record-audit, governance, the unit-data record compliance twice, store-compliance,
+# store-fuzz and record-fuzz, base-only, module-tests), each hermetic
+# and staged from the shipped core (the unit-data record compliance runs the record cases
+# through the unit module data script over base's posix driver and the fts5 plugin's own
+# copy, and stages the storage core and the unit module; store compliance stages the
+# storage core and the docs module's data file; store-fuzz and record-fuzz stage the
+# storage core and the fts5 plugin's own copies; the base-only gate stages base alone and
+# runs the posix core suites with a synthetic data file); the session suite runs twice,
+# once on the posix driver and once
 # on the fts5 driver (the plugin's own copy staged into its sandbox; skip 77 when sqlite3
 # lacks FTS5), so every verb is proven to reach the one configured store; then every
 # plugin suite by convention
@@ -21,8 +23,9 @@
 # prints every suite's output followed by its outcome line in the fixed order below,
 # whatever order they finish in. A suite's exit code is read from the suite itself
 # (written by the job that ran it), never from a pipeline. A suite still running after
-# GATE_SUITE_TIMEOUT seconds (default 1200) is stopped with its whole process tree and
-# fails. GATE_JOBS caps how many suites run at once (default 0: all; 1 runs them one
+# GATE_SUITE_TIMEOUT seconds (default 3600, raised for the unit-data data modes, whose
+# contended wall has been measured in tens of minutes) is stopped with its whole process
+# tree and fails. GATE_JOBS caps how many suites run at once (default 0: all; 1 runs them one
 # after another, the order unchanged; the session suite still runs its section groups at
 # once inside its own run).
 #
@@ -40,9 +43,9 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh storage-compliance.sh store-compliance.sh store-fuzz.sh base-only-tests.sh module-tests.sh"
+CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh unit-data-tests.sh:posix unit-data-tests.sh:fts5 store-compliance.sh store-fuzz.sh record-fuzz.sh base-only-tests.sh module-tests.sh"
 
-GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-1200}
+GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
 GATE_JOBS=${GATE_JOBS:-0}
 case "$GATE_SUITE_TIMEOUT" in ''|*[!0-9]*) echo "run: GATE_SUITE_TIMEOUT must be a number of seconds" >&2; exit 1 ;; esac
 case "$GATE_JOBS" in ''|*[!0-9]*) echo "run: GATE_JOBS must be a number" >&2; exit 1 ;; esac
@@ -91,9 +94,11 @@ for entry in $CORE_SUITES; do
     continue
   fi
   case "$entry" in
-    # the record runs through the unit module data script over the shipped posix store;
-    # capability, health, the descriptor, and the store/resolver cases stay on the driver
-    storage-compliance.sh) add_job "core:$entry" run "$SCRIPT_DIR/$s" "--data=unit" ;;
+    # the record compliance through the unit module data script over the shipped store,
+    # one job per driver so the two halves run concurrently; capability, health, the
+    # descriptor, and the store/resolver cases stay on the driver
+    unit-data-tests.sh:posix) add_job "core:$entry" run "$SCRIPT_DIR/${s}" "--driver=posix" ;;
+    unit-data-tests.sh:fts5) add_job "core:$entry" run "$SCRIPT_DIR/${s}" "--driver=fts5" ;;
     # the second session run: the same assertions on the fts5 driver
     session-tests.sh:fts5) add_job "core:$entry" run "$SCRIPT_DIR/$s" "--driver=fts5" ;;
     *) add_job "core:$entry" run "$SCRIPT_DIR/$s" ;;

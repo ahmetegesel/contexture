@@ -10,24 +10,34 @@
 #    exact search, the ranked search (fts5 answers with the record identity mapped,
 #    posix refuses by name), and the lane artifact ref.
 #
+# --driver=posix|fts5|both selects the halves (default both); the gate runs the two
+# halves as separate concurrent jobs. --smoke runs the module's short representative
+# sequence (create, task, entry, finding, lane, searches, one refusal) instead of the
+# compliance: the fast inner-loop proof; the full 66/60 stays for the gate and pre-land.
+#
 # The suites are hermetic: each stages the storage core and the unit module (and the
 # fts5 plugin's own driver for the fts5 run) from base/ into its own sandbox under
 # .contexture/tmp. No live drawer, no record.
 #
-# Usage: tests/unit-data-tests.sh [--keep]
+# Usage: tests/unit-data-tests.sh [--driver=posix|fts5|both] [--smoke] [--keep]
 # Exit codes: 0 every case passed; 1 a case failed; 2 the staging failed.
 
 set -u
 SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
 ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 KEEP=0
+DRIVERS=both
+SMOKE=0
 for arg in "$@"; do
   case "$arg" in
+    --driver=posix|--driver=fts5|--driver=both) DRIVERS=${arg#--driver=} ;;
+    --smoke) SMOKE=1 ;;
     --keep) KEEP=1 ;;
-    --help|-h) printf 'usage: tests/unit-data-tests.sh [--keep]\n'; exit 0 ;;
+    --help|-h) printf 'usage: tests/unit-data-tests.sh [--driver=posix|fts5|both] [--smoke] [--keep]\n'; exit 0 ;;
     *) printf 'unit-data-tests: unknown argument: %s\n' "$arg" >&2; exit 1 ;;
   esac
 done
+has_driver() { case "$DRIVERS" in both|"$1") return 0 ;; *) return 1 ;; esac; }
 
 tmp_root="${TMPDIR:-/tmp}"
 if mkdir -p "$ROOT/.contexture/tmp" 2>/dev/null && [ -d "$ROOT/.contexture/tmp" ] && [ -w "$ROOT/.contexture/tmp" ]; then
@@ -49,17 +59,23 @@ a_rc() { if [ "$2" -eq "$3" ]; then ok "$1"; else bad "$1 (rc $2 want $3)"; fi; 
 a_match() { if printf '%s\n' "$1" | grep -q -- "$2"; then ok "$3"; else bad "$3 (no match: $2)"; fi; }
 
 # ==============================================================================
-# Part 1: the record compliance through the unit module, both drivers
+# Part 1: the record compliance through the unit module, the selected drivers
 # ==============================================================================
+if [ "$SMOKE" -eq 0 ]; then
 printf '== record compliance through the unit module ==\n'
-sh "$SCRIPT_DIR/storage-compliance.sh" --data=unit --driver=posix > "$T/compliance-posix.out" 2>&1
-_rc=$?
-a_eq "$(tail -n 2 "$T/compliance-posix.out" | head -n 1)" "storage-compliance: 66 passed, 0 failed" "posix: the 66 record cases pass through the data script"
-[ "$_rc" -eq 0 ] || { printf '%s\n' "$(tail -n 5 "$T/compliance-posix.out")"; bad "posix: the compliance suite rc $_rc"; }
-sh "$SCRIPT_DIR/storage-compliance.sh" --data=unit --driver=fts5 > "$T/compliance-fts5.out" 2>&1
-_rc=$?
-a_eq "$(tail -n 2 "$T/compliance-fts5.out" | head -n 1)" "storage-compliance: 60 passed, 0 failed" "fts5: the 60 record cases pass through the data script"
-[ "$_rc" -eq 0 ] || { printf '%s\n' "$(tail -n 5 "$T/compliance-fts5.out")"; bad "fts5: the compliance suite rc $_rc"; }
+if has_driver posix; then
+  sh "$SCRIPT_DIR/storage-compliance.sh" --data=unit --driver=posix > "$T/compliance-posix.out" 2>&1
+  _rc=$?
+  a_eq "$(tail -n 2 "$T/compliance-posix.out" | head -n 1)" "storage-compliance: 66 passed, 0 failed" "posix: the 66 record cases pass through the data script"
+  [ "$_rc" -eq 0 ] || { printf '%s\n' "$(tail -n 5 "$T/compliance-posix.out")"; bad "posix: the compliance suite rc $_rc"; }
+fi
+if has_driver fts5; then
+  sh "$SCRIPT_DIR/storage-compliance.sh" --data=unit --driver=fts5 > "$T/compliance-fts5.out" 2>&1
+  _rc=$?
+  a_eq "$(tail -n 2 "$T/compliance-fts5.out" | head -n 1)" "storage-compliance: 60 passed, 0 failed" "fts5: the 60 record cases pass through the data script"
+  [ "$_rc" -eq 0 ] || { printf '%s\n' "$(tail -n 5 "$T/compliance-fts5.out")"; bad "fts5: the compliance suite rc $_rc"; }
+fi
+fi
 
 # ==============================================================================
 # Part 2: the module's own cases, both drivers
@@ -173,8 +189,49 @@ run_driver() {
   fi
 }
 
-run_driver posix
-run_driver fts5
+# run_smoke <driver>: the fast representative sequence for the inner loop (the same data
+# script and store path as the full cases, a fraction of the calls)
+run_smoke() {
+  _drv=$1
+  stage "$_drv"
+  printf '\n== smoke cases: %s ==\n' "$_drv"
+  out=$(dmk s1); a_match "$out" '"status":"ACTIVE"' "$_drv: session.create answers the ACTIVE state"
+  printf 'objective=a smoke task\nrefs.count=0\n' | ds task.add s1 s-t1 > "$T/s-t1.out"
+  a_match "$(cat "$T/s-t1.out")" '"slug":"s-t1"' "$_drv: task.add answers the task"
+  out=$(ds task.list s1 all); a_match "$out" '"slug":"s-t1"' "$_drv: task.list answers the task"
+  out=$(dg 'unit#s1/task/s-t1'); a_match "$out" '"ref":"unit#s1/task/s-t1"' "$_drv: data_get answers the canonical task ref"
+  dg 'unit#s1/task/missing' > /dev/null 2> "$T/s-miss.err"
+  a_rc "$_drv: data_get of a missing task refuses rc1" "$?" 1
+  a_match "$(cat "$T/s-miss.err")" "data_get: error: ref 'unit#s1/task/missing': task 'missing' not found in unit 's1' (ERR_ENTITY_NOT_FOUND)" "$_drv: data_get names the missing target"
+  printf 'what=a smoke entry\nthread=none\ndate=2026-11-03\nepoch=1793687300\nrefs.count=0\n' | ds entry.record s1 > "$T/s-entry.out"
+  _slug=$(sed -n 's/.*"slug":"\([^"]*\)".*/\1/p' "$T/s-entry.out" | head -n 1)
+  out=$(dg "unit#s1/entry/$_slug"); a_match "$out" '"data":{"unit":"s1","entry":{"kind":"entry"' "$_drv: data_get answers the canonical entry ref"
+  printf 'objective=a smoke finding\nsummary=a smoke summary\nrefs.count=0\n' | ds finding.add s1 SF1 > /dev/null
+  a_rc "$_drv: finding.add lands" "$?" 0
+  printf '# a smoke recipe\nMISSION\n  GOAL: "walk the smoke"\n' | ds lane.create s1 sl1 > /dev/null
+  a_rc "$_drv: lane.create lands" "$?" 0
+  printf 'what=a smoke lane entry\nthread=none\nslug=smoke-lane\nrefs.count=0\n' | ds lane.record s1 sl1 > /dev/null
+  a_rc "$_drv: lane.record lands" "$?" 0
+  printf 'a smoke lane report needle\n' | ds lane.write_report s1 sl1 > /dev/null
+  a_rc "$_drv: lane.write_report lands" "$?" 0
+  out=$(ds lane.get s1 sl1 report); a_match "$out" 'a smoke lane report needle' "$_drv: lane.get answers the report"
+  printf 'query=smoke\n' | ds search.query s1 --mode=exact > "$T/s-search.out"
+  a_match "$(cat "$T/s-search.out")" '"entity_type":"task","entity_id":"s-t1","section":"backlog"' "$_drv: the exact search answers the task in record order"
+  printf 'query=smoke\n' | ds search.query s1 --mode=hybrid > "$T/s-hyb.out" 2> "$T/s-hyb.err"
+  if [ "$_drv" = "fts5" ]; then
+    a_rc "$_drv: the ranked search answers rc0" "$?" 0
+    a_match "$(cat "$T/s-hyb.out")" '"mode":"hybrid"' "$_drv: the ranked search keeps the mode"
+  else
+    a_rc "$_drv: the ranked search refuses rc1" "$?" 1
+    a_match "$(cat "$T/s-hyb.err")" "search.query: error: mode 'hybrid' is not supported; declared modes: exact (ERR_CAPABILITY_UNSUPPORTED)" "$_drv: the ranked refusal names the driver's modes"
+  fi
+}
+
+if [ "$SMOKE" -eq 1 ]; then
+  for _d in posix fts5; do has_driver "$_d" && run_smoke "$_d"; done
+else
+  for _d in posix fts5; do has_driver "$_d" && run_driver "$_d"; done
+fi
 
 printf '\n== summary ==\n'
 printf 'unit-data-tests: pass=%s fail=%s\n' "$pass" "$fail"

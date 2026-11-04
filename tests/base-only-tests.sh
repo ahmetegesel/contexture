@@ -511,7 +511,7 @@ collect_core 2 "ctx-tests.sh"
 collect_core 3 "session-tests.sh (posix)"
 collect_core 4 "hook-tests.sh"
 collect_core 5 "record-audit-tests.sh"
-collect_core 6 "storage-compliance.sh (base posix driver)"
+collect_core 6 "storage-compliance.sh --data=unit (base posix driver)"
 collect_core 7 "store-compliance.sh (--data-file)"
 fi
 

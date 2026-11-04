@@ -5,13 +5,16 @@
 # full pre-land gate (tests/run.sh), which stays mandatory before any commit, tag, or push.
 #
 # Usage: tests/fast.sh <area> [<arg>]
-#   unit             the seven unit-like suites (about 42 s isolated, 290 assertions)
+#   unit             the seven unit-like suites (about 42 s isolated, 290 assertions),
+#                    with the unit-data smoke in place of the long data-mode compliance
 #   engine           filter-tests, ctx-tests, governance-tests
 #   record <1|2|3|4> one session suite group (the owning group is required)
-#   driver posix     storage compliance against base's posix driver, store compliance,
-#                    and the session suite on posix
+#   unit-data [posix|fts5]  the full record compliance through the unit data script on
+#                    one driver (default posix; the fts5 half stays for pre-land)
+#   driver posix     the unit-data smoke, store compliance, and the session suite on posix
 #   driver fts5      the storage-fts5 plugin's own driver and store compliance
-#   fuzz             the differential store fuzzer (posix against fts5)
+#   fuzz             the differential fuzzers: store-fuzz and record-fuzz (skip 77
+#                    without sqlite3)
 #   module           the package overlay installer suite (module-tests.sh)
 #   docs             the docs-discipline suite on the files driver
 #   docs-fts5        the docs-discipline suite on fts5
@@ -27,13 +30,16 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 usage() {
   cat <<'USAGE'
 usage: tests/fast.sh <area> [<arg>]
-  unit             the seven unit-like suites (about 42 s isolated, 290 assertions)
+  unit             the seven unit-like suites (about 42 s isolated, 290 assertions),
+                   with the unit-data smoke in place of the long data-mode compliance
   engine           filter-tests, ctx-tests, governance-tests
   record <1|2|3|4> one session suite group (the owning group is required)
-  driver posix     storage compliance against base's posix driver, store compliance,
-                   and the session suite on posix
+  unit-data [posix|fts5]  the full record compliance through the unit data script on
+                   one driver (default posix; the fts5 half stays for pre-land)
+  driver posix     the unit-data smoke, store compliance, and the session suite on posix
   driver fts5      the storage-fts5 plugin's own driver and store compliance
-  fuzz             the differential store fuzzer (posix against fts5)
+  fuzz             the differential fuzzers: store-fuzz and record-fuzz (skip 77
+                   without sqlite3)
   module           the package overlay installer suite (module-tests.sh)
   docs             the docs-discipline suite on the files driver
   docs-fts5        the docs-discipline suite on fts5
@@ -98,7 +104,7 @@ unit_suites() {
   run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
   run_suite "record-audit-tests.sh" sh "$ROOT/tests/record-audit-tests.sh"
   run_suite "store-compliance.sh (posix)" sh "$ROOT/tests/store-compliance.sh"
-  run_suite "storage-compliance.sh (unit module over posix)" sh "$ROOT/tests/storage-compliance.sh" "--data=unit"
+  run_suite "unit-data-tests.sh (smoke posix)" sh "$ROOT/tests/unit-data-tests.sh" "--smoke" "--driver=posix"
   run_suite "ast-doc-graph test-ddl.sh" sh "$ROOT/plugins/ast-doc-graph/tests/test-ddl.sh"
 }
 
@@ -121,11 +127,19 @@ case "${1:-}" in
     AREA="record $2"
     run_suite "session-tests.sh --group=$2" sh "$ROOT/tests/session-tests.sh" "--group=$2"
     ;;
+  unit-data)
+    case "${2:-posix}" in
+      posix|fts5) ;;
+      *) echo "fast.sh: unit-data needs posix or fts5" >&2; exit 1 ;;
+    esac
+    AREA="unit-data ${2:-posix}"
+    run_suite "unit-data-tests.sh (record compliance through the data script, ${2:-posix})" sh "$ROOT/tests/unit-data-tests.sh" "--driver=${2:-posix}"
+    ;;
   driver)
     case "${2:-}" in
       posix)
         AREA="driver posix"
-        run_suite "storage-compliance.sh (unit module over posix)" sh "$ROOT/tests/storage-compliance.sh" "--data=unit"
+        run_suite "unit-data-tests.sh (smoke posix)" sh "$ROOT/tests/unit-data-tests.sh" "--smoke" "--driver=posix"
         run_suite "store-compliance.sh (posix)" sh "$ROOT/tests/store-compliance.sh"
         run_suite "session-tests.sh (posix)" sh "$ROOT/tests/session-tests.sh" --driver=posix
         ;;
@@ -143,6 +157,7 @@ case "${1:-}" in
   fuzz)
     AREA="fuzz"
     run_suite "store-fuzz.sh (posix against fts5)" sh "$ROOT/tests/store-fuzz.sh"
+    run_suite "record-fuzz.sh (posix against fts5)" sh "$ROOT/tests/record-fuzz.sh"
     ;;
   module)
     AREA="module"
