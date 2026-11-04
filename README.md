@@ -150,7 +150,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit entry closure <unit> <slug> | Open, or closed with the verdict of the first closer, then every later closer naming it with its line |
 | ctx unit finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list; `--ref` repeats |
 | ctx unit search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet, score); --mode is required, no default: exact on every driver or a mode the configured driver declares (ctx unit diagnose lists them); a search without it refuses rc 1 naming the declared modes |
-| ctx unit resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) and the legacy file forms to the entity block |
+| ctx unit resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim), the canonical unit refs (unit#<unit>/task/<slug>, entry, finding, and lane artifact forms; a canonical ref carries its own unit), and the legacy file forms to the entity block |
 | ctx unit units <repo> | Each unit touching the repo: slug, status, anchor, next action |
 | ctx unit refs-to <session> | Each unit referencing the session |
 | ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from parent session journals: create (the dispatcher's act, the recipe on stdin), record, report, show |

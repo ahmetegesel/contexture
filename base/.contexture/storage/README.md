@@ -84,7 +84,7 @@ data declaration is `ERR_INVALID_ARGUMENT`, an undeclared namespace
 answer, so a read failure midway prints no partial line. The library's ref interface
 re-frames a target refusal as `data_get: error: ref '<ref>': <message> (<CODE>)`; a chain
 over 8 hops or a cycle refuses `ERR_INVALID_ARGUMENT`; the source write's re-frame and its
-refusal before writing are the unit module's later. A module may mint its own tier 1 code
+refusal before writing are the unit module's. A module may mint its own tier 1 code
 (the docs module's `ERR_SCHEMA_VIOLATION` is the precedent); core codes are never
 redefined. The resolver's `driver-resolver: ERROR: ...` line is the one shape exception,
 and the library passes it through unchanged.
@@ -160,7 +160,7 @@ runs it with `data_get <ref>`, and prints the envelope the script emits through
 repeated ref in the chain refuses as a cycle. The target data script calls
 `data_emit <ref> <data>` to print one compact JSON envelope
 `{"ref":"<ref>","data":<data>}`. The source write's validation of a new ref is the unit
-module's later; the library is the mechanism it calls.
+module's; the library is the mechanism it calls.
 
 ## Errors
 

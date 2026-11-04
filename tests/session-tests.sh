@@ -822,6 +822,26 @@ a_match "$out" "VERDICT: \"from stdin\"" "P4: the lanes/ form prints the claim b
 out=$($CTX unit resolve x-unit "knowledge.md#X_FINDING" 2>&1); rc=$?
 a_eq "$rc" "0" "F4: the legacy knowledge.md# form still resolves"
 $CTX unit resolve x-unit task#x-missing >/dev/null 2>&1; a_eq "$?" "1" "F4: a missing typed ref refuses rc1"
+# canonical refs: the same forms a new write mints resolve through the public verb; the
+# ref carries its target unit, a lane artifact prints its document or journal, and a
+# claim-shaped or missing canonical ref refuses
+out=$($CTX unit resolve x-unit "unit#x-unit/task/x-todo" 2>&1); rc=$?
+a_eq "$rc" "0" "canonical: resolve unit#.../task rc0"
+a_match "$out" "^@task x-todo" "canonical: resolve prints the task block"
+out=$($CTX unit resolve x-unit "unit#x-unit/finding/X_FINDING" 2>&1); rc=$?
+a_eq "$rc" "0" "canonical: resolve unit#.../finding rc0"
+a_match "$out" "^@finding X_FINDING" "canonical: resolve prints the finding block"
+out=$($CTX unit resolve x-unit "unit#x-unit/entry/$TODAY-x-e1" 2>&1); rc=$?
+a_eq "$rc" "0" "canonical: resolve unit#.../entry rc0"
+a_match "$out" "WHAT: \"Resolvable entry\"" "canonical: resolve prints the entry block"
+out=$($CTX unit resolve x-unit "unit#x-unit/lane/x-lane/report" 2>&1); rc=$?
+a_eq "$rc" "0" "canonical: resolve unit#.../lane/report rc0"
+a_match "$out" "VERDICT: \"from stdin\"" "canonical: the lane report prints its content"
+out=$($CTX unit resolve x-unit "unit#x-unit/lane/x-lane/journal" 2>&1); rc=$?
+a_eq "$rc" "0" "canonical: resolve unit#.../lane/journal rc0"
+a_match "$out" "^@entry $TODAY-x-l2\$" "canonical: the lane journal prints its entries"
+$CTX unit resolve x-unit "unit#x-unit/task/x-missing" >/dev/null 2>&1; a_eq "$?" "1" "canonical: a missing target refuses rc1"
+$CTX unit resolve x-unit "unit#x-unit/lane/x-lane/report#x1" >/dev/null 2>&1; a_eq "$?" "1" "canonical: a claim-shaped canonical ref refuses rc1"
 # F7: diagnose reports the store that holds the units, never a missing database
 out=$($CTX unit diagnose --json 2>&1)
 a_not "$out" "not created yet" "F7: diagnose never reports the store missing while it holds units"

@@ -85,10 +85,13 @@ unit#<unit>/lane/<lane>/<recipe|journal|report>
 
 A new write validates its canonical `unit#...` refs through the storage core's `data_get`
 before anything lands and refuses a missing target, re-framed with the write's function
-and the ref. A legacy record target (`journal#<slug>`, `task#<slug>`, `knowledge#<NAME>`,
-`lanes/<lane>/report#<claim>`) and a file pointer stay as stored: the check is forward
-only, the two pointer shapes of @record references. The existing refs keep reading; the
-migration to the canonical form is an agent rewrite, not a verb.
+and the ref. The public `ctx unit resolve <unit> <ref>` accepts the same canonical forms
+(the ref carries its target unit) beside the abstract and legacy forms, so a canonical ref
+stored in a source item resolves to its entity. A legacy record target (`journal#<slug>`,
+`task#<slug>`, `knowledge#<NAME>`, `lanes/<lane>/report#<claim>`) and a file pointer stay
+as stored: the check is forward only, the two pointer shapes of @record references. The
+existing refs keep reading; the migration to the canonical form is an agent rewrite, not a
+verb.
 
 ## The search
 

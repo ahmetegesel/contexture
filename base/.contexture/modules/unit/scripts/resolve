@@ -3,9 +3,9 @@
 # usage: ctx unit resolve <unit> <ref> [--json]
 # help: resolves domain references and normalizes legacy file-based references
 # help: arguments:
-# help:   <unit>      session unit slug
-# help:   <ref>       abstract entity reference (task#slug, finding#NAME, entry#slug, lane#slug/report#claim); the legacy file forms (backlog.md#slug, knowledge.md#NAME, journal.md#slug, lanes/<lane>/report.md#claim) resolve the same entities
-# help: the text view prints the item's span in the canonical layout (its canonical lines, its trailing separator included; a report claim from its @<claim> line to the next column-0 @ line); --json prints the storage function's answer (task.get, finding.get, entry.get, or lane.get)
+# help:   <unit>      session unit slug (the target unit for a legacy ref; a canonical ref carries its own)
+# help:   <ref>       abstract entity reference (task#slug, finding#NAME, entry#slug, lane#slug/report#claim), the canonical unit ref (unit#<unit>/task/<slug>, unit#<unit>/entry/<slug>, unit#<unit>/finding/<NAME>, unit#<unit>/lane/<lane>/<recipe|journal|report>), or the legacy file forms (backlog.md#slug, knowledge.md#NAME, journal.md#slug, lanes/<lane>/report.md#claim); each resolves the entity
+# help: the text view prints the item's span in the canonical layout (its canonical lines, its trailing separator included; a report claim from its @<claim> line to the next column-0 @ line; a lane artifact as its file content or its lane journal); --json prints the storage function's answer (task.get, finding.get, entry.get, or lane.get)
 # help:   --json      output JSON format
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
@@ -49,20 +49,50 @@ kind=""
 id=""
 lane=""
 case "$ref" in
-  task#*|backlog#*|backlog.md#*) kind=task; id="${ref#*#}" ;;
-  finding#*|knowledge#*|knowledge.md#*) kind=finding; id="${ref#*#}" ;;
-  entry#*|journal#*|journal.md#*) kind=entry; id="${ref#*#}" ;;
-  lane#*/report#*)
-    rest="${ref#lane#}"
-    lane="${rest%%/report#*}"
-    id="${rest#*/report#}"
-    kind=claim
+  unit#*/*/*)
+    # the canonical ref mints its own address: unit#<unit>/task/<slug>,
+    # unit#<unit>/entry/<slug>, unit#<unit>/finding/<NAME>, or
+    # unit#<unit>/lane/<lane>/<recipe|journal|report>. The ref's unit is the target
+    # (a source item may point across units); a second # or a malformed unit refuses.
+    rest="${ref#unit#}"
+    unit="${rest%%/*}"
+    rest="${rest#*/}"
+    case "$unit" in ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) unsupported ;; esac
+    case "$rest" in *'#'*) unsupported ;; esac
+    case "$rest" in
+      task/*) kind=task; id="${rest#task/}" ;;
+      entry/*) kind=entry; id="${rest#entry/}" ;;
+      finding/*) kind=finding; id="${rest#finding/}" ;;
+      lane/*)
+        rest="${rest#lane/}"
+        lane="${rest%%/*}"
+        id="${rest#*/}"
+        case "$lane" in ""|*/*) unsupported ;; esac
+        vb_slug_ok "$lane" || unsupported
+        case "$id" in recipe|journal|report) ;; *) unsupported ;; esac
+        kind=lane
+        ;;
+      *) unsupported ;;
+    esac
     ;;
-  lanes/*/report.md#*|lanes/*/report#*)
-    rest="${ref#lanes/}"
-    lane="${rest%%/*}"
-    id="${ref##*#}"
-    kind=claim
+  *)
+    case "$ref" in
+      task#*|backlog#*|backlog.md#*) kind=task; id="${ref#*#}" ;;
+      finding#*|knowledge#*|knowledge.md#*) kind=finding; id="${ref#*#}" ;;
+      entry#*|journal#*|journal.md#*) kind=entry; id="${ref#*#}" ;;
+      lane#*/report#*)
+        rest="${ref#lane#}"
+        lane="${rest%%/report#*}"
+        id="${rest#*/report#}"
+        kind=claim
+        ;;
+      lanes/*/report.md#*|lanes/*/report#*)
+        rest="${ref#lanes/}"
+        lane="${rest%%/*}"
+        id="${ref##*#}"
+        kind=claim
+        ;;
+    esac
     ;;
 esac
 [ -n "$kind" ] && [ -n "$id" ] || unsupported
@@ -73,6 +103,7 @@ case "$kind" in
   finding) vb_call finding.get "$unit" "$id" ;;
   entry) vb_call entry.get "$unit" "$id" ;;
   claim) vb_call lane.get "$unit" "$lane" report ;;
+  lane) vb_call lane.get "$unit" "$lane" "$id" ;;
 esac
 if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_ENTITY_NOT_FOUND" && ! vb_err_has "unit '$unit' not found"; then
   printf "resolve: error: reference '%s' not found in unit '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ref" "$unit" >&2
@@ -91,4 +122,15 @@ if [ "$json_out" -eq 1 ]; then
   vb_json
   exit 0
 fi
-vb_render resolve RV_KIND="$kind" RV_CLAIM="$id" RV_REF="$ref" RV_UNIT="$unit"
+case "$kind" in
+  lane)
+    if [ "$id" = journal ]; then
+      vb_render lane_journal
+    else
+      vb_render lane_doc
+    fi
+    ;;
+  *)
+    vb_render resolve RV_KIND="$kind" RV_CLAIM="$id" RV_REF="$ref" RV_UNIT="$unit"
+    ;;
+esac

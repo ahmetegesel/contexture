@@ -177,6 +177,7 @@ A REF names its target exactly in one of the two pointer shapes of the laws' ref
 - Journal entries: `entry#<slug>`
 - Findings: `finding#<NAME>`
 - Subagent claims: `lane#<lane-slug>/report#<claim-slug>`
+- Canonical module refs: `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, `unit#<unit>/lane/<lane>/<recipe|journal|report>` (the ref carries its target unit)
 
 The resolution verb resolves references directly:
 
@@ -184,7 +185,7 @@ The resolution verb resolves references directly:
 .contexture/ctx unit resolve <unit> <ref>
 ```
 
-When given legacy file-based paths (such as `knowledge.md#NAME`, `journal.md#slug`, `backlog.md#slug`), the CLI normalizes them transparently to entity lookups. Agents author pure entity syntax natively.
+When given legacy file-based paths (such as `knowledge.md#NAME`, `journal.md#slug`, `backlog.md#slug`), the CLI normalizes them transparently to entity lookups. Agents author pure entity syntax natively; a canonical ref minted by a write resolves directly.
 
 ## Universal search and snippet consumption
 
