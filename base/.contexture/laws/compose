@@ -46,7 +46,9 @@ for _stale in "$root/.contexture/tmp"/law-compose.*; do
   kill -0 "$_p" 2>/dev/null || rm -rf "$_stale" 2>/dev/null
 done
 work=$(mktemp -d "$root/.contexture/tmp/law-compose.$$.XXXXXX" 2>/dev/null) || die 2 "cannot create the compose scratch"
-trap 'rm -rf "$work"' EXIT INT TERM
+trap 'rm -rf "$work"' EXIT
+trap 'rm -rf "$work"; exit 130' INT
+trap 'rm -rf "$work"; exit 143' TERM
 
 parse_stream() {
   awk -v mode="$2" '
@@ -124,19 +126,31 @@ add_module() {
   printf '%s\t%s\n' "$_name" "$_dir" >> "$work/modules"
 }
 
+ws_names=" "
 for _d in "$root"/.contexture/modules/*; do
   [ -d "$_d" ] || continue
-  [ -f "$_d/module" ] || continue
   _name=${_d##*/}
+  case "$_name" in
+    ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved) continue ;;
+  esac
+  if "$ctx_bin" _reserved "$_name" >/dev/null 2>&1 && [ "$_name" != unit ] && [ "$_name" != run ]; then
+    continue
+  fi
+  ws_names="$ws_names$_name "
+  [ -f "$_d/module" ] || continue
   add_module "$_name" "$_d"
 done
 for _d in "$root"/.contexture/extensions/modules/*; do
   [ -d "$_d" ] || continue
-  [ -f "$_d/module" ] || continue
   _name=${_d##*/}
   case "$_name" in
-    unit|run) continue ;;
+    ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|unit|run) continue ;;
   esac
+  case "$ws_names" in
+    *" $_name "*) continue ;;
+  esac
+  "$ctx_bin" _reserved "$_name" >/dev/null 2>&1 && continue
+  [ -f "$_d/module" ] || continue
   add_module "$_name" "$_d"
 done
 
@@ -164,7 +178,11 @@ if [ -e "$root/.contexture/extensions/laws" ] || [ -L "$root/.contexture/extensi
   if [ -f "$root/.contexture/extensions/laws" ]; then
     printf '%s\t%s\n' ".contexture/extensions/laws" "$root/.contexture/extensions/laws" >> "$work/standalone.candidates"
   elif [ -d "$root/.contexture/extensions/laws" ]; then
-    find "$root/.contexture/extensions/laws" -type f 2>/dev/null | LC_ALL=C sort > "$work/standalone.files"
+    [ -r "$root/.contexture/extensions/laws" ] || die 2 "unreadable standalone law folder: .contexture/extensions/laws"
+    find "$root/.contexture/extensions/laws" -type f > "$work/standalone.raw" 2>/dev/null \
+      || die 2 "cannot read the standalone law folder: .contexture/extensions/laws"
+    LC_ALL=C sort "$work/standalone.raw" > "$work/standalone.files" \
+      || die 2 "cannot read the standalone law folder: .contexture/extensions/laws"
     while IFS= read -r _abs; do
       [ -n "$_abs" ] || continue
       printf '%s\t%s\n' "${_abs#"$root"/}" "$_abs" >> "$work/standalone.candidates"
@@ -174,9 +192,11 @@ if [ -e "$root/.contexture/extensions/laws" ] || [ -L "$root/.contexture/extensi
   fi
 fi
 if [ -d "$root/.contexture/extensions/.state" ]; then
+  [ -r "$root/.contexture/extensions/.state" ] || die 2 "unreadable install record folder: .contexture/extensions/.state"
   for _sf in "$root"/.contexture/extensions/.state/*.files; do
     [ -f "$_sf" ] || continue
-    awk '$1 == "law" { print $2 }' "$_sf" >> "$work/state.laws"
+    [ -r "$_sf" ] || die 2 "unreadable install record: ${_sf##*/}"
+    awk '$1 == "law" { print $2 }' "$_sf" >> "$work/state.laws" || die 2 "cannot read install record: ${_sf##*/}"
   done
   if [ -f "$work/state.laws" ]; then
     LC_ALL=C sort -u "$work/state.laws" > "$work/state.laws.sorted"
@@ -209,8 +229,10 @@ fi
 : > "$work/packages"
 custom_order=""
 if [ -d "$root/.contexture/extensions/.state" ]; then
+  [ -r "$root/.contexture/extensions/.state" ] || die 2 "unreadable install record folder: .contexture/extensions/.state"
   for _sf in "$root"/.contexture/extensions/.state/*.files; do
     [ -f "$_sf" ] || continue
+    [ -r "$_sf" ] || die 2 "unreadable install record: ${_sf##*/}"
     _pkg=$(awk '$1 == "package" { print $2; exit }' "$_sf")
     _ver=$(awk '$1 == "version" { print $2; exit }' "$_sf")
     [ -n "$_pkg" ] || _pkg=${_sf##*/}
@@ -326,7 +348,9 @@ awk '
   }
 ' "$work/generated" >> "$work/slugs"
 for _ov in "$root/AGENTS.workspace.md" "$root/AGENTS.local.md"; do
-  [ -f "$_ov" ] || continue
+  [ -e "$_ov" ] || [ -L "$_ov" ] || continue
+  [ -f "$_ov" ] || die 2 "the overlay is not a file: ${_ov##*/}"
+  [ -r "$_ov" ] || die 2 "unreadable overlay: ${_ov##*/}"
   _src=${_ov##*/}
   awk -v src="$_src" '
     /^@/ { inlaws = ($0 == "@append @laws" || $0 == "@replace @laws"); next }
@@ -336,7 +360,7 @@ for _ov in "$root/AGENTS.workspace.md" "$root/AGENTS.local.md"; do
       sub(/:.*/, "", line)
       print line "\t" src
     }
-  ' "$_ov" >> "$work/slugs"
+  ' "$_ov" >> "$work/slugs" || die 2 "cannot read overlay: $_src"
 done
 _dup=$(awk -F'\t' 'NF >= 2 { if (seen[$1]) { print $1 "\t" seen[$1] "\t" $2; exit } seen[$1] = $2 }' "$work/slugs")
 if [ -n "$_dup" ]; then

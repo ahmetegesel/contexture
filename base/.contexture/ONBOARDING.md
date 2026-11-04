@@ -73,6 +73,7 @@
       never deny by default (*); do not alter project file tracking
       append personal amendments to existing .gitignore (AGENTS.local.md)
       per confirmed plan: ignore or track .contexture/sessions/ and .contexture/rhythms/ based on team choice
+      always ignore the composed law layer: .contexture/laws/AGENTS.generated.md (built at install and boot, never tracked, never edited)
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
       whitelist shared files explicitly:

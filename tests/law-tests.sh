@@ -258,6 +258,26 @@ upd=$(line_of "$GS" '^@update$'); cus=$(line_of "$GS" '^@custom$'); not=$(line_o
 a_lt "$upd" "$cus" "custom: the first custom section follows the last core block"
 a_lt "$cus" "$not" "custom: the custom sections keep first-occurrence order"
 
+stage_synth
+mkdir -p "$SB/synth/.contexture/modules/refresh" "$SB/synth/.contexture/modules/shadow"
+printf '# summary: reserved workspace fixture\n# version: 0.1.0\n' > "$SB/synth/.contexture/modules/refresh/module"
+printf '@append @laws\n  refresh-law: reserved workspace law\n' > "$SB/synth/.contexture/modules/refresh/laws"
+mkdir -p "$SB/synth/.contexture/extensions/modules/help" "$SB/synth/.contexture/extensions/modules/shadow"
+printf '# summary: reserved extension fixture\n# version: 0.1.0\n' > "$SB/synth/.contexture/extensions/modules/help/module"
+printf '@append @laws\n  help-law: reserved extension law\n' > "$SB/synth/.contexture/extensions/modules/help/laws"
+printf '# summary: shadowed extension fixture\n# version: 0.1.0\n' > "$SB/synth/.contexture/extensions/modules/shadow/module"
+printf '@append @laws\n  shadow-law: shadowed extension law\n' > "$SB/synth/.contexture/extensions/modules/shadow/laws"
+run_compose "$SB/synth"
+a_rc "$RC" "0" "discovery: the compose accepts the filtered fixture set"
+GS="$SB/synth/.contexture/laws/AGENTS.generated.md"
+a_not "$(cat "$GS")" '^@module refresh$' "discovery: a reserved workspace module is not composed"
+a_not "$(cat "$GS")" 'refresh-law' "discovery: a reserved workspace module contributes no law"
+a_not "$(cat "$GS")" '^@module help$' "discovery: a reserved extension module is not composed"
+a_not "$(cat "$GS")" 'help-law' "discovery: a reserved extension module contributes no law"
+a_not "$(cat "$GS")" '^@module shadow$' "discovery: an extension module shadowed by a workspace name is not composed"
+a_not "$(cat "$GS")" 'shadow-law' "discovery: a shadowed extension module contributes no law"
+a_eq "$(grep -c '^@module ' "$GS")" "4" "discovery: no filtered name adds a preamble"
+
 stage_synth overlay-clean.md
 run_compose "$SB/synth"
 a_rc "$RC" "0" "overlay: a unique workspace law passes the slug check"
@@ -272,6 +292,21 @@ a_rc "$RC" "1" "slug: a duplicate across the generated and the workspace overlay
 a_contains "$(cat "$SB/compose.err")" "duplicate law slug 'alpha-law'" "slug: the refusal names the duplicate slug"
 a_contains "$(cat "$SB/compose.err")" "AGENTS.workspace.md" "slug: the refusal names the overlay"
 if cmp -s "$SB/synth/.contexture/laws/AGENTS.generated.md" "$SB/synth-before"; then ok "slug: the refusal writes nothing"; else bad "slug: the refusal rewrote the generated layer"; fi
+
+stage_synth
+run_compose "$SB/synth"
+cp "$SB/synth/.contexture/laws/AGENTS.generated.md" "$SB/synth-before"
+printf '@append @laws\n  workspace-law: a workspace overlay law\n' > "$SB/synth/AGENTS.workspace.md"
+chmod 000 "$SB/synth/AGENTS.workspace.md"
+if [ -r "$SB/synth/AGENTS.workspace.md" ]; then
+  ok "overlay: the unreadable case skipped (the overlay stayed readable)"
+else
+  run_compose "$SB/synth"
+  a_rc "$RC" "2" "overlay: an unreadable workspace overlay refuses rc2"
+  a_contains "$(cat "$SB/compose.err")" "unreadable overlay" "overlay: the refusal names the unreadable overlay"
+  if cmp -s "$SB/synth/.contexture/laws/AGENTS.generated.md" "$SB/synth-before"; then ok "overlay: the unreadable refusal writes nothing"; else bad "overlay: the unreadable refusal rewrote the generated layer"; fi
+fi
+chmod 644 "$SB/synth/AGENTS.workspace.md"
 
 stage_synth
 run_compose "$SB/synth"
@@ -300,6 +335,20 @@ run_compose "$SB/synth"
 a_rc "$RC" "2" "fragment: a recorded but missing standalone law refuses rc2"
 a_contains "$(cat "$SB/compose.err")" "missing or unreadable standalone law fragment" "fragment: the refusal names the missing fragment"
 if cmp -s "$SB/synth/.contexture/laws/AGENTS.generated.md" "$SB/synth-before"; then ok "fragment: the missing-fragment refusal writes nothing"; else bad "fragment: the missing-fragment refusal rewrote the generated layer"; fi
+
+stage_synth
+run_compose "$SB/synth"
+cp "$SB/synth/.contexture/laws/AGENTS.generated.md" "$SB/synth-before"
+chmod 000 "$SB/synth/.contexture/extensions/.state/alpha.files"
+if [ -r "$SB/synth/.contexture/extensions/.state/alpha.files" ]; then
+  ok "record: the unreadable install-record case skipped (the file stayed readable)"
+else
+  run_compose "$SB/synth"
+  a_rc "$RC" "2" "record: an unreadable install record refuses rc2"
+  a_contains "$(cat "$SB/compose.err")" "unreadable install record" "record: the refusal names the unreadable record"
+  if cmp -s "$SB/synth/.contexture/laws/AGENTS.generated.md" "$SB/synth-before"; then ok "record: the unreadable-record refusal writes nothing"; else bad "record: the unreadable-record refusal rewrote the generated layer"; fi
+fi
+chmod 644 "$SB/synth/.contexture/extensions/.state/alpha.files"
 
 stage_synth
 run_compose "$SB/synth"

@@ -56,7 +56,7 @@ The order is simple: the loader, then the generated law layer, then the workspac
 
 The loader composes or verifies `.contexture/laws/AGENTS.generated.md` and reads it whole; the generated layer carries the core laws plus the installed modules' laws and preambles. The workspace overlay then extends that layer, and the local file extends the workspace. Where the two overlays conflict, the workspace's version wins and the local one is ignored, which is why the local file is described as yielding. Both sit below the laws: an overlay amends, it never overrides a guarantee the core carries. The boot order itself is open to amendment by an overlay, so the overlays are read at the very start of boot.
 
-The generated layer is gitignored and never edited. In a parent workspace that whitelists `.contexture/`, one deny line for `.contexture/laws/AGENTS.generated.md` follows the whitelist, as the adoption page shows.
+The generated layer is gitignored and never edited. A workspace that tracks `.contexture/` adds one deny line for `.contexture/laws/AGENTS.generated.md` wherever its tracking is configured; a standalone repository adds it whatever its sessions and rhythms choice. The adoption page shows the line.
 
 ## Amend, never contradict
 

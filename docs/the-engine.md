@@ -6,7 +6,7 @@ The engine is the part of contexture that runs and checks: the instruction files
 
 The division of labor is deliberate. The model does the work; the machinery holds the line. A record kept by memory drifts, so the parts that must not drift are mechanical instead: the shapes are pinned in files, the searches are plain shell tools, and the checks are small scripts that run at fixed points. Quality comes from the machinery, not from the model remembering.
 
-## The instruction files, delivered every turn
+## The instruction files: the loader every turn
 
 A coding harness reads its repository instruction file before it acts. In a contexture workspace `AGENTS.md` is the loader: the only file guaranteed to be in front of the agent every turn, and deliberately a few lines. Its first instruction runs the compose (which composes or verifies the generated layer), then loads `.contexture/laws/AGENTS.generated.md` whole, then chains `AGENTS.workspace.md` and `AGENTS.local.md`. An absent compose or core source is a broken payload: the instruction stops and names the missing path, never booting on a stale or partial layer.
 

@@ -47,7 +47,7 @@ Then configure the choices the agent would have proposed: the gitignore posture 
 sh plugins/starter-rhythms/install
 ```
 
-A plugin install reads the package `manifest` (summary, version, kind, parts, and the driver name for a driver package), overlays only the declared parts under `.contexture/extensions/`, records every installed path and mode under `.contexture/extensions/.state/<package>.files`, refuses a collision (a path outside the extension root, a core path, an existing non-recorded file, another package's file, a module or driver name collision, a duplicate namespace, a declared part that is absent, a payload path outside the declared parts), and runs the module part hooks after the record. A re-install of the recorded files is an update; `sh plugins/<name>/uninstall` removes the unchanged recorded files and preserves and reports a file changed after install.
+A plugin install reads the package `manifest` (summary, version, kind, parts, and the driver name for a driver package), overlays only the declared parts under `.contexture/extensions/`, records every installed path and mode under `.contexture/extensions/.state/<package>.files`, refuses a collision (a path outside the extension root, a core path, an existing non-recorded file, another package's file, a module or driver name collision, a duplicate namespace, a declared part that is absent, a payload path outside the declared parts), runs the module part hooks after the record, and recomposes the generated law layer (a compose refusal surfaces loudly, never as a stale layer). A re-install of the recorded files is an update; `sh plugins/<name>/uninstall` removes the unchanged recorded files, preserves and reports a file changed after install, and recomposes the law layer.
 
 Then name the first unit of work; the agent bootstraps its folder and the record starts.
 
@@ -78,7 +78,7 @@ questions   what only you can answer
 
 There is no universal `.gitignore` block; the topology decides, and the tracking of sessions and rhythms is a team choice either way.
 
-Standalone repository (application code lives here): never deny by default, so existing project files keep tracking. Append your personal amendments (`AGENTS.local.md`) to the existing ignore file, and decide with the team whether `.contexture/sessions/` and `.contexture/rhythms/` are tracked or ignored. Tracked, the record travels with the repository; ignored, the record stays local. Both are defensible; the convention requires neither.
+Standalone repository (application code lives here): never deny by default, so existing project files keep tracking. Append your personal amendments (`AGENTS.local.md`) to the existing ignore file, and decide with the team whether `.contexture/sessions/` and `.contexture/rhythms/` are tracked or ignored. Tracked, the record travels with the repository; ignored, the record stays local. Both are defensible; the convention requires neither. Whatever the choice, ignore the composed law layer, `.contexture/laws/AGENTS.generated.md`: it is built at install and boot and never tracked.
 
 Parent workspace (multiple repositories, the workspace tracks convention configuration alone): deny by default and whitelist shared files explicitly:
 
