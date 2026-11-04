@@ -1,9 +1,9 @@
 #!/bin/sh
-# law-tests.sh: the law merger's suite. It proves the core law source, the compose, the
+# law-tests.sh: the law compose's suite. It proves the core law source, the compose, the
 # block-keyword merge, the @module preambles, the append-only fragments, the checks, the
-# synthetic fixture, and the base-only golden (unit plus lane, no docs). The loader,
-# boot, docs laws, and the gate wiring belong to the law-tests stage; this suite proves
-# the merger alone.
+# synthetic fixture, the base-only golden (unit plus lane, no docs), the loader's first
+# instruction, the absent/stale/absent-composer boot behavior, the docs laws and the
+# retired plugin overlay, the lane clauses, and the installer's recompose.
 #
 # Usage: tests/law-tests.sh [--keep]
 # Exit 0 when every case passes; 1 otherwise; 2 a staging failure.
@@ -17,6 +17,13 @@ CORE_SRC="$ROOT/base/.contexture/laws/core.md"
 COMPOSE_SRC="$ROOT/base/.contexture/laws/compose"
 CTX_SRC="$ROOT/base/.contexture/ctx"
 GOLDEN="$FIX/base-only.golden"
+LOADER="$ROOT/base/AGENTS.md"
+WS_OVERLAY="$ROOT/AGENTS.workspace.md"
+DOCS_LAWS="$ROOT/plugins/docs-discipline/.contexture/extensions/modules/docs/laws"
+DOCS_MOD="$ROOT/plugins/docs-discipline/.contexture/extensions/modules/docs"
+LANE_LAWS="$ROOT/base/.contexture/extensions/modules/lane/laws"
+INSTALL_SRC="$ROOT/base/.contexture/package-install"
+UNINSTALL_SRC="$ROOT/base/.contexture/package-uninstall"
 
 KEEP=0
 for a in "$@"; do
@@ -26,7 +33,7 @@ for a in "$@"; do
   esac
 done
 
-for f in "$CORE_SRC" "$COMPOSE_SRC" "$CTX_SRC" "$GOLDEN" "$FIX/synthetic/core.md" "$FIX/synthetic/modules/alpha/laws"; do
+for f in "$CORE_SRC" "$COMPOSE_SRC" "$CTX_SRC" "$GOLDEN" "$LOADER" "$WS_OVERLAY" "$DOCS_LAWS" "$DOCS_MOD/module" "$LANE_LAWS" "$INSTALL_SRC" "$UNINSTALL_SRC" "$FIX/synthetic/core.md" "$FIX/synthetic/modules/alpha/laws"; do
   [ -e "$f" ] || { echo "law-tests.sh: missing $f" >&2; exit 2; }
 done
 
@@ -74,6 +81,39 @@ module_block() { # <file> <name>
     on { print }
     on && /^  help: / { exit }
   ' "$1"
+}
+law_slugs() { # <file>: the slugs under @laws or @append @laws, in order
+  awk '
+    /^@/ { on = ($0 == "@laws" || $0 == "@append @laws"); next }
+    on && /^  [A-Za-z0-9][A-Za-z0-9_-]*:/ {
+      line = $0
+      sub(/^  /, "", line)
+      sub(/:.*/, "", line)
+      print line
+    }
+  ' "$1" | tr '\n' ' '
+}
+loader_ok() { # <file>: the loader's first instruction and its paths
+  [ -f "$1" ] || return 1
+  grep -q 'FIRST: run \.contexture/laws/compose' "$1" || return 1
+  grep -q 'composes the generated law layer \.contexture/laws/AGENTS\.generated\.md' "$1" || return 1
+  grep -q 'read \.contexture/laws/AGENTS\.generated\.md WHOLE' "$1" || return 1
+  grep -q 'read AGENTS\.workspace\.md then AGENTS\.local\.md' "$1" || return 1
+  grep -q 'absent or not executable' "$1" || return 1
+  grep -q 'missing payload path' "$1" || return 1
+  grep -q 'never edit this file' "$1" || return 1
+  return 0
+}
+boot_first() { # <workspace>: the loader's first instruction, as the loader states it
+  if [ ! -x "$1/.contexture/laws/compose" ]; then
+    printf 'boot: missing payload path: .contexture/laws/compose\n' >&2
+    return 2
+  fi
+  if [ ! -r "$1/.contexture/laws/core.md" ]; then
+    printf 'boot: missing payload path: .contexture/laws/core.md\n' >&2
+    return 2
+  fi
+  ( cd "$1" && sh .contexture/laws/compose )
 }
 
 stage_ctx() { # <sandbox>
@@ -143,9 +183,13 @@ GB="$SB/base/.contexture/laws/AGENTS.generated.md"
 a_file "$GB" "base-only: the generated layer is written"
 if cmp -s "$GB" "$GOLDEN"; then ok "base-only: the generated layer matches the golden"; else bad "base-only: the generated layer differs from the golden"; fi
 hdr=$(sed -n '1p' "$GB")
-printf '%s\n' "$hdr" | grep -Eq '^# contexture v0\.61\.1: generated law layer; core cksum [0-9]+-[0-9]+; sources [0-9]+-[0-9]+; never edit$'
+printf '%s\n' "$hdr" | grep -Eq '^# contexture v[0-9]+\.[0-9]+\.[0-9]+: generated law layer; core cksum [0-9]+-[0-9]+; sources [0-9]+-[0-9]+; never edit$'
 a_rc "$?" "0" "base-only: the header carries the core version and both checksums"
+core_version=$(sed -n '1s/.*v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' "$CORE_SRC")
+golden_version=$(sed -n '1s/.*v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' "$GOLDEN")
+a_eq "$golden_version" "$core_version" "base-only: the golden carries the current core version (regenerate it on a version bump)"
 a_not "$(cat "$GB")" "docs-first" "base-only: no docs law is composed"
+a_eq "$(grep -c '^@module docs$' "$GB")" "0" "base-only: no docs preamble is composed"
 a_eq "$(grep -c '^@module ' "$GB")" "2" "base-only: exactly the unit and lane preambles"
 a_match "$(cat "$GB")" "^@module unit$" "base-only: the unit preamble"
 a_match "$(cat "$GB")" "^  help: ctx unit help$" "base-only: the unit help pointer"
@@ -153,6 +197,7 @@ a_match "$(cat "$GB")" "^@module lane$" "base-only: the lane preamble"
 a_match "$(module_block "$GB" lane)" "The lane module is the subagent dispatch surface" "base-only: the lane description"
 a_match "$(cat "$GB")" "^  unit of work = session unit" "base-only: the unit record clause"
 a_match "$(cat "$GB")" "^  branch/worktree: the recipe names" "base-only: the lane subagent clause"
+a_match "$(cat "$GB")" "^  boundary-warning: every lane recipe" "base-only: the lane boundary-warning clause is composed"
 a_match "$(cat "$GB")" "^  branch/worktree on demand" "base-only: the lane git clause"
 a_not "$(grep '^@' "$GB")" "^@custom$" "base-only: no custom section without a module keyword"
 lay=$(line_of "$GB" '^@layout$'); mod=$(line_of "$GB" '^@module unit$'); rec=$(line_of "$GB" '^@record$')
@@ -317,6 +362,178 @@ if cmp -s "$SB/synth/.contexture/laws/AGENTS.generated.md" "$SB/synth-clock1"; t
 stage_synth
 run_compose "$SB/synth" --bogus
 a_rc "$RC" "1" "usage: an unknown argument refuses rc1"
+
+echo "== L4: the loader and the boot =="
+a_file "$LOADER" "loader: base/AGENTS.md is the loader"
+loader_bytes=$(wc -c < "$LOADER" | tr -d ' ')
+a_lt "$loader_bytes" 2048 "loader: the every-turn file stays the few-line loader (< 2048 B)"
+a_match "$(cat "$LOADER")" '^  1\. FIRST: run \.contexture/laws/compose' "loader: the first instruction runs the compose"
+a_match "$(cat "$LOADER")" 'composes the generated law layer \.contexture/laws/AGENTS\.generated\.md or verifies it current' "loader: the first instruction names the generated layer and the verify"
+a_match "$(cat "$LOADER")" 'read \.contexture/laws/AGENTS\.generated\.md WHOLE' "loader: the second instruction loads the generated layer whole"
+a_match "$(cat "$LOADER")" 'read AGENTS\.workspace\.md then AGENTS\.local\.md' "loader: the overlays chain after the generated layer"
+a_match "$(cat "$LOADER")" 'absent or not executable' "loader: the first instruction names the absent-composer stop"
+a_match "$(cat "$LOADER")" 'core source \.contexture/laws/core\.md is absent or unreadable' "loader: the first instruction names the absent-core stop"
+a_match "$(cat "$LOADER")" 'stop and report the missing payload path' "loader: the stop reports the missing payload path"
+a_not "$(cat "$LOADER")" 'source-of-truth:' "loader: no law statement moved into the every-turn file"
+loader_version=$(sed -n '1s/.*v\([0-9][0-9]*\.[0-9][0-9]*\.[0-9][0-9]*\).*/\1/p' "$LOADER")
+a_eq "$loader_version" "$core_version" "loader: the header version tracks the core law source"
+if loader_ok "$LOADER"; then ok "loader: the validating probe accepts the shipped loader"; else bad "loader: the validating probe rejects the shipped loader"; fi
+printf '# contexture v0.0.0: the loader\n@boot\n  1. read AGENTS.md whole\n' > "$SB/wrong-loader.md"
+if loader_ok "$SB/wrong-loader.md"; then bad "loader plant: a wrong first instruction reads as the loader"; else ok "loader plant: a wrong first instruction reads red"; fi
+sed 's/read AGENTS\.workspace\.md then AGENTS\.local\.md/read AGENTS.local.md then AGENTS.workspace.md/' "$LOADER" > "$SB/wrong-order.md"
+if loader_ok "$SB/wrong-order.md"; then bad "loader plant: a reversed overlay order reads as the loader"; else ok "loader plant: a reversed overlay order reads red"; fi
+
+stage_base
+GB="$SB/base/.contexture/laws/AGENTS.generated.md"
+rm -f "$GB"
+run_compose "$SB/base" --check
+a_rc "$RC" "1" "boot: the absent generated layer reads stale for --check"
+a_no_file "$GB" "boot: the stale check writes nothing"
+( boot_first "$SB/base" ) > "$SB/boot.out" 2> "$SB/boot.err"; rc=$?
+a_rc "$rc" "0" "boot: the absent generated layer composes rc0 (step 1)"
+a_file "$GB" "boot: step 1 writes the generated layer"
+a_match "$(cat "$GB")" '^@boot$' "boot: step 2 has the boot block to read"
+a_match "$(cat "$GB")" '^# contexture v' "boot: the written layer carries its deterministic header"
+a_contains "$(cat "$SB/boot.err")" "compose: composed .contexture/laws/AGENTS.generated.md" "boot: the absent-layer compose announces the write"
+( boot_first "$SB/base" ) > "$SB/boot2.out" 2> "$SB/boot2.err"; rc=$?
+a_rc "$rc" "0" "boot: a current layer verifies rc0"
+a_eq "$(cat "$SB/boot2.err")" "" "boot: a current layer writes no compose line"
+
+stage_base
+rm -f "$SB/base/.contexture/laws/compose"
+( boot_first "$SB/base" ) > "$SB/boot.out" 2> "$SB/boot.err"; rc=$?
+a_rc "$rc" "2" "boot: an absent composer stops rc2"
+a_contains "$(cat "$SB/boot.err")" ".contexture/laws/compose" "boot: the stop names the missing composer path"
+
+stage_base
+rm -f "$SB/base/.contexture/laws/core.md"
+( boot_first "$SB/base" ) > "$SB/boot.out" 2> "$SB/boot.err"; rc=$?
+a_rc "$rc" "2" "boot: an absent core source stops rc2"
+a_contains "$(cat "$SB/boot.err")" ".contexture/laws/core.md" "boot: the stop names the missing core source path"
+
+stage_base
+( boot_first "$SB/base" ) > /dev/null 2>&1
+cp "$SB/base/.contexture/laws/AGENTS.generated.md" "$SB/boot-current"
+printf '\n@append @record\n  boot-stale: a later clause\n' >> "$SB/base/.contexture/modules/unit/laws"
+( cd "$SB/base" && sh .contexture/laws/compose --check ) > "$SB/boot.out" 2> "$SB/boot.err"; rc=$?
+a_rc "$rc" "1" "boot: a stale layer makes the verify refuse rc1"
+if cmp -s "$SB/base/.contexture/laws/AGENTS.generated.md" "$SB/boot-current"; then ok "boot: the stale verify writes nothing"; else bad "boot: the stale verify rewrote the layer"; fi
+( boot_first "$SB/base" ) > "$SB/boot.out" 2> "$SB/boot.err"; rc=$?
+a_rc "$rc" "0" "boot: step 1 recomposes a stale layer rc0"
+a_match "$(cat "$SB/base/.contexture/laws/AGENTS.generated.md")" '^  boot-stale: a later clause$' "boot: the recomposed layer carries the late clause"
+( cd "$SB/base" && sh .contexture/laws/compose --check ) > "$SB/boot.out" 2> "$SB/boot.err"; rc=$?
+a_rc "$rc" "0" "boot: the recomposed layer verifies current"
+
+echo "== L5: the docs laws and the lane clauses =="
+a_file "$DOCS_LAWS" "docs: the docs module's law fragment is tracked"
+a_eq "$(law_slugs "$DOCS_LAWS")" "docs-first docs-are-code corpus-untracked corpus-reconcile gap harness-free dont-fool-yourself docs-audience-separation " "docs: the eight docs laws live in the docs module"
+a_eq "$(grep -c '^@append @' "$DOCS_LAWS")" "4" "docs: the fragment appends four blocks (laws, layout, boot, close)"
+a_match "$(cat "$DOCS_LAWS")" '^@append @layout$' "docs: the layout clause block"
+a_match "$(cat "$DOCS_LAWS")" 'ctx docs query workspace conventions' "docs: the layout clause names the corpus conventions"
+a_match "$(cat "$DOCS_LAWS")" '\.contexture/extensions/modules/docs/README\.md' "docs: the layout clause names the installed module README"
+a_match "$(cat "$DOCS_LAWS")" '^@append @boot$' "docs: the boot clause block"
+a_match "$(cat "$DOCS_LAWS")" 'ctx docs query --index' "docs: the boot clause loads the index whole"
+a_match "$(cat "$DOCS_LAWS")" '^@append @close$' "docs: the close clause block"
+a_match "$(cat "$DOCS_LAWS")" 'ctx docs gate' "docs: the close clause names the docs gate"
+
+for slug in docs-first docs-are-code corpus-untracked corpus-reconcile gap harness-free dont-fool-yourself docs-audience-separation; do
+  a_not "$(cat "$WS_OVERLAY")" "^  $slug:" "workspace: the $slug law left the overlay"
+done
+a_not "$(cat "$WS_OVERLAY")" '^@append @layout$' "workspace: the docs layout clause left the overlay"
+a_not "$(cat "$WS_OVERLAY")" '^@append @boot$' "workspace: the docs boot clause left the overlay"
+a_not "$(cat "$WS_OVERLAY")" '^@append @close$' "workspace: the docs close clause left the overlay"
+a_not "$(cat "$WS_OVERLAY")" '^  branch/worktree: ' "workspace: the lane branch clause left the overlay"
+a_not "$(cat "$WS_OVERLAY")" '^  landing: ' "workspace: the lane landing clause left the overlay"
+a_not "$(cat "$WS_OVERLAY")" '^  boundary-warning: ' "workspace: the lane boundary-warning left the overlay"
+a_not "$(cat "$WS_OVERLAY")" '^  drift: ' "workspace: the lane drift clause left the overlay"
+a_not "$(cat "$WS_OVERLAY")" '^  branch/worktree on demand: ' "workspace: the lane git clause left the overlay"
+a_match "$(cat "$WS_OVERLAY")" '^  corpus-untracked-here: ' "workspace: the repository-specific corpus law stays"
+
+a_no_file "$ROOT/plugins/docs-discipline/AGENTS.workspace.md" "plugin: the docs overlay is retired"
+a_match "$(cat "$ROOT/plugins/docs-discipline/README.md")" 'retired: no root overlay fragment ships' "plugin: the README records the overlay retirement"
+
+a_match "$(cat "$LANE_LAWS")" '^@append @subagents$' "lane: the dispatch clause block"
+a_match "$(cat "$LANE_LAWS")" '^  branch/worktree: ' "lane: the branch clause"
+a_match "$(cat "$LANE_LAWS")" '^  landing: ' "lane: the landing clause"
+a_match "$(cat "$LANE_LAWS")" '^  boundary-warning: ' "lane: the boundary-warning clause"
+a_match "$(cat "$LANE_LAWS")" '^  drift: ' "lane: the drift clause"
+a_match "$(cat "$LANE_LAWS")" '^@append @git$' "lane: the git clause block"
+a_match "$(cat "$LANE_LAWS")" '^  branch/worktree on demand: ' "lane: the git branch clause"
+
+stage_base
+cp -R "$DOCS_MOD" "$SB/base/.contexture/extensions/modules/docs"
+run_compose "$SB/base"
+a_rc "$RC" "0" "docs compose: the docs module composes rc0"
+GB="$SB/base/.contexture/laws/AGENTS.generated.md"
+a_eq "$(grep -c '^@module docs$' "$GB")" "1" "docs compose: the docs preamble appears once"
+a_match "$(module_block "$GB" docs)" '^  summary: the corpus-first documentation discipline' "docs compose: the docs summary is the preamble"
+a_match "$(module_block "$GB" docs)" '^  The docs module holds the agent-facing corpus' "docs compose: the docs description follows"
+a_eq "$(grep -c '^  docs-first: ' "$GB")" "1" "docs compose: docs-first composes once"
+a_match "$(cat "$GB")" '^  the corpus conventions (repo workspace, slug conventions): ' "docs compose: the docs layout clause composes"
+a_match "$(cat "$GB")" '^  boot order addition: ' "docs compose: the docs boot clause composes"
+a_match "$(cat "$GB")" '^  docs gate (unit close): ' "docs compose: the docs close clause composes"
+
+stage_base
+cp -R "$DOCS_MOD" "$SB/base/.contexture/extensions/modules/docs"
+printf '@append @laws\n  docs-first: the overlay twin\n' > "$SB/base/AGENTS.workspace.md"
+run_compose "$SB/base"
+a_rc "$RC" "1" "docs compose: the old overlay's docs-first refuses rc1"
+a_contains "$(cat "$SB/compose.err")" "duplicate law slug 'docs-first'" "docs compose: the refusal names docs-first"
+a_contains "$(cat "$SB/compose.err")" "AGENTS.workspace.md" "docs compose: the refusal names the overlay"
+if [ -f "$SB/base/.contexture/laws/AGENTS.generated.md" ]; then bad "docs compose: the refusal wrote a layer"; else ok "docs compose: the refusal writes nothing"; fi
+
+echo "== L6: the installer recompose =="
+stage_base
+run_compose "$SB/base"
+GB="$SB/base/.contexture/laws/AGENTS.generated.md"
+cp "$GB" "$SB/install-before"
+PKG="$SB/catalog/lawfix"
+mkdir -p "$PKG/.contexture/extensions/modules/pkgfix"
+{
+  printf '# summary: the pkgfix law fixture module\n'
+  printf '# version: 0.1.0\n'
+  printf '# description:\n'
+  printf '# A fixture module proving the installer recompose.\n'
+} > "$PKG/.contexture/extensions/modules/pkgfix/module"
+printf '@append @laws\n  pkgfix-law: the installer fixture law\n' > "$PKG/.contexture/extensions/modules/pkgfix/laws"
+{
+  printf '# summary: the law install fixture package\n'
+  printf '# version: 0.1.0\n'
+  printf '# kind: feature\n'
+  printf '# part: module modules/pkgfix\n'
+} > "$PKG/manifest"
+( cd "$SB/base" && CTX_ROOT="$SB/base" sh .contexture/package-install "$PKG" ) > "$SB/install.out" 2> "$SB/install.err"; rc=$?
+a_rc "$rc" "0" "installer: a law-bearing package installs rc0"
+a_file "$SB/base/.contexture/extensions/modules/pkgfix/module" "installer: the module landed"
+a_match "$(cat "$GB")" '^@module pkgfix$' "installer: the recompose adds the module preamble"
+a_match "$(cat "$GB")" '^  pkgfix-law: the installer fixture law$' "installer: the recompose adds the module law"
+if cmp -s "$GB" "$SB/install-before"; then bad "installer: the generated layer did not change with the install"; else ok "installer: the generated layer changed with the install"; fi
+a_contains "$(cat "$SB/install.err")" "compose: composed .contexture/laws/AGENTS.generated.md" "installer: the install announces the recompose"
+( cd "$SB/base" && sh .contexture/laws/compose --check ) > "$SB/chk.out" 2> "$SB/chk.err"; rc=$?
+a_rc "$rc" "0" "installer: the recomposed layer verifies current"
+
+( cd "$SB/base" && CTX_ROOT="$SB/base" sh .contexture/package-uninstall lawfix ) > "$SB/uninstall.out" 2> "$SB/uninstall.err"; rc=$?
+a_rc "$rc" "0" "installer: the uninstall rc0"
+a_no_file "$SB/base/.contexture/extensions/modules/pkgfix/module" "installer: the module left"
+a_not "$(cat "$GB")" '^@module pkgfix$' "installer: the recompose drops the module preamble"
+a_not "$(cat "$GB")" 'pkgfix-law' "installer: the recompose drops the module law"
+if cmp -s "$GB" "$SB/install-before"; then ok "installer: the uninstall recompose restores the pre-install layer"; else bad "installer: the uninstall left a different layer"; fi
+
+stage_base
+run_compose "$SB/base"
+cp "$SB/base/.contexture/laws/AGENTS.generated.md" "$SB/plant-before"
+printf '@append @laws\n  pkgfix-law: the overlay twin\n' > "$SB/base/AGENTS.workspace.md"
+( cd "$SB/base" && CTX_ROOT="$SB/base" sh .contexture/package-install "$PKG" ) > "$SB/install.out" 2> "$SB/install.err"; rc=$?
+a_rc "$rc" "2" "installer plant: a duplicate law slug fails the recompose rc2"
+a_contains "$(cat "$SB/install.err")" "duplicate law slug 'pkgfix-law'" "installer plant: the refusal names the slug"
+a_contains "$(cat "$SB/install.err")" "the law layer did not recompose" "installer plant: the installer names the failed recompose"
+if cmp -s "$SB/base/.contexture/laws/AGENTS.generated.md" "$SB/plant-before"; then ok "installer plant: the failed recompose writes nothing"; else bad "installer plant: the failed recompose rewrote the layer"; fi
+
+stage_base
+rm -f "$SB/base/.contexture/laws/compose" "$SB/base/.contexture/laws/AGENTS.generated.md"
+( cd "$SB/base" && CTX_ROOT="$SB/base" sh .contexture/package-install "$PKG" ) > "$SB/install.out" 2> "$SB/install.err"; rc=$?
+a_rc "$rc" "0" "installer: an older core without the composer installs rc0 (no recompose)"
+if [ -f "$SB/base/.contexture/laws/AGENTS.generated.md" ]; then bad "installer: the composer-less install left a generated layer"; else ok "installer: the composer-less install skips the recompose"; fi
 
 echo "== summary =="
 echo "law-tests: pass=$pass fail=$fail"

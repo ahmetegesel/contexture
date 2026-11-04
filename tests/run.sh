@@ -1,7 +1,7 @@
 #!/bin/sh
 # run.sh: the upstream test runner. Runs the core suites (filters, ctx, session, hooks,
-# record-audit, governance, the unit-data record compliance twice, store-compliance,
-# store-fuzz and record-fuzz, base-only, module-tests), each hermetic
+# record-audit, governance, law compose, the unit-data record compliance twice,
+# store-compliance, store-fuzz and record-fuzz, base-only, module-tests), each hermetic
 # and staged from the shipped core (the unit-data record compliance runs the record cases
 # through the unit module data script over base's posix driver and the fts5 plugin's own
 # copy, and stages the storage core and the unit module; store compliance stages the
@@ -46,7 +46,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh unit-data-tests.sh:posix unit-data-tests.sh:fts5 store-compliance.sh store-fuzz.sh record-fuzz.sh base-only-tests.sh module-tests.sh"
+CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh law-tests.sh unit-data-tests.sh:posix unit-data-tests.sh:fts5 store-compliance.sh store-fuzz.sh record-fuzz.sh base-only-tests.sh module-tests.sh"
 
 GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
 GATE_JOBS=${GATE_JOBS:-5}

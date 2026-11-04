@@ -8,6 +8,7 @@
 #   unit             the seven unit-like suites (about 42 s isolated, 290 assertions),
 #                    with the unit-data smoke in place of the long data-mode compliance
 #   engine           filter-tests, ctx-tests, governance-tests
+#   law              the law compose suite (law-tests.sh)
 #   record <1|2|3|4> one session suite group (the owning group is required)
 #   unit-data [posix|fts5]  the full record compliance through the unit data script on
 #                    one driver (default posix; the fts5 half stays for pre-land)
@@ -34,6 +35,7 @@ usage: tests/fast.sh <area> [<arg>]
   unit             the seven unit-like suites (about 42 s isolated, 290 assertions),
                    with the unit-data smoke in place of the long data-mode compliance
   engine           filter-tests, ctx-tests, governance-tests
+  law              the law compose suite (law-tests.sh)
   record <1|2|3|4> one session suite group (the owning group is required)
   unit-data [posix|fts5]  the full record compliance through the unit data script on
                    one driver (default posix; the fts5 half stays for pre-land)
@@ -120,6 +122,10 @@ case "${1:-}" in
     run_suite "filter-tests.sh" sh "$ROOT/tests/filter-tests.sh"
     run_suite "ctx-tests.sh" sh "$ROOT/tests/ctx-tests.sh"
     run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
+    ;;
+  law)
+    AREA="law"
+    run_suite "law-tests.sh" sh "$ROOT/tests/law-tests.sh"
     ;;
   record)
     case "${2:-}" in
