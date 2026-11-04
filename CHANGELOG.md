@@ -4,6 +4,25 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.62.0] - 2026-11-04
+
+MINOR: the law compose lands. The base is a loader; the law layer is composed from the core source, the installed modules' fragments, and the preambles at install and boot, and the workspace and local overlays chain after it. The generated layer is gitignored. The docs laws move into the docs module, the lane laws gain the boundary-warning, and the workspace overlay keeps its own five laws.
+
+### Added
+
+- The core law source `base/.contexture/laws/core.md` (the 15-block skeleton in order) and the composer `base/.contexture/laws/compose` (a POSIX sh/awk script; the effective module set plus the standalone law parts; the module preambles after `@layout`; the custom sections after `@update`; the deterministic cksum header; the checks: determinism, an intact core, the unique slugs across the generated and both overlays, each module once, the version and hash; the refusals).
+- The loader `base/AGENTS.md` (856 B): compose or verify, the absent-payload refusal, the generated whole, then the workspace and local overlays.
+- The boot and install triggers: the loader's first instruction, the adoption copy and ONBOARDING compose, and the installer/uninstaller recompose after the law set changes.
+- The tests: `tests/law-tests.sh` 212 assertions (the loader, the boot, the docs and lane laws, the base-only golden, the installer recompose, the plants), the 19th gate job, and the fast `law` area.
+
+### Changed
+
+- The docs module's laws file carries the generalized corpus-untracked plus its layout, boot, and close clauses; the docs module and package versions are 1.1.0.
+- The lane module's laws gain the boundary-warning; the docs plugin overlay is retired.
+- The workspace overlay loses the eight docs laws, the docs and lane clauses, and the storage line, keeping the five workspace laws (installs, background-subagents, docs-sync, workspace-tmp, test-scope), the corpus-untracked-here, the ideas rule, and the release rules.
+- The every-turn AGENTS stack drops from 34,994 B to the 856 B loader; the boot whole is about 36.7 KB with the docs module.
+- The payload declaration gains `laws`.
+
 ## [0.61.1] - 2026-11-04
 
 PATCH: the unit module release's records and the header repair. The v0.61.0 tag carries the unit module, the clean cut to `ctx unit`, the contract 3 store-only drivers, and the fast test gate; its changelog section was omitted and its header left at v0.60.2. The v0.61.0 breaks, named here: a record-only driver refuses under contract 3; `ctx session` retires in favor of `ctx unit`; the fts5 store re-enters a fresh schema 5.
