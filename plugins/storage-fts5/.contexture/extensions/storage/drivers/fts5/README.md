@@ -63,8 +63,7 @@ verbs.
 ## Tests
 
 `plugins/storage-fts5/tests/run.sh` runs the plugin's own suite beside this module, never
-the adopted copy: `test-driver.sh` runs the shared storage compliance suite through
-`--driver-exec`, `test-store-compliance.sh` runs the shared store compliance suite, and
+the adopted copy: `test-store-compliance.sh` runs the shared store compliance suite, and
 `test-store.sh` adds the store's change rows, the atomic put's rollback, the schema open
 path, and the legacy tables staying untouched. `test-schema.sh` pins the version 4 lay and
 the refusal of every other version, `test-version.sh` the sqlite3 3.44 guard,

@@ -27,7 +27,6 @@ The storage-fts5 plugin serves as an indexed storage backend: the single store o
 | `.contexture/extensions/storage/drivers/fts5/schema.sql` | the schema version 5 DDL: the generic store, its change log, and the derived store documents with the dual FTS5 virtual tables and their triggers | install (driver part) |
 | `.contexture/extensions/storage/drivers/fts5/driver` | the driver executable: the contract 3 store-only entry point (capability, storage.health, the seven store functions, the store search) | install (driver part) |
 | `.contexture/extensions/storage/drivers/fts5/db-init.sh` | the database open path: the sqlite3 3.44 minimum, the fresh schema 5 in a new or empty file, the version 5 open, the refusal of any other version, the per-connection busy timeout | install (driver part) |
-| `tests/test-driver.sh` | the record compliance through the unit module data script over the plugin's own driver (`storage-compliance --data=unit --driver=fts5`) | reference |
 | `tests/test-schema.sh` | schema 5 laid in an absent or empty file with no backup, a read leaving a version 5 store byte for byte, and a version 4, 0, or 6 file refused naming its version, the file untouched, no backup, `storage.health` reporting error | reference |
 | `tests/test-version.sh` | the sqlite3 3.44 guard under a fake sqlite3: below it a store function refuses rc 2 naming the version and `storage.health` reports `error` naming it; at 3.44 both serve | reference |
 | `tests/test-store.sh` | the generic module store on this driver: the five single-key functions, the byte round-trip, the change log's row order and head window, a refused write logging nothing, the atomic put's rollback under a planted trigger, a store at another schema refused with no upgrade path, the store-only schema, and the contract 3 descriptor (version 3.0.0, the seven store data names, the optional tokens, no record family) | reference |
@@ -180,7 +179,6 @@ The docs plugin suite runs in full against this driver (it declares `store` and 
 | `tests/test-version.sh` | authored fresh: the sqlite3 version guard suite |
 | `.contexture/extensions/storage/drivers/fts5/driver` | authored fresh: the contract 3 store-only entry point (the seven store functions, the store search, pure SQL RRF ranking) |
 | `.contexture/extensions/storage/drivers/fts5/db-init.sh` | authored fresh: the open path at version 5 (fresh schema, version 5 open, every other version refused with no upgrade path) |
-| `tests/test-driver.sh` | authored fresh: SPI compliance test runner |
 | `tests/test-store.sh` | authored fresh: the generic module store suite (change log, atomicity, a store at another schema refused, the store-only schema, the contract 3 descriptor) |
 | `tests/test-store-compliance.sh` | authored fresh: the shared store compliance harness against the plugin's own driver |
 | `tests/run.sh` | authored fresh: named test runner over plugin test suites |

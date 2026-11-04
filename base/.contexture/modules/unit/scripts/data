@@ -183,14 +183,16 @@ u_keys_prefix() {
 }
 
 # u_add_key <manifest key> <store key>: fetch the raw value to a scratch file and add its
-# manifest line; a key that vanished between the list and the get is absent
+# manifest line; a key that vanished between the list and the get is absent, and U_ADD_RC
+# reports which (0 fetched, 1 absent)
 u_add_key() {
+  U_ADD_RC=1
   U_NART=$((U_NART + 1))
   U_ART="$U_SCR/art.$U_NART"
   store_get "$U_NS" "$2" > "$U_ART" 2> "$U_SCR/get.err" < /dev/null
   U_GRC=$?
   case "$U_GRC" in
-    0) ;;
+    0) U_ADD_RC=0 ;;
     1) rm -f "$U_ART"; U_NART=$((U_NART - 1)); return 0 ;;
     *) [ -s "$U_SCR/get.err" ] && cat "$U_SCR/get.err" >&2
        printf '%s: error: the store read failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
@@ -206,49 +208,76 @@ u_manifest_reset() {
   U_NART=0
 }
 
-# u_fetch_unit <unit> <parts>: the unit's artifacts into the manifest; state always, the
-# other parts on request ("all" takes every artifact, "lanes" or "lane:<l>" the lanes)
+# u_fetch_parts <unit> <parts>: the named block artifacts into the manifest, no list: a
+# part the store does not hold is simply absent, exactly as the list would have said
+u_fetch_parts() {
+  case " $2 " in *" backlog "*) u_add_key "$1|backlog" "$1/backlog" ;; esac
+  case " $2 " in *" journal "*) u_add_key "$1|journal" "$1/journal" ;; esac
+  case " $2 " in *" knowledge "*) u_add_key "$1|knowledge" "$1/knowledge" ;; esac
+}
+
+# u_fetch_unit <unit> <parts> [required]: the unit's artifacts into the manifest; state
+# always, the other parts on request ("all" takes every artifact, "lane:<l>" the lane,
+# "__lanes__" discovers the lanes alone). A parts set with no lane and no "all" fetches the
+# exact keys, no list at all; required refuses a unit the store does not hold with the
+# same line the held probe answered.
 u_fetch_unit() {
   uf_u=$1
   uf_parts=" $2 "
-  uf_state=0
-  uf_lanes=""
-  u_keys_prefix "$uf_u/" > "$U_SCR/keys"
-  while IFS= read -r uf_k; do
-    [ -n "$uf_k" ] || continue
-    uf_r=${uf_k#"$uf_u/"}
-    case "$uf_r" in
-      state)
-        uf_state=1
-        u_add_key "$uf_u|state" "$uf_k"
-        ;;
-      backlog|knowledge|journal)
-        case "$uf_parts" in
-          *" all "*|*" $uf_r "*) u_add_key "$uf_u|$uf_r" "$uf_k" ;;
+  uf_req=${3:-0}
+  case "$uf_parts" in
+    *" all "*|*" lane:"*|*" __lanes__ "*)
+      uf_state=0
+      uf_lanes=""
+      u_keys_prefix "$uf_u/" > "$U_SCR/keys"
+      while IFS= read -r uf_k; do
+        [ -n "$uf_k" ] || continue
+        uf_r=${uf_k#"$uf_u/"}
+        case "$uf_r" in
+          state)
+            uf_state=1
+            u_add_key "$uf_u|state" "$uf_k"
+            ;;
+          backlog|knowledge|journal)
+            case "$uf_parts" in
+              *" all "*|*" $uf_r "*) u_add_key "$uf_u|$uf_r" "$uf_k" ;;
+            esac
+            ;;
+          lanes/*/*)
+            uf_rest=${uf_r#lanes/}
+            uf_lane=${uf_rest%%/*}
+            uf_art=${uf_rest#*/}
+            case "$uf_art" in recipe|journal|report) ;; *) continue ;; esac
+            u_ident_valid "$uf_lane" || continue
+            case " $uf_lanes " in
+              *" $uf_lane "*) ;;
+              *) uf_lanes="$uf_lanes $uf_lane" ;;
+            esac
+            case "$uf_parts" in
+              *" all "*|*" lanes "*|*" lane:$uf_lane "*) u_add_key "$uf_u|lane/$uf_lane/$uf_art" "$uf_k" ;;
+            esac
+            ;;
         esac
-        ;;
-      lanes/*/*)
-        uf_rest=${uf_r#lanes/}
-        uf_lane=${uf_rest%%/*}
-        uf_art=${uf_rest#*/}
-        case "$uf_art" in recipe|journal|report) ;; *) continue ;; esac
-        u_ident_valid "$uf_lane" || continue
-        case " $uf_lanes " in
-          *" $uf_lane "*) ;;
-          *) uf_lanes="$uf_lanes $uf_lane" ;;
-        esac
-        case "$uf_parts" in
-          *" all "*|*" lanes "*|*" lane:$uf_lane "*) u_add_key "$uf_u|lane/$uf_lane/$uf_art" "$uf_k" ;;
-        esac
-        ;;
-    esac
-  done < "$U_SCR/keys"
-  if [ "$uf_state" -eq 1 ]; then
-    printf 'U\t%s\n' "$uf_u" >> "$U_SCR/man"
-  fi
-  for uf_l in $uf_lanes; do
-    printf 'L\t%s\t%s\n' "$uf_u" "$uf_l" >> "$U_SCR/man"
-  done
+      done < "$U_SCR/keys"
+      if [ "$uf_state" -eq 1 ]; then
+        printf 'U\t%s\n' "$uf_u" >> "$U_SCR/man"
+      elif [ "$uf_req" -eq 1 ]; then
+        u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
+      fi
+      for uf_l in $uf_lanes; do
+        printf 'L\t%s\t%s\n' "$uf_u" "$uf_l" >> "$U_SCR/man"
+      done
+      ;;
+    *)
+      u_add_key "$uf_u|state" "$uf_u/state"
+      if [ "$U_ADD_RC" -eq 0 ]; then
+        printf 'U\t%s\n' "$uf_u" >> "$U_SCR/man"
+      elif [ "$uf_req" -eq 1 ]; then
+        u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
+      fi
+      u_fetch_parts "$uf_u" "$2"
+      ;;
+  esac
 }
 
 # u_fetch_all <with_journal 0|1>: every held unit's state (and journal for the listing)
@@ -270,12 +299,18 @@ u_fetch_all() {
     printf 'U\t%s\n' "$fa_u" >> "$U_SCR/man"
   done < "$U_SCR/keys"
   if [ "$fa_j" -eq 1 ]; then
+    LC_ALL=C awk '
+      FILENAME == ARGV[1] { u[$0] = 1; next }
+      {
+        if ($0 !~ /\/journal$/) next
+        p = $0
+        sub(/\/journal$/, "", p)
+        if ((p in u) && p !~ /\//) print p
+      }' "$U_SCR/units" "$U_SCR/keys" > "$U_SCR/junits"
     while IFS= read -r fa_u; do
       [ -n "$fa_u" ] || continue
-      if grep -qxF "$fa_u/journal" "$U_SCR/keys"; then
-        u_add_key "$fa_u|journal" "$fa_u/journal"
-      fi
-    done < "$U_SCR/units"
+      u_add_key "$fa_u|journal" "$fa_u/journal"
+    done < "$U_SCR/junits"
   fi
 }
 
@@ -408,7 +443,7 @@ u_unit_call() {
     u_lock "$U_UNIT"
     u_stage_start
   fi
-  u_fetch_unit "$U_UNIT" "$U_PARTS"
+  u_fetch_unit "$U_UNIT" "$U_PARTS" 1
   u_args "$@"
   u_awk
   if [ "$U_WRITE" -eq 1 ]; then
@@ -431,7 +466,7 @@ u_lane_doc() {
   u_stage_start
   cat > "$U_STAGE/doc" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the document"
   PX_DOCSIZE=$(wc -c < "$U_STAGE/doc" | tr -d ' ')
-  u_fetch_unit "$U_UNIT" ""
+  u_fetch_unit "$U_UNIT" "__lanes__" 1
   u_args "$U_LANE"
   u_awk
   u_refs_validate
@@ -445,14 +480,13 @@ u_load() {
   U_UNIT=$1
   u_manifest_reset
   u_payload
-  u_fetch_unit "$1" ""
+  u_fetch_unit "$1" "" 1
   FN=state.refs
   U_CAPTURE=1
   u_lrefs=$(u_awk) || exit $?
   U_CAPTURE=0
   FN=session.load
-  u_manifest_reset
-  u_fetch_unit "$1" "backlog knowledge journal"
+  u_fetch_parts "$1" "backlog knowledge journal"
   for u_lr in $u_lrefs; do
     u_ident_valid "$u_lr" || continue
     [ "$u_lr" = "$1" ] && continue
@@ -715,7 +749,7 @@ case "$cmd" in
     ;;
   session.load)
     u_extra 1 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     u_load "${1:-}"
     ;;
   session.refload)
@@ -723,32 +757,32 @@ case "$cmd" in
     ;;
   session.board)
     u_extra 1 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "backlog journal" 0
     ;;
   session.audit)
     u_extra 1 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "backlog journal" 0
     ;;
   session.stamp)
     u_extra 1 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "journal" 1
     ;;
   session.next)
     u_extra 1 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "backlog" 1
     ;;
   session.close)
     u_extra 1 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "backlog journal" 1
     ;;
   session.reopen)
     u_extra 1 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "" 1
     ;;
   session.refs)
@@ -779,7 +813,7 @@ case "$cmd" in
   task.add|task.update|task.start|task.complete|task.reopen|task.drop|task.get)
     u_extra 2 "$@"
     FN=$cmd
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the task slug"
     u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed task slug '$2'"
     case "$cmd" in
@@ -790,7 +824,7 @@ case "$cmd" in
     ;;
   task.list)
     u_extra 2 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     case "${2:-}" in
       TODO|IN_PROGRESS|DONE|all) ;;
       *) u_refuse 1 ERR_INVALID_ARGUMENT "task.list takes TODO, IN_PROGRESS, DONE, or all: '${2:-}'" ;;
@@ -800,18 +834,18 @@ case "$cmd" in
   entry.record)
     u_extra 1 "$@"
     FN=$cmd
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "journal" 1
     ;;
   entry.get|entry.closure)
     u_extra 2 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the entry slug"
     u_name_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed entry slug '$2'"
     u_unit_call "$cmd" "$1" "journal" 0 "$2"
     ;;
   entry.list)
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     el_u=$1
     shift
     for el_a in "$@"; do
@@ -825,7 +859,7 @@ case "$cmd" in
     ;;
   finding.add|finding.update|finding.drop|finding.get)
     u_extra 2 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the finding NAME"
     u_name_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$2'"
     case "$cmd" in
@@ -835,7 +869,7 @@ case "$cmd" in
     ;;
   finding.supersede)
     u_extra 3 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     for fs_n in "${2:-}" "${3:-}"; do
       [ -n "$fs_n" ] || u_refuse 1 ERR_INVALID_ARGUMENT "finding.supersede takes the unit, OLD, and NEW"
       u_name_valid "$fs_n" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed finding NAME '$fs_n'"
@@ -844,7 +878,7 @@ case "$cmd" in
     ;;
   finding.list)
     u_extra 2 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     case "${2:-}" in
       active|all) ;;
       *) u_refuse 1 ERR_INVALID_ARGUMENT "finding.list takes active or all: '${2:-}'" ;;
@@ -854,7 +888,7 @@ case "$cmd" in
   lane.create|lane.write_report)
     u_extra 2 "$@"
     FN=$cmd
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
     u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
     u_lane_doc "$cmd" "$1" "$2"
@@ -862,14 +896,14 @@ case "$cmd" in
   lane.record)
     u_extra 2 "$@"
     FN=$cmd
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
     u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
     u_unit_call "$cmd" "$1" "lane:$2" 1 "$2"
     ;;
   lane.get)
     u_extra 3 "$@"
-    u_want_held "${1:-}"
+    u_want_unit "${1:-}"
     [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
     u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
     case "${3:-}" in

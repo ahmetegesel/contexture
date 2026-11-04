@@ -16,8 +16,8 @@
 #
 # Usage: tests/base-only-tests.sh [--keep] [--skip-core]
 #   --keep       preserve the sandbox
-#   --skip-core  skip B6's seven nested posix suites and their launches, running B1 to B5
-#                alone (pass=169); the full run stays pass=176
+#   --skip-core  skip B6's six nested posix suites and their launches, running B1 to B5
+#                alone (pass=163); the full run is pass=169
 # Exit 0 when every case passes; 1 otherwise; 2 a staging failure.
 
 set -u
@@ -96,7 +96,7 @@ refused() { # <rc> <message...>: one line on stderr, nothing on stdout, the exac
 }
 
 # ==============================================================================
-# B6 launch: the seven nested posix suites run while B1 to B5 execute
+# B6 launch: the six nested posix suites run while B1 to B5 execute
 # ==============================================================================
 # --skip-core skips the launches and the B6 section, leaving B1 to B5 alone
 if [ "$SKIP_CORE" -eq 0 ]; then
@@ -107,15 +107,14 @@ mkdir -p "$NESTED"
 NESTED_JOBS=3
 NESTED_PID=""
 
-run_core_cmd() { # <index>: the original seven commands and arguments, in order
+run_core_cmd() { # <index>: the original six commands and arguments, in order
   case "$1" in
     1) sh "$ROOT/tests/filter-tests.sh" ;;
     2) sh "$ROOT/tests/ctx-tests.sh" ;;
     3) sh "$ROOT/tests/session-tests.sh" --driver=posix ;;
     4) sh "$ROOT/tests/hook-tests.sh" ;;
     5) sh "$ROOT/tests/record-audit-tests.sh" ;;
-    6) sh "$ROOT/tests/storage-compliance.sh" "--data=unit" ;;
-    7) sh "$ROOT/tests/store-compliance.sh" "--data-file=$SB/base-only-data" ;;
+    6) sh "$ROOT/tests/store-compliance.sh" "--data-file=$SB/base-only-data" ;;
   esac
 }
 
@@ -488,7 +487,7 @@ rm -rf "$plantdir"
 # ==============================================================================
 if [ "$SKIP_CORE" -eq 0 ]; then
 printf '\n== B6: the posix core suites ==\n'
-# the seven suites were launched before B1; wait for the poll loop, then print in order
+# the six suites were launched before B1; wait for the poll loop, then print in order
 if [ -n "$NESTED_PID" ]; then wait "$NESTED_PID"; fi
 collect_core() { # <index> <label>
   _cc_idx=$1; _cc_label=$2
@@ -511,8 +510,7 @@ collect_core 2 "ctx-tests.sh"
 collect_core 3 "session-tests.sh (posix)"
 collect_core 4 "hook-tests.sh"
 collect_core 5 "record-audit-tests.sh"
-collect_core 6 "storage-compliance.sh --data=unit (base posix driver)"
-collect_core 7 "store-compliance.sh (--data-file)"
+collect_core 6 "store-compliance.sh (--data-file)"
 fi
 
 printf '\n== summary ==\n'

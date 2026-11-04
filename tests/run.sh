@@ -25,9 +25,12 @@
 # (written by the job that ran it), never from a pipeline. A suite still running after
 # GATE_SUITE_TIMEOUT seconds (default 3600, raised for the unit-data data modes, whose
 # contended wall has been measured in tens of minutes) is stopped with its whole process
-# tree and fails. GATE_JOBS caps how many suites run at once (default 0: all; 1 runs them one
-# after another, the order unchanged; the session suite still runs its section groups at
-# once inside its own run).
+# tree and fails. A suite that fails or times out prints a one-line notice on stderr as
+# soon as its rc is read, so a red surfaces without waiting for the long jobs; the suite's
+# full output and outcome line still print in the fixed order below. GATE_JOBS caps how
+# many suites run at once (default 5: the four to six lanes the host's cores allow; 0
+# runs all; 1 runs them one after another, the order unchanged; the session suite still
+# runs its section groups at once inside its own run).
 #
 # The runner prints one outcome line per suite plus a final verdict, and exits
 # non-zero when any suite fails. This is the ship gate: a red run holds the
@@ -46,7 +49,7 @@ unset COMPACT_DISABLE COMPACT_DEBUG
 CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh unit-data-tests.sh:posix unit-data-tests.sh:fts5 store-compliance.sh store-fuzz.sh record-fuzz.sh base-only-tests.sh module-tests.sh"
 
 GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
-GATE_JOBS=${GATE_JOBS:-0}
+GATE_JOBS=${GATE_JOBS:-5}
 case "$GATE_SUITE_TIMEOUT" in ''|*[!0-9]*) echo "run: GATE_SUITE_TIMEOUT must be a number of seconds" >&2; exit 1 ;; esac
 case "$GATE_JOBS" in ''|*[!0-9]*) echo "run: GATE_JOBS must be a number" >&2; exit 1 ;; esac
 
@@ -153,6 +156,25 @@ for i in $ids; do
   [ "$(cat "$GATE_DIR/$i/kind")" = run ] && queue="$queue $i"
 done
 
+# note_red <id>: a suite's red surfaces once, on stderr, the moment its rc is read or its
+# timeout is taken; a green or skipped suite is silent, and the ordered report below is
+# unchanged
+note_red() {
+  nr_d="$GATE_DIR/$1"
+  [ -f "$nr_d/noticed" ] && return 0
+  : > "$nr_d/noticed"
+  if [ -f "$nr_d/timedout" ]; then
+    printf 'run: %s FAILED (timed out after %ss, stopped); the ordered report follows\n' "$(cat "$nr_d/label")" "$GATE_SUITE_TIMEOUT" >&2
+    return 0
+  fi
+  [ -f "$nr_d/rc" ] || return 0
+  nr_rc=$(cat "$nr_d/rc")
+  [ "$nr_rc" -eq 0 ] && return 0
+  [ "$nr_rc" -eq 77 ] && return 0
+  printf 'run: %s FAILED (rc=%s); the ordered report follows\n' "$(cat "$nr_d/label")" "$nr_rc" >&2
+  return 0
+}
+
 while :; do
   # finished or overdue jobs leave the running set
   still=""
@@ -161,12 +183,14 @@ while :; do
     jd="$GATE_DIR/$j"
     if [ -f "$jd/rc" ]; then
       date +%s > "$jd/end"
+      note_red "$j"
       continue
     fi
     if [ $((now - $(cat "$jd/start"))) -ge "$GATE_SUITE_TIMEOUT" ]; then
       stop_tree "$(cat "$jd/pid")"
       : > "$jd/timedout"
       date +%s > "$jd/end"
+      note_red "$j"
       continue
     fi
     still="$still $j"

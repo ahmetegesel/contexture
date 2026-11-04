@@ -57,11 +57,16 @@ The data script answers the 35 record operations: 13 session (`create`, `list`, 
 `supersede`, `drop`, `get`, `list`), and 4 lane (`create`, `record`, `write_report`,
 `get`), plus `search.query`. `capability` and `storage.health` stay the driver's.
 
-The reads fetch the unit's artifacts by `store.list <namespace> "<unit>/"` and
-`store.get`; the all-unit reads (`session.list`, `session.units`, `session.refs_to`) read
-every unit's state (the listing also its journal) and the cross-unit reads
-(`session.load`, `session.refload`) read the named units' state, backlog, knowledge, and
-journal. The scan is not the record's read path.
+The reads of one unit fetch the exact keys with `store.get` (state, then the named
+backlog, journal, and knowledge), no list: a part the store does not hold is absent, and
+the unit's absence is the same `ERR_ENTITY_NOT_FOUND` line the held probe answered. Only
+the lane reads and `search.query` take `store.list <namespace> "<unit>/"` to discover the
+lane artifacts, and the all-unit reads (`session.list`, `session.units`, `session.refs_to`)
+read every unit's state (the listing also its journal, resolved in one pass); the
+cross-unit reads (`session.load`, `session.refload`) read the named units' state,
+backlog, knowledge, and journal. `session.load` reads the state once, captures its
+ref_sessions, then adds the parts without a second state read. The scan is not the
+record's read path.
 
 A write fetches under the unit lock (`.contexture/tmp/locks/<unit>.lock`, the same path the
 posix driver uses), stages the changed artifacts with the record engine, and lands them

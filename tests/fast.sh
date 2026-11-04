@@ -12,7 +12,8 @@
 #   unit-data [posix|fts5]  the full record compliance through the unit data script on
 #                    one driver (default posix; the fts5 half stays for pre-land)
 #   driver posix     the unit-data smoke, store compliance, and the session suite on posix
-#   driver fts5      the storage-fts5 plugin's own driver and store compliance
+#   driver fts5      the record compliance through the data script on fts5 and the
+#                    storage-fts5 plugin's own store compliance
 #   fuzz             the differential fuzzers: store-fuzz and record-fuzz (skip 77
 #                    without sqlite3)
 #   module           the package overlay installer suite (module-tests.sh)
@@ -37,7 +38,8 @@ usage: tests/fast.sh <area> [<arg>]
   unit-data [posix|fts5]  the full record compliance through the unit data script on
                    one driver (default posix; the fts5 half stays for pre-land)
   driver posix     the unit-data smoke, store compliance, and the session suite on posix
-  driver fts5      the storage-fts5 plugin's own driver and store compliance
+  driver fts5      the record compliance through the data script on fts5 and the
+                   storage-fts5 plugin's own store compliance
   fuzz             the differential fuzzers: store-fuzz and record-fuzz (skip 77
                    without sqlite3)
   module           the package overlay installer suite (module-tests.sh)
@@ -145,7 +147,7 @@ case "${1:-}" in
         ;;
       fts5)
         AREA="driver fts5"
-        run_suite "storage-fts5 test-driver.sh" sh "$ROOT/plugins/storage-fts5/tests/test-driver.sh"
+        run_suite "unit-data-tests.sh (record compliance through the data script, fts5)" sh "$ROOT/tests/unit-data-tests.sh" "--driver=fts5"
         run_suite "storage-fts5 test-store-compliance.sh" sh "$ROOT/plugins/storage-fts5/tests/test-store-compliance.sh"
         ;;
       *)

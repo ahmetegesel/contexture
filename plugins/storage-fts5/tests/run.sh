@@ -1,9 +1,10 @@
 #!/usr/bin/env sh
 # storage-fts5 plugin suite: the named runner for tests/.
-# Suites: test-driver, test-schema, test-version, test-store, test-store-compliance
-# (each needs sqlite3).
+# Suites: test-schema, test-version, test-store, test-store-compliance (each needs
+# sqlite3). The record compliance through the unit module data script runs once per
+# driver in the gate's core:unit-data-tests.sh:fts5 job, so it is not rerun here.
 # A suite missing a need prints "SKIP: <need>" and exits 77.
-# The five sub-suites are hermetic, so they run concurrently with a cap of 3; each
+# The four sub-suites are hermetic, so they run concurrently with a cap of 3; each
 # capture is printed in the fixed sub-suite order, keeping every verdict and counter.
 # Exit: 0 when no suite failed, 1 otherwise.
 
@@ -16,7 +17,7 @@ FAIL=0
 SKIP=0
 CAP=3
 
-printf 'storage-fts5 plugin suite: test-driver, test-schema, test-version, test-store, test-store-compliance\n'
+printf 'storage-fts5 plugin suite: test-schema, test-version, test-store, test-store-compliance\n'
 printf 'needs: sqlite3\n\n'
 
 tmp_root="${TMPDIR:-/tmp}"
@@ -25,7 +26,7 @@ if mkdir -p "$ROOT/.contexture/tmp" 2>/dev/null && [ -w "$ROOT/.contexture/tmp" 
 fi
 SB=$(mktemp -d "$tmp_root/storage-fts5-suite.XXXXXX") || exit 1
 running=""
-queue="test-driver test-schema test-version test-store test-store-compliance"
+queue="test-schema test-version test-store test-store-compliance"
 pids=""
 
 stop_all() { [ -n "$pids" ] && kill $pids 2>/dev/null; }
@@ -82,7 +83,6 @@ run_suite() {
   printf '\n'
 }
 
-run_suite test-driver
 run_suite test-schema
 run_suite test-version
 run_suite test-store

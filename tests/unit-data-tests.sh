@@ -67,13 +67,21 @@ if has_driver posix; then
   sh "$SCRIPT_DIR/storage-compliance.sh" --data=unit --driver=posix > "$T/compliance-posix.out" 2>&1
   _rc=$?
   a_eq "$(tail -n 2 "$T/compliance-posix.out" | head -n 1)" "storage-compliance: 66 passed, 0 failed" "posix: the 66 record cases pass through the data script"
-  [ "$_rc" -eq 0 ] || { printf '%s\n' "$(tail -n 5 "$T/compliance-posix.out")"; bad "posix: the compliance suite rc $_rc"; }
+  [ "$_rc" -eq 0 ] || {
+    printf '%s\n' "$(grep '^FAIL:' "$T/compliance-posix.out" | tail -n 5)"
+    printf '%s\n' "$(tail -n 5 "$T/compliance-posix.out")"
+    bad "posix: the compliance suite rc $_rc"
+  }
 fi
 if has_driver fts5; then
   sh "$SCRIPT_DIR/storage-compliance.sh" --data=unit --driver=fts5 > "$T/compliance-fts5.out" 2>&1
   _rc=$?
   a_eq "$(tail -n 2 "$T/compliance-fts5.out" | head -n 1)" "storage-compliance: 60 passed, 0 failed" "fts5: the 60 record cases pass through the data script"
-  [ "$_rc" -eq 0 ] || { printf '%s\n' "$(tail -n 5 "$T/compliance-fts5.out")"; bad "fts5: the compliance suite rc $_rc"; }
+  [ "$_rc" -eq 0 ] || {
+    printf '%s\n' "$(grep '^FAIL:' "$T/compliance-fts5.out" | tail -n 5)"
+    printf '%s\n' "$(tail -n 5 "$T/compliance-fts5.out")"
+    bad "fts5: the compliance suite rc $_rc"
+  }
 fi
 fi
 
