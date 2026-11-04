@@ -40,10 +40,10 @@ git archive <tag> base/ plugins/ | tar -x -C .adopt-contexture
 cp -R .adopt-contexture/base/. .
 cp -R .adopt-contexture/plugins .
 rm -rf .adopt-contexture
-chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
+chmod +x .contexture/ctx .contexture/laws/compose .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
 ```
 
-`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it. `plugins/` lands at the root as the catalog to install from.
+`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog to install from. `AGENTS.md` is the loader: run `sh .contexture/laws/compose` after the copy, and the loader verifies or recomposes the generated law layer `.contexture/laws/AGENTS.generated.md` at every boot.
 
 ### 2. Run the onboarding wizard
 
@@ -73,13 +73,14 @@ The workspace couples root governance with a dedicated convention drawer:
 
 ```text
 .
-├── AGENTS.md             Base laws and navigation pointers, delivered every turn
+├── AGENTS.md             The loader: compose then load the generated law layer, delivered every turn
 ├── AGENTS.workspace.md   Shared workspace overlay, tracked in git for team-wide rules
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
     ├── config            Optional workspace configuration (storage.driver: posix)
     ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
+    ├── laws/             The law layer: core.md the core source, compose the composer, AGENTS.generated.md the generated whole (built at install and boot; gitignored)
     ├── modules/          The standard module folders: unit (the record engine), run (stream filters), and workspace additions
     ├── extensions/       The package overlay root: modules/ for package feature modules (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression
@@ -166,13 +167,13 @@ The interaction toolbox is the typed semantic verbs (`task`, `record`, `entry`, 
 
 ## Maintaining contexture
 
-This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/unit,modules/run,modules/unit,extensions,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the store alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
+This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/run,modules/unit,extensions,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the store alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
 
 The dev loop:
 
 1. Edit `base/` directly: it is the shipping copy.
 2. Run the test pipeline (it stages the base runtime): `tests/run.sh`.
 3. Ship: docs sync, commit, push, and the annotated tag in one breath.
-4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched; it never removes a file either, so a payload path the release removed is deleted from the live drawer by hand (see [Adoption](docs/adoption.md)).
+4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root, then compose the law layer (`sh .contexture/laws/compose`). The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched; it never removes a file either, so a payload path the release removed is deleted from the live drawer by hand (see [Adoption](docs/adoption.md)).
 
 `plugins/` is the tracked catalog of packaged overlays, installed into a workspace when wanted (see [docs/plugins.md](docs/plugins.md)); `docs/adoption.md` carries the same loop beside the adopter's view.

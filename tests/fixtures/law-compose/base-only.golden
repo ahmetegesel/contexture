@@ -1,4 +1,4 @@
-# contexture v0.61.1: generated law layer; core cksum 1027188495-11759; sources 1250103398-27716; never edit
+# contexture v0.61.1: generated law layer; core cksum 1027188495-11759; sources 3627051814-28004; never edit
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
@@ -145,6 +145,7 @@
   - journal every dispatch: the subagent's lane slug
   branch/worktree: the recipe names the branch/worktree the subagent works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every subagent of the unit works there; the subagent's journal and report stay in the session folder
   landing: the dispatcher owns it: review the branch (or its PR), merge, remove the worktree, delete the branch; a subagent never merges or prunes
+  boundary-warning: every lane recipe and dispatch prompt carries the explicit rule: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach
   drift: an edit outside the declared roots, a code change without its journal line, or a command run raw without .contexture/ctx run, is drift
 
 @refresh

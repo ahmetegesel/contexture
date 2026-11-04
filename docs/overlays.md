@@ -48,13 +48,15 @@ Laws can be added the same way, through `@append @laws`:
   <slug>: <the rule, one statement>
 ```
 
-Each law reads `slug: statement`, and references to a law are `@laws#<slug>`. Slugs are unique across the merged base plus overlays, so a new law must not reuse a slug that already exists anywhere in the merge. A law added by an overlay binds exactly like the base's own. The laws themselves are covered on the engine page.
+Each law reads `slug: statement`, and references to a law are `@laws#<slug>`. Slugs are unique across the generated layer and both overlays, so a new law must not reuse a slug that already exists anywhere in the merge; the compose refuses a duplicate at boot. A law added by an overlay binds exactly like the base's own. The laws themselves are covered on the engine page.
 
 ## Precedence
 
-The order is simple: the base, then the workspace overlay, then your local file.
+The order is simple: the loader, then the generated law layer, then the workspace overlay, then your local file.
 
-At boot the agent reads `AGENTS.workspace.md` first, then `AGENTS.local.md`. Where the two conflict, the workspace's version wins and the local one is ignored, which is why the local file is described as yielding. Both sit below the laws: an overlay amends, it never overrides a guarantee the core carries. The boot order itself is open to amendment by an overlay, so overlays are read at the very start of boot.
+The loader composes or verifies `.contexture/laws/AGENTS.generated.md` and reads it whole; the generated layer carries the core laws plus the installed modules' laws and preambles. The workspace overlay then extends that layer, and the local file extends the workspace. Where the two overlays conflict, the workspace's version wins and the local one is ignored, which is why the local file is described as yielding. Both sit below the laws: an overlay amends, it never overrides a guarantee the core carries. The boot order itself is open to amendment by an overlay, so the overlays are read at the very start of boot.
+
+The generated layer is gitignored and never edited. In a parent workspace that whitelists `.contexture/`, one deny line for `.contexture/laws/AGENTS.generated.md` follows the whitelist, as the adoption page shows.
 
 ## Amend, never contradict
 
@@ -62,13 +64,13 @@ This is the one rule the overlays cannot negotiate:
 
 > Amend freely, never contradict. Extend a section or replace it; add rules where they fit. Nothing enforces this, which is why it is on you: the core carries the guarantees, and an overlay that contradicts a law silently breaks what depends on them.
 
-Nothing checks the overlays against the base, and that is deliberate. An invariant with two homes has none: restate a law's content in an overlay and you have created two copies that will drift, each looking locally correct while the seam rots. Do not restate the base; add only what the workspace adds. A local "skip verification" is a contradiction, not an amendment, and it fails quietly: the scripts and the boot still assume the guarantee, and the break surfaces later, somewhere else.
+Nothing checks an overlay's prose against the base, and that is deliberate; the compose checks one mechanical seam, the law slugs' uniqueness across the generated layer and both overlays. An invariant with two homes has none: restate a law's content in an overlay and you have created two copies that will drift, each looking locally correct while the seam rots. Do not restate the base; add only what the workspace adds. A local "skip verification" is a contradiction, not an amendment, and it fails quietly: the scripts and the boot still assume the guarantee, and the break surfaces later, somewhere else.
 
 ## When to use @replace
 
 Prefer `@append`. `@replace` is a last resort, for the rare section whose base shape genuinely does not fit the workspace.
 
-The reason is mechanical: a replaced base section still loads. `AGENTS.md` is delivered every turn, so the agent holds the base text and the overlay's replacement side by side; two versions of one section compete, and the agent may follow either. Performance degrades. When a replacement is unavoidable, re-check the replaced section after every sync, since the base text it stands in for may have changed. MAJOR updates in particular demand a review of the overlay. Contexture's own overlays use `@append` throughout; no live `@replace` exists in this repository.
+The reason is mechanical: a replaced generated section still loads. The loader is delivered every turn, and the generated layer and the overlays are boot reads; at boot the agent holds the generated text and the overlay's replacement side by side, so two versions of one section compete and the agent may follow either. Performance degrades. When a replacement is unavoidable, re-check the replaced section after every sync, since the base text it stands in for may have changed. MAJOR updates in particular demand a review of the overlay. Contexture's own overlays use `@append` throughout; no live `@replace` exists in this repository.
 
 ## Overlay life
 
@@ -76,7 +78,7 @@ Overlays are workspace-owned. A sync of the upstream base never rewrites them, a
 
 Tracking follows ownership. The workspace overlay is shared and tracked with the repository. The local file is personal; in standalone repositories most teams ignore it, and whether sessions and rhythms are tracked is a team choice made at onboarding. In parent meta-workspaces that whitelist shared files explicitly, `AGENTS.workspace.md` is on the list.
 
-Adoption is where the files begin: the onboarding flow proposes the workspace overlay and initializes the local one, then leaves you to grow them. The adoption page walks that flow.
+Adoption is where the files begin: the onboarding flow proposes the workspace overlay and initializes the local one, then leaves you to grow them. The adoption page walks that flow. An upgrade that moves rules into a module's laws file (the docs laws and their clauses, the lane clauses) removes their overlay copies: the boot compose refuses a duplicate law slug across the generated layer and both overlays, so an adopter deletes the old overlay block rather than keeping two homes.
 
 ## Worked examples
 

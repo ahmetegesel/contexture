@@ -45,12 +45,12 @@ The ctx interface is the only user/agent-facing surface: a package's verbs, its 
 
 1. Read the plugin's `README.md` whole: it carries the adoption flow, the plugin's needs, and the verification walk.
 2. Ensure the base is adopted; its `.contexture/package-install` and `.contexture/package-uninstall` do the work.
-3. On the human's go at the act, run the package's install from the workspace root: `sh plugins/<name>/install`. It reads the package `manifest` (summary, version, kind, parts, and the driver name for a driver package), overlays only the declared parts under `.contexture/extensions/`, records every installed path and its mode under `.contexture/extensions/.state/<name>.files` (with the law fragments the compose reads), refuses the collision classes and a payload path outside the declared parts, and runs the installed module folders' `install` part hooks after the record. A re-install of the recorded files is an update.
+3. On the human's go at the act, run the package's install from the workspace root: `sh plugins/<name>/install`. It reads the package `manifest` (summary, version, kind, parts, and the driver name for a driver package), overlays only the declared parts under `.contexture/extensions/`, records every installed path and its mode under `.contexture/extensions/.state/<name>.files` (with the law fragments the compose reads), refuses the collision classes and a payload path outside the declared parts, and runs the installed module folders' `install` part hooks after the record. The installer then recomposes the generated law layer (`.contexture/laws/compose`), since every package version and law fragment feeds its sources hash; a compose refusal surfaces loudly, never as a stale layer. A re-install of the recorded files is an update.
 4. Apply the reference material by hand: the seed goes in through `ctx docs write`; the root overlay fragments' laws live in the module's `laws` file.
 5. Declare the plugin's needs: install nothing the README does not name; a plugin's dependencies are its own, never the core's.
 6. Run the README's verification walk before any real work depends on the plugin.
 
-The plugin's `tests/` folder never lands in a workspace: tests live with the plugin, at the plugin root. Uninstall with `sh plugins/<name>/uninstall`: it runs the module `uninstall` part hooks, removes the unchanged recorded files, preserves and reports a file changed after install, and removes the record.
+The plugin's `tests/` folder never lands in a workspace: tests live with the plugin, at the plugin root. Uninstall with `sh plugins/<name>/uninstall`: it runs the module `uninstall` part hooks, removes the unchanged recorded files, preserves and reports a file changed after install, removes the record, and recomposes the generated law layer.
 
 A plugin installs into an existing setup the same way: the extension-root overlay installs into any adopted workspace, whenever it wants it.
 

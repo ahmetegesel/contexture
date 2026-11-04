@@ -8,7 +8,7 @@ A rhythm is a file your workspace owns. It lives in `.contexture/rhythms/`, igno
 
 Rhythms complement your harness's skills and features rather than replace them: skills add capability, rhythms add shape, and one can carry the other. Contexture owns two layers, the record and the process; your task skills run untouched unless they contradict one of the two. When nothing matches, the default design loop stands in.
 
-Placement matters as much as shape. Per-turn surfaces carry interaction rules only; work patterns are rhythm material, and a workflow written into AGENTS.md taxes every turn forever. The boot loads the trigger index; a rhythm's body loads when the rhythm is invoked.
+Placement matters as much as shape. Per-turn surfaces carry interaction rules only; work patterns are rhythm material, and a workflow written into the loader taxes every turn while one written into the generated law layer taxes every boot. The boot loads the trigger index; a rhythm's body loads when the rhythm is invoked.
 
 ## The grammar
 

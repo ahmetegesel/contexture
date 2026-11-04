@@ -34,7 +34,8 @@
 # update, files the new source drops are removed when unchanged and preserved
 # (and kept recorded) when changed. Part hooks run after the overlay and the
 # record, in module-name order. rc 2: no workspace or engine, a read-only
-# extension root (nothing is written), an I/O failure, or a failing part hook.
+# extension root (nothing is written), an I/O failure, a failing part hook, or a
+# failing compose (the overlay and its record are in place; the law layer is stale).
 set -u
 
 err() { printf 'package-install: %s\n' "$*" >&2; }
@@ -549,6 +550,14 @@ while IFS= read -r mname; do
   _hr=$?
   [ "$_hr" -eq 0 ] || die 2 "the '$mname' module's install hook failed (rc $_hr); the overlay and its record are in place"
 done < "$scratch/modules"
+
+# the law layer: every package version and law fragment feeds the generated layer's
+# sources hash, so recompose after the record lands and the hooks run; a boot then reads
+# the set this install just changed. An absent composer is an older core: nothing to do.
+compose=$ws_root/.contexture/laws/compose
+if [ -f "$compose" ]; then
+  ( cd "$ws_root" && sh "$compose" ) || die 2 "the law layer did not recompose; run .contexture/laws/compose and fix what it names (the overlay and its record are in place)"
+fi
 
 printf 'package-install: installed %s (%s) into .contexture/extensions (%s files: %s added, %s updated; %s stale removed, %s preserved)\n' \
   "$pkg_name" "$pkg_summary" "$((added + updated))" "$added" "$updated" "$stale_removed" "$stale_kept"

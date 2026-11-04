@@ -8,9 +8,9 @@ The division of labor is deliberate. The model does the work; the machinery hold
 
 ## The instruction files, delivered every turn
 
-A coding harness reads its repository instruction file before it acts. In a contexture workspace `AGENTS.md` is the loader: the only file guaranteed to be in front of the agent every turn, and deliberately a few lines. Its first instruction runs the compose (which composes or verifies the generated layer), then loads `.contexture/laws/AGENTS.generated.md` whole, then chains `AGENTS.workspace.md` and `AGENTS.local.md`.
+A coding harness reads its repository instruction file before it acts. In a contexture workspace `AGENTS.md` is the loader: the only file guaranteed to be in front of the agent every turn, and deliberately a few lines. Its first instruction runs the compose (which composes or verifies the generated layer), then loads `.contexture/laws/AGENTS.generated.md` whole, then chains `AGENTS.workspace.md` and `AGENTS.local.md`. An absent compose or core source is a broken payload: the instruction stops and names the missing path, never booting on a stale or partial layer.
 
-The four delivery files split by ownership. `AGENTS.md` is the base loader; the generated layer is the composed law set, the core law source plus the installed modules' preambles and clauses; the workspace overlay is the shared, tracked amendment; the local file is the personal amendment. The loader is the every-turn cost, under a kilobyte; the generated layer and the overlays are boot reads. The generated layer is gitignored and built at install and boot, never edited.
+The four delivery files split by ownership. `AGENTS.md` is the base loader; the generated layer is the composed law set, the core law source plus the installed modules' preambles and clauses; the workspace overlay is the shared, tracked amendment; the local file is the personal amendment. The loader is the every-turn cost, under a kilobyte; the generated layer and the overlays are boot reads. The generated layer is gitignored and built at install and boot, never edited. Measured at the v0.61.1 base: the three-file stack it replaces is 34,994 bytes every turn; the loader is 856 bytes, and the boot whole (the generated layer plus both overlays) measured 36,693 bytes with the docs module installed.
 
 The sections below are the blocks the generated layer carries, in the order the core law source fixes:
 
@@ -607,7 +607,7 @@ Placement follows the class of the file, never convenience:
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
 | live workspace | the untracked root: `AGENTS.md`, `.contexture/` (sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 

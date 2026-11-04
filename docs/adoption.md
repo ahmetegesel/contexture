@@ -4,7 +4,7 @@ contexture is a convention, not a tool: one commit, any harness, no dependencies
 
 ## Adoption in one breath
 
-What lands is a small set of plain files: `AGENTS.md` at the root and the `.contexture/` drawer beside it. Nothing is installed: no dependency, no service, no runtime. The files are the system. The plugin catalog is an optional addition, shipped with the same tag and installed into the extension root with the package installer when a workspace wants one of its overlays (the manual path below shows the install).
+What lands is a small set of plain files: `AGENTS.md` at the root and the `.contexture/` drawer beside it. Nothing is installed: no dependency, no service, no runtime. The files are the system. `AGENTS.md` is the loader: its first instruction composes the generated law layer, `.contexture/laws/AGENTS.generated.md`, from the core law source and the installed modules, then reads it whole; the laws live there, not in the loader. The plugin catalog is an optional addition, shipped with the same tag and installed into the extension root with the package installer when a workspace wants one of its overlays (the manual path below shows the install).
 
 Adoption is a procedure, not the convention. `.contexture/ONBOARDING.md` carries it, an agent runs it, and it is deleted when the adoption closes. What remains is the convention itself: the record and the process.
 
@@ -15,7 +15,7 @@ Either path ends the same way: name your first unit of work and the record start
 Point an agent at `.contexture/ONBOARDING.md`. It adopts the base alone, and the proposal phase gates twice: the agent stops and waits for you there. The plugin catalog is optional; the manual path below lands its reference copy, and each plugin's README carries its adoption through the package installer.
 
 1. ISOLATE: it creates a dedicated branch, never working on main, halts if the tree carries uncommitted changes, and bootstraps the adoption session. The record starts before the first edit, so the whole adoption history lands as it happens.
-2. ASSESS: it reads your instruction stack first and whole (the existing `AGENTS.md` and its derivations), then reads the base `AGENTS.md` and this project's README completely. It maps the convention's sections against your workspace one by one: what feeds each capability, what conflicts with it, what belongs there. Structure comes from listings; application code is out of scope; and it asks you what evidence cannot answer: resolutions, history, intent.
+2. ASSESS: it reads your instruction stack first and whole (the existing `AGENTS.md` and its derivations), then reads the generated law layer and this project's README completely. It maps the convention's sections against your workspace one by one: what feeds each capability, what conflicts with it, what belongs there. Structure comes from listings; application code is out of scope; and it asks you what evidence cannot answer: resolutions, history, intent.
 3. PROPOSE: it presents the installation plan in two gated segments (next section). Nothing is written before your verdict.
 4. EXECUTE: it lands the confirmed plan, running the default loop. Drift halts execution and re-confirms.
 5. VERIFY: it runs the boot query and the audit against the live record, then reviews `git status`, `git diff`, and the adoption record with you, ready for the PR.
@@ -33,10 +33,13 @@ git archive <tag> base/ plugins/ | tar -x -C .adopt-contexture
 cp -R .adopt-contexture/base/. .
 cp -R .adopt-contexture/plugins .
 rm -rf .adopt-contexture
-chmod +x .contexture/ctx .contexture/package-install .contexture/package-uninstall .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* plugins/*/install plugins/*/uninstall 2>/dev/null || true
+chmod +x .contexture/ctx .contexture/laws/compose .contexture/package-install .contexture/package-uninstall .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* plugins/*/install plugins/*/uninstall 2>/dev/null || true
+sh .contexture/laws/compose
 ```
 
 `base/` mirrors the target tree, so its content copies into place: `AGENTS.md` lands at the root, the drawer alongside it; `plugins/` lands at the root as the catalog to install from. The copy carries a semantic version: MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections or features, PATCH fixes wording. The installed version is the header line of `AGENTS.md`.
+
+The compose builds `.contexture/laws/AGENTS.generated.md` from the core law source, `.contexture/laws/core.md`, and the installed modules' laws. It is gitignored and never edited; the loader composes or verifies it at every boot, so a stale or absent layer cannot boot, and an absent compose or core source is a broken payload the agent stops on, naming the path.
 
 Then configure the choices the agent would have proposed: the gitignore posture for your topology, your overlays, and the harness symlinks. If no team rhythm emerged from your instruction stack, the starter-rhythms plugin is the starting set: install it on the human's go and edit the installed copies freely.
 
@@ -87,17 +90,20 @@ Parent workspace (multiple repositories, the workspace tracks convention configu
 !README.md
 !.contexture/
 !.contexture/**
+.contexture/laws/AGENTS.generated.md
 !CLAUDE.md
 !GEMINI.md
 ```
 
-The last two stand for the harness entry points you wire; keep only the ones in use. This repository keeps a stricter shape: its live root (the same `AGENTS.md` and `.contexture/`) is untracked working state, its agent-facing corpus is never committed (untracked working state at `docs/workspace/` under the files driver, the store alone under a store driver), and the shippable core is tracked mirrored under `base/` (see Payload classes and syncing).
+The generated law layer sits under the `.contexture/` whitelist, so the deny line re-ignores it: one deny line for `.contexture/laws/AGENTS.generated.md` follows any `.contexture/` whitelist. The last two stand for the harness entry points you wire; keep only the ones in use. This repository keeps a stricter shape: its live root (the same `AGENTS.md` and `.contexture/`) is untracked working state, its agent-facing corpus is never committed (untracked working state at `docs/workspace/` under the files driver, the store alone under a store driver), and the shippable core is tracked mirrored under `base/` (see Payload classes and syncing).
 
 ## Migration, overlays, symlinks
 
 Existing instruction files do not vanish; their project-specific rules move to overlays. Extract architecture, build and test commands, code style, and the rest from `AGENTS.md`, `CLAUDE.md`, or whatever the workspace uses, and place them in `AGENTS.workspace.md` under the appropriate blocks (`@append @laws`, and so on). Migration follows the destination, never the file list: the instruction stack guides the sweep, and the sweep covers what the stack misses: contributing guides, style and lint configs, CI rules, documentation conventions. Existing rules the convention supersedes are listed in the plan's `deletions` field; nothing disappears silently.
 
 Initialize `AGENTS.workspace.md` with the workspace versioning rules and `AGENTS.local.md` with local preferences. Amend freely, never contradict: the laws stand, and an overlay that breaks one silently breaks what depends on it. `@replace` is a last resort, since the replaced base text still loads and the agent can hold two versions of one section; prefer `@append`, and re-check replaced sections after every sync.
+
+The law layer moves some rules out of the overlays: the installed modules' laws compose into `.contexture/laws/AGENTS.generated.md`, and the overlays stay workspace-owned. When an existing overlay already carries a rule that now has a module home (the docs laws, the docs layout, boot, and close clauses, the lane clauses), remove the overlay copy at upgrade: the boot compose refuses a duplicate law slug across the generated layer and both overlays.
 
 For each harness file found during the assessment, or each active harness in use, wire the entry point as a symlink to the base file:
 
@@ -128,7 +134,7 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/` | installed into the extension root when wanted; shipped with every tag, never deleted at adoption close |
 | workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/` | never touched |
 
@@ -139,7 +145,8 @@ In this repository the live root (`AGENTS.md` and `.contexture/`) is untracked w
 1. Edit `base/` directly: it is the shipping copy.
 2. Ship: docs sync, commit, push, and the annotated tag in one breath.
 3. Apply: `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched. A copy adds and replaces files but never removes one: delete from the live drawer every payload path the release removed (`git diff --name-status --diff-filter=D <previous-tag> <tag> -- base/` lists them).
-4. Verify the live install: the boot load, the audit, and the ground check.
+4. Compose the law layer: `sh .contexture/laws/compose`. The generated layer is gitignored, never shipped, and rebuilt after any package or payload change; the first boot verifies or recomposes it too.
+5. Verify the live install: the boot load, the audit, and the ground check.
 
 ## Updating
 
@@ -152,7 +159,8 @@ The base evolves upstream, and updating is judgment, not a script: the changes a
 5. Decide: adopt now, migrate first, or wait.
 6. Copy the payload: `git archive <tag> base/ | tar -x --strip-components=1 -C <your-repo>`; the archive carries only payload paths, so workspace-owned paths are never touched. The archive adds and replaces files but never removes one, so delete every payload path the target tag no longer carries (`git diff --name-status --diff-filter=D <installed-tag> <tag> -- base/` lists them): v0.55.0, for one, removes the session verbs `append`, `amend`, `query`, `flip`, and `drop` and three posix driver awk files, and a removed verb file left behind still lists in `ctx unit help` though its call prints the replacement.
 7. Verify it: `git ls-tree -r --name-only <tag> -- base/` plus a `cmp` per file against the applied paths.
-8. Review the staged diff before committing; it shows you the changed base.
-9. Run your instruments against the result: the boot query, the audit, the ground check. After a MAJOR tag, review the overlay: its rules were written against the old shape.
+8. Compose the law layer: `sh .contexture/laws/compose`. The generated layer is gitignored, never shipped, and rebuilt after any package or payload change; a boot verifies or recomposes it too.
+9. Review the staged diff before committing; it shows you the changed base.
+10. Run your instruments against the result: the boot query, the audit, the ground check. After a MAJOR tag, review the overlay: its rules were written against the old shape, and the docs and lane clauses moved to the module laws (a duplicate slug refuses at boot).
 
 The payload applies cleanly, and your sessions, rhythms, tmp, and workspace modules are never touched; the classes hold on every update.

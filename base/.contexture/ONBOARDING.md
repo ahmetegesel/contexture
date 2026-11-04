@@ -23,7 +23,7 @@
     standalone repo: contains application code (src/, package.json, Cargo.toml, pyproject.toml, etc.)
     parent workspace: contains multiple independent repositories as subdirectories
   instruction stack first: the existing AGENTS.md and its derivations (CLAUDE.md, GEMINI.md, harness files) are the workspace's self-description: read them first and whole; they name the rules that matter and often where the rest live
-  know the convention whole: ONBOARDING is the procedure, not the convention: read the base AGENTS.md and the upstream README completely before mapping; fetch upstream, the URL lives in the base AGENTS.md's @update section, and the README carries the philosophy behind every judgment the mapping makes
+  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/laws/compose`, then read the loader, the generated law layer `.contexture/laws/AGENTS.generated.md`, and the upstream README completely before mapping; fetch upstream, the URL lives in the generated layer's @update section, and the README carries the philosophy behind every judgment the mapping makes
   map from the destination: walk the convention's sections one by one against the workspace's material: for each capability, what feeds it, what conflicts with it, what belongs there; migration follows the destination, never the file list
   governance: map every rule surface against the incoming convention; each contradicts, overlaps, or complements it, and the plan must resolve each one; the stack guides the sweep, the sweep covers what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions)
   reading budget: rule-bearing surfaces read whole, they are small and dense; structure is derived by listing, never by reading; application code is out of scope
@@ -66,7 +66,8 @@
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx unit task add`; the pointer moves via `.contexture/ctx unit next` (a task start writes it too: `.contexture/ctx unit task start`); every task's completion journals its receipt (`.contexture/ctx unit task complete`) and advances the pointer (`.contexture/ctx unit next`); drift updates the backlog in the same breath via `.contexture/ctx unit task update`
   base assets:
     copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
-    set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
+    set script permissions: `chmod +x .contexture/ctx .contexture/laws/compose .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
+    compose the law layer: `sh .contexture/laws/compose`; it builds `.contexture/laws/AGENTS.generated.md` from the core source and the installed modules, and the loader verifies or recomposes it at every boot
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
@@ -81,7 +82,9 @@
         !README.md
         !.contexture/
         !.contexture/**
+        .contexture/laws/AGENTS.generated.md
         (and active harness symlinks: !CLAUDE.md, !GEMINI.md)
+      one deny line for the generated law layer follows any .contexture whitelist: it is composed, gitignored, never edited
   migration:
     if existing AGENTS.md, CLAUDE.md, or other instruction files exist:
       extract project-specific guidelines (architecture, test/build commands, code style)
@@ -91,16 +94,17 @@
 
 @symlink
   strictly per the confirmed plan
-  wire harness entry points to base AGENTS.md:
+  wire harness entry points to AGENTS.md (the loader):
     for each existing harness file identified during assessment, or active harnesses in use (e.g. CLAUDE.md, GEMINI.md):
       replace or point entry file with symlink: `ln -s AGENTS.md <harness-file>`
     propose symlinks to human for any detected agent environments
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. run boot load: `.contexture/ctx unit load adopt-contexture` (read every page the map reports)
-  2. run audit: `.contexture/ctx unit audit adopt-contexture` (must exit 0)
-  3. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
+  1. verify the law layer: `sh .contexture/laws/compose --check` (the loader composes or verifies it at boot; an absent compose or core source is a broken payload, named loudly)
+  2. run boot load: `.contexture/ctx unit load adopt-contexture` (read every page the map reports)
+  3. run audit: `.contexture/ctx unit audit adopt-contexture` (must exit 0)
+  4. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
 
 @close
   delete .contexture/ONBOARDING.md once the adoption closes: adoption material, not the convention; remove any ONBOARDING gitignore whitelist line with it

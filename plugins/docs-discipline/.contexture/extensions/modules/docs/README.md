@@ -7,7 +7,7 @@ map: it is not linked from the workspace's boot, laws, or help.
 
 ## Layout
 
-The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the eight docs laws; `data` is the store declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; this README is off-path.
+The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the store declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; this README is off-path.
 
 | verb | engine |
 |---|---|

@@ -55,7 +55,7 @@ What lands where:
 |---|---|---|
 | `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the sixteen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed (ctx docs write) |
-| `AGENTS.workspace.md` | the overlay blocks: five docs laws, layout, boot, close | reference (the laws live in the module's laws file) |
+| `AGENTS.workspace.md` | retired: no root overlay fragment ships; the laws, layout, boot, and close live in the module's laws file | retired |
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
 | `docs/work.md` | the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW | reference (copy it into the workspace's own `.contexture/rhythms/` to own it; the starter-rhythms plugin owns the installed generic `work`) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
@@ -140,7 +140,7 @@ Render the findings to the human and ask for the go. Cover:
 
 - the topology and the docs mapping this implies;
 - the copy list (the module, its grammar riding inside it), the merge list (the
-  overlay blocks and the gitignore lines), and the seed list (the
+  gitignore lines), and the seed list (the
   conventions plus the first unit docs);
 - who owns the close gate: the gate runs when a unit closes, manually or via
   the adopter's own trigger;
@@ -178,10 +178,11 @@ into an existing file; `seed` means it is starting content to adapt; and
    `.contexture/extensions/rhythms/`; the starter-rhythms plugin owns the
    installed generic `work`, so the two packages never collide.
 
-3. Merge `AGENTS.workspace.md` into the workspace overlay (or copy the file
-   whole where none exists), and merge the gitignore lines below into
-   `.gitignore` where the tree denies by default. Skip any line the workspace
-   already allows (the contexture base normally allows AGENTS.md and
+3. Nothing merges into the workspace overlay: the docs laws and the layout,
+   boot, and close clauses ride the module's `laws` file, and the compose
+   composes them into the generated law layer. Merge the gitignore lines below
+   into `.gitignore` where the tree denies by default. Skip any line the
+   workspace already allows (the contexture base normally allows AGENTS.md and
    AGENTS.workspace.md).
 
    The corpus lines apply under the files driver, whose corpus is the files
@@ -959,7 +960,7 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | file | provenance |
 |---|---|
 | `README.md` | authored fresh for this plugin (reference only) |
-| `AGENTS.workspace.md` | neutralized from the workspace overlay this plugin was extracted from: the five docs laws, the trimmed layout, boot and close in ctx docs forms; no names, no unrelated laws |
+| `AGENTS.workspace.md` | retired: the module's `laws` file carries the docs laws and the layout, boot, and close clauses the compose reads |
 | `.contexture/extensions/modules/docs/module` | authored fresh: the module summary line |
 | `.contexture/extensions/modules/docs/scripts/audit` | authored fresh from the docs-query precedent: the help text moved into the `# summary`/`# usage`/`# help` declarations and delegation to `docs-audit.awk` over the corpus the IO helper resolved (a bare call reads the whole corpus) |
 | `.contexture/extensions/modules/docs/scripts/query` | reworked from the source CLI: the workspace root and the corpus from the IO helper (`CTX_ROOT`, the `DOCS_WORKSPACE_ROOT` override), the usage strings are ctx forms, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, an empty-corpus refusal, a no-match note on an empty projection, the help forms moved into the declarations, the free-text options exported to the engine's environment, and `--entry` through the edit engine |
