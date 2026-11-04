@@ -4,6 +4,22 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.61.1] - 2026-11-04
+
+PATCH: the unit module release's records and the header repair. The v0.61.0 tag carries the unit module, the clean cut to `ctx unit`, the contract 3 store-only drivers, and the fast test gate; its changelog section was omitted and its header left at v0.60.2. The v0.61.0 breaks, named here: a record-only driver refuses under contract 3; `ctx session` retires in favor of `ctx unit`; the fts5 store re-enters a fresh schema 5.
+
+### Added
+
+- The unit module at `base/.contexture/modules/unit`: the 35 record operations over the store's get, put, list, batch, and the extended search; the canonical render; the canonical refs resolved publicly through `ctx unit resolve` and `data_get`; the active listing; the 12 document-set rules; the legacy parse and the file-pointer exemption.
+- The contract 3 store-only desk: the seven store names in order, the record-only refusal, the fts5 schema 5, the capability and health as driver methods.
+- The clean cut: `ctx unit` with the 22 verbs, the base and root AGENTS at `ctx unit`, the docs and corpus reconciled, the session module retired.
+- The fast test gate: `GATE_JOBS=5` parallel jobs with the early-red notice, the data-script cost cut (the exact-key reads, the one-state load; the dbg-anchor load 1.546 s to 0.759 s, the 66-case posix 632 s to 453 s), the duplicate suites removed (the base-only nested compliance and the storage-fts5 test-driver), the record fuzzer, and the flakes hardened (the midnight dates derived from the artifacts, the lock retries, the KR tree kill).
+
+### Changed
+
+- The payload declaration gains `modules/unit` in place of `modules/session`; the governance and base-only checks follow.
+- The gate's timeout is 3600 s for the data mode; the fast loop runs the smoke, the unit-data half, or the affected suite.
+
 ## [0.60.2] - 2026-11-03
 
 PATCH: the core record-shape templates retire. The break: `base/.contexture/templates/` and its seven files leave the payload, so an adopter on v0.60.1 or earlier deletes `.contexture/templates` from the live drawer by hand; nothing at runtime read them, since the verbs write the shapes and the audit parses them. The release also repairs the AGENTS.md header that v0.60.1 left at v0.60.0.
