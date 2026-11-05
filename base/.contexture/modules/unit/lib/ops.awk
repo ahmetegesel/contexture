@@ -204,14 +204,27 @@ function open_threads(kj,   i, n) {
   return n
 }
 
-# active_listing_json(u): the UnitSummary fields, then the derived move (next_task null when
-# none), the open-thread count, the task count, the backlog presence, and last_event
-function active_listing_json(u,   kb, kj, nt, ns, j, i) {
+# st_active(u): the state's status reads exact ACTIVE after the same edge whitespace trim
+# the data script's active scan applies, so the answered derived fields match the units the
+# scan fetched
+function st_active(u,   s) {
+  s = ST[u, "status"]
+  sub(/^[ \t]+/, "", s)
+  sub(/[ \t\r]+$/, "", s)
+  return s == "ACTIVE"
+}
+
+# active_listing_json(u, active): the UnitSummary fields, then the derived move (next_task
+# null when none), the open-thread count, the task count, the backlog presence, and
+# last_event; a non-ACTIVE unit's artifacts are not read, so its derived fields are null,
+# never a false backlog_present or a zero count (the renderer prints ACTIVE units alone)
+function active_listing_json(u, aa,   kb, kj, nt, ns, j, i) {
   kb = u "|backlog"; kj = u "|journal"
+  j = state_json(u)
+  if (!aa) return substr(j, 1, length(j) - 1) ",\"next_task\":null,\"open_threads\":null,\"task_count\":null,\"backlog_present\":null,\"last_event\":null}"
   ns = 0
   for (i = 1; i <= NI[kb]; i++) if (IK[kb, i] == "task") ns++
   nt = active_task(kb)
-  j = state_json(u)
   return substr(j, 1, length(j) - 1) ",\"next_task\":" (nt ? "{\"slug\":" jstr(X[kb, nt, "slug"]) ",\"status\":" jstr(AT_STATUS) "}" : "null") ",\"open_threads\":" open_threads(kj) ",\"task_count\":" ns ",\"backlog_present\":" jbool(PRE[kb] != NULLV) ",\"last_event\":" jnull(last_event(kj)) "}"
 }
 
@@ -220,7 +233,7 @@ function f_session_active(   i, u) {
   for (i = 1; i <= NUNITS; i++) {
     u = UL[i]
     parse_unit(u, "backlog journal")
-    O((i > 1 ? "," : "") active_listing_json(u))
+    O((i > 1 ? "," : "") active_listing_json(u, st_active(u)))
   }
   answer("]}")
 }

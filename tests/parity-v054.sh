@@ -15,8 +15,8 @@
 # scaffolding, the order of an item's fields across labels, a block or a line for one value,
 # the quoting of WHAT, OBJECTIVE, REF, the spelling of a REFS list, a closer, an anchor, a
 # state key's continuation lines, a search result's snippet, the WRITE SCOPE line each load
-# page repeats) and keep every value and every line no field holds; --bytes compares the
-# bytes instead.
+# page repeats, the retired next_action field a state no longer holds) and keep every other
+# value and every line no field holds; --bytes compares the bytes instead.
 # A difference is allowed only by a named class; every other difference is the remainder:
 #   quote-layout  the query " (a double quote), whose matches are the quoting of the lines
 #   write-scope   with --bytes, a load whose only difference is the WRITE SCOPE line (D28)

@@ -25,7 +25,7 @@ laws              the record clauses: @record, @journal, @backlog, @query, @refr
                   @close, @handoff (the law compose fragment)
 data              the store declaration: namespace unit, root .contexture/sessions,
                   suffix .md, key <unit>/<path...>, changes false, the document rules
-scripts/<verb>    the 22 record verbs (sh), each sourcing lib/verb.sh
+scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
 scripts/data      the 35 record operations over the store (sh, private)
 lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
 lib/json.awk      the one flattener: a function's JSON answer to path=value lines
@@ -61,13 +61,14 @@ The reads of one unit fetch the exact keys with `store.get` (state, then the nam
 backlog, journal, and knowledge), no list: a part the store does not hold is absent, and
 the unit's absence is the same `ERR_ENTITY_NOT_FOUND` line the held probe answered. Only
 the lane reads and `search.query` take `store.list <namespace> "<unit>/"` to discover the
-lane artifacts, and the all-unit reads (`session.list`, `session.units`, `session.refs_to`)
-read every unit's state (the listing also its journal, resolved in one pass); the
-cross-unit reads (`session.load`, `session.refload`) read the named units' state,
-backlog, knowledge, and journal. `session.load` reads the state once, captures its
+lane artifacts, and the all-unit reads (`session.list`, `session.active`, `session.units`,
+`session.refs_to`) read every unit's state (the listing also its journal, resolved in one
+pass); the cross-unit reads (`session.load`, `session.refload`) read the named units'
+state, backlog, knowledge, and journal. `session.load` reads the state once, captures its
 ref_sessions, then adds the parts without a second state read. `session.active` reads
 every state, then each ACTIVE unit's backlog and journal, so the derived move and the
-open-thread count come from one data-script pass. The scan is not the record's read path.
+open-thread count come from one data-script pass; a non-ACTIVE unit answers its state
+fields alone, its derived fields null. The scan is not the record's read path.
 
 A write fetches under the unit lock (`.contexture/tmp/locks/<unit>.lock`, the same path the
 posix driver uses), stages the changed artifacts with the record engine, and lands them

@@ -22,7 +22,7 @@ In the POSIX baseline driver, these domains map to four files and the lanes fold
 
 | file | physical role in POSIX driver |
 |---|---|
-| `state.md` | state card: status, current anchor, objective, repos, refs |
+| `state.md` | state card: status, current anchor, objective, repos, ref_sessions |
 | `backlog.md` | task queue: multiline containers for description, criteria, details |
 | `journal.md` | event log: chronological entries stamped with anchor and thread |
 | `knowledge.md` | findings store: settled findings with references and summaries |
@@ -47,7 +47,7 @@ ref_sessions: [design-notes]
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference sessions mounted at boot; boot loads their knowledge and active journal.
 
-The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored on read and erased by the next state write; a new state never carries one.
+The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `active`, `units`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the store's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
 
 The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `ctx unit active` orders it newest first. A unit whose last item carries no date answers null, and lane journals never enter the derivation.
 

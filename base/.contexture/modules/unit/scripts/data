@@ -10,7 +10,8 @@
 # list, and batch, and the writes land all or none through one store.batch.
 #
 # The cross-unit reads use store.list with the per-unit key prefix; the active listing
-# (session.list) reads every unit's state and journal. The exact search is the record
+# (session.active) reads every unit's state, then each ACTIVE unit's backlog and journal;
+# session.list (the diagnose count) reads every unit's state and journal. The exact search is the record
 # rule over the canonical render (lib/search.awk); a ranked mode is the store's search
 # over the document-set schema, filtered to the unit and capped after the walk, its
 # default-document identity (the artifact key) mapped to the record id (the unit or the
