@@ -516,13 +516,13 @@ tc "TC74: a fresh store: session.list and storage.health answer store absent, no
 # ==============================================================================
 printf '\n== Suite 1: Session Lifecycle ==\n'
 UNIT="compliance-u1"
-U1STATE='{"unit":"compliance-u1","status":"ACTIVE","current_anchor":"A1","next_action":"backlog the first task","objective":"Compliance test session","repos":["alpha","beta"],"ref_sessions":null,"extra_fields":[],"extra_lines":[]}'
+U1STATE='{"unit":"compliance-u1","status":"ACTIVE","current_anchor":"A1","objective":"Compliance test session","repos":["alpha","beta"],"ref_sessions":null,"extra_fields":[],"extra_lines":[]}'
 
 # TC01: session.create answers the new unit's canonical state at A1
 kv objective "Compliance test session"; kl repos alpha beta; kv attention "compliance fixture"
 call session.create "$UNIT"
 answer; wantout "{\"unit\":\"compliance-u1\",\"state\":$U1STATE}"
-tc "TC01: session.create answers the unit's state at A1 with the default next_action"
+tc "TC01: session.create answers the unit's state at A1 with no stored pointer"
 
 # TC02: a second session.create refuses rc1 ERR_ENTITY_EXISTS and leaves the state whole
 kv objective "Duplicate session"; kv attention "again"
@@ -590,14 +590,14 @@ call task.get "$TUNIT" task-sample
 answer; wantout "{\"unit\":\"compliance-tasks\",\"task\":$T6}"
 tc "TC06: task.update replaces the given fields and keeps the rest"
 
-# TC07: task.start moves TODO to IN_PROGRESS and sets the default pointer
+# TC07: task.start moves TODO to IN_PROGRESS without writing the state
 call task.start "$TUNIT" task-sample
-answer; wantout '{"unit":"compliance-tasks","task":{"slug":"task-sample","status":"IN_PROGRESS","objective":"Updated task objective"},"next_action":"work active task: task-sample"}'
+answer; wantout '{"unit":"compliance-tasks","task":{"slug":"task-sample","status":"IN_PROGRESS","objective":"Updated task objective"}}'
 call task.get "$TUNIT" task-sample
 answer; wantv task.status '"IN_PROGRESS"'
 call session.load "$TUNIT"
-answer; wantv state.next_action '"work active task: task-sample"'
-tc "TC07: task.start answers IN_PROGRESS and next_action names the task"
+answer; wantv state.next_action ""
+tc "TC07: task.start answers IN_PROGRESS and writes no state pointer"
 
 # TC08: task.complete answers DONE and its receipt entry, which the journal lists
 kv evidence "Verified via automated test suite"; kv date "$DATE"
@@ -1016,12 +1016,12 @@ wantv "units.$_t80_null.last_event" null
 wantv "units.$_t80_entry.last_event" '"2026-09-27"'
 wantv "units.$_t80_stamp.last_event" '"2026-09-28"'
 wantv "units.$_t80_dateless.last_event" null
-wantkeys "units.$_t80_entry" "unit,status,current_anchor,next_action,objective,repos,ref_sessions,extra_fields,extra_lines,last_event"
+wantkeys "units.$_t80_entry" "unit,status,current_anchor,objective,repos,ref_sessions,extra_fields,extra_lines,last_event"
 _t80_units=$(vals units unit | tr ' ' '\n' | sed 's/^"//; s/"$//')
 _t80_sorted=$(printf '%s\n' "$_t80_units" | LC_ALL=C sort)
 [ "$_t80_units" = "$_t80_sorted" ] || miss "session.list units [$_t80_units] want the LC_ALL=C order [$_t80_sorted]"
 call session.units tc80-repo
-answer; wantv units.1.unit '"tc80-entry"'; wantkeys units.1 "unit,status,current_anchor,next_action,objective,repos,ref_sessions,extra_fields,extra_lines"
+answer; wantv units.1.unit '"tc80-entry"'; wantkeys units.1 "unit,status,current_anchor,objective,repos,ref_sessions,extra_fields,extra_lines"
 # a lane journal is never the unit's recency: a newer lane trace leaves the main date alone
 printf 'recency lane recipe\n' > "$SANDBOX/tc80-recipe.txt"
 doc "$SANDBOX/tc80-recipe.txt"
@@ -1041,9 +1041,8 @@ printf '\n== Suite 11: Uniform Answers ==\n'
 # TC34: task.list filters by TODO, IN_PROGRESS, DONE, and all
 call task.list "$TUNIT" all
 answer; wantout '{"unit":"compliance-tasks","tasks":[{"slug":"task-keeper","status":"TODO","objective":"Keeper objective"},{"slug":"task-sample","status":"TODO","objective":"Re-declared objective"}]}'
-kv pointer "work on task-keeper"
 call task.start "$TUNIT" task-keeper
-answer; wantv next_action '"work on task-keeper"'
+answer; wantv task.status '"IN_PROGRESS"'
 call task.list "$TUNIT" IN_PROGRESS
 answer; wantout '{"unit":"compliance-tasks","tasks":[{"slug":"task-keeper","status":"IN_PROGRESS","objective":"Keeper objective"}]}'
 call task.list "$TUNIT" TODO
@@ -1105,9 +1104,8 @@ tc "TC38: search.query answers one shape, honors --limit and --entity, refuses a
 # refuses naming the declared modes (every call names its mode: base refuses a search
 # without --mode before any call, end review item 2)
 EX=compliance-exact
-kv objective "exact fixture"; kl repos; kv attention plain; call session.create "$EX"; answer
+kv objective "exact fixture, find the Needle in the state"; kl repos; kv attention plain; call session.create "$EX"; answer
 call session.refs "$EX"; answer
-kv pointer "find the Needle in the state"; call session.next "$EX"; answer
 kv objective "a needle in the objective"; kv desc "a second NEEDLE line of the same task"; call task.add "$EX" t-one; answer
 kv objective "needlework, a substring"; call task.add "$EX" t-two; answer
 kv objective "no match here"; call task.add "$EX" t-three; answer
@@ -1328,7 +1326,7 @@ tc "TC81: the resolver keeps its own ERROR line as the one shape exception"
 # ==============================================================================
 printf '\n== Suite 13: Record Rules ==\n'
 
-# TC52: after session.close each of the 17 write functions refuses rc1 ERR_UNIT_CLOSED
+# TC52: after session.close each of the 16 write functions refuses rc1 ERR_UNIT_CLOSED
 # with inputs that would land on an ACTIVE unit, and nothing changes
 mk tc52-u; answer
 kv objective "open task"; call task.add tc52-u t52; answer
@@ -1345,7 +1343,6 @@ call finding.list tc52-u all; cp "$O" "$SANDBOX/t52-findings"
 call lane.get tc52-u l52 journal; cp "$O" "$SANDBOX/t52-lane"
 C52="unit 'tc52-u' is CLOSED; a closed unit takes no writes"
 kv date "$DATE"; call session.stamp tc52-u; refused 1 ERR_UNIT_CLOSED "$C52"
-kv pointer "closed"; call session.next tc52-u; refused 1 ERR_UNIT_CLOSED "$C52"
 call session.refs tc52-u; refused 1 ERR_UNIT_CLOSED "$C52"
 kv objective "new"; call task.add tc52-u t52b; refused 1 ERR_UNIT_CLOSED "$C52"
 kv objective "changed"; call task.update tc52-u t52; refused 1 ERR_UNIT_CLOSED "$C52"
@@ -1391,34 +1388,33 @@ t53 m-done-reopen; done53 m-done-reopen; answer
 call task.reopen tc53-u m-done-reopen; answer; wantv task.status '"TODO"'; st53 m-done-reopen TODO
 tc "TC53: the status move matrix: every allowed move lands, every other refuses ERR_INVALID_TRANSITION"
 
-# TC54: the pointer rule: after task.start or session.next, next_action names every
-# IN_PROGRESS task, else rc1 ERR_POINTER_INCOMPLETE and nothing written
-mk tc54-u; answer
-kv objective "first"; call task.add tc54-u tc54-first; answer
-kv objective "second"; call task.add tc54-u tc54-second; answer
-call task.start tc54-u tc54-first
-answer; wantv next_action '"work active task: tc54-first"'
-kv pointer "work on tc54-second"
-call task.start tc54-u tc54-second
-refused 1 ERR_POINTER_INCOMPLETE "next_action would not name IN_PROGRESS task(s): tc54-first"
-call task.get tc54-u tc54-second; answer; wantv task.status '"TODO"'
-call task.start tc54-u tc54-second
-refused 1 ERR_POINTER_INCOMPLETE "next_action would not name IN_PROGRESS task(s): tc54-first"
-kv pointer "something unrelated"
-call session.next tc54-u
-refused 1 ERR_POINTER_INCOMPLETE "next_action would not name IN_PROGRESS task(s): tc54-first"
-call session.load tc54-u; answer; wantv state.next_action '"work active task: tc54-first"'
-kv pointer "tc54-first then tc54-second"
-call task.start tc54-u tc54-second
-answer; wantv next_action '"tc54-first then tc54-second"'
-call session.load tc54-u; answer; wantv state.next_action '"tc54-first then tc54-second"'
-kv pointer "tc54-second alone"
-call session.next tc54-u
-refused 1 ERR_POINTER_INCOMPLETE "next_action would not name IN_PROGRESS task(s): tc54-first"
-kv pointer "both: tc54-first, tc54-second"
-call session.next tc54-u
-answer; wantout '{"unit":"tc54-u","next_action":"both: tc54-first, tc54-second"}'
-tc "TC54: task.start and session.next refuse a pointer that omits an IN_PROGRESS task"
+# TC54 (the unit data mode): the move is derived from the backlog: the first IN_PROGRESS
+# task, else the first TODO, with the open-thread count; no stored pointer enters
+if [ -n "${DATA_EXEC:-}" ]; then
+  mk tc54-u; answer
+  kv objective "todo before the active task"; call task.add tc54-u tc54-todo; answer
+  kv objective "first active"; call task.add tc54-u tc54-first; answer
+  kv objective "second active"; call task.add tc54-u tc54-second; answer
+  kv objective "done"; call task.add tc54-u tc54-done; answer
+  call task.start tc54-u tc54-first; answer
+  call task.start tc54-u tc54-second; answer
+  kv evidence "tc54 done"; kv date "$DATE"; call task.complete tc54-u tc54-done; answer
+  kv what "the open question"; kv thread "the human"; kv slug 2026-09-27-tc54-open; rec tc54-u 1790000540 "the open question" "the human"; answer
+  kv what "the resolved question"; kv thread "a lane"; kv slug 2026-09-27-tc54-resolved; rec tc54-u 1790000541 "the resolved question" "a lane"; answer
+  kv what "the answer"; kv thread none; kv closers.count 1; kcl 1 CLOSES done "answered" 2026-09-27-tc54-resolved
+  rec tc54-u 1790000542 "the answer"; answer
+  call session.active
+  answer
+  _t54=$(uidx tc54-u)
+  [ -n "$_t54" ] || miss "session.active holds no tc54-u"
+  wantv "units.$_t54.next_task.slug" '"tc54-first"'
+  wantv "units.$_t54.next_task.status" '"IN_PROGRESS"'
+  wantv "units.$_t54.open_threads" 1
+  wantv "units.$_t54.task_count" 4
+  wantv "units.$_t54.backlog_present" true
+  wantv "units.$_t54.next_action" ""
+fi
+tc "TC54: session.active derives the first IN_PROGRESS task and the open-thread count"
 
 # TC55: task.complete writes its receipt entry atomically: the receipt answers the slug,
 # the WHAT, thread none, the current anchor; entry.get of the slug equals it; a second
@@ -1442,8 +1438,8 @@ call session.audit tc55-u
 answer; wantout '{"unit":"tc55-u","clean":true,"findings":[],"open_threads":[]}'
 tc "TC55: task.complete writes its receipt; entry.get equals it; a same-day repeat takes -1"
 
-# TC56: task.drop answers its DROPPED receipt; the slug is gone and addable again; an
-# IN_PROGRESS task next_action names refuses ERR_INVALID_TRANSITION
+# TC56: task.drop answers its DROPPED receipt; the slug is gone and addable again; any
+# IN_PROGRESS task refuses (reopen it first), TODO and DONE drop
 mk tc56-u; answer
 kv objective "to drop"; call task.add tc56-u tc56-t; answer
 kv reason "no longer needed"; kv date "$DATE"
@@ -1455,9 +1451,13 @@ kv objective "declared again"; call task.add tc56-u tc56-t; answer; wantv task.o
 call task.start tc56-u tc56-t; answer
 kv reason "in progress"; kv date "$DATE"
 call task.drop tc56-u tc56-t
-refused 1 ERR_INVALID_TRANSITION "task 'tc56-t' is IN_PROGRESS; task.drop moves only from TODO, DONE, or an IN_PROGRESS task next_action does not name"
+refused 1 ERR_INVALID_TRANSITION "task 'tc56-t' is IN_PROGRESS; task.drop moves only from TODO or DONE; reopen an IN_PROGRESS task before dropping it"
 call task.get tc56-u tc56-t; answer; wantv task.status '"IN_PROGRESS"'
-tc "TC56: task.drop answers its receipt; a dropped slug is addable again; the active task refuses"
+call task.reopen tc56-u tc56-t; answer; wantv task.status '"TODO"'
+kv reason "now droppable"; kv date "$DATE"
+call task.drop tc56-u tc56-t
+answer; wantv slug '"tc56-t"'
+tc "TC56: task.drop answers its receipt; a dropped slug is addable again; an active task refuses until reopened"
 
 # TC57 (posix alone: a repeated slug is legacy text only a hand-written file holds): X at
 # entries 1 and 5, a closer naming X at 3: the board holds the later occurrence, entry.get
@@ -1588,7 +1588,7 @@ kv objective "Only an objective"; call task.add "$VU" plain-task; answer
 kv objective "Completed in the walk"; call task.add "$VU" done-task; answer
 kv evidence "the walk verified it"; kv date "$DATE"; call task.complete "$VU" done-task; answer
 kv objective "Started in the walk"; call task.add "$VU" active-task; answer
-kv pointer "active-task IN_PROGRESS: the verb walk"; call task.start "$VU" active-task; answer
+call task.start "$VU" active-task; answer
 kv summary "$(printf 'a canonical finding\nover two lines')"; kl refs "journal#2026-09-27-verb-one"; call finding.add "$VU" VERB_CANON; answer
 kv summary "the older reading"; call finding.add "$VU" VERB_OLD; answer
 kv summary "the newer reading"; kv reason "replaced by the walk"; call finding.supersede "$VU" VERB_OLD VERB_NEW; answer
@@ -1640,13 +1640,13 @@ answer; wantout "{\"unit\":\"tc63-clean\",\"clean\":true,\"findings\":[],\"open_
 tc "TC63: each record check a verb-built unit can carry yields exactly its finding; a clean unit answers its open threads"
 
 # TC77 (posix alone: the functions refuse to write these shapes, so only a hand-written
-# file holds them): a closer naming an entry the journal lacks, a DONE task without its
-# receipt, an IN_PROGRESS task the state does not name each yield exactly their finding
+# file holds them): a closer naming an entry the journal lacks and a DONE task without its
+# receipt each yield exactly their finding; the old IN_PROGRESS-absent check retired with
+# the stored pointer
 if [ "$IS_POSIX" -eq 1 ]; then
   plant tc63-dangling; wantaudit tc63-dangling DANGLING_CLOSER 2026-09-20-closer-a 7 '"2026-09-19-absent-target"'
   plant tc63-done; wantaudit tc63-done DONE_WITHOUT_EVENT t-done null null
-  plant tc63-inprogress; wantaudit tc63-inprogress IN_PROGRESS_ABSENT_FROM_STATE t-active null null
-  tc "TC77: the record checks only legacy text carries (a dangling closer, DONE without its event, IN_PROGRESS absent from the state) yield exactly their finding"
+  tc "TC77: the record checks only legacy text carries (a dangling closer, DONE without its event) yield exactly their finding"
 fi
 
 # TC64 (posix alone: broken text only a hand-written file holds): the posix grammar
@@ -1708,14 +1708,13 @@ kv objective "Unit a of three"; kl repos tc67-alpha tc67-beta; kv attention "tc6
 kv objective "Unit b of three"; kl repos tc67-beta; kv attention "tc67-b fixture"; call session.create tc67-b; answer
 call session.refs tc67-a tc67-c; answer
 call session.refs tc67-b tc67-a tc67-c; answer
-kv pointer "closed unit b"; call session.next tc67-b; answer
 call session.close tc67-b; answer; wantv status '"CLOSED"'
 call session.list
 answer
 _t67_known=$(awk 'index($0, "units.") == 1 { k = $0; sub(/=.*$/, "", k); if (k ~ /^units\.[0-9]+\.repos\.[0-9]+$/) print substr($0, length(k) + 2) }' "$F" | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')
 call session.units tc67-beta
 answer; wantv repo '"tc67-beta"'; wantvals units unit '"tc67-a" "tc67-b"'
-wantv units.1 '{unit,status,current_anchor,next_action,objective,repos,ref_sessions,extra_fields,extra_lines}'
+wantv units.1 '{unit,status,current_anchor,objective,repos,ref_sessions,extra_fields,extra_lines}'
 wantvals units status '"ACTIVE" "CLOSED"'; wantvals units.1.repos "" '"tc67-alpha" "tc67-beta"'; wantvals units.2.ref_sessions "" '"tc67-a" "tc67-c"'
 wantvals known_repos "" "$_t67_known"
 case " $_t67_known " in *' "tc67-alpha" "tc67-beta" "tc67-gamma" '*) ;; *) miss "known repos [$_t67_known]" ;; esac

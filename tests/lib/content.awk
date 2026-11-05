@@ -19,8 +19,8 @@
 #     hyphen or a parenthesis, the reason to its last closing parenthesis), an anchor head
 #     in the stamp form its anchor, continues, and attention; a task without STATUS reads TODO
 #   * the other lines kept as they are, but a state key line ("<key>: <value>" at any
-#     indent) with its continuation lines (a deeper indent) one value: next_action and
-#     objective unquoted, repos and ref_sessions lists
+#     indent) with its continuation lines (a deeper indent) one value: objective
+#     unquoted, repos and ref_sessions lists, a legacy next_action dropped
 #   * VIEW=search: a result line keeps its entity and section, never its snippet (the first
 #     matching line of an entity follows its field order, which is layout)
 # The environment: VIEW (optional). BWK awk, mawk, gawk, busybox; the C locale.
@@ -154,7 +154,8 @@ function item_flush(   h, w, id, rest, i, j, t, lab, v, first, last, m, key, n, 
 function key_flush(   k, v) {
   if (KEYK == "") return
   k = KEYK; v = KEYV
-  if (k == "next_action" || k == "objective") v = unq(v)
+  if (k == "next_action") { KEYK = ""; return }
+  if (k == "objective") v = unq(v)
   else if (k == "repos" || k == "ref_sessions") v = listnorm(v)
   print "K\t" esc(k) "\t" esc(v)
   KEYK = ""

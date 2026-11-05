@@ -3,8 +3,8 @@
 # exactly one function per record act, and renders the answer with lib/json.awk (the one
 # flattener) and lib/render.awk (the one renderer). No verb reads or writes a record
 # artifact itself: the record's 35 operations are the unit module data script's over the
-# configured store, and its record rules (a CLOSED unit, a repeated key, the status moves,
-# the pointer rule) are the module's; capability and storage.health stay the driver's,
+# configured store, and its record rules (a CLOSED unit, a repeated key, the status
+# moves) are the module's; capability and storage.health stay the driver's,
 # reached through the storage core's resolver. A refusal passes through as its one fixed
 # stderr line with its rc.
 #

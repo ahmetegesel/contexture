@@ -11,7 +11,7 @@
 # The sequence is a Lehmer LCG over the seed, so the run is reproducible on every awk;
 # the payloads cover one-line and two-line values, quotes, backslashes, multibyte text,
 # canonical and legacy refs, a file pointer, entry closers, task transitions, finding
-# supersession, lane entries and reports, stamps, and pointers. A fixed preamble and a
+# supersession, lane entries and reports, stamps, and refs. A fixed preamble and a
 # final close/reopen lead and tail the random steps, and the final read pass gets every
 # artifact kind and three exact searches, so a run that lands nothing reads as an
 # instrument blind, never as SAME.
@@ -150,7 +150,7 @@ gen_sequence() { # <calls> > <file>
         } else if (r < 99) {
           printf "lane.write_report|%s|l1|%d|\n", u, pick(3)
         } else {
-          printf "session.next|%s|-|%d|\n", u, pick(3)
+          printf "session.refs|%s|%s|%d|\n", u, (u == "u1" ? "u2" : "u1"), pick(3)
         }
       }
     }'
@@ -257,13 +257,6 @@ fz_payload() { # <side> <n> <unit> <kind> <variant> <step> [<extra>]
     lane.write_report)
       printf 'a needle lane report %s\n' "$fp_v" > "$fp_out"
       ;;
-    session.next)
-      case "$fp_v" in
-        1) printf 'pointer=work active task: t1\n' ;;
-        2) printf 'pointer=work active task: t2\n' ;;
-        3) printf 'pointer=continue the fuzz\n' ;;
-      esac > "$fp_out"
-      ;;
     session.stamp)
       printf 'date=2026-11-03\n' > "$fp_out"
       ;;
@@ -369,10 +362,6 @@ fz_replay() { # <side> <sequence file>
       lane.write_report)
         fz_payload "$FR_SIDE" "$FR_N" "$FR_UNIT" lane.write_report "$FR_VAR" "$FR_STEP"
         fz_call "$FR_SIDE" "$FR_N" "$CAP/$FR_SIDE/$FR_N.in" lane.write_report "$FR_UNIT" "$FR_NAME"
-        ;;
-      session.next)
-        fz_payload "$FR_SIDE" "$FR_N" "$FR_UNIT" session.next "$FR_VAR" "$FR_STEP"
-        fz_call "$FR_SIDE" "$FR_N" "$CAP/$FR_SIDE/$FR_N.in" session.next "$FR_UNIT"
         ;;
       session.stamp)
         fz_payload "$FR_SIDE" "$FR_N" "$FR_UNIT" session.stamp "$FR_VAR" "$FR_STEP"

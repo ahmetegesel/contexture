@@ -102,19 +102,6 @@ function st_write(u,   k) {
   parse_state(u)
 }
 
-# ptr_missing(pointer, extra): the IN_PROGRESS tasks (and extra) the pointer omits, in
-# backlog order, joined by ", "
-function ptr_missing(p, extra,   kb, i, s, m) {
-  kb = U "|backlog"
-  m = ""
-  for (i = 1; i <= NI[kb]; i++) {
-    if (IK[kb, i] != "task") continue
-    s = X[kb, i, "slug"]
-    if ((X[kb, i, "status"] == "IN_PROGRESS" || s == extra) && index(p, s) == 0) m = m (m == "" ? "" : ", ") s
-  }
-  return m
-}
-
 # ---- the item writes ----
 function reparse(k,   key) {
   for (key in LASTOCC) if (index(key, k SUBSEP) == 1) delete LASTOCC[key]
@@ -163,7 +150,7 @@ function f_session_create(   R, nr, S, ob, att, k) {
   nr = recs_refs("repos", R)
   UNITS[U] = 1
   k = U "|state"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1
-  ed_splice(k, 1, 0, c_state("ACTIVE", "A1", "backlog the first task", ob, R, nr, 0, S, 0, "", ""))
+  ed_splice(k, 1, 0, c_state("ACTIVE", "A1", ob, R, nr, 0, S, 0, "", ""))
   parse_state(U)
   k = U "|backlog"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1
   stage(k)
@@ -188,6 +175,53 @@ function f_session_list(   u, first, n, i) {
   for (i = 1; i <= NUNITS; i++) { u = UL[i]; parse_state(u); n++ }
   O("{\"store\":" jstr(n > 0 ? "present" : "absent") ",\"units\":[")
   for (i = 1; i <= NUNITS; i++) O((i > 1 ? "," : "") unit_listing_json(UL[i]))
+  answer("]}")
+}
+
+# active_task(kb): the derived move: the first task in backlog order with exact
+# IN_PROGRESS, else the first with exact TODO; returns its index or 0, its status in
+# AT_STATUS; a DONE, legacy, or unknown status is never the move
+function active_task(kb,   i) {
+  AT_STATUS = NULLV
+  if (PRE[kb] == NULLV) return 0
+  for (i = 1; i <= NI[kb]; i++) {
+    if (IK[kb, i] != "task") continue
+    if (X[kb, i, "status"] == "IN_PROGRESS") { AT_STATUS = "IN_PROGRESS"; return i }
+  }
+  for (i = 1; i <= NI[kb]; i++) {
+    if (IK[kb, i] != "task") continue
+    if (X[kb, i, "status"] == "TODO") { AT_STATUS = "TODO"; return i }
+  }
+  return 0
+}
+
+# open_threads(kj): the board's open-thread rule over the main journal: a live entry whose
+# THREAD is set and not none; lane journals never enter
+function open_threads(kj,   i, n) {
+  n = 0
+  for (i = 1; i <= NI[kj]; i++)
+    if (IK[kj, i] == "entry" && CLBY[kj, i] == 0 && X[kj, i, "thread"] != NULLV && X[kj, i, "thread"] != "none") n++
+  return n
+}
+
+# active_listing_json(u): the UnitSummary fields, then the derived move (next_task null when
+# none), the open-thread count, the task count, the backlog presence, and last_event
+function active_listing_json(u,   kb, kj, nt, ns, j, i) {
+  kb = u "|backlog"; kj = u "|journal"
+  ns = 0
+  for (i = 1; i <= NI[kb]; i++) if (IK[kb, i] == "task") ns++
+  nt = active_task(kb)
+  j = state_json(u)
+  return substr(j, 1, length(j) - 1) ",\"next_task\":" (nt ? "{\"slug\":" jstr(X[kb, nt, "slug"]) ",\"status\":" jstr(AT_STATUS) "}" : "null") ",\"open_threads\":" open_threads(kj) ",\"task_count\":" ns ",\"backlog_present\":" jbool(PRE[kb] != NULLV) ",\"last_event\":" jnull(last_event(kj)) "}"
+}
+
+function f_session_active(   i, u) {
+  O("{\"store\":" jstr(NUNITS > 0 ? "present" : "absent") ",\"units\":[")
+  for (i = 1; i <= NUNITS; i++) {
+    u = UL[i]
+    parse_unit(u, "backlog journal")
+    O((i > 1 ? "," : "") active_listing_json(u))
+  }
   answer("]}")
 }
 
@@ -290,9 +324,6 @@ function audit_json(u,   kj, kb, i, j, c, t, s, owner, head, line, val, n, words
     for (j = 1; j <= DONEW[0] && !found; j++) if (index(DONEW[j], s) > 0) found = 1
     if (!found) af("DONE_WITHOUT_EVENT", "error", X[kb, i, "slug"], NULLV, NULLV, NULLV, NULLV)
   }
-  if (u in UNITS) for (i = 1; i <= NI[kb]; i++) {
-    if (IK[kb, i] == "task" && X[kb, i, "status"] == "IN_PROGRESS" && index(ST[u, "text"], X[kb, i, "slug"]) == 0) af("IN_PROGRESS_ABSENT_FROM_STATE", "error", X[kb, i, "slug"], NULLV, NULLV, NULLV, NULLV)
-  }
   for (i = 1; i <= NI[kj]; i++) {
     if (IK[kj, i] != "entry") continue
     s = X[kj, i, "slug"]
@@ -333,19 +364,6 @@ function f_session_stamp(   dt, ca, n, kj) {
   reparse(kj)
   stage(U "|state"); stage(kj)
   answer("{\"unit\":" jstr(U) ",\"previous_anchor\":" jstr(ca) ",\"current_anchor\":" jstr("A" n) ",\"receipt\":" anchor_json(kj, NI[kj]) "}")
-}
-
-function f_session_next(   p, m) {
-  parse_unit(U, "backlog")
-  not_closed()
-  need("pointer"); p = pv("pointer"); oneline("pointer", p)
-  if (!((U, "next_action") in SLINE)) die(2, "ERR_STORAGE_CORRUPT", "the state holds no next_action line")
-  m = ptr_missing(p, NULLV)
-  if (m != "") die(1, "ERR_POINTER_INCOMPLETE", "next_action would not name IN_PROGRESS task(s): " m)
-  ST[U, "next"] = p
-  st_write(U)
-  stage(U "|state")
-  answer("{\"unit\":" jstr(U) ",\"next_action\":" jstr(ST[U, "next"]) "}")
 }
 
 function f_session_refs(   n, i, r, R, o) {
@@ -453,22 +471,15 @@ function transition(kind, x, st, fn, allowed) {
   die(1, "ERR_INVALID_TRANSITION", kind " '" x "' is " st "; " fn " moves only from " allowed)
 }
 
-function f_task_start(   kb, s, i, p, m) {
+function f_task_start(   kb, s, i) {
   parse_unit(U, "backlog")
   not_closed()
   kb = U "|backlog"; s = ENVIRON["PX_A1"]
   if (!(i = find_task(kb, s))) nf("task", s)
   if (X[kb, i, "status"] != "TODO") transition("task", s, X[kb, i, "status"], "task.start", "TODO")
-  p = has("pointer") ? pv("pointer") : "work active task: " s
-  oneline("pointer", p)
-  if (!((U, "next_action") in SLINE)) die(2, "ERR_STORAGE_CORRUPT", "the state holds no next_action line")
-  m = ptr_missing(p, s)
-  if (m != "") die(1, "ERR_POINTER_INCOMPLETE", "next_action would not name IN_PROGRESS task(s): " m)
   task_status(kb, i, "IN_PROGRESS")
-  ST[U, "next"] = p
-  st_write(U)
-  stage(kb); stage(U "|state")
-  answer("{\"unit\":" jstr(U) ",\"task\":" taskitem_json(kb, find_task(kb, s)) ",\"next_action\":" jstr(ST[U, "next"]) "}")
+  stage(kb)
+  answer("{\"unit\":" jstr(U) ",\"task\":" taskitem_json(kb, find_task(kb, s)) "}")
 }
 
 # want_anchor: the state's current_anchor is A<N>, else the store is corrupt (the rule of
@@ -519,7 +530,7 @@ function f_task_drop(   kb, kj, s, i, rs, d, r) {
   not_closed()
   kb = U "|backlog"; kj = U "|journal"; s = ENVIRON["PX_A1"]
   if (!(i = find_task(kb, s))) nf("task", s)
-  if (X[kb, i, "status"] == "IN_PROGRESS" && index(ST[U, "next"], s) > 0) transition("task", s, "IN_PROGRESS", "task.drop", "TODO, DONE, or an IN_PROGRESS task next_action does not name")
+  if (X[kb, i, "status"] == "IN_PROGRESS") transition("task", s, "IN_PROGRESS", "task.drop", "TODO or DONE; reopen an IN_PROGRESS task before dropping it")
   need("date"); d = pv("date"); want_date(d)
   rs = has("reason") ? pv("reason") : "task dropped"
   oneline("reason", rs)
@@ -822,13 +833,13 @@ BEGIN {
   close(ENVIRON["PX_MAN"])
   if (FN == "session.create") f_session_create()
   else if (FN == "session.list") f_session_list()
+  else if (FN == "session.active") f_session_active()
   else if (FN == "state.refs") f_state_refs()
   else if (FN == "session.load") f_session_load()
   else if (FN == "session.refload") f_session_refload()
   else if (FN == "session.board") f_session_board()
   else if (FN == "session.audit") f_session_audit()
   else if (FN == "session.stamp") f_session_stamp()
-  else if (FN == "session.next") f_session_next()
   else if (FN == "session.refs") f_session_refs()
   else if (FN == "session.close") f_session_close()
   else if (FN == "session.reopen") f_session_reopen()

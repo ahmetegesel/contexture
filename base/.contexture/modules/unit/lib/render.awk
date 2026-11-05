@@ -144,9 +144,10 @@ function c_xf(p,   n, i, o) {
 
 function c_head(w, id, p) { return "@" w " " id (nul(D(p) "head_text") ? "" : " " sv(D(p) "head_text")) "\n" }
 
-# the state: its extra lines, the six keys, its extra keys (a value's later lines as stored)
+# the state: its extra lines, the five keys, its extra keys (a value's later lines as
+# stored); the next action is derived at presentation, never stored
 function c_state(p,   o, n, i) {
-  o = c_xl(p) "status: " sv(D(p) "status") "\ncurrent_anchor: " sv(D(p) "current_anchor") "\nnext_action: \"" sv(D(p) "next_action") "\"\nobjective: \"" sv(D(p) "objective") "\"\nrepos: [" list_join(D(p) "repos", ", ") "]\n"
+  o = c_xl(p) "status: " sv(D(p) "status") "\ncurrent_anchor: " sv(D(p) "current_anchor") "\nobjective: \"" sv(D(p) "objective") "\"\nrepos: [" list_join(D(p) "repos", ", ") "]\n"
   if (!nul(D(p) "ref_sessions")) o = o "ref_sessions: [" list_join(D(p) "ref_sessions", ", ") "]\n"
   n = nn(D(p) "extra_fields")
   for (i = 1; i <= n; i++) o = o sv(D(p) "extra_fields." i ".key") ": " sv(D(p) "extra_fields." i ".value") "\n"
@@ -246,7 +247,7 @@ function block(p, k,   t) {
 # and the indented lines after it until an empty line or the next column-0 line; the last
 # group of a key wins
 function st_groups(text, loose,   n, L, i, ln, cur) {
-  ST_status = ""; ST_anchor = ""; ST_nl = 0; ST_ol = 0; ST_repos = ""; ST_hasrepos = 0
+  ST_status = ""; ST_anchor = ""; ST_ol = 0; ST_repos = ""; ST_hasrepos = 0
   n = split(text, L, "\n")
   if (n > 0 && L[n] == "") n--
   cur = ""
@@ -261,8 +262,7 @@ function st_groups(text, loose,   n, L, i, ln, cur) {
     }
     if (ln ~ /^[ \t]*$/) { cur = ""; continue }
     if (ln ~ /^[ \t]/) {
-      if (cur == "next_action") { ST_nl++; ST_nxt[ST_nl] = ln }
-      else if (cur == "objective") { ST_ol++; ST_obj[ST_ol] = ln }
+      if (cur == "objective") { ST_ol++; ST_obj[ST_ol] = ln }
       continue
     }
     if (loose ? (ln ~ /^status:[ \t]*/) : (ln ~ /^status:[ \t]/)) {
@@ -273,10 +273,6 @@ function st_groups(text, loose,   n, L, i, ln, cur) {
     } else if (loose ? (ln ~ /^current_anchor:[ \t]*/) : (ln ~ /^current_anchor:[ \t]/)) {
       ST_anchor = ln
       cur = "current_anchor"
-    } else if (loose ? (ln ~ /^next_action:[ \t]*/) : (ln ~ /^next_action:[ \t]/)) {
-      ST_nl = 1
-      ST_nxt[1] = ln
-      cur = "next_action"
     } else if (loose && ln ~ /^objective:[ \t]*/) {
       ST_ol = 1
       ST_obj[1] = ln
@@ -460,7 +456,6 @@ function audit_line(p,   c, l, s, d, ln) {
   }
   if (c == "UNHARVESTED_KNOWLEDGE") return "UNHARVESTED KNOWLEDGE" ln ": " s
   if (c == "DONE_WITHOUT_EVENT") return "DONE WITHOUT EVENT (backlog/" s ": DONE): " s
-  if (c == "IN_PROGRESS_ABSENT_FROM_STATE") return "IN_PROGRESS ABSENT FROM STATE: " s
   if (c == "MISSING_THREAD") return "MISSING THREAD" ln ": " s " (declare THREAD: <what it awaits> | none)"
   return c ln ": " s
 }
@@ -508,8 +503,22 @@ function act_before(a, b,   da, db, ua, ub) {
 }
 
 # ------------------------------------------------------------------------------
-# active (kept): every ACTIVE unit newest last_event first, with its anchor, next_action,
-# and objective line groups and its last_event date when present
+# active_next(p): the pinned derived line: the first IN_PROGRESS task, else the first TODO,
+# with the open-thread count; the explicit no-work forms stay one line
+function active_next(p,   nt, th, bp, tc, s) {
+  nt = !nul(D(p) "next_task.slug")
+  th = V[D(p) "open_threads"] + 0
+  bp = bv(D(p) "backlog_present")
+  tc = V[D(p) "task_count"] + 0
+  if (!bp) s = "none (no backlog)"
+  else if (tc == 0) s = "none (empty backlog)"
+  else if (!nt) s = "none (no open task)"
+  else s = sv(D(p) "next_task.slug") " (" sv(D(p) "next_task.status") ")"
+  return "next: " s " | threads: " th
+}
+
+# active: every ACTIVE unit newest last_event first, with its anchor, the derived next line,
+# and objective line group, then its last_event date when present; a missing backlog warns
 function v_active(   n, i, p, k, m, j, v, nact, ntot, le) {
   n = nn("units")
   if (n == 0 && sv("store") == "absent") { line("no sessions yet"); return }
@@ -538,7 +547,8 @@ function v_active(   n, i, p, k, m, j, v, nact, ntot, le) {
     nact++
     line(sv(D(p) "unit"))
     if (ST_anchor != "") line("  " ST_anchor)
-    for (j = 1; j <= ST_nl; j++) line("  " ST_nxt[j])
+    if (!bv(D(p) "backlog_present")) warn("WARNING: missing backlog: unit " sv(D(p) "unit"))
+    line("  " active_next(p))
     for (j = 1; j <= ST_ol; j++) line("  " ST_obj[j])
     le = sv(D(p) "last_event")
     if (le != "") line("  last_event: " le)
@@ -547,8 +557,7 @@ function v_active(   n, i, p, k, m, j, v, nact, ntot, le) {
   line("closed: " (ntot - nact))
 }
 
-# units (the former query units): the units touching a repo with their anchor and
-# next_action line groups
+# units (the former query units): the units touching a repo with their anchor line group
 function v_units(   n, i, p, j, known) {
   n = nn("units")
   if (n == 0) fail("ERROR: no unit touches repo: " sv("repo") " (known: " list_join("known_repos", ", ") ")")
@@ -560,7 +569,6 @@ function v_units(   n, i, p, j, known) {
     st_groups(state_text(p), 0)
     line(sv(D(p) "unit") " " ((ST_status == "ACTIVE") ? "[ACTIVE]" : "[CLOSED]"))
     if (ST_anchor != "") line("  " ST_anchor)
-    for (j = 1; j <= ST_nl; j++) line("  " ST_nxt[j])
   }
 }
 

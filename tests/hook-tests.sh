@@ -7,7 +7,7 @@
 # It proves the six shipped points end to end: stamp (order, context, stdout
 # position), warn-continue at stamp, load-pre/load-post on the main form only,
 # the refs form firing none, refresh (board + audit + hooks), the refresh rc
-# semantics, task-landing from the typed task writes and next, close (with no
+# semantics, task-landing from the typed task writes, close (with no
 # refresh hooks), block mode stopping a point rc1, and the help surface hiding
 # the internal runner and the boot point.
 #
@@ -152,8 +152,9 @@ a_match "$(sed -n 3p marker.log)" "^FAIL zzz-refresh-block-fail point=refresh$" 
 a_match "$err" "hook blocked the point at refresh: zzz-block-refresh: 10-fail.sh" "S5b refresh block stderr"
 
 echo "== S6 task-landing gate =="
-# v0.55.0 (D34): the task-landing acts are the typed task writes and next; append, flip, and
-# amend retired, and task update fires none (amend's replacement)
+# v0.55.0 (D34): the task-landing acts are the typed task writes; append, flip, and amend
+# retired, task update fires none (amend's replacement), and next is retired with the stored
+# pointer, so it fires no hook.
 : > marker.log
 $CTX unit task add zz-unit fix-1 --objective="fixture task" --desc="fixture body" --criteria="fixture criterion" --details="fixture detail" >/dev/null
 a_eq "$?" "0" "S6 task add rc0"
@@ -161,14 +162,17 @@ a_eq "$(wc -l < marker.log | tr -d ' ')" "2" "S6 task-landing fires two hooks"
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=add slugs=fix-1 form=none page=none" "S6 add act+slugs context"
 a_eq "$(sed -n 2p marker.log)" "zz-task point=task-landing unit=zz-unit anchor=none act=add slugs=fix-1 form=none page=none" "S6 add zz module"
 : > marker.log
-$CTX unit next zz-unit "fix-1 is next" >/dev/null
-a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=next slugs=none form=none page=none" "S6 next act fires with empty slugs"
+next_out=$($CTX unit next zz-unit "fix-1 is next" 2>&1 >/dev/null); next_rc=$?
+a_eq "$next_rc" "1" "S6 next is retired rc1"
+a_match "$next_out" "ctx unit next retired: use active" "S6 next names its replacement"
+a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 next fires no task-landing hook"
 : > marker.log
 $CTX unit task start zz-unit fix-1 >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=start slugs=fix-1 form=none page=none" "S6 start act+slugs context"
 : > marker.log
-$CTX unit next zz-unit "fix-1 IN_PROGRESS: next names it" >/dev/null
-a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=next slugs=fix-1 form=none page=none" "S6 next act carries the IN_PROGRESS task"
+next_out=$($CTX unit next zz-unit "fix-1 IN_PROGRESS: next names it" 2>&1 >/dev/null)
+a_eq "$?" "1" "S6 next stays retired rc1"
+a_eq "$(wc -l < marker.log | tr -d ' ')" "0" "S6 next fires no hook for an IN_PROGRESS task"
 : > marker.log
 $CTX unit task complete zz-unit fix-1 --evidence="fixture evidence" >/dev/null
 a_eq "$(sed -n 1p marker.log)" "az-task point=task-landing unit=zz-unit anchor=none act=complete slugs=fix-1 form=none page=none" "S6 complete act+slugs context"

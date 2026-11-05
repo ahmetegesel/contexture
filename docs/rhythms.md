@@ -26,7 +26,7 @@ A rhythm is written in the same dialect as the artifacts: typed blocks at column
 
 `activation:` decides how the rhythm starts. `propose` is the default: the agent recognizes the trigger and proposes the rhythm before applying it, and the human confirms. `auto` is the team's explicit opt-in: the agent applies the rhythm on trigger without a separate ask. Either way, the acts inside still pass the interaction gates.
 
-Each step is one line, the form `N. GATE: outcome`. The gate names the point in order; the outcome says what must be true when it closes. Steps reference the workspace's artifacts by name (the state pointer, the backlog, the journal, the harvest); they never restate an artifact's grammar, and they never prescribe the content of the work. The shipped work example also carries an optional `ground:` line, naming where the standards live.
+Each step is one line, the form `N. GATE: outcome`. The gate names the point in order; the outcome says what must be true when it closes. Steps reference the workspace's artifacts by name (the state, the backlog, the journal, the harvest); they never restate an artifact's grammar, and they never prescribe the content of the work. The shipped work example also carries an optional `ground:` line, naming where the standards live.
 
 Keep the text minimal. A rhythm may carry as much as a skill would, but structured and denser than prose: typed blocks carry meaning per token, and prose is where misreadings live.
 
@@ -48,7 +48,7 @@ A rhythm with no `use when:` line prints `(missing)`; a rhythm with no `activati
 
 ## The invariant boundary
 
-A rhythm replaces task progression only. The artifact invariants hold across every rhythm: entries land as events happen, findings settle as decisions, tasks move in the backlog, the pointer advances, the harvest runs at boundaries. The record is not a rhythm's business: a rhythm never restates what the core already records, and extra recording rules belong to an overlay. The rhythm's own mark is one stamp: the entries that advance it carry `RHYTHM: <name> <N> <GATE>`, a label of the process in force, never a maintained field. The record checks the stamp against the named rhythm: the workspace's own `.contexture/rhythms/<name>.md` first, then the installed `.contexture/extensions/rhythms/<name>.md`, so an installed rhythm stamps without a workspace copy and a workspace copy shadows the installed one.
+A rhythm replaces task progression only. The artifact invariants hold across every rhythm: entries land as events happen, findings settle as decisions, tasks move in the backlog, the derived move advances with them, the harvest runs at boundaries. The record is not a rhythm's business: a rhythm never restates what the core already records, and extra recording rules belong to an overlay. The rhythm's own mark is one stamp: the entries that advance it carry `RHYTHM: <name> <N> <GATE>`, a label of the process in force, never a maintained field. The record checks the stamp against the named rhythm: the workspace's own `.contexture/rhythms/<name>.md` first, then the installed `.contexture/extensions/rhythms/<name>.md`, so an installed rhythm stamps without a workspace copy and a workspace copy shadows the installed one.
 
 Gate closures follow the same discipline. DECIDE closes by the backlog, VERIFY and LAND close by the completion receipt carrying its evidence, and REFRESH closes by the harvest. A gate closed by memory is debt.
 
@@ -65,9 +65,9 @@ When no rhythm is invoked, the agent runs the design loop:
 ```
 1. DISCUSS: explore the problem space; grounded questions resolve intent
 2. DECIDE: the human verdict settles the intent; the harvest candidate triggers
-3. BACKLOG: the intent updates backlog.md; next_action points at the active task
+3. BACKLOG: the intent updates backlog.md; the first IN_PROGRESS task, else the first TODO, is the move
 4. EXECUTE: work the active task; drift updates the backlog in the same breath
-5. VERIFY: the task's acceptance criteria are proven; the journal records completion, next_action advances
+5. VERIFY: the task's acceptance criteria are proven; the journal records completion, the backlog's derived move advances
 6. REFRESH: run @refresh
 ```
 

@@ -314,6 +314,40 @@ u_fetch_all() {
   fi
 }
 
+# u_active: the active listing's one fetch: every unit's state, then each ACTIVE unit's
+# backlog and journal; the state's first column-0 status line decides, the same typed key
+# the record parser reads, so no per-unit verb call enters the view
+u_active() {
+  FN=session.active
+  U_UNIT=""
+  u_manifest_reset
+  u_fetch_all 0
+  LC_ALL=C awk -F '	' '
+    $1 == "F" {
+      k = $2
+      if (k !~ /\|state$/) next
+      u = k; sub(/\|state$/, "", u)
+      st = ""
+      while ((getline line < $3) > 0) {
+        if (line ~ /^status:/) {
+          st = line
+          sub(/^status:[ 	]*/, "", st)
+          sub(/[ 	\r]+$/, "", st)
+          break
+        }
+      }
+      close($3)
+      if (st == "ACTIVE") print u
+    }' "$U_SCR/man" > "$U_SCR/active"
+  while IFS= read -r ua_u; do
+    [ -n "$ua_u" ] || continue
+    u_add_key "$ua_u|backlog" "$ua_u/backlog"
+    u_add_key "$ua_u|journal" "$ua_u/journal"
+  done < "$U_SCR/active"
+  u_awk
+  cat "$U_SCR/answer"
+}
+
 u_payload() {
   cat > "$U_SCR/pay" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the payload"
   U_PAY="$U_SCR/pay"
@@ -747,6 +781,10 @@ case "$cmd" in
     u_awk
     cat "$U_SCR/answer"
     ;;
+  session.active)
+    u_extra 0 "$@"
+    u_active
+    ;;
   session.load)
     u_extra 1 "$@"
     u_want_unit "${1:-}"
@@ -769,11 +807,6 @@ case "$cmd" in
     u_extra 1 "$@"
     u_want_unit "${1:-}"
     u_unit_call "$cmd" "$1" "journal" 1
-    ;;
-  session.next)
-    u_extra 1 "$@"
-    u_want_unit "${1:-}"
-    u_unit_call "$cmd" "$1" "backlog" 1
     ;;
   session.close)
     u_extra 1 "$@"

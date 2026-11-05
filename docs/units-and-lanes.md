@@ -18,14 +18,14 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 ```
 .contexture/sessions/<unit>/
-  state.md       the pointer: where the work stands
+  state.md       where the unit stands: status, anchor, objective, repos, mounts
   journal.md     the memory: what happened, append-only
   knowledge.md   what was settled, each with a reference
   backlog.md     the work declared ahead
   lanes/         dispatched work, one folder per subagent
 ```
 
-`state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the one next action, the objective, the repos it touches, and optional reference sessions (`ref_sessions`). Nothing else; detail lives behind references. It is a pointer, not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
+`state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the objective, the repos it touches, and optional reference sessions (`ref_sessions`). Nothing else; detail lives behind references. The next move is not stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first TODO). The state is not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
 
 `backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence (`ctx unit task complete`), and the completion receipt lands in the journal in the same write.
 
@@ -35,7 +35,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
 
 `lanes/` holds delegated work, one folder per dispatch; its own section follows.
 
-The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command; no one edits them by hand, and under the posix driver the driver is the only code that touches them. `state.md` is the pointer, refreshed as the work moves (`ctx unit stamp`, `next`, `refs`, `close`, `reopen`, and `task start`); `backlog.md` evolves in place as tasks move (`ctx unit task add`, `update`, `start`, `complete`, `reopen`, `drop`); `journal.md` only grows (`ctx unit record`, the receipts `task complete` and `task drop` write, the anchors `stamp` appends), which is why it survives every compaction intact; `knowledge.md` changes through `ctx unit finding` (add, update, supersede, drop).
+The record files share one design rule: each is written as a creation act, never as a maintenance sweep, and each write rides its command; no one edits them by hand, and under the posix driver the driver is the only code that touches them. `state.md` is refreshed as the work moves (`ctx unit stamp`, `refs`, `close`, `reopen`); `backlog.md` evolves in place as tasks move (`ctx unit task add`, `update`, `start`, `complete`, `reopen`, `drop`); `journal.md` only grows (`ctx unit record`, the receipts `task complete` and `task drop` write, the anchors `stamp` appends), which is why it survives every compaction intact; `knowledge.md` changes through `ctx unit finding` (add, update, supersede, drop).
 
 ## The unit's life
 
@@ -70,13 +70,13 @@ The first thing the agent does in a fresh context, mechanically:
    ```bash
    .contexture/ctx unit stamp <unit>
    ```
-9. Continue from `next_action`, following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
+9. Continue from the backlog's derived move (the first `IN_PROGRESS` task, else the first `TODO`; `ctx unit active` prints it), following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
 
-New work bootstraps a unit instead of joining one: run `.contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]`; the storage driver creates the unit whole (the state pointer at A1 with its folded first anchor, an empty backlog and knowledge), and the verb prints the state and the next move; then continue at step 6.
+New work bootstraps a unit instead of joining one: run `.contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]`; the storage driver creates the unit whole (the state at A1 with its folded first anchor, an empty backlog and knowledge), and the verb prints the state and the first-task reminder; then continue at step 6.
 
 ### Refresh
 
-The artifact sweep, shared by rhythm boundaries, close, and handoff: the events journaled, the backlog statuses advanced, `next_action` refreshed in state (one terse pointer, overwritten never prepended), the harvest run over every open flag (one candidate each; a candidate that meets the bar lands in knowledge and its entry closes by reference; one that does not drops), and the journal audit run. It keeps the record current mid-flight, so nothing waits for the period end.
+The artifact sweep, shared by rhythm boundaries, close, and handoff: the events journaled, the backlog statuses advanced, the derived move read from the backlog, the harvest run over every open flag (one candidate each; a candidate that meets the bar lands in knowledge and its entry closes by reference; one that does not drops), and the journal audit run. It keeps the record current mid-flight, so nothing waits for the period end.
 
 ### Close
 
@@ -93,7 +93,7 @@ Boot is the reader; handoff is the writer's proof. Both run against the same rec
 
 ## The field
 
-Several units can be active at once. The field is what a boot sees: every unit whose state says ACTIVE, ordered newest `last_event` first (the date the last main-journal item carries, an anchor's stamp date or a dated entry slug), with a bytewise unit tie-break and undated units last. Each unit renders its slug, anchor, next action, and objective, then its `last_event` date when known.
+Several units can be active at once. The field is what a boot sees: every unit whose state says ACTIVE, ordered newest `last_event` first (the date the last main-journal item carries, an anchor's stamp date or a dated entry slug), with a bytewise unit tie-break and undated units last. Each unit renders its slug, anchor, the derived next line (the first IN_PROGRESS task, else the first TODO, with the open-thread count), and its objective, then its `last_event` date when known.
 
 The opening message is the primary signal; the field is the cross-check. The agent reads the message against the candidates, proposes its pick (continue this one, or bootstrap a new one), and waits for the human's word. A sweep of the folders before knowing the ask spends context on irrelevant text; matching the message first and verifying with one grep is the boot's order.
 

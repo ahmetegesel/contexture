@@ -14,7 +14,7 @@ top README.
 
 The engine discovers `.contexture/modules/unit/`, reads the summary for `ctx help`, and
 builds the verb table from `scripts/*`: an extension-less file with a `# summary:` header
-is a verb. `scripts/data` carries no summary and is private; the 22 verbs are the record's
+is a verb. `scripts/data` carries no summary and is private; the 21 verbs are the record's
 public surface, and `ctx session` is retired (a line naming `ctx unit`).
 
 ## Layout
@@ -50,8 +50,8 @@ current file shapes, so the record order, the preambles, the anchors, the opaque
 the legacy shapes, and the positional liveness survive unchanged. The store is the
 configured driver; the module never names it.
 
-The data script answers the 35 record operations: 13 session (`create`, `list`, `load`,
-`refload`, `board`, `audit`, `stamp`, `next`, `refs`, `close`, `reopen`, `units`,
+The data script answers the 35 record operations: 13 session (`create`, `list`, `active`, `load`,
+`refload`, `board`, `audit`, `stamp`, `refs`, `close`, `reopen`, `units`,
 `refs_to`), 8 task (`add`, `update`, `start`, `complete`, `reopen`, `drop`, `list`,
 `get`), 4 entry (`record`, `get`, `list`, `closure`), 6 finding (`add`, `update`,
 `supersede`, `drop`, `get`, `list`), and 4 lane (`create`, `record`, `write_report`,
@@ -65,13 +65,15 @@ lane artifacts, and the all-unit reads (`session.list`, `session.units`, `sessio
 read every unit's state (the listing also its journal, resolved in one pass); the
 cross-unit reads (`session.load`, `session.refload`) read the named units' state,
 backlog, knowledge, and journal. `session.load` reads the state once, captures its
-ref_sessions, then adds the parts without a second state read. The scan is not the
-record's read path.
+ref_sessions, then adds the parts without a second state read. `session.active` reads
+every state, then each ACTIVE unit's backlog and journal, so the derived move and the
+open-thread count come from one data-script pass. The scan is not the record's read path.
 
 A write fetches under the unit lock (`.contexture/tmp/locks/<unit>.lock`, the same path the
 posix driver uses), stages the changed artifacts with the record engine, and lands them
 through one `store.batch`, all or none. The multi-key writes are the batch's: `session.create`
-the four fresh artifacts, `task.start` the backlog and the state, `task.complete` and
+the four fresh artifacts, `task.start` the backlog alone (the state no longer holds a
+next action), `task.complete` and
 `task.drop` the backlog and the journal, `session.stamp` the state and the journal,
 `lane.create` the recipe and the lane journal, `lane.record` the lane journal. The store's namespace-scope batch lock
 serializes the batches; the unit lock serializes the read to the commit, the single-user

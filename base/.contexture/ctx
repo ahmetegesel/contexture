@@ -29,8 +29,8 @@
 # directory without a module file warns and skips; a directory with neither
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
 # Reserved names are the unit verb set plus refresh, run, hooks, and the
-# verbs retired in v0.55.0 (append, amend, query, flip, drop, which print their
-# replacement); the builtin unit and run are allowed. A duplicate verb shadows: first file name
+# retired record verbs (append, amend, query, flip, drop, next, which print
+# their replacement); the builtin unit and run are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
 # ctx help --all, ctx <module> help, ctx <module> help <verb>, and bare
 # ctx <module> (module table, rc0). Dispatch validates the verb engine-side
@@ -449,10 +449,9 @@ package_reader() {
 
 # ---------------------------------------------------------------------------
 # reserved names: the unit verb set (its scripts own the list) plus
-# refresh, run, and hooks, and the verbs retired in v0.55.0 (append, amend,
-# query, flip, drop: a static list, so no module can claim a retired name and
-# a retired call prints its replacement); the builtin unit and run are
-# allowed
+# refresh, run, and hooks, and the retired record verbs (append, amend, query,
+# flip, drop, next: a static list, so no module can claim a retired name and a
+# retired call prints its replacement); the builtin unit and run are allowed
 
 # retired_replacement <verb>: the replacement of a retired record verb
 retired_replacement() {
@@ -462,6 +461,7 @@ retired_replacement() {
     query) printf 'use entry show, entry list, entry closure, finding show, resolve, search, units, refs-to, lane show' ;;
     flip) printf 'use task start, complete, reopen' ;;
     drop) printf 'use task drop' ;;
+    next) printf 'use active (the next task is derived from the backlog)' ;;
     *) return 1 ;;
   esac
 }
@@ -494,7 +494,7 @@ load_unit_verbs() {
 
 is_reserved() {
   case "$1" in
-    refresh|run|hooks|append|amend|query|flip|drop)
+    refresh|run|hooks|append|amend|query|flip|drop|next)
       return 0
       ;;
   esac
@@ -1601,7 +1601,7 @@ case "$1" in
       exit 0
     fi
     if [ $# -eq 1 ] && [ "$found_target" = unit ] && repl=$(retired_replacement "$1"); then
-      printf 'ctx unit %s retired in v0.55.0: %s\n' "$1" "$repl" >&2
+      printf 'ctx unit %s retired: %s\n' "$1" "$repl" >&2
       exit 1
     fi
     ctx_err "unknown verb: $1"
@@ -1626,7 +1626,7 @@ esac
 
 verb=$1
 if [ "$found_target" = unit ] && repl=$(retired_replacement "$verb"); then
-  printf 'ctx unit %s retired in v0.55.0: %s\n' "$verb" "$repl" >&2
+  printf 'ctx unit %s retired: %s\n' "$verb" "$repl" >&2
   exit 1
 fi
 if ! verb_exists "$md" "$verb"; then

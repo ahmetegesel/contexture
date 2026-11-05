@@ -494,12 +494,13 @@ function derive_knowledge(k,   i, n) {
 # ---- the state ----
 # every "<key>: <value>" line at column 0 opens a key; the indented lines after it continue
 # its value (joined by newlines as stored) until a blank line or the next column-0 line; the
-# first line of each of the six keys is typed (next_action and objective unquoted, repos and
-# ref_sessions lists, ref_sessions null without its line), every other key (unknown, or a
-# later occurrence) an extra field in line order, every other line an extra line
-function parse_state(u,   k, i, key, v, st, ca, na, ob, rv, rs, R, nr, S, ns, seen, t, cur, NK, KK, KV, KL) {
+# first line of each of the five keys is typed (objective unquoted, repos and ref_sessions
+# lists, ref_sessions null without its line), every other key (unknown, or a later
+# occurrence) an extra field in line order, every other line an extra line; a legacy
+# next_action key and its continuation lines are consumed and dropped, never rendered
+function parse_state(u,   k, i, key, v, st, ca, ob, rv, rs, R, nr, S, ns, seen, t, cur, NK, KK, KV, KL) {
   k = u "|state"
-  st = ""; ca = ""; na = ""; ob = ""; rv = NULLV; rs = NULLV
+  st = ""; ca = ""; ob = ""; rv = NULLV; rs = NULLV
   split("", seen)
   for (t in SLINE) if (index(t, u SUBSEP) == 1) delete SLINE[t]
   ST[u, "e#"] = 0; ST[u, "l#"] = 0
@@ -518,12 +519,12 @@ function parse_state(u,   k, i, key, v, st, ca, na, ob, rv, rs, R, nr, S, ns, se
   }
   for (i = 1; i <= NK; i++) {
     key = KK[i]; v = KV[i]
-    if (!(key in seen) && key ~ /^(status|current_anchor|next_action|objective|repos|ref_sessions)$/) {
+    if (key == "next_action") continue
+    if (!(key in seen) && key ~ /^(status|current_anchor|objective|repos|ref_sessions)$/) {
       seen[key] = 1
       SLINE[u, key] = KL[i]
       if (key == "status") st = v
       else if (key == "current_anchor") ca = v
-      else if (key == "next_action") na = unq(v)
       else if (key == "objective") ob = unq(v)
       else if (key == "repos") rv = v
       else rs = v
@@ -533,7 +534,7 @@ function parse_state(u,   k, i, key, v, st, ca, na, ob, rv, rs, R, nr, S, ns, se
   }
   nr = (rv == NULLV) ? 0 : listparse(rv, R)
   ns = (rs == NULLV) ? 0 : listparse(rs, S)
-  ST[u, "status"] = st; ST[u, "anchor"] = ca; ST[u, "next"] = na; ST[u, "obj"] = ob
+  ST[u, "status"] = st; ST[u, "anchor"] = ca; ST[u, "obj"] = ob
   ST[u, "r#"] = nr
   for (i = 1; i <= nr; i++) ST[u, "r", i] = R[i]
   ST[u, "hasrs"] = (rs != NULLV)
@@ -577,7 +578,7 @@ function state_text(u,   i, R, S, xl, xf) {
   xl = ""; xf = ""
   for (i = 1; i <= ST[u, "l#"]; i++) xl = xl ST[u, "l", i] "\n"
   for (i = 1; i <= ST[u, "e#"]; i++) xf = xf ST[u, "e", i, "key"] ": " ST[u, "e", i, "val"] "\n"
-  return c_state(ST[u, "status"], ST[u, "anchor"], ST[u, "next"], ST[u, "obj"], R, ST[u, "r#"], ST[u, "hasrs"], S, ST[u, "s#"], xl, xf)
+  return c_state(ST[u, "status"], ST[u, "anchor"], ST[u, "obj"], R, ST[u, "r#"], ST[u, "hasrs"], S, ST[u, "s#"], xl, xf)
 }
 
 # ---- the JSON of the schemas ----
@@ -619,7 +620,7 @@ function state_json(u,   i, o, rs, e, l) {
   l = "["
   for (i = 1; i <= ST[u, "l#"]; i++) l = l (i > 1 ? "," : "") jstr(ST[u, "l", i])
   l = l "]"
-  return "{\"unit\":" jstr(u) ",\"status\":" jstr(ST[u, "status"]) ",\"current_anchor\":" jstr(ST[u, "anchor"]) ",\"next_action\":" jstr(ST[u, "next"]) ",\"objective\":" jstr(ST[u, "obj"]) ",\"repos\":" o ",\"ref_sessions\":" rs ",\"extra_fields\":" e ",\"extra_lines\":" l "}"
+  return "{\"unit\":" jstr(u) ",\"status\":" jstr(ST[u, "status"]) ",\"current_anchor\":" jstr(ST[u, "anchor"]) ",\"objective\":" jstr(ST[u, "obj"]) ",\"repos\":" o ",\"ref_sessions\":" rs ",\"extra_fields\":" e ",\"extra_lines\":" l "}"
 }
 
 # last_event(k): the date the last head line of the main journal carries: an anchor's stamp

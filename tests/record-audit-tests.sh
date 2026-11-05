@@ -11,7 +11,7 @@
 #   5. bracketed field line
 #   6. unharvested KNOWLEDGE flag
 #   7. DONE task without its backlog/<slug>: DONE event
-#   8. IN_PROGRESS task absent from state.md
+#   8. an IN_PROGRESS task audits clean without a state pointer (the retired check)
 #   9. entry dated at or after ENF_FROM missing THREAD
 #
 # Usage: tests/record-audit-tests.sh
@@ -189,20 +189,20 @@ cp backlog.bak "$BACKLOG"
 run_audit
 a_eq "$audit_rc" "0" "done repair rc0"
 
-echo "== 8 IN_PROGRESS task absent from state =="
+echo "== 8 IN_PROGRESS task needs no state pointer =="
 cp "$BACKLOG" backlog.bak
 cat >> "$BACKLOG" <<'EOF'
 
 @task zz-plant-inp
   STATUS: IN_PROGRESS
-  OBJECTIVE: "planted in progress absent from state"
+  OBJECTIVE: "planted in progress, no state pointer"
 EOF
 run_audit
-a_eq "$audit_rc" "1" "in-progress absent rc1"
-a_match "$audit_out" "IN_PROGRESS ABSENT FROM STATE: zz-plant-inp" "in-progress absence named"
+a_eq "$audit_rc" "0" "in-progress task audits clean without a state pointer"
+if printf '%s\n' "$audit_out" | grep -q "IN_PROGRESS ABSENT FROM STATE"; then bad "the retired absence check never fires"; else ok "the retired absence check never fires"; fi
 cp backlog.bak "$BACKLOG"
 run_audit
-a_eq "$audit_rc" "0" "in-progress repair rc0"
+a_eq "$audit_rc" "0" "in-progress plant removed rc0"
 
 echo "== 9 missing THREAD on a dated entry =="
 cp "$JOURNAL" journal.bak

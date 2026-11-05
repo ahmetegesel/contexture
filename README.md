@@ -85,7 +85,7 @@ The workspace couples root governance with a dedicated convention drawer:
     ├── extensions/       The package overlay root: modules/ for package feature modules (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression
     └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
-        ├── state.md      Live pointer: status, current anchor, next action, and refs
+        ├── state.md      Where the unit stands: status, current anchor, objective, repos, and mounts
         ├── backlog.md    Living task queue with acceptance criteria and execution blueprints
         ├── journal.md    Append-only event stream rebuilding working context from scratch
         ├── knowledge.md  Settled decisions and durable findings, grounded by exact references
@@ -135,16 +135,16 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 |---|---|
 | ctx help | The runtime summary: `ctx run`, `ctx unit` with its verbs, and every discovered module with its summary line |
 | ctx unit help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
-| ctx unit active | The field: each ACTIVE unit newest last_event first, with its slug, anchor, next action, objective, and last_event date when known, then the closed count |
-| ctx unit bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the next move |
+| ctx unit active | The field: each ACTIVE unit newest last_event first, with its slug, anchor, the derived next line (the first IN_PROGRESS task, else the first TODO; `next: <slug> (<status>) \| threads: <n>`, or an explicit none form), objective, and last_event date when known, then the closed count |
+| ctx unit bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the first-task reminder |
 | ctx unit load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
 | ctx unit load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
 | ctx unit stamp <unit> | Stamps the new period: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with its number and date (@anchor A<N> <date>), no receipt text; a text argument refuses rc 1 |
 | ctx unit board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
-| ctx unit audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event, in-progress tasks absent from state) and the open-thread tail; exits nonzero on any defect |
+| ctx unit audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event) and the open-thread tail; exits nonzero on any defect |
 | ctx unit fold <unit> [--lane=<lane> \| --check \| --finish] | The consolidation fold: the first no-lane call plans the live scope, records the fold start, and prints the plan (the carried open threads included), the first lane's manual, and the first act; a lane call fetches the next unclosed chunk, its entries, and the lane's remaining chunks; the lane writes an ordinary entry whose REFs name the batch and whose CLOSES fold its non-thread constituents, while open threads stay live and are carried; --check proves the closed receipts are the scope minus the carried threads and the audit is clean; --finish writes the receipt and closes the fold start (docs/the-record.md) |
 | ctx unit index | One line per rhythm: name, path, use when, activation |
-| ctx unit task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags; the driver enforces the status moves (start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop refused for the task next_action names) and writes the completion or drop receipt in the same write; show prints the canonical block |
+| ctx unit task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags; the driver enforces the status moves (start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop refused for an IN_PROGRESS task; reopen it first) and writes the completion or drop receipt in the same write; show prints the canonical block |
 | ctx unit record <unit> --what="..." [--flags] | Append an immutable journal event (--group, --thread, --rhythm, --knowledge, --slug, and the repeatable --ref, --closes, --supersedes); the driver injects the active anchor and composes the slug from the local date and time |
 | ctx unit entry show <unit> <slug> | The entry's canonical block (the last occurrence of a repeated legacy slug) |
 | ctx unit entry list <unit> [--anchor=A<N>] [--group=<token>] | One line per entry occurrence (anchor, slug, WHAT), open or closed; `--group` is the topic thread, `--anchor` one period |
@@ -152,10 +152,9 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list; `--ref` repeats |
 | ctx unit search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet, score); --mode is required, no default: exact on every driver or a mode the configured driver declares (ctx unit diagnose lists them); a search without it refuses rc 1 naming the declared modes |
 | ctx unit resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim), the canonical unit refs (unit#<unit>/task/<slug>, entry, finding, and lane artifact forms; a canonical ref carries its own unit), and the legacy file forms to the entity block |
-| ctx unit units <repo> | Each unit touching the repo: slug, status, anchor, next action |
+| ctx unit units <repo> | Each unit touching the repo: slug, status, anchor |
 | ctx unit refs-to <session> | Each unit referencing the session |
 | ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from parent session journals: create (the dispatcher's act, the recipe on stdin), record, report, show |
-| ctx unit next <unit> "<pointer>" | Overwrite the one next action; refuses when an in-progress task would go unnamed |
 | ctx unit refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
 | ctx unit close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
 | ctx unit reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
@@ -163,7 +162,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 
 The named looks (`entry show`, `entry closure`, `units`, `refs-to`, `resolve`) and search answer questions over the record, so agents never improvise greps that over-read: a look that misses is loud, rc=1 with a named error, never an empty success; search prints its zero count. The lists (`entry list` with `--group` or `--anchor`, `task list`, `finding list`) print nothing with rc 0 when nothing matches.
 
-The interaction toolbox is the typed semantic verbs (`task`, `record`, `entry`, `finding`, `search`, `resolve`) and `ctx lane`, ensuring atomic state transitions and eliminating format guessing; they are the only write inputs, so no markdown crosses the command interface. The earlier verbs that carried raw blocks or duplicated a typed verb (`append`, `amend`, `flip`, `drop`, and the `query` family) retired in v0.55.0: each name stays reserved and prints its replacement with rc 1.
+The interaction toolbox is the typed semantic verbs (`task`, `record`, `entry`, `finding`, `search`, `resolve`) and `ctx lane`, ensuring atomic state transitions and eliminating format guessing; they are the only write inputs, so no markdown crosses the command interface. The earlier verbs that carried raw blocks or duplicated a typed verb (`append`, `amend`, `flip`, `drop`, and the `query` family) retired in v0.55.0, and `next` retired when the pointer became a derivation: each name stays reserved and prints its replacement with rc 1.
 
 ## Maintaining contexture
 

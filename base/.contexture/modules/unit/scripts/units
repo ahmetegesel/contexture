@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: the units touching a repo (the cross-repo look)
 # usage: ctx unit units <repo> [--json]
-# help: every unit, ACTIVE or CLOSED, whose repos name the repo, with its current_anchor and next_action (session.units); no unit refuses rc 1 naming the repos the units know
+# help: every unit, ACTIVE or CLOSED, whose repos name the repo, with its current_anchor (session.units); the next move is not stored, so ctx unit active derives it; no unit refuses rc 1 naming the repos the units know
 # help: exit codes: 0 units listed; 1 no unit touches the repo, or a bad argument
 # help: example: ctx unit units my-repo
 

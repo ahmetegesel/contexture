@@ -149,6 +149,14 @@ run_driver() {
   _act=$(printf '%s' "$out" | awk '{ n += gsub(/"status":"ACTIVE"/, ""); } END { print n + 0 }')
   a_eq "$_act" "2" "$_drv: the active listing counts both ACTIVE units"
 
+  out=$(ds session.active)
+  a_match "$out" '"units":\[{"unit":"u1"' "$_drv: session.active answers the units"
+  a_match "$out" '"next_task":{"slug":"t1","status":"TODO"}' "$_drv: session.active derives the first TODO task"
+  a_match "$out" '"open_threads":0' "$_drv: session.active counts zero open threads"
+  a_match "$out" '"backlog_present":true' "$_drv: session.active names the backlog present"
+  case "$out" in *'"next_action"'*) miss "session.active carries a stored next_action" ;; esac
+  tc "$_drv: session.active carries no stored next_action"
+
   printf 'query=needle\n' | ds search.query u1 --mode=exact > "$T/search.out"
   a_match "$(cat "$T/search.out")" '"entity_type":"session","entity_id":"u1","section":"state"' "$_drv: the exact search answers the session in record order"
   a_match "$(cat "$T/search.out")" '"entity_type":"task","entity_id":"t1","section":"backlog"' "$_drv: the exact search answers the task in record order"

@@ -300,8 +300,7 @@ if [ "$CORPUS_STORE" -eq 1 ]; then
         --refs="docs/demo-orders/operational.md" \
         --desc="Set up the environment, run the build, and test the checkout path on demo-orders." \
         --criteria="- the suite is green" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }task add failed"
-    "$SANDBOX/.contexture/ctx" unit task start nudge-demo install-and-run-local \
-        --pointer="install-and-run-local IN_PROGRESS: the sample nudge" > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }task start failed"
+    "$SANDBOX/.contexture/ctx" unit task start nudge-demo install-and-run-local > /dev/null 2>&1 || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }task start failed"
     TASK_BLOCK=$("$SANDBOX/.contexture/ctx" unit resolve nudge-demo 'task#install-and-run-local' 2>&1)
     printf '%s\n' "$TASK_BLOCK" > "$SANDBOX/nudge-task.out"
     cmp -s "$SANDBOX/nudge-task.out" "$PLUGIN_ROOT/tests/sample/backlog.md" || NUDGE_NOTE="${NUDGE_NOTE:+$NUDGE_NOTE; }resolve task# differs from the sample block"

@@ -4,7 +4,7 @@
 # help: subcommands:
 # help:   add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
 # help:   update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
-# help:   start <unit> <slug> [--pointer="..."]
+# help:   start <unit> <slug>
 # help:   complete <unit> <slug> --evidence="..."
 # help:   reopen <unit> <slug>
 # help:   drop <unit> <slug> [--reason="..."]
@@ -12,7 +12,7 @@
 # help:   show <unit> <slug> [--json]
 # help: --refs takes the references blank or comma separated (brackets optional), each <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), without control characters or double quotes; an update with --refs replaces the list, --refs="" clears it
 # help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --objective, --desc, --criteria, or --details carrying no field
-# help: the storage driver holds the record rules: a CLOSED unit refuses every write; start moves only a TODO task, complete a TODO or IN_PROGRESS task, reopen an IN_PROGRESS or DONE task; drop refuses an IN_PROGRESS task next_action names; start and the pointer it writes must name every IN_PROGRESS task; complete and drop write their receipt entry (backlog/<slug>: DONE (<evidence>), DROPPED (<reason>)) in the same write
+# help: the storage driver holds the record rules: a CLOSED unit refuses every write; start moves only a TODO task, complete a TODO or IN_PROGRESS task, reopen an IN_PROGRESS or DONE task; drop refuses an IN_PROGRESS task (reopen it first); complete and drop write their receipt entry (backlog/<slug>: DONE (<evidence>), DROPPED (<reason>)) in the same write
 # help: add, start, complete, reopen, and drop fire the task-landing hooks (CTX_ACT add, start, complete, reopen, or drop; CTX_SLUGS the task)
 # help: a malformed slug (letters, digits, underscore, dash; starts alphanumeric) refuses rc 1 before any driver call
 
@@ -24,7 +24,7 @@ help_table() {
   printf '  add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
   printf '  update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
   printf '  update reads no stdin; an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT)\n'
-  printf '  start <unit> <slug> [--pointer="..."]\n'
+  printf '  start <unit> <slug>\n'
   printf '  complete <unit> <slug> --evidence="..."\n'
   printf '  reopen <unit> <slug>\n'
   printf '  drop <unit> <slug> [--reason="..."]\n'
@@ -97,7 +97,6 @@ desc=""; has_desc=0
 criteria=""; has_criteria=0
 details=""; has_details=0
 refs=""; has_refs=0
-pointer=""; has_pointer=0
 evidence=""
 reason="task dropped"
 status_filter=""
@@ -177,20 +176,17 @@ case "$subcmd" in
     npos=0
     while [ $# -gt 0 ]; do
       case "$subcmd:$1" in
-        start:--pointer=*) pointer="${1#--pointer=}"; has_pointer=1 ;;
-        start:-p) shift; [ $# -gt 0 ] && { pointer="$1"; has_pointer=1; } ;;
         complete:--evidence=*) evidence="${1#--evidence=}" ;;
         complete:-e) shift; [ $# -gt 0 ] && evidence="$1" ;;
         drop:--reason=*) reason="${1#--reason=}" ;;
         drop:-r) shift; [ $# -gt 0 ] && reason="$1" ;;
         *:--json) json_out=1 ;;
         *:-*) vb_unknown "task $subcmd" "$1" ;;
-        start:*|complete:*|drop:*)
+        complete:*|drop:*)
           # one positional value stands for the flag (the v0.54.0 form); a second refuses
           npos=$((npos + 1))
           [ "$npos" -eq 1 ] || vb_unknown "task $subcmd" "$1"
           case "$subcmd" in
-            start) [ "$has_pointer" -eq 1 ] || { pointer="$1"; has_pointer=1; } ;;
             complete) [ -n "$evidence" ] || evidence="$1" ;;
             drop) [ -n "$1" ] && reason="$1" ;;
           esac
@@ -202,9 +198,6 @@ case "$subcmd" in
     require_slug "$slug"
     case "$subcmd" in
       start)
-        vb_refuse_cr "$pointer"
-        vb_refuse_nl --pointer "$pointer"
-        [ "$has_pointer" -eq 1 ] && [ -n "$pointer" ] && vb_kv pointer "$pointer"
         vb_call task.start "$unit" "$slug"
         vb_ok
         if [ "$json_out" -eq 1 ]; then vb_json; else printf 'task started: %s (IN_PROGRESS)\n' "$slug"; fi

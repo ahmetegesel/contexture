@@ -12,7 +12,7 @@ The record comprises five distinct entity domains:
 
 | domain | role | how it changes |
 |---|---|---|
-| unit state | the pointer: where the unit stands and what happens next | overwritten freely; updated via stamp, next, refs, close, reopen, task start |
+| unit state | where the unit stands: its status, anchor, objective, repos, and mounts | overwritten freely; updated via stamp, refs, close, reopen; the next move is derived from the backlog at presentation |
 | backlog tasks | the declaration: the work declared ahead | mutated atomically via typed task commands; living queue |
 | journal events | the memory: what happened, as it happened | immutable append-only event stream; closed by later reference |
 | durable findings | the mind: settled architectural truths and decisions | full lifecycle CRUD; updated or superseded forward |
@@ -22,20 +22,19 @@ In the POSIX baseline driver, these domains map to four files and the lanes fold
 
 | file | physical role in POSIX driver |
 |---|---|
-| `state.md` | state card: status, current anchor, next action, objective, repos, refs |
+| `state.md` | state card: status, current anchor, objective, repos, refs |
 | `backlog.md` | task queue: multiline containers for description, criteria, details |
 | `journal.md` | event log: chronological entries stamped with anchor and thread |
 | `knowledge.md` | findings store: settled findings with references and summaries |
 | `lanes/<lane>/` | subagent directories holding recipe.md, journal.md, and report.md |
 
-## Session state, the pointer
+## Session state
 
 The session state is the map, not the content: detail lives behind references, never inside the state itself.
 
 ```text
 status: ACTIVE
 current_anchor: A12
-next_action: "one terse pointer: what to do next"
 objective: "what the unit is for"
 repos: [app, docs]
 ref_sessions: [design-notes]
@@ -43,12 +42,12 @@ ref_sessions: [design-notes]
 
 - `status:` is `ACTIVE` or `CLOSED`.
 - `current_anchor:` is the current value of the anchor counter, `A<N>`. A fresh unit starts at `A1`, the bootstrap's folded first anchor, and each stamp adds one.
-- `next_action:` is one terse pointer, overwritten never prepended. The why behind it rebuilds from the record; when the unit sits between plans, it reads "plan the next move".
-- `objective:` is what the unit is for. Both it and `next_action` are one quoted line: an embedded double or single quote is text, an embedded newline refuses.
+- `objective:` is what the unit is for: one quoted line, an embedded double or single quote is text, an embedded newline refuses.
+- the next move is not a state field: it is derived at presentation from the backlog, the first `IN_PROGRESS` task, else the first `TODO` (`ctx unit active` prints it); a unit with no open task has none.
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference sessions mounted at boot; boot loads their knowledge and active journal.
 
-The pointer mutates often: it is refreshed as the work moves, at every backlog update, task landing, and period end. It is updated via `ctx unit stamp`, `ctx unit next`, `ctx unit refs`, `ctx unit close`, `ctx unit reopen`, and `ctx unit task start` (which writes the pointer with the start); after `next` or a start, `next_action` must name every `IN_PROGRESS` task, else the write refuses.
+The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored on read and erased by the next state write; a new state never carries one.
 
 The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `ctx unit active` orders it newest first. A unit whose last item carries no date answers null, and lane journals never enter the derivation.
 
@@ -82,10 +81,11 @@ Agents mutate the backlog through typed CLI verbs, the only write inputs (no mar
 
 - `ctx unit task add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: creates a task in `TODO` status.
 - `ctx unit task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: updates the given fields in place; `--refs` replaces the list and `--refs=""` clears it; an update carrying no field refuses rc 1.
-- `ctx unit task start <unit> <slug> [--pointer="..."]`: atomically moves a `TODO` task to `IN_PROGRESS` and writes `next_action`.
+- `ctx unit task start <unit> <slug>`: moves a `TODO` task to `IN_PROGRESS`; the state is not written.
+- `ctx unit active`: the pre-boot field: each ACTIVE unit, newest last_event first, with its anchor, the derived next line (`next: <slug> (<status>) | threads: <n>`, or an explicit none form), and its objective.
 - `ctx unit task complete <unit> <slug> --evidence="..."`: atomically moves a `TODO` or `IN_PROGRESS` task to `DONE` and records its completion receipt (`<date>-<slug>-completed`, `WHAT: "backlog/<slug>: DONE (<evidence>)"`) in the journal.
 - `ctx unit task reopen <unit> <slug>`: moves an `IN_PROGRESS` or `DONE` task back to `TODO`.
-- `ctx unit task drop <unit> <slug> [--reason="..."]`: removes the task and records its drop receipt (`backlog/<slug>: DROPPED (<reason>)`) in the journal; an `IN_PROGRESS` task the pointer names refuses.
+- `ctx unit task drop <unit> <slug> [--reason="..."]`: removes the task and records its drop receipt (`backlog/<slug>: DROPPED (<reason>)`) in the journal; an `IN_PROGRESS` task refuses (reopen it first).
 - `ctx unit task list <unit> [--status=todo|progress|done|all]`: lists tasks matching the filter.
 - `ctx unit task show <unit> <slug>`: prints the task's canonical block, its `REFS` included (a legacy task too, every value kept).
 
@@ -131,7 +131,7 @@ Agents record events via `ctx unit record`:
 .contexture/ctx unit record <unit> --what="..." [--group=...] [--thread=...] [--rhythm="<name> <N> <GATE>"] [--ref=...]... [--closes=...]... [--supersedes=...]... [--knowledge] [--slug=...]
 ```
 
-The command sends the current local date and time, the storage driver takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` and `--supersedes` take only the explicit form `<slug> (<verdict>: <reason>)` (one or more target slugs before the parenthesis, each naming an entry the journal already holds, as in `--closes="<slug> <slug> (dropped: reason)"`), the verdict one of `done`, `superseded`, `dropped`, `folded` and the reason non-empty; a bare target list refuses rc 1 naming the form, since the closer carries the resolution itself, and a reason holding a parenthesis refuses naming the rule. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, pointer, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal reads in the canonical layout, every value kept, and its file bytes stay as they are. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the `next_action` pointer, the state `objective`) on every write path: an embedded double quote is text (the typed verbs, `next`, and `bootstrap` store it), and every reader returns it verbatim.
+The command sends the current local date and time, the storage driver takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` and `--supersedes` take only the explicit form `<slug> (<verdict>: <reason>)` (one or more target slugs before the parenthesis, each naming an entry the journal already holds, as in `--closes="<slug> <slug> (dropped: reason)"`), the verdict one of `done`, `superseded`, `dropped`, `folded` and the reason non-empty; a bare target list refuses rc 1 naming the form, since the closer carries the resolution itself, and a reason holding a parenthesis refuses naming the rule. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal reads in the canonical layout, every value kept, and its file bytes stay as they are. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the state `objective`) on every write path: an embedded double quote is text (the typed verbs and `bootstrap` store it), and every reader returns it verbatim.
 
 To inspect entries:
 - `ctx unit entry show <unit> <slug> [--json]`: prints the entry's canonical block (every field it carries); `--json` prints the typed entry: its fields, `refs` as a list, its closers, and the closure derived by position (`closed`, `closed_by`, `close_reason`).

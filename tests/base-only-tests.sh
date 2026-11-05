@@ -226,10 +226,12 @@ out=$($CTX unit task list baseonly --status=all 2>&1)
 a_match "$out" "base-t1" "record: task list reads the added task"
 out=$($CTX unit task show baseonly base-t1 2>&1)
 a_match "$out" 'OBJECTIVE: "the base-only task"' "record: task show reads the objective"
-$CTX unit task start baseonly base-t1 --pointer="base-t1 IN_PROGRESS: run the base-only smoke" >/dev/null 2>&1
-a_rc "$?" "0" "record: task start with a pointer rc0"
+$CTX unit task start baseonly base-t1 >/dev/null 2>&1
+a_rc "$?" "0" "record: task start rc0"
 out=$($CTX unit task show baseonly base-t1 2>&1)
 a_match "$out" "STATUS: IN_PROGRESS" "record: task start moves the status"
+out=$($CTX unit active 2>/dev/null)
+a_match "$out" '^  next: base-t1 (IN_PROGRESS) | threads: 0$' "record: active derives the started task"
 $CTX unit task update baseonly base-t1 --desc="two words" >/dev/null 2>&1
 a_rc "$?" "0" "record: task update rc0"
 $CTX unit task complete baseonly base-t1 --evidence="the smoke passed" >/dev/null 2>&1
@@ -276,12 +278,10 @@ out=$($CTX unit search baseonly "base-only task" --mode=exact 2>&1)
 a_rc "$?" "0" "record: search --mode=exact rc0"
 a_match "$out" "base-t1" "record: the exact search finds the task"
 # BG2: a snippet strips the double quotes only as a pair, so a lowercase field line keeps
-# its closing quote (the state's next_action is the pre-fix case)
-$CTX unit next baseonly 'task#probe-task' >/dev/null 2>&1
-a_rc "$?" "0" "BG2: next with a paired state line rc0"
-out=$($CTX unit search baseonly "task#probe-task" --mode=exact --json 2>&1)
-a_match "$out" '"snippet":"next_action: \\"task#probe-task\\""' "BG2: the exact snippet keeps the quote pair on a lowercase field line"
-a_not "$out" 'task#probe-task","score"' "BG2: the snippet no longer ends at the stripped trailing quote"
+# its closing quote (the state's objective is the case)
+out=$($CTX unit search baseonly "the base-only probe unit" --mode=exact --json 2>&1)
+a_match "$out" '"snippet":"objective: \\"the base-only probe unit\\""' "BG2: the exact snippet keeps the quote pair on a lowercase field line"
+a_not "$out" 'the base-only probe unit","score"' "BG2: the snippet no longer ends at the stripped trailing quote"
 out=$($CTX unit resolve baseonly task#base-t1 2>&1); rc=$?
 a_rc "$rc" "0" "record: resolve task# rc0"
 a_match "$out" "^@task base-t1" "record: resolve prints the task block"

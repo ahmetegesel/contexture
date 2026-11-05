@@ -123,12 +123,12 @@ function c_xfield(k, v) {
 # c_head(word, id, head_text): the head line of an item
 function c_head(w, id, ht) { return "@" w " " id ((ht != NULLV && ht != "") ? " " ht : "") "\n" }
 
-# c_state(status, anchor, next_action, objective, repos, nrepos, has ref_sessions, refs, nrefs,
-# the extra lines, the extra fields): the extra lines (the state's lines no key holds) first,
-# then the six keys, then every extra key with its value (a value's later lines follow it as
-# stored)
-function c_state(st, ca, na, ob, R, nr, hasrs, S, ns, xl, xf,   o) {
-  o = xl "status: " st "\ncurrent_anchor: " ca "\nnext_action: \"" na "\"\nobjective: \"" ob "\"\nrepos: [" c_join(R, nr, ", ") "]\n"
+# c_state(status, anchor, objective, repos, nrepos, has ref_sessions, refs, nrefs, the
+# extra lines, the extra fields): the extra lines (the state's lines no key holds) first,
+# then the five keys, then every extra key with its value (a value's later lines follow it
+# as stored); the next action is derived at presentation, never stored
+function c_state(st, ca, ob, R, nr, hasrs, S, ns, xl, xf,   o) {
+  o = xl "status: " st "\ncurrent_anchor: " ca "\nobjective: \"" ob "\"\nrepos: [" c_join(R, nr, ", ") "]\n"
   if (hasrs) o = o "ref_sessions: [" c_join(S, ns, ", ") "]\n"
   return o xf
 }

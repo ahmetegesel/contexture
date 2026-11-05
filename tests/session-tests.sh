@@ -178,7 +178,7 @@ fi
 # and each call printing its replacement, below); units, refs-to added (D42); migrate, added
 # on this branch and never released, left the contract with unit.export and unit.import
 # (knowledge#MIGRATION_IS_AGENT_JUDGMENT) and answers as an unknown verb (below)
-DECLARED="active audit board bootstrap close diagnose entry finding fold index load next record refresh refs refs-to reopen resolve search stamp task units"
+DECLARED="active audit board bootstrap close diagnose entry finding fold index load record refresh refs refs-to reopen resolve search stamp task units"
 disk=$(for f in .contexture/modules/unit/scripts/*; do
   [ -f "$f" ] || continue
   b=${f##*/}
@@ -201,17 +201,17 @@ for v in $DECLARED; do
   esac
   a_eq "$rc" "$want" "verb:$v no-arg rc $want"
 done
-a_eq "$(printf '%s\n' $DECLARED | grep -c '')" "22" "verb surface: 22 unit verbs"
+a_eq "$(printf '%s\n' $DECLARED | grep -c '')" "21" "verb surface: 21 unit verbs"
 # migrate: no verb moves a record between backends; the name is no reserved retirement (it
 # never shipped), so ctx answers it as any unknown verb
 err=$($CTX unit migrate --from=posix --to=fts5 2>&1 >/dev/null); rc=$?
 a_eq "$rc" "1" "migrate: ctx unit migrate rc1"
 a_match "$err" "^ctx: unknown verb: migrate\$" "migrate: ctx unit migrate answers an unknown verb"
 # the retired verbs: each prints its replacement rc 1, and ctx unit help <verb> too
-for v in append amend query flip drop; do
+for v in append amend query flip drop next; do
   err=$($CTX unit "$v" u1 2>&1 >/dev/null); rc=$?
   a_eq "$rc" "1" "retired: unit $v rc1"
-  a_match "$err" "^ctx unit $v retired in v0.55.0: use " "retired: unit $v prints its replacement"
+  a_match "$err" "^ctx unit $v retired: use " "retired: unit $v prints its replacement"
 done
 # a module can never claim a retired name (the static reserved list, D14)
 mkdir -p .contexture/modules/flip/scripts
@@ -222,8 +222,8 @@ a_match "$err" "reserved name refused (shadow): flip" "retired: the module named
 rm -rf .contexture/modules/flip
 err=$($CTX unit help query 2>&1 >/dev/null); rc=$?
 a_eq "$rc" "1" "retired: unit help query rc1"
-a_match "$err" "^ctx unit query retired in v0.55.0: use entry show" "retired: unit help query prints the replacement"
-a_eq "$($CTX unit help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "22" "unit help lists the 22 verbs"
+a_match "$err" "^ctx unit query retired: use entry show" "retired: unit help query prints the replacement"
+a_eq "$($CTX unit help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "21" "unit help lists the 21 verbs"
 a_eq "$($CTX lane help 2>/dev/null | sed -n '/^verbs:/,/^$/p' | grep -c '^  [a-z]')" "4" "lane help lists the 4 verbs (create added)"
 out=$($CTX unit index)
 a_match "$out" "probe (.*probe.md) | use when: the suite needs an index line | activation: propose" "index renders the rhythm line"
@@ -267,7 +267,6 @@ $CTX unit active extra >/dev/null 2>&1; a_eq "$?" "1" "active with an argument r
 $CTX unit index extra >/dev/null 2>&1; a_eq "$?" "1" "index with an argument rc1"
 $CTX unit refs u1 u1 >/dev/null 2>&1; a_eq "$?" "1" "refs naming the unit itself rc1"
 $CTX unit refs u1 nosuch >/dev/null 2>&1; a_eq "$?" "1" "refs naming a missing session rc1"
-$CTX unit next u1 >/dev/null 2>&1; a_eq "$?" "1" "next without a pointer rc1"
 # flip retired (D1): its status vocabulary lives in task list --status
 $CTX unit task list u1 --status=bogus >/dev/null 2>&1; a_eq "$?" "1" "task list with a bogus status rc1 (the former flip bogus status)"
 
@@ -300,18 +299,18 @@ a_eq "$rc" "1" "RH: a missing rhythm refuses rc1"
 a_match "$err" "no such rhythm: nosuch (looked under .contexture/rhythms/ and .contexture/extensions/rhythms/)" "RH: the missing-rhythm refusal names both roots"
 
 echo "== S state rewrite safety and reopen =="
-$CTX unit bootstrap rw-unit "rewrite unit" >/dev/null 2>&1
-$CTX unit next rw-unit "slash / and amp & pointer" >/dev/null 2>&1; a_eq "$?" "0" "next with sed metacharacters rc0"
+$CTX unit bootstrap rw-unit "rewrite / & unit" >/dev/null 2>&1
+$CTX unit stamp rw-unit >/dev/null 2>&1; a_eq "$?" "0" "stamp with sed metacharacters in the state rc0"
 out=$($CTX unit load rw-unit 1 2>/dev/null)
-a_match "$out" 'next_action: "slash / and amp & pointer"' "next with sed metacharacters lands verbatim"
-a_match "$out" "^status: ACTIVE" "next with sed metacharacters keeps the state whole"
-$CTX unit task add rw-unit rw-task --objective="rewrite task" >/dev/null 2>&1
-# D22: the pointer task start writes names every IN_PROGRESS task, the started one included
-$CTX unit task start rw-unit rw-task --pointer="start / with & metachars" >/dev/null 2>&1; a_eq "$?" "1" "task start pointer omitting the started task refuses rc1 (D22)"
-$CTX unit task start rw-unit rw-task --pointer="rw-task start / with & metachars" >/dev/null 2>&1; a_eq "$?" "0" "task start pointer with sed metacharacters rc0"
+a_match "$out" '^objective: "rewrite / & unit"' "stamp rewrites the state with sed metacharacters whole"
+a_match "$out" "^status: ACTIVE" "stamp keeps the state status whole"
+$CTX unit task add rw-unit rw-task --objective="rewrite / & task" >/dev/null 2>&1
+$CTX unit task start rw-unit rw-task >/dev/null 2>&1; a_eq "$?" "0" "task start with sed metacharacters rc0"
 out=$($CTX unit load rw-unit 1 2>/dev/null)
-a_match "$out" 'next_action: "rw-task start / with & metachars"' "task start pointer lands verbatim"
-a_match "$out" "^objective: " "task start with metacharacters keeps the state whole"
+a_match "$out" '^objective: "rewrite / & unit"' "task start keeps the state whole"
+a_not "$out" 'next_action:' "task start writes no next_action"
+out=$($CTX unit task show rw-unit rw-task 2>/dev/null)
+a_match "$out" 'OBJECTIVE: "rewrite / & task"' "task start with sed metacharacters keeps the task whole"
 $CTX unit reopen rw-unit >/dev/null 2>&1; a_eq "$?" "1" "reopen an ACTIVE unit rc1"
 $CTX unit reopen nosuch >/dev/null 2>&1; a_eq "$?" "1" "reopen a missing unit rc1"
 $CTX unit close rw-unit >/dev/null 2>&1; a_eq "$?" "0" "close before reopen rc0"
@@ -583,12 +582,12 @@ a_match "$out" "OBJECTIVE: \"Updated objective 1\"" "F5-NOFIELD: the refused tas
 out=$($CTX unit task update --help 2>&1 </dev/null)
 a_match "$out" "no field refuses" "F5-NOFIELD: task help names the no-field refusal and the unread stdin"
 
-# 4. task start (atomic status and state pointer update)
-$CTX unit task start sem-unit task-1 --pointer="work on task-1" >/dev/null 2>&1
+# 4. task start (the status move; the state is not written)
+$CTX unit task start sem-unit task-1 >/dev/null 2>&1
 a_eq "$?" "0" "semantic: task start rc0"
 out=$($CTX unit task show sem-unit task-1)
 a_match "$out" "STATUS: IN_PROGRESS" "semantic: task start updates status to IN_PROGRESS"
-a_match "$($CTX unit load sem-unit 1 2>/dev/null)" "next_action: \"work on task-1\"" "semantic: task start atomically updates next_action"
+a_not "$($CTX unit load sem-unit 1 2>/dev/null)" "next_action:" "semantic: task start writes no state pointer"
 
 # 5. task complete (atomic status and receipt event)
 $CTX unit task complete sem-unit task-1 --evidence="test verified cleanly" >/dev/null 2>&1
@@ -754,6 +753,57 @@ if [ "$DRIVER" = posix ]; then
   cmp -s lane-fixture.md lane-stored.out; a_eq "$?" "0" "lane: stored report is byte-identical to the input"
 fi
 rm -f lane-fixture.md lane-write.out lane-report.out lane-show.out lane-stored.out
+
+echo "== DP the derived next pointer (backlog derived-pointer) =="
+# the move is derived at presentation: the first IN_PROGRESS task, else the first TODO;
+# a TODO before an IN_PROGRESS is not the move, a second IN_PROGRESS is not either
+$CTX unit bootstrap dp-unit "derived pointer unit" >/dev/null 2>&1
+$CTX unit task add dp-unit dp-todo --objective="a todo task" >/dev/null 2>&1
+$CTX unit task add dp-unit dp-active --objective="the active task" >/dev/null 2>&1
+$CTX unit task add dp-unit dp-done --objective="a done task" >/dev/null 2>&1
+$CTX unit task start dp-unit dp-active >/dev/null 2>&1
+$CTX unit task complete dp-unit dp-done --evidence="done for the fixture" >/dev/null 2>&1
+$CTX unit task add dp-unit dp-second --objective="a second active task" >/dev/null 2>&1
+$CTX unit task start dp-unit dp-second >/dev/null 2>&1
+$CTX unit record dp-unit --what="an open question" --thread="the human's answer" --slug="$TODAY-dp-open" >/dev/null 2>&1
+$CTX unit record dp-unit --what="a resolved question" --thread="a lane report" --slug="$TODAY-dp-resolved" >/dev/null 2>&1
+$CTX unit record dp-unit --what="the answer" --thread=none --closes="$TODAY-dp-resolved (done: answered)" >/dev/null 2>&1
+out=$($CTX unit active 2>/dev/null)
+a_eq "$(printf '%s\n' "$out" | grep -c '^dp-unit$')" "1" "DP: active lists the unit"
+a_match "$out" '^  next: dp-active (IN_PROGRESS) | threads: 1$' "DP: active derives the first IN_PROGRESS task and counts only the open thread"
+a_not "$out" 'dp-second' "DP: a second IN_PROGRESS task is not the move"
+a_not "$out" 'next_action' "DP: active prints no stored pointer"
+out=$($CTX unit load dp-unit 1 2>/dev/null)
+a_not "$out" 'next_action' "DP: the load state page carries no stored next_action"
+# no-work forms: empty backlog, no open task, a missing backlog
+$CTX unit bootstrap dp-empty "empty backlog unit" >/dev/null 2>&1
+out=$($CTX unit active 2>/dev/null)
+a_match "$out" '^  next: none (empty backlog) | threads: 0$' "DP: an empty backlog reads its explicit none form"
+$CTX unit task add dp-empty dp-first --objective="the first task" >/dev/null 2>&1
+out=$($CTX unit active 2>/dev/null)
+a_match "$out" '^  next: dp-first (TODO) | threads: 0$' "DP: a unit whose only task is TODO derives it"
+$CTX unit task complete dp-empty dp-first --evidence="the only task" >/dev/null 2>&1
+out=$($CTX unit active 2>/dev/null)
+a_match "$out" '^  next: none (no open task) | threads: 0$' "DP: an all-DONE backlog reads its explicit none form"
+$CTX unit bootstrap dp-stamp "empty board stamp unit" >/dev/null 2>&1
+$CTX unit stamp dp-stamp >/dev/null 2>&1; a_eq "$?" "0" "DP: stamp on an empty board stays backlog-free"
+$CTX unit stamp dp-empty >/dev/null 2>&1; a_eq "$?" "0" "DP: stamp on an all-DONE board stays backlog-free"
+if [ "$DRIVER" = posix ]; then
+  # a state alone: the backlog artifact is absent, the view warns and still prints
+  printf 'status: ACTIVE\ncurrent_anchor: A1\nobjective: "missing backlog unit"\nrepos: []\nref_sessions: []\n' | rput dp-missing state
+  out=$($CTX unit active 2>&1)
+  a_match "$out" '^WARNING: missing backlog: unit dp-missing$' "DP: an ACTIVE unit without a backlog warns"
+  a_match "$out" '^  next: none (no backlog) | threads: 0$' "DP: a missing backlog reads its explicit none form"
+  # a legacy next_action is ignored on read and erased by the next state write
+  $CTX unit bootstrap dp-legacy "legacy pointer unit" >/dev/null 2>&1
+  $CTX unit task add dp-legacy dp-legacy-task --objective="the derived task" >/dev/null 2>&1
+  printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "the stale stored pointer"\nobjective: "legacy pointer unit"\nrepos: []\nref_sessions: []\n' | rput dp-legacy state
+  out=$($CTX unit active 2>/dev/null)
+  a_match "$out" '^  next: dp-legacy-task (TODO) | threads: 0$' "DP: active ignores a legacy next_action"
+  a_not "$out" 'stale stored pointer' "DP: the legacy pointer never appears in active"
+  $CTX unit refs dp-legacy >/dev/null 2>&1
+  a_eq "$(rcat dp-legacy state | grep -c '^next_action:')" "0" "DP: a state write erases the legacy next_action"
+fi
 fi # group 1
 
 if in_group 2; then
@@ -763,7 +813,7 @@ $CTX unit bootstrap x-unit "defect regression unit" >/dev/null 2>&1
 $CTX unit task add x-unit x-todo --objective="Open task" >/dev/null 2>&1
 $CTX unit task add x-unit x-prog --objective="Running task" >/dev/null 2>&1
 $CTX unit task add x-unit x-done --objective="Finished task" >/dev/null 2>&1
-$CTX unit task start x-unit x-prog --pointer="x-prog IN_PROGRESS" >/dev/null 2>&1
+$CTX unit task start x-unit x-prog >/dev/null 2>&1
 $CTX unit task complete x-unit x-done --evidence="closed by the suite" >/dev/null 2>&1
 out=$($CTX unit task list x-unit --status=todo 2>&1)
 a_match "$out" "\[TODO\] x-todo: Open task" "F1: status todo lists the TODO task"
@@ -1111,7 +1161,6 @@ e3_utf8_refused "task complete --evidence" evidence $CTX unit task complete e3-u
 e3_utf8_refused "finding add --summary" summary $CTX unit finding add e3-unit E3_U8 --summary="$e3_bad"
 e3_utf8_refused "lane record --what" what $CTX lane record e3-unit e3-lane --what="$e3_bad"
 e3_utf8_refused "bootstrap objective" objective $CTX unit bootstrap e3-u8-unit "$e3_bad"
-e3_utf8_refused "next pointer" pointer $CTX unit next e3-unit "$e3_bad"
 e3_utf8_refused "search query" query $CTX unit search e3-unit "$e3_bad" --mode=exact
 e3_utf8_refused "lane report --body" "the report" $CTX lane report e3-unit e3-lane --body="$e3_bad"
 $CTX unit task show e3-unit e3-u8 >/dev/null 2>&1; a_eq "$?" "1" "E3-10: the refused task add landed nothing"
@@ -1198,8 +1247,7 @@ out=$($CTX unit task update y-unit y-keep --desc="$y_nl" 2>&1); rc=$?
 a_eq "$rc" "0" "R1: task update with a two-line --desc rc0"
 a_eq "$($CTX unit task list y-unit --status=all 2>/dev/null | grep -c '^  \[')" "3" "R1: task update with a two-line --desc keeps every task block"
 a_eq "$($CTX unit task show y-unit y-keep 2>/dev/null | grep -c -e '^    first body line$' -e '^    second body line$')" "2" "R1: the updated --desc lands as body lines"
-$CTX unit task start y-unit y-bs --pointer='y-bs IN_PROGRESS: see C:\new' >/dev/null 2>&1
-a_eq "$($CTX unit load y-unit 1 2>/dev/null | grep -cF 'next_action: "y-bs IN_PROGRESS: see C:\new"')" "1" "R1: a literal backslash sequence in --pointer stays verbatim"
+$CTX unit task start y-unit y-bs >/dev/null 2>&1
 out=$($CTX unit finding add y-unit Y_MULTI --summary="$y_nl" 2>&1); rc=$?
 a_eq "$rc" "0" "R1: finding add with a two-line --summary rc0"
 $CTX unit finding show y-unit Y_MULTI >/dev/null 2>&1
@@ -1216,13 +1264,11 @@ out=$($CTX unit search y-unit 'Kept task' --mode=exact --json 2>&1)
 a_match "$out" '"snippet":"[^"]*Kept task' "R9: the exact search finds the task"
 a_not "$out" '\\n"}' "R9: an exact search snippet ends without a trailing newline"
 # BG2: a snippet strips a value's double quotes only as a pair, so a lowercase field line
-# keeps its closing quote (the state's next_action is the pre-fix case)
+# keeps its closing quote (the state's objective is the case)
 $CTX unit bootstrap bg2-unit "the quote pair unit" >/dev/null 2>&1
-$CTX unit next bg2-unit 'task#probe-task' >/dev/null 2>&1
-a_eq "$?" "0" "BG2: next with a paired state line rc0"
-out=$($CTX unit search bg2-unit 'task#probe-task' --mode=exact --json 2>&1)
-a_match "$out" '"snippet":"next_action: \\"task#probe-task\\""' "BG2: the snippet keeps the quote pair on a lowercase field line"
-a_not "$out" 'task#probe-task","score"' "BG2: the snippet no longer ends at the stripped trailing quote"
+out=$($CTX unit search bg2-unit 'the quote pair unit' --mode=exact --json 2>&1)
+a_match "$out" '"snippet":"objective: \\"the quote pair unit\\""' "BG2: the snippet keeps the quote pair on a lowercase field line"
+a_not "$out" 'the quote pair unit","score"' "BG2: the snippet no longer ends at the stripped trailing quote"
 # R2: the dialect is LF: a carriage return in a typed field refuses rc1 before any write,
 # so no verb poisons the record for the grammar verbs that refuse CR on read
 y_cr=$(printf 'carriage\rreturn')
@@ -1347,7 +1393,7 @@ else
 fi
 $CTX unit task add w-unit w-c --objective="Task C" >/dev/null 2>&1
 a_eq "$?" "2" "R4: task add on a read-only store exits 2"
-$CTX unit task start w-unit w-a --pointer="w-a IN_PROGRESS" >/dev/null 2>&1
+$CTX unit task start w-unit w-a >/dev/null 2>&1
 a_eq "$?" "2" "R4: task start on a read-only store exits 2"
 $CTX unit task complete w-unit w-b --evidence="never lands" >/dev/null 2>&1
 a_eq "$?" "2" "R4: task complete on a read-only store exits 2"
@@ -1366,7 +1412,7 @@ else
 fi
 a_eq "$(w_sum)" "$w_before" "R4: the refused writes left every artifact unchanged"
 a_eq "$(w_residue)" "$w_res0" "R4: the refused writes left no temp in the scratch drawer"
-$CTX unit task start w-unit w-a --pointer="w-a IN_PROGRESS" >/dev/null 2>&1
+$CTX unit task start w-unit w-a >/dev/null 2>&1
 a_eq "$?" "0" "R4: the unit lock was released: a later task start lands"
 
 echo "== WH a refused handshake names the driver's own refusal (lanes/si-s3-service-review/report) =="
@@ -1484,7 +1530,7 @@ wait "$kr_holder" 2>/dev/null
 kr_alive=0
 kill -0 "$kr_holder" 2>/dev/null && kr_alive=1
 a_eq "$kr_alive" "0" "KR: the killed holder pid is gone"
-$CTX unit task start kr-unit kr-a --pointer="kr-a IN_PROGRESS" >/dev/null 2>&1 </dev/null
+$CTX unit task start kr-unit kr-a >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "KR: a waiter removes the stale lock and the write lands"
 a_match "$($CTX unit task show kr-unit kr-a 2>/dev/null </dev/null)" "IN_PROGRESS" "KR: the stale-lock writer's effect reads back"
 # a live holder still refuses the next writer, after the driver's timeout
@@ -1500,7 +1546,7 @@ mkdir -p "$kr_lock"
 printf '%s\n' "$$" > "$kr_lock/pid"
 ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort > kr-before.lst
 kr_new() { ls .contexture/tmp | grep -v '^locks$' | LC_ALL=C sort | LC_ALL=C comm -13 kr-before.lst -; }
-$CTX unit task start kr-unit kr-a --pointer="kr-a IN_PROGRESS" >/dev/null 2>&1 &
+$CTX unit task start kr-unit kr-a >/dev/null 2>&1 &
 kr_pid=$!
 # wait until the data script has staged its own scratch under the verb root: that proves
 # the child exists, so the kill below can take the whole tree rather than racing its spawn
@@ -1570,7 +1616,6 @@ q_refuse "record --ref" $CTX unit record q-unit --what="one line" --ref="$q_nl"
 q_refuse "task add --objective" $CTX unit task add q-unit q-b --objective="$q_nl"
 q_refuse "task add --refs" $CTX unit task add q-unit q-c --objective="Task C" --refs="$q_nl"
 q_refuse "task update --objective" $CTX unit task update q-unit q-a --objective="$q_nl"
-q_refuse "task start --pointer" $CTX unit task start q-unit q-a --pointer="$q_nl"
 q_refuse "task complete --evidence" $CTX unit task complete q-unit q-a --evidence="$q_nl"
 q_refuse "task drop --reason" $CTX unit task drop q-unit q-a --reason="$q_nl"
 q_refuse "finding add --ref" $CTX unit finding add q-unit Q_TWO --summary="Two" --ref="$q_nl"
@@ -1578,7 +1623,6 @@ q_refuse "finding update --ref" $CTX unit finding update q-unit Q_ONE --ref="$q_
 q_refuse "finding supersede --ref" $CTX unit finding supersede q-unit Q_ONE Q_THREE --summary="Three" --ref="$q_nl"
 q_refuse "lane record --what" $CTX lane record q-unit q-lane --what="$q_nl"
 q_refuse "lane record --thread" $CTX lane record q-unit q-lane --what="one line" --thread="$q_nl"
-q_refuse "next pointer" $CTX unit next q-unit "$q_nl"
 a_eq "$(q_sum)" "$q_before" "R3: the refused one-line writes left every artifact unchanged"
 out=$($CTX unit task add q-unit q-d --objective="Task D" --desc="$q_nl" 2>&1); rc=$?
 a_eq "$rc" "0" "R3: a block scalar keeps its newline (task add --desc rc0)"
@@ -1612,7 +1656,7 @@ out=$($CTX unit search q-unit 'appended "quoted" what' --mode=exact --json 2>&1)
 a_match "$out" "\"entity_id\":\"$TODAY-q-appended-quote\"" "R3: search --mode=exact finds the quoted WHAT"
 err=$(printf '@entry %s-q-bad-quote\n  WHAT: unquoted "what"\n  THREAD: none\n' "$TODAY" | $CTX unit append q-unit 2>&1 >/dev/null); rc=$?
 a_eq "$rc" "1" "R3: append (retired) refuses rc1"
-a_match "$err" "^ctx unit append retired in v0.55.0: use record, task add, finding add" "R3: append names its replacement (D14)"
+a_match "$err" "^ctx unit append retired: use record, task add, finding add" "R3: append names its replacement (D14)"
 # legacy records stay readable: an entry written before the refusal with a two-line WHAT
 # still loads and audits as before (knowledge#BACKWARD_COMPATIBLE_READS); legacy text lives
 # in posix files alone
@@ -1713,12 +1757,12 @@ while [ "$i" -le 10 ]; do
   $CTX unit bootstrap "$slug" "parallel probe unit $i" >/dev/null 2>&1 || { p1_fail=$((p1_fail + 1)); i=$((i + 1)); continue; }
   lock_retry "record p1-$i" $CTX unit record "$slug" --what="journal write $i" --slug="$today-probe-journal-$i" &
   a=$!
-  lock_retry "next p1-$i" $CTX unit next "$slug" "pointer $i" &
+  lock_retry "task add p1-$i" $CTX unit task add "$slug" "p1-task-$i" --objective="parallel $i" &
   b=$!
   wait "$a" || true
   wait "$b" || true
   if $CTX unit entry show "$slug" "$today-probe-journal-$i" >/dev/null 2>&1 \
-    && $CTX unit load "$slug" 1 2>/dev/null | grep -q "next_action: \"pointer $i\""; then
+    && $CTX unit task show "$slug" "p1-task-$i" >/dev/null 2>&1; then
     p1_pass=$((p1_pass + 1))
   else
     p1_fail=$((p1_fail + 1))
@@ -1857,7 +1901,7 @@ a_not "$err" '\.md' "RF3: the missing ref warning names no file"
 fi
 
 echo "== U one quote rule for every one-line quoted field (backlog quote-rule-uniform) =="
-# every one-line quoted field (WHAT, a task OBJECTIVE, the next_action pointer, the state
+# every one-line quoted field (WHAT, a task OBJECTIVE, the state
 # objective) follows one rule on every write path: an embedded double quote is text, an
 # embedded newline refuses; the readers return the stored value verbatim
 $CTX unit bootstrap u-unit "quote rule unit" >/dev/null 2>&1 </dev/null
@@ -1872,11 +1916,8 @@ $CTX unit audit u-obj >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "QU: audit rc0 over the quoted state objective"
 $CTX unit task add u-unit u-a --objective='Task "A" typed' >/dev/null 2>&1 </dev/null
 a_eq "$?" "0" "QU: task add --objective with embedded quotes rc0 (unchanged)"
-$CTX unit task start u-unit u-a --pointer='u-a IN_PROGRESS: the "typed" pointer' >/dev/null 2>&1 </dev/null
-a_eq "$?" "0" "QU: task start --pointer with embedded quotes rc0 (unchanged)"
-out=$($CTX unit next u-unit 'u-a IN_PROGRESS: the "next" pointer' 2>&1 </dev/null); rc=$?
-a_eq "$rc" "0" "QU: next accepts a pointer with embedded double quotes"
-a_eq "$($CTX unit load u-unit 1 2>/dev/null </dev/null | grep -cF 'next_action: "u-a IN_PROGRESS: the "next" pointer"')" "1" "QU: the next pointer lands verbatim"
+$CTX unit task start u-unit u-a >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "QU: task start after the quoted task objective rc0"
 # append and amend retired (D1): the formerly appended and amended tasks land through task add
 # and task update
 $CTX unit task add u-unit u-b --objective='an "appended" objective' >/dev/null 2>&1 </dev/null
@@ -1899,7 +1940,6 @@ $u_page"
   printf '%s\n' "$u_page" | grep -qi 'load complete' && break
   u_p=$((u_p + 1))
 done
-a_match "$out" 'next_action: "u-a IN_PROGRESS: the "next" pointer"' "QU: load reads the quoted next pointer verbatim"
 a_match "$out" 'OBJECTIVE: "an "appended" objective"' "QU: load reads the appended OBJECTIVE verbatim"
 a_match "$out" 'OBJECTIVE: "an "amended" objective"' "QU: load reads the amended OBJECTIVE verbatim"
 out=$($CTX unit board u-unit 2>&1 </dev/null)
@@ -1916,15 +1956,13 @@ a_match "$out" "$u_snip" "QU: the --mode=exact search snippet carries the quoted
 u_nl=$(printf 'first\nsecond')
 $CTX unit bootstrap u-nl "$u_nl" >/dev/null 2>&1 </dev/null
 a_eq "$?" "1" "QU: bootstrap still refuses an objective with an embedded newline"
-$CTX unit next u-unit "u-a $u_nl" >/dev/null 2>&1 </dev/null
-a_eq "$?" "1" "QU: next still refuses a pointer with an embedded newline"
 # append and amend retired (D1, D14): the markdown forms refuse rc1 naming their replacement
 err=$(printf '@task u-d\n  STATUS: TODO\n  OBJECTIVE: bare objective\n' | $CTX unit append u-unit 2>&1 >/dev/null); rc=$?
 a_eq "$rc" "1" "QU: append (retired) refuses rc1"
-a_match "$err" "^ctx unit append retired in v0.55.0: use record, task add, finding add" "QU: append names its replacement"
+a_match "$err" "^ctx unit append retired: use record, task add, finding add" "QU: append names its replacement"
 err=$(printf '  OBJECTIVE: bare objective\n' | $CTX unit amend u-unit u-c 2>&1 >/dev/null); rc=$?
 a_eq "$rc" "1" "QU: amend (retired) refuses rc1"
-a_match "$err" "^ctx unit amend retired in v0.55.0: use task update" "QU: amend names its replacement"
+a_match "$err" "^ctx unit amend retired: use task update" "QU: amend names its replacement"
 
 echo "== UP messages name the artifact and its unit, never a storage path (backlog path-free-messages) =="
 # every warning and error of the verbs reads <artifact>: unit <u>; the fixtures are units
@@ -1944,7 +1982,7 @@ out=$(up_err $CTX unit bootstrap u-unit "again")
 a_match "$out" '^ERROR: session exists: unit u-unit$' "UP: bootstrap of an existing unit names the unit"
 up_path "$out" "UP: bootstrap of an existing unit"
 # the units below hold legacy text (a unit without a backlog, knowledge, or journal, a
-# malformed anchor, a state without next_action, CRLF lines, an unknown status) only
+# malformed anchor, a legacy next_action, CRLF lines, an unknown status) only
 # hand-written posix files hold: posix alone
 if [ "$DRIVER" = posix ]; then
 # up-bare: a state and a journal, no backlog, no knowledge
@@ -1955,9 +1993,10 @@ a_match "$out" '^WARNING: missing backlog: unit up-bare$' "UP: board without a b
 up_path "$out" "UP: the board warning"
 # query retired (D1): its search moved to session search, whose backend reads the artifacts
 # the unit holds, so a missing backlog or knowledge is no warning there
-out=$($CTX unit search up-bare plan --mode=exact 2>&1 </dev/null); rc=$?
+out=$($CTX unit search up-bare "bare unit" --mode=exact 2>&1 </dev/null); rc=$?
 a_eq "$rc" "0" "UP: search over a unit without backlog and knowledge rc0 (the former query search)"
-a_match "$out" 'session up-bare (state): next_action: "plan' "UP: search reads the state of the bare unit"
+a_match "$out" 'session up-bare (state): objective: "bare unit' "UP: search reads the canonical state of the bare unit"
+a_not "$out" 'next_action' "UP: the legacy next_action never enters the search text"
 up_path "$out" "UP: the search output"
 # its resolve moved to session resolve, whose miss names the reference and the unit
 out=$(up_err $CTX unit resolve up-bare "backlog.md#some-task")
@@ -1968,17 +2007,30 @@ up_path "$(printf '%s\n' "$out" | sed 's|backlog\.md#some-task||')" "UP: the res
 out=$(up_err $CTX unit resolve up-bare "lanes/no-lane/report.md#orientation")
 a_match "$out" "^resolve: error: reference 'lanes/no-lane/report.md#orientation' not found in unit 'up-bare' (ERR_ENTITY_NOT_FOUND)\$" "UP: resolve of an absent lane report names the reference and the unit"
 up_path "$(printf '%s\n' "$out" | sed 's|lanes/no-lane/report\.md#orientation||')" "UP: the lane report resolve error"
-# the record engine retired: next is the backend's session.next, whose pointer rule reads no
-# IN_PROGRESS task from an absent backlog, so the pointer lands
-out=$($CTX unit next up-bare "plan" 2>&1 </dev/null); rc=$?
-a_eq "$rc" "0" "UP: next without a backlog lands rc0 (the backend's pointer rule, no task to name)"
-up_path "$out" "UP: the next without a backlog"
+# a legacy next_action is ignored on read and erased by the next state write; a state
+# without one is no longer corrupt
+printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "legacy one-line"\nobjective: "legacy pointer unit"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+out=$($CTX unit load up-odd 1 2>&1 </dev/null); rc=$?
+a_eq "$rc" "0" "UP: a legacy next_action state loads rc0"
+a_not "$out" 'next_action' "UP: load never prints the legacy next_action"
+$CTX unit refs up-odd >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "UP: a state write under a legacy next_action lands rc0"
+a_eq "$(rcat up-odd state | grep -c '^next_action:')" "0" "UP: the next state write erases the legacy next_action"
+printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "legacy multi\n  continued pointer"\nobjective: "legacy pointer unit"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+out=$($CTX unit load up-odd 1 2>&1 </dev/null)
+a_not "$out" 'next_action' "UP: a multi-line legacy next_action never prints"
+a_not "$out" 'continued pointer' "UP: its continuation is consumed, never an extra field"
+$CTX unit refs up-odd >/dev/null 2>&1 </dev/null
+a_eq "$(rcat up-odd state | grep -c 'continued pointer')" "0" "UP: the state write erases the multi-line pointer and its continuation"
+printf 'status: ACTIVE\ncurrent_anchor: A1\nobjective: "no pointer"\nrepos: []\nref_sessions: []\n' | rput up-odd state
+$CTX unit refs up-odd >/dev/null 2>&1 </dev/null
+a_eq "$?" "0" "UP: a state without next_action takes a write rc0 (no corrupt state)"
 # up-nojournal: a state alone
 printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "plan"\nobjective: "no journal"\nrepos: []\nref_sessions: []\n' | rput up-nojournal state
 out=$(up_err $CTX unit entry show up-nojournal "$TODAY-no-entry")
 a_match "$out" "^entry.get: error: entry '$TODAY-no-entry' not found in unit 'up-nojournal' (ERR_ENTITY_NOT_FOUND)\$" "UP: entry show without a journal names the entry and the unit (the former query entry)"
 up_path "$out" "UP: the entry show error"
-# up-odd: a state with a malformed anchor and an unknown status, then one without next_action
+# up-odd: a state with a malformed anchor and an unknown status
 printf 'status: ACTIVE\ncurrent_anchor: X9\nnext_action: "plan"\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
 printf '@anchor A1 ("continues A0", attention: odd)\n' | rput up-odd journal
 : | rput up-odd backlog
@@ -1989,11 +2041,6 @@ out=$(up_err $CTX unit stamp up-odd); rc=$?
 a_eq "$rc" "2" "UP: stamp under a malformed anchor refuses rc2 (D43)"
 a_match "$out" "^session.stamp: error: the state's current_anchor 'X9' is not A<N> (ERR_STORAGE_CORRUPT)\$" "UP: stamp under a malformed anchor names the anchor"
 up_path "$out" "UP: the malformed anchor error"
-printf 'status: ACTIVE\ncurrent_anchor: A1\nobjective: "odd"\nrepos: []\nref_sessions: []\n' | rput up-odd state
-out=$(up_err $CTX unit next up-odd "plan"); rc=$?
-a_eq "$rc" "2" "UP: next without a next_action refuses rc2 (the backend's corrupt state)"
-a_match "$out" '^session.next: error: the state holds no next_action line (ERR_STORAGE_CORRUPT)$' "UP: next without a next_action names the missing line"
-up_path "$out" "UP: the missing next_action error"
 # a legacy CRLF line the posix store holds keeps its bytes until a write touches its item; the typed
 # record appends after it (the retired record engine refused every CRLF artifact on read)
 printf '@anchor A1 ("continues A0", attention: odd)\r\n' | rput up-odd journal
@@ -2096,8 +2143,9 @@ a_eq "$(cl_sum)" "$cl_before" "CL: the reads leave every posix file byte for byt
 # a write touching one item rewrites it canonical in place; every other byte stays
 $CTX unit task update cl-unit cl-task --criteria="a criterion" >/dev/null 2>&1 </dev/null
 a_eq "$(rcat cl-unit backlog)" "$(printf '# backlog grammar\n\n@task cl-task\n  STATUS: TODO\n  OBJECTIVE: "legacy task"\n  REFS: [a#b, c#d]\n  DESCRIPTION ::\n    legacy body\n  ACCEPTANCE CRITERIA ::\n    a criterion\n\n@task cl-other\n  STATUS: TODO\n  OBJECTIVE: "other task"')" "CL: task update rewrites the touched legacy task canonical, the preamble and the other task byte for byte"
-$CTX unit next cl-unit "plan the legacy unit again" >/dev/null 2>&1 </dev/null
-a_eq "$(rcat cl-unit state)" "$(printf 'status: ACTIVE\ncurrent_anchor: A2\nnext_action: "plan the legacy unit again"\nobjective: "Legacy objective;\n  continued on a second line"\nrepos: [cl]')" "CL: next rewrites the legacy state canonical, the continuation kept in the objective"
+$CTX unit close cl-unit >/dev/null 2>&1 </dev/null
+$CTX unit reopen cl-unit >/dev/null 2>&1 </dev/null
+a_eq "$(rcat cl-unit state)" "$(printf 'status: ACTIVE\ncurrent_anchor: A2\nobjective: "Legacy objective;\n  continued on a second line"\nrepos: [cl]')" "CL: a state write rewrites the legacy state canonical, the next_action erased, the continuation kept in the objective"
 fi
 
 echo "== N the verbs added in v0.55.0: entry closure, units, refs-to (D42) =="
@@ -2118,6 +2166,7 @@ out=$($CTX unit units n-repo 2>&1 </dev/null); rc=$?
 a_eq "$rc" "0" "N: units rc0"
 a_eq "$(printf '%s\n' "$out" | sed -n '1p;3p' | tr '\n' '|')" "units n-repo: 1 units|n-unit [ACTIVE]|" "N: units lists the unit touching the repo"
 a_match "$out" '^  current_anchor: A1$' "N: units prints the unit's anchor line"
+a_not "$out" 'next_action' "N: units prints no stored pointer"
 err=$($CTX unit units no-such-repo 2>&1 >/dev/null </dev/null); rc=$?
 a_eq "$rc" "1" "N: units of a repo no unit touches refuses rc1"
 a_match "$err" '^ERROR: no unit touches repo: no-such-repo (known: .*n-other, n-repo' "N: units names the known repos"

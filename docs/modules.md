@@ -159,7 +159,7 @@ Filters declare themselves with their own header vocabulary; see Filters.
 - `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines.
 - `ctx help --all` prints the top summary plus every module's block.
 - A duplicate verb name inside one module shadows: the engine warns and the first file name in byte order wins.
-- Reserved names cannot be module names: the unit verb set (its twenty-two verbs plus `help`, so twenty-three names), plus `run` and `hooks`, plus the five record verbs retired in v0.55.0 (`append`, `amend`, `query`, `flip`, `drop`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `unit` and `run` directories are exempt.
+- Reserved names cannot be module names: the unit verb set (its twenty-one verbs plus `help`, so twenty-two names), plus `run` and `hooks`, plus the retired record verbs (`append`, `amend`, `query`, `flip`, `drop`, and `next`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `unit` and `run` directories are exempt.
 - Help is engine-owned: no module ships a help script.
 
 ## Dispatch
@@ -191,7 +191,7 @@ Six points ship:
 | point | fires |
 |---|---|
 | `stamp` | after `ctx unit stamp` appends the new period's anchor |
-| `task-landing` | after a `ctx unit task add\|start\|complete\|reopen\|drop` or `ctx unit next` act lands (`task update` fires none); a refusal never fires |
+| `task-landing` | after a `ctx unit task add\|start\|complete\|reopen\|drop` act lands (`task update` fires none); a refusal never fires |
 | `close` | at the end of `ctx unit close` |
 | `load-pre` | in the main form of `ctx unit load`, before the load map |
 | `load-post` | in the main form of `ctx unit load`, after the load banner |
@@ -208,7 +208,7 @@ Every hook runs with:
 | point | context |
 |---|---|
 | `stamp` | `CTX_UNIT`, `CTX_ANCHOR` (the new anchor) |
-| `task-landing` | `CTX_UNIT`, `CTX_ACT` (`add`, `start`, `complete`, `reopen`, `drop`, or `next`), `CTX_SLUGS` (the task; for `next`, the `IN_PROGRESS` tasks as a comma-space list) |
+| `task-landing` | `CTX_UNIT`, `CTX_ACT` (`add`, `start`, `complete`, `reopen`, or `drop`), `CTX_SLUGS` (the task) |
 | `close` | `CTX_UNIT` |
 | `load-pre` | `CTX_UNIT`, `CTX_LOAD_FORM=main`, `CTX_LOAD_PAGE` |
 | `load-post` | `CTX_UNIT`, `CTX_LOAD_FORM=main`, `CTX_LOAD_PAGE` |
@@ -360,7 +360,7 @@ The storage core at `.contexture/storage/` is not a module: `ctx help` does not 
 
 ### unit: the record's data module
 
-The record's core feature module, `.contexture/modules/unit/`. Its `data` file declares the record as one store value per artifact: namespace `unit`, root `.contexture/sessions`, suffix `.md`, the variable-depth key `<unit>/<path...>`, and the document-set search rules (the state, the backlog and its tasks, the knowledge and its findings, the journal and its entries, and each lane's recipe, journal, entries, and report). Its `scripts/data` answers the 35 record operations over the store's `get`, `list`, and `batch`, keeping the current file shapes so every legacy record reads unchanged; the record rules and the canonical render are the module's own (`lib/canon.awk`, `lib/model.awk`, `lib/ops.awk`, `lib/search.awk`), and a multi-key write lands through one `store.batch`, all or none. The exact search is the record rule over the canonical render; a ranked mode is the store's document-set search, filtered to the unit. The module's ref interface resolves the canonical `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, and `unit#<unit>/lane/<lane>/<recipe|journal|report>` forms through `data_get` and `data_emit`; a new write validates a canonical unit ref before it lands, and `ctx unit resolve` accepts the same canonical forms publicly, while a legacy record target and a file pointer stay as stored. The unit module's 22 scripts are the record's public surface; `ctx session` is retired naming `ctx unit`, and the data script's cases (the 66/60 record compliance through it, plus the module's own cases) are `tests/unit-data-tests.sh`, which the gate runs once per driver, with `tests/record-fuzz.sh` the seeded differential proof beside it. Off-path detail is in `.contexture/modules/unit/README.md`.
+The record's core feature module, `.contexture/modules/unit/`. Its `data` file declares the record as one store value per artifact: namespace `unit`, root `.contexture/sessions`, suffix `.md`, the variable-depth key `<unit>/<path...>`, and the document-set search rules (the state, the backlog and its tasks, the knowledge and its findings, the journal and its entries, and each lane's recipe, journal, entries, and report). Its `scripts/data` answers the 35 record operations over the store's `get`, `list`, and `batch`, keeping the current file shapes so every legacy record reads unchanged; the record rules and the canonical render are the module's own (`lib/canon.awk`, `lib/model.awk`, `lib/ops.awk`, `lib/search.awk`), and a multi-key write lands through one `store.batch`, all or none. The exact search is the record rule over the canonical render; a ranked mode is the store's document-set search, filtered to the unit. The module's ref interface resolves the canonical `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, and `unit#<unit>/lane/<lane>/<recipe|journal|report>` forms through `data_get` and `data_emit`; a new write validates a canonical unit ref before it lands, and `ctx unit resolve` accepts the same canonical forms publicly, while a legacy record target and a file pointer stay as stored. The unit module's 21 scripts are the record's public surface; `ctx session` is retired naming `ctx unit`, and the data script's cases (the 66/60 record compliance through it, plus the module's own cases) are `tests/unit-data-tests.sh`, which the gate runs once per driver, with `tests/record-fuzz.sh` the seeded differential proof beside it. Off-path detail is in `.contexture/modules/unit/README.md`.
 
 ### unit: thin verbs over a shared library and a storage driver
 

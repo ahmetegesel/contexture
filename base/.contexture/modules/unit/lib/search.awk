@@ -59,7 +59,7 @@ function s_line(t,   header, parts, ty, id, key, snippet) {
   sub(/^[A-Z_]+:[ ]*/, "", snippet)
   # the value's double quotes strip only as a pair (BG2): a line that does not open and
   # close with the one quote pair keeps them, so a lowercase field line (the state's
-  # next_action) never loses its closing quote
+  # lowercase objective) never loses its closing quote
   if (snippet ~ /^"/ && snippet ~ /"$/) {
     sub(/^"[ \t]*/, "", snippet)
     sub(/[ \t]*"$/, "", snippet)
