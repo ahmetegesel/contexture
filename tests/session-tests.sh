@@ -320,15 +320,12 @@ out=$($CTX unit load rw-unit 1 2>/dev/null)
 a_match "$out" "^status: ACTIVE" "reopen flips status back to ACTIVE"
 out=$($CTX unit active 2>/dev/null)
 a_match "$out" "^rw-unit" "reopened unit lists as active again"
-# active recency: an A1-only unit prints no date line, an entry prints its slug date, a
-# stamped anchor prints its own distinct date, and the units order newest first with a
-# bytewise tie and the undated last; the fixtures enter in creation order (null, entry,
-# tie-b, tie-a, stamp), so creation order, the entry date for an anchor, or an absent
-# last_event each fails these assertions
+# active order: the view reads no journal, so it prints no date line and no thread count,
+# and its units come bytewise by name rather than newest last_event first
 $CTX unit bootstrap a80-null "recency null unit" >/dev/null 2>&1
 $CTX unit bootstrap a80-entry "recency entry unit" >/dev/null 2>&1
 $CTX unit record a80-entry --what="a dated entry" --slug=2026-09-27-a80-entry >/dev/null 2>&1
-a_eq "$?" "0" "active recency: the entry fixture records rc0"
+a_eq "$?" "0" "active order: the entry fixture records rc0"
 $CTX unit bootstrap a80-tie-b "recency tie b" >/dev/null 2>&1
 $CTX unit record a80-tie-b --what="a tied entry" --slug=2026-09-27-a80-tie-b >/dev/null 2>&1
 $CTX unit bootstrap a80-tie-a "recency tie a" >/dev/null 2>&1
@@ -336,21 +333,13 @@ $CTX unit record a80-tie-a --what="a tied entry" --slug=2026-09-27-a80-tie-a >/d
 $CTX unit bootstrap a80-stamp "recency stamp unit" >/dev/null 2>&1
 $CTX unit record a80-stamp --what="the entry before the stamp" --slug=2026-09-27-a80-stamp-e >/dev/null 2>&1
 printf 'date=2026-09-28\n' | "$DATA" session.stamp a80-stamp >/dev/null 2>&1
-a_eq "$?" "0" "active recency: the stamp fixture lands rc0"
+a_eq "$?" "0" "active order: the stamp fixture lands rc0"
 a80_out=$($CTX unit active 2>/dev/null)
 a80_block() { printf '%s\n' "$a80_out" | sed -n "/^$1\$/,/^\$/p"; }
-a_not "$(a80_block a80-null)" "last_event:" "active recency: an A1-only unit prints no last_event line"
-a_match "$(a80_block a80-entry)" "^  last_event: 2026-09-27\$" "active recency: an entry prints its slug date"
-a_match "$(a80_block a80-stamp)" "^  last_event: 2026-09-28\$" "active recency: a stamped anchor prints its own date, not the entry's"
-a_eq "$(a80_block a80-entry | grep -v '^$' | tail -n 1)" "  last_event: 2026-09-27" "active recency: the date line closes the block after the objectives"
-a_eq "$(printf '%s\n' "$a80_out" | grep -E '^a80-(stamp|entry|tie-a|tie-b|null)$' | tr '\n' ' ' | sed 's/ $//')" "a80-stamp a80-entry a80-tie-a a80-tie-b a80-null" "active recency: newest first, bytewise ties, undated last"
-a80_le_last=$(printf '%s\n' "$a80_out" | grep -n '^  last_event: ' | tail -n 1 | cut -d: -f1)
-a80_null_line=$(printf '%s\n' "$a80_out" | grep -n '^a80-null$' | cut -d: -f1)
-if [ -n "$a80_le_last" ] && [ -n "$a80_null_line" ] && [ "$a80_le_last" -lt "$a80_null_line" ]; then
-  ok "active recency: every dated unit precedes the undated one"
-else
-  bad "active recency: every dated unit precedes the undated one (last date line: ${a80_le_last:-none}, a80-null: ${a80_null_line:-none})"
-fi
+a_not "$a80_out" "last_event:" "active order: the view prints no last_event line"
+a_not "$a80_out" "threads:" "active order: the view prints no thread count"
+a_eq "$(a80_block a80-entry | grep -v '^$' | tail -n 1)" '  objective: "recency entry unit"' "active order: the objective closes the block"
+a_eq "$(printf '%s\n' "$a80_out" | grep -E '^a80-(stamp|entry|tie-a|tie-b|null)$' | tr '\n' ' ' | sed 's/ $//')" "a80-entry a80-null a80-stamp a80-tie-a a80-tie-b" "active order: bytewise by unit name"
 $CTX unit bootstrap dup-audit "duplicate slug unit" >/dev/null 2>&1
 # append retired (D1): the typed record writes the entries, the backend refuses the repeat (R5)
 $CTX unit record dup-audit --what="first" --slug="$TODAY-twice" >/dev/null 2>&1
@@ -771,7 +760,8 @@ $CTX unit record dp-unit --what="a resolved question" --thread="a lane report" -
 $CTX unit record dp-unit --what="the answer" --thread=none --closes="$TODAY-dp-resolved (done: answered)" >/dev/null 2>&1
 out=$($CTX unit active 2>/dev/null)
 a_eq "$(printf '%s\n' "$out" | grep -c '^dp-unit$')" "1" "DP: active lists the unit"
-a_match "$out" '^  next: dp-active (IN_PROGRESS) | threads: 1$' "DP: active derives the first IN_PROGRESS task and counts only the open thread"
+a_match "$out" '^  next: dp-active (IN_PROGRESS)$' "DP: active derives the first IN_PROGRESS task"
+a_not "$out" 'threads:' "DP: active prints no thread count"
 a_not "$out" 'dp-second' "DP: a second IN_PROGRESS task is not the move"
 a_not "$out" 'next_action' "DP: active prints no stored pointer"
 out=$($CTX unit load dp-unit 1 2>/dev/null)
@@ -779,13 +769,13 @@ a_not "$out" 'next_action' "DP: the load state page carries no stored next_actio
 # no-work forms: empty backlog, no open task, a missing backlog
 $CTX unit bootstrap dp-empty "empty backlog unit" >/dev/null 2>&1
 out=$($CTX unit active 2>/dev/null)
-a_match "$out" '^  next: none (empty backlog) | threads: 0$' "DP: an empty backlog reads its explicit none form"
+a_match "$out" '^  next: none (empty backlog)$' "DP: an empty backlog reads its explicit none form"
 $CTX unit task add dp-empty dp-first --objective="the first task" >/dev/null 2>&1
 out=$($CTX unit active 2>/dev/null)
-a_match "$out" '^  next: dp-first (TODO) | threads: 0$' "DP: a unit whose only task is TODO derives it"
+a_match "$out" '^  next: dp-first (TODO)$' "DP: a unit whose only task is TODO derives it"
 $CTX unit task complete dp-empty dp-first --evidence="the only task" >/dev/null 2>&1
 out=$($CTX unit active 2>/dev/null)
-a_match "$out" '^  next: none (no open task) | threads: 0$' "DP: an all-DONE backlog reads its explicit none form"
+a_match "$out" '^  next: none (no open task)$' "DP: an all-DONE backlog reads its explicit none form"
 $CTX unit bootstrap dp-stamp "empty board stamp unit" >/dev/null 2>&1
 $CTX unit stamp dp-stamp >/dev/null 2>&1; a_eq "$?" "0" "DP: stamp on an empty board stays backlog-free"
 $CTX unit stamp dp-empty >/dev/null 2>&1; a_eq "$?" "0" "DP: stamp on an all-DONE board stays backlog-free"
@@ -794,13 +784,13 @@ if [ "$DRIVER" = posix ]; then
   printf 'status: ACTIVE\ncurrent_anchor: A1\nobjective: "missing backlog unit"\nrepos: []\nref_sessions: []\n' | rput dp-missing state
   out=$($CTX unit active 2>&1)
   a_match "$out" '^WARNING: missing backlog: unit dp-missing$' "DP: an ACTIVE unit without a backlog warns"
-  a_match "$out" '^  next: none (no backlog) | threads: 0$' "DP: a missing backlog reads its explicit none form"
+  a_match "$out" '^  next: none (no backlog)$' "DP: a missing backlog reads its explicit none form"
   # a legacy next_action is ignored on read and erased by the next state write
   $CTX unit bootstrap dp-legacy "legacy pointer unit" >/dev/null 2>&1
   $CTX unit task add dp-legacy dp-legacy-task --objective="the derived task" >/dev/null 2>&1
   printf 'status: ACTIVE\ncurrent_anchor: A1\nnext_action: "the stale stored pointer"\nobjective: "legacy pointer unit"\nrepos: []\nref_sessions: []\n' | rput dp-legacy state
   out=$($CTX unit active 2>/dev/null)
-  a_match "$out" '^  next: dp-legacy-task (TODO) | threads: 0$' "DP: active ignores a legacy next_action"
+  a_match "$out" '^  next: dp-legacy-task (TODO)$' "DP: active ignores a legacy next_action"
   a_not "$out" 'stale stored pointer' "DP: the legacy pointer never appears in active"
   $CTX unit refs dp-legacy >/dev/null 2>&1
   a_eq "$(rcat dp-legacy state | grep -c '^next_action:')" "0" "DP: a state write erases the legacy next_action"
@@ -809,7 +799,7 @@ if [ "$DRIVER" = posix ]; then
   printf 'status: ACTIVE\ncurrent_anchor: A1\nobjective: "unknown status unit"\nrepos: []\nref_sessions: []\n' | rput dp-unknown state
   printf '@task dp-unknown-task\n  STATUS: progress\n  OBJECTIVE: "an unknown status task"\n\n@task dp-after-unknown\n  STATUS: TODO\n  OBJECTIVE: "a todo after the unknown"\n' | rput dp-unknown backlog
   out=$($CTX unit active 2>/dev/null)
-  a_match "$out" '^  next: dp-unknown-task (progress) | threads: 0$' "DP: an unknown status task is the first open task, printed as stored"
+  a_match "$out" '^  next: dp-unknown-task (progress)$' "DP: an unknown status task is the first open task, printed as stored"
 fi
 fi # group 1
 

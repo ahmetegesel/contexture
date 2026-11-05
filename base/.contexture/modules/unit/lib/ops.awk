@@ -196,15 +196,6 @@ function active_task(kb,   i) {
   return 0
 }
 
-# open_threads(kj): the board's open-thread rule over the main journal: a live entry whose
-# THREAD is set and not none; lane journals never enter
-function open_threads(kj,   i, n) {
-  n = 0
-  for (i = 1; i <= NI[kj]; i++)
-    if (IK[kj, i] == "entry" && CLBY[kj, i] == 0 && X[kj, i, "thread"] != NULLV && X[kj, i, "thread"] != "none") n++
-  return n
-}
-
 # st_active(u): the state's status reads exact ACTIVE after the same edge whitespace trim
 # the data script's active scan applies, so the answered derived fields match the units the
 # scan fetched
@@ -216,24 +207,25 @@ function st_active(u,   s) {
 }
 
 # active_listing_json(u, active): the UnitSummary fields, then the derived move (next_task
-# null when none), the open-thread count, the task count, the backlog presence, and
-# last_event; a non-ACTIVE unit's artifacts are not read, so its derived fields are null,
-# never a false backlog_present or a zero count (the renderer prints ACTIVE units alone)
-function active_listing_json(u, aa,   kb, kj, nt, ns, j, i) {
-  kb = u "|backlog"; kj = u "|journal"
+# null when none), the task count, and the backlog presence; the active view reads no
+# journal, so it carries no thread count and no last_event; a non-ACTIVE unit's backlog is
+# not read, so its derived fields are null, never a false backlog_present or a zero count
+# (the renderer prints ACTIVE units alone)
+function active_listing_json(u, aa,   kb, nt, ns, j, i) {
+  kb = u "|backlog"
   j = state_json(u)
-  if (!aa) return substr(j, 1, length(j) - 1) ",\"next_task\":null,\"open_threads\":null,\"task_count\":null,\"backlog_present\":null,\"last_event\":null}"
+  if (!aa) return substr(j, 1, length(j) - 1) ",\"next_task\":null,\"task_count\":null,\"backlog_present\":null}"
   ns = 0
   for (i = 1; i <= NI[kb]; i++) if (IK[kb, i] == "task") ns++
   nt = active_task(kb)
-  return substr(j, 1, length(j) - 1) ",\"next_task\":" (nt ? "{\"slug\":" jstr(X[kb, nt, "slug"]) ",\"status\":" jstr(AT_STATUS) "}" : "null") ",\"open_threads\":" open_threads(kj) ",\"task_count\":" ns ",\"backlog_present\":" jbool(PRE[kb] != NULLV) ",\"last_event\":" jnull(last_event(kj)) "}"
+  return substr(j, 1, length(j) - 1) ",\"next_task\":" (nt ? "{\"slug\":" jstr(X[kb, nt, "slug"]) ",\"status\":" jstr(AT_STATUS) "}" : "null") ",\"task_count\":" ns ",\"backlog_present\":" jbool(PRE[kb] != NULLV) "}"
 }
 
 function f_session_active(   i, u) {
   O("{\"store\":" jstr(NUNITS > 0 ? "present" : "absent") ",\"units\":[")
   for (i = 1; i <= NUNITS; i++) {
     u = UL[i]
-    parse_unit(u, "backlog journal")
+    parse_unit(u, "backlog")
     O((i > 1 ? "," : "") active_listing_json(u, st_active(u)))
   }
   answer("]}")

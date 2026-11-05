@@ -1389,8 +1389,8 @@ call task.reopen tc53-u m-done-reopen; answer; wantv task.status '"TODO"'; st53 
 tc "TC53: the status move matrix: every allowed move lands, every other refuses ERR_INVALID_TRANSITION"
 
 # TC54 (the unit data mode): the move is derived from the backlog: the first IN_PROGRESS
-# task, else the first open task (every status but DONE), with the open-thread count;
-# no stored pointer enters
+# task, else the first open task (every status but DONE); the active view reads no
+# journal, so it carries no open-thread count and no last_event; no stored pointer enters
 if [ -n "${DATA_EXEC:-}" ]; then
   mk tc54-u; answer
   kv objective "todo before the active task"; call task.add tc54-u tc54-todo; answer
@@ -1410,12 +1410,13 @@ if [ -n "${DATA_EXEC:-}" ]; then
   [ -n "$_t54" ] || miss "session.active holds no tc54-u"
   wantv "units.$_t54.next_task.slug" '"tc54-first"'
   wantv "units.$_t54.next_task.status" '"IN_PROGRESS"'
-  wantv "units.$_t54.open_threads" 1
   wantv "units.$_t54.task_count" 4
   wantv "units.$_t54.backlog_present" true
   wantv "units.$_t54.next_action" ""
+  wantno '"open_threads"'
+  wantno '"last_event"'
 fi
-tc "TC54: session.active derives the first IN_PROGRESS task and the open-thread count"
+tc "TC54: session.active derives the first IN_PROGRESS task and reads no journal"
 
 # TC55: task.complete writes its receipt entry atomically: the receipt answers the slug,
 # the WHAT, thread none, the current anchor; entry.get of the slug equals it; a second

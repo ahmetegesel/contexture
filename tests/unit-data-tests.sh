@@ -152,8 +152,12 @@ run_driver() {
   out=$(ds session.active)
   a_match "$out" '"units":\[{"unit":"u1"' "$_drv: session.active answers the units"
   a_match "$out" '"next_task":{"slug":"t1","status":"TODO"}' "$_drv: session.active derives the first open task"
-  a_match "$out" '"open_threads":0' "$_drv: session.active counts zero open threads"
+  a_match "$out" '"task_count":' "$_drv: session.active carries the task count"
   a_match "$out" '"backlog_present":true' "$_drv: session.active names the backlog present"
+  case "$out" in *'"open_threads"'*) miss "session.active reads no journal (open_threads present)" ;; esac
+  tc "$_drv: session.active carries no open_threads"
+  case "$out" in *'"last_event"'*) miss "session.active reads no journal (last_event present)" ;; esac
+  tc "$_drv: session.active carries no last_event"
   case "$out" in *'"next_action"'*) miss "session.active carries a stored next_action" ;; esac
   tc "$_drv: session.active carries no stored next_action"
 

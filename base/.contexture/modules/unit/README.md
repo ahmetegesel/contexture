@@ -66,9 +66,9 @@ lane artifacts, and the all-unit reads (`session.list`, `session.active`, `sessi
 pass); the cross-unit reads (`session.load`, `session.refload`) read the named units'
 state, backlog, knowledge, and journal. `session.load` reads the state once, captures its
 ref_sessions, then adds the parts without a second state read. `session.active` reads
-every state, then each ACTIVE unit's backlog and journal, so the derived move and the
-open-thread count come from one data-script pass; a non-ACTIVE unit answers its state
-fields alone, its derived fields null. The scan is not the record's read path.
+every state, then each ACTIVE unit's backlog only, never a journal, so the derived move
+comes from one data-script pass; a non-ACTIVE unit answers its state fields alone, its
+derived fields null. The scan is not the record's read path.
 
 A write fetches under the unit lock (`.contexture/tmp/locks/<unit>.lock`, the same path the
 posix driver uses), stages the changed artifacts with the record engine, and lands them

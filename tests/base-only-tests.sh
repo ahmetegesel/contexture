@@ -231,7 +231,7 @@ a_rc "$?" "0" "record: task start rc0"
 out=$($CTX unit task show baseonly base-t1 2>&1)
 a_match "$out" "STATUS: IN_PROGRESS" "record: task start moves the status"
 out=$($CTX unit active 2>/dev/null)
-a_match "$out" '^  next: base-t1 (IN_PROGRESS) | threads: 0$' "record: active derives the started task"
+a_match "$out" '^  next: base-t1 (IN_PROGRESS)$' "record: active derives the started task"
 $CTX unit task update baseonly base-t1 --desc="two words" >/dev/null 2>&1
 a_rc "$?" "0" "record: task update rc0"
 $CTX unit task complete baseonly base-t1 --evidence="the smoke passed" >/dev/null 2>&1

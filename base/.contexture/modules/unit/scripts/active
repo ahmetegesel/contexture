@@ -1,10 +1,10 @@
 #!/bin/sh
 # summary: every ACTIVE unit at a glance
 # usage: ctx unit active
-# help: no arguments: every ACTIVE unit newest last_event first (a bytewise unit tie-break, a unit with no date last), its slug, then the current_anchor, the derived next line, and the objective lines of its canonical state, then its last_event date when known, then the closed count; a store not created yet prints "no sessions yet" rc=0; an argument refuses rc=1
-# help: the next line is derived at presentation from the backlog, never stored: the first IN_PROGRESS task, else the first open task (the board's rule, every status but DONE), as "next: <slug> (<status>) | threads: <n>"; the no-work forms are "next: none (no backlog) | threads: <n>", "next: none (empty backlog) | threads: <n>", and "next: none (no open task) | threads: <n>"; threads counts the open main-journal threads (live entries whose THREAD is set and not none)
-# help: last_event is the date the last main-journal item carries: an anchor's stamp date or a dated entry slug; a unit whose journal carries no date prints no line
-# help: the storage driver answers the whole view in one call (session.active, bytewise by name): every state, then each ACTIVE unit's backlog and journal; an ACTIVE unit without a backlog warns on stderr and reads none; a state whose status is neither exact ACTIVE nor CLOSED warns and counts as closed
+# help: no arguments: every ACTIVE unit bytewise by name, its slug, then the current_anchor, the derived next line, and the objective lines of its canonical state, then the closed count; a store not created yet prints "no sessions yet" rc=0; an argument refuses rc=1
+# help: the next line is derived at presentation from the backlog, never stored: the first IN_PROGRESS task, else the first open task (the board's rule, every status but DONE), as "next: <slug> (<status>)"; the no-work forms are "next: none (no backlog)", "next: none (empty backlog)", and "next: none (no open task)"
+# help: the view reads no journal: it carries no thread count and no last_event date line
+# help: the storage driver answers the whole view in one call (session.active, bytewise by name): every state, then each ACTIVE unit's backlog; an ACTIVE unit without a backlog warns on stderr and reads none; a state whose status is neither exact ACTIVE nor CLOSED warns and counts as closed
 # help: exit codes: 0 every active unit printed (or "no sessions yet"); 1 an argument was passed
 # help: example: ctx unit active
 

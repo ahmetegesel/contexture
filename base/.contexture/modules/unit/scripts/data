@@ -10,8 +10,8 @@
 # list, and batch, and the writes land all or none through one store.batch.
 #
 # The cross-unit reads use store.list with the per-unit key prefix; the active listing
-# (session.active) reads every unit's state, then each ACTIVE unit's backlog and journal;
-# session.list (the diagnose count) reads every unit's state and journal. The exact search is the record
+# (session.active) reads every unit's state, then each ACTIVE unit's backlog, never a
+# journal; session.list (the diagnose count) reads every unit's state and journal. The exact search is the record
 # rule over the canonical render (lib/search.awk); a ranked mode is the store's search
 # over the document-set schema, filtered to the unit and capped after the walk, its
 # default-document identity (the artifact key) mapped to the record id (the unit or the
@@ -316,9 +316,9 @@ u_fetch_all() {
 }
 
 # u_active: the active listing's one fetch: every unit's state, then each ACTIVE unit's
-# backlog and journal; the state's first column-0 status line decides, the same typed key
-# the record parser reads, so no per-unit verb call enters the view; the derived move the
-# functions read from it follows the board's open-task rule (any status but DONE)
+# backlog, never a journal; the state's first column-0 status line decides, the same typed
+# key the record parser reads, so no per-unit verb call enters the view; the derived move
+# the functions read from it follows the board's open-task rule (any status but DONE)
 u_active() {
   FN=session.active
   U_UNIT=""
@@ -344,7 +344,6 @@ u_active() {
   while IFS= read -r ua_u; do
     [ -n "$ua_u" ] || continue
     u_add_key "$ua_u|backlog" "$ua_u/backlog"
-    u_add_key "$ua_u|journal" "$ua_u/journal"
   done < "$U_SCR/active"
   u_awk
   cat "$U_SCR/answer"

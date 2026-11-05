@@ -49,7 +49,7 @@ ref_sessions: [design-notes]
 
 The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `active`, `units`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the store's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
 
-The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `ctx unit active` orders it newest first. A unit whose last item carries no date answers null, and lane journals never enter the derivation.
+The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `session.list` answers it. A unit whose last item carries no date answers null, and lane journals never enter the derivation. `ctx unit active` reads no journal, so it prints no date and orders its units bytewise by name.
 
 ## Backlog tasks, the declaration
 
@@ -82,7 +82,7 @@ Agents mutate the backlog through typed CLI verbs, the only write inputs (no mar
 - `ctx unit task add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: creates a task in `TODO` status.
 - `ctx unit task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: updates the given fields in place; `--refs` replaces the list and `--refs=""` clears it; an update carrying no field refuses rc 1.
 - `ctx unit task start <unit> <slug>`: moves a `TODO` task to `IN_PROGRESS`; the state is not written.
-- `ctx unit active`: the pre-boot field: each ACTIVE unit, newest last_event first, with its anchor, the derived next line (`next: <slug> (<status>) | threads: <n>`, or an explicit none form), and its objective.
+- `ctx unit active`: the pre-boot field: each ACTIVE unit bytewise by name, with its anchor, the derived next line (`next: <slug> (<status>)`, or an explicit none form), and its objective.
 - `ctx unit task complete <unit> <slug> --evidence="..."`: atomically moves a `TODO` or `IN_PROGRESS` task to `DONE` and records its completion receipt (`<date>-<slug>-completed`, `WHAT: "backlog/<slug>: DONE (<evidence>)"`) in the journal.
 - `ctx unit task reopen <unit> <slug>`: moves an `IN_PROGRESS` or `DONE` task back to `TODO`.
 - `ctx unit task drop <unit> <slug> [--reason="..."]`: removes the task and records its drop receipt (`backlog/<slug>: DROPPED (<reason>)`) in the journal; an `IN_PROGRESS` task refuses (reopen it first).
@@ -262,7 +262,7 @@ Time is recorded by anchors. An `@anchor` line stamps one working period, a fres
 
 A fresh unit starts at `A1`, the bootstrap's folded first anchor; each later stamp is the previous plus one. Anchors provide period ordering: `ctx unit entry list <unit> --anchor=A<N>` lists one period, and an entry's `ANCHOR` names the period it was written in. A legacy anchor that carries receipt text (`("continues A11", attention: ...)`) keeps it as content and reads back as stored. No entry loads or skips by its anchor, and age never closes anything: an entry stays live until a closure names it.
 
-The stamped date is also a recency source: when an anchor is the last main-journal item, its date is the unit's `last_event`, the date `session.list` answers and `ctx unit active` renders and orders by. A dated entry slug supplies the date otherwise; an anchor holding no date stamp, or a dateless last item, answers null.
+The stamped date is also a recency source: when an anchor is the last main-journal item, its date is the unit's `last_event`, the date `session.list` answers. A dated entry slug supplies the date otherwise; an anchor holding no date stamp, or a dateless last item, answers null.
 
 ## The schema as the memory boundary
 
