@@ -755,7 +755,8 @@ fi
 rm -f lane-fixture.md lane-write.out lane-report.out lane-show.out lane-stored.out
 
 echo "== DP the derived next pointer (backlog derived-pointer) =="
-# the move is derived at presentation: the first IN_PROGRESS task, else the first TODO;
+# the move is derived at presentation: the first IN_PROGRESS task, else the first open
+# task (every status but DONE);
 # a TODO before an IN_PROGRESS is not the move, a second IN_PROGRESS is not either
 $CTX unit bootstrap dp-unit "derived pointer unit" >/dev/null 2>&1
 $CTX unit task add dp-unit dp-todo --objective="a todo task" >/dev/null 2>&1
@@ -803,6 +804,12 @@ if [ "$DRIVER" = posix ]; then
   a_not "$out" 'stale stored pointer' "DP: the legacy pointer never appears in active"
   $CTX unit refs dp-legacy >/dev/null 2>&1
   a_eq "$(rcat dp-legacy state | grep -c '^next_action:')" "0" "DP: a state write erases the legacy next_action"
+  # an unknown task status is open by the board's rule: with no IN_PROGRESS task, the first
+  # non-DONE task in backlog order is the move, printed with its stored status
+  printf 'status: ACTIVE\ncurrent_anchor: A1\nobjective: "unknown status unit"\nrepos: []\nref_sessions: []\n' | rput dp-unknown state
+  printf '@task dp-unknown-task\n  STATUS: progress\n  OBJECTIVE: "an unknown status task"\n\n@task dp-after-unknown\n  STATUS: TODO\n  OBJECTIVE: "a todo after the unknown"\n' | rput dp-unknown backlog
+  out=$($CTX unit active 2>/dev/null)
+  a_match "$out" '^  next: dp-unknown-task (progress) | threads: 0$' "DP: an unknown status task is the first open task, printed as stored"
 fi
 fi # group 1
 

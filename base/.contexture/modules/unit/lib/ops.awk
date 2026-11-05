@@ -179,8 +179,9 @@ function f_session_list(   u, first, n, i) {
 }
 
 # active_task(kb): the derived move: the first task in backlog order with exact
-# IN_PROGRESS, else the first with exact TODO; returns its index or 0, its status in
-# AT_STATUS; a DONE, legacy, or unknown status is never the move
+# IN_PROGRESS, else the first open task, open being the board's rule, every status but
+# DONE, so a legacy or unknown status is the move and prints as stored; returns its index
+# or 0, its status in AT_STATUS
 function active_task(kb,   i) {
   AT_STATUS = NULLV
   if (PRE[kb] == NULLV) return 0
@@ -190,7 +191,7 @@ function active_task(kb,   i) {
   }
   for (i = 1; i <= NI[kb]; i++) {
     if (IK[kb, i] != "task") continue
-    if (X[kb, i, "status"] == "TODO") { AT_STATUS = "TODO"; return i }
+    if (X[kb, i, "status"] != "DONE") { AT_STATUS = X[kb, i, "status"]; return i }
   }
   return 0
 }

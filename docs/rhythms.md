@@ -65,7 +65,7 @@ When no rhythm is invoked, the agent runs the design loop:
 ```
 1. DISCUSS: explore the problem space; grounded questions resolve intent
 2. DECIDE: the human verdict settles the intent; the harvest candidate triggers
-3. BACKLOG: the intent updates backlog.md; the first IN_PROGRESS task, else the first TODO, is the move
+3. BACKLOG: the intent updates backlog.md; the first IN_PROGRESS task, else the first open task (every status but DONE), is the move
 4. EXECUTE: work the active task; drift updates the backlog in the same breath
 5. VERIFY: the task's acceptance criteria are proven; the journal records completion, the backlog's derived move advances
 6. REFRESH: run @refresh

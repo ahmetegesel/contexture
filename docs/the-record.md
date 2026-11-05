@@ -43,7 +43,7 @@ ref_sessions: [design-notes]
 - `status:` is `ACTIVE` or `CLOSED`.
 - `current_anchor:` is the current value of the anchor counter, `A<N>`. A fresh unit starts at `A1`, the bootstrap's folded first anchor, and each stamp adds one.
 - `objective:` is what the unit is for: one quoted line, an embedded double or single quote is text, an embedded newline refuses.
-- the next move is not a state field: it is derived at presentation from the backlog, the first `IN_PROGRESS` task, else the first `TODO` (`ctx unit active` prints it); a unit with no open task has none.
+- the next move is not a state field: it is derived at presentation from the backlog, the first `IN_PROGRESS` task, else the first open task, open being the board's rule of every status but `DONE` (`ctx unit active` prints it); a unit with no open task has none.
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference sessions mounted at boot; boot loads their knowledge and active journal.
 
@@ -69,7 +69,7 @@ The backlog holds actionable tasks as a living queue: the current declaration of
     requirements to honor, decisions made, how it lands
 ```
 
-Three fields carry the task's identity: `STATUS` (`TODO`, `IN_PROGRESS`, `DONE`), `OBJECTIVE`, and, when present, `REFS`. Three block containers carry technical substance:
+Three fields carry the task's identity: `STATUS` (`TODO`, `IN_PROGRESS`, `DONE`), `OBJECTIVE`, and, when present, `REFS`. The typed verbs write only those three; a legacy record may carry another status, and it stays open: the board lists every task whose status is not `DONE`, the derived next reads it after any `IN_PROGRESS`, and `ctx unit active` prints it as stored. Three block containers carry technical substance:
 
 - `DESCRIPTION` carries context, problem statement, and scope.
 - `ACCEPTANCE CRITERIA` carries checkable done conditions.

@@ -317,7 +317,8 @@ u_fetch_all() {
 
 # u_active: the active listing's one fetch: every unit's state, then each ACTIVE unit's
 # backlog and journal; the state's first column-0 status line decides, the same typed key
-# the record parser reads, so no per-unit verb call enters the view
+# the record parser reads, so no per-unit verb call enters the view; the derived move the
+# functions read from it follows the board's open-task rule (any status but DONE)
 u_active() {
   FN=session.active
   U_UNIT=""

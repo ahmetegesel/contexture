@@ -1389,7 +1389,8 @@ call task.reopen tc53-u m-done-reopen; answer; wantv task.status '"TODO"'; st53 
 tc "TC53: the status move matrix: every allowed move lands, every other refuses ERR_INVALID_TRANSITION"
 
 # TC54 (the unit data mode): the move is derived from the backlog: the first IN_PROGRESS
-# task, else the first TODO, with the open-thread count; no stored pointer enters
+# task, else the first open task (every status but DONE), with the open-thread count;
+# no stored pointer enters
 if [ -n "${DATA_EXEC:-}" ]; then
   mk tc54-u; answer
   kv objective "todo before the active task"; call task.add tc54-u tc54-todo; answer

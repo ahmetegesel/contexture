@@ -503,8 +503,9 @@ function act_before(a, b,   da, db, ua, ub) {
 }
 
 # ------------------------------------------------------------------------------
-# active_next(p): the pinned derived line: the first IN_PROGRESS task, else the first TODO,
-# with the open-thread count; the explicit no-work forms stay one line
+# active_next(p): the pinned derived line: the first IN_PROGRESS task, else the first open
+# task (the board's rule, every status but DONE), with the open-thread count; the explicit
+# no-work forms stay one line
 function active_next(p,   nt, th, bp, tc, s) {
   nt = !nul(D(p) "next_task.slug")
   th = V[D(p) "open_threads"] + 0

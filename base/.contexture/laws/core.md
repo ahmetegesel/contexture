@@ -39,7 +39,7 @@
   6. read the rhythm index: .contexture/ctx unit index
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp the new period: .contexture/ctx unit stamp <unit> (the anchor carries the period's number and date, no receipt text; a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
-  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first TODO; ctx unit active prints it), following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
+  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit active prints it), following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
   10. new work: run .contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
 
 @interact
@@ -60,7 +60,7 @@
   default :: the design loop, when no rhythm is invoked; human rhythm replaces progression
   1. DISCUSS: explore problem space; grounded questions resolve intent
   2. DECIDE: human verdict settles; triggers harvest candidate
-  3. BACKLOG: intent updates the backlog (ctx unit task add); the move is the backlog's first IN_PROGRESS task, else its first TODO, and ctx unit active derives it
+  3. BACKLOG: intent updates the backlog (ctx unit task add); the move is the backlog's first IN_PROGRESS task, else its first open task (every status but DONE), and ctx unit active derives it
   4. EXECUTE: work active task; drift updates backlog in same breath
   5. VERIFY: task acceptance criteria proven; journal records completion, the backlog's derived move advances
   6. REFRESH: run @refresh
