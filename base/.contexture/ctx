@@ -80,12 +80,34 @@ verb_scratch() {
 
 header_field() {
   # first value of a header line, trimmed of surrounding whitespace
-  sed -n "s/^# $2: //p" "$1" | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+  hf_prefix="# $2: "
+  while IFS= read -r hf_line || [ -n "$hf_line" ]; do
+    case "$hf_line" in
+      "$hf_prefix"*)
+        hf_value=${hf_line#"$hf_prefix"}
+        hf_value=${hf_value#"${hf_value%%[![:space:]]*}"}
+        hf_value=${hf_value%"${hf_value##*[![:space:]]}"}
+        printf '%s\n' "$hf_value"
+        return 0
+        ;;
+    esac
+  done < "$1"
+  return 0
 }
 
 header_values() {
   # every value of a header line, in file order, trimmed
-  sed -n "s/^# $2: //p" "$1" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+  hv_prefix="# $2: "
+  while IFS= read -r hv_line || [ -n "$hv_line" ]; do
+    case "$hv_line" in
+      "$hv_prefix"*)
+        hv_value=${hv_line#"$hv_prefix"}
+        hv_value=${hv_value#"${hv_value%%[![:space:]]*}"}
+        hv_value=${hv_value%"${hv_value##*[![:space:]]}"}
+        printf '%s\n' "$hv_value"
+        ;;
+    esac
+  done < "$1"
 }
 
 # ---------------------------------------------------------------------------
@@ -137,7 +159,8 @@ module_file_parse() {
       '# summary: '*)
         [ "$mf_seen_summary" -eq 0 ] || { MF_ERROR="line $mf_lineno: duplicate # summary:"; return 1; }
         mf_summary=${mf_line#'# summary: '}
-        mf_summary=$(printf '%s' "$mf_summary" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        mf_summary=${mf_summary#"${mf_summary%%[![:space:]]*}"}
+        mf_summary=${mf_summary%"${mf_summary##*[![:space:]]}"}
         [ -n "$mf_summary" ] || { MF_ERROR="line $mf_lineno: the summary is empty"; return 1; }
         mf_seen_summary=1
         ;;
@@ -148,7 +171,8 @@ module_file_parse() {
       '# version: '*)
         [ "$mf_seen_version" -eq 0 ] || { MF_ERROR="line $mf_lineno: duplicate # version:"; return 1; }
         mf_version=${mf_line#'# version: '}
-        mf_version=$(printf '%s' "$mf_version" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        mf_version=${mf_version#"${mf_version%%[![:space:]]*}"}
+        mf_version=${mf_version%"${mf_version##*[![:space:]]}"}
         case "$mf_version" in
           ''|*[!A-Za-z0-9._+-]*)
             MF_ERROR="line $mf_lineno: malformed version '$mf_version' (one token of letters, digits, dot, underscore, plus, or hyphen)"
@@ -466,6 +490,33 @@ retired_replacement() {
   esac
 }
 
+# summary_files <scripts-dir>: extension-less, non-hidden script names carrying a
+# "# summary: " header, one per line in glob order; private files are left out
+summary_files() {
+  sf_dir=$1
+  [ -d "$sf_dir" ] || return 0
+  set --
+  for sf_f in "$sf_dir"/*; do
+    [ -f "$sf_f" ] || continue
+    sf_b=${sf_f##*/}
+    case "$sf_b" in
+      ""|.*|*[[:space:]]*) continue ;;
+    esac
+    set -- "$@" "$sf_f"
+  done
+  [ $# -gt 0 ] || return 0
+  LC_ALL=C awk '
+    function base(p,   n, a) { n = split(p, a, "/"); return a[n] }
+    FNR == 1 {
+      if (NR > 1 && ok) print prev
+      prev = base(FILENAME)
+      ok = 0
+    }
+    /^# summary: / { ok = 1 }
+    END { if (ok) print prev }
+  ' "$@"
+}
+
 unit_verbs=""
 unit_verbs_loaded=0
 
@@ -477,17 +528,12 @@ load_unit_verbs() {
   verbs=""
   sd="$modules_root/unit/scripts"
   if [ -d "$sd" ]; then
-    for f in "$sd"/*; do
-      [ -f "$f" ] || continue
-      b=${f##*/}
-      case "$b" in
-        ""|.*|*[[:space:]]*)
-          continue
-          ;;
-      esac
-      [ -n "$(header_field "$f" summary)" ] || continue
+    while IFS= read -r b; do
+      [ -n "$b" ] || continue
       verbs="$verbs $b"
-    done
+    done <<EOF
+$(summary_files "$sd")
+EOF
   fi
   unit_verbs="help${verbs}"
 }
@@ -671,20 +717,9 @@ verb_names() {
   # engine-owned
   sd="$1/scripts"
   [ -d "$sd" ] || return 0
-  raw=""
-  for f in "$sd"/*; do
-    [ -f "$f" ] || continue
-    b=${f##*/}
-    case "$b" in
-      ""|.*|*[[:space:]]*)
-        continue
-        ;;
-    esac
-    [ -n "$(header_field "$f" summary)" ] || continue
-    raw="$raw $b"
-  done
+  raw=$(summary_files "$sd")
   [ -n "$raw" ] || return 0
-  raw=$(printf '%s\n' ${raw# } | LC_ALL=C sort)
+  raw=$(printf '%s\n' $raw | LC_ALL=C sort)
   out=""
   seen=""
   for b in $raw; do
@@ -718,6 +753,18 @@ verb_detail() {
 }
 
 verb_exists() {
+  case "${1##*/}" in
+    unit)
+      case "$2" in
+        help) return 1 ;;
+      esac
+      load_unit_verbs
+      case " $unit_verbs " in
+        *" $2 "*) return 0 ;;
+      esac
+      return 1
+      ;;
+  esac
   for v in $(verb_names "$1"); do
     if [ "$v" = "$2" ]; then
       return 0
