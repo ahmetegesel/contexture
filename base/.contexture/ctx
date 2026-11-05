@@ -511,8 +511,16 @@ summary_files() {
       if (NR > 1 && ok) print prev
       prev = base(FILENAME)
       ok = 0
+      seen_summary = 0
     }
-    /^# summary: / { ok = 1 }
+    !seen_summary && /^# summary: / {
+      seen_summary = 1
+      v = $0
+      sub(/^# summary: /, "", v)
+      gsub(/^[[:space:]]+/, "", v)
+      gsub(/[[:space:]]+$/, "", v)
+      if (v != "") ok = 1
+    }
     END { if (ok) print prev }
   ' "$@"
 }
