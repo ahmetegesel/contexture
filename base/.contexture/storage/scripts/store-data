@@ -46,7 +46,6 @@ LC_ALL=C
 export LC_ALL
 
 SD_NAMESPACE="${1:-}"
-SD_CR=$(printf '\r')
 
 sd_fail() {
   printf 'store-data: %s\n' "$1" >&2
@@ -56,60 +55,6 @@ sd_fail() {
 sd_env() {
   printf 'store-data: %s\n' "$1" >&2
   exit 2
-}
-
-# sd_pattern_ok <pattern>: one <name> placeholder per slash-separated segment; the final
-# segment may be a multi-segment <name...> placeholder
-sd_pattern_ok() {
-  SP_KEY="$1" LC_ALL=C awk 'BEGIN {
-    k = ENVIRON["SP_KEY"]
-    if (k == "") exit 1
-    n = split(k, p, "/")
-    if (n < 1) exit 1
-    for (i = 1; i <= n; i++) {
-      if (i == n && p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/) continue
-      if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
-    }
-    exit 0
-  }'
-}
-
-# sd_doc_pattern_ok <pattern>: a document rule's key pattern: a <name> placeholder or a
-# literal token per slash-separated segment; the final segment may be a <name...> placeholder
-sd_doc_pattern_ok() {
-  SP_KEY="$1" LC_ALL=C awk 'BEGIN {
-    k = ENVIRON["SP_KEY"]
-    if (k == "") exit 1
-    n = split(k, p, "/")
-    if (n < 1) exit 1
-    for (i = 1; i <= n; i++) {
-      if (i == n && p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/) continue
-      if (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*>$/) continue
-      if (p[i] !~ /^[A-Za-z0-9._-]+$/) exit 1
-    }
-    exit 0
-  }'
-}
-
-sd_section_ok() {  case "$1" in
-    ''|[!a-z]*|*[!a-z0-9_]*) return 1 ;;
-  esac
-  return 0
-}
-
-sd_entity_ok() {
-  case "$1" in
-    ''|[!a-z]*|*[!a-z0-9_]*) return 1 ;;
-  esac
-  return 0
-}
-
-sd_marker_ok() {
-  case "$1" in
-    -) return 0 ;;
-    @[A-Za-z]*) case "${1#@}" in *[!A-Za-z0-9_-]*) return 1 ;; esac; return 0 ;;
-    *) return 1 ;;
-  esac
 }
 
 # the namespace token: lowercase letters, digits, dot, underscore, hyphen
@@ -132,277 +77,279 @@ fi
 sd_modules="$SD_WS/.contexture/modules"
 sd_extension_modules="$SD_WS/.contexture/extensions/modules"
 
-# data_namespace <file>: the first namespace value of a data file, trimmed, or nothing
-data_namespace() {
-  dn_out=""
-  while IFS= read -r dn_line || [ -n "$dn_line" ];   do
-    dn_line=${dn_line%"$SD_CR"}
-    case "$dn_line" in
-      '#'*) continue ;;
-    esac
-    case "$dn_line" in
-      *[![:space:]]*) ;;
-      *) continue ;;
-    esac
-    dn_key=${dn_line%%:*}
-    dn_val=${dn_line#*:}
-    dn_key=$(printf '%s' "$dn_key" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-    [ "$dn_key" = namespace ] || continue
-    dn_out=$(printf '%s' "$dn_val" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-    break
-  done < "$1"
-  printf '%s\n' "$dn_out"
-}
+# the owner scan: the first namespace value of each candidate data file, one awk pass over
+# every file in both roots; the workspace modules first, then the extension modules
+set --
+for sd_file in "$sd_modules"/*/data; do
+  [ -f "$sd_file" ] || continue
+  set -- "$@" "$sd_file"
+done
+if [ -d "$sd_extension_modules" ]; then
+  for sd_file in "$sd_extension_modules"/*/data; do
+    [ -f "$sd_file" ] || continue
+    set -- "$@" "$sd_file"
+  done
+fi
+
+sd_owner_files=""
+if [ $# -gt 0 ]; then
+  sd_owner_files=$(SD_WANT_NS="$SD_NAMESPACE" LC_ALL=C awk '
+    BEGIN { want = ENVIRON["SD_WANT_NS"] }
+    FNR == 1 { found = 0 }
+    found { next }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line ~ /^#/) next
+      if (line !~ /[^[:space:]]/) next
+      c = index(line, ":")
+      if (c == 0) next
+      key = substr(line, 1, c - 1)
+      val = substr(line, c + 1)
+      gsub(/^[[:space:]]+/, "", key)
+      gsub(/[[:space:]]+$/, "", key)
+      if (key != "namespace") next
+      gsub(/^[[:space:]]+/, "", val)
+      gsub(/[[:space:]]+$/, "", val)
+      found = 1
+      if (val == want) print FILENAME
+    }
+  ' "$@")
+fi
 
 sd_found=""
 sd_count=0
-
-# the owner scan reads both module roots: the workspace modules, then the extension
-# modules (the package overlay's install root); an absent extension root is silent
-sd_scan_root() {
-  for sd_file in "$1"/*/data; do
-    [ -f "$sd_file" ] || continue
-    sd_ns=$(data_namespace "$sd_file")
-    [ "$sd_ns" = "$SD_NAMESPACE" ] || continue
+sd_owners=""
+if [ -n "$sd_owner_files" ]; then
+  sd_ifs=$IFS
+  IFS='
+'
+  for sd_file in $sd_owner_files; do
     sd_count=$((sd_count + 1))
-    sd_found="$sd_file"
+    sd_found=$sd_file
+    sd_mod=${sd_file%/*}
+    sd_mod=${sd_mod##*/}
+    sd_owners="$sd_owners $sd_mod"
   done
-}
-sd_scan_root "$sd_modules"
-[ -d "$sd_extension_modules" ] && sd_scan_root "$sd_extension_modules"
+  IFS=$sd_ifs
+fi
 
 if [ "$sd_count" -eq 0 ]; then
   printf 'store-data: namespace '\''%s'\'' is declared by no module data file\n' "$SD_NAMESPACE" >&2
   exit 3
 fi
 if [ "$sd_count" -gt 1 ]; then
-  sd_owners=""
-  sd_owner_root() {
-    for sd_file in "$1"/*/data; do
-      [ -f "$sd_file" ] || continue
-      sd_ns=$(data_namespace "$sd_file")
-      [ "$sd_ns" = "$SD_NAMESPACE" ] || continue
-      sd_mod=${sd_file%/*}; sd_mod=${sd_mod##*/}
-      sd_owners="$sd_owners $sd_mod"
-    done
-  }
-  sd_owner_root "$sd_modules"
-  [ -d "$sd_extension_modules" ] && sd_owner_root "$sd_extension_modules"
   sd_fail "namespace '$SD_NAMESPACE' is declared by more than one module:$sd_owners"
 fi
 
-sd_ns=""
-sd_root=""
-sd_suffix=""
-sd_key=""
-sd_changes=""
-sd_search=""
-sd_format=""
-sd_fields=""
-sd_title=""
-sd_snippet=""
-sd_modes=""
-sd_docs=""
-sd_doc_count=0
-sd_seen_ns=0
-sd_seen_root=0
-sd_seen_suffix=0
-sd_seen_key=0
-sd_seen_changes=0
-sd_seen_search=0
-sd_seen_format=0
-sd_seen_fields=0
-sd_seen_title=0
-sd_seen_snippet=0
-sd_seen_modes=0
-sd_lineno=0
-
-while IFS= read -r sd_line || [ -n "$sd_line" ]; do
-  sd_lineno=$((sd_lineno + 1))
-  sd_line=${sd_line%"$SD_CR"}
-  case "$sd_line" in
-    '#'*) continue ;;
-  esac
-  case "$sd_line" in
-    *[![:space:]]*) ;;
-    *) continue ;;
-  esac
-  case "$sd_line" in
-    *:*) ;;
-    *) sd_fail "line $sd_lineno of ${sd_found##*/} is not a 'field: value' line" ;;
-  esac
-  sd_field=${sd_line%%:*}
-  sd_value=${sd_line#*:}
-  sd_field=$(printf '%s' "$sd_field" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-  sd_value=$(printf '%s' "$sd_value" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-  case "$sd_field" in
-    namespace)
-      [ "$sd_seen_ns" -eq 0 ] || sd_fail "duplicate field 'namespace' in the data file"
-      sd_seen_ns=1; sd_ns=$sd_value ;;
-    root)
-      [ "$sd_seen_root" -eq 0 ] || sd_fail "duplicate field 'root' in the data file"
-      sd_seen_root=1; sd_root=$sd_value ;;
-    suffix)
-      [ "$sd_seen_suffix" -eq 0 ] || sd_fail "duplicate field 'suffix' in the data file"
-      sd_seen_suffix=1; sd_suffix=$sd_value ;;
-    key)
-      [ "$sd_seen_key" -eq 0 ] || sd_fail "duplicate field 'key' in the data file"
-      sd_seen_key=1; sd_key=$sd_value ;;
-    changes)
-      [ "$sd_seen_changes" -eq 0 ] || sd_fail "duplicate field 'changes' in the data file"
-      sd_seen_changes=1; sd_changes=$sd_value ;;
-    search)
-      [ "$sd_seen_search" -eq 0 ] || sd_fail "duplicate field 'search' in the data file"
-      sd_seen_search=1; sd_search=$sd_value ;;
-    format)
-      [ "$sd_seen_format" -eq 0 ] || sd_fail "duplicate field 'format' in the data file"
-      sd_seen_format=1; sd_format=$sd_value ;;
-    fields)
-      [ "$sd_seen_fields" -eq 0 ] || sd_fail "duplicate field 'fields' in the data file"
-      sd_seen_fields=1; sd_fields=$sd_value ;;
-    title)
-      [ "$sd_seen_title" -eq 0 ] || sd_fail "duplicate field 'title' in the data file"
-      sd_seen_title=1; sd_title=$sd_value ;;
-    snippet)
-      [ "$sd_seen_snippet" -eq 0 ] || sd_fail "duplicate field 'snippet' in the data file"
-      sd_seen_snippet=1; sd_snippet=$sd_value ;;
-    modes)
-      [ "$sd_seen_modes" -eq 0 ] || sd_fail "duplicate field 'modes' in the data file"
-      sd_seen_modes=1; sd_modes=$sd_value ;;
-    document)
-      sd_doc_count=$((sd_doc_count + 1))
-      set -f
-      set -- $sd_value
-      set +f
-      [ $# -eq 4 ] || sd_fail "line $sd_lineno: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)"
-      sd_dpat=$1; sd_dsec=$2; sd_dent=$3; sd_dmark=$4
-      sd_doc_pattern_ok "$sd_dpat" || sd_fail "line $sd_lineno: malformed document key pattern '$sd_dpat'"
-      sd_section_ok "$sd_dsec" || sd_fail "line $sd_lineno: malformed document section '$sd_dsec'"
-      sd_entity_ok "$sd_dent" || sd_fail "line $sd_lineno: malformed document entity type '$sd_dent'"
-      sd_marker_ok "$sd_dmark" || sd_fail "line $sd_lineno: malformed document head marker '$sd_dmark'"
-      sd_docs="$sd_docs$sd_dpat	$sd_dsec	$sd_dent	$sd_dmark
-" ;;
-    *)
-      sd_fail "unknown field '$sd_field' in the data file" ;;
-  esac
-done < "$sd_found"
-
-[ "$sd_seen_ns" -eq 1 ] || sd_fail "the data file declares no namespace"
-[ "$sd_seen_key" -eq 1 ] || sd_fail "the data file declares no key pattern"
-[ "$sd_seen_root" -eq 1 ] || sd_root=$sd_ns
-[ "$sd_seen_suffix" -eq 1 ] || sd_suffix=""
-[ "$sd_seen_changes" -eq 1 ] || sd_changes=false
-
-case "$sd_ns" in
-  ''|[!a-z0-9._-]*|*[!a-z0-9._-]*) sd_fail "malformed namespace '$sd_ns'" ;;
-esac
-[ "$sd_ns" = "$SD_NAMESPACE" ] || sd_fail "the data file declares namespace '$sd_ns', not '$SD_NAMESPACE'"
-
-SR_ROOT="$sd_root" LC_ALL=C awk 'BEGIN {
-  r = ENVIRON["SR_ROOT"]
-  if (r == "" || r == ".") exit 1
-  if (substr(r, 1, 1) == "/" || substr(r, length(r), 1) == "/") exit 1
-  if (r ~ /[[:cntrl:]]/ || index(r, " ") || index(r, "\\")) exit 1
+# the parse and the rule checks: one awk pass over the owner file; the answer is the twelve
+# lines plus the document rules, a refusal is the one prefixed line and exit 1
+SD_WANT_NS="$SD_NAMESPACE" SD_PATH="$sd_found" SD_FNAME="${sd_found##*/}" LC_ALL=C awk '
+function fail(msg) {
+  printf "store-data: %s\n", msg > "/dev/stderr"
+  bad = 1
+  exit 1
+}
+function trim(s) {
+  gsub(/^[[:space:]]+/, "", s)
+  gsub(/[[:space:]]+$/, "", s)
+  return s
+}
+function ns_ok(s) { return s != "" && s ~ /^[a-z0-9._-]+$/ }
+function root_ok(r,   n, p, i) {
+  if (r == "" || r == ".") return 0
+  if (substr(r, 1, 1) == "/" || substr(r, length(r), 1) == "/") return 0
+  if (r ~ /[[:cntrl:]]/ || index(r, " ") || index(r, "\\")) return 0
   n = split(r, p, "/")
-  for (i = 1; i <= n; i++) if (p[i] == "" || p[i] == "." || p[i] == "..") exit 1
-  exit 0
-}' || sd_fail "malformed root '$sd_root' (a workspace-relative folder inside the workspace)"
+  for (i = 1; i <= n; i++) if (p[i] == "" || p[i] == "." || p[i] == "..") return 0
+  return 1
+}
+function suffix_ok(s) {
+  if (s == "") return 1
+  if (s == "." || s == "..") return 0
+  if (index(s, "/") || index(s, " ")) return 0
+  if (s ~ /[[:cntrl:]]/) return 0
+  return 1
+}
+function key_pattern_ok(k,   n, p, i) {
+  if (k == "") return 0
+  n = split(k, p, "/")
+  for (i = 1; i <= n; i++) {
+    if (i == n && p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/) continue
+    if (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*>$/) continue
+    return 0
+  }
+  return 1
+}
+function doc_pattern_ok(k,   n, p, i) {
+  if (k == "") return 0
+  n = split(k, p, "/")
+  for (i = 1; i <= n; i++) {
+    if (i == n && p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/) continue
+    if (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*>$/) continue
+    if (p[i] ~ /^[A-Za-z0-9._-]+$/) continue
+    return 0
+  }
+  return 1
+}
+function section_ok(s) { return s != "" && s ~ /^[a-z][a-z0-9_]*$/ }
+function entity_ok(s) { return s != "" && s ~ /^[a-z][a-z0-9_]*$/ }
+function marker_ok(s) { return s == "-" || s ~ /^@[A-Za-z][A-Za-z0-9_-]*$/ }
+BEGIN {
+  want = ENVIRON["SD_WANT_NS"]
+  path = ENVIRON["SD_PATH"]
+  fname = ENVIRON["SD_FNAME"]
+  seen_ns = seen_root = seen_suffix = seen_key = seen_changes = 0
+  seen_search = seen_format = seen_fields = seen_title = seen_snippet = seen_modes = 0
+  ns = root = suffix = key = changes = search = format = fields = title = snippet = modes = ""
+  docs = ""
+  doc_count = 0
+  lineno = 0
+}
+{
+  line = $0
+  sub(/\r$/, "", line)
+  lineno++
+  if (line ~ /^#/) next
+  if (line !~ /[^[:space:]]/) next
+  c = index(line, ":")
+  if (c == 0) fail("line " lineno " of " fname " is not a '\''field: value'\'' line")
+  field = trim(substr(line, 1, c - 1))
+  value = trim(substr(line, c + 1))
+  if (field == "namespace") {
+    if (seen_ns) fail("duplicate field '\''namespace'\'' in the data file")
+    seen_ns = 1; ns = value
+  } else if (field == "root") {
+    if (seen_root) fail("duplicate field '\''root'\'' in the data file")
+    seen_root = 1; root = value
+  } else if (field == "suffix") {
+    if (seen_suffix) fail("duplicate field '\''suffix'\'' in the data file")
+    seen_suffix = 1; suffix = value
+  } else if (field == "key") {
+    if (seen_key) fail("duplicate field '\''key'\'' in the data file")
+    seen_key = 1; key = value
+  } else if (field == "changes") {
+    if (seen_changes) fail("duplicate field '\''changes'\'' in the data file")
+    seen_changes = 1; changes = value
+  } else if (field == "search") {
+    if (seen_search) fail("duplicate field '\''search'\'' in the data file")
+    seen_search = 1; search = value
+  } else if (field == "format") {
+    if (seen_format) fail("duplicate field '\''format'\'' in the data file")
+    seen_format = 1; format = value
+  } else if (field == "fields") {
+    if (seen_fields) fail("duplicate field '\''fields'\'' in the data file")
+    seen_fields = 1; fields = value
+  } else if (field == "title") {
+    if (seen_title) fail("duplicate field '\''title'\'' in the data file")
+    seen_title = 1; title = value
+  } else if (field == "snippet") {
+    if (seen_snippet) fail("duplicate field '\''snippet'\'' in the data file")
+    seen_snippet = 1; snippet = value
+  } else if (field == "modes") {
+    if (seen_modes) fail("duplicate field '\''modes'\'' in the data file")
+    seen_modes = 1; modes = value
+  } else if (field == "document") {
+    doc_count++
+    n = split(value, p, /[[:space:]]+/)
+    if (n != 4) fail("line " lineno ": a document rule takes the key pattern, the section, the entity type, and the head marker (or -)")
+    dpat = p[1]; dsec = p[2]; dent = p[3]; dmark = p[4]
+    if (!doc_pattern_ok(dpat)) fail("line " lineno ": malformed document key pattern '\''" dpat "'\''")
+    if (!section_ok(dsec)) fail("line " lineno ": malformed document section '\''" dsec "'\''")
+    if (!entity_ok(dent)) fail("line " lineno ": malformed document entity type '\''" dent "'\''")
+    if (!marker_ok(dmark)) fail("line " lineno ": malformed document head marker '\''" dmark "'\''")
+    docs = docs dpat "\t" dsec "\t" dent "\t" dmark "\n"
+  } else {
+    fail("unknown field '\''" field "'\'' in the data file")
+  }
+}
+END {
+  if (bad) exit 1
+  if (!seen_ns) fail("the data file declares no namespace")
+  if (!seen_key) fail("the data file declares no key pattern")
+  if (!seen_root) root = ns
+  if (!seen_suffix) suffix = ""
+  if (!seen_changes) changes = "false"
 
-case "$sd_suffix" in
-  '') ;;
-  .|..) sd_fail "malformed suffix '$sd_suffix'" ;;
-  */*|*' '*) sd_fail "malformed suffix '$sd_suffix'" ;;
-  *[[:cntrl:]]*) sd_fail "malformed suffix '$sd_suffix'" ;;
-esac
+  if (!ns_ok(ns)) fail("malformed namespace '\''" ns "'\''")
+  if (ns != want) fail("the data file declares namespace '\''" ns "'\'', not '\''" want "'\''")
+  if (!root_ok(root)) fail("malformed root '\''" root "'\'' (a workspace-relative folder inside the workspace)")
+  if (!suffix_ok(suffix)) fail("malformed suffix '\''" suffix "'\''")
+  if (!key_pattern_ok(key)) fail("malformed key pattern '\''" key "'\'' (a <name> placeholder per slash-separated segment, the last optionally <name...>)")
+  if (changes != "true" && changes != "false") fail("malformed changes flag '\''" changes "'\'' (true or false)")
 
-sd_pattern_ok "$sd_key" || sd_fail "malformed key pattern '$sd_key' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"
+  form = ""
+  if (seen_search) {
+    if (search != "flat" && search != "documents") fail("malformed search form '\''" search "'\'' (flat or documents)")
+    form = search
+  } else if (doc_count > 0 || seen_format || seen_fields || seen_title || seen_snippet) {
+    if (doc_count > 0) form = "documents"; else form = "flat"
+  }
+  if (form == "documents" && doc_count == 0) fail("the document-set search form takes at least one document rule")
+  if (form == "documents" && (seen_format || seen_fields)) fail("the document-set search form takes no format or fields")
+  if (form != "documents" && doc_count > 0) fail("a document rule needs the document-set search form")
 
-case "$sd_changes" in
-  true|false) ;;
-  *) sd_fail "malformed changes flag '$sd_changes' (true or false)" ;;
-esac
+  if (format == "") {
+    if (form == "flat") format = "text"
+  } else if (format == "text" || format == "json") {
+    if (form != "flat") fail("format is a flat-form field")
+  } else {
+    fail("malformed format '\''" format "'\'' (text or json)")
+  }
 
-# the search form: explicit or implied by the optional keys; a flat key and a document
-# rule never mix
-sd_form=""
-if [ "$sd_seen_search" -eq 1 ]; then
-  case "$sd_search" in
-    flat|documents) sd_form=$sd_search ;;
-    *) sd_fail "malformed search form '$sd_search' (flat or documents)" ;;
-  esac
-elif [ "$sd_doc_count" -gt 0 ] || [ "$sd_seen_format" -eq 1 ] || [ "$sd_seen_fields" -eq 1 ] \
-  || [ "$sd_seen_title" -eq 1 ] || [ "$sd_seen_snippet" -eq 1 ]; then
-  if [ "$sd_doc_count" -gt 0 ]; then sd_form=documents; else sd_form=flat; fi
-fi
-if [ "$sd_form" = documents ] && [ "$sd_doc_count" -eq 0 ]; then
-  sd_fail "the document-set search form takes at least one document rule"
-fi
-if [ "$sd_form" = documents ] && { [ "$sd_seen_format" -eq 1 ] || [ "$sd_seen_fields" -eq 1 ]; }; then
-  sd_fail "the document-set search form takes no format or fields"
-fi
-if [ "$sd_form" != documents ] && [ "$sd_doc_count" -gt 0 ]; then
-  sd_fail "a document rule needs the document-set search form"
-fi
+  if (form != "flat" && seen_fields) fail("fields is a flat-form field")
+  if (seen_fields) {
+    gsub(/[[:space:]]/, "", fields)
+    if (fields == "" || fields ~ /^,/ || fields ~ /,$/ || index(fields, ",,")) fail("malformed fields '\''" fields "'\''")
+    n = split(fields, p, ",")
+    for (i = 1; i <= n; i++) if (p[i] !~ /^[A-Za-z0-9_.-]+$/) fail("malformed field name '\''" p[i] "'\''")
+  }
 
-case "$sd_format" in
-  '') [ "$sd_form" = flat ] && sd_format=text ;;
-  text|json) [ "$sd_form" = flat ] || sd_fail "format is a flat-form field" ;;
-  *) sd_fail "malformed format '$sd_format' (text or json)" ;;
-esac
-if [ "$sd_form" != flat ] && [ "$sd_seen_fields" -eq 1 ]; then
-  sd_fail "fields is a flat-form field"
-fi
-if [ "$sd_seen_fields" -eq 1 ]; then
-  sd_fields=$(printf '%s' "$sd_fields" | tr -d '[:space:]')
-  case "$sd_fields" in
-    ''|,*|*,|*,,*) sd_fail "malformed fields '$sd_fields'" ;;
-  esac
-  set -f
-  set -- $(printf '%s' "$sd_fields" | tr ',' ' ')
-  set +f
-  for sd_f in "$@"; do
-    case "$sd_f" in
-      [!A-Za-z0-9_.-]*|*[!A-Za-z0-9_.-]*) sd_fail "malformed field name '$sd_f'" ;;
-    esac
-  done
-fi
-if [ "$sd_seen_title" -eq 1 ]; then
-  case "$sd_form" in
-    documents) case "$sd_title" in head|key) ;; *) sd_fail "malformed document title '$sd_title' (head or key)" ;; esac ;;
-    *) case "$sd_title" in [!A-Za-z0-9_.-]*|*[!A-Za-z0-9_.-]*) sd_fail "malformed title '$sd_title'" ;; esac ;;
-  esac
-else
-  case "$sd_form" in documents) sd_title=head ;; *) sd_title=key ;; esac
-fi
-if [ "$sd_seen_snippet" -eq 1 ] && [ "$sd_snippet" != line ]; then
-  sd_fail "malformed snippet '$sd_snippet' (line)"
-fi
-[ "$sd_seen_snippet" -eq 1 ] || sd_snippet=line
-if [ "$sd_seen_modes" -eq 1 ]; then
-  sd_modes=$(printf '%s' "$sd_modes" | tr -d '[:space:]')
-  case "$sd_modes" in
-    ''|,*|*,|*,,*) sd_fail "malformed modes '$sd_modes'" ;;
-  esac
-  sd_modes_norm=""
-  sd_modes_seen=" "
-  for sd_m in $(printf '%s' "$sd_modes" | tr ',' ' '); do
-    case "$sd_m" in
-      [!a-z]*|*[!a-z0-9_-]*) sd_fail "malformed mode '$sd_m'" ;;
-    esac
-    case "$sd_modes_seen" in *" $sd_m "*) sd_fail "duplicate mode '$sd_m'" ;; esac
-    sd_modes_seen="$sd_modes_seen$sd_m "
-    sd_modes_norm="$sd_modes_norm${sd_modes_norm:+,}$sd_m"
-  done
-  case "$sd_modes_seen" in
-    *" exact "*) ;;
-    *) sd_fail "the modes must include exact" ;;
-  esac
-  sd_modes=$sd_modes_norm
-else
-  sd_modes=exact
-fi
+  if (seen_title) {
+    if (form == "documents") {
+      if (title != "head" && title != "key") fail("malformed document title '\''" title "'\'' (head or key)")
+    } else {
+      if (title !~ /^[A-Za-z0-9_.-]+$/) fail("malformed title '\''" title "'\''")
+    }
+  } else {
+    if (form == "documents") title = "head"; else title = "key"
+  }
 
-printf '%s\n' "$sd_ns" "$sd_root" "$sd_suffix" "$sd_key" "$sd_changes" "$sd_found" \
-  "$sd_form" "$sd_format" "$sd_fields" "$sd_title" "$sd_snippet" "$sd_modes"
-[ -z "$sd_docs" ] || printf '%s' "$sd_docs"
-exit 0
+  if (seen_snippet && snippet != "line") fail("malformed snippet '\''" snippet "'\'' (line)")
+  if (!seen_snippet) snippet = "line"
+
+  if (seen_modes) {
+    gsub(/[[:space:]]/, "", modes)
+    if (modes == "" || modes ~ /^,/ || modes ~ /,$/ || index(modes, ",,")) fail("malformed modes '\''" modes "'\''")
+    n = split(modes, p, ",")
+    mnorm = ""
+    mseen = " "
+    for (i = 1; i <= n; i++) {
+      m = p[i]
+      if (m !~ /^[a-z][a-z0-9_-]*$/) fail("malformed mode '\''" m "'\''")
+      if (index(mseen, " " m " ")) fail("duplicate mode '\''" m "'\''")
+      mseen = mseen m " "
+      if (mnorm == "") mnorm = m; else mnorm = mnorm "," m
+    }
+    if (!index(mseen, " exact ")) fail("the modes must include exact")
+    modes = mnorm
+  } else {
+    modes = "exact"
+  }
+
+  print ns
+  print root
+  print suffix
+  print key
+  print changes
+  print path
+  print form
+  print format
+  print fields
+  print title
+  print snippet
+  print modes
+  printf "%s", docs
+}
+' "$sd_found"
+exit $?
