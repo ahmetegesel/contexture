@@ -352,6 +352,21 @@ store_json() {
   printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
 
+store_json_lines() {
+  awk '
+    function bs_double(s,    n, p, i, o) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; return o }
+    function sjoin(s, sep, lit,    n, p, i, o) { n = split(s, p, sep); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o lit p[i]; return o }
+    BEGIN { ORS = ""; first = 1 }
+    {
+      if (!first) printf ","
+      first = 0
+      s = bs_double($0)
+      s = sjoin(s, "[\"]", "\\" "\"")
+      printf "\"%s\"", s
+    }
+  ' "$1"
+}
+
 store_list() {
   FN=store.list
   [ $# -ge 1 ] && [ $# -le 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.list takes the namespace and an optional key prefix"
@@ -372,20 +387,16 @@ store_list() {
     : > "$sn_tmp"
   fi
   printf '{"namespace":"%s","keys":[' "$(store_json "$sn_ns")"
-  sn_first=1
+  sn_filtered=$(mktemp "$(scratch_base)/store-keys-out.XXXXXX" 2>/dev/null) || { rm -f "$sn_tmp"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
   while IFS= read -r sn_key; do
     [ -n "$sn_key" ] || continue
     store_key_ok "$sn_key" || continue
     store_key_shape "$SD_KEYPAT" "$sn_key" || continue
     [ -z "$sn_prefix" ] || [ "${sn_key#"$sn_prefix"}" != "$sn_key" ] || continue
-    if [ "$sn_first" -eq 1 ]; then
-      printf '"%s"' "$(store_json "$sn_key")"
-      sn_first=0
-    else
-      printf ',"%s"' "$(store_json "$sn_key")"
-    fi
+    printf '%s\n' "$sn_key" >> "$sn_filtered"
   done < "$sn_tmp"
-  rm -f "$sn_tmp"
+  store_json_lines "$sn_filtered"
+  rm -f "$sn_tmp" "$sn_filtered"
   printf ']}\n'
   exit 0
 }
