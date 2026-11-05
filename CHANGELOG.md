@@ -4,6 +4,26 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.63.0] - 2026-11-05
+
+MINOR: the derived pointer and the record speed. The state stops storing `next_action`: the next move derives from the backlog at presentation time, so it cannot go stale. `ctx unit active` shows the derived next task per unit without a journal scan. Naming the break: the State artifact loses `next_action`, `ctx unit next` and `task start --pointer` retire, and the audit's IN_PROGRESS-cross-check drops.
+
+### Added
+
+- The derived next: `ctx unit active` prints `next: <slug> (<status>)` per ACTIVE unit (the first exact IN_PROGRESS, else the first non-DONE task in backlog order), with the no-work forms (`next: none (empty backlog)`, `next: none (no open task)`) and the missing-backlog warning; the load states the reader rule and adds nothing, since the backlog page carries the tasks.
+- `session.active`: one data-script call over every state plus each ACTIVE unit's backlog; no journal fetch.
+
+### Changed
+
+- The record speed: the batch parser's quadratic long-line strips (the suffix CR strip 12.4 s on a 1.24 MB line) become a quote-strip, `record` 15.1 s to 1.4 s (10.9x) byte-identical, 5/5 concurrent records rc0; the store-data reader runs in two awk passes (15x, 62/62 differential fixtures); engine discovery reads headers in-process (about 69 percent off a missing-module call); `store.list` escapes its keys in one pass (16x).
+- `ctx unit active`: 76 s to 9.5 s; `last_event` and the threads count leave the output, the journal scan is gone.
+- An open task is any status but not DONE, exactly the board's rule; an unknown legacy status now derives instead of reading as no open task; `task.drop` protects any IN_PROGRESS task.
+- The state's legacy `next_action` is ignored by the record reads and exact search and erased by the next state write; a ranked backend may still match its raw document until that write.
+
+### Removed
+
+- `next_action` from the State schema; `ctx unit next` (the replacement line names the derived view); `task start --pointer`; the audit's IN_PROGRESS-absent-from-state check; `last_event` and the thread count from `active`.
+
 ## [0.62.0] - 2026-11-04
 
 MINOR: the law compose lands. The base is a loader; the law layer is composed from the core source, the installed modules' fragments, and the preambles at install and boot, and the workspace and local overlays chain after it. The generated layer is gitignored. The docs laws move into the docs module, the lane laws gain the boundary-warning, and the workspace overlay keeps its own five laws.
