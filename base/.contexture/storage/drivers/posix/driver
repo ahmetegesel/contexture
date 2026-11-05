@@ -633,7 +633,7 @@ batch_parse() {
   sb_open=0
   sb_op=""; sb_key=""; sb_head=""; sb_val=""; sb_seen_key=0; sb_seen_head=0; sb_seen_val=0
   while IFS= read -r sb_l || [ -n "$sb_l" ]; do
-    sb_l=${sb_l%"$cr_byte"}
+    case "$sb_l" in *"$cr_byte") sb_l=${sb_l%?} ;; esac
     case "$sb_l" in
       '') continue ;;
       action=*)
@@ -662,7 +662,7 @@ batch_parse() {
         [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
         [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$SB_N" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'value_b64='"
         sb_seen_val=1
-        sb_val=${sb_l#value_b64=}
+        sb_val=${sb_l#??????????}
         ;;
       *) batch_refuse 1 "$SB_N" "${sb_op:-?}" "${sb_key:-?}" ERR_INVALID_ARGUMENT "unknown payload line '$sb_l'" ;;
     esac
