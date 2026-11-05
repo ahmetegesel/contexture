@@ -1,0 +1,16 @@
+{
+  "name": "contexture-tests",
+  "private": true,
+  "type": "module",
+  "packageManager": "bun@1.3.13",
+  "scripts": {
+    "test": "vitest run",
+    "test:harness": "vitest run --project harness",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2",
+    "vitest": "5.1.0"
+  }
+}

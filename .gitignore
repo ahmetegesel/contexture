@@ -16,6 +16,8 @@
 # the test material (upstream only)
 !tests/
 !tests/**
+# the test tooling's installed packages stay untracked (the lockfile is tracked)
+/tests/node_modules/
 # the plugins (tracked catalog: overlays installable into an existing setup)
 !plugins/
 !plugins/**
