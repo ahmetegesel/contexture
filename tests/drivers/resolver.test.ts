@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
@@ -96,6 +96,20 @@ describe('the resolver', { concurrent: true }, () => {
     expect((await rsv(sb, [`--driver=${w}`, 'require', 'store'])).code).toBe(0);
     utimesSync(w, FUTURE, FUTURE);
     expect((await rsv(sb, [`--driver=${w}`, 'require', 'store'])).code).toBe(2);
+  });
+
+  it('[the-engine-r15] refuses require and has rc 2 ERR_DRIVER_NOT_FOUND for a removed bundled driver, whatever fresh verdict it cached', async () => {
+    const sb = fresh(posix);
+    expect((await rsv(sb, ['require', 'store'])).code).toBe(0);
+    const cached = verdicts(sb).filter((v) => v.endsWith('.require.store'));
+    expect(cached).toHaveLength(1);
+    utimesSync(join(sb, '.contexture/tmp/driver-verdicts', cached[0]), FUTURE, FUTURE);
+    const driver = driverPath(sb, 'posix');
+    rmSync(driver);
+    for (const args of [['require', 'store'], ['has', 'store']]) {
+      const r = await rsv(sb, args);
+      expect([r.code, r.stdout, r.stderr], args.join(' ')).toEqual([2, '', `driver-resolver: ERROR: driver executable '${driver}' not found or not executable (ERR_DRIVER_NOT_FOUND)\n`]);
+    }
   });
 
   it('takes the dispatch verdict again when the workspace configuration changes', async () => {

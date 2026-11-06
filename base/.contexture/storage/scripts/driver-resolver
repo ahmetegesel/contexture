@@ -354,11 +354,13 @@ desc_field() {
     }'
 }
 
-# verdict_fresh <verdict file> <driver path>: a cached verdict stands while it is strictly
-# newer than the driver and, when the workspace carries one, than its configuration (a
-# driver that reads configuration is verified again after the configuration changes)
+# verdict_fresh <verdict file> <driver path>: a cached verdict stands while the driver
+# exists and the verdict is strictly newer than it and, when the workspace carries one, than
+# its configuration (a driver that reads configuration is verified again after the
+# configuration changes). The driver's existence is tested on its own, since a bash or ksh
+# sh reads -nt as true against a missing file where dash and zsh read false
 verdict_fresh() {
-  [ -f "$1" ] && [ "$1" -nt "$2" ] || return 1
+  [ -f "$1" ] && [ -f "$2" ] && [ "$1" -nt "$2" ] || return 1
   if [ -f "$CTX_DIR/config" ] && [ ! "$1" -nt "$CTX_DIR/config" ]; then return 1; fi
   return 0
 }
@@ -454,12 +456,13 @@ require_caps() {
   done
   rq_dir="$CTX_DIR/tmp/driver-verdicts"
   rq_file="$rq_dir/$rq_key.require.$rq_tag"
-  if verdict_fresh "$rq_file" "$rq_path"; then
-    return 0
-  fi
+  # the driver must be there and executable before any cached verdict answers for it
   if [ ! -x "$rq_path" ]; then
     printf 'driver-resolver: ERROR: driver executable '\''%s'\'' not found or not executable (ERR_DRIVER_NOT_FOUND)\n' "$rq_path" >&2
     return 2
+  fi
+  if verdict_fresh "$rq_file" "$rq_path"; then
+    return 0
   fi
   cap_prep
   rq_json=$("$rq_path" capability 2>"${CAP_ERR_FILE:-/dev/null}" </dev/null)
