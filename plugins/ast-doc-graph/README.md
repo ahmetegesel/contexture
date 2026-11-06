@@ -149,7 +149,7 @@ dispatch to the module, and `ctx help` lists it.
 
 ### Step 2: Update Git Ignore Rules
 
-Add the compiled database and intermediate cache directories to `.gitignore`:
+Add the compiled database to `.gitignore`:
 
 ```text
 # AST and documentation graph artifacts
@@ -157,8 +157,12 @@ graph.db
 graph.db-journal
 graph.db-wal
 graph.db-shm
-.contexture/cache/ast-doc-graph/
 ```
+
+The intermediate streams need no rule: each run stages them in its own folder
+inside the verb's scratch (the drawer's `.contexture/tmp`) and removes it at exit.
+A caller who passes `--cache-dir <path>` owns that folder; the index keeps the
+streams there and only `--clean` empties it.
 
 ### Step 3: Run Initial Indexing
 
@@ -170,6 +174,11 @@ ctx ast-doc-graph index --repo-root . --clean
 
 The driver discovers TypeScript files and documentation units, runs the extractors,
 and compiles `graph.db` in the repository root.
+
+The index runs only inside a contexture drawer: under `ctx` the drawer is the
+workspace (`CTX_ROOT`), so `--repo-root` may name any repository; run directly,
+`bin/ast-doc-index` needs a repository root that holds its own `.contexture`
+folder. Outside a drawer it refuses rc 1 before any write, naming the need.
 
 #### Multi-Directory Repository Root Discovery
 When `--src-dir` is omitted, `ast-doc-index` automatically scans the entire repository root, discovering TypeScript source code across `components/`, `pages/`, `services/`, `backend/`, and any other source directories in the project. The scanner enforces standard exclusion directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.work`, `.idea`, `tests`, `__tests__`, `.worktrees`) so generated bundles and test fixtures never contaminate the graph. The exclusions match paths inside the scanned root only: a repository that itself sits under such a folder (a checkout under `.worktrees/`, a fixture under `tests/`) still indexes.
@@ -376,6 +385,7 @@ ctx ast-doc-graph query stats
 
 - Node with the TypeScript Compiler API reachable from the target repository: `typescript` in its `node_modules`, or `tsx`, or Node 22.6+ with `--experimental-strip-types`; the launchers take a project-local `tsx`, else `tsx` or `node` from the caller's PATH, and never edit PATH.
 - System `sqlite3` with FTS5 (standard on macOS and modern Linux distributions).
+- A contexture drawer: `ctx ast-doc-graph index` runs inside the workspace; a direct run of `bin/ast-doc-index` needs a repository root holding its `.contexture` folder. The intermediate streams live in a per-run folder inside `CTX_SCRATCH_ROOT`, else the drawer's `.contexture/tmp`; a folder it cannot make refuses rc 2. The query verb needs no drawer: it reads any database it is given.
 - The docs-discipline corpus grammar (private to the docs module) when documentation is extracted; code-only indexing needs TypeScript alone.
 - The plugin's tests live with the plugin (`tests/`) as its vitest project, are never copied into a workspace, and run from the repository's `tests/` folder (`bun run test:ast-doc-graph`): they need sqlite3 with FTS5, and the pipeline tests the TypeScript compiler API (the test tooling's own TypeScript, linked into each sandbox); a test whose need is absent skips, naming it.
 
@@ -426,9 +436,10 @@ Output from step 1:
 
 A docs-only sandbox exercises the same verbs without the TypeScript need (no
 `.ts` files: the pipeline indexes the corpus and `query` reads it back). The
-staging builds a scratch workspace carrying the base runtime, this plugin's
-module, and the docs-discipline sample corpus; the outputs below are verbatim
-from that run:
+index runs only inside a contexture drawer, so the staging builds a scratch
+workspace carrying the base runtime, this plugin's module, and the
+docs-discipline sample corpus, and runs the verbs through that workspace's
+`ctx`; the outputs below are verbatim from that run:
 
 ```sh
 scratch="../../.contexture/tmp/ast-doc-graph-walk"

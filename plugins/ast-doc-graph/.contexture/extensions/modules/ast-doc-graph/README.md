@@ -35,6 +35,20 @@ produced them, resolves the `GOVERNS`, `WARNS`, and `COVERS` edges, and
 compiles `graph.db` (relational tables plus the dual `fts_symbols` and
 `fts_docs` virtual tables). Retrieval runs directly on system `sqlite3`.
 
+`bin/ast-doc-index` runs only inside a contexture drawer: `CTX_ROOT` when the
+engine dispatched it (`ctx ast-doc-graph index`, or the query's micro-sync
+under `ctx ast-doc-graph query`), else the repository root when it holds a
+`.contexture` folder; there is no marker file and no walk up. Outside a drawer
+it refuses rc 1 before any write. The intermediate streams live in one
+per-run folder made by `mktemp -d` inside `CTX_SCRATCH_ROOT` when set (never
+the root itself, which a micro-sync shares with its parent verb), else inside
+the drawer's `.contexture/tmp`, and a trap removes it on exit, hangup,
+interrupt, and termination; a folder it cannot make refuses rc 2 naming it.
+`--cache-dir` names a caller-owned folder instead, emptied only by `--clean`.
+`bin/graph-query` stages no scratch and reads any database it is given; its
+micro-sync discards the index's exit code and output, so outside a drawer it
+answers from the graph as it stands.
+
 Discovery (the full index, the delta scan, and the query's freshness check)
 runs `find` from inside the scanned root, so the exclusion folders
 (`node_modules`, `.contexture`, `tests`, `.worktrees`, and the rest) match
@@ -77,8 +91,12 @@ linked to the test tooling's TypeScript, runs the full index, then the delta
 index of one file, the query's micro-sync of one dirty file, and the advisory
 for three (file times set directly, never slept); it also indexes through a
 module reached by a symbolic link, under a spaced folder, and under a
-non-ASCII folder, and runs every launcher on the node first on the
-caller's PATH. `static/` holds the census of the module tree: no PATH edit,
-no sibling-project glob, and no pre-extension-root path, each with a
-planted null check. The tests skip, naming the
+non-ASCII folder, runs every launcher on the node first on the caller's
+PATH, and proves the drawer rule and the per-run scratch (a planted `mktemp`
+records each folder made: inside the drawer's `.contexture/tmp` or
+`CTX_SCRATCH_ROOT`, gone after the run), the refusals outside a drawer
+(rc 1) and for a folder it cannot make (rc 2), and a caller's `--cache-dir`.
+`static/` holds the census of the module tree: no PATH edit, no
+sibling-project glob, no pre-extension-root path, and no absolute system
+temp path, each with a planted null check. The tests skip, naming the
 need, without sqlite3 FTS5 or without a TypeScript compiler API.

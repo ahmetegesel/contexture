@@ -42,11 +42,17 @@ Options:
   --repo-root <path>   Repository root directory (default: current directory)
   --db <path>          Output SQLite database path (default: $GRAPH_DB or <repo-root>/graph.db)
   --src-dir <path>     Source directory relative to repo root (default: scan whole repo root)
-  --cache-dir <path>   Intermediate JSONL cache directory
+  --cache-dir <path>   Keep the intermediate JSONL streams in this caller-owned folder
+                       (default: one per-run folder inside CTX_SCRATCH_ROOT, else the
+                       drawer's .contexture/tmp, removed at exit)
   --delta              Incremental update for modified files only
   --file <path>        Target file to update in delta mode (can be repeated)
-  --clean              Clean intermediate cache and recreate database
+  --clean              Recreate the database and empty a --cache-dir folder
   --help, -h           Display this help manual
+
+Drawer:
+  Runs inside a contexture drawer: CTX_ROOT when ctx dispatches it, else the
+  repository root when it holds a .contexture folder; refuses rc 1 outside one.
 
 Pipeline steps:
   1. Discovery: scans TypeScript sources (.ts, .tsx) and documentation (.md)
@@ -168,6 +174,46 @@ if [[ ! -d "$REPO_ROOT" ]]; then
   exit 1
 fi
 
+# The drawer: CTX_ROOT under ctx dispatch, else the repository root's own .contexture folder
+if [[ -n "${CTX_ROOT:-}" ]]; then
+  DRAWER="$CTX_ROOT"
+  if [[ ! -d "$DRAWER/.contexture" ]]; then
+    echo "Error: ast-doc-index runs inside a contexture drawer: CTX_ROOT names $DRAWER, which holds no .contexture folder" >&2
+    exit 1
+  fi
+elif [[ -d "$REPO_ROOT/.contexture" ]]; then
+  DRAWER="$REPO_ROOT"
+else
+  echo "Error: ast-doc-index runs inside a contexture drawer: run it through ctx (ctx ast-doc-graph index), or from a repository root that holds its .contexture folder; $REPO_ROOT holds none" >&2
+  exit 1
+fi
+
+# Intermediate streams: a caller-named --cache-dir, else one per-run folder removed at exit
+RUN_DIR=""
+remove_run_dir() {
+  [[ -n "$RUN_DIR" ]] && rm -rf "$RUN_DIR"
+  RUN_DIR=""
+  return 0
+}
+trap remove_run_dir EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [[ -n "$CACHE_DIR" ]]; then
+  if [[ "$CLEAN" == true ]]; then
+    rm -rf "$CACHE_DIR"
+  fi
+  mkdir -p "$CACHE_DIR"
+else
+  SCRATCH_BASE="${CTX_SCRATCH_ROOT:-$DRAWER/.contexture/tmp}"
+  if ! mkdir -p "$SCRATCH_BASE" 2>/dev/null || ! RUN_DIR="$(mktemp -d "$SCRATCH_BASE/ast-doc-index.XXXXXX" 2>/dev/null)"; then
+    echo "Error: cannot create a scratch folder inside $SCRATCH_BASE" >&2
+    exit 2
+  fi
+  CACHE_DIR="$RUN_DIR"
+fi
+
 # Resolve database destination
 if [[ -z "$DB_PATH" ]]; then
   DB_PATH="$REPO_ROOT/graph.db"
@@ -175,20 +221,6 @@ fi
 DB_DIR="$(dirname "$DB_PATH")"
 mkdir -p "$DB_DIR"
 DB_PATH="$(cd "$DB_DIR" && pwd)/$(basename "$DB_PATH")"
-
-# Resolve cache directory for intermediate JSONL files
-if [[ -z "$CACHE_DIR" ]]; then
-  if [[ -d "$REPO_ROOT/.contexture" ]]; then
-    CACHE_DIR="$REPO_ROOT/.contexture/cache/ast-doc-graph"
-  else
-    CACHE_DIR="/tmp/ast-doc-graph-$(basename "$REPO_ROOT")"
-  fi
-fi
-
-if [[ "$CLEAN" == true ]]; then
-  rm -rf "$CACHE_DIR"
-fi
-mkdir -p "$CACHE_DIR"
 
 # Resolve source scanning directory
 SCAN_DIR=""
