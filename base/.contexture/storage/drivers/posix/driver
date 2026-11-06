@@ -656,23 +656,23 @@ batch_parse() {
         ;;
       key=*)
         [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
-        [ "$sb_seen_key" -eq 0 ] || batch_refuse 1 "$SB_N" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'key='"
+        [ "$sb_seen_key" -eq 0 ] || batch_refuse 1 "$((SB_N + 1))" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'key='"
         sb_seen_key=1
         sb_key=$(batch_unescape "${sb_l#key=}")
         ;;
       head=*)
         [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
-        [ "$sb_seen_head" -eq 0 ] || batch_refuse 1 "$SB_N" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'head='"
+        [ "$sb_seen_head" -eq 0 ] || batch_refuse 1 "$((SB_N + 1))" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'head='"
         sb_seen_head=1
         sb_head=${sb_l#head=}
         ;;
       value_b64=*)
         [ "$sb_open" -eq 1 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "a payload line outside an action"
-        [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$SB_N" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'value_b64='"
+        [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$((SB_N + 1))" "$sb_op" "${sb_key:-?}" ERR_INVALID_ARGUMENT "duplicate payload line 'value_b64='"
         sb_seen_val=1
         sb_val=${sb_l#??????????}
         ;;
-      *) batch_refuse 1 "$SB_N" "${sb_op:-?}" "${sb_key:-?}" ERR_INVALID_ARGUMENT "unknown payload line '$sb_l'" ;;
+      *) batch_refuse 1 "$((SB_N + 1))" "${sb_op:-?}" "${sb_key:-?}" ERR_INVALID_ARGUMENT "unknown payload line '$sb_l'" ;;
     esac
   done
   if [ "$sb_open" -eq 1 ]; then batch_close_action; fi
