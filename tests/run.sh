@@ -1,8 +1,9 @@
 #!/bin/sh
 # run.sh: the upstream test runner. Runs the core suites (ctx, hooks, governance,
-# base-only, module-tests), each hermetic and staged from the shipped core
+# base-only), each hermetic and staged from the shipped core
 # (the run filter pairs are the vitest filters and toolchain-filters projects'; the law
-# compose is the vitest laws project's, tests/laws; the store
+# compose is the vitest laws project's, tests/laws; the package overlay installer and the
+# worked example package are the vitest packages project's, tests/packages; the store
 # driver tests and the store fuzzer are the vitest drivers project's,
 # tests/drivers; the record logic, the audit, and the unit data cases are the vitest
 # unit-record project's, tests/unit-record; the unit and lane verbs are the vitest
@@ -40,7 +41,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="ctx-tests.sh hook-tests.sh governance-tests.sh base-only-tests.sh module-tests.sh"
+CORE_SUITES="ctx-tests.sh hook-tests.sh governance-tests.sh base-only-tests.sh"
 
 GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
 GATE_JOBS=${GATE_JOBS:-5}

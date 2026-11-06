@@ -346,13 +346,13 @@ The steps below use the workspace modules root; a package installs its feature m
 - `.contexture/extensions/modules/notes/scripts/`: the private `notes` implementation (no summary line, so it is not a verb) and the `put`, `show`, and `keys` wrappers. The implementation sources the storage core's library, so the module never names the configured driver.
 - `install`, `uninstall`, `README.md`, `tests/`: the package entry scripts, the package prose, and the test; none of them installs.
 
-The test stages the shipped base in a sandbox, installs the package there, and proves the manifests, the landed laws and data files, the install hook's seed, the store roundtrip through the verbs, the malformed key refusal, the re-install's no-overwrite rule, and the uninstall leaving the store data:
+The test (`tests/notes.test.ts`, a vitest file) stages the shipped base in a sandbox, copies the package into the sandbox's catalog, installs it there through its own `install` script, and proves the manifests, the landed laws and data files, the install hook's seed, the store roundtrip through the verbs, the malformed key refusal, the re-install's no-overwrite rule, and the uninstall leaving the store data. It belongs to the `packages` vitest project, which also proves the package installer itself; run it from `tests/`:
 
 ```sh
-sh tests/fixtures/worked-package/tests/run.sh
+bun run test:packages
 ```
 
-The module suite (`tests/module-tests.sh`) runs the same test in the gate. The package shows the whole path the sections above describe: a module part under the extension root, a module that calls the library and never the driver, a part hook that uses its own verbs, and a test that stages the shipped core rather than the live drawer.
+The package shows the whole path the sections above describe: a module part under the extension root, a module that calls the library and never the driver, a part hook that uses its own verbs, and a test that stages the shipped core rather than the live drawer.
 
 ### the storage core: not a module
 

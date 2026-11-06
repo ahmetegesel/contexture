@@ -19,16 +19,17 @@ end:
   `notes` and the three wrappers `put`, `show`, and `keys`;
 - `install` and `uninstall`: the package entry scripts that exec the core's
   overlay installer and uninstaller;
-- `tests/run.sh`: the test, which stages the shipped base in a sandbox, installs
-  this package there, exercises the verbs over the store, and proves the
-  uninstall leaves the module data.
+- `tests/notes.test.ts`: the test, a vitest file, which stages the shipped base
+  in a sandbox, copies this package into the sandbox's catalog, installs it
+  there through its own `install` script, exercises the verbs over the store,
+  and proves the uninstall leaves the module data.
 
-Run the test from the repository root:
+The test belongs to the `packages` vitest project, which also proves the
+package installer; run it from the repository's `tests/` folder:
 
 ```sh
-sh tests/fixtures/worked-package/tests/run.sh
+bun run test:packages
 ```
 
-The module suite (`tests/module-tests.sh`) runs the same test in the gate. The
-package never installs from this repository: it is authoring material, not a
-catalog entry.
+The package never installs from this repository: it is authoring material, not
+a catalog entry.

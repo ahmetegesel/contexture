@@ -9,7 +9,6 @@
 #                    vitest: bun run test:drivers, and bun run test:unit for the unit-record
 #                    and unit-verbs projects)
 #   engine           ctx-tests, governance-tests (the filter pairs: bun run test:filters)
-#   module           the package overlay installer suite (module-tests.sh)
 #   docs             the docs-discipline suite on the files driver
 #   docs-fts5        the docs-discipline suite on fts5
 #   plugin <name>    plugins/<name>/tests/run.sh
@@ -28,7 +27,6 @@ usage: tests/fast.sh <area> [<arg>]
                    vitest: bun run test:drivers, and bun run test:unit for the unit-record
                    and unit-verbs projects)
   engine           ctx-tests, governance-tests (the filter pairs: bun run test:filters)
-  module           the package overlay installer suite (module-tests.sh)
   docs             the docs-discipline suite on the files driver
   docs-fts5        the docs-discipline suite on fts5
   plugin <name>    plugins/<name>/tests/run.sh
@@ -101,10 +99,6 @@ case "${1:-}" in
     AREA="engine"
     run_suite "ctx-tests.sh" sh "$ROOT/tests/ctx-tests.sh"
     run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
-    ;;
-  module)
-    AREA="module"
-    run_suite "module-tests.sh" sh "$ROOT/tests/module-tests.sh"
     ;;
   docs)
     AREA="docs"
