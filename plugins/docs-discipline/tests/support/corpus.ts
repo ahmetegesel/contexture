@@ -1,9 +1,9 @@
-import { copyFileSync, cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, cpSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { exec, type Run } from '@support/exec';
 import { ROOT } from '@support/root';
 import { sandbox } from '@support/sandbox';
-import { seed } from '@support/snapshot';
+import { seed, seedSteps } from '@support/snapshot';
 import { stage, type Driver } from '@support/stage';
 import { store } from '@support/store';
 import { answer } from '@support/wire';
@@ -92,3 +92,35 @@ export async function gwWorkspace(driver: Driver, label: string): Promise<string
     if (r.code !== 0) throw new Error(`gw docs new: rc ${r.code}: ${r.stderr}`);
   }, driver, label);
 }
+
+export function stagedDocs(): [string, string][] {
+  return [PLUGIN, SAMPLE].flatMap((root) =>
+    readdirSync(join(root, 'docs'), { withFileTypes: true })
+      .filter((d) => d.isDirectory())
+      .flatMap((d) => readdirSync(join(root, 'docs', d.name)).filter((f) => f.endsWith('.md')).map((f): [string, string] => [`${d.name}/${f.slice(0, -3)}`, join(root, 'docs', d.name, f)])),
+  );
+}
+
+async function writeCorpus(sb: string): Promise<void> {
+  let pending = stagedDocs();
+  for (let pass = 0; pending.length && pass < stagedDocs().length; pass++) {
+    const left: [string, string][] = [];
+    for (const [key, path] of pending) {
+      const [repo, slug] = key.split('/');
+      if ((await docs(sb, ['write', repo, slug], { input: readFileSync(path) })).code !== 0) left.push([key, path]);
+    }
+    pending = left;
+  }
+  if (pending.length) throw new Error(`the store seed refused: ${pending.map(([k]) => k).join(', ')}`);
+}
+
+export const fts5Corpus = seedSteps('docs-fts5', [
+  {
+    name: 'corpus',
+    build: async (sb) => {
+      addDocs(sb);
+      await writeCorpus(sb);
+      rmSync(join(sb, 'docs'), { recursive: true });
+    },
+  },
+], 'fts5');
