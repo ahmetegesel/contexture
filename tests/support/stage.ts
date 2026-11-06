@@ -5,7 +5,8 @@ import { ROOT } from './root';
 import { sandbox } from './sandbox';
 
 export type Driver = 'posix' | 'fts5';
-export const DRIVERS: readonly Driver[] = ['posix', 'fts5'];
+const ALL: readonly Driver[] = ['posix', 'fts5'];
+export const DRIVERS: readonly Driver[] = ALL.filter((d) => (process.env.VITEST_DRIVERS ?? ALL.join(',')).split(',').includes(d));
 
 const BASE = join(ROOT, 'base');
 const FTS5_DRIVER = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5');
@@ -21,7 +22,7 @@ export function probeFts5(path = process.env.PATH ?? ''): boolean {
 
 let fts5: boolean | undefined;
 export function fts5Available(): boolean {
-  fts5 ??= probeFts5();
+  fts5 ??= DRIVERS.includes('fts5') && probeFts5();
   return fts5;
 }
 
