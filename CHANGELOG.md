@@ -4,6 +4,32 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.66.0] - 2026-11-06
+
+MINOR: the ast-doc-graph cluster, ast-doc-graph 1.1.0. The index runs only inside a contexture drawer and stages its streams in one per-run folder removed at exit, `AST_DOC_GRAPH_TYPESCRIPT` names the TypeScript compiler API the extractor parses with and an index with none reachable refuses naming each typescript it found, the entry points run as the script by their real paths, and the caller's PATH chooses the runner.
+
+### Added
+
+- `AST_DOC_GRAPH_TYPESCRIPT` names the TypeScript compiler API ast-doc-graph parses with: a TypeScript 5 or 6 package folder or its entry file. When set it is the only candidate, and one that loads no package or carries no compiler API refuses naming the variable and what it found. Unset (or empty), the extractor takes its own Node resolution, then the target repository's. The extractor stays on a TypeScript 5 or 6 compiler API whatever the target uses, since TypeScript 7 exposes none, and the plugin installs none.
+- The ast-doc-graph tests prove the compiler API resolution over a committed TypeScript 7 stub package, with no install. A static census guards the module tree: no PATH edit (an appended PATH included), no sibling-project glob, no pre-extension-root path, no absolute /tmp path (a shell default-value fallback such as `${TMPDIR:-/tmp}` included), each rule null-checked by its planted lines.
+
+### Changed
+
+- ast-doc-graph 1.0.1 to 1.1.0.
+- The ast-doc-graph index runs only inside a contexture drawer: the workspace when ctx dispatches it (`CTX_ROOT`, which must hold a `.contexture` folder), else a repository root that holds its own `.contexture` folder. Outside one it refuses rc 1 before any write. A direct run against a repository without `.contexture` now refuses where it used to stage under the system temp folder (a behavior change). The query verb keeps reading any database it is given, and its micro-sync still discards the index's exit code.
+- The index stages its intermediate streams in one per-run folder inside the verb's scratch (`CTX_SCRATCH_ROOT`, never the root itself, else the drawer's `.contexture/tmp`), removed at exit, hangup, interrupt, and termination; a folder it cannot make refuses rc 2. The persistent `.contexture/cache/ast-doc-graph` folder and its ignore rule are gone. `--cache-dir` stays a caller-owned folder, emptied only by `--clean`.
+- The launchers no longer prepend `/opt/homebrew/bin` to PATH, so the caller's PATH chooses node. They extend the caller's `NODE_OPTIONS` instead of replacing it, and silence Node's experimental warning on the type-stripping run.
+- With no TypeScript compiler API reachable, the index refuses rc 1 naming each typescript it found with its version and path, the variable, and the need for a TypeScript 5 or 6, and writes nothing. Before, the message listed every target file with a stack.
+
+### Fixed
+
+- The ast-doc-graph entry points run as the script when the module is reached through a symbolic link or sits under a folder whose name holds a space or a non-ASCII character. Before, the index exited rc 0 with no output and an empty graph.db.
+- A full ast-doc-graph index makes the database folder only when the loader runs, so a refusal or failure before it (no compiler API, no runner) leaves a `--db` inside an absent folder unmade; a delta on an absent database refuses without making its folder.
+- The ast-doc-graph module names its extension root: the extractor header comments and the spec's invariant, and the loader's working-folder schema fallback is gone.
+- The launchers drop a sibling-project tsx probe whose quoted glob never expanded.
+
+Commits in the range: 0f7318e (the extension root, ast-doc-graph 1.1.0), 1347fc4 (the sibling probe), d578f62 (the real-path entry guard), 099f8e7 (the caller's PATH, NODE_OPTIONS), 53da21c (the drawer and the per-run scratch), a2170e6 (AST_DOC_GRAPH_TYPESCRIPT and the refusal), 150a35a (the drawer tmp made when absent), e374e38 (the census reads an appended PATH and a default-value /tmp fallback), 6e67b2f (the database folder made only when the loader runs), 88fd725 (the in-process refusal names its need), 43f36ca (the module README paragraph rewrapped), and the release commit.
+
 ## [0.65.0] - 2026-11-06
 
 MINOR: the docs-discipline cluster, docs-discipline 1.2.0. The close gate proves a committed range and names the limits of its delta, the check governs awk engines and shebang scripts, anchors its doc touch, and reads every dead source, the owner lookup names the most specific owner by the check's own glob rule, `ctx docs entry` sets a component's kind, and a single-module package's module version is held to its manifest's.
