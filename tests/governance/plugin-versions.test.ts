@@ -25,7 +25,8 @@ const probe = (root: string, ...args: string[]): string | undefined => {
   return r.status === 0 ? r.stdout : undefined;
 };
 
-const READ = /\$(?:\{CTX_PACKAGE_ROOT\}|CTX_PACKAGE_ROOT)\/([\w.-]+(?:\/[\w.-]+)*)(?![\w./$-])/g;
+const READ = /\$(?:\{CTX_PACKAGE_ROOT(?::-)?\}|CTX_PACKAGE_ROOT)\/([\w.-]+(?:\/[\w.-]+)*)(?![\w./$-])/g;
+const GUARD = /\$\{CTX_PACKAGE_ROOT:-\}(?!"?\/)/g;
 
 function census(body: string): Mention[] {
   return lines(body)
@@ -35,11 +36,11 @@ function census(body: string): Mention[] {
       const reads: string[] = [];
       const rest = line
         .replace(/'[^']*'/g, '')
-        .replaceAll('${CTX_PACKAGE_ROOT:-}', '')
         .replace(READ, (_m, path: string) => {
           reads.push(path);
           return '';
-        });
+        })
+        .replace(GUARD, '');
       const kind = rest.includes('CTX_PACKAGE_ROOT') ? 'unread' : reads.length ? 'read' : 'quiet';
       return { kind, line, reads };
     });
@@ -124,9 +125,10 @@ describe.skipIf(real.need !== undefined && !PRERELEASE)(`the plugin versions on 
 });
 
 describe.concurrent('the part hook census', () => {
-  it('a planted literal read yields its path, braced or bare', () => {
+  it('a planted literal read yields its path, braced, bare, or behind the empty default guard', () => {
     expect(census('cp "$CTX_PACKAGE_ROOT/docs/extra.md" "$CTX_ROOT/x"').map((m) => [m.kind, m.reads])).toEqual([['read', ['docs/extra.md']]]);
     expect(census('seed=${CTX_PACKAGE_ROOT}/seed/a.md').map((m) => [m.kind, m.reads])).toEqual([['read', ['seed/a.md']]]);
+    expect(census('seed=${CTX_PACKAGE_ROOT:-}/seed/b.md').map((m) => [m.kind, m.reads])).toEqual([['read', ['seed/b.md']]]);
   });
 
   it('a guard, a comment, and quoted text read no path', () => {
@@ -137,6 +139,7 @@ describe.concurrent('the part hook census', () => {
   it('a read the census cannot name reads unread', () => {
     expect(census('cp "$CTX_PACKAGE_ROOT/$name" .').map((m) => m.kind)).toEqual(['unread']);
     expect(census('cd "$CTX_PACKAGE_ROOT"').map((m) => m.kind)).toEqual(['unread']);
+    expect(census('cp "${CTX_PACKAGE_ROOT:-}"/docs/seed.md .').map((m) => m.kind)).toEqual(['unread']);
   });
 });
 
