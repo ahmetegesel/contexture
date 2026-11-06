@@ -40,8 +40,8 @@ function process(path,   line) {
 BEGIN {
   if (ARGC > 1) usage()
   # an absent rhythms directory is an empty index, never an error: the base payload ships
-  # no rhythms, and a workspace may carry none (BG1, the base-only audit); the extension
-  # root's rhythms list after the workspace's
+  # no rhythms, and a workspace may carry none (BG1, the base project's bare-base test);
+  # the extension root's rhythms list after the workspace's
   cmd = "ls .contexture/rhythms/*.md 2>/dev/null"
   while ((cmd | getline fname) > 0) {
     process(fname)

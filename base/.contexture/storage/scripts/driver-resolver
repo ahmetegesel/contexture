@@ -1,9 +1,10 @@
 #!/bin/sh
 # driver-resolver: the storage core's driver resolver: it resolves storage drivers,
 # validates capability handshakes, and dispatches storage operations for every module
-# (the record, the corpus, and the generic module store). The core's posix driver sits
-# beside this script under storage/drivers; the session module keeps a compatibility
-# wrapper at its old path, so every caller reaches the one resolver here.
+# over the generic module store (the record through the unit module's data script, the
+# corpus through the docs module). The core's posix driver sits beside this script under
+# storage/drivers; the session module's compatibility wrapper retired with the unit
+# module, so every caller reaches the one resolver here directly.
 #
 # Standardized exit codes:
 #   0: success

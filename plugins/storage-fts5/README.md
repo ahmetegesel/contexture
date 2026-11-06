@@ -111,7 +111,7 @@ sh plugins/storage-fts5/install
 
 The installer overlays the package's driver part at
 `.contexture/extensions/storage/drivers/fts5/` (the executable named `driver`
-with `schema.sql`, `sql/`, and `db-init.sh` beside it), records every installed
+with `schema.sql`, `db-init.sh`, and its `README.md` beside it), records every installed
 path under `.contexture/extensions/.state/storage-fts5.files`, and refuses the
 collision classes before writing. A re-install is an update: files the new
 source drops are removed when unchanged and preserved when changed. A

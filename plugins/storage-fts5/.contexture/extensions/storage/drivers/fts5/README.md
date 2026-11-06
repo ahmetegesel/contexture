@@ -1,4 +1,4 @@
-# storage-fts5 module: internals
+# fts5 driver: internals
 
 The storage-fts5 plugin ships this driver tree; adoption installs it at the package's
 declared driver part. The engine discovers no verb here: the package manifest declares
@@ -13,7 +13,7 @@ is the off-path maintainer map.
 |---|---|
 | `schema.sql` | the schema version 5 store-only DDL: `store`, `store_changes`, `store_docs`, `store_docs_schema`, and the dual store FTS5 tables with their triggers |
 | `db-init.sh` | the open path, sourced by the driver: the sqlite3 3.44 minimum, the whole schema 5 in a new or empty file, the version 5 open, and the refusal of any other version with no upgrade path |
-| `drivers/fts5` | the contract 3 store-only entry point: the seven store functions, the store search, `capability`, and `storage.health` |
+| `driver` | the contract 3 store-only entry point: the seven store functions, the store search, `capability`, and `storage.health` |
 
 ## The record
 
@@ -38,7 +38,7 @@ one `BEGIN IMMEDIATE` transaction with one change row per action (all or none; t
 failure names the 1-based action and key and leaves nothing written), and `store.scan`
 answers every admitted key bytewise with its raw value in base64. A refused write logs
 nothing. The key rule is the posix driver's; the docs corpus reaches this store through
-the docs module, and this module never parses a doc.
+the docs module, and this driver never parses a doc.
 
 `store.search` answers the module search schema. `exact` is the record rule over the raw
 values, computed by the storage core's shared engine on every driver. A ranked mode reads
@@ -63,7 +63,7 @@ verbs.
 ## Tests
 
 The plugin's vitest project `storage-fts5` (`plugins/storage-fts5/tests`) runs on this
-module's own copy, never the adopted one: `fts5-schema.test.ts` pins schema 5 and the
+driver's own copy, never the adopted one: `fts5-schema.test.ts` pins schema 5 and the
 refusal of every other version, `fts5-version.test.ts` the sqlite3 3.44 guard, and
 `fts5-store.test.ts` the change log, the ranked modes and their re-derive, and the trigger
 rollbacks. The shared store contract (`tests/drivers`) holds this copy and the posix driver
