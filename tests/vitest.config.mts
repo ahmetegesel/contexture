@@ -43,6 +43,7 @@ export default defineConfig({
       },
       pluginProject('toolchain-filters'),
       pluginProject('docs-discipline'),
+      pluginProject('ast-doc-graph'),
       {
         extends: true,
         test: { name: 'engine', include: ['engine/**/*.test.ts'], maxConcurrency: 16 },

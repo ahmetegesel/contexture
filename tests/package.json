@@ -16,6 +16,7 @@
     "test:filters": "vitest run --project filters",
     "test:toolchain-filters": "vitest run --project toolchain-filters",
     "test:docs-discipline": "vitest run --project docs-discipline",
+    "test:ast-doc-graph": "vitest run --project ast-doc-graph",
     "test:engine": "vitest run --project engine",
     "test:hooks": "vitest run --project hooks",
     "test:laws": "vitest run --project laws",
