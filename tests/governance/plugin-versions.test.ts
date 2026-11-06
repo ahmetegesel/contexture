@@ -46,11 +46,15 @@ function census(body: string): Mention[] {
     });
 }
 
-const hooks = (root: string, plugin = '*'): string[] =>
-  lines(run(root, 'ls-files', '--', ...['install', 'uninstall'].map((h) => `:(glob)plugins/${plugin}/.contexture/extensions/modules/*/${h}`)));
+function readers(root: string, plugin = '*'): string[] {
+  const r = git(root, 'grep', '--cached', '-l', '-F', 'CTX_PACKAGE_ROOT', '--', `:(glob)plugins/${plugin}/.contexture/**`, ':(exclude,glob)**/*.md');
+  if (r.status === 1) return [];
+  if (r.status !== 0) throw new Error(`git grep in ${root}: rc ${r.status}: ${r.stderr}`);
+  return lines(r.stdout);
+}
 
 function extras(root: string, plugin: string): string[] {
-  const reads = hooks(root, plugin).flatMap((h) => census(run(root, 'show', `:${h}`)).flatMap((m) => m.reads));
+  const reads = readers(root, plugin).flatMap((f) => census(run(root, 'show', `:${f}`)).flatMap((m) => m.reads));
   return [...new Set(reads)].sort().map((p) => `plugins/${plugin}/${p}`);
 }
 
@@ -116,15 +120,15 @@ describe.skipIf(real.need !== undefined && !PRERELEASE)(`the plugin versions on 
     expect(real.verdicts.filter((v) => v.red).map((v) => v.line)).toEqual([]);
   });
 
-  it('the part hooks name the package root only as a guard, a comment, quoted text, or a literal read', () => {
-    const mentions = hooks(ROOT).flatMap((h) => census(run(ROOT, 'show', `:${h}`)));
+  it('the payload scripts, which inherit a part hook environment, name the package root only as a guard, a comment, quoted text, or a literal read', () => {
+    const mentions = readers(ROOT).flatMap((f) => census(run(ROOT, 'show', `:${f}`)));
     expect(mentions.length).toBeGreaterThan(0);
     expect(mentions.filter((m) => m.kind === 'unread').map((m) => m.line)).toEqual([]);
     expect(extras(ROOT, 'docs-discipline')).toEqual(['plugins/docs-discipline/docs/workspace/conventions.md']);
   });
 });
 
-describe.concurrent('the part hook census', () => {
+describe.concurrent('the package root census', () => {
   it('a planted literal read yields its path, braced, bare, or behind the empty default guard', () => {
     expect(census('cp "$CTX_PACKAGE_ROOT/docs/extra.md" "$CTX_ROOT/x"').map((m) => [m.kind, m.reads])).toEqual([['read', ['docs/extra.md']]]);
     expect(census('seed=${CTX_PACKAGE_ROOT}/seed/a.md').map((m) => [m.kind, m.reads])).toEqual([['read', ['seed/a.md']]]);
@@ -166,8 +170,10 @@ describe('the ship breath states in a sandbox repository', () => {
     const { dir, env, sh, write } = repository('plugin-versions');
     write('plugins/demo/manifest', manifest('1.0.0'));
     write(MODULE, '# summary: demo\n');
-    write('plugins/demo/.contexture/extensions/modules/demo/install', '#!/bin/sh\nseed=$CTX_PACKAGE_ROOT/docs/seed.md\n');
+    write('plugins/demo/.contexture/extensions/modules/demo/install', '#!/bin/sh\nseed=$CTX_PACKAGE_ROOT/docs/seed.md\nsh "$CTX_ROOT/.contexture/extensions/modules/demo/scripts/seed"\n');
+    write('plugins/demo/.contexture/extensions/modules/demo/scripts/seed', '#!/bin/sh\ncp "$CTX_PACKAGE_ROOT/docs/extra.md" "$CTX_ROOT/extra.md"\n');
     write('plugins/demo/docs/seed.md', 'seed\n');
+    write('plugins/demo/docs/extra.md', 'extra\n');
     write('plugins/demo/README.md', 'readme\n');
     const states: [string, string][] = [];
     const note = (state: string): void => {
@@ -187,6 +193,10 @@ describe('the ship breath states in a sandbox repository', () => {
     write('plugins/demo/docs/seed.md', 'seed, changed\n');
     stage();
     note('a hook-applied seed change staged');
+    sh('reset', '-q', '--hard');
+    write('plugins/demo/docs/extra.md', 'extra, changed\n');
+    stage();
+    note('a change staged to a file a script the hook runs applies');
     sh('reset', '-q', '--hard');
     write(MODULE, '# summary: demo, changed\n');
     note('a payload edit left unstaged');
@@ -230,6 +240,7 @@ describe('the ship breath states in a sandbox repository', () => {
       ['tagged', 'green'],
       ['a package-root README change staged', 'green'],
       ['a hook-applied seed change staged', 'demo 1.0.0 first shipped in v0.0.1, and its payload changed since: plugins/demo/docs/seed.md; bump plugins/demo/manifest'],
+      ['a change staged to a file a script the hook runs applies', 'demo 1.0.0 first shipped in v0.0.1, and its payload changed since: plugins/demo/docs/extra.md; bump plugins/demo/manifest'],
       ['a payload edit left unstaged', 'green'],
       ['a payload change staged with the version unchanged', `demo 1.0.0 first shipped in v0.0.1, and its payload changed since: ${MODULE}; bump plugins/demo/manifest`],
       ['the bump staged', 'green'],
