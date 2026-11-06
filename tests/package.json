@@ -7,6 +7,7 @@
     "test": "vitest run",
     "test:harness": "vitest run --project harness",
     "test:drivers": "vitest run --project drivers",
+    "test:storage-fts5": "vitest run --project storage-fts5",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

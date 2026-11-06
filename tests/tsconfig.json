@@ -9,8 +9,12 @@
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
-    "verbatimModuleSyntax": true
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "@support/*": ["./support/*"],
+      "vitest": ["./node_modules/vitest"]
+    }
   },
-  "include": ["**/*.ts", "**/*.mts"],
+  "include": ["**/*.ts", "**/*.mts", "../plugins/*/tests/**/*.ts"],
   "exclude": ["node_modules"]
 }
