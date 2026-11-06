@@ -46,6 +46,7 @@ export interface ParseResult {
   doc: DocRecord | null;
   rules: DocRuleRecord[];
   pitfalls: DocPitfallRecord[];
+  unitless: number;
 }
 
 // --- UTILITIES ---
@@ -191,7 +192,7 @@ export function extractEvidenceSymbols(raw: string | null | undefined): string[]
 export function parseDocMarkdown(content: string, filePath: string, projectRoot?: string): ParseResult {
   const lines = content.split(/\r?\n/);
 
-  let docHeader: {
+  type DocHeader = {
     kind: string;
     slug: string;
     repo?: string;
@@ -199,20 +200,21 @@ export function parseDocMarkdown(content: string, filePath: string, projectRoot?
     description?: string;
     sources: string[];
     keywords: string[];
-  } | null = null;
+  };
+  let docHeader: DocHeader | null = null;
 
   const rules: DocRuleRecord[] = [];
   const pitfalls: DocPitfallRecord[] = [];
+  let unitless = 0;
 
   // Track rule slugs to ensure unique IDs per doc
   const seenRuleSlugs = new Set<string>();
 
   // Determine doc id prefix
   // Default doc id format: doc:<repo>:<slug> or doc:<relPathNoExt>
-  function computeDocId(): string {
-    if (!docHeader) return 'doc:unknown';
-    const slug = docHeader.slug;
-    const repo = docHeader.repo || 'unknown';
+  function computeDocId(header: DocHeader): string {
+    const slug = header.slug;
+    const repo = header.repo || 'unknown';
 
     if (projectRoot && filePath) {
       const rel = path.relative(projectRoot, filePath);
@@ -275,8 +277,13 @@ export function parseDocMarkdown(content: string, filePath: string, projectRoot?
       currentRule = null;
       return;
     }
-    const docId = computeDocId();
-    const docSlug = docHeader ? docHeader.slug : 'doc';
+    if (!docHeader) {
+      unitless++;
+      currentRule = null;
+      return;
+    }
+    const docId = computeDocId(docHeader);
+    const docSlug = docHeader.slug;
 
     let ruleSlug = currentRule.slug || slugify(currentRule.statement);
     if (seenRuleSlugs.has(ruleSlug)) {
@@ -306,8 +313,13 @@ export function parseDocMarkdown(content: string, filePath: string, projectRoot?
       currentPitfall = null;
       return;
     }
-    const docId = computeDocId();
-    const docSlug = docHeader ? docHeader.slug : 'doc';
+    if (!docHeader) {
+      unitless++;
+      currentPitfall = null;
+      return;
+    }
+    const docId = computeDocId(docHeader);
+    const docSlug = docHeader.slug;
 
     let rawId = currentPitfall.id.trim();
     if (rawId.startsWith('pitfall:')) {
@@ -642,7 +654,7 @@ export function parseDocMarkdown(content: string, filePath: string, projectRoot?
   let finalDoc: DocRecord | null = null;
   if (docHeader) {
     finalDoc = {
-      id: computeDocId(),
+      id: computeDocId(docHeader),
       repo: docHeader.repo || 'unknown',
       kind: docHeader.kind,
       summary: docHeader.description || '',
@@ -655,6 +667,7 @@ export function parseDocMarkdown(content: string, filePath: string, projectRoot?
     doc: finalDoc,
     rules,
     pitfalls,
+    unitless,
   };
 }
 
@@ -814,7 +827,10 @@ export async function main() {
   for (const file of targetFiles) {
     try {
       const content = fs.readFileSync(file, 'utf8');
-      const { doc, rules, pitfalls } = parseDocMarkdown(content, file, projectRoot);
+      const { doc, rules, pitfalls, unitless } = parseDocMarkdown(content, file, projectRoot);
+      if (unitless > 0) {
+        console.error(`Warning: skipping ${unitless} rule or pitfall ${unitless === 1 ? 'entry' : 'entries'} before any @doc line in ${path.relative(projectRoot, file)}`);
+      }
       if (doc) {
         allDocs.push(doc);
       }

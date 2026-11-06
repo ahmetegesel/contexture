@@ -36,6 +36,35 @@ describe('the docs extractor in process', { concurrent: true }, () => {
     expect(p1?.trigger).toContain('retries POST /orders');
   });
 
+  it('[ast-doc-graph-r7] skips and counts every rule or pitfall met before any @doc line, a bang pitfall line among them, and keeps the unit that follows', () => {
+    const r = parseDocMarkdown(
+      [
+        '@contract',
+        '  - rule: "A quoted grammar rule"',
+        '    evidence: "quotedWork"',
+        '',
+        '! [high/bug] stray-p1: A quoted bang pitfall',
+        '',
+        '@pitfalls',
+        '  - id: stray-p2',
+        '    summary: "A quoted pitfall"',
+        '',
+        '@doc structural alpha',
+        '  repo: w',
+        '  description: "alpha"',
+        '',
+        '@contract',
+        '  - rule: "Alpha holds"',
+        '    evidence: "alphaWork"',
+      ].join('\n'),
+      'docs/w/alpha.md',
+    );
+    expect(r.doc?.id).toBe('doc:w:alpha');
+    expect(r.rules.map((x) => [x.doc_id, x.statement])).toEqual([['doc:w:alpha', 'Alpha holds']]);
+    expect(r.pitfalls).toEqual([]);
+    expect(r.unitless).toBe(3);
+  });
+
   it('extracts evidence symbols: identifiers and qnames kept, file paths and keywords dropped', () => {
     expect(extractEvidenceSymbols('validateCart; OrderService.save, src/order/x.ts')).toEqual(['validateCart', 'OrderService.save']);
     expect(extractEvidenceSymbols('')).toEqual([]);
