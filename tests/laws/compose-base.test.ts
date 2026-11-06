@@ -17,19 +17,19 @@ describe.concurrent('the base-only composition (unit plus lane, no docs)', () =>
     }, 'posix', 'laws-base');
   });
 
-  it('composes rc0 and writes a layer byte-equal to the golden', () => {
+  it('[modules-r19] composes rc0 and writes a layer byte-equal to the golden', () => {
     expect(first.code).toBe(0);
     const bytes = layerBytes(base);
     expect(bytes).toBeDefined();
     expect(firstByteDifference(bytes!, readFileSync(GOLDEN))).toBe(-1);
   });
 
-  it('heads the layer with the core version and both checksums, and the golden carries the current core version', () => {
+  it('[modules-r19] heads the layer with the core version and both checksums, and the golden carries the current core version', () => {
     expect(layer(base).split('\n')[0]).toMatch(HEADER);
     expect(versionOf(readFileSync(GOLDEN, 'utf8'))).toBe(versionOf(readFileSync(CORE_SRC, 'utf8')));
   });
 
-  it('composes the unit and lane preambles alone, with no docs law', () => {
+  it('[modules-r19] composes the unit and lane preambles alone, with no docs law', () => {
     const g = layer(base);
     expect(g).not.toContain('docs-first');
     expect(count(g, /^@module docs$/)).toBe(0);
@@ -40,7 +40,7 @@ describe.concurrent('the base-only composition (unit plus lane, no docs)', () =>
     expect(moduleBlock(g, 'lane')).toContain('The lane module is the subagent dispatch surface');
   });
 
-  it('composes the unit record clause and the lane subagent, boundary-warning, and git clauses', () => {
+  it('[modules-r12, modules-r19] composes the unit record clause and the lane subagent, boundary-warning, and git clauses', () => {
     const g = layer(base);
     expect(count(g, /^ {2}unit of work = session unit/)).toBe(1);
     expect(count(g, /^ {2}branch\/worktree: the recipe names/)).toBe(1);
@@ -48,7 +48,7 @@ describe.concurrent('the base-only composition (unit plus lane, no docs)', () =>
     expect(count(g, /^ {2}branch\/worktree on demand/)).toBe(1);
   });
 
-  it('opens no custom section and seats the preambles between @layout and @record', () => {
+  it('[modules-r19] opens no custom section and seats the preambles between @layout and @record', () => {
     const g = layer(base);
     expect(count(g, /^@custom$/)).toBe(0);
     const mod = lineOf(g, /^@module unit$/);
@@ -56,7 +56,7 @@ describe.concurrent('the base-only composition (unit plus lane, no docs)', () =>
     expect(mod).toBeLessThan(lineOf(g, /^@record$/));
   });
 
-  it('composes byte-identically a second time from scratch, and --check verifies the current layer rc0', async () => {
+  it('[modules-r19] composes byte-identically a second time from scratch, and --check verifies the current layer rc0', async () => {
     const sb = fresh(base);
     rmSync(layerPath(sb));
     expect((await compose(sb)).code).toBe(0);
@@ -64,7 +64,7 @@ describe.concurrent('the base-only composition (unit plus lane, no docs)', () =>
     expect((await compose(sb, '--check')).code).toBe(0);
   });
 
-  it('reads a changed unit law as stale: --check refuses rc1 writing nothing, and the compose recomposes with the clause', async () => {
+  it('[modules-r12, modules-r19] reads a changed unit law as stale: --check refuses rc1 writing nothing, and the compose recomposes with the clause', async () => {
     const sb = fresh(base);
     const before = layerBytes(sb)!;
     appendFileSync(join(sb, '.contexture/modules/unit/laws'), '\n@append @record\n  unit-extra: a later unit clause\n');
@@ -83,7 +83,7 @@ describe.concurrent('the sources hash and the determinism comparator (synthetic 
     expect((await compose(composed)).code).toBe(0);
   });
 
-  it('moves the sources hash with a package version change: --check refuses rc1, the compose rewrites the header', async () => {
+  it('[modules-r19] moves the sources hash with a package version change: --check refuses rc1, the compose rewrites the header', async () => {
     const sb = fresh(composed);
     const before = layer(sb);
     const record = readFileSync(join(SYNTH, 'extensions/.state/alpha.files'), 'utf8').replace(/^version 1\.0\.0$/m, 'version 1.0.1');

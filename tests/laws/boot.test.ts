@@ -6,7 +6,7 @@ import { stage } from '../support/stage';
 import { firstByteDifference } from '../support/tree';
 
 describe.concurrent("the loader's step 1 at boot (sh .contexture/laws/compose from the workspace root)", () => {
-  it('reads an absent layer as stale for --check writing nothing, then composes it, and verifies it current silently', async () => {
+  it('[modules-r19] reads an absent layer as stale for --check writing nothing, then composes it, and verifies it current silently', async () => {
     const sb = stage('posix', 'laws-boot-absent');
     expect(layerBytes(sb)).toBeUndefined();
     expect((await compose(sb, '--check')).code).toBe(1);
@@ -22,7 +22,7 @@ describe.concurrent("the loader's step 1 at boot (sh .contexture/laws/compose fr
     expect(again.stderr).toBe('');
   });
 
-  it('reads a stale layer red for --check writing nothing, recomposes it with the late clause, and then verifies it current', async () => {
+  it('[modules-r19] reads a stale layer red for --check writing nothing, recomposes it with the late clause, and then verifies it current', async () => {
     const sb = stage('posix', 'laws-boot-stale');
     expect((await compose(sb)).code).toBe(0);
     const current = layerBytes(sb)!;

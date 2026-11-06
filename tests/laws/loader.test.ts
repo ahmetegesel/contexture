@@ -19,7 +19,7 @@ function loaderOk(text: string): boolean {
 }
 
 describe.concurrent('the loader (base/AGENTS.md)', () => {
-  it('stays the few-line loader whose first instruction runs or verifies the compose and names its stops', () => {
+  it('[modules-r19] stays the few-line loader whose first instruction runs or verifies the compose and names its stops', () => {
     expect(existsSync(LOADER)).toBe(true);
     expect(statSync(LOADER).size).toBeLessThan(2048);
     const text = readFileSync(LOADER, 'utf8');
@@ -34,7 +34,7 @@ describe.concurrent('the loader (base/AGENTS.md)', () => {
     expect(versionOf(text)).toBe(versionOf(readFileSync(CORE_SRC, 'utf8')));
   });
 
-  it('passes the validating probe, which reads a wrong first instruction and a reversed overlay order red', () => {
+  it('[modules-r19] passes the validating probe, which reads a wrong first instruction and a reversed overlay order red', () => {
     const text = readFileSync(LOADER, 'utf8');
     expect(loaderOk(text)).toBe(true);
     expect(loaderOk('# contexture v0.0.0: the loader\n@boot\n  1. read AGENTS.md whole\n')).toBe(false);

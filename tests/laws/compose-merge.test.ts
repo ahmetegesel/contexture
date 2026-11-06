@@ -13,12 +13,12 @@ describe.concurrent('the synthetic merge', () => {
     run = await compose(sb);
   });
 
-  it('composes rc0 under a header carrying the fixture version and both checksums', () => {
+  it('[modules-r19] composes rc0 under a header carrying the fixture version and both checksums', () => {
     expect(run.code).toBe(0);
     expect(layer(sb).split('\n')[0]).toMatch(/^# contexture v9\.9\.9: generated law layer; core cksum \d+-\d+; sources \d+-\d+; never edit$/);
   });
 
-  it('appends the clauses under their block keywords in core, module, then standalone order', () => {
+  it('[modules-r12, modules-r19] appends the clauses under their block keywords in core, module, then standalone order', () => {
     const g = layer(sb);
     expect(blockClauses(g, 'laws')).toEqual(['core-law', 'shared-law', 'alpha-law', 'alpha-extra-law', 'beta-extra-law']);
     expect(blockClauses(g, 'record')).toEqual(['beta-record']);
@@ -27,7 +27,7 @@ describe.concurrent('the synthetic merge', () => {
     expect(blockClauses(g, 'notes')).toEqual(['beta-notes']);
   });
 
-  it('composes each module once and each standalone part once, with no preamble for a standalone part', () => {
+  it('[modules-r19] composes each module once and each standalone part once, with no preamble for a standalone part', () => {
     const g = layer(sb);
     expect(count(g, /^@module /)).toBe(4);
     expect(count(g, /^@module alpha$/)).toBe(1);
@@ -36,7 +36,7 @@ describe.concurrent('the synthetic merge', () => {
     expect(count(g, /alpha-extra-law: a standalone law part/)).toBe(1);
   });
 
-  it('writes each preamble from its manifest: the summary, the indented description, the help pointer', () => {
+  it('[modules-r11, modules-r19] writes each preamble from its manifest: the summary, the indented description, the help pointer', () => {
     const g = layer(sb);
     const beta = moduleBlock(g, 'beta');
     expect(beta).toMatch(/^ {2}summary: beta the summary-only fixture module$/m);
@@ -47,7 +47,7 @@ describe.concurrent('the synthetic merge', () => {
     expect(moduleBlock(g, 'alpha')).toMatch(/^ {2}Alpha's preamble: what it is\.$/m);
   });
 
-  it('orders the preambles after @layout and before @record, workspace modules in byte order then extension modules, and the custom sections after @update', () => {
+  it('[modules-r19] orders the preambles after @layout and before @record, workspace modules in byte order then extension modules, and the custom sections after @update', () => {
     const g = layer(sb);
     const at = (re: RegExp) => lineOf(g, re);
     expect(at(/^@layout$/)).toBeLessThan(at(/^@module alpha$/));
@@ -74,7 +74,7 @@ describe.concurrent('the discovery filters and the docs composition', () => {
     if (workspaceShadow) mkdirSync(join(sb, '.contexture/modules/shadow'), { recursive: true });
   };
 
-  it('composes no reserved module in either root and no extension module a workspace name shadows', async () => {
+  it('[modules-r19] composes no reserved module in either root and no extension module a workspace name shadows', async () => {
     const sb = synth();
     plantFiltered(sb, true);
     expect((await compose(sb)).code).toBe(0);
@@ -86,7 +86,7 @@ describe.concurrent('the discovery filters and the docs composition', () => {
     expect(count(g, /^@module /)).toBe(4);
   });
 
-  it('composes the extension module once no workspace folder shadows its name (the shadow assertion discriminates)', async () => {
+  it('[modules-r19] composes the extension module once no workspace folder shadows its name (the shadow assertion discriminates)', async () => {
     const sb = synth();
     plantFiltered(sb, false);
     expect((await compose(sb)).code).toBe(0);
@@ -94,7 +94,7 @@ describe.concurrent('the discovery filters and the docs composition', () => {
     expect(layer(sb)).toContain('shadow-law: shadowed extension law');
   });
 
-  it('composes the docs module once with its preamble and its layout, boot, and close clauses', async () => {
+  it('[modules-r12] composes the docs module once with its preamble and its layout, boot, and close clauses', async () => {
     let run: Run | undefined;
     const sb = await seed(async (s) => {
       cpSync(DOCS_MOD, join(s, '.contexture/extensions/modules/docs'), { recursive: true });

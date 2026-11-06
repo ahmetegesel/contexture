@@ -20,7 +20,7 @@ const install = (sb: string, pkg: string) => exec('sh', ['.contexture/package-in
 const uninstall = (sb: string, name: string) => exec('sh', ['.contexture/package-uninstall', name], { cwd: sb, env: { CTX_ROOT: sb } });
 
 describe.concurrent('the installer recompose', () => {
-  it('recomposes the layer when a law-bearing package installs, and restores it byte for byte when it uninstalls', async () => {
+  it('[modules-r19] recomposes the layer when a law-bearing package installs, and restores it byte for byte when it uninstalls', async () => {
     const sb = stage('posix', 'laws-install');
     expect((await compose(sb)).code).toBe(0);
     const before = layerBytes(sb)!;
@@ -40,7 +40,7 @@ describe.concurrent('the installer recompose', () => {
     expect(firstByteDifference(layerBytes(sb)!, before)).toBe(-1);
   });
 
-  it('fails the install rc2 when the recompose refuses a duplicate law slug, leaving the layer untouched', async () => {
+  it('[modules-r19] fails the install rc2 when the recompose refuses a duplicate law slug, leaving the layer untouched', async () => {
     const sb = stage('posix', 'laws-install-dup');
     expect((await compose(sb)).code).toBe(0);
     const before = layerBytes(sb)!;

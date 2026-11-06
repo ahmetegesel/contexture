@@ -22,7 +22,7 @@ function lawSlugs(text: string): string[] {
 }
 
 describe.concurrent('the module law fragments', () => {
-  it('keeps the eight docs laws and the layout, boot, and close clauses in the docs module', () => {
+  it('[modules-r12, plugins-r2] keeps the eight docs laws and the layout, boot, and close clauses in the docs module', () => {
     expect(existsSync(DOCS_LAWS)).toBe(true);
     const text = readFileSync(DOCS_LAWS, 'utf8');
     expect(lawSlugs(text)).toEqual(['docs-first', 'docs-are-code', 'corpus-untracked', 'corpus-reconcile', 'gap', 'harness-free', 'dont-fool-yourself', 'docs-audience-separation']);
@@ -36,7 +36,7 @@ describe.concurrent('the module law fragments', () => {
     expect(text).toContain('ctx docs gate');
   });
 
-  it('keeps the lane subagent clauses and the git clause in the lane module', () => {
+  it('[modules-r12] keeps the lane subagent clauses and the git clause in the lane module', () => {
     const text = readFileSync(LANE_LAWS, 'utf8');
     expect(text).toMatch(/^@append @subagents$/m);
     for (const clause of ['branch/worktree', 'landing', 'boundary-warning', 'drift']) expect(text).toMatch(new RegExp(`^ {2}${clause}: `, 'm'));

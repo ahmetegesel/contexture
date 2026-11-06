@@ -30,19 +30,19 @@ describe.concurrent('the compose refusals', () => {
     expect(layerBytes(sb)).toEqual(before);
   };
 
-  it('reads the workspace overlay only for its slugs: a unique overlay law passes and stays out of the layer', async () => {
+  it('[modules-r19] reads the workspace overlay only for its slugs: a unique overlay law passes and stays out of the layer', async () => {
     const sb = synth('overlay-clean.md');
     expect((await compose(sb)).code).toBe(0);
     expect(layer(sb)).not.toContain('workspace-law');
   });
 
-  it('refuses rc1 a slug duplicated across the layer and the workspace overlay, naming both, writing nothing', async () => {
+  it('[modules-r19] refuses rc1 a slug duplicated across the layer and the workspace overlay, naming both, writing nothing', async () => {
     const sb = fresh(composed);
     copyFileSync(join(SYNTH, 'overlay-duplicate.md'), join(sb, 'AGENTS.workspace.md'));
     await refusal(sb, 1, "duplicate law slug 'alpha-law'", 'AGENTS.workspace.md');
   });
 
-  it.skipIf(ROOT_USER)('refuses rc2 an unreadable workspace overlay, writing nothing', async ({ onTestFinished, skip }) => {
+  it.skipIf(ROOT_USER)('[modules-r19] refuses rc2 an unreadable workspace overlay, writing nothing', async ({ onTestFinished, skip }) => {
     const sb = fresh(composed);
     const overlay = join(sb, 'AGENTS.workspace.md');
     writeFileSync(overlay, '@append @laws\n  workspace-law: a workspace overlay law\n');
@@ -51,25 +51,25 @@ describe.concurrent('the compose refusals', () => {
     await refusal(sb, 2, 'unreadable overlay');
   });
 
-  it('refuses rc1 a @replace fragment, writing nothing', async () => {
+  it('[modules-r19] refuses rc1 a @replace fragment, writing nothing', async () => {
     const sb = fresh(composed);
     writeFileSync(join(sb, '.contexture/modules/beta/laws'), '@replace @laws\n  x-law: x\n');
     await refusal(sb, 1, '@replace');
   });
 
-  it('refuses rc1 a module manifest carrying a requires line, naming the module and the rule, writing nothing', async () => {
+  it('[modules-r11, modules-r19] refuses rc1 a module manifest carrying a requires line, naming the module and the rule, writing nothing', async () => {
     const sb = fresh(composed);
     appendFileSync(join(sb, '.contexture/modules/beta/module'), '# requires: x\n');
     await refusal(sb, 1, "module 'beta'", 'requires is reserved');
   });
 
-  it('refuses rc2 a recorded standalone law fragment that is missing, writing nothing', async () => {
+  it('[modules-r19] refuses rc2 a recorded standalone law fragment that is missing, writing nothing', async () => {
     const sb = fresh(composed);
     rmSync(join(sb, '.contexture/extensions/laws/alpha-extra'));
     await refusal(sb, 2, 'missing or unreadable standalone law fragment');
   });
 
-  it.skipIf(ROOT_USER)('refuses rc2 an unreadable install record, writing nothing', async ({ onTestFinished, skip }) => {
+  it.skipIf(ROOT_USER)('[modules-r19] refuses rc2 an unreadable install record, writing nothing', async ({ onTestFinished, skip }) => {
     const sb = fresh(composed);
     const record = join(sb, '.contexture/extensions/.state/alpha.files');
     chmodPlant(record, 0o000, 0o644, onTestFinished);
@@ -77,7 +77,7 @@ describe.concurrent('the compose refusals', () => {
     await refusal(sb, 2, 'unreadable install record');
   });
 
-  it.skipIf(ROOT_USER)('refuses rc2 an unreadable module laws fragment, writing nothing', async ({ onTestFinished, skip }) => {
+  it.skipIf(ROOT_USER)('[modules-r19] refuses rc2 an unreadable module laws fragment, writing nothing', async ({ onTestFinished, skip }) => {
     const sb = fresh(composed);
     const laws = join(sb, '.contexture/modules/beta/laws');
     chmodPlant(laws, 0o000, 0o644, onTestFinished);
@@ -85,7 +85,7 @@ describe.concurrent('the compose refusals', () => {
     await refusal(sb, 2, 'unreadable laws fragment');
   });
 
-  it('refuses rc1 an edited core whose block skeleton changed, writing nothing', async () => {
+  it('[modules-r19] refuses rc1 an edited core whose block skeleton changed, writing nothing', async () => {
     const sb = fresh(composed);
     const core = join(sb, '.contexture/laws/core.md');
     let dropping = false;
@@ -101,7 +101,7 @@ describe.concurrent('the compose refusals', () => {
     await refusal(sb, 1, 'core law source', 'block skeleton');
   });
 
-  it('refuses rc2 a missing core source, writing nothing', async () => {
+  it('[modules-r19] refuses rc2 a missing core source, writing nothing', async () => {
     const sb = fresh(composed);
     rmSync(join(sb, '.contexture/laws/core.md'));
     await refusal(sb, 2, 'missing core law source');
@@ -111,7 +111,7 @@ describe.concurrent('the compose refusals', () => {
     expect((await compose(fresh(composed), '--bogus')).code).toBe(1);
   });
 
-  it("refuses rc1 an old overlay's docs-first beside the composed docs module, writing no layer", async () => {
+  it("[modules-r19] refuses rc1 an old overlay's docs-first beside the composed docs module, writing no layer", async () => {
     const sb = stage('posix', 'laws-docs-overlay');
     cpSync(DOCS_MOD, join(sb, '.contexture/extensions/modules/docs'), { recursive: true });
     writeFileSync(join(sb, 'AGENTS.workspace.md'), '@append @laws\n  docs-first: the overlay twin\n');
