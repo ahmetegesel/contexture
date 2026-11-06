@@ -128,20 +128,23 @@ shift
 
 
 # ==============================================================================
-# The generic module store (the storage module's store contract)
+# The generic module store (the storage core's store contract)
 # ==============================================================================
 # Seven data functions over a module's declared data file: store.list, store.get,
-# store.put, store.delete, store.changes, store.batch, and store.scan. The data file
-# (modules/<module>/data) is read and validated by the storage module's private store-data
-# script; the value is opaque bytes in the `store` table keyed by (namespace, key), and
-# every put and delete lands its row in `store_changes` in the same transaction. Keys are
-# exact, ASCII-case-fold twins never coexist, list is bytewise and filtered by the module
-# pattern, put is one transaction,
-# and the change log is optional per namespace (a namespace declaring changes: false
-# refuses store.changes). The batch takes one namespace scope lock, validates its whole
-# action list, and runs every action in one BEGIN IMMEDIATE transaction with one
-# store_changes row per action; the scan answers every admitted key with its raw value in
-# base64. The legacy docs tables stay untouched and unread by the store.
+# store.put, store.delete, store.changes, store.batch, and store.scan. The data file (the
+# data file beside a module's manifest, in either module root) is read and validated by
+# the storage core's private store-data script. Schema 5 holds module data only, every
+# namespace in the one `store` table (the record under unit, the docs corpus under docs),
+# with no record, corpus, or legacy docs table beside it: the value is opaque bytes keyed
+# by (namespace, key), and every put and delete lands its row in `store_changes` and
+# refreshes the key's derived `store_docs` documents (the two FTS5 tables index them) in
+# the same transaction. Keys are exact, ASCII-case-fold twins never coexist, list is
+# bytewise and filtered by the module pattern, a put or delete is one transaction under the
+# namespace scope lock, and reading the change log is optional per namespace (a namespace
+# declaring changes: false refuses store.changes). The batch takes the same lock once,
+# validates its whole action list, and runs every action in one BEGIN IMMEDIATE
+# transaction with one store_changes row per action; the scan answers every admitted key
+# with its raw value in base64.
 # The posix driver's messages and exit tiers are kept, so a caller never branches.
 STORE_LOCK=""
 STORE_TMP=""
