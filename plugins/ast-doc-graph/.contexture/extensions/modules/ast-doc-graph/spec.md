@@ -5,7 +5,7 @@
 The `ast-doc-graph` plugin bridges code structure and architectural documentation. It connects code symbols, syntactic call graphs, and documentation rules into a unified SQLite database with Full-Text Search (FTS5) and recursive Common Table Expressions (CTEs).
 
 ### 1.1 Invariants
-* Zero dependency in Contexture core: plugin files live strictly under `plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/`. No dependencies or node modules are installed in Contexture root.
+* Zero dependency in Contexture core: plugin files live strictly under the extension root, `plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/` in the plugin and `.contexture/extensions/modules/ast-doc-graph/` once installed. No dependencies or node modules are installed in Contexture root.
 * Decoupled pipeline: Extractors emit intermediate line-delimited JSON (JSONL). The ingestion loader consumes standard JSONL streams regardless of source programming language.
 * Instant retrieval: Retrieval queries execute directly against `/usr/bin/sqlite3` with zero runtime startup overhead.
 * Cycle safety: Recursive call graph traversals enforce depth boundaries and path tracking to guarantee termination across mutually recursive calls.

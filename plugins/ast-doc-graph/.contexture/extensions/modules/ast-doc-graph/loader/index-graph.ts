@@ -416,12 +416,9 @@ async function main(): Promise<void> {
 
   // Locate schema.sql
   if (!schemaPath) {
-    const candidate1 = path.resolve(scriptDir, '../schema.sql');
-    const candidate2 = path.resolve(process.cwd(), 'plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/schema.sql');
-    if (fs.existsSync(candidate1)) {
-      schemaPath = candidate1;
-    } else if (fs.existsSync(candidate2)) {
-      schemaPath = candidate2;
+    const candidate = path.resolve(scriptDir, '../schema.sql');
+    if (fs.existsSync(candidate)) {
+      schemaPath = candidate;
     } else {
       console.error('Error: cannot find schema.sql. Please specify --schema <path>.');
       process.exit(1);

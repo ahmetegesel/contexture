@@ -1,7 +1,7 @@
 /**
  * TypeScript AST Extractor
  * Extracts code symbols and call graph edges using the TypeScript Compiler API.
- * Emits intermediate JSONL conforming to plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/spec.md.
+ * Emits intermediate JSONL conforming to the module's own spec.md.
  */
 
 import { createRequire } from 'node:module';
