@@ -1,12 +1,12 @@
 #!/bin/sh
 # run.sh: the upstream test runner. Runs the core suites (filters, ctx, session, hooks,
 # record-audit, governance, law compose, the unit-data record compliance twice,
-# store-compliance, store-fuzz and record-fuzz, base-only, module-tests), each hermetic
+# store-compliance, base-only, module-tests), each hermetic
 # and staged from the shipped core (the unit-data record compliance runs the record cases
 # through the unit module data script over base's posix driver and the fts5 plugin's own
 # copy, and stages the storage core and the unit module; store compliance stages the
-# storage core and the docs module's data file; store-fuzz and record-fuzz stage the
-# storage core and the fts5 plugin's own copies; the base-only gate stages base alone and
+# storage core and the docs module's data file (the store fuzzer is the vitest drivers
+# project's, tests/drivers/store-fuzz.test.ts); the base-only gate stages base alone and
 # runs the posix core suites with a synthetic data file); the session suite runs twice,
 # once on the posix driver and once
 # on the fts5 driver (the plugin's own copy staged into its sandbox; skip 77 when sqlite3
@@ -46,7 +46,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh law-tests.sh unit-data-tests.sh:posix unit-data-tests.sh:fts5 store-compliance.sh store-fuzz.sh record-fuzz.sh base-only-tests.sh module-tests.sh"
+CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh law-tests.sh unit-data-tests.sh:posix unit-data-tests.sh:fts5 store-compliance.sh base-only-tests.sh module-tests.sh"
 
 GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
 GATE_JOBS=${GATE_JOBS:-5}

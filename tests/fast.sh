@@ -15,8 +15,6 @@
 #   driver posix     the unit-data smoke, store compliance, and the session suite on posix
 #   driver fts5      the record compliance through the data script on fts5 (the driver
 #                    tests run in vitest: bun run test:drivers and test:storage-fts5)
-#   fuzz             the differential fuzzers: store-fuzz and record-fuzz (skip 77
-#                    without sqlite3)
 #   module           the package overlay installer suite (module-tests.sh)
 #   docs             the docs-discipline suite on the files driver
 #   docs-fts5        the docs-discipline suite on fts5
@@ -42,8 +40,6 @@ usage: tests/fast.sh <area> [<arg>]
   driver posix     the unit-data smoke, store compliance, and the session suite on posix
   driver fts5      the record compliance through the data script on fts5 (the driver
                    tests run in vitest: bun run test:drivers and test:storage-fts5)
-  fuzz             the differential fuzzers: store-fuzz and record-fuzz (skip 77
-                   without sqlite3)
   module           the package overlay installer suite (module-tests.sh)
   docs             the docs-discipline suite on the files driver
   docs-fts5        the docs-discipline suite on fts5
@@ -160,11 +156,6 @@ case "${1:-}" in
         exit 1
         ;;
     esac
-    ;;
-  fuzz)
-    AREA="fuzz"
-    run_suite "store-fuzz.sh (posix against fts5)" sh "$ROOT/tests/store-fuzz.sh"
-    run_suite "record-fuzz.sh (posix against fts5)" sh "$ROOT/tests/record-fuzz.sh"
     ;;
   module)
     AREA="module"
