@@ -74,17 +74,18 @@ The filters' test material stays upstream, under `plugins/toolchain-filters/test
 Every filter carries input and expected-output pairs upstream, in a `tests/` folder (its README carries the why, the roots, and the maintenance contract):
 
 ```text
-tests/                                 the core filters
+tests/filters/pairs/                     the core filters
 plugins/toolchain-filters/tests/       the plugin filters
 ```
 
-A pair is named `<filter>-<case>.in` and `<filter>-<case>.expected`. Run the harness from the repository root:
+A pair is named `<filter>-<case>.in` and `<filter>-<case>.expected`. Run the tests from the repository's `tests/` folder:
 
 ```sh
-tests/filter-tests.sh
+bun run test:filters
+bun run test:toolchain-filters
 ```
 
-It pipes each input through the runner (`ctx run --filter=<filter>`) and byte-compares the output with the expected file. Core cases run through the base runner; plugin cases run through a staged sandbox: the runtime discovers filters in the builtin run module and in workspace modules, so the harness stages a `toolchain-filters` module holding the plugin's filters rather than installing them into the workspace. The presence check fails when a filter carries no fixture pair, so a new filter is not done until it has one. Mechanics cases pin the runner itself: the ANSI strip, command identity in runner mode, the notice-only false-green output, and the recovery fallback to raw.
+Each test pipes an input through the runner (`ctx run --filter=<filter>`) of a sandbox staged from `base/` and byte-compares the output with the expected file, failing at the first differing offset. Plugin cases stage the plugin's own module tree into the sandbox's extension root, its installed layout, rather than installing it into the workspace. The presence check fails when a filter carries no fixture pair, so a new filter is not done until it has one. Mechanics cases pin the runner itself: the ANSI strip, command identity in runner mode, the notice-only false-green output, and the recovery fallback to raw.
 
 ## Writing Custom Filters
 
@@ -94,7 +95,7 @@ It pipes each input through the runner (`ctx run --filter=<filter>`) and byte-co
 4. Buffer lines and process them in the `END` block.
 5. Keep the fail-safe fallback: if output is empty or larger than raw input, print the raw lines.
 6. Emit a notice when truncating: a marker line carrying one of `collapsed`, `elided`, `repeated`, `capped`, or a `COMPACT_DISABLE` recovery pointer; a shrink with no notice falls back to raw.
-7. Add a fixture pair under the matching tests folder (`tests/` for a core filter, `plugins/toolchain-filters/tests/` for a plugin filter) and run the harness.
+7. Add a fixture pair under the matching tests folder (`tests/filters/pairs/` for a core filter, `plugins/toolchain-filters/tests/` for a plugin filter) and run the tests.
 
 ### Authoring Gotchas
 
@@ -107,4 +108,4 @@ None beyond the base: every filter is a plain awk program, and the runner (`ctx 
 
 ## Contributing
 
-A new filter or an adapted one lands upstream with its fixture pair (the presence check fails without one) and a run of `tests/filter-tests.sh`. Keep each filter's `# match:` and `# command:` headers exact: they are the selection contract. Packaging, naming, and the test convention are in `docs/plugins.md`.
+A new filter or an adapted one lands upstream with its fixture pair (the presence check fails without one) and a green run of `bun run test:filters` and `bun run test:toolchain-filters`. Keep each filter's `# match:` and `# command:` headers exact: they are the selection contract. Packaging, naming, and the test convention are in `docs/plugins.md`.

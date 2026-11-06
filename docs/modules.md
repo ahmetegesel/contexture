@@ -259,7 +259,7 @@ A match on an already-claimed command line or signature warns as a shadow; the f
 
 A filter-only module — no module file, no `scripts/` — is legal and unlisted; the run module is exactly that shape.
 
-To test a filter without touching the live drawer, stage a sandbox workspace whose `.contexture/ctx` and `.contexture/modules/<name>/filters/` mirror the real layout: the engine resolves its root from its own path, so the sandbox is self-contained. `tests/filter-tests.sh` is the upstream precedent.
+To test a filter without touching the live drawer, stage a sandbox workspace whose `.contexture/ctx` and `.contexture/modules/<name>/filters/` mirror the real layout: the engine resolves its root from its own path, so the sandbox is self-contained. The upstream precedent is the vitest `filters` project (`tests/filters/`) and the plugin's `toolchain-filters` project, which stage `base/` as shipped into a sandbox and pipe each pair through its `ctx run --filter`.
 
 The filter guards (fail-safe passthrough, notice-only, format-only recovery) belong to the engine: see `docs/the-engine.md`.
 

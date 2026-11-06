@@ -16,8 +16,8 @@
 #
 # Usage: tests/base-only-tests.sh [--keep] [--skip-core]
 #   --keep       preserve the sandbox
-#   --skip-core  skip B6's three nested posix suites and their launches, running B1 to B5
-#                alone (pass=163); the full run is pass=166
+#   --skip-core  skip B6's two nested posix suites and their launches, running B1 to B5
+#                alone (pass=163); the full run is pass=165
 # Exit 0 when every case passes; 1 otherwise; 2 a staging failure.
 
 set -u
@@ -96,20 +96,19 @@ refused() { # <rc> <message...>: one line on stderr, nothing on stdout, the exac
 }
 
 # ==============================================================================
-# B6 launch: the three nested posix suites run while B1 to B5 execute
+# B6 launch: the two nested posix suites run while B1 to B5 execute
 # ==============================================================================
 # --skip-core skips the launches and the B6 section, leaving B1 to B5 alone
 if [ "$SKIP_CORE" -eq 0 ]; then
 NESTED="$SB/nested"
 mkdir -p "$NESTED"
-NESTED_JOBS=3
+NESTED_JOBS=2
 NESTED_PID=""
 
-run_core_cmd() { # <index>: the three nested commands and arguments, in order
+run_core_cmd() { # <index>: the two nested commands and arguments, in order
   case "$1" in
-    1) sh "$ROOT/tests/filter-tests.sh" ;;
-    2) sh "$ROOT/tests/ctx-tests.sh" ;;
-    3) sh "$ROOT/tests/hook-tests.sh" ;;
+    1) sh "$ROOT/tests/ctx-tests.sh" ;;
+    2) sh "$ROOT/tests/hook-tests.sh" ;;
   esac
 }
 
@@ -119,8 +118,8 @@ launch_core() { # <index>: one output and rc file per suite, the rc atomically r
   printf '%s\n' "$!" > "$NESTED/$_lc_idx.pid"
 }
 
-run_nested() { # the gate's rc-file poll idiom (tests/run.sh lines 128-180), cap 3
-  nq="1 2 3"
+run_nested() { # the gate's rc-file poll idiom (tests/run.sh lines 128-180), cap 2
+  nq="1 2"
   nr=""
   while :; do
     still=""
@@ -482,7 +481,7 @@ rm -rf "$plantdir"
 # ==============================================================================
 if [ "$SKIP_CORE" -eq 0 ]; then
 printf '\n== B6: the posix core suites ==\n'
-# the three suites were launched before B1; wait for the poll loop, then print in order
+# the two suites were launched before B1; wait for the poll loop, then print in order
 if [ -n "$NESTED_PID" ]; then wait "$NESTED_PID"; fi
 collect_core() { # <index> <label>
   _cc_idx=$1; _cc_label=$2
@@ -500,9 +499,8 @@ collect_core() { # <index> <label>
     printf '%s\n' "--- end of $_cc_label ---"
   fi
 }
-collect_core 1 "filter-tests.sh"
-collect_core 2 "ctx-tests.sh"
-collect_core 3 "hook-tests.sh"
+collect_core 1 "ctx-tests.sh"
+collect_core 2 "hook-tests.sh"
 fi
 
 printf '\n== summary ==\n'

@@ -5,10 +5,10 @@
 # full pre-land gate (tests/run.sh), which stays mandatory before any commit, tag, or push.
 #
 # Usage: tests/fast.sh <area> [<arg>]
-#   unit             the four unit-like suites (the store driver, record, and verb tests run in
+#   unit             the three unit-like suites (the filter, store driver, record, and verb tests run in
 #                    vitest: bun run test:drivers, and bun run test:unit for the unit-record
 #                    and unit-verbs projects)
-#   engine           filter-tests, ctx-tests, governance-tests
+#   engine           ctx-tests, governance-tests (the filter pairs: bun run test:filters)
 #   law              the law compose suite (law-tests.sh)
 #   module           the package overlay installer suite (module-tests.sh)
 #   docs             the docs-discipline suite on the files driver
@@ -25,10 +25,10 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 usage() {
   cat <<'USAGE'
 usage: tests/fast.sh <area> [<arg>]
-  unit             the four unit-like suites (the store driver, record, and verb tests run in
+  unit             the three unit-like suites (the filter, store driver, record, and verb tests run in
                    vitest: bun run test:drivers, and bun run test:unit for the unit-record
                    and unit-verbs projects)
-  engine           filter-tests, ctx-tests, governance-tests
+  engine           ctx-tests, governance-tests (the filter pairs: bun run test:filters)
   law              the law compose suite (law-tests.sh)
   module           the package overlay installer suite (module-tests.sh)
   docs             the docs-discipline suite on the files driver
@@ -89,7 +89,6 @@ run_suite() { # <label> <command...>
 }
 
 unit_suites() {
-  run_suite "filter-tests.sh" sh "$ROOT/tests/filter-tests.sh"
   run_suite "ctx-tests.sh" sh "$ROOT/tests/ctx-tests.sh"
   run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
   run_suite "ast-doc-graph test-ddl.sh" sh "$ROOT/plugins/ast-doc-graph/tests/test-ddl.sh"
@@ -102,7 +101,6 @@ case "${1:-}" in
     ;;
   engine)
     AREA="engine"
-    run_suite "filter-tests.sh" sh "$ROOT/tests/filter-tests.sh"
     run_suite "ctx-tests.sh" sh "$ROOT/tests/ctx-tests.sh"
     run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
     ;;
