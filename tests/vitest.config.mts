@@ -13,6 +13,7 @@ export default defineConfig({
   test: {
     pool: 'forks',
     globalSetup: [here('./support/global-setup.ts')],
+    setupFiles: [here('./support/setup.ts')],
     testTimeout: 120_000,
     hookTimeout: 300_000,
     projects: [
