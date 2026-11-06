@@ -19,7 +19,7 @@ const modules = (help: string): string[] => {
   return at < 0 ? [] : [...help.slice(at).matchAll(/^ {2}([a-z][a-z0-9-]*) /gm)].map((m) => m[1] ?? '');
 };
 
-describe.concurrent('the bare base: the no-plugin boot and help surface (the-engine-r1, r5)', () => {
+describe.concurrent('the bare base: the no-plugin boot and help surface [the-engine-r1, the-engine-r5]', () => {
   it('the stage carries no rhythms, docs, or plugins folder, and the storage core sits in it', () => {
     const sb = bare();
     for (const absent of ['.contexture/rhythms', 'docs', 'plugins']) expect(existsSync(join(sb, absent)), absent).toBe(false);

@@ -20,7 +20,7 @@ beforeAll(async () => {
   }, 'fts5', 'sq-seed');
 });
 
-describe.concurrent('the SQLite smoke set: every command family lands in the fts5 store and nowhere else (the-record-r2, r10; C14 runtime half)', () => {
+describe.concurrent('the SQLite smoke set: every command family lands in the fts5 store and nowhere else [the-record-r2, the-record-r10] (C14 runtime half)', () => {
   it('SF1 the unit lifecycle: bootstrap, active, units, stamp, close, the closed refusal, reopen, board', async () => {
     const sb = sqliteStage('sf1');
     await must(unit(sb, 'bootstrap', 'sf1', 'the lifecycle unit', 'sq-repo'));
