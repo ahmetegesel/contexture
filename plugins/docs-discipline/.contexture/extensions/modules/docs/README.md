@@ -40,7 +40,10 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   in corpus order (the store's bytewise key order); it strips a
   `projects/<repo>/` or `<repo>/` prefix when present and keeps the path as
   given otherwise, while the check skips a repo doc's path that carries no
-  prefix.
+  prefix. Without a repo argument the claimants span repos, so the engine
+  ranks each claimant's best source with the prefix it stripped prepended as
+  literal text (a child repository's exact source beats a workspace glob);
+  one repo's docs strip the same prefix, so a one-repo answer is unchanged.
 - `gate` carries the whole close-gate logic (git aggregation, the `--since`
   range, drift warnings, the delta notices, and the self-planted
   eight-scenario matrix); the other four verbs are thin
@@ -254,7 +257,9 @@ committed expected output under `unit/expected/` (regenerated with
 `DOCS_WRITE_EXPECTED=1` and read by hand), the owner rule of `query --file`
 over the `tests/fixtures/owner` corpus (an exact later source over a broad
 earlier glob, a narrower later glob, the fewer wildcards, the corpus-order
-tie, a repo prefix, a substring that claims nothing), `docs-check.awk` over the gate
+tie, a repo prefix, a substring that claims nothing, and without a repo
+argument a child repository's exact source over a workspace glob and a
+workspace doc's exact child path over the child's glob), `docs-check.awk` over the gate
 matrix's eight scenarios, the twelve capture deltas, both delta sources,
 the doc touch at the logical address alone, and the governed set over a
 planted shebang list (the shebang script, the `.awk` engine, the plain file,

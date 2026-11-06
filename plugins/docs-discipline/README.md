@@ -308,7 +308,7 @@ it walk below runs every one of these.
   check and query engines share the header-source glob rule in
   `docs-glob.awk`, so their verbs run them as `awk -f docs-glob.awk -f
   <engine>` on the awk the PATH names, and neither runs alone.
-- The owner lookup (`ctx docs query <repo> --file <path>`) claims by the
+- The owner lookup (`ctx docs query [<repo>] --file <path>`) claims by the
   check's own rule: a doc claims the path (a `projects/<repo>/` or `<repo>/`
   prefix stripped when present, the path kept as given otherwise) when a
   header source equals it or matches it as a glob, so a path that merely
@@ -317,6 +317,11 @@ it walk below runs every one of these.
   before its first wildcard (`*` or `{`; a source without one counts its
   whole length), then the fewest wildcards, then the earlier doc in corpus
   order, still one `OWNER`, `SUMMARY`, `DOC` answer, and a miss refuses rc 1.
+  Without a repo argument every repo's docs claim, and a claimant's best
+  source reads with the prefix it stripped as literal text, so
+  `projects/demo/src/x.ts` belongs to demo's exact `src/x.ts` over a
+  workspace `projects/**`; one repo's docs strip the same prefix, so the
+  one-repo form answers as before.
 - The write verbs share one pipeline in the IO helper: the doc read through
   the driver, one structural edit by `docs-edit.awk` against the schema at the
   foot of the module's private grammar asset `scripts/doc.grammar` (the engine

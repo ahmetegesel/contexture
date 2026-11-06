@@ -82,26 +82,28 @@ mode == "index" {
 # ─── MODE: FILE OWNER LOOKUP ─────────────────────────────────────────────────
 # A doc claims the path (a projects/<repo>/ or <repo>/ prefix stripped when present) by the
 # check's own rule (docs-glob.awk source_matches); every doc is read, and the answer in END is
-# the claimant whose best claiming source is the most specific (source_beats), the earlier doc
-# in corpus order on a full tie
+# the claimant whose best claiming source, read with the prefix it stripped as literal text, is
+# the most specific (source_beats), the earlier doc in corpus order on a full tie; one repo's
+# docs strip the same prefix, so only a claimant of another repo meets the difference
 mode == "file" {
     if (curr_sources != "" && !seen_file_check[curr_file]) {
         seen_file_check[curr_file] = 1
         n = split_sources(curr_sources, src_globs)
-        norm_file = file
+        stripped = ""
         p_prefix = "projects/" curr_repo "/"
         r_prefix = curr_repo "/"
-        if (index(norm_file, p_prefix) == 1) {
-            norm_file = substr(norm_file, length(p_prefix) + 1)
-        } else if (index(norm_file, r_prefix) == 1) {
-            norm_file = substr(norm_file, length(r_prefix) + 1)
+        if (index(file, p_prefix) == 1) {
+            stripped = p_prefix
+        } else if (index(file, r_prefix) == 1) {
+            stripped = r_prefix
         }
+        norm_file = substr(file, length(stripped) + 1)
         doc_best = ""
         for (i = 1; i <= n; i++) {
             if (source_matches(norm_file, src_globs[i]) && (doc_best == "" || source_beats(src_globs[i], doc_best))) doc_best = src_globs[i]
         }
-        if (doc_best != "" && (owner_source == "" || source_beats(doc_best, owner_source))) {
-            owner_source = doc_best
+        if (doc_best != "" && (owner_source == "" || source_beats(stripped doc_best, owner_source))) {
+            owner_source = stripped doc_best
             owner_head = "OWNER: " curr_slug " (" curr_kind (curr_role ? ", " curr_role : "") ") [" curr_repo "]"
             owner_summary = "SUMMARY: " curr_desc
             owner_doc = "DOC: " curr_file

@@ -93,6 +93,21 @@ describe('the query engine --file: the most specific owner by the check glob pre
     expect(summary).toMatch(/^SUMMARY: \S/);
   });
 
+  it.each([
+    ["a child repository's exact source beats a workspace glob, the stripped prefix counted as literal", 'projects/demo/src/x.ts', 'da', 'capability', 'demo'],
+    ["a workspace doc's exact child path beats the child repository's glob", 'projects/demo/lib/y.ts', 'wa', 'structural', 'workspace'],
+  ])('[docs-module-r6] without a repo argument %s', async (_, file, slug, kind, repo) => {
+    const r = await query(owners, { mode: 'file', file });
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    const [head, , doc] = r.stdout.split('\n');
+    expect([head, doc]).toEqual([`OWNER: ${slug} (${kind}) [${repo}]`, `DOC: docs/${repo}/${slug}.md`]);
+  });
+
+  it('[docs-module-r6] the one-repo form keeps its answer for a prefixed child path', async () => {
+    const r = await query(owners, { mode: 'file', repo: 'workspace', file: 'projects/demo/src/x.ts' });
+    expect(r.stdout.split('\n')[0]).toBe('OWNER: wa (structural) [workspace]');
+  });
+
   it('a path that holds a source only as a substring has no owner', async () => {
     const r = await query(owners, { mode: 'file', repo: 'eown', file: 'xplugins/docs-discipline/.contexture/extensions/modules/docs/scripts/gate' });
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
