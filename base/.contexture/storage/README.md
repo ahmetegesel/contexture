@@ -51,7 +51,9 @@ same rule in the fts5 driver) carries its holder's pid: a waiter polls every 0.1
 a lock whose pid is gone at once, gives a pid-less lock ten polls of grace, and refuses a
 live holder rc 2 `ERR_STORAGE_LOCKED` after 600 polls (60 s of sleep), the unit lock's
 wait (the unit module's README names why and how it was sized); where `sleep` refuses a
-fraction, a poll sleeps 1 s and counts as ten. The scan answers the namespace's admitted keys with the raw value in
+fraction, a poll sleeps 1 s and counts as ten. A write interrupted (HUP, INT, TERM) while
+it holds the lock releases it; a writer interrupted while it still waits removes nothing,
+so the live holder keeps its lock and no third writer enters beside it. The scan answers the namespace's admitted keys with the raw value in
 base64, no limit; the module decodes and stops after the keys it needs. The change log is
 optional per namespace; a namespace declaring `changes: false`, or a driver without the
 log, refuses `store.changes` rc 1 `ERR_CAPABILITY_UNSUPPORTED`.

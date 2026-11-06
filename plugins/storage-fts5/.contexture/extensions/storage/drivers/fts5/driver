@@ -171,17 +171,16 @@ store_unlock() {
 # carries its holder pid; a waiter removes a lock whose pid is gone, gives a lock with no
 # pid file ten polls of grace for its holder to write one, and refuses a live holder rc 2
 # ERR_STORAGE_LOCKED after 600 polls 0.1 s apart, 60 s of sleep (the unit lock's wait;
-# where sleep refuses a fraction, a poll sleeps 1 s and counts as ten).
+# where sleep refuses a fraction, a poll sleeps 1 s and counts as ten). STORE_LOCK names
+# the folder only once mkdir holds it, so a waiter's interrupt trap removes nothing.
 store_lock() {
-  STORE_LOCK="$DB_TMP/locks/store-$1.lock"
-  mkdir -p "$(dirname "$STORE_LOCK")" 2>/dev/null || {
-    STORE_LOCK=""
-    refuse 2 ERR_STORAGE_WRITE "cannot make the store lock folder"
-  }
+  sl_lock="$DB_TMP/locks/store-$1.lock"
+  mkdir -p "$(dirname "$sl_lock")" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot make the store lock folder"
   sl_n=0
   sl_miss=0
   while [ "$sl_n" -lt 600 ]; do
-    if mkdir "$STORE_LOCK" 2>/dev/null; then
+    if mkdir "$sl_lock" 2>/dev/null; then
+      STORE_LOCK=$sl_lock
       printf '%s\n' "$$" > "$STORE_LOCK/pid" 2>/dev/null || {
         rm -rf "$STORE_LOCK" 2>/dev/null
         STORE_LOCK=""
@@ -189,22 +188,21 @@ store_lock() {
       }
       return 0
     fi
-    sl_pid=$(cat "$STORE_LOCK/pid" 2>/dev/null)
+    sl_pid=$(cat "$sl_lock/pid" 2>/dev/null)
     case "$sl_pid" in
       ""|*[!0-9]*)
         sl_miss=$((sl_miss + 1))
-        if [ "$sl_miss" -ge 10 ]; then rm -rf "$STORE_LOCK" 2>/dev/null; sl_miss=0; continue; fi
+        if [ "$sl_miss" -ge 10 ]; then rm -rf "$sl_lock" 2>/dev/null; sl_miss=0; continue; fi
         ;;
       *)
         if kill -0 "$sl_pid" 2>/dev/null; then sl_miss=0
-        else rm -rf "$STORE_LOCK" 2>/dev/null; continue
+        else rm -rf "$sl_lock" 2>/dev/null; continue
         fi
         ;;
     esac
     sl_n=$((sl_n + 1))
     sleep 0.1 2>/dev/null || { sleep 1; sl_n=$((sl_n + 9)); }
   done
-  STORE_LOCK=""
   refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (60 s timeout)"
 }
 
