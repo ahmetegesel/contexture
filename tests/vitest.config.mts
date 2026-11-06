@@ -22,6 +22,29 @@ const pluginProjects = readdirSync(here('../plugins'), { withFileTypes: true })
     test: { name, root: here(`../plugins/${name}`), include: ['tests/**/*.test.ts'], maxConcurrency: 16 },
   }));
 
+const projects = [
+  area('harness'),
+  area('drivers'),
+  area('unit-record'),
+  area('unit-verbs'),
+  area('governance'),
+  area('filters'),
+  area('engine'),
+  area('hooks'),
+  area('laws'),
+  area('packages', ['packages/**/*.test.ts', 'fixtures/worked-package/tests/**/*.test.ts']),
+  area('base'),
+  area('integration'),
+  area('sqlite-smoke'),
+  ...pluginProjects,
+];
+
+const rules = {
+  projects: projects.map((p) => p.test.name),
+  outputFile: here('./.reports/rules.json'),
+  reasons: here('./support/rule-reasons.txt'),
+};
+
 export default defineConfig({
   test: {
     pool: 'forks',
@@ -34,22 +57,8 @@ export default defineConfig({
       'default',
       ['json', { outputFile: here('./.reports/last.json') }],
       here('./support/timing.ts'),
+      ...(process.env.VITEST_PRERELEASE === '1' ? [[here('./support/rules.ts'), rules] as [string, typeof rules]] : []),
     ],
-    projects: [
-      area('harness'),
-      area('drivers'),
-      area('unit-record'),
-      area('unit-verbs'),
-      area('governance'),
-      area('filters'),
-      area('engine'),
-      area('hooks'),
-      area('laws'),
-      area('packages', ['packages/**/*.test.ts', 'fixtures/worked-package/tests/**/*.test.ts']),
-      area('base'),
-      area('integration'),
-      area('sqlite-smoke'),
-      ...pluginProjects,
-    ],
+    projects,
   },
 });
