@@ -13,6 +13,18 @@ export function run(sb: string, args: readonly string[], { input = '', env }: Ct
   return exec('./.contexture/ctx', args, { cwd: sb, input, env });
 }
 
+export function printfFormat(value: string | Buffer): string {
+  let format = '';
+  for (const c of typeof value === 'string' ? Buffer.from(value) : value) format += c >= 0x20 && c < 0x7f && c !== 0x5c && c !== 0x25 ? String.fromCharCode(c) : `\\${c.toString(8).padStart(3, '0')}`;
+  return format;
+}
+
+const DECODE = 'for a; do v=$(printf "x${a}y"); v=${v#x}; v=${v%y}; set -- "$@" "$v"; shift; done; exec "$@"';
+
+export function execBytes(sb: string, argv: readonly (string | Buffer)[], { input = '', env }: CtxOptions = {}): Promise<Run> {
+  return exec('sh', ['-c', DECODE, 'sh', ...argv.map(printfFormat)], { cwd: sb, input, env });
+}
+
 export const unit = (sb: string, ...args: string[]): Promise<Run> => run(sb, ['unit', ...args]);
 export const lane = (sb: string, ...args: string[]): Promise<Run> => run(sb, ['lane', ...args]);
 
