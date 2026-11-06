@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { launch } from '../support/exec';
-import { holdLock, lockPath, sleepShim, unitLock } from '../support/locks';
+import { catShim, holdLock, lockPath, sleepShim, unitLock } from '../support/locks';
 import { ROOT_USER } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { lane, must, run, seedUnit, unit, unitChecksum, waitFor } from '../support/unit';
@@ -58,18 +58,21 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it('K: a TERM on a data script waiting on a held unit lock leaves no scratch once the drawer settles', async () => {
     const sb = fresh(sb0);
-    const release = holdLock(sb, unitLock('w-unit'), 'live');
+    const lock = unitLock('w-unit');
+    const release = holdLock(sb, lock, 'live');
+    const cat = catShim();
     const before = scratch(sb);
     const method = launch(join(sb, '.contexture/modules/unit/scripts/data'), ['task.start', 'w-unit', 'w-a'], {
       cwd: sb,
       input: 'pointer=w-a IN_PROGRESS\n',
-      env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(sb, '.contexture/storage/scripts/driver-resolver') },
+      env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(sb, '.contexture/storage/scripts/driver-resolver'), ...cat.env },
     });
-    const staged = await waitFor(() => added(sb, before).length > 0, 20_000);
+    expect(await waitFor(() => cat.reads().includes(join(lockPath(sb, lock), 'pid')), 20_000)).toBe(true);
+    expect(added(sb, before).length).toBeGreaterThan(0);
     method.signal('SIGTERM');
-    await method.result;
+    const r = await method.result;
     release();
-    expect(staged).toBe(true);
+    expect(r.code).toBe(143);
     expect(await waitFor(() => added(sb, before).length === 0, 10_000)).toBe(true);
   });
 
@@ -98,19 +101,19 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it('KR-c: a writer killed while waiting leaves one per-verb scratch root, which the next dispatch sweeps', async () => {
     const sb = fresh(sb0);
-    const release = holdLock(sb, unitLock('w-unit'), 'live');
+    const lock = unitLock('w-unit');
+    const release = holdLock(sb, lock, 'live');
+    const cat = catShim();
     const before = scratch(sb);
     const verbRoot = (): string | undefined => added(sb, before).find((f) => f.startsWith('verb.'));
-    const writer = launch('./.contexture/ctx', ['unit', 'task', 'start', 'w-unit', 'w-a'], { cwd: sb, group: true });
-    const staged = await waitFor(() => {
-      const root = verbRoot();
-      return root !== undefined && readdirSync(join(sb, '.contexture/tmp', root)).some((f) => f.startsWith('unit.'));
-    }, 30_000, 50);
+    const writer = launch('./.contexture/ctx', ['unit', 'task', 'start', 'w-unit', 'w-a'], { cwd: sb, group: true, env: cat.env });
+    expect(await waitFor(() => cat.reads().includes(join(lockPath(sb, lock), 'pid')), 30_000, 50)).toBe(true);
+    const root = verbRoot();
+    expect(root !== undefined && readdirSync(join(sb, '.contexture/tmp', root)).some((f) => f.startsWith('unit.'))).toBe(true);
     writer.signal('SIGKILL');
     await writer.result;
     expect(await waitFor(() => groupGone(writer.child.pid!), 10_000)).toBe(true);
     release();
-    expect(staged).toBe(true);
     expect(added(sb, before).filter((f) => f.startsWith('verb.'))).toHaveLength(1);
     await unit(sb, 'task', 'show', 'w-unit', 'w-a');
     expect(added(sb, before)).toEqual([]);

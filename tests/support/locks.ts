@@ -1,17 +1,26 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathPlant } from './plants';
 import { sandbox } from './sandbox';
 
 export type Holder = 'live' | 'dead' | 'pidless';
 
 const TRUE = ['/usr/bin/true', '/bin/true'].find((p) => existsSync(p));
+const CAT = ['/bin/cat', '/usr/bin/cat'].find((p) => existsSync(p));
 
 export function sleepShim(): Record<string, string> {
   if (!TRUE) throw new Error('no true binary for the sleep shim');
   const dir = sandbox('sleep-shim');
   symlinkSync(TRUE, join(dir, 'sleep'));
   return { PATH: `${dir}:${process.env.PATH ?? ''}` };
+}
+
+export function catShim(): { env: Record<string, string>; reads: () => string[] } {
+  if (!CAT) throw new Error('no cat binary for the cat shim');
+  const log = join(sandbox('cat-log'), 'reads');
+  const env = pathPlant('cat', `for a in "$@"; do printf '%s\\n' "$a" >> "${log}"; done\nexec "${CAT}" "$@"`);
+  return { env, reads: () => (existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter((l) => l !== '') : []) };
 }
 
 function exitedPid(): number {
