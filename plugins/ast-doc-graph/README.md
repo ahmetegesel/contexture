@@ -388,6 +388,7 @@ ctx ast-doc-graph query stats
 
 ## Needs
 
+- `bash` on the PATH: the index driver, the query engine, and the three launchers are bash scripts, and only the two verb wrappers are plain `sh`, so a host without bash runs neither verb.
 - A runner for the TypeScript entry points: a project-local `tsx`, else `tsx` or Node 22.6+ (`--experimental-strip-types`) from the caller's PATH; the launchers never edit PATH. A runner runs the extractor; it supplies no compiler API.
 - A TypeScript 5 or 6 compiler API (a `typescript` package carrying `createSourceFile`) when the repository holds TypeScript, whatever TypeScript the repository itself uses: TypeScript 7, the native compiler, exposes none, and a 6.x parser reads its code. The extractor takes the first one reachable, its own Node resolution from the module, then the target repository and its ancestors; `AST_DOC_GRAPH_TYPESCRIPT` names one (its package folder or its entry file) and, when set, is the only candidate. The plugin installs none: the adopter provides it. With none reachable the whole index refuses rc 1 and writes nothing, naming each typescript it found with its version and path, and the variable; a variable naming a package without the compiler API refuses naming the variable and that version. A docs-only repository needs no compiler API.
 - System `sqlite3` with FTS5 (standard on macOS and modern Linux distributions).
