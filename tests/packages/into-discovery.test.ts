@@ -15,8 +15,8 @@ const lines = (text: string): string[] => text.replace(/\n+$/, '').split('\n');
 const RITUAL = 'fixture-ritual (.contexture/extensions/rhythms/fixture-ritual.md) | use when: a fixture needs the rhythm index | activation: propose';
 const WORKSPACE_RITUAL = 'workspace-ritual (.contexture/rhythms/workspace-ritual.md) | use when: the workspace half is proven | activation: propose';
 
-describe.concurrent('package-install into discovery: the engine, the resolver, and the rhythm index see the overlay (the-engine-r1, r10, r19, r23)', () => {
-  it('the installed module lists beside the base lane module and its verb dispatches', async () => {
+describe.concurrent('package-install into discovery: the engine, the resolver, and the rhythm index see the overlay', () => {
+  it('[the-engine-r1, modules-r14] the installed module lists beside the base lane module and its verb dispatches', async () => {
     const sb = sandbox();
     const pa = newPkg(sb, 'pkga');
     addModule(pa, 'alpha', 'docs');
@@ -27,7 +27,7 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect(out(await ctx(sb, 'alpha', 'hello'))).toBe('hello from alpha');
   });
 
-  it('a module-only package lists its module', async () => {
+  it('[the-engine-r1] a module-only package lists its module', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'shape-module');
     addModule(p, 'shaped');
@@ -35,7 +35,7 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect((await ctx(sb, 'help')).stdout).toContain('the shaped fixture module');
   });
 
-  it('a driver package resolves by its name from the extension root and never lists as a module', async () => {
+  it('[the-engine-r19, the-engine-r23] a driver package resolves by its name from the extension root and never lists as a module', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'shape-driver');
     addFile(p, 'storage/drivers/shapedrv/driver', '#!/bin/sh\nexit 0', 0o755);
@@ -44,7 +44,7 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect((await ctx(sb, 'help', '--all')).stdout).not.toContain('shapedrv');
   });
 
-  it('a filters-only package resolves its filter from the extension root and stays unlisted', async () => {
+  it('[the-engine-r10, the-engine-r1] a filters-only package resolves its filter from the extension root and stays unlisted', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'shape-filters');
     addFile(p, 'modules/shapefilters/filters/shape.awk', '#!/usr/bin/awk -f\n# command: ^shapefilters$\n# format-only: shape\n{ print "SHAPED" }', 0o755);
@@ -54,7 +54,7 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect((await ctx(sb, 'help')).stdout).not.toContain('shapefilters');
   });
 
-  it('the rhythm index reads the extension root after the workspace, the law fragment is recorded, and the uninstall leaves the index', async () => {
+  it('[the-engine-r22] the rhythm index reads the extension root after the workspace, the law fragment is recorded, and the uninstall leaves the index', async () => {
     const sb = sandbox();
     const ri = newPkg(sb, 'pkgri');
     addModule(ri, 'rifixture');
@@ -75,7 +75,7 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect((await ctx(sb, 'unit', 'index')).stdout).not.toContain('fixture-ritual');
   });
 
-  it('a driver package lands executable, resolves from the extension root, records its kind and name, stays unlisted, and uninstalls', async () => {
+  it('[the-engine-r19, the-engine-r22, the-engine-r23] a driver package lands executable, resolves from the extension root, records its kind and name, stays unlisted, and uninstalls', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgdrv');
     addFile(p, 'storage/drivers/fakedrv/driver', '#!/bin/sh\nexit 0', 0o755);

@@ -7,8 +7,8 @@ import { put } from '../support/tree';
 
 const sandbox = () => stage('posix', 'pkg-hooks');
 
-describe.concurrent('package-install: the module part hooks (modules-r13)', () => {
-  it('the install hook runs after the overlay and the record with the roots exported; the uninstall hook runs before the removal', async () => {
+describe.concurrent('package-install: the module part hooks', () => {
+  it('[modules-r13, the-engine-r22] the install hook runs after the overlay and the record with the roots exported; the uninstall hook runs before the removal', async () => {
     const sb = sandbox();
     const ph = newPkg(sb, 'pkgh');
     addModule(ph, 'h');
@@ -35,7 +35,7 @@ describe.concurrent('package-install: the module part hooks (modules-r13)', () =
     expect(existsSync(extPath(sb, 'modules/h/module'))).toBe(false);
   });
 
-  it('a failing install hook fails the install rc2, naming itself, with the overlay and the record in place', async () => {
+  it('[modules-r13] a failing install hook fails the install rc2, naming itself, with the overlay and the record in place', async () => {
     const sb = sandbox();
     const pf = newPkg(sb, 'pkgfail');
     addModule(pf, 'f');

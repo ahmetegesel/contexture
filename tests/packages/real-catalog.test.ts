@@ -13,8 +13,8 @@ const PLUGINS = ['docs-discipline', 'ast-doc-graph', 'storage-fts5', 'toolchain-
 const manifest = (p: string): string => join(ROOT, 'plugins', p, 'manifest');
 const FTS5 = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5');
 
-describe.concurrent('the real catalog installs through its own wrappers (plugins-r6, modules-r13, the-engine-r19)', () => {
-  it('docs-discipline lands its module, grammar, and rhythms under the extension root, seeds the corpus, and serves its store; starter-rhythms owns work.md', async () => {
+describe.concurrent('the real catalog installs through its own wrappers', () => {
+  it('[plugins-r1, plugins-r2, plugins-r6, modules-r13, modules-r10] docs-discipline lands its module, grammar, and rhythms under the extension root, seeds the corpus, and serves its store; starter-rhythms owns work.md', async () => {
     const sb = sandbox();
     const docs = catalogCopy(sb, 'docs-discipline');
     expect((await wrapper(sb, docs, 'install')).code).toBe(0);
@@ -40,7 +40,7 @@ describe.concurrent('the real catalog installs through its own wrappers (plugins
     expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(false);
   });
 
-  it('starter-rhythms puts work and debug in the rhythm index with their use-when and activation', async () => {
+  it('[plugins-r6] starter-rhythms puts work and debug in the rhythm index with their use-when and activation', async () => {
     const sb = sandbox();
     expect(out(await ctx(sb, 'unit', 'index'))).toBe('');
     expect((await wrapper(sb, catalogCopy(sb, 'starter-rhythms'), 'install')).code).toBe(0);
@@ -50,7 +50,7 @@ describe.concurrent('the real catalog installs through its own wrappers (plugins
     ]);
   });
 
-  it('storage-fts5 resolves from the extension root ahead of the transitional module tier, never lists, and uninstalls', async () => {
+  it('[the-engine-r19, the-engine-r23, plugins-r6] storage-fts5 resolves from the extension root ahead of the transitional module tier, never lists, and uninstalls', async () => {
     const sb = sandbox();
     const fts5 = catalogCopy(sb, 'storage-fts5');
     expect((await wrapper(sb, fts5, 'install')).code).toBe(0);
@@ -67,7 +67,7 @@ describe.concurrent('the real catalog installs through its own wrappers (plugins
     ['ast-doc-graph', 'modules/ast-doc-graph/module'],
     ['toolchain-filters', 'modules/toolchain-filters/filters'],
     ['starter-rhythms', 'rhythms/work.md'],
-  ])('%s installs and uninstalls through its wrappers, leaving nothing of its own', async (plugin, landed) => {
+  ])('[plugins-r6] %s installs and uninstalls through its wrappers, leaving nothing of its own', async (plugin, landed) => {
     const sb = sandbox();
     const p = catalogCopy(sb, plugin);
     expect((await wrapper(sb, p, 'install')).code).toBe(0);
@@ -76,19 +76,19 @@ describe.concurrent('the real catalog installs through its own wrappers (plugins
   });
 });
 
-describe.concurrent('the real package manifests (plugins-r9, modules-r16)', () => {
+describe.concurrent('the real package manifests', () => {
   let sb: string;
   beforeAll(() => {
     sb = sandbox();
   });
   const pkgv = async (p: string, field: string) => out(await ctx(sb, '_package', manifest(p), field));
 
-  it.each(PLUGINS)('%s carries a package manifest that validates', async (p) => {
+  it.each(PLUGINS)('[plugins-r9, modules-r16] %s carries a package manifest that validates', async (p) => {
     expect(existsSync(manifest(p))).toBe(true);
     expect((await ctx(sb, '_package', manifest(p), 'validate')).code).toBe(0);
   });
 
-  it('the kinds, parts, and driver name read as declared', async () => {
+  it('[plugins-r9, modules-r16] the kinds, parts, and driver name read as declared', async () => {
     expect(await pkgv('docs-discipline', 'kind')).toBe('feature');
     expect(await pkgv('docs-discipline', 'parts')).toBe('module modules/docs\nrhythms rhythms');
     expect(await pkgv('ast-doc-graph', 'kind')).toBe('feature');
@@ -99,7 +99,7 @@ describe.concurrent('the real package manifests (plugins-r9, modules-r16)', () =
     expect(await pkgv('storage-fts5', 'parts')).toBe('driver storage/drivers/fts5');
   });
 
-  it('the fts5 driver sits at its extension-relative driver path with no module file and declares fts5, 3.0.0, contract 3', async () => {
+  it('[plugins-r9, the-engine-r23] the fts5 driver sits at its extension-relative driver path with no module file and declares fts5, 3.0.0, contract 3', async () => {
     expect(existsSync(join(FTS5, 'module'))).toBe(false);
     expect(isExec(join(FTS5, 'driver'))).toBe(true);
     const cap = (await exec('sh', [join(FTS5, 'driver'), 'capability'], { cwd: sb })).stdout;
@@ -108,7 +108,7 @@ describe.concurrent('the real package manifests (plugins-r9, modules-r16)', () =
     expect(cap).toContain('"contract":"3"');
   });
 
-  it('the lane-isolation package is retired into the lane module laws', () => {
+  it('[plugins-r9, modules-r12] the lane-isolation package is retired into the lane module laws', () => {
     expect(existsSync(join(ROOT, 'plugins/lane-isolation'))).toBe(false);
     expect(readFileSync(join(ROOT, 'base/.contexture/extensions/modules/lane/laws'), 'utf8')).toContain('branch/worktree');
   });

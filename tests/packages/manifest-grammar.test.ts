@@ -36,8 +36,8 @@ beforeAll(() => {
   sb = stage('posix', 'pkg-grammar');
 });
 
-describe.concurrent('ctx _package: the package manifest grammar (the-engine-r23, modules-r16)', () => {
-  it('a feature manifest validates and reads its summary, version, kind, no driver, and parts', async () => {
+describe.concurrent('ctx _package: the package manifest grammar', () => {
+  it('[the-engine-r23, modules-r16] a feature manifest validates and reads its summary, version, kind, no driver, and parts', async () => {
     const f = manifest('feature', ['summary: a feature fixture package', 'version: 1.2.3', 'kind: feature', 'part: module modules/alpha', 'part: laws modules/alpha/laws', 'part: rhythms rhythms']);
     expect((await pkgv(f, 'validate')).code).toBe(0);
     expect(out(await pkgv(f, 'summary'))).toBe('a feature fixture package');
@@ -47,19 +47,19 @@ describe.concurrent('ctx _package: the package manifest grammar (the-engine-r23,
     expect(out(await pkgv(f, 'parts'))).toBe('module modules/alpha\nlaws modules/alpha/laws\nrhythms rhythms');
   });
 
-  it('a driver manifest validates and reads its kind and driver name', async () => {
+  it('[the-engine-r23, modules-r16] a driver manifest validates and reads its kind and driver name', async () => {
     const f = manifest('driver', ['summary: a driver fixture package', 'version: 2.0.0', 'kind: driver', 'driver: fakedrv', 'part: driver storage/drivers/fakedrv']);
     expect((await pkgv(f, 'validate')).code).toBe(0);
     expect(out(await pkgv(f, 'kind'))).toBe('driver');
     expect(out(await pkgv(f, 'driver'))).toBe('fakedrv');
   });
 
-  it.each(REFUSED)('%s refuses rc1', async (label, lines) => {
+  it.each(REFUSED)('[the-engine-r23, modules-r16] %s refuses rc1', async (label, lines) => {
     const f = manifest(label.replace(/[^a-z]+/g, '-'), lines);
     expect((await pkgv(f, 'validate')).code).toBe(1);
   });
 
-  it('a templates part refuses rc1 naming the retired type', async () => {
+  it('[modules-r16, plugins-r9] a templates part refuses rc1 naming the retired type', async () => {
     const f = manifest('retiredtemplate', [...HEAD, 'kind: feature', 'part: templates templates']);
     const r = await pkgv(f, 'validate');
     expect(r.code).toBe(1);

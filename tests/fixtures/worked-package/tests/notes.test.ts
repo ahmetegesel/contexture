@@ -22,8 +22,8 @@ beforeAll(async () => {
   }, 'posix', 'worked-installed');
 });
 
-describe.concurrent('the worked example package: notes, from manifest to uninstall (modules-r18)', () => {
-  it('the module and package manifests validate and read as authored', async () => {
+describe.concurrent('the worked example package: notes, from manifest to uninstall', () => {
+  it('[modules-r18] the module and package manifests validate and read as authored', async () => {
     const sb = stage('posix', 'worked-manifests');
     const p = catalog(sb);
     const mod = join(p, '.contexture/extensions/modules/notes/module');
@@ -35,7 +35,7 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
     expect(out(await ctx(sb, '_package', join(p, 'manifest'), 'parts'))).toBe('module modules/notes');
   });
 
-  it('the install lands the module, its laws, data, and part hook, lists it, and the hook seeds the welcome note through the verb', async () => {
+  it('[modules-r18, modules-r13] the install lands the module, its laws, data, and part hook, lists it, and the hook seeds the welcome note through the verb', async () => {
     const sb = stage('posix', 'worked-install');
     const r = await wrapper(sb, catalog(sb), 'install');
     expect(r.code).toBe(0);
@@ -46,7 +46,7 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
     expect((await ctx(sb, 'notes', 'show', 'welcome/readme')).stdout).toContain('A note reaches the module store through the notes verbs');
   });
 
-  it('the verbs put, show, and list notes over the posix store and refuse a malformed key', async () => {
+  it('[modules-r18] the verbs put, show, and list notes over the posix store and refuse a malformed key', async () => {
     const sb = fresh(installed);
     const put = await ctxIn(sb, 'the first test note\n', 'notes', 'put', 'demo/first');
     expect(put.code).toBe(0);
@@ -62,7 +62,7 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
     expect(bad.stderr).toContain('ERR_INVALID_ARGUMENT');
   });
 
-  it('a re-install never overwrites a present note', async () => {
+  it('[modules-r18] a re-install never overwrites a present note', async () => {
     const sb = fresh(installed);
     expect((await ctxIn(sb, 'an edited welcome\n', 'notes', 'put', 'welcome/readme')).code).toBe(0);
     const r = await wrapper(sb, pkgIn(sb), 'install');
@@ -71,7 +71,7 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
     expect(out(await ctx(sb, 'notes', 'show', 'welcome/readme'))).toBe('an edited welcome');
   });
 
-  it('the uninstall removes the module and its record and leaves the store data', async () => {
+  it('[modules-r18] the uninstall removes the module and its record and leaves the store data', async () => {
     const sb = fresh(installed);
     expect((await ctxIn(sb, 'the first test note\n', 'notes', 'put', 'demo/first')).code).toBe(0);
     expect((await wrapper(sb, pkgIn(sb), 'uninstall')).code).toBe(0);

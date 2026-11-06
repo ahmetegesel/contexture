@@ -8,8 +8,8 @@ import { put, treeState } from '../support/tree';
 const sandbox = () => stage('posix', 'pkg-refuse');
 const manifestText = (lines: readonly string[]): string => lines.map((l) => `# ${l}\n`).join('');
 
-describe.concurrent('package-install: the manifest refusals at install (the-engine-r23, modules-r16)', () => {
-  it('a package without a manifest refuses rc1 naming it', async () => {
+describe.concurrent('package-install: the manifest refusals at install', () => {
+  it('[the-engine-r23, modules-r16] a package without a manifest refuses rc1 naming it', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkg-nomanifest');
     addModule(p, 'nomf');
@@ -18,7 +18,7 @@ describe.concurrent('package-install: the manifest refusals at install (the-engi
     expect(r.stderr).toContain('no package manifest');
   });
 
-  it('a manifest with requires refuses rc1 naming the rule', async () => {
+  it('[the-engine-r23, modules-r16] a manifest with requires refuses rc1 naming the rule', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkg-badmanifest');
     addModule(p, 'badmf');
@@ -28,7 +28,7 @@ describe.concurrent('package-install: the manifest refusals at install (the-engi
     expect(r.stderr).toContain('requires is reserved and refused');
   });
 
-  it('a payload path outside the declared parts refuses rc1 naming it', async () => {
+  it('[the-engine-r23, modules-r16, modules-r15] a payload path outside the declared parts refuses rc1 naming it', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkg-uncovered');
     addModule(p, 'covered');
@@ -39,7 +39,7 @@ describe.concurrent('package-install: the manifest refusals at install (the-engi
     expect(r.stderr).toContain('payload path outside the declared parts');
   });
 
-  it('a declared part that is absent refuses rc1 naming it', async () => {
+  it('[the-engine-r23, modules-r16, modules-r15] a declared part that is absent refuses rc1 naming it', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkg-missingpart');
     addModule(p, 'missingpart');
@@ -49,7 +49,7 @@ describe.concurrent('package-install: the manifest refusals at install (the-engi
     expect(r.stderr).toContain('declared part is missing: rhythms rhythms');
   });
 
-  it('a module folder not declared as a module part refuses rc1 naming it', async () => {
+  it('[the-engine-r23, modules-r16, modules-r15] a module folder not declared as a module part refuses rc1 naming it', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkg-nomoduledecl');
     addModule(p, 'undeclared');
@@ -59,7 +59,7 @@ describe.concurrent('package-install: the manifest refusals at install (the-engi
     expect(r.stderr).toContain('is not declared as a module part');
   });
 
-  it('a feature package carrying a driver path refuses rc1 naming the mismatch', async () => {
+  it('[the-engine-r23, modules-r16, modules-r15] a feature package carrying a driver path refuses rc1 naming the mismatch', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkg-featuredriver');
     addFile(p, 'storage/drivers/hidden/driver', '#!/bin/sh\nexit 0', 0o755);
@@ -70,8 +70,8 @@ describe.concurrent('package-install: the manifest refusals at install (the-engi
   });
 });
 
-describe.concurrent('package-install: the collision classes (modules-r15, modules-r14)', () => {
-  it('a core path refuses rc1 and writes nothing there', async () => {
+describe.concurrent('package-install: the collision classes', () => {
+  it('[modules-r15, the-engine-r22] a core path refuses rc1 and writes nothing there', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgcore');
     addFile(p, 'rhythms/core.md', 'the core-path fixture rhythm');
@@ -82,7 +82,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     expect(existsSync(join(sb, '.contexture/modules/x'))).toBe(false);
   });
 
-  it('a path outside the extension root refuses rc1', async () => {
+  it('[modules-r15, the-engine-r22] a path outside the extension root refuses rc1', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgout');
     addFile(p, 'rhythms/out.md', 'the outside-path fixture rhythm');
@@ -92,7 +92,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     expect(r.stderr).toContain('outside the extension root');
   });
 
-  it('an existing non-recorded file refuses rc1 and keeps its bytes', async () => {
+  it('[modules-r15, the-engine-r22] an existing non-recorded file refuses rc1 and keeps its bytes', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgex');
     addFile(p, 'rhythms/taken.md', 'the package rhythm');
@@ -103,7 +103,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     expect(readFileSync(extPath(sb, 'rhythms/taken.md'), 'utf8')).toBe('the workspace rhythm\n');
   });
 
-  it("another package's file refuses rc1 naming the recording package and keeps its bytes", async () => {
+  it("[modules-r15, the-engine-r22] another package's file refuses rc1 naming the recording package and keeps its bytes", async () => {
     const sb = sandbox();
     const one = newPkg(sb, 'pkgshared1');
     addFile(one, 'rhythms/shared.md', 'from package one');
@@ -121,7 +121,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     ['the unit builtin', 'pkgbuiltin', 'unit', 'collides with a builtin'],
     ['the lane builtin', 'pkgbuiltinlane', 'lane', 'collides with a builtin'],
     ['a reserved name', 'pkgreserved', 'refresh', 'reserved name'],
-  ])('a module named after %s refuses rc1 naming its class', async (_label, pkg, module, message) => {
+  ])('[modules-r15, modules-r14] a module named after %s refuses rc1 naming its class', async (_label, pkg, module, message) => {
     const sb = sandbox();
     const p = newPkg(sb, pkg);
     addModule(p, module);
@@ -130,7 +130,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     expect(r.stderr).toContain(message);
   });
 
-  it('a workspace module name refuses rc1 naming its class', async () => {
+  it('[modules-r15, modules-r14] a workspace module name refuses rc1 naming its class', async () => {
     const sb = sandbox();
     put(join(sb, '.contexture/modules/wsmod/module'), '# summary: a workspace fixture module\n');
     const p = newPkg(sb, 'pkgws');
@@ -140,7 +140,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     expect(r.stderr).toContain('collides with a workspace module');
   });
 
-  it('a driver named posix refuses rc1 naming the core posix driver', async () => {
+  it('[modules-r15] a driver named posix refuses rc1 naming the core posix driver', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgdriver');
     addFile(p, 'storage/drivers/posix/driver', '#!/bin/sh\nexit 0', 0o755);
@@ -149,7 +149,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     expect(r.stderr).toContain('core posix driver');
   });
 
-  it('a namespace declared twice in one package refuses rc1', async () => {
+  it('[modules-r15, modules-r10] a namespace declared twice in one package refuses rc1', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgdupns');
     addModule(p, 'one', 'dupns');
@@ -159,7 +159,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     expect(r.stderr).toContain('more than one module');
   });
 
-  it('a namespace a workspace module declares refuses rc1 naming the owner', async () => {
+  it('[modules-r15, modules-r10] a namespace a workspace module declares refuses rc1 naming the owner', async () => {
     const sb = sandbox();
     put(join(sb, '.contexture/modules/wsns/module'), '# summary: a workspace namespace fixture\n');
     put(join(sb, '.contexture/modules/wsns/data'), 'namespace: taken\nkey: <a>/<b>\n');
@@ -170,7 +170,7 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
     expect(r.stderr).toContain("declared by module 'wsns'");
   });
 
-  it('a malformed module manifest refuses rc1 naming the module', async () => {
+  it('[modules-r15] a malformed module manifest refuses rc1 naming the module', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgmalformed');
     put(join(p, '.contexture/extensions/modules/bad/module'), '# summary: a malformed manifest\n# requires: base>=1.0.0\n');
@@ -181,12 +181,12 @@ describe.concurrent('package-install: the collision classes (modules-r15, module
   });
 });
 
-describe.concurrent('package-install: a driver name that already resolves ahead of the extension root (N16, modules-r15)', () => {
+describe.concurrent('package-install: a driver name that already resolves ahead of the extension root (N16)', () => {
   it.each([
     ['the core', '.contexture/storage/drivers/fakedrv/driver', 'already resolves in the core'],
     ['the workspace', '.contexture/drivers/fakedrv/driver', 'already resolves in the workspace'],
     ['a module', '.contexture/modules/m/drivers/fakedrv', 'already resolves in a module'],
-  ])('a driver resolving in %s refuses rc1 and writes nothing', async (_label, ahead, message) => {
+  ])('N16 [modules-r15]: a driver resolving in %s refuses rc1 and writes nothing', async (_label, ahead, message) => {
     const sb = sandbox();
     put(join(sb, ahead), '#!/bin/sh\nexit 0\n', 0o755);
     const p = newPkg(sb, 'pkgahead');
@@ -198,7 +198,7 @@ describe.concurrent('package-install: a driver name that already resolves ahead 
     expect(treeState(extPath(sb))).toBe(before);
   });
 
-  it('null check: with nothing ahead the same driver package installs', async () => {
+  it('N16 [modules-r15]: null check: with nothing ahead the same driver package installs', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgahead');
     addFile(p, 'storage/drivers/fakedrv/driver', '#!/bin/sh\nexit 0', 0o755);

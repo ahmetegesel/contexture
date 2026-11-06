@@ -20,8 +20,8 @@ printf 'keep me too\\n' > .contexture/victim2
 } >> "$state/pkgu.files"
 `;
 
-describe.concurrent('package-uninstall: the removal and the changed-file preservation (the-engine-r22, modules-r15)', () => {
-  it('preserves a changed file and every forged record line, removes the unchanged overlay and the record, and refuses a second uninstall', async () => {
+describe.concurrent('package-uninstall: the removal and the changed-file preservation', () => {
+  it('[the-engine-r22, modules-r15] preserves a changed file and every forged record line, removes the unchanged overlay and the record, and refuses a second uninstall', async () => {
     const sb = sandbox();
     const pu = newPkg(sb, 'pkgu');
     addModule(pu, 'u');
@@ -47,7 +47,7 @@ describe.concurrent('package-uninstall: the removal and the changed-file preserv
     expect(again.stderr).toContain('not installed');
   });
 
-  it('a preserved stale file of an upgrade survives the package uninstall while the record and the module folder go', async () => {
+  it('[the-engine-r22, modules-r15] a preserved stale file of an upgrade survives the package uninstall while the record and the module folder go', async () => {
     const sb = sandbox();
     const pa = newPkg(sb, 'pkga');
     addModule(pa, 'alpha', 'docs');

@@ -15,8 +15,8 @@ async function installed(): Promise<{ sb: string; pa: string }> {
   return { sb, pa };
 }
 
-describe.concurrent('package-install: the re-install is an update (the-engine-r22, modules-r15)', () => {
-  it('an upgrade lands the new files, removes the stale unchanged one, and records the package version and kind', async () => {
+describe.concurrent('package-install: the re-install is an update', () => {
+  it('[the-engine-r22, modules-r15] an upgrade lands the new files, removes the stale unchanged one, and records the package version and kind', async () => {
     const { sb, pa } = await installed();
     const alpha = join(pa, '.contexture/extensions/modules/alpha');
     put(join(alpha, 'module'), '# summary: the alpha fixture module, updated\n# version: 9.9.9\n# description:\n# The updated fixture module.\n');
@@ -34,7 +34,7 @@ describe.concurrent('package-install: the re-install is an update (the-engine-r2
     expect(rec).not.toContain('rhythms/alpha.md');
   });
 
-  it('a re-install that drops a changed file preserves it, reports it, and keeps it recorded', async () => {
+  it('[the-engine-r22, modules-r15] a re-install that drops a changed file preserves it, reports it, and keeps it recorded', async () => {
     const { sb, pa } = await installed();
     addFile(pa, 'rhythms/keep.md', 'the kept rhythm');
     expect((await installPkg(sb, pa)).code).toBe(0);
@@ -47,7 +47,7 @@ describe.concurrent('package-install: the re-install is an update (the-engine-r2
     expect(recordText(sb, 'pkga')).toContain('rhythms/keep.md');
   });
 
-  it('an upgrade dropping a whole module prunes its emptied folders, so a later re-add installs and dispatches', async () => {
+  it('[the-engine-r22, modules-r15] an upgrade dropping a whole module prunes its emptied folders, so a later re-add installs and dispatches', async () => {
     const { sb, pa } = await installed();
     addModule(pa, 'gamma');
     expect((await installPkg(sb, pa)).code).toBe(0);
