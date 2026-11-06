@@ -25,6 +25,13 @@ describe.concurrent('the changed-files map selects a project for every tracked p
     expect(projectsOf('base/.contexture/modules/unit/scripts/zz-verb')).toContain('unit-verbs');
   });
 
+  it('a plugin manifest or payload change selects governance, which holds the plugin version check; plugin tests do not', () => {
+    expect(projectsOf('plugins/storage-fts5/manifest')).toContain('governance');
+    expect(projectsOf('plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters/x')).toContain('governance');
+    expect(projectsOf('plugins/starter-rhythms/.contexture/extensions/rhythms/x.md')).toContain('governance');
+    expect(projectsOf('plugins/toolchain-filters/tests/x.test.ts')).not.toContain('governance');
+  });
+
   it('the map names only declared projects, and every declared project is reachable from it', () => {
     const named = new Set(AREAS.flatMap(([, ps]) => ps));
     expect([...named].filter((p) => p !== EVERY && !projects.includes(p))).toEqual([]);
