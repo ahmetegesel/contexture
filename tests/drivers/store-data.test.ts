@@ -96,6 +96,22 @@ describe.concurrent('store-data, the data file reader', () => {
     await refusal(sb, 'probe', 1, reason);
   });
 
+  it('refuses a declaration with no key pattern, and finds none for a file with no namespace', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'nokey', 'namespace: nokey\nroot: r\nsuffix: .txt\n');
+    dataFile(sb, 'modules', 'nonamespace', 'key: <a>/<b>\n');
+    await refusal(sb, 'nokey', 1, 'the data file declares no key pattern');
+    await refusal(sb, 'nonamespace', 3, "namespace 'nonamespace' is declared by no module data file");
+  });
+
+  it('answers a variable-depth <unit>/<path...> declaration and refuses a non-final <unit...>', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'variable', 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n');
+    expect((await answerLines(sb, 'variable')).slice(0, 5)).toEqual(['variable', '.contexture/sessions', '.md', '<unit>/<path...>', 'false']);
+    dataFile(sb, 'modules', 'variable', 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit...>/<path>\nchanges: false\n');
+    await refusal(sb, 'variable', 1, "malformed key pattern '<unit...>/<path>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)");
+  });
+
   it('the optional flat search keys are accepted and answered on the schema lines', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'searchy', probe('changes: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\nmodes: exact\n'));
