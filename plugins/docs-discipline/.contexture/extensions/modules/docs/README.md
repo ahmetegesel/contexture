@@ -131,6 +131,13 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   process-owned clean, and under `--since` a notice names that limit (the
   corpus docs `git check-ignore` reports). An empty range prints its own
   notice. The notices go to stderr; stdout and the exit code stay the check's.
+- The doc touch: a corpus doc rides a delta only at its logical address,
+  `docs/<repo>/<slug>.md` at the start of a delta path (the workspace root's
+  corpus under the files driver, the `ctx docs changes` lines under a store).
+  A path that merely ends in that shape (a package's conventions seed, a test
+  sample, a child repository's own guides under its `projects/<repo>/` or
+  `<repo>/` prefix) is code to the check, never a doc touch: it freshens no
+  claimant and triggers no blanket.
 - What a clean verdict cannot see: coverage is glob membership over the
   header sources, so a broad glob (`plugins/**`, `tests/**`) covers every path
   under it and the check never names the glob that matched; and under the
@@ -188,7 +195,8 @@ against the `tests/write/` goldens (every success byte for byte, every
 refusal), `docs-audit.awk`, `docs-query.awk` and `docs-nudge.awk` against
 committed expected output under `unit/expected/` (regenerated with
 `DOCS_WRITE_EXPECTED=1` and read by hand), `docs-check.awk` over the gate
-matrix's eight scenarios, the twelve capture deltas, and both delta sources,
+matrix's eight scenarios, the twelve capture deltas, both delta sources, and
+the doc touch at the logical address alone,
 and the pure helpers of `docs-io.sh`. `static/` runs the single-door census
 (`tests/census.awk` over `tests/census-allow.txt`, with three planted
 bypasses), the grammar agreement check (`tests/grammar-agreement.awk`, with

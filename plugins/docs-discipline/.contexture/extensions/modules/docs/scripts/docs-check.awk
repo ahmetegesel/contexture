@@ -58,11 +58,11 @@ BEGIN {
         touched[line] = 1
         touched_count++
 
-        # Track touched documentation for freshness verification
-        if (line ~ /docs\/[^\/]+\/[^\/]+\.md$/) {
-            match(line, /docs\/[^\/]+\/[^\/]+\.md$/)
-            dpath = substr(line, RSTART)
-            split(dpath, dparts, "/")
+        # a corpus doc rides the delta only at its logical address, the start of a delta path;
+        # a code path that merely ends in docs/<x>/<y>.md (a seed, a sample, a child
+        # repository's own guide under its prefix) is no doc touch
+        if (line ~ /^docs\/[^\/]+\/[^\/]+\.md$/) {
+            split(line, dparts, "/")
             d_repo = dparts[2]
             d_slug = dparts[3]
             sub(/\.md$/, "", d_slug)

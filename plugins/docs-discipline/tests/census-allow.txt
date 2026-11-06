@@ -47,8 +47,7 @@ engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "evidence must be gr
 engine-path-logic	docs-audit.awk	        err(FILENAME, FNR, "duplicate id '" pid "' in repo '" curr_repo "' (first seen at " seen_ids[scope_pid] ")")
 engine-path-logic	docs-audit.awk	        seen_ids[scope_pid] = FILENAME ":" FNR
 engine-path-logic	docs-check.awk	    GUIDE_RE = "^docs/[^/]+\\.md$"
-engine-path-logic	docs-check.awk	        if (line ~ /docs\/[^\/]+\/[^\/]+\.md$/) {
-engine-path-logic	docs-check.awk	            match(line, /docs\/[^\/]+\/[^\/]+\.md$/)
+engine-path-logic	docs-check.awk	        if (line ~ /^docs\/[^\/]+\/[^\/]+\.md$/) {
 engine-path-logic	docs-check.awk	            sub(/\.md$/, "", d_slug)
 engine-path-logic	docs-check.awk	    curr_file = FILENAME
 engine-path-logic	docs-query.awk	    curr_file = FILENAME
