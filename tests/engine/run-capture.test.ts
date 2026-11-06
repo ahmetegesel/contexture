@@ -1,17 +1,13 @@
 import { join } from 'node:path';
-import { beforeAll, describe, expect, it, onTestFinished } from 'vitest';
+import { describe, expect, it, onTestFinished } from 'vitest';
 import { chmodPlant, ROOT_USER } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { stage } from '../support/stage';
 import { run } from '../support/unit';
 
 describe.concurrent('ctx run capture', () => {
-  let sb: string;
-  beforeAll(() => {
-    sb = stage('posix', 'run-capture');
-  });
-
   it('CT-RD [the-engine-r14]: run --diagnose reports the temp directory, the anonymous capture, and the builtin filters rc 0', async () => {
+    const sb = stage('posix', 'run-capture');
     const r = await run(sb, ['run', '--diagnose']);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('runner compaction diagnostics');
@@ -21,6 +17,7 @@ describe.concurrent('ctx run capture', () => {
   });
 
   it('CT-RD [the-engine-r14]: the wrapped command never sees the runner capture files, while it sees its own', async () => {
+    const sb = stage('posix', 'run-capture');
     const r = await run(sb, ['run', 'sh', '-c', ': > .contexture/tmp/own-probe-file; find .contexture/tmp -type f -print']);
     expect(r.stdout).toContain('own-probe-file');
     expect(r.stdout).not.toContain('compact-stdout');
@@ -28,6 +25,7 @@ describe.concurrent('ctx run capture', () => {
   });
 
   it('CT-RD [the-engine-r14]: the capture carries stdin, keeps stderr out of stdout and visible, and keeps the exit code', async () => {
+    const sb = stage('posix', 'run-capture');
     const r = await run(sb, ['run', 'sh', '-c', 'cat; echo "err line" >&2'], { input: 'stdin line\n' });
     expect(r.stdout).toContain('stdin line');
     expect(r.stdout).not.toContain('err line');
