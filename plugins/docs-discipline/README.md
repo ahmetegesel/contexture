@@ -309,12 +309,13 @@ it walk below runs every one of these.
   `docs-glob.awk`, so their verbs run them as `awk -f docs-glob.awk -f
   <engine>` on the awk the PATH names, and neither runs alone.
 - The owner lookup (`ctx docs query [<repo>] --file <path>`) claims by the
-  check's own rule: a doc claims the path (a `projects/<repo>/` or `<repo>/`
-  prefix stripped when present, the path kept as given otherwise) when a
-  header source equals it or matches it as a glob, so a path that merely
-  holds a source as a substring has no owner. Among several claimants the
-  answer is the doc whose best claiming source has the longest literal part
-  before its first wildcard (`*` or `{`; a source without one counts its
+  check's own rule: a doc claims the path (for a child repository's doc a
+  `projects/<repo>/` or `<repo>/` prefix stripped when present, the path kept
+  as given otherwise and always for a workspace doc, as the check reads it)
+  when a header source equals it or matches it as a glob, so a path that
+  merely holds a source as a substring has no owner. Among several claimants
+  the answer is the doc whose best claiming source has the longest literal
+  part before its first wildcard (`*` or `{`; a source without one counts its
   whole length), then the fewest wildcards, then the earlier doc in corpus
   order, still one `OWNER`, `SUMMARY`, `DOC` answer, and a miss refuses rc 1.
   Without a repo argument every repo's docs claim, and a claimant's best

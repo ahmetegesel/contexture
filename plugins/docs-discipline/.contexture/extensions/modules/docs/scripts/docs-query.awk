@@ -80,11 +80,12 @@ mode == "index" {
 }
 
 # ─── MODE: FILE OWNER LOOKUP ─────────────────────────────────────────────────
-# A doc claims the path (a projects/<repo>/ or <repo>/ prefix stripped when present) by the
-# check's own rule (docs-glob.awk source_matches); every doc is read, and the answer in END is
-# the claimant whose best claiming source, read with the prefix it stripped as literal text, is
-# the most specific (source_beats), the earlier doc in corpus order on a full tie; one repo's
-# docs strip the same prefix, so only a claimant of another repo meets the difference
+# A doc claims the path by the check's own rule (docs-glob.awk source_matches): a child
+# repository's doc after its projects/<repo>/ or <repo>/ prefix is stripped when present, a
+# workspace doc on the path as given, as the check reads it; every doc is read, and the answer
+# in END is the claimant whose best claiming source, read with the prefix it stripped as literal
+# text, is the most specific (source_beats), the earlier doc in corpus order on a full tie; one
+# repo's docs strip the same prefix, so only a claimant of another repo meets the difference
 mode == "file" {
     if (curr_sources != "" && !seen_file_check[curr_file]) {
         seen_file_check[curr_file] = 1
@@ -92,10 +93,12 @@ mode == "file" {
         stripped = ""
         p_prefix = "projects/" curr_repo "/"
         r_prefix = curr_repo "/"
-        if (index(file, p_prefix) == 1) {
-            stripped = p_prefix
-        } else if (index(file, r_prefix) == 1) {
-            stripped = r_prefix
+        if (curr_repo != "workspace") {
+            if (index(file, p_prefix) == 1) {
+                stripped = p_prefix
+            } else if (index(file, r_prefix) == 1) {
+                stripped = r_prefix
+            }
         }
         norm_file = substr(file, length(stripped) + 1)
         doc_best = ""

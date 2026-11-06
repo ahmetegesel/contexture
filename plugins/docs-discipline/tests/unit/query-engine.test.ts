@@ -1,7 +1,9 @@
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { sandbox } from '@support/sandbox';
 import { corpusDir, ENGINE_FIXTURES, matches, OWNER_FIXTURES, TESTS } from '../support/corpus';
-import { query, type Query } from '../support/engines';
+import { check, query, type Query } from '../support/engines';
 
 const EXPECTED = join(TESTS, 'unit/expected/query');
 
@@ -106,6 +108,22 @@ describe('the query engine --file: the most specific owner by the check glob pre
   it('[docs-module-r6] the one-repo form keeps its answer for a prefixed child path', async () => {
     const r = await query(owners, { mode: 'file', repo: 'workspace', file: 'projects/demo/src/x.ts' });
     expect(r.stdout.split('\n')[0]).toBe('OWNER: wa (structural) [workspace]');
+  });
+
+  it('[docs-module-r6] a workspace doc reads a path as given, as the check does: a folder named workspace keeps its prefix', async () => {
+    const dir = sandbox('query-workspace-strip');
+    mkdirSync(join(dir, 'docs/workspace'), { recursive: true });
+    writeFileSync(join(dir, 'docs/workspace/wl.md'), '@doc capability wl\n  repo: workspace\n  description: "Claims the root lib folder."\n  sources: [lib/*.ts]\n');
+    for (const file of ['workspace/lib/a.ts', 'projects/workspace/lib/a.ts']) {
+      for (const repo of ['workspace', undefined]) {
+        const r = await query(dir, { mode: 'file', repo, file });
+        expect([file, repo, r.code, r.stdout, r.stderr]).toEqual([file, repo, 0, '', '']);
+      }
+      const c = await check(dir, `M\t${file}\n`);
+      expect([c.code, c.stdout.match(/^UNCOVERED: .*$/gm)]).toEqual([1, [`UNCOVERED: ${file}`]]);
+    }
+    const owned = await query(dir, { mode: 'file', repo: 'workspace', file: 'lib/a.ts' });
+    expect(owned.stdout.split('\n')[0]).toBe('OWNER: wl (capability) [workspace]');
   });
 
   it('a path that holds a source only as a substring has no owner', async () => {
