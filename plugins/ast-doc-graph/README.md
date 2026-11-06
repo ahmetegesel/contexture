@@ -113,7 +113,7 @@ The SQLite database operates in Write-Ahead Logging (WAL) mode (`PRAGMA journal_
 
 Before adopting `ast-doc-graph` in a repository, answer these questions:
 
-* Language and toolchain: Does the repository contain TypeScript (`.ts`, `.tsx`) files, and is `typescript` installed in `node_modules` or available via `tsx` or Node 22+?
+* Language and toolchain: Does the repository contain TypeScript (`.ts`, `.tsx`) files; is a TypeScript 5 or 6 package reachable (its own `node_modules`, or one `AST_DOC_GRAPH_TYPESCRIPT` can name, since TypeScript 7 offers no compiler API); and is a runner on the PATH (`tsx`, or Node 22.6+)?
 * Documentation discipline: Does the repository follow the Contexture docs-discipline format (typed `@doc` blocks with `@contract` rules and `@pitfalls` in `docs/`)?
 * Source directory layout: Where do primary business logic, services, and core models live (`src/`, `backend/`, `packages/`, etc.)?
 * System SQLite: Is `/usr/bin/sqlite3` available with FTS5 support (standard on macOS and modern Linux distributions)?
@@ -375,7 +375,7 @@ ctx ast-doc-graph query stats
 ## Limits and status
 
 * Static call graph approximation: The AST extractor identifies direct invocations, method calls on identifiers, and property access calls. Dynamic calls (`obj[fnName]()`), indirect callback dispatches, and heavily polymorphic reflection are not statically resolvable.
-* TypeScript Compiler API resolution: The extractor dynamically searches for `typescript` in target project `node_modules` or parent directories. If `typescript` is absent, the launcher attempts execution via Node 22+ with `--experimental-strip-types`.
+* TypeScript Compiler API resolution: The extractor parses through a TypeScript 5 or 6 compiler API whatever the target uses, found through its own Node resolution, then the target repository's `node_modules` and its ancestors, or named alone by `AST_DOC_GRAPH_TYPESCRIPT`. TypeScript 7 offers no `createSourceFile`, so a repository whose only reachable typescript is 7 indexes once the variable names a 5 or 6 package, and refuses rc 1 until then: the refusal stops the whole index, docs included, so no partial graph reads as complete. The runner (`tsx`, or Node with `--experimental-strip-types`) runs the extractor and supplies no compiler API.
 * Documentation grammar compliance: The docs extractor parses documents adhering to the docs-discipline corpus grammar (the docs module's private grammar). Documents lacking typed headers (`@doc <kind> <id>`) are skipped during rule extraction. The id line a migrated contract rule or responsibility carries on its second line (`id: <slug>-r<N>`, `id: <slug>-o<N>`) is skipped as an unknown field, so the extracted rules and pitfalls stay the same.
 * Files-only corpus reader: The docs extractor reads the corpus as files under `docs/` (the pipeline driver scans the folder, the parser reads each file), never through `ctx docs`. Under the docs-discipline files driver that folder is the corpus; under a store driver (the storage-fts5 plugin, or any driver whose corpus lives outside the files) the folder holds no corpus, so the graph indexes no docs, rules, or pitfalls while code indexing works unchanged. Routing the extraction through `ctx docs` is a later change; until then, index docs only in a workspace on the files driver.
 * Incremental delta lifecycle: Single-file and partial-batch delta updates are fully supported via `ctx ast-doc-graph index --delta` and lazy JIT micro-sync in the query verb. Re-parsing is scoped strictly to modified files with automatic cascading edge purging and dynamic governance re-linking.
@@ -383,11 +383,12 @@ ctx ast-doc-graph query stats
 
 ## Needs
 
-- Node with the TypeScript Compiler API reachable from the target repository: `typescript` in its `node_modules`, or `tsx`, or Node 22.6+ with `--experimental-strip-types`; the launchers take a project-local `tsx`, else `tsx` or `node` from the caller's PATH, and never edit PATH.
+- A runner for the TypeScript entry points: a project-local `tsx`, else `tsx` or Node 22.6+ (`--experimental-strip-types`) from the caller's PATH; the launchers never edit PATH. A runner runs the extractor; it supplies no compiler API.
+- A TypeScript 5 or 6 compiler API (a `typescript` package carrying `createSourceFile`) when the repository holds TypeScript, whatever TypeScript the repository itself uses: TypeScript 7, the native compiler, exposes none, and a 6.x parser reads its code. The extractor takes the first one reachable, its own Node resolution from the module, then the target repository and its ancestors; `AST_DOC_GRAPH_TYPESCRIPT` names one (its package folder or its entry file) and, when set, is the only candidate. The plugin installs none: the adopter provides it. With none reachable the whole index refuses rc 1 and writes nothing, naming each typescript it found with its version and path, and the variable; a variable naming a package without the compiler API refuses naming the variable and that version. A docs-only repository needs no compiler API.
 - System `sqlite3` with FTS5 (standard on macOS and modern Linux distributions).
 - A contexture drawer: `ctx ast-doc-graph index` runs inside the workspace; a direct run of `bin/ast-doc-index` needs a repository root holding its `.contexture` folder. The intermediate streams live in a per-run folder inside `CTX_SCRATCH_ROOT`, else the drawer's `.contexture/tmp`; a folder it cannot make refuses rc 2. The query verb needs no drawer: it reads any database it is given.
 - The docs-discipline corpus grammar (private to the docs module) when documentation is extracted; code-only indexing needs TypeScript alone.
-- The plugin's tests live with the plugin (`tests/`) as its vitest project, are never copied into a workspace, and run from the repository's `tests/` folder (`bun run test:ast-doc-graph`): they need sqlite3 with FTS5, and the pipeline tests the TypeScript compiler API (the test tooling's own TypeScript, linked into each sandbox); a test whose need is absent skips, naming it.
+- The plugin's tests live with the plugin (`tests/`) as its vitest project, are never copied into a workspace, and run from the repository's `tests/` folder (`bun run test:ast-doc-graph`): they need sqlite3 with FTS5, and the pipeline tests the TypeScript compiler API (the test tooling's own TypeScript, linked into each sandbox); the TypeScript 7 cases run over a committed stub package (`tests/fixtures/typescript-7-stub`), never an install; a test whose need is absent skips, naming it.
 
 ## Contributing
 

@@ -1,0 +1,5 @@
+{
+  "name": "typescript",
+  "version": "7.0.2",
+  "main": "lib/index.js"
+}

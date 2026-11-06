@@ -31,45 +31,72 @@ interface EdgeRecord {
 
 // --- DYNAMIC TYPESCRIPT RESOLUTION ---
 
-function resolveTypeScript(searchPaths: string[]): any {
-  // 1. Try standard require
-  try {
-    const req = createRequire(import.meta.url);
-    const ts = req('typescript');
-    if (ts && ts.createSourceFile) return ts;
-  } catch {}
+export class TypeScriptRefusal extends Error {}
 
-  // 2. Try search paths and parent node_modules
+type Require = ReturnType<typeof createRequire>;
+
+const NEED = 'a TypeScript 5 or 6 package folder or its entry file';
+
+function load(req: Require, id: string): { ts: any; at: string } | null {
+  try {
+    const at = req.resolve(id);
+    return { ts: req(at), at };
+  } catch {
+    return null;
+  }
+}
+
+const hasCompilerApi = (ts: any): boolean => typeof ts?.createSourceFile === 'function';
+const versionOf = (ts: any): string => (typeof ts?.version === 'string' ? ts.version : 'of unknown version');
+
+export function resolveTypeScript(searchPaths: string[], override: string | undefined = process.env.AST_DOC_GRAPH_TYPESCRIPT): any {
+  if (override) {
+    const target = path.resolve(override);
+    const named = load(createRequire(import.meta.url), target);
+    if (!named) {
+      throw new TypeScriptRefusal(`AST_DOC_GRAPH_TYPESCRIPT names ${target}, which loads no typescript package; point it at ${NEED}`);
+    }
+    if (hasCompilerApi(named.ts)) return named.ts;
+    throw new TypeScriptRefusal(
+      `AST_DOC_GRAPH_TYPESCRIPT names typescript ${versionOf(named.ts)} at ${named.at}, which has no compiler API (createSourceFile); point it at ${NEED}`,
+    );
+  }
+
+  const withoutApi = new Map<string, string>();
+  const accept = (req: Require): any => {
+    const found = load(req, 'typescript');
+    if (!found) return null;
+    if (hasCompilerApi(found.ts)) return found.ts;
+    withoutApi.set(found.at, versionOf(found.ts));
+    return null;
+  };
+
+  const own = accept(createRequire(import.meta.url));
+  if (own) return own;
+
   for (const item of searchPaths) {
     if (!item) continue;
     try {
-      let resolved = path.resolve(item);
-      let dir = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory()
-        ? resolved
-        : path.dirname(resolved);
-
+      const resolved = path.resolve(item);
+      let dir = fs.existsSync(resolved) && fs.statSync(resolved).isDirectory() ? resolved : path.dirname(resolved);
       while (dir && dir !== path.dirname(dir)) {
-        const candidatePkg = path.join(dir, 'node_modules', 'typescript', 'package.json');
-        if (fs.existsSync(candidatePkg)) {
-          const req = createRequire(candidatePkg);
-          const ts = req('typescript');
-          if (ts && ts.createSourceFile) return ts;
-        }
-        const pkgJson = path.join(dir, 'package.json');
-        if (fs.existsSync(pkgJson)) {
-          try {
-            const req = createRequire(pkgJson);
-            const ts = req('typescript');
-            if (ts && ts.createSourceFile) return ts;
-          } catch {}
+        for (const from of [path.join(dir, 'node_modules', 'typescript', 'package.json'), path.join(dir, 'package.json')]) {
+          if (!fs.existsSync(from)) continue;
+          const ts = accept(createRequire(from));
+          if (ts) return ts;
         }
         dir = path.dirname(dir);
       }
     } catch {}
   }
 
-  throw new Error(
-    'Unable to resolve TypeScript compiler API from search paths: ' + searchPaths.join(', ')
+  const found = [...withoutApi].map(([at, version]) => `  found typescript ${version} at ${at}: no compiler API (createSourceFile)`);
+  throw new TypeScriptRefusal(
+    [
+      'no TypeScript compiler API reachable: the extractor needs a TypeScript 5 or 6 package, whatever the target repository uses',
+      ...(found.length > 0 ? found : ['  found no typescript package from the module, the target repository, or the working folder']),
+      `  set AST_DOC_GRAPH_TYPESCRIPT to ${NEED}, or make one reachable from the target repository`,
+    ].join('\n'),
   );
 }
 
@@ -635,7 +662,8 @@ function executedAsScript(): boolean {
 
 if (executedAsScript()) {
   main().catch((err) => {
-    console.error('Fatal extraction error:', err);
+    if (err instanceof TypeScriptRefusal) console.error(`Error: ${err.message}`);
+    else console.error('Fatal extraction error:', err);
     process.exit(1);
   });
 }

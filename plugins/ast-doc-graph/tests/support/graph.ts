@@ -28,20 +28,26 @@ export function graphQuery(cwd: string, db: string, ...args: string[]): Promise<
 }
 
 export const TYPESCRIPT = join(ROOT, 'tests/node_modules/typescript');
+export const TYPESCRIPT_7_STUB = join(FIXTURES, 'typescript-7-stub');
 
-export function compilerApi(): boolean {
+export function compilerApiFrom(from: string): boolean {
   try {
-    return typeof createRequire(join(TYPESCRIPT, 'package.json'))('typescript').createSourceFile === 'function';
+    return typeof createRequire(from)('typescript').createSourceFile === 'function';
   } catch {
     return false;
   }
 }
 
-export function miniRepo(label: string): string {
+export const compilerApi = (): boolean => compilerApiFrom(join(TYPESCRIPT, 'package.json'));
+
+export const noCompilerApiAround = (): boolean =>
+  !compilerApiFrom(join(MODULE, 'extractors/ts/extract-ts.ts')) && !compilerApiFrom(join(ROOT, '.contexture/tmp/probe.js'));
+
+export function miniRepo(label: string, typescript = TYPESCRIPT): string {
   const sb = sandbox(label);
   cpSync(join(FIXTURES, 'mini-repo'), sb, { recursive: true });
   mkdirSync(join(sb, 'node_modules'));
-  symlinkSync(TYPESCRIPT, join(sb, 'node_modules/typescript'));
+  symlinkSync(typescript, join(sb, 'node_modules/typescript'));
   return sb;
 }
 

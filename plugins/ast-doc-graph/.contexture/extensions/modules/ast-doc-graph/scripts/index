@@ -3,7 +3,7 @@
 # usage: ctx ast-doc-graph index [--repo-root <path>] [--src-dir <dir>] [--db <path>] [--cache-dir <path>] [--clean | --delta] [files...]
 # help: discovers TypeScript sources and docs units, runs the extractors, and compiles the SQLite graph; --clean rebuilds the database from scratch, --delta re-indexes changed files (all changed by default, or the named files)
 # help: runs inside a contexture drawer (the workspace under ctx; run directly, a repository root holding its .contexture folder) and refuses rc 1 outside one; the intermediate streams live in a per-run folder inside the verb's scratch, removed at exit, or in a caller-owned --cache-dir
-# help: the extractors need a TypeScript runner reachable from the target repository (a project-local tsx, tsx on PATH, or Node with type stripping); sqlite3 with FTS5 compiles and queries the graph
+# help: the extractors need a runner (a project-local tsx, else tsx or Node with type stripping on the caller's PATH) and, for TypeScript sources, a TypeScript 5 or 6 compiler API reachable from the module or the target repository, or named by AST_DOC_GRAPH_TYPESCRIPT (a package folder or its entry file, the only candidate when set); with none the index refuses rc 1 naming each typescript found; sqlite3 with FTS5 compiles and queries the graph
 # help: example: ctx ast-doc-graph index --repo-root . --clean
 # help: example: ctx ast-doc-graph index --repo-root . --delta backend/core/cascadeCore.ts
 

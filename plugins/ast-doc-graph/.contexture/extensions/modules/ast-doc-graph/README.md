@@ -67,7 +67,14 @@ Launchers resolve their runner dynamically: a project-local `tsx`, `tsx` on
 PATH, or Node with type stripping (the launchers end with
 `node --experimental-strip-types`, its experimental warnings silenced). The
 caller's PATH chooses the runner: no launcher edits PATH, and each extends
-the caller's `NODE_OPTIONS` with `--no-deprecation` instead of replacing it. Each TypeScript entry point (the two
+the caller's `NODE_OPTIONS` with `--no-deprecation` instead of replacing it.
+The TypeScript extractor also needs a TypeScript 5 or 6 compiler API
+(`createSourceFile`), which no runner supplies: `resolveTypeScript` takes
+`AST_DOC_GRAPH_TYPESCRIPT` alone when set (a package folder or its entry
+file), else the module's own Node resolution, then each search path walked
+upward (the project root, every target file, the working folder). With none
+it refuses rc 1, one line per typescript found (its version and path) and
+the way forward, never a stack; the driver's `set -e` stops the whole index. Each TypeScript entry point (the two
 extractors and the loader) runs its CLI only when executed as the script, so
 its exported helpers import without side effects; the guard compares the
 module file and the executed path by their real paths, so a module reached
@@ -96,6 +103,13 @@ PATH, and proves the drawer rule and the per-run scratch (a planted `mktemp`
 records each folder made: inside the drawer's `.contexture/tmp` or
 `CTX_SCRATCH_ROOT`, gone after the run), the refusals outside a drawer
 (rc 1) and for a folder it cannot make (rc 2), and a caller's `--cache-dir`.
+`integration/compiler-api` and `unit/extract-ts` prove the compiler API
+resolution over a committed TypeScript 7 stub (`fixtures/typescript-7-stub`,
+version 7.0.2, no `createSourceFile`) and the test tooling's TypeScript:
+the refusal, the variable by package folder and by entry file, and the
+refusal of a variable without the API; a refusal case skips, naming the
+need, when a TypeScript 5 or 6 is reachable from the module or the sandbox
+ancestors.
 `static/` holds the census of the module tree: no PATH edit, no
 sibling-project glob, no pre-extension-root path, and no absolute system
 temp path, each with a planted null check. The tests skip, naming the
