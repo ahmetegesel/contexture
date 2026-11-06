@@ -1,15 +1,9 @@
 #!/bin/sh
-# run.sh: the upstream test runner. Runs the core suites (governance,
-# base-only), each hermetic and staged from the shipped core
-# (the engine, its run filter pairs, and the hook runner are the vitest engine, filters,
-# toolchain-filters, and hooks projects'; the law
-# compose is the vitest laws project's, tests/laws; the package overlay installer and the
-# worked example package are the vitest packages project's, tests/packages; the store
-# driver tests and the store fuzzer are the vitest drivers project's,
-# tests/drivers; the record logic, the audit, and the unit data cases are the vitest
-# unit-record project's, tests/unit-record; the unit and lane verbs are the vitest
-# unit-verbs project's, tests/unit-verbs; the base-only gate stages base alone
-# with a synthetic data file); then every plugin suite by convention
+# run.sh: the upstream test runner. Runs the one core shell suite (base-only, the shipped
+# base alone, staged with a synthetic data file; every other core area is a vitest project
+# under tests/, run with bun run test: engine, filters, hooks, laws, governance with the
+# static store-bypass check, packages, drivers, unit-record, unit-verbs, and the plugins'
+# toolchain-filters and storage-fts5); then every plugin suite by convention
 # (plugins/<name>/tests/run.sh; a suite with a declared need absent exits 77
 # and skips cleanly, naming the need); the docs-discipline suite runs twice too, once per
 # driver (plugin:docs-discipline and plugin:docs-discipline:fts5), staged from base/ and
@@ -42,7 +36,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="governance-tests.sh base-only-tests.sh"
+CORE_SUITES="base-only-tests.sh"
 
 GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
 GATE_JOBS=${GATE_JOBS:-5}

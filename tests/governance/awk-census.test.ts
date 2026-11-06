@@ -17,7 +17,7 @@ function censusFiles(): string[] {
     ...readdirSync(join(ROOT, 'plugins')).sort().map((p) => join(ROOT, 'plugins', p, '.contexture')),
     join(ROOT, 'tests'),
   ];
-  const skip = (p: string) => SKIPPED.test(p) || PROSE.test(p) || p === join(ROOT, 'tests/governance-tests.sh');
+  const skip = (p: string) => SKIPPED.test(p) || PROSE.test(p);
   return roots.flatMap((r) => walk(r, skip));
 }
 

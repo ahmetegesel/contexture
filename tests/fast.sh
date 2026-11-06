@@ -5,11 +5,9 @@
 # full pre-land gate (tests/run.sh), which stays mandatory before any commit, tag, or push.
 #
 # Usage: tests/fast.sh <area> [<arg>]
-#   unit             the two unit-like suites (the engine, filter, hook, store driver, record, and verb tests run in
-#                    vitest: bun run test:drivers, and bun run test:unit for the unit-record
-#                    and unit-verbs projects)
-#   engine           governance-tests (the engine, filter, and hook tests: bun run test:engine,
-#                    test:filters, test:hooks)
+#   unit             the one unit-like suite, ast-doc-graph's test-ddl.sh (the engine, filter,
+#                    hook, law, governance, package, store driver, record, and verb tests run
+#                    in vitest: bun run test from tests/, or bun run test:<project>)
 #   docs             the docs-discipline suite on the files driver
 #   docs-fts5        the docs-discipline suite on fts5
 #   plugin <name>    plugins/<name>/tests/run.sh
@@ -24,11 +22,9 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 usage() {
   cat <<'USAGE'
 usage: tests/fast.sh <area> [<arg>]
-  unit             the two unit-like suites (the engine, filter, hook, store driver, record, and verb tests run in
-                   vitest: bun run test:drivers, and bun run test:unit for the unit-record
-                   and unit-verbs projects)
-  engine           governance-tests (the engine, filter, and hook tests: bun run test:engine,
-                   test:filters, test:hooks)
+  unit             the one unit-like suite, ast-doc-graph's test-ddl.sh (the engine, filter,
+                   hook, law, governance, package, store driver, record, and verb tests run
+                   in vitest: bun run test from tests/, or bun run test:<project>)
   docs             the docs-discipline suite on the files driver
   docs-fts5        the docs-discipline suite on fts5
   plugin <name>    plugins/<name>/tests/run.sh
@@ -87,7 +83,6 @@ run_suite() { # <label> <command...>
 }
 
 unit_suites() {
-  run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
   run_suite "ast-doc-graph test-ddl.sh" sh "$ROOT/plugins/ast-doc-graph/tests/test-ddl.sh"
 }
 
@@ -95,10 +90,6 @@ case "${1:-}" in
   unit)
     AREA="unit"
     unit_suites
-    ;;
-  engine)
-    AREA="engine"
-    run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
     ;;
   docs)
     AREA="docs"
