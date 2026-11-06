@@ -17,7 +17,7 @@ function refusedCleanly(r: { code: number; stdout: string; stderr: string }, rep
 }
 
 describe.skipIf(!isolated)('a repository whose only typescript is 7 (needs no TypeScript 5 or 6 reachable from the module or the sandbox ancestors)', { concurrent: true }, () => {
-  it('refuses rc 1 naming typescript 7.0.2 with its path, the variable, and the need, and writes no database', async () => {
+  it('[ast-doc-graph-r10, ast-doc-graph-r11] refuses rc 1 naming typescript 7.0.2 with its path, the variable, and the need, and writes no database', async () => {
     const repo = miniRepo('ts7-refusal', TYPESCRIPT_7_STUB);
     const r = await astDocIndex(repo, ['--clean']);
     refusedCleanly(r, repo);
@@ -30,7 +30,7 @@ describe.skipIf(!isolated)('a repository whose only typescript is 7 (needs no Ty
   it.skipIf(!sqliteFts5 || !compilerApi()).each([
     ['its package folder', TYPESCRIPT],
     ['its entry file', compilerApi() ? createRequire(join(TYPESCRIPT, 'package.json')).resolve('typescript') : TYPESCRIPT],
-  ])('AST_DOC_GRAPH_TYPESCRIPT naming a TypeScript 6 package by %s indexes the repository', async (_by, override) => {
+  ])('[ast-doc-graph-r10] AST_DOC_GRAPH_TYPESCRIPT naming a TypeScript 6 package by %s indexes the repository', async (_by, override) => {
     const repo = miniRepo('ts7-override', TYPESCRIPT_7_STUB);
     const r = await astDocIndex(repo, ['--clean'], { env: { AST_DOC_GRAPH_TYPESCRIPT: override } });
     expect(r.code, r.stderr).toBe(0);
@@ -39,7 +39,7 @@ describe.skipIf(!isolated)('a repository whose only typescript is 7 (needs no Ty
 });
 
 describe.skipIf(!compilerApi())('the variable is the only candidate when set, even beside a reachable TypeScript 6', { concurrent: true }, () => {
-  it('naming typescript 7 refuses rc 1 naming the variable, the version, and the path', async () => {
+  it('[ast-doc-graph-r10, ast-doc-graph-r11] naming typescript 7 refuses rc 1 naming the variable, the version, and the path', async () => {
     const repo = miniRepo('ts7-override-stub');
     const r = await astDocIndex(repo, ['--clean'], { env: { AST_DOC_GRAPH_TYPESCRIPT: TYPESCRIPT_7_STUB } });
     refusedCleanly(r, repo);
@@ -47,7 +47,7 @@ describe.skipIf(!compilerApi())('the variable is the only candidate when set, ev
     expect(r.stderr).toContain('TypeScript 5 or 6');
   });
 
-  it('a refusal makes no database folder: a --db inside an absent folder leaves that folder absent', async () => {
+  it('[ast-doc-graph-r5, ast-doc-graph-r11] a refusal makes no database folder: a --db inside an absent folder leaves that folder absent', async () => {
     const repo = miniRepo('ts7-override-db');
     const db = join(sandbox('ts7-db'), 'absent/graph.db');
     const r = await astDocIndex(repo, ['--clean', '--db', db], { env: { AST_DOC_GRAPH_TYPESCRIPT: TYPESCRIPT_7_STUB } });
@@ -55,7 +55,7 @@ describe.skipIf(!compilerApi())('the variable is the only candidate when set, ev
     expect(existsSync(dirname(db))).toBe(false);
   });
 
-  it('naming a path that loads no package refuses rc 1 naming the variable and the path', async () => {
+  it('[ast-doc-graph-r11] naming a path that loads no package refuses rc 1 naming the variable and the path', async () => {
     const repo = miniRepo('ts7-override-absent');
     const absent = join(sandbox('ts7-absent'), 'typescript');
     const r = await astDocIndex(repo, ['--clean'], { env: { AST_DOC_GRAPH_TYPESCRIPT: absent } });

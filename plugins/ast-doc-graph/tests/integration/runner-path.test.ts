@@ -19,7 +19,7 @@ const callerNode = (process.env.PATH ?? '')
   });
 
 describe.skipIf(!sqliteFts5 || !callerNode)('the caller chooses the runner', { concurrent: true }, () => {
-  it("the node first on the caller's PATH runs every launcher, with the caller's NODE_OPTIONS extended and no experimental warning", async () => {
+  it("[ast-doc-graph-r12] the node first on the caller's PATH runs every launcher, with the caller's NODE_OPTIONS extended and no experimental warning", async () => {
     const mark = join(sandbox('runner-mark'), 'calls');
     const plant = pathPlant('node', `printf '%s\\n' "$NODE_OPTIONS" >> "${mark}"\nexec "${callerNode}" "$@"`);
     const repo = docsRepo('runner-docs');

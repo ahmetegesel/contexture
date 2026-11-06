@@ -26,7 +26,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     if (r.code !== 0) throw new Error(`ast-doc-index: rc ${r.code}: ${r.stderr}`);
   });
 
-  it('VP11 --delta on one file adds its new symbol, keeps an unrelated one, and refreshes its indexed_files row', async () => {
+  it('VP11 [ast-doc-graph-r1, ast-doc-graph-r6] --delta on one file adds its new symbol, keeps an unrelated one, and refreshes its indexed_files row', async () => {
     const sb = fresh(indexed);
     const before = sqlite(db(sb), "SELECT mtime FROM indexed_files WHERE file = 'src/orders/validate.ts';").trim();
     edit(sb, 'src/orders/validate.ts', '\nexport function checkCart(cart: Cart): boolean {\n  return validateCart(cart);\n}\n');
@@ -37,7 +37,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     expect(sqlite(db(sb), "SELECT mtime FROM indexed_files WHERE file = 'src/orders/validate.ts';").trim()).not.toBe(before);
   });
 
-  it('VP12 a query micro-syncs one dirty file before it answers', async () => {
+  it('VP12 [ast-doc-graph-r16] a query micro-syncs one dirty file before it answers', async () => {
     const sb = fresh(indexed);
     edit(sb, 'src/cart/store.ts', '\nexport function emptyCart(): number[] {\n  return [];\n}\n');
     expect(hasSymbol(sb, 'emptyCart')).toBe(false);
@@ -47,7 +47,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     expect(hasSymbol(sb, 'emptyCart')).toBe(true);
   });
 
-  it('VP13 three dirty files print the advisory and sync nothing', async () => {
+  it('VP13 [ast-doc-graph-r16] three dirty files print the advisory and sync nothing', async () => {
     const sb = fresh(indexed);
     edit(sb, 'src/cart/store.ts', '\nexport const one = 1;\n');
     edit(sb, 'src/orders/price.ts', '\nexport const two = 2;\n');
@@ -58,7 +58,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     expect(hasSymbol(sb, 'one')).toBe(false);
   });
 
-  it('null check: a clean copy prints no advisory and syncs nothing', async () => {
+  it('[ast-doc-graph-r16] null check: a clean copy prints no advisory and syncs nothing', async () => {
     const sb = fresh(indexed);
     const r = await graphQuery(sb, db(sb), 'stats');
     expect([r.code, r.stderr]).toEqual([0, '']);

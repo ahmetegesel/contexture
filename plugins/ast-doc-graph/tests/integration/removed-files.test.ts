@@ -109,7 +109,7 @@ describe.skipIf(!sqliteFts5)('a removed corpus doc leaves the graph', { concurre
     expect(statSync(db(repo)).mtimeMs).toBe(before);
   });
 
-  it('a named file the graph never held and the disk lacks is still warned and skipped', async () => {
+  it('[ast-doc-graph-r1] a named file the graph never held and the disk lacks is still warned and skipped', async () => {
     const repo = twoDocs('named-unknown');
     await indexed(repo);
     const r = await astDocIndex(repo, ['--delta', 'docs/workspace/nope.md']);

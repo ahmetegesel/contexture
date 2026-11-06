@@ -22,7 +22,7 @@ const placements: [string, (sb: string) => string][] = [
 ];
 
 describe.skipIf(!sqliteFts5)('the entry points run as the script wherever the module sits', { concurrent: true }, () => {
-  it.each(placements)('a module reached %s indexes a docs-only repository', async (_where, place) => {
+  it.each(placements)('[ast-doc-graph-r13] a module reached %s indexes a docs-only repository', async (_where, place) => {
     const module = place(sandbox('guard-module'));
     const repo = docsRepo('guard-docs');
     const r = await astDocIndex(repo, ['--clean'], { module });
@@ -31,7 +31,7 @@ describe.skipIf(!sqliteFts5)('the entry points run as the script wherever the mo
     expect(count(join(repo, 'graph.db'), 'SELECT count(*) FROM rules;')).toBe(2);
   });
 
-  it.skipIf(!compilerApi()).each(placements)('a module reached %s indexes the mini repository symbols', async (_where, place) => {
+  it.skipIf(!compilerApi()).each(placements)('[ast-doc-graph-r13] a module reached %s indexes the mini repository symbols', async (_where, place) => {
     const module = place(sandbox('guard-module'));
     const repo = miniRepo('guard-mini');
     const r = await astDocIndex(repo, ['--clean'], { module });

@@ -31,15 +31,15 @@ describe('the loader helpers in process', { concurrent: true }, () => {
     ['./src/a.ts', ['src/a.ts'], true],
     ['src/cart/a.ts', ['src/cart/'], true],
     ['src/cart/a.ts', ['src/order/**'], false],
-  ])('fileMatchesGlobs %s against %j is %s', (file, sources, want) => {
+  ])('[ast-doc-graph-r9] fileMatchesGlobs %s against %j is %s', (file, sources, want) => {
     expect(fileMatchesGlobs(file, sources)).toBe(want);
   });
 
-  it('candidateDocIdsForFile maps a docs path to its id forms', () => {
+  it('[ast-doc-graph-r6] candidateDocIdsForFile maps a docs path to its id forms', () => {
     expect(candidateDocIdsForFile('docs/demo-orders/order-flow.md')).toEqual(['doc:demo-orders:order-flow', 'doc:order-flow', 'doc:docs:demo-orders:order-flow']);
   });
 
-  it('resolveDocFile finds the file a doc id names under the project root, and null otherwise', () => {
+  it('[ast-doc-graph-r6] resolveDocFile finds the file a doc id names under the project root, and null otherwise', () => {
     const root = sandbox('loader-resolve');
     mkdirSync(join(root, 'docs/demo-orders'), { recursive: true });
     writeFileSync(join(root, 'docs/demo-orders/order-flow.md'), '@doc capability order-flow\n');
@@ -63,7 +63,7 @@ describe('the loader helpers in process', { concurrent: true }, () => {
     expect(docFileCandidates('sym:1')).toEqual([]);
   });
 
-  it('computeDerivedEdges links rules, pitfalls, and docs, a bare name disambiguated by the doc sources', () => {
+  it('[ast-doc-graph-r9] computeDerivedEdges links rules, pitfalls, and docs, a bare name disambiguated by the doc sources', () => {
     const symbols = [
       sym('sym:1', 'validateCart', 'validateCart', 'src/order/validate.ts'),
       sym('sym:2', 'save', 'OrderStore.save', 'src/order/store.ts'),

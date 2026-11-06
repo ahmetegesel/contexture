@@ -15,21 +15,21 @@ const corpus = (): [string, string][] =>
 const parsed = () => corpus().map(([rel, path]) => parseDocMarkdown(readFileSync(path, 'utf8'), rel));
 
 describe('the docs extractor in process', { concurrent: true }, () => {
-  it('reads the docs-discipline sample and seed: 5 docs, 17 rules, 3 pitfalls', () => {
+  it('[ast-doc-graph-r7] reads the docs-discipline sample and seed: 5 docs, 17 rules, 3 pitfalls', () => {
     const all = parsed();
     expect(all.filter((p) => p.doc).length).toBe(5);
     expect(all.flatMap((p) => p.rules).length).toBe(17);
     expect(all.flatMap((p) => p.pitfalls).length).toBe(3);
   });
 
-  it('parses a doc header: its repo, kind, summary, sources, and keywords', () => {
+  it('[ast-doc-graph-r7] parses a doc header: its repo, kind, summary, sources, and keywords', () => {
     const flow = parseDocMarkdown(readFileSync(join(DOCS_PLUGIN, 'tests/sample/docs/demo-orders/order-flow.md'), 'utf8'), 'docs/demo-orders/order-flow.md');
     expect(flow.doc).toMatchObject({ repo: 'demo-orders', kind: 'capability', summary: 'Cart validation, pricing, and order persistence for the demo storefront' });
     expect(flow.doc?.keywords).toEqual(['orders', 'checkout', 'pricing', 'validation']);
     expect(flow.doc?.sources.length).toBeGreaterThan(0);
   });
 
-  it('reads a pitfall with its severity, type, trigger, and evidence symbols', () => {
+  it('[ast-doc-graph-r7] reads a pitfall with its severity, type, trigger, and evidence symbols', () => {
     const flow = parseDocMarkdown(readFileSync(join(DOCS_PLUGIN, 'tests/sample/docs/demo-orders/order-flow.md'), 'utf8'), 'docs/demo-orders/order-flow.md');
     const p1 = flow.pitfalls.find((p) => p.statement === 'A retried checkout can persist the same cart twice');
     expect(p1).toMatchObject({ severity: 'high', type: 'bug', evidence_symbols: ['validateCart'] });
@@ -65,7 +65,7 @@ describe('the docs extractor in process', { concurrent: true }, () => {
     expect(r.unitless).toBe(3);
   });
 
-  it('extracts evidence symbols: identifiers and qnames kept, file paths and keywords dropped', () => {
+  it('[ast-doc-graph-r9] extracts evidence symbols: identifiers and qnames kept, file paths and keywords dropped', () => {
     expect(extractEvidenceSymbols('validateCart; OrderService.save, src/order/x.ts')).toEqual(['validateCart', 'OrderService.save']);
     expect(extractEvidenceSymbols('')).toEqual([]);
     expect(extractEvidenceSymbols(null)).toEqual([]);
@@ -85,7 +85,7 @@ describe('the docs extractor in process', { concurrent: true }, () => {
     expect(parseArray('')).toEqual([]);
   });
 
-  it('slugify keeps the first sentence, lowercased and dashed, within its bound', () => {
+  it('[ast-doc-graph-r8] slugify keeps the first sentence, lowercased and dashed, within its bound', () => {
     expect(slugify('Record the phase: then more')).toBe('record-the-phase');
     expect(slugify('')).toBe('item');
     expect(slugify('x'.repeat(60)).length).toBe(40);
