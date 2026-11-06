@@ -638,17 +638,15 @@ function op_new(    b, i, j, f, t, text) {
     NOTE = "created (" KIND ")"
 }
 
-function op_write(    i, w, r, lastline) {
+function op_write(    i, w, r) {
     for (i = 1; i <= n; i++) if (index(L[i], CR)) refuse("a carriage return in the doc at line " i " (ERR_INVALID_ARGUMENT)")
     if (n == 0) refuse("the doc on stdin is empty (ERR_INVALID_ARGUMENT)")
     split(L[1], w, " ")
     if (w[1] != "@doc") refuse("the doc on stdin must open with its @doc line naming " SLUG " (ERR_SCHEMA_VIOLATION)")
     if (w[3] != SLUG) refuse("the @doc line names slug '" w[3] "', the address names '" SLUG "' (ERR_SCHEMA_VIOLATION)")
     r = ""
-    lastline = 0
     for (i = 2; i <= n && !blank(L[i]) && substr(L[i], 1, 1) != "@"; i++) {
         if (L[i] ~ /^  repo:[ ]*/) { r = L[i]; sub(/^  repo:[ ]*/, "", r); sub(/[ ]+$/, "", r) }
-        if (field_name(L[i], 2) != "") lastline = i
     }
     if (r != REPO) refuse("the header names repo '" r "', the address names '" REPO "' (ERR_SCHEMA_VIOLATION)")
     NOTE = "written (" n " lines)"
