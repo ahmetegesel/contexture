@@ -40,7 +40,9 @@ A full load rebuilds the graph inside one transaction: it clears every table,
 the search indexes first so the delete triggers find them empty, then loads
 the streams, so each symbol and unit keeps one search row and a failed load
 leaves the graph as it was; the `sqlite3` command fallback runs the same
-statements and stops at its first error (`-bail`).
+statements and stops at its first error (`-bail`). A delta on the fallback
+applies the schema as well and re-links against the edges its own deletes
+leave, so both branches write the same graph and print the same summary.
 
 `bin/ast-doc-index` runs only inside a contexture drawer: `CTX_ROOT` when the
 engine dispatched it (`ctx ast-doc-graph index`, or the query's micro-sync

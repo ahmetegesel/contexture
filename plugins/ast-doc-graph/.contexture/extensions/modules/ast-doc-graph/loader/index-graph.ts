@@ -909,8 +909,16 @@ async function main(): Promise<void> {
         ...pitfalls,
       ];
 
+      // The edges the deletes below leave, the triggers' rule mirrored: the built-in branch reads this state after its deletes
+      const deletedIds = new Set<string>([
+        ...existingSymbolsRaw.filter((s: any) => modifiedFiles.has(s.file)).map((s: any) => s.id),
+        ...existingDocsRaw.filter((d: any) => docIdsToDelete.has(d.id)).map((d: any) => d.id),
+        ...existingRulesRaw.filter((r: any) => docIdsToDelete.has(r.doc_id)).map((r: any) => r.id),
+        ...existingPitfallsRaw.filter((p: any) => docIdsToDelete.has(p.doc_id)).map((p: any) => p.id),
+      ]);
       const edgeSet = new Set<string>();
       for (const e of existingEdgesRaw) {
+        if (modifiedFiles.has(e.source) || deletedIds.has(e.source) || deletedIds.has(e.target)) continue;
         edgeSet.add(`${e.source}|${e.target}|${e.kind}`);
       }
       for (const e of rawEdges) {
@@ -935,14 +943,14 @@ async function main(): Promise<void> {
         docsById.set(doc.id, doc);
       }
 
+      const derivedEdges = new Map<string, EdgeRecord>();
       const newEdges: EdgeRecord[] = [];
       function addFallbackEdge(source: string, target: string, kind: string): void {
         if (!source || !target || !kind) return;
         const key = `${source}|${target}|${kind}`;
-        if (!edgeSet.has(key)) {
-          edgeSet.add(key);
-          newEdges.push({ source, target, kind });
-        }
+        if (derivedEdges.has(key)) return;
+        derivedEdges.set(key, { source, target, kind });
+        if (!edgeSet.has(key)) newEdges.push({ source, target, kind });
       }
 
       computeDerivedEdges(
@@ -962,6 +970,7 @@ async function main(): Promise<void> {
       const sqlChunks: string[] = [
         'PRAGMA foreign_keys = ON;',
         'PRAGMA busy_timeout = 5000;',
+        schemaSql,
         'BEGIN TRANSACTION;',
       ];
 
@@ -1048,8 +1057,9 @@ async function main(): Promise<void> {
       for (const e of rawEdges) {
         sqlChunks.push(`INSERT INTO edges (source, target, kind) VALUES (${sqlEscape(e.source)}, ${sqlEscape(e.target)}, ${sqlEscape(e.kind)});`);
       }
-      for (const e of newEdges) {
-        sqlChunks.push(`INSERT INTO edges (source, target, kind) VALUES (${sqlEscape(e.source)}, ${sqlEscape(e.target)}, ${sqlEscape(e.kind)});`);
+      for (const e of derivedEdges.values()) {
+        const [s, t, k] = [sqlEscape(e.source), sqlEscape(e.target), sqlEscape(e.kind)];
+        sqlChunks.push(`INSERT INTO edges (source, target, kind) SELECT ${s}, ${t}, ${k} WHERE NOT EXISTS (SELECT 1 FROM edges WHERE source = ${s} AND target = ${t} AND kind = ${k});`);
       }
 
       for (const relFile of modifiedFiles) {
@@ -1078,7 +1088,7 @@ async function main(): Promise<void> {
 
       execFileSync(sqliteBin, ['-bail', dbPath], {
         input: sqlChunks.join('\n'),
-        stdio: ['pipe', 'inherit', 'inherit'],
+        stdio: ['pipe', 'ignore', 'inherit'],
       });
 
       const countRes = queryJson('SELECT count(*) AS count FROM edges;');
@@ -1257,7 +1267,7 @@ async function main(): Promise<void> {
 
       execFileSync(sqliteBin, ['-bail', dbPath], {
         input: sqlChunks.join('\n'),
-        stdio: ['pipe', 'inherit', 'inherit'],
+        stdio: ['pipe', 'ignore', 'inherit'],
       });
     }
   }

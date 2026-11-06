@@ -5,7 +5,7 @@ import { exec } from '@support/exec';
 import { sandbox } from '@support/sandbox';
 import { fresh } from '@support/snapshot';
 import { sqlite } from '@support/sqlite';
-import { astDocIndex, compilerApi, count, docsRepo, graphQuery, miniRepo, MODULE, sqliteFts5 } from '../support/graph';
+import { astDocIndex, compilerApi, count, docsRepo, fallbackReachable, graphQuery, miniRepo, MODULE, NO_NODE_SQLITE, sqliteFts5 } from '../support/graph';
 
 const db = (sb: string) => join(sb, 'graph.db');
 
@@ -62,6 +62,25 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     const sb = fresh(indexed);
     const r = await graphQuery(sb, db(sb), 'stats');
     expect([r.code, r.stderr]).toEqual([0, '']);
+  });
+
+  it.skipIf(!fallbackReachable)('[ast-doc-graph-r6] a delta on the sqlite3 command fallback keeps the derived edges the built-in delta keeps, prints the same summary, and applies the schema (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', async () => {
+    const builtIn = fresh(indexed);
+    const fallback = fresh(indexed);
+    sqlite(db(fallback), 'DROP INDEX idx_edges_kind;');
+    const runs = await Promise.all(
+      [[builtIn, {}], [fallback, NO_NODE_SQLITE]].map(([sb, env]) => {
+        edit(sb as string, 'src/orders/validate.ts', '\n');
+        return astDocIndex(sb as string, ['--delta', 'src/orders/validate.ts'], { env: env as Record<string, string> });
+      }),
+    );
+    for (const r of runs) expect(r.code, r.stderr).toBe(0);
+    const edges = (sb: string) => sqlite(db(sb), 'SELECT kind, source, target FROM edges ORDER BY kind, source, target;');
+    expect(edges(fallback)).toBe(edges(builtIn));
+    expect(count(db(fallback), "SELECT count(*) FROM edges e JOIN symbols s ON s.id = e.target WHERE e.kind IN ('GOVERNS', 'COVERS') AND s.qname = 'validateCart';")).toBe(2);
+    expect(count(db(fallback), "SELECT count(*) FROM sqlite_master WHERE name = 'idx_edges_kind';")).toBe(1);
+    const summary = (out: string) => out.split('\n').filter((l) => !l.startsWith('  DATABASE: '));
+    expect(summary(runs[1].stdout)).toEqual(summary(runs[0].stdout));
   });
 });
 
