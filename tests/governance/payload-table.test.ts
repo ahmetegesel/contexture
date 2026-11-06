@@ -1,15 +1,11 @@
-import { spawnSync } from 'node:child_process';
-import { realpathSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ROOT } from '../support/root';
-import { text } from './walk';
+import { atTop, git, text } from './walk';
 
 const SHIPPED = 'base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/run,modules/unit,extensions,ONBOARDING.md}';
 
-const git = (...args: string[]) => spawnSync('git', ['-C', ROOT, ...args], { encoding: 'utf8' });
-const top = git('rev-parse', '--show-toplevel');
-const atTop = top.status === 0 && realpathSync(top.stdout.trim()) === realpathSync(ROOT);
+const rooted = atTop();
 
 const declaration = (rel: string): string => text(join(ROOT, rel)).match(/base\/\.contexture\/\{[^}]*\}/)?.[0] ?? '';
 
@@ -29,8 +25,8 @@ describe('the payload path tables', () => {
     expect(declaration('docs/adoption.md')).toBe(SHIPPED);
   });
 
-  describe.skipIf(!atTop)('against git ls-files base/ (needs git and the repository top at the root)', () => {
-    const tracked = atTop ? git('ls-files', 'base/').stdout.split('\n').filter(Boolean) : [];
+  describe.skipIf(!rooted)('against git ls-files base/ (needs git and the repository top at the root)', () => {
+    const tracked = rooted ? git(ROOT, 'ls-files', 'base/').stdout.split('\n').filter(Boolean) : [];
     const declared = roots(SHIPPED);
 
     it('git ls-files base/ returns the tracked set', () => {

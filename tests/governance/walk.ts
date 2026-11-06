@@ -1,5 +1,7 @@
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { ROOT } from '../support/root';
 
 export function walk(dir: string, skip: (path: string) => boolean = () => false): string[] {
   if (!existsSync(dir)) return [];
@@ -14,3 +16,10 @@ export function walk(dir: string, skip: (path: string) => boolean = () => false)
 }
 
 export const text = (path: string): string => readFileSync(path, 'utf8');
+
+export const git = (root: string, ...args: string[]) => spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
+
+export function atTop(root: string = ROOT): boolean {
+  const top = git(root, 'rev-parse', '--show-toplevel');
+  return top.status === 0 && realpathSync(top.stdout.trim()) === realpathSync(root);
+}
