@@ -34,8 +34,11 @@
 # update, files the new source drops are removed when unchanged and preserved
 # (and kept recorded) when changed. Part hooks run after the overlay and the
 # record, in module-name order. rc 2: no workspace or engine, a read-only
-# extension root (nothing is written), an I/O failure, a failing part hook, or a
-# failing compose (the overlay and its record are in place; the law layer is stale).
+# extension root (nothing is written), an I/O failure (the install rolls back
+# whole: every moved file restored or removed, the record restored, and every
+# folder the install made removed, so a failed fresh install leaves the tree as it
+# found it and its retry proceeds), a failing part hook, or a failing compose (the
+# overlay and its record are in place; the law layer is stale).
 set -u
 
 err() { printf 'package-install: %s\n' "$*" >&2; }
@@ -368,20 +371,64 @@ while IFS= read -r rel; do
   printf '%s\n' "$rel_ws" >> "$scratch/newpaths"
 done < "$scratch/files"
 
-mkdir -p "$state_root" || die 2 "cannot create .contexture/extensions/.state"
+# make_dir <folder>: mkdir -p, noting every folder it creates so a rollback removes them
+# again (and only them): a failed fresh install leaves the tree as it found it
+: > "$scratch/made"
+make_dir() {
+  _md=$1
+  while [ -n "$_md" ] && [ ! -e "$_md" ]; do
+    printf '%s\n' "$_md" >> "$scratch/made"
+    _md=${_md%/*}
+  done
+  mkdir -p "$1"
+}
+
 stage=$state_root/.stage.$$
+record_phase=0
+rollback() {
+  _rb=$1
+  if [ -f "$scratch/moved" ]; then
+    while IFS= read -r _t; do
+      _p=${_t#"$ws_root"/}
+      if [ -f "$stage/.backup/$_p" ]; then
+        mv -f "$stage/.backup/$_p" "$_t" 2>/dev/null
+      else
+        rm -f "$_t" 2>/dev/null
+      fi
+    done < "$scratch/moved"
+  fi
+  if [ -f "$scratch/removed" ]; then
+    while IFS= read -r _t; do
+      _p=${_t#"$ws_root"/}
+      [ -f "$stage/.backup/$_p" ] && mv -f "$stage/.backup/$_p" "$_t" 2>/dev/null
+    done < "$scratch/removed"
+  fi
+  if [ "$record_phase" -eq 1 ]; then
+    if [ -f "$stage/.backup/.record" ]; then
+      mv -f "$stage/.backup/.record" "$state_file" 2>/dev/null
+    else
+      rm -f "$state_file" 2>/dev/null
+    fi
+  fi
+  rm -rf "$stage" 2>/dev/null
+  LC_ALL=C sort -ru "$scratch/made" | while IFS= read -r _d; do
+    rmdir "$_d" 2>/dev/null
+  done
+  die 2 "$_rb"
+}
+
+make_dir "$state_root" || rollback "cannot create .contexture/extensions/.state"
 rm -rf "$stage"
-mkdir -p "$stage" || die 2 "cannot create the install staging folder"
+mkdir -p "$stage" || rollback "cannot create the install staging folder"
 
 : > "$scratch/plan"
 while IFS= read -r rel; do
-  mkdir -p "$stage/$(dirname "$rel")" || { rm -rf "$stage"; die 2 "cannot stage $rel"; }
-  cp -p "$payload_root/$rel" "$stage/$rel" || { rm -rf "$stage"; die 2 "cannot stage $rel"; }
+  mkdir -p "$stage/$(dirname "$rel")" || rollback "cannot stage $rel"
+  cp -p "$payload_root/$rel" "$stage/$rel" || rollback "cannot stage $rel"
   m=$(mode_of "$stage/$rel")
   c=$(cksum_of "$stage/$rel")
   if [ -z "$m" ] || [ -z "$c" ]; then
-    rm -rf "$stage"
-    die 2 "cannot read the mode or checksum of $rel"
+    rollback "cannot read the mode or checksum of $rel"
   fi
   printf '%s %s %s\n' "$rel" "$m" "$c" >> "$scratch/plan"
 done < "$scratch/files"
@@ -446,42 +493,12 @@ stale_kept=$(grep -c . "$scratch/stale_keep" 2>/dev/null || true)
 [ -n "$stale_removed" ] || stale_removed=0
 [ -n "$stale_kept" ] || stale_kept=0
 
-record_phase=0
-rollback() {
-  _rb=$1
-  if [ -f "$scratch/moved" ]; then
-    while IFS= read -r _t; do
-      _p=${_t#"$ws_root"/}
-      if [ -f "$stage/.backup/$_p" ]; then
-        mv -f "$stage/.backup/$_p" "$_t" 2>/dev/null
-      else
-        rm -f "$_t" 2>/dev/null
-      fi
-    done < "$scratch/moved"
-  fi
-  if [ -f "$scratch/removed" ]; then
-    while IFS= read -r _t; do
-      _p=${_t#"$ws_root"/}
-      [ -f "$stage/.backup/$_p" ] && mv -f "$stage/.backup/$_p" "$_t" 2>/dev/null
-    done < "$scratch/removed"
-  fi
-  if [ "$record_phase" -eq 1 ]; then
-    if [ -f "$stage/.backup/.record" ]; then
-      mv -f "$stage/.backup/.record" "$state_file" 2>/dev/null
-    else
-      rm -f "$state_file" 2>/dev/null
-    fi
-  fi
-  rm -rf "$stage" 2>/dev/null
-  die 2 "$_rb"
-}
-
 mkdir -p "$stage/.backup"
 : > "$scratch/moved"
 : > "$scratch/removed"
 while read -r rel _m _c; do
   t=$ext_root/$rel
-  mkdir -p "$(dirname "$t")" || rollback "cannot create the directory for $rel"
+  make_dir "$(dirname "$t")" || rollback "cannot create the directory for $rel"
   if [ -e "$t" ]; then
     mkdir -p "$stage/.backup/.contexture/extensions/$(dirname "$rel")" || rollback "cannot back up $rel"
     cp -p "$t" "$stage/.backup/.contexture/extensions/$rel" || rollback "cannot back up $rel"

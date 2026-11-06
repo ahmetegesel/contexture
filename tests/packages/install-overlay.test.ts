@@ -139,7 +139,7 @@ describe.concurrent('package-install: the mid-write rollback and the payload pat
     expect(files(treeState(extPath(sb)))).toBe(files(before));
   });
 
-  it.skipIf(ROOT_USER).fails('N14 defect: a failed fresh install leaves no folder of its own, so the package installs once the fault is gone', async ({ onTestFinished }) => {
+  it.skipIf(ROOT_USER)('N14: a failed fresh install leaves no folder of its own, so the package installs once the fault is gone', async ({ onTestFinished }) => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgrb');
     addModule(p, 'alpha');
@@ -151,7 +151,22 @@ describe.concurrent('package-install: the mid-write rollback and the payload pat
     expect(treeState(extPath(sb))).toBe(before);
     chmodSync(extPath(sb, 'rhythms'), 0o755);
     const again = await install(sb, p);
-    expect({ code: again.code, stderr: again.stderr }).toEqual({ code: 0, stderr: '' });
+    expect(again.code, again.stderr).toBe(0);
+    expect(again.stdout).toContain('installed pkgrb');
+  });
+
+  it.skipIf(ROOT_USER)('N14: a payload file that cannot be staged refuses rc2 and leaves the extension tree as it was', async ({ onTestFinished }) => {
+    const sb = sandbox();
+    const p = newPkg(sb, 'pkgrb');
+    addModule(p, 'alpha');
+    addFile(p, 'rhythms/x.md', 'the x rhythm');
+    writeManifest(p);
+    chmodPlant(join(p, '.contexture/extensions/rhythms/x.md'), 0o000, 0o644, onTestFinished);
+    const before = treeState(extPath(sb));
+    const r = await install(sb, p);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('cannot stage rhythms/x.md');
+    expect(treeState(extPath(sb))).toBe(before);
   });
 
   it('N15: a payload path carrying a blank refuses rc1 and writes nothing', async () => {
