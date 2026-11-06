@@ -134,12 +134,13 @@ declare refuses with the store's line, re-framed as `search.query`.
 
 ## The tests
 
-`tests/storage-compliance.sh --data=unit --driver=posix|fts5` runs the record compliance
-(the same 66 posix and 60 other-backend cases) through this data script over the store.
-`tests/unit-data-tests.sh` runs that case set on both drivers (or one with `--driver`) and
-adds the module's own cases: the canonical refs and the write refusal, the file-pointer
-exemption, the legacy ref, the ranked search identity, the active listing, the per-unit
-read, and the `--smoke` sequence the fast inner loop uses. The gate runs the two driver
-halves as separate concurrent jobs, and the store fuzzer's unit-shaped
-profile (`tests/drivers/store-fuzz.test.ts`) is the seeded differential proof of the
+The vitest project `unit-record` (`tests/unit-record`, `bun run test:unit-record` from
+`tests/`) proves the record logic once, on posix: the record compliance cases through this
+data script over a staged store, the module's own cases (the canonical refs and the write
+refusal, the file-pointer exemption, the legacy ref, the ranked search identity over a
+canned fts5 store answer, the active listing, the per-unit read), the audit classes, and
+the record engine alone (`lib/canon.awk`, `lib/model.awk`, `lib/ops.awk`), held equal to
+this data script for every dispatched function by a differential test, with the search,
+ranked, render, payload, and base64 programs each tested alone. The store fuzzer's
+unit-shaped profile (`tests/drivers/store-fuzz.test.ts`) is the seeded differential proof of the
 store calls the module makes across posix and fts5.

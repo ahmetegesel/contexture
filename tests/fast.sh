@@ -5,15 +5,13 @@
 # full pre-land gate (tests/run.sh), which stays mandatory before any commit, tag, or push.
 #
 # Usage: tests/fast.sh <area> [<arg>]
-#   unit             the six unit-like suites (the store driver tests run in vitest, bun run test:drivers),
-#                    with the unit-data smoke in place of the long data-mode compliance
+#   unit             the four unit-like suites (the store driver and record tests run in vitest:
+#                    bun run test:drivers and bun run test:unit-record)
 #   engine           filter-tests, ctx-tests, governance-tests
 #   law              the law compose suite (law-tests.sh)
 #   record <1|2|3|4> one session suite group (the owning group is required)
-#   unit-data [posix|fts5]  the full record compliance through the unit data script on
-#                    one driver (default posix; the fts5 half stays for pre-land)
-#   driver posix     the unit-data smoke and the session suite on posix
-#   driver fts5      the record compliance through the data script on fts5 (the driver
+#   driver posix     the session suite on posix
+#   driver fts5      the session suite on fts5 (the driver
 #                    tests run in vitest: bun run test:drivers and test:storage-fts5)
 #   module           the package overlay installer suite (module-tests.sh)
 #   docs             the docs-discipline suite on the files driver
@@ -30,15 +28,13 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 usage() {
   cat <<'USAGE'
 usage: tests/fast.sh <area> [<arg>]
-  unit             the six unit-like suites (the store driver tests run in vitest, bun run test:drivers),
-                   with the unit-data smoke in place of the long data-mode compliance
+  unit             the four unit-like suites (the store driver and record tests run in vitest:
+                   bun run test:drivers and bun run test:unit-record)
   engine           filter-tests, ctx-tests, governance-tests
   law              the law compose suite (law-tests.sh)
   record <1|2|3|4> one session suite group (the owning group is required)
-  unit-data [posix|fts5]  the full record compliance through the unit data script on
-                   one driver (default posix; the fts5 half stays for pre-land)
-  driver posix     the unit-data smoke and the session suite on posix
-  driver fts5      the record compliance through the data script on fts5 (the driver
+  driver posix     the session suite on posix
+  driver fts5      the session suite on fts5 (the driver
                    tests run in vitest: bun run test:drivers and test:storage-fts5)
   module           the package overlay installer suite (module-tests.sh)
   docs             the docs-discipline suite on the files driver
@@ -102,8 +98,6 @@ unit_suites() {
   run_suite "filter-tests.sh" sh "$ROOT/tests/filter-tests.sh"
   run_suite "ctx-tests.sh" sh "$ROOT/tests/ctx-tests.sh"
   run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
-  run_suite "record-audit-tests.sh" sh "$ROOT/tests/record-audit-tests.sh"
-  run_suite "unit-data-tests.sh (smoke posix)" sh "$ROOT/tests/unit-data-tests.sh" "--smoke" "--driver=posix"
   run_suite "ast-doc-graph test-ddl.sh" sh "$ROOT/plugins/ast-doc-graph/tests/test-ddl.sh"
 }
 
@@ -130,24 +124,15 @@ case "${1:-}" in
     AREA="record $2"
     run_suite "session-tests.sh --group=$2" sh "$ROOT/tests/session-tests.sh" "--group=$2"
     ;;
-  unit-data)
-    case "${2:-posix}" in
-      posix|fts5) ;;
-      *) echo "fast.sh: unit-data needs posix or fts5" >&2; exit 1 ;;
-    esac
-    AREA="unit-data ${2:-posix}"
-    run_suite "unit-data-tests.sh (record compliance through the data script, ${2:-posix})" sh "$ROOT/tests/unit-data-tests.sh" "--driver=${2:-posix}"
-    ;;
   driver)
     case "${2:-}" in
       posix)
         AREA="driver posix"
-        run_suite "unit-data-tests.sh (smoke posix)" sh "$ROOT/tests/unit-data-tests.sh" "--smoke" "--driver=posix"
         run_suite "session-tests.sh (posix)" sh "$ROOT/tests/session-tests.sh" --driver=posix
         ;;
       fts5)
         AREA="driver fts5"
-        run_suite "unit-data-tests.sh (record compliance through the data script, fts5)" sh "$ROOT/tests/unit-data-tests.sh" "--driver=fts5"
+        run_suite "session-tests.sh (fts5)" sh "$ROOT/tests/session-tests.sh" --driver=fts5
         ;;
       *)
         echo "fast.sh: driver needs posix or fts5" >&2

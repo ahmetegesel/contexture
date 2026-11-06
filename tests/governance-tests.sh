@@ -193,7 +193,7 @@ check_filter_pairs() {
 check_filter_pairs "$ROOT/base/.contexture/modules/run/filters" "$SCRIPT_DIR" "core"
 check_filter_pairs "$ROOT/plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters" "$ROOT/plugins/toolchain-filters/tests" "toolchain-filters"
 
-for s in filter-tests.sh ctx-tests.sh session-tests.sh hook-tests.sh record-audit-tests.sh governance-tests.sh; do
+for s in filter-tests.sh ctx-tests.sh session-tests.sh hook-tests.sh governance-tests.sh; do
   if [ -f "$SCRIPT_DIR/$s" ]; then ok "suite present: $s"; else bad "suite missing: $s"; fi
 done
 

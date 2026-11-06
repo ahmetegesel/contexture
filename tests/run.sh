@@ -1,11 +1,9 @@
 #!/bin/sh
 # run.sh: the upstream test runner. Runs the core suites (filters, ctx, session, hooks,
-# record-audit, governance, law compose, the unit-data record compliance twice,
-# base-only, module-tests), each hermetic
-# and staged from the shipped core (the unit-data record compliance runs the record cases
-# through the unit module data script over base's posix driver and the fts5 plugin's own
-# copy, and stages the storage core and the unit module; the store driver tests and the
-# store fuzzer are the vitest drivers project's, tests/drivers); the base-only gate stages base alone and
+# governance, law compose, base-only, module-tests), each hermetic and staged from the
+# shipped core (the store driver tests and the store fuzzer are the vitest drivers
+# project's, tests/drivers; the record logic, the audit, and the unit data cases are the
+# vitest unit-record project's, tests/unit-record; the base-only gate stages base alone and
 # runs the posix core suites with a synthetic data file); the session suite runs twice,
 # once on the posix driver and once
 # on the fts5 driver (the plugin's own copy staged into its sandbox; skip 77 when sqlite3
@@ -22,8 +20,7 @@
 # prints every suite's output followed by its outcome line in the fixed order below,
 # whatever order they finish in. A suite's exit code is read from the suite itself
 # (written by the job that ran it), never from a pipeline. A suite still running after
-# GATE_SUITE_TIMEOUT seconds (default 3600, raised for the unit-data data modes, whose
-# contended wall has been measured in tens of minutes) is stopped with its whole process
+# GATE_SUITE_TIMEOUT seconds (default 3600) is stopped with its whole process
 # tree and fails. A suite that fails or times out prints a one-line notice on stderr as
 # soon as its rc is read, so a red surfaces without waiting for the long jobs; the suite's
 # full output and outcome line still print in the fixed order below. GATE_JOBS caps how
@@ -45,7 +42,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh record-audit-tests.sh governance-tests.sh law-tests.sh unit-data-tests.sh:posix unit-data-tests.sh:fts5 base-only-tests.sh module-tests.sh"
+CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh governance-tests.sh law-tests.sh base-only-tests.sh module-tests.sh"
 
 GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
 GATE_JOBS=${GATE_JOBS:-5}
@@ -96,11 +93,6 @@ for entry in $CORE_SUITES; do
     continue
   fi
   case "$entry" in
-    # the record compliance through the unit module data script over the shipped store,
-    # one job per driver so the two halves run concurrently; capability, health, the
-    # descriptor, and the store/resolver cases stay on the driver
-    unit-data-tests.sh:posix) add_job "core:$entry" run "$SCRIPT_DIR/${s}" "--driver=posix" ;;
-    unit-data-tests.sh:fts5) add_job "core:$entry" run "$SCRIPT_DIR/${s}" "--driver=fts5" ;;
     # the second session run: the same assertions on the fts5 driver
     session-tests.sh:fts5) add_job "core:$entry" run "$SCRIPT_DIR/$s" "--driver=fts5" ;;
     *) add_job "core:$entry" run "$SCRIPT_DIR/$s" ;;

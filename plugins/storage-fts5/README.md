@@ -142,13 +142,7 @@ ctx docs write <repo> <slug> < docs/<repo>/<slug>.md
 
 ## Verify
 
-Verify the installation against the Storage SPI compliance harness:
-
-```sh
-tests/storage-compliance.sh --driver=fts5
-```
-
-This resolves the driver through the workspace drawer, so it checks the adopted copy. The plugin's tests check the plugin's own copy instead: the vitest harness stages this folder's driver into every fts5 sandbox, so an edit to either copy never passes on the other's behalf.
+The plugin's tests check the plugin's own copy, never the adopted one: the vitest harness stages this folder's driver into every fts5 sandbox, so an edit to either copy never passes on the other's behalf.
 
 Verify the generic module store with the shared store contract tests, which hold this plugin's own copy and the posix driver to the same set, and with this plugin's own project (from `tests/`, the bun scripts):
 
