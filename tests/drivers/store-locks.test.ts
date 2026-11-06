@@ -4,7 +4,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { driverPath } from '../support/driver';
 import { launch } from '../support/exec';
-import { holdLock, lockPath } from '../support/locks';
+import { holdLock, lockPath, namespaceLock } from '../support/locks';
 import { pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { fresh } from '../support/snapshot';
@@ -12,7 +12,7 @@ import { DRIVERS, fts5Available } from '../support/stage';
 import { docsStore, listAnswer, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
-const LOCK = 'store-docs.lock';
+const LOCK = namespaceLock('docs');
 
 async function until(check: () => boolean, ms = 10_000): Promise<boolean> {
   for (const t0 = Date.now(); Date.now() - t0 < ms; await wait(20)) if (check()) return true;

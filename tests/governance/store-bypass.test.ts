@@ -14,8 +14,8 @@ const DOCS_IO = 'plugins/docs-discipline/.contexture/extensions/modules/docs/scr
 
 const ALLOW: readonly [file: string, line: string, why: string][] = [
   [`${UNIT}/data`, 'root: .contexture/sessions', 'the unit namespace declaration the storage core reads'],
-  [`${UNIT}/scripts/data`, '  mkdir -p "$u_tmp/locks" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the lock folder"', 'the unit lock folder, not a store file'],
-  [`${UNIT}/scripts/data`, '  U_LT="$u_tmp/locks/$1.lock"', 'the unit lock folder, not a store file'],
+  [`${UNIT}/scripts/data`, '  mkdir -p "$u_tmp/locks/unit" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the lock folder"', 'the unit lock folder, not a store file'],
+  [`${UNIT}/scripts/data`, '  U_LT="$u_tmp/locks/unit/$1.lock"', 'the unit lock folder, not a store file'],
   [`${GRAPH}/bin/graph-query`, 'SQLITE_BIN="/usr/bin/sqlite3"', 'the graph module queries its own graph database'],
   [`${GRAPH}/bin/graph-query`, '  SQLITE_BIN="$(command -v sqlite3 || true)"', 'the graph module queries its own graph database'],
   [`${GRAPH}/bin/graph-query`, '  echo "Error: sqlite3 binary not found." >&2', 'the graph module queries its own graph database'],

@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { launch } from '../support/exec';
-import { holdLock, lockPath, sleepShim } from '../support/locks';
+import { holdLock, lockPath, sleepShim, unitLock } from '../support/locks';
 import { ROOT_USER } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { lane, must, run, seedUnit, unit, unitChecksum, waitFor } from '../support/unit';
@@ -58,7 +58,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it('K: a TERM on a data script waiting on a held unit lock leaves no scratch once the drawer settles', async () => {
     const sb = fresh(sb0);
-    const release = holdLock(sb, 'w-unit.lock', 'live');
+    const release = holdLock(sb, unitLock('w-unit'), 'live');
     const before = scratch(sb);
     const method = launch(join(sb, '.contexture/modules/unit/scripts/data'), ['task.start', 'w-unit', 'w-a'], {
       cwd: sb,
@@ -75,7 +75,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it('KR-a: a SIGKILLed holder leaves its pid in the lock; the next writer removes the stale lock and lands', async () => {
     const sb = fresh(sb0);
-    const lock = lockPath(sb, 'w-unit.lock');
+    const lock = lockPath(sb, unitLock('w-unit'));
     const holder = launch('sh', ['-c', 'mkdir -p "$(dirname "$1")" && mkdir "$1" && printf "%s\\n" "$$" > "$1/pid" && sleep 30', 'kr-holder', lock], { cwd: sb, group: true });
     expect(await waitFor(() => existsSync(join(lock, 'pid')) && readFileSync(join(lock, 'pid'), 'utf8').trim() !== '', 10_000)).toBe(true);
     expect(readFileSync(join(lock, 'pid'), 'utf8').trim()).toBe(String(holder.child.pid));
@@ -84,12 +84,13 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     await holder.result;
     expect(() => process.kill(holder.child.pid!, 0)).toThrow();
     expect((await unit(sb, 'task', 'start', 'w-unit', 'w-a')).code).toBe(0);
+    expect(existsSync(lock)).toBe(false);
     expect((await unit(sb, 'task', 'show', 'w-unit', 'w-a')).stdout).toContain('IN_PROGRESS');
   });
 
   it('KR-b: a live holder still refuses the next writer rc 2 ERR_STORAGE_LOCKED (the wait under the sleep shim)', async () => {
     const sb = fresh(sb0);
-    holdLock(sb, 'w-unit.lock', 'live');
+    holdLock(sb, unitLock('w-unit'), 'live');
     const r = await run(sb, ['unit', 'task', 'complete', 'w-unit', 'w-a', '--evidence=never lands'], { env: sleepShim() });
     expect(r.code).toBe(2);
     expect(r.stdout + r.stderr).toContain('ERR_STORAGE_LOCKED');
@@ -97,7 +98,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it('KR-c: a writer killed while waiting leaves one per-verb scratch root, which the next dispatch sweeps', async () => {
     const sb = fresh(sb0);
-    const release = holdLock(sb, 'w-unit.lock', 'live');
+    const release = holdLock(sb, unitLock('w-unit'), 'live');
     const before = scratch(sb);
     const verbRoot = (): string | undefined => added(sb, before).find((f) => f.startsWith('verb.'));
     const writer = launch('./.contexture/ctx', ['unit', 'task', 'start', 'w-unit', 'w-a'], { cwd: sb, group: true });

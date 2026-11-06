@@ -4,7 +4,7 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { driverPath } from '../support/driver';
 import { launch } from '../support/exec';
-import { lockPath } from '../support/locks';
+import { lockPath, namespaceLock } from '../support/locks';
 import { ROOT_USER, chmodPlant, pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { fresh } from '../support/snapshot';
@@ -85,7 +85,7 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
     const after = await bytesOf(sb, 'posix', Object.keys(OLD));
     expect([Object.values(OLD), NEW.map((a) => a.value)]).toContainEqual(after);
     expect(stages(sb)).toEqual([]);
-    expect(existsSync(lockPath(sb, 'store-docs.lock'))).toBe(false);
+    expect(existsSync(lockPath(sb, namespaceLock('docs')))).toBe(false);
   });
 });
 

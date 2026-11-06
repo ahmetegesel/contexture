@@ -18,6 +18,10 @@ function exitedPid(): number {
   return Number(spawnSync('sh', ['-c', 'echo $$'], { encoding: 'utf8' }).stdout.trim());
 }
 
+export const unitLock = (unit: string): string => join('unit', `${unit}.lock`);
+
+export const namespaceLock = (namespace: string): string => `store-${namespace}.lock`;
+
 export function lockPath(sb: string, lock: string): string {
   return join(sb, '.contexture', 'tmp', 'locks', lock);
 }
