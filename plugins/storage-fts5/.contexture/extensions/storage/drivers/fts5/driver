@@ -96,10 +96,25 @@ now_utc() {
 
 SCRATCH=""
 STORE_SDERR=""
+STORE_TEMPS=""
 cleanup() {
   [ -n "${STORE_SDERR:-}" ] && rm -f "$STORE_SDERR"
+  if [ -n "${STORE_TEMPS:-}" ]; then
+    printf '%s' "$STORE_TEMPS" | while IFS= read -r st_f; do
+      [ -n "$st_f" ] && rm -f "$st_f" 2>/dev/null
+    done
+    STORE_TEMPS=""
+  fi
   [ -n "${SCRATCH:-}" ] && rm -rf "$SCRATCH"
   return 0
+}
+
+# store_temp <path>: a temp file outside SCRATCH, named for the exit cleanup as soon as
+# mktemp answers it, so a HUP, INT, or TERM during the call removes it (a signal inside
+# mktemp's own fork, before the name is back, is the one window left)
+store_temp() {
+  STORE_TEMPS="$STORE_TEMPS$1
+"
 }
 trap cleanup EXIT
 # a HUP, INT, or TERM exits through the EXIT trap (dash runs no EXIT trap on a signal it
@@ -417,6 +432,7 @@ store_list() {
   fi
   store_data store.list "$sn_ns"
   sn_tmp=$(mktemp "$(scratch_base)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  store_temp "$sn_tmp"
   if [ -f "$DB_PATH" ]; then
     db_init
     if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = '$(sql_escape "$sn_ns")' ORDER BY key COLLATE BINARY;" > "$sn_tmp"; } 2>/dev/null; then
@@ -427,6 +443,7 @@ store_list() {
     scratch_new "$sn_tmp" || { rm -f "$sn_tmp"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   fi
   sn_filtered=$(mktemp "$(scratch_base)/store-keys-out.XXXXXX" 2>/dev/null) || { rm -f "$sn_tmp"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
+  store_temp "$sn_filtered"
   while IFS= read -r sn_key; do
     [ -n "$sn_key" ] || continue
     store_key_ok "$sn_key" || continue

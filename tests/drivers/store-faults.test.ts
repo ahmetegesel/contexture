@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { chmodSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
@@ -157,6 +158,45 @@ for (const driver of DRIVERS) {
       expect((await result).code).not.toBe(0);
       expect(scratch(sb)).toEqual(before);
     });
+  });
+}
+
+const realBin = (name: string): string => spawnSync('sh', ['-c', `command -v ${name}`], { encoding: 'utf8' }).stdout.trim();
+
+const readBlock = (cmd: string, temps: readonly string[], mark: string): Record<string, string> =>
+  pathPlant(cmd, `for t in ${temps.map((t) => `.contexture/tmp/${t}.*`).join(' ')}; do\n  [ -e "$t" ] && { : > "${mark}"; exec sleep 30; }\ndone\nexec "${realBin(cmd)}" "$@"`);
+
+const READS = [
+  ['posix', 'store.list', 'SIGHUP', [], 'find', ['store-keys']],
+  ['posix', 'store.list', 'SIGINT', [], 'find', ['store-keys']],
+  ['posix', 'store.list', 'SIGTERM', [], 'find', ['store-keys']],
+  ['posix', 'store.scan', 'SIGTERM', [], 'find', ['store-scan', 'store-scan-out']],
+  ['posix', 'store.search', 'SIGTERM', ['exact', '20'], 'find', ['store-search', 'store-search-err']],
+  ['fts5', 'store.list', 'SIGHUP', [], 'sqlite3', ['store-keys']],
+  ['fts5', 'store.list', 'SIGINT', [], 'sqlite3', ['store-keys']],
+  ['fts5', 'store.list', 'SIGTERM', [], 'sqlite3', ['store-keys']],
+] as const;
+
+for (const driver of DRIVERS) {
+  describe.skipIf(driver === 'fts5' && !fts5Available())(`an interrupt while the ${driver} driver reads the store`, { concurrent: true }, () => {
+    let keyed: string;
+    beforeAll(async () => {
+      keyed = await docsStore(driver, true);
+    });
+
+    it.each(READS.filter((r) => r[0] === driver).map((r) => r.slice(1) as unknown as [string, NodeJS.Signals, readonly string[], string, readonly string[]]))(
+      '%s under a group %s leaves none of its read temps', async (fn, sig, args, cmd, temps) => {
+        const sb = fresh(keyed);
+        const mark = join(sandbox('read-mark'), 'mark');
+        const before = scratch(sb);
+        const { result, signal } = launch(driverPath(sb, driver), [fn, 'docs', ...args], { cwd: sb, input: fn === 'store.search' ? 'query=a\n' : '', group: true, env: readBlock(cmd, temps, mark) });
+        for (let i = 0; i < 200 && !existsSync(mark); i++) await wait(50);
+        expect(existsSync(mark)).toBe(true);
+        expect(scratch(sb).filter((n) => !before.includes(n)).map((n) => n.replace(/\.[^.]+$/, '')).sort()).toEqual([...temps].sort());
+        signal(sig);
+        expect((await result).code).not.toBe(0);
+        expect(scratch(sb)).toEqual(before);
+      });
   });
 }
 

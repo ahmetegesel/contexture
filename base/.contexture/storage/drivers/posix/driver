@@ -152,13 +152,28 @@ STORE_TMP=""
 STORE_LOCK=""
 STORE_BATCH_STAGE=""
 STORE_SDERR=""
+STORE_TEMPS=""
 SB_ON=0
+
+# store_temp <path>: a read's temp file, named for store_cleanup as soon as mktemp answers it,
+# so a HUP, INT, or TERM during the read removes it (a signal inside mktemp's own fork,
+# before the name is back, is the one window left)
+store_temp() {
+  STORE_TEMPS="$STORE_TEMPS$1
+"
+}
 
 store_cleanup() {
   [ "${SB_ON:-0}" -eq 1 ] && sb_rollback
   SB_ON=0
   [ -n "${STORE_SDERR:-}" ] && rm -f "$STORE_SDERR" 2>/dev/null
   STORE_SDERR=""
+  if [ -n "${STORE_TEMPS:-}" ]; then
+    printf '%s' "$STORE_TEMPS" | while IFS= read -r st_f; do
+      [ -n "$st_f" ] && rm -f "$st_f" 2>/dev/null
+    done
+    STORE_TEMPS=""
+  fi
   [ -n "${STORE_TMP:-}" ] && rm -f "$STORE_TMP" 2>/dev/null
   STORE_TMP=""
   [ -n "${STORE_BATCH_STAGE:-}" ] && rm -rf "$STORE_BATCH_STAGE" 2>/dev/null
@@ -500,6 +515,7 @@ store_list() {
   fi
   store_data store.list "$sn_ns"
   sn_tmp=$(mktemp "$(scratch_dir)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  store_temp "$sn_tmp"
   if ! { store_list_keys "$sn_prefix" > "$sn_tmp"; } 2>/dev/null; then
     rm -f "$sn_tmp"
     refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
@@ -871,7 +887,9 @@ store_scan() {
   done
   [ -n "$sc_b64" ] || refuse 2 ERR_STORAGE_READ "the storage core base64 encoder is not installed"
   sc_keys=$(mktemp "$(scratch_dir)/store-scan.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  store_temp "$sc_keys"
   sc_out=$(mktemp "$(scratch_dir)/store-scan-out.XXXXXX" 2>/dev/null) || { rm -f "$sc_keys"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
+  store_temp "$sc_out"
   { store_list_keys > "$sc_keys"; } 2>/dev/null \
     && scratch_add "$sc_out" '{"namespace":"%s","items":[' "$(escape_json "$sc_ns")" \
     || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
@@ -953,8 +971,11 @@ store_search() {
   done
   [ -n "$ss_core" ] || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
   ss_keytmp=$(mktemp "$(scratch_dir)/store-search.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  store_temp "$ss_keytmp"
   ss_err=$(mktemp "$(scratch_dir)/store-search-err.XXXXXX" 2>/dev/null) || { rm -f "$ss_keytmp"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
+  store_temp "$ss_err"
   ss_man="${ss_keytmp}.man"
+  store_temp "$ss_man"
   { store_list_keys > "$ss_keytmp"; } 2>/dev/null && scratch_new "$ss_err" "$ss_man" \
     || { rm -f "$ss_keytmp" "$ss_err" "$ss_man"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   while IFS= read -r ss_k; do
