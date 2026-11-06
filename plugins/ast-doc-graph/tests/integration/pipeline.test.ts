@@ -2,7 +2,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fresh } from '@support/snapshot';
 import { sqlite } from '@support/sqlite';
-import { astDocIndex, compilerApi, count, graphQuery, miniRepo, sqliteFts5 } from '../support/graph';
+import { astDocIndex, compilerApi, count, fallbackReachable, graphQuery, miniRepo, NO_NODE_SQLITE, sqliteFts5 } from '../support/graph';
 
 describe.skipIf(!sqliteFts5 || !compilerApi())('the full index of the mini repository', { concurrent: true }, () => {
   let indexed: string;
@@ -39,6 +39,25 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the full index of the mini repos
     expect(r.stdout).toContain('@governing_rules');
     expect(r.stdout).toContain('A cart is validated before it is priced');
   });
+
+  async function repeatedFullRuns(env: Record<string, string>): Promise<void> {
+    const sb = fresh(indexed);
+    const once = await graphQuery(sb, db(sb), 'search', 'cart', '--no-sync');
+    expect(once.stdout).toContain('validateCart');
+    for (const _run of [1, 2]) {
+      const r = await astDocIndex(sb, [], { env });
+      expect(r.code, r.stderr).toBe(0);
+    }
+    expect(count(db(sb), 'SELECT count(*) FROM fts_symbols;')).toBe(count(db(sb), 'SELECT count(*) FROM symbols;'));
+    expect(count(db(sb), "SELECT count(*) FROM fts_docs WHERE entity_type = 'doc';")).toBe(count(db(sb), 'SELECT count(*) FROM docs;'));
+    const again = await graphQuery(sb, db(sb), 'search', 'cart', '--no-sync');
+    expect(again.stdout).toBe(once.stdout);
+  }
+
+  it('[ast-doc-graph-r6] repeated full runs without --clean keep one search row per symbol and unit, so search reads as it did after one run', () => repeatedFullRuns({}));
+
+  it.skipIf(!fallbackReachable)('[ast-doc-graph-r6] the sqlite3 command fallback keeps one search row per symbol and unit over repeated full runs (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', () =>
+    repeatedFullRuns(NO_NODE_SQLITE));
 
   it('the cycle priceCart and roundTotal reads once each way', async () => {
     const sb = fresh(indexed);

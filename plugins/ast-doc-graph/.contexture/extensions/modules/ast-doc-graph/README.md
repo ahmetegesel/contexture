@@ -36,6 +36,11 @@ pitfalls); the loader consumes the streams without knowing which extractor
 produced them, resolves the `GOVERNS`, `WARNS`, and `COVERS` edges, and
 compiles `graph.db` (relational tables plus the dual `fts_symbols` and
 `fts_docs` virtual tables). Retrieval runs directly on system `sqlite3`.
+A full load rebuilds the graph inside one transaction: it clears every table,
+the search indexes first so the delete triggers find them empty, then loads
+the streams, so each symbol and unit keeps one search row and a failed load
+leaves the graph as it was; the `sqlite3` command fallback runs the same
+statements and stops at its first error (`-bail`).
 
 `bin/ast-doc-index` runs only inside a contexture drawer: `CTX_ROOT` when the
 engine dispatched it (`ctx ast-doc-graph index`, or the query's micro-sync

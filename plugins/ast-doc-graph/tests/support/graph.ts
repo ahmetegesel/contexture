@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, readFileSync, symlinkSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -13,6 +14,13 @@ export const FIXTURES = join(PLUGIN, 'tests/fixtures');
 export const SCHEMA = join(MODULE, 'schema.sql');
 
 export const sqliteFts5 = probeFts5();
+
+export const NO_NODE_SQLITE = { NODE_OPTIONS: '--no-experimental-sqlite' };
+
+export const fallbackReachable =
+  spawnSync('node', ['-e', "import('node:sqlite').then(() => process.exit(1), () => process.exit(0))"], {
+    env: { PATH: process.env.PATH ?? '', ...NO_NODE_SQLITE },
+  }).status === 0;
 
 export function seededDb(label: string): string {
   const db = join(sandbox(label), 'graph.db');

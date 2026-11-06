@@ -544,6 +544,8 @@ WHERE e.target = :symbol_id
 
 Full repository rebuilds provide a reliable clean baseline, but re-parsing every source and documentation file on every minor change introduces unnecessary latency. The delta indexing pipeline provides sub-second incremental updates for modified files.
 
+A full load, with or without `--clean`, rebuilds the graph inside its one transaction: it deletes every row of `edges`, `fts_symbols`, `fts_docs`, `pitfalls`, `rules`, `docs`, `symbols`, and `indexed_files` (the search indexes first, so the delete triggers find them empty), then inserts the fresh streams. Each symbol and unit therefore keeps one search row across repeated runs, and a load that fails leaves the graph as it was; the sqlite3 command fallback runs the same statements with `-bail`, so it stops at its first error and the transaction rolls back.
+
 ### 7.1 Pipeline Flow in Delta Mode
 1. Change Detection:
    * Explicit file targets: Provided via `--file <path>` arguments or positional file arguments.

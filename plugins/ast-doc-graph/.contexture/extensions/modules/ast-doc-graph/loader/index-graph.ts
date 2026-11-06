@@ -202,6 +202,11 @@ Options:
 `);
 }
 
+/* A full load rebuilds the graph: the search indexes first, so the delete triggers find them empty */
+
+const CLEAR_GRAPH =
+  'DELETE FROM edges; DELETE FROM fts_symbols; DELETE FROM fts_docs; DELETE FROM pitfalls; DELETE FROM rules; DELETE FROM docs; DELETE FROM symbols; DELETE FROM indexed_files;';
+
 /* SQL helper for fallback */
 
 function sqlEscape(val: any): string {
@@ -538,8 +543,7 @@ async function main(): Promise<void> {
         }
       }
     } else {
-      // Full mode: clear all edges
-      db.exec('DELETE FROM edges;');
+      db.exec(CLEAR_GRAPH);
     }
 
     // Insert incoming symbols
@@ -1072,7 +1076,7 @@ async function main(): Promise<void> {
 
       sqlChunks.push('COMMIT;');
 
-      execFileSync(sqliteBin, [dbPath], {
+      execFileSync(sqliteBin, ['-bail', dbPath], {
         input: sqlChunks.join('\n'),
         stdio: ['pipe', 'inherit', 'inherit'],
       });
@@ -1145,7 +1149,7 @@ async function main(): Promise<void> {
         'PRAGMA busy_timeout = 5000;',
         schemaSql,
         'BEGIN TRANSACTION;',
-        'DELETE FROM edges;',
+        CLEAR_GRAPH,
       ];
 
       for (const s of symbols) {
@@ -1251,7 +1255,7 @@ async function main(): Promise<void> {
 
       sqlChunks.push('COMMIT;');
 
-      execFileSync(sqliteBin, [dbPath], {
+      execFileSync(sqliteBin, ['-bail', dbPath], {
         input: sqlChunks.join('\n'),
         stdio: ['pipe', 'inherit', 'inherit'],
       });
