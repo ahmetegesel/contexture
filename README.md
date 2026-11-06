@@ -21,7 +21,7 @@ contexture is a convention, not a tool: lightweight, abstracted, extensible. Pla
 
 ## Why contexture
 
-- **Lightweight by construction**: Plain files and POSIX awk baseline, no mandatory background services, no required databases, no external dependencies. The system awk is enough: the whole test suite runs green under BWK awk (the macOS awk), mawk (the Debian default), gawk, and busybox awk (Alpine's build and Debian's).
+- **Lightweight by construction**: Plain files and POSIX awk baseline, no mandatory background services, no required databases, no external dependencies. The system awk is enough: the shipped scripts keep to the common subset of BWK awk (the macOS awk), mawk (the Debian default), gawk, and busybox awk (Alpine's build and Debian's), and the test suite runs the product on whatever awk the host carries, with a static census guarding the known portability trap.
 - **Abstracted by design**: The schema governs shapes and the laws govern mechanisms, carrying zero workflow policies your workspace cannot override.
 - **Extensible without forks**: Add custom rhythms, amend rules through overlays, configure storage drivers, and delegate work through subagents while the core stays untouched.
 
@@ -128,7 +128,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
 - [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
 - [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and the generic module store with its change log and search schema
-- [Tests](tests/): The filter test material, upstream only; see [tests/README.md](tests/README.md)
+- [Tests](tests/): The test suite (vitest projects that run the shipped product as child processes), upstream only; see [tests/README.md](tests/README.md)
 - [Maintaining contexture](#maintaining-contexture): The `base/` dev loop: edit, ship, apply
 
 | command | what it returns |

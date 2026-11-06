@@ -96,7 +96,7 @@ When proposing `storage-fts5` adoption to the repository maintainer:
 
 * Present the destination: the package installs its driver at `.contexture/extensions/storage/drivers/fts5/`.
 * Explain concurrency and indexing benefits: dual FTS5 tables with automatic trigger synchronization and WAL mode concurrency.
-* Highlight the ranked modes: 12-token snippets with highlight markers instead of whole session files in context (`exact`, the default on every driver, answers the first matching line).
+* Highlight the ranked modes: 12-token snippets with highlight markers instead of whole unit files in context (`exact`, the default on every driver, answers the first matching line).
 * Confirm the cutover plan: no command moves the record; the agent re-enters the units worth carrying through the ordinary verbs and the corpus through `ctx docs write`, and the posix files stay where they are until the maintainer removes them, so switching `storage.driver` back to posix reads them again.
 
 ## Execute
@@ -124,7 +124,7 @@ install proves the driver resolves.
 Add the database files to `.gitignore`:
 
 ```text
-# SQLite session database
+# the SQLite store (the record and the corpus)
 .contexture/sessions.db
 .contexture/sessions.db-wal
 .contexture/sessions.db-shm
@@ -155,7 +155,7 @@ The shared set (`tests/drivers/store-contract.test.ts` and its siblings) proves 
 
 Verify the re-entered record with the read verbs (`ctx unit board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) against the same reads under posix, and each doc with `ctx docs write <repo> <slug> --replace --dry-run < docs/<repo>/<slug>.md`, which answers `unchanged (nothing written)` exactly when the store holds the doc byte for byte.
 
-The docs plugin suite runs in full against this driver (it declares `store` and `store.changelog`), the capture parity and the change-log cases included; the record's verbs run once, on posix, in the vitest `unit-verbs` project, and this driver is held to the shared store contract (`tests/drivers`) instead.
+The docs-discipline project tests the docs logic once, on posix, and keeps its store mode cases on this driver (it declares `store` and `store.changelog`): the store round trip, the change log and its changes window, the gate's store half, the check's store mode, and a parity smoke of eight captures (`plugins/docs-discipline/tests/store/`); the record's verbs run once, on posix, in the vitest `unit-verbs` project, and this driver is held to the shared store contract (`tests/drivers`) instead.
 
 ## Needs
 

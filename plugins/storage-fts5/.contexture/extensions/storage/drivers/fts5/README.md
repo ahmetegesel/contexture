@@ -67,10 +67,11 @@ module's own copy, never the adopted one: `fts5-schema.test.ts` pins schema 5 an
 refusal of every other version, `fts5-version.test.ts` the sqlite3 3.44 guard, and
 `fts5-store.test.ts` the change log, the ranked modes and their re-derive, and the trigger
 rollbacks. The shared store contract (`tests/drivers`) holds this copy and the posix driver
-to the same set. Each skips without sqlite3 FTS5, naming the need.
+to the same set. Each skips without sqlite3 FTS5, naming the need, except in the
+pre-release set (`bun run test:prerelease`), where the missing need fails the run.
 
 The unit and lane verbs run once, on posix, in the vitest `unit-verbs` project (this
-driver holds no record logic, so the store contract is its proof), and the docs suite
-runs on it when the plugin is present;
+driver holds no record logic, so the store contract is its proof), and the docs-discipline
+project keeps its store mode cases on this driver (`plugins/docs-discipline/tests/store/`);
 the base contract these cases hold is in `docs/the-engine.md` (The storage contract), and
 the plugin's adoption and needs are in `plugins/storage-fts5/README.md`.

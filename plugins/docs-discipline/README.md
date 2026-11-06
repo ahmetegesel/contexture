@@ -68,7 +68,8 @@ What lands where:
 The write verbs' edit engine is portable across BWK awk, mawk, gawk, and busybox awk: a splice
 point with no text already emits no separating blank line (mawk keeps a split leading empty
 field where BWK drops it), so a header, rule, entry, section, or ids write stores the same
-bytes on every awk; the edit engine's tests hold under each in the container matrix. The
+bytes on every awk; the edit engine's tests run on the host's awk (no container matrix
+runs; the governance awk census guards the known trap statically). The
 audit's block scalar body is the opening field's indent plus two, so a sibling field or an id
 line after a block scalar is still audited under every awk; a blanket four-space body test
 would swallow it after a nested block scalar.

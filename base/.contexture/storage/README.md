@@ -180,6 +180,5 @@ name and the ref, and writes nothing.
 ## The retirements
 
 The session module's `scripts/driver-resolver` compatibility wrapper retired with the
-unit module: the unit and lane verbs, the docs module, and the plugin suites reach this
-resolver directly. The storage module's `module` file and its `ctx help` listing retired
+unit module: the unit and lane verbs and the docs module reach this resolver directly. The storage module's `module` file and its `ctx help` listing retired
 with the core move; the core is not a module.

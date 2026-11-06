@@ -281,10 +281,10 @@ The steps below use the workspace modules root; a package installs its feature m
 
    An awk verb starts `#!/usr/bin/awk -f` instead and writes its output on stdout. Keep that absolute shebang: Linux hands `env` the words `awk -f` as one argument, so `#!/usr/bin/env awk -f` fails there, while every supported system carries `/usr/bin/awk`.
 
-   Write awk to the common subset of the supported awks, BWK awk (macOS), mawk (the Debian default), gawk, and busybox awk (Alpine's build and Debian's); the suite runs green under each. Three rules the shipped scripts follow:
+   Write awk to the common subset of the supported awks, BWK awk (macOS), mawk (the Debian default), gawk, and busybox awk (Alpine's build and Debian's); the test suite runs on whatever awk the host carries, and no container matrix runs, so these rules and the census below keep the code in that subset. Three rules the shipped scripts follow:
 
    - Double a backslash by concatenation, never by a `gsub` replacement: `gsub(/\\/, "\\\\")` yields two backslashes under BWK awk, mawk, and gawk but one under busybox awk and `gawk --posix`, which breaks every escape that follows. The shipped encoders call a `bs_double` helper that splits on the backslash and rejoins with `"\\" "\\"`.
-   - Write every escape by splitting and rejoining, never by a `sub` or `gsub` replacement carrying a backslash before another character: `gsub(/"/, "\\\"")` or `gsub(/\t/, "\\t")` writes the backslash under BWK awk, mawk, gawk, and Alpine's busybox, but Debian's busybox awk drops it and writes a bare quote or `t`. The shipped encoders split on the byte and rejoin with the literal (`n = split(s, P, /\t/); o = P[1]; for (i = 2; i <= n; i++) o = o "\\" "t" P[i]`), the separator a regex (`/\t/`, or a bracketed string such as `"[\t]"` passed to a helper), never a one-character string, since BWK awk splits a value at its newlines too under a one-character string separator; the governance project's awk replacement census (`tests/governance/awkrepl.awk`, run by `awk-census.test.ts`) keeps the form out of base, the plugin module copies, and the suites.
+   - Write every escape by splitting and rejoining, never by a `sub` or `gsub` replacement carrying a backslash before another character: `gsub(/"/, "\\\"")` or `gsub(/\t/, "\\t")` writes the backslash under BWK awk, mawk, gawk, and Alpine's busybox, but Debian's busybox awk drops it and writes a bare quote or `t`. The shipped encoders split on the byte and rejoin with the literal (`n = split(s, P, /\t/); o = P[1]; for (i = 2; i <= n; i++) o = o "\\" "t" P[i]`), the separator a regex (`/\t/`, or a bracketed string such as `"[\t]"` passed to a helper), never a one-character string, since BWK awk splits a value at its newlines too under a one-character string separator; the governance project's awk replacement census (`tests/governance/awkrepl.awk`, run by `awk-census.test.ts`) keeps the form out of base, the plugin module copies, and the tests.
    - Spell a tab inside a dynamic regex string as `"\t"` (the string then holds a real tab), never `"\\t"`: busybox awk reads the escaped form inside a bracket expression as a backslash and a `t`.
 
 3. `chmod +x scripts/<verb>`.
@@ -356,7 +356,7 @@ The package shows the whole path the sections above describe: a module part unde
 
 ### the storage core: not a module
 
-The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file (in the workspace modules and the extension modules alike), the module-facing `scripts/library` (the store seven, `store_require` and `store_has`, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The unit verbs, the docs module, and the plugin suites reach the core resolver directly; the lane module, under the extension root, sources the unit lib from `CTX_ROOT`. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
+The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file (in the workspace modules and the extension modules alike), the module-facing `scripts/library` (the store seven, `store_require` and `store_has`, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The unit verbs and the docs module reach the core resolver directly; the lane module, under the extension root, sources the unit lib from `CTX_ROOT`. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
 
 ### unit: the record's data module
 
@@ -381,8 +381,7 @@ A module you add is workspace-owned: updates never touch it. The builtin `unit` 
 ## Where the rest lives
 
 - Engine behavior: run guards, load paging, audit classes, the named looks: `docs/the-engine.md`.
-- The record grammars (state, backlog, journal, knowledge) — `docs/the-record.md`.
-- Drawer layout, the three payload classes, and update mechanics — `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing, Updating).
+- The record grammars (state, backlog, journal, knowledge): `docs/the-record.md`.
+- Drawer layout, the three payload classes, and update mechanics: `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing, Updating).
 - Packaging a module as a plugin for reuse or contribution: `docs/plugins.md`.
-- Session module internals — `.contexture/modules/unit/README.md`, off-path.
-- Unit module internals — `.contexture/modules/unit/README.md`, off-path.
+- Unit module internals: `.contexture/modules/unit/README.md`, off-path.
