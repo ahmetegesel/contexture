@@ -60,6 +60,10 @@ export default defineConfig({
         extends: true,
         test: { name: 'packages', include: ['packages/**/*.test.ts', 'fixtures/worked-package/tests/**/*.test.ts'], maxConcurrency: 16 },
       },
+      {
+        extends: true,
+        test: { name: 'base', include: ['base/**/*.test.ts'], maxConcurrency: 16 },
+      },
     ],
   },
 });

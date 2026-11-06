@@ -21,6 +21,7 @@
     "test:hooks": "vitest run --project hooks",
     "test:laws": "vitest run --project laws",
     "test:packages": "vitest run --project packages",
+    "test:base": "vitest run --project base",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
