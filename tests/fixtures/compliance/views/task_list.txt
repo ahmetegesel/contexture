@@ -1,0 +1,4 @@
+  [TODO] canon-task: Every section filled
+  [TODO] plain-task: Only an objective
+  [DONE] done-task: Completed in the walk
+  [IN_PROGRESS] active-task: Started in the walk

@@ -1,0 +1,13 @@
+@task canon-task
+  STATUS: TODO
+  OBJECTIVE: "Every section filled"
+  REFS: [journal#2026-09-27-verb-one, knowledge#VERB_CANON]
+  DESCRIPTION ::
+    first description line
+
+    third line after an empty one
+  ACCEPTANCE CRITERIA ::
+    one criterion
+  IMPLEMENTATION DETAILS ::
+    detail one
+    detail two

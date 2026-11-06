@@ -1,0 +1,9 @@
+@entry 2026-09-27-verb-one
+  ANCHOR: A1
+  WHAT: "the first verb entry"
+  GROUP: verb-group
+  RHYTHM: probe
+  THREAD: the human
+  REF: "task#canon-task"
+  REF: "lanes/verb-lane/report"
+  KNOWLEDGE: true

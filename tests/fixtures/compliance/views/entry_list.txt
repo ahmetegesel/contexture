@@ -1,0 +1,5 @@
+  [A1] 2026-09-27-done-task-completed: backlog/done-task: DONE (the walk verified it)
+  [A1] 2026-09-27-verb-one: the first verb entry
+  [A1] 2026-09-27-verb-two: the second verb entry
+  [A1] 2026-09-27-verb-three: the third verb entry
+  [A2] 2026-09-27-verb-four: folds the second and the third

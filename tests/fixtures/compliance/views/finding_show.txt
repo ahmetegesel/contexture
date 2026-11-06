@@ -1,0 +1,4 @@
+@finding VERB_NEW
+  SUPERSEDES: VERB_OLD (replaced by the walk)
+  SUMMARY ::
+    the newer reading

@@ -2,13 +2,20 @@ import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
 import { driverOp } from '../support/driver';
 import { stage } from '../support/stage';
-import { answer, b64, esc, payload, unb64, unesc } from '../support/wire';
+import { answer, b64, compact, esc, payload, unb64, unesc } from '../support/wire';
 
 describe('wire round trip', () => {
   it('esc and unesc are inverse over every escaped character', () => {
     const text = 'back\\slash \\n literal tab\there cr\rhere nl\nhere ü trailing\\';
     expect(esc(text)).toBe('back\\\\slash \\\\n literal tab\\there cr\\rhere nl\\nhere ü trailing\\\\');
     expect(unesc(esc(text))).toBe(text);
+  });
+
+  it('compact reads whitespace between tokens and a raw control byte as not compact, and string contents as data', () => {
+    expect(compact('{"a":"x y\\"z","b":[1,2],"c":{"d":null}}')).toBe(true);
+    expect(compact('{"a": 1}')).toBe(false);
+    expect(compact('{"a":[1, 2]}')).toBe(false);
+    expect(compact('{"a":"tab\there"}')).toBe(false);
   });
 
   it('a payload value travels to the unit data script and back in its JSON answer unchanged', async () => {

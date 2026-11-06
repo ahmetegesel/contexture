@@ -1,0 +1,32 @@
+board verb-u: 3 live entries, 3 open tasks
+
+@entry 2026-09-27-done-task-completed
+  ANCHOR: A1
+  WHAT: "backlog/done-task: DONE (the walk verified it)"
+  THREAD: none
+
+@entry 2026-09-27-verb-one
+  ANCHOR: A1
+  WHAT: "the first verb entry"
+  GROUP: verb-group
+  RHYTHM: probe
+  THREAD: the human
+  REF: "task#canon-task"
+  REF: "lanes/verb-lane/report"
+  KNOWLEDGE: true
+
+@entry 2026-09-27-verb-four
+  ANCHOR: A2
+  WHAT: "folds the second and the third"
+  THREAD: none
+  CLOSES: 2026-09-27-verb-two 2026-09-27-verb-three (folded: read together)
+
+OPEN TASKS
+  canon-task
+  plain-task
+  active-task
+the entries say what happened; these say what remains
+
+OPEN THREADS (awaiting outside the unit)
+  2026-09-27-verb-one (A1): the human
+these await someone outside: resolve or re-ask

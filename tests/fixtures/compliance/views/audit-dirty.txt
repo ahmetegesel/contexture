@@ -1,0 +1,4 @@
+DATELESS SLUG at line 3: legacy-dateless
+INLINE MARKER at line 7: 2026-09-20-inline
+BRACKETED FIELD at line 14: [THREAD: none]
+SLUGLESS CLOSER at line 19: no valid date-slug target

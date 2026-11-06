@@ -1,0 +1,3 @@
+  VERB_CANON: a canonical finding over two lines
+  VERB_OLD: the older reading
+  VERB_NEW: the newer reading

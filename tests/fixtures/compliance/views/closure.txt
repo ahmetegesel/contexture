@@ -1,0 +1,4 @@
+closure verb-u 2026-09-27-verb-two: closed (folded)
+
+closer 2026-09-27-verb-four (A2)
+  CLOSES: 2026-09-27-verb-two 2026-09-27-verb-three (folded: read together)

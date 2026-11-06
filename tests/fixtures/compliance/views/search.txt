@@ -1,0 +1,2 @@
+search compliance-tasks "architectural": 1 matches, 1 shown
+  finding FINDING_ALPHA (knowledge): Alpha architectural decision summary
