@@ -97,6 +97,68 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(r.stdout).toBe('docs-check: 0 modified files provided on stdin.\n');
     expect(r.stderr).toMatch(/^\[GATE NOTICE\] the delta is empty \(a clean tree\): .*ctx docs gate --since=<rev>/m);
   });
+
+  it('[docs-module-r16] the default delta reads a non-ASCII path byte for byte, at the root and in a child repository, as its plain twin', async () => {
+    const [sb] = await committed();
+    writeFileSync(join(sb, 'src/café.sh'), 'echo cafe\n');
+    writeFileSync(join(sb, 'src/plain.sh'), 'echo plain\n');
+    const child = join(sb, 'child');
+    mkdirSync(child);
+    writeFileSync(join(child, 'lib.sh'), 'echo lib\n');
+    await git(child, 'init', '-q', '-b', 'main');
+    await git(child, 'add', '-A');
+    await gitCommit(child, 'c1');
+    writeFileSync(join(child, 'naïve.sh'), 'echo naive\n');
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout.match(/^UNCOVERED: .*$/gm)?.sort()).toEqual(['UNCOVERED: child/naïve.sh', 'UNCOVERED: src/café.sh', 'UNCOVERED: src/plain.sh']);
+  });
+
+  it('[docs-module-r16, docs-module-r17] a path with a quote and a backslash reads right, and a path with a tab is named in a notice', async () => {
+    const [sb] = await committed();
+    writeFileSync(join(sb, 'src/q"b\\c.sh'), 'echo q\n');
+    writeFileSync(join(sb, 'src/t\tb.sh'), 'echo t\n');
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout.match(/^UNCOVERED: .*$/gm)).toEqual(['UNCOVERED: src/q"b\\c.sh']);
+    expect(r.stderr).toMatch(/^\[GATE NOTICE\] 1 delta path\(s\) hold a control character \(a tab, a newline\) that a status line cannot carry; the check does not read them: "src\/t\\tb\.sh"$/m);
+  });
+
+  it('[docs-module-r16] --stdin reads a path git quotes in the caller delta', async () => {
+    const [sb] = await committed();
+    const r = await docs(sb, ['gate', '--stdin'], { input: 'A\t"src/caf\\303\\251.sh"\n' });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain('UNCOVERED: src/café.sh');
+  });
+
+  it('[docs-module-r16] --drift reads an incoming non-ASCII path byte for byte', async () => {
+    const [sb] = await committed();
+    const remote = sandbox('gate-remote-quoted');
+    await git(remote, 'init', '-q', '--bare', '-b', 'main');
+    await git(sb, 'remote', 'add', 'origin', remote);
+    await git(sb, 'push', '-q', 'origin', 'main');
+    const parent = sandbox('gate-clone-quoted');
+    await git(parent, 'clone', '-q', remote, 'clone');
+    const other = join(parent, 'clone');
+    writeFileSync(join(other, 'src/café.sh'), 'echo incoming\n');
+    await git(other, 'add', '-A');
+    await gitCommit(other, 'incoming');
+    await git(other, 'push', '-q', 'origin', 'main');
+    await git(sb, 'fetch', '-q', 'origin');
+    const r = await docs(sb, ['gate', '--drift']);
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain('UNCOVERED: src/café.sh');
+  });
+
+  it('[docs-module-r16] an untracked, unignored corpus doc rides no working delta: its claimed file reads UNTRACKED CLAIMANT, as an ignored one does', async () => {
+    const sb = fresh(gw);
+    codeChange(sb);
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toContain('UNTRACKED CLAIMANT: workspace/gw-unit');
+    expect(r.stdout).toContain('docs-check: CLEAN (PROCESS-OWNED)');
+    expect(r.stdout).not.toContain('FRESH: workspace > gw-unit');
+  });
 });
 
 describe('the gate --since=<rev> on posix: the root repository from <rev> to the working tree', { concurrent: true }, () => {
@@ -138,7 +200,34 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
     expect(r.code, r.stdout + r.stderr).toBe(0);
     expect(r.stdout).toContain('UNTRACKED CLAIMANT: workspace/gw-unit');
     expect(r.stdout).toContain('docs-check: CLEAN (PROCESS-OWNED)');
-    expect(r.stderr).toMatch(/^\[GATE NOTICE\] the corpus is untracked here \(1 of 1 docs ignored by git\)/m);
+    expect(r.stderr).toMatch(/^\[GATE NOTICE\] the corpus is untracked here \(1 of 1 docs not tracked by git\)/m);
+  });
+
+  it('[docs-module-r16, docs-module-r17] an untracked corpus git does not ignore reads as the ignored corpus does: UNTRACKED CLAIMANT, the process-owned clean, and the notice', async () => {
+    const sb = fresh(gw);
+    const h1 = await gitCommit(sb, 'h1', '--allow-empty');
+    codeChange(sb);
+    await gitCommit(sb, 'h2', '-a');
+    const r = await docs(sb, ['gate', `--since=${h1}`]);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toContain('UNTRACKED CLAIMANT: workspace/gw-unit');
+    expect(r.stdout).toContain('docs-check: CLEAN (PROCESS-OWNED)');
+    expect(r.stdout).not.toContain('FRESH: workspace > gw-unit');
+    expect(r.stderr).toMatch(/^\[GATE NOTICE\] the corpus is untracked here \(1 of 1 docs not tracked by git\)/m);
+  });
+
+  it('[docs-module-r16] a committed non-ASCII change reads STALE DOC as its plain twin does', async () => {
+    const [sb] = await committed();
+    writeFileSync(join(sb, 'src/café.sh'), 'echo cafe\n');
+    expect((await docs(sb, ['header', 'workspace', 'gw-unit', '--add-source=src/café.sh'])).code).toBe(0);
+    await git(sb, 'add', '-A');
+    const h2 = await gitCommit(sb, 'h2');
+    writeFileSync(join(sb, 'src/café.sh'), 'echo cafe2\n');
+    codeChange(sb);
+    await gitCommit(sb, 'h3', '-a');
+    const r = await docs(sb, ['gate', `--since=${h2}`]);
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout.match(/^ {2}file: .*$/gm)?.sort()).toEqual(['  file: src/café.sh', '  file: src/gw.sh']);
   });
 
   it('an empty range names its limit in a notice', async () => {

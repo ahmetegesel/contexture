@@ -60,16 +60,16 @@ false-positive	docs-nudge.awk	        if (/^@pitfalls/) { in_pitfalls = 1; next 
 false-positive	docs-nudge.awk	                if (num_pitfalls < 3) {
 false-positive	docs-nudge.awk	    if (num_pitfalls > 0) {
 false-positive	nudge	if docs_file_form "$first"; then
-git-delta	gate	            git diff --name-status "$DOCS_SINCE_REV" 2>/dev/null || true
-git-delta	gate	            git diff --name-status 2>/dev/null || true
-git-delta	gate	            git diff --name-status --cached 2>/dev/null || true
-git-delta	gate	        git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
-git-delta	gate	                    git diff --name-status 2>/dev/null || true
-git-delta	gate	                    git diff --name-status --cached 2>/dev/null || true
-git-delta	gate	                    git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
+git-delta	gate	            git -c core.quotePath=false diff --name-status "$DOCS_SINCE_REV" 2>/dev/null || true
+git-delta	gate	            git -c core.quotePath=false diff --name-status 2>/dev/null || true
+git-delta	gate	            git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
+git-delta	gate	        git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | docs_untracked_half
+git-delta	gate	                    git -c core.quotePath=false diff --name-status 2>/dev/null || true
+git-delta	gate	                    git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
+git-delta	gate	                    git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
 git-delta	gate	            if ! git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
 git-delta	gate	            if git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
-git-delta	gate	                git diff --name-status "HEAD...$remote_ref" 2>/dev/null || true
+git-delta	gate	                git -c core.quotePath=false diff --name-status "HEAD...$remote_ref" 2>/dev/null || true
 git-delta	gate	            branch=$(git -C "$pdir" branch --show-current 2>/dev/null || echo "")
 git-delta	gate	            if ! git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
 git-delta	gate	            if git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then

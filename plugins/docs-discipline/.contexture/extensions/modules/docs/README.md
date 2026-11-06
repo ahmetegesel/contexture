@@ -70,8 +70,20 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   same staged file before the engine runs. `docs_since_rev`
   resolves a `--since=<rev>` base for the gate and `ctx docs changes` alike
   (rc 1 for an unknown revision or a root outside a repository with a
-  commit), and `docs_corpus_ignored` counts the corpus docs the root's
-  repository ignores under the files driver.
+  commit), and `docs_corpus_untracked` counts the corpus docs the root's
+  repository does not track (`git ls-files`, ignored or not) under the files
+  driver.
+- The quoted paths: every gate git call runs with `core.quotePath=false`, so a
+  non-ASCII path arrives as its bytes. `docs_delta_decode` (under `LC_ALL=C`)
+  decodes every path git still quotes (a `"..."` field: octal escapes, an
+  escaped quote or backslash) before the stage: `check` and `--stdin` decode
+  the caller's delta, the gate each repository's git output before its
+  `projects/<repo>/` or `<repo>/` prefix lands. A field whose escapes name a
+  control character (a tab, a newline, a byte below 040 or 0177) cannot ride
+  a status line: it is left out (a rename keeps its other side as `A` or `D`,
+  a copy its new side) and its spelling lands in the scratch list `unread`,
+  which `docs_delta_unread` names in one `[GATE NOTICE]` or `[CHECK NOTICE]`
+  line on stderr; a plain line passes byte for byte.
 - The nudge's unit form reads the active task through `ctx unit task list
   <unit> --status=progress` and `ctx unit resolve <unit> task#<slug>` (the
   text view of task show drops REFS, which the engine scores); the
@@ -140,12 +152,14 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   plus the untracked files, the child repositories keep their working delta
   (a notice names them), and under a store the corpus half is `ctx docs
   changes --since=<rev>`. Under the files driver git carries the corpus half
-  only where the workspace tracks the corpus; an untracked corpus (the
-  corpus-untracked law's posture) rides no delta, so every governed file's
-  claimants read untracked and the check reports `UNTRACKED CLAIMANT` with a
-  process-owned clean, and under `--since` a notice names that limit (the
-  corpus docs `git check-ignore` reports). An empty range prints its own
-  notice. The notices go to stderr; stdout and the exit code stay the check's.
+  only where the workspace tracks the corpus; an untracked corpus rides no
+  delta, whether git ignores it (the corpus-untracked law's posture) or not,
+  since `docs_untracked_half` leaves the corpus docs (`docs/<repo>/<slug>.md`)
+  out of the root's untracked files; every governed file's claimants then read
+  untracked and the check reports `UNTRACKED CLAIMANT` with a process-owned
+  clean, and under `--since` a notice names that limit (the corpus docs `git
+  ls-files` does not list). An empty range prints its own notice. The notices
+  go to stderr; stdout and the exit code stay the check's.
 - The governed set: the check governs the code extensions of `CODE_EXT_RE`
   (`awk` among them) and every extensionless file (a non-empty basename with
   no dot after its first character) whose first line starts with `#!`, plus a
@@ -252,15 +266,21 @@ verb that does not take that control, the by-design id pairs of `entry` and
 end: one success per write verb with its stored bytes, the write pipeline's
 refusals leaving the stored doc unchanged, the read verbs and their misses,
 the check verb's shebang read under the workspace root from a working folder
-elsewhere, the unit-form nudge against the backlog-file form, the part hooks,
+elsewhere, the check verb over a plain quoted git delta (a non-ASCII path, a
+quote and a backslash, the control-character notice with a rename's readable
+side), the unit-form nudge against the backlog-file form, the part hooks,
 and the gate (the matrix with an empty `TMPDIR` watch, the git mode in a
 workspace with its own repository, a shebang script in the default delta,
 the clean-tree notice, the drift warnings, `--drift`
-over a bare remote, and `--since` over a committed range: STALE for a
-code-only commit, FRESH with the doc in the commit, a rename's dead source
-and uncovered new path, an ignored corpus's untracked claimant with its
-notice, an empty range, a child repository's working delta with its notice,
-and the refusals). `fault/` configures a planted driver that declares no store, so
+over a bare remote, the quoted paths in every form (a non-ASCII path at the
+root and in a child repository, a quote and a backslash path beside a tab
+path's notice, a quoted `--stdin` delta, an incoming non-ASCII path under
+`--drift`), an unignored untracked corpus in the working delta, and `--since`
+over a committed range: STALE for a code-only commit, FRESH with the doc in
+the commit, a rename's dead source and uncovered new path, an ignored
+corpus's untracked claimant with its notice, an unignored untracked corpus
+read the same way, a committed non-ASCII change's STALE, an empty range, a
+child repository's working delta with its notice, and the refusals). `fault/` configures a planted driver that declares no store, so
 every read verb refuses rc 2 naming the capability. `store/` keeps the cases
 where the fts5 driver adds value: the corpus written through `ctx docs write`
 with the docs folder removed and read back unchanged through `ctx docs write

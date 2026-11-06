@@ -136,6 +136,21 @@ describe('the check verb governs a shebang script by its first line, read under 
   });
 });
 
+describe('the check verb reads a path git quotes in a plain git delta', { concurrent: true }, () => {
+  it('[docs-module-r8] a non-ASCII path and a path with a quote and a backslash read byte for byte, as their plain twin', async () => {
+    const r = await docs(fresh(staged), ['check', 'workspace'], { input: 'A\t"tools/caf\\303\\251.sh"\nA\t"tools/q\\"b\\\\c.sh"\nA\ttools/plain.sh\n' });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout.match(/^UNCOVERED: .*$/gm)?.sort()).toEqual(['UNCOVERED: tools/café.sh', 'UNCOVERED: tools/plain.sh', 'UNCOVERED: tools/q"b\\c.sh']);
+  });
+
+  it('[docs-module-r8] a path with a control character is named in a notice, never dropped silently, and a rename keeps its readable side', async () => {
+    const r = await docs(fresh(staged), ['check', 'workspace'], { input: 'A\t"tools/t\\tb.sh"\nR100\t"tools/n\\nl.sh"\ttools/renamed.sh\n' });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout.match(/^UNCOVERED: .*$/gm)).toEqual(['UNCOVERED: tools/renamed.sh']);
+    expect(r.stderr).toMatch(/^\[CHECK NOTICE\] 2 delta path\(s\) hold a control character \(a tab, a newline\) that a status line cannot carry; the check does not read them: "tools\/t\\tb\.sh", "tools\/n\\nl\.sh"$/m);
+  });
+});
+
 describe('the nudge through its unit', { concurrent: true }, () => {
   it('RS5b the task entered through the unit verbs resolves to the sample block byte for byte', async () => {
     const r = await unit(fresh(corpus), 'resolve', 'nudge-demo', 'task#install-and-run-local');

@@ -6,7 +6,8 @@
 # usage: ctx docs gate --stdin
 # usage: ctx docs gate --test-matrix
 # help: runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
-# help: the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus, and an ignored corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
+# help: the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus: the untracked files leave the corpus docs out, so an untracked doc never rides, ignored or not, and an untracked corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
+# help: git runs with core.quotePath=false, so a non-ASCII path arrives as its bytes; a path git still quotes is decoded (a quote, a backslash), and one holding a control character (a tab, a newline) cannot ride a status line, so it is left out and named in a notice; --stdin decodes the caller's delta the same way
 # help: under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together, or since <rev> under --since); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
 # help: the notices and warnings go to stderr with a bracketed prefix; stdout and the exit code stay the check's
 # help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
@@ -73,21 +74,21 @@ done
 
 # Function to aggregate git changes across workspace and product repos; under --since the
 # workspace root's half runs from DOCS_SINCE_REV to the working tree and a notice names the
-# child repositories, which keep their working delta
+# child repositories, which keep their working delta. Every git call runs with
+# core.quotePath=false, so a non-ASCII path arrives as its bytes; a path git still quotes
+# (a quote, a backslash, a control character) is decoded or named by docs_delta_decode
 aggregate_git_changes() {
-    # 1. Parent workspace root changes
+    # 1. Parent workspace root changes; its untracked files carry no corpus doc
     (
         cd "$WORKSPACE_ROOT"
         if [ -n "$DOCS_SINCE_REV" ]; then
-            git diff --name-status "$DOCS_SINCE_REV" 2>/dev/null || true
+            git -c core.quotePath=false diff --name-status "$DOCS_SINCE_REV" 2>/dev/null || true
         else
-            git diff --name-status 2>/dev/null || true
-            git diff --name-status --cached 2>/dev/null || true
+            git -c core.quotePath=false diff --name-status 2>/dev/null || true
+            git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
         fi
-        git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
-            [ -n "$f" ] && printf "A\t%s\n" "$f"
-        done
-    )
+        git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | docs_untracked_half
+    ) | docs_delta_decode
 
     # 2. Product repositories changes ($PRODUCT_REPOS_DIR/* or workspace root child repos)
     if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
@@ -107,12 +108,12 @@ aggregate_git_changes() {
             (
                 cd "$pdir"
                 {
-                    git diff --name-status 2>/dev/null || true
-                    git diff --name-status --cached 2>/dev/null || true
-                    git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
+                    git -c core.quotePath=false diff --name-status 2>/dev/null || true
+                    git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
+                    git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
                         [ -n "$f" ] && printf "A\t%s\n" "$f"
                     done
-                } | while IFS= read -r line; do
+                } | docs_delta_decode "$pfx/" | while IFS= read -r line; do
                     [ -z "$line" ] && continue
                     case "$line" in
                         R[0-9]*[[:space:]]*)
@@ -144,8 +145,9 @@ aggregate_git_changes() {
 }
 
 # The notices that name the delta's limits, on stderr after the staged delta: an empty
-# delta proves nothing (a clean tree, or an empty range), and under the files driver a
-# --since range over an ignored corpus carries no corpus line
+# delta proves nothing (a clean tree, or an empty range), under the files driver a --since
+# range over a corpus git does not track (ignored or not) carries no corpus line, and a path
+# the decode left out is named
 gate_notices() {
     if docs_delta_empty; then
         if [ -n "$GATE_SINCE" ]; then
@@ -155,11 +157,12 @@ gate_notices() {
         fi
     fi
     if [ -n "$GATE_SINCE" ] && [ "$DOCS_DELTA" != log ]; then
-        docs_corpus_ignored
-        if [ "$DOCS_IGNORED" -gt 0 ]; then
-            printf "[GATE NOTICE] the corpus is untracked here (%s of %s docs ignored by git): no corpus line rides the delta, so a changed file whose claimants are all untracked reads UNTRACKED CLAIMANT, its freshness process-owned through the docs-drift flow\n" "$DOCS_IGNORED" "$DOCS_NDOCS" >&2
+        docs_corpus_untracked
+        if [ "$DOCS_UNTRACKED" -gt 0 ]; then
+            printf "[GATE NOTICE] the corpus is untracked here (%s of %s docs not tracked by git): no corpus line rides the delta, so a changed file whose claimants are all untracked reads UNTRACKED CLAIMANT, its freshness process-owned through the docs-drift flow\n" "$DOCS_UNTRACKED" "$DOCS_NDOCS" >&2
         fi
     fi
+    docs_delta_unread "[GATE NOTICE]"
     return 0
 }
 
@@ -196,9 +199,9 @@ aggregate_remote_drift_changes() {
                 remote_ref="origin/master"
             fi
             if git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
-                git diff --name-status "HEAD...$remote_ref" 2>/dev/null || true
+                git -c core.quotePath=false diff --name-status "HEAD...$remote_ref" 2>/dev/null || true
             fi
-        ) | while IFS= read -r line; do
+        ) | docs_delta_decode "${pfx:+$pfx/}" | while IFS= read -r line; do
             [ -z "$line" ] && continue
             case "$line" in
                 R[0-9]*[[:space:]]*)
@@ -408,7 +411,8 @@ if [ "$1" = "-" ] || [ "$1" = "--stdin" ]; then
     fi
     prepare_corpus
     run_audit
-    docs_delta_stage
+    docs_delta_decode | docs_delta_stage
+    docs_delta_unread "[GATE NOTICE]"
     run_gate_check
 elif [ "$1" = "--drift" ]; then
     prepare_corpus
@@ -420,6 +424,7 @@ elif [ "$1" = "--drift" ]; then
     else
         aggregate_remote_drift_changes | sort -u | docs_delta_stage
     fi
+    docs_delta_unread "[GATE NOTICE]"
     run_gate_check
 elif [ -z "$1" ]; then
     prepare_corpus

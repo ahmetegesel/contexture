@@ -401,10 +401,21 @@ it walk below runs every one of these.
   working delta, which a notice names). `--since` joins the default form
   alone; an unknown revision, an empty one, or a root outside a repository
   with a commit refuses rc 1. Under the files driver git carries the corpus
-  half only for a tracked corpus: an ignored one (the corpus-untracked
-  posture) rides no delta, so `--since` there reads `UNTRACKED CLAIMANT` and
-  a process-owned clean, and its notice names the limit. The notices print to
-  stderr only; stdout and the exit code stay the check's.
+  half only for a tracked corpus: an untracked one rides no delta, whether git
+  ignores it (the corpus-untracked posture) or not (an adopter between seeding
+  the corpus and committing it), since the root's untracked files leave the
+  corpus docs out; every form there reads `UNTRACKED CLAIMANT` and a
+  process-owned clean, and the `--since` notice names the limit. A doc rides
+  once git tracks it (staged or committed). The notices print to stderr only;
+  stdout and the exit code stay the check's.
+- Paths git quotes read as their bytes: every gate git call runs with
+  `core.quotePath=false`, so a non-ASCII path arrives unquoted, and the check
+  and every gate form decode a path git still quotes (`"..."` with octal
+  escapes, an escaped quote or backslash), so a plain `git diff --name-status`
+  piped into `ctx docs check` reads as its unquoted twin. A path holding a
+  control character (a tab, a newline) cannot ride a status line: it is left
+  out of the delta and named in a `[GATE NOTICE]` or `[CHECK NOTICE]` on
+  stderr, and a rename with such a side keeps its other side.
 - The default run's drift warnings read the last-fetched remote refs, not the
   live remote: fetch first for current ones. They print to stderr only, and
   stdout and the exit code stay as the check left them. `ctx docs gate
@@ -852,7 +863,8 @@ usage:
 
 help:
   runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
-  the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus, and an ignored corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
+  the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus: the untracked files leave the corpus docs out, so an untracked doc never rides, ignored or not, and an untracked corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
+  git runs with core.quotePath=false, so a non-ASCII path arrives as its bytes; a path git still quotes is decoded (a quote, a backslash), and one holding a control character (a tab, a newline) cannot ride a status line, so it is left out and named in a notice; --stdin decodes the caller's delta the same way
   under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together, or since <rev> under --since); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
   the notices and warnings go to stderr with a bracketed prefix; stdout and the exit code stay the check's
   exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)

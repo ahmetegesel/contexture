@@ -436,6 +436,82 @@ docs_delta_empty() {
   awk 'NF { n = 1; exit } END { exit n }' "$DOCS_SCRATCH/delta"
 }
 
+# docs_delta_decode [<prefix>]: a status-prefixed delta on stdin, every path git quoted (a
+# "..." field: a non-ASCII byte as an octal escape under core.quotePath, a quote or a
+# backslash escaped) decoded to its bytes, so the check reads it as its plain twin; a plain
+# line passes byte for byte. A field whose escapes name a control character (a tab, a
+# newline, a byte below 040 or 0177) cannot ride a status line: it is left out and its
+# spelling, after <prefix>, lands in the scratch list docs_delta_unread names; a rename with
+# one such side keeps its other side (A for the new path, D for the old), a copy its new one
+docs_delta_decode() {
+  DOCS_DECODE_PFX="${1:-}" DOCS_UNREAD="$DOCS_SCRATCH/unread" LC_ALL=C awk '
+    BEGIN {
+      BS = sprintf("%c", 92); DQ = sprintf("%c", 34)
+      PFX = ENVIRON["DOCS_DECODE_PFX"]; UNREAD = ENVIRON["DOCS_UNREAD"]
+      for (i = 0; i < 8; i++) OCT[i ""] = i
+    }
+    function unq(f,    n, i, c, v, k, o) {
+      n = length(f)
+      if (n < 2 || substr(f, 1, 1) != DQ || substr(f, n, 1) != DQ) return f
+      o = ""
+      i = 2
+      while (i < n) {
+        c = substr(f, i++, 1)
+        if (c != BS) { o = o c; continue }
+        c = substr(f, i, 1)
+        if (c == DQ || c == BS) { o = o c; i++; continue }
+        v = 0
+        for (k = 0; k < 3 && i < n; k++) {
+          c = substr(f, i, 1)
+          if (!(c in OCT)) break
+          v = v * 8 + OCT[c]
+          i++
+        }
+        if (k == 0 || v < 32 || v == 127 || v > 255) { BAD = 1; return f }
+        o = o sprintf("%c", v)
+      }
+      return o
+    }
+    function unread(f) { print PFX f >> UNREAD }
+    {
+      st = ""
+      rest = $0
+      if (match(rest, /^[MADRCU?!][0-9]*[ \t]+/)) { st = substr(rest, 1, RLENGTH); rest = substr(rest, RLENGTH + 1) }
+      c = substr(st, 1, 1)
+      t = index(rest, "\t")
+      if ((c == "R" || c == "C") && t > 0) {
+        a = substr(rest, 1, t - 1); b = substr(rest, t + 1)
+        BAD = 0; da = unq(a); ba = BAD
+        BAD = 0; db = unq(b); bb = BAD
+        if (ba) unread(a)
+        if (bb) unread(b)
+        if (ba && !bb) print "A\t" db
+        else if (bb && !ba && c == "R") print "D\t" da
+        else if (!ba && !bb) print st da "\t" db
+        next
+      }
+      BAD = 0; d = unq(rest)
+      if (BAD) { unread(rest); next }
+      print st d
+    }'
+}
+
+# docs_delta_unread <label>: the notice on stderr naming the delta paths docs_delta_decode
+# left out, one line after <label>; nothing when it left none out
+docs_delta_unread() {
+  [ -s "$DOCS_SCRATCH/unread" ] || return 0
+  DOCS_NOTICE_LABEL=$1 awk '
+    { s = s (NR > 1 ? ", " : "") $0 }
+    END { printf "%s %d delta path(s) hold a control character (a tab, a newline) that a status line cannot carry; the check does not read them: %s\n", ENVIRON["DOCS_NOTICE_LABEL"], NR, s }' "$DOCS_SCRATCH/unread" >&2
+}
+
+# docs_untracked_half: the workspace root's untracked files (git ls-files --others on stdin)
+# as A lines, the corpus docs (docs/<repo>/<slug>.md) left out: an untracked doc cannot ride a
+# tracked delta, whether git ignores it or not, so the check reads its claimants untracked
+docs_untracked_half() {
+  awk '$0 != "" && $0 !~ /^docs\/[^\/]+\/[^\/]+\.md$/ { print "A\t" $0 }'
+}
+
 # docs_delta_shebangs: the governed set's first-line read, on this side so no engine line
 # opens a code path. Every extensionless path of the staged delta (a non-empty basename with
 # no dot after its first character; both sides of a rename) that is a readable regular file
@@ -473,12 +549,16 @@ docs_delta_shebangs() {
   done > "$DOCS_SHEBANG_LIST"
 }
 
-# docs_corpus_ignored: under the files driver, where a doc's logical address is its file
-# under the workspace root, DOCS_IGNORED counts the materialized corpus docs that the
-# root's repository ignores (git check-ignore; 0 when none is or outside a repository) and
-# DOCS_NDOCS counts them all
-docs_corpus_ignored() {
-  DOCS_IGNORED=$(git -C "$DOCS_ROOT" check-ignore --stdin < "$DOCS_PATHS" 2>/dev/null | awk 'END { print NR }')
+# docs_corpus_untracked: under the files driver, where a doc's logical address is its file
+# under the workspace root, DOCS_UNTRACKED counts the materialized corpus docs the root's
+# repository does not track (ignored or not; every doc outside a repository) and DOCS_NDOCS
+# counts them all
+docs_corpus_untracked() {
+  git -C "$DOCS_ROOT" ls-files -- docs > "$DOCS_SCRATCH/tracked" 2>/dev/null || : > "$DOCS_SCRATCH/tracked"
+  DOCS_UNTRACKED=$(DOCS_TRACKED="$DOCS_SCRATCH/tracked" awk '
+    BEGIN { f = ENVIRON["DOCS_TRACKED"]; while ((getline l < f) > 0) t[l] = 1; close(f) }
+    !($0 in t) { n++ }
+    END { print n + 0 }' "$DOCS_PATHS")
   DOCS_NDOCS=$(awk 'END { print NR }' "$DOCS_PATHS")
   return 0
 }
