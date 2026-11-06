@@ -52,16 +52,6 @@ if [[ -z "$TSX_BIN" ]] && command -v tsx >/dev/null 2>&1; then
   TSX_BIN="$(command -v tsx)"
 fi
 
-# 5. Check sibling project directories
-if [[ -z "$TSX_BIN" ]]; then
-  for candidate in "$SCRIPT_DIR/../../../../../*/node_modules/.bin/tsx"; do
-    if [[ -x "$candidate" ]]; then
-      TSX_BIN="$candidate"
-      break
-    fi
-  done
-fi
-
 # Execute extractor: use tsx if found, otherwise use node with native strip-types
 if [[ -n "$TSX_BIN" ]]; then
   exec "$TSX_BIN" "$EXTRACT_DOCS" "$@"
