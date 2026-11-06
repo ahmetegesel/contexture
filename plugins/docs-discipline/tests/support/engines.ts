@@ -43,7 +43,7 @@ export function query(dir: string, q: Query, files: readonly string[] = docFiles
     DOCS_Q_CHANNEL: q.channel ?? '',
     ...ceiling(dir),
   };
-  return awk(dir, engine('docs-query.awk'), { args: files, env, vars: { mode: q.mode ?? '', repo: q.repo ?? '' } });
+  return awk(dir, [engine('docs-glob.awk'), engine('docs-query.awk')], { args: files, env, vars: { mode: q.mode ?? '', repo: q.repo ?? '' } });
 }
 
 export interface CheckOptions {
@@ -54,7 +54,7 @@ export interface CheckOptions {
 
 export function check(dir: string, delta: string, { log = false, files = docFiles(dir), shebangs }: CheckOptions = {}): Promise<Run> {
   const env = { ...ceiling(dir), ...(shebangs ? { DOCS_SHEBANG_LIST: shebangs } : {}) };
-  return awk(dir, engine('docs-check.awk'), { input: delta, args: files, env, vars: log ? { delta_source: 'log' } : {} });
+  return awk(dir, [engine('docs-glob.awk'), engine('docs-check.awk')], { input: delta, args: files, env, vars: log ? { delta_source: 'log' } : {} });
 }
 
 export function nudge(dir: string, task: string, files: readonly string[] = docFiles(dir)): Promise<Run> {

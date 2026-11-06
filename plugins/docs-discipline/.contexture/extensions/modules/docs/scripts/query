@@ -10,6 +10,7 @@
 # usage: ctx docs query --index [repo]
 # help: projects the typed-block corpus down to one answer, so no one reads the corpus to find it: the index, a doc projection, a section, the owner of a code path, a search, the rules, the pitfalls, or the edges
 # help: --entry <block>/<key> prints one entry's raw lines, quotes kept (the verbatim text a ctx docs entry, pitfall, or rule write starts from); keys as ctx docs entry takes them (an id, a first field's value, <from>><to>, <direction>:<key>, #<N>), a rule as rule/<category>/<rule-slug>
+# help: --file <path> names one owner by the check's own glob rule: a doc claims the path (a projects/<repo>/ or <repo>/ prefix stripped when present, the path kept as given otherwise) when a header source equals it or matches it as a glob, and among several claimants the answer is the doc whose best claiming source has the longest literal part before its first wildcard (* or {; a source without one counts its whole length), then the fewest wildcards, then the earlier doc in corpus order
 # help: exit codes: 0 with an answer; 1 no match, a missing repo, or a bad option; 2 unreadable input (the awk engine's own failure)
 # help: example: ctx docs query --index (the full overview, never truncated (no head/tail); ends with an entry count)
 # help: the "index complete" marker proves the read was whole; a missing marker means the read was truncated, re-read it whole
@@ -37,6 +38,7 @@ dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # configured storage driver: both from the module's IO helper
 . "$dir/docs-io.sh"
 docs_io_init "$dir" query
+AWK_GLOB="$dir/docs-glob.awk"
 AWK_SCRIPT="$dir/docs-query.awk"
 
 MODE=""
@@ -156,6 +158,7 @@ DOCS_Q_CHANNEL=$CHANNEL
 export DOCS_Q_SLUG DOCS_Q_SECTION DOCS_Q_FILE DOCS_Q_SEARCH DOCS_Q_CATEGORY DOCS_Q_SEVERITY DOCS_Q_CHANNEL
 QUERY_OUT=$(docs_engine_run awk -v mode="$MODE" \
     -v repo="$REPO" \
+    -f "$AWK_GLOB" \
     -f "$AWK_SCRIPT" "$@")
 AWK_RC=$?
 if [ "$AWK_RC" -ne 0 ]; then

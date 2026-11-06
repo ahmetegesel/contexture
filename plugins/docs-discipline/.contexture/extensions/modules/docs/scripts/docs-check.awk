@@ -3,13 +3,15 @@
 # Usage: git diff --name-status | ctx docs check <repo>...
 # Help: ctx docs help check
 # Exits 0 on clean; exits 1 on completeness, freshness, or dead sources violation.
+# Runs behind docs-glob.awk (awk -f docs-glob.awk -f docs-check.awk), the glob rule it shares
+# with the owner query.
 # Governed files (is_governed): the code extensions (awk among them), an extensionless file the
 # verb vouched for with a #! first line, a path the verb could not vouch for (deleted, absent, a
 # folder) when a header source lists it exactly, plus a depth-1 docs/*.md claimed by a corpus
-# doc; a governed file's freshness is its claimant riding the delta. A claimant the repository does not track cannot
-# ride a tracked delta: the check reports the state (UNTRACKED CLAIMANT) and leaves reconciliation
-# to the process (the docs-drift flow), never a false STALE; one tracked claimant among several
-# restores the delta rule.
+# doc; a governed file's freshness is its claimant riding the delta. A claimant the repository
+# does not track cannot ride a tracked delta: the check reports the state (UNTRACKED CLAIMANT)
+# and leaves reconciliation to the process (the docs-drift flow), never a false STALE; one
+# tracked claimant among several restores the delta rule.
 # delta_source (a bounded token, -v): git (the default, the files driver: the rules above) or
 # log (a store driver feeds the corpus half from its change log): a claimed file reads fresh only
 # when a doc whose own sources claim it rode the delta, so the blanket (a workspace,
@@ -91,48 +93,6 @@ BEGIN {
     }
 }
 
-function split_sources(str, arr,    len, i, ch, depth, current, count) {
-    len = length(str)
-    depth = 0
-    current = ""
-    count = 0
-    for (i = 1; i <= len; i++) {
-        ch = substr(str, i, 1)
-        if (ch == "{" || ch == "[") {
-            depth++
-            current = current ch
-        } else if (ch == "}" || ch == "]") {
-            depth--
-            current = current ch
-        } else if (ch == "," && depth == 0) {
-            gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", current)
-            if (current != "") arr[++count] = current
-            current = ""
-        } else {
-            current = current ch
-        }
-    }
-    gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", current)
-    if (current != "") arr[++count] = current
-    return count
-}
-
-function glob_to_regex(g,    rgx, brace_part) {
-    rgx = g
-    gsub(/\./, "[.]", rgx)
-    while (match(rgx, /\{[^{}]*\}/)) {
-        brace_part = substr(rgx, RSTART + 1, RLENGTH - 2)
-        gsub(/,/, "|", brace_part)
-        rgx = substr(rgx, 1, RSTART - 1) "(" brace_part ")" substr(rgx, RSTART + RLENGTH)
-    }
-    gsub(/\*\*\//, "\001", rgx)
-    gsub(/\*\*/, "\002", rgx)
-    gsub(/\*/, "[^/]*", rgx)
-    gsub(/\001/, "(.*/)?", rgx)
-    gsub(/\002/, ".*", rgx)
-    return "^" rgx "$"
-}
-
 # EXCLUDE_RE first, then the code extensions; a path with another extension stays out; an
 # extensionless one (a non-empty basename with no dot after its first character, or a <dir>/
 # line) reads the verb's vouch, else counts only when a claiming doc lists it exactly
@@ -203,15 +163,9 @@ function process_doc_sources() {
         matched = 0
         exact_matched = 0
         for (i = 1; i <= n_globs; i++) {
-            g = globs[i]
-            rgx = glob_to_regex(g)
-
-            if (norm_file == g) {
+            if (source_matches(norm_file, globs[i])) {
                 matched = 1
-                exact_matched = 1
-                break
-            } else if (norm_file ~ rgx) {
-                matched = 1
+                exact_matched = (norm_file == globs[i])
                 break
             }
         }

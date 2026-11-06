@@ -12,10 +12,10 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 | verb | engine |
 |---|---|
 | `audit` | `scripts/docs-audit.awk` |
-| `check` | `scripts/docs-check.awk` |
-| `query` | `scripts/docs-query.awk` (`--entry`: `scripts/docs-edit.awk`) |
+| `check` | `scripts/docs-check.awk` behind `scripts/docs-glob.awk` |
+| `query` | `scripts/docs-query.awk` behind `scripts/docs-glob.awk` (`--entry`: `scripts/docs-edit.awk`) |
 | `nudge` | `scripts/docs-nudge.awk` |
-| `gate` | self-contained; uses `scripts/docs-audit.awk` and `scripts/docs-check.awk` |
+| `gate` | self-contained; uses `scripts/docs-audit.awk`, and `scripts/docs-check.awk` behind `scripts/docs-glob.awk` |
 | `changes` | none: the corpus half of a delta from the store's change log, computed in `docs-io.sh` |
 | `new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `ids` | `scripts/docs-edit.awk` (the edit), then `scripts/docs-audit.awk` (the grammar check) |
 | `remove` | none: `store.delete` through `docs-io.sh` |
@@ -26,6 +26,21 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   and they never appear in help. `doc.grammar` is the corpus grammar asset the
   write verbs and the audit enforce; it rides inside the module and is never a
   shared drawer file.
+- `docs-glob.awk` is the one home of the header-source glob rule the check
+  and the owner query share (`split_sources`, `glob_to_regex`,
+  `source_matches`, and the specificity helpers `source_literal`,
+  `source_wildcards`, `source_beats`); `check`, `gate`, and `query` load it
+  ahead of their engine with a second `awk -f` (POSIX awk concatenates the
+  programs), so the check engine runs on the `awk` the PATH names and neither
+  engine runs alone. A source claims a path when the path equals it or
+  matches it as a glob. `query --file` reads every doc and names the
+  claimant whose best claiming source is the most specific: the longest
+  literal part before its first wildcard (`*` or `{`; a source without one
+  counts its whole length), then the fewest wildcards, then the earlier doc
+  in corpus order (the store's bytewise key order); it strips a
+  `projects/<repo>/` or `<repo>/` prefix when present and keeps the path as
+  given otherwise, while the check skips a repo doc's path that carries no
+  prefix.
 - `gate` carries the whole close-gate logic (git aggregation, the `--since`
   range, drift warnings, the delta notices, and the self-planted
   eight-scenario matrix); the other four verbs are thin
@@ -212,7 +227,10 @@ once, on posix. `unit/` drives each engine alone over files: `docs-edit.awk`
 against the `tests/write/` goldens (every success byte for byte, every
 refusal), `docs-audit.awk`, `docs-query.awk` and `docs-nudge.awk` against
 committed expected output under `unit/expected/` (regenerated with
-`DOCS_WRITE_EXPECTED=1` and read by hand), `docs-check.awk` over the gate
+`DOCS_WRITE_EXPECTED=1` and read by hand), the owner rule of `query --file`
+over the `tests/fixtures/owner` corpus (an exact later source over a broad
+earlier glob, a narrower later glob, the fewer wildcards, the corpus-order
+tie, a repo prefix, a substring that claims nothing), `docs-check.awk` over the gate
 matrix's eight scenarios, the twelve capture deltas, both delta sources,
 the doc touch at the logical address alone, and the governed set over a
 planted shebang list (the shebang script, the `.awk` engine, the plain file,
@@ -224,7 +242,8 @@ bypasses), the grammar agreement check (`tests/grammar-agreement.awk`, with
 two plants), the flag collision check (`tests/flag-collision.awk`: every
 grammar field named like a value control stays settable through each field
 verb that does not take that control, the by-design id pairs of `entry` and
-`pitfall` allowed, with four plants), and the package shape. `integration/` drives the verbs end to
+`pitfall` allowed, with four plants), the one home of the glob rule (only
+`docs-glob.awk` defines its functions), and the package shape. `integration/` drives the verbs end to
 end: one success per write verb with its stored bytes, the write pipeline's
 refusals leaving the stored doc unchanged, the read verbs and their misses,
 the check verb's shebang read under the workspace root from a working folder

@@ -41,6 +41,7 @@ case "$0" in
     *) dir="$(pwd)" ;;
 esac
 AWK_AUDIT="$dir/docs-audit.awk"
+AWK_GLOB="$dir/docs-glob.awk"
 AWK_CHECK="$dir/docs-check.awk"
 # the workspace root and the corpus (through the configured storage driver) come from the
 # module's IO helper
@@ -278,21 +279,19 @@ prepare_corpus() {
     exit "$pc_rc"
 }
 
-# run_engine_over_corpus <engine> [awk options]: the engine over every materialized doc,
+# run_engine_over_corpus <awk programs and options>: the engine over every materialized doc,
 # whose paths are the logical addresses docs/<repo>/<slug>.md
 run_engine_over_corpus() {
-    eng="$1"
-    shift
     while IFS= read -r doc_path; do
         set -- "$@" "$doc_path"
     done < "$DOCS_PATHS"
-    docs_engine_run awk -f "$eng" "$@"
+    docs_engine_run awk "$@"
 }
 
 # Run syntax/integrity audit across all typed documentation
 run_audit() {
     docs_template || exit $?
-    run_engine_over_corpus "$AWK_AUDIT"
+    run_engine_over_corpus -f "$AWK_AUDIT"
 }
 
 # Run coverage, freshness, and dead sources check on the staged delta (docs_delta_stage),
@@ -301,9 +300,9 @@ run_audit() {
 run_gate_check() {
     docs_delta_shebangs
     if [ "$DOCS_DELTA" = log ]; then
-        run_engine_over_corpus "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v delta_source=log
+        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v delta_source=log
     else
-        run_engine_over_corpus "$AWK_CHECK" -v "$DOCS_DELTA_ARG"
+        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG"
     fi
 }
 
@@ -352,7 +351,7 @@ FIXTURE
         expected="$2"
         input="$3"
         code=0
-        out="$(printf '%s' "$input" | (cd "$FIXTURE_DIR" && awk -f "$AWK_CHECK" docs/demo/*.md) 2>&1)" || code=$?
+        out="$(printf '%s' "$input" | (cd "$FIXTURE_DIR" && awk -f "$AWK_GLOB" -f "$AWK_CHECK" docs/demo/*.md) 2>&1)" || code=$?
         echo ""
         echo "[$name]"
         echo "$out"

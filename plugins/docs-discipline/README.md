@@ -28,9 +28,9 @@ owning repo's run, build, and test targets.
 
 | verb | what it is | engine (private) |
 |---|---|---|
-| `ctx docs query` | the retrieval CLI: index, projection, section, owner, search, rules, pitfalls, edges; `--entry <block>/<key>` prints one entry's raw lines | `docs-query.awk` (`--entry`: `docs-edit.awk`) |
+| `ctx docs query` | the retrieval CLI: index, projection, section, owner (the most specific claimant by the check's own glob rule), search, rules, pitfalls, edges; `--entry <block>/<key>` prints one entry's raw lines | `docs-query.awk` behind `docs-glob.awk` (`--entry`: `docs-edit.awk`) |
 | `ctx docs audit` | the grammar and integrity audit: header, blocks, indentation, rule fields, the pitfall required fields and class/severity enums, symbol-only evidence, duplicate ids | `docs-audit.awk` |
-| `ctx docs check` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | `docs-check.awk` |
+| `ctx docs check` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | `docs-check.awk` behind `docs-glob.awk` |
 | `ctx docs gate` | the close gate: audit then check over the aggregated working-tree delta (a committed range with `--since=<rev>`, or the incoming remote delta with `--drift`), plus a self-planted eight-scenario matrix | self-contained |
 | `ctx docs nudge` | the task nudge: matched docs, top pitfalls, forced setup targets | `docs-nudge.awk` |
 | `ctx docs changes` | the corpus half of a delta under a store driver: one net status line per doc written since the current git HEAD (`--since=<rev>` widens the window); refuses under the files driver, where git carries a tracked corpus and nothing carries an untracked one | none (the IO helper) |
@@ -59,7 +59,7 @@ What lands where:
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
 | `docs/work.md` | the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW | reference (copy it into the workspace's own `.contexture/rhythms/` to own it; the starter-rhythms plugin owns the installed generic `work`) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/` | the plugin's vitest project `docs-discipline`: the engines and helpers alone (`unit/`), the census, the grammar agreement, the flag collision check, and the package shape (`static/`), the verbs end to end on posix (`integration/`), the read refusal on a driver without a store (`fault/`), and the store mode on fts5 (`store/`) | reference (never copied) |
+| `tests/` | the plugin's vitest project `docs-discipline`: the engines and helpers alone (`unit/`), the census, the grammar agreement, the flag collision check, the glob rule's one home, and the package shape (`static/`), the verbs end to end on posix (`integration/`), the read refusal on a driver without a store (`fault/`), and the store mode on fts5 (`store/`) | reference (never copied) |
 | `tests/write/` | the edit engine's seeds, payloads, and goldens: every write verb's result byte for byte | reference (never copied) |
 | `tests/census.awk`, `tests/census-allow.txt` | the single-door census of the module and its classified allow-list | reference (never copied) |
 | `tests/grammar-agreement.awk` | the grammar agreement check the static tests run: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
@@ -303,7 +303,19 @@ it walk below runs every one of these.
   drives its engine with parsed options over the helper's paths, and gate is
   self-contained over the audit and check engines. The engines' shebang names
   `/usr/bin/awk` (the same launcher form the base scripts use). A system whose
-  awk lives elsewhere invokes the engines via `awk -f <path>` instead.
+  awk lives elsewhere invokes the engines via `awk -f <path>` instead. The
+  check and query engines share the header-source glob rule in
+  `docs-glob.awk`, so their verbs run them as `awk -f docs-glob.awk -f
+  <engine>` on the awk the PATH names, and neither runs alone.
+- The owner lookup (`ctx docs query <repo> --file <path>`) claims by the
+  check's own rule: a doc claims the path (a `projects/<repo>/` or `<repo>/`
+  prefix stripped when present, the path kept as given otherwise) when a
+  header source equals it or matches it as a glob, so a path that merely
+  holds a source as a substring has no owner. Among several claimants the
+  answer is the doc whose best claiming source has the longest literal part
+  before its first wildcard (`*` or `{`; a source without one counts its
+  whole length), then the fewest wildcards, then the earlier doc in corpus
+  order, still one `OWNER`, `SUMMARY`, `DOC` answer, and a miss refuses rc 1.
 - The write verbs share one pipeline in the IO helper: the doc read through
   the driver, one structural edit by `docs-edit.awk` against the schema at the
   foot of the module's private grammar asset `scripts/doc.grammar` (the engine
@@ -1020,9 +1032,10 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `.contexture/extensions/modules/docs/scripts/new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `remove`, `ids` | authored fresh: the write verbs, each a thin script over the IO helper's write pipeline with its help in the declarations |
 | `.contexture/extensions/modules/docs/scripts/docs-edit.awk` | authored fresh: the structural edit engine of the write verbs and of `query --entry`, driven by the grammar's `#%` schema, the request through the environment |
 | `.contexture/extensions/modules/docs/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the duplicate-id check generalized to one namespace per repo over every id field (an entry head or an id line of its own) |
-| `.contexture/extensions/modules/docs/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the free-text options read from the environment (never `awk -v`), and the pitfalls view scoped to `@pitfalls` |
+| `.contexture/extensions/modules/docs/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the free-text options read from the environment (never `awk -v`), the pitfalls view scoped to `@pitfalls`, and the owner lookup claiming by the check's glob rule (the substring and raw-prefix matches gone) and answering the most specific claimant once every doc is read |
 | `.contexture/extensions/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`); the `delta_source` token (`log` turns the blanket and the trackedness probe off for a store's driver-fed delta); the doc touch anchored to the logical address at the start of a delta path; the governed set (`is_governed`) widened to `awk` and the shebang scripts the verb's list vouches for, a path the list cannot vouch for governed only when a header source lists it exactly |
 | `.contexture/extensions/modules/docs/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
+| `.contexture/extensions/modules/docs/scripts/docs-glob.awk` | authored fresh: the header-source glob rule the check and the owner query share, `split_sources` and `glob_to_regex` moved out of the two engines (byte-identical copies before), plus the claim predicate and the specificity helpers; loaded ahead of either engine by a second `awk -f` |
 | `.contexture/extensions/modules/docs/README.md` | authored fresh: the off-path module map (layout, workspace root, tests) |
 | `.contexture/extensions/modules/docs/scripts/doc.grammar` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII; the contract and responsibilities shapes show their id lines, and the machine-readable schema (section 6, the `#%` lines) restates every shape for the write verbs; it is private to the module, never a shared template |
 | `docs/work.md` | authored as the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW; reference material, copied into the workspace's own `.contexture/rhythms/` to own it |

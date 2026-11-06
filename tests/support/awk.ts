@@ -7,7 +7,8 @@ export interface AwkOptions {
   vars?: Record<string, string>;
 }
 
-export function awk(cwd: string, program: string, { input, env, args = [], vars = {} }: AwkOptions = {}): Promise<Run> {
+export function awk(cwd: string, program: string | readonly string[], { input, env, args = [], vars = {} }: AwkOptions = {}): Promise<Run> {
   const v = Object.entries(vars).flatMap(([k, val]) => ['-v', `${k}=${val}`]);
-  return exec('awk', [...v, '-f', program, ...args], { cwd, input, env });
+  const f = (typeof program === 'string' ? [program] : program).flatMap((p) => ['-f', p]);
+  return exec('awk', [...v, ...f, ...args], { cwd, input, env });
 }

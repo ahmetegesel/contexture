@@ -3,6 +3,8 @@
 # Usage: ctx docs query <repo> <slug> [--section <name>] | <repo> --file <path> | --index (the full table: ctx docs help query)
 # Help: ctx docs help query
 # Supports: projection, section slicing, rules query, pitfall scan, file owner lookup, corpus search, edges, index.
+# Runs behind docs-glob.awk (awk -f docs-glob.awk -f docs-query.awk), the glob rule it shares
+# with the check.
 
 # The free-text options come through the environment (the query verb exports them), never
 # awk -v, which rewrites backslash escapes and refuses a newline; mode and repo stay -v
@@ -77,54 +79,15 @@ mode == "index" {
     next
 }
 
-function split_sources(str, arr,    len, i, ch, depth, current, count) {
-    len = length(str)
-    depth = 0
-    current = ""
-    count = 0
-    for (i = 1; i <= len; i++) {
-        ch = substr(str, i, 1)
-        if (ch == "{" || ch == "[") {
-            depth++
-            current = current ch
-        } else if (ch == "}" || ch == "]") {
-            depth--
-            current = current ch
-        } else if (ch == "," && depth == 0) {
-            gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", current)
-            if (current != "") arr[++count] = current
-            current = ""
-        } else {
-            current = current ch
-        }
-    }
-    gsub(/^[[:space:]"']+|[[:space:]"']+$/, "", current)
-    if (current != "") arr[++count] = current
-    return count
-}
-
-function glob_to_regex(g,    rgx, brace_part) {
-    rgx = g
-    gsub(/\./, "[.]", rgx)
-    while (match(rgx, /\{[^{}]*\}/)) {
-        brace_part = substr(rgx, RSTART + 1, RLENGTH - 2)
-        gsub(/,/, "|", brace_part)
-        rgx = substr(rgx, 1, RSTART - 1) "(" brace_part ")" substr(rgx, RSTART + RLENGTH)
-    }
-    gsub(/\*\*\//, "\001", rgx)
-    gsub(/\*\*/, "\002", rgx)
-    gsub(/\*/, "[^/]*", rgx)
-    gsub(/\001/, "(.*/)?", rgx)
-    gsub(/\002/, ".*", rgx)
-    return "^" rgx "$"
-}
-
 # ─── MODE: FILE OWNER LOOKUP ─────────────────────────────────────────────────
+# A doc claims the path (a projects/<repo>/ or <repo>/ prefix stripped when present) by the
+# check's own rule (docs-glob.awk source_matches); every doc is read, and the answer in END is
+# the claimant whose best claiming source is the most specific (source_beats), the earlier doc
+# in corpus order on a full tie
 mode == "file" {
     if (curr_sources != "" && !seen_file_check[curr_file]) {
         seen_file_check[curr_file] = 1
         n = split_sources(curr_sources, src_globs)
-        matched = 0
         norm_file = file
         p_prefix = "projects/" curr_repo "/"
         r_prefix = curr_repo "/"
@@ -133,19 +96,15 @@ mode == "file" {
         } else if (index(norm_file, r_prefix) == 1) {
             norm_file = substr(norm_file, length(r_prefix) + 1)
         }
+        doc_best = ""
         for (i = 1; i <= n; i++) {
-            g = src_globs[i]
-            rgx = glob_to_regex(g)
-            if (norm_file ~ rgx || norm_file == g || file ~ rgx || file ~ ("^" g) || index(file, g) > 0) {
-                matched = 1
-                break
-            }
+            if (source_matches(norm_file, src_globs[i]) && (doc_best == "" || source_beats(src_globs[i], doc_best))) doc_best = src_globs[i]
         }
-        if (matched) {
-            print "OWNER: " curr_slug " (" curr_kind (curr_role ? ", " curr_role : "") ") [" curr_repo "]"
-            print "SUMMARY: " curr_desc
-            print "DOC: " curr_file
-            exit 0
+        if (doc_best != "" && (owner_source == "" || source_beats(doc_best, owner_source))) {
+            owner_source = doc_best
+            owner_head = "OWNER: " curr_slug " (" curr_kind (curr_role ? ", " curr_role : "") ") [" curr_repo "]"
+            owner_summary = "SUMMARY: " curr_desc
+            owner_doc = "DOC: " curr_file
         }
     }
     next
@@ -357,6 +316,11 @@ slug != "" && curr_slug == slug {
 }
 
 END {
+    if (mode == "file" && owner_source != "") {
+        print owner_head
+        print owner_summary
+        print owner_doc
+    }
     if (mode == "rules" && in_rule) print_rule()
     if (mode == "pitfalls" && in_pitfall) print_pitfall()
     if (mode == "index") printf "index complete: %d entries\n", n_index

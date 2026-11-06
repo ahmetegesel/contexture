@@ -1,15 +1,17 @@
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { corpusDir, ENGINE_FIXTURES, matches, TESTS } from '../support/corpus';
+import { corpusDir, ENGINE_FIXTURES, matches, OWNER_FIXTURES, TESTS } from '../support/corpus';
 import { query, type Query } from '../support/engines';
 
 const EXPECTED = join(TESTS, 'unit/expected/query');
 
 let corpus: string;
 let engine: string;
+let owners: string;
 beforeAll(() => {
   corpus = corpusDir('query-corpus');
   engine = corpusDir('query-engine', ENGINE_FIXTURES);
+  owners = corpusDir('query-owner', OWNER_FIXTURES);
 });
 
 const CASES: [string, Query][] = [
@@ -73,5 +75,26 @@ describe('the query engine over the engine fixtures', { concurrent: true }, () =
     expect(r.stdout).toContain('The marker reads zz\\tqq on disk');
     const tab = await query(engine, { mode: 'search', repo: 'etest', search: 'zz\tqq' });
     expect(tab.stdout).toBe('');
+  });
+});
+
+describe('the query engine --file: the most specific owner by the check glob predicate', { concurrent: true }, () => {
+  it.each([
+    ['a broad glob of an earlier doc loses to the exact source of a later doc', '.contexture/extensions/modules/docs/scripts/gate', 'ops', 'operational'],
+    ['a narrower glob of a later doc beats plugins/**', 'plugins/docs-discipline/README.md', 'pb-narrow', 'structural'],
+    ['the fewest wildcards break a tie on the literal part', 'lib/x/run.sh', 'w2', 'capability'],
+    ['corpus order breaks a full tie, a bare folder name claiming nothing below it', 'src/x.ts', 't-b', 'capability'],
+    ['a repo-prefixed path reads as its repo-relative form', 'eown/lib/x/run.sh', 'w2', 'capability'],
+  ])('%s', async (_, file, slug, kind) => {
+    const r = await query(owners, { mode: 'file', repo: 'eown', file });
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    const [head, summary, doc, ...rest] = r.stdout.split('\n');
+    expect([head, doc, rest]).toEqual([`OWNER: ${slug} (${kind}) [eown]`, `DOC: docs/eown/${slug}.md`, ['']]);
+    expect(summary).toMatch(/^SUMMARY: \S/);
+  });
+
+  it('a path that holds a source only as a substring has no owner', async () => {
+    const r = await query(owners, { mode: 'file', repo: 'eown', file: 'xplugins/docs-discipline/.contexture/extensions/modules/docs/scripts/gate' });
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
   });
 });

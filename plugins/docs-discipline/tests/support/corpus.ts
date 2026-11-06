@@ -52,6 +52,7 @@ export function stageSeed(driver: Driver, label: string, build: (sb: string) => 
 }
 
 export const ENGINE_FIXTURES = join(TESTS, 'fixtures/engine');
+export const OWNER_FIXTURES = join(TESTS, 'fixtures/owner');
 
 export function corpusDir(label: string, ...roots: string[]): string {
   const dir = sandbox(label);

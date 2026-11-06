@@ -38,6 +38,6 @@ docs_delta_source
 docs_delta_stage || exit $?
 docs_delta_shebangs
 if [ "$DOCS_DELTA" = log ]; then
-  docs_exec "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG" -v delta_source=log
+  docs_exec awk -f "$dir/docs-glob.awk" -f "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG" -v delta_source=log
 fi
-docs_exec "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG"
+docs_exec awk -f "$dir/docs-glob.awk" -f "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG"
