@@ -1092,7 +1092,8 @@ docs_show() {
   cat "$DOCS_SCRATCH/new"
 }
 
-# docs_remove_doc <repo> <slug>: store.delete with op remove, stamped with the HEAD
+# docs_remove_doc <repo> <slug>: store.delete with op remove, stamped with the HEAD; a dry
+# run prints the verb's line and the stored doc whole, then writes nothing
 docs_remove_doc() {
   docs_keys_ok "$1" "$2" || return 1
   docs_require || return 2
@@ -1102,6 +1103,13 @@ docs_remove_doc() {
     [ "$dx_rc" -eq 1 ] && printf '%s: no such doc: %s/%s (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$1" "$2" >&2
     return "$dx_rc"
   }
+  if [ "$DOCS_DRY" -eq 1 ]; then
+    docs_read_doc "$1" "$2" "$DOCS_SCRATCH/old" || return $?
+    printf 'docs remove: %s/%s removed\n' "$1" "$2"
+    awk '{ print }' "$DOCS_SCRATCH/old"
+    printf '%s: dry run, nothing written\n' "$DOCS_VERB"
+    return 0
+  fi
   dx_head=$(docs_head)
   if store_delete docs "$1/$2" --op=remove "--head=$dx_head" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     printf 'docs remove: %s/%s removed\n' "$1" "$2"

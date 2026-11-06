@@ -18,7 +18,7 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 | `gate` | self-contained; uses `scripts/docs-audit.awk`, and `scripts/docs-check.awk` behind `scripts/docs-glob.awk` |
 | `changes` | none: the corpus half of a delta from the store's change log, computed in `docs-io.sh` |
 | `new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `ids` | `scripts/docs-edit.awk` (the edit), then `scripts/docs-audit.awk` (the grammar check) |
-| `remove` | none: `store.delete` through `docs-io.sh` |
+| `remove` | none: `store.delete` through `docs-io.sh` (`--dry-run` prints the stored doc whole and writes nothing) |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
 
 - The `.awk` engines, `docs-io.sh`, `doc.grammar`, `install`, and `uninstall`
@@ -269,7 +269,8 @@ grammar field named like a value control stays settable through each field
 verb that does not take that control, the by-design id pairs of `entry` and
 `pitfall` allowed, with four plants), the one home of the glob rule (only
 `docs-glob.awk` defines its functions), and the package shape. `integration/` drives the verbs end to
-end: one success per write verb with its stored bytes, the write pipeline's
+end: one success per write verb with its stored bytes, `remove --dry-run`
+printing the doc and writing nothing, the write pipeline's
 refusals leaving the stored doc unchanged, a dispatched verb SIGKILLed while
 it holds its scratch leaving nothing after the next dispatch, the read verbs
 and their misses,

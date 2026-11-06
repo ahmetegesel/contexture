@@ -42,7 +42,7 @@ owning repo's run, build, and test targets.
 | `ctx docs entry` | one entry of any list block by its key (an id, a first field's value, `<from>><to>`, `<direction>:<key>`, or `#<N>`): add with `--after` or `--first`, change fields (a component's kind through `--kind`), remove | `docs-edit.awk` |
 | `ctx docs section` | a whole block from stdin: replace, create, or remove (rare) | `docs-edit.awk` |
 | `ctx docs replace` | counted exact replacement over a doc, a repo, or the corpus (sync sweeps; the total must equal `--count`) | `docs-edit.awk` |
-| `ctx docs remove` | a whole doc out of the corpus | none (the IO helper) |
+| `ctx docs remove` | a whole doc out of the corpus (`--dry-run` prints the doc it would delete and writes nothing) | none (the IO helper) |
 | `ctx docs ids` | the one-time migration: keyless contract rules and responsibilities gain `<slug>-r<N>` and `<slug>-o<N>` ids | `docs-edit.awk` |
 
 The help surface is engine-owned: `ctx docs help` lists the sixteen verbs and
@@ -266,7 +266,8 @@ it walk below runs every one of these.
   replace --count`; each write checks its edit against the grammar's schema,
   audits the result over its repo, and only then stores it (under a store
   driver the change log stamps it with the workspace git HEAD). `--dry-run`
-  prints the changed lines without storing.
+  prints the changed lines without storing, on every write verb `ctx docs
+  remove` included (it prints the doc it would delete, whole).
 - Authoring: the `docs-authoring` rhythm: the 11-step progression (sync,
   map, backlog, draft, interrogate, audit, coverage, reconcile, project,
   trace and accumulate, refresh); the method detail lives in the grammar's

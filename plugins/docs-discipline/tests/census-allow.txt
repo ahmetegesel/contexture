@@ -142,8 +142,7 @@ helper-source	pitfall	. "$dir/docs-io.sh"
 helper-output	pitfall	docs_parse "after first remove id stdin dry-run" 1 "$@" || exit $?
 usage-text	query	    echo "Usage: ctx docs query <repo> <slug> --entry <block>/<key>" >&2
 helper-source	remove	. "$dir/docs-io.sh"
-helper-output	remove	docs_parse "" 0 "$@" || exit $?
-usage-text	remove	  echo "Usage: ctx docs remove <repo> <slug>" >&2
+helper-output	remove	docs_parse "dry-run" 0 "$@" || exit $?
 helper-source	replace	. "$dir/docs-io.sh"
 helper-output	replace	docs_parse "old new count dry-run" 0 "$@" || exit $?
 helper-source	rule	. "$dir/docs-io.sh"

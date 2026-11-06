@@ -74,6 +74,12 @@ describe('the write verbs through ctx on posix: one success per verb, the stored
     expect([r.code, r.stdout]).toEqual([0, 'docs remove: wtest/fresh removed\n']);
     expect((await stored(sb, 'fresh')).code).toBe(1);
   });
+  it('[docs-module-r24] remove --dry-run prints the doc it would delete and writes nothing', async () => {
+    const sb = fresh(wtest);
+    const r = await unchanged(sb, 'unit', () => docs(sb, ['remove', 'wtest', 'unit', '--dry-run']));
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toBe(`docs remove: wtest/unit removed\n${read('unit.md')}ctx docs remove: dry run, nothing written\n`);
+  });
   it('W27 ids keys the legacy entries and names the count', async () => {
     const r = await succeeds(fresh(wtest), ['ids', 'wtest'], 'unit', golden('exp-ids.md'));
     expect(r.stdout).toContain('4 entries keyed');
