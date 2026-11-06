@@ -6,7 +6,7 @@ const here = (path: string): string => fileURLToPath(new URL(path, import.meta.u
 const pluginProject = (name: string) => ({
   extends: true,
   resolve: { alias: { '@support': here('./support') } },
-  test: { name, root: here(`../plugins/${name}`), include: ['tests/**/*.test.ts'] },
+  test: { name, root: here(`../plugins/${name}`), include: ['tests/**/*.test.ts'], maxConcurrency: 16 },
 });
 
 export default defineConfig({
@@ -22,7 +22,7 @@ export default defineConfig({
       },
       {
         extends: true,
-        test: { name: 'drivers', include: ['drivers/**/*.test.ts'] },
+        test: { name: 'drivers', include: ['drivers/**/*.test.ts'], maxConcurrency: 16 },
       },
       pluginProject('storage-fts5'),
     ],
