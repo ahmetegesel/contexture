@@ -20,8 +20,8 @@ beforeAll(async () => {
   }, 'fts5', 'sq-seed');
 });
 
-describe.concurrent('the SQLite smoke set: every command family lands in the fts5 store and nowhere else [the-record-r2, the-record-r10] (C14 runtime half)', () => {
-  it('SF1 the unit lifecycle: bootstrap, active, units, stamp, close, the closed refusal, reopen, board', async () => {
+describe.concurrent('the SQLite smoke set: every command family lands in the fts5 store and nowhere else (C14 runtime half)', () => {
+  it('SF1 [the-record-r2, the-record-r10] the unit lifecycle: bootstrap, active, units, stamp, close, the closed refusal, reopen, board', async () => {
     const sb = sqliteStage('sf1');
     await must(unit(sb, 'bootstrap', 'sf1', 'the lifecycle unit', 'sq-repo'));
     expect(await show(sb, 'active')).toContain('sf1');
@@ -35,7 +35,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', ['sf1/state', 'sf1/journal', 'sf1/backlog', 'sf1/knowledge']);
   });
 
-  it('SF2 the task family: add, update, start, complete, reopen, drop; task show and list read them', async () => {
+  it('SF2 [the-record-r2, the-record-r10] the task family: add, update, start, complete, reopen, drop; task show and list read them', async () => {
     const sb = fresh(seeded);
     await must(unit(sb, 'task', 'add', U, 'sq-t1', '--objective=the sqlite task'));
     await must(unit(sb, 'task', 'add', U, 'sq-t2', '--objective=a task to drop'));
@@ -54,7 +54,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/backlog`]);
   });
 
-  it('SF3 the journal family: record with a closer; entry show, list, closure, and the fold plan read them', async () => {
+  it('SF3 [the-record-r2, the-record-r10] the journal family: record with a closer; entry show, list, closure, and the fold plan read them', async () => {
     const sb = fresh(seeded);
     const first = `${DATE}-sq-first`;
     expect(await recordAndList(sb, U, first, 'the first sqlite entry')).toEqual({ code: 0, listed: true, residue: [] });
@@ -66,7 +66,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/journal`]);
   });
 
-  it('SF4 the finding family: add, update, supersede, drop; finding show and the active list read them', async () => {
+  it('SF4 [the-record-r2, the-record-r10] the finding family: add, update, supersede, drop; finding show and the active list read them', async () => {
     const sb = fresh(seeded);
     await must(unit(sb, 'finding', 'add', U, 'SQ_OLD', '--summary=the old sqlite finding'));
     await must(unit(sb, 'finding', 'update', U, 'SQ_OLD', '--summary=the updated sqlite finding'));
@@ -81,7 +81,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/knowledge`]);
   });
 
-  it('SF5 the lane family: create with the recipe on stdin, record, report; lane show and resolve read them', async () => {
+  it('SF5 [the-record-r2, the-record-r10] the lane family: create with the recipe on stdin, record, report; lane show and resolve read them', async () => {
     const sb = fresh(seeded);
     await must(run(sb, ['lane', 'create', U, 'sq-lane'], { input: '# the sqlite recipe\n' }));
     await must(lane(sb, 'record', U, 'sq-lane', '--what=the sqlite lane event'));
@@ -93,7 +93,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', ['recipe', 'journal', 'report'].map((a) => `${U}/lanes/sq-lane/${a}`));
   });
 
-  it('SF6 the read views: load to its complete page, audit, refresh, resolve, refs and refs-to', async () => {
+  it('SF6 [the-record-r2, the-record-r10] the read views: load to its complete page, audit, refresh, resolve, refs and refs-to', async () => {
     const sb = fresh(seeded);
     await must(unit(sb, 'task', 'add', U, 'sq-t6', '--objective=the sqlite view task'));
     await must(unit(sb, 'record', U, `--slug=${DATE}-sq-view`, '--what=the sqlite view entry'));
@@ -113,7 +113,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/state`, 'sq-ref/state']);
   });
 
-  it('SF7 search: exact, hybrid, and trigram each find the written task', async () => {
+  it('SF7 [the-record-r2, the-record-r10, the-record-r13, plugins-r8] search: exact, hybrid, and trigram each find the written task', async () => {
     const sb = fresh(seeded);
     await must(unit(sb, 'task', 'add', U, 'sq-t7', '--objective=the sqlite search task'));
     for (const [mode, query] of [['exact', 'sqlite search task'], ['hybrid', 'sqlite search task'], ['trigram', 'sqlite']]) {
@@ -122,7 +122,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/backlog`]);
   });
 
-  it('SF8 the descriptor: diagnose names fts5 with a healthy store, and the resolver answers the same card', async () => {
+  it('SF8 [the-record-r2, the-record-r10, the-engine-r19, the-engine-r24, plugins-r8] the descriptor: diagnose names fts5 with a healthy store, and the resolver answers the same card', async () => {
     const sb = fresh(seeded);
     const d = JSON.parse(await show(sb, 'diagnose', '--json'));
     expect(d.driver.name).toBe('fts5');
@@ -134,7 +134,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/state`]);
   });
 
-  it('SF9 the module store: the worked notes module puts, shows, and lists its notes in the database, never in a notes folder', async () => {
+  it('SF9 [the-engine-r15, plugins-r8] the module store: the worked notes module puts, shows, and lists its notes in the database, never in a notes folder', async () => {
     const sb = sqliteStage('sf9');
     const pkg = join(sb, 'catalog/worked-package');
     cpSync(join(ROOT, 'tests/fixtures/worked-package'), pkg, { recursive: true });

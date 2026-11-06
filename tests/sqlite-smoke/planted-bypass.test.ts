@@ -19,7 +19,7 @@ const BYPASS = [
 ].join('\n');
 
 describe('the SQLite smoke set: a planted record verb that bypasses the store reads red', () => {
-  it('the bypassing verb answers rc0 with a receipt, yet the journal family lists nothing and finds a posix residue', async () => {
+  it('[the-record-r2, the-record-r10] the bypassing verb answers rc0 with a receipt, yet the journal family lists nothing and finds a posix residue', async () => {
     const sb = sqliteStage('sq-plant');
     await must(unit(sb, 'bootstrap', 'sq-plant', 'the planted unit'));
     const record = join(sb, '.contexture/modules/unit/scripts/record');
