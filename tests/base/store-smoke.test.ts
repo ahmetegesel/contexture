@@ -20,8 +20,8 @@ const resolver = (sb: string, args: readonly string[], env: Record<string, strin
   exec('.contexture/storage/scripts/driver-resolver', args, { cwd: sb, env });
 const op = (sb: string, name: string, args: readonly string[], input = ''): Promise<Run> => driverOp(sb, 'posix', name, args, input);
 
-describe.concurrent('the bare base: the store-data owner scan over both module roots (modules-r10)', () => {
-  it("an extension module's data file answers its five validated fields", async () => {
+describe.concurrent('the bare base: the store-data owner scan over both module roots', () => {
+  it("[modules-r10] an extension module's data file answers its five validated fields", async () => {
     const sb = probeStage();
     dataFile(sb, 'extensions', 'extprobe', 'namespace: extprobe\nroot: ext-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
     const r = await storeData(sb, 'extprobe');
@@ -29,7 +29,7 @@ describe.concurrent('the bare base: the store-data owner scan over both module r
     expect(r.stdout.split('\n').slice(0, 5)).toEqual(['extprobe', 'ext-data', '.txt', '<a>/<b>', 'false']);
   });
 
-  it('a namespace declared in both module roots refuses rc1 naming both owners', async () => {
+  it('[modules-r10, the-engine-p4] a namespace declared in both module roots refuses rc1 naming both owners', async () => {
     const sb = probeStage();
     dataFile(sb, 'extensions', 'probe2', 'namespace: probe\nroot: ext-probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: true\n');
     const r = await storeData(sb, 'probe');
@@ -40,7 +40,7 @@ describe.concurrent('the bare base: the store-data owner scan over both module r
     });
   });
 
-  it('an absent extension root is silent to the owner scan', async () => {
+  it('[modules-r10] an absent extension root is silent to the owner scan', async () => {
     const sb = probeStage();
     renameSync(join(sb, '.contexture/extensions'), join(sb, '.contexture/extensions.away'));
     const r = await storeData(sb, 'probe');
@@ -48,8 +48,8 @@ describe.concurrent('the bare base: the store-data owner scan over both module r
   });
 });
 
-describe.concurrent('the bare base: the driver resolver tiers (the-engine-r19)', () => {
-  it('resolves the core posix driver and an extension-root driver by name', async () => {
+describe.concurrent('the bare base: the driver resolver tiers', () => {
+  it('[the-engine-r19] resolves the core posix driver and an extension-root driver by name', async () => {
     const sb = probeStage();
     const core = await resolver(sb, ['resolve']);
     expect(core.code).toBe(0);
@@ -60,7 +60,7 @@ describe.concurrent('the bare base: the driver resolver tiers (the-engine-r19)',
     expect(ext.stdout.trim()).toMatch(/\/\.contexture\/extensions\/storage\/drivers\/extposix\/driver$/);
   });
 
-  it('require and has answer the posix capabilities: store yes, store.changelog no', async () => {
+  it('[the-engine-r15] require and has answer the posix capabilities: store yes, store.changelog no', async () => {
     const sb = probeStage();
     expect((await resolver(sb, ['require', 'store'])).code).toBe(0);
     expect((await resolver(sb, ['has', 'store.changelog'])).code).toBe(1);
@@ -70,8 +70,8 @@ describe.concurrent('the bare base: the driver resolver tiers (the-engine-r19)',
   });
 });
 
-describe('the bare base: the store seven over a synthetic namespace (the-engine-r19)', () => {
-  it('list, put, get, and delete answer exactly on posix', async () => {
+describe('the bare base: the store seven over a synthetic namespace', () => {
+  it('[the-engine-r19] list, put, get, and delete answer exactly on posix', async () => {
     const sb = probeStage();
     expect(answerLine(await op(sb, 'store.list', ['probe']), 'store.list')).toBe('{"namespace":"probe","keys":[]}');
     expect(answerLine(await op(sb, 'store.put', ['probe', 'x/one'], 'one\n'), 'store.put')).toBe('{"namespace":"probe","key":"x/one","op":"write"}');

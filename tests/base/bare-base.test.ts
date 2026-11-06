@@ -19,7 +19,7 @@ const modules = (help: string): string[] => {
   return at < 0 ? [] : [...help.slice(at).matchAll(/^ {2}([a-z][a-z0-9-]*) /gm)].map((m) => m[1] ?? '');
 };
 
-describe.concurrent('the bare base: the no-plugin boot and help surface [the-engine-r1, the-engine-r5]', () => {
+describe.concurrent('the bare base: the no-plugin boot and help surface', () => {
   it('the stage carries no rhythms, docs, or plugins folder, and the storage core sits in it', () => {
     const sb = bare();
     for (const absent of ['.contexture/rhythms', 'docs', 'plugins']) expect(existsSync(join(sb, absent)), absent).toBe(false);
@@ -28,7 +28,7 @@ describe.concurrent('the bare base: the no-plugin boot and help surface [the-eng
     expect(runnable(join(sb, '.contexture/storage/drivers/posix/driver'))).toBe(true);
   });
 
-  it('help lists the unit module, then the extension-root lane module, and never the storage core', async () => {
+  it('[the-engine-r1, modules-r14] help lists the unit module, then the extension-root lane module, and never the storage core', async () => {
     const sb = bare();
     const help = await ctx(sb, 'help');
     expect(help.code).toBe(0);
@@ -40,13 +40,13 @@ describe.concurrent('the bare base: the no-plugin boot and help surface [the-eng
     expect(all.stdout).not.toContain('module storage:');
   });
 
-  it('the lane module dispatches from the extension root', async () => {
+  it('[the-engine-r1, the-engine-r4] the lane module dispatches from the extension root', async () => {
     const r = await ctx(bare(), 'lane', 'help');
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('create');
   });
 
-  it('an absent extension root is silent and lists no extension module', async () => {
+  it('[the-engine-r1, modules-r14] an absent extension root is silent and lists no extension module', async () => {
     const sb = bare();
     renameSync(join(sb, '.contexture/extensions'), join(sb, '.contexture/extensions.away'));
     const r = await ctx(sb, 'help');
@@ -55,7 +55,7 @@ describe.concurrent('the bare base: the no-plugin boot and help surface [the-eng
     expect(modules(r.stdout)).toEqual(['unit']);
   });
 
-  it('ctx run answers its help, and docs and storage-fts5 are unknown without their plugins', async () => {
+  it('[the-engine-r5] ctx run answers its help, and docs and storage-fts5 are unknown without their plugins', async () => {
     const sb = bare();
     expect((await ctx(sb, 'run', '--help')).code).toBe(0);
     for (const name of ['docs', 'storage-fts5']) {
@@ -101,8 +101,8 @@ const CARD = {
   optional: ['store'],
 };
 
-describe('the bare base: the posix descriptor, the contract 3 store-only card (the-engine-r19)', () => {
-  it('diagnose names posix with the exact card and a healthy store after a bootstrap; a planted card reads against it', async () => {
+describe('the bare base: the posix descriptor, the contract 3 store-only card', () => {
+  it('[the-engine-r19, the-engine-r24] diagnose names posix with the exact card and a healthy store after a bootstrap; a planted card reads against it', async () => {
     const sb = bare();
     expect((await ctx(sb, 'unit', 'bootstrap', 'baseonly', 'the base-only probe unit')).code).toBe(0);
     const r = await ctx(sb, 'unit', 'diagnose', '--json');

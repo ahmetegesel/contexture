@@ -32,7 +32,7 @@ const snap = seedSteps('base-smoke', [
 ]);
 
 describe.concurrent('the bare base: the record and lane smoke over the shipped unit and lane modules', () => {
-  it('tasks: list and show, start (active derives it), update, complete with evidence, drop with a reason', async () => {
+  it('[the-record-r1, the-record-r8] tasks: list and show, start (active derives it), update, complete with evidence, drop with a reason', async () => {
     const sb = fresh(await snap('tasks'));
     expect((await unit(sb, 'task', 'list', U, '--status=all')).stdout).toContain('base-t1');
     expect((await unit(sb, 'task', 'show', U, 'base-t1')).stdout).toContain('OBJECTIVE: "the base-only task"');
@@ -45,7 +45,7 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     expect((await unit(sb, 'task', 'list', U, '--status=all')).stdout).toBe('  [DONE] base-t1: the base-only task\n');
   });
 
-  it('journal and knowledge: the closer closes its target, and the active findings read the successor alone', async () => {
+  it('[the-record-r4] journal and knowledge: the closer closes its target, and the active findings read the successor alone', async () => {
     const sb = fresh(await snap('written'));
     const closure = await unit(sb, 'entry', 'closure', U, S1);
     expect(closure.code).toBe(0);
@@ -55,7 +55,7 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     expect(active).not.toContain('BASE_OLD');
   });
 
-  it('lane: show reads the journal and the report, and resolve reads the claim', async () => {
+  it('[the-record-r15] lane: show reads the journal and the report, and resolve reads the claim', async () => {
     const sb = fresh(await snap('written'));
     expect((await lane(sb, 'show', U, 'base-lane', 'journal')).stdout).toContain('a lane event');
     expect((await lane(sb, 'show', U, 'base-lane', 'report')).stdout).toContain('@claim probe-claim');
@@ -64,7 +64,7 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     expect(claim.stdout).toMatch(/^@claim probe-claim/m);
   });
 
-  it('the reads: board, load to its complete page, audit, the exact search, the snippet quote pair, resolve, and the fold plan', async () => {
+  it('[the-record-r13] the reads: board, load to its complete page, audit, the exact search, the snippet quote pair, resolve, and the fold plan', async () => {
     const sb = fresh(await snap('written'));
     expect((await unit(sb, 'board', U)).code).toBe(0);
     let pages = '';
@@ -88,7 +88,7 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     expect((await unit(sb, 'fold', U)).code).toBe(0);
   });
 
-  it('stamp, refresh, close, the closed refusal, reopen, and a write after reopen', async () => {
+  it('[the-record-r11] stamp, refresh, close, the closed refusal, reopen, and a write after reopen', async () => {
     const sb = fresh(await snap('written'));
     await must(unit(sb, 'stamp', U));
     await must(unit(sb, 'refresh', U));
