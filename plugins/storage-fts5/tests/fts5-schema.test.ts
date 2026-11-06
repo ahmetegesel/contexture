@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync, writeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
+import { ROOT_USER, chmodPlant } from '@support/plants';
 import { sandbox } from '@support/sandbox';
 import { sqlite } from '@support/sqlite';
 import { fts5Available, stage } from '@support/stage';
@@ -26,6 +27,7 @@ const backups = (dir: string, db: string) => readdirSync(dir).filter((n) => ![ba
 const digest = (db: string) => createHash('sha256').update(Buffer.concat([db, `${db}-wal`].filter(existsSync).map((p) => readFileSync(p)))).digest('hex');
 
 const schemaRefusal = (v: number) => `the store is at schema ${v}; this driver reads 5 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs`;
+const health = async (s: ReturnType<typeof store>) => answer(await s.op('storage.health', []), 'storage.health');
 
 describe.skipIf(!fts5Available())('the fts5 store schema', { concurrent: true }, () => {
   it('[the-engine-r16] an absent store: the first write lays schema 5, store-only, with no backup', async () => {
@@ -70,5 +72,61 @@ describe.skipIf(!fts5Available())('the fts5 store schema', { concurrent: true },
         driver: 'fts5', health: 'error', detail: 'database at schema 4; this driver reads 5 and has no upgrade path', store: 'present',
       });
     }
+  });
+});
+
+describe.skipIf(!fts5Available())('the fts5 storage.health over the database states', { concurrent: true }, () => {
+  it('[the-engine-r24] a database holding no key reads degraded with the store absent: a file with no table, and a schema 5 store whose last key was deleted', async () => {
+    const { db, s } = at('nokey.db');
+    const none = { driver: 'fts5', health: 'degraded', detail: 'database present, no key stored yet', store: 'absent' };
+    writeFileSync(db, '');
+    expect(await health(s)).toEqual(none);
+    answer(await s.put('docs', 'workspace/gone', 'x\n'), 'store.put');
+    answer(await s.del('docs', 'workspace/gone'), 'store.delete');
+    expect(version(db)).toBe('5');
+    expect(await health(s)).toEqual(none);
+  });
+
+  it('[the-engine-r24] a file that is not a database reads error, the database unreadable, with the store absent', async () => {
+    const { db, s } = at('text.db');
+    writeFileSync(db, 'plain text, never an sqlite database\n');
+    expect(await health(s)).toEqual({ driver: 'fts5', health: 'error', detail: 'database unreadable', store: 'absent' });
+  });
+
+  it.skipIf(ROOT_USER)('[the-engine-r24] a database file the driver cannot write reads error with the store present', async ({ onTestFinished }) => {
+    const { db, s } = at('ro.db');
+    answer(await s.put('docs', 'workspace/kept', 'x\n'), 'store.put');
+    chmodPlant(db, 0o444, 0o644, onTestFinished);
+    expect(await health(s)).toEqual({ driver: 'fts5', health: 'error', detail: 'database file not writable', store: 'present' });
+  });
+
+  it('[the-engine-r24] a database failing its integrity check reads error with the store present, while its store table still counts', async () => {
+    const { db, s } = at('corrupt.db');
+    answer(await s.put('docs', 'workspace/kept', 'x\n'), 'store.put');
+    sqlite(db, 'PRAGMA wal_checkpoint(TRUNCATE);');
+    const page = Number(sqlite(db, 'PRAGMA page_size;'));
+    const root = Number(sqlite(db, "SELECT rootpage FROM sqlite_master WHERE name = 'store_docs';"));
+    const fd = openSync(db, 'r+');
+    writeSync(fd, Buffer.alloc(8, 0xff), 0, 8, (root - 1) * page);
+    closeSync(fd);
+    expect(sqlite(db, 'SELECT count(*) FROM store;').trim()).toBe('1');
+    expect(await health(s)).toEqual({ driver: 'fts5', health: 'error', detail: 'database integrity check failed', store: 'present' });
+  });
+});
+
+describe.skipIf(!fts5Available())('the fts5 store location', { concurrent: true }, () => {
+  it.each([
+    ['a workspace-relative path, under the workspace', '.contexture/elsewhere.db'],
+    ['an absolute path, as given', 'absolute'],
+  ])('the storage.database configuration key places the store at %s, never the default file', async (_, path) => {
+    const sb = stage('fts5');
+    dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
+    const db = path === 'absolute' ? join(sandbox('placed'), 'store.db') : join(sb, path);
+    appendFileSync(join(sb, '.contexture/config'), `storage.database: ${path === 'absolute' ? db : path}\n`);
+    const s = store(sb, 'fts5');
+    answer(await s.put('docs', 'workspace/placed', 'placed\n'), 'store.put');
+    expect(sqlite(db, "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/placed');
+    expect(existsSync(join(sb, '.contexture/sessions.db'))).toBe(false);
+    expect((await s.get('docs', 'workspace/placed')).stdout).toBe('placed\n');
   });
 });
