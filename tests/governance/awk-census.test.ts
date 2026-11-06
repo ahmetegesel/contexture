@@ -1,5 +1,5 @@
 import { readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { exec } from '../support/exec';
 import { ROOT } from '../support/root';
@@ -11,13 +11,13 @@ const AWKREPL = join(ROOT, 'tests/governance/awkrepl.awk');
 const PROSE = /\.(ts|js|json|md|py|sql)$/;
 const SKIPPED = /\/(node_modules|fixtures)(\/|$)|\/\.contexture\/(tmp|sessions)(\/|$)/;
 
-function censusFiles(): string[] {
+function censusFiles(root = ROOT): string[] {
   const roots = [
-    join(ROOT, 'base/.contexture'),
-    ...readdirSync(join(ROOT, 'plugins')).sort().map((p) => join(ROOT, 'plugins', p, '.contexture')),
-    join(ROOT, 'tests'),
+    join(root, 'base/.contexture'),
+    ...readdirSync(join(root, 'plugins')).sort().map((p) => join(root, 'plugins', p, '.contexture')),
+    join(root, 'tests'),
   ];
-  const skip = (p: string) => SKIPPED.test(p) || PROSE.test(p);
+  const skip = (p: string) => SKIPPED.test(`/${relative(root, p)}`) || PROSE.test(p);
   return roots.flatMap((r) => walk(r, skip));
 }
 
@@ -32,6 +32,15 @@ describe.concurrent('the awk replacement census: no sub or gsub replacement carr
     const r = await census(withSub);
     expect(r.code).toBe(0);
     expect(r.stdout).toBe('');
+  });
+
+  it('the exclusions match paths inside the repository, so a repository under a .contexture/tmp folder still reads its files', () => {
+    const root = sandbox('census-root');
+    const kept = ['base/.contexture/modules/m/scripts/v.sh', 'plugins/p/.contexture/x.awk', 'tests/lib.sh'];
+    const skipped = ['base/.contexture/tmp/t.awk', 'base/.contexture/sessions/u/s.sh', 'tests/fixtures/f.awk', 'tests/node_modules/n.sh', 'tests/notes.md'];
+    for (const f of [...kept, ...skipped]) put(join(root, f), 'x\n');
+    expect(root).toContain('/.contexture/tmp/');
+    expect(censusFiles(root).map((f) => relative(root, f))).toEqual(kept);
   });
 
   it('the census reads the three planted unportable forms and none of the four portable ones', async () => {
