@@ -14,9 +14,10 @@
 # tracked claimant among several restores the delta rule.
 # delta_source (a bounded token, -v): git (the default, the files driver: the rules above) or
 # log (a store driver feeds the corpus half from its change log): a claimed file reads fresh only
-# when a doc whose own sources claim it rode the delta, so the blanket (a workspace,
-# architecture, or overview doc freshening its whole repo) is off, and every claimant can ride a
-# driver-fed delta, so the trackedness probe is off and UNTRACKED CLAIMANT never fires.
+# when a doc whose own sources claim it rode the delta, so the blanket (a riding architecture or
+# overview doc freshening every claimed file of its repo, any riding workspace doc every claimed
+# file of every repo) is off, and every claimant can ride a driver-fed delta, so the trackedness
+# probe is off and UNTRACKED CLAIMANT never fires.
 
 BEGIN {
     CODE_EXT_RE = "\\.(awk|cs|js|cjs|mjs|jsx|ts|tsx|vue|svelte|astro|dart|py|rb|php|java|kt|kts|go|rs|swift|c|h|cc|cpp|hpp|sh|bash|zsh|sql|proto|graphql|gql|html|css|scss|sass|less|lua|pl|r|ex|exs|erl|hs|cshtml)$"
@@ -181,9 +182,10 @@ function process_doc_sources() {
             doc_matched_files[curr_slug] = (doc_matched_files[curr_slug] ? doc_matched_files[curr_slug] ", " : "") norm_file
 
             # Freshness signal. The claiming doc itself riding the change is real evidence.
-            # An architecture/overview doc (or any workspace doc) marks every file in the repo
-            # fresh wholesale: that is a blanket, not evidence, so it is recorded separately and
-            # reported, never folded silently into a clean verdict.
+            # A riding architecture or overview doc marks every claimed file of its own repo
+            # fresh, and any riding workspace doc every claimed file of every repo: that is a
+            # blanket, not evidence, so it is recorded separately and reported, never folded
+            # silently into a clean verdict.
             if (touched_doc[curr_repo, curr_slug]) {
                 file_has_fresh_doc[t_file] = 1
                 doc_is_fresh[curr_slug] = 1
