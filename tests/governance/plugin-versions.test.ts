@@ -85,7 +85,7 @@ function verdict(root: string, tag: string, manifest: string): Verdict {
   if (now !== then) {
     return greater(now, then) ? green(`${plugin} ${now}: bumped from ${then} at ${tag}`) : red(`${plugin} ${now} in the index is not a greater x.y.z than ${then} at ${tag}`);
   }
-  const commit = run(root, 'log', '-1', '--format=%H', '-G^# version:', tag, '--', manifest).trim();
+  const commit = lines(run(root, 'log', '--format=%H', '-G^# version:', tag, '--', manifest)).find((c) => version(probe(root, 'show', `${c}^:${manifest}`)) !== now);
   const first = commit ? lines(run(root, 'tag', '--list', 'v[0-9]*', '--contains', commit, '--merged', tag, '--sort=v:refname'))[0] : undefined;
   if (!first) return red(`${plugin} ${now}: no release tag holds the commit that set it`);
   const paths = lines(run(root, 'diff', '--cached', '--name-only', first, '--', `plugins/${plugin}/.contexture`, ...extras(root, plugin)));
@@ -224,6 +224,13 @@ describe('the ship breath states in a sandbox repository', () => {
     write('plugins/fresh/.contexture/extensions/modules/fresh/module', '# summary: fresh\n');
     stage();
     note('a plugin absent at the tag staged');
+    sh('reset', '-q', '--hard');
+    write(MODULE, '# summary: demo, released unbumped\n');
+    write('plugins/demo/manifest', manifest('1.0.1 '));
+    stage();
+    sh('commit', '-q', '-m', 'three');
+    sh('tag', '-a', 'v0.0.3', '-m', 'v0.0.3');
+    note('released unbumped, the version line touched and its value kept');
 
     const shallow = sandbox('plugin-versions-shallow');
     const clone = spawnSync('git', ['clone', '-q', '--depth', '1', `file://${dir}`, shallow], { encoding: 'utf8', env });
@@ -250,6 +257,7 @@ describe('the ship breath states in a sandbox repository', () => {
       ['a lower version staged', 'demo 1.0.0 in the index is not a greater x.y.z than 1.0.1 at v0.0.2'],
       ['a bump with no payload change staged', 'green'],
       ['a plugin absent at the tag staged', 'green'],
+      ['released unbumped, the version line touched and its value kept', `demo 1.0.1 first shipped in v0.0.2, and its payload changed since: ${MODULE}; bump plugins/demo/manifest`],
       ['a shallow clone', 'a full clone, not a shallow one (git fetch --unshallow)'],
       ['no release tag', 'a release tag reachable from HEAD (git fetch --tags)'],
     ]);
