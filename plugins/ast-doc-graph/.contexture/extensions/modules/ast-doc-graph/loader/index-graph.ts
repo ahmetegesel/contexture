@@ -1300,7 +1300,15 @@ async function main(): Promise<void> {
   }
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+function executedAsScript(): boolean {
+  try {
+    return fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1] ?? '');
+  } catch {
+    return false;
+  }
+}
+
+if (executedAsScript()) {
   main().catch((err) => {
     console.error('Fatal loader error:', err);
     process.exit(1);

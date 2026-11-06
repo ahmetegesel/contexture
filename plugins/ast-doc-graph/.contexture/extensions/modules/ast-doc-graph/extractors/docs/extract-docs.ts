@@ -6,6 +6,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // --- INTERFACES (conforming to spec.md) ---
 
@@ -853,8 +854,15 @@ export async function main() {
   }
 }
 
-// Run if executed as script
-if (import.meta.url === `file://${process.argv[1]}`) {
+function executedAsScript(): boolean {
+  try {
+    return fs.realpathSync(fileURLToPath(import.meta.url)) === fs.realpathSync(process.argv[1] ?? '');
+  } catch {
+    return false;
+  }
+}
+
+if (executedAsScript()) {
   main().catch((err) => {
     console.error('Fatal extraction error:', err);
     process.exit(1);

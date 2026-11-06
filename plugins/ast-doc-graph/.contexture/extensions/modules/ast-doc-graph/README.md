@@ -53,7 +53,10 @@ Launchers resolve their runner dynamically: a project-local `tsx`, `tsx` on
 PATH, or Node with type stripping (the launchers end with
 `node --experimental-strip-types`). Each TypeScript entry point (the two
 extractors and the loader) runs its CLI only when executed as the script, so
-its exported helpers import without side effects. The graph database is generated, never
+its exported helpers import without side effects; the guard compares the
+module file and the executed path by their real paths, so a module reached
+through a symbolic link or under a folder whose name holds a space or a
+non-ASCII character still runs. The graph database is generated, never
 shipped.
 
 ## Tests
@@ -70,5 +73,9 @@ loader's helpers in process. `integration/` copies `fixtures/mini-repo` into a
 sandbox under the workspace's `.contexture/tmp/` with `node_modules/typescript`
 linked to the test tooling's TypeScript, runs the full index, then the delta
 index of one file, the query's micro-sync of one dirty file, and the advisory
-for three (file times set directly, never slept). The tests skip, naming the
+for three (file times set directly, never slept); it also indexes through a
+module reached by a symbolic link, under a spaced folder, and under a
+non-ASCII folder. `static/` holds the census of the module tree: no
+sibling-project glob and no pre-extension-root path, each with a planted
+null check. The tests skip, naming the
 need, without sqlite3 FTS5 or without a TypeScript compiler API.

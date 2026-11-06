@@ -45,6 +45,18 @@ export function miniRepo(label: string): string {
   return sb;
 }
 
-export function astDocIndex(repo: string, ...args: string[]): Promise<Run> {
-  return exec(join(MODULE, 'bin/ast-doc-index'), ['--repo-root', repo, '--db', join(repo, 'graph.db'), ...args], { cwd: repo });
+export function docsRepo(label: string): string {
+  const sb = sandbox(label);
+  cpSync(join(FIXTURES, 'mini-repo/docs'), join(sb, 'docs'), { recursive: true });
+  return sb;
+}
+
+export interface IndexOptions {
+  cwd?: string;
+  env?: Record<string, string>;
+  module?: string;
+}
+
+export function astDocIndex(repo: string, args: readonly string[] = [], { cwd = repo, env = {}, module = MODULE }: IndexOptions = {}): Promise<Run> {
+  return exec(join(module, 'bin/ast-doc-index'), ['--repo-root', repo, '--db', join(repo, 'graph.db'), ...args], { cwd, env });
 }

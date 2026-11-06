@@ -8,7 +8,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the full index of the mini repos
   let indexed: string;
   beforeAll(async () => {
     indexed = miniRepo('mini-indexed');
-    const r = await astDocIndex(indexed, '--clean');
+    const r = await astDocIndex(indexed, ['--clean']);
     if (r.code !== 0) throw new Error(`ast-doc-index: rc ${r.code}: ${r.stderr}`);
   });
   const db = (sb: string) => join(sb, 'graph.db');

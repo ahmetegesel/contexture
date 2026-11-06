@@ -20,7 +20,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
   let indexed: string;
   beforeAll(async () => {
     indexed = miniRepo('mini-delta');
-    const r = await astDocIndex(indexed, '--clean');
+    const r = await astDocIndex(indexed, ['--clean']);
     if (r.code !== 0) throw new Error(`ast-doc-index: rc ${r.code}: ${r.stderr}`);
   });
 
@@ -28,7 +28,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     const sb = fresh(indexed);
     const before = sqlite(db(sb), "SELECT mtime FROM indexed_files WHERE file = 'src/orders/validate.ts';").trim();
     edit(sb, 'src/orders/validate.ts', '\nexport function checkCart(cart: Cart): boolean {\n  return validateCart(cart);\n}\n');
-    const r = await astDocIndex(sb, '--delta', 'src/orders/validate.ts');
+    const r = await astDocIndex(sb, ['--delta', 'src/orders/validate.ts']);
     expect(r.code, r.stderr).toBe(0);
     expect(hasSymbol(sb, 'checkCart')).toBe(true);
     expect(hasSymbol(sb, 'CartStore.save')).toBe(true);
