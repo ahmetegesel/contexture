@@ -58,7 +58,7 @@ function extras(root: string, plugin: string): string[] {
   return [...new Set(reads)].sort().map((p) => `plugins/${plugin}/${p}`);
 }
 
-const version = (manifest: string | undefined): string | undefined => manifest?.match(/^# version: *(\S+) *$/m)?.[1];
+const version = (manifest: string | undefined): string | undefined => manifest?.match(/^# version: [ \t]*(\S+)[ \t]*$/m)?.[1];
 
 const triple = (v: string): number[] | undefined => (/^\d+\.\d+\.\d+$/.test(v) ? v.split('.').map(Number) : undefined);
 
@@ -263,8 +263,9 @@ describe('the ship breath states in a sandbox repository', () => {
     ]);
   });
 
-  it('the shown paths stop at five and count the rest; a greater version compares x.y.z numerically', () => {
+  it('the shown paths stop at five and count the rest; a version line reads as the installer reads it; a greater version compares x.y.z numerically', () => {
     expect(shown(['a', 'b', 'c', 'd', 'e', 'f', 'g'])).toBe('a, b, c, d, e (and 2 more)');
+    expect(version('# summary: demo\n# version: \t1.0.0\t\n# kind: feature\n')).toBe('1.0.0');
     expect(greater('1.10.0', '1.9.9')).toBe(true);
     expect(greater('1.0.0', '1.0.0')).toBe(false);
     expect(greater('2.0', '1.0.0')).toBe(false);
