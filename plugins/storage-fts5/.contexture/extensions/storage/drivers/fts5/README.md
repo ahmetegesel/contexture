@@ -62,13 +62,12 @@ verbs.
 
 ## Tests
 
-`plugins/storage-fts5/tests/run.sh` runs the plugin's own suite beside this module, never
-the adopted copy: `test-store-compliance.sh` runs the shared store compliance suite, and
-`test-store.sh` adds the store's change rows, the atomic put's rollback, the schema open
-path, and the legacy tables staying untouched. `test-schema.sh` pins the version 4 lay and
-the refusal of every other version, `test-version.sh` the sqlite3 3.44 guard,
-`test-derive.sh` the narrowed derive against a whole rebuild, and `test-verbs.sh` one verb
-sequence on posix and this driver with every view equal. Each skips 77 without sqlite3.
+The plugin's vitest project `storage-fts5` (`plugins/storage-fts5/tests`) runs on this
+module's own copy, never the adopted one: `fts5-schema.test.ts` pins schema 5 and the
+refusal of every other version, `fts5-version.test.ts` the sqlite3 3.44 guard, and
+`fts5-store.test.ts` the change log, the ranked modes and their re-derive, and the trigger
+rollbacks. The shared store contract (`tests/drivers`) holds this copy and the posix driver
+to the same set. Each skips without sqlite3 FTS5, naming the need.
 
 The upstream gate runs the whole session suite a second time on this driver
 (`core:session-tests.sh:fts5`), and the docs suite runs on it when the plugin is present;

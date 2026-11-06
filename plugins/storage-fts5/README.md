@@ -27,11 +27,9 @@ The storage-fts5 plugin serves as an indexed storage backend: the single store o
 | `.contexture/extensions/storage/drivers/fts5/schema.sql` | the schema version 5 DDL: the generic store, its change log, and the derived store documents with the dual FTS5 virtual tables and their triggers | install (driver part) |
 | `.contexture/extensions/storage/drivers/fts5/driver` | the driver executable: the contract 3 store-only entry point (capability, storage.health, the seven store functions, the store search) | install (driver part) |
 | `.contexture/extensions/storage/drivers/fts5/db-init.sh` | the database open path: the sqlite3 3.44 minimum, the fresh schema 5 in a new or empty file, the version 5 open, the refusal of any other version, the per-connection busy timeout | install (driver part) |
-| `tests/test-schema.sh` | schema 5 laid in an absent or empty file with no backup, a read leaving a version 5 store byte for byte, and a version 4, 0, or 6 file refused naming its version, the file untouched, no backup, `storage.health` reporting error | reference |
-| `tests/test-version.sh` | the sqlite3 3.44 guard under a fake sqlite3: below it a store function refuses rc 2 naming the version and `storage.health` reports `error` naming it; at 3.44 both serve | reference |
-| `tests/test-store.sh` | the generic module store on this driver: the five single-key functions, the byte round-trip, the change log's row order and head window, a refused write logging nothing, the atomic put's rollback under a planted trigger, a store at another schema refused with no upgrade path, the store-only schema, and the contract 3 descriptor (version 3.0.0, the seven store data names, the optional tokens, no record family) | reference |
-| `tests/test-store-compliance.sh` | the shared store compliance suite (`tests/store-compliance.sh --driver=fts5`) against the plugin's own driver | reference |
-| `tests/run.sh` | plugin test suite runner | reference |
+| `tests/fts5-schema.test.ts` | the schema (vitest project `storage-fts5`): schema 5 laid in an absent or empty file with no backup, a read leaving a version 5 store byte for byte, a version 4, 0, or 6 file refusing get, list, and put naming its version with the file untouched and no backup, and `storage.health` reporting error at version 4 | reference |
+| `tests/fts5-version.test.ts` | the sqlite3 3.44 guard under a fake sqlite3 (itself null-checked): below it a store function refuses rc 2 naming the version and `storage.health` reports `error` naming it; at 3.44 both serve | reference |
+| `tests/fts5-store.test.ts` | the store on this driver beyond the shared contract: planted rows never listed or scanned, the zero-length blob, the ranked modes (hybrid and trigram over the derived documents, the flat, generic, and JSON forms, quoted queries), the re-derive of a namespace whose search schema changed, the change log's rows, head window, and refusals, a refused write logging nothing, one change row per batch action, and the put and the batch rolled back whole by a planted trigger | reference |
 | `README.md` | this onboarding guide and reference manual | reference |
 
 ## Architecture and invariants
@@ -150,15 +148,16 @@ Verify the installation against the Storage SPI compliance harness:
 tests/storage-compliance.sh --driver=fts5
 ```
 
-This resolves the driver through the workspace drawer, so it checks the adopted copy. The plugin suite (`plugins/storage-fts5/tests/run.sh`) checks the plugin's own copy instead: its scripts resolve the module from their own location and hand the driver to the harness by path (`--driver-exec=<path>`), so an edit to either copy never passes on the other's behalf.
+This resolves the driver through the workspace drawer, so it checks the adopted copy. The plugin's tests check the plugin's own copy instead: the vitest harness stages this folder's driver into every fts5 sandbox, so an edit to either copy never passes on the other's behalf.
 
-Verify the generic module store with the shared store compliance suite, which takes the driver by name:
+Verify the generic module store with the shared store contract tests, which hold this plugin's own copy and the posix driver to the same set, and with this plugin's own project (from `tests/`, the bun scripts):
 
 ```sh
-tests/store-compliance.sh --driver=fts5
+bun run test:drivers
+bun run test:storage-fts5
 ```
 
-The plugin suite runs the same suite against its own copy (`tests/test-store-compliance.sh`) and adds `tests/test-store.sh`: the five single-key functions, the change log's row order and head window, a refused write logging nothing, the atomic put's rollback, a store at another schema refused with no upgrade path, and the store-only schema; the batch and the scan are proven by the store-compliance suite on both drivers.
+The shared set (`tests/drivers/store-contract.test.ts` and its siblings) proves the store seven, the batch, the scan, the locks, and the faults on both drivers; `plugins/storage-fts5/tests` adds what only this driver keeps: the schema, the sqlite3 guard, the change log, the ranked modes and their re-derive, and the trigger rollbacks.
 
 Verify the re-entered record with the read verbs (`ctx unit board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) against the same reads under posix, and each doc with `ctx docs write <repo> <slug> --replace --dry-run < docs/<repo>/<slug>.md`, which answers `unchanged (nothing written)` exactly when the store holds the doc byte for byte.
 
@@ -175,11 +174,7 @@ The docs plugin suite runs in full against this driver (it declares `store` and 
 |---|---|
 | `manifest` | authored fresh: the package summary, version, kind driver, driver fts5, and the driver part; the module file retired |
 | `.contexture/extensions/storage/drivers/fts5/schema.sql` | authored fresh: the schema version 5 store-only tables, the derived store documents, and the two FTS5 tables |
-| `tests/test-schema.sh` | authored fresh: the schema version suite (it replaces the upgrade suite, whose live checks it carries) |
-| `tests/test-version.sh` | authored fresh: the sqlite3 version guard suite |
+| `tests/fts5-schema.test.ts`, `tests/fts5-version.test.ts`, `tests/fts5-store.test.ts` | authored fresh: the vitest project `storage-fts5` (it replaces the shell sub-suites and their runner; the shared store contract runs over this driver's own copy in `tests/drivers`) |
 | `.contexture/extensions/storage/drivers/fts5/driver` | authored fresh: the contract 3 store-only entry point (the seven store functions, the store search, pure SQL RRF ranking) |
 | `.contexture/extensions/storage/drivers/fts5/db-init.sh` | authored fresh: the open path at version 5 (fresh schema, version 5 open, every other version refused with no upgrade path) |
-| `tests/test-store.sh` | authored fresh: the generic module store suite (change log, atomicity, a store at another schema refused, the store-only schema, the contract 3 descriptor) |
-| `tests/test-store-compliance.sh` | authored fresh: the shared store compliance harness against the plugin's own driver |
-| `tests/run.sh` | authored fresh: named test runner over plugin test suites |
 | `README.md` | authored fresh: onboarding guide and technical reference |
