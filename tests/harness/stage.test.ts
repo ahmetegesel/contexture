@@ -34,7 +34,7 @@ describe('stage', () => {
 
   for (const driver of DRIVERS) {
     describe.skipIf(driver === 'fts5' && !fts5Available())(driver, () => {
-      it(`the staged ctx bootstraps a unit, lists it, and names the ${driver} driver`, async () => {
+      it(`[plugins-r4] the staged ctx bootstraps a unit, lists it, and names the ${driver} driver`, async () => {
         const sb = stage(driver);
         const boot = await ctx(sb, 'unit', 'bootstrap', 'probe-unit', 'staging probe');
         expect(boot.code, boot.stderr).toBe(0);
@@ -53,7 +53,7 @@ describe('stage', () => {
     });
   }
 
-  it('the fts5 probe reads absent where sqlite3 is not on PATH, so the fts5 cases skip', () => {
+  it('[plugins-r3] the fts5 probe reads absent where sqlite3 is not on PATH, so the fts5 cases skip', () => {
     expect(probeFts5('/nonexistent')).toBe(false);
   });
 });

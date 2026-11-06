@@ -36,7 +36,7 @@ describe('snapshot: a fresh copy of the seeded sandbox per test', { concurrent: 
     expect(await sawLeak(sb)).toBe(true);
   });
 
-  it('the next test reads its own copy: the leak is absent', async () => {
+  it('[plugins-r5] the next test reads its own copy: the leak is absent', async () => {
     expect(await sawLeak(sb)).toBe(false);
   });
 });
@@ -51,7 +51,7 @@ describe('snapshot null check: one sandbox shared by two tests, no copy', { conc
     await plantLeak(shared);
   });
 
-  it('the same instrument sees the leak, so the isolation assertion fails without the copy', async () => {
+  it('[plugins-r5] the same instrument sees the leak, so the isolation assertion fails without the copy', async () => {
     expect(await sawLeak(shared)).toBe(true);
   });
 });
