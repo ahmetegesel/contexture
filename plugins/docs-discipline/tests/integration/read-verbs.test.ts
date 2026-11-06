@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { exec } from '@support/exec';
 import { fresh } from '@support/snapshot';
 import { unit } from '@support/unit';
 import { docs, ENGINE_FIXTURES, putDocs, SAMPLE, stageSeed, TESTS } from '../support/corpus';
@@ -102,6 +103,23 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
     const r = await docs(fresh(corpus), [verb]);
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toContain(usage);
+  });
+});
+
+describe('the check verb governs a shebang script by its first line, read under the workspace root', { concurrent: true }, () => {
+  it('from a working folder elsewhere: the script reads UNCOVERED, a plain file and a folder stay out', async () => {
+    const sb = fresh(staged);
+    const away = join(sb, 'tools/sub');
+    mkdirSync(away, { recursive: true });
+    writeFileSync(join(sb, 'tools/run'), '#!/bin/sh\necho run\n');
+    writeFileSync(join(sb, 'tools/notes'), 'plain notes\n');
+    const r = await exec(join(sb, '.contexture/ctx'), ['docs', 'check', 'workspace'], {
+      cwd: away,
+      input: 'A\ttools/run\nA\ttools/notes\nA\ttools/sub/\nM\ttools/sub\n',
+      env: { GIT_CEILING_DIRECTORIES: dirname(sb) },
+    });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout.match(/^UNCOVERED: .*$/gm)).toEqual(['UNCOVERED: tools/run']);
   });
 });
 

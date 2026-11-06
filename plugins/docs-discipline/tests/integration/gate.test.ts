@@ -81,6 +81,15 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(gate.stderr).toMatch(/\[DRIFT WARNING\] \S+ is 1 commit\(s\) behind origin\/main/);
   });
 
+  it('the default delta governs a shebang script and leaves a plain extensionless file out', async () => {
+    const [sb] = await committed();
+    writeFileSync(join(sb, 'src/tool'), '#!/bin/sh\necho tool\n');
+    writeFileSync(join(sb, 'src/NOTES'), 'notes\n');
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout.match(/^UNCOVERED: .*$/gm)).toEqual(['UNCOVERED: src/tool']);
+  });
+
   it('a clean tree reads 0 modified files and names its limit in a notice', async () => {
     const [sb] = await committed();
     const r = await docs(sb, ['gate']);

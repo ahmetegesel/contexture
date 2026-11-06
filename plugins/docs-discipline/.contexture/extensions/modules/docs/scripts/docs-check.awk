@@ -3,8 +3,10 @@
 # Usage: git diff --name-status | ctx docs check <repo>...
 # Help: ctx docs help check
 # Exits 0 on clean; exits 1 on completeness, freshness, or dead sources violation.
-# Governed files: the code extensions plus a depth-1 docs/*.md claimed by a corpus doc; a governed
-# file's freshness is its claimant riding the delta. A claimant the repository does not track cannot
+# Governed files (is_governed): the code extensions (awk among them), an extensionless file the
+# verb vouched for with a #! first line, a path the verb could not vouch for (deleted, absent, a
+# folder) when a header source lists it exactly, plus a depth-1 docs/*.md claimed by a corpus
+# doc; a governed file's freshness is its claimant riding the delta. A claimant the repository does not track cannot
 # ride a tracked delta: the check reports the state (UNTRACKED CLAIMANT) and leaves reconciliation
 # to the process (the docs-drift flow), never a false STALE; one tracked claimant among several
 # restores the delta rule.
@@ -15,7 +17,7 @@
 # driver-fed delta, so the trackedness probe is off and UNTRACKED CLAIMANT never fires.
 
 BEGIN {
-    CODE_EXT_RE = "\\.(cs|js|cjs|mjs|jsx|ts|tsx|vue|svelte|astro|dart|py|rb|php|java|kt|kts|go|rs|swift|c|h|cc|cpp|hpp|sh|bash|zsh|sql|proto|graphql|gql|html|css|scss|sass|less|lua|pl|r|ex|exs|erl|hs|cshtml)$"
+    CODE_EXT_RE = "\\.(awk|cs|js|cjs|mjs|jsx|ts|tsx|vue|svelte|astro|dart|py|rb|php|java|kt|kts|go|rs|swift|c|h|cc|cpp|hpp|sh|bash|zsh|sql|proto|graphql|gql|html|css|scss|sass|less|lua|pl|r|ex|exs|erl|hs|cshtml)$"
     EXCLUDE_RE = "([.]spec[.]|/spec/|^spec/|\\.Test|\\.Tests|\\.min\\.|\\.generated\\.)"
     GUIDE_RE = "^docs/[^/]+\\.md$"
     touched_count = 0
@@ -75,6 +77,18 @@ BEGIN {
     if (input_src != "-") close(input_src)
     # under a store's change log a doc refreshes only the code its own sources name
     if (delta_source == "log") split("", arch_touched)
+
+    # the verb's scratch list of the extensionless delta paths it read as regular files under
+    # the workspace root, one <shebang|plain> TAB <path> line each; no engine line opens a
+    # code path
+    shebang_src = ENVIRON["DOCS_SHEBANG_LIST"]
+    if (shebang_src != "") {
+        while ((getline sb_line < shebang_src) > 0) {
+            sb_tab = index(sb_line, "\t")
+            if (sb_tab > 1) vouched[substr(sb_line, sb_tab + 1)] = (substr(sb_line, 1, sb_tab - 1) == "shebang")
+        }
+        close(shebang_src)
+    }
 }
 
 function split_sources(str, arr,    len, i, ch, depth, current, count) {
@@ -117,6 +131,19 @@ function glob_to_regex(g,    rgx, brace_part) {
     gsub(/\001/, "(.*/)?", rgx)
     gsub(/\002/, ".*", rgx)
     return "^" rgx "$"
+}
+
+# EXCLUDE_RE first, then the code extensions; a path with another extension stays out; an
+# extensionless one (a non-empty basename with no dot after its first character, or a <dir>/
+# line) reads the verb's vouch, else counts only when a claiming doc lists it exactly
+function is_governed(t_file,    base) {
+    if (t_file ~ EXCLUDE_RE) return 0
+    if (t_file ~ CODE_EXT_RE) return 1
+    base = t_file
+    sub(/.*\//, "", base)
+    if (base != "" && substr(base, 2) ~ /[.]/) return 0
+    if (t_file in vouched) return vouched[t_file]
+    return listed[t_file] ? 1 : 0
 }
 
 function is_governed_guide(t_file) {
@@ -190,6 +217,7 @@ function process_doc_sources() {
         }
 
         if (matched) {
+            for (i = 1; i <= n_globs; i++) if (norm_file == globs[i]) listed[t_file] = 1
             claimed[t_file] = 1
             file_claimants[t_file] = (file_claimants[t_file] ? file_claimants[t_file] ", " : "") curr_repo "/" curr_slug
             claimant_paths[t_file] = (claimant_paths[t_file] ? claimant_paths[t_file] "\n" : "") curr_file
@@ -279,7 +307,7 @@ END {
     # 1. Coverage Audit (Completeness)
     print "--- COVERAGE AUDIT (COMPLETENESS) ---"
     for (t_file in touched) {
-        if (t_file ~ CODE_EXT_RE && t_file !~ EXCLUDE_RE) {
+        if (is_governed(t_file)) {
             # Deleted files are not active code files; they cannot be uncovered active code
             if (deleted[t_file]) continue
 
@@ -297,7 +325,7 @@ END {
     # 2. Freshness Audit
     print "--- FRESHNESS AUDIT ---"
     for (t_file in touched) {
-        if ((t_file ~ CODE_EXT_RE && t_file !~ EXCLUDE_RE) || is_governed_guide(t_file)) {
+        if (is_governed(t_file) || is_governed_guide(t_file)) {
             if (claimed[t_file] && !file_has_fresh_doc[t_file]) {
                 if (!any_claimant_tracked(t_file)) {
                     print "UNTRACKED CLAIMANT: " file_claimants[t_file] " (governed file " t_file " changed; its claimants are untracked and cannot ride a tracked delta)"

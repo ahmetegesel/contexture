@@ -4,7 +4,9 @@
 # paths or runs the engine the helper handed it, or hands its arguments to the helper's
 # write-side parser; every corpus read and write of a write verb runs inside the helper);
 # usage-text (a refusal message naming a
-# form); delta-read (the check's stdin delta); claimant-probe (the check's git trackedness
+# form); delta-read (the check's stdin delta); scratch-list (the check's read of a list the
+# verb staged in its scratch, the governed set's shebang list, never a corpus or code path);
+# claimant-probe (the check's git trackedness
 # probe of a claimant doc path, turned off under a store's change log in B4); engine-output
 # (an engine prints; the edit engine's one stderr line carries its note or refusal);
 # engine-path-logic (an engine reads FILENAME or matches the address
@@ -17,6 +19,7 @@ claimant-probe	docs-check.awk	    if (root != "") cmd = "git -C \"" root "\" ls-
 claimant-probe	docs-check.awk	    else cmd = "git ls-files --error-unmatch -- \"" path "\" >/dev/null 2>&1"
 claimant-probe	docs-check.awk	    rc = system(cmd)
 delta-read	docs-check.awk	    while ((getline raw_line < input_src) > 0) {
+scratch-list	docs-check.awk	        while ((getline sb_line < shebang_src) > 0) {
 engine-output	docs-audit.awk	    print file ":" line ": error: " msg > "/dev/stderr"
 engine-output	docs-audit.awk	        print "docs-audit: FAILED with " errors " error(s)" > "/dev/stderr"
 engine-output	docs-check.awk	            print "AFFECTED: " s " [" slug_repo[s] "] -> " slug_doc[s]
@@ -74,8 +77,8 @@ git-delta	gate	                behind=$(git -C "$pdir" rev-list --count "HEAD..$
 helper-output	audit	docs_args 1 0 "$@" || exit $?
 helper-output	audit	docs_exec "$dir/docs-audit.awk"
 helper-output	check	docs_args 0 0 "$@" || exit $?
-helper-output	check	docs_exec "$dir/docs-check.awk"
-helper-output	check	  docs_exec "$dir/docs-check.awk" -v delta_source=log
+helper-output	check	docs_exec "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG"
+helper-output	check	  docs_exec "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG" -v delta_source=log
 helper-output	changes	docs_changes "$@"
 helper-output	gate	        set -- "$@" "$doc_path"
 helper-output	gate	    done < "$DOCS_PATHS"

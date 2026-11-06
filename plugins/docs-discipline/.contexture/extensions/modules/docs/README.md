@@ -49,10 +49,10 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   and may close a pipeline, since the file carries the delta;
   `docs_delta_empty` tells an empty delta before the check, and the check
   engine reads the file by name (`DOCS_DELTA_ARG`, its `change_file` relative
-  to the corpus scratch it runs in), never from its own stdin. The gate stages
-  every form's delta this way (the default, `--since`, `--stdin`, and
-  `--drift`); a verb that needs the delta's paths before the check (a list
-  drawn from them, a count) reads the same staged file. `docs_since_rev`
+  to the corpus scratch it runs in), never from its own stdin. `check` and
+  every gate form (the default, `--since`, `--stdin`, and `--drift`) stage
+  their delta this way, and the governed set's shebang list is drawn from the
+  same staged file before the engine runs. `docs_since_rev`
   resolves a `--since=<rev>` base for the gate and `ctx docs changes` alike
   (rc 1 for an unknown revision or a root outside a repository with a
   commit), and `docs_corpus_ignored` counts the corpus docs the root's
@@ -131,6 +131,24 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   process-owned clean, and under `--since` a notice names that limit (the
   corpus docs `git check-ignore` reports). An empty range prints its own
   notice. The notices go to stderr; stdout and the exit code stay the check's.
+- The governed set: the check governs the code extensions of `CODE_EXT_RE`
+  (`awk` among them) and every extensionless file (a non-empty basename with
+  no dot after its first character) whose first line starts with `#!`, plus a
+  depth-1 `docs/*.md` a doc claims; `EXCLUDE_RE` applies first, and an
+  extensionless file without a shebang stays out. The first line is read on
+  the shell side: `docs_delta_shebangs` walks the staged delta (both sides of
+  a rename), reads each extensionless path that is a readable regular file
+  under the workspace root (`[ -f ]`, the first line by `IFS= read -r`; a path
+  with a `..` segment is skipped), and writes the scratch list `shebangs` (one
+  `shebang` or `plain` line per path) that the engine reads by name from
+  `DOCS_SHEBANG_LIST`, so no engine line opens a code path and a folder in the
+  delta never fails the engine. A path the list cannot vouch for (deleted,
+  absent, a folder such as a submodule, an embedded repository's `<dir>/`
+  line) counts only when a claiming doc lists it exactly. `check` and every
+  gate form draw the list from the delta they staged; under `--drift` the
+  first line is the working tree's copy, so an incoming new script reads
+  ungoverned until it lands; the gate's `--test-matrix` keeps the extension
+  rule alone.
 - The doc touch: a corpus doc rides a delta only at its logical address,
   `docs/<repo>/<slug>.md` at the start of a delta path (the workspace root's
   corpus under the files driver, the `ctx docs changes` lines under a store).
@@ -195,8 +213,11 @@ against the `tests/write/` goldens (every success byte for byte, every
 refusal), `docs-audit.awk`, `docs-query.awk` and `docs-nudge.awk` against
 committed expected output under `unit/expected/` (regenerated with
 `DOCS_WRITE_EXPECTED=1` and read by hand), `docs-check.awk` over the gate
-matrix's eight scenarios, the twelve capture deltas, both delta sources, and
-the doc touch at the logical address alone,
+matrix's eight scenarios, the twelve capture deltas, both delta sources,
+the doc touch at the logical address alone, and the governed set over a
+planted shebang list (the shebang script, the `.awk` engine, the plain file,
+the exclusions first, a claimed script's `STALE DOC`, a deleted path listed
+exactly, the folder and `<dir>/` lines),
 and the pure helpers of `docs-io.sh`. `static/` runs the single-door census
 (`tests/census.awk` over `tests/census-allow.txt`, with three planted
 bypasses), the grammar agreement check (`tests/grammar-agreement.awk`, with
@@ -206,9 +227,11 @@ verb that does not take that control, the by-design id pairs of `entry` and
 `pitfall` allowed, with four plants), and the package shape. `integration/` drives the verbs end to
 end: one success per write verb with its stored bytes, the write pipeline's
 refusals leaving the stored doc unchanged, the read verbs and their misses,
-the unit-form nudge against the backlog-file form, the part hooks, and the
-gate (the matrix with an empty `TMPDIR` watch, the git mode in a workspace
-with its own repository, the clean-tree notice, the drift warnings, `--drift`
+the check verb's shebang read under the workspace root from a working folder
+elsewhere, the unit-form nudge against the backlog-file form, the part hooks,
+and the gate (the matrix with an empty `TMPDIR` watch, the git mode in a
+workspace with its own repository, a shebang script in the default delta,
+the clean-tree notice, the drift warnings, `--drift`
 over a bare remote, and `--since` over a committed range: STALE for a
 code-only commit, FRESH with the doc in the commit, a rename's dead source
 and uncovered new path, an ignored corpus's untracked claimant with its

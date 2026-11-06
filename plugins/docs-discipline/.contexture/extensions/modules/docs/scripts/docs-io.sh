@@ -436,6 +436,42 @@ docs_delta_empty() {
   awk 'NF { n = 1; exit } END { exit n }' "$DOCS_SCRATCH/delta"
 }
 
+# docs_delta_shebangs: the governed set's first-line read, on this side so no engine line
+# opens a code path. Every extensionless path of the staged delta (a non-empty basename with
+# no dot after its first character; both sides of a rename) that is a readable regular file
+# under the workspace root, its path free of a .. segment, lands in the scratch list as
+# shebang<TAB><path> when its first line starts with #!, plain<TAB><path> otherwise; the
+# check engine reads the list by name from DOCS_SHEBANG_LIST, and a path left out (deleted,
+# absent, a folder) counts only when a header source lists it exactly. Under --drift the
+# first line is the working tree's copy.
+docs_delta_shebangs() {
+  DOCS_SHEBANG_LIST="$DOCS_SCRATCH/shebangs"
+  export DOCS_SHEBANG_LIST
+  awk '
+    { gsub(/^[[:space:]]+|[[:space:]]+$/, "") }
+    $0 == "" { next }
+    /^[MADRCU?!][0-9]*[[:space:]]+/ {
+      rn = (substr($0, 1, 1) == "R")
+      sub(/^[MADRCU?!][0-9]*[[:space:]]+/, "")
+      if (rn) { split($0, rp, /[[:space:]]+/); path(rp[1]); path(rp[2]); next }
+    }
+    { path($0) }
+    function path(p,    b) {
+      b = p
+      sub(/.*\//, "", b)
+      if (b != "" && substr(b, 2) !~ /[.]/) print p
+    }' "$DOCS_SCRATCH/delta" | while IFS= read -r ds_p; do
+    case "/$ds_p/" in */../*) continue ;; esac
+    [ -f "$DOCS_ROOT/$ds_p" ] && [ -r "$DOCS_ROOT/$ds_p" ] || continue
+    ds_l=""
+    IFS= read -r ds_l < "$DOCS_ROOT/$ds_p" || :
+    case "$ds_l" in
+      '#!'*) printf 'shebang\t%s\n' "$ds_p" ;;
+      *) printf 'plain\t%s\n' "$ds_p" ;;
+    esac
+  done > "$DOCS_SHEBANG_LIST"
+}
+
 # docs_corpus_ignored: under the files driver, where a doc's logical address is its file
 # under the workspace root, DOCS_IGNORED counts the materialized corpus docs that the
 # root's repository ignores (git check-ignore; 0 when none is or outside a repository) and

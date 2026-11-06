@@ -296,9 +296,10 @@ run_audit() {
 }
 
 # Run coverage, freshness, and dead sources check on the staged delta (docs_delta_stage),
-# read by name; under a store's change log the engine runs in its log mode (no blanket, no
-# trackedness probe)
+# read by name with the shebang list drawn from its paths; under a store's change log the
+# engine runs in its log mode (no blanket, no trackedness probe)
 run_gate_check() {
+    docs_delta_shebangs
     if [ "$DOCS_DELTA" = log ]; then
         run_engine_over_corpus "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v delta_source=log
     else

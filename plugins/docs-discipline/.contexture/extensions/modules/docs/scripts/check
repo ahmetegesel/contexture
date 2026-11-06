@@ -3,6 +3,7 @@
 # usage: git diff --name-status | ctx docs check <repo>...
 # usage: git diff --name-status | ctx docs check docs/<repo>/<slug>.md...
 # help: reads a status-prefixed change delta on stdin together with the corpus and reports the touched code files that no doc claims (coverage), the changed code files whose docs did not ride the change (freshness), and the deleted files still listed as doc sources
+# help: the governed set: the code extensions (awk among them) and every extensionless file (a non-empty basename with no dot after its first character) whose first line, read under the workspace root, starts with #!, plus a depth-1 docs/*.md a doc claims; the test and generated exclusions apply first; an extensionless file without a shebang stays out, and a path that is not a readable regular file (deleted, absent, a folder) counts only when a header source lists it exactly; a doc rides the delta only at its logical address docs/<repo>/<slug>.md, the start of a delta path
 # help: the corpus comes from the configured storage driver's module store: a repo name checks against that repo's docs, a doc path names one doc by its logical address docs/<repo>/<slug>.md and the verb reads the stored doc, never a file at the caller's spelling; the corpus argument is required, so the delta on stdin is never read as a corpus
 # help: the glob forms docs/*/*.md and docs/<repo>/*.md are the files-driver form: under a store driver no file matches, and zsh refuses an unmatched glob before the verb runs, so name repos there
 # help: under a store driver with a change log (store.changelog) a claimed file reads fresh only when a doc whose own sources claim it rode the delta (no workspace or architecture blanket), and every claimant can ride the delta (no UNTRACKED CLAIMANT); compose the delta as { git diff --name-status; ctx docs changes; }
@@ -31,9 +32,12 @@ dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 docs_io_init "$dir" check
 docs_args 0 0 "$@" || exit $?
 # a store driver's change log feeds the corpus half: the engine's log mode (no blanket, no
-# trackedness probe); the files driver keeps today's git mode
+# trackedness probe); the files driver keeps today's git mode. The delta is staged and read
+# by name, so the shebang list can be drawn from its paths first
 docs_delta_source
+docs_delta_stage || exit $?
+docs_delta_shebangs
 if [ "$DOCS_DELTA" = log ]; then
-  docs_exec "$dir/docs-check.awk" -v delta_source=log
+  docs_exec "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG" -v delta_source=log
 fi
-docs_exec "$dir/docs-check.awk"
+docs_exec "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG"

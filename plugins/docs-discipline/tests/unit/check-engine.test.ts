@@ -11,7 +11,12 @@ const EXPECTED = join(TESTS, 'unit/expected/check');
 let matrix: string;
 let corpus: string;
 let eng: string;
+let tools: string;
 beforeAll(async () => {
+  tools = sandbox('check-tools');
+  mkdirSync(join(tools, 'docs/demo'), { recursive: true });
+  writeFileSync(join(tools, 'docs/demo/tools.md'), '@doc capability tools\n  repo: demo\n  description: "The demo tools."\n  sources: [bin/*, lib/gone, etc/conf]\n');
+  await gitInit(tools, 'docs/demo/tools.md');
   matrix = sandbox('check-matrix');
   mkdirSync(join(matrix, 'docs/demo'), { recursive: true });
   writeFileSync(join(matrix, 'docs/demo/widgets.md'), '@doc capability widgets\n  repo: demo\n  description: "Widget catalog and rendering."\n  sources: [src/widgets/*.cs]\n');
@@ -126,5 +131,60 @@ describe('the check engine: a doc touch only at the corpus logical address docs/
     expect(r.code, r.stdout + r.stderr).toBe(1);
     expect(r.stdout).toContain('STALE DOC: demo/platform');
     expect(r.stdout).not.toContain('FRESH: demo > widgets');
+  });
+});
+
+const shebangs = (name: string, body: string): string => {
+  const path = join(tools, `${name}.list`);
+  writeFileSync(path, body);
+  return path;
+};
+const uncovered = (out: string): string[] => out.match(/^UNCOVERED: .*$/gm) ?? [];
+
+describe('the check engine: the governed set, the code extensions with awk plus the shebang scripts the verb vouched for', { concurrent: true }, () => {
+  it('an unclaimed shebang script reads UNCOVERED rc 1', async () => {
+    const r = await check(tools, 'A\tnowhere/brand-new-script\n', { shebangs: shebangs('unclaimed', 'shebang\tnowhere/brand-new-script\n') });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(uncovered(r.stdout)).toEqual(['UNCOVERED: nowhere/brand-new-script']);
+  });
+  it('an unclaimed .awk engine reads UNCOVERED rc 1', async () => {
+    const r = await check(tools, 'A\tnowhere/engine.awk\n');
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(uncovered(r.stdout)).toEqual(['UNCOVERED: nowhere/engine.awk']);
+  });
+  it('an extensionless file without a shebang stays out, a header source listing it exactly included', async () => {
+    const r = await check(tools, 'A\tnowhere/notes\nM\tprojects/demo/etc/conf\n', { shebangs: shebangs('plain', 'plain\tnowhere/notes\nplain\tprojects/demo/etc/conf\n') });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain('UNCOVERED:');
+    expect(r.stdout).not.toContain('STALE DOC');
+  });
+  it('EXCLUDE_RE applies before the shebang list', async () => {
+    const r = await check(tools, 'A\tspec/run\n', { shebangs: shebangs('excluded', 'shebang\tspec/run\n') });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain('UNCOVERED:');
+  });
+  it('a claimed shebang script changed with no claimant riding reads STALE DOC under a tracked corpus', async () => {
+    const r = await check(tools, 'M\tprojects/demo/bin/run\n', { shebangs: shebangs('claimed', 'shebang\tprojects/demo/bin/run\n') });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain('STALE DOC: demo/tools (code modified without doc update)');
+  });
+  it('a deleted extensionless path a header source lists exactly is governed', async () => {
+    const r = await check(tools, 'D\tprojects/demo/lib/gone\n');
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain('STALE DOC: demo/tools (code deleted without doc update)');
+    expect(r.stdout).toContain("DEAD SOURCE: demo/tools still explicitly lists deleted file 'projects/demo/lib/gone'");
+  });
+  it('a deleted extensionless path a glob alone claims stays out', async () => {
+    const r = await check(tools, 'D\tprojects/demo/bin/old\n');
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain('STALE DOC');
+  });
+  it.each([
+    ['beside an uncovered script', 'A\tnowhere/brand-new.sh\n', 1, ['UNCOVERED: nowhere/brand-new.sh']],
+    ['alone', '', 0, []],
+  ])('a folder line and a <dir>/ line leave the verdict to the other paths, %s', async (_, rest, rc, lines) => {
+    const r = await check(tools, `M\tprojects/demo/vendor/sub\nA\tprojects/demo/vendor/embedded/\n${rest}`);
+    expect(r.code, r.stdout + r.stderr).toBe(rc);
+    expect(uncovered(r.stdout)).toEqual(lines);
   });
 });

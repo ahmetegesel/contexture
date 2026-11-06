@@ -118,9 +118,10 @@ The agent reads the workspace and answers, without writing anything:
   a contexture overlay (`AGENTS.workspace.md`) already exist?
 - Which repositories exist, and which one needs docs first?
 - Which code extensions does the tree use? The coverage filter counts a
-  broad default set of code, markup, style, shell, SQL, and IDL extensions
-  (the list lives in `CODE_EXT_RE` in the check's engine,
-  `.contexture/extensions/modules/docs/scripts/docs-check.awk`), skipping test
+  broad default set of code, markup, style, shell, awk, SQL, and IDL
+  extensions (the list lives in `CODE_EXT_RE` in the check's engine,
+  `.contexture/extensions/modules/docs/scripts/docs-check.awk`) and every
+  extensionless script whose first line is a shebang (`#!`), skipping test
   files and generated markers (`*.min.*`, `*.generated.*`); a stack outside
   the set extends the list before the coverage claim holds. The test and
   generated exclusions are reference defaults: compare them with the repo's
@@ -411,8 +412,9 @@ it walk below runs every one of these.
   the check reports it (`FRESH (BLANKET)` plus an `ARCH-COVERED` count of the
   files no riding claimant covered) instead of folding it silently into a
   clean verdict, though the verdict line and the exit code still read as a
-  real clean; coverage counts only the listed extensions; deleting a unit
-  doc does not red the check. A doc rides only at its logical address,
+  real clean; coverage counts only the listed extensions (`awk` among them)
+  and the extensionless scripts whose first line is a shebang; deleting a
+  unit doc does not red the check. A doc rides only at its logical address,
   `docs/<repo>/<slug>.md` at the start of a delta path, so a code path that
   merely ends in that shape (a package seed, a test sample, a child
   repository's own guides under its prefix) freshens nothing. The gate stays
@@ -424,6 +426,17 @@ it walk below runs every one of these.
   doc's sources, not that the doc which owns it describes it; read the owning
   doc of each changed path and check that its own claimant rode the delta.
   The check's output stays as it is.
+- A script without an extension is governed by its first line: an
+  extensionless file (a non-empty basename with no dot after its first
+  character) counts when its first line starts with `#!`, read by the verb on
+  the shell side under the workspace root (a readable regular file, its path
+  free of a `..` segment), never by the engine, so a folder in the delta (a
+  submodule, an embedded repository's `<dir>/` line) never fails the check.
+  An extensionless file without a shebang stays out; a path the verb cannot
+  read (deleted, absent, a folder) counts only when a header source lists it
+  exactly; under `--drift` the first line is the working tree's copy, so an
+  incoming new script reads ungoverned until it lands; the gate's matrix
+  keeps the extension rule alone.
 - The governed guide pages count as governed files: a depth-1 `docs/*.md`
   claimed by a corpus doc's sources demands its claimant ride the same delta
   (`STALE DOC` with `guide modified without corpus update` otherwise);
@@ -999,16 +1012,16 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `.contexture/extensions/modules/docs/module` | authored fresh: the module summary line |
 | `.contexture/extensions/modules/docs/scripts/audit` | authored fresh from the docs-query precedent: the help text moved into the `# summary`/`# usage`/`# help` declarations and delegation to `docs-audit.awk` over the corpus the IO helper resolved (a bare call reads the whole corpus) |
 | `.contexture/extensions/modules/docs/scripts/query` | reworked from the source CLI: the workspace root and the corpus from the IO helper (`CTX_ROOT`, the `DOCS_WORKSPACE_ROOT` override), the usage strings are ctx forms, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, an empty-corpus refusal, a no-match note on an empty projection, the help forms moved into the declarations, the free-text options exported to the engine's environment, and `--entry` through the edit engine |
-| `.contexture/extensions/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and delegation to `docs-check.awk` over the corpus the IO helper resolved, in the engine's store mode (`-v delta_source=log`) when the driver keeps a change log |
+| `.contexture/extensions/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and delegation to `docs-check.awk` over the corpus the IO helper resolved, in the engine's store mode (`-v delta_source=log`) when the driver keeps a change log; the delta staged in the scratch and read by name, the shebang list drawn from it first |
 | `.contexture/extensions/modules/docs/scripts/changes` | authored fresh: the corpus half of a delta from the store's change log (the net status computed in the IO helper), refusing under the files driver |
 | `.contexture/extensions/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, the unit form (the active task through `ctx unit task list` and `ctx unit resolve task#`), the backlog-file form refusing a record path, and delegation to `docs-nudge.awk` over the corpus the IO helper resolved |
 | `.contexture/extensions/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (from the IO helper: `DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the corpus read once through the IO helper into its scratch, the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, the help moved into the declarations, the store mode (the git half without the workspace root's corpus paths plus `ctx docs changes`, the check's store mode, the drift deferral notice), and the `--since=<rev>` range with every form's delta staged in the IO helper's scratch and the delta notices on stderr |
-| `.contexture/extensions/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `store` requirement, the list and get materialized into the module's scratch, the logical address rule, the store mode's delta source, change window, and code-half filter, the staged delta the check reads by name with the `--since` base it shares with the gate, and the write side (the argument parser, the field actions in the environment, the grammar check over a scratch copy of the corpus, the store put stamped with the op and the HEAD, the multi-doc pipeline of replace and ids) |
+| `.contexture/extensions/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `store` requirement, the list and get materialized into the module's scratch, the logical address rule, the store mode's delta source, change window, and code-half filter, the staged delta the check reads by name with the `--since` base it shares with the gate, the governed set's shebang list read from the staged delta's extensionless paths, and the write side (the argument parser, the field actions in the environment, the grammar check over a scratch copy of the corpus, the store put stamped with the op and the HEAD, the multi-doc pipeline of replace and ids) |
 | `.contexture/extensions/modules/docs/scripts/new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `remove`, `ids` | authored fresh: the write verbs, each a thin script over the IO helper's write pipeline with its help in the declarations |
 | `.contexture/extensions/modules/docs/scripts/docs-edit.awk` | authored fresh: the structural edit engine of the write verbs and of `query --entry`, driven by the grammar's `#%` schema, the request through the environment |
 | `.contexture/extensions/modules/docs/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the duplicate-id check generalized to one namespace per repo over every id field (an entry head or an id line of its own) |
 | `.contexture/extensions/modules/docs/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the free-text options read from the environment (never `awk -v`), and the pitfalls view scoped to `@pitfalls` |
-| `.contexture/extensions/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`); the `delta_source` token (`log` turns the blanket and the trackedness probe off for a store's driver-fed delta); the doc touch anchored to the logical address at the start of a delta path |
+| `.contexture/extensions/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`); the `delta_source` token (`log` turns the blanket and the trackedness probe off for a store's driver-fed delta); the doc touch anchored to the logical address at the start of a delta path; the governed set (`is_governed`) widened to `awk` and the shebang scripts the verb's list vouches for, a path the list cannot vouch for governed only when a header source lists it exactly |
 | `.contexture/extensions/modules/docs/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/extensions/modules/docs/README.md` | authored fresh: the off-path module map (layout, workspace root, tests) |
 | `.contexture/extensions/modules/docs/scripts/doc.grammar` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII; the contract and responsibilities shapes show their id lines, and the machine-readable schema (section 6, the `#%` lines) restates every shape for the write verbs; it is private to the module, never a shared template |

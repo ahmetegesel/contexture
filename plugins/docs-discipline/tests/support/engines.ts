@@ -46,8 +46,15 @@ export function query(dir: string, q: Query, files: readonly string[] = docFiles
   return awk(dir, engine('docs-query.awk'), { args: files, env, vars: { mode: q.mode ?? '', repo: q.repo ?? '' } });
 }
 
-export function check(dir: string, delta: string, { log = false, files = docFiles(dir) }: { log?: boolean; files?: readonly string[] } = {}): Promise<Run> {
-  return awk(dir, engine('docs-check.awk'), { input: delta, args: files, env: ceiling(dir), vars: log ? { delta_source: 'log' } : {} });
+export interface CheckOptions {
+  log?: boolean;
+  files?: readonly string[];
+  shebangs?: string;
+}
+
+export function check(dir: string, delta: string, { log = false, files = docFiles(dir), shebangs }: CheckOptions = {}): Promise<Run> {
+  const env = { ...ceiling(dir), ...(shebangs ? { DOCS_SHEBANG_LIST: shebangs } : {}) };
+  return awk(dir, engine('docs-check.awk'), { input: delta, args: files, env, vars: log ? { delta_source: 'log' } : {} });
 }
 
 export function nudge(dir: string, task: string, files: readonly string[] = docFiles(dir)): Promise<Run> {
