@@ -10,7 +10,7 @@ export async function git(dir: string, ...args: string[]): Promise<Run> {
 }
 
 export async function gitInit(dir: string, ...paths: string[]): Promise<void> {
-  await git(dir, 'init', '-q');
+  await git(dir, 'init', '-q', '-b', 'main');
   if (paths.length) await git(dir, 'add', ...paths);
 }
 

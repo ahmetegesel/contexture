@@ -7,6 +7,7 @@ import { seed } from '@support/snapshot';
 import { stage, type Driver } from '@support/stage';
 import { store } from '@support/store';
 import { answer } from '@support/wire';
+import { git, gitCommit, gitInit } from './git';
 
 export const PLUGIN = join(ROOT, 'plugins/docs-discipline');
 export const MODULE = join(PLUGIN, '.contexture/extensions/modules/docs');
@@ -16,8 +17,12 @@ export const WRITE = join(TESTS, 'write');
 export const SAMPLE = join(TESTS, 'sample');
 export const STAGED_SCRIPTS = '.contexture/extensions/modules/docs/scripts';
 
-function addDocs(sb: string): void {
+export function addModule(sb: string): void {
   cpSync(MODULE, join(sb, '.contexture/extensions/modules/docs'), { recursive: true });
+}
+
+function addDocs(sb: string): void {
+  addModule(sb);
   cpSync(join(PLUGIN, 'docs'), join(sb, 'docs'), { recursive: true });
   cpSync(join(SAMPLE, 'docs'), join(sb, 'docs'), { recursive: true });
   copyFileSync(join(SAMPLE, 'backlog.md'), join(sb, 'backlog.md'));
@@ -72,4 +77,18 @@ export function matches(actual: string, expectedFile: string): string {
     writeFileSync(expectedFile, actual);
   }
   return readFileSync(expectedFile, 'utf8');
+}
+
+export async function gwWorkspace(driver: Driver, label: string): Promise<string> {
+  return seed(async (sb) => {
+    addModule(sb);
+    mkdirSync(join(sb, 'src'));
+    writeFileSync(join(sb, 'src/gw.sh'), 'echo gw\n');
+    writeFileSync(join(sb, '.gitignore'), '.contexture/\n');
+    await gitInit(sb);
+    await git(sb, 'add', '-A');
+    await gitCommit(sb, 'h0');
+    const r = await docs(sb, ['new', 'workspace', 'gw-unit', '--kind=capability', "--description=the suite's own unit", '--sources=src/gw.sh', '--keywords=gw']);
+    if (r.code !== 0) throw new Error(`gw docs new: rc ${r.code}: ${r.stderr}`);
+  }, driver, label);
 }
