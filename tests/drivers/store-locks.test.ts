@@ -70,7 +70,7 @@ for (const driver of DRIVERS) {
       refused(await store(sb, driver).get('docs', 'workspace/waiter'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/waiter' not found in namespace 'docs'");
     });
 
-    it.fails('a TERM while waiting leaves the live holder\'s lock in place (known defect: the waiter removes it)', async () => {
+    it('a TERM while waiting leaves the live holder\'s lock in place', async () => {
       const sb = fresh(empty);
       holdLock(sb, LOCK, 'live');
       await termWaiter(sb);
