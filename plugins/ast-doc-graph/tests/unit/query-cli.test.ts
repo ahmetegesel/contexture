@@ -75,6 +75,17 @@ describe.skipIf(!sqliteFts5)('graph-query over the seeded database', { concurren
     expect(bare.stderr).toContain('rules requires a target symbol name or qname');
   });
 
+  it('[ast-doc-graph-r14] an unknown subcommand refuses rc 1 naming the known ones, while help and no arguments print the usage rc 0', async () => {
+    const r = await q('symbols', 'OrderCore.startOrder');
+    expect([r.code, r.stdout]).toEqual([1, '']);
+    expect(r.stderr).toBe('Error: unknown subcommand: symbols (known: symbol, search, callers, callees, rules, pitfalls, stats, help)\n');
+    for (const args of [['help'], ['--help'], []]) {
+      const usage = await graphQuery(cwd, db, ...args);
+      expect([usage.code, usage.stderr], args.join(' ')).toEqual([0, '']);
+      expect(usage.stdout).toContain('Usage:');
+    }
+  });
+
   it('stats counts every table and edge kind', async () => {
     const r = await q('stats');
     expect(r.code).toBe(0);

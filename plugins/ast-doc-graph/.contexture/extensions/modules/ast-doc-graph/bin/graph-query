@@ -109,6 +109,11 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+if [[ -z "$COMMAND" && -n "$TARGET" ]]; then
+  echo "Error: unknown subcommand: $TARGET (known: symbol, search, callers, callees, rules, pitfalls, stats, help)" >&2
+  exit 1
+fi
+
 if ! [[ "$DEPTH" =~ ^[1-9][0-9]*$ ]]; then
   echo "Error: --depth must be a positive integer." >&2
   exit 1
@@ -987,10 +992,5 @@ case "$COMMAND" in
     ;;
   stats)
     cmd_stats
-    ;;
-  *)
-    echo "Unknown command: $COMMAND" >&2
-    print_help
-    exit 1
     ;;
 esac

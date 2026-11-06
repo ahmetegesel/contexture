@@ -25,7 +25,9 @@ do not live under `scripts/`):
 
 The two verbs are thin wrappers: they exec their engine with the arguments
 untouched. `query`'s seven subcommands (`symbol`, `search`, `callers`,
-`callees`, `rules`, `pitfalls`, `stats`) ride as arguments to the query verb.
+`callees`, `rules`, `pitfalls`, `stats`) ride as arguments to the query verb;
+words that name none (a mistyped `symbols`) refuse rc 1 naming the known ones,
+while `help` or no word at all prints the usage rc 0.
 
 ## Pipeline
 
