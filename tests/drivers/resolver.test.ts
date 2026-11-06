@@ -128,9 +128,16 @@ describe('the resolver', { concurrent: true }, () => {
     expect((await rsv(sb, [`--driver=${w}`, 'store.list', 'unit'])).code).toBe(2);
   });
 
-  it.skipIf(ROOT_USER).fails('answers with a clean stderr when the drawer is unwritable (known defect: a shell redirect error leaks)', async ({ onTestFinished }) => {
+  it.skipIf(ROOT_USER)('answers with a clean stderr when the drawer is unwritable', async ({ onTestFinished }) => {
     const [sb, w] = unwritableDrawer(onTestFinished);
     answer(await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']), 'store.list');
+  });
+
+  it.skipIf(ROOT_USER)('answers a require with a clean stderr and caches nothing when the drawer is unwritable', async ({ onTestFinished }) => {
+    const [sb, w] = unwritableDrawer(onTestFinished);
+    const r = await rsv(sb, [`--driver=${w}`, 'require', 'store']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
+    expect(verdicts(sb)).toEqual([]);
   });
 
   it('passes the driver\'s own capability refusal line through the handshake', async () => {
