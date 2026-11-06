@@ -214,13 +214,14 @@ else
   CACHE_DIR="$RUN_DIR"
 fi
 
-# Resolve database destination
+# Resolve database destination; a full index makes its folder only when the loader runs
 if [[ -z "$DB_PATH" ]]; then
   DB_PATH="$REPO_ROOT/graph.db"
 fi
 DB_DIR="$(dirname "$DB_PATH")"
-mkdir -p "$DB_DIR"
-DB_PATH="$(cd "$DB_DIR" && pwd)/$(basename "$DB_PATH")"
+if [[ -d "$DB_DIR" ]]; then
+  DB_PATH="$(cd "$DB_DIR" && pwd)/$(basename "$DB_PATH")"
+fi
 
 # Resolve source scanning directory
 SCAN_DIR=""
@@ -447,6 +448,8 @@ fi
   "$DOCS_SCAN_DIR"
 
 # Step 4: Ingest intermediate streams into SQLite graph database
+mkdir -p "$DB_DIR"
+DB_PATH="$(cd "$DB_DIR" && pwd)/$(basename "$DB_PATH")"
 LOADER_FLAGS=(
   --db "$DB_PATH"
   --symbols "$SYMBOLS_JSONL"

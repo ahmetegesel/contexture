@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { existsSync, realpathSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { sandbox } from '@support/sandbox';
 import { astDocIndex, compilerApi, count, miniRepo, noCompilerApiAround, sqliteFts5, TYPESCRIPT, TYPESCRIPT_7_STUB } from '../support/graph';
@@ -45,6 +45,14 @@ describe.skipIf(!compilerApi())('the variable is the only candidate when set, ev
     refusedCleanly(r, repo);
     expect(r.stderr).toContain(`AST_DOC_GRAPH_TYPESCRIPT names typescript 7.0.2 at ${STUB_ENTRY}, which has no compiler API (createSourceFile)`);
     expect(r.stderr).toContain('TypeScript 5 or 6');
+  });
+
+  it('a refusal makes no database folder: a --db inside an absent folder leaves that folder absent', async () => {
+    const repo = miniRepo('ts7-override-db');
+    const db = join(sandbox('ts7-db'), 'absent/graph.db');
+    const r = await astDocIndex(repo, ['--clean', '--db', db], { env: { AST_DOC_GRAPH_TYPESCRIPT: TYPESCRIPT_7_STUB } });
+    refusedCleanly(r, repo);
+    expect(existsSync(dirname(db))).toBe(false);
   });
 
   it('naming a path that loads no package refuses rc 1 naming the variable and the path', async () => {
