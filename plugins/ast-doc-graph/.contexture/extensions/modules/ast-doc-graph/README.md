@@ -58,7 +58,8 @@ other.
 
 The docs extractor reads the corpus as files: `bin/ast-doc-index` scans the
 workspace's `docs/` folder and `extractors/docs/extract-docs.ts` parses each
-file, never through `ctx docs` or the storage driver. Under the docs-discipline
+file, never through `ctx docs` or the storage driver; a walk that finds no
+markdown yields empty docs streams, never a refusal. Under the docs-discipline
 files driver that folder is the corpus; under a store driver it holds none, so
 the graph carries no docs, rules, or pitfalls (the code side is unaffected).
 This files-only limit stands until the extraction routes through `ctx docs`.

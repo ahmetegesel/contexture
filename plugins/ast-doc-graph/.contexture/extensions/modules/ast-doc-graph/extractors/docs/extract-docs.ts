@@ -796,8 +796,8 @@ export async function main() {
     }
   }
 
-  // If no files were given or found from arguments, check projectRoot/docs
-  if (targetFiles.length === 0) {
+  // Only a run given no path argument falls back to projectRoot/docs or refuses; a path holding no markdown yields empty streams
+  if (targetFiles.length === 0 && positionalArgs.length === 0) {
     if (!projectRoot) {
       projectRoot = findProjectRoot();
     }
@@ -805,11 +805,10 @@ export async function main() {
     if (fs.existsSync(defaultDocsDir)) {
       targetFiles = findMarkdownFiles(defaultDocsDir);
     }
-  }
-
-  if (targetFiles.length === 0) {
-    printUsage();
-    process.exit(1);
+    if (targetFiles.length === 0) {
+      printUsage();
+      process.exit(1);
+    }
   }
 
   if (!projectRoot) {

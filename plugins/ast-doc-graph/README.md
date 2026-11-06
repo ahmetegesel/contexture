@@ -173,7 +173,10 @@ ctx ast-doc-graph index --repo-root . --clean
 ```
 
 The driver discovers TypeScript files and documentation units, runs the extractors,
-and compiles `graph.db` in the repository root.
+and compiles `graph.db` in the repository root. A repository without TypeScript
+never runs the TypeScript extractor, and a docs walk (the `docs/` folder, else the
+repository root) that finds no markdown yields an empty docs side, so a docs-only
+or a code-only repository indexes rc 0.
 
 The index runs only inside a contexture drawer: under `ctx` the drawer is the
 workspace (`CTX_ROOT`), so `--repo-root` may name any repository; run directly,
