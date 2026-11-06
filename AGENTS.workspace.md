@@ -13,5 +13,6 @@
 @append @git
   version: MAJOR = breaking (fields removed, shapes changed); MINOR = new sections, features; PATCH = fixes, wording
   bumps: agent applies PATCH + MINOR at ship, no ask; MAJOR = human verdict alone, agent proposes only
+  plugin versions: a release that changes a plugin's payload (its installed .contexture tree and any package-root file its part hooks apply at install) bumps that plugin's manifest version by the version rule; the governance plugin-versions check reads red on a staged or committed payload change with an unchanged version
   ship breath: stage the payload first (git add every path that ships, so the governance probe over tracked paths sees what it is about to gate), then the run green (bun run test:prerelease from tests/) + docs sync + commit + push + annotated tag vX.Y.Z + the CHANGELOG.md section, one act; every commit in the tag range appears in the section; a gate run on an unstaged payload is not the gate
   changelog: no adopter, project, or personal names; the changelog speaks the convention's vocabulary, the record carries the names
