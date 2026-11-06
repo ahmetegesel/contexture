@@ -99,10 +99,10 @@ describe.skipIf(!sqliteFts5)('the index stages its intermediate streams in one p
     expect(listing(join(cwd, '.contexture/tmp'))).toEqual([]);
   });
 
-  it("under ctx the drawer is CTX_ROOT: a repository without its own .contexture indexes, its folder inside CTX_ROOT's .contexture/tmp", async () => {
+  it("under ctx the drawer is CTX_ROOT: a repository without its own .contexture indexes, its folder inside CTX_ROOT's .contexture/tmp, made when absent", async () => {
     const cwd = sandbox('drawer-ctx-cwd');
     const drawer = sandbox('drawer-ctx-root');
-    mkdirSync(join(drawer, '.contexture/tmp'), { recursive: true });
+    mkdirSync(join(drawer, '.contexture'));
     const repo = docsRepo('drawer-ctx');
     const made = madeFolders('drawer-ctx');
     const r = await astDocIndex(repo, ['--clean'], { cwd, env: { ...made.env, CTX_ROOT: drawer } });
