@@ -38,7 +38,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['bootstrap objective', 'objective', ['unit', 'bootstrap', 'in-u8-unit', BAD]],
     ['search query', 'query', ['unit', 'search', 'in-unit', BAD, '--mode=exact']],
     ['lane report --body', 'the report', ['lane', 'report', 'in-unit', 'in-lane', flag('body', BAD)]],
-  ] as const)('E3-d: %s refuses bytes that are not UTF-8 naming the field %s, nothing landed', async ([, field, argv]) => {
+  ] as const)('E3-d [the-record-r9, the-record-r12]: %s refuses bytes that are not UTF-8 naming the field %s, nothing landed', async ([, field, argv]) => {
     const sb = fresh(sb0);
     const before = await picture(sb);
     const r = await execBytes(sb, ctxArgs(...argv));
@@ -53,7 +53,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['create', 'a recipe holding a NUL', Buffer.from('a recipe\0with a NUL\n'), 'the recipe holds a NUL byte'],
     ['report', 'a report holding a NUL', Buffer.from('a report\0with a NUL\n'), 'the report holds a NUL byte'],
     ['report', 'a report not UTF-8', latin1('a report \xc0\x80\n'), 'the report is not valid UTF-8'],
-  ] as const)('E3-d: lane %s refuses %s on stdin naming it, nothing landed', async ([verb, , doc, message]) => {
+  ] as const)('E3-d [the-record-r9, the-record-r12]: lane %s refuses %s on stdin naming it, nothing landed', async ([verb, , doc, message]) => {
     const sb = fresh(sb0);
     const r = await run(sb, ['lane', verb, 'in-unit', verb === 'create' ? 'in-u8-lane' : 'in-lane'], { input: doc });
     expect(r.code).toBe(1);
@@ -62,7 +62,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect((await lane(sb, 'show', 'in-unit', 'in-lane', 'report')).stdout.trim()).toBe('');
   });
 
-  it('E3-d: valid UTF-8 of every length lands in a WHAT and a recipe and reads back byte for byte', async () => {
+  it('E3-d [the-record-r12]: valid UTF-8 of every length lands in a WHAT and a recipe and reads back byte for byte', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'record', 'in-unit', `--what=${UTF8_OK}`, `--slug=${D}-e3-u8ok`)).code).toBe(0);
     expect((await unit(sb, 'entry', 'show', 'in-unit', `${D}-e3-u8ok`)).stdout).toContain(`WHAT: "${UTF8_OK}"`);
@@ -71,7 +71,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect((await lane(sb, 'show', 'in-unit', 'in-u8-lane', 'recipe')).stdout).toBe(recipe);
   });
 
-  it('E3-e: a legacy entry holding a byte that is not UTF-8 reads as stored (posix plant)', async () => {
+  it('E3-e [the-record-r12]: a legacy entry holding a byte that is not UTF-8 reads as stored (posix plant)', async () => {
     const sb = fresh(sb0);
     appendFileSync(artifactPath(sb, 'in-unit', 'journal'), latin1('\n@entry 2026-09-20-e3-bytes\n  ANCHOR: A1\n  WHAT: "legacy \xff bytes"\n  THREAD: none\n'));
     const shown = await unit(sb, 'entry', 'show', 'in-unit', '2026-09-20-e3-bytes');
@@ -80,7 +80,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect((await unit(sb, 'board', 'in-unit')).code).toBe(0);
   });
 
-  it('Y-a R1: a two-line block lands as indented body lines; literal backslash sequences stay verbatim', async () => {
+  it('Y-a R1 [the-record-r12]: a two-line block lands as indented body lines; literal backslash sequences stay verbatim', async () => {
     const sb = fresh(sb0);
     const added = await unit(sb, 'task', 'add', 'in-unit', 'y-multi', '--objective=Multi-line task', '--desc=first body line\nsecond body line');
     expect(added.code).toBe(0);
@@ -94,7 +94,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect((await unit(sb, 'search', 'in-unit', 'C:\\new', '--mode=exact', '--json')).stdout).not.toContain('"total_matches":0');
   });
 
-  it('Y-a R1: task update and finding add and update with a two-line block keep every item', async () => {
+  it('Y-a R1 [the-record-r12]: task update and finding add and update with a two-line block keep every item', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'task', 'update', 'in-unit', 'in-task', '--desc=first body line\nsecond body line')).code).toBe(0);
     expect((await unit(sb, 'task', 'list', 'in-unit', '--status=all')).stdout.split('\n').filter((l) => l.startsWith('  ['))).toHaveLength(1);
@@ -112,7 +112,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['finding add --summary', ['unit', 'finding', 'add', 'in-unit', 'Y_CR', `--summary=${CR}`]],
     ['record --what', ['unit', 'record', 'in-unit', `--what=${CR}`]],
     ['lane record --what', ['lane', 'record', 'in-unit', 'in-lane', `--what=${CR}`]],
-  ] as const)('Y-c R2: %s with a carriage return refuses rc 1 and changes nothing', async ([, argv]) => {
+  ] as const)('Y-c R2 [the-record-r9, the-record-r12]: %s with a carriage return refuses rc 1 and changes nothing', async ([, argv]) => {
     const sb = fresh(sb0);
     const before = await picture(sb);
     expect((await run(sb, argv)).code).toBe(1);
@@ -135,7 +135,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['finding supersede --ref', ['unit', 'finding', 'supersede', 'in-unit', 'IN_ONE', 'Q_THREE', '--summary=Three', `--ref=${NL}`]],
     ['lane record --what', ['lane', 'record', 'in-unit', 'in-lane', `--what=${NL}`]],
     ['lane record --thread', ['lane', 'record', 'in-unit', 'in-lane', '--what=one line', `--thread=${NL}`]],
-  ] as const)('Q-a R3: %s with an embedded newline refuses naming it and changes nothing', async ([, argv]) => {
+  ] as const)('Q-a R3 [the-record-r9, the-record-r12]: %s with an embedded newline refuses naming it and changes nothing', async ([, argv]) => {
     const sb = fresh(sb0);
     const before = await picture(sb);
     const r = await run(sb, argv);
@@ -144,11 +144,11 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect(await picture(sb)).toBe(before);
   });
 
-  it('Q-a R3: a block scalar keeps its newline', async () => {
+  it('Q-a R3 [the-record-r12]: a block scalar keeps its newline', async () => {
     expect((await unit(fresh(sb0), 'task', 'add', 'in-unit', 'q-d', '--objective=Task D', `--desc=${NL}`)).code).toBe(0);
   });
 
-  it('B: backslash payloads travel through task add, show, and the --json views byte for byte', async () => {
+  it('B [the-record-r12]: backslash payloads travel through task add, show, and the --json views byte for byte', async () => {
     const sb = fresh(sb0);
     const obj = 'B a\\b c\\\\d \\n e\\';
     const json = 'B a\\\\b c\\\\\\\\d \\\\n e\\\\';
@@ -163,7 +163,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect((await unit(sb, 'task', 'list', 'in-unit', '--json')).stdout).toContain(`"objective":"${json}"`);
   });
 
-  it('B: backslash payloads travel through finding add, record, board, entry show, and search', async () => {
+  it('B [the-record-r12]: backslash payloads travel through finding add, record, board, entry show, and search', async () => {
     const sb = fresh(sb0);
     const sum = 'S a\\b c\\\\d \\n e\\';
     expect((await unit(sb, 'finding', 'add', 'in-unit', 'B_BS', `--summary=${sum}`)).code).toBe(0);
@@ -178,7 +178,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect((await unit(sb, 'search', 'in-unit', 'c\\\\d', '--mode=exact', '--json')).stdout).not.toContain('"total_matches":0');
   });
 
-  it('B: backslash payloads travel through lane record and a lane report, the write echo one line with its size', async () => {
+  it('B [the-record-r12, the-record-r16]: backslash payloads travel through lane record and a lane report, the write echo one line with its size', async () => {
     const sb = fresh(sb0);
     const lw = 'L a\\b c\\\\d \\n e\\';
     expect((await lane(sb, 'record', 'in-unit', 'in-lane', `--what=${lw}`)).code).toBe(0);

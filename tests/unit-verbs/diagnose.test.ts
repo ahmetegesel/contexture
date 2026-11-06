@@ -14,19 +14,19 @@ describe.concurrent('ctx unit diagnose', () => {
     }, 'posix', 'diagnose');
   });
 
-  it('X-f: diagnose never reports the store missing while it holds units', async () => {
+  it('X-f [the-engine-r24]: diagnose never reports the store missing while it holds units', async () => {
     const r = await unit(fresh(sb0), 'diagnose', '--json');
     expect(r.stdout + r.stderr).not.toContain('not created yet');
   });
 
-  it('X-q: diagnose counts the ACTIVE units exactly, in the text and --json views', async () => {
+  it('X-q [the-engine-r24]: diagnose counts the ACTIVE units exactly, in the text and --json views', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'active')).stdout.split('\n').filter((l) => /^[a-z0-9][a-z0-9_-]*$/.test(l))).toHaveLength(2);
     expect((await unit(sb, 'diagnose')).stdout).toMatch(/active units: {4}2$/m);
     expect((await unit(sb, 'diagnose', '--json')).stdout).toMatch(/"active_units":2\}\}\n?$/);
   });
 
-  it('X-q: diagnose counts zero ACTIVE units when every unit is CLOSED', async () => {
+  it('X-q [the-engine-r24]: diagnose counts zero ACTIVE units when every unit is CLOSED', async () => {
     const sb = stage('posix', 'diagnose-closed');
     await seedUnit(sb, 'd-only', 'only unit');
     await must(unit(sb, 'close', 'd-only'));

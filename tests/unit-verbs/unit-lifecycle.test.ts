@@ -7,7 +7,7 @@ import { lane, must, run, seedUnit, unit } from '../support/unit';
 const anchor = async (sb: string, u: string): Promise<string | undefined> => (await unit(sb, 'load', u)).stdout.split('\n').find((l) => l.startsWith('current_anchor: '));
 
 describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, refs', () => {
-  it('R-a: bootstrap refuses no argument, an existing slug, and a malformed slug rc 1', async () => {
+  it('R-a [the-record-r11]: bootstrap refuses no argument, an existing slug, and a malformed slug rc 1', async () => {
     const sb = stage('posix', 'life-boot');
     expect((await unit(sb, 'bootstrap')).code).toBe(1);
     expect((await unit(sb, 'bootstrap', 'u1', 'refusal unit')).code).toBe(0);
@@ -22,7 +22,7 @@ describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, 
     expect((await unit(sb, 'refs', 'u1', 'nosuch')).code).toBe(1);
   });
 
-  it('S1-a: stamp and task start keep a state and a task holding sed metacharacters whole, with no next_action', async () => {
+  it('S1-a [the-record-r1]: stamp and task start keep a state and a task holding sed metacharacters whole, with no next_action', async () => {
     const sb = stage('posix', 'life-sed');
     await seedUnit(sb, 'rw-unit', 'rewrite / & unit');
     expect((await unit(sb, 'stamp', 'rw-unit')).code).toBe(0);
@@ -51,7 +51,7 @@ describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, 
     expect((await unit(sb, 'active')).stdout).toMatch(/^rw-unit$/m);
   });
 
-  it('E3-f: stamp takes the unit alone; a receipt text refuses and leaves the anchor; the anchor carries its number and date only', async () => {
+  it('E3-f [the-record-r3]: stamp takes the unit alone; a receipt text refuses and leaves the anchor; the anchor carries its number and date only', async () => {
     const sb = stage('posix', 'life-stamp');
     await seedUnit(sb, 'e3-unit', 'input checks unit');
     const before = await anchor(sb, 'e3-unit');
@@ -71,7 +71,7 @@ describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, 
     expect((await unit(sb, 'search', 'e3-unit', 'a legacy receipt kept', '--mode=exact', '--json')).stdout).toContain('"snippet":"@anchor A3 (\\"continues A2\\", attention: a legacy receipt kept)"');
   });
 
-  it('X-o: a CLOSED unit refuses typed writes through the verbs and nothing lands', async () => {
+  it('X-o [the-record-r11]: a CLOSED unit refuses typed writes through the verbs and nothing lands', async () => {
     const sb = stage('posix', 'life-closed');
     await seedUnit(sb, 'x-closed', 'closed unit');
     await must(run(sb, ['lane', 'create', 'x-closed', 'x-cl'], { input: '# recipe grammar\n' }));

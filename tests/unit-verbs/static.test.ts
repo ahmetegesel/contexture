@@ -8,7 +8,7 @@ const verbScripts = (): [string, string][] =>
   MODULES.flatMap((dir) => readdirSync(join(ROOT, dir)).map((f) => [`${dir}/${f}`, readFileSync(join(ROOT, dir, f), 'utf8')] as [string, string])).filter(([, text]) => /^# summary: /m.test(text));
 
 describe('the unit and lane verb scripts, read statically', () => {
-  it('UP-d: no verb script prints a sessions path in a message (comments and the WRITE SCOPE line aside)', () => {
+  it('UP-d [the-record-r14]: no verb script prints a sessions path in a message (comments and the WRITE SCOPE line aside)', () => {
     const hits = MODULES.flatMap((dir) => readdirSync(join(ROOT, dir)).flatMap((f) => readFileSync(join(ROOT, dir, f), 'utf8').split('\n').map((line, i) => `${dir}/${f}:${i + 1}:${line}`)))
       .filter((l) => l.includes('contexture/sessions') && !/:\d+:#/.test(l) && !l.includes('WRITE SCOPE'));
     expect(hits).toEqual([]);

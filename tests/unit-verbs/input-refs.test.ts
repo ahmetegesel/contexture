@@ -30,7 +30,7 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
     }, 'posix', 'input-refs');
   });
 
-  it.for(PATHS)('E3-a: %s refuses a malformed ref naming both shapes, and nothing lands', async ([, argv]) => {
+  it.for(PATHS)('E3-a [the-record-r9, the-record-r18]: %s refuses a malformed ref naming both shapes, and nothing lands', async ([, argv]) => {
     const sb = fresh(sb0);
     const before = await unitChecksum(sb, 'e3-unit', ['e3-lane']);
     const r = await run(sb, argv('bareword'));
@@ -39,7 +39,7 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
     expect(await unitChecksum(sb, 'e3-unit', ['e3-lane'])).toBe(before);
   });
 
-  it('E3-b: a control byte in a ref refuses through the verb too, nothing landed', async () => {
+  it('E3-b [the-record-r18]: a control byte in a ref refuses through the verb too, nothing landed', async () => {
     const sb = fresh(sb0);
     const before = await unitChecksum(sb, 'e3-unit', ['e3-lane']);
     const r = await unit(sb, 'record', 'e3-unit', '--what=e7 probe', '--ref=journal#x\fy');
@@ -48,7 +48,7 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
     expect(await unitChecksum(sb, 'e3-unit', ['e3-lane'])).toBe(before);
   });
 
-  it('E3-b: record lands the seven shapes and a root-level file, each its own REF line', async () => {
+  it('E3-b [the-record-r14, the-record-r18]: record lands the seven shapes and a root-level file, each its own REF line', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'record', 'e3-unit', '--what=e7 refs ok', `--slug=${D}-e7-refs`, ...refs(...SEVEN))).code).toBe(0);
     expect((await unit(sb, 'entry', 'show', 'e3-unit', `${D}-e7-refs`)).stdout.split('\n').filter((l) => l.startsWith('  REF: '))).toHaveLength(7);
@@ -56,7 +56,7 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
     expect((await unit(sb, 'entry', 'show', 'e3-unit', `${D}-e3-refs`)).stdout.split('\n').filter((l) => l.startsWith('  REF: '))).toHaveLength(3);
   });
 
-  it('E3-b: task add and task update land the shapes as the REFS list', async () => {
+  it('E3-b [the-record-r14, the-record-r18]: task add and task update land the shapes as the REFS list', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'task', 'add', 'e3-unit', 'e7-good', '--objective=e7 good refs', `--refs=${SEVEN.join(' ')}`)).code).toBe(0);
     expect((await unit(sb, 'task', 'show', 'e3-unit', 'e7-good')).stdout).toMatch(/^ {2}REFS: \[\/abs\/file, \.\.\/x, \.\/README\.md, lanes\/l\/recipe, journal#x, README\.md#top, ###\]$/m);
@@ -64,7 +64,7 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
     expect((await unit(sb, 'task', 'show', 'e3-unit', 'e3-task')).stdout).toMatch(new RegExp(`^ {2}REFS: \\[journal#${D}-e3-t, lanes/e3-lane/recipe\\]$`, 'm'));
   });
 
-  it('E3-b: finding add, update, and supersede, and lane record land the shapes', async () => {
+  it('E3-b [the-record-r14, the-record-r18]: finding add, update, and supersede, and lane record land the shapes', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'finding', 'add', 'e3-unit', 'E7_GOOD', '--summary=e7 good', ...refs(...SEVEN))).code).toBe(0);
     expect((await unit(sb, 'finding', 'show', 'e3-unit', 'E7_GOOD')).stdout.split('\n').filter((l) => l.startsWith('  REF: '))).toHaveLength(7);
@@ -74,7 +74,7 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
     expect((await lane(sb, 'show', 'e3-unit', 'e3-lane', 'journal')).stdout).toContain('e7 lane refs ok');
   });
 
-  it('E3-c: a legacy free-text REF reads as stored (posix plant)', async () => {
+  it('E3-c [the-record-r18]: a legacy free-text REF reads as stored (posix plant)', async () => {
     const sb = fresh(sb0);
     appendArtifact(sb, 'e3-unit', 'journal', '\n@entry 2026-09-20-e3-legacy\n  ANCHOR: A1\n  WHAT: "legacy ref"\n  THREAD: none\n  REF: "a free text legacy reference"\n');
     expect((await unit(sb, 'entry', 'show', 'e3-unit', '2026-09-20-e3-legacy')).stdout).toMatch(/^ {2}REF: "a free text legacy reference"$/m);

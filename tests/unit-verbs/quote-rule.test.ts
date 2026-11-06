@@ -33,7 +33,7 @@ describe.concurrent('one quote rule for every one-line quoted field', () => {
     }, 'posix', 'quote-rule');
   });
 
-  it('Q-b: a WHAT carrying double quotes lands verbatim and every reader returns it', async () => {
+  it('Q-b [the-record-r12]: a WHAT carrying double quotes lands verbatim and every reader returns it', async () => {
     const sb = fresh(sb0);
     expect(readFileSync(artifactPath(sb, 'q-unit', 'journal'), 'utf8').split('\n')).toContain('  WHAT: "an appended "quoted" what"');
     const board = (await unit(sb, 'board', 'q-unit')).stdout;
@@ -45,14 +45,14 @@ describe.concurrent('one quote rule for every one-line quoted field', () => {
     expect((await unit(sb, 'search', 'q-unit', 'appended "quoted" what', '--mode=exact', '--json')).stdout).toContain(`"entity_id":"${D}-q-appended-quote"`);
   });
 
-  it('Q-d: a legacy two-line WHAT still audits rc 0 and loads on the board (posix plant)', async () => {
+  it('Q-d [the-record-r12]: a legacy two-line WHAT still audits rc 0 and loads on the board (posix plant)', async () => {
     const sb = fresh(sb0);
     appendArtifact(sb, 'q-unit', 'journal', `\n@entry ${D}-q-legacy-two-line\n  ANCHOR: A1\n  WHAT: "legacy first line\nlegacy second line"\n  THREAD: none\n`);
     expect((await unit(sb, 'audit', 'q-unit')).code).toBe(0);
     expect((await unit(sb, 'board', 'q-unit')).stdout).toContain(`@entry ${D}-q-legacy-two-line`);
   });
 
-  it('U-a: bootstrap takes a state objective with double and single quotes; load, active, and the audit read it verbatim', async () => {
+  it('U-a [the-record-r12]: bootstrap takes a state objective with double and single quotes; load, active, and the audit read it verbatim', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'bootstrap', 'u-obj', OBJ)).code).toBe(0);
     expect((await unit(sb, 'load', 'u-obj', '1')).stdout.split('\n')).toContain(`objective: "${OBJ}"`);
@@ -62,7 +62,7 @@ describe.concurrent('one quote rule for every one-line quoted field', () => {
     expect((await unit(sb, 'bootstrap', 'u-nl', 'first\nsecond')).code).toBe(1);
   });
 
-  it('U-a: a task OBJECTIVE with double quotes from task add and task update reads back verbatim everywhere', async () => {
+  it('U-a [the-record-r12]: a task OBJECTIVE with double quotes from task add and task update reads back verbatim everywhere', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'task', 'show', 'u-unit', 'u-b')).stdout.split('\n')).toContain('  OBJECTIVE: "an "appended" objective"');
     expect((await unit(sb, 'task', 'show', 'u-unit', 'u-c')).stdout.split('\n')).toContain('  OBJECTIVE: "an "amended" objective"');

@@ -18,7 +18,7 @@ describe.concurrent('ctx unit refresh: the audit rc wins over the hook rc', () =
     sb0 = await seed((sb) => seedUnit(sb, 'refresh-unit', 'refresh semantics unit'), 'posix', 'refresh');
   });
 
-  it('H: a clean refresh answers rc 0; a warn hook warns on stderr and keeps rc 0; a block hook fails it rc 1', async () => {
+  it('H [the-engine-r13, modules-r5]: a clean refresh answers rc 0; a warn hook warns on stderr and keeps rc 0; a block hook fails it rc 1', async () => {
     const sb = fresh(sb0);
     expect(await refresh(sb)).toBe(0);
     hook(sb, 'warnmod', 'w', 'exit 3\n');

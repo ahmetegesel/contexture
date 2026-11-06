@@ -14,7 +14,7 @@ describe.concurrent('the unit and lane verb surface', () => {
     sb = stage('posix', 'verb-surface');
   });
 
-  it('V-b: the verb scripts on disk are the declared 21', () => {
+  it('V-b [modules-r2]: the verb scripts on disk are the declared 21', () => {
     const dir = join(sb, '.contexture/modules/unit/scripts');
     const verbs = readdirSync(dir).filter((f) => !f.startsWith('.') && /^# summary: /m.test(readFileSync(join(dir, f), 'utf8'))).sort();
     expect(verbs).toEqual(DECLARED);
@@ -32,19 +32,19 @@ describe.concurrent('the unit and lane verb surface', () => {
     expect((await unit(sb, verb)).code).toBe(NO_ARG_OK.has(verb) ? 0 : 1);
   });
 
-  it('V-b: ctx unit migrate answers as an unknown verb', async () => {
+  it('V-b [the-engine-r17]: ctx unit migrate answers as an unknown verb', async () => {
     const r = await unit(sb, 'migrate', '--from=posix', '--to=fts5');
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^ctx: unknown verb: migrate$/m);
   });
 
-  it.for(['append', 'amend', 'query', 'flip', 'drop', 'next'])('V-c: the retired ctx unit %s refuses rc 1 naming its replacement', async (verb) => {
+  it.for(['append', 'amend', 'query', 'flip', 'drop', 'next'])('V-c [the-engine-r2]: the retired ctx unit %s refuses rc 1 naming its replacement', async (verb) => {
     const r = await unit(sb, verb, 'u1');
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(new RegExp(`^ctx unit ${verb} retired: use `, 'm'));
   });
 
-  it('V-c: a module named after a retired verb is refused as a reserved name', async () => {
+  it('V-c [the-engine-r2, modules-r6]: a module named after a retired verb is refused as a reserved name', async () => {
     const own = stage('posix', 'verb-flip');
     mkdirSync(join(own, '.contexture/modules/flip/scripts'), { recursive: true });
     writeFileSync(join(own, '.contexture/modules/flip/module'), '# summary: a module claiming a retired verb name\n');
@@ -53,7 +53,7 @@ describe.concurrent('the unit and lane verb surface', () => {
     expect(r.stderr).toContain('reserved name refused (shadow): flip');
   });
 
-  it('V-c: unit help of a retired verb prints its replacement; the help tables list 21 unit and 4 lane verbs', async () => {
+  it('V-c [the-engine-r2, the-engine-r4]: unit help of a retired verb prints its replacement; the help tables list 21 unit and 4 lane verbs', async () => {
     const r = await unit(sb, 'help', 'query');
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^ctx unit query retired: use entry show/m);
@@ -66,7 +66,7 @@ describe.concurrent('the unit and lane verb surface', () => {
     ['finding', 'add', /^ {2}add <unit>/m],
     ['task', 'start', /^ {2}start <unit>/m],
     ['entry', 'show', /^ {2}show <unit>/m],
-  ] as const)('E-11b: ctx unit %s %s --help and -h print its usage rc 0, never taken for a unit', async ([verb, sub, usage]) => {
+  ] as const)('E-11b [the-engine-r7]: ctx unit %s %s --help and -h print its usage rc 0, never taken for a unit', async ([verb, sub, usage]) => {
     for (const flag of ['--help', '-h']) {
       const r = await unit(sb, verb, sub, flag);
       expect(r.code).toBe(0);
@@ -75,7 +75,7 @@ describe.concurrent('the unit and lane verb surface', () => {
     }
   });
 
-  it('X-h: record and reopen --help and -h print the usage rc 0', async () => {
+  it('X-h [the-engine-r7]: record and reopen --help and -h print the usage rc 0', async () => {
     const record = await unit(sb, 'record', '--help');
     expect(record.code).toBe(0);
     expect(record.stdout + record.stderr).toContain('ctx unit record <unit> --what=');
@@ -85,7 +85,7 @@ describe.concurrent('the unit and lane verb surface', () => {
     expect(reopen.stdout + reopen.stderr).toMatch(/^usage: ctx unit reopen/m);
   });
 
-  it('UP-e: finding update --help and the unit help table show --summary and --ref as optional', async () => {
+  it('UP-e [the-engine-r4, the-engine-r7]: finding update --help and the unit help table show --summary and --ref as optional', async () => {
     const optional = /update <unit> <NAME> \[--summary="\.\.\."\] \[--ref=\.\.\.\]/;
     const verbHelp = await unit(sb, 'finding', 'update', '--help');
     expect(verbHelp.stdout + verbHelp.stderr).toMatch(optional);

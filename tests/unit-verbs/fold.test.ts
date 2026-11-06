@@ -10,7 +10,7 @@ describe.concurrent('ctx unit fold: the surface, the handoff, and the input rule
     empty = await seed((sb) => seedUnit(sb, 'fc-empty', 'empty fold unit'), 'posix', 'fold-empty');
   });
 
-  it('FC1: fold with no argument prints the usage rc 1; --help, -h, and help print the lane manual rc 0', async () => {
+  it('FC1 [the-engine-r7]: fold with no argument prints the usage rc 1; --help, -h, and help print the lane manual rc 0', async () => {
     const sb = fresh(empty);
     const bare = await unit(sb, 'fold');
     expect(bare.code).toBe(1);
@@ -52,7 +52,7 @@ describe.concurrent('ctx unit fold: the surface, the handoff, and the input rule
     expect(check.stdout).toContain('fold check: clean');
   });
 
-  it('FC12: a carriage return in a WHAT or a closer refuses rc 1', async () => {
+  it('FC12 [the-record-r12]: a carriage return in a WHAT or a closer refuses rc 1', async () => {
     const sb = fresh(empty);
     expect((await unit(sb, 'record', 'fc-empty', '--what=a\rb')).code).toBe(1);
     expect((await unit(sb, 'record', 'fc-empty', `--closes=${D}-fc-long-1 (folded: \rbad)`)).code).toBe(1);

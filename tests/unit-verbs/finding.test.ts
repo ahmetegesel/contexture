@@ -19,7 +19,7 @@ describe.concurrent('ctx unit finding', () => {
     }, 'posix', 'finding');
   });
 
-  it('E-11a: finding add, show, and list; a summary carrying quotes and a backslash reads back verbatim', async () => {
+  it('E-11a [the-record-r12]: finding add, show, and list; a summary carrying quotes and a backslash reads back verbatim', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'finding', 'add', 'sem-unit', 'ARCH_DECISION', '--summary=Architecture decision 1', '--ref=journal.md#event')).code).toBe(0);
     expect(await show(sb, 'sem-unit', 'ARCH_DECISION')).toContain('SUMMARY ::');
@@ -32,7 +32,7 @@ describe.concurrent('ctx unit finding', () => {
     expect(list.split('\n').filter((l) => /^ {2}[A-Za-z0-9_-]*: /.test(l))).toHaveLength(2);
   });
 
-  it('E-11c: finding update persists; an update with no field refuses with the one fixed line and changes nothing', async () => {
+  it('E-11c [the-record-r9]: finding update persists; an update with no field refuses with the one fixed line and changes nothing', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'finding', 'update', 'arch-unit', 'ARCH_DECISION', '--summary=Updated architecture decision')).code).toBe(0);
     expect(await show(sb, 'arch-unit', 'ARCH_DECISION')).toContain('Updated architecture decision');
@@ -53,7 +53,7 @@ describe.concurrent('ctx unit finding', () => {
     expect((await unit(sb, 'finding', 'show', 'arch-unit', 'ARCH_DECISION')).code).toBe(1);
   });
 
-  it('X-c: a repeated finding NAME refuses ERR_ENTITY_EXISTS and the first stays intact', async () => {
+  it('X-c [the-record-r11]: a repeated finding NAME refuses ERR_ENTITY_EXISTS and the first stays intact', async () => {
     const sb = fresh(sb0);
     const r = await unit(sb, 'finding', 'add', 'f-unit', 'F_LAST', '--summary=Repeated');
     expect(r.code).toBe(1);
@@ -61,7 +61,7 @@ describe.concurrent('ctx unit finding', () => {
     expect(await show(sb, 'f-unit', 'F_LAST', '--json')).toContain('"summary":"last summary"');
   });
 
-  it('X-j: a raw @finding block on stdin is retired, never evaluated by the shell; the typed flags land it', async () => {
+  it('X-j [the-engine-r16]: a raw @finding block on stdin is retired, never evaluated by the shell; the typed flags land it', async () => {
     const sb = fresh(sb0);
     const raw = await run(sb, ['unit', 'finding', 'add', 'f-unit'], { input: '@finding X_RAW\n  REF: "journal#2026-09-27-x-e1"\n  SUMMARY ::\n    Raw block finding.\n' });
     expect(raw.code).toBe(1);
@@ -70,13 +70,13 @@ describe.concurrent('ctx unit finding', () => {
     expect(await show(sb, 'f-unit', 'X_RAW', '--json')).toContain('"summary":"Raw block finding."');
   });
 
-  it('X-k S8: supersede of a missing predecessor refuses and lands no successor', async () => {
+  it('X-k S8 [the-record-r9]: supersede of a missing predecessor refuses and lands no successor', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'finding', 'supersede', 'f-unit', 'X_MISSING', 'X_SUCC', '--summary=Successor')).code).toBe(1);
     expect((await unit(sb, 'finding', 'show', 'f-unit', 'X_SUCC')).code).toBe(1);
   });
 
-  it('RF1: finding update --ref adds the first REF canonical (before SUMMARY), replaces an existing one, and keeps every finding', async () => {
+  it('RF1 [the-record-r14, the-record-r20]: finding update --ref adds the first REF canonical (before SUMMARY), replaces an existing one, and keeps every finding', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'finding', 'update', 'f-unit', 'F_NOREF', '--summary=updated summary', '--ref=journal#f-target')).code).toBe(0);
     const json = await show(sb, 'f-unit', 'F_NOREF', '--json');

@@ -48,13 +48,13 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect(missing.stderr).toContain('no such rhythm: nosuch (looked under .contexture/rhythms/ and .contexture/extensions/rhythms/)');
   });
 
-  it('S1-d: a repeated record slug is refused', async () => {
+  it('S1-d [the-record-r6, the-record-r11]: a repeated record slug is refused', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'record', 'cl-unit', '--what=first', `--slug=${D}-twice`)).code).toBe(0);
     expect((await unit(sb, 'record', 'cl-unit', '--what=second', `--slug=${D}-twice`)).code).toBe(1);
   });
 
-  it('C: one closer names two targets with a caller verdict kept verbatim; board drops both, entry show reads the second closed', async () => {
+  it('C [the-record-r3, the-record-r4, the-record-r5]: one closer names two targets with a caller verdict kept verbatim; board drops both, entry show reads the second closed', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'record', 'cl-unit', '--what=closes two', `--slug=${D}-cl-d`, `--closes=${D}-cl-a ${D}-cl-b (folded: two at once)`)).code).toBe(0);
     expect(await closesLine(sb, `${D}-cl-d`)).toBe(`  CLOSES: ${D}-cl-a ${D}-cl-b (folded: two at once)`);
@@ -68,7 +68,7 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect(shown).toContain('"close_reason":"folded: two at once"');
   });
 
-  it('C E3-5: a bare --closes or --supersedes and a reason holding a parenthesis refuse naming the explicit form, nothing written', async () => {
+  it('C E3-5 [the-record-r5]: a bare --closes or --supersedes and a reason holding a parenthesis refuse naming the explicit form, nothing written', async () => {
     const sb = fresh(sb0);
     const bare = await unit(sb, 'record', 'cl-unit', '--what=closes one', `--slug=${D}-cl-e`, `--closes=${D}-cl-c`);
     expect(bare.code).toBe(1);
@@ -83,13 +83,13 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect(nested.stderr).toContain('a closer reason holds no parenthesis');
   });
 
-  it.for([`${D}-cl-c (a reason without a verdict)`, `${D}-cl-c (finished: an unknown verdict)`, `${D}-cl-c (done: )`, `${D}-cl-c (done: open`])('C E3-5: --closes=%s refuses naming the explicit form', async (closer) => {
+  it.for([`${D}-cl-c (a reason without a verdict)`, `${D}-cl-c (finished: an unknown verdict)`, `${D}-cl-c (done: )`, `${D}-cl-c (done: open`])('C E3-5 [the-record-r5]: --closes=%s refuses naming the explicit form', async (closer) => {
     const r = await unit(fresh(sb0), 'record', 'cl-unit', '--what=bad closer', `--closes=${closer}`);
     expect(r.code).toBe(1);
     expect(r.stderr).toContain(FORM);
   });
 
-  it('C E3-5: the explicit form lands and the closer carries its own reason, never the WHAT', async () => {
+  it('C E3-5 [the-record-r4, the-record-r5]: the explicit form lands and the closer carries its own reason, never the WHAT', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'record', 'cl-unit', '--what=closes one (a WHAT with parentheses)', `--slug=${D}-cl-e`, `--closes=${D}-cl-c (done: the resolution)`)).code).toBe(0);
     expect(await closesLine(sb, `${D}-cl-e`)).toBe(`  CLOSES: ${D}-cl-c (done: the resolution)`);
@@ -108,7 +108,7 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect(lines.slice(0, at).reverse().find((l) => l.startsWith('@entry '))).toMatch(/^@entry \d{4}-\d{2}-\d{2}-event-/);
   });
 
-  it('E-10: a raw @entry block on stdin is retired, refused rc 1; the same entry lands through the typed flags', async () => {
+  it('E-10 [the-engine-r16]: a raw @entry block on stdin is retired, refused rc 1; the same entry lands through the typed flags', async () => {
     const sb = fresh(sb0);
     const raw = await run(sb, ['unit', 'record', 'x-unit'], { input: `@entry ${D}-piped-event\n  WHAT: "piped event content"\n  THREAD: none\n` });
     expect(raw.code).toBe(1);
@@ -124,7 +124,7 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect((await unit(sb, 'entry', 'show', 'x-unit', '2026-01-01-no-such-slug')).code).toBe(1);
   });
 
-  it('X-i: record --slug of an existing entry refuses; the first stays the only one', async () => {
+  it('X-i [the-record-r6, the-record-r11]: record --slug of an existing entry refuses; the first stays the only one', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'record', 'x-unit', '--what=Repeated slug', `--slug=${D}-x-e1`)).code).toBe(1);
     expect((await unit(sb, 'entry', 'show', 'x-unit', `${D}-x-e1`, '--json')).stdout).toContain('"what":"Resolvable entry"');
@@ -144,7 +144,7 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect(anchored).not.toContain(`${D}-x-g1`);
   });
 
-  it('RF2: entry show --json carries the refs list after thread (empty when none); the text view prints the REF line', async () => {
+  it('RF2 [the-record-r14]: entry show --json carries the refs list after thread (empty when none); the text view prints the REF line', async () => {
     const sb = fresh(sb0);
     await must(unit(sb, 'record', 'x-unit', '--what=entry with a ref', `--slug=${D}-f-e1`, '--ref=knowledge#F_NOREF'));
     const withRef = (await unit(sb, 'entry', 'show', 'x-unit', `${D}-f-e1`, '--json')).stdout;
@@ -155,7 +155,7 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect(text).toContain('  REF: "knowledge#F_NOREF"');
   });
 
-  it('N-a: entry closure prints the verdict and the closer, for a closed, an open, and an absent entry, and as --json', async () => {
+  it('N-a [the-record-r4]: entry closure prints the verdict and the closer, for a closed, an open, and an absent entry, and as --json', async () => {
     const sb = fresh(sb0);
     const closed = await unit(sb, 'entry', 'closure', 'n-unit', `${D}-n-t`);
     expect(closed.code).toBe(0);

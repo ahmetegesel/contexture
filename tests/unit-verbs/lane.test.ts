@@ -23,7 +23,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     }, 'posix', 'lane');
   });
 
-  it('E-14: lane create takes the recipe on stdin; an existing lane or an empty recipe refuses rc 1', async () => {
+  it('E-14 [the-record-r11, the-record-r15]: lane create takes the recipe on stdin; an existing lane or an empty recipe refuses rc 1', async () => {
     const sb = fresh(sb0);
     expect((await run(sb, ['lane', 'create', 'sem-unit', 'new-lane'], { input: RECIPE })).code).toBe(0);
     const again = await run(sb, ['lane', 'create', 'sem-unit', 'sub-lane'], { input: 'again\n' });
@@ -33,14 +33,14 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect((await lane(sb, 'show', 'sem-unit', 'sub-lane', 'recipe')).stdout).toContain('lane test subagent');
   });
 
-  it('E-14: lane record lands in the lane journal and never in the unit journal', async () => {
+  it('E-14 [the-record-r15]: lane record lands in the lane journal and never in the unit journal', async () => {
     const sb = fresh(sb0);
     expect((await lane(sb, 'record', 'sem-unit', 'sub-lane', '--what=lane event 1')).code).toBe(0);
     expect((await lane(sb, 'show', 'sem-unit', 'sub-lane', 'journal')).stdout).toContain('lane event 1');
     expect((await unit(sb, 'entry', 'list', 'sem-unit')).stdout).not.toContain('lane event 1');
   });
 
-  it('E-14: a --body report reads back; a stdin report reads back byte for byte through report and show, the write printing one line with its size', async () => {
+  it('E-14 [the-record-r16, the-record-r17]: a --body report reads back; a stdin report reads back byte for byte through report and show, the write printing one line with its size', async () => {
     const sb = fresh(sb0);
     expect((await lane(sb, 'report', 'sem-unit', 'sub-lane', '--body=lane report summary')).code).toBe(0);
     expect((await lane(sb, 'show', 'sem-unit', 'sub-lane', 'report')).stdout).toContain('lane report summary');
@@ -52,7 +52,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(readFileSync(artifactPath(sb, 'sem-unit', 'lane/sub-lane/report'), 'utf8')).toBe(FIDELITY);
   });
 
-  it('X-d: a repeated lane entry slug refuses ERR_ENTITY_EXISTS; the journal reads back as stored with headers and THREAD lines', async () => {
+  it('X-d [the-record-r11, the-record-r16]: a repeated lane entry slug refuses ERR_ENTITY_EXISTS; the journal reads back as stored with headers and THREAD lines', async () => {
     const sb = fresh(sb0);
     const again = await lane(sb, 'record', 'x-unit', 'x-lane', '--what=Repeated lane slug', `--slug=${D}-x-l1`);
     expect(again.code).toBe(1);
@@ -64,7 +64,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(journal.split('\n').filter((l) => l === `@entry ${D}-x-l1`)).toHaveLength(1);
   });
 
-  it.for(['', 'true', 'false'])('X-d E5-T: lane record --thread="%s" refuses naming the THREAD shape and nothing lands', async (thread) => {
+  it.for(['', 'true', 'false'])('X-d E5-T [the-record-r7]: lane record --thread="%s" refuses naming the THREAD shape and nothing lands', async (thread) => {
     const sb = fresh(sb0);
     const r = await lane(sb, 'record', 'x-unit', 'x-lane', '--what=E5-T bad thread', `--thread=${thread}`);
     expect(r.code).toBe(1);
@@ -72,7 +72,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect((await lane(sb, 'show', 'x-unit', 'x-lane', 'journal')).stdout).not.toContain('E5-T bad thread');
   });
 
-  it('X-d F6: a --body report reads back through the empty stdin read; the stdin write echo carries no JSON tail', async () => {
+  it('X-d F6 [the-record-r16, the-record-r17]: a --body report reads back through the empty stdin read; the stdin write echo carries no JSON tail', async () => {
     const sb = fresh(sb0);
     await must(lane(sb, 'report', 'x-unit', 'x-lane', '--body=report by the body flag'));
     const read = await report(sb, 'x-unit', 'x-lane', '');
@@ -81,14 +81,14 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(echo.stdout + echo.stderr).not.toContain('"}');
   });
 
-  it('X-p: a 2 MB lane report lands through the verb and reads back byte for byte', async () => {
+  it('X-p [the-engine-r9]: a 2 MB lane report lands through the verb and reads back byte for byte', async () => {
     const sb = fresh(sb0);
     const big = Array.from({ length: 26000 }, (_, i) => `line ${String(i + 1).padStart(6, '0')} of the big report, eighty bytes wide, padded to width ....\n`).join('');
     expect((await report(sb, 'x-unit', 'x-lane', big)).code).toBe(0);
     expect((await report(sb, 'x-unit', 'x-lane', '')).bytes.equals(Buffer.from(big))).toBe(true);
   });
 
-  it('UP-c: a recipe line ending in a carriage return keeps the byte in lane show and in the posix file', async () => {
+  it('UP-c [the-record-r16]: a recipe line ending in a carriage return keeps the byte in lane show and in the posix file', async () => {
     const sb = fresh(sb0);
     await must(run(sb, ['lane', 'create', 'sem-unit', 'up-cr'], { input: '# recipe grammar\r\nMISSION\n  GOAL: "a CRLF recipe"\n' }));
     expect((await lane(sb, 'show', 'sem-unit', 'up-cr', 'recipe')).stdout.split('\n').filter((l) => l.endsWith('\r'))).toHaveLength(1);

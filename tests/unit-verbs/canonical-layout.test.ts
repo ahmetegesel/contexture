@@ -31,7 +31,7 @@ describe.concurrent('every item reads in the one canonical layout, every value k
     }, 'posix', 'canonical');
   });
 
-  it('Y-d F5-WS: a block value drops its trailing whitespace-only lines on write and read; the item renders canonical', async () => {
+  it('Y-d F5-WS [the-record-r20]: a block value drops its trailing whitespace-only lines on write and read; the item renders canonical', async () => {
     const sb = fresh(sb0);
     await must(unit(sb, 'task', 'add', 'cl-verbs', 'y-ws', '--objective=trailing blank lines', `--desc=${WS}`));
     const json = (await unit(sb, 'task', 'show', 'cl-verbs', 'y-ws', '--json')).stdout;
@@ -48,7 +48,7 @@ describe.concurrent('every item reads in the one canonical layout, every value k
     expect(finding).not.toContain('"verbatim"');
   });
 
-  it('CL-a: no answer of a verb-written unit carries a verbatim key; entries answer their empty extras', async () => {
+  it('CL-a [the-record-r20]: no answer of a verb-written unit carries a verbatim key; entries answer their empty extras', async () => {
     const sb = fresh(sb0);
     const calls = [
       ['unit', 'task', 'show', 'cl-verbs', 'cl-v', '--json'],
@@ -71,7 +71,7 @@ describe.concurrent('every item reads in the one canonical layout, every value k
       for (const [artifact, text] of Object.entries(LEGACY)) plantArtifact(legacy, 'cl-unit', artifact, text);
     });
 
-    it('CL-b: a legacy entry shows canonical: extra fields first, the legacy STATUS, the WHAT quoted, the nested reason whole', async () => {
+    it('CL-b [the-record-r5, the-record-r20]: a legacy entry shows canonical: extra fields first, the legacy STATUS, the WHAT quoted, the nested reason whole', async () => {
       const sb = fresh(legacy);
       expect(chomp((await unit(sb, 'entry', 'show', 'cl-unit', '2026-09-20-cl-one')).stdout)).toBe('@entry 2026-09-20-cl-one\n  NOTE: an unknown field\n  ANCHOR: A1\n  STATUS: DONE\n  WHAT: "unquoted legacy what"\n  GROUP: cl\n  THREAD: none\n  CLOSES: 2026-09-20-cl-zero (done: a (nested) reason, kept)');
       const json = (await unit(sb, 'entry', 'show', 'cl-unit', '2026-09-20-cl-one', '--json')).stdout;
@@ -81,7 +81,7 @@ describe.concurrent('every item reads in the one canonical layout, every value k
       expect(files(sb)).toBe(Object.values(LEGACY).join('\0'));
     });
 
-    it('CL-b: a legacy task, finding, state, and lane journal read canonical; the files stay byte for byte', async () => {
+    it('CL-b [the-record-r20]: a legacy task, finding, state, and lane journal read canonical; the files stay byte for byte', async () => {
       const sb = fresh(legacy);
       expect(chomp((await unit(sb, 'task', 'show', 'cl-unit', 'cl-task')).stdout)).toBe('@task cl-task\n  STATUS: TODO\n  OBJECTIVE: "legacy task"\n  REFS: [a#b, c#d]\n  DESCRIPTION ::\n    legacy body');
       expect(chomp((await unit(sb, 'finding', 'show', 'cl-unit', 'CL_FIND')).stdout)).toBe('@finding CL_FIND\n  REF: "journal#2026-09-20-cl-zero"\n  SUMMARY ::\n    a legacy summary');
@@ -93,7 +93,7 @@ describe.concurrent('every item reads in the one canonical layout, every value k
       expect(files(sb)).toBe(Object.values(LEGACY).join('\0'));
     });
 
-    it('CL-b: a write rewrites the touched item canonical in place, every other byte kept; a state write erases next_action', async () => {
+    it('CL-b [the-record-r20]: a write rewrites the touched item canonical in place, every other byte kept; a state write erases next_action', async () => {
       const sb = fresh(legacy);
       await must(unit(sb, 'task', 'update', 'cl-unit', 'cl-task', '--criteria=a criterion'));
       expect(chomp(readFileSync(artifactPath(sb, 'cl-unit', 'backlog'), 'utf8'))).toBe('# backlog grammar\n\n@task cl-task\n  STATUS: TODO\n  OBJECTIVE: "legacy task"\n  REFS: [a#b, c#d]\n  DESCRIPTION ::\n    legacy body\n  ACCEPTANCE CRITERIA ::\n    a criterion\n\n@task cl-other\n  STATUS: TODO\n  OBJECTIVE: "other task"');

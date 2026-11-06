@@ -25,19 +25,19 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     ['stamp', /^ERROR: missing state: unit nosuch$/m],
     ['board', /^ERROR: missing journal: unit nosuch$/m],
     ['audit', /^ERROR: missing journal: unit nosuch$/m],
-  ] as const)('UP-a: %s of an absent unit names the artifact and the unit', async ([verb, line]) => {
+  ] as const)('UP-a [the-record-r14]: %s of an absent unit names the artifact and the unit', async ([verb, line]) => {
     const err = (await unit(fresh(sb0), verb, 'nosuch')).stderr;
     expect(err).toMatch(line);
     pathFree(err);
   });
 
-  it('UP-a: bootstrap of an existing unit names the unit', async () => {
+  it('UP-a [the-record-r14]: bootstrap of an existing unit names the unit', async () => {
     const err = (await unit(fresh(sb0), 'bootstrap', 'u-unit', 'again')).stderr;
     expect(err).toMatch(/^ERROR: session exists: unit u-unit$/m);
     pathFree(err);
   });
 
-  it('UP-b: a unit without backlog or knowledge warns on the board, searches its canonical state, and resolves misses path-free (posix plant)', async () => {
+  it('UP-b [the-record-r14]: a unit without backlog or knowledge warns on the board, searches its canonical state, and resolves misses path-free (posix plant)', async () => {
     const sb = stage('posix', 'messages-bare');
     plantArtifact(sb, 'up-bare', 'state', state('bare unit'));
     plantArtifact(sb, 'up-bare', 'journal', '@anchor A1 ("continues A0", attention: bare)\n');
@@ -56,7 +56,7 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     }
   });
 
-  it('UP-b: a legacy next_action, one-line or multi-line, never prints and the next state write erases it (posix plant)', async () => {
+  it('UP-b [the-record-r1]: a legacy next_action, one-line or multi-line, never prints and the next state write erases it (posix plant)', async () => {
     const sb = stage('posix', 'messages-pointer');
     plantArtifact(sb, 'up-odd', 'state', state('legacy pointer unit', { pointer: 'next_action: "legacy one-line"\n' }));
     const one = await unit(sb, 'load', 'up-odd', '1');
@@ -74,7 +74,7 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     expect((await unit(sb, 'refs', 'up-odd')).code).toBe(0);
   });
 
-  it('UP-b: entry show without a journal names the entry and the unit (posix plant)', async () => {
+  it('UP-b [the-record-r14]: entry show without a journal names the entry and the unit (posix plant)', async () => {
     const sb = stage('posix', 'messages-nojournal');
     plantArtifact(sb, 'up-nojournal', 'state', state('no journal'));
     const err = (await unit(sb, 'entry', 'show', 'up-nojournal', '2026-09-27-no-entry')).stderr;
@@ -82,7 +82,7 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     pathFree(err);
   });
 
-  it('UP-b: stamp under a malformed anchor refuses rc 2 ERR_STORAGE_CORRUPT naming the anchor (posix plant)', async () => {
+  it('UP-b [the-record-r14, the-engine-r18]: stamp under a malformed anchor refuses rc 2 ERR_STORAGE_CORRUPT naming the anchor (posix plant)', async () => {
     const sb = stage('posix', 'messages-anchor');
     plantArtifact(sb, 'up-odd', 'state', state('odd', { anchor: 'X9' }));
     plantArtifact(sb, 'up-odd', 'journal', '@anchor A1 ("continues A0", attention: odd)\n');
@@ -94,7 +94,7 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     pathFree(r.stderr);
   });
 
-  it('UP-b B5-F2: legacy CRLF lines keep their bytes; a CRLF entry reads with LF-only fields, audits clean, and searches by slug (posix plant)', async () => {
+  it('UP-b B5-F2 [the-record-r12]: legacy CRLF lines keep their bytes; a CRLF entry reads with LF-only fields, audits clean, and searches by slug (posix plant)', async () => {
     const sb = stage('posix', 'messages-crlf');
     plantArtifact(sb, 'up-odd', 'state', state('odd'));
     plantArtifact(sb, 'up-odd', 'backlog', '');
@@ -115,7 +115,7 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     expect(crCount(sb, 'up-odd')).toBe(5);
   });
 
-  it('UP-b: active names the state and the unit of an unknown status (posix plant)', async () => {
+  it('UP-b [the-record-r14]: active names the state and the unit of an unknown status (posix plant)', async () => {
     const sb = stage('posix', 'messages-status');
     plantArtifact(sb, 'up-odd', 'state', state('odd', { status: 'WEIRD' }));
     const err = (await unit(sb, 'active')).stderr;

@@ -34,7 +34,7 @@ describe.concurrent('ctx unit active: the derived view', () => {
     expect((await unit(stage('posix', 'active-arg'), 'active', 'extra')).code).toBe(1);
   });
 
-  it('S1-c: active lists bytewise by unit name and prints no last_event or thread count', async () => {
+  it('S1-c [the-record-r1]: active lists bytewise by unit name and prints no last_event or thread count', async () => {
     const sb = stage('posix', 'active-order');
     await seedUnit(sb, 'a80-null', 'recency null unit');
     await seedUnit(sb, 'a80-entry', 'recency entry unit');
@@ -53,7 +53,7 @@ describe.concurrent('ctx unit active: the derived view', () => {
     expect(out.split('\n').filter((l) => /^a80-(stamp|entry|tie-a|tie-b|null)$/.test(l))).toEqual(['a80-entry', 'a80-null', 'a80-stamp', 'a80-tie-a', 'a80-tie-b']);
   });
 
-  it('DP: the move is the first IN_PROGRESS task; no second one, no thread count, no stored pointer', async () => {
+  it('DP [the-record-r1]: the move is the first IN_PROGRESS task; no second one, no thread count, no stored pointer', async () => {
     const sb = fresh(dp);
     const out = (await unit(sb, 'active')).stdout;
     expect(out.split('\n').filter((l) => l === 'dp-unit')).toHaveLength(1);
@@ -64,7 +64,7 @@ describe.concurrent('ctx unit active: the derived view', () => {
     expect((await unit(sb, 'load', 'dp-unit', '1')).stdout).not.toContain('next_action');
   });
 
-  it('DP: the no-work forms read in the unit block itself (empty backlog, TODO, all DONE), and stamp stays backlog-free', async () => {
+  it('DP [the-record-r1]: the no-work forms read in the unit block itself (empty backlog, TODO, all DONE), and stamp stays backlog-free', async () => {
     const sb = stage('posix', 'active-nowork');
     await seedUnit(sb, 'dp-decoy', 'another empty backlog unit');
     const block = async (): Promise<string | undefined> => activeBlocks((await unit(sb, 'active')).stdout)['dp-empty'];
@@ -79,7 +79,7 @@ describe.concurrent('ctx unit active: the derived view', () => {
     expect((await unit(sb, 'stamp', 'dp-empty')).code).toBe(0);
   });
 
-  it('DP: an ACTIVE unit without a backlog warns and reads its none form (posix plant)', async () => {
+  it('DP [the-record-r1, the-record-r14]: an ACTIVE unit without a backlog warns and reads its none form (posix plant)', async () => {
     const sb = stage('posix', 'active-nobacklog');
     plantArtifact(sb, 'dp-missing', 'state', STATE('missing backlog unit'));
     const r = await run(sb, ['unit', 'active']);
@@ -87,7 +87,7 @@ describe.concurrent('ctx unit active: the derived view', () => {
     expect(activeBlocks(r.stdout)['dp-missing']).toMatch(/^ {2}next: none \(no backlog\)$/m);
   });
 
-  it('DP: a legacy next_action is ignored by active and erased by the next state write (posix plant)', async () => {
+  it('DP [the-record-r1]: a legacy next_action is ignored by active and erased by the next state write (posix plant)', async () => {
     const sb = stage('posix', 'active-legacy');
     await seedUnit(sb, 'dp-legacy', 'legacy pointer unit');
     await must(unit(sb, 'task', 'add', 'dp-legacy', 'dp-legacy-task', '--objective=the derived task'));
@@ -99,7 +99,7 @@ describe.concurrent('ctx unit active: the derived view', () => {
     expect(readFileSync(artifactPath(sb, 'dp-legacy', 'state'), 'utf8')).not.toMatch(/^next_action:/m);
   });
 
-  it('DP: an unknown task status is the first open task, printed as stored (posix plant)', async () => {
+  it('DP [the-record-r1, the-record-r11]: an unknown task status is the first open task, printed as stored (posix plant)', async () => {
     const sb = stage('posix', 'active-unknown');
     plantArtifact(sb, 'dp-unknown', 'state', STATE('unknown status unit'));
     plantArtifact(sb, 'dp-unknown', 'backlog', '@task dp-unknown-task\n  STATUS: progress\n  OBJECTIVE: "an unknown status task"\n\n@task dp-after-unknown\n  STATUS: TODO\n  OBJECTIVE: "a todo after the unknown"\n');

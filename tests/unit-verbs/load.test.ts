@@ -25,7 +25,7 @@ describe.concurrent('ctx unit load: paging, the refs form, and the warnings', ()
     }, 'posix', 'load-refs');
   });
 
-  it('R-b: load refuses a missing unit naming the state and the unit, path-free, and a page out of range', async () => {
+  it('R-b [the-record-r14]: load refuses a missing unit naming the state and the unit, path-free, and a page out of range', async () => {
     const sb = fresh(refs);
     const missing = await unit(sb, 'load', 'nosuch');
     expect(missing.code).toBe(1);
@@ -54,7 +54,7 @@ describe.concurrent('ctx unit load: paging, the refs form, and the warnings', ()
     expect((await unit(sb, 'load', 'page-unit', String(pages + 1))).code).toBe(1);
   });
 
-  it('F: the main load renders a ref session read-only with a path-free WRITE SCOPE; clearing the refs drops it', async () => {
+  it('F [the-record-r1]: the main load renders a ref session read-only with a path-free WRITE SCOPE; clearing the refs drops it', async () => {
     const sb = fresh(refs);
     expect((await unit(sb, 'refs', 'ref-unit', 'ref-src')).code).toBe(0);
     const out = await loadAll(sb, 'ref-unit');
@@ -75,7 +75,7 @@ describe.concurrent('ctx unit load: paging, the refs form, and the warnings', ()
     expect((await unit(sb, 'load', 'refs', 'nosuch')).code).toBe(1);
   });
 
-  it('RF3: a ref session the store lacks warns naming the artifact and the unit, never a path (posix plant)', async () => {
+  it('RF3 [the-record-r14]: a ref session the store lacks warns naming the artifact and the unit, never a path (posix plant)', async () => {
     const sb = fresh(refs);
     const state = readFileSync(artifactPath(sb, 'ref-unit', 'state'), 'utf8').split('\n').filter((l) => l && !l.startsWith('ref_sessions:'));
     plantArtifact(sb, 'ref-unit', 'state', [...state, 'ref_sessions: [f-ghost]', ''].join('\n'));

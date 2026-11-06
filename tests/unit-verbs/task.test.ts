@@ -45,7 +45,7 @@ describe.concurrent('ctx unit task', () => {
     expect(out).toContain('STATUS: TODO');
   });
 
-  it('E-2: a raw @task block on stdin is retired, refused rc 1; the same task lands through the typed flags', async () => {
+  it('E-2 [the-engine-r16]: a raw @task block on stdin is retired, refused rc 1; the same task lands through the typed flags', async () => {
     const sb = fresh(x);
     const raw = await run(sb, ['unit', 'task', 'add', 'x-unit'], { input: '@task task-2\n  STATUS: TODO\n  OBJECTIVE: "Second objective"\n  DESCRIPTION ::\n    Piped task description\n' });
     expect(raw.code).toBe(1);
@@ -54,7 +54,7 @@ describe.concurrent('ctx unit task', () => {
     expect(await show(sb, 'x-unit', 'task-2')).toContain('OBJECTIVE: "Second objective"');
   });
 
-  it('E-3: task update lands; an update carrying no field refuses with the one fixed line and changes nothing', async () => {
+  it('E-3 [the-record-r9]: task update lands; an update carrying no field refuses with the one fixed line and changes nothing', async () => {
     const sb = fresh(sem);
     expect((await unit(sb, 'task', 'update', 'sem-unit', 'task-1', '--objective=Updated objective 1')).code).toBe(0);
     expect(await show(sb, 'sem-unit', 'task-1')).toContain('OBJECTIVE: "Updated objective 1"');
@@ -68,14 +68,14 @@ describe.concurrent('ctx unit task', () => {
     expect(help.stdout + help.stderr).toContain('no field refuses');
   });
 
-  it('E-4: task start moves the task to IN_PROGRESS and writes no state pointer', async () => {
+  it('E-4 [the-record-r1, the-record-r11]: task start moves the task to IN_PROGRESS and writes no state pointer', async () => {
     const sb = fresh(sem);
     expect((await unit(sb, 'task', 'start', 'sem-unit', 'task-1')).code).toBe(0);
     expect(await show(sb, 'sem-unit', 'task-1')).toContain('STATUS: IN_PROGRESS');
     expect((await unit(sb, 'load', 'sem-unit', '1')).stdout).not.toContain('next_action:');
   });
 
-  it('E-5 and E-6: task complete lands DONE with its receipt entry; task reopen restores TODO', async () => {
+  it('E-5 and E-6 [the-record-r8, the-record-r11]: task complete lands DONE with its receipt entry; task reopen restores TODO', async () => {
     const sb = fresh(sem);
     await must(unit(sb, 'task', 'start', 'sem-unit', 'task-1'));
     expect((await unit(sb, 'task', 'complete', 'sem-unit', 'task-1', '--evidence=test verified cleanly')).code).toBe(0);
@@ -110,7 +110,7 @@ describe.concurrent('ctx unit task', () => {
     expect((await unit(sb, 'task', 'list', 'x-unit', '--status=progress')).stdout).toContain('[IN_PROGRESS] x-prog: Running task');
   });
 
-  it('X-b: task add --refs lands in the JSON refs array with no error', async () => {
+  it('X-b [the-record-r14]: task add --refs lands in the JSON refs array with no error', async () => {
     const sb = fresh(x);
     const added = await unit(sb, 'task', 'add', 'x-unit', 'x-refs', '--objective=Refs task', '--refs=backlog#one knowledge#TWO');
     expect(added.stderr).toBe('');
@@ -124,7 +124,7 @@ describe.concurrent('ctx unit task', () => {
     expect((await unit(sb, 'task', 'show', 'x-unit', 'x-upd', '--json')).stdout).toContain('"description":"Added description","criteria":"Added criteria","details":"Added details"');
   });
 
-  it('X-k: a malformed slug refuses; a quoted objective reads whole; a slug prefixing another adds', async () => {
+  it('X-k [the-record-r12]: a malformed slug refuses; a quoted objective reads whole; a slug prefixing another adds', async () => {
     const sb = fresh(x);
     expect((await unit(sb, 'task', 'add', 'x-unit', 'Bad Slug', '--objective=Malformed slug')).code).toBe(1);
     expect((await unit(sb, 'task', 'list', 'x-unit')).stdout).not.toContain('Bad');

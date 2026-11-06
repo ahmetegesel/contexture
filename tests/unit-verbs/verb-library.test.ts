@@ -12,29 +12,29 @@ describe.concurrent('the verb library lib/verb.sh, one function at a time', () =
   });
   const call = (script: string, ...args: (string | Buffer)[]) => execBytes(sb, ['sh', '-c', `. .contexture/modules/unit/lib/verb.sh; ${script}`, 'sh', ...args], { env: { VB_SELF: '.contexture/modules/unit/scripts/record' } });
 
-  it.for(BAD_REFS)('vb_ref_ok refuses %j naming both pointer shapes', async (ref) => {
+  it.for(BAD_REFS)('[the-record-r18] vb_ref_ok refuses %j naming both pointer shapes', async (ref) => {
     const r = await call('vb_ref_ok record "$1"', ref);
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toBe(`record: error: malformed ref '${ref}': ${SHAPES}\n`);
   });
 
-  it.for(GOOD_REFS)('vb_ref_ok takes %j', async (ref) => {
+  it.for(GOOD_REFS)('[the-record-r18] vb_ref_ok takes %j', async (ref) => {
     const r = await call('vb_ref_ok record "$1"', ref);
     expect([r.code, r.stderr]).toEqual([0, '']);
   });
 
-  it.for(NOT_UTF8.map((b) => [b.toString('hex'), b] as const))('vb_kv refuses the bytes %s as not valid UTF-8 naming the field', async ([, bytes]) => {
+  it.for(NOT_UTF8.map((b) => [b.toString('hex'), b] as const))('[the-record-r12] vb_kv refuses the bytes %s as not valid UTF-8 naming the field', async ([, bytes]) => {
     const r = await call('vb_kv what "$1"; cat "$VB_PAY"', bytes);
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toMatch(/error: what is not valid UTF-8 \(ERR_INVALID_ARGUMENT\)\n$/);
   });
 
-  it('vb_kv takes valid UTF-8 of two, three, and four bytes unchanged', async () => {
+  it('[the-record-r12] vb_kv takes valid UTF-8 of two, three, and four bytes unchanged', async () => {
     const r = await call('vb_kv what "$1"; cat "$VB_PAY"', UTF8_OK);
     expect([r.code, r.stdout]).toEqual([0, `what=${UTF8_OK}\n`]);
   });
 
-  it('vb_kv escapes a backslash, a tab, a carriage return, and a newline by concatenation', async () => {
+  it('[the-engine-r9] vb_kv escapes a backslash, a tab, a carriage return, and a newline by concatenation', async () => {
     const r = await call('vb_kv k "$1"; cat "$VB_PAY"', 'a\\b\tc\rd\ne\\');
     expect([r.code, r.stdout]).toEqual([0, 'k=a\\\\b\\tc\\rd\\ne\\\\\n']);
   });
@@ -42,25 +42,25 @@ describe.concurrent('the verb library lib/verb.sh, one function at a time', () =
   it.for([
     ['nul', Buffer.from('a recipe\0with a NUL\n'), 'the recipe holds a NUL byte'],
     ['bad', latin1('a recipe \xff\n'), 'the recipe is not valid UTF-8'],
-  ] as const)('vb_doc_ok refuses a %s document naming it', async ([name, bytes, message]) => {
+  ] as const)('[the-record-r12] vb_doc_ok refuses a %s document naming it', async ([name, bytes, message]) => {
     writeFileSync(join(sb, `${name}.doc`), bytes);
     const r = await call('vb_doc_ok "the recipe" "$1"', `${name}.doc`);
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(new RegExp(`error: ${message} \\(ERR_INVALID_ARGUMENT\\)\\n$`));
   });
 
-  it('vb_doc_ok takes a UTF-8 document', async () => {
+  it('[the-record-r12] vb_doc_ok takes a UTF-8 document', async () => {
     writeFileSync(join(sb, 'ok.doc'), `# recipe ${UTF8_OK}\n`);
     expect((await call('vb_doc_ok "the recipe" "$1"', 'ok.doc')).code).toBe(0);
   });
 
-  it('vb_refuse_nl refuses a newline in a one-line field, naming it, and takes one line', async () => {
+  it('[the-record-r12] vb_refuse_nl refuses a newline in a one-line field, naming it, and takes one line', async () => {
     const r = await call('vb_refuse_nl what "$1"', 'one\ntwo');
     expect([r.code, r.stderr]).toEqual([1, 'ERROR: embedded newline in what (one line)\n']);
     expect((await call('vb_refuse_nl what "$1"', 'one line')).code).toBe(0);
   });
 
-  it('vb_refuse_cr refuses a carriage return in any value and takes LF text', async () => {
+  it('[the-record-r12] vb_refuse_cr refuses a carriage return in any value and takes LF text', async () => {
     const r = await call('vb_refuse_cr "$1" "$2"', 'plain', 'carriage\rreturn');
     expect([r.code, r.stderr]).toEqual([1, 'ERROR: embedded carriage return in a field value (the dialect is LF)\n']);
     expect((await call('vb_refuse_cr "$1"', 'line\nfeed')).code).toBe(0);
@@ -74,7 +74,7 @@ describe.concurrent('the verb library lib/verb.sh, one function at a time', () =
     expect((await call('vb_slug_ok "$1"', slug)).code).toBe(rc);
   });
 
-  it('vb_unknown refuses an unknown flag and an extra argument with their own lines', async () => {
+  it('[the-record-r9] vb_unknown refuses an unknown flag and an extra argument with their own lines', async () => {
     expect((await call('vb_unknown "task add" "$1"', '--bogus')).stderr).toBe("task add: error: unknown option '--bogus' (ERR_INVALID_ARGUMENT)\n");
     const extra = await call('vb_unknown "task add" "$1"', 'extra');
     expect([extra.code, extra.stderr]).toEqual([1, "task add: error: unexpected argument 'extra' (ERR_INVALID_ARGUMENT)\n"]);

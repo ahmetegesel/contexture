@@ -36,7 +36,7 @@ describe.concurrent('concurrent writers of one unit serialize: no refusal, no re
     p2 = await seed((sb) => seedUnit(sb, 'p2', 'parallel probe same-target'), 'posix', 'concurrency');
   });
 
-  it.for(Array.from({ length: 10 }, (_, i) => i + 1))('L-a: a record and a task add landing at once on unit p1-%i both land with no refusal', async (i) => {
+  it.for(Array.from({ length: 10 }, (_, i) => i + 1))('L-a [the-record-r9]: a record and a task add landing at once on unit p1-%i both land with no refusal', async (i) => {
     const sb = stage('posix', `concurrency-p1-${i}`);
     await seedUnit(sb, `p1-${i}`, `parallel probe unit ${i}`);
     const [a, b] = await Promise.all([
@@ -48,7 +48,7 @@ describe.concurrent('concurrent writers of one unit serialize: no refusal, no re
     expect((await unit(sb, 'task', 'show', `p1-${i}`, `p1-task-${i}`)).code).toBe(0);
   });
 
-  it('L-b: two records landing at once on one unit, five rounds: every write rc 0, no residue, no torn block, both land', async () => {
+  it('L-b [the-record-r9]: two records landing at once on one unit, five rounds: every write rc 0, no residue, no torn block, both land', async () => {
     const sb = fresh(p2);
     for (let i = 1; i <= 5; i++) {
       const runs = await Promise.all(['x', 'y'].map((e) => unit(sb, 'record', 'p2', `--what=${e} ${i}`, `--slug=${D}-probe-${e}-${i}`)));
@@ -59,7 +59,7 @@ describe.concurrent('concurrent writers of one unit serialize: no refusal, no re
     }
   });
 
-  it.for(['.contexture/sessions/p2/.tmpplant', '.contexture/sessions/p2/plant.XXXXXX', '.contexture/tmp/rec.plant', '.contexture/tmp/fts5-ws.plant', '.contexture/tmp/posix.plant', '.contexture/tmp/verb.plant'])('L-c: a single planted leak %s reads as residue, while the retired one-ls probe misses it', async (plant) => {
+  it.for(['.contexture/sessions/p2/.tmpplant', '.contexture/sessions/p2/plant.XXXXXX', '.contexture/tmp/rec.plant', '.contexture/tmp/fts5-ws.plant', '.contexture/tmp/posix.plant', '.contexture/tmp/verb.plant'])('L-c [the-record-r9]: a single planted leak %s reads as residue, while the retired one-ls probe misses it', async (plant) => {
     const sb = fresh(p2);
     const path = join(sb, plant);
     mkdirSync(dirname(path), { recursive: true });
@@ -70,7 +70,7 @@ describe.concurrent('concurrent writers of one unit serialize: no refusal, no re
     rmSync(path);
   });
 
-  it('L-c: the torn-block instrument reads an entry without its THREAD line as torn', () => {
+  it('L-c [the-record-r9]: the torn-block instrument reads an entry without its THREAD line as torn', () => {
     expect(tornBlocks('@entry a\n  WHAT: "x"\n  THREAD: none\n')).toBe(false);
     expect(tornBlocks('@entry a\n  WHAT: "x"\n@entry b\n  WHAT: "y"\n  THREAD: none\n')).toBe(true);
   });

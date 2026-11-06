@@ -34,7 +34,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     }, 'posix', 'faults');
   });
 
-  it.skipIf(ROOT_USER)('W-a: every typed write on a read-only store exits 2, changes nothing, leaves no temp, and releases the lock', async () => {
+  it.skipIf(ROOT_USER)('W-a [the-record-r9, the-record-r12, the-engine-r18]: every typed write on a read-only store exits 2, changes nothing, leaves no temp, and releases the lock', async () => {
     const sb = fresh(sb0);
     const unitDir = join(sb, '.contexture/sessions/w-unit');
     const laneDir = join(unitDir, 'lanes/w-lane');
@@ -58,7 +58,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect((await unit(sb, 'task', 'start', 'w-unit', 'w-a')).code).toBe(0);
   });
 
-  it('K: a TERM on a data script waiting on a held unit lock leaves no scratch once the drawer settles', async () => {
+  it('K [the-engine-r18]: a TERM on a data script waiting on a held unit lock leaves no scratch once the drawer settles', async () => {
     const sb = fresh(sb0);
     const lock = unitLock('w-unit');
     const release = holdLock(sb, lock, 'live');
@@ -78,7 +78,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(await waitFor(() => added(sb, before).length === 0, 10_000)).toBe(true);
   });
 
-  it('KR-a: a SIGKILLed holder leaves its pid in the lock; the next writer removes the stale lock and lands', async () => {
+  it('KR-a [the-engine-r18]: a SIGKILLed holder leaves its pid in the lock; the next writer removes the stale lock and lands', async () => {
     const sb = fresh(sb0);
     const lock = lockPath(sb, unitLock('w-unit'));
     const holder = launch('sh', ['-c', 'mkdir -p "$(dirname "$1")" && mkdir "$1" && printf "%s\\n" "$$" > "$1/pid" && sleep 30', 'kr-holder', lock], { cwd: sb, group: true });
@@ -93,7 +93,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect((await unit(sb, 'task', 'show', 'w-unit', 'w-a')).stdout).toContain('IN_PROGRESS');
   });
 
-  it('KR-b: a live holder still refuses the next writer rc 2 ERR_STORAGE_LOCKED (the wait under the sleep shim)', async () => {
+  it('KR-b [the-engine-r18]: a live holder still refuses the next writer rc 2 ERR_STORAGE_LOCKED (the wait under the sleep shim)', async () => {
     const sb = fresh(sb0);
     holdLock(sb, unitLock('w-unit'), 'live');
     const r = await run(sb, ['unit', 'task', 'complete', 'w-unit', 'w-a', '--evidence=never lands'], { env: sleepShim() });
@@ -101,7 +101,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(r.stdout + r.stderr).toContain('ERR_STORAGE_LOCKED');
   });
 
-  it('KR-c: a writer killed while waiting leaves one per-verb scratch root, which the next dispatch sweeps', async () => {
+  it('KR-c [the-engine-r6, the-engine-r20]: a writer killed while waiting leaves one per-verb scratch root, which the next dispatch sweeps', async () => {
     const sb = fresh(sb0);
     const lock = unitLock('w-unit');
     const release = holdLock(sb, lock, 'live');
@@ -135,7 +135,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect((await unit(sb, 'task', 'show', 'w-unit', 'w-a')).stdout).toContain('STATUS: TODO');
   });
 
-  it('a lane document the data script cannot stage refuses rc 2 ERR_STORAGE_WRITE and leaves the report as it was', async () => {
+  it('[the-record-r9, the-engine-r21] a lane document the data script cannot stage refuses rc 2 ERR_STORAGE_WRITE and leaves the report as it was', async () => {
     const sb = fresh(sb0);
     const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const r = await data(sb, 'lane.write_report', ['w-unit', 'w-lane'], 'never lands\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir -p "$p/stage/doc" ;; esac'));
@@ -143,7 +143,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).toBe(before);
   });
 
-  it('a session.create whose existence probe cannot be written refuses rc 2 and leaves the unit it names whole', async () => {
+  it('[the-record-r9, the-engine-r21] a session.create whose existence probe cannot be written refuses rc 2 and leaves the unit it names whole', async () => {
     const sb = fresh(sb0);
     const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const r = await data(sb, 'session.create', ['w-unit'], 'objective=a second unit\nattention=fresh unit\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir "$p/keys" ;; esac'));
@@ -152,7 +152,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(r.stderr).toMatch(/^session\.create: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
   });
 
-  it('a task.add whose fetched backlog cannot be written refuses rc 2 and never reads the backlog as absent', async () => {
+  it('[the-record-r9, the-engine-r21] a task.add whose fetched backlog cannot be written refuses rc 2 and never reads the backlog as absent', async () => {
     const sb = fresh(sb0);
     const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const r = await data(sb, 'task.add', ['w-unit', 'w-c'], 'objective=Task C\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir "$p/art.2" ;; esac'));
@@ -161,7 +161,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(r.stderr).toMatch(/^task\.add: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
   });
 
-  it.skipIf(ROOT_USER)('a write whose batch payload loses a line after its first action refuses rc 2 and lands none of it', async () => {
+  it.skipIf(ROOT_USER)('[the-record-r9, the-engine-r18, the-engine-r21] a write whose batch payload loses a line after its first action refuses rc 2 and lands none of it', async () => {
     const sb = fresh(sb0);
     const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const b64 = join(sb, '.contexture/modules/unit/lib/b64');

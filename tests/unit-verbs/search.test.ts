@@ -19,11 +19,11 @@ describe.concurrent('ctx unit search on posix', () => {
     }, 'posix', 'search');
   });
 
-  it('E-12: search finds a finding', async () => {
+  it('E-12 [the-record-r13]: search finds a finding', async () => {
     expect((await search(fresh(sb0), 'Architecture decision', '--mode=exact')).stdout).toContain('ARCH_V2');
   });
 
-  it('X-m: --limit caps the results; every result carries the one shape and no physical file key', async () => {
+  it('X-m [the-record-r13]: --limit caps the results; every result carries the one shape and no physical file key', async () => {
     const sb = fresh(sb0);
     expect((await search(sb, 'task', '--mode=exact', '--json', '--limit=1')).stdout.match(/"entity_type":/g)).toHaveLength(1);
     const out = (await search(sb, 'task', '--mode=exact', '--json', '--limit=50')).stdout;
@@ -31,7 +31,7 @@ describe.concurrent('ctx unit search on posix', () => {
     expect(out).not.toContain('"file":');
   });
 
-  it('X-m E3-2: a search without --mode refuses before any call naming the declared modes; diagnose lists them', async () => {
+  it('X-m E3-2 [the-record-r13]: a search without --mode refuses before any call naming the declared modes; diagnose lists them', async () => {
     const sb = fresh(sb0);
     const r = await search(sb, 'task');
     expect(r.code).toBe(1);
@@ -41,7 +41,7 @@ describe.concurrent('ctx unit search on posix', () => {
     expect((await unit(sb, 'diagnose')).stdout).toMatch(/^ {2}search modes: {4}exact$/m);
   });
 
-  it('X-m E3-1: the search help and usage name --mode and no driver mode, pointing to diagnose', async () => {
+  it('X-m E3-1 [the-record-r13]: the search help and usage name --mode and no driver mode, pointing to diagnose', async () => {
     const sb = fresh(sb0);
     const help = await unit(sb, 'search', '--help');
     expect(help.stdout + help.stderr).toContain(' --mode=MODE ');
@@ -52,7 +52,7 @@ describe.concurrent('ctx unit search on posix', () => {
     expect((await unit(sb, 'search')).stderr).not.toMatch(/hybrid|trigram/);
   });
 
-  it('X-m: --entity keeps one entity type', async () => {
+  it('X-m [the-record-r13]: --entity keeps one entity type', async () => {
     const sb = fresh(sb0);
     expect((await search(sb, 'zzshared', '--mode=exact', '--json', '--limit=50')).stdout).toContain('"entity_type":"task"');
     const findings = (await search(sb, 'zzshared', '--mode=exact', '--json', '--entity=finding', '--limit=50')).stdout;
@@ -60,7 +60,7 @@ describe.concurrent('ctx unit search on posix', () => {
     expect(findings).not.toContain('"entity_type":"task"');
   });
 
-  it('X-m: --mode=exact is honored and reported; the text view is its own format', async () => {
+  it('X-m [the-record-r13]: --mode=exact is honored and reported; the text view is its own format', async () => {
     const sb = fresh(sb0);
     const json = await search(sb, 'Open task', '--json', '--mode=exact');
     expect(json.code).toBe(0);
@@ -71,7 +71,7 @@ describe.concurrent('ctx unit search on posix', () => {
     expect(text).not.toMatch(/^\{"unit"/m);
   });
 
-  it('X-m: an empty query refuses ERR_INVALID_ARGUMENT; --mode=hybrid refuses ERR_CAPABILITY_UNSUPPORTED on posix', async () => {
+  it('X-m [the-record-r13]: an empty query refuses ERR_INVALID_ARGUMENT; --mode=hybrid refuses ERR_CAPABILITY_UNSUPPORTED on posix', async () => {
     const sb = fresh(sb0);
     const empty = await search(sb, '', '--mode=exact');
     expect(empty.code).toBe(1);
@@ -81,13 +81,13 @@ describe.concurrent('ctx unit search on posix', () => {
     expect(hybrid.stderr).toContain('ERR_CAPABILITY_UNSUPPORTED');
   });
 
-  it('Y-b R9: an exact snippet carries no edge padding', async () => {
+  it('Y-b R9 [the-record-r13]: an exact snippet carries no edge padding', async () => {
     const out = (await unit(fresh(sb0), 'search', 'y-unit', 'Kept task', '--mode=exact', '--json')).stdout;
     expect(out).toMatch(/"snippet":"[^"]*Kept task/);
     expect(out).not.toContain('\\n"}');
   });
 
-  it('Y-b BG2: a snippet keeps the quote pair on a lowercase field line', async () => {
+  it('Y-b BG2 [the-record-r13]: a snippet keeps the quote pair on a lowercase field line', async () => {
     const out = (await unit(fresh(sb0), 'search', 'bg2-unit', 'the quote pair unit', '--mode=exact', '--json')).stdout;
     expect(out).toContain('"snippet":"objective: \\"the quote pair unit\\""');
     expect(out).not.toContain('the quote pair unit","score"');

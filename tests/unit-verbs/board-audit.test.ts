@@ -11,7 +11,7 @@ describe.concurrent('ctx unit board and audit', () => {
     expect((await unit(stage('posix', 'audit-missing'), 'audit', 'nosuch')).code).toBe(1);
   });
 
-  it('S1-e: a legacy repeated slug warns in the audit with rc 0; a closer closes the occurrences before it; entry show reads the last (posix plant)', async () => {
+  it('S1-e [the-record-r6]: a legacy repeated slug warns in the audit with rc 0; a closer closes the occurrences before it; entry show reads the last (posix plant)', async () => {
     const sb = stage('posix', 'audit-dup');
     await seedUnit(sb, 'dup-audit', 'duplicate slug unit');
     await must(unit(sb, 'record', 'dup-audit', '--what=first', `--slug=${D}-twice`));
