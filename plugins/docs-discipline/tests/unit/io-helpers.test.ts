@@ -37,9 +37,21 @@ describe('docs_parse: the verb arguments into positionals, controls, and field a
   });
 
   it.each([
+    ['entry --kind, the components kind', 'after first remove id stdin dry-run', ['--kind=runtime'], ['act 1: set kind [runtime]']],
+    ['header --kind and --stdin', 'dry-run', ['--kind=overview', '--stdin=detail'], ['act 1: set kind [overview]', 'act 2: set stdin [detail]']],
+    ['rule --id', 'after first remove stdin dry-run', ['--id=conv-r1'], ['act 1: set id [conv-r1]']],
+    ['new --id', 'kind dry-run', ['--id=x'], ['act 1: set id [x]']],
+  ])('reads a value control the verb does not take as a field action: %s', async (_, controls, args, acts) => {
+    const r = await sourced(`docs_parse "${controls}" 1 "$@" || exit $?; ${SHOW}`, ...args);
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout.split('\n').filter((l) => l.startsWith('act '))).toEqual(acts);
+  });
+
+  it.each([
     ['W49 an unknown option without a value', '1', ['--bogus']],
     ['a control the verb does not take', '1', ['--first']],
     ['a field flag on a verb without fields', '0', ['--summary=x']],
+    ['a value control the verb does not take, on a verb without fields', '0', ['--kind=x']],
     ['a field name outside the name set', '1', ['--Bad=x']],
   ])('refuses %s rc 1 naming the verb and its flags', async (_, fields, args) => {
     const r = await sourced(`DOCS_VERB="ctx docs entry"; DOCS_FLAGS="--after= --dry-run"; docs_parse "after dry-run" ${fields} "$@"`, ...args);

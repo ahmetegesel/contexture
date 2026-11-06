@@ -80,6 +80,15 @@ describe('the write verbs through ctx on posix: one success per verb, the stored
   });
 });
 
+describe('a components entry takes its kind through --kind on posix', { concurrent: true }, () => {
+  it('adds a component with its kind', async () => {
+    await succeeds(fresh(wtest), ['entry', 'wtest', 'map', 'components', '--name=beta', '--repo=wtest', '--kind=runtime', '--stack=sh', '--responsibilities=Beta things'], 'map', golden('exp-entry-component-kind-add.md'));
+  });
+  it('changes the kind of an existing component', async () => {
+    await succeeds(fresh(wtest), ['entry', 'wtest', 'map', 'components', 'alpha', '--kind=runtime'], 'map', golden('exp-entry-component-kind-change.md'));
+  });
+});
+
 describe('the write pipeline through ctx on posix', { concurrent: true }, () => {
   it('W4 write --replace of the stored bytes writes nothing', async () => {
     const sb = fresh(wtest);

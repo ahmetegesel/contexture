@@ -39,7 +39,7 @@ owning repo's run, build, and test targets.
 | `ctx docs header` | header fields without a read: `--add-source`, `--remove-source` (the UNCOVERED and DEAD SOURCE fixes), keywords, children, description, role, upstream, parent | `docs-edit.awk` |
 | `ctx docs rule` | a `@rule` block by `<category>/<rule-slug>`: add, change fields, remove | `docs-edit.awk` |
 | `ctx docs pitfall` | a `@pitfalls` entry by its repo-unique id: add (id assigned), change, retire | `docs-edit.awk` |
-| `ctx docs entry` | one entry of any list block by its key (an id, a first field's value, `<from>><to>`, `<direction>:<key>`, or `#<N>`): add with `--after` or `--first`, change fields, remove | `docs-edit.awk` |
+| `ctx docs entry` | one entry of any list block by its key (an id, a first field's value, `<from>><to>`, `<direction>:<key>`, or `#<N>`): add with `--after` or `--first`, change fields (a component's kind through `--kind`), remove | `docs-edit.awk` |
 | `ctx docs section` | a whole block from stdin: replace, create, or remove (rare) | `docs-edit.awk` |
 | `ctx docs replace` | counted exact replacement over a doc, a repo, or the corpus (sync sweeps; the total must equal `--count`) | `docs-edit.awk` |
 | `ctx docs remove` | a whole doc out of the corpus | none (the IO helper) |
@@ -59,10 +59,11 @@ What lands where:
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
 | `docs/work.md` | the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW | reference (copy it into the workspace's own `.contexture/rhythms/` to own it; the starter-rhythms plugin owns the installed generic `work`) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/` | the plugin's vitest project `docs-discipline`: the engines and helpers alone (`unit/`), the census, the grammar agreement, and the package shape (`static/`), the verbs end to end on posix (`integration/`), the read refusal on a driver without a store (`fault/`), and the store mode on fts5 (`store/`) | reference (never copied) |
+| `tests/` | the plugin's vitest project `docs-discipline`: the engines and helpers alone (`unit/`), the census, the grammar agreement, the flag collision check, and the package shape (`static/`), the verbs end to end on posix (`integration/`), the read refusal on a driver without a store (`fault/`), and the store mode on fts5 (`store/`) | reference (never copied) |
 | `tests/write/` | the edit engine's seeds, payloads, and goldens: every write verb's result byte for byte | reference (never copied) |
 | `tests/census.awk`, `tests/census-allow.txt` | the single-door census of the module and its classified allow-list | reference (never copied) |
 | `tests/grammar-agreement.awk` | the grammar agreement check the static tests run: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
+| `tests/flag-collision.awk` | the flag collision check the static tests run: every grammar field named like a value control stays settable through each field verb that does not take that control | reference (never copied) |
 | `README.md` | this onboarding document | reference |
 
 The write verbs' edit engine is portable across BWK awk, mawk, gawk, and busybox awk: a splice
@@ -456,7 +457,10 @@ query and nudge engines' tests hold their answers against the committed
 expected output under `tests/unit/expected/`. Keep the module's grammar (`scripts/doc.grammar`), its
 machine-readable schema (section 6), and the audit in step: the project's
 grammar agreement check (`tests/grammar-agreement.awk`) fails on any
-difference among the three; the `tests/sample/` corpus is reference data. Packaging,
+difference among the three, and the flag collision check
+(`tests/flag-collision.awk`) fails when a grammar field named like a value
+control (`--kind`, `--id`, `--after`, and the rest) can no longer be set
+through a field verb; the `tests/sample/` corpus is reference data. Packaging,
 naming, and the test convention are in `docs/plugins.md`; the module shape is
 `docs/modules.md`.
 
@@ -979,3 +983,4 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `tests/write/` | authored fresh: the write verbs' seeds, payloads, and expected docs |
 | `tests/census.awk`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, names read with quotes deleted and the file-reading commands of a shell script counted, the classified allow-list by file and exact line, remainder zero) |
 | `tests/grammar-agreement.awk` | authored fresh: the agreement check of the `#%` schema, the prose shapes, and the audit's lists, refusing an empty side as a pass |
+| `tests/flag-collision.awk` | authored fresh: the collision check of the grammar fields named like a value control against each field verb's controls and reach, the by-design id pairs allow-listed, refusing an empty reach or census as a pass |

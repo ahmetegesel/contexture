@@ -610,7 +610,8 @@ docs_bad_flag() {
 # docs_parse <controls> <fields 0|1> [<argument>...]: positionals into DOCS_P1..DOCS_P<n>
 # (DOCS_NP); the control flags the verb takes (<controls>, space separated: after first
 # remove id dry-run replace kind old new count stdin) into DOCS_*; with <fields> 1 every
-# other --<field>=<value>, --add-<field>=<item>, --remove-<field>=<item>, and
+# other --<field>=<value> (a control the verb does not take among them, as entry's --kind
+# for a component), --add-<field>=<item>, --remove-<field>=<item>, and
 # --unset=<field> into a field action (dashes read as underscores; the engine refuses a
 # field the block does not carry); anything else refuses rc 1 naming the verb's flags
 docs_parse() {
@@ -632,11 +633,11 @@ docs_parse() {
       --count=*) dp_c=count ;;
       --stdin=*) dp_c=stdin ;;
     esac
+    case "$dp_ok" in
+      *" $dp_c "*) ;;
+      *) dp_c="" ;;
+    esac
     if [ -n "$dp_c" ]; then
-      case "$dp_ok" in
-        *" $dp_c "*) ;;
-        *) docs_bad_flag "$dp_a"; return 1 ;;
-      esac
       case "$dp_c" in
         after) DOCS_AFTER=${dp_a#--after=} ;;
         first) DOCS_FIRST=1 ;;
