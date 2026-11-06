@@ -21,7 +21,7 @@ describe('the compiler API resolution in process', { concurrent: true }, () => {
     expect([ts.version, typeof ts.createSourceFile]).toEqual(['6.0.3', 'function']);
   });
 
-  it.skipIf(!noCompilerApiAround())('unset, a search path holding only the typescript 7 stub refuses naming each typescript found and the variable', () => {
+  it.skipIf(!noCompilerApiAround())('unset, a search path holding only the typescript 7 stub refuses naming each typescript found and the variable (needs no TypeScript 5 or 6 reachable from the module or the sandbox ancestors)', () => {
     const run = () => resolveTypeScript([miniRepo('resolve-stub', TYPESCRIPT_7_STUB)], '');
     expect(run).toThrow(`typescript 7.0.2 at ${STUB_ENTRY}`);
     expect(run).toThrow('AST_DOC_GRAPH_TYPESCRIPT');
