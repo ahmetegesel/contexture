@@ -441,12 +441,13 @@ it walk below runs every one of these.
 - A script without an extension is governed by its first line: an
   extensionless file (a non-empty basename with no dot after its first
   character) counts when its first line starts with `#!`, read by the verb on
-  the shell side under the workspace root (a readable regular file, its path
-  free of a `..` segment), never by the engine, so a folder in the delta (a
-  submodule, an embedded repository's `<dir>/` line) never fails the check.
-  An extensionless file without a shebang stays out; a path the verb cannot
-  read (deleted, absent, a folder) counts only when a header source lists it
-  exactly; under `--drift` the first line is the working tree's copy, so an
+  the shell side under the workspace root (a readable regular file, never a
+  symbolic link, its path free of a `..` segment), never by the engine, so a
+  folder in the delta (a submodule, an embedded repository's `<dir>/` line)
+  never fails the check. An extensionless file without a shebang stays out; a
+  path the verb does not read (deleted, absent, a folder, a symbolic link,
+  which git keeps as its target path) counts only when a header source lists
+  it exactly; under `--drift` the first line is the working tree's copy, so an
   incoming new script reads ungoverned until it lands; the gate's matrix
   keeps the extension rule alone.
 - The governed guide pages count as governed files: a depth-1 `docs/*.md`

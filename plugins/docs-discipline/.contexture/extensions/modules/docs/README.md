@@ -153,13 +153,15 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   extensionless file without a shebang stays out. The first line is read on
   the shell side: `docs_delta_shebangs` walks the staged delta (both sides of
   a rename), reads each extensionless path that is a readable regular file
-  under the workspace root (`[ -f ]`, the first line by `IFS= read -r`; a path
-  with a `..` segment is skipped), and writes the scratch list `shebangs` (one
-  `shebang` or `plain` line per path) that the engine reads by name from
-  `DOCS_SHEBANG_LIST`, so no engine line opens a code path and a folder in the
-  delta never fails the engine. A path the list cannot vouch for (deleted,
-  absent, a folder such as a submodule, an embedded repository's `<dir>/`
-  line) counts only when a claiming doc lists it exactly. `check` and every
+  under the workspace root (`[ -f ]` and never a symbolic link, which git keeps
+  as its target path and whose target may lie outside the root; the first line
+  by `IFS= read -r`; a path with a `..` segment is skipped), and writes the
+  scratch list `shebangs` (one `shebang` or `plain` line per path) that the
+  engine reads by name from `DOCS_SHEBANG_LIST`, so no engine line opens a code
+  path and a folder in the delta never fails the engine. A path the list
+  cannot vouch for (deleted, absent, a folder such as a submodule, an embedded
+  repository's `<dir>/` line, a symbolic link) counts only when a claiming doc
+  lists it exactly. `check` and every
   gate form draw the list from the delta they staged; under `--drift` the
   first line is the working tree's copy, so an incoming new script reads
   ungoverned until it lands; the gate's `--test-matrix` keeps the extension

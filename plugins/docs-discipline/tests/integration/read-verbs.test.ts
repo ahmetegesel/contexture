@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec } from '@support/exec';
+import { sandbox } from '@support/sandbox';
 import { fresh } from '@support/snapshot';
 import { unit } from '@support/unit';
 import { docs, ENGINE_FIXTURES, putDocs, SAMPLE, stageSeed, TESTS } from '../support/corpus';
@@ -120,6 +121,18 @@ describe('the check verb governs a shebang script by its first line, read under 
     });
     expect(r.code, r.stdout + r.stderr).toBe(1);
     expect(r.stdout.match(/^UNCOVERED: .*$/gm)).toEqual(['UNCOVERED: tools/run']);
+  });
+  it('a symbolic link is no shebang script, whether its target lies inside the workspace root or outside it', async () => {
+    const sb = fresh(staged);
+    const outside = join(sandbox('check-link-target'), 'run');
+    writeFileSync(outside, '#!/bin/sh\necho outside\n');
+    mkdirSync(join(sb, 'tools'), { recursive: true });
+    writeFileSync(join(sb, 'tools/run'), '#!/bin/sh\necho run\n');
+    symlinkSync(outside, join(sb, 'tools/out-link'));
+    symlinkSync('run', join(sb, 'tools/in-link'));
+    const r = await docs(sb, ['check', 'workspace'], { input: 'A\ttools/out-link\nA\ttools/in-link\n' });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain('UNCOVERED:');
   });
 });
 
