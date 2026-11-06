@@ -39,8 +39,9 @@ export function goldens(unit: string, dir: string): Golden[] {
 export async function holdsGoldens(unit: string, dir: string, call: (fn: string, args: string[]) => Promise<Run>): Promise<void> {
   const set = goldens(unit, dir);
   expect(set.length).toBe(23);
-  for (const g of set) {
-    const r = await call(g.fn, g.args);
+  const runs = await Promise.all(set.map((g) => call(g.fn, g.args)));
+  for (const [i, g] of set.entries()) {
+    const r = runs[i];
     answer(r, `${g.fn} ${g.args.join(' ')}`);
     if (WRITE_GOLDENS) writeFileSync(g.file, r.bytes);
     else expect(r.stdout, `${g.fn} ${g.args.join(' ')} against ${g.file}`).toBe(readFileSync(g.file, 'utf8'));

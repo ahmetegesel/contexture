@@ -82,8 +82,8 @@ class Manifest {
     }
     if (journals) for (const u of units) this.add(`${u}|journal`, `${u}/journal`);
     if (backlogs) {
-      const active = units.filter((u) => /^status:[ \t]*ACTIVE[ \t\r]*$/m.test(readFileSync(join(store(this.sb), u, 'state.md'), 'utf8').split('\n').find((l) => l.startsWith('status:')) ?? ''));
-      for (const u of active) this.add(`${u}|backlog`, `${u}/backlog`);
+      const status = (u: string) => readFileSync(join(store(this.sb), u, 'state.md'), 'utf8').split('\n').find((l) => l.startsWith('status:'))?.slice(7).trim();
+      for (const u of units.filter((u) => status(u) === 'ACTIVE')) this.add(`${u}|backlog`, `${u}/backlog`);
     }
   }
 }
