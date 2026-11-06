@@ -174,7 +174,7 @@ The driver discovers TypeScript files and documentation units, runs the extracto
 and compiles `graph.db` in the repository root.
 
 #### Multi-Directory Repository Root Discovery
-When `--src-dir` is omitted, `ast-doc-index` automatically scans the entire repository root, discovering TypeScript source code across `components/`, `pages/`, `services/`, `backend/`, and any other source directories in the project. The scanner enforces standard exclusion directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.work`, `.idea`, `tests`, `__tests__`, `.worktrees`) so generated bundles and test fixtures never contaminate the graph.
+When `--src-dir` is omitted, `ast-doc-index` automatically scans the entire repository root, discovering TypeScript source code across `components/`, `pages/`, `services/`, `backend/`, and any other source directories in the project. The scanner enforces standard exclusion directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.work`, `.idea`, `tests`, `__tests__`, `.worktrees`) so generated bundles and test fixtures never contaminate the graph. The exclusions match paths inside the scanned root only: a repository that itself sits under such a folder (a checkout under `.worktrees/`, a fixture under `tests/`) still indexes.
 
 #### Incremental Delta Indexing (--delta)
 To update the database after code or documentation edits without running a full rebuild:

@@ -1,7 +1,8 @@
 # ast-doc-graph module: internals
 
-The ast-doc-graph module ships with the ast-doc-graph plugin. Adoption copies
-this directory to `<workspace>/.contexture/modules/ast-doc-graph/`; the engine
+The ast-doc-graph module ships with the ast-doc-graph plugin. The package
+installer overlays this directory at
+`<workspace>/.contexture/extensions/modules/ast-doc-graph/`; the engine
 discovers its two verbs. This page is the off-path maintainer map: it is not
 linked from the workspace's boot, laws, or help.
 
@@ -33,6 +34,13 @@ pitfalls); the loader consumes the streams without knowing which extractor
 produced them, resolves the `GOVERNS`, `WARNS`, and `COVERS` edges, and
 compiles `graph.db` (relational tables plus the dual `fts_symbols` and
 `fts_docs` virtual tables). Retrieval runs directly on system `sqlite3`.
+
+Discovery (the full index, the delta scan, and the query's freshness check)
+runs `find` from inside the scanned root, so the exclusion folders
+(`node_modules`, `.contexture`, `tests`, `.worktrees`, and the rest) match
+paths within the repository and never the folders the repository itself sits
+in: a repository under a `tests/` or `.worktrees/` folder indexes like any
+other.
 
 The docs extractor reads the corpus as files: `bin/ast-doc-index` scans the
 workspace's `docs/` folder and `extractors/docs/extract-docs.ts` parses each

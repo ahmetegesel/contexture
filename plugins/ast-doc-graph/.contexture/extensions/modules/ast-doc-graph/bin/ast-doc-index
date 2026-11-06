@@ -6,15 +6,6 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SETUP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-# Fallback setup directory resolution if copied into scripts or tools directory
-if [[ ! -f "$SETUP_DIR/extractors/ts/extract-ts.sh" ]]; then
-  if [[ -d "$SCRIPT_DIR/../setups/ast-doc-graph" ]]; then
-    SETUP_DIR="$(cd "$SCRIPT_DIR/../setups/ast-doc-graph" && pwd)"
-  elif [[ -d "$SCRIPT_DIR/../plugins/ast-doc-graph/.contexture/modules/ast-doc-graph" ]]; then
-    SETUP_DIR="$(cd "$SCRIPT_DIR/../plugins/ast-doc-graph/.contexture/modules/ast-doc-graph" && pwd)"
-  fi
-fi
-
 EXTRACT_TS="$SETUP_DIR/extractors/ts/extract-ts.sh"
 EXTRACT_DOCS="$SETUP_DIR/extractors/docs/extract-docs.sh"
 INDEX_GRAPH="$SETUP_DIR/loader/index-graph.sh"
@@ -26,6 +17,17 @@ for component in "$EXTRACT_TS" "$EXTRACT_DOCS" "$INDEX_GRAPH" "$SCHEMA_SQL"; do
     exit 1
   fi
 done
+
+# scan_find <root> <find expression...>: find runs from inside the root, so the exclusion
+# patterns match paths within the repository, never the folders the repository sits in;
+# each path prints with the root in front
+scan_find() {
+  local root="$1"
+  shift
+  (cd "$root" && find . "$@") | while IFS= read -r f; do
+    printf '%s/%s\n' "$root" "${f#./}"
+  done
+}
 
 print_help() {
   cat << 'EOF'
@@ -262,7 +264,7 @@ if [[ "$DELTA" == true ]]; then
         rel_f="${rel_f#./}"
         DIRTY_TS+=("$rel_f")
       fi
-    done < <(find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
+    done < <(scan_find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
       ! -name "*.d.ts" \
       ! -path "*/node_modules/*" \
       ! -path "*/dist/*" \
@@ -288,7 +290,7 @@ if [[ "$DELTA" == true ]]; then
         rel_f="${rel_f#./}"
         DIRTY_DOCS+=("$rel_f")
       fi
-    done < <(find "$DOCS_SCAN_DIR" -type f -name "*.md" \
+    done < <(scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" \
       ! -path "*/node_modules/*" \
       ! -path "*/dist/*" \
       ! -path "*/build/*" \
@@ -370,7 +372,7 @@ fi
 # Full indexing mode
 # Step 1: Discover TypeScript source files
 TS_FILE_LIST="$CACHE_DIR/ts_files.txt"
-find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
+scan_find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
   ! -name "*.d.ts" \
   ! -path "*/node_modules/*" \
   ! -path "*/dist/*" \

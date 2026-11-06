@@ -147,6 +147,17 @@ sql_escape() {
 
 # --- JIT FRESHNESS MICRO-SYNC ---
 
+# scan_find <root> <find expression...>: find runs from inside the root, so the exclusion
+# patterns match paths within the repository, never the folders the repository sits in;
+# each path prints with the root in front
+scan_find() {
+  local root="$1"
+  shift
+  (cd "$root" && find . "$@") | while IFS= read -r f; do
+    printf '%s/%s\n' "$root" "${f#./}"
+  done
+}
+
 check_and_sync_freshness() {
   if [[ "$NO_SYNC" == true ]]; then
     return 0
@@ -174,21 +185,20 @@ check_and_sync_freshness() {
     index_driver="$SCRIPT_DIR/ast-doc-index"
   elif [[ -x "$SCRIPT_DIR/../bin/ast-doc-index" ]]; then
     index_driver="$SCRIPT_DIR/../bin/ast-doc-index"
-  elif [[ -x "$SCRIPT_DIR/../setups/ast-doc-graph/bin/ast-doc-index" ]]; then
-    index_driver="$SCRIPT_DIR/../setups/ast-doc-graph/bin/ast-doc-index"
-  elif [[ -x "$SCRIPT_DIR/../plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/bin/ast-doc-index" ]]; then
-    index_driver="$SCRIPT_DIR/../plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/bin/ast-doc-index"
   elif command -v ast-doc-index >/dev/null 2>&1; then
     index_driver="$(command -v ast-doc-index)"
   fi
 
   # Discover files newer than DB_PATH with standard excludes
+  [[ -f "$DB_PATH" ]] || return 0
+  local db_abs
+  db_abs="$(cd "$(dirname "$DB_PATH")" && pwd)/$(basename "$DB_PATH")"
   local dirty_files=()
   while IFS= read -r f; do
     if [[ -n "$f" ]]; then
       dirty_files+=("$f")
     fi
-  done < <(find "$repo_root" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.md" \) \
+  done < <(scan_find "$repo_root" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.md" \) \
     ! -name "*.d.ts" \
     ! -path "*/node_modules/*" \
     ! -path "*/dist/*" \
@@ -206,7 +216,7 @@ check_and_sync_freshness() {
     ! -name "*.test.tsx" \
     ! -name "*.spec.ts" \
     ! -name "*.spec.tsx" \
-    -newer "$DB_PATH" 2>/dev/null || true)
+    -newer "$db_abs" 2>/dev/null || true)
 
   local dirty_count=${#dirty_files[@]}
   if [[ "$dirty_count" -eq 0 ]]; then
