@@ -26,7 +26,7 @@ export default defineConfig({
       },
       {
         extends: true,
-        test: { name: 'unit-record', include: ['unit-record/**/*.test.ts'], maxConcurrency: 16 },
+        test: { name: 'unit-record', include: ['unit-record/**/*.test.ts'], maxConcurrency: 16, sequence: { groupOrder: 1 } },
       },
       pluginProject('storage-fts5'),
     ],
