@@ -74,13 +74,13 @@ The TypeScript extractor also needs a TypeScript 5 or 6 compiler API
 file), else the module's own Node resolution, then each search path walked
 upward (the project root, every target file, the working folder). With none
 it refuses rc 1, one line per typescript found (its version and path) and
-the way forward, never a stack; the driver's `set -e` stops the whole index. Each TypeScript entry point (the two
-extractors and the loader) runs its CLI only when executed as the script, so
-its exported helpers import without side effects; the guard compares the
-module file and the executed path by their real paths, so a module reached
-through a symbolic link or under a folder whose name holds a space or a
-non-ASCII character still runs. The graph database is generated, never
-shipped.
+the way forward, never a stack; the driver's `set -e` stops the whole index.
+Each TypeScript entry point (the two extractors and the loader) runs its CLI
+only when executed as the script, so its exported helpers import without
+side effects; the guard compares the module file and the executed path by
+their real paths, so a module reached through a symbolic link or under a
+folder whose name holds a space or a non-ASCII character still runs. The
+graph database is generated, never shipped.
 
 ## Tests
 
