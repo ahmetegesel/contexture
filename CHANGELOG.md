@@ -4,6 +4,36 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.65.0] - 2026-11-06
+
+MINOR: the docs-discipline cluster, docs-discipline 1.2.0. The close gate proves a committed range and names the limits of its delta, the check governs awk engines and shebang scripts, anchors its doc touch, and reads every dead source, the owner lookup names the most specific owner by the check's own glob rule, `ctx docs entry` sets a component's kind, and a single-module package's module version is held to its manifest's.
+
+### Added
+
+- `ctx docs gate --since=<rev>`: the close gate proves a committed range: the workspace root's repository from `<rev>` to the working tree plus its untracked files, the child repositories keeping their working delta, and the corpus half by driver (the same git delta for a tracked corpus, `ctx docs changes --since=<rev>` under a store driver). It joins the default form alone; an unknown revision, an empty one, another argument beside it, or a root outside a repository with a commit refuses rc 1.
+- The gate names the limits of its delta in `[GATE NOTICE]` lines on stderr: an empty delta on a clean tree (pointing at `--since`), an empty range, the child repositories `--since` leaves on their working delta, and a files-driver corpus that git ignores under `--since`; stdout and the exit code stay the check's.
+- `ctx docs check` and `ctx docs gate` govern awk engines (`.awk` joins the code extensions) and every extensionless script whose first line is a shebang (`#!`), read by the verb over its staged delta under the workspace root, never by the engine. An extensionless file without a shebang stays out, and a path the verb does not read (deleted, absent, a folder such as a submodule or an embedded repository's `<dir>/` line, a symbolic link) is governed only when a header source lists it exactly. A delta that read CLEAN can now read UNCOVERED or STALE DOC for such scripts: a wider governed set for every adopter.
+- The docs-discipline flag collision check (`tests/flag-collision.awk`): every grammar field named like a value control stays settable through each field verb that does not take that control, the by-design id pairs of `entry` and `pitfall` allowed, null-checked by four plants.
+- The governance single-module lockstep: a catalog package whose manifest declares one module part, and whose module file carries a version line, holds the two versions equal; a versionless module file is exempt.
+
+### Changed
+
+- docs-discipline 1.1.1 to 1.2.0, its manifest and its docs module file together.
+- `ctx docs query --file` names the most specific owner by the check's own glob rule: a doc claims the path when a header source equals it or matches it as a glob (the substring and raw-prefix matches are gone, so a path that merely holds a source has no owner), and among several claimants the answer is the doc whose best claiming source has the longest literal part before its first wildcard, then the fewest wildcards, then the earlier doc in corpus order; the answer's shape and exit codes are unchanged.
+- The check and query engines share one header-source glob definition (the docs module's `docs-glob.awk`), loaded ahead of either engine; the check verb runs its engine on the awk the PATH names instead of the engine's `/usr/bin/awk` shebang. The check verb and every gate form stage their delta in the module scratch and the engine reads it by name, never from its own stdin.
+- A value control flag a field verb does not take is read as a field flag: on `ctx docs entry`, `header`, `new`, `pitfall`, and `rule`, any of `--after`, `--id`, `--kind`, `--old`, `--new`, `--count`, and `--stdin` the verb does not take (such as `header --kind`, `header --stdin`, `new --id`, `rule --id`) now refuses through the edit engine as an unknown field (`ERR_SCHEMA_VIOLATION`) instead of an unknown option (`ERR_INVALID_ARGUMENT`), rc 1 either way.
+- The files-driver wording: git carries the corpus only where the workspace tracks it (the gate and changes help, the changes refusal, the docs-drift rhythm, the plugin README, and the conventions seed's docs/drift anti).
+- The ownership limits of a clean check (glob coverage over the header sources, the files-driver blanket) documented in the docs module README, the plugin README's Limits, and the close gate step; the check's output unchanged.
+
+### Fixed
+
+- `ctx docs entry` sets a components entry's kind through `--kind`, on a new component and an existing one (it refused as an unknown option, so a component kind needed `--stdin=kind`); `ctx docs new` keeps `--kind` as the doc kind.
+- `ctx docs check` counts a doc touch only at the corpus logical address `docs/<repo>/<slug>.md` at the start of a delta path: a code path that merely ends in that shape (a package seed, a test sample, a child repository's own guide under its prefix) no longer reads FRESH under a store's change log nor triggers the files-driver workspace blanket (a verdict change).
+- `ctx docs check` reads a deleted file's dead source from every source of its doc: a file listed exactly after a broader glob of the same doc (sources `[src/**, src/old.sh]`) read no DEAD SOURCE, so a doc that rode the delta while still listing the deleted file read CLEAN rc 0 (a verdict change).
+- Two guide sentences: the plugin anatomy's overlay fragment line no longer calls them seeds, and the golden regeneration names the release version stamp, which no plugin bump moves.
+
+Commits in the range: c80afce (ctx docs entry --kind, docs-discipline 1.2.0), db5fb57 (the single-module lockstep, two guide sentences), b1d2f87 (gate --since, the staged delta, the gate notices), c9aad8e (the anchored doc touch), f7c6720 (the governed set: awk and shebang scripts), 4041c7f (the owner rule and docs-glob.awk), 10ec357 (every source reads a dead source), 0bac05f (a symbolic link is never vouched), 6a79d31 (the ignored-corpus count no longer overwrites --count), and the release commit.
+
 ## [0.64.2] - 2026-11-06
 
 PATCH: the plugin version rule. A release that changes a plugin's payload now bumps that plugin's manifest version, a governance check holds the rule over the staged payload, and the three plugins whose payloads moved without a bump catch up.
