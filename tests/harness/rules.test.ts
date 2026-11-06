@@ -119,7 +119,7 @@ describe.concurrent('the rule id coverage reporter reads the ids from each test 
 });
 
 describe.concurrent('an inner vitest run reports the coverage per corpus doc and never fails the run', () => {
-  it('a complete run counts only passed tests by their own titles, and names the unknown, off-form, stale, orphan, and malformed lines', async () => {
+  it('a complete run counts only passed tests by their own titles, and names the unknown, off-form, describe, stale, orphan, and malformed lines', async () => {
     const corpus = drawer('rules-corpus');
     const { r, json } = await inner('rules-complete', corpus);
     expect(r.code, r.stdout + r.stderr).toBe(0);
@@ -132,6 +132,7 @@ describe.concurrent('an inner vitest run reports the coverage per corpus doc and
     expect(r.stdout).toContain(`rules: cited but absent from the corpus: alpha-r9 in ${at('[alpha-r9] an id the corpus lacks')}\n`);
     expect(r.stdout).toContain(`rules: outside the canonical form [<id>] or [<id>, <id>]: alpha-r5 in ${at('alpha-r5: a prefix outside the canonical form')}\n`);
     expect(r.stdout).toContain(`rules: outside the canonical form [<id>] or [<id>, <id>]: alpha-r1 in ${at('[alpha-r1, r6] an abbreviated group')}\n`);
+    expect(r.stdout).toContain(`rules: on a describe, which proves nothing: alpha-r3 in ${at('[alpha-r3] a describe tag proves nothing')}\n`);
     expect(r.stdout).toContain('rules: stale reasons, the id is covered now: beta-r2\n');
     expect(r.stdout).toContain('rules: reasons naming no contract rule id of the corpus: gone-r1\n');
     expect(r.stdout).toContain('rules: malformed reason line: not a reason line\n');

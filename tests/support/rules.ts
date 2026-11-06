@@ -33,6 +33,7 @@ export interface Tested {
   where: string;
   name: string;
   state: string;
+  suite?: boolean;
 }
 
 export interface Reasons {
@@ -135,8 +136,13 @@ export function coverage(tests: readonly Tested[], corpus: Corpus, table: Reason
   const passed = new Map<string, string[]>();
   const cited = new Map<string, string[]>();
   const offForm: string[] = [];
+  const onDescribe: string[] = [];
   for (const t of tests) {
     const c = citations(t.name);
+    if (t.suite) {
+      if (c.ids.length + c.offForm.length > 0) onDescribe.push(`${[...c.ids, ...c.offForm].join(', ')} in ${t.where}`);
+      continue;
+    }
     if (c.offForm.length > 0) offForm.push(`${c.offForm.join(', ')} in ${t.where}`);
     for (const id of c.ids) {
       add(cited, id, t.where);
@@ -170,6 +176,7 @@ export function coverage(tests: readonly Tested[], corpus: Corpus, table: Reason
     pitfalls: apart((d) => d.pitfalls),
     unknown: Object.fromEntries([...cited].filter(([id]) => !known.has(id))),
     offForm,
+    onDescribe,
     stale: [...table.reasons.keys()].filter((id) => contract.has(id) && passed.has(id)),
     orphanReasons: [...table.reasons.keys()].filter((id) => !contract.has(id)),
     malformedReasons: table.malformed,
@@ -190,6 +197,7 @@ export function render(c: Coverage): string[] {
     `rules: cited apart: responsibilities ${c.responsibilities.cited.length} of ${c.responsibilities.total}, pitfalls ${c.pitfalls.cited.length} of ${c.pitfalls.total}`,
     ...Object.entries(c.unknown).map(([id, where]) => `rules: cited but absent from the corpus: ${id} in ${where.join('; ')}`),
     ...c.offForm.map((o) => `rules: outside the canonical form [<id>] or [<id>, <id>]: ${o}`),
+    ...c.onDescribe.map((o) => `rules: on a describe, which proves nothing: ${o}`),
     ...(c.stale.length > 0 ? [`rules: stale reasons, the id is covered now: ${list(c.stale)}`] : []),
     ...(c.orphanReasons.length > 0 ? [`rules: reasons naming no contract rule id of the corpus: ${list(c.orphanReasons)}`] : []),
     ...c.malformedReasons.map((l) => `rules: malformed reason line: ${l}`),
@@ -239,9 +247,10 @@ export default class Rules implements Reporter {
       writeFileSync(this.options.outputFile, `${JSON.stringify({ status: 'skipped', need: corpus.need }, null, 1)}\n`);
       return [`rules: skipped, needs ${corpus.need}`, written];
     }
-    const tests: Tested[] = modules.flatMap((m) =>
-      [...m.children.allTests()].map((t) => ({ where: `${m.project.name} ${m.relativeModuleId} > ${t.fullName}`, name: t.name, state: t.result().state })),
-    );
+    const tests: Tested[] = modules.flatMap((m) => [
+      ...[...m.children.allSuites()].map((s) => ({ where: `${m.project.name} ${m.relativeModuleId} > ${s.fullName}`, name: s.name, state: s.state(), suite: true })),
+      ...[...m.children.allTests()].map((t) => ({ where: `${m.project.name} ${m.relativeModuleId} > ${t.fullName}`, name: t.name, state: t.result().state })),
+    ]);
     const table = reasonsTable(readFileSync(this.options.reasons, 'utf8'));
     const result = coverage(tests, corpus, table, await this.partial(modules, reason));
     writeFileSync(this.options.outputFile, `${JSON.stringify(result, null, 1)}\n`);
