@@ -171,8 +171,8 @@ This repository builds the convention; workspaces consume it from tags. The ship
 The dev loop:
 
 1. Edit `base/` directly: it is the shipping copy.
-2. Run the test pipeline (it stages the base runtime): `tests/run.sh`.
-3. Ship: docs sync, commit, push, and the annotated tag in one breath.
+2. Run the tests of the change from `tests/` (they stage the base runtime; `bun install --frozen-lockfile` once): `bun run test:changed`, or the area's project with `bun run test:<project>`; see [tests/README.md](tests/README.md).
+3. Ship: the release gate green (`bun run test:prerelease` from `tests/`), docs sync, commit, push, and the annotated tag in one breath.
 4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root, then compose the law layer (`sh .contexture/laws/compose`). The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched; it never removes a file either, so a payload path the release removed is deleted from the live drawer by hand (see [Adoption](docs/adoption.md)).
 
 `plugins/` is the tracked catalog of packaged overlays, installed into a workspace when wanted (see [docs/plugins.md](docs/plugins.md)); `docs/adoption.md` carries the same loop beside the adopter's view.

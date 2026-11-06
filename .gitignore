@@ -18,6 +18,8 @@
 !tests/**
 # the test tooling's installed packages stay untracked (the lockfile is tracked)
 /tests/node_modules/
+# the test run reports (the JSON reporter and the timing summary) stay untracked
+/tests/.reports/
 # the plugins (tracked catalog: overlays installable into an existing setup)
 !plugins/
 !plugins/**

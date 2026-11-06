@@ -4,7 +4,7 @@
   background-subagents: subagents run strictly in the background; the turn ends immediately at launch and never blocks the conversation, sleeps, or polls for completion; work continues or the turn yields so the harness wakes reactively on message delivery.
   docs-sync: every change to base mechanics, scripts, templates, or governance audits and updates README.md and relevant docs/ before ship; no release ships without its documentation updated in the same breath.
   workspace-tmp: scratch (mktemp, fixtures, short-lived files) lives in .contexture/tmp/ when the workspace is writable (gitignored; engines prefer it as TMPDIR); never route temp content outside the workspace while that drawer can hold it.
-  test-scope: run only the tests the change makes necessary: the targeted suites, the docs audit and check, and the change's own probes during the work; the full gate (tests/run.sh) runs only before landing a new version, on the staged payload
+  test-scope: run only the tests the change makes necessary: during the work the area's vitest project, one file, or one test (from tests/: bun run test:<project>, bun run test:changed, or vitest run --project <project> <file> -t "<name>"), the docs audit and check, and the change's own probes; the full suite (bun run test:prerelease from tests/) runs only before a release, on the staged payload; no container matrix runs (the static awk census guards portability)
   corpus-untracked-here: under the files driver this repository's agent-facing corpus is gitignored working state at docs/workspace/, and its guides (docs/*.md plus README.md) stay tracked files
 
 @append @backlog
@@ -13,5 +13,5 @@
 @append @git
   version: MAJOR = breaking (fields removed, shapes changed); MINOR = new sections, features; PATCH = fixes, wording
   bumps: agent applies PATCH + MINOR at ship, no ask; MAJOR = human verdict alone, agent proposes only
-  ship breath: stage the payload first (git add every path that ships, so the governance probe over tracked paths sees what it is about to gate), then the run green (tests/run.sh) + docs sync + commit + push + annotated tag vX.Y.Z + the CHANGELOG.md section, one act; every commit in the tag range appears in the section; a gate run on an unstaged payload is not the gate
+  ship breath: stage the payload first (git add every path that ships, so the governance probe over tracked paths sees what it is about to gate), then the run green (bun run test:prerelease from tests/) + docs sync + commit + push + annotated tag vX.Y.Z + the CHANGELOG.md section, one act; every commit in the tag range appears in the section; a gate run on an unstaged payload is not the gate
   changelog: no adopter, project, or personal names; the changelog speaks the convention's vocabulary, the record carries the names

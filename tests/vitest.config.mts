@@ -1,13 +1,26 @@
+import { existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 
 const here = (path: string): string => fileURLToPath(new URL(path, import.meta.url));
 
-const pluginProject = (name: string) => ({
+const area = (name: string, include = [`${name}/**/*.test.ts`]) => ({
   extends: true,
-  resolve: { alias: { '@support': here('./support') } },
-  test: { name, root: here(`../plugins/${name}`), include: ['tests/**/*.test.ts'], maxConcurrency: 16 },
+  test: { name, include, maxConcurrency: 16 },
 });
+
+const holdsTests = (dir: string): boolean =>
+  existsSync(dir) && readdirSync(dir, { recursive: true }).some((f) => String(f).endsWith('.test.ts'));
+
+const pluginProjects = readdirSync(here('../plugins'), { withFileTypes: true })
+  .filter((d) => d.isDirectory() && holdsTests(here(`../plugins/${d.name}/tests`)))
+  .map((d) => d.name)
+  .sort()
+  .map((name) => ({
+    extends: true,
+    resolve: { alias: { '@support': here('./support') } },
+    test: { name, root: here(`../plugins/${name}`), include: ['tests/**/*.test.ts'], maxConcurrency: 16 },
+  }));
 
 export default defineConfig({
   test: {
@@ -16,63 +29,26 @@ export default defineConfig({
     setupFiles: [here('./support/setup.ts')],
     testTimeout: 120_000,
     hookTimeout: 300_000,
+    reporters: [
+      'default',
+      ['json', { outputFile: here('./.reports/last.json') }],
+      here('./support/timing.ts'),
+    ],
     projects: [
-      {
-        extends: true,
-        test: { name: 'harness', include: ['harness/**/*.test.ts'] },
-      },
-      {
-        extends: true,
-        test: { name: 'drivers', include: ['drivers/**/*.test.ts'], maxConcurrency: 16 },
-      },
-      {
-        extends: true,
-        test: { name: 'unit-record', include: ['unit-record/**/*.test.ts'], maxConcurrency: 16, sequence: { groupOrder: 1 } },
-      },
-      {
-        extends: true,
-        test: { name: 'unit-verbs', include: ['unit-verbs/**/*.test.ts'], maxConcurrency: 16, sequence: { groupOrder: 1 } },
-      },
-      pluginProject('storage-fts5'),
-      {
-        extends: true,
-        test: { name: 'governance', include: ['governance/**/*.test.ts'] },
-      },
-      {
-        extends: true,
-        test: { name: 'filters', include: ['filters/**/*.test.ts'], maxConcurrency: 16 },
-      },
-      pluginProject('toolchain-filters'),
-      pluginProject('docs-discipline'),
-      pluginProject('ast-doc-graph'),
-      {
-        extends: true,
-        test: { name: 'engine', include: ['engine/**/*.test.ts'], maxConcurrency: 16 },
-      },
-      {
-        extends: true,
-        test: { name: 'hooks', include: ['hooks/**/*.test.ts'], maxConcurrency: 16 },
-      },
-      {
-        extends: true,
-        test: { name: 'laws', include: ['laws/**/*.test.ts'], maxConcurrency: 16 },
-      },
-      {
-        extends: true,
-        test: { name: 'packages', include: ['packages/**/*.test.ts', 'fixtures/worked-package/tests/**/*.test.ts'], maxConcurrency: 16 },
-      },
-      {
-        extends: true,
-        test: { name: 'base', include: ['base/**/*.test.ts'], maxConcurrency: 16 },
-      },
-      {
-        extends: true,
-        test: { name: 'integration', include: ['integration/**/*.test.ts'], maxConcurrency: 16 },
-      },
-      {
-        extends: true,
-        test: { name: 'sqlite-smoke', include: ['sqlite-smoke/**/*.test.ts'], maxConcurrency: 16 },
-      },
+      area('harness'),
+      area('drivers'),
+      { ...area('unit-record'), test: { ...area('unit-record').test, sequence: { groupOrder: 1 } } },
+      { ...area('unit-verbs'), test: { ...area('unit-verbs').test, sequence: { groupOrder: 1 } } },
+      area('governance'),
+      area('filters'),
+      area('engine'),
+      area('hooks'),
+      area('laws'),
+      area('packages', ['packages/**/*.test.ts', 'fixtures/worked-package/tests/**/*.test.ts']),
+      area('base'),
+      area('integration'),
+      area('sqlite-smoke'),
+      ...pluginProjects,
     ],
   },
 });
