@@ -22,16 +22,16 @@ const unaccounted = (plugins: readonly string[], names: readonly string[], reaso
   plugins.filter((p) => !names.includes(p) && !(p in reasons));
 
 describe.concurrent('every plugin and every project is reachable by convention', () => {
-  it('every catalog plugin has its own project or a named no-suite reason', () => {
+  it('[plugins-r3] every catalog plugin has its own project or a named no-suite reason', () => {
     expect(catalog().length).toBeGreaterThan(3);
     expect(unaccounted(catalog(), projects(), NO_SUITE)).toEqual([]);
   });
 
-  it('a no-suite reason names a catalog plugin that has no project', () => {
+  it('[plugins-r3] a no-suite reason names a catalog plugin that has no project', () => {
     expect(Object.keys(NO_SUITE).filter((p) => !catalog().includes(p) || projects().includes(p))).toEqual([]);
   });
 
-  it('null check: a plugin with neither a project nor a reason reads unaccounted', () => {
+  it('[plugins-r3] null check: a plugin with neither a project nor a reason reads unaccounted', () => {
     expect(unaccounted([...catalog(), 'zz-plugin'], projects(), NO_SUITE)).toEqual(['zz-plugin']);
   });
 

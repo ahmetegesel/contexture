@@ -11,13 +11,13 @@ const DOCS_REF = /modules\/docs|docs-edit\.awk|docs-model\.awk/;
 const census = (dir: string): string[] => walk(dir).filter((f) => DOCS_REF.test(text(f)));
 
 describe.concurrent('the no-base-to-docs census', () => {
-  it('the shipped base carries no docs module or docs parser reference', () => {
+  it('[the-engine-r19] the shipped base carries no docs module or docs parser reference', () => {
     const drawer = join(stage('posix', 'census'), '.contexture');
     expect(walk(drawer).length).toBeGreaterThan(50);
     expect(census(drawer)).toEqual([]);
   });
 
-  it('a planted base-to-docs reference reads red', () => {
+  it('[the-engine-r19] a planted base-to-docs reference reads red', () => {
     const copy = join(sandbox('census-plant'), 'base');
     cpSync(join(stage('posix', 'census'), '.contexture'), copy, { recursive: true });
     put(join(copy, 'plant'), 'modules/docs\n');

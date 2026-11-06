@@ -106,21 +106,21 @@ const summary = (c: Check): string => c.need ?? (c.verdicts.filter((v) => v.red)
 const real: Check = atTop() ? check(ROOT) : { need: 'git and the repository top at the root', verdicts: [] };
 
 describe.skipIf(real.need !== undefined && !PRERELEASE)(`the plugin versions on the tracked tree${real.need ? ` (needs ${real.need})` : ''}`, () => {
-  it('the check has what it needs, since a skipped check proves nothing in the pre-release set', () => {
+  it('[plugins-r11] the check has what it needs, since a skipped check proves nothing in the pre-release set', () => {
     expect(real.need).toBeUndefined();
   });
 
-  it('every catalog plugin with a manifest gets a verdict', () => {
+  it('[plugins-r11] every catalog plugin with a manifest gets a verdict', () => {
     const plugins = catalog(ROOT);
     expect(plugins.length).toBeGreaterThan(4);
     expect(real.verdicts.map((v) => v.plugin)).toEqual(plugins);
   });
 
-  it('a plugin whose payload changed since the release that first shipped its version bumps that version', () => {
+  it('[plugins-r11] a plugin whose payload changed since the release that first shipped its version bumps that version', () => {
     expect(real.verdicts.filter((v) => v.red).map((v) => v.line)).toEqual([]);
   });
 
-  it('the payload scripts, which inherit a part hook environment, name the package root only as a guard, a comment, quoted text, or a literal read', () => {
+  it('[plugins-r11] the payload scripts, which inherit a part hook environment, name the package root only as a guard, a comment, quoted text, or a literal read', () => {
     const mentions = readers(ROOT).flatMap((f) => census(run(ROOT, 'show', `:${f}`)));
     expect(mentions.length).toBeGreaterThan(0);
     expect(mentions.filter((m) => m.kind === 'unread').map((m) => m.line)).toEqual([]);
@@ -129,18 +129,18 @@ describe.skipIf(real.need !== undefined && !PRERELEASE)(`the plugin versions on 
 });
 
 describe.concurrent('the package root census', () => {
-  it('a planted literal read yields its path, braced, bare, or behind the empty default guard', () => {
+  it('[plugins-r11] a planted literal read yields its path, braced, bare, or behind the empty default guard', () => {
     expect(census('cp "$CTX_PACKAGE_ROOT/docs/extra.md" "$CTX_ROOT/x"').map((m) => [m.kind, m.reads])).toEqual([['read', ['docs/extra.md']]]);
     expect(census('seed=${CTX_PACKAGE_ROOT}/seed/a.md').map((m) => [m.kind, m.reads])).toEqual([['read', ['seed/a.md']]]);
     expect(census('seed=${CTX_PACKAGE_ROOT:-}/seed/b.md').map((m) => [m.kind, m.reads])).toEqual([['read', ['seed/b.md']]]);
   });
 
-  it('a guard, a comment, and quoted text read no path', () => {
+  it('[plugins-r11] a guard, a comment, and quoted text read no path', () => {
     const body = ['# the installer exports CTX_PACKAGE_ROOT', 'if [ -z "${CTX_PACKAGE_ROOT:-}" ]; then', "  echo 'CTX_PACKAGE_ROOT is not set' >&2"].join('\n');
     expect(census(body).map((m) => m.kind)).toEqual(['comment', 'quiet', 'quiet']);
   });
 
-  it('a read the census cannot name reads unread', () => {
+  it('[plugins-r11] a read the census cannot name reads unread', () => {
     expect(census('cp "$CTX_PACKAGE_ROOT/$name" .').map((m) => m.kind)).toEqual(['unread']);
     expect(census('cd "$CTX_PACKAGE_ROOT"').map((m) => m.kind)).toEqual(['unread']);
     expect(census('cp "${CTX_PACKAGE_ROOT:-}"/docs/seed.md .').map((m) => m.kind)).toEqual(['unread']);
@@ -167,14 +167,14 @@ function lockstep(root: string, plugin: string): Verdict {
 const catalog = (root: string): string[] => readdirSync(join(root, 'plugins')).filter((p) => existsSync(join(root, 'plugins', p, 'manifest'))).sort();
 
 describe.concurrent('the single-module version lockstep', () => {
-  it('every catalog package with one module part and a versioned module file holds the module version equal to its manifest', () => {
+  it('[plugins-r11] every catalog package with one module part and a versioned module file holds the module version equal to its manifest', () => {
     const verdicts = catalog(ROOT).map((p) => lockstep(ROOT, p));
     expect(verdicts.filter((v) => v.red).map((v) => v.line)).toEqual([]);
     expect(verdicts.find((v) => v.plugin === 'docs-discipline')?.line).toMatch(/^docs-discipline \S+: the module file moves with its manifest$/);
     expect(verdicts.find((v) => v.plugin === 'ast-doc-graph')?.line).toBe('ast-doc-graph: plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/module carries no version line, exempt');
   });
 
-  it('a planted mismatch reads red; a versionless module file, a second module part, and a blank-padded equal version read green', () => {
+  it('[plugins-r11] a planted mismatch reads red; a versionless module file, a second module part, and a blank-padded equal version read green', () => {
     const root = sandbox('plugin-lockstep');
     const pkg = (name: string, manifestBody: string, modules: Record<string, string>): void => {
       put(join(root, 'plugins', name, 'manifest'), manifestBody);
@@ -215,7 +215,7 @@ const MODULE = 'plugins/demo/.contexture/extensions/modules/demo/module';
 const manifest = (v: string): string => `# summary: demo\n# version: ${v}\n# kind: feature\n# part: module modules/demo\n`;
 
 describe('the ship breath states in a sandbox repository', () => {
-  it('each state reads its verdict from the index against the release that first shipped the version', () => {
+  it('[plugins-r11] each state reads its verdict from the index against the release that first shipped the version', () => {
     const { dir, env, sh, write } = repository('plugin-versions');
     write('plugins/demo/manifest', manifest('1.0.0'));
     write(MODULE, '# summary: demo\n');
@@ -312,7 +312,7 @@ describe('the ship breath states in a sandbox repository', () => {
     ]);
   });
 
-  it('the shown paths stop at five and count the rest; a version line reads as the installer reads it; a greater version compares x.y.z numerically', () => {
+  it('[plugins-r11] the shown paths stop at five and count the rest; a version line reads as the installer reads it; a greater version compares x.y.z numerically', () => {
     expect(shown(['a', 'b', 'c', 'd', 'e', 'f', 'g'])).toBe('a, b, c, d, e (and 2 more)');
     expect(version('# summary: demo\n# version: \t1.0.0\t\n# kind: feature\n')).toBe('1.0.0');
     expect(greater('1.10.0', '1.9.9')).toBe(true);

@@ -24,7 +24,7 @@ describe.concurrent('the ship-gate lines live on their declared surfaces', () =>
     expect(read('tests/README.md')).toContain(RELEASE);
   });
 
-  it('docs/plugins.md carries the plugin project convention and the release command', () => {
+  it('[plugins-r7] docs/plugins.md carries the plugin project convention and the release command', () => {
     expect(read('docs/plugins.md')).toContain('plugins/<name>/tests/');
     expect(read('docs/plugins.md')).toContain(RELEASE);
   });
@@ -44,7 +44,7 @@ describe.concurrent('the ship-gate lines live on their declared surfaces', () =>
     expect(naming(['planted.md'], () => 'run `tests/run.sh` before a release')).toEqual(['planted.md']);
   });
 
-  it('the lane-isolation package folder is retired into the lane laws', () => {
+  it('[plugins-r9] the lane-isolation package folder is retired into the lane laws', () => {
     expect(existsSync(join(ROOT, 'plugins/lane-isolation'))).toBe(false);
   });
 });

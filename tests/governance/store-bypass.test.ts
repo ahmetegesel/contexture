@@ -68,7 +68,7 @@ function plantedTree(line: string): string {
 }
 
 describe.concurrent('the static store-bypass check: module code reaches the store only through the storage core', () => {
-  it('every module line naming the store, a driver, the resolver answer, sqlite3, or the lock area is allow-listed by its exact text', () => {
+  it('[the-record-r10] every module line naming the store, a driver, the resolver answer, sqlite3, or the lock area is allow-listed by its exact text', () => {
     const r = scan(ROOT);
     expect(r.files).toBeGreaterThan(80);
     expect(r.flagged).toBeGreaterThan(0);
@@ -80,7 +80,7 @@ describe.concurrent('the static store-bypass check: module code reaches the stor
     ['a direct read of the posix record store', 'cat "$CTX_ROOT/.contexture/sessions/$1/journal.md"'],
     ['a direct posix driver call', '"$CTX_ROOT/.contexture/storage/drivers/posix/driver" store.get unit "$1/state"'],
     ['a name split by quoting', 'cat "$CTX_ROOT/.contexture/"sess"ions/$1/state.md"'],
-  ])('%s planted in a verb reads red', (_name, line) => {
+  ])('[the-record-r10] %s planted in a verb reads red', (_name, line) => {
     const r = scan(plantedTree(line));
     expect(r.remainder).toHaveLength(1);
     expect(r.remainder[0]).toContain(line);

@@ -45,7 +45,7 @@ describe('the payload path tables', () => {
       expect(tracked.some((p) => p.startsWith(root))).toBe(true);
     });
 
-    it('the payload modules are exactly lane, run, and unit; the storage core is not a module', () => {
+    it('[modules-r1] the payload modules are exactly lane, run, and unit; the storage core is not a module', () => {
       const modules = new Set<string>();
       for (const p of tracked) {
         const parts = p.split('/');

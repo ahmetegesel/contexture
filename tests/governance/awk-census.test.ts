@@ -24,7 +24,7 @@ function censusFiles(root = ROOT): string[] {
 const census = (files: readonly string[]) => exec('awk', ['-f', AWKREPL, ...files], { cwd: sandbox('awk-census'), input: '' });
 
 describe.concurrent('the awk replacement census: no sub or gsub replacement carries a backslash before another character', () => {
-  it('the shipped awk and sh files, the plugin module copies, and the suites read clean', async () => {
+  it('[modules-r8] the shipped awk and sh files, the plugin module copies, and the suites read clean', async () => {
     const files = censusFiles();
     const withSub = files.filter((f) => text(f).includes('sub('));
     expect(files.length).toBeGreaterThan(100);
@@ -34,7 +34,7 @@ describe.concurrent('the awk replacement census: no sub or gsub replacement carr
     expect(r.stdout).toBe('');
   });
 
-  it('the exclusions match paths inside the repository, so a repository under a .contexture/tmp folder still reads its files', () => {
+  it('[modules-r8] the exclusions match paths inside the repository, so a repository under a .contexture/tmp folder still reads its files', () => {
     const root = sandbox('census-root');
     const kept = ['base/.contexture/modules/m/scripts/v.sh', 'plugins/p/.contexture/x.awk', 'tests/lib.sh'];
     const skipped = ['base/.contexture/tmp/t.awk', 'base/.contexture/sessions/u/s.sh', 'tests/fixtures/f.awk', 'tests/node_modules/n.sh', 'tests/notes.md'];
@@ -43,7 +43,7 @@ describe.concurrent('the awk replacement census: no sub or gsub replacement carr
     expect(censusFiles(root).map((f) => relative(root, f))).toEqual(kept);
   });
 
-  it('the census reads the three planted unportable forms and none of the four portable ones', async () => {
+  it('[modules-r8] the census reads the three planted unportable forms and none of the four portable ones', async () => {
     const plant = put(
       join(sandbox('awk-plant'), 'plant.awk'),
       [

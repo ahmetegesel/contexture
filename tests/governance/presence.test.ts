@@ -58,7 +58,7 @@ describe.concurrent('presence: every shipped surface has its tests', () => {
     expect(shippedVerbs().filter((v) => !bodies.some((b) => b.includes(`'${v}'`)))).toEqual([]);
   });
 
-  it('the derived hook points are the shipped six', () => {
+  it('[modules-r5] the derived hook points are the shipped six', () => {
     expect(derivedPoints()).toEqual(['close', 'load-post', 'load-pre', 'refresh', 'stamp', 'task-landing']);
   });
 
