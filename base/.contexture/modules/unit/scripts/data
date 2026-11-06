@@ -75,6 +75,25 @@ u_refuse() {
   exit "$1"
 }
 
+# u_new <file>...: each of this run's scratch files made empty; u_put <file> <format>
+# [<args>...]: one printf appended to such a file. Both are silent (a shell reports a
+# failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
+# refuse rc 2 ERR_STORAGE_WRITE when the write fails. A command whose own stderr may carry
+# a refusal writes into a file u_new made, so its status, never a failing redirect (which
+# answers 1 and would read as absent), decides: a lost line would let a write read an
+# artifact as absent, a unit as new, or commit part of its artifacts
+u_new() {
+  for un_f in "$@"; do
+    { : > "$un_f"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  done
+}
+
+u_put() {
+  up_f=$1
+  shift
+  { printf "$@" >> "$up_f"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+}
+
 u_ident_valid() {
   case "$1" in
     ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
@@ -169,6 +188,7 @@ u_keys_parse() {
 }
 
 u_keys_all() {
+  u_new "$U_SCR/list.ans" "$U_SCR/list.err"
   store_list "$U_NS" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
   case $? in
     0) u_keys_parse < "$U_SCR/list.ans" ;;
@@ -179,6 +199,7 @@ u_keys_all() {
 }
 
 u_keys_prefix() {
+  u_new "$U_SCR/list.ans" "$U_SCR/list.err"
   store_list "$U_NS" "$1" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
   case $? in
     0) u_keys_parse < "$U_SCR/list.ans" ;;
@@ -195,6 +216,7 @@ u_add_key() {
   U_ADD_RC=1
   U_NART=$((U_NART + 1))
   U_ART="$U_SCR/art.$U_NART"
+  u_new "$U_ART" "$U_SCR/get.err"
   store_get "$U_NS" "$2" > "$U_ART" 2> "$U_SCR/get.err" < /dev/null
   U_GRC=$?
   case "$U_GRC" in
@@ -204,13 +226,12 @@ u_add_key() {
        printf '%s: error: the store read failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
        exit "$U_GRC" ;;
   esac
-  printf 'F\t%s\t%s\n' "$1" "$U_ART" >> "$U_SCR/man"
-  printf '%s\n' "$U_ART" >> "$U_SCR/files"
+  u_put "$U_SCR/man" 'F\t%s\t%s\n' "$1" "$U_ART"
+  u_put "$U_SCR/files" '%s\n' "$U_ART"
 }
 
 u_manifest_reset() {
-  : > "$U_SCR/man"
-  : > "$U_SCR/files"
+  u_new "$U_SCR/man" "$U_SCR/files"
   U_NART=0
 }
 
@@ -235,7 +256,8 @@ u_fetch_unit() {
     *" all "*|*" lane:"*|*" __lanes__ "*)
       uf_state=0
       uf_lanes=""
-      u_keys_prefix "$uf_u/" > "$U_SCR/keys"
+      u_new "$U_SCR/keys"
+      u_keys_prefix "$uf_u/" > "$U_SCR/keys" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
       while IFS= read -r uf_k; do
         [ -n "$uf_k" ] || continue
         uf_r=${uf_k#"$uf_u/"}
@@ -266,18 +288,18 @@ u_fetch_unit() {
         esac
       done < "$U_SCR/keys"
       if [ "$uf_state" -eq 1 ]; then
-        printf 'U\t%s\n' "$uf_u" >> "$U_SCR/man"
+        u_put "$U_SCR/man" 'U\t%s\n' "$uf_u"
       elif [ "$uf_req" -eq 1 ]; then
         u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
       fi
       for uf_l in $uf_lanes; do
-        printf 'L\t%s\t%s\n' "$uf_u" "$uf_l" >> "$U_SCR/man"
+        u_put "$U_SCR/man" 'L\t%s\t%s\n' "$uf_u" "$uf_l"
       done
       ;;
     *)
       u_add_key "$uf_u|state" "$uf_u/state"
       if [ "$U_ADD_RC" -eq 0 ]; then
-        printf 'U\t%s\n' "$uf_u" >> "$U_SCR/man"
+        u_put "$U_SCR/man" 'U\t%s\n' "$uf_u"
       elif [ "$uf_req" -eq 1 ]; then
         u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
       fi
@@ -289,8 +311,8 @@ u_fetch_unit() {
 # u_fetch_all <with_journal 0|1>: every held unit's state (and journal for the listing)
 u_fetch_all() {
   fa_j=$1
-  : > "$U_SCR/units"
-  u_keys_all > "$U_SCR/keys"
+  u_new "$U_SCR/units" "$U_SCR/keys"
+  u_keys_all > "$U_SCR/keys" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   while IFS= read -r fa_k; do
     [ -n "$fa_k" ] || continue
     case "$fa_k" in
@@ -300,11 +322,12 @@ u_fetch_all() {
     fa_u=${fa_k%/state}
     case "$fa_u" in */*) continue ;; esac
     u_ident_valid "$fa_u" || continue
-    printf '%s\n' "$fa_u" >> "$U_SCR/units"
+    u_put "$U_SCR/units" '%s\n' "$fa_u"
     u_add_key "$fa_u|state" "$fa_k"
-    printf 'U\t%s\n' "$fa_u" >> "$U_SCR/man"
+    u_put "$U_SCR/man" 'U\t%s\n' "$fa_u"
   done < "$U_SCR/keys"
   if [ "$fa_j" -eq 1 ]; then
+    u_new "$U_SCR/junits"
     LC_ALL=C awk '
       FILENAME == ARGV[1] { u[$0] = 1; next }
       {
@@ -312,7 +335,7 @@ u_fetch_all() {
         p = $0
         sub(/\/journal$/, "", p)
         if ((p in u) && p !~ /\//) print p
-      }' "$U_SCR/units" "$U_SCR/keys" > "$U_SCR/junits"
+      }' "$U_SCR/units" "$U_SCR/keys" > "$U_SCR/junits" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
     while IFS= read -r fa_u; do
       [ -n "$fa_u" ] || continue
       u_add_key "$fa_u|journal" "$fa_u/journal"
@@ -329,6 +352,7 @@ u_active() {
   U_UNIT=""
   u_manifest_reset
   u_fetch_all 0
+  u_new "$U_SCR/active"
   LC_ALL=C awk -F '	' '
     $1 == "F" {
       k = $2
@@ -345,7 +369,7 @@ u_active() {
       }
       close($3)
       if (st == "ACTIVE") print u
-    }' "$U_SCR/man" > "$U_SCR/active"
+    }' "$U_SCR/man" > "$U_SCR/active" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   while IFS= read -r ua_u; do
     [ -n "$ua_u" ] || continue
     u_add_key "$ua_u|backlog" "$ua_u/backlog"
@@ -370,7 +394,7 @@ u_args() {
 }
 
 u_sizes() {
-  : > "$U_SCR/sizes"
+  u_new "$U_SCR/sizes"
   [ -s "$U_SCR/files" ] || return 0
   set --
   while IFS= read -r us_p; do set -- "$@" "$us_p"; done < "$U_SCR/files"
@@ -413,19 +437,19 @@ u_commit() {
     cat "$U_SCR/answer"
     return 0
   fi
-  : > "$U_SCR/batch"
+  u_new "$U_SCR/batch" "$U_SCR/batch.out" "$U_SCR/batch.err"
   while IFS='	' read -r uc_n uc_rel; do
     [ -n "$uc_n" ] || continue
     uc_src="$U_STAGE/$uc_n"
     [ -f "$uc_src" ] || u_refuse 2 ERR_STORAGE_WRITE "the staged write of $uc_rel is missing"
     uc_key="$U_UNIT/${uc_rel%.md}"
     uc_b64=$("$ULIB/b64" "$uc_src") || u_refuse 2 ERR_STORAGE_WRITE "cannot encode $uc_rel"
-    {
-      printf 'action=put\n'
-      printf 'key=%s\n' "$(store_lib_escape "$uc_key")"
-      printf 'head=none\n'
+    { {
+      printf 'action=put\n' &&
+      printf 'key=%s\n' "$(store_lib_escape "$uc_key")" &&
+      printf 'head=none\n' &&
       printf 'value_b64=%s\n' "$uc_b64"
-    } >> "$U_SCR/batch"
+    } >> "$U_SCR/batch"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   done < "$U_STAGE/manifest"
   store_batch "$U_NS" < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
   uc_rc=$?
@@ -445,6 +469,7 @@ u_commit() {
 # anything lands; a legacy record target and a file pointer stay as stored
 u_refs_validate() {
   [ -n "$U_PAY" ] && [ -f "$U_PAY" ] || return 0
+  u_new "$U_SCR/refs" "$U_SCR/refs.err"
   PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/refs.awk" \
     > "$U_SCR/refs" 2> "$U_SCR/refs.err"
   case $? in
@@ -582,6 +607,7 @@ u_refs() {
 
 # u_held <unit>: the unit's state key exists
 u_held() {
+  u_new "$U_SCR/held.err"
   store_get "$U_NS" "$1/state" > /dev/null 2> "$U_SCR/held.err" < /dev/null
   uh_rc=$?
   case "$uh_rc" in
@@ -663,6 +689,7 @@ u_search() {
     u_manifest_reset
     u_fetch_unit "$U_UNIT" "all"
     u_sizes
+    u_new "$U_SCR/answer"
     PX_MAN="$U_SCR/man" PX_SIZES="$U_SCR/sizes" PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" \
       SQ_UNIT="$U_UNIT" SQ_LIMIT="$sq_limit" SQ_ENTITY="$sq_entity" SQ_MODE="$sq_mode" \
       awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/search.awk" > "$U_SCR/answer"
@@ -678,6 +705,7 @@ u_search() {
     return 0
   fi
   sq_q=$(u_pay_field query)
+  u_new "$U_SCR/store.ans" "$U_SCR/store.err" "$U_SCR/flat" "$U_SCR/flat.err" "$U_SCR/answer"
   if ! store_search "$U_NS" "$sq_q" "$sq_mode" 0 > "$U_SCR/store.ans" 2> "$U_SCR/store.err"; then
     sq_rc=$?
     sq_msg=$(head -n 1 "$U_SCR/store.err" 2>/dev/null)
@@ -729,6 +757,7 @@ u_data_get() {
     *) u_refuse 1 ERR_INVALID_ARGUMENT "the ref names no record entity: '$ud_ref'" ;;
   esac
   u_scratch
+  u_new "$U_SCR/dg.err"
   if [ -n "$ud_a2" ]; then
     ud_ans=$("$0" "$ud_fn" "$ud_u" "$ud_a1" "$ud_a2" < /dev/null 2> "$U_SCR/dg.err")
   else
@@ -771,7 +800,9 @@ case "$cmd" in
     u_manifest_reset
     u_payload
     u_lock "${1:-}"
-    if u_keys_prefix "${1:-}/" > "$U_SCR/keys" && [ -s "$U_SCR/keys" ]; then
+    u_new "$U_SCR/keys"
+    u_keys_prefix "${1:-}/" > "$U_SCR/keys" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+    if [ -s "$U_SCR/keys" ]; then
       u_refuse 1 ERR_ENTITY_EXISTS "unit '$1' already exists"
     fi
     u_stage_start

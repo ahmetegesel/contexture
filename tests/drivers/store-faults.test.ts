@@ -76,6 +76,20 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
     expect(stages(sb)).toEqual([]);
   });
 
+  it('a batch whose undo log cannot be written refuses rc 2 before its first rename, so a later failing rename leaves nothing written', async () => {
+    const sb = await seeded(empty, 'posix', OLD);
+    const mv = pathPlant('mv', 'for a in "$@"; do last=$a; done\ncase "$last" in */y.md) exit 1 ;; esac\nexec /bin/mv "$@"');
+    const undo = mktempPlant('case "$p" in */store-batch.*) /bin/mkdir "$p/undo" ;; esac');
+    const r = await store(sb, 'posix', { PATH: `${undo.PATH.split(':')[0]}:${mv.PATH}` }).batch('docs', NEW);
+    expect(await bytesOf(sb, 'posix', Object.keys(OLD)), `rc ${r.code} [${r.stderr}]`).toEqual(Object.values(OLD));
+    refusedLike(r, 'store.batch', 2, 'ERR_STORAGE_WRITE', "action 1 (put 'workspace/x'): ");
+  });
+
+  it('a list whose key listing cannot be written refuses rc 2 with its one line, never an empty answer', async () => {
+    const sb = await seeded(empty, 'posix', OLD);
+    refusedLike(await store(sb, 'posix', mktempPlant('case "$p" in */store-keys.*) chmod 400 "$p" ;; esac')).list('docs'), 'store.list', 2, 'ERR_STORAGE_WRITE');
+  });
+
   it('a TERM between the batch renames leaves both keys whole, no stage, and the lock released', async () => {
     const sb = await seeded(empty, 'posix', OLD);
     const mark = join(sandbox('wa-mark'), 'mark');
@@ -171,6 +185,36 @@ for (const driver of DRIVERS) {
   });
 }
 
+const BASE64 = ['/usr/bin/base64', '/bin/base64'].find((p) => existsSync(p));
+
+const manifestPlant = (): Record<string, string> => {
+  if (!BASE64) throw new Error('no base64 binary for the manifest plant');
+  return pathPlant('base64', `for m in .contexture/tmp/store-batch.*/man .contexture/tmp/fts5-ws.*/man; do\n  [ -f "$m" ] && [ "$(wc -l < "$m")" -eq 1 ] && chmod 400 "$m"\ndone\nexec "${BASE64}" "$@"`);
+};
+
+for (const driver of DRIVERS) {
+  describe.skipIf(ROOT_USER || (driver === 'fts5' && !fts5Available()))(`a batch on ${driver} whose manifest append fails after its first action`, { concurrent: true }, () => {
+    let empty: string;
+    beforeAll(async () => {
+      empty = await docsStore(driver, false);
+    });
+
+    it('lands whole or refuses rc 2 with its one line and nothing written', async () => {
+      const sb = await seeded(empty, driver, OLD);
+      const r = await store(sb, driver, manifestPlant()).batch('docs', NEW);
+      const after = await bytesOf(sb, driver, Object.keys(OLD));
+      expect([Object.values(OLD), NEW.map((a) => a.value)], `rc ${r.code} [${r.stdout}] [${r.stderr}]`).toContainEqual(after);
+      if (r.code === 0) {
+        answer(r, 'store.batch');
+        expect(after).toEqual(NEW.map((a) => a.value));
+      } else {
+        refusedLike(r, 'store.batch', 2, 'ERR_STORAGE_WRITE', "action 2 (put 'workspace/y'): ");
+        expect(after).toEqual(Object.values(OLD));
+      }
+    });
+  });
+}
+
 describe.skipIf(ROOT_USER || !fts5Available())('[the-engine-r21] an fts5 key listing into a scratch the call just made fails with its one refusal line', { concurrent: true }, () => {
   let keyed: string;
   beforeAll(async () => {
@@ -184,5 +228,10 @@ describe.skipIf(ROOT_USER || !fts5Available())('[the-engine-r21] an fts5 key lis
   ] as const)('%s refuses rc 2 with nothing else on stderr', async (fn, args, input) => {
     const sb = fresh(keyed);
     refusedLike(await store(sb, 'fts5', scratchPlant('keys')).op(fn, args, input), fn, 2, 'ERR_STORAGE_READ');
+  });
+
+  it('store.list whose filtered keys cannot be written refuses rc 2 with its one line, never a short answer', async () => {
+    const sb = fresh(keyed);
+    refusedLike(await store(sb, 'fts5', mktempPlant('case "$p" in */store-keys-out.*) chmod 400 "$p" ;; esac')).list('docs'), 'store.list', 2, 'ERR_STORAGE_WRITE');
   });
 });

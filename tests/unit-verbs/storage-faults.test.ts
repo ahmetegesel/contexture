@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, readdirSync, readFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
@@ -135,5 +135,36 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(r.stdout).toBe('');
     expect(r.stderr).toMatch(/^task\.start: error: [^\n]+ \(ERR_STORAGE_[A-Z]+\)\n$/);
     expect((await unit(sb, 'task', 'show', 'w-unit', 'w-a')).stdout).toContain('STATUS: TODO');
+  });
+
+  it('a session.create whose existence probe cannot be written refuses rc 2 and leaves the unit it names whole', async () => {
+    const sb = fresh(sb0);
+    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
+    const r = await data(sb, 'session.create', ['w-unit'], 'objective=a second unit\nattention=fresh unit\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir "$p/keys" ;; esac'));
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stderr}]`).toBe(before);
+    expect([r.code, r.stdout]).toEqual([2, '']);
+    expect(r.stderr).toMatch(/^session\.create: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
+  });
+
+  it('a task.add whose fetched backlog cannot be written refuses rc 2 and never reads the backlog as absent', async () => {
+    const sb = fresh(sb0);
+    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
+    const r = await data(sb, 'task.add', ['w-unit', 'w-c'], 'objective=Task C\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir "$p/art.2" ;; esac'));
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stderr}]`).toBe(before);
+    expect([r.code, r.stdout]).toEqual([2, '']);
+    expect(r.stderr).toMatch(/^task\.add: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
+  });
+
+  it.skipIf(ROOT_USER)('a write whose batch payload loses a line after its first action refuses rc 2 and lands none of it', async () => {
+    const sb = fresh(sb0);
+    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
+    const b64 = join(sb, '.contexture/modules/unit/lib/b64');
+    copyFileSync(b64, `${b64}.real`);
+    writeFileSync(b64, `#!/bin/sh\nfor b in "\${CTX_SCRATCH_ROOT:-.contexture/tmp}"/unit.*/batch; do\n  [ -s "$b" ] && chmod 400 "$b"\ndone\nexec "${b64}.real" "$@"\n`, { mode: 0o755 });
+    const r = await unit(sb, 'task', 'complete', 'w-unit', 'w-b', '--evidence=never lands');
+    copyFileSync(`${b64}.real`, b64);
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stdout}] [${r.stderr}]`).toBe(before);
+    expect([r.code, r.stdout], r.stderr).toEqual([2, '']);
+    expect(r.stderr).toMatch(/^task\.complete: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
   });
 });

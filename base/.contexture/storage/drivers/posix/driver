@@ -113,6 +113,25 @@ refuse() {
   exit "$1"
 }
 
+# scratch_new <file>...: each of this call's scratch files made empty; scratch_add <file>
+# <format> [<args>...]: one printf appended to such a file. Both are silent (a shell reports a
+# failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
+# answer nonzero when the write fails, for the caller to refuse rc 2 ERR_STORAGE_WRITE: a
+# lost line would let a batch commit part of its actions or a read answer short
+scratch_new() {
+  for sw_f in "$@"; do
+    { : > "$sw_f"; } 2>/dev/null || return 1
+  done
+}
+
+scratch_add() {
+  sa_f=$1
+  shift
+  { printf "$@" >> "$sa_f"; } 2>/dev/null
+}
+
+SCRATCH_FAILED="cannot write the driver's scratch file"
+
 # ==============================================================================
 # The generic module store (the storage core's store contract)
 # ==============================================================================
@@ -239,6 +258,7 @@ store_data() {
   trap 'store_cleanup; exit 130' INT
   trap 'store_cleanup; exit 143' TERM
   STORE_SDERR=$(mktemp "$(scratch_dir)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  scratch_new "$STORE_SDERR" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   sd_out=$(CTX_STORE_WORKSPACE="$sd_ws" "$sd_script" "$sd_ns" 2>"$STORE_SDERR")
   sd_rc=$?
   sd_msg=$(head -n 1 "$STORE_SDERR" 2>/dev/null)
@@ -480,7 +500,10 @@ store_list() {
   fi
   store_data store.list "$sn_ns"
   sn_tmp=$(mktemp "$(scratch_dir)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
-  store_list_keys "$sn_prefix" > "$sn_tmp"
+  if ! { store_list_keys "$sn_prefix" > "$sn_tmp"; } 2>/dev/null; then
+    rm -f "$sn_tmp"
+    refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
   printf '{"namespace":"%s","keys":[' "$(escape_json "$sn_ns")"
   escape_json_lines "$sn_tmp"
   rm -f "$sn_tmp"
@@ -530,7 +553,7 @@ store_put() {
     refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
   }
   chmod "$(umask -S | tr -d x)" "$STORE_TMP" 2>/dev/null || true
-  if ! cat > "$STORE_TMP" || ! mv -f "$STORE_TMP" "$sp_path" 2>/dev/null; then
+  if ! { cat > "$STORE_TMP"; } 2>/dev/null || ! mv -f "$STORE_TMP" "$sp_path" 2>/dev/null; then
     rm -f "$STORE_TMP"
     STORE_TMP=""
     store_unlock
@@ -649,11 +672,13 @@ batch_close_action() {
       [ "$sb_seen_val" -eq 1 ] || batch_refuse 1 "$SB_N" put "$sb_key" ERR_INVALID_ARGUMENT "a put carries no value"
       sb_v="$STORE_BATCH_STAGE/val.$SB_N"
       batch_decode "$sb_val" "$sb_v" || batch_refuse 1 "$SB_N" put "$sb_key" ERR_INVALID_ARGUMENT "malformed base64 value"
-      printf '%s\t%s\t%s\t%s\t%s\n' "$SB_N" put "$sb_key" "$sb_head" "$sb_v" >> "$STORE_BATCH_STAGE/man"
+      scratch_add "$STORE_BATCH_STAGE/man" '%s\t%s\t%s\t%s\t%s\n' "$SB_N" put "$sb_key" "$sb_head" "$sb_v" \
+        || batch_refuse 2 "$SB_N" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
       ;;
     delete)
       [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$SB_N" delete "$sb_key" ERR_INVALID_ARGUMENT "a delete carries no value"
-      printf '%s\t%s\t%s\t%s\t\n' "$SB_N" delete "$sb_key" "$sb_head" >> "$STORE_BATCH_STAGE/man"
+      scratch_add "$STORE_BATCH_STAGE/man" '%s\t%s\t%s\t%s\t\n' "$SB_N" delete "$sb_key" "$sb_head" \
+        || batch_refuse 2 "$SB_N" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
       ;;
   esac
 }
@@ -661,7 +686,7 @@ batch_close_action() {
 # batch_parse: read the action payload from stdin; values stage under STORE_BATCH_STAGE
 batch_parse() {
   STORE_BATCH_STAGE=$(mktemp -d "$(get_tmp_dir)/store-batch.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the batch staging folder"
-  : > "$STORE_BATCH_STAGE/man"
+  scratch_new "$STORE_BATCH_STAGE/man" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   SB_N=0
   sb_open=0
   sb_op=""; sb_key=""; sb_head=""; sb_val=""; sb_seen_key=0; sb_seen_head=0; sb_seen_val=0
@@ -709,27 +734,31 @@ batch_parse() {
 # with an ASCII case twin
 batch_validate() {
   SB_LIVE="$STORE_BATCH_STAGE/live"
-  store_list_keys > "$SB_LIVE"
+  { store_list_keys > "$SB_LIVE"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
     case "$sb_op" in
       put)
         sb_twin=$(SB_T="$sb_key" LC_ALL=C awk 'BEGIN { t = ENVIRON["SB_T"] } { if ($0 != t && tolower($0) == tolower(t)) { print; exit } }' "$SB_LIVE")
         [ -z "$sb_twin" ] || batch_refuse 1 "$sb_i" put "$sb_key" ERR_ENTITY_EXISTS "key '$sb_key' folds onto '$sb_twin' under ASCII case; keys differing only by case never coexist in namespace '$SB_NS'"
-        printf '%s\n' "$sb_key" >> "$SB_LIVE"
-        LC_ALL=C sort -u "$SB_LIVE" -o "$SB_LIVE"
+        scratch_add "$SB_LIVE" '%s\n' "$sb_key" && LC_ALL=C sort -u "$SB_LIVE" -o "$SB_LIVE" 2>/dev/null \
+          || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
         ;;
       delete)
         grep -F -q -x -e "$sb_key" "$SB_LIVE" || batch_refuse 1 "$sb_i" delete "$sb_key" ERR_ENTITY_NOT_FOUND "key '$sb_key' not found in namespace '$SB_NS'"
-        grep -F -v -x -e "$sb_key" "$SB_LIVE" > "$SB_LIVE.next" || true
-        mv -f "$SB_LIVE.next" "$SB_LIVE"
+        scratch_new "$SB_LIVE.next" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
+        { grep -F -v -x -e "$sb_key" "$SB_LIVE" > "$SB_LIVE.next"; } 2>/dev/null
+        [ $? -le 1 ] && mv -f "$SB_LIVE.next" "$SB_LIVE" 2>/dev/null \
+          || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
         ;;
     esac
   done < "$STORE_BATCH_STAGE/man"
 }
 
-# sb_note <f|d> <path> <backup>: one undo step; the store-scope log the batch commits under
+# sb_note <f|d> <path> <backup>: one undo step; the store-scope log the batch commits under.
+# A step the log cannot hold answers nonzero before its change is made, so a rollback never
+# misses a landed step
 sb_note() {
-  printf '%s\t%s\t%s\n' "$1" "$2" "${3:-}" >> "$STORE_BATCH_STAGE/undo"
+  scratch_add "$STORE_BATCH_STAGE/undo" '%s\t%s\t%s\n' "$1" "$2" "${3:-}"
 }
 
 # sb_rollback: every noted step undone, the last first
@@ -749,7 +778,7 @@ sb_dir() {
   [ -d "$1" ] && return 0
   sb_up=$(dirname "$1")
   sb_dir "$sb_up" || return 1
-  sb_note d "$1" ""
+  sb_note d "$1" "" || return 1
   mkdir "$1" 2>/dev/null || [ -d "$1" ] || return 1
 }
 
@@ -778,13 +807,13 @@ batch_commit() {
       put)
         sb_dir "$(dirname "$sb_path")" || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
         sb_backup "$sb_path" || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
-        sb_note f "$sb_path" "$SB_BAK"
+        sb_note f "$sb_path" "$SB_BAK" || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
         mv -f "$sb_val" "$sb_path" 2>/dev/null || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
         ;;
       delete)
         [ -f "$sb_path" ] || continue
         sb_backup "$sb_path" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
-        sb_note f "$sb_path" "$SB_BAK"
+        sb_note f "$sb_path" "$SB_BAK" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
         rm -f "$sb_path" 2>/dev/null && [ ! -f "$sb_path" ] || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
         ;;
     esac
@@ -831,19 +860,22 @@ store_scan() {
   [ -n "$sc_b64" ] || refuse 2 ERR_STORAGE_READ "the storage core base64 encoder is not installed"
   sc_keys=$(mktemp "$(scratch_dir)/store-scan.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   sc_out=$(mktemp "$(scratch_dir)/store-scan-out.XXXXXX" 2>/dev/null) || { rm -f "$sc_keys"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
-  store_list_keys > "$sc_keys"
-  printf '{"namespace":"%s","items":[' "$(escape_json "$sc_ns")" > "$sc_out"
+  { store_list_keys > "$sc_keys"; } 2>/dev/null \
+    && scratch_add "$sc_out" '{"namespace":"%s","items":[' "$(escape_json "$sc_ns")" \
+    || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   sc_first=1
   while IFS= read -r sc_key; do
     [ -n "$sc_key" ] || continue
     sc_path=$(store_path "$sc_key")
     [ -f "$sc_path" ] || continue
     sc_v=$("$sc_b64" "$sc_path" 2>/dev/null) || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_READ "cannot read key '$sc_key' in namespace '$sc_ns'"; }
-    if [ "$sc_first" -eq 1 ]; then sc_first=0; else printf ',' >> "$sc_out"; fi
-    printf '{"key":"%s","value_b64":"%s"}' "$(escape_json "$sc_key")" "$sc_v" >> "$sc_out"
+    sc_sep=','
+    if [ "$sc_first" -eq 1 ]; then sc_first=0; sc_sep=''; fi
+    scratch_add "$sc_out" '%s{"key":"%s","value_b64":"%s"}' "$sc_sep" "$(escape_json "$sc_key")" "$sc_v" \
+      || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   done < "$sc_keys"
   rm -f "$sc_keys"
-  printf ']}\n' >> "$sc_out"
+  scratch_add "$sc_out" ']}\n' || { rm -f "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   cat "$sc_out"
   rm -f "$sc_out"
 }
@@ -911,12 +943,14 @@ store_search() {
   ss_keytmp=$(mktemp "$(scratch_dir)/store-search.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   ss_err=$(mktemp "$(scratch_dir)/store-search-err.XXXXXX" 2>/dev/null) || { rm -f "$ss_keytmp"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
   ss_man="${ss_keytmp}.man"
-  store_list_keys > "$ss_keytmp"
-  : > "$ss_man"
+  { store_list_keys > "$ss_keytmp"; } 2>/dev/null && scratch_new "$ss_err" "$ss_man" \
+    || { rm -f "$ss_keytmp" "$ss_err" "$ss_man"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   while IFS= read -r ss_k; do
     [ -n "$ss_k" ] || continue
     ss_p=$(store_path "$ss_k")
-    [ -f "$ss_p" ] && printf '%s\t%s\n' "$ss_k" "$ss_p" >> "$ss_man"
+    [ -f "$ss_p" ] || continue
+    scratch_add "$ss_man" '%s\t%s\n' "$ss_k" "$ss_p" \
+      || { rm -f "$ss_keytmp" "$ss_err" "$ss_man"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   done < "$ss_keytmp"
   rm -f "$ss_keytmp"
   ss_out=$("$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$ss_man" 2>"$ss_err")

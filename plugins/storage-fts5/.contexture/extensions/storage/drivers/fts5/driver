@@ -118,6 +118,26 @@ scratch() {
   fi
 }
 
+# scratch_new <file>...: each of this call's scratch files made empty; scratch_add <file>
+# <format> [<args>...]: one printf appended to such a file. Both are silent (a shell reports a
+# failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
+# answer nonzero when the write fails, for the caller to refuse rc 2 ERR_STORAGE_WRITE: a
+# lost line would let a batch commit part of its actions, a transaction script end without
+# its COMMIT (sqlite3 then rolls back and exits 0), or a read answer short
+scratch_new() {
+  for sw_f in "$@"; do
+    { : > "$sw_f"; } 2>/dev/null || return 1
+  done
+}
+
+scratch_add() {
+  sa_f=$1
+  shift
+  { printf "$@" >> "$sa_f"; } 2>/dev/null
+}
+
+SCRATCH_FAILED="cannot write the driver's scratch file"
+
 if [ $# -eq 0 ]; then
   printf 'fts5-driver: error: missing command (ERR_INVALID_ARGUMENT)\n' >&2
   exit 1
@@ -240,6 +260,7 @@ store_data() {
   done
   [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage core data reader is not installed"
   STORE_SDERR=$(mktemp "$(scratch_base)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  scratch_new "$STORE_SDERR" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   sd_out=$(CTX_STORE_WORKSPACE="$ROOT" "$sd_script" "$sd_ns" 2>"$STORE_SDERR")
   sd_rc=$?
   sd_msg=$(head -n 1 "$STORE_SDERR" 2>/dev/null)
@@ -403,17 +424,17 @@ store_list() {
       refuse 2 ERR_STORAGE_READ "the storage read failed"
     fi
   else
-    : > "$sn_tmp"
+    scratch_new "$sn_tmp" || { rm -f "$sn_tmp"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   fi
-  printf '{"namespace":"%s","keys":[' "$(store_json "$sn_ns")"
   sn_filtered=$(mktemp "$(scratch_base)/store-keys-out.XXXXXX" 2>/dev/null) || { rm -f "$sn_tmp"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
   while IFS= read -r sn_key; do
     [ -n "$sn_key" ] || continue
     store_key_ok "$sn_key" || continue
     store_key_shape "$SD_KEYPAT" "$sn_key" || continue
     [ -z "$sn_prefix" ] || [ "${sn_key#"$sn_prefix"}" != "$sn_key" ] || continue
-    printf '%s\n' "$sn_key" >> "$sn_filtered"
+    scratch_add "$sn_filtered" '%s\n' "$sn_key" || { rm -f "$sn_tmp" "$sn_filtered"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   done < "$sn_tmp"
+  printf '{"namespace":"%s","keys":[' "$(store_json "$sn_ns")"
   store_json_lines "$sn_filtered"
   rm -f "$sn_tmp" "$sn_filtered"
   printf ']}\n'
@@ -434,11 +455,12 @@ store_get() {
     refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
   fi
   scratch
-  : > "$SCRATCH/key"
+  scratch_new "$SCRATCH/key" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   sq -bail "$DB_PATH" "SELECT writefile('$(sql_escape "$SCRATCH/key")', value) FROM store WHERE namespace = '$(sql_escape "$sg_ns")' AND key = '$(sql_escape "$sg_key")';" > /dev/null 2>&1 || {
     refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
   }
-  cat "$SCRATCH/key"
+  # the value's write is the answer: a short write exits rc 2, never a short value at rc 0
+  cat "$SCRATCH/key" || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
   exit 0
 }
 
@@ -456,7 +478,7 @@ store_put() {
   trap 'store_cleanup; exit 143' TERM
   store_lock "$sp_ns"
   scratch
-  cat > "$SCRATCH/value" || {
+  { cat > "$SCRATCH/value"; } 2>/dev/null || {
     store_cleanup
     refuse 2 ERR_STORAGE_READ "cannot read the value"
   }
@@ -474,20 +496,23 @@ store_put() {
     store_cleanup
     refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
   }
-  if ! "$sp_core" docs "$SD_FILE" "$sp_ns" "$sp_key" "$SCRATCH/value" "$SD_SIG" > "$SCRATCH/docs.sql"; then
+  if ! { "$sp_core" docs "$SD_FILE" "$sp_ns" "$sp_key" "$SCRATCH/value" "$SD_SIG" > "$SCRATCH/docs.sql"; } 2>/dev/null; then
     store_cleanup
     refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
   fi
   sp_now=$(now_utc)
-  {
-    printf 'BEGIN IMMEDIATE;\n'
+  if ! { {
+    printf 'BEGIN IMMEDIATE;\n' &&
     printf "INSERT INTO store_changes (at, namespace, key, op, head, prior) VALUES ('%s', '%s', '%s', '%s', '%s', CASE WHEN EXISTS (SELECT 1 FROM store WHERE namespace = '%s' AND key = '%s') THEN 'present' ELSE 'absent' END);\n" \
-      "$sp_now" "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")" "$(sql_escape "$SF_OP")" "$(sql_escape "$SF_HEAD")" "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")"
+      "$sp_now" "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")" "$(sql_escape "$SF_OP")" "$(sql_escape "$SF_HEAD")" "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")" &&
     printf "INSERT INTO store (namespace, key, value, updated_at) VALUES ('%s', '%s', readfile('%s'), '%s') ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;\n" \
-      "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")" "$(sql_escape "$SCRATCH/value")" "$sp_now"
-    cat "$SCRATCH/docs.sql"
+      "$(sql_escape "$sp_ns")" "$(sql_escape "$sp_key")" "$(sql_escape "$SCRATCH/value")" "$sp_now" &&
+    cat "$SCRATCH/docs.sql" &&
     printf 'COMMIT;\n'
-  } > "$SCRATCH/store.sql"
+  } > "$SCRATCH/store.sql"; } 2>/dev/null; then
+    store_cleanup
+    refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
   if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2>&1; then
     store_cleanup
     refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
@@ -521,14 +546,17 @@ store_delete() {
   fi
   store_docs_ensure "$sx_ns" "$SD_SIG"
   scratch
-  {
-    printf 'BEGIN IMMEDIATE;\n'
+  if ! { {
+    printf 'BEGIN IMMEDIATE;\n' &&
     printf "INSERT INTO store_changes (at, namespace, key, op, head, prior) VALUES ('%s', '%s', '%s', '%s', '%s', 'present');\n" \
-      "$(now_utc)" "$(sql_escape "$sx_ns")" "$(sql_escape "$sx_key")" "$(sql_escape "$SF_OP")" "$(sql_escape "$SF_HEAD")"
-    printf "DELETE FROM store WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sx_ns")" "$(sql_escape "$sx_key")"
-    printf 'DELETE FROM store_docs WHERE namespace = %s AND key = %s;\n' "$(store_sqlq "$sx_ns")" "$(store_sqlq "$sx_key")"
+      "$(now_utc)" "$(sql_escape "$sx_ns")" "$(sql_escape "$sx_key")" "$(sql_escape "$SF_OP")" "$(sql_escape "$SF_HEAD")" &&
+    printf "DELETE FROM store WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sx_ns")" "$(sql_escape "$sx_key")" &&
+    printf 'DELETE FROM store_docs WHERE namespace = %s AND key = %s;\n' "$(store_sqlq "$sx_ns")" "$(store_sqlq "$sx_key")" &&
     printf 'COMMIT;\n'
-  } > "$SCRATCH/store.sql"
+  } > "$SCRATCH/store.sql"; } 2>/dev/null; then
+    store_cleanup
+    refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
   if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2>&1; then
     store_cleanup
     refuse 2 ERR_STORAGE_WRITE "the storage remove of key '$sx_key' failed"
@@ -547,8 +575,8 @@ store_changes() {
     refuse 1 ERR_CAPABILITY_UNSUPPORTED "the namespace '$sc_ns' declares no change log (changes: false)"
   fi
   scratch
-  cat > "$SCRATCH/heads" || refuse 2 ERR_STORAGE_READ "cannot read the heads"
-  printf 'CREATE TEMP TABLE want_heads (head TEXT PRIMARY KEY);\n' > "$SCRATCH/changes.sql"
+  { cat > "$SCRATCH/heads"; } 2>/dev/null || refuse 2 ERR_STORAGE_READ "cannot read the heads"
+  scratch_add "$SCRATCH/changes.sql" 'CREATE TEMP TABLE want_heads (head TEXT PRIMARY KEY);\n' || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   while IFS= read -r ch_l || [ -n "$ch_l" ]; do
     [ -n "$ch_l" ] || continue
     case "$ch_l" in
@@ -559,15 +587,15 @@ store_changes() {
       none) ;;
       ""|*[!0-9a-fA-F]*) refuse 1 ERR_INVALID_ARGUMENT "a head is a commit id or none: '$ch_h'" ;;
     esac
-    printf "INSERT OR IGNORE INTO want_heads VALUES ('%s');\n" "$ch_h" >> "$SCRATCH/changes.sql"
+    scratch_add "$SCRATCH/changes.sql" "INSERT OR IGNORE INTO want_heads VALUES ('%s');\n" "$ch_h" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   done < "$SCRATCH/heads"
   if [ ! -f "$DB_PATH" ]; then
     printf '{"namespace":"%s","changes":[]}\n' "$(store_json "$sc_ns")"
     exit 0
   fi
   db_init
-  printf "SELECT '{\"namespace\":' || json_quote('%s') || ',\"changes\":' || coalesce(json_group_array(json_object('seq', seq, 'at', at, 'key', key, 'op', op, 'head', head, 'prior', prior)), '[]') || '}' FROM (SELECT seq, at, key, op, head, prior FROM store_changes WHERE namespace = '%s' AND head IN (SELECT head FROM want_heads) ORDER BY seq);\n" \
-    "$(sql_escape "$sc_ns")" "$(sql_escape "$sc_ns")" >> "$SCRATCH/changes.sql"
+  scratch_add "$SCRATCH/changes.sql" "SELECT '{\"namespace\":' || json_quote('%s') || ',\"changes\":' || coalesce(json_group_array(json_object('seq', seq, 'at', at, 'key', key, 'op', op, 'head', head, 'prior', prior)), '[]') || '}' FROM (SELECT seq, at, key, op, head, prior FROM store_changes WHERE namespace = '%s' AND head IN (SELECT head FROM want_heads) ORDER BY seq);\n" \
+    "$(sql_escape "$sc_ns")" "$(sql_escape "$sc_ns")" && scratch_new "$SCRATCH/changes.out" "$SCRATCH/changes.err" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if ! sq -bail "$DB_PATH" < "$SCRATCH/changes.sql" > "$SCRATCH/changes.out" 2> "$SCRATCH/changes.err"; then
     refuse 2 ERR_STORAGE_READ "the storage read failed"
   fi
@@ -646,11 +674,13 @@ batch_close_action() {
       [ "$sb_seen_val" -eq 1 ] || batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "a put carries no value"
       sb_v="$SCRATCH/batch-val.$sb_n"
       batch_decode "$sb_val" "$sb_v" || batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "malformed base64 value"
-      printf '%s\t%s\t%s\t%s\t%s\n' "$sb_n" put "$sb_key" "$sb_head" "$sb_v" >> "$SCRATCH/man"
+      scratch_add "$SCRATCH/man" '%s\t%s\t%s\t%s\t%s\n' "$sb_n" put "$sb_key" "$sb_head" "$sb_v" \
+        || batch_refuse 2 "$sb_n" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
       ;;
     delete)
       [ "$sb_seen_val" -eq 0 ] || batch_refuse 1 "$sb_n" delete "$sb_key" ERR_INVALID_ARGUMENT "a delete carries no value"
-      printf '%s\t%s\t%s\t%s\t\n' "$sb_n" delete "$sb_key" "$sb_head" >> "$SCRATCH/man"
+      scratch_add "$SCRATCH/man" '%s\t%s\t%s\t%s\t\n' "$sb_n" delete "$sb_key" "$sb_head" \
+        || batch_refuse 2 "$sb_n" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
       ;;
   esac
 }
@@ -658,7 +688,7 @@ batch_close_action() {
 # batch_parse: read the action payload from stdin into the manifest; values stage in the
 # per-call scratch folder
 batch_parse() {
-  : > "$SCRATCH/man"
+  scratch_new "$SCRATCH/man" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   sb_n=0
   sb_open=0
   sb_op=""; sb_key=""; sb_head=""; sb_val=""; sb_seen_key=0; sb_seen_head=0; sb_seen_val=0
@@ -705,7 +735,7 @@ batch_parse() {
 # a delete must find the key present at its place in the order, and a put never coexists
 # with an ASCII case twin
 batch_validate() {
-  : > "$SCRATCH/live"
+  scratch_new "$SCRATCH/live" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if [ -f "$DB_PATH" ]; then
     db_init
     if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sb_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/live"; } 2>/dev/null; then
@@ -717,13 +747,15 @@ batch_validate() {
       put)
         sb_twin=$(SB_T="$sb_key" LC_ALL=C awk 'BEGIN { t = ENVIRON["SB_T"] } { if ($0 != t && tolower($0) == tolower(t)) { print; exit } }' "$SCRATCH/live")
         [ -z "$sb_twin" ] || batch_refuse 1 "$sb_i" put "$sb_key" ERR_ENTITY_EXISTS "key '$sb_key' folds onto '$sb_twin' under ASCII case; keys differing only by case never coexist in namespace '$sb_ns'"
-        printf '%s\n' "$sb_key" >> "$SCRATCH/live"
-        LC_ALL=C sort -u "$SCRATCH/live" -o "$SCRATCH/live"
+        scratch_add "$SCRATCH/live" '%s\n' "$sb_key" && LC_ALL=C sort -u "$SCRATCH/live" -o "$SCRATCH/live" 2>/dev/null \
+          || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
         ;;
       delete)
         grep -F -q -x -e "$sb_key" "$SCRATCH/live" || batch_refuse 1 "$sb_i" delete "$sb_key" ERR_ENTITY_NOT_FOUND "key '$sb_key' not found in namespace '$sb_ns'"
-        grep -F -v -x -e "$sb_key" "$SCRATCH/live" > "$SCRATCH/live.next" || true
-        mv -f "$SCRATCH/live.next" "$SCRATCH/live"
+        scratch_new "$SCRATCH/live.next" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
+        { grep -F -v -x -e "$sb_key" "$SCRATCH/live" > "$SCRATCH/live.next"; } 2>/dev/null
+        [ $? -le 1 ] && mv -f "$SCRATCH/live.next" "$SCRATCH/live" 2>/dev/null \
+          || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
         ;;
     esac
   done < "$SCRATCH/man"
@@ -734,30 +766,32 @@ batch_validate() {
 batch_sql() {
   sbs_core=$(store_search_core) || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
   sbs_now=$(now_utc)
-  : > "$SCRATCH/store.sql"
-  : > "$SCRATCH/action-lines"
-  printf 'BEGIN IMMEDIATE;\n' >> "$SCRATCH/store.sql"
+  scratch_new "$SCRATCH/store.sql" "$SCRATCH/action-lines" \
+    && scratch_add "$SCRATCH/store.sql" 'BEGIN IMMEDIATE;\n' || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   while IFS='	' read -r sbs_i sbs_op sbs_key sbs_head sbs_val; do
     sbs_start=$(( $(wc -l < "$SCRATCH/store.sql") + 1 ))
-    printf '%s\t%s\n' "$sbs_start" "$sbs_i" >> "$SCRATCH/action-lines"
-    printf "INSERT INTO store_changes (at, namespace, key, op, head, prior) VALUES ('%s', '%s', '%s', '%s', '%s', CASE WHEN EXISTS (SELECT 1 FROM store WHERE namespace = '%s' AND key = '%s') THEN 'present' ELSE 'absent' END);\n" \
-      "$sbs_now" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" "$(sql_escape "$sbs_op")" "$(sql_escape "$sbs_head")" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" >> "$SCRATCH/store.sql"
+    scratch_add "$SCRATCH/action-lines" '%s\t%s\n' "$sbs_start" "$sbs_i" \
+      && scratch_add "$SCRATCH/store.sql" "INSERT INTO store_changes (at, namespace, key, op, head, prior) VALUES ('%s', '%s', '%s', '%s', '%s', CASE WHEN EXISTS (SELECT 1 FROM store WHERE namespace = '%s' AND key = '%s') THEN 'present' ELSE 'absent' END);\n" \
+      "$sbs_now" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" "$(sql_escape "$sbs_op")" "$(sql_escape "$sbs_head")" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" \
+      || batch_refuse 2 "$sbs_i" "$sbs_op" "$sbs_key" ERR_STORAGE_WRITE "cannot stage the action"
     case "$sbs_op" in
       put)
-        printf "INSERT INTO store (namespace, key, value, updated_at) VALUES ('%s', '%s', readfile('%s'), '%s') ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;\n" \
-          "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" "$(sql_escape "$sbs_val")" "$sbs_now" >> "$SCRATCH/store.sql"
-        printf "DELETE FROM store_docs WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" >> "$SCRATCH/store.sql"
-        if ! "$sbs_core" docs "$SD_FILE" "$sb_ns" "$sbs_key" "$sbs_val" "$SD_SIG" >> "$SCRATCH/store.sql"; then
+        scratch_add "$SCRATCH/store.sql" "INSERT INTO store (namespace, key, value, updated_at) VALUES ('%s', '%s', readfile('%s'), '%s') ON CONFLICT(namespace, key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at;\n" \
+          "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" "$(sql_escape "$sbs_val")" "$sbs_now" \
+          && scratch_add "$SCRATCH/store.sql" "DELETE FROM store_docs WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" \
+          || batch_refuse 2 "$sbs_i" put "$sbs_key" ERR_STORAGE_WRITE "cannot stage the action"
+        if ! { "$sbs_core" docs "$SD_FILE" "$sb_ns" "$sbs_key" "$sbs_val" "$SD_SIG" >> "$SCRATCH/store.sql"; } 2>/dev/null; then
           batch_refuse 2 "$sbs_i" put "$sbs_key" ERR_STORAGE_WRITE "cannot derive the store search documents"
         fi
         ;;
       delete)
-        printf "DELETE FROM store WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" >> "$SCRATCH/store.sql"
-        printf "DELETE FROM store_docs WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" >> "$SCRATCH/store.sql"
+        scratch_add "$SCRATCH/store.sql" "DELETE FROM store WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" \
+          && scratch_add "$SCRATCH/store.sql" "DELETE FROM store_docs WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" \
+          || batch_refuse 2 "$sbs_i" delete "$sbs_key" ERR_STORAGE_WRITE "cannot stage the action"
         ;;
     esac
   done < "$SCRATCH/man"
-  printf 'COMMIT;\n' >> "$SCRATCH/store.sql"
+  scratch_add "$SCRATCH/store.sql" 'COMMIT;\n' || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
 }
 
 store_batch() {
@@ -776,6 +810,7 @@ store_batch() {
   db_init
   store_docs_ensure "$sb_ns" "$SD_SIG"
   batch_sql
+  scratch_new "$SCRATCH/err" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if ! sq -bail "$DB_PATH" < "$SCRATCH/store.sql" > /dev/null 2> "$SCRATCH/err"; then
     sb_line=$(sed -n 's/.*near line \([0-9][0-9]*\):.*/\1/p' "$SCRATCH/err" | head -n 1)
     [ -n "$sb_line" ] || sb_line=999999999
@@ -816,10 +851,10 @@ store_scan() {
       refuse 2 ERR_STORAGE_READ "the storage read failed"
     fi
   else
-    : > "$SCRATCH/keys"
+    scratch_new "$SCRATCH/keys" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   fi
-  : > "$SCRATCH/scan-out"
-  printf '{"namespace":"%s","items":[' "$(store_json "$sns_ns")" >> "$SCRATCH/scan-out"
+  scratch_new "$SCRATCH/scan-out" && scratch_add "$SCRATCH/scan-out" '{"namespace":"%s","items":[' "$(store_json "$sns_ns")" \
+    || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   sns_first=1
   while IFS= read -r sns_key || [ -n "$sns_key" ]; do
     [ -n "$sns_key" ] || continue
@@ -829,10 +864,12 @@ store_scan() {
       refuse 2 ERR_STORAGE_READ "cannot read key '$sns_key' in namespace '$sns_ns'"
     fi
     sns_v=$("$sns_b64" "$SCRATCH/value" 2>/dev/null) || refuse 2 ERR_STORAGE_READ "cannot read key '$sns_key' in namespace '$sns_ns'"
-    if [ "$sns_first" -eq 1 ]; then sns_first=0; else printf ',' >> "$SCRATCH/scan-out"; fi
-    printf '{"key":"%s","value_b64":"%s"}' "$(store_json "$sns_key")" "$sns_v" >> "$SCRATCH/scan-out"
+    sns_sep=','
+    if [ "$sns_first" -eq 1 ]; then sns_first=0; sns_sep=''; fi
+    scratch_add "$SCRATCH/scan-out" '%s{"key":"%s","value_b64":"%s"}' "$sns_sep" "$(store_json "$sns_key")" "$sns_v" \
+      || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   done < "$SCRATCH/keys"
-  printf ']}\n' >> "$SCRATCH/scan-out"
+  scratch_add "$SCRATCH/scan-out" ']}\n' || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   cat "$SCRATCH/scan-out"
   exit 0
 }
@@ -892,7 +929,8 @@ store_docs_ensure() {
   scratch
   mkdir -p "$SCRATCH/values" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
   sde_sql="$SCRATCH/docs-ensure.sql"
-  printf 'BEGIN IMMEDIATE;\nDELETE FROM store_docs WHERE namespace = %s;\n' "$(store_sqlq "$sde_ns")" > "$sde_sql"
+  scratch_new "$sde_sql" && scratch_add "$sde_sql" 'BEGIN IMMEDIATE;\nDELETE FROM store_docs WHERE namespace = %s;\n' "$(store_sqlq "$sde_ns")" \
+    || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sde_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys"; } 2>/dev/null; then
     refuse 2 ERR_STORAGE_READ "the storage read failed"
   fi
@@ -908,8 +946,8 @@ store_docs_ensure() {
       refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
     fi
   done < "$SCRATCH/keys"
-  printf "INSERT INTO store_docs_schema (namespace, sig) VALUES (%s, %s) ON CONFLICT(namespace) DO UPDATE SET sig = excluded.sig;\nCOMMIT;\n" \
-    "$(store_sqlq "$sde_ns")" "$(store_sqlq "$sde_sig")" >> "$sde_sql"
+  scratch_add "$sde_sql" "INSERT INTO store_docs_schema (namespace, sig) VALUES (%s, %s) ON CONFLICT(namespace) DO UPDATE SET sig = excluded.sig;\nCOMMIT;\n" \
+    "$(store_sqlq "$sde_ns")" "$(store_sqlq "$sde_sig")" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if ! sq -bail "$DB_PATH" < "$sde_sql" > /dev/null 2>&1; then
     refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
   fi
@@ -919,10 +957,11 @@ store_docs_ensure() {
 store_search_ranked() {
   sr_ns=$1; sr_q=$2; sr_mode=$3; sr_lim=$4
   scratch
-  {
-    printf 'BEGIN;\n'
+  scratch_new "$SCRATCH/store-search.sql" "$SCRATCH/search.out" "$SCRATCH/search.err" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  { {
+    printf 'BEGIN;\n' &&
     printf "CREATE TEMP TABLE ssr AS SELECT %s AS ns, %s AS q, %s AS mode, %d AS lim;\n" \
-      "$(store_sqlq "$sr_ns")" "$(store_sqlq "$sr_q")" "$(store_sqlq "$sr_mode")" "$sr_lim"
+      "$(store_sqlq "$sr_ns")" "$(store_sqlq "$sr_q")" "$(store_sqlq "$sr_mode")" "$sr_lim" &&
     cat <<'RANKED'
 CREATE TEMP TABLE sst AS SELECT group_concat('"' || replace(t.value, '"', '""') || '"', ' ' ORDER BY t.key) AS m FROM json_each('["' || replace(replace(replace(replace(replace(replace((SELECT q FROM temp.ssr), '\', '\\'), '"', '\"'), char(9), ' '), char(10), ' '), char(13), ' '), ' ', '","') || '"]') t WHERE t.value <> '';
 CREATE TEMP TABLE ssres (doc_id INTEGER, key TEXT, entity_type TEXT, entity_id TEXT, section TEXT, score REAL, snippet TEXT);
@@ -948,7 +987,7 @@ SELECT json_object('namespace', s.ns, 'query', s.q, 'mode', s.mode, 'total_match
 FROM temp.ssr s;
 COMMIT;
 RANKED
-  } > "$SCRATCH/store-search.sql"
+  } > "$SCRATCH/store-search.sql"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if ! sq -bail "$DB_PATH" < "$SCRATCH/store-search.sql" > "$SCRATCH/search.out" 2> "$SCRATCH/search.err"; then
     refuse 2 ERR_STORAGE_READ "the storage search failed"
   fi
@@ -982,8 +1021,8 @@ store_search() {
   if [ "$ss_mode" = exact ]; then
     ss_core=$(store_search_core) || refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
     scratch
-    : > "$SCRATCH/man"
     ss_err="$SCRATCH/search-err"
+    scratch_new "$SCRATCH/man" "$ss_err" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
     if [ -f "$DB_PATH" ]; then
       db_init
       mkdir -p "$SCRATCH/values" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
@@ -998,7 +1037,7 @@ store_search() {
         if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$ss_v"), value) FROM store WHERE namespace = $(store_sqlq "$ss_ns") AND key = $(store_sqlq "$ss_k");" > /dev/null 2>&1; then
           refuse 2 ERR_STORAGE_READ "cannot read the store values"
         fi
-        printf '%s\t%s\n' "$ss_k" "$ss_v" >> "$SCRATCH/man"
+        scratch_add "$SCRATCH/man" '%s\t%s\n' "$ss_k" "$ss_v" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
       done < "$SCRATCH/keys"
     fi
     ss_out=$("$ss_core" exact "$SD_FILE" "$ss_ns" "$ss_q" "$ss_lim" "$SCRATCH/man" 2>"$ss_err")
