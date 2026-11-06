@@ -592,6 +592,11 @@ Advisory notice format on stderr:
 [ast-doc-graph: N files modified since last index. Run ast-doc-index --delta to refresh]
 ```
 
+An inline micro-sync that fails (outside a drawer, with no runner, or with no compiler API for a dirty source) prints one line on stderr naming the index's exit code and its first error line, then the query answers from the database as it stands with its own exit code:
+```text
+[ast-doc-graph: the inline delta index failed (rc 1: Error: ...); answering from the graph as it stands. Run ast-doc-index --delta to refresh]
+```
+
 ### 8.3 Bypass Flag (--no-sync)
 In latency-critical loops, batch processing, or CI scripts where freshness checks are redundant, passing `--no-sync` instructs `graph-query` to bypass the `find -newer` check entirely and proceed immediately to query execution.
 

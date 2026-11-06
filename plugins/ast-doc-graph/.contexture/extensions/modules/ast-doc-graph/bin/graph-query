@@ -228,7 +228,12 @@ check_and_sync_freshness() {
     return 0
   elif [[ "$dirty_count" -le 2 ]]; then
     if [[ -n "$index_driver" && -x "$index_driver" ]]; then
-      "$index_driver" --repo-root "$repo_root" --db "$DB_PATH" --delta "${dirty_files[@]}" >/dev/null 2>&1 || true
+      local sync_err sync_rc=0 reason
+      sync_err="$("$index_driver" --repo-root "$repo_root" --db "$DB_PATH" --delta "${dirty_files[@]}" 2>&1 >/dev/null)" || sync_rc=$?
+      if [[ "$sync_rc" -ne 0 ]]; then
+        reason="$(printf '%s\n' "$sync_err" | grep -m 1 -E '^(Error|Fatal)' || printf '%s\n' "$sync_err" | grep -v '^[[:space:]]*$' | tail -n 1 || true)"
+        echo "[ast-doc-graph: the inline delta index failed (rc $sync_rc${reason:+: $reason}); answering from the graph as it stands. Run ast-doc-index --delta to refresh]" >&2
+      fi
     fi
   else
     echo "[ast-doc-graph: $dirty_count files modified since last index. Run ast-doc-index --delta to refresh]" >&2

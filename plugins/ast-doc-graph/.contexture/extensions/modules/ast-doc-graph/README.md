@@ -48,8 +48,9 @@ the drawer's `.contexture/tmp`, and a trap removes it on exit, hangup,
 interrupt, and termination; a folder it cannot make refuses rc 2 naming it.
 `--cache-dir` names a caller-owned folder instead, emptied only by `--clean`.
 `bin/graph-query` stages no scratch and reads any database it is given; its
-micro-sync discards the index's exit code and output, so outside a drawer it
-answers from the graph as it stands.
+micro-sync discards the index's output on success, and on a failure (outside
+a drawer, say) prints one stderr line naming the failure and the delta to
+run, then answers from the graph as it stands.
 
 Discovery (the full index, the delta scan, and the query's freshness check)
 runs `find` from inside the scanned root, so the exclusion folders

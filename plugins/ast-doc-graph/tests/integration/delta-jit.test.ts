@@ -1,9 +1,11 @@
 import { appendFileSync, statSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { exec } from '@support/exec';
+import { sandbox } from '@support/sandbox';
 import { fresh } from '@support/snapshot';
 import { sqlite } from '@support/sqlite';
-import { astDocIndex, compilerApi, count, graphQuery, miniRepo, sqliteFts5 } from '../support/graph';
+import { astDocIndex, compilerApi, count, docsRepo, graphQuery, miniRepo, MODULE, sqliteFts5 } from '../support/graph';
 
 const db = (sb: string) => join(sb, 'graph.db');
 
@@ -60,5 +62,21 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     const sb = fresh(indexed);
     const r = await graphQuery(sb, db(sb), 'stats');
     expect([r.code, r.stderr]).toEqual([0, '']);
+  });
+});
+
+describe.skipIf(!sqliteFts5)('a failed inline delta', { concurrent: true }, () => {
+  it('[ast-doc-graph-r16] prints one stderr line naming the failure and the delta to run, and the query answers rc 0 from the graph as it stands', async () => {
+    const sb = docsRepo('sync-failed');
+    const full = await astDocIndex(sb, ['--clean']);
+    expect(full.code, full.stderr).toBe(0);
+    edit(sb, 'docs/orders/order-flow.md', '\n');
+    const stray = sandbox('sync-failed-stray');
+    const r = await exec(join(MODULE, 'bin/graph-query'), ['stats', '--db', db(sb)], { cwd: sb, env: { CTX_ROOT: stray } });
+    expect(r.code).toBe(0);
+    expect(r.stdout.split('\n')).toContain('  RULES: 2');
+    expect(r.stderr).toBe(
+      `[ast-doc-graph: the inline delta index failed (rc 1: Error: ast-doc-index runs inside a contexture drawer: CTX_ROOT names ${stray}, which holds no .contexture folder); answering from the graph as it stands. Run ast-doc-index --delta to refresh]\n`,
+    );
   });
 });
