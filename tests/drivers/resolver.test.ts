@@ -73,7 +73,7 @@ describe('the resolver', { concurrent: true }, () => {
     ['the store family', {}, ['require', 'store', 'store.changelog'], 2],
     ['the store family', {}, ['require', 'search.mode.hybrid'], 2],
     ['the store family', {}, ['has', 'search.schema'], 1],
-  ] as const)('[the-engine-r15] a planted card with %s answers %j rc %i', async (_, card, args, rc) => {
+  ] as const)('[the-engine-r15] a planted card with %s (%j) answers %j rc %i', async (_, card, args, rc) => {
     const sb = fresh(posix);
     const w = wrap(join(sb, 'w/driver'), driverPath(sb, 'posix'), card as Card);
     const r = await rsv(sb, [`--driver=${w}`, ...args]);
