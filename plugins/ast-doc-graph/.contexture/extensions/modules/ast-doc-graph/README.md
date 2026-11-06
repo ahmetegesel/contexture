@@ -43,7 +43,9 @@ This files-only limit stands until the extraction routes through `ctx docs`.
 
 Launchers resolve their runner dynamically: a project-local `tsx`, `tsx` on
 PATH, or Node with type stripping (the launchers end with
-`node --experimental-strip-types`). The graph database is generated, never
+`node --experimental-strip-types`). Each TypeScript entry point (the two
+extractors and the loader) runs its CLI only when executed as the script, so
+its exported helpers import without side effects. The graph database is generated, never
 shipped.
 
 ## Tests

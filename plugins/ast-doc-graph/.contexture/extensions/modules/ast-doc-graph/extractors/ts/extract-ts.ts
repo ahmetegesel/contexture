@@ -624,7 +624,9 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  console.error('Fatal extraction error:', err);
-  process.exit(1);
-});
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch((err) => {
+    console.error('Fatal extraction error:', err);
+    process.exit(1);
+  });
+}
