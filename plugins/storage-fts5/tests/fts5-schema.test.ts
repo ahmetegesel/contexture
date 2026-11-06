@@ -28,7 +28,7 @@ const digest = (db: string) => createHash('sha256').update(Buffer.concat([db, `$
 const schemaRefusal = (v: number) => `the store is at schema ${v}; this driver reads 5 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs`;
 
 describe.skipIf(!fts5Available())('the fts5 store schema', { concurrent: true }, () => {
-  it('an absent store: the first write lays schema 5, store-only, with no backup', async () => {
+  it('[the-engine-r16] an absent store: the first write lays schema 5, store-only, with no backup', async () => {
     const { db, dir, s } = at('new.db');
     answer(await s.put('docs', 'workspace/new', 'schema probe\n'), 'store.put');
     expect(version(db)).toBe('5');
@@ -56,7 +56,7 @@ describe.skipIf(!fts5Available())('the fts5 store schema', { concurrent: true },
     expect(backups(dir, db)).toEqual([]);
   });
 
-  it.each([4, 0, 6])('a store at version %i: get, list, and put refuse rc 2 naming it, the file untouched, no backup', async (v) => {
+  it.each([4, 0, 6])('[plugins-r8] a store at version %i: get, list, and put refuse rc 2 naming it, the file untouched, no backup', async (v) => {
     const { db, dir, s } = at(`v${v}.db`);
     sqlite(db, `CREATE TABLE sessions (unit TEXT PRIMARY KEY); INSERT INTO sessions VALUES ('old-unit'); PRAGMA user_version = ${v};`);
     const pre = readFileSync(db);

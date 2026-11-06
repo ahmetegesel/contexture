@@ -34,7 +34,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
     ]);
   });
 
-  it('never lists or scans a planted row the pattern does not admit', async () => {
+  it('[modules-r10] never lists or scans a planted row the pattern does not admit', async () => {
     const sb = fresh(docs);
     sqlite(db(sb), "INSERT INTO store (namespace, key, value, updated_at) VALUES ('docs', 'top', x'78', 't'), ('docs', 'workspace/deep/x', x'78', 't');");
     const s = store(sb, 'fts5');
@@ -42,7 +42,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
     expect((await s.scan('docs')).stdout).toBe('{"namespace":"docs","items":[{"key":"workspace/a","value_b64":"YQo="}]}\n');
   });
 
-  it('stores an empty value as a zero-length blob', async () => {
+  it('[the-engine-r19] stores an empty value as a zero-length blob', async () => {
     const sb = fresh(docs);
     answer(await store(sb, 'fts5').put('docs', 'workspace/empty', ''), 'store.put');
     expect(rows(sb, "SELECT length(value) FROM store WHERE namespace = 'docs' AND key = 'workspace/empty';")).toEqual(['0']);
@@ -54,32 +54,32 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       return answer(r, 'store.search');
     }
 
-    it.each(['hybrid', 'trigram'])('answers %s over the derived documents with the entity identity and a positive score', async (mode) => {
+    it.each(['hybrid', 'trigram'])('[plugins-r8] answers %s over the derived documents with the entity identity and a positive score', async (mode) => {
       const a = await ranked('searchdoc', mode, 'needle');
       expect([a.namespace, a.query, a.mode, a.total_matches]).toEqual(['searchdoc', 'needle', mode, 3]);
       expect(a.results).toContainEqual(expect.objectContaining({ key: 'u1/backlog', entity_type: 'task', entity_id: 'beta' }));
       if (mode === 'hybrid') for (const r of a.results) expect(r.score).toBeGreaterThan(0);
     });
 
-    it.each([['flatdoc', 'f1/x'], ['genericdoc', 'g1/x'], ['jsondoc', 'j1/x']])('ranks the %s module as one body document', async (ns, key) => {
+    it.each([['flatdoc', 'f1/x'], ['genericdoc', 'g1/x'], ['jsondoc', 'j1/x']])('[plugins-r8] ranks the %s module as one body document', async (ns, key) => {
       const a = await ranked(ns, 'hybrid', 'needle');
       expect(a.results).toEqual([expect.objectContaining({ key, entity_type: 'document', entity_id: key, section: 'body' })]);
       expect(a.results[0].score).toBeGreaterThan(0);
     });
 
-    it('refuses a mode the module does not declare, by name', async () => {
+    it('[modules-r10] refuses a mode the module does not declare, by name', async () => {
       refused(await store(fresh(searched), 'fts5').search('exactonly', 'hybrid', '20', q('needle')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
         "mode 'hybrid' is not declared by namespace 'exactonly'; declared modes: exact");
     });
 
-    it('answers a query holding a double quote on one line, a lone quote with no rows', async () => {
+    it('[plugins-r8] answers a query holding a double quote on one line, a lone quote with no rows', async () => {
       const quoted = await ranked('searchdoc', 'hybrid', 'needle"');
       expect([quoted.query, quoted.total_matches]).toEqual(['needle"', 3]);
       const lone = await ranked('searchdoc', 'hybrid', '"');
       expect([lone.query, lone.total_matches, lone.results]).toEqual(['"', 0, []]);
     });
 
-    it('re-derives a namespace whose search schema changed before it ranks', async () => {
+    it('[plugins-r8, modules-r10] re-derives a namespace whose search schema changed before it ranks', async () => {
       const sb = fresh(searched);
       const before = answer(await store(sb, 'fts5').search('searchdoc', 'hybrid', '20', q('ACTIVE')), 'store.search');
       expect(before.results.map((r: { entity_type: string }) => r.entity_type)).toContain('session');
@@ -101,7 +101,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
     }
     const strip = (a: { changes: Record<string, unknown>[] }) => a.changes.map(({ at, ...rest }) => (expect(at).toMatch(/^\d{4}-\d\d-\d\dT/), rest));
 
-    it('answers the rows of the asked heads in order with every field, a head window, and no heads as an empty list', async () => {
+    it('[plugins-r8] answers the rows of the asked heads in order with every field, a head window, and no heads as an empty list', async () => {
       const { s } = await logged();
       expect(strip(answer(await s.changes('docs'), 'store.changes'))).toEqual([]);
       expect(strip(answer(await s.op('store.changes', ['docs'], 'head=none\nhead=abc\n'), 'store.changes'))).toEqual([
@@ -113,7 +113,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       expect(strip(answer(await s.op('store.changes', ['docs'], 'head=abc\n'), 'store.changes')).map((c) => c.seq)).toEqual([3]);
     });
 
-    it('refuses a malformed head, an unknown payload line, and a namespace without a log', async () => {
+    it('[plugins-r8, the-engine-r9] refuses a malformed head, an unknown payload line, and a namespace without a log', async () => {
       const { sb, s } = await logged();
       refused(await s.op('store.changes', ['docs'], 'head=zz\n'), 'store.changes', 1, 'ERR_INVALID_ARGUMENT', "a head is a commit id or none: 'zz'");
       refused(await s.op('store.changes', ['docs'], 'what=1\n'), 'store.changes', 1, 'ERR_INVALID_ARGUMENT', "unknown payload line 'what=1' (head=<sha> lines only)");
@@ -121,7 +121,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       refused(await s.changes('probe'), 'store.changes', 1, 'ERR_CAPABILITY_UNSUPPORTED', "the namespace 'probe' declares no change log (changes: false)");
     });
 
-    it('logs nothing for a refused write', async () => {
+    it('[plugins-r8] logs nothing for a refused write', async () => {
       const { sb, s } = await logged();
       const n = changeCount(sb);
       refused(await s.put('docs', 'a/b/c', 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', "key 'a/b/c' does not match the namespace pattern '<repo>/<slug>'");
@@ -131,7 +131,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       expect(changeCount(sb)).toBe(n);
     });
 
-    it('lands one change row per batch action in order, prior at its position', async () => {
+    it('[plugins-r8] lands one change row per batch action in order, prior at its position', async () => {
       const { sb, s } = await logged();
       answer(await s.put('docs', 'workspace/bat1', 'one\n'), 'store.put');
       const seq = Number(sqlite(db(sb), 'SELECT max(seq) FROM store_changes;'));
@@ -147,7 +147,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
   });
 
   describe('a planted trigger', () => {
-    it('aborts a put whole: the old value and the log survive, and the retry lands', async () => {
+    it('[the-engine-r18, the-engine-r19] aborts a put whole: the old value and the log survive, and the retry lands', async () => {
       const sb = fresh(docs);
       const s = store(sb, 'fts5');
       answer(await s.put('docs', 'workspace/atomic', 'atomic-old\n'), 'store.put');
@@ -161,7 +161,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       expect((await s.get('docs', 'workspace/atomic')).stdout).toBe('atomic-new\n');
     });
 
-    it('rolls a batch back when its second action fails, names action 2, and logs nothing', async () => {
+    it('[the-engine-r18, the-engine-r19, the-engine-r21] rolls a batch back when its second action fails, names action 2, and logs nothing', async () => {
       const sb = fresh(docs);
       const s = store(sb, 'fts5');
       const n = changeCount(sb);
