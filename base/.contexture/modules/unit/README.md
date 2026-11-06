@@ -70,7 +70,7 @@ every state, then each ACTIVE unit's backlog only, never a journal, so the deriv
 comes from one data-script pass; a non-ACTIVE unit answers its state fields alone, its
 derived fields null. The scan is not the record's read path.
 
-A write fetches under the unit lock (`.contexture/tmp/locks/<unit>.lock`), stages the
+A write fetches under the unit lock (`.contexture/tmp/locks/unit/<unit>.lock`), stages the
 changed artifacts with the record engine, and lands them through one `store.batch`, all or
 none. The multi-key writes are the batch's: `session.create`
 the four fresh artifacts, `task.start` the backlog alone (the state no longer holds a
@@ -79,7 +79,9 @@ next action), `task.complete` and
 `lane.create` the recipe and the lane journal, `lane.record` the lane journal. The driver's
 namespace-scope batch lock (`store-unit.lock`, taken inside the unit lock at the commit)
 serializes the batches; the unit lock serializes the read to the commit, the single-user
-trade named.
+trade named. The unit locks keep their own folder (`locks/unit/`) beside the drivers' flat
+`locks/store-<namespace>.lock`, so no unit name can meet a namespace lock: a unit named
+`store-unit` or `store-docs` locks like any other.
 
 The lock folder carries its holder's pid. A waiter polls every 0.1 s: it removes a lock
 whose pid is gone at once, gives a pid-less lock ten polls of grace, and refuses a live
@@ -88,8 +90,7 @@ processes, so the wait measured 82 s at a load of 4.5); where `sleep` refuses a 
 a poll sleeps 1 s and counts as ten, so the sleep still totals 60 s. The recovery clears
 every dead holder, so the wait exists only to bound a live one, busy or hung (a stopped
 process, a holder blocked on its input, a pid reused by another process), turning an
-endless wait into a named error (a unit named `store-unit` even waits on itself, since
-its lock folder is the unit store's namespace lock). Its size is measured on a 1 MB unit:
+endless wait into a named error. Its size is measured on a 1 MB unit:
 six writers arriving at once (five lanes and their dispatcher) wait at most 6.8 s on
 posix and 29 s on fts5 with four more writers busy on other units, eight writers 9.3 s and
 42 s, so the 60 s floor holds a margin over that need, while the error still surfaces

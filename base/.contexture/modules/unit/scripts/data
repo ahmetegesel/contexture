@@ -112,14 +112,16 @@ u_scratch() {
 }
 
 # u_lock <unit>: the unit lock folder, held from the read to the batch commit (the driver
-# takes its namespace lock inside it, at the commit). A waiter removes a lock whose holder
-# pid is gone, gives a pid-less lock ten polls of grace, and refuses a live holder (busy or
-# hung) after 600 polls 0.1 s apart (60 s of sleep); where sleep refuses a fraction, a poll
-# sleeps 1 s and counts as ten
+# takes its namespace lock inside it, at the commit). The unit locks live in their own
+# folder, locks/unit/, beside the drivers' flat locks/store-<namespace>.lock, so no unit
+# name can meet a namespace lock. A waiter removes a lock whose holder pid is gone, gives
+# a pid-less lock ten polls of grace, and refuses a live holder (busy or hung) after 600
+# polls 0.1 s apart (60 s of sleep); where sleep refuses a fraction, a poll sleeps 1 s and
+# counts as ten
 u_lock() {
   u_tmp=$(store_lib_root)/.contexture/tmp
-  mkdir -p "$u_tmp/locks" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the lock folder"
-  U_LT="$u_tmp/locks/$1.lock"
+  mkdir -p "$u_tmp/locks/unit" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the lock folder"
+  U_LT="$u_tmp/locks/unit/$1.lock"
   U_LN=0
   U_LM=0
   while [ "$U_LN" -lt 600 ]; do

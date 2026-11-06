@@ -47,7 +47,8 @@ batch holds that lock once, validates the whole action list against the live key
 a value per put, and commits every key under one store-scope undo log; its first failure
 prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and
 nothing is written. The namespace lock (`.contexture/tmp/locks/store-<namespace>.lock`, the
-same rule in the fts5 driver) carries its holder's pid: a waiter polls every 0.1 s, removes
+same rule in the fts5 driver; the unit module's unit locks keep their own folder,
+`locks/unit/`, so no unit name meets a namespace lock) carries its holder's pid: a waiter polls every 0.1 s, removes
 a lock whose pid is gone at once, gives a pid-less lock ten polls of grace, and refuses a
 live holder rc 2 `ERR_STORAGE_LOCKED` after 600 polls (60 s of sleep), the unit lock's
 wait (the unit module's README names why and how it was sized); where `sleep` refuses a
