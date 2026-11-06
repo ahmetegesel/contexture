@@ -25,7 +25,7 @@ function plantCopy(): string {
 const remainder = (r: Run, file: string): string[] => r.stdout.split('\n').filter((l) => l.startsWith(`REMAINDER ${file}:`));
 
 describe('the single-door census of the docs module', { concurrent: true }, () => {
-  it('lists the verbs and engines, never the grammar asset', () => {
+  it('[docs-module-r1] lists the verbs and engines, never the grammar asset', () => {
     const names = scripts(SCRIPTS).map((p) => p.slice(SCRIPTS.length + 1));
     expect(names).toContain('docs-io.sh');
     expect(names).toContain('docs-edit.awk');
@@ -33,7 +33,7 @@ describe('the single-door census of the docs module', { concurrent: true }, () =
     expect(names).not.toContain('doc.grammar');
   });
 
-  it('reads remainder 0 over the shipped scripts, every flagged line a helper or classified', async () => {
+  it('[docs-module-r1, plugins-r2] reads remainder 0 over the shipped scripts, every flagged line a helper or classified', async () => {
     const r = await census(SCRIPTS);
     expect(r.code, r.stdout + r.stderr).toBe(0);
     const summary = r.stdout.match(/^census: flagged (\d+) = helper (\d+) \+ classified (\d+) \+ remainder (\d+)$/m);
@@ -45,7 +45,7 @@ describe('the single-door census of the docs module', { concurrent: true }, () =
     expect(classified).toBeGreaterThan(0);
   });
 
-  it('reads a cat of a composed corpus path planted in a verb as REMAINDER', async () => {
+  it('[docs-module-r1] reads a cat of a composed corpus path planted in a verb as REMAINDER', async () => {
     const dir = plantCopy();
     appendFileSync(join(dir, 'query'), 'cat "$ROOT_DIR/docs/$REPO/x.md" >/dev/null\n');
     const r = await census(dir);
@@ -53,7 +53,7 @@ describe('the single-door census of the docs module', { concurrent: true }, () =
     expect(remainder(r, 'query')).toHaveLength(1);
   });
 
-  it('reads a getline over a computed path planted in an engine as REMAINDER', async () => {
+  it('[docs-module-r1] reads a getline over a computed path planted in an engine as REMAINDER', async () => {
     const dir = plantCopy();
     const engine = readFileSync(join(dir, 'docs-check.awk'), 'utf8');
     const at = engine.search(/^END \{\n/m) + 'END {\n'.length;
@@ -63,7 +63,7 @@ describe('the single-door census of the docs module', { concurrent: true }, () =
     expect(remainder(r, 'docs-check.awk')).toHaveLength(1);
   });
 
-  it('reads a quote-split corpus path read by awk without -f as REMAINDER twice', async () => {
+  it('[docs-module-r1] reads a quote-split corpus path read by awk without -f as REMAINDER twice', async () => {
     const dir = plantCopy();
     appendFileSync(join(dir, 'query'), 'pf="$DOCS_ROOT/do""cs/$REPO/x.m""d"\nawk \'NR == 1\' "$pf" >/dev/null 2>&1\n');
     const r = await census(dir);

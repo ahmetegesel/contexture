@@ -43,32 +43,32 @@ async function refuses(sb: string, args: string[], slug: string, rc: number, mes
 }
 
 describe('the write verbs through ctx on posix: one success per verb, the stored bytes', { concurrent: true }, () => {
-  it('new', async () => {
+  it('[modules-r9, docs-module-r23] new', async () => {
     await succeeds(fresh(wtest), ['new', 'wtest', 'fresh', '--kind=structural', '--description=A fresh doc', '--sources=src/fresh/**', '--keywords=fresh'], 'fresh', golden('exp-new.md'));
   });
-  it('write', async () => {
+  it('[modules-r9, docs-module-r23] write', async () => {
     await succeeds(fresh(wtest), ['write', 'wtest', 'written'], 'written', golden('written.md'), golden('written.md'));
   });
-  it('header', async () => {
+  it('[modules-r9, docs-module-r23] header', async () => {
     await succeeds(fresh(wtest), ['header', 'wtest', 'unit', '--add-source=src/more/**', '--remove-keyword=unit', '--upstream=An upstream note'], 'unit', golden('exp-header.md'));
   });
-  it('rule', async () => {
+  it('[modules-r9, docs-module-r21] rule', async () => {
     await succeeds(fresh(wtest), ['rule', 'wtest', 'conv', 'docs/second', '--caution=Mind it', '--status=violated'], 'conv', golden('exp-rule-update.md'));
   });
-  it('pitfall', async () => {
+  it('[modules-r9, docs-module-r21] pitfall', async () => {
     await succeeds(fresh(wtest), ['pitfall', 'wtest', 'unit', 'unit-p1', '--severity=high', '--consequence=Now one line'], 'unit', golden('exp-pitfall-update.md'));
   });
-  it('entry', async () => {
+  it('[modules-r9, docs-module-r21] entry', async () => {
     await succeeds(fresh(wtest), ['entry', 'wtest', 'unit', 'contract', '--rule=The middle invariant', '--evidence=midSym', '--after=#1'], 'unit', golden('exp-entry-contract-add.md'), '', { DOCS_ID_SEED: ID_SEED });
   });
-  it('section', async () => {
+  it('[modules-r9, docs-module-r24] section', async () => {
     await succeeds(fresh(wtest), ['section', 'wtest', 'unit', 'see_also'], 'unit', golden('exp-section-replace.md'), read('see-also.block'));
   });
-  it('replace', async () => {
+  it('[modules-r9, docs-module-r24] replace', async () => {
     const r = await succeeds(fresh(wtest), ['replace', 'wtest', '--old=invariant holds', '--new=invariant stands', '--count=2'], 'unit', golden('exp-replace.md'));
     expect(r.stdout).toContain('2 replaced in 1 docs');
   });
-  it('W25 remove', async () => {
+  it('W25 [docs-module-r24] remove', async () => {
     const sb = fresh(wtest);
     await putDocs(sb, 'posix', { 'wtest/fresh': golden('exp-new.md') });
     const r = await docs(sb, ['remove', 'wtest', 'fresh']);
@@ -81,7 +81,7 @@ describe('the write verbs through ctx on posix: one success per verb, the stored
     expect([r.code, r.stderr]).toEqual([0, '']);
     expect(r.stdout).toBe(`docs remove: wtest/unit removed\n${read('unit.md')}ctx docs remove: dry run, nothing written\n`);
   });
-  it('W27 ids keys the legacy entries and names the count', async () => {
+  it('W27 [docs-module-r22] ids keys the legacy entries and names the count', async () => {
     const r = await succeeds(fresh(wtest), ['ids', 'wtest'], 'unit', golden('exp-ids.md'), '', { DOCS_ID_SEED: ID_SEED });
     expect(r.stdout).toContain('4 entries keyed');
   });
@@ -111,21 +111,21 @@ describe('a dispatched docs verb stages its scratch inside the per-verb root the
 });
 
 describe('a components entry takes its kind through --kind on posix', { concurrent: true }, () => {
-  it('adds a component with its kind', async () => {
+  it('[docs-module-r19] adds a component with its kind', async () => {
     await succeeds(fresh(wtest), ['entry', 'wtest', 'map', 'components', '--name=beta', '--repo=wtest', '--kind=runtime', '--stack=sh', '--responsibilities=Beta things'], 'map', golden('exp-entry-component-kind-add.md'));
   });
-  it('changes the kind of an existing component', async () => {
+  it('[docs-module-r19] changes the kind of an existing component', async () => {
     await succeeds(fresh(wtest), ['entry', 'wtest', 'map', 'components', 'alpha', '--kind=runtime'], 'map', golden('exp-entry-component-kind-change.md'));
   });
 });
 
 describe('the write pipeline through ctx on posix', { concurrent: true }, () => {
-  it('W4 write --replace of the stored bytes writes nothing', async () => {
+  it('W4 [docs-module-r18] write --replace of the stored bytes writes nothing', async () => {
     const sb = fresh(wtest);
     const r = await unchanged(sb, 'unit', () => docs(sb, ['write', 'wtest', 'unit', '--replace'], { input: read('unit.md') }));
     expect([r.code, r.stdout]).toEqual([0, 'docs write: wtest/unit unchanged (nothing written)\n']);
   });
-  it('W21 a --stdin body past the argument and environment limit lands whole', async () => {
+  it('W21 [docs-module-r19] a --stdin body past the argument and environment limit lands whole', async () => {
     const sb = fresh(wtest);
     const big = Array.from({ length: 14000 }, (_, i) => `big detail line ${String(i + 1).padStart(6, '0')}, padded out to about eighty bytes wide for the limit\n`).join('');
     expect(big.length).toBeGreaterThan(1_000_000);
@@ -138,50 +138,50 @@ describe('the write pipeline through ctx on posix', { concurrent: true }, () => 
     const detail = body.slice(start, end).map((l) => l.slice(6));
     expect(`${detail.join('\n')}\n`).toBe(big);
   });
-  it('W26 ids --dry-run counts and writes nothing', async () => {
+  it('W26 [docs-module-r22] ids --dry-run counts and writes nothing', async () => {
     const sb = fresh(wtest);
     const r = await unchanged(sb, 'unit', () => docs(sb, ['ids', 'wtest', '--dry-run']));
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('dry run: 4 in 1 docs');
   });
-  it('W28 an ids rerun keys 0 and writes nothing', async () => {
+  it('W28 [docs-module-r22] an ids rerun keys 0 and writes nothing', async () => {
     const sb = fresh(wtest);
     expect((await docs(sb, ['ids', 'wtest'])).code).toBe(0);
     const r = await unchanged(sb, 'unit', () => docs(sb, ['ids', 'wtest']));
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('0 entries keyed');
   });
-  it('W30 entry --dry-run prints and writes nothing', async () => {
+  it('W30 [docs-module-r18] entry --dry-run prints and writes nothing', async () => {
     const sb = fresh(wtest);
     const r = await unchanged(sb, 'unit', () => docs(sb, ['entry', 'wtest', 'unit', 'contract', '--rule=A dry rule', '--evidence=drySym', '--dry-run']));
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('dry run, nothing written');
   });
-  it('W40 a missing doc', async () => {
+  it('W40 [docs-module-r18] a missing doc', async () => {
     await refuses(fresh(wtest), ['header', 'wtest', 'nosuch', '--description=x'], 'nosuch', 1, 'no such doc: wtest/nosuch (ERR_ENTITY_NOT_FOUND)');
   });
-  it('W41 a stale replace count names the real count', async () => {
+  it('W41 [docs-module-r24] a stale replace count names the real count', async () => {
     await refuses(fresh(wtest), ['replace', 'wtest', 'unit', '--old=invariant holds', '--new=x', '--count=5'], 'unit', 1, '2 occurrences in scope, --count says 5');
   });
-  it('W42 the result fails the repo audit: an id another doc holds', async () => {
+  it('W42 [modules-r9, docs-module-r18] the result fails the repo audit: an id another doc holds', async () => {
     const sb = fresh(wtest);
     await putDocs(sb, 'posix', { 'wtest/dup': read('dup.md') });
     const r = await refuses(sb, ['pitfall', 'wtest', 'unit', '--id=unit-p5', '--summary=s', '--class=bug', '--severity=low', '--trigger=t', '--consequence=c', '--evidence=e'], 'unit', 1, 'fails the grammar audit');
     expect(r.stderr).toContain("duplicate id 'unit-p5'");
   });
-  it('W43 the result fails the repo audit: an unknown block', async () => {
+  it('W43 [modules-r9, docs-module-r18] the result fails the repo audit: an unknown block', async () => {
     await refuses(fresh(wtest), ['write', 'wtest', 'badblock'], 'badblock', 1, "unknown block header '@bogus'", read('bad-block.md'));
   });
-  it('W51 new over an existing doc', async () => {
+  it('W51 [docs-module-r23] new over an existing doc', async () => {
     await refuses(fresh(wtest), ['new', 'wtest', 'unit', '--kind=capability', '--description=d', '--sources=a', '--keywords=b'], 'unit', 1, 'wtest/unit already exists (ERR_ENTITY_EXISTS)');
   });
-  it('W52 write over an existing doc without --replace', async () => {
+  it('W52 [docs-module-r23] write over an existing doc without --replace', async () => {
     await refuses(fresh(wtest), ['write', 'wtest', 'unit'], 'unit', 1, '--replace rewrites it whole', read('unit.md'));
   });
-  it('W53 --replace of an absent doc', async () => {
+  it('W53 [docs-module-r23] --replace of an absent doc', async () => {
     await refuses(fresh(wtest), ['write', 'wtest', 'written', '--replace'], 'written', 1, '--replace rewrites an existing doc', read('written.md'));
   });
-  it('RS2 a missing module grammar refuses rc 2 naming the asset and the reinstall fix', async () => {
+  it('RS2 [docs-module-r3] a missing module grammar refuses rc 2 naming the asset and the reinstall fix', async () => {
     const sb = fresh(wtest);
     renameSync(join(sb, STAGED_SCRIPTS, 'doc.grammar'), join(sb, 'doc.grammar.away'));
     const r = await refuses(sb, ['write', 'wtest', 'probe'], 'probe', 2, 'the corpus grammar asset scripts/doc.grammar is missing', '@doc probe probe\n  repo: workspace\n');

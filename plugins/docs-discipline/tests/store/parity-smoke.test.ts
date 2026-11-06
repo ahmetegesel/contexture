@@ -21,18 +21,18 @@ describe.skipIf(!fts5Available())('the read verbs on the fts5 store answer what 
     ['the rules of a repo', ['query', 'workspace', '--rules'], 'query/rules-repo.txt'],
     ['the pitfalls', ['query', '--pitfalls'], 'query/pitfalls.txt'],
     ['the nudge of the sample backlog', ['nudge', 'backlog.md', 'demo-orders', 'demo-web', 'workspace'], 'nudge/sample-backlog.txt'],
-  ])('%s', async (_, args, file) => {
+  ])('[docs-module-r1] %s', async (_, args, file) => {
     const r = await docs(fresh(corpus), args);
     expect([r.code, r.stderr]).toEqual([0, '']);
     expect(r.stdout).toBe(asTheVerbPrints(expected(file)));
   });
 
-  it('the whole audit is silent', async () => {
+  it('[docs-module-r1] the whole audit is silent', async () => {
     const r = await docs(fresh(corpus), ['audit', 'demo-orders', 'demo-web', 'workspace']);
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
   });
 
-  it('S1 the check runs in its store mode: STALE DOC where the files driver prints the blanket', async () => {
+  it('S1 [docs-module-r13, docs-module-r15] the check runs in its store mode: STALE DOC where the files driver prints the blanket', async () => {
     const delta = 'M\tprojects/demo-orders/src/order/validate.ts\nM\tdocs/workspace/system-map.md\n';
     expect(expected('check/11-workspace-doc-rides.txt')).toContain('FRESH (BLANKET): demo-orders > order-flow');
     const r = await docs(fresh(corpus), ['check', 'demo-orders', 'demo-web', 'workspace'], { input: delta });

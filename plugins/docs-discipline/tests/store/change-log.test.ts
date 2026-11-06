@@ -44,7 +44,7 @@ describe.skipIf(!fts5Available())('the change log of the docs writes on fts5', {
     ['replace', ['replace', 'wtest', 'unit', '--old=invariant holds', '--new=invariant stands', '--count=2'], 'wtest/unit'],
     ['remove', ['remove', 'wtest', 'map'], 'wtest/map'],
     ['ids', ['ids', 'wtest'], 'wtest/unit'],
-  ])('%s logs one row with its op and the workspace HEAD', async (op, args, key, input) => {
+  ])('[modules-r9, docs-module-r18] %s logs one row with its op and the workspace HEAD', async (op, args, key, input) => {
     const sb = fresh(wlog);
     const head = await headOf(sb);
     expect(await rows(sb, head)).toEqual([]);
@@ -59,14 +59,14 @@ describe.skipIf(!fts5Available())('the change log of the docs writes on fts5', {
     ['an audit refusal', ['write', 'wtest', 'badblock'], 'bad-block.md'],
     ['an unchanged --replace', ['write', 'wtest', 'unit', '--replace'], 'unit.md'],
     ['a dry run', ['entry', 'wtest', 'unit', 'contract', '--rule=A dry rule', '--evidence=drySym', '--dry-run']],
-  ])('logs no row for %s', async (_, args, input) => {
+  ])('[docs-module-r18] logs no row for %s', async (_, args, input) => {
     const sb = fresh(wlog);
     const head = await headOf(sb);
     await docs(sb, args, { input: input ? read(input) : '' });
     expect(await rows(sb, head)).toEqual([]);
   });
 
-  it('W61 ctx docs changes reads the window back: A for a new doc, M for a written one, nothing for one created and removed', async () => {
+  it('W61 [docs-module-r15] ctx docs changes reads the window back: A for a new doc, M for a written one, nothing for one created and removed', async () => {
     const sb = fresh(wlog);
     for (const args of [
       ['new', 'wtest', 'late', '--kind=structural', '--description=Late', '--sources=late', '--keywords=late'],
@@ -82,7 +82,7 @@ describe.skipIf(!fts5Available())('the change log of the docs writes on fts5', {
     expect(r.stdout).not.toContain('docs/wtest/gone.md');
   });
 
-  it('null check: the stored bytes of a logged write are the golden', async () => {
+  it('[docs-module-r18] null check: the stored bytes of a logged write are the golden', async () => {
     const sb = fresh(wlog);
     expect((await docs(sb, ['pitfall', 'wtest', 'unit', 'unit-p1', '--severity=high', '--consequence=Now one line'])).code).toBe(0);
     expect((await store(sb, 'fts5').get('docs', 'wtest/unit')).stdout).toBe(golden('exp-pitfall-update.md'));

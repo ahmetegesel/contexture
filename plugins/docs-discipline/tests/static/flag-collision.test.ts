@@ -55,7 +55,7 @@ const REFUSES = [
 ].join('\n');
 
 describe('the flag collision check of the field verbs', { concurrent: true }, () => {
-  it('reads the shipped collisions: the components kind settable through entry, the id pairs allowed', async () => {
+  it('[docs-module-r20] reads the shipped collisions: the components kind settable through entry, the id pairs allowed', async () => {
     const r = await collide();
     expect(r.code, r.stdout + r.stderr).toBe(0);
     expect(r.stdout).toMatch(/^COLLISION entry components\.kind --kind settable; entry takes: after first remove id stdin dry-run$/m);
@@ -69,7 +69,7 @@ describe('the flag collision check of the field verbs', { concurrent: true }, ()
     expect(set + allowed).toBe(all);
   });
 
-  it('sets the field through docs_parse for every settable collision', async () => {
+  it('[docs-module-r19, docs-module-r20] sets the field through docs_parse for every settable collision', async () => {
     const found = settable(await collide());
     expect(found.length).toBeGreaterThan(0);
     for (const s of found) {
@@ -79,28 +79,28 @@ describe('the flag collision check of the field verbs', { concurrent: true }, ()
     }
   });
 
-  it('reads a planted grammar field named like a control the verb takes as REFUSED', async () => {
+  it('[docs-module-r20] reads a planted grammar field named like a control the verb takes as REFUSED', async () => {
     const grammar = planted('doc.grammar', 'doc.grammar', (t) => t.replace('#% field components kind word required\n', '#% field components kind word required\n#% field components after text optional\n'));
     const r = await collide({ 'doc.grammar': grammar });
     expect(r.code).toBe(1);
     expect(r.stdout).toMatch(/^COLLISION entry components\.after --after REFUSED: /m);
   });
 
-  it('reads a planted entry that takes the kind control as REFUSED', async () => {
+  it('[docs-module-r20] reads a planted entry that takes the kind control as REFUSED', async () => {
     const entry = planted('entry', 'entry', (t) => t.replace('docs_parse "after first remove id stdin dry-run" 1', 'docs_parse "after first remove id stdin dry-run kind" 1'));
     const r = await collide({ entry });
     expect(r.code).toBe(1);
     expect(r.stdout).toMatch(/^COLLISION entry components\.kind --kind REFUSED: /m);
   });
 
-  it('reads a planted entry without its blocks line as an empty reach', async () => {
+  it('[docs-module-r20] reads a planted entry without its blocks line as an empty reach', async () => {
     const entry = planted('entry', 'entry', (t) => t.replace(/^# help: blocks: .*\n/m, ''));
     const r = await collide({ entry });
     expect(r.code).toBe(1);
     expect(r.stdout).toMatch(/^REFUSED entry: no reach/m);
   });
 
-  it('reads the pre-fix docs_parse as refusing the settable kind', async () => {
+  it('[docs-module-r20] reads the pre-fix docs_parse as refusing the settable kind', async () => {
     const io = planted('docs-io.sh', 'docs-io.sh', (t) => t.replace(FALLS_THROUGH, REFUSES));
     const found = settable(await collide({ 'docs-io.sh': io }));
     expect(found.map((s) => `${s.verb} ${s.flag}`)).toContain('entry kind');

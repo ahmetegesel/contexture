@@ -26,7 +26,7 @@ describe('RS5f the read verbs on a driver that declares no store', { concurrent:
     ['gate', ['gate'], ''],
     ['nudge', ['nudge', 'nudge-demo'], ''],
     ['check', ['check', 'workspace'], 'M\tx.ts\n'],
-  ])('%s refuses rc 2 naming the store capability', async (_, args, input) => {
+  ])('[docs-module-r1, the-engine-r15] %s refuses rc 2 naming the store capability', async (_, args, input) => {
     const sb = fresh(staged);
     plantStoreless(sb);
     const r = await docs(sb, args, { input });
@@ -34,7 +34,7 @@ describe('RS5f the read verbs on a driver that declares no store', { concurrent:
     expect(r.stderr).toContain('store (ERR_CAPABILITY_UNSUPPORTED)');
   });
 
-  it('null check: the same verb on the shipped posix driver answers', async () => {
+  it('[docs-module-r1, the-engine-r15] null check: the same verb on the shipped posix driver answers', async () => {
     const r = await docs(fresh(staged), ['query', '--index']);
     expect(r.code).toBe(0);
   });

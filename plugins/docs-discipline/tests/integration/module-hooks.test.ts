@@ -16,19 +16,19 @@ beforeAll(() => {
 });
 
 describe('the docs module part hooks, in order on one workspace', { concurrent: false }, () => {
-  it('RS3a install seeds the corpus conventions once', async () => {
+  it('RS3a [plugins-r1, plugins-r2, modules-r13] install seeds the corpus conventions once', async () => {
     const r = await hook('install', context());
     expect(r.code, r.stderr).toBe(0);
     expect(r.stdout + r.stderr).toContain('seeded workspace conventions');
   });
 
-  it('RS3b the seeded doc reads back through ctx docs query', async () => {
+  it('RS3b [modules-r13] the seeded doc reads back through ctx docs query', async () => {
     const r = await docs(ws, ['query', 'workspace', 'conventions']);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('Universal workspace conventions');
   });
 
-  it('RS3c a second install leaves a present doc byte for byte', async () => {
+  it('RS3c [plugins-r2, modules-r13] a second install leaves a present doc byte for byte', async () => {
     expect((await docs(ws, ['header', 'workspace', 'conventions', '--description=A locally kept description'])).code).toBe(0);
     const before = (await docs(ws, ['query', 'workspace', 'conventions'])).stdout;
     const r = await hook('install', context());
@@ -39,7 +39,7 @@ describe('the docs module part hooks, in order on one workspace', { concurrent: 
     expect(after).toBe(before);
   });
 
-  it('RS3d uninstall leaves the corpus readable', async () => {
+  it('RS3d [plugins-r2, modules-r13] uninstall leaves the corpus readable', async () => {
     const r = await hook('uninstall', context());
     expect(r.code).toBe(0);
     expect(r.stdout + r.stderr).toContain('stays in the configured store');

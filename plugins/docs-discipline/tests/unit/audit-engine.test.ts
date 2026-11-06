@@ -17,20 +17,20 @@ const plant = (dir: string, path: string, text: string): string => {
 };
 
 describe('the audit engine', { concurrent: true }, () => {
-  it('reads the staged corpus clean: silent, rc 0', async () => {
+  it('[docs-module-r7] reads the staged corpus clean: silent, rc 0', async () => {
     const files = docFiles(sample);
     expect(files.length).toBeGreaterThanOrEqual(5);
     const r = await audit(sample, files);
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
   });
 
-  it('EC1 keeps one id namespace per repo across kinds (a rule id reused as a pitfall id)', async () => {
+  it('EC1 [docs-module-r7] keeps one id namespace per repo across kinds (a rule id reused as a pitfall id)', async () => {
     const r = await audit(engine, docFiles(engine, 'etest'));
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("docs/etest/idtwo.md:8: error: duplicate id 'idone-r1' in repo 'etest' (first seen at docs/etest/idone.md:9)");
   });
 
-  it('EC1 null check: the same ids in two repos read clean', async () => {
+  it('EC1 [docs-module-r7] null check: the same ids in two repos read clean', async () => {
     const dir = corpusDir('audit-two-repos', ENGINE_FIXTURES);
     mkdirSync(join(dir, 'docs/eother'));
     const moved = plant(dir, 'docs/eother/idtwo.md', readFileSync(join(dir, 'docs/etest/idtwo.md'), 'utf8').replace('repo: etest', 'repo: eother'));
@@ -38,14 +38,14 @@ describe('the audit engine', { concurrent: true }, () => {
     expect([r.code, r.stderr]).toEqual([0, '']);
   });
 
-  it('EC7 reads the pitfall schema from the grammar: the class enum and a missing trigger', async () => {
+  it('EC7 [docs-module-r7] reads the pitfall schema from the grammar: the class enum and a missing trigger', async () => {
     const r = await audit(engine, docFiles(engine, 'ebad'));
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("pitfall 'badpf-p1' class must be one of: bug tech-debt gotcha drift-risk (got 'urgent')");
     expect(r.stderr).toContain("pitfall 'badpf-p1' missing 'trigger:'");
   });
 
-  it('refuses an unknown block header', async () => {
+  it('[docs-module-r7] refuses an unknown block header', async () => {
     const dir = corpusDir('audit-block');
     const bad = readFileSync(join(WRITE, 'bad-block.md'), 'utf8');
     const r = await audit(dir, [plant(dir, 'docs/workspace/badblock.md', bad)]);
@@ -53,7 +53,7 @@ describe('the audit engine', { concurrent: true }, () => {
     expect(r.stderr).toContain("unknown block header '@bogus'");
   });
 
-  it('refuses a line-number evidence, an invalid kind, and a slug that is not the file name', async () => {
+  it('[docs-module-r7] refuses a line-number evidence, an invalid kind, and a slug that is not the file name', async () => {
     const dir = corpusDir('audit-header');
     const doc = readFileSync(join(WRITE, 'unit.md'), 'utf8');
     const files = [
@@ -68,7 +68,7 @@ describe('the audit engine', { concurrent: true }, () => {
     expect(r.stderr).toContain("docs/workspace/named.md:1: error: slug 'other' does not match filename 'named'");
   });
 
-  it('W42 engine side: an id another doc of the repo holds', async () => {
+  it('W42 [docs-module-r7] engine side: an id another doc of the repo holds', async () => {
     const dir = corpusDir('audit-dup');
     const unit = readFileSync(join(WRITE, 'unit.md'), 'utf8').replace('repo: wtest', 'repo: workspace');
     plant(dir, 'docs/workspace/dup.md', readFileSync(join(WRITE, 'dup.md'), 'utf8').replace('repo: wtest', 'repo: workspace'));

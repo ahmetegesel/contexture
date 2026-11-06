@@ -22,12 +22,12 @@ describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half
   const codeChange = (sb: string): void => writeFileSync(join(sb, 'src/gw.sh'), 'echo gw2\n');
   const gate = (sb: string): Promise<Run> => docs(sb, ['gate']);
 
-  it('S10 reads clean once the doc is older than HEAD', async () => {
+  it('S10 [docs-module-r15, docs-module-r16] reads clean once the doc is older than HEAD', async () => {
     const r = await gate(await committed());
     expect(r.code, r.stdout + r.stderr).toBe(0);
   });
 
-  it('S11 a code change alone reads STALE', async () => {
+  it('S11 [docs-module-r16] a code change alone reads STALE', async () => {
     const sb = await committed();
     codeChange(sb);
     const r = await gate(sb);
@@ -35,7 +35,7 @@ describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half
     expect(r.stdout + r.stderr).toContain('STALE DOC: workspace/gw-unit');
   });
 
-  it('S13 the doc written under the same HEAD reads FRESH', async () => {
+  it('S13 [docs-module-r15, docs-module-r16] the doc written under the same HEAD reads FRESH', async () => {
     const sb = await committed();
     codeChange(sb);
     expect((await docs(sb, ['header', 'workspace', 'gw-unit', '--add-keyword=fresh'])).code).toBe(0);
@@ -44,7 +44,7 @@ describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half
     expect(r.stdout).toContain('FRESH: workspace > gw-unit');
   });
 
-  it('S15 a commit empties both halves', async () => {
+  it('S15 [docs-module-r15, docs-module-r16] a commit empties both halves', async () => {
     const sb = await committed();
     codeChange(sb);
     expect((await docs(sb, ['header', 'workspace', 'gw-unit', '--add-keyword=fresh'])).code).toBe(0);
@@ -54,7 +54,7 @@ describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half
     expect(r.stdout + r.stderr).toContain('0 modified files');
   });
 
-  it('S21 --since reads FRESH over a commit that carried a code change and a doc write, where the plain gate reads 0 modified files', async () => {
+  it('S21 [docs-module-r15, docs-module-r16] --since reads FRESH over a commit that carried a code change and a doc write, where the plain gate reads 0 modified files', async () => {
     const sb = await committed();
     const h1 = await head(sb);
     codeChange(sb);
@@ -66,7 +66,7 @@ describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half
     expect(r.stdout).toContain('FRESH: workspace > gw-unit');
   });
 
-  it('S22 --since reads STALE over a commit that carried a code change alone', async () => {
+  it('S22 [docs-module-r16] --since reads STALE over a commit that carried a code change alone', async () => {
     const sb = await committed();
     const h1 = await head(sb);
     codeChange(sb);
@@ -77,7 +77,7 @@ describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half
     expect(r.stderr).not.toContain('[GATE NOTICE]');
   });
 
-  it('S16 a lingering corpus file is not the corpus', async () => {
+  it('S16 [docs-module-r16] a lingering corpus file is not the corpus', async () => {
     const sb = await committed();
     codeChange(sb);
     mkdirSync(join(sb, 'docs/workspace'), { recursive: true });

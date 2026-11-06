@@ -33,12 +33,12 @@ beforeAll(async () => {
 });
 
 describe('the read verbs through ctx on posix', { concurrent: true }, () => {
-  it('RS5a audit over the staged corpus is silent, rc 0', async () => {
+  it('RS5a [docs-module-r7] audit over the staged corpus is silent, rc 0', async () => {
     const r = await docs(fresh(staged), ['audit', 'docs/*/*.md']);
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
   });
 
-  it('query prints the engine answer unchanged', async () => {
+  it('[docs-module-r1] query prints the engine answer unchanged', async () => {
     const r = await docs(fresh(corpus), ['query', 'demo-orders', 'order-flow']);
     expect(r.code).toBe(0);
     expect(r.stdout).toBe(readFileSync(join(TESTS, 'unit/expected/query/projection.txt'), 'utf8'));
@@ -49,7 +49,7 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
     ['an address', ['docs/demo-orders/order-flow.md']],
     ['a literal repo pattern', ['docs/demo-orders/*.md']],
     ['a prefixed address', ['/elsewhere/docs/demo-web/cart-ui.md']],
-  ])('audit takes %s', async (_, args) => {
+  ])('[docs-module-r2] audit takes %s', async (_, args) => {
     const r = await docs(fresh(corpus), ['audit', ...args]);
     expect([r.code, r.stderr]).toEqual([0, '']);
   });
@@ -58,7 +58,7 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
     ['a doc the corpus lacks', ['docs/nosuch/missing.md'], 'no such doc: nosuch/missing'],
     ['a repo the corpus lacks', ['nosuchrepo'], 'no such repo: nosuchrepo'],
     ['a path outside the corpus forms', ['notes/README.txt'], 'not a corpus doc: notes/README.txt'],
-  ])('audit refuses %s rc 1', async (_, args, message) => {
+  ])('[docs-module-r7] audit refuses %s rc 1', async (_, args, message) => {
     const r = await docs(fresh(corpus), ['audit', ...args]);
     expect(r.code).toBe(1);
     expect(r.stderr).toContain(message);
@@ -71,19 +71,19 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
     ['edge', ['etest', '--edge', 'nosuchchannel'], "no edges match channel 'nosuchchannel'"],
     ['file', ['etest', '--file', 'no/such/path'], "no doc owns 'no/such/path'"],
     ['section', ['etest', 'idone', '--section', 'nosuchsection'], "no 'nosuchsection' section in etest/idone"],
-  ])('EC5 a %s miss refuses rc 1', async (_, args, message) => {
+  ])('EC5 [docs-module-r5] a %s miss refuses rc 1', async (_, args, message) => {
     const r = await docs(fresh(corpus), ['query', ...args]);
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toContain(message);
   });
 
-  it('EC4 the verb passes a backslash search through the environment, literal', async () => {
+  it('EC4 [docs-module-r5] the verb passes a backslash search through the environment, literal', async () => {
     const r = await docs(fresh(corpus), ['query', 'etest', '--search', 'zz\\tqq']);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('The marker reads zz\\tqq on disk');
   });
 
-  it('EC6 a draft path reads the stored doc by its address, never the file', async () => {
+  it('EC6 [docs-module-r2] a draft path reads the stored doc by its address, never the file', async () => {
     const sb = fresh(corpus);
     mkdirSync(join(sb, 'draft/docs/etest'), { recursive: true });
     const draft = join(sb, 'draft/docs/etest/esc.md');
@@ -100,7 +100,7 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
   it.each([
     ['check', 'Usage: git diff --name-status | ctx docs check <repo>...'],
     ['nudge', 'Usage: ctx docs nudge <unit> [<repo>...]'],
-  ])('a bare %s refuses rc 1 with its usage', async (verb, usage) => {
+  ])('[docs-module-r4] a bare %s refuses rc 1 with its usage', async (verb, usage) => {
     const r = await docs(fresh(corpus), [verb]);
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toContain(usage);
@@ -108,7 +108,7 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
 });
 
 describe('the check verb governs a shebang script by its first line, read under the workspace root', { concurrent: true }, () => {
-  it('from a working folder elsewhere: the script reads UNCOVERED, a plain file and a folder stay out', async () => {
+  it('[docs-module-r10] from a working folder elsewhere: the script reads UNCOVERED, a plain file and a folder stay out', async () => {
     const sb = fresh(staged);
     const away = join(sb, 'tools/sub');
     mkdirSync(away, { recursive: true });
@@ -122,7 +122,7 @@ describe('the check verb governs a shebang script by its first line, read under 
     expect(r.code, r.stdout + r.stderr).toBe(1);
     expect(r.stdout.match(/^UNCOVERED: .*$/gm)).toEqual(['UNCOVERED: tools/run']);
   });
-  it('a symbolic link is no shebang script, whether its target lies inside the workspace root or outside it', async () => {
+  it('[docs-module-r11] a symbolic link is no shebang script, whether its target lies inside the workspace root or outside it', async () => {
     const sb = fresh(staged);
     const outside = join(sandbox('check-link-target'), 'run');
     writeFileSync(outside, '#!/bin/sh\necho outside\n');
@@ -152,13 +152,13 @@ describe('the check verb reads a path git quotes in a plain git delta', { concur
 });
 
 describe('the nudge through its unit', { concurrent: true }, () => {
-  it('RS5b the task entered through the unit verbs resolves to the sample block byte for byte', async () => {
+  it('RS5b [docs-module-r26] the task entered through the unit verbs resolves to the sample block byte for byte', async () => {
     const r = await unit(fresh(corpus), 'resolve', 'nudge-demo', 'task#install-and-run-local');
     expect(r.code).toBe(0);
     expect(r.stdout).toBe(readFileSync(join(SAMPLE, 'backlog.md'), 'utf8'));
   });
 
-  it('RS5b the unit form equals the backlog-file form, the top pitfall first', async () => {
+  it('RS5b [docs-module-r26] the unit form equals the backlog-file form, the top pitfall first', async () => {
     const sb = fresh(corpus);
     const byUnit = await docs(sb, ['nudge', 'nudge-demo']);
     const byFile = await docs(sb, ['nudge', 'backlog.md', 'demo-orders', 'demo-web', 'workspace']);
@@ -167,7 +167,7 @@ describe('the nudge through its unit', { concurrent: true }, () => {
     expect(byUnit.stdout).toBe(byFile.stdout);
   });
 
-  it('RS5b a path inside the sessions drawer refuses rc 1: a record artifact is read through its unit', async () => {
+  it('RS5b [docs-module-r26] a path inside the sessions drawer refuses rc 1: a record artifact is read through its unit', async () => {
     const r = await docs(fresh(corpus), ['nudge', '.contexture/sessions/nudge-demo/backlog.md', 'demo-orders']);
     expect(r.code).toBe(1);
     expect(r.stderr).toContain('read through its unit');

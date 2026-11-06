@@ -33,7 +33,7 @@ const CASES: [string, Query][] = [
 ];
 
 describe('the query engine over the staged corpus, against committed expected output', { concurrent: true }, () => {
-  it.each(CASES)('%s', async (name, q) => {
+  it.each(CASES)('[docs-module-r5] %s', async (name, q) => {
     const r = await query(corpus, q);
     expect([r.code, r.stderr]).toEqual([0, '']);
     expect(r.stdout).not.toBe('');
@@ -45,33 +45,33 @@ describe('the query engine over the staged corpus, against committed expected ou
     ['a term with no hit', { mode: 'search', search: 'zzqqxx' }],
     ['an absent section', { repo: 'demo-orders', slug: 'order-flow', section: 'nosuchsection' }],
     ['an absent channel', { mode: 'edge', channel: 'nosuchchannel' }],
-  ])('prints nothing for %s (the verb maps the miss to rc 1)', async (_, q) => {
+  ])('[docs-module-r5] prints nothing for %s (the verb maps the miss to rc 1)', async (_, q) => {
     const r = await query(corpus, q);
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
   });
 });
 
 describe('the query engine over the engine fixtures', { concurrent: true }, () => {
-  it('EC2 lists @pitfalls entries only, never an overview caveat', async () => {
+  it('EC2 [docs-module-r5] lists @pitfalls entries only, never an overview caveat', async () => {
     const r = await query(engine, { mode: 'pitfalls', repo: 'etest' });
     expect(r.stdout).toContain('idone-r1');
     expect(r.stdout).not.toContain('over-c1');
   });
 
-  it('EC3 credits a pitfall that ends a doc to that doc', async () => {
+  it('EC3 [docs-module-r5] credits a pitfall that ends a doc to that doc', async () => {
     const r = await query(engine, { mode: 'pitfalls', repo: 'etest' });
     expect(r.stdout.split('\n')).toContain('! [LOW/bug] idone-r1: A pitfall (idtwo.md)');
     expect(r.stdout).not.toContain('(over.md)');
   });
 
-  it('finds a multibyte word under LC_ALL=C', async () => {
+  it('[docs-module-r5] finds a multibyte word under LC_ALL=C', async () => {
     const r = await query(engine, { mode: 'search', repo: 'etr', search: 'değil' });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('Kayıt değil, belge yazılır');
     expect(r.stdout).toContain('Bir kuralın değil, bir notun yeri');
   });
 
-  it('EC4 keeps a backslash in the search text literal', async () => {
+  it('EC4 [docs-module-r5] keeps a backslash in the search text literal', async () => {
     const r = await query(engine, { mode: 'search', repo: 'etest', search: 'zz\\tqq' });
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('The marker reads zz\\tqq on disk');
@@ -87,7 +87,7 @@ describe('the query engine --file: the most specific owner by the check glob pre
     ['the fewest wildcards break a tie on the literal part', 'lib/x/run.sh', 'w2', 'capability'],
     ['corpus order breaks a full tie, a bare folder name claiming nothing below it', 'src/x.ts', 't-b', 'capability'],
     ['a repo-prefixed path reads as its repo-relative form', 'eown/lib/x/run.sh', 'w2', 'capability'],
-  ])('%s', async (_, file, slug, kind) => {
+  ])('[docs-module-r6] %s', async (_, file, slug, kind) => {
     const r = await query(owners, { mode: 'file', repo: 'eown', file });
     expect([r.code, r.stderr]).toEqual([0, '']);
     const [head, summary, doc, ...rest] = r.stdout.split('\n');
@@ -126,7 +126,7 @@ describe('the query engine --file: the most specific owner by the check glob pre
     expect(owned.stdout.split('\n')[0]).toBe('OWNER: wl (capability) [workspace]');
   });
 
-  it('a path that holds a source only as a substring has no owner', async () => {
+  it('[docs-module-r6] a path that holds a source only as a substring has no owner', async () => {
     const r = await query(owners, { mode: 'file', repo: 'eown', file: 'xplugins/docs-discipline/.contexture/extensions/modules/docs/scripts/gate' });
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
   });

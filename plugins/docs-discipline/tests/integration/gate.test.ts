@@ -22,7 +22,7 @@ const committed = async (from = gw): Promise<[string, string]> => {
 const codeChange = (sb: string): void => writeFileSync(join(sb, 'src/gw.sh'), 'echo gw2\n');
 
 describe('the gate through ctx on posix', { concurrent: true }, () => {
-  it('RS13 --test-matrix passes all 8 scenarios and leaves TMPDIR empty', async () => {
+  it('RS13 [docs-module-r16, docs-module-r25] --test-matrix passes all 8 scenarios and leaves TMPDIR empty', async () => {
     const watch = sandbox('gate-tmp-watch');
     const r = await docs(fresh(staged), ['gate', '--test-matrix'], { env: { TMPDIR: watch } });
     expect(r.code, r.stdout.slice(-400)).toBe(0);
@@ -30,13 +30,13 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(readdirSync(watch)).toEqual([]);
   });
 
-  it('S18 changes refuses on the files driver, naming git', async () => {
+  it('S18 [docs-module-r15] changes refuses on the files driver, naming git', async () => {
     const r = await docs(fresh(gw), ['changes']);
     expect(r.code).toBe(1);
     expect(r.stderr).toContain('the corpus delta comes from git');
   });
 
-  it('S19 git mode: a code change alone reads STALE once the doc is committed', async () => {
+  it('S19 [docs-module-r16] git mode: a code change alone reads STALE once the doc is committed', async () => {
     const [sb] = await committed();
     codeChange(sb);
     const r = await docs(sb, ['gate']);
@@ -44,7 +44,7 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(r.stdout + r.stderr).toContain('STALE DOC: workspace/gw-unit');
   });
 
-  it('S20 git mode: the doc file modified by the write rides git', async () => {
+  it('S20 [docs-module-r15, docs-module-r16] git mode: the doc file modified by the write rides git', async () => {
     const [sb] = await committed();
     codeChange(sb);
     expect((await docs(sb, ['header', 'workspace', 'gw-unit', '--add-keyword=fresh'])).code).toBe(0);
@@ -53,14 +53,14 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(r.stdout).toContain('FRESH: workspace > gw-unit');
   });
 
-  it('warns about a branch other than main', async () => {
+  it('[docs-module-r16, docs-module-r17] warns about a branch other than main', async () => {
     const [sb] = await committed();
     await git(sb, 'checkout', '-q', '-b', 'feature');
     const r = await docs(sb, ['gate']);
     expect(r.stderr).toMatch(/\[DRIFT WARNING\] \S+ is on branch 'feature' \(not main\)/);
   });
 
-  it('--drift checks the incoming remote delta, and the gate warns how far behind the branch is', async () => {
+  it('[docs-module-r16, docs-module-r17] --drift checks the incoming remote delta, and the gate warns how far behind the branch is', async () => {
     const [sb] = await committed();
     const remote = sandbox('gate-remote');
     await git(remote, 'init', '-q', '--bare', '-b', 'main');
@@ -81,7 +81,7 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(gate.stderr).toMatch(/\[DRIFT WARNING\] \S+ is 1 commit\(s\) behind origin\/main/);
   });
 
-  it('the default delta governs a shebang script and leaves a plain extensionless file out', async () => {
+  it('[docs-module-r10] the default delta governs a shebang script and leaves a plain extensionless file out', async () => {
     const [sb] = await committed();
     writeFileSync(join(sb, 'src/tool'), '#!/bin/sh\necho tool\n');
     writeFileSync(join(sb, 'src/NOTES'), 'notes\n');
@@ -90,7 +90,7 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
     expect(r.stdout.match(/^UNCOVERED: .*$/gm)).toEqual(['UNCOVERED: src/tool']);
   });
 
-  it('a clean tree reads 0 modified files and names its limit in a notice', async () => {
+  it('[docs-module-r17] a clean tree reads 0 modified files and names its limit in a notice', async () => {
     const [sb] = await committed();
     const r = await docs(sb, ['gate']);
     expect(r.code, r.stderr).toBe(0);
@@ -162,7 +162,7 @@ describe('the gate through ctx on posix', { concurrent: true }, () => {
 });
 
 describe('the gate --since=<rev> on posix: the root repository from <rev> to the working tree', { concurrent: true }, () => {
-  it('a code-only commit on a clean tree reads STALE', async () => {
+  it('[docs-module-r16] a code-only commit on a clean tree reads STALE', async () => {
     const [sb, h1] = await committed();
     codeChange(sb);
     await gitCommit(sb, 'h2', '-a');
@@ -172,7 +172,7 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
     expect(r.stderr).not.toContain('[GATE NOTICE]');
   });
 
-  it('the doc in the same commit reads FRESH', async () => {
+  it('[docs-module-r16] the doc in the same commit reads FRESH', async () => {
     const [sb, h1] = await committed();
     codeChange(sb);
     expect((await docs(sb, ['header', 'workspace', 'gw-unit', '--add-keyword=fresh'])).code).toBe(0);
@@ -182,7 +182,7 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
     expect(r.stdout).toContain('FRESH: workspace > gw-unit');
   });
 
-  it('a rename in the range reads its old path as a dead source and its new path as uncovered', async () => {
+  it('[docs-module-r8, docs-module-r9] a rename in the range reads its old path as a dead source and its new path as uncovered', async () => {
     const [sb, h1] = await committed();
     await git(sb, 'mv', 'src/gw.sh', 'src/gw2.sh');
     await gitCommit(sb, 'h2');
@@ -192,7 +192,7 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
     expect(r.stdout).toContain("DEAD SOURCE: workspace/gw-unit still explicitly lists deleted file 'src/gw.sh'");
   });
 
-  it('an untracked corpus reads UNTRACKED CLAIMANT and names the limit in a notice', async () => {
+  it('[docs-module-r14, docs-module-r17] an untracked corpus reads UNTRACKED CLAIMANT and names the limit in a notice', async () => {
     const [sb, h1] = await committed(gwIgnored);
     codeChange(sb);
     await gitCommit(sb, 'h2', '-a');
@@ -230,7 +230,7 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
     expect(r.stdout.match(/^ {2}file: .*$/gm)?.sort()).toEqual(['  file: src/café.sh', '  file: src/gw.sh']);
   });
 
-  it('an empty range names its limit in a notice', async () => {
+  it('[docs-module-r17] an empty range names its limit in a notice', async () => {
     const [sb, h1] = await committed();
     const r = await docs(sb, ['gate', `--since=${h1}`]);
     expect(r.code, r.stderr).toBe(0);
@@ -238,7 +238,7 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
     expect(r.stderr).toMatch(new RegExp(`^\\[GATE NOTICE\\] the delta since ${h1} is empty`, 'm'));
   });
 
-  it('a child repository keeps its working delta, and the notice names it', async () => {
+  it('[docs-module-r16, docs-module-r17] a child repository keeps its working delta, and the notice names it', async () => {
     const [sb, h1] = await committed();
     const child = join(sb, 'child');
     mkdirSync(child);
@@ -258,14 +258,14 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
     ['an empty revision', ['--since='], 'ctx docs gate: --since needs a revision (--since=<rev>)\n'],
     ['--since beside --stdin', ['--stdin', '--since=HEAD'], 'ctx docs gate: --since=<rev> takes no other argument (not --stdin, --drift, or --test-matrix)\n'],
     ['--since beside --drift', ['--since=HEAD', '--drift'], 'ctx docs gate: --since=<rev> takes no other argument (not --stdin, --drift, or --test-matrix)\n'],
-  ])('refuses %s rc 1', async (_, args, message) => {
+  ])('[docs-module-r16] refuses %s rc 1', async (_, args, message) => {
     const [sb] = await committed();
     const r = await docs(sb, ['gate', ...args]);
     expect([r.code, r.stderr]).toEqual([1, message]);
     expect(r.stdout).toBe('');
   });
 
-  it('refuses --since outside a repository rc 1', async () => {
+  it('[docs-module-r16] refuses --since outside a repository rc 1', async () => {
     const r = await docs(fresh(staged), ['gate', '--since=HEAD']);
     expect([r.code, r.stderr]).toEqual([1, 'ctx docs gate: --since needs the workspace to be a git repository with a commit\n']);
   });
