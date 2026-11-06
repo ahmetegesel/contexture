@@ -635,13 +635,20 @@ batch_unescape() {
   }'
 }
 
-# batch_decode <base64> <out>: decode one value; the base64 command differs only in its
-# decode flag, so the GNU/Darwin spelling is tried first and the BSD one second
+# batch_decode <base64> <out>: decode one value: rc 0 staged, 1 not base64 (the caller's
+# input), 2 the decoded value cannot be written (a storage failure). The value is decoded
+# into /dev/null first, so a write failure never reads as bad input; the base64 command
+# differs only in its decode flag, so the GNU/Darwin spelling is tried first and the BSD
+# one second
 batch_decode() {
-  printf '%s' "$1" | { base64 -d > "$2"; } 2>/dev/null && return 0
-  printf '%s' "$1" | { base64 -D > "$2"; } 2>/dev/null && return 0
+  bd_flag=""
+  for bd_f in -d -D; do
+    if printf '%s' "$1" | base64 "$bd_f" > /dev/null 2>&1; then bd_flag=$bd_f; break; fi
+  done
+  [ -n "$bd_flag" ] || return 1
+  printf '%s' "$1" | { base64 "$bd_flag" > "$2"; } 2>/dev/null && return 0
   rm -f "$2" 2>/dev/null
-  return 1
+  return 2
 }
 
 # batch_refuse <rc> <n> <op> <key> <CODE> <message>: the batch's one failure line
@@ -673,7 +680,12 @@ batch_close_action() {
     put)
       [ "$sb_seen_val" -eq 1 ] || batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "a put carries no value"
       sb_v="$SCRATCH/batch-val.$sb_n"
-      batch_decode "$sb_val" "$sb_v" || batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "malformed base64 value"
+      batch_decode "$sb_val" "$sb_v"
+      case $? in
+        0) ;;
+        1) batch_refuse 1 "$sb_n" put "$sb_key" ERR_INVALID_ARGUMENT "malformed base64 value" ;;
+        *) batch_refuse 2 "$sb_n" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the value" ;;
+      esac
       scratch_add "$SCRATCH/man" '%s\t%s\t%s\t%s\t%s\n' "$sb_n" put "$sb_key" "$sb_head" "$sb_v" \
         || batch_refuse 2 "$sb_n" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
       ;;

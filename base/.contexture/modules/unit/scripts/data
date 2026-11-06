@@ -378,7 +378,10 @@ u_active() {
   cat "$U_SCR/answer"
 }
 
+# u_payload: stdin into the scratch. The target is made first, so a scratch that cannot hold
+# it refuses ERR_STORAGE_WRITE; a failure of the copy itself reads as the payload's read
 u_payload() {
+  u_new "$U_SCR/pay"
   { cat > "$U_SCR/pay"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the payload"
   U_PAY="$U_SCR/pay"
 }
@@ -529,6 +532,7 @@ u_lane_doc() {
   U_PAY=""
   u_lock "$U_UNIT"
   u_stage_start
+  u_new "$U_STAGE/doc"
   { cat > "$U_STAGE/doc"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the document"
   PX_DOCSIZE=$(wc -c < "$U_STAGE/doc" | tr -d ' ')
   u_fetch_unit "$U_UNIT" "__lanes__" 1

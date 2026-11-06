@@ -174,12 +174,17 @@ for (const driver of DRIVERS) {
       expect(await bytesOf(sb, driver, Object.keys(OLD))).toEqual(Object.values(OLD));
     });
 
-    it('a batch whose value cannot be staged refuses with nothing else on stderr', async () => {
+    it('a batch whose value cannot be staged refuses rc 2 ERR_STORAGE_WRITE naming its action, with nothing else on stderr', async () => {
       const sb = await seeded(empty, driver, OLD);
       const r = await store(sb, driver, scratchPlant(driver === 'fts5' ? 'batch-val.1' : 'val.1')).batch('docs', NEW);
-      expect(r.code).not.toBe(0);
-      expect(r.stdout).toBe('');
-      expect(r.stderr).toMatch(/^store\.batch: error: action 1 \(put 'workspace\/x'\): [^\n]+ \(ERR_[A-Z_]+\)\n$/);
+      refused(r, 'store.batch', 2, 'ERR_STORAGE_WRITE', "action 1 (put 'workspace/x'): cannot stage the value");
+      expect(await bytesOf(sb, driver, Object.keys(OLD))).toEqual(Object.values(OLD));
+    });
+
+    it('a batch value both malformed and unstageable refuses as the input it is, rc 1 ERR_INVALID_ARGUMENT', async () => {
+      const sb = await seeded(empty, driver, OLD);
+      const r = await store(sb, driver, scratchPlant(driver === 'fts5' ? 'batch-val.1' : 'val.1')).batch('docs', 'action=put\nkey=workspace/x\nvalue_b64=***\n');
+      refused(r, 'store.batch', 1, 'ERR_INVALID_ARGUMENT', "action 1 (put 'workspace/x'): malformed base64 value");
       expect(await bytesOf(sb, driver, Object.keys(OLD))).toEqual(Object.values(OLD));
     });
   });

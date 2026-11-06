@@ -128,13 +128,19 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect((await unit(sb, 'task', 'show', 'w-unit', 'w-a')).stdout).toContain('STATUS: TODO');
   });
 
-  it('[the-engine-r21] a payload the data script cannot stage in its fresh scratch refuses with its one line and nothing else on stderr', async () => {
+  it('[the-engine-r21] a payload the data script cannot stage in its fresh scratch refuses rc 2 ERR_STORAGE_WRITE with nothing else on stderr', async () => {
     const sb = fresh(sb0);
     const r = await data(sb, 'task.start', ['w-unit', 'w-a'], 'pointer=w-a IN_PROGRESS\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir "$p/pay" ;; esac'));
-    expect(r.code).toBe(2);
-    expect(r.stdout).toBe('');
-    expect(r.stderr).toMatch(/^task\.start: error: [^\n]+ \(ERR_STORAGE_[A-Z]+\)\n$/);
+    refused(r, 'task.start', 2, 'ERR_STORAGE_WRITE', "cannot write the data script's scratch");
     expect((await unit(sb, 'task', 'show', 'w-unit', 'w-a')).stdout).toContain('STATUS: TODO');
+  });
+
+  it('a lane document the data script cannot stage refuses rc 2 ERR_STORAGE_WRITE and leaves the report as it was', async () => {
+    const sb = fresh(sb0);
+    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
+    const r = await data(sb, 'lane.write_report', ['w-unit', 'w-lane'], 'never lands\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir -p "$p/stage/doc" ;; esac'));
+    refused(r, 'lane.write_report', 2, 'ERR_STORAGE_WRITE', "cannot write the data script's scratch");
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).toBe(before);
   });
 
   it('a session.create whose existence probe cannot be written refuses rc 2 and leaves the unit it names whole', async () => {
