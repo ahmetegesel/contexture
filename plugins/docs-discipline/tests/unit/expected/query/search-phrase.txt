@@ -1,0 +1,5 @@
+[demo-web > cart-ui (capability)]
+  description: "Storefront cart interaction: add, remove, quantity edits, and the checkout handoff"
+  why: "The order API side of the checkout handoff"
+[workspace > system-map (architecture)]
+  responsibilities: "Storefront cart interaction and checkout handoff"

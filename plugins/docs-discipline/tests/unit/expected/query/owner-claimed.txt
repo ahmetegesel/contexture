@@ -1,0 +1,3 @@
+OWNER: order-flow (capability) [demo-orders]
+SUMMARY: Cart validation, pricing, and order persistence for the demo storefront
+DOC: docs/demo-orders/order-flow.md

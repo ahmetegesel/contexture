@@ -1,0 +1,17 @@
+rc=0
+--- stdout
+--- TOUCHED DOCUMENTATION ---
+AFFECTED: order-flow [demo-orders] -> docs/demo-orders/order-flow.md
+  files: src/order/validate.ts
+
+--- COVERAGE AUDIT (COMPLETENESS) ---
+CLEAN: all touched code files are covered by sources globs.
+
+--- FRESHNESS AUDIT ---
+FRESH (BLANKET): demo-orders > order-flow (counted fresh only because an architecture/overview/workspace doc was touched)
+ARCH-COVERED: 1 file(s) counted fresh ONLY because an architecture/overview/workspace doc was touched, not because their own claiming doc rode the change.
+  This is a blanket, not evidence. Verify those docs directly before reading the verdict as clean.
+CLEAN: all affected code files have corresponding doc updates.
+
+docs-check: CLEAN: all touched code files are covered and fresh.
+--- stderr

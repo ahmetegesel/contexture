@@ -1,0 +1,13 @@
+rc=1
+--- stdout
+--- TOUCHED DOCUMENTATION ---
+none (no documented files modified)
+
+--- COVERAGE AUDIT (COMPLETENESS) ---
+UNCOVERED: projects/demo-orders/src/tools/report.ts
+
+--- FRESHNESS AUDIT ---
+CLEAN: no documented units affected.
+
+--- stderr
+docs-check: FAILED: 1 code file(s) are uncovered by any documentation.

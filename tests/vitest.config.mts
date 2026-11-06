@@ -42,6 +42,7 @@ export default defineConfig({
         test: { name: 'filters', include: ['filters/**/*.test.ts'], maxConcurrency: 16 },
       },
       pluginProject('toolchain-filters'),
+      pluginProject('docs-discipline'),
       {
         extends: true,
         test: { name: 'engine', include: ['engine/**/*.test.ts'], maxConcurrency: 16 },

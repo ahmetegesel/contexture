@@ -1,0 +1,6 @@
+demo-orders               operational                  operational                     Run, build, test, debug, and observe the demo order service
+demo-orders               order-flow                   capability                      Cart validation, pricing, and order persistence for the demo
+demo-web                  cart-ui                      capability                      Storefront cart interaction: add, remove, quantity edits, an
+workspace                 conventions                  conventions                     Universal workspace conventions: documentation discipline, g
+workspace                 system-map                   architecture                    The demo workspace map: two fictional product repos, their c
+index complete: 5 entries

@@ -1,0 +1,4 @@
+! [HIGH/bug] order-flow-p1: A retried checkout can persist the same cart twice (order-flow.md)
+  Trigger: The storefront retries POST /orders after a timeout while the first request is still in flight
+  Evidence: validateCart
+

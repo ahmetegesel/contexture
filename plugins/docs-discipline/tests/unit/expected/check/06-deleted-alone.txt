@@ -1,0 +1,13 @@
+rc=0
+--- stdout
+--- TOUCHED DOCUMENTATION ---
+none (no documented files modified)
+
+--- COVERAGE AUDIT (COMPLETENESS) ---
+CLEAN: all touched code files are covered by sources globs.
+
+--- FRESHNESS AUDIT ---
+CLEAN: no documented units affected.
+
+docs-check: CLEAN: all touched code files are covered and fresh.
+--- stderr

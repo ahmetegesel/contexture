@@ -1,0 +1,23 @@
+[demo-orders > operational (operational)]
+  - step: "Run the checkout integration test"
+  evidence: "src/order/checkout.test.ts"
+  Run `npm run test:checkout` against a local database.
+[demo-orders > order-flow (capability)]
+  keywords: [orders, checkout, pricing, validation]
+  summary: "A retried checkout can persist the same cart twice"
+  trigger: "The price table changes while a checkout request is in flight"
+[demo-web > cart-ui (capability)]
+  description: "Storefront cart interaction: add, remove, quantity edits, and the checkout handoff"
+  sources: [src/cart/**, src/checkout/**]
+  keywords: [cart, storefront, checkout]
+  - rule: "The cart state is the single source for the checkout payload"
+  - rule: "A failed checkout keeps the cart intact for retry"
+  evidence: "submitCheckout"
+  summary: "A stale cart snapshot is posted after a failed checkout"
+  trigger: "Editing the cart while a checkout request is in flight"
+  evidence: "submitCheckout"
+  why: "The order API side of the checkout handoff"
+[workspace > system-map (architecture)]
+  responsibilities: "Storefront cart interaction and checkout handoff"
+  - stage: "Checkout"
+  evidence: "postCheckout"

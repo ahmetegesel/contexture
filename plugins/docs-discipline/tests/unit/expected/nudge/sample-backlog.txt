@@ -1,0 +1,8 @@
+[CONTEXT NUDGE: Task 'install-and-run-local']
+Matched Docs: demo-orders/operational, demo-orders/order-flow, demo-web/cart-ui
+Setup (demo-orders/operational):
+  run: Install dependencies; Start the dev server
+  build: Compile the service; Package the container
+  test: Run the unit suite; Run the checkout integration test
+  toolchain: Run `npm install` at the repository root. `.nvmrc` pins Node 20, so switch to it before installing.
+Pitfalls: order-flow-p1: A retried checkout can persist the same cart twice; order-flow-p2: A price edited between validation and persistence is applied inconsistently; cart-ui-p1: A stale cart snapshot is posted after a failed checkout

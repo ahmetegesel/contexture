@@ -1,0 +1,5 @@
+[demo-orders > order-flow (capability)]
+  evidence: "validateCart"
+  evidence: "validateCart"
+[workspace > system-map (architecture)]
+  evidence: "validateCart"

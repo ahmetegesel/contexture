@@ -1,0 +1,18 @@
+rc=0
+--- stdout
+--- TOUCHED DOCUMENTATION ---
+AFFECTED: order-flow [demo-orders] -> docs/demo-orders/order-flow.md
+  files: src/order/validate.ts
+
+--- COVERAGE AUDIT (COMPLETENESS) ---
+CLEAN: all touched code files are covered by sources globs.
+
+--- FRESHNESS AUDIT ---
+UNTRACKED CLAIMANT: demo-orders/order-flow (governed file projects/demo-orders/src/order/validate.ts changed; its claimants are untracked and cannot ride a tracked delta)
+  file: projects/demo-orders/src/order/validate.ts
+  claimant: docs/demo-orders/order-flow.md
+  reconciliation: process-owned via the docs-drift flow
+CLEAN: all affected code files have corresponding doc updates.
+
+docs-check: CLEAN (PROCESS-OWNED): 1 governed file(s) carry untracked claimants; the delta cannot verify them; reconciliation is process-owned via the docs-drift flow.
+--- stderr

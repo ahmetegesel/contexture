@@ -1,0 +1,12 @@
+! [HIGH/bug] order-flow-p1: A retried checkout can persist the same cart twice (order-flow.md)
+  Trigger: The storefront retries POST /orders after a timeout while the first request is still in flight
+  Evidence: validateCart
+
+! [MEDIUM/drift-risk] order-flow-p2: A price edited between validation and persistence is applied inconsistently (order-flow.md)
+  Trigger: The price table changes while a checkout request is in flight
+  Evidence: priceCart
+
+! [MEDIUM/bug] cart-ui-p1: A stale cart snapshot is posted after a failed checkout (cart-ui.md)
+  Trigger: Editing the cart while a checkout request is in flight
+  Evidence: submitCheckout
+
