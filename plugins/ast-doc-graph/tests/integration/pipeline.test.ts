@@ -1,8 +1,10 @@
-import { join } from 'node:path';
+import { cpSync, mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { sandbox } from '@support/sandbox';
 import { fresh } from '@support/snapshot';
 import { sqlite } from '@support/sqlite';
-import { astDocIndex, compilerApi, count, fallbackReachable, graphQuery, miniRepo, NO_NODE_SQLITE, sqliteFts5 } from '../support/graph';
+import { astDocIndex, compilerApi, count, fallbackReachable, FIXTURES, graphQuery, miniRepo, NO_NODE_SQLITE, sqliteFts5, TYPESCRIPT } from '../support/graph';
 
 describe.skipIf(!sqliteFts5 || !compilerApi())('the full index of the mini repository', { concurrent: true }, () => {
   let indexed: string;
@@ -65,5 +67,19 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the full index of the mini repos
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('roundTotal');
     expect(r.stdout).toContain('validateCart');
+  });
+
+  it('[ast-doc-graph-r2, plugins-r10] a repository under folders named tests and node_modules indexes its sources, while the exclusion folders, test files, and declaration files inside it stay out', async () => {
+    const repo = join(sandbox('excluded-parents'), 'tests/node_modules/repo');
+    cpSync(join(FIXTURES, 'mini-repo'), repo, { recursive: true });
+    for (const f of ['tests/skip.ts', 'node_modules/pkg/skip.ts', 'dist/skip.ts', 'src/orders/skip.test.ts', 'src/orders/skip.d.ts']) {
+      mkdirSync(dirname(join(repo, f)), { recursive: true });
+      writeFileSync(join(repo, f), 'export function skipWork(): number {\n  return 0;\n}\n');
+    }
+    symlinkSync(TYPESCRIPT, join(repo, 'node_modules/typescript'));
+    const r = await astDocIndex(repo, ['--clean']);
+    expect(r.code, r.stderr).toBe(0);
+    expect(sqlite(db(repo), "SELECT file FROM indexed_files WHERE file LIKE '%.ts' ORDER BY file;").trim().split('\n')).toEqual(['src/cart/store.ts', 'src/orders/price.ts', 'src/orders/validate.ts']);
+    expect(count(db(repo), "SELECT count(*) FROM symbols WHERE qname = 'skipWork';")).toBe(0);
   });
 });
