@@ -165,8 +165,8 @@ ok "presence: each verb name is called by a unit-verbs test"
 disk_points=$( { grep -ho 'fire_hooks("[a-z-]*"' "$ROOT"/base/.contexture/modules/unit/scripts/*; grep -ho 'vb_hook [a-z-]*' "$ROOT"/base/.contexture/modules/unit/scripts/*; grep -ho '_hooks [a-z-]*' "$ROOT"/base/.contexture/modules/unit/scripts/refresh; } | sed 's/fire_hooks("//; s/vb_hook //; s/_hooks //; s/"//' | LC_ALL=C sort -u | tr '\n' ' ' | sed 's/ $//')
 a_eq "$disk_points" "close load-post load-pre refresh stamp task-landing" "presence: the derived hook points are the shipped six"
 for p in $disk_points; do
-  grep -q "$p" "$SCRIPT_DIR/hook-tests.sh" || bad "presence: hook point $p has no case in the hook suite"
-  grep -rq "# ctx-hook: $p" "$SCRIPT_DIR/fixtures/hooks/modules" || bad "presence: hook point $p has no fixture hook"
+  grep -q "$p" "$SCRIPT_DIR/hooks/around-verbs.test.ts" || bad "presence: hook point $p has no case in the hooks project"
+  grep -rq "# ctx-hook: $p" "$SCRIPT_DIR/hooks/fixtures/modules" || bad "presence: hook point $p has no fixture hook"
 done
 ok "presence: every hook point has a suite case and a fixture hook"
 
@@ -193,7 +193,7 @@ check_filter_pairs() {
 check_filter_pairs "$ROOT/base/.contexture/modules/run/filters" "$SCRIPT_DIR/filters/pairs" "core"
 check_filter_pairs "$ROOT/plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters" "$ROOT/plugins/toolchain-filters/tests" "toolchain-filters"
 
-for s in filters/pairs.test.ts ctx-tests.sh unit-verbs/verb-surface.test.ts hook-tests.sh governance-tests.sh; do
+for s in filters/pairs.test.ts engine/dispatch.test.ts unit-verbs/verb-surface.test.ts hooks/around-verbs.test.ts governance-tests.sh; do
   if [ -f "$SCRIPT_DIR/$s" ]; then ok "suite present: $s"; else bad "suite missing: $s"; fi
 done
 

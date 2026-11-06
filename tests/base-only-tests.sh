@@ -2,8 +2,7 @@
 # base-only-tests.sh: the shipped base alone, with no plugin. It stages base/ only and
 # proves the payload a bare adoption carries: the no-plugin help surface, the record,
 # lane, and store surfaces over a synthetic data module, the absent-rhythms index, the
-# posix descriptor, the store refusals, the no-base-to-docs census, and the posix core
-# suites. It excludes every plugin suite (the docs suite and every plugins/<name>
+# posix descriptor, the store refusals, and the no-base-to-docs census. It excludes every plugin suite (the docs suite and every plugins/<name>
 # suite): those are plugin gates, not base gates. A base-only regression
 # (the absent rhythms index, a missing record or store function, a help drift, a
 # base-to-docs reference) passes the upstream gate, so this suite is that gate's base
@@ -14,10 +13,8 @@
 # the instruments below (the 44-function descriptor check and the census, both
 # null-checked by a planted difference).
 #
-# Usage: tests/base-only-tests.sh [--keep] [--skip-core]
+# Usage: tests/base-only-tests.sh [--keep]
 #   --keep       preserve the sandbox
-#   --skip-core  skip B6's two nested posix suites and their launches, running B1 to B5
-#                alone (pass=163); the full run is pass=165
 # Exit 0 when every case passes; 1 otherwise; 2 a staging failure.
 
 set -u
@@ -31,11 +28,9 @@ LANE_MOD="$ROOT/base/.contexture/extensions/modules/lane"
 RUN_MOD="$ROOT/base/.contexture/modules/run"
 
 KEEP=0
-SKIP_CORE=0
 for a in "$@"; do
   case "$a" in
     --keep) KEEP=1 ;;
-    --skip-core) SKIP_CORE=1 ;;
     *) echo "base-only-tests.sh: unknown argument: $a" >&2; exit 1 ;;
   esac
 done
@@ -94,56 +89,6 @@ refused() { # <rc> <message...>: one line on stderr, nothing on stdout, the exac
   _r_got=$(cat "$E")
   a_eq "$_r_got" "$_r_want" "$FN: the fixed refusal line"
 }
-
-# ==============================================================================
-# B6 launch: the two nested posix suites run while B1 to B5 execute
-# ==============================================================================
-# --skip-core skips the launches and the B6 section, leaving B1 to B5 alone
-if [ "$SKIP_CORE" -eq 0 ]; then
-NESTED="$SB/nested"
-mkdir -p "$NESTED"
-NESTED_JOBS=2
-NESTED_PID=""
-
-run_core_cmd() { # <index>: the two nested commands and arguments, in order
-  case "$1" in
-    1) sh "$ROOT/tests/ctx-tests.sh" ;;
-    2) sh "$ROOT/tests/hook-tests.sh" ;;
-  esac
-}
-
-launch_core() { # <index>: one output and rc file per suite, the rc atomically renamed
-  _lc_idx=$1
-  ( run_core_cmd "$_lc_idx" > "$NESTED/$_lc_idx.out" 2>&1; printf '%s\n' "$?" > "$NESTED/$_lc_idx.rc.part"; mv "$NESTED/$_lc_idx.rc.part" "$NESTED/$_lc_idx.rc" ) &
-  printf '%s\n' "$!" > "$NESTED/$_lc_idx.pid"
-}
-
-run_nested() { # the gate's rc-file poll idiom (tests/run.sh lines 128-180), cap 2
-  nq="1 2"
-  nr=""
-  while :; do
-    still=""
-    for j in $nr; do
-      [ -f "$NESTED/$j.rc" ] || still="$still $j"
-    done
-    nr=$still
-    while [ -n "$nq" ]; do
-      set -- $nr
-      [ $# -ge "$NESTED_JOBS" ] && break
-      set -- $nq
-      launch_core "$1"
-      nr="$nr $1"
-      shift
-      nq="$*"
-    done
-    [ -z "$nr" ] && [ -z "$nq" ] && break
-    sleep 1
-  done
-}
-
-run_nested &
-NESTED_PID=$!
-fi
 
 # ==============================================================================
 # B1: the no-plugin boot and help surface
@@ -475,33 +420,6 @@ printf 'modules/docs\n' > "$plantdir/base/plant"
 phits=$(census_hits "$plantdir/base")
 a_eq "$phits" "1" "census null check: a planted base-to-docs reference reads red"
 rm -rf "$plantdir"
-
-# ==============================================================================
-# B6: the posix core suites (no plugin)
-# ==============================================================================
-if [ "$SKIP_CORE" -eq 0 ]; then
-printf '\n== B6: the posix core suites ==\n'
-# the two suites were launched before B1; wait for the poll loop, then print in order
-if [ -n "$NESTED_PID" ]; then wait "$NESTED_PID"; fi
-collect_core() { # <index> <label>
-  _cc_idx=$1; _cc_label=$2
-  if [ -f "$NESTED/$_cc_idx.rc" ]; then
-    _cc_rc=$(cat "$NESTED/$_cc_idx.rc")
-  else
-    _cc_rc=2
-  fi
-  if [ "$_cc_rc" -eq 0 ]; then
-    ok "suite: $_cc_label"
-  else
-    bad "suite: $_cc_label (rc $_cc_rc)"
-    printf '%s\n' "--- tail of $_cc_label ---"
-    [ -f "$NESTED/$_cc_idx.out" ] && tail -n 25 "$NESTED/$_cc_idx.out"
-    printf '%s\n' "--- end of $_cc_label ---"
-  fi
-}
-collect_core 1 "ctx-tests.sh"
-collect_core 2 "hook-tests.sh"
-fi
 
 printf '\n== summary ==\n'
 printf 'base-only-tests: pass=%d fail=%d\n' "$pass" "$fail"
