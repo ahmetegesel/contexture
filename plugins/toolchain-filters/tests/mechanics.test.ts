@@ -21,7 +21,7 @@ describe.concurrent('the run mechanics over the plugin filters', () => {
     expect(firstByteDifference(r.bytes, readFileSync(join(TESTS, 'compiler-errors-pretty.expected')))).toBe(-1);
   });
 
-  it('a notice-only output passes through with the command exit code, so a false green is never hidden', async () => {
+  it('[the-engine-r11] a notice-only output passes through with the command exit code, so a false green is never hidden', async () => {
     const env = { ...pathPlant('tsc', 'cat "$FILTER_TESTS_IN" >&2\nexit 2'), FILTER_TESTS_IN: join(TESTS, 'mechanics/compact-false-green.in') };
     const r = await exec('./.contexture/ctx', ['run', '--stats', 'tsc', '--noEmit'], { cwd: staged('false-green'), env });
     expect(r.code).toBe(2);
