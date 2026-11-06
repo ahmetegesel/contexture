@@ -277,15 +277,20 @@ for (const driver of DRIVERS) {
         ['', "action 1 (? '?'): the batch carries no actions"],
         ['key=workspace/b\naction=put\nvalue_b64=eA==\n', "action 1 (? '?'): a payload line outside an action"],
         ['action=put\nkey=workspace/b\nvalue_b64=***\n', "action 1 (put 'workspace/b'): malformed base64 value"],
+        ['bogus=1\naction=put\nkey=workspace/b\nvalue_b64=eA==\n', "action 1 (? '?'): unknown payload line 'bogus=1'"],
       ])('refuses the malformed batch %j with its action context', async (input, message) => {
         refused(await store(fresh(empty), driver).batch('docs', input), 'store.batch', 1, 'ERR_INVALID_ARGUMENT', message);
       });
 
-      it.fails.each(['key=workspace/c', 'head=none', 'value_b64=eA=='])(
-        'names the 1-based action of a duplicate %s line (known defect: the line says action 0)', async (dup) => {
-          refused(await store(fresh(empty), driver).batch('docs', `action=put\nkey=workspace/b\nhead=none\nvalue_b64=eA==\n${dup}\n`), 'store.batch', 1, 'ERR_INVALID_ARGUMENT',
-            `action 1 (put 'workspace/b'): duplicate payload line '${dup.split('=')[0]}='`);
-        });
+      it.each([
+        ['key=workspace/c', "duplicate payload line 'key='"],
+        ['head=none', "duplicate payload line 'head='"],
+        ['value_b64=eA==', "duplicate payload line 'value_b64='"],
+        ['bogus=1', "unknown payload line 'bogus=1'"],
+      ])('names the 1-based action of a refused %s line inside it', async (line, message) => {
+        refused(await store(fresh(empty), driver).batch('docs', `action=put\nkey=workspace/a\nvalue_b64=eA==\naction=put\nkey=workspace/b\nhead=none\nvalue_b64=eA==\n${line}\n`),
+          'store.batch', 1, 'ERR_INVALID_ARGUMENT', `action 2 (put 'workspace/b'): ${message}`);
+      });
 
       it('strips a carriage return from every payload line', async () => {
         const s = store(fresh(empty), driver);
