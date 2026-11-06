@@ -157,7 +157,7 @@ gate_notices() {
     if [ -n "$GATE_SINCE" ] && [ "$DOCS_DELTA" != log ]; then
         docs_corpus_ignored
         if [ "$DOCS_IGNORED" -gt 0 ]; then
-            printf "[GATE NOTICE] the corpus is untracked here (%s of %s docs ignored by git): no corpus line rides the delta, so a changed file whose claimants are all untracked reads UNTRACKED CLAIMANT, its freshness process-owned through the docs-drift flow\n" "$DOCS_IGNORED" "$DOCS_COUNT" >&2
+            printf "[GATE NOTICE] the corpus is untracked here (%s of %s docs ignored by git): no corpus line rides the delta, so a changed file whose claimants are all untracked reads UNTRACKED CLAIMANT, its freshness process-owned through the docs-drift flow\n" "$DOCS_IGNORED" "$DOCS_NDOCS" >&2
         fi
     fi
     return 0

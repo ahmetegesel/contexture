@@ -476,10 +476,10 @@ docs_delta_shebangs() {
 # docs_corpus_ignored: under the files driver, where a doc's logical address is its file
 # under the workspace root, DOCS_IGNORED counts the materialized corpus docs that the
 # root's repository ignores (git check-ignore; 0 when none is or outside a repository) and
-# DOCS_COUNT counts them all
+# DOCS_NDOCS counts them all
 docs_corpus_ignored() {
   DOCS_IGNORED=$(git -C "$DOCS_ROOT" check-ignore --stdin < "$DOCS_PATHS" 2>/dev/null | awk 'END { print NR }')
-  DOCS_COUNT=$(awk 'END { print NR }' "$DOCS_PATHS")
+  DOCS_NDOCS=$(awk 'END { print NR }' "$DOCS_PATHS")
   return 0
 }
 
