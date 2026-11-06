@@ -33,6 +33,31 @@ export default defineConfig({
         test: { name: 'unit-verbs', include: ['unit-verbs/**/*.test.ts'], maxConcurrency: 16, sequence: { groupOrder: 1 } },
       },
       pluginProject('storage-fts5'),
+      {
+        extends: true,
+        test: { name: 'governance', include: ['governance/**/*.test.ts'] },
+      },
+      {
+        extends: true,
+        test: { name: 'filters', include: ['filters/**/*.test.ts'], maxConcurrency: 16 },
+      },
+      pluginProject('toolchain-filters'),
+      {
+        extends: true,
+        test: { name: 'engine', include: ['engine/**/*.test.ts'], maxConcurrency: 16 },
+      },
+      {
+        extends: true,
+        test: { name: 'hooks', include: ['hooks/**/*.test.ts'], maxConcurrency: 16 },
+      },
+      {
+        extends: true,
+        test: { name: 'laws', include: ['laws/**/*.test.ts'], maxConcurrency: 16 },
+      },
+      {
+        extends: true,
+        test: { name: 'packages', include: ['packages/**/*.test.ts', 'fixtures/worked-package/tests/**/*.test.ts'], maxConcurrency: 16 },
+      },
     ],
   },
 });
