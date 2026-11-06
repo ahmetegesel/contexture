@@ -4,6 +4,32 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.64.2] - 2026-11-06
+
+PATCH: the plugin version rule. A release that changes a plugin's payload now bumps that plugin's manifest version, a governance check holds the rule over the staged payload, and the three plugins whose payloads moved without a bump catch up.
+
+### Added
+
+- The governance plugin-versions check (`tests/governance/plugin-versions.test.ts`). It reads the index against the nearest release tag: a plugin whose version is unchanged reads red, naming the plugin, the tag that first shipped that version, and the changed paths, when its payload differs from that tag. The payload is its `.contexture` tree plus every literal package-root path its payload scripts read (the part hooks and every script they run). A changed version must be a greater x.y.z. The release that first shipped a version is found by the version line's value, so a touch that keeps the value moves nothing, and the version line is read as the installer reads it. The check runs in every governance run; a shallow clone, or no reachable release tag, skips it naming the need and fails the pre-release set. It is null-checked by a package root census with planted lines and by a sandbox repository walking the ship breath states.
+
+### Changed
+
+- storage-fts5 1.0.0 to 1.1.0: its payload changed in v0.61.0 (the contract 3 store-only card and fts5 schema 5, the break that release named, held to MINOR), v0.63.0, v0.64.0, and v0.64.1 while its manifest stayed 1.0.0.
+- ast-doc-graph 1.0.0 to 1.0.1: its payload changed in v0.60.1 and v0.64.0 (the discovery exclusions fix, the CLI guard refactor, the module README) while its manifest stayed 1.0.0.
+- docs-discipline 1.1.0 to 1.1.1, the manifest and the docs module file together: the docs module README changed in v0.64.0.
+- A release that changes a plugin's payload (its installed `.contexture` tree, plus any package-root file a part hook applies at install) bumps that plugin's manifest version by the version rule: `AGENTS.workspace.md` gains the @git plugin versions clause, and `docs/plugins.md`, `docs/modules.md`, the `README.md` dev loop, and `tests/README.md` state the rule.
+- `docs/adoption.md` Updating gains a package step: compare each install record's version with the target catalog manifest's, and refresh and re-install a package whose version moved, on the human's go.
+- The changed-files map selects the governance project for a plugin manifest or payload change, so `bun run test:changed` runs the version check.
+- The governance git and repository top helpers move into the shared walk helpers.
+
+### Fixed
+
+- `docs/plugins.md` and `docs/modules.md` said the docs conventions seed never installs; the docs module's install part hook writes it into a corpus that holds no conventions doc on a first install, and the guides now say so.
+
+The storage-fts5 bump that v0.64.1 deferred lands here, with the rule and the check that enforce it.
+
+Commits in the range: 13eae5e (the governance git helpers move), 0eaf15d (the plugin versions check, red on three plugins), 5c5f139 (the three bumps), 75331c2 (a plugin payload change selects governance), 736b4fc (the guides: the version rule, the adopter's package step, the seed), 52bd8c3 (the @git plugin versions clause), 45f826a (a read behind the empty default guard is counted), 5a4c100 (the census reads every payload script), a27ca04 (a touch of the version line keeps its first release), da5befd (the version line read as the installer reads it), and the release commit.
+
 ## [0.64.1] - 2026-11-06
 
 PATCH: storage correctness and the guides as built. Storage writes that answered success on a failed scratch write now refuse, an interrupted store call leaves no scratch, the resolver refuses a missing driver whatever its cache holds, and the engine guide describes the storage contract as it is built.

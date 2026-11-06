@@ -1,4 +1,4 @@
-# contexture v0.64.1: the core law source; the compose merges the installed modules' laws beneath it
+# contexture v0.64.2: the core law source; the compose merges the installed modules' laws beneath it
 
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
