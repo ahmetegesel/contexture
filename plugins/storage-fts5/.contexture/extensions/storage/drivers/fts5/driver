@@ -181,7 +181,7 @@ store_lock() {
   while [ "$sl_n" -lt 600 ]; do
     if mkdir "$sl_lock" 2>/dev/null; then
       STORE_LOCK=$sl_lock
-      printf '%s\n' "$$" > "$STORE_LOCK/pid" 2>/dev/null || {
+      { printf '%s\n' "$$" > "$STORE_LOCK/pid"; } 2>/dev/null || {
         rm -rf "$STORE_LOCK" 2>/dev/null
         STORE_LOCK=""
         refuse 2 ERR_STORAGE_WRITE "cannot write the store lock holder pid"
@@ -391,7 +391,7 @@ store_list() {
   sn_tmp=$(mktemp "$(scratch_base)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
   if [ -f "$DB_PATH" ]; then
     db_init
-    if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = '$(sql_escape "$sn_ns")' ORDER BY key COLLATE BINARY;" > "$sn_tmp" 2>/dev/null; then
+    if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = '$(sql_escape "$sn_ns")' ORDER BY key COLLATE BINARY;" > "$sn_tmp"; } 2>/dev/null; then
       rm -f "$sn_tmp"
       refuse 2 ERR_STORAGE_READ "the storage read failed"
     fi
@@ -603,8 +603,8 @@ batch_unescape() {
 # batch_decode <base64> <out>: decode one value; the base64 command differs only in its
 # decode flag, so the GNU/Darwin spelling is tried first and the BSD one second
 batch_decode() {
-  printf '%s' "$1" | base64 -d > "$2" 2>/dev/null && return 0
-  printf '%s' "$1" | base64 -D > "$2" 2>/dev/null && return 0
+  printf '%s' "$1" | { base64 -d > "$2"; } 2>/dev/null && return 0
+  printf '%s' "$1" | { base64 -D > "$2"; } 2>/dev/null && return 0
   rm -f "$2" 2>/dev/null
   return 1
 }
@@ -701,7 +701,7 @@ batch_validate() {
   : > "$SCRATCH/live"
   if [ -f "$DB_PATH" ]; then
     db_init
-    if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sb_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/live" 2>/dev/null; then
+    if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sb_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/live"; } 2>/dev/null; then
       refuse 2 ERR_STORAGE_READ "the storage read failed"
     fi
   fi
@@ -805,7 +805,7 @@ store_scan() {
   scratch
   if [ -f "$DB_PATH" ]; then
     db_init
-    if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sns_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys" 2>/dev/null; then
+    if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sns_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys"; } 2>/dev/null; then
       refuse 2 ERR_STORAGE_READ "the storage read failed"
     fi
   else
@@ -886,7 +886,7 @@ store_docs_ensure() {
   mkdir -p "$SCRATCH/values" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
   sde_sql="$SCRATCH/docs-ensure.sql"
   printf 'BEGIN IMMEDIATE;\nDELETE FROM store_docs WHERE namespace = %s;\n' "$(store_sqlq "$sde_ns")" > "$sde_sql"
-  if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sde_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys" 2>/dev/null; then
+  if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sde_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys"; } 2>/dev/null; then
     refuse 2 ERR_STORAGE_READ "the storage read failed"
   fi
   sde_n=0
@@ -897,7 +897,7 @@ store_docs_ensure() {
     if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$sde_val"), value) FROM store WHERE namespace = $(store_sqlq "$sde_ns") AND key = $(store_sqlq "$sde_key");" > /dev/null 2>&1; then
       refuse 2 ERR_STORAGE_READ "cannot read the store values"
     fi
-    if ! "$sde_core" docs "$SD_FILE" "$sde_ns" "$sde_key" "$sde_val" "$sde_sig" >> "$sde_sql" 2>/dev/null; then
+    if ! { "$sde_core" docs "$SD_FILE" "$sde_ns" "$sde_key" "$sde_val" "$sde_sig" >> "$sde_sql"; } 2>/dev/null; then
       refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
     fi
   done < "$SCRATCH/keys"
@@ -980,7 +980,7 @@ store_search() {
     if [ -f "$DB_PATH" ]; then
       db_init
       mkdir -p "$SCRATCH/values" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch folder"
-      if ! sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$ss_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys" 2>/dev/null; then
+      if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$ss_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/keys"; } 2>/dev/null; then
         refuse 2 ERR_STORAGE_READ "the storage read failed"
       fi
       ss_n=0

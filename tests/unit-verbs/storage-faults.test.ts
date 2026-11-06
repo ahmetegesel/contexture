@@ -1,11 +1,13 @@
 import { chmodSync, existsSync, readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { data } from '../support/data';
 import { launch } from '../support/exec';
-import { catShim, holdLock, lockPath, sleepShim, unitLock } from '../support/locks';
-import { ROOT_USER } from '../support/plants';
+import { catShim, holdLock, lockPath, readOnlyLockShim, sleepShim, unitLock } from '../support/locks';
+import { ROOT_USER, mktempPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { lane, must, run, seedUnit, unit, unitChecksum, waitFor } from '../support/unit';
+import { refused } from '../support/wire';
 
 const scratch = (sb: string): string[] => readdirSync(join(sb, '.contexture/tmp')).filter((f) => f !== 'locks').sort();
 const added = (sb: string, before: readonly string[]): string[] => scratch(sb).filter((f) => !before.includes(f));
@@ -117,5 +119,21 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(added(sb, before).filter((f) => f.startsWith('verb.'))).toHaveLength(1);
     await unit(sb, 'task', 'show', 'w-unit', 'w-a');
     expect(added(sb, before)).toEqual([]);
+  });
+
+  it.skipIf(ROOT_USER)('[the-engine-r21] a unit lock whose holder pid cannot be written refuses with its one line, nothing else on stderr, and no lock left', async () => {
+    const sb = fresh(sb0);
+    refused(await data(sb, 'task.start', ['w-unit', 'w-a'], 'pointer=w-a IN_PROGRESS\n', readOnlyLockShim()), 'task.start', 2, 'ERR_STORAGE_WRITE', 'cannot write the unit lock holder pid');
+    expect(existsSync(lockPath(sb, unitLock('w-unit')))).toBe(false);
+    expect((await unit(sb, 'task', 'show', 'w-unit', 'w-a')).stdout).toContain('STATUS: TODO');
+  });
+
+  it('[the-engine-r21] a payload the data script cannot stage in its fresh scratch refuses with its one line and nothing else on stderr', async () => {
+    const sb = fresh(sb0);
+    const r = await data(sb, 'task.start', ['w-unit', 'w-a'], 'pointer=w-a IN_PROGRESS\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir "$p/pay" ;; esac'));
+    expect(r.code).toBe(2);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toMatch(/^task\.start: error: [^\n]+ \(ERR_STORAGE_[A-Z]+\)\n$/);
+    expect((await unit(sb, 'task', 'show', 'w-unit', 'w-a')).stdout).toContain('STATUS: TODO');
   });
 });

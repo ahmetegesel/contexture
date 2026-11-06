@@ -126,7 +126,7 @@ u_lock() {
   U_LM=0
   while [ "$U_LN" -lt 600 ]; do
     if mkdir "$U_LT" 2>/dev/null; then
-      printf '%s\n' "$$" > "$U_LT/pid" 2>/dev/null || {
+      { printf '%s\n' "$$" > "$U_LT/pid"; } 2>/dev/null || {
         rm -rf "$U_LT" 2>/dev/null
         u_refuse 2 ERR_STORAGE_WRITE "cannot write the unit lock holder pid"
       }
@@ -355,7 +355,7 @@ u_active() {
 }
 
 u_payload() {
-  cat > "$U_SCR/pay" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the payload"
+  { cat > "$U_SCR/pay"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the payload"
   U_PAY="$U_SCR/pay"
 }
 
@@ -374,7 +374,7 @@ u_sizes() {
   [ -s "$U_SCR/files" ] || return 0
   set --
   while IFS= read -r us_p; do set -- "$@" "$us_p"; done < "$U_SCR/files"
-  wc -c "$@" > "$U_SCR/sizes" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the unit's artifacts"
+  { wc -c "$@" > "$U_SCR/sizes"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the unit's artifacts"
 }
 
 u_stage_start() {
@@ -504,7 +504,7 @@ u_lane_doc() {
   U_PAY=""
   u_lock "$U_UNIT"
   u_stage_start
-  cat > "$U_STAGE/doc" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the document"
+  { cat > "$U_STAGE/doc"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the document"
   PX_DOCSIZE=$(wc -c < "$U_STAGE/doc" | tr -d ' ')
   u_fetch_unit "$U_UNIT" "__lanes__" 1
   u_args "$U_LANE"

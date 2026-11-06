@@ -174,7 +174,7 @@ store_lock() {
   while [ "$sl_n" -lt 600 ]; do
     if mkdir "$sl_lock" 2>/dev/null; then
       STORE_LOCK=$sl_lock
-      printf '%s\n' "$$" > "$STORE_LOCK/pid" 2>/dev/null || {
+      { printf '%s\n' "$$" > "$STORE_LOCK/pid"; } 2>/dev/null || {
         rm -rf "$STORE_LOCK" 2>/dev/null
         STORE_LOCK=""
         refuse 2 ERR_STORAGE_WRITE "cannot write the store lock holder pid"
@@ -604,8 +604,8 @@ batch_unescape() {
 # batch_decode <base64> <out>: decode one value; the base64 command differs only in its
 # decode flag, so the GNU/Darwin spelling is tried first and the BSD one second
 batch_decode() {
-  printf '%s' "$1" | base64 -d > "$2" 2>/dev/null && return 0
-  printf '%s' "$1" | base64 -D > "$2" 2>/dev/null && return 0
+  printf '%s' "$1" | { base64 -d > "$2"; } 2>/dev/null && return 0
+  printf '%s' "$1" | { base64 -D > "$2"; } 2>/dev/null && return 0
   rm -f "$2" 2>/dev/null
   return 1
 }

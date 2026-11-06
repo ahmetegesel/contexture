@@ -16,6 +16,10 @@ export function sleepShim(): Record<string, string> {
   return { PATH: `${dir}:${process.env.PATH ?? ''}` };
 }
 
+export function readOnlyLockShim(): Record<string, string> {
+  return pathPlant('mkdir', '/bin/mkdir "$@" || exit\nfor a in "$@"; do case "$a" in *.lock) chmod 555 "$a" ;; esac; done');
+}
+
 export function catShim(): { env: Record<string, string>; reads: () => string[] } {
   if (!CAT) throw new Error('no cat binary for the cat shim');
   const log = join(sandbox('cat-log'), 'reads');
