@@ -6,8 +6,8 @@
 #
 # Usage: tests/fast.sh <area> [<arg>]
 #   plugin <name>    plugins/<name>/tests/run.sh
-#   base             the shipped base alone (base-only-tests.sh)
-# Every other area is a vitest project: bun run test:<project> from tests/.
+# Every other area is a vitest project: bun run test:<project> from tests/ (the shipped
+# base alone is bun run test:base).
 # Exit 0 when every suite passes or skips; 1 on any failure or an unknown area.
 
 set -u
@@ -19,8 +19,8 @@ usage() {
   cat <<'USAGE'
 usage: tests/fast.sh <area> [<arg>]
   plugin <name>    plugins/<name>/tests/run.sh
-  base             the shipped base alone (base-only-tests.sh)
-Every other area is a vitest project: bun run test:<project> from tests/.
+Every other area is a vitest project: bun run test:<project> from tests/ (the shipped
+base alone is bun run test:base).
 USAGE
 }
 
@@ -82,10 +82,6 @@ case "${1:-}" in
     [ -f "$ROOT/plugins/$2/tests/run.sh" ] || { echo "fast.sh: no suite at plugins/$2/tests/run.sh" >&2; exit 1; }
     AREA="plugin $2"
     run_suite "plugins/$2/tests/run.sh" sh "$ROOT/plugins/$2/tests/run.sh"
-    ;;
-  base)
-    AREA="base"
-    run_suite "base-only-tests.sh" sh "$ROOT/tests/base-only-tests.sh"
     ;;
   -h|--help)
     usage

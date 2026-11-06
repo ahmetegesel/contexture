@@ -1,12 +1,12 @@
 #!/bin/sh
-# run.sh: the upstream test runner. Runs the one core shell suite (base-only, the shipped
-# base alone, staged with a synthetic data file; every other core area is a vitest project
-# under tests/, run with bun run test: engine, filters, hooks, laws, governance with the
-# static store-bypass check, packages, drivers, unit-record, unit-verbs, and the plugins'
-# toolchain-filters, storage-fts5, docs-discipline, and ast-doc-graph); then every plugin suite by
-# convention (plugins/<name>/tests/run.sh; a suite with a declared need absent exits 77
-# and skips cleanly, naming the need); a plugin whose tests are a vitest project reports
-# INFO.
+# run.sh: the upstream test runner. No core shell suite remains: every core area is a
+# vitest project under tests/, run with bun run test (engine, filters, hooks, laws,
+# governance with the static store-bypass check, packages, base, the shipped base alone,
+# integration, drivers, unit-record, unit-verbs, and the plugins' toolchain-filters,
+# storage-fts5, docs-discipline, and ast-doc-graph; the pre-release sqlite-smoke set with
+# bun run test:sqlite-smoke). The runner keeps every plugin suite by convention
+# (plugins/<name>/tests/run.sh; a suite with a declared need absent exits 77 and skips
+# cleanly, naming the need); a plugin whose tests are a vitest project reports INFO.
 #
 # The suites run concurrently: each is independent (its own mktemp sandbox, its own
 # locks and stores inside it), so the runner starts them together, keeps each suite's
@@ -35,7 +35,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="base-only-tests.sh"
+CORE_SUITES=""
 
 GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
 GATE_JOBS=${GATE_JOBS:-5}
@@ -194,7 +194,7 @@ fail=0
 skipped=0
 
 printf 'run: the upstream test runner at %s\n' "$ROOT"
-printf 'core suites: %s\n\n' "$CORE_SUITES"
+printf 'core suites: %s\n\n' "${CORE_SUITES:-none (every core area is a vitest project: bun run test from tests/)}"
 
 times=""
 for i in $ids; do
