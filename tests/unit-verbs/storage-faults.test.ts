@@ -76,10 +76,11 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
   it('KR-a: a SIGKILLed holder leaves its pid in the lock; the next writer removes the stale lock and lands', async () => {
     const sb = fresh(sb0);
     const lock = lockPath(sb, 'w-unit.lock');
-    const holder = launch('sh', ['-c', 'mkdir -p "$(dirname "$1")" && mkdir "$1" && printf "%s\\n" "$$" > "$1/pid" && sleep 30', 'kr-holder', lock], { cwd: sb });
+    const holder = launch('sh', ['-c', 'mkdir -p "$(dirname "$1")" && mkdir "$1" && printf "%s\\n" "$$" > "$1/pid" && sleep 30', 'kr-holder', lock], { cwd: sb, group: true });
     expect(await waitFor(() => existsSync(join(lock, 'pid')) && readFileSync(join(lock, 'pid'), 'utf8').trim() !== '', 10_000)).toBe(true);
     expect(readFileSync(join(lock, 'pid'), 'utf8').trim()).toBe(String(holder.child.pid));
     holder.signal('SIGKILL');
+    expect(await waitFor(() => groupGone(holder.child.pid!), 10_000)).toBe(true);
     await holder.result;
     expect(() => process.kill(holder.child.pid!, 0)).toThrow();
     expect((await unit(sb, 'task', 'start', 'w-unit', 'w-a')).code).toBe(0);
