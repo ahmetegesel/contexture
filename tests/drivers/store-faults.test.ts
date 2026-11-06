@@ -9,7 +9,7 @@ import { ROOT_USER, chmodPlant, mktempPlant, pathPlant } from '../support/plants
 import { sandbox } from '../support/sandbox';
 import { fresh } from '../support/snapshot';
 import { DRIVERS, type Driver, fts5Available } from '../support/stage';
-import { batchPayload, docsStore, store } from '../support/store';
+import { batchPayload, docsStore, plantScript, store } from '../support/store';
 import { answer, refused, refusedLike } from '../support/wire';
 
 function walk(dir: string): string[] {
@@ -17,6 +17,7 @@ function walk(dir: string): string[] {
 }
 
 const stages = (sb: string) => walk(sb).filter((p) => /\/\.stage/.test(p));
+const scratch = (sb: string) => readdirSync(join(sb, '.contexture/tmp')).filter((n) => n !== 'locks').sort();
 
 async function seeded(snapshot: string, driver: Driver, keys: Record<string, string>): Promise<string> {
   const sb = fresh(snapshot);
@@ -113,6 +114,34 @@ for (const driver of DRIVERS) {
       for (const side of ['-wal', '-shm']) if (existsSync(`${ro[0]}${side}`)) chmodSync(`${ro[0]}${side}`, 0o644);
       answer(await s.put('docs', 'workspace/x', 'lands\n'), 'store.put');
       expect((await s.get('docs', 'workspace/x')).stdout).toBe('lands\n');
+    });
+  });
+}
+
+for (const driver of DRIVERS) {
+  describe.skipIf(driver === 'fts5' && !fts5Available())(`an interrupt while the ${driver} driver reads the namespace declaration`, { concurrent: true }, () => {
+    let empty: string;
+    beforeAll(async () => {
+      empty = await docsStore(driver, false);
+    });
+
+    it.each([
+      ['store.put', 'SIGHUP'],
+      ['store.put', 'SIGINT'],
+      ['store.put', 'SIGTERM'],
+      ['store.get', 'SIGTERM'],
+    ] as const)('%s under a group %s leaves no store-data scratch', async (fn, sig) => {
+      const sb = fresh(empty);
+      const mark = join(sandbox('store-data-mark'), 'mark');
+      plantScript(sb, 'store-data', `: > "${mark}"\nexec sleep 30`);
+      const before = scratch(sb);
+      const { result, signal } = launch(driverPath(sb, driver), [fn, 'docs', 'workspace/x'], { cwd: sb, input: fn === 'store.put' ? 'never lands\n' : '', group: true });
+      for (let i = 0; i < 200 && !existsSync(mark); i++) await wait(50);
+      expect(existsSync(mark)).toBe(true);
+      expect(scratch(sb).filter((n) => !before.includes(n))).toEqual([expect.stringMatching(/^store-data\./)]);
+      signal(sig);
+      expect((await result).code).not.toBe(0);
+      expect(scratch(sb)).toEqual(before);
     });
   });
 }
