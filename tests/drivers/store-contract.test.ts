@@ -2,6 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
+import { holdLock, namespaceLock } from '../support/locks';
 import { sandbox } from '../support/sandbox';
 import { NEEDLE_ROWS, SEARCH_DATA, SEARCH_VALUES, searchAnswer } from '../support/search-fixture';
 import { fresh } from '../support/snapshot';
@@ -322,6 +323,21 @@ for (const driver of DRIVERS) {
         const after = answer(await s.op('storage.health', []), 'storage.health');
         expect(Object.keys(after)).toEqual(['driver', 'health', 'detail', 'store']);
         expect([after.driver, after.health, after.store]).toEqual([driver, 'ok', 'present']);
+      });
+
+      it('reports locked while a writer holds the unit namespace lock, and ok once it is released or its holder is gone', async () => {
+        const sb = stage(driver);
+        const s = store(sb, driver);
+        answer(await s.put('unit', 'probe/state', 'x\n'), 'store.put');
+        const health = async () => answer(await s.op('storage.health', []), 'storage.health');
+        const release = holdLock(sb, namespaceLock('unit'), 'live');
+        expect(await health()).toEqual({ driver, health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'present' });
+        release();
+        expect((await health()).health).toBe('ok');
+        holdLock(sb, namespaceLock('unit'), 'pidless');
+        expect((await health()).health).toBe('locked');
+        holdLock(sb, namespaceLock('unit'), 'dead');
+        expect((await health()).health).toBe('ok');
       });
     });
   });
