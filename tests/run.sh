@@ -1,14 +1,11 @@
 #!/bin/sh
-# run.sh: the upstream test runner. Runs the core suites (filters, ctx, session, hooks,
-# governance, law compose, base-only, module-tests), each hermetic and staged from the
-# shipped core (the store driver tests and the store fuzzer are the vitest drivers
-# project's, tests/drivers; the record logic, the audit, and the unit data cases are the
-# vitest unit-record project's, tests/unit-record; the base-only gate stages base alone and
-# runs the posix core suites with a synthetic data file); the session suite runs twice,
-# once on the posix driver and once
-# on the fts5 driver (the plugin's own copy staged into its sandbox; skip 77 when sqlite3
-# lacks FTS5), so every verb is proven to reach the one configured store; then every
-# plugin suite by convention
+# run.sh: the upstream test runner. Runs the core suites (filters, ctx, hooks, governance,
+# law compose, base-only, module-tests), each hermetic and staged from the shipped core
+# (the store driver tests and the store fuzzer are the vitest drivers project's,
+# tests/drivers; the record logic, the audit, and the unit data cases are the vitest
+# unit-record project's, tests/unit-record; the unit and lane verbs are the vitest
+# unit-verbs project's, tests/unit-verbs; the base-only gate stages base alone and runs the
+# posix core suites with a synthetic data file); then every plugin suite by convention
 # (plugins/<name>/tests/run.sh; a suite with a declared need absent exits 77
 # and skips cleanly, naming the need); the docs-discipline suite runs twice too, once per
 # driver (plugin:docs-discipline and plugin:docs-discipline:fts5), staged from base/ and
@@ -25,8 +22,7 @@
 # soon as its rc is read, so a red surfaces without waiting for the long jobs; the suite's
 # full output and outcome line still print in the fixed order below. GATE_JOBS caps how
 # many suites run at once (default 5: the four to six lanes the host's cores allow; 0
-# runs all; 1 runs them one after another, the order unchanged; the session suite still
-# runs its section groups at once inside its own run).
+# runs all; 1 runs them one after another, the order unchanged).
 #
 # The runner prints one outcome line per suite plus a final verdict, and exits
 # non-zero when any suite fails. This is the ship gate: a red run holds the
@@ -42,7 +38,7 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 export LC_ALL=C
 unset COMPACT_DISABLE COMPACT_DEBUG
 
-CORE_SUITES="filter-tests.sh ctx-tests.sh session-tests.sh session-tests.sh:fts5 hook-tests.sh governance-tests.sh law-tests.sh base-only-tests.sh module-tests.sh"
+CORE_SUITES="filter-tests.sh ctx-tests.sh hook-tests.sh governance-tests.sh law-tests.sh base-only-tests.sh module-tests.sh"
 
 GATE_SUITE_TIMEOUT=${GATE_SUITE_TIMEOUT:-3600}
 GATE_JOBS=${GATE_JOBS:-5}
@@ -86,17 +82,12 @@ add_job() { # <label> <kind: run|missing|info|skip> [<suite path> [<argument>]]
   ids="$ids $n"
 }
 
-for entry in $CORE_SUITES; do
-  s=${entry%%:*}
+for s in $CORE_SUITES; do
   if [ ! -f "$SCRIPT_DIR/$s" ]; then
-    add_job "core:$entry" missing
+    add_job "core:$s" missing
     continue
   fi
-  case "$entry" in
-    # the second session run: the same assertions on the fts5 driver
-    session-tests.sh:fts5) add_job "core:$entry" run "$SCRIPT_DIR/$s" "--driver=fts5" ;;
-    *) add_job "core:$entry" run "$SCRIPT_DIR/$s" ;;
-  esac
+  add_job "core:$s" run "$SCRIPT_DIR/$s"
 done
 core_count=$n
 

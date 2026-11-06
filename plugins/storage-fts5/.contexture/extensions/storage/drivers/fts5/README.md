@@ -69,7 +69,8 @@ refusal of every other version, `fts5-version.test.ts` the sqlite3 3.44 guard, a
 rollbacks. The shared store contract (`tests/drivers`) holds this copy and the posix driver
 to the same set. Each skips without sqlite3 FTS5, naming the need.
 
-The upstream gate runs the whole session suite a second time on this driver
-(`core:session-tests.sh:fts5`), and the docs suite runs on it when the plugin is present;
+The unit and lane verbs run once, on posix, in the vitest `unit-verbs` project (this
+driver holds no record logic, so the store contract is its proof), and the docs suite
+runs on it when the plugin is present;
 the base contract these cases hold is in `docs/the-engine.md` (The storage contract), and
 the plugin's adoption and needs are in `plugins/storage-fts5/README.md`.

@@ -155,7 +155,7 @@ The shared set (`tests/drivers/store-contract.test.ts` and its siblings) proves 
 
 Verify the re-entered record with the read verbs (`ctx unit board`, `load`, `task list`, `entry list`, `finding list`, `lane show`) against the same reads under posix, and each doc with `ctx docs write <repo> <slug> --replace --dry-run < docs/<repo>/<slug>.md`, which answers `unchanged (nothing written)` exactly when the store holds the doc byte for byte.
 
-The docs plugin suite runs in full against this driver (it declares `store` and `store.changelog`), the capture parity and the change-log cases included; the record's cross-driver verb parity runs in the unit suite (posix and fts5) through the unit module.
+The docs plugin suite runs in full against this driver (it declares `store` and `store.changelog`), the capture parity and the change-log cases included; the record's verbs run once, on posix, in the vitest `unit-verbs` project, and this driver is held to the shared store contract (`tests/drivers`) instead.
 
 ## Needs
 

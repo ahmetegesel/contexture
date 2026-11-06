@@ -153,12 +153,12 @@ disk_verbs=$(for f in "$ROOT"/base/.contexture/modules/unit/scripts/*; do
   grep -q '^# summary: ' "$f" || continue
   printf '%s\n' "$b"
 done | LC_ALL=C sort | tr '\n' ' ' | sed 's/ $//')
-suite_verbs=$(sed -n 's/^DECLARED="\(.*\)"$/\1/p' "$SCRIPT_DIR/session-tests.sh" | head -n 1)
-a_eq "$suite_verbs" "$disk_verbs" "presence: every shipped unit verb is declared in the unit suite"
+suite_verbs=$(sed -n "s/^export const DECLARED = \[\(.*\)\];\$/\1/p" "$SCRIPT_DIR/unit-verbs/verb-surface.test.ts" | head -n 1 | tr -d "'," )
+a_eq "$suite_verbs" "$disk_verbs" "presence: every shipped unit verb is declared in the unit-verbs verb surface test"
 for v in $disk_verbs; do
-  grep -q "$v" "$SCRIPT_DIR/session-tests.sh" || bad "presence: verb $v has no suite reference"
+  grep -l -F "'$v'" "$SCRIPT_DIR"/unit-verbs/*.test.ts | grep -v '/verb-surface\.test\.ts$' | grep -q . || bad "presence: verb $v has no unit-verbs test calling it"
 done
-ok "presence: each verb name appears in the unit suite"
+ok "presence: each verb name is called by a unit-verbs test"
 
 # the points: the awk fire_hooks of load, the sh vb_hook of the verbs over lib/verb.sh
 # (v0.55.0), and the refresh runner
@@ -193,7 +193,7 @@ check_filter_pairs() {
 check_filter_pairs "$ROOT/base/.contexture/modules/run/filters" "$SCRIPT_DIR" "core"
 check_filter_pairs "$ROOT/plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters" "$ROOT/plugins/toolchain-filters/tests" "toolchain-filters"
 
-for s in filter-tests.sh ctx-tests.sh session-tests.sh hook-tests.sh governance-tests.sh; do
+for s in filter-tests.sh ctx-tests.sh unit-verbs/verb-surface.test.ts hook-tests.sh governance-tests.sh; do
   if [ -f "$SCRIPT_DIR/$s" ]; then ok "suite present: $s"; else bad "suite missing: $s"; fi
 done
 

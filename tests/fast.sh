@@ -5,14 +5,11 @@
 # full pre-land gate (tests/run.sh), which stays mandatory before any commit, tag, or push.
 #
 # Usage: tests/fast.sh <area> [<arg>]
-#   unit             the four unit-like suites (the store driver and record tests run in vitest:
-#                    bun run test:drivers and bun run test:unit-record)
+#   unit             the four unit-like suites (the store driver, record, and verb tests run in
+#                    vitest: bun run test:drivers, and bun run test:unit for the unit-record
+#                    and unit-verbs projects)
 #   engine           filter-tests, ctx-tests, governance-tests
 #   law              the law compose suite (law-tests.sh)
-#   record <1|2|3|4> one session suite group (the owning group is required)
-#   driver posix     the session suite on posix
-#   driver fts5      the session suite on fts5 (the driver
-#                    tests run in vitest: bun run test:drivers and test:storage-fts5)
 #   module           the package overlay installer suite (module-tests.sh)
 #   docs             the docs-discipline suite on the files driver
 #   docs-fts5        the docs-discipline suite on fts5
@@ -28,14 +25,11 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 usage() {
   cat <<'USAGE'
 usage: tests/fast.sh <area> [<arg>]
-  unit             the four unit-like suites (the store driver and record tests run in vitest:
-                   bun run test:drivers and bun run test:unit-record)
+  unit             the four unit-like suites (the store driver, record, and verb tests run in
+                   vitest: bun run test:drivers, and bun run test:unit for the unit-record
+                   and unit-verbs projects)
   engine           filter-tests, ctx-tests, governance-tests
   law              the law compose suite (law-tests.sh)
-  record <1|2|3|4> one session suite group (the owning group is required)
-  driver posix     the session suite on posix
-  driver fts5      the session suite on fts5 (the driver
-                   tests run in vitest: bun run test:drivers and test:storage-fts5)
   module           the package overlay installer suite (module-tests.sh)
   docs             the docs-discipline suite on the files driver
   docs-fts5        the docs-discipline suite on fts5
@@ -115,30 +109,6 @@ case "${1:-}" in
   law)
     AREA="law"
     run_suite "law-tests.sh" sh "$ROOT/tests/law-tests.sh"
-    ;;
-  record)
-    case "${2:-}" in
-      1|2|3|4) ;;
-      *) echo "fast.sh: record needs a group: 1, 2, 3, or 4" >&2; exit 1 ;;
-    esac
-    AREA="record $2"
-    run_suite "session-tests.sh --group=$2" sh "$ROOT/tests/session-tests.sh" "--group=$2"
-    ;;
-  driver)
-    case "${2:-}" in
-      posix)
-        AREA="driver posix"
-        run_suite "session-tests.sh (posix)" sh "$ROOT/tests/session-tests.sh" --driver=posix
-        ;;
-      fts5)
-        AREA="driver fts5"
-        run_suite "session-tests.sh (fts5)" sh "$ROOT/tests/session-tests.sh" --driver=fts5
-        ;;
-      *)
-        echo "fast.sh: driver needs posix or fts5" >&2
-        exit 1
-        ;;
-    esac
     ;;
   module)
     AREA="module"

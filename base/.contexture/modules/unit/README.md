@@ -141,6 +141,13 @@ refusal, the file-pointer exemption, the legacy ref, the ranked search identity 
 canned fts5 store answer, the active listing, the per-unit read), the audit classes, and
 the record engine alone (`lib/canon.awk`, `lib/model.awk`, `lib/ops.awk`), held equal to
 this data script for every dispatched function by a differential test, with the search,
-ranked, render, payload, and base64 programs each tested alone. The store fuzzer's
+ranked, render, payload, and base64 programs each tested alone. The vitest project
+`unit-verbs` (`tests/unit-verbs`, `bun run test:unit-verbs`; `bun run test:unit` runs both
+unit projects) proves the `ctx unit` and `ctx lane` verbs once, on posix: one file per verb
+family, each over its own seeded snapshot built through the verbs, the input matrices of
+`lib/verb.sh` (the REF shapes, the UTF-8 and NUL checks, the newline and carriage return
+refusals) one function at a time with one wiring test per write path, the fold protocol
+and its defect classes, and the fault cases (a read-only store, an interrupted waiter, a
+killed writer, a held lock, concurrent writers). The store fuzzer's
 unit-shaped profile (`tests/drivers/store-fuzz.test.ts`) is the seeded differential proof of the
 store calls the module makes across posix and fts5.

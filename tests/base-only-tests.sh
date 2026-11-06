@@ -3,8 +3,8 @@
 # proves the payload a bare adoption carries: the no-plugin help surface, the record,
 # lane, and store surfaces over a synthetic data module, the absent-rhythms index, the
 # posix descriptor, the store refusals, the no-base-to-docs census, and the posix core
-# suites. It excludes every plugin suite (the fts5 session run, the docs suite, and every
-# plugins/<name> suite): those are plugin gates, not base gates. A base-only regression
+# suites. It excludes every plugin suite (the docs suite and every plugins/<name>
+# suite): those are plugin gates, not base gates. A base-only regression
 # (the absent rhythms index, a missing record or store function, a help drift, a
 # base-to-docs reference) passes the upstream gate, so this suite is that gate's base
 # half.
@@ -16,8 +16,8 @@
 #
 # Usage: tests/base-only-tests.sh [--keep] [--skip-core]
 #   --keep       preserve the sandbox
-#   --skip-core  skip B6's four nested posix suites and their launches, running B1 to B5
-#                alone (pass=163); the full run is pass=167
+#   --skip-core  skip B6's three nested posix suites and their launches, running B1 to B5
+#                alone (pass=163); the full run is pass=166
 # Exit 0 when every case passes; 1 otherwise; 2 a staging failure.
 
 set -u
@@ -96,7 +96,7 @@ refused() { # <rc> <message...>: one line on stderr, nothing on stdout, the exac
 }
 
 # ==============================================================================
-# B6 launch: the four nested posix suites run while B1 to B5 execute
+# B6 launch: the three nested posix suites run while B1 to B5 execute
 # ==============================================================================
 # --skip-core skips the launches and the B6 section, leaving B1 to B5 alone
 if [ "$SKIP_CORE" -eq 0 ]; then
@@ -105,12 +105,11 @@ mkdir -p "$NESTED"
 NESTED_JOBS=3
 NESTED_PID=""
 
-run_core_cmd() { # <index>: the four nested commands and arguments, in order
+run_core_cmd() { # <index>: the three nested commands and arguments, in order
   case "$1" in
     1) sh "$ROOT/tests/filter-tests.sh" ;;
     2) sh "$ROOT/tests/ctx-tests.sh" ;;
-    3) sh "$ROOT/tests/session-tests.sh" --driver=posix ;;
-    4) sh "$ROOT/tests/hook-tests.sh" ;;
+    3) sh "$ROOT/tests/hook-tests.sh" ;;
   esac
 }
 
@@ -121,7 +120,7 @@ launch_core() { # <index>: one output and rc file per suite, the rc atomically r
 }
 
 run_nested() { # the gate's rc-file poll idiom (tests/run.sh lines 128-180), cap 3
-  nq="1 2 3 4"
+  nq="1 2 3"
   nr=""
   while :; do
     still=""
@@ -483,7 +482,7 @@ rm -rf "$plantdir"
 # ==============================================================================
 if [ "$SKIP_CORE" -eq 0 ]; then
 printf '\n== B6: the posix core suites ==\n'
-# the four suites were launched before B1; wait for the poll loop, then print in order
+# the three suites were launched before B1; wait for the poll loop, then print in order
 if [ -n "$NESTED_PID" ]; then wait "$NESTED_PID"; fi
 collect_core() { # <index> <label>
   _cc_idx=$1; _cc_label=$2
@@ -503,8 +502,7 @@ collect_core() { # <index> <label>
 }
 collect_core 1 "filter-tests.sh"
 collect_core 2 "ctx-tests.sh"
-collect_core 3 "session-tests.sh (posix)"
-collect_core 4 "hook-tests.sh"
+collect_core 3 "hook-tests.sh"
 fi
 
 printf '\n== summary ==\n'
