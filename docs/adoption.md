@@ -144,20 +144,28 @@ In this repository the live root (`AGENTS.md` and `.contexture/`) is untracked w
 
 1. Edit `base/` directly: it is the shipping copy.
 2. Ship: docs sync, commit, push, and the annotated tag in one breath.
-3. Apply: `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched. A copy adds and replaces files but never removes one: delete from the live drawer every payload path the release removed (`git diff --name-status --diff-filter=D <previous-tag> <tag> -- base/` lists them).
+3. Apply: first read the version actually live in the drawer by comparing its files against the tags (the payload compare below), never by assuming the previous tag; then `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched. A copy adds and replaces files but never removes one: delete from the live drawer every payload path removed since the live version (`git diff --name-status --diff-filter=D <live-tag> <tag> -- base/` lists them), then run the payload compare: it prints nothing once no removed path is left.
 4. Compose the law layer: `sh .contexture/laws/compose`. The generated layer is gitignored, never shipped, and rebuilt after any package or payload change; the first boot verifies or recomposes it too.
 5. Verify the live install: the boot load, the audit, and the ground check.
+
+The payload compare lists every live payload path the release lacks, whatever range the deletes came from:
+
+```sh
+diff -rq -x AGENTS.generated.md base/.contexture .contexture | grep -v -E '^Only in \.contexture(/modules|/extensions|/extensions/modules)?: '
+```
+
+Each `Only in .contexture/...` line it prints is a missed delete; a `differ` line or an `Only in base/...` line is a copy that did not land; no output means the drawer's payload class equals the release. The `-x` skips the generated law layer, and the `grep` drops the direct children of the four folders where workspace-owned paths and installed packages sit beside the payload (the drawer's top, its module folder, the extension root, and the extension root's module folder), so a payload member removed whole at that level shows only in the range. The same compare reads the version actually live, which the `AGENTS.md` header cannot always show: a release that bumps no header keeps the previous one (v0.63.0 kept v0.62.0's). Before the copy, extract a candidate tag's tree into a new scratch folder (`mkdir -p .contexture/tmp/<name> && git archive <tag> base/ | tar -x -C .contexture/tmp/<name>`) and run the compare with `.contexture/tmp/<name>/base/.contexture` as its first operand: the live version is the tag it finds no differing file against. The range from the previous tag once missed a verb file v0.63.0 removed while the drawer still held v0.62.0, and the compare found four posix driver awk files v0.61.0 removed that every later apply had left behind.
 
 ## Updating
 
 The base evolves upstream, and updating is judgment, not a script: the changes are semantic, and every workspace differs. The path:
 
-1. Read your installed version: the header line of `AGENTS.md`. MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections or features, PATCH fixes wording.
+1. Read your installed version: the header line of `AGENTS.md`; a release that bumps no header keeps the previous one, so step 6 reads the version actually live from the files. MAJOR breaks existing artifacts (fields removed, shapes changed), MINOR adds sections or features, PATCH fixes wording.
 2. Fetch the upstream tags: `git fetch https://github.com/ahmetegesel/contexture.git --tags`.
 3. Read the CHANGELOG from your installed version to the target: what changed and why.
 4. Read your workspace: the overlay's `@replace` blocks, live sessions, in-flight artifacts.
 5. Decide: adopt now, migrate first, or wait.
-6. Copy the payload: `git archive <tag> base/ | tar -x --strip-components=1 -C <your-repo>`; the archive carries only payload paths, so workspace-owned paths are never touched. The archive adds and replaces files but never removes one, so delete every payload path the target tag no longer carries (`git diff --name-status --diff-filter=D <installed-tag> <tag> -- base/` lists them): v0.55.0, for one, removes the session verbs `append`, `amend`, `query`, `flip`, and `drop` and three posix driver awk files, and a removed verb file left behind still lists in `ctx unit help` though its call prints the replacement.
+6. Copy the payload: first read the version actually live in the drawer with the payload compare against the tags (see Payload classes and syncing), never from the header alone; then `git archive <tag> base/ | tar -x --strip-components=1 -C <your-repo>`; the archive carries only payload paths, so workspace-owned paths are never touched. The archive adds and replaces files but never removes one, so delete every payload path removed since the live version (`git diff --name-status --diff-filter=D <live-tag> <tag> -- base/` lists them): v0.55.0, for one, removes the session verbs `append`, `amend`, `query`, `flip`, and `drop` and three posix driver awk files, and a removed verb file left behind still lists in `ctx unit help` though its call prints the replacement. Then run the payload compare with the target tag's tree extracted into scratch as its first operand: it prints nothing once no removed path is left.
 7. Verify it: `git ls-tree -r --name-only <tag> -- base/` plus a `cmp` per file against the applied paths.
 8. Compose the law layer: `sh .contexture/laws/compose`. The generated layer is gitignored, never shipped, and rebuilt after any package or payload change; a boot verifies or recomposes it too.
 9. Review the staged diff before committing; it shows you the changed base.
