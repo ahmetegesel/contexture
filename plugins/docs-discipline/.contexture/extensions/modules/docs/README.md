@@ -57,8 +57,14 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   `docs/<repo>/<slug>.md`, whatever the caller's spelling and whatever the
   driver; the old display-path mapping and the draft-path refusal retire
   because the stored bytes are what a verb reads. Driver calls run from the
-  workspace root with stdin from `/dev/null`; scratch lives under
-  `.contexture/tmp` and is removed on exit.
+  workspace root with stdin from `/dev/null`. `docs_scratch` makes the verb's
+  scratch once, one `docs-io.*` folder inside the per-verb root the engine
+  exports at dispatch (`CTX_SCRATCH_ROOT`, as the unit verbs and the drivers
+  use it), so a SIGKILLed verb's folder goes with the next dispatch's sweep of
+  dead roots; an undispatched run (no root exported) stages under
+  `.contexture/tmp`, the system temp only when the drawer cannot be written;
+  the folder is removed on exit, a hangup, interrupt, or terminate exiting
+  through that removal.
 - The staged delta: `docs_delta_stage` copies a verb's status-prefixed delta
   from its stdin into the scratch (`delta`, beside the materialized corpus)
   and may close a pipeline, since the file carries the delta;
@@ -264,7 +270,9 @@ verb that does not take that control, the by-design id pairs of `entry` and
 `pitfall` allowed, with four plants), the one home of the glob rule (only
 `docs-glob.awk` defines its functions), and the package shape. `integration/` drives the verbs end to
 end: one success per write verb with its stored bytes, the write pipeline's
-refusals leaving the stored doc unchanged, the read verbs and their misses,
+refusals leaving the stored doc unchanged, a dispatched verb SIGKILLed while
+it holds its scratch leaving nothing after the next dispatch, the read verbs
+and their misses,
 the check verb's shebang read under the workspace root from a working folder
 elsewhere, the check verb over a plain quoted git delta (a non-ASCII path, a
 quote and a backslash, the control-character notice with a rename's readable
@@ -293,9 +301,9 @@ and for `store/` sqlite3 with FTS5.
 
 ## The gate's matrix
 
-`ctx docs gate --test-matrix` builds its fixtures under the workspace
-drawer's `.contexture/tmp` (the system temp only when that drawer cannot hold
-it), plants a local repository inside them for the claimant trackedness probe,
+`ctx docs gate --test-matrix` builds its fixtures in the verb's own scratch
+(`docs_scratch`: inside the per-verb root when dispatched, removed on exit),
+plants a local repository inside them for the claimant trackedness probe,
 writes nothing outside them, and exercises the check over eight self-planted
 scenarios; the suite points `TMPDIR` at an empty watch folder and proves it
 stays empty. The default gate run aggregates the live git delta (workspace root

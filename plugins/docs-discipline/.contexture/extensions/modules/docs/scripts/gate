@@ -309,18 +309,14 @@ run_gate_check() {
     fi
 }
 
-# Self-planted test matrix: builds its own fixture corpus under the workspace
-# drawer's .contexture/tmp (the system temp only when that drawer cannot hold
-# it), plants a local repository inside it for the claimant trackedness probe,
-# then exercises the check over the eight scenarios. No external paths, no
-# writes outside the fixture directory.
+# Self-planted test matrix: builds its own fixture corpus in the verb's scratch
+# (docs_scratch: inside the per-verb root when dispatched, removed on exit),
+# plants a local repository inside it for the claimant trackedness probe, then
+# exercises the check over the eight scenarios. No external paths, no writes
+# outside the fixture directory.
 run_test_matrix() {
-    FIXTURE_BASE="${DOCS_ROOT:-$PWD}/.contexture/tmp"
-    if ! mkdir -p "$FIXTURE_BASE" 2>/dev/null || [ ! -w "$FIXTURE_BASE" ]; then
-        FIXTURE_BASE="${TMPDIR:-/tmp}"
-    fi
-    FIXTURE_DIR="$(mktemp -d "$FIXTURE_BASE/docs-gate-matrix.XXXXXX")" || { echo "ctx docs gate: mktemp -d failed" >&2; return 1; }
-    trap 'rm -rf "$FIXTURE_DIR"' EXIT INT TERM
+    docs_scratch || return 1
+    FIXTURE_DIR="$DOCS_SCRATCH/matrix"
     mkdir -p "$FIXTURE_DIR/docs/demo"
 
     cat > "$FIXTURE_DIR/docs/demo/widgets.md" <<'FIXTURE'

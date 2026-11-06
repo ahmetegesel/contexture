@@ -374,9 +374,15 @@ it walk below runs every one of these.
   a shared store is undesigned) and checks the incoming code delta alone.
 - The sample corpus is fictional and reference-only; the adopter's corpus is
   the real subject.
-- The gate's matrix is self-planted: it builds its fixtures under the
-  workspace drawer's `.contexture/tmp` (the system temp only when that drawer
-  cannot hold it), plants a local repository inside them for the claimant
+- Every docs verb stages its scratch (the materialized corpus, the staged
+  delta, the payloads) in one folder of its own inside the per-verb root the
+  engine exports at dispatch (`CTX_SCRATCH_ROOT`) and removes it on exit, so a
+  verb killed by SIGKILL leaves nothing the next dispatch's sweep does not
+  remove; run undispatched (no root exported) it stages under the workspace
+  drawer's `.contexture/tmp`, the system temp only when that drawer cannot be
+  written.
+- The gate's matrix is self-planted: it builds its fixtures in the verb's own
+  scratch, plants a local repository inside them for the claimant
   trackedness probe, and writes nothing outside the fixture directory; the
   gate test points `TMPDIR` at an empty watch folder and proves it stays empty.
 - The single-repo mapping is documented, not scripted: the check maps

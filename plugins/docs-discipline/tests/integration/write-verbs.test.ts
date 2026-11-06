@@ -1,7 +1,7 @@
-import { readFileSync, renameSync } from 'node:fs';
-import { join } from 'node:path';
+import { readdirSync, readFileSync, renameSync } from 'node:fs';
+import { basename, dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import type { Run } from '@support/exec';
+import { launch, type Run } from '@support/exec';
 import { fresh } from '@support/snapshot';
 import { store } from '@support/store';
 import { docs, putDocs, stageSeed, STAGED_SCRIPTS } from '../support/corpus';
@@ -77,6 +77,29 @@ describe('the write verbs through ctx on posix: one success per verb, the stored
   it('W27 ids keys the legacy entries and names the count', async () => {
     const r = await succeeds(fresh(wtest), ['ids', 'wtest'], 'unit', golden('exp-ids.md'));
     expect(r.stdout).toContain('4 entries keyed');
+  });
+});
+
+describe('a dispatched docs verb stages its scratch inside the per-verb root the engine sweeps', { concurrent: true }, () => {
+  const scratches = (sb: string): string[] =>
+    readdirSync(join(sb, '.contexture/tmp'), { recursive: true })
+      .map(String)
+      .filter((p) => basename(p).startsWith('docs-io.'));
+
+  it('[docs-module-r25, the-engine-r20] a verb killed while it holds its scratch leaves nothing the next dispatch does not remove', async () => {
+    const sb = fresh(wtest);
+    const verb = launch('./.contexture/ctx', ['docs', 'write', 'wtest', 'killed'], { cwd: sb, input: null, group: true, env: { GIT_CEILING_DIRECTORIES: dirname(sb) } });
+    let held: string[] = [];
+    for (let i = 0; i < 200 && !held.length; i++) {
+      await new Promise((done) => setTimeout(done, 50));
+      held = scratches(sb);
+    }
+    verb.signal('SIGKILL');
+    await verb.result;
+    expect(held).toHaveLength(1);
+    expect((await docs(sb, ['query', '--index'])).code).toBe(0);
+    expect(scratches(sb)).toEqual([]);
+    expect(held[0]).toMatch(/^verb\.\d+\.\d+\/docs-io\./);
   });
 });
 

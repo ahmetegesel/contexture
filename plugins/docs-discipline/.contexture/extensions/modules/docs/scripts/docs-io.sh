@@ -12,8 +12,9 @@
 #
 # The display rule: every doc path a verb prints is the logical address
 # docs/<repo>/<slug>.md, whatever the caller's spelling and whatever the driver. Scratch
-# lives under the workspace's .contexture/tmp (the system temp only when the drawer cannot
-# be written) and is removed on exit.
+# lives in one folder inside the per-verb root the engine exports (CTX_SCRATCH_ROOT), under
+# the workspace's .contexture/tmp when the verb runs undispatched (the system temp only when
+# the drawer cannot be written), and is removed on exit.
 
 DOCS_VERB=""
 DOCS_ROOT=""
@@ -101,11 +102,17 @@ docs_io_cleanup() {
   return 0
 }
 
-# docs_scratch: the verb's scratch folder, made once, removed on exit
+# docs_scratch: the verb's scratch folder, made once, removed on exit: one folder of its own
+# inside the per-verb root the engine exports at dispatch (CTX_SCRATCH_ROOT), so a SIGKILL
+# that skips the removal leaves it to the next dispatch's sweep; the drawer's scratch when
+# no root is exported (an undispatched run), the system temp only when the drawer cannot be
+# written
 docs_scratch() {
   [ -n "$DOCS_SCRATCH" ] && return 0
   ds_base="${TMPDIR:-/tmp}"
-  if [ -d "$DOCS_ROOT/.contexture" ] && mkdir -p "$DOCS_ROOT/.contexture/tmp" 2>/dev/null && [ -w "$DOCS_ROOT/.contexture/tmp" ]; then
+  if [ -n "${CTX_SCRATCH_ROOT:-}" ] && mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null && [ -d "$CTX_SCRATCH_ROOT" ] && [ -w "$CTX_SCRATCH_ROOT" ]; then
+    ds_base=$CTX_SCRATCH_ROOT
+  elif [ -d "$DOCS_ROOT/.contexture" ] && mkdir -p "$DOCS_ROOT/.contexture/tmp" 2>/dev/null && [ -w "$DOCS_ROOT/.contexture/tmp" ]; then
     ds_base="$DOCS_ROOT/.contexture/tmp"
   fi
   if ! DOCS_SCRATCH=$(mktemp -d "$ds_base/docs-io.XXXXXX" 2>/dev/null); then
