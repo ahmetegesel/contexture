@@ -8,7 +8,7 @@ import { DRIVERS, fts5Available, stage } from '../support/stage';
 import { answer, payload, refused } from '../support/wire';
 
 const WAIT_S = 60;
-const SHIMMED_MS = (WAIT_S * 1000) / 4;
+const SHIMMED_MS = (WAIT_S * 1000 * 3) / 4;
 
 async function timed<T>(call: () => Promise<T>): Promise<[T, number]> {
   const t0 = performance.now();

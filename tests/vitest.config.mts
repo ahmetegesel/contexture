@@ -25,10 +25,11 @@ const pluginProjects = readdirSync(here('../plugins'), { withFileTypes: true })
 export default defineConfig({
   test: {
     pool: 'forks',
+    maxWorkers: '50%',
     globalSetup: [here('./support/global-setup.ts')],
     setupFiles: [here('./support/setup.ts')],
     testTimeout: 120_000,
-    hookTimeout: 300_000,
+    hookTimeout: 120_000,
     reporters: [
       'default',
       ['json', { outputFile: here('./.reports/last.json') }],
@@ -37,8 +38,8 @@ export default defineConfig({
     projects: [
       area('harness'),
       area('drivers'),
-      { ...area('unit-record'), test: { ...area('unit-record').test, sequence: { groupOrder: 1 } } },
-      { ...area('unit-verbs'), test: { ...area('unit-verbs').test, sequence: { groupOrder: 1 } } },
+      area('unit-record'),
+      area('unit-verbs'),
       area('governance'),
       area('filters'),
       area('engine'),
