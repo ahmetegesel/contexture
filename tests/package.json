@@ -9,6 +9,8 @@
     "test:drivers": "vitest run --project drivers",
     "test:storage-fts5": "vitest run --project storage-fts5",
     "test:drivers:posix": "VITEST_DRIVERS=posix vitest run --project drivers",
+    "test:unit-record": "vitest run --project unit-record",
+    "test:unit": "vitest run --project 'unit-*'",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

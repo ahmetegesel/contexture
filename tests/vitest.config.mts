@@ -24,6 +24,10 @@ export default defineConfig({
         extends: true,
         test: { name: 'drivers', include: ['drivers/**/*.test.ts'], maxConcurrency: 16 },
       },
+      {
+        extends: true,
+        test: { name: 'unit-record', include: ['unit-record/**/*.test.ts'], maxConcurrency: 16 },
+      },
       pluginProject('storage-fts5'),
     ],
   },
