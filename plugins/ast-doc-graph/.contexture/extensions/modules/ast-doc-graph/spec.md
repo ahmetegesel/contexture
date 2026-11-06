@@ -582,7 +582,7 @@ To eliminate the operational complexity, memory footprint, and potential flakine
 Every invocation of `graph-query` executes `check_and_sync_freshness` before evaluating the requested query:
 1. Repository Root Resolution: Discovers repository root by inspecting database directory ancestry (`.git`, `package.json`, `backend`, `docs`, `src`) or git toplevel.
 2. Fast Filesystem Scan: Executes system `find` comparing `.ts`, `.tsx`, and `.md` files against `graph.db` using `-newer`. The scan filters out standard build and artifact directories. On modern filesystems, this check completes in 1 to 5ms.
-3. Removed Files: Every file `indexed_files` holds that the disk no longer has counts as dirty too, so the inline delta removes it (unless every indexed file reads absent, the sign of a repository root other than the index's, when none counts).
+3. Removed Files: Every file `indexed_files` holds that the disk no longer has counts as dirty too, so the inline delta removes it (unless every indexed file reads absent, the sign of a repository root other than the index's, when none counts). This costs one existence test per indexed file on every synced query, so it grows with the graph's file count (about a tenth of a second for ten thousand files on a laptop); `--no-sync` skips it with the scan.
 
 ### 8.2 Lifecycle Threshold Bands
 The query CLI applies three threshold behaviors based on the count of dirty files discovered:
