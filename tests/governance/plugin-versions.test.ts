@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { PRERELEASE } from '../support/fts5';
@@ -111,9 +111,9 @@ describe.skipIf(real.need !== undefined && !PRERELEASE)(`the plugin versions on 
   });
 
   it('every catalog plugin with a manifest gets a verdict', () => {
-    const catalog = readdirSync(join(ROOT, 'plugins')).filter((p) => existsSync(join(ROOT, 'plugins', p, 'manifest'))).sort();
-    expect(catalog.length).toBeGreaterThan(4);
-    expect(real.verdicts.map((v) => v.plugin)).toEqual(catalog);
+    const plugins = catalog(ROOT);
+    expect(plugins.length).toBeGreaterThan(4);
+    expect(real.verdicts.map((v) => v.plugin)).toEqual(plugins);
   });
 
   it('a plugin whose payload changed since the release that first shipped its version bumps that version', () => {
@@ -144,6 +144,55 @@ describe.concurrent('the package root census', () => {
     expect(census('cp "$CTX_PACKAGE_ROOT/$name" .').map((m) => m.kind)).toEqual(['unread']);
     expect(census('cd "$CTX_PACKAGE_ROOT"').map((m) => m.kind)).toEqual(['unread']);
     expect(census('cp "${CTX_PACKAGE_ROOT:-}"/docs/seed.md .').map((m) => m.kind)).toEqual(['unread']);
+  });
+});
+
+const MODULE_PART = /^# part: module (\S+)$/gm;
+
+function lockstep(root: string, plugin: string): Verdict {
+  const green = (line: string): Verdict => ({ plugin, red: false, line });
+  const red = (line: string): Verdict => ({ plugin, red: true, line });
+  const manifest = readFileSync(join(root, 'plugins', plugin, 'manifest'), 'utf8');
+  const parts = [...manifest.matchAll(MODULE_PART)].map((m) => m[1]);
+  if (parts.length !== 1) return green(`${plugin}: ${parts.length} module parts, outside the lockstep`);
+  const file = `plugins/${plugin}/.contexture/extensions/${parts[0]}/module`;
+  if (!existsSync(join(root, file))) return red(`${plugin}: its module part names ${file}, which is absent`);
+  const pv = version(manifest);
+  const mv = version(readFileSync(join(root, file), 'utf8'));
+  if (!mv) return green(`${plugin}: ${file} carries no version line, exempt`);
+  if (mv !== pv) return red(`${plugin}: ${file} reads ${mv} while its manifest reads ${pv}; a single-module package moves both together`);
+  return green(`${plugin} ${pv}: the module file moves with its manifest`);
+}
+
+const catalog = (root: string): string[] => readdirSync(join(root, 'plugins')).filter((p) => existsSync(join(root, 'plugins', p, 'manifest'))).sort();
+
+describe.concurrent('the single-module version lockstep', () => {
+  it('every catalog package with one module part and a versioned module file holds the module version equal to its manifest', () => {
+    const verdicts = catalog(ROOT).map((p) => lockstep(ROOT, p));
+    expect(verdicts.filter((v) => v.red).map((v) => v.line)).toEqual([]);
+    expect(verdicts.find((v) => v.plugin === 'docs-discipline')?.line).toMatch(/^docs-discipline \S+: the module file moves with its manifest$/);
+    expect(verdicts.find((v) => v.plugin === 'ast-doc-graph')?.line).toBe('ast-doc-graph: plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/module carries no version line, exempt');
+  });
+
+  it('a planted mismatch reads red; a versionless module file, a second module part, and a blank-padded equal version read green', () => {
+    const root = sandbox('plugin-lockstep');
+    const pkg = (name: string, manifestBody: string, modules: Record<string, string>): void => {
+      put(join(root, 'plugins', name, 'manifest'), manifestBody);
+      for (const [path, body] of Object.entries(modules)) put(join(root, 'plugins', name, '.contexture/extensions', path, 'module'), body);
+    };
+    const one = (v: string, part = 'modules/m'): string => `# summary: s\n# version: ${v}\n# kind: feature\n# part: module ${part}\n`;
+    pkg('apart', one('1.0.1'), { 'modules/m': '# summary: m\n# version: 1.0.0\n' });
+    pkg('plain', one('1.0.1'), { 'modules/m': '# summary: m\n' });
+    pkg('twin', `${one('1.0.1')}# part: module modules/n\n`, { 'modules/m': '# summary: m\n# version: 1.0.0\n', 'modules/n': '# summary: n\n# version: 1.0.0\n' });
+    pkg('padded', one('1.0.1\t'), { 'modules/m': '# summary: m\n# version:  1.0.1 \n' });
+    pkg('lost', one('1.0.1', 'modules/gone'), {});
+    expect(catalog(root).map((p) => lockstep(root, p))).toEqual([
+      { plugin: 'apart', red: true, line: 'apart: plugins/apart/.contexture/extensions/modules/m/module reads 1.0.0 while its manifest reads 1.0.1; a single-module package moves both together' },
+      { plugin: 'lost', red: true, line: 'lost: its module part names plugins/lost/.contexture/extensions/modules/gone/module, which is absent' },
+      { plugin: 'padded', red: false, line: 'padded 1.0.1: the module file moves with its manifest' },
+      { plugin: 'plain', red: false, line: 'plain: plugins/plain/.contexture/extensions/modules/m/module carries no version line, exempt' },
+      { plugin: 'twin', red: false, line: 'twin: 2 module parts, outside the lockstep' },
+    ]);
   });
 });
 
