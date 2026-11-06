@@ -3,11 +3,10 @@
 # base alone, staged with a synthetic data file; every other core area is a vitest project
 # under tests/, run with bun run test: engine, filters, hooks, laws, governance with the
 # static store-bypass check, packages, drivers, unit-record, unit-verbs, and the plugins'
-# toolchain-filters and storage-fts5); then every plugin suite by convention
-# (plugins/<name>/tests/run.sh; a suite with a declared need absent exits 77
-# and skips cleanly, naming the need); the docs-discipline suite runs twice too, once per
-# driver (plugin:docs-discipline and plugin:docs-discipline:fts5), staged from base/ and
-# the plugins' own copies.
+# toolchain-filters, storage-fts5, and docs-discipline); then every plugin suite by
+# convention (plugins/<name>/tests/run.sh; a suite with a declared need absent exits 77
+# and skips cleanly, naming the need); a plugin whose tests are a vitest project reports
+# INFO.
 #
 # The suites run concurrently: each is independent (its own mktemp sandbox, its own
 # locks and stores inside it), so the runner starts them together, keeps each suite's
@@ -96,8 +95,6 @@ for p in "$ROOT"/plugins/*; do
   name=${p##*/}
   if [ -f "$p/tests/run.sh" ]; then
     add_job "plugin:$name" run "$p/tests/run.sh"
-    # the docs suite's second run: the same checks with the fts5 driver configured
-    [ "$name" = docs-discipline ] && add_job "plugin:$name:fts5" run "$p/tests/run.sh" "--driver=fts5"
   elif [ -d "$p/tests" ]; then
     add_job "plugin:$name" info
   else

@@ -1,4 +1,4 @@
-# census-allow.txt: the classified lines of the docs module's single-door census (tests/census.sh).
+# census-allow.txt: the classified lines of the docs module's single-door census (tests/census.awk, run by tests/static/census.test.ts).
 # One entry per flagged line outside docs-io.sh: <class><TAB><file><TAB><the line as written>.
 # Classes: helper-source (a verb sources the one door); helper-output (a verb consumes the
 # paths or runs the engine the helper handed it, or hands its arguments to the helper's

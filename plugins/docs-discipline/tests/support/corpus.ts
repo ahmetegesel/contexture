@@ -4,7 +4,7 @@ import { exec, type Run } from '@support/exec';
 import { ROOT } from '@support/root';
 import { sandbox } from '@support/sandbox';
 import { seed, seedSteps } from '@support/snapshot';
-import { stage, type Driver } from '@support/stage';
+import type { Driver } from '@support/stage';
 import { store } from '@support/store';
 import { answer } from '@support/wire';
 import { git, gitCommit, gitInit } from './git';
@@ -28,12 +28,6 @@ function addDocs(sb: string): void {
   copyFileSync(join(SAMPLE, 'backlog.md'), join(sb, 'backlog.md'));
 }
 
-export function stageDocs(driver: Driver = 'posix', label = 'docs'): string {
-  const sb = stage(driver, label);
-  addDocs(sb);
-  return sb;
-}
-
 export interface DocsOptions {
   input?: string | Buffer;
   env?: Record<string, string>;
@@ -43,13 +37,12 @@ export function docs(sb: string, args: readonly string[], { input = '', env = {}
   return exec('./.contexture/ctx', ['docs', ...args], { cwd: sb, input, env: { GIT_CEILING_DIRECTORIES: dirname(sb), ...env } });
 }
 
-export const SEED_HEAD = '0000000';
+const SEED_HEAD = '0000000';
 
 export async function putDocs(sb: string, driver: Driver, docsByKey: Record<string, string | Buffer>): Promise<void> {
   const s = store(sb, driver);
   for (const [key, value] of Object.entries(docsByKey)) answer(await s.put('docs', key, value, `--head=${SEED_HEAD}`), 'store.put');
 }
-
 
 export function stageSeed(driver: Driver, label: string, build: (sb: string) => Promise<void> = async () => undefined): Promise<string> {
   return seed(async (sb) => {
@@ -57,11 +50,6 @@ export function stageSeed(driver: Driver, label: string, build: (sb: string) => 
     await build(sb);
   }, driver, label);
 }
-
-export function lines(text: string): string[] {
-  return text.split('\n').filter(Boolean);
-}
-
 
 export const ENGINE_FIXTURES = join(TESTS, 'fixtures/engine');
 

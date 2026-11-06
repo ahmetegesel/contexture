@@ -59,17 +59,16 @@ What lands where:
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
 | `docs/work.md` | the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at GATHER, EXECUTE, and REVIEW | reference (copy it into the workspace's own `.contexture/rhythms/` to own it; the starter-rhythms plugin owns the installed generic `work`) |
 | `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
-| `tests/run.sh` | the plugin's own suite: the staging check, the missing-grammar refusal, the audit, the unit-form nudge, the write verbs, the engine checks, the delta-source cases, the single-door census, the gate matrix over the sample with its empty `TMPDIR` watch, and the grammar agreement check, on either storage driver (`--driver=posix\|fts5`); the fts5 run adds the store seed through `ctx docs write`, the stored bytes read back through the write verb, and the capture parity against the files driver, with the corpus checks in a second sandbox running beside that chain | reference (never copied) |
-| `tests/store-cases.sh` | the delta-source cases: the check's store mode against its git mode, `ctx docs changes` (its window, `--since`, A, M, D, its refusals), and the gate composing the code half from git with the corpus half from the store (or from git under the files driver) | reference (never copied) |
-| `tests/write-verbs.sh`, `tests/write/` | the write verbs' assertions and their fixtures: every verb's result byte for byte, every refusal leaving the stored doc unchanged, the change-log rows under a store | reference (never copied) |
-| `tests/engine-checks.sh` | the audit's one id namespace per repo, the pitfalls view scoped to `@pitfalls` with a doc-ending pitfall credited to its own doc, a backslash search kept literal, every query form refusing rc 1 on a miss, an explicit draft path reading the stored doc by its address, and the pitfall schema (a class outside its enum or a missing required field red) | reference (never copied) |
-| `tests/grammar-agreement.awk` | the grammar agreement check the suite runs: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
+| `tests/` | the plugin's vitest project `docs-discipline`: the engines and helpers alone (`unit/`), the census, the grammar agreement, and the package shape (`static/`), the verbs end to end on posix (`integration/`), the read refusal on a driver without a store (`fault/`), and the store mode on fts5 (`store/`) | reference (never copied) |
+| `tests/write/` | the edit engine's seeds, payloads, and goldens: every write verb's result byte for byte | reference (never copied) |
+| `tests/census.awk`, `tests/census-allow.txt` | the single-door census of the module and its classified allow-list | reference (never copied) |
+| `tests/grammar-agreement.awk` | the grammar agreement check the static tests run: the `#%` schema, the prose shapes, and the audit's kind and block lists agree | reference (never copied) |
 | `README.md` | this onboarding document | reference |
 
 The write verbs' edit engine is portable across BWK awk, mawk, gawk, and busybox awk: a splice
 point with no text already emits no separating blank line (mawk keeps a split leading empty
 field where BWK drops it), so a header, rule, entry, section, or ids write stores the same
-bytes on every awk; the suite's write cases hold under each in the container matrix. The
+bytes on every awk; the edit engine's tests hold under each in the container matrix. The
 audit's block scalar body is the opening field's indent plus two, so a sibling field or an id
 line after a block scalar is still audited under every awk; a blanket four-space body test
 would swallow it after a nested block scalar.
@@ -215,11 +214,11 @@ into an existing file; `seed` means it is starting content to adapt; and
    force. Under the files driver each write lands as `docs/<repo>/<slug>.md`.
 
 5. Keep `tests/sample/` and this README as references: the sample is
-   fictional and never part of the adopted corpus; `tests/run.sh` is the
-   plugin's own suite (the corpus checks, the write verbs, the store cases, and
-   the gate matrix over the sample, the census, and the grammar agreement
-   check), lives with the plugin, is never copied, and the upstream runner
-   invokes it twice, once per storage driver.
+   fictional and never part of the adopted corpus; `tests/` holds the
+   plugin's own vitest project (the engines, the write verbs, the read verbs,
+   the gate matrix over the sample, the census, the grammar agreement check,
+   and the store mode cases on fts5), lives with the plugin, and is never
+   copied.
 
 ## Verify
 
@@ -359,7 +358,7 @@ it walk below runs every one of these.
   workspace drawer's `.contexture/tmp` (the system temp only when that drawer
   cannot hold it), plants a local repository inside them for the claimant
   trackedness probe, and writes nothing outside the fixture directory; the
-  suite points `TMPDIR` at an empty watch folder and proves it stays empty.
+  gate test points `TMPDIR` at an empty watch folder and proves it stays empty.
 - The single-repo mapping is documented, not scripted: the check maps
   non-workspace docs through `projects/<repo>/`. A corpus whose code sits at
   the root marks its docs `repo: workspace`, or the adoption calibrates the
@@ -441,28 +440,20 @@ reads the corpus grammar.
 ## Contributing
 
 Changes land upstream with the walk re-run: every command in Try it below is
-the plugin's test, and `tests/run.sh` drives the audit and the gate matrix as
-the committed suite, staged from the repository's shipped core (`base/`) and
-this plugin's own copies, never an adopted drawer, on the posix driver and
-again with `--driver=fts5` (the storage-fts5 plugin's copy configured; skip 77
-without sqlite3 FTS5). The suite also runs the single-door census
-(`tests/census.sh` over `tests/census-allow.txt`): a new corpus read or path
-print outside `scripts/docs-io.sh` fails it until the allow-list names it on
-purpose. `tests/captures.sh` (plan, run, compare) is the capture set of the
-read verbs, the instrument of the byte identity between two module versions
-at one path and of the parity between two drivers: the fts5 run compares the
-files driver and the store at one sandbox path and accepts only the store
-mode's named verdicts as differences. The fts5 run also seeds the store
-through `ctx docs write` and reads every doc back unchanged through
-`ctx docs write --replace --dry-run`, byte for byte.
-`tests/write-verbs.sh` asserts every write verb against the expected docs
-under `tests/write/` (a changed rendering updates its fixture on purpose),
-  `tests/engine-checks.sh` the id namespace, the pitfalls scoping (a doc-ending pitfall credited to its own doc), the
-  literal backslash search, the query forms refusing rc 1 on a miss, the explicit draft path reading the stored doc by its address,
-  and the pitfall schema (a class outside its enum or a missing required field red), and `tests/store-cases.sh` the delta sources on
-either driver (the check's two modes, `ctx docs changes`, the gate's two
-halves in a git workspace of its own). Keep the module's grammar (`scripts/doc.grammar`), its
-machine-readable schema (section 6), and the audit in step: the suite's
+the plugin's test, and the plugin's vitest project (`bun run
+test:docs-discipline` from the repository's `tests/` folder) drives the
+engines, the verbs, and the gate matrix, staged from the repository's shipped
+core (`base/`) and this plugin's own copies, never an adopted drawer; the
+logic runs once on posix, and the store mode cases run on fts5 (the
+storage-fts5 plugin's copy configured; skipped without sqlite3 FTS5). The
+project also runs the single-door census (`tests/census.awk` over
+`tests/census-allow.txt`): a new corpus read or path print outside
+`scripts/docs-io.sh` fails it until the allow-list names it on purpose. The
+edit engine's tests hold every write against the expected docs under
+`tests/write/` (a changed rendering updates its golden on purpose), and the
+query and nudge engines' tests hold their answers against the committed
+expected output under `tests/unit/expected/`. Keep the module's grammar (`scripts/doc.grammar`), its
+machine-readable schema (section 6), and the audit in step: the project's
 grammar agreement check (`tests/grammar-agreement.awk`) fails on any
 difference among the three; the `tests/sample/` corpus is reference data. Packaging,
 naming, and the test convention are in `docs/plugins.md`; the module shape is
@@ -983,10 +974,7 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the drawer sources glob and evidence fields re-pointed at the module |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
-| `tests/run.sh` | authored fresh: the plugin suite (the staging check; on fts5 the capture set run first on the files driver at the sandbox path, then the store seed, every doc written through `ctx docs write` and the docs folder removed, the stored bytes read back unchanged through the write verb, and the capture parity against the files driver, the corpus checks then running in a second sandbox beside that chain; the corpus checks keyed on the declared `store`: the audit, the unit-form nudge against the backlog-file form, the write verbs, the engine checks, and the delta-source cases, or every read verb's rc 2 refusal; the single-door census; the gate matrix over `tests/sample/`; and the grammar agreement check), staged from `base/` and the plugins' own copies under the workspace's `.contexture/tmp/` (made on demand), on either driver (`--driver=posix\|fts5`) |
-| `tests/write-verbs.sh`, `tests/write/` | authored fresh: the write verbs' table (success bytes against the expected docs, refusals leaving the stored doc unchanged, the change-log rows and `ctx docs changes` under a store) and its fixtures |
-| `tests/engine-checks.sh` | authored fresh: the audit's id namespace, the pitfalls scoping and attribution, the literal backslash search, and an explicit draft path reading the stored doc by its address, through the verbs on the configured driver |
-| `tests/store-cases.sh` | authored fresh: the delta-source cases keyed on the declared `store.changelog` (the check's two modes over planted deltas; `ctx docs changes` and the gate's halves in a git workspace of its own made from the sandbox) |
-| `tests/census.sh`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, names read with quotes deleted and the file-reading commands of a shell script counted, the classified allow-list by file and exact line, remainder zero) |
-| `tests/captures.sh` | authored fresh: the capture set of the read verbs (plan, run, compare) |
+| `tests/` (the vitest project) | authored fresh: the engines alone over the sample, the write goldens, and committed expected output; the verbs end to end on posix; the read refusal on a planted driver; the store mode on fts5 |
+| `tests/write/` | authored fresh: the write verbs' seeds, payloads, and expected docs |
+| `tests/census.awk`, `tests/census-allow.txt` | authored fresh: the single-door census of the module (two instruments, names read with quotes deleted and the file-reading commands of a shell script counted, the classified allow-list by file and exact line, remainder zero) |
 | `tests/grammar-agreement.awk` | authored fresh: the agreement check of the `#%` schema, the prose shapes, and the audit's lists, refusing an empty side as a pass |

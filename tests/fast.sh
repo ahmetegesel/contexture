@@ -8,8 +8,6 @@
 #   unit             the one unit-like suite, ast-doc-graph's test-ddl.sh (the engine, filter,
 #                    hook, law, governance, package, store driver, record, and verb tests run
 #                    in vitest: bun run test from tests/, or bun run test:<project>)
-#   docs             the docs-discipline suite on the files driver
-#   docs-fts5        the docs-discipline suite on fts5
 #   plugin <name>    plugins/<name>/tests/run.sh
 #   base             the shipped base alone (base-only-tests.sh)
 # Exit 0 when every suite passes or skips; 1 on any failure or an unknown area.
@@ -25,8 +23,6 @@ usage: tests/fast.sh <area> [<arg>]
   unit             the one unit-like suite, ast-doc-graph's test-ddl.sh (the engine, filter,
                    hook, law, governance, package, store driver, record, and verb tests run
                    in vitest: bun run test from tests/, or bun run test:<project>)
-  docs             the docs-discipline suite on the files driver
-  docs-fts5        the docs-discipline suite on fts5
   plugin <name>    plugins/<name>/tests/run.sh
   base             the shipped base alone (base-only-tests.sh)
 USAGE
@@ -90,14 +86,6 @@ case "${1:-}" in
   unit)
     AREA="unit"
     unit_suites
-    ;;
-  docs)
-    AREA="docs"
-    run_suite "docs-discipline (posix)" sh "$ROOT/plugins/docs-discipline/tests/run.sh"
-    ;;
-  docs-fts5)
-    AREA="docs-fts5"
-    run_suite "docs-discipline (fts5)" sh "$ROOT/plugins/docs-discipline/tests/run.sh" --driver=fts5
     ;;
   plugin)
     case "${2:-}" in

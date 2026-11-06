@@ -32,7 +32,7 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   `docs-io.sh` resolved from their arguments, and query drives it with parsed
   options over the helper's paths.
 - `docs-io.sh` is the only file of the module that calls a store function or
-  composes a doc's path (the census in `tests/census.sh` holds it there). It
+  composes a doc's path (the plugin's census, `tests/census.awk` run by `tests/static/census.test.ts`, holds it there). It
   asks `driver-resolver require store`, lists the docs namespace with
   `store.list`, reads each key with `store.get` into the module's scratch at
   `docs/<repo>/<slug>.md`, and runs the engines there; no driver parses a doc
@@ -133,40 +133,38 @@ directory.
 
 ## Tests
 
-`tests/run.sh [--driver=posix|fts5]` at the plugin root stages a scratch
-workspace under the workspace's `.contexture/tmp/` (made on demand; the system
-temp only when it cannot be), copies the shipped core's runtime and its session
-module from `base/` and the lane module from `base/.contexture/extensions/`,
-this module (its grammar asset riding inside it), and with
-`--driver=fts5`, the storage-fts5 plugin's module and `storage.driver: fts5`,
-seeds `tests/sample/docs/` plus `docs/`, and drives the staging check; on
-fts5 the capture set first run on the files driver at the sandbox path (the
-config set aside), then the store seed (every staged doc written through `ctx
-docs write`, then the docs folder removed, so the corpus checks read the
-store alone), the stored bytes (every staged doc offered back to `ctx docs
-write --replace --dry-run` reads unchanged, a planted line never does), and
-the capture parity (every capture byte-identical to the
-files driver's except a check or gate capture where the files driver prints
-the blanket or the untracked-claimant verdict and the store `STALE DOC`), while
-the corpus checks run in a second sandbox of the same staging and seed in the
-background, their lines printed after the chain in the same order; the
-delta-source cases (`tests/store-cases.sh`: the check's two modes, `ctx docs
-changes`, the gate's halves in a git workspace of its own, keyed on the
-declared `store.changelog`); the corpus reads keyed on the declared `store` (declared: the audit and the
-unit-form nudge, the sample backlog's task entered into a unit through the unit verbs and compared with the
-backlog-file form, the write verbs (`tests/write-verbs.sh` over the fixtures
-of `tests/write/`: every success's stored bytes, every refusal leaving the
-stored doc unchanged, the change-log rows under a store), and the engine
-checks (`tests/engine-checks.sh`: the id namespace, the pitfalls scoping and a doc-ending pitfall credited to its doc, the
-literal backslash search, the query forms refusing rc 1 on a miss, the explicit draft path reading the stored doc by its address,
-and the pitfall schema read from the grammar); not declared: every read verb's rc 2 refusal); the
-single-door census (`tests/census.sh` over `tests/census-allow.txt`, with three
-planted bypasses); the gate matrix; and the grammar agreement check
-(`tests/grammar-agreement.awk`). `tests/captures.sh` is the capture set of the
-read verbs (plan, run, compare) for the byte-identity and driver-parity
-proofs. Needs: POSIX awk/sh, `base/` beside
-`plugins/`, git (the gate matrix plants a local repository for the claimant
-trackedness probe), and for the fts5 run sqlite3 with FTS5 (skip 77 without).
+The plugin's tests are the vitest project `docs-discipline` in
+`plugins/docs-discipline/tests/`, run from the repository's `tests/` folder
+(`bun run test:docs-discipline`; `tests/README.md` there describes the
+harness). Every test stages a sandbox under the workspace's `.contexture/tmp/`
+from the shipped copies alone: the runtime, the unit and lane modules, and the
+storage core from `base/`, this module (its grammar asset riding inside it)
+from the plugin, and on fts5 the storage-fts5 plugin's driver copy with
+`storage.driver: fts5`; the engines run under the system awk. The logic runs
+once, on posix. `unit/` drives each engine alone over files: `docs-edit.awk`
+against the `tests/write/` goldens (every success byte for byte, every
+refusal), `docs-audit.awk`, `docs-query.awk` and `docs-nudge.awk` against
+committed expected output under `unit/expected/` (regenerated with
+`DOCS_WRITE_EXPECTED=1` and read by hand), `docs-check.awk` over the gate
+matrix's eight scenarios, the twelve capture deltas, and both delta sources,
+and the pure helpers of `docs-io.sh`. `static/` runs the single-door census
+(`tests/census.awk` over `tests/census-allow.txt`, with three planted
+bypasses), the grammar agreement check (`tests/grammar-agreement.awk`, with
+two plants), and the package shape. `integration/` drives the verbs end to
+end: one success per write verb with its stored bytes, the write pipeline's
+refusals leaving the stored doc unchanged, the read verbs and their misses,
+the unit-form nudge against the backlog-file form, the part hooks, and the
+gate (the matrix with an empty `TMPDIR` watch, the git mode in a workspace
+with its own repository, the drift warnings, and `--drift` over a bare
+remote). `fault/` configures a planted driver that declares no store, so
+every read verb refuses rc 2 naming the capability. `store/` keeps the cases
+where the fts5 driver adds value: the corpus written through `ctx docs write`
+with the docs folder removed and read back unchanged through `ctx docs write
+--replace --dry-run`, one change-log row with its op and the workspace HEAD
+per write, the `ctx docs changes` window, the gate's store mode, and a parity
+smoke of the read verbs against the engines' expected output; it skips when
+sqlite3 lacks FTS5. Needs: POSIX awk and sh, `base/` beside `plugins/`, git,
+and for `store/` sqlite3 with FTS5.
 
 ## The gate's matrix
 
