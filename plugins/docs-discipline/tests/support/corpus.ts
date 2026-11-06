@@ -67,12 +67,12 @@ export function matches(actual: string, expectedFile: string): string {
   return readFileSync(expectedFile, 'utf8');
 }
 
-export async function gwWorkspace(driver: Driver, label: string): Promise<string> {
+export async function gwWorkspace(driver: Driver, label: string, { ignoreCorpus = false } = {}): Promise<string> {
   return seed(async (sb) => {
     addModule(sb);
     mkdirSync(join(sb, 'src'));
     writeFileSync(join(sb, 'src/gw.sh'), 'echo gw\n');
-    writeFileSync(join(sb, '.gitignore'), '.contexture/\n');
+    writeFileSync(join(sb, '.gitignore'), ignoreCorpus ? '.contexture/\n/docs/\n' : '.contexture/\n');
     await gitInit(sb);
     await git(sb, 'add', '-A');
     await gitCommit(sb, 'h0');

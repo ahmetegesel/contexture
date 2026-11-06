@@ -5,7 +5,7 @@ import type { Run } from '@support/exec';
 import { fresh } from '@support/snapshot';
 import { fts5Available } from '@support/stage';
 import { docs, gwWorkspace } from '../support/corpus';
-import { gitCommit } from '../support/git';
+import { git, gitCommit } from '../support/git';
 
 describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half from git, the corpus half from the store', { concurrent: true }, () => {
   let gw: string;
@@ -18,6 +18,7 @@ describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half
     await gitCommit(sb, 'h1', '--allow-empty');
     return sb;
   };
+  const head = async (sb: string): Promise<string> => (await git(sb, 'rev-parse', 'HEAD')).stdout.trim();
   const codeChange = (sb: string): void => writeFileSync(join(sb, 'src/gw.sh'), 'echo gw2\n');
   const gate = (sb: string): Promise<Run> => docs(sb, ['gate']);
 
@@ -51,6 +52,29 @@ describe.skipIf(!fts5Available())('the gate in store mode on fts5: the code half
     const r = await gate(sb);
     expect(r.code).toBe(0);
     expect(r.stdout + r.stderr).toContain('0 modified files');
+  });
+
+  it('S21 --since reads FRESH over a commit that carried a code change and a doc write, where the plain gate reads 0 modified files', async () => {
+    const sb = await committed();
+    const h1 = await head(sb);
+    codeChange(sb);
+    expect((await docs(sb, ['header', 'workspace', 'gw-unit', '--add-keyword=fresh'])).code).toBe(0);
+    await gitCommit(sb, 'h2', '-a');
+    expect((await gate(sb)).stdout).toBe('docs-check: 0 modified files provided on stdin.\n');
+    const r = await docs(sb, ['gate', `--since=${h1}`]);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toContain('FRESH: workspace > gw-unit');
+  });
+
+  it('S22 --since reads STALE over a commit that carried a code change alone', async () => {
+    const sb = await committed();
+    const h1 = await head(sb);
+    codeChange(sb);
+    await gitCommit(sb, 'h2', '-a');
+    const r = await docs(sb, ['gate', `--since=${h1}`]);
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain('STALE DOC: workspace/gw-unit');
+    expect(r.stderr).not.toContain('[GATE NOTICE]');
   });
 
   it('S16 a lingering corpus file is not the corpus', async () => {

@@ -58,8 +58,9 @@ false-positive	docs-nudge.awk	        if (/^@pitfalls/) { in_pitfalls = 1; next 
 false-positive	docs-nudge.awk	                if (num_pitfalls < 3) {
 false-positive	docs-nudge.awk	    if (num_pitfalls > 0) {
 false-positive	nudge	if docs_file_form "$first"; then
-git-delta	gate	        git diff --name-status 2>/dev/null || true
-git-delta	gate	        git diff --name-status --cached 2>/dev/null || true
+git-delta	gate	            git diff --name-status "$DOCS_SINCE_REV" 2>/dev/null || true
+git-delta	gate	            git diff --name-status 2>/dev/null || true
+git-delta	gate	            git diff --name-status --cached 2>/dev/null || true
 git-delta	gate	        git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
 git-delta	gate	                    git diff --name-status 2>/dev/null || true
 git-delta	gate	                    git diff --name-status --cached 2>/dev/null || true
@@ -148,9 +149,9 @@ helper-source	section	. "$dir/docs-io.sh"
 helper-output	section	docs_parse "after first remove dry-run" 0 "$@" || exit $?
 helper-source	write	. "$dir/docs-io.sh"
 helper-output	write	docs_parse "replace dry-run" 0 "$@" || exit $?
-git-delta	gate	        aggregate_remote_drift_changes | docs_code_half | sort -u | run_gate_check
-git-delta	gate	        aggregate_remote_drift_changes | sort -u | run_gate_check
-git-delta	gate	        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | run_gate_check
-git-delta	gate	        aggregate_git_changes | sort -u | run_gate_check
+git-delta	gate	        aggregate_remote_drift_changes | docs_code_half | sort -u | docs_delta_stage
+git-delta	gate	        aggregate_remote_drift_changes | sort -u | docs_delta_stage
+git-delta	gate	        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | docs_delta_stage
+git-delta	gate	        aggregate_git_changes | sort -u | docs_delta_stage
 false-positive	query	      if [ $# -gt 0 ] && [ "$(echo "$1" | cut -c 1-2)" != "--" ]; then
 helper-output	query	QUERY_OUT=$(docs_engine_run awk -v mode="$MODE" \

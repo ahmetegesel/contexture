@@ -26,8 +26,9 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   and they never appear in help. `doc.grammar` is the corpus grammar asset the
   write verbs and the audit enforce; it rides inside the module and is never a
   shared drawer file.
-- `gate` carries the whole close-gate logic (git aggregation, drift warnings,
-  and the self-planted eight-scenario matrix); the other four verbs are thin
+- `gate` carries the whole close-gate logic (git aggregation, the `--since`
+  range, drift warnings, the delta notices, and the self-planted
+  eight-scenario matrix); the other four verbs are thin
   wrappers over their engine: audit, check, and nudge hand it the corpus paths
   `docs-io.sh` resolved from their arguments, and query drives it with parsed
   options over the helper's paths.
@@ -43,6 +44,19 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   because the stored bytes are what a verb reads. Driver calls run from the
   workspace root with stdin from `/dev/null`; scratch lives under
   `.contexture/tmp` and is removed on exit.
+- The staged delta: `docs_delta_stage` copies a verb's status-prefixed delta
+  from its stdin into the scratch (`delta`, beside the materialized corpus)
+  and may close a pipeline, since the file carries the delta;
+  `docs_delta_empty` tells an empty delta before the check, and the check
+  engine reads the file by name (`DOCS_DELTA_ARG`, its `change_file` relative
+  to the corpus scratch it runs in), never from its own stdin. The gate stages
+  every form's delta this way (the default, `--since`, `--stdin`, and
+  `--drift`); a verb that needs the delta's paths before the check (a list
+  drawn from them, a count) reads the same staged file. `docs_since_rev`
+  resolves a `--since=<rev>` base for the gate and `ctx docs changes` alike
+  (rc 1 for an unknown revision or a root outside a repository with a
+  commit), and `docs_corpus_ignored` counts the corpus docs the root's
+  repository ignores under the files driver.
 - The nudge's unit form reads the active task through `ctx unit task list
   <unit> --status=progress` and `ctx unit resolve <unit> task#<slug>` (the
   text view of task show drops REFS, which the engine scores); the
@@ -98,8 +112,34 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   commit empties both halves together; a HEAD move that is not a commit (a
   checkout, a reset) leaves the old rows outside the window, recovered by
   `ctx docs changes --since=<the previous HEAD>` piped with the git delta into
-  the check; `--drift` prints a deferral notice (drift over a shared store is
-  undesigned) and checks the incoming code delta alone.
+  the check (or by `ctx docs gate --since=<the previous HEAD>`); `--drift`
+  prints a deferral notice (drift over a shared store is undesigned) and
+  checks the incoming code delta alone.
+- The gate's delta: the default form reads the working tree (the workspace
+  root's `git diff`, `git diff --cached`, and untracked files, plus each child
+  repository's), so a clean tree hands the check an empty delta and proves
+  the audit half alone; the gate then prints `[GATE NOTICE] the delta is
+  empty (a clean tree)` on stderr. `--since=<rev>` (the default form only)
+  proves a committed range: the root's half becomes `git diff --name-status
+  <rev>` (from `<rev>` to the working tree, rename lines as git prints them)
+  plus the untracked files, the child repositories keep their working delta
+  (a notice names them), and under a store the corpus half is `ctx docs
+  changes --since=<rev>`. Under the files driver git carries the corpus half
+  only where the workspace tracks the corpus; an untracked corpus (the
+  corpus-untracked law's posture) rides no delta, so every governed file's
+  claimants read untracked and the check reports `UNTRACKED CLAIMANT` with a
+  process-owned clean, and under `--since` a notice names that limit (the
+  corpus docs `git check-ignore` reports). An empty range prints its own
+  notice. The notices go to stderr; stdout and the exit code stay the check's.
+- What a clean verdict cannot see: coverage is glob membership over the
+  header sources, so a broad glob (`plugins/**`, `tests/**`) covers every path
+  under it and the check never names the glob that matched; and under the
+  files driver a riding doc of the workspace repo, or an architecture or
+  overview doc, freshens every claimed file of its repo (`FRESH (BLANKET)`
+  and an `ARCH-COVERED` count in the body, while the verdict line and the
+  exit code read as a real clean). The check's output stays as it is; a
+  reader who needs ownership reads the owning doc of each changed path and
+  checks that its own claimant rode the delta.
 
 ## Workspace root
 
@@ -160,13 +200,18 @@ end: one success per write verb with its stored bytes, the write pipeline's
 refusals leaving the stored doc unchanged, the read verbs and their misses,
 the unit-form nudge against the backlog-file form, the part hooks, and the
 gate (the matrix with an empty `TMPDIR` watch, the git mode in a workspace
-with its own repository, the drift warnings, and `--drift` over a bare
-remote). `fault/` configures a planted driver that declares no store, so
+with its own repository, the clean-tree notice, the drift warnings, `--drift`
+over a bare remote, and `--since` over a committed range: STALE for a
+code-only commit, FRESH with the doc in the commit, a rename's dead source
+and uncovered new path, an ignored corpus's untracked claimant with its
+notice, an empty range, a child repository's working delta with its notice,
+and the refusals). `fault/` configures a planted driver that declares no store, so
 every read verb refuses rc 2 naming the capability. `store/` keeps the cases
 where the fts5 driver adds value: the corpus written through `ctx docs write`
 with the docs folder removed and read back unchanged through `ctx docs write
 --replace --dry-run`, one change-log row with its op and the workspace HEAD
-per write, the `ctx docs changes` window, the gate's store mode, and a parity
+per write, the `ctx docs changes` window, the gate's store mode (with
+`--since` reading FRESH or STALE over a commit the plain gate reads empty), and a parity
 smoke of the read verbs against the engines' expected output; it skips when
 sqlite3 lacks FTS5. Needs: POSIX awk and sh, `base/` beside `plugins/`, git,
 and for `store/` sqlite3 with FTS5.
@@ -180,6 +225,7 @@ writes nothing outside them, and exercises the check over eight self-planted
 scenarios; the suite points `TMPDIR` at an empty watch folder and proves it
 stays empty. The default gate run aggregates the live git delta (workspace root
 plus every child repository), with the store's corpus half under a store
-driver; `--drift` evaluates the incoming remote delta; `--stdin` takes a piped
+driver; `--since=<rev>` aggregates the root's committed range from `<rev>` to
+the working tree instead; `--drift` evaluates the incoming remote delta; `--stdin` takes a piped
 name-status list. The matrix runs the engine in its git mode on every driver
 (its fixture is files by construction).

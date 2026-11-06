@@ -28,6 +28,7 @@ DOCS_ALL=""
 DOCS_CD=0
 DOCS_PATHS=""
 DOCS_ERR=""
+DOCS_SINCE_REV=""
 
 # docs_io_init <scripts dir> <verb>: the workspace root as the verbs resolve it
 # (DOCS_WORKSPACE_ROOT, then CTX_ROOT, then the walk up to the .contexture drawer's
@@ -384,8 +385,8 @@ docs_active_task() {
 
 # docs_delta_source: DOCS_DELTA is log when the configured driver keeps a store change log
 # (store.changelog: the corpus half of a delta comes from the store), git otherwise (the
-# files driver: the corpus rides the git delta as the code does); the check engine takes it
-# as its bounded delta_source token
+# files driver: the git delta carries the corpus only where the workspace tracks it); the
+# check engine takes it as its bounded delta_source token
 docs_delta_source() {
   DOCS_DELTA=git
   if [ -n "$DOCS_LIB" ] && store_has store.changelog < /dev/null; then
@@ -399,6 +400,50 @@ docs_head() {
   dh_h=$(git -C "$DOCS_ROOT" rev-parse --verify -q HEAD 2>/dev/null) || dh_h=""
   [ -n "$dh_h" ] || dh_h=none
   printf '%s\n' "$dh_h"
+}
+
+# docs_since_rev <rev>: DOCS_SINCE_REV, the commit <rev> names in the workspace root's
+# repository (the base of a --since window); rc 1 naming the need outside a repository with
+# a commit, or naming an unknown revision
+docs_since_rev() {
+  DOCS_SINCE_REV=""
+  if [ "$(docs_head)" = none ]; then
+    printf '%s: --since needs the workspace to be a git repository with a commit\n' "$DOCS_VERB" >&2
+    return 1
+  fi
+  if ! DOCS_SINCE_REV=$(git -C "$DOCS_ROOT" rev-parse --verify -q "$1^{commit}" 2>/dev/null); then
+    DOCS_SINCE_REV=""
+    printf '%s: unknown revision: %s\n' "$DOCS_VERB" "$1" >&2
+    return 1
+  fi
+  return 0
+}
+
+# docs_delta_stage: the status-prefixed delta on stdin copied into the verb's scratch, so the
+# verb can tell an empty delta (docs_delta_empty) and the check engine reads it by name
+# (DOCS_DELTA_ARG, its change_file relative to the corpus scratch it runs in), never from
+# its stdin; the file carries the delta, so the stage may close a pipeline; rc 2 when the
+# scratch cannot hold it
+DOCS_DELTA_ARG="change_file=../delta"
+docs_delta_stage() {
+  docs_scratch || return 2
+  cat > "$DOCS_SCRATCH/delta" || return 2
+  return 0
+}
+
+# docs_delta_empty: rc 0 when the staged delta carries no path, 1 when it carries one
+docs_delta_empty() {
+  awk 'NF { n = 1; exit } END { exit n }' "$DOCS_SCRATCH/delta"
+}
+
+# docs_corpus_ignored: under the files driver, where a doc's logical address is its file
+# under the workspace root, DOCS_IGNORED counts the materialized corpus docs that the
+# root's repository ignores (git check-ignore; 0 when none is or outside a repository) and
+# DOCS_COUNT counts them all
+docs_corpus_ignored() {
+  DOCS_IGNORED=$(git -C "$DOCS_ROOT" check-ignore --stdin < "$DOCS_PATHS" 2>/dev/null | awk 'END { print NR }')
+  DOCS_COUNT=$(awk 'END { print NR }' "$DOCS_PATHS")
+  return 0
 }
 
 # docs_store_changes_rows: the store.changes answer flattened into its six status fields,
@@ -441,8 +486,9 @@ docs_store_changes_rows() {
 # and HEAD. Net status per doc, as git would report the same history: A when the doc was
 # absent before its first row in the window and exists now, M when it was present and
 # exists now, D when it was present and is gone now, no line when it was absent and is gone.
-# rc 1 on a driver without store.changelog (the files driver takes the corpus delta from
-# git), an unknown revision, or --since outside a repository; rc 2 a driver failure
+# rc 1 on a driver without store.changelog (under the files driver git carries the corpus
+# delta where the workspace tracks the corpus, and nothing carries an untracked one), an
+# unknown revision, or --since outside a repository; rc 2 a driver failure
 docs_changes() {
   dx_since=""
   for dx_a in "$@"; do
@@ -453,23 +499,15 @@ docs_changes() {
   done
   docs_require || return 2
   if ! store_has store.changelog < /dev/null; then
-    printf '%s: the configured storage driver keeps no store change log (store.changelog); under the files driver the corpus delta comes from git\n' "$DOCS_VERB" >&2
+    printf '%s: the configured storage driver keeps no store change log (store.changelog); under the files driver the corpus delta comes from git where the workspace tracks the corpus, and an untracked corpus reconciles through the docs-drift flow\n' "$DOCS_VERB" >&2
     return 1
   fi
   docs_scratch || return 2
-  dx_head=$(docs_head)
-  printf 'head=%s\n' "$dx_head" > "$DOCS_SCRATCH/heads"
+  printf 'head=%s\n' "$(docs_head)" > "$DOCS_SCRATCH/heads"
   if [ -n "$dx_since" ]; then
-    if [ "$dx_head" = none ]; then
-      printf '%s: --since needs the workspace to be a git repository with a commit\n' "$DOCS_VERB" >&2
-      return 1
-    fi
-    if ! dx_rev=$(git -C "$DOCS_ROOT" rev-parse --verify -q "$dx_since^{commit}" 2>/dev/null); then
-      printf '%s: unknown revision: %s\n' "$DOCS_VERB" "$dx_since" >&2
-      return 1
-    fi
-    printf 'head=%s\n' "$dx_rev" >> "$DOCS_SCRATCH/heads"
-    git -C "$DOCS_ROOT" rev-list --boundary "$dx_rev..HEAD" 2>/dev/null | sed -e 's/^-//' -e 's/^/head=/' >> "$DOCS_SCRATCH/heads"
+    docs_since_rev "$dx_since" || return 1
+    printf 'head=%s\n' "$DOCS_SINCE_REV" >> "$DOCS_SCRATCH/heads"
+    git -C "$DOCS_ROOT" rev-list --boundary "$DOCS_SINCE_REV..HEAD" 2>/dev/null | sed -e 's/^-//' -e 's/^/head=/' >> "$DOCS_SCRATCH/heads"
   fi
   if ! store_changes docs < "$DOCS_SCRATCH/heads" > "$DOCS_SCRATCH/rows.json"; then
     return 2

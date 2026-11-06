@@ -103,7 +103,7 @@
   evidence: ".contexture/extensions/modules/docs/scripts/docs-check.awk"
   enforced_at: [.contexture/extensions/modules/docs/scripts/docs-check.awk, .contexture/extensions/modules/docs/scripts/gate, .contexture/extensions/rhythms/docs-drift.md]
   caution: "Two ways this check reports a result that is not the truth. A code-only stream can never pass: the check marks a file fresh only when a doc path appears in the SAME stdin, so omitting the docs half reports every claimed file stale forever, whatever the docs say; the stale count then says nothing about the work. And a name-only delta carries no deletion marker, so deleted files read as uncovered. Under a store driver the check runs in its store mode: a doc refreshes only the code its own sources name, and every doc can ride the driver-fed delta."
-  anti: "Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone, which cannot exit 0 by construction"
+  anti: "Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone: it reads every claimed file stale where a claimant is tracked, and CLEAN (PROCESS-OWNED) where none is, so its verdict says nothing about the docs"
   good: "Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline"
 
 @rule docs/greppable-evidence

@@ -1,11 +1,14 @@
 #!/bin/sh
 # summary: the close gate: the corpus audit plus the coverage and freshness check as one pass
 # usage: ctx docs gate
+# usage: ctx docs gate --since=<rev>
 # usage: ctx docs gate --drift
 # usage: ctx docs gate --stdin
 # usage: ctx docs gate --test-matrix
 # help: runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
-# help: under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
+# help: the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus, and an ignored corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
+# help: under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together, or since <rev> under --since); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
+# help: the notices and warnings go to stderr with a bracketed prefix; stdout and the exit code stay the check's
 # help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
 # help: example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
 #
@@ -46,13 +49,40 @@ docs_io_init "$dir" gate
 WORKSPACE_ROOT="$DOCS_ROOT"
 PRODUCT_REPOS_DIR="${DOCS_PRODUCT_REPOS_DIR:-projects}"
 
-# Function to aggregate git changes across workspace and product repos
+# --since=<rev>: the default form's committed range; DOCS_SINCE_REV names its base commit
+GATE_SINCE=""
+for gate_a
+do
+    case "$gate_a" in
+        --since=*)
+            if [ "$#" -ne 1 ]; then
+                echo "ctx docs gate: --since=<rev> takes no other argument (not --stdin, --drift, or --test-matrix)" >&2
+                exit 1
+            fi
+            GATE_SINCE=${gate_a#--since=}
+            if [ -z "$GATE_SINCE" ]; then
+                echo "ctx docs gate: --since needs a revision (--since=<rev>)" >&2
+                exit 1
+            fi
+            docs_since_rev "$GATE_SINCE" || exit 1
+            set --
+            ;;
+    esac
+done
+
+# Function to aggregate git changes across workspace and product repos; under --since the
+# workspace root's half runs from DOCS_SINCE_REV to the working tree and a notice names the
+# child repositories, which keep their working delta
 aggregate_git_changes() {
     # 1. Parent workspace root changes
     (
         cd "$WORKSPACE_ROOT"
-        git diff --name-status 2>/dev/null || true
-        git diff --name-status --cached 2>/dev/null || true
+        if [ -n "$DOCS_SINCE_REV" ]; then
+            git diff --name-status "$DOCS_SINCE_REV" 2>/dev/null || true
+        else
+            git diff --name-status 2>/dev/null || true
+            git diff --name-status --cached 2>/dev/null || true
+        fi
         git ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
             [ -n "$f" ] && printf "A\t%s\n" "$f"
         done
@@ -67,10 +97,12 @@ aggregate_git_changes() {
         prefix_base=""
     fi
 
+    children=""
     for pdir in $scan_dirs; do
         if [ -d "$pdir/.git" ] && [ "$pdir" != "$WORKSPACE_ROOT" ]; then
             repo_name="${pdir##*/}"
             pfx="${prefix_base:+$prefix_base/}$repo_name"
+            children="${children:+$children, }$pfx"
             (
                 cd "$pdir"
                 {
@@ -105,6 +137,29 @@ aggregate_git_changes() {
             )
         fi
     done
+    if [ -n "$DOCS_SINCE_REV" ] && [ -n "$children" ]; then
+        printf "[GATE NOTICE] --since=%s reaches the workspace root's repository only; the child repositories (%s) keep their working delta\n" "$GATE_SINCE" "$children" >&2
+    fi
+}
+
+# The notices that name the delta's limits, on stderr after the staged delta: an empty
+# delta proves nothing (a clean tree, or an empty range), and under the files driver a
+# --since range over an ignored corpus carries no corpus line
+gate_notices() {
+    if docs_delta_empty; then
+        if [ -n "$GATE_SINCE" ]; then
+            printf "[GATE NOTICE] the delta since %s is empty: the check has nothing to prove\n" "$GATE_SINCE" >&2
+        else
+            printf "[GATE NOTICE] the delta is empty (a clean tree): the check proves nothing about coverage or freshness; prove a committed range with ctx docs gate --since=<rev>\n" >&2
+        fi
+    fi
+    if [ -n "$GATE_SINCE" ] && [ "$DOCS_DELTA" != log ]; then
+        docs_corpus_ignored
+        if [ "$DOCS_IGNORED" -gt 0 ]; then
+            printf "[GATE NOTICE] the corpus is untracked here (%s of %s docs ignored by git): no corpus line rides the delta, so a changed file whose claimants are all untracked reads UNTRACKED CLAIMANT, its freshness process-owned through the docs-drift flow\n" "$DOCS_IGNORED" "$DOCS_COUNT" >&2
+        fi
+    fi
+    return 0
 }
 
 # Function to aggregate remote drift changes (HEAD...origin/main, the
@@ -240,13 +295,14 @@ run_audit() {
     run_engine_over_corpus "$AWK_AUDIT"
 }
 
-# Run coverage, freshness, and dead sources check on streamed diff; under a store's change
-# log the engine runs in its log mode (no blanket, no trackedness probe)
+# Run coverage, freshness, and dead sources check on the staged delta (docs_delta_stage),
+# read by name; under a store's change log the engine runs in its log mode (no blanket, no
+# trackedness probe)
 run_gate_check() {
     if [ "$DOCS_DELTA" = log ]; then
-        run_engine_over_corpus "$AWK_CHECK" -v delta_source=log
+        run_engine_over_corpus "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v delta_source=log
     else
-        run_engine_over_corpus "$AWK_CHECK"
+        run_engine_over_corpus "$AWK_CHECK" -v "$DOCS_DELTA_ARG"
     fi
 }
 
@@ -352,6 +408,7 @@ if [ "$1" = "-" ] || [ "$1" = "--stdin" ]; then
     fi
     prepare_corpus
     run_audit
+    docs_delta_stage
     run_gate_check
 elif [ "$1" = "--drift" ]; then
     prepare_corpus
@@ -359,25 +416,29 @@ elif [ "$1" = "--drift" ]; then
     if [ "$DOCS_DELTA" = log ]; then
         # the store's corpus has no incoming half: the incoming code delta alone
         echo "[DRIFT NOTICE] the corpus store carries no incoming changes; drift over a shared store is deferred" >&2
-        aggregate_remote_drift_changes | docs_code_half | sort -u | run_gate_check
+        aggregate_remote_drift_changes | docs_code_half | sort -u | docs_delta_stage
     else
-        aggregate_remote_drift_changes | sort -u | run_gate_check
+        aggregate_remote_drift_changes | sort -u | docs_delta_stage
     fi
+    run_gate_check
 elif [ -z "$1" ]; then
     prepare_corpus
     run_audit
     check_drift_warnings
     if [ "$DOCS_DELTA" = log ]; then
         # the code half from git without the workspace root's corpus paths, the corpus half
-        # from the store's change log (the docs written since the current HEAD)
-        docs_changes_prepare || exit $?
-        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | run_gate_check
+        # from the store's change log (the docs written since the current HEAD, or since
+        # <rev> under --since)
+        docs_changes_prepare ${GATE_SINCE:+"--since=$GATE_SINCE"} || exit $?
+        { aggregate_git_changes | docs_code_half; docs_changes_emit; } | sort -u | docs_delta_stage
     else
-        aggregate_git_changes | sort -u | run_gate_check
+        aggregate_git_changes | sort -u | docs_delta_stage
     fi
+    gate_notices
+    run_gate_check
 else
     echo "ctx docs gate: unknown argument: $1" >&2
-    echo "Usage: ctx docs gate [--drift | --stdin | --test-matrix]" >&2
+    echo "Usage: ctx docs gate [--since=<rev> | --drift | --stdin | --test-matrix]" >&2
     echo "help: ctx docs help gate" >&2
     exit 1
 fi

@@ -31,9 +31,9 @@ owning repo's run, build, and test targets.
 | `ctx docs query` | the retrieval CLI: index, projection, section, owner, search, rules, pitfalls, edges; `--entry <block>/<key>` prints one entry's raw lines | `docs-query.awk` (`--entry`: `docs-edit.awk`) |
 | `ctx docs audit` | the grammar and integrity audit: header, blocks, indentation, rule fields, the pitfall required fields and class/severity enums, symbol-only evidence, duplicate ids | `docs-audit.awk` |
 | `ctx docs check` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | `docs-check.awk` |
-| `ctx docs gate` | the close gate: audit then check over the aggregated delta (or the incoming remote delta with `--drift`), plus a self-planted eight-scenario matrix | self-contained |
+| `ctx docs gate` | the close gate: audit then check over the aggregated working-tree delta (a committed range with `--since=<rev>`, or the incoming remote delta with `--drift`), plus a self-planted eight-scenario matrix | self-contained |
 | `ctx docs nudge` | the task nudge: matched docs, top pitfalls, forced setup targets | `docs-nudge.awk` |
-| `ctx docs changes` | the corpus half of a delta under a store driver: one net status line per doc written since the current git HEAD (`--since=<rev>` widens the window); refuses under the files driver, whose corpus rides git | none (the IO helper) |
+| `ctx docs changes` | the corpus half of a delta under a store driver: one net status line per doc written since the current git HEAD (`--since=<rev>` widens the window); refuses under the files driver, where git carries a tracked corpus and nothing carries an untracked one | none (the IO helper) |
 | `ctx docs new` | a doc holding only its header (first extraction, block by block) | `docs-edit.awk` |
 | `ctx docs write` | a whole doc from stdin (first extraction, or `--replace` for a deliberate rewrite) | `docs-edit.awk` (the checks) |
 | `ctx docs header` | header fields without a read: `--add-source`, `--remove-source` (the UNCOVERED and DEAD SOURCE fixes), keywords, children, description, role, upstream, parent | `docs-edit.awk` |
@@ -233,6 +233,7 @@ ctx docs audit                         # silence, exit 0 (the whole corpus; ctx 
 ctx docs query --index                 # ends: index complete: N entries
 printf 'M\tprojects/<repo>/src/example.ts\n' | ctx docs check <repo>   # substitute repo and path; red (UNCOVERED) until a doc claims it
 ctx docs gate                          # in a git workspace: audit plus the aggregated delta check
+ctx docs gate --since=<rev>            # in a git workspace: audit plus the committed range from <rev> to the working tree
 ctx docs gate --drift                  # in a git workspace: audit plus the incoming remote delta check
 ctx docs gate --test-matrix            # ALL 8 SCENARIOS PASSED
 ctx docs help gate                     # the full explanation and the module's verb table
@@ -274,14 +275,17 @@ it walk below runs every one of these.
   (fetch; a branch comes up to date with main), declare the affected units as
   `@task` entries in `backlog.md`, pipe the status-prefixed code delta from git
   with the corpus half (the corpus paths of the same git delta under the files
-  driver, `ctx docs changes` under a store) through the check, update each
+  driver with a tracked corpus, the flow's own list of updated docs with an
+  untracked one, `ctx docs changes` under a store) through the check, update each
   affected doc through the write verbs in the same change, re-verify with
   `ctx docs gate`.
 - Close: `ctx docs gate` must pass cleanly. The gate verifies change, never
   truth. A default run also warns on stderr when a scanned repository is on a
   non-main branch or behind its last-fetched origin; `ctx docs gate --drift`
   evaluates the incoming remote delta (the merge-base form) instead of the
-  local one.
+  local one. A default run on a clean tree checks an empty delta and says so
+  in a `[GATE NOTICE]` on stderr; close a committed range (a unit's, or a
+  release's since the previous tag) with `ctx docs gate --since=<rev>`.
 - Setup tasks: run `ctx docs nudge <unit>` when the unit's active task names
   setup verbs; it reads the first IN_PROGRESS task through `ctx unit` (the
   record's own store, never the backlog as a file) and prints the owning
@@ -345,7 +349,8 @@ it walk below runs every one of these.
   half stays on git. `ctx docs gate` composes both halves by itself (the
   workspace root's `docs/<repo>/<slug>.md` files, if any linger, are dropped
   from the git half: they are not the corpus), so a commit empties both
-  together. The check then runs in its store mode: no blanket (a doc
+  together, and `ctx docs gate --since=<rev>` composes them over a committed
+  range (`ctx docs changes --since=<rev>` beside the root's `git diff <rev>`). The check then runs in its store mode: no blanket (a doc
   refreshes only the code its own sources name, so `FRESH (BLANKET)` and
   `ARCH-COVERED` never print) and no trackedness probe (every claimant can
   ride the delta, so `UNTRACKED CLAIMANT` never fires). A HEAD move that is
@@ -375,6 +380,18 @@ it walk below runs every one of these.
   violated.
 - The gate verifies change, never truth: passing it means the touched code
   has fresh docs, not that the corpus is correct.
+- The default delta is the working tree's: on a clean tree the check gets
+  nothing, prints `docs-check: 0 modified files provided on stdin.`, and the
+  gate adds a `[GATE NOTICE]` on stderr; `--since=<rev>` proves a committed
+  range instead (the workspace root's repository from `<rev>` to the working
+  tree, rename lines as git prints them; the child repositories keep their
+  working delta, which a notice names). `--since` joins the default form
+  alone; an unknown revision, an empty one, or a root outside a repository
+  with a commit refuses rc 1. Under the files driver git carries the corpus
+  half only for a tracked corpus: an ignored one (the corpus-untracked
+  posture) rides no delta, so `--since` there reads `UNTRACKED CLAIMANT` and
+  a process-owned clean, and its notice names the limit. The notices print to
+  stderr only; stdout and the exit code stay the check's.
 - The default run's drift warnings read the last-fetched remote refs, not the
   live remote: fetch first for current ones. They print to stderr only, and
   stdout and the exit code stay as the check left them. `ctx docs gate
@@ -393,9 +410,17 @@ it walk below runs every one of these.
   workspace doc rides the delta; the latter two are a repo-wide blanket, so
   the check reports it (`FRESH (BLANKET)` plus an `ARCH-COVERED` count of the
   files no riding claimant covered) instead of folding it silently into a
-  clean verdict; coverage counts only the listed extensions; deleting a unit
+  clean verdict, though the verdict line and the exit code still read as a
+  real clean; coverage counts only the listed extensions; deleting a unit
   doc does not red the check. The gate stays scoped to the change delta,
   never the corpus's truth.
+- Coverage is glob membership, not ownership: a path is covered when any
+  header source glob matches it, so a broad glob (`plugins/**`, `tests/**`)
+  covers every file under it, and the check never names the glob that
+  matched. A clean verdict therefore says each touched file sits under some
+  doc's sources, not that the doc which owns it describes it; read the owning
+  doc of each changed path and check that its own claimant rode the delta.
+  The check's output stays as it is.
 - The governed guide pages count as governed files: a depth-1 `docs/*.md`
   claimed by a corpus doc's sources demands its claimant ride the same delta
   (`STALE DOC` with `guide modified without corpus update` otherwise);
@@ -578,7 +603,7 @@ DOC: <scratch>/docs/demo-orders/order-flow.md
 MUST docs/drift (universal, workspace)
   Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta under the files driver, ctx docs changes under a store driver); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands.
   evidence: .contexture/extensions/modules/docs/scripts/docs-check.awk
-  anti: Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone, which cannot exit 0 by construction
+  anti: Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone: it reads every claimed file stale where a claimant is tracked, and CLEAN (PROCESS-OWNED) where none is, so its verdict says nothing about the docs
   good: Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline
 ```
 
@@ -715,7 +740,15 @@ workspace revision the work began at:
 ```
 
 For an uncommitted working tree, `ctx docs gate` composes both halves by
-itself on every driver and needs no pipeline.
+itself and needs no pipeline, and for a range the workspace root's own
+repository committed, `ctx docs gate --since=<rev>` does the same: the root's
+`git diff --name-status <rev>` plus its untracked files, the child
+repositories' working delta, and the corpus half by driver (the same git
+delta for a tracked corpus, `ctx docs changes --since=<rev>` under a store).
+An untracked files-driver corpus rides neither form: the check reads its
+claimants untracked (`UNTRACKED CLAIMANT`, a process-owned clean), `--since`
+names the limit in a notice, and the docs-drift flow's own list of the docs
+it updated is the corpus half to pipe beside the code delta.
 
 The gate: clean over the same delta, then red on a planted syntax defect (a
 direct file edit, which only the files driver allows and which the write
@@ -778,13 +811,16 @@ ctx docs gate: the close gate: the corpus audit plus the coverage and freshness 
 
 usage:
   ctx docs gate
+  ctx docs gate --since=<rev>
   ctx docs gate --drift
   ctx docs gate --stdin
   ctx docs gate --test-matrix
 
 help:
   runs the corpus audit, then feeds the aggregated status-prefixed delta to the check; it fails when either does; the default run also warns on stderr when a scanned repository is on a non-main branch or behind its last-fetched origin
-  under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
+  the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus, and an ignored corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
+  under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the store (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together, or since <rev> under --since); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
+  the notices and warnings go to stderr with a bracketed prefix; stdout and the exit code stay the check's
   exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
   example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
 ```
@@ -963,8 +999,8 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `.contexture/extensions/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and delegation to `docs-check.awk` over the corpus the IO helper resolved, in the engine's store mode (`-v delta_source=log`) when the driver keeps a change log |
 | `.contexture/extensions/modules/docs/scripts/changes` | authored fresh: the corpus half of a delta from the store's change log (the net status computed in the IO helper), refusing under the files driver |
 | `.contexture/extensions/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, the unit form (the active task through `ctx unit task list` and `ctx unit resolve task#`), the backlog-file form refusing a record path, and delegation to `docs-nudge.awk` over the corpus the IO helper resolved |
-| `.contexture/extensions/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (from the IO helper: `DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the corpus read once through the IO helper into its scratch, the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, the help moved into the declarations, and the store mode (the git half without the workspace root's corpus paths plus `ctx docs changes`, the check's store mode, the drift deferral notice) |
-| `.contexture/extensions/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `store` requirement, the list and get materialized into the module's scratch, the logical address rule, the store mode's delta source, change window, and code-half filter, and the write side (the argument parser, the field actions in the environment, the grammar check over a scratch copy of the corpus, the store put stamped with the op and the HEAD, the multi-doc pipeline of replace and ids) |
+| `.contexture/extensions/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (from the IO helper: `DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the corpus read once through the IO helper into its scratch, the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, the help moved into the declarations, the store mode (the git half without the workspace root's corpus paths plus `ctx docs changes`, the check's store mode, the drift deferral notice), and the `--since=<rev>` range with every form's delta staged in the IO helper's scratch and the delta notices on stderr |
+| `.contexture/extensions/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `store` requirement, the list and get materialized into the module's scratch, the logical address rule, the store mode's delta source, change window, and code-half filter, the staged delta the check reads by name with the `--since` base it shares with the gate, and the write side (the argument parser, the field actions in the environment, the grammar check over a scratch copy of the corpus, the store put stamped with the op and the HEAD, the multi-doc pipeline of replace and ids) |
 | `.contexture/extensions/modules/docs/scripts/new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `remove`, `ids` | authored fresh: the write verbs, each a thin script over the IO helper's write pipeline with its help in the declarations |
 | `.contexture/extensions/modules/docs/scripts/docs-edit.awk` | authored fresh: the structural edit engine of the write verbs and of `query --entry`, driven by the grammar's `#%` schema, the request through the environment |
 | `.contexture/extensions/modules/docs/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the duplicate-id check generalized to one namespace per repo over every id field (an entry head or an id line of its own) |
