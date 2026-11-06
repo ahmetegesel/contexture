@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -22,6 +22,18 @@ async function until(check: () => boolean, ms = 10_000): Promise<boolean> {
 const scratch = (sb: string) => readdirSync(join(sb, '.contexture/tmp')).filter((n) => n !== 'locks').sort();
 const residue = (sb: string) => readdirSync(join(sb, 'docs/workspace')).filter((n) => !/^[^.][^/]*\.md$/.test(n));
 
+const PARTIAL = 'the first chunk of a payload the TERM cuts short\n';
+
+function reading(sb: string): boolean {
+  try {
+    return ['docs', '.contexture/tmp'].map((dir) => join(sb, dir)).filter((dir) => existsSync(dir))
+      .some((dir) => readdirSync(dir, { recursive: true, encoding: 'utf8' })
+        .some((name) => statSync(join(dir, name)).isFile() && readFileSync(join(dir, name), 'utf8') === PARTIAL));
+  } catch {
+    return false;
+  }
+}
+
 for (const driver of DRIVERS) {
   describe.skipIf(driver === 'fts5' && !fts5Available())(`the namespace lock on ${driver}`, { concurrent: true }, () => {
     let empty: string;
@@ -42,12 +54,15 @@ for (const driver of DRIVERS) {
     it('a TERM while holding the lock releases it and lands nothing', async () => {
       const sb = fresh(empty);
       const before = scratch(sb);
-      const { result, signal } = launch(driverPath(sb, driver), ['store.put', 'docs', 'workspace/held'], { cwd: sb, input: null, group: true });
-      expect(await until(() => existsSync(lockPath(sb, LOCK)))).toBe(true);
+      const { child, result, signal } = launch(driverPath(sb, driver), ['store.put', 'docs', 'workspace/held'], { cwd: sb, input: null, group: true });
+      child.stdin!.write(PARTIAL);
+      expect(await until(() => reading(sb))).toBe(true);
+      expect(existsSync(lockPath(sb, LOCK))).toBe(true);
       signal('SIGTERM');
       expect((await result).code).not.toBe(0);
       expect(await until(() => !existsSync(lockPath(sb, LOCK)))).toBe(true);
       expect(scratch(sb)).toEqual(before);
+      if (driver === 'posix') expect(residue(sb)).toEqual([]);
       refused(await store(sb, driver).get('docs', 'workspace/held'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/held' not found in namespace 'docs'");
     });
 
