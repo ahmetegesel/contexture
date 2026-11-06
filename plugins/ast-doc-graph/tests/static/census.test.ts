@@ -12,6 +12,7 @@ const hits = (pattern: RegExp, text: string, where: string): string[] =>
   text.split('\n').flatMap((line, i) => (pattern.test(line) ? [`${where}:${i + 1}: ${line}`] : []));
 
 const RULES: [name: string, pattern: RegExp, plant: string, miss: string][] = [
+  ['no launcher edits PATH', /(^|[^A-Za-z0-9_])PATH\s*=(?!=)/, 'export PATH="/opt/homebrew/bin:$PATH"', 'export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--no-deprecation"; command -v node "$PATH"'],
   ['no sibling project glob', /\.\.\/\*\//, 'for candidate in "$SCRIPT_DIR/../../../../../*/node_modules/.bin/tsx"; do', 'SETUP_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"; "$SCRIPT_DIR/../schema.sql"'],
   ['no pre-extension-root path', /\.contexture\/modules\/ast-doc-graph/, ' * Emits intermediate JSONL conforming to plugins/ast-doc-graph/.contexture/modules/ast-doc-graph/spec.md.', 'plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph/spec.md'],
 ];

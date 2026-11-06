@@ -374,7 +374,7 @@ ctx ast-doc-graph query stats
 
 ## Needs
 
-- Node with the TypeScript Compiler API reachable from the target repository: `typescript` in its `node_modules`, or `tsx`, or Node 22+ with `--experimental-strip-types`; the extractor launcher locates one.
+- Node with the TypeScript Compiler API reachable from the target repository: `typescript` in its `node_modules`, or `tsx`, or Node 22.6+ with `--experimental-strip-types`; the launchers take a project-local `tsx`, else `tsx` or `node` from the caller's PATH, and never edit PATH.
 - System `sqlite3` with FTS5 (standard on macOS and modern Linux distributions).
 - The docs-discipline corpus grammar (private to the docs module) when documentation is extracted; code-only indexing needs TypeScript alone.
 - The plugin's tests live with the plugin (`tests/`) as its vitest project, are never copied into a workspace, and run from the repository's `tests/` folder (`bun run test:ast-doc-graph`): they need sqlite3 with FTS5, and the pipeline tests the TypeScript compiler API (the test tooling's own TypeScript, linked into each sandbox); a test whose need is absent skips, naming it.

@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export PATH="/opt/homebrew/bin:$PATH"
-export NODE_OPTIONS="--no-deprecation"
+export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--no-deprecation"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INDEX_GRAPH="$SCRIPT_DIR/index-graph.ts"
@@ -40,7 +39,7 @@ fi
 if [[ -n "$TSX_BIN" ]]; then
   exec "$TSX_BIN" "$INDEX_GRAPH" "$@"
 elif command -v node >/dev/null 2>&1; then
-  exec node --experimental-strip-types "$INDEX_GRAPH" "$@"
+  exec node --experimental-strip-types --disable-warning=ExperimentalWarning "$INDEX_GRAPH" "$@"
 else
   echo "Error: neither tsx nor node runtime found in PATH." >&2
   exit 1

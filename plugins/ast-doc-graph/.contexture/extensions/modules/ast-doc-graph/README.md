@@ -51,7 +51,9 @@ This files-only limit stands until the extraction routes through `ctx docs`.
 
 Launchers resolve their runner dynamically: a project-local `tsx`, `tsx` on
 PATH, or Node with type stripping (the launchers end with
-`node --experimental-strip-types`). Each TypeScript entry point (the two
+`node --experimental-strip-types`, its experimental warnings silenced). The
+caller's PATH chooses the runner: no launcher edits PATH, and each extends
+the caller's `NODE_OPTIONS` with `--no-deprecation` instead of replacing it. Each TypeScript entry point (the two
 extractors and the loader) runs its CLI only when executed as the script, so
 its exported helpers import without side effects; the guard compares the
 module file and the executed path by their real paths, so a module reached
@@ -75,7 +77,8 @@ linked to the test tooling's TypeScript, runs the full index, then the delta
 index of one file, the query's micro-sync of one dirty file, and the advisory
 for three (file times set directly, never slept); it also indexes through a
 module reached by a symbolic link, under a spaced folder, and under a
-non-ASCII folder. `static/` holds the census of the module tree: no
-sibling-project glob and no pre-extension-root path, each with a planted
-null check. The tests skip, naming the
+non-ASCII folder, and runs every launcher on the node first on the
+caller's PATH. `static/` holds the census of the module tree: no PATH edit,
+no sibling-project glob, and no pre-extension-root path, each with a
+planted null check. The tests skip, naming the
 need, without sqlite3 FTS5 or without a TypeScript compiler API.
