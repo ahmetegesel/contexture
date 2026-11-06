@@ -16,8 +16,8 @@
 #
 # Usage: tests/base-only-tests.sh [--keep] [--skip-core]
 #   --keep       preserve the sandbox
-#   --skip-core  skip B6's six nested posix suites and their launches, running B1 to B5
-#                alone (pass=163); the full run is pass=169
+#   --skip-core  skip B6's five nested posix suites and their launches, running B1 to B5
+#                alone (pass=163); the full run is pass=168
 # Exit 0 when every case passes; 1 otherwise; 2 a staging failure.
 
 set -u
@@ -96,25 +96,22 @@ refused() { # <rc> <message...>: one line on stderr, nothing on stdout, the exac
 }
 
 # ==============================================================================
-# B6 launch: the six nested posix suites run while B1 to B5 execute
+# B6 launch: the five nested posix suites run while B1 to B5 execute
 # ==============================================================================
 # --skip-core skips the launches and the B6 section, leaving B1 to B5 alone
 if [ "$SKIP_CORE" -eq 0 ]; then
-# the nested suites are docs-shaped; the synthetic data file supplies that contract
-printf 'namespace: docs\nroot: docs\nsuffix: .md\nkey: <repo>/<slug>\nchanges: true\n' > "$SB/base-only-data"
 NESTED="$SB/nested"
 mkdir -p "$NESTED"
 NESTED_JOBS=3
 NESTED_PID=""
 
-run_core_cmd() { # <index>: the original six commands and arguments, in order
+run_core_cmd() { # <index>: the five nested commands and arguments, in order
   case "$1" in
     1) sh "$ROOT/tests/filter-tests.sh" ;;
     2) sh "$ROOT/tests/ctx-tests.sh" ;;
     3) sh "$ROOT/tests/session-tests.sh" --driver=posix ;;
     4) sh "$ROOT/tests/hook-tests.sh" ;;
     5) sh "$ROOT/tests/record-audit-tests.sh" ;;
-    6) sh "$ROOT/tests/store-compliance.sh" "--data-file=$SB/base-only-data" ;;
   esac
 }
 
@@ -125,7 +122,7 @@ launch_core() { # <index>: one output and rc file per suite, the rc atomically r
 }
 
 run_nested() { # the gate's rc-file poll idiom (tests/run.sh lines 128-180), cap 3
-  nq="1 2 3 4 5 6 7"
+  nq="1 2 3 4 5"
   nr=""
   while :; do
     still=""
@@ -510,7 +507,6 @@ collect_core 2 "ctx-tests.sh"
 collect_core 3 "session-tests.sh (posix)"
 collect_core 4 "hook-tests.sh"
 collect_core 5 "record-audit-tests.sh"
-collect_core 6 "store-compliance.sh (--data-file)"
 fi
 
 printf '\n== summary ==\n'

@@ -5,14 +5,14 @@
 # full pre-land gate (tests/run.sh), which stays mandatory before any commit, tag, or push.
 #
 # Usage: tests/fast.sh <area> [<arg>]
-#   unit             the seven unit-like suites (about 42 s isolated, 290 assertions),
+#   unit             the six unit-like suites (the store driver tests run in vitest, bun run test:drivers),
 #                    with the unit-data smoke in place of the long data-mode compliance
 #   engine           filter-tests, ctx-tests, governance-tests
 #   law              the law compose suite (law-tests.sh)
 #   record <1|2|3|4> one session suite group (the owning group is required)
 #   unit-data [posix|fts5]  the full record compliance through the unit data script on
 #                    one driver (default posix; the fts5 half stays for pre-land)
-#   driver posix     the unit-data smoke, store compliance, and the session suite on posix
+#   driver posix     the unit-data smoke and the session suite on posix
 #   driver fts5      the record compliance through the data script on fts5 (the driver
 #                    tests run in vitest: bun run test:drivers and test:storage-fts5)
 #   module           the package overlay installer suite (module-tests.sh)
@@ -30,14 +30,14 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 usage() {
   cat <<'USAGE'
 usage: tests/fast.sh <area> [<arg>]
-  unit             the seven unit-like suites (about 42 s isolated, 290 assertions),
+  unit             the six unit-like suites (the store driver tests run in vitest, bun run test:drivers),
                    with the unit-data smoke in place of the long data-mode compliance
   engine           filter-tests, ctx-tests, governance-tests
   law              the law compose suite (law-tests.sh)
   record <1|2|3|4> one session suite group (the owning group is required)
   unit-data [posix|fts5]  the full record compliance through the unit data script on
                    one driver (default posix; the fts5 half stays for pre-land)
-  driver posix     the unit-data smoke, store compliance, and the session suite on posix
+  driver posix     the unit-data smoke and the session suite on posix
   driver fts5      the record compliance through the data script on fts5 (the driver
                    tests run in vitest: bun run test:drivers and test:storage-fts5)
   module           the package overlay installer suite (module-tests.sh)
@@ -103,7 +103,6 @@ unit_suites() {
   run_suite "ctx-tests.sh" sh "$ROOT/tests/ctx-tests.sh"
   run_suite "governance-tests.sh" sh "$ROOT/tests/governance-tests.sh"
   run_suite "record-audit-tests.sh" sh "$ROOT/tests/record-audit-tests.sh"
-  run_suite "store-compliance.sh (posix)" sh "$ROOT/tests/store-compliance.sh"
   run_suite "unit-data-tests.sh (smoke posix)" sh "$ROOT/tests/unit-data-tests.sh" "--smoke" "--driver=posix"
   run_suite "ast-doc-graph test-ddl.sh" sh "$ROOT/plugins/ast-doc-graph/tests/test-ddl.sh"
 }
@@ -144,7 +143,6 @@ case "${1:-}" in
       posix)
         AREA="driver posix"
         run_suite "unit-data-tests.sh (smoke posix)" sh "$ROOT/tests/unit-data-tests.sh" "--smoke" "--driver=posix"
-        run_suite "store-compliance.sh (posix)" sh "$ROOT/tests/store-compliance.sh"
         run_suite "session-tests.sh (posix)" sh "$ROOT/tests/session-tests.sh" --driver=posix
         ;;
       fts5)
