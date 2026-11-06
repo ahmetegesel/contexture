@@ -106,6 +106,22 @@ describe.concurrent('the rule id coverage reporter reads the ids from each test 
     expect(projectionIds('workspace', 'gamma', GAMMA)).toEqual({ repo: 'workspace', slug: 'gamma', contract: [], responsibilities: [], pitfalls: [] });
   });
 
+  it('an opaque id reads beside the numbered form: in a group, outside one, in a projection after the numbered ids, and in the reasons table', () => {
+    expect(citations('[docs-module-r-k3x9m] an opaque id')).toEqual({ ids: ['docs-module-r-k3x9m'], offForm: [] });
+    expect(citations('[docs-module-r22, docs-module-p-a1b2c] both forms in one group')).toEqual({ ids: ['docs-module-r22', 'docs-module-p-a1b2c'], offForm: [] });
+    expect(citations('docs-module-o-k3x9m: a prefix')).toEqual({ ids: [], offForm: ['docs-module-o-k3x9m'] });
+    expect(citations('[docs-module-r-k3x9] four characters and [docs-module-r-K3X9M] capitals cite nothing')).toEqual({ ids: [], offForm: [] });
+    const delta = ['[structural: delta] ', 'The delta doc', '', '', 'CONTRACT:', ...contract(['delta-r-zz9aa', 'delta-r10', 'delta-r-0b1cd', 'delta-r2']), '', 'PITFALLS:', '  - id: delta-p-q7w8e', '    summary: an opaque pitfall', ''].join('\n');
+    expect(projectionIds('workspace', 'delta', delta)).toEqual({
+      repo: 'workspace',
+      slug: 'delta',
+      contract: ['delta-r2', 'delta-r10', 'delta-r-0b1cd', 'delta-r-zz9aa'],
+      responsibilities: [],
+      pitfalls: ['delta-p-q7w8e'],
+    });
+    expect(reasonsTable('delta-r-zz9aa an opaque reason\n')).toEqual({ reasons: new Map([['delta-r-zz9aa', 'an opaque reason']]), malformed: [] });
+  });
+
   it('the reasons table keys one reason per id and names every line it cannot read', () => {
     const t = reasonsTable(`${REASONS}alpha-r6 a second reason for one id\n`);
     expect([...t.reasons]).toEqual([

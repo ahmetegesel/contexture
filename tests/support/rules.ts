@@ -41,7 +41,7 @@ export interface Reasons {
   malformed: string[];
 }
 
-const TOKEN = '[a-z][a-z0-9]*(?:-[a-z0-9]+)*-[orpc][0-9]+';
+const TOKEN = '[a-z][a-z0-9]*(?:-[a-z0-9]+)*-[orpc](?:[0-9]+|-[0-9a-z]{5})';
 const ONE = new RegExp(`^${TOKEN}$`);
 const ANY = new RegExp(`(?<![A-Za-z0-9-])${TOKEN}(?![A-Za-z0-9-])`, 'g');
 const GROUP = /\[([^[\]]*)\]/g;
@@ -50,7 +50,15 @@ const SECTION = /^([A-Z_]+):$/;
 const ID_LINE = /^(?: {4}| {2}- )id: (\S+)$/;
 const REASON = new RegExp(`^(${TOKEN}) (\\S.*)$`);
 
-const byNumber = (a: string, b: string): number => Number(/\d+$/.exec(a)?.[0]) - Number(/\d+$/.exec(b)?.[0]);
+const rank = (id: string): [number, number, string] => {
+  const n = /-[orpc]([0-9]+)$/.exec(id)?.[1];
+  return n === undefined ? [1, 0, id] : [0, Number(n), ''];
+};
+
+const byId = (a: string, b: string): number => {
+  const [x, y] = [rank(a), rank(b)];
+  return x[0] - y[0] || x[1] - y[1] || (x[2] < y[2] ? -1 : x[2] > y[2] ? 1 : 0);
+};
 
 export function citations(name: string): { ids: string[]; offForm: string[] } {
   const ids: string[] = [];
@@ -86,7 +94,7 @@ export function projectionIds(repo: string, slug: string, text: string): DocIds 
     const id = ID_LINE.exec(line);
     if (id) into[section]?.push(id[1]);
   }
-  for (const ids of Object.values(into)) ids.sort(byNumber);
+  for (const ids of Object.values(into)) ids.sort(byId);
   return doc;
 }
 
