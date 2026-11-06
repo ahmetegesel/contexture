@@ -46,7 +46,12 @@ over the key under one namespace scope lock, so a put lands whole or not at all.
 batch holds that lock once, validates the whole action list against the live keys, stages
 a value per put, and commits every key under one store-scope undo log; its first failure
 prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and
-nothing is written. The scan answers the namespace's admitted keys with the raw value in
+nothing is written. The namespace lock (`.contexture/tmp/locks/store-<namespace>.lock`, the
+same rule in the fts5 driver) carries its holder's pid: a waiter polls every 0.1 s, removes
+a lock whose pid is gone at once, gives a pid-less lock ten polls of grace, and refuses a
+live holder rc 2 `ERR_STORAGE_LOCKED` after 600 polls (60 s of sleep), the unit lock's
+wait (the unit module's README names why and how it was sized); where `sleep` refuses a
+fraction, a poll sleeps 1 s and counts as ten. The scan answers the namespace's admitted keys with the raw value in
 base64, no limit; the module decodes and stops after the keys it needs. The change log is
 optional per namespace; a namespace declaring `changes: false`, or a driver without the
 log, refuses `store.changes` rc 1 `ERR_CAPABILITY_UNSUPPORTED`.

@@ -111,15 +111,18 @@ u_scratch() {
   U_SCR=$(mktemp -d "$us_tmp/unit.XXXXXX" 2>/dev/null) || u_refuse 2 ERR_STORAGE_WRITE "cannot create the data script's scratch folder"
 }
 
-# u_lock <unit>: the unit lock folder, held from the read to the batch commit; the same
-# path the posix driver uses, so the record's writers serialize across the two surfaces
+# u_lock <unit>: the unit lock folder, held from the read to the batch commit (the driver
+# takes its namespace lock inside it, at the commit). A waiter removes a lock whose holder
+# pid is gone, gives a pid-less lock ten polls of grace, and refuses a live holder (busy or
+# hung) after 600 polls 0.1 s apart (60 s of sleep); where sleep refuses a fraction, a poll
+# sleeps 1 s and counts as ten
 u_lock() {
   u_tmp=$(store_lib_root)/.contexture/tmp
   mkdir -p "$u_tmp/locks" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the lock folder"
   U_LT="$u_tmp/locks/$1.lock"
   U_LN=0
   U_LM=0
-  while [ "$U_LN" -lt 50 ]; do
+  while [ "$U_LN" -lt 600 ]; do
     if mkdir "$U_LT" 2>/dev/null; then
       printf '%s\n' "$$" > "$U_LT/pid" 2>/dev/null || {
         rm -rf "$U_LT" 2>/dev/null
@@ -141,9 +144,9 @@ u_lock() {
         ;;
     esac
     U_LN=$((U_LN + 1))
-    sleep 0.1 2>/dev/null || sleep 1
+    sleep 0.1 2>/dev/null || { sleep 1; U_LN=$((U_LN + 9)); }
   done
-  u_refuse 2 ERR_STORAGE_LOCKED "the unit lock of '$1' is held (5 s timeout)"
+  u_refuse 2 ERR_STORAGE_LOCKED "the unit lock of '$1' is held (60 s timeout)"
 }
 
 # u_keys_parse: the keys of store.list's answer, one per line

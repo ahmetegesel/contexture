@@ -160,10 +160,11 @@ store_unlock() {
 }
 
 # store_lock <namespace>: one namespace scope lock shared by store.put, store.delete, and
-# store.batch, a folder under the drawer's lock folder, held until store_unlock; five
-# seconds of retries then rc 2 ERR_STORAGE_LOCKED. The folder carries its holder pid; a
-# waiter removes a lock whose pid is gone, and gives a lock with no pid file a second's
-# grace for its holder to write one.
+# store.batch, a folder under the drawer's lock folder, held until store_unlock. The folder
+# carries its holder pid; a waiter removes a lock whose pid is gone, gives a lock with no
+# pid file ten polls of grace for its holder to write one, and refuses a live holder rc 2
+# ERR_STORAGE_LOCKED after 600 polls 0.1 s apart, 60 s of sleep (the unit lock's wait;
+# where sleep refuses a fraction, a poll sleeps 1 s and counts as ten).
 store_lock() {
   STORE_LOCK="$(get_lock_dir)/store-$1.lock"
   mkdir -p "$(dirname "$STORE_LOCK")" 2>/dev/null || {
@@ -172,7 +173,7 @@ store_lock() {
   }
   sl_n=0
   sl_miss=0
-  while [ "$sl_n" -lt 50 ]; do
+  while [ "$sl_n" -lt 600 ]; do
     if mkdir "$STORE_LOCK" 2>/dev/null; then
       printf '%s\n' "$$" > "$STORE_LOCK/pid" 2>/dev/null || {
         rm -rf "$STORE_LOCK" 2>/dev/null
@@ -194,10 +195,10 @@ store_lock() {
         ;;
     esac
     sl_n=$((sl_n + 1))
-    sleep 0.1 2>/dev/null || sleep 1
+    sleep 0.1 2>/dev/null || { sleep 1; sl_n=$((sl_n + 9)); }
   done
   STORE_LOCK=""
-  refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (5 s timeout)"
+  refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (60 s timeout)"
 }
 
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
