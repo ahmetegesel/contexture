@@ -261,7 +261,9 @@ over the `tests/fixtures/owner` corpus (an exact later source over a broad
 earlier glob, a narrower later glob, the fewer wildcards, the corpus-order
 tie, a repo prefix, a substring that claims nothing, and without a repo
 argument a child repository's exact source over a workspace glob and a
-workspace doc's exact child path over the child's glob), `docs-check.awk` over the gate
+workspace doc's exact child path over the child's glob, and a workspace doc
+reading a `workspace/` path as given, as the check reads it UNCOVERED),
+`docs-check.awk` over the gate
 matrix's eight scenarios, the twelve capture deltas, both delta sources,
 the doc touch at the logical address alone, and the governed set over a
 planted shebang list (the shebang script, the `.awk` engine, the plain file,
