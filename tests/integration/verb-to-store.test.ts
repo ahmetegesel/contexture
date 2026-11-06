@@ -36,7 +36,7 @@ beforeAll(async () => {
 });
 
 describe.concurrent('a unit verb reaches the store through the data script, the library, the resolver, and the driver (C5, knowledge#LOGIC_ONCE_DRIVERS_BY_CONTRACT)', () => {
-  it('state: a bootstrap lands in the verb, the data script, the driver, and the posix file', async () => {
+  it('[the-engine-r16, the-record-r10] state: a bootstrap lands in the verb, the data script, the driver, and the posix file', async () => {
     const sb = stage('posix', 'chain-state');
     await landsEveryLayer(sb, `${U}/state`, 'the chain objective',
       () => unit(sb, 'bootstrap', U, 'the chain objective'),
@@ -44,7 +44,7 @@ describe.concurrent('a unit verb reaches the store through the data script, the 
       () => data(sb, 'session.load', [U]));
   });
 
-  it('backlog: a task add lands every way', async () => {
+  it('[the-engine-r16, the-record-r10] backlog: a task add lands every way', async () => {
     const sb = fresh(seeded);
     await landsEveryLayer(sb, `${U}/backlog`, 'the chain task',
       () => unit(sb, 'task', 'add', U, 'vt1', '--objective=the chain task'),
@@ -52,7 +52,7 @@ describe.concurrent('a unit verb reaches the store through the data script, the 
       () => data(sb, 'task.get', [U, 'vt1']));
   });
 
-  it('journal: a record lands every way', async () => {
+  it('[the-engine-r16, the-record-r10] journal: a record lands every way', async () => {
     const sb = fresh(seeded);
     const slug = `${DATE}-chain-entry`;
     await landsEveryLayer(sb, `${U}/journal`, 'the chain entry',
@@ -61,7 +61,7 @@ describe.concurrent('a unit verb reaches the store through the data script, the 
       () => data(sb, 'entry.get', [U, slug]));
   });
 
-  it('knowledge: a finding add lands every way', async () => {
+  it('[the-engine-r16, the-record-r10] knowledge: a finding add lands every way', async () => {
     const sb = fresh(seeded);
     await landsEveryLayer(sb, `${U}/knowledge`, 'the chain finding',
       () => unit(sb, 'finding', 'add', U, 'CHAIN_FINDING', '--summary=the chain finding'),
@@ -69,7 +69,7 @@ describe.concurrent('a unit verb reaches the store through the data script, the 
       () => data(sb, 'finding.get', [U, 'CHAIN_FINDING']));
   });
 
-  it('lane: the recipe, the journal, and the report the extension-root lane module writes land every way (C6)', async () => {
+  it('[the-engine-r16, the-record-r10] lane: the recipe, the journal, and the report the extension-root lane module writes land every way (C6)', async () => {
     const sb = fresh(seeded);
     const writes: [string, string, Read][] = [
       ['recipe', 'the chain recipe', () => run(sb, ['lane', 'create', U, 'chain-lane'], { input: '# the chain recipe\n' })],
@@ -105,8 +105,8 @@ function plantDriver(sb: string, name: string, without?: string): string {
 
 const calls = (log: string): string[] => (existsSync(log) ? readFileSync(log, 'utf8').split('\n').filter(Boolean) : []);
 
-describe.concurrent('a verb on a driver that fails the capability handshake (the session Z verb half; the-engine-r19)', () => {
-  it('bootstrap on a planted driver missing put refuses rc2 naming the family, creates nothing, and never reaches its store', async () => {
+describe.concurrent('a verb on a driver that fails the capability handshake (the session Z verb half)', () => {
+  it('[the-engine-r8, the-engine-r19] bootstrap on a planted driver missing put refuses rc2 naming the family, creates nothing, and never reaches its store', async () => {
     const sb = stage('posix', 'z-bad');
     const log = plantDriver(sb, 'z-bad', 'put');
     const r = await run(sb, ['unit', 'bootstrap', 'z-unit', 'handshake unit'], { env: { CTX_STORAGE_DRIVER: 'z-bad' } });
@@ -118,7 +118,7 @@ describe.concurrent('a verb on a driver that fails the capability handshake (the
     expect(calls(log).filter((c) => c !== 'capability')).toEqual([]);
   });
 
-  it('the same plant carrying all seven names serves the bootstrap through its store', async () => {
+  it('[the-engine-r8, the-engine-r19] the same plant carrying all seven names serves the bootstrap through its store', async () => {
     const sb = stage('posix', 'z-good');
     const log = plantDriver(sb, 'z-good');
     const r = await run(sb, ['unit', 'bootstrap', 'z-unit', 'handshake unit'], { env: { CTX_STORAGE_DRIVER: 'z-good' } });
