@@ -44,6 +44,31 @@ export function readPlan(sb: string, text = readFileSync(join(sb, 'fold-plan.txt
   return { start: /^fold start: (\S+)/m.exec(text)?.[1] ?? '', l1: chunkLanes[1]!, l2: chunkLanes[2]!, l3: chunkLanes[4]!, chunkLanes };
 }
 
+export const SHAPES = {
+  one: ['e1'],
+  two: ['e1', 'e2'],
+  three: ['e1', 'backlog/a: DONE x', 'e2', 'backlog/b: DONE x', 'e3'],
+  twoChunks: ['e1', 'backlog/a: DONE x', 'e2'],
+};
+
+export async function foldUnit(sb: string, u: string, whats: readonly string[], { stampBefore = 0, lanes = [1] }: { stampBefore?: number; lanes?: number[] } = {}): Promise<string> {
+  await seedUnit(sb, u, `fold defect ${u}`);
+  for (const [i, what] of whats.entries()) {
+    if (stampBefore && i + 1 === stampBefore) await must(unit(sb, 'stamp', u));
+    await must(unit(sb, 'record', u, `--what=${what}`, `--slug=${D}-${u}-${i + 1}`));
+  }
+  const r = await must(unit(sb, 'fold', u));
+  const plan = r.stdout + r.stderr;
+  for (const n of lanes) await must(run(sb, ['lane', 'create', u, laneOf(plan, n) ?? ''], { input: 'fold defect lane\n' }));
+  return plan;
+}
+
+export async function batch(sb: string, u: string, what: string, folds: readonly number[], ...extra: string[]): Promise<string> {
+  const args = [`--what=${what}`, ...folds.map((n) => `--ref=journal#${D}-${u}-${n}`), ...folds.map((n) => `--closes=${D}-${u}-${n} (folded: consolidated)`), ...extra];
+  const r = await must(unit(sb, 'record', u, ...args));
+  return /^recorded entry: (\S+)/m.exec(r.stdout + r.stderr)?.[1] ?? '';
+}
+
 const ref = (n: string): string => `--ref=journal#${D}-fc-${n}`;
 const folded = (n: string): string => `--closes=${D}-fc-${n} (folded: consolidated)`;
 const BATCHES: Record<string, string[]> = {
