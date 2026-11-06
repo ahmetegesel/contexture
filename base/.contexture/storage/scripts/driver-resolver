@@ -370,8 +370,8 @@ verdict_fresh() {
 # verdict is cached in the scratch drawer, one file per driver path, valid while fresh
 # (verdict_fresh), so the handshake runs once per driver change, never once per call; a
 # driver changed in the second of its verdict is verified again until a later verdict
-# stands. An unwritable drawer caches nothing and verifies on every call. The handshake
-# reads /dev/null, never the payload on stdin.
+# stands. An unwritable drawer caches nothing, verifies on every call, and adds nothing to
+# stderr. The handshake reads /dev/null, never the payload on stdin.
 handshake_at_dispatch() {
   hd_path="$1"
   hd_name="$2"
@@ -392,7 +392,7 @@ handshake_at_dispatch() {
   verify_capabilities "$hd_path" "$hd_name" >/dev/null </dev/null || return 2
   if mkdir -p "$hd_dir" 2>/dev/null; then
     hd_tmp="$hd_file.$$"
-    if printf 'verified %s\n' "$hd_path" > "$hd_tmp" 2>/dev/null; then
+    if { printf 'verified %s\n' "$hd_path" > "$hd_tmp"; } 2>/dev/null; then
       mv -f "$hd_tmp" "$hd_file" 2>/dev/null || rm -f "$hd_tmp"
     fi
   fi
@@ -411,7 +411,8 @@ handshake_at_dispatch() {
 # (sorted, so the order of the arguments never matters; has reads it and writes none), its name apart from the dispatch
 # verdict of the same driver (which it never answers or overwrites), valid while fresh (the
 # rule of handshake_at_dispatch); a missing capability is never cached, and an unwritable
-# drawer caches nothing. The descriptor is read with stdin from /dev/null.
+# drawer caches nothing and adds nothing to stderr. The descriptor is read with stdin from
+# /dev/null.
 cap_token_valid() {
   case "$1" in
     ""|[!a-z]*|*[!a-z0-9._]*) return 1 ;;
@@ -481,7 +482,7 @@ require_caps() {
   [ "$rq_quiet" -eq 1 ] && return 0
   if mkdir -p "$rq_dir" 2>/dev/null; then
     rq_tmp="$rq_file.$$"
-    if printf 'declares %s: %s\n' "$rq_path" "$rq_tag" > "$rq_tmp" 2>/dev/null; then
+    if { printf 'declares %s: %s\n' "$rq_path" "$rq_tag" > "$rq_tmp"; } 2>/dev/null; then
       mv -f "$rq_tmp" "$rq_file" 2>/dev/null || rm -f "$rq_tmp"
     fi
   fi
