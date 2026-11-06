@@ -58,16 +58,17 @@ shipped.
 
 ## Tests
 
-`tests/run.sh` is the named runner. It reports each suite and exits non-zero
-only on a failure:
-
-- `tests/test-ddl.sh` applies `schema.sql` to a scratch database and proves
-  the DDL, FTS5 tables, triggers, and cycle-safe CTE queries. Needs: `sqlite3`.
-- `tests/verify-pilot.sh` runs the full pipeline and ten retrieval assertions
-  against a pilot repository. Needs: the pilot repository (passed as the
-  first argument or `AST_DOC_GRAPH_PILOT`), `sqlite3`, and a Node/tsx runner.
-
-A suite missing a need prints `SKIP: <need>` and exits 77; the runner counts
-it as skipped, never failed. Scratch databases and sandboxes live under the
-workspace's `.contexture/tmp/` when that drawer is writable, the system temp
-otherwise.
+The plugin's tests are the vitest project `ast-doc-graph` in
+`plugins/ast-doc-graph/tests/`, run from the repository's `tests/` folder
+(`bun run test:ast-doc-graph`). `unit/` applies `schema.sql` to a fresh
+database seeded from `fixtures/schema-seed.sql` (the tables, the two FTS5
+searches, the governance links, `busy_timeout`, `indexed_files`, and the
+delete triggers and cascades), drives `bin/graph-query --no-sync` over it
+(the symbol view, the cycle-safe callers and callees queries over a call cycle,
+search, rules, pitfalls, stats), and imports the docs extractor and the
+loader's helpers in process. `integration/` copies `fixtures/mini-repo` into a
+sandbox under the workspace's `.contexture/tmp/` with `node_modules/typescript`
+linked to the test tooling's TypeScript, runs the full index, then the delta
+index of one file, the query's micro-sync of one dirty file, and the advisory
+for three (file times set directly, never slept). The tests skip, naming the
+need, without sqlite3 FTS5 or without a TypeScript compiler API.

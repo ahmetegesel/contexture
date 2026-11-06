@@ -1,15 +1,13 @@
 #!/bin/sh
 # fast.sh: the fast inner loop, the smallest set that proves the kind of change at hand.
-# It runs the unit-like suites or one area selector, POSIX sh and awk only, no dependency,
+# It runs one area selector, POSIX sh and awk only, no dependency,
 # no fixed scratch name, 77 a skip, and any failure a nonzero exit. It NEVER replaces the
 # full pre-land gate (tests/run.sh), which stays mandatory before any commit, tag, or push.
 #
 # Usage: tests/fast.sh <area> [<arg>]
-#   unit             the one unit-like suite, ast-doc-graph's test-ddl.sh (the engine, filter,
-#                    hook, law, governance, package, store driver, record, and verb tests run
-#                    in vitest: bun run test from tests/, or bun run test:<project>)
 #   plugin <name>    plugins/<name>/tests/run.sh
 #   base             the shipped base alone (base-only-tests.sh)
+# Every other area is a vitest project: bun run test:<project> from tests/.
 # Exit 0 when every suite passes or skips; 1 on any failure or an unknown area.
 
 set -u
@@ -20,11 +18,9 @@ ROOT=$(CDPATH="" cd "$SCRIPT_DIR/.." && pwd)
 usage() {
   cat <<'USAGE'
 usage: tests/fast.sh <area> [<arg>]
-  unit             the one unit-like suite, ast-doc-graph's test-ddl.sh (the engine, filter,
-                   hook, law, governance, package, store driver, record, and verb tests run
-                   in vitest: bun run test from tests/, or bun run test:<project>)
   plugin <name>    plugins/<name>/tests/run.sh
   base             the shipped base alone (base-only-tests.sh)
+Every other area is a vitest project: bun run test:<project> from tests/.
 USAGE
 }
 
@@ -78,15 +74,7 @@ run_suite() { # <label> <command...>
   esac
 }
 
-unit_suites() {
-  run_suite "ast-doc-graph test-ddl.sh" sh "$ROOT/plugins/ast-doc-graph/tests/test-ddl.sh"
-}
-
 case "${1:-}" in
-  unit)
-    AREA="unit"
-    unit_suites
-    ;;
   plugin)
     case "${2:-}" in
       ""|*/*|.|..) echo "fast.sh: plugin needs a plugin name (plugins/<name>/tests/run.sh)" >&2; exit 1 ;;

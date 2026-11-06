@@ -3,7 +3,7 @@
 # base alone, staged with a synthetic data file; every other core area is a vitest project
 # under tests/, run with bun run test: engine, filters, hooks, laws, governance with the
 # static store-bypass check, packages, drivers, unit-record, unit-verbs, and the plugins'
-# toolchain-filters, storage-fts5, and docs-discipline); then every plugin suite by
+# toolchain-filters, storage-fts5, docs-discipline, and ast-doc-graph); then every plugin suite by
 # convention (plugins/<name>/tests/run.sh; a suite with a declared need absent exits 77
 # and skips cleanly, naming the need); a plugin whose tests are a vitest project reports
 # INFO.

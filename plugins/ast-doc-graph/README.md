@@ -44,9 +44,7 @@ Two ctx verbs drive it: `ctx ast-doc-graph index` runs the pipeline, and
 | `.contexture/extensions/modules/ast-doc-graph/schema.sql` | the SQLite relational DDL: table definitions, foreign keys, triggers, FTS5 virtual tables | copy |
 | `.contexture/extensions/modules/ast-doc-graph/spec.md` | the comprehensive data contract specification: JSONL schemas, edge linking rules, CTE patterns | reference |
 | `.contexture/extensions/modules/ast-doc-graph/README.md` | the off-path module map | reference |
-| `tests/test-ddl.sh` | the DDL/CTE verification suite: needs `sqlite3` | reference |
-| `tests/verify-pilot.sh` | the end-to-end pilot suite: needs the pilot repository, `sqlite3`, and node/tsx | reference |
-| `tests/run.sh` | the named runner over both suites: declares the needs and skips cleanly | reference |
+| `tests/` | the plugin's vitest project `ast-doc-graph`: the schema, the query CLI, the extractors and the loader in process, and the full and delta index of `tests/fixtures/mini-repo`; needs sqlite3 with FTS5 and the TypeScript compiler API | reference |
 | `README.md` | this onboarding guide and reference manual | reference |
 
 ## Architecture and invariants
@@ -379,11 +377,11 @@ ctx ast-doc-graph query stats
 - Node with the TypeScript Compiler API reachable from the target repository: `typescript` in its `node_modules`, or `tsx`, or Node 22+ with `--experimental-strip-types`; the extractor launcher locates one.
 - System `sqlite3` with FTS5 (standard on macOS and modern Linux distributions).
 - The docs-discipline corpus grammar (private to the docs module) when documentation is extracted; code-only indexing needs TypeScript alone.
-- The plugin's tests live with the plugin (`tests/`), are never copied into a workspace, and the upstream runner may invoke them through `tests/run.sh`: `test-ddl.sh` needs only `sqlite3`; `verify-pilot.sh` additionally needs its pilot repository (passed as the first argument or `AST_DOC_GRAPH_PILOT`) and node/tsx. A suite missing a need prints `SKIP: <need>` and exits 77; the runner reports it as skipped, never failed.
+- The plugin's tests live with the plugin (`tests/`) as its vitest project, are never copied into a workspace, and run from the repository's `tests/` folder (`bun run test:ast-doc-graph`): they need sqlite3 with FTS5, and the pipeline tests the TypeScript compiler API (the test tooling's own TypeScript, linked into each sandbox); a test whose need is absent skips, naming it.
 
 ## Contributing
 
-The extractors keep their JSONL contract (see `spec.md`), so a new language extractor lands without touching the loader. Changes land upstream with the plugin's suite run (`tests/run.sh`) and the Try it walk re-derived. Packaging, naming, and the test convention are in `docs/plugins.md`.
+The extractors keep their JSONL contract (see `spec.md`), so a new language extractor lands without touching the loader. Changes land upstream with the plugin's tests run (`bun run test:ast-doc-graph`) and the Try it walk re-derived. Packaging, naming, and the test convention are in `docs/plugins.md`.
 
 ## Try it
 
@@ -485,7 +483,5 @@ gets retrieval without the TypeScript toolchain.
 | `.contexture/extensions/modules/ast-doc-graph/loader/index-graph.ts` | authored fresh: database ingestion loader building relational tables, resolving GOVERNS/WARNS/COVERS, and compiling FTS5 |
 | `.contexture/extensions/modules/ast-doc-graph/schema.sql` | authored fresh: relational SQLite schema and FTS5 virtual table definitions with foreign keys and trigram tokenizers |
 | `.contexture/extensions/modules/ast-doc-graph/spec.md` | authored fresh: data contract specification for intermediate JSONL streams, recursive CTEs, and edge linking |
-| `tests/test-ddl.sh` | authored fresh: SQLite DDL/FTS5/trigger/CTE verification, needs declared |
-| `tests/verify-pilot.sh` | authored fresh: end-to-end pipeline and ten retrieval assertions against a declared pilot, needs declared |
-| `tests/run.sh` | authored fresh: the named runner over both suites with declared needs and clean skips |
+| `tests/` (the vitest project) | authored fresh: the schema over seeded rows, the query CLI over its cycle-safe queries, the extractors and the loader in process, and the pipeline, delta, and freshness over a committed mini repository |
 | `README.md` | authored fresh: onboarding guide, architecture specification, and reference manual |
