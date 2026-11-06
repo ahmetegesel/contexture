@@ -1,0 +1,117 @@
+import { mkdirSync } from 'node:fs';
+import { join } from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { DOCS_SHAPED, dataFile, moduleDir } from '../support/data-file';
+import { exec } from '../support/exec';
+import { ROOT } from '../support/root';
+import { sandbox } from '../support/sandbox';
+
+const STORE_DATA = join(ROOT, 'base/.contexture/storage/scripts/store-data');
+
+function workspace(): string {
+  const sb = sandbox('store-data');
+  mkdirSync(join(sb, '.contexture/modules'), { recursive: true });
+  dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
+  return sb;
+}
+
+const storeData = (sb: string, ns: string) => exec(STORE_DATA, [ns], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+
+async function answerLines(sb: string, ns: string): Promise<string[]> {
+  const r = await storeData(sb, ns);
+  expect(r.stderr).toBe('');
+  expect(r.code).toBe(0);
+  return r.stdout.split('\n').slice(0, -1);
+}
+
+async function refusal(sb: string, ns: string, rc: number, reason: string): Promise<void> {
+  const r = await storeData(sb, ns);
+  expect(r.stdout).toBe('');
+  expect(r.stderr).toBe(`store-data: ${reason}\n`);
+  expect(r.code).toBe(rc);
+}
+
+const probe = (fields: string) => `namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\n${fields}`;
+
+describe.concurrent('store-data, the data file reader', () => {
+  it('answers a docs-shaped declaration from the extension root on twelve lines, the data file path among them', async () => {
+    const sb = workspace();
+    expect(await answerLines(sb, 'docs')).toEqual([
+      'docs', 'docs', '.md', '<repo>/<slug>', 'true', join(moduleDir(sb, 'extensions', 'docs'), 'data'), '', '', '', 'key', 'line', 'exact',
+    ]);
+  });
+
+  it('a declaration of namespace and key alone takes the defaults: root the namespace, an empty suffix, changes false', async () => {
+    const sb = workspace();
+    const file = dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
+    expect(await answerLines(sb, 'minimal')).toEqual(['minimal', 'minimal', '', '<a>/<b>', 'false', file, '', '', '', 'key', 'line', 'exact']);
+  });
+
+  it('a second module declaring the namespace refuses, naming both owners', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'probe', probe('changes: false\n'));
+    dataFile(sb, 'modules', 'probe2', probe('changes: true\n'));
+    await refusal(sb, 'probe', 1, "namespace 'probe' is declared by more than one module: probe probe2");
+  });
+
+  it('a declaration duplicated across the workspace and the extension roots refuses', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'docs-copy', DOCS_SHAPED);
+    await refusal(sb, 'docs', 1, "namespace 'docs' is declared by more than one module: docs-copy docs");
+  });
+
+  it('an undeclared namespace answers rc 3 and an absent module drawer rc 2', async () => {
+    const sb = workspace();
+    await refusal(sb, 'nosuch', 3, "namespace 'nosuch' is declared by no module data file");
+    const r = await storeData(sandbox('no-drawer'), 'docs');
+    expect(r.code).toBe(2);
+    expect(r.stdout).toBe('');
+    expect(r.stderr).toMatch(/^store-data: .+\n$/);
+  });
+
+  it.each([
+    ['Bad!', "malformed namespace 'Bad!'"],
+    ['', "malformed namespace ''"],
+  ])('a malformed namespace token %j refuses', async (ns, reason) => {
+    await refusal(workspace(), ns, 1, reason);
+  });
+
+  it.each([
+    ['an unknown field', probe('mode: fast\nchanges: true\n'), "unknown field 'mode' in the data file"],
+    ['a root escaping the workspace', 'namespace: probe\nroot: ../outside\nsuffix: .txt\nkey: <a>/<b>\n', "malformed root '../outside' (a workspace-relative folder inside the workspace)"],
+    ['an absolute root', 'namespace: probe\nroot: /abs\nsuffix: .txt\nkey: <a>/<b>\n', "malformed root '/abs' (a workspace-relative folder inside the workspace)"],
+    ['a key without placeholders', 'namespace: probe\nkey: a/b\n', "malformed key pattern 'a/b' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"],
+    ['a non-final multi-segment placeholder', 'namespace: probe\nkey: <a>/<b...>/<c>\n', "malformed key pattern '<a>/<b...>/<c>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"],
+    ['a bad changes flag', probe('changes: maybe\n'), "malformed changes flag 'maybe' (true or false)"],
+    ['a duplicate search key', probe('format: text\nformat: json\n'), "duplicate field 'format' in the data file"],
+    ['a document form without a rule', probe('search: documents\n'), 'the document-set search form takes at least one document rule'],
+    ['a document form with a format', probe('search: documents\nformat: text\ndocument: <a>/<b> body document -\n'), 'the document-set search form takes no format or fields'],
+    ['a document rule on the flat form', probe('search: flat\ndocument: <a>/<b> body document -\n'), 'a document rule needs the document-set search form'],
+    ['a three-token document rule', probe('changes: false\nsearch: documents\ndocument: <a>/<b> body document\n'), 'line 7: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)'],
+    ['a repeated mode', probe('search: flat\nmodes: exact, exact\n'), "duplicate mode 'exact'"],
+    ['modes without exact', probe('search: flat\nmodes: hybrid\n'), 'the modes must include exact'],
+  ])('%s refuses rc 1 naming the rule', async (_, text, reason) => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'probe', text);
+    await refusal(sb, 'probe', 1, reason);
+  });
+
+  it('the optional flat search keys are accepted and answered on the schema lines', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'searchy', probe('changes: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\nmodes: exact\n'));
+    const lines = await answerLines(sb, 'probe');
+    expect(lines.slice(0, 5)).toEqual(['probe', 'probe-root', '.txt', '<a>/<b>', 'false']);
+    expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line', 'exact']);
+  });
+
+  it('the document-set form answers its rules after the twelve lines, one tab-separated rule per line', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'unitlike', [
+      'namespace: unitlike', 'key: <unit>/<path...>', 'search: documents', 'modes: exact, hybrid, trigram',
+      'document: <unit>/state state session -', 'document: <unit>/journal journal entry @entry', '',
+    ].join('\n'));
+    const lines = await answerLines(sb, 'unitlike');
+    expect(lines.slice(6, 12)).toEqual(['documents', '', '', 'head', 'line', 'exact,hybrid,trigram']);
+    expect(lines.slice(12)).toEqual(['<unit>/state\tstate\tsession\t-', '<unit>/journal\tjournal\tentry\t@entry']);
+  });
+});
