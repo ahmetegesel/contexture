@@ -11,6 +11,10 @@ export default defineConfig({
         extends: true,
         test: { name: 'harness', include: ['harness/**/*.test.ts'] },
       },
+      {
+        extends: true,
+        test: { name: 'drivers', include: ['drivers/**/*.test.ts'] },
+      },
     ],
   },
 });

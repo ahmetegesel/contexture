@@ -8,6 +8,13 @@ export function driverPath(sb: string, driver: Driver): string {
     : join(sb, '.contexture/storage/drivers/posix/driver');
 }
 
-export function driverOp(sb: string, driver: Driver, op: string, args: readonly string[] = [], input: string | Buffer = ''): Promise<Run> {
-  return exec(driverPath(sb, driver), [op, ...args], { cwd: sb, input });
+export function driverOp(
+  sb: string,
+  driver: Driver,
+  op: string,
+  args: readonly string[] = [],
+  input: string | Buffer = '',
+  env: Record<string, string> = {},
+): Promise<Run> {
+  return exec(driverPath(sb, driver), [op, ...args], { cwd: sb, input, env });
 }
