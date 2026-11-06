@@ -109,7 +109,7 @@ Delegation is first-class; an orchestrating agent is the clearest example, not a
 
 The memory is in the record, so nothing depends on the subagent surviving. If a subagent stalls or dies, its lane still holds the brief, the trace, and the report so far; a re-dispatch resumes from the lane, continuing from the last uncompleted task, never rebuilding from scratch. A crash costs the dispatch, not the work.
 
-One writer per surface: the session journal records the dispatch (the subagent's lane slug), and the subagent records the execution. The subagent never writes session surfaces; the dispatcher never mines the subagent journal for what the report should carry.
+One writer per surface: the unit's main journal records the dispatch (the subagent's lane slug), and the subagent records the execution. The subagent never writes session surfaces; the dispatcher never mines the subagent journal for what the report should carry.
 
 The lane does the containment work. It is a derived structure: write isolation, auditability, and crash resumption fall out of the lane itself, and the standard journal grammar applies inside. Nothing extra needs remembering, and `AGENTS.md` stays lean.
 
@@ -207,4 +207,4 @@ The recipe slices the parent's attention into exact references and isolated fact
 - Subagents run in the background: the turn ends at launch, and the conversation never blocks on a subagent.
 - Parallel subagents are only for independent domains. Shared state or ordering means sequential, however tempting the fan-out.
 
-And every dispatch is journaled in the session journal: an entry carrying the subagent's lane slug.
+And every dispatch is journaled in the unit's main journal: an entry carrying the subagent's lane slug.
