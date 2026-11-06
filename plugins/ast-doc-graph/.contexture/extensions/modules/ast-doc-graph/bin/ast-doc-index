@@ -45,7 +45,8 @@ Options:
   --cache-dir <path>   Keep the intermediate JSONL streams in this caller-owned folder
                        (default: one per-run folder inside CTX_SCRATCH_ROOT, else the
                        drawer's .contexture/tmp, removed at exit)
-  --delta              Incremental update for modified files only
+  --delta              Incremental update: the named files, else those newer than the
+                       database, plus every file added or removed since the last index
   --file <path>        Target file to update in delta mode (can be repeated)
   --clean              Recreate the database and empty a --cache-dir folder
   --help, -h           Display this help manual
@@ -252,6 +253,29 @@ DOCS_JSONL="$CACHE_DIR/docs.jsonl"
 RULES_JSONL="$CACHE_DIR/rules.jsonl"
 PITFALLS_JSONL="$CACHE_DIR/pitfalls.jsonl"
 
+EXCLUDES=(
+  ! -path "*/node_modules/*"
+  ! -path "*/dist/*"
+  ! -path "*/build/*"
+  ! -path "*/archive/*"
+  ! -path "*/.git/*"
+  ! -path "*/.contexture/*"
+  ! -path "*/.work/*"
+  ! -path "*/.idea/*"
+  ! -path "*/tests/*"
+  ! -path "*/test/*"
+  ! -path "*/__tests__/*"
+  ! -path "*/.worktrees/*"
+)
+TS_SOURCES=(
+  -type f \( -name "*.ts" -o -name "*.tsx" \)
+  ! -name "*.d.ts"
+  ! -name "*.test.ts"
+  ! -name "*.test.tsx"
+  ! -name "*.spec.ts"
+  ! -name "*.spec.tsx"
+)
+
 # Delta indexing mode
 if [[ "$DELTA" == true ]]; then
   if [[ ! -f "$DB_PATH" ]]; then
@@ -259,8 +283,25 @@ if [[ "$DELTA" == true ]]; then
     exit 1
   fi
 
-  DIRTY_TS=()
-  DIRTY_DOCS=()
+  # Reconcile: D for an indexed file the disk lacks, A for a discovered file the graph lacks in a folder it covers
+  DISCOVERED_LIST="$CACHE_DIR/discovered_files.txt"
+  RECONCILED_LIST="$CACHE_DIR/reconciled_files.txt"
+  {
+    scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}"
+    scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" "${EXCLUDES[@]}"
+  } > "$DISCOVERED_LIST"
+  "$INDEX_GRAPH" --db "$DB_PATH" --project-root "$REPO_ROOT" --schema "$SCHEMA_SQL" --reconcile "$DISCOVERED_LIST" > "$RECONCILED_LIST"
+
+  DIRTY_LIST="$CACHE_DIR/dirty_files.txt"
+  GONE_LIST="$CACHE_DIR/gone_files.txt"
+  : > "$DIRTY_LIST"
+  : > "$GONE_LIST"
+  while IFS=$'\t' read -r mark f; do
+    case "$mark" in
+      A) printf '%s\n' "$f" >> "$DIRTY_LIST" ;;
+      D) printf '%s\n' "$f" >> "$GONE_LIST" ;;
+    esac
+  done < "$RECONCILED_LIST"
 
   if [[ ${#EXPLICIT_FILES[@]} -gt 0 ]]; then
     for raw_f in "${EXPLICIT_FILES[@]}"; do
@@ -272,74 +313,42 @@ if [[ "$DELTA" == true ]]; then
       fi
 
       if [[ -z "$target_f" ]]; then
-        echo "Warning: target file not found, skipping: $raw_f" >&2
+        if ! grep -Fxq -- "${raw_f#"$REPO_ROOT"/}" "$GONE_LIST"; then
+          echo "Warning: target file not found, skipping: $raw_f" >&2
+        fi
         continue
       fi
 
       target_abs="$(cd "$(dirname "$target_f")" && pwd)/$(basename "$target_f")"
       if [[ "$target_abs" == "$REPO_ROOT/"* ]]; then
-        rel_f="${target_abs#$REPO_ROOT/}"
+        printf '%s\n' "${target_abs#"$REPO_ROOT"/}" >> "$DIRTY_LIST"
       else
-        rel_f="$raw_f"
-      fi
-
-      if [[ "$target_abs" =~ \.(ts|tsx)$ && ! "$target_abs" =~ \.d\.ts$ ]]; then
-        DIRTY_TS+=("$rel_f")
-      elif [[ "$target_abs" =~ \.md$ ]]; then
-        DIRTY_DOCS+=("$rel_f")
+        printf '%s\n' "$raw_f" >> "$DIRTY_LIST"
       fi
     done
   else
-    # Discover dirty files modified newer than DB_PATH with standard excludes
-    while IFS= read -r f; do
-      if [[ -n "$f" ]]; then
-        rel_f="${f#$REPO_ROOT/}"
-        rel_f="${rel_f#./}"
-        DIRTY_TS+=("$rel_f")
-      fi
-    done < <(scan_find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
-      ! -name "*.d.ts" \
-      ! -path "*/node_modules/*" \
-      ! -path "*/dist/*" \
-      ! -path "*/build/*" \
-      ! -path "*/archive/*" \
-      ! -path "*/.git/*" \
-      ! -path "*/.contexture/*" \
-      ! -path "*/.work/*" \
-      ! -path "*/.idea/*" \
-      ! -path "*/tests/*" \
-      ! -path "*/test/*" \
-      ! -path "*/__tests__/*" \
-      ! -path "*/.worktrees/*" \
-      ! -name "*.test.ts" \
-      ! -name "*.test.tsx" \
-      ! -name "*.spec.ts" \
-      ! -name "*.spec.tsx" \
-      -newer "$DB_PATH" 2>/dev/null || true)
-
-    while IFS= read -r f; do
-      if [[ -n "$f" ]]; then
-        rel_f="${f#$REPO_ROOT/}"
-        rel_f="${rel_f#./}"
-        DIRTY_DOCS+=("$rel_f")
-      fi
-    done < <(scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" \
-      ! -path "*/node_modules/*" \
-      ! -path "*/dist/*" \
-      ! -path "*/build/*" \
-      ! -path "*/archive/*" \
-      ! -path "*/.git/*" \
-      ! -path "*/.contexture/*" \
-      ! -path "*/.work/*" \
-      ! -path "*/.idea/*" \
-      ! -path "*/tests/*" \
-      ! -path "*/test/*" \
-      ! -path "*/__tests__/*" \
-      ! -path "*/.worktrees/*" \
-      -newer "$DB_PATH" 2>/dev/null || true)
+    { scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}" -newer "$DB_PATH" 2>/dev/null || true
+      scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" "${EXCLUDES[@]}" -newer "$DB_PATH" 2>/dev/null || true
+    } | while IFS= read -r f; do
+      printf '%s\n' "${f#"$REPO_ROOT"/}"
+    done >> "$DIRTY_LIST"
   fi
 
-  DIRTY_COUNT=$(( ${#DIRTY_TS[@]} + ${#DIRTY_DOCS[@]} ))
+  DIRTY_TS=()
+  DIRTY_DOCS=()
+  REMOVED=()
+  while IFS= read -r rel_f; do
+    if [[ "$rel_f" =~ \.(ts|tsx)$ && ! "$rel_f" =~ \.d\.ts$ ]]; then
+      DIRTY_TS+=("$rel_f")
+    elif [[ "$rel_f" =~ \.md$ ]]; then
+      DIRTY_DOCS+=("$rel_f")
+    fi
+  done < <(LC_ALL=C sort -u "$DIRTY_LIST")
+  while IFS= read -r rel_f; do
+    REMOVED+=("$rel_f")
+  done < "$GONE_LIST"
+
+  DIRTY_COUNT=$(( ${#DIRTY_TS[@]} + ${#DIRTY_DOCS[@]} + ${#REMOVED[@]} ))
   if [[ "$DIRTY_COUNT" -eq 0 ]]; then
     exit 0
   fi
@@ -396,6 +405,11 @@ if [[ "$DELTA" == true ]]; then
       LOADER_FLAGS+=(--file "$f")
     done
   fi
+  if [[ ${#REMOVED[@]} -gt 0 ]]; then
+    for f in "${REMOVED[@]}"; do
+      LOADER_FLAGS+=(--file "$f")
+    done
+  fi
 
   "$INDEX_GRAPH" "${LOADER_FLAGS[@]}"
   touch "$DB_PATH"
@@ -403,27 +417,11 @@ if [[ "$DELTA" == true ]]; then
 fi
 
 # Full indexing mode
-# Step 1: Discover TypeScript source files
+# Step 1: Discover the TypeScript sources and the markdown files of the docs walk
 TS_FILE_LIST="$CACHE_DIR/ts_files.txt"
-scan_find "$SCAN_DIR" -type f \( -name "*.ts" -o -name "*.tsx" \) \
-  ! -name "*.d.ts" \
-  ! -path "*/node_modules/*" \
-  ! -path "*/dist/*" \
-  ! -path "*/build/*" \
-  ! -path "*/archive/*" \
-  ! -path "*/.git/*" \
-  ! -path "*/.contexture/*" \
-  ! -path "*/.work/*" \
-  ! -path "*/.idea/*" \
-  ! -path "*/tests/*" \
-  ! -path "*/test/*" \
-  ! -path "*/__tests__/*" \
-  ! -path "*/.worktrees/*" \
-  ! -name "*.test.ts" \
-  ! -name "*.test.tsx" \
-  ! -name "*.spec.ts" \
-  ! -name "*.spec.tsx" \
-  | sort > "$TS_FILE_LIST"
+scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}" | sort > "$TS_FILE_LIST"
+MD_FILE_LIST="$CACHE_DIR/md_files.txt"
+scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" | sort > "$MD_FILE_LIST"
 
 TS_COUNT="$(wc -l < "$TS_FILE_LIST" | tr -d ' ')"
 
@@ -445,9 +443,9 @@ fi
   --out-docs "$DOCS_JSONL" \
   --out-rules "$RULES_JSONL" \
   --out-pitfalls "$PITFALLS_JSONL" \
-  "$DOCS_SCAN_DIR"
+  "-" < "$MD_FILE_LIST"
 
-# Step 4: Ingest intermediate streams into SQLite graph database
+# Step 4: Ingest intermediate streams into SQLite graph database, recording every discovered file
 mkdir -p "$DB_DIR"
 DB_PATH="$(cd "$DB_DIR" && pwd)/$(basename "$DB_PATH")"
 LOADER_FLAGS=(
@@ -459,6 +457,8 @@ LOADER_FLAGS=(
   --pitfalls "$PITFALLS_JSONL"
   --project-root "$REPO_ROOT"
   --schema "$SCHEMA_SQL"
+  --file-list "$TS_FILE_LIST"
+  --file-list "$MD_FILE_LIST"
 )
 
 if [[ "$CLEAN" == true ]]; then

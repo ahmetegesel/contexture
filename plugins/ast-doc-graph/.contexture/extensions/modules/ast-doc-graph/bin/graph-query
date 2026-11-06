@@ -223,6 +223,18 @@ check_and_sync_freshness() {
     ! -name "*.spec.tsx" \
     -newer "$db_abs" 2>/dev/null || true)
 
+  # An indexed file the disk no longer has is dirty too, unless every one reads gone (another root)
+  local indexed_file indexed_count=0 gone_files=()
+  while IFS= read -r indexed_file; do
+    [[ -n "$indexed_file" ]] || continue
+    indexed_count=$((indexed_count + 1))
+    [[ "$indexed_file" == /* ]] || indexed_file="$repo_root/$indexed_file"
+    [[ -e "$indexed_file" ]] || gone_files+=("$indexed_file")
+  done < <(sqlite_exec "$DB_PATH" "SELECT file FROM indexed_files;" 2>/dev/null || true)
+  if [[ ${#gone_files[@]} -gt 0 && ${#gone_files[@]} -lt "$indexed_count" ]]; then
+    dirty_files+=("${gone_files[@]}")
+  fi
+
   local dirty_count=${#dirty_files[@]}
   if [[ "$dirty_count" -eq 0 ]]; then
     return 0

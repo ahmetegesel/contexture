@@ -5,12 +5,15 @@ import { sandbox } from '@support/sandbox';
 import {
   candidateDocIdsForFile,
   computeDerivedEdges,
+  docFileCandidates,
   type DocPitfallRecord,
   type DocRecord,
   type DocRuleRecord,
   fileMatchesGlobs,
+  reconcileFiles,
   resolveDocFile,
   type SymbolRecord,
+  unitsOfFile,
 } from '../../.contexture/extensions/modules/ast-doc-graph/loader/index-graph';
 
 const sym = (id: string, name: string, qname: string, file: string): SymbolRecord => ({ id, name, qname, kind: 'function', file, line_start: 1, line_end: 2 }) as SymbolRecord;
@@ -43,6 +46,21 @@ describe('the loader helpers in process', { concurrent: true }, () => {
     expect(resolveDocFile('doc:demo-orders:order-flow', root)).toBe('docs/demo-orders/order-flow.md');
     expect(resolveDocFile('doc:nosuch', root)).toBeNull();
     expect(resolveDocFile('sym:1', root)).toBeNull();
+  });
+
+  it('[ast-doc-graph-r1] reconcileFiles names the indexed files the disk lacks and the discovered files the graph lacks inside a folder it covers for their kind', () => {
+    const indexed = ['src/a.ts', 'src/gone.ts', 'docs/w/x.md'];
+    const discovered = ['src/a.ts', 'src/new/b.ts', 'tools/c.ts', 'docs/w/y.md', 'src/notes.md', 'docs/w/z.ts'];
+    const disk = new Set(['docs/w/x.md', ...discovered]);
+    expect(reconcileFiles(indexed, discovered, (f) => disk.has(f))).toEqual({ added: ['src/new/b.ts', 'docs/w/y.md'], gone: ['src/gone.ts'] });
+  });
+
+  it('[ast-doc-graph-r1] unitsOfFile inverts resolveDocFile: the units whose first existing candidate file is the one named, present or gone', () => {
+    const ids = ['doc:w:x', 'doc:w:y', 'doc:x'];
+    expect(unitsOfFile('docs/w/x.md', ids, () => false)).toEqual(['doc:w:x']);
+    expect(unitsOfFile('docs/x.md', ids, () => false)).toEqual(['doc:w:x', 'doc:x']);
+    expect(unitsOfFile('docs/x.md', ids, (f) => f === 'docs/w/x.md')).toEqual(['doc:x']);
+    expect(docFileCandidates('sym:1')).toEqual([]);
   });
 
   it('computeDerivedEdges links rules, pitfalls, and docs, a bare name disambiguated by the doc sources', () => {

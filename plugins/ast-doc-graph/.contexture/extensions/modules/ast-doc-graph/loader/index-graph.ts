@@ -134,21 +134,75 @@ export function candidateDocIdsForFile(file: string): string[] {
   return Array.from(new Set(res));
 }
 
-export function resolveDocFile(docId: string, projectRoot?: string): string | null {
-  if (!docId.startsWith('doc:')) return null;
+export function docFileCandidates(docId: string): string[] {
+  if (!docId.startsWith('doc:')) return [];
   const parts = docId.slice(4).split(':');
-  const candidateRels = [
+  return [
     path.join('docs', ...parts) + '.md',
     path.join('docs', parts[parts.length-1]) + '.md',
     path.join(...parts) + '.md',
   ];
-  for (const rel of candidateRels) {
+}
+
+export function resolveDocFile(docId: string, projectRoot?: string): string | null {
+  for (const rel of docFileCandidates(docId)) {
     const full = projectRoot ? path.resolve(projectRoot, rel) : path.resolve(rel);
     if (fs.existsSync(full)) {
       return rel;
     }
   }
   return null;
+}
+
+/* The units a full load records under a file (resolveDocFile's answer), the file present or gone */
+export function unitsOfFile(file: string, docIds: string[], exists: (rel: string) => boolean): string[] {
+  const norm = file.replace(/^\.\//, '');
+  return docIds.filter((id) => {
+    const candidates = docFileCandidates(id);
+    const at = candidates.indexOf(norm);
+    return at >= 0 && candidates.slice(0, at).every((c) => !exists(c));
+  });
+}
+
+function fileKind(file: string): string | null {
+  if (/\.d\.ts$/.test(file)) return null;
+  if (/\.tsx?$/.test(file)) return 'ts';
+  if (/\.md$/.test(file)) return 'md';
+  return null;
+}
+
+/* A delta's reconcile: the indexed files the disk lacks, and the discovered files the graph lacks inside a folder it covers for their kind */
+export function reconcileFiles(indexed: string[], discovered: string[], exists: (rel: string) => boolean): { added: string[]; gone: string[] } {
+  const held = new Set(indexed);
+  const covered = new Set<string>();
+  for (const f of indexed) {
+    const kind = fileKind(f);
+    if (kind) covered.add(`${kind} ${path.posix.dirname(f)}`);
+  }
+  const inCoveredFolder = (f: string): boolean => {
+    const kind = fileKind(f);
+    if (!kind) return false;
+    for (let dir = path.posix.dirname(f); ; dir = path.posix.dirname(dir)) {
+      if (covered.has(`${kind} ${dir}`)) return true;
+      if (dir === path.posix.dirname(dir)) return false;
+    }
+  };
+  return {
+    added: [...new Set(discovered)].filter((f) => !held.has(f) && inCoveredFolder(f)),
+    gone: indexed.filter((f) => !exists(f)),
+  };
+}
+
+function projectRelative(file: string, projectRoot: string): string {
+  if (projectRoot && path.isAbsolute(file)) {
+    const rel = path.relative(projectRoot, file);
+    if (rel !== '..' && !rel.startsWith('../')) return rel;
+  }
+  return file.replace(/^\.\//, '');
+}
+
+function readLines(listPath: string): string[] {
+  return fs.readFileSync(listPath, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean);
 }
 
 /* JSONL reader */
@@ -194,7 +248,10 @@ Options:
   --delta                 Incremental delta update mode without recreating database
   --files <list>          Comma-separated list of modified files
   --file <path>           Individual modified file path
+  --file-list <path>      A file of paths, one per line, read as --file each (a full load records them)
   --modified-files <list> Comma-separated list of modified files
+  --reconcile <path>      Read only: print D for each indexed file the disk lacks and A for each
+                          listed file the graph lacks inside a folder it covers, then exit
   --project-root <path>   Project root path for relative file resolution
   --schema <file>         Path to schema.sql (default: ../schema.sql)
   --clean                 Remove existing database before indexing
@@ -331,6 +388,8 @@ async function main(): Promise<void> {
   let projectRoot = '';
   let schemaPath = '';
   let explicitFiles: string[] = [];
+  const fileLists: string[] = [];
+  let reconcilePath = '';
   let clean = false;
   let delta = false;
 
@@ -385,6 +444,14 @@ async function main(): Promise<void> {
     } else if (arg.startsWith('--file=')) {
       const val = arg.slice('--file='.length);
       if (val) explicitFiles.push(val.trim());
+    } else if (arg === '--file-list') {
+      fileLists.push(args[++i]);
+    } else if (arg.startsWith('--file-list=')) {
+      fileLists.push(arg.slice('--file-list='.length));
+    } else if (arg === '--reconcile') {
+      reconcilePath = args[++i];
+    } else if (arg.startsWith('--reconcile=')) {
+      reconcilePath = arg.slice('--reconcile='.length);
     } else if (arg === '--modified-files') {
       const val = args[++i];
       if (val) explicitFiles.push(...val.split(',').map((x) => x.trim()).filter(Boolean));
@@ -412,10 +479,25 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  if (delta && !fs.existsSync(dbPath)) {
+  if ((delta || reconcilePath) && !fs.existsSync(dbPath)) {
     console.error(`Error: delta mode requires an existing database at ${dbPath}`);
     process.exit(1);
   }
+
+  for (const list of fileLists) {
+    explicitFiles.push(...readLines(list).map((f) => projectRelative(f, projectRoot)));
+  }
+  const existsUnderRoot = (rel: string): boolean => fs.existsSync(projectRoot ? path.resolve(projectRoot, rel) : path.resolve(rel));
+  const printReconcile = (indexed: string[]): void => {
+    const discovered = readLines(reconcilePath).map((f) => projectRelative(f, projectRoot));
+    const { added, gone } = reconcileFiles(indexed, discovered, existsUnderRoot);
+    if (indexed.length > 0 && gone.length === indexed.length) {
+      console.error(`Error: every file the graph indexed is absent under ${path.resolve(projectRoot || '.')}: a delta there would empty the graph; run a full index of that repository to rebuild it`);
+      process.exit(1);
+    }
+    for (const f of gone) console.log(`D\t${f}`);
+    for (const f of added) console.log(`A\t${f}`);
+  };
 
   const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -506,6 +588,12 @@ async function main(): Promise<void> {
 
   if (DatabaseSync) {
     const db = new DatabaseSync(dbPath);
+    if (reconcilePath) {
+      const indexed = (db.prepare('SELECT file FROM indexed_files;').all() as any[]).map((r) => r.file);
+      db.close();
+      printReconcile(indexed);
+      return;
+    }
     db.exec('PRAGMA foreign_keys = ON;');
     db.exec('PRAGMA busy_timeout = 5000;');
     db.exec(schemaSql);
@@ -531,16 +619,24 @@ async function main(): Promise<void> {
         }
       }
 
+      const mdFiles = [...modifiedFiles].filter((f) => f.endsWith('.md'));
+      if (mdFiles.length > 0) {
+        const unitIds = (db.prepare('SELECT id FROM docs;').all() as any[]).map((r) => r.id);
+        for (const f of mdFiles) for (const id of unitsOfFile(f, unitIds, existsUnderRoot)) docIdsToDelete.add(id);
+      }
+
       const deleteDocsStmt = db.prepare('DELETE FROM docs WHERE id = ?;');
       for (const docId of docIdsToDelete) {
         deleteDocsStmt.run(docId);
       }
 
-      // Clean file-level edges for doc files
+      // Clean file-level edges: a doc file's own, and every edge to a modified file
+      const deleteEdgesByTargetStmt = db.prepare('DELETE FROM edges WHERE target = ?;');
       for (const file of modifiedFiles) {
         if (file.endsWith('.md')) {
           deleteEdgesBySourceStmt.run(file);
         }
+        deleteEdgesByTargetStmt.run(file);
       }
     } else {
       db.exec(CLEAR_GRAPH);
@@ -833,6 +929,12 @@ async function main(): Promise<void> {
     // Fallback to /usr/bin/sqlite3 CLI
     const sqliteBin = fs.existsSync('/usr/bin/sqlite3') ? '/usr/bin/sqlite3' : 'sqlite3';
 
+    if (reconcilePath) {
+      const out = execFileSync(sqliteBin, [dbPath, '-json', 'SELECT file FROM indexed_files;'], { encoding: 'utf8' });
+      printReconcile((out.trim() ? JSON.parse(out) : []).map((r: any) => r.file));
+      return;
+    }
+
     if (delta) {
       // Query existing state to re-link edges
       const queryJson = (sql: string): any[] => {
@@ -858,6 +960,10 @@ async function main(): Promise<void> {
             if (row.source) docIdsToDelete.add(row.source);
           }
         }
+      }
+      const unitIds = existingDocsRaw.map((d: any) => d.id);
+      for (const f of modifiedFiles) {
+        if (f.endsWith('.md')) for (const id of unitsOfFile(f, unitIds, existsUnderRoot)) docIdsToDelete.add(id);
       }
 
       // In-memory simulation to compute re-linked edges
@@ -918,7 +1024,7 @@ async function main(): Promise<void> {
       ]);
       const edgeSet = new Set<string>();
       for (const e of existingEdgesRaw) {
-        if (modifiedFiles.has(e.source) || deletedIds.has(e.source) || deletedIds.has(e.target)) continue;
+        if (modifiedFiles.has(e.source) || modifiedFiles.has(e.target) || deletedIds.has(e.source) || deletedIds.has(e.target)) continue;
         edgeSet.add(`${e.source}|${e.target}|${e.kind}`);
       }
       for (const e of rawEdges) {
@@ -985,6 +1091,7 @@ async function main(): Promise<void> {
         if (file.endsWith('.md')) {
           sqlChunks.push(`DELETE FROM edges WHERE source = ${sqlEscape(file)};`);
         }
+        sqlChunks.push(`DELETE FROM edges WHERE target = ${sqlEscape(file)};`);
       }
 
       for (const s of symbols) {

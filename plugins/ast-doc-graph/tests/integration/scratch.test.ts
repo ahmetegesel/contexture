@@ -130,7 +130,7 @@ describe.skipIf(!sqliteFts5)('the index stages its intermediate streams in one p
     const made = madeFolders('scratch-cache-dir');
     const r = await astDocIndex(repo, ['--clean', '--cache-dir', cache], { env: made.env });
     expect(r.code, r.stderr).toBe(0);
-    expect(listing(cache)).toEqual(['docs.jsonl', 'edges.jsonl', 'pitfalls.jsonl', 'rules.jsonl', 'symbols.jsonl', 'ts_files.txt']);
+    expect(listing(cache)).toEqual(['docs.jsonl', 'edges.jsonl', 'md_files.txt', 'pitfalls.jsonl', 'rules.jsonl', 'symbols.jsonl', 'ts_files.txt']);
     expect(made.folders()).toEqual([]);
     expect(listing(join(repo, '.contexture'))).toEqual(['tmp']);
   });

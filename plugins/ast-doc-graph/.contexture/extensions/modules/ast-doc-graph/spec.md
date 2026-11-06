@@ -317,7 +317,7 @@ END;
 ```
 
 ### 3.1 File Tracking Schema (indexed_files)
-The `indexed_files` table tracks modification times and cryptographic hashes of indexed source and documentation files:
+The `indexed_files` table tracks modification times and cryptographic hashes of indexed source and documentation files, one row for every file the last full index discovered and every file a delta added since (Section 7.1):
 * `file` (string, primary key): Repository-relative file path (example: `backend/core/cascadeCore.ts`).
 * `mtime` (real, required): File modification timestamp in seconds since unix epoch with fractional second precision.
 * `hash` (string, required): SHA-256 hexadecimal content hash for content drift verification.
@@ -547,17 +547,20 @@ Full repository rebuilds provide a reliable clean baseline, but re-parsing every
 A full load, with or without `--clean`, rebuilds the graph inside its one transaction: it deletes every row of `edges`, `fts_symbols`, `fts_docs`, `pitfalls`, `rules`, `docs`, `symbols`, and `indexed_files` (the search indexes first, so the delete triggers find them empty), then inserts the fresh streams. Each symbol and unit therefore keeps one search row across repeated runs, and a load that fails leaves the graph as it was; the sqlite3 command fallback runs the same statements with `-bail`, so it stops at its first error and the transaction rolls back.
 
 ### 7.1 Pipeline Flow in Delta Mode
+A full index records every file it discovered in `indexed_files` (each TypeScript source and each markdown file of the docs walk, a source with no symbol and a markdown file with no unit included), so the table is the graph's file set and a delta can compare it with the disk.
+
 1. Change Detection:
-   * Explicit file targets: Provided via `--file <path>` arguments or positional file arguments.
-   * Timestamp comparison: When explicit targets are omitted, `ast-doc-index --delta` compares source files against the modification timestamp of `graph.db` using system `find -newer`. Standard non-source directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.worktrees`, tests) are excluded.
-   * Early exit: If zero files are dirty, the driver exits immediately with code 0 in under 10ms.
+   * Reconcile: every delta first lists its discovery (the TypeScript sources under the scan root and the markdown files under the docs walk, the exclusion folders applied) and asks the loader, read only (`--reconcile`), which indexed files the disk no longer has (removed) and which discovered files the graph does not hold inside a folder it already covers for their kind, that folder or one above it up to the repository root holding an indexed file of the same kind (added). A renamed or moved file therefore reads as its old path removed and its new path added whatever its modification time, and a delta never widens a graph built with `--src-dir` to folders it never covered. When every indexed file is absent under the repository root, the reconcile refuses rc 1 rather than empty the graph (a delta run against another root).
+   * Explicit file targets: Provided via `--file <path>` arguments or positional file arguments. A named file that is gone is removed when the graph held it, and warned and skipped otherwise.
+   * Timestamp comparison: When explicit targets are omitted, `ast-doc-index --delta` also takes every discovered file newer than `graph.db` (system `find -newer`). Standard non-source directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.worktrees`, tests) are excluded.
+   * Early exit: If no file is dirty, added, or removed, the driver exits with code 0 and leaves the database untouched.
 2. Targeted Extraction:
-   * Dirty TypeScript source files are piped directly to `extract-ts.sh` via standard input, avoiding whole-tree discovery.
-   * Dirty Markdown documentation files are piped directly to `extract-docs.sh`.
-   * Unchanged files are omitted from extractor execution, minimizing AST parser overhead.
+   * Dirty and added TypeScript source files are piped directly to `extract-ts.sh` via standard input, avoiding whole-tree extraction.
+   * Dirty and added Markdown documentation files are piped directly to `extract-docs.sh`.
+   * Unchanged and removed files are omitted from extractor execution, minimizing AST parser overhead.
 3. Ingestion and Atomic Transaction:
    * The loader begins an exclusive database transaction.
-   * Previous entities belonging to modified files are removed: `DELETE FROM symbols WHERE file = ?` and `DELETE FROM docs WHERE id = ?`.
+   * Previous entities belonging to modified or removed files are removed: `DELETE FROM symbols WHERE file = ?`, every edge from or to the file, and `DELETE FROM docs WHERE id = ?` for each unit the file held (the candidate ids of its path, plus each unit whose first existing `resolveDocFile` candidate is that file, present or gone).
    * Cascading triggers automatically purge corresponding edges and FTS5 index entries.
    * Fresh symbols, docs, rules, pitfalls, and syntactic edges are inserted.
 4. Edge Re-linking:
@@ -565,8 +568,8 @@ A full load, with or without `--clean`, rebuilds the graph inside its one transa
    * Incoming code symbols are checked against standing contract rules and pitfalls, establishing `GOVERNS` and `WARNS` edges without requiring a full documentation re-parse.
    * `COVERS` edges are recomputed for modified source files and documents.
 5. Tracking Table Update:
-   * `indexed_files` records for modified files are upserted with fresh `mtime` and SHA-256 hash values.
-   * Deleted files are removed from `indexed_files`.
+   * `indexed_files` records for modified and added files are upserted with fresh `mtime` and SHA-256 hash values.
+   * Removed files are deleted from `indexed_files`.
    * The database file modification time is touched upon completion.
 
 ---
@@ -579,6 +582,7 @@ To eliminate the operational complexity, memory footprint, and potential flakine
 Every invocation of `graph-query` executes `check_and_sync_freshness` before evaluating the requested query:
 1. Repository Root Resolution: Discovers repository root by inspecting database directory ancestry (`.git`, `package.json`, `backend`, `docs`, `src`) or git toplevel.
 2. Fast Filesystem Scan: Executes system `find` comparing `.ts`, `.tsx`, and `.md` files against `graph.db` using `-newer`. The scan filters out standard build and artifact directories. On modern filesystems, this check completes in 1 to 5ms.
+3. Removed Files: Every file `indexed_files` holds that the disk no longer has counts as dirty too, so the inline delta removes it (unless every indexed file reads absent, the sign of a repository root other than the index's, when none counts).
 
 ### 8.2 Lifecycle Threshold Bands
 The query CLI applies three threshold behaviors based on the count of dirty files discovered:

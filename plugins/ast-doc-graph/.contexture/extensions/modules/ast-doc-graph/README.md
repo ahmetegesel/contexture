@@ -64,10 +64,17 @@ runs `find` from inside the scanned root, so the exclusion folders
 (`node_modules`, `.contexture`, `tests`, `.worktrees`, and the rest) match
 paths within the repository and never the folders the repository itself sits
 in: a repository under a `tests/` or `.worktrees/` folder indexes like any
-other.
+other. A full index hands the loader both discovery lists (`--file-list`), so
+`indexed_files` holds every file it discovered; every delta first asks the
+loader, read only (`--reconcile`), for the indexed files the disk lacks and
+the discovered files the graph lacks inside a folder it already covers for
+their kind, removes the first and indexes the second with the dirty ones,
+and refuses rc 1 when every indexed file is absent under its root. The
+query's freshness check counts an indexed file the disk lacks as dirty.
 
-The docs extractor reads the corpus as files: `bin/ast-doc-index` scans the
-workspace's `docs/` folder and `extractors/docs/extract-docs.ts` parses each
+The docs extractor reads the corpus as files: `bin/ast-doc-index` lists the
+regular markdown files of the workspace's `docs/` folder (else the whole
+repository root) and `extractors/docs/extract-docs.ts` parses each listed
 file, never through `ctx docs` or the storage driver; a walk that finds no
 markdown yields empty docs streams, never a refusal. Under the docs-discipline
 files driver that folder is the corpus; under a store driver it holds none, so
@@ -121,6 +128,15 @@ the refusal, the variable by package folder and by entry file, and the
 refusal of a variable without the API; a refusal case skips, naming the
 need, when a TypeScript 5 or 6 is reachable from the module or the sandbox
 ancestors.
+`integration/docs-walk`, `rebuild`, and `removed-files` prove a rule or
+pitfall before any `@doc` line skipped with its one warning, a code-only
+repository indexing rc 0, the full load's rebuild and its rollback, and a
+removed, renamed, or moved file leaving the graph after a full run, a bare
+delta, a named delta, and the query's inline delta, a `--src-dir` graph
+never widening; `delta-jit` also proves a failed inline delta's one stderr
+line. The `sqlite3` command fallback cases run with
+`NODE_OPTIONS=--no-experimental-sqlite` and skip, naming the need, where the
+host's node does not read it.
 `static/` holds the census of the module tree: no PATH edit, no
 sibling-project glob, no pre-extension-root path, and no absolute system
 temp path, each with a planted null check. The tests skip, naming the
