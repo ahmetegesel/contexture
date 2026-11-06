@@ -199,6 +199,22 @@ store_lock() {
   refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (60 s timeout)"
 }
 
+# store_lock_held <namespace>: rc 0 while a writer holds the namespace lock, found without a
+# write in the folder get_lock_dir answers (the drawer's while its scratch folder is
+# writable, else the fallback). Held follows the waiter's rule: a pid-less lock is held, a
+# lock whose pid is gone is not, since the next writer removes it.
+store_lock_held() {
+  lh_tmp="$(find_workspace_root)/.contexture/tmp"
+  [ -d "$lh_tmp" ] && [ -w "$lh_tmp" ] || lh_tmp="${TMPDIR:-/tmp}/contexture-${USER:-}"
+  lh_lock="$lh_tmp/locks/store-$1.lock"
+  [ -d "$lh_lock" ] || return 1
+  lh_pid=$(cat "$lh_lock/pid" 2>/dev/null)
+  case "$lh_pid" in
+    ""|*[!0-9]*) return 0 ;;
+  esac
+  kill -0 "$lh_pid" 2>/dev/null
+}
+
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
 # SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the caller's function name frames the
 # refusal. The storage core's store-data script owns the grammar (the core is
@@ -932,8 +948,9 @@ capability() {
 
 # storage.health: a probe, never a write, and the backend's own health alone (no record
 # count: the record's active listing is the unit module's). The sessions drawer is the
-# record namespace's root; a drawer holding no artifact reports store absent, and an
-# unwritable drawer reports error
+# record namespace's root; a drawer holding no artifact reports store absent, an
+# unwritable drawer reports error, and a writable one reports locked in place of ok while a
+# writer holds the record namespace's lock
 storage_health() {
   sh_ws=$(find_workspace_root)
   sh_sess="$sh_ws/.contexture/sessions"
@@ -945,15 +962,17 @@ storage_health() {
   elif [ ! -w "$sh_sess" ]; then
     sh_health="error"
     sh_detail="sessions directory is not writable"
-  elif [ -n "$(ls -A "$sh_sess" 2>/dev/null)" ]; then
-    sh_store="present"
-    sh_detail="sessions directory writable, unlocked"
-    if [ -d "$sh_sess/.lock" ]; then
-      sh_health="locked"
-      sh_detail="storage lock active"
-    fi
   else
-    sh_detail="sessions directory writable, no artifact stored yet"
+    if [ -n "$(ls -A "$sh_sess" 2>/dev/null)" ]; then
+      sh_store="present"
+      sh_detail="sessions directory writable, unlocked"
+    else
+      sh_detail="sessions directory writable, no artifact stored yet"
+    fi
+    if store_lock_held unit; then
+      sh_health="locked"
+      sh_detail="the store namespace 'unit' is locked by a writer"
+    fi
   fi
   printf '{"driver":"posix","health":"%s","detail":"%s","store":"%s"}\n' "$sh_health" "$sh_detail" "$sh_store"
 }

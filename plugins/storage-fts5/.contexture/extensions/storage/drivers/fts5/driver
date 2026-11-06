@@ -206,6 +206,19 @@ store_lock() {
   refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (60 s timeout)"
 }
 
+# store_lock_held <namespace>: rc 0 while a writer holds the namespace lock. Held follows
+# the waiter's rule: a pid-less lock is held, a lock whose pid is gone is not, since the
+# next writer removes it.
+store_lock_held() {
+  lh_lock="$DB_TMP/locks/store-$1.lock"
+  [ -d "$lh_lock" ] || return 1
+  lh_pid=$(cat "$lh_lock/pid" 2>/dev/null)
+  case "$lh_pid" in
+    ""|*[!0-9]*) return 0 ;;
+  esac
+  kill -0 "$lh_pid" 2>/dev/null
+}
+
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
 # SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the storage core's store-data script
 # owns the grammar (the core is base, never the docs module: no module's parser
@@ -1033,7 +1046,8 @@ capability() {
 # storage.health: a probe, never a write, and the backend's own health alone (no record
 # count: the record's active listing is the unit module's). An absent database reports
 # degraded with store absent (the store starts at the first write), a store holding no key
-# reports degraded, and a store at another schema reports error
+# reports degraded, a store at another schema reports error, and a healthy store reports
+# locked in place of ok while a writer holds the record namespace's lock
 storage_health() {
   # an sqlite3 older than the driver's minimum serves no function (db_init refuses each), so
   # the probe reports error naming it, never ok (lanes/si-f5-fts5-review/report F3)
@@ -1072,6 +1086,8 @@ storage_health() {
     printf '{"driver":"fts5","health":"error","detail":"database file not writable","store":"present"}\n'
   elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
     printf '{"driver":"fts5","health":"error","detail":"database integrity check failed","store":"present"}\n'
+  elif store_lock_held unit; then
+    printf '{"driver":"fts5","health":"locked","detail":"%s","store":"present"}\n' "the store namespace 'unit' is locked by a writer"
   else
     printf '{"driver":"fts5","health":"ok","detail":"database present and writable","store":"present"}\n'
   fi
