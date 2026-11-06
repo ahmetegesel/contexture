@@ -42,11 +42,11 @@ for (const driver of DRIVERS) {
 
     describe('reads', () => {
       it('a fresh store lists no keys', async () => {
-        expect((await store(empty, driver).list('docs')).stdout).toBe(listAnswer('docs', []));
+        expect((await store(fresh(empty), driver).list('docs')).stdout).toBe(listAnswer('docs', []));
       });
 
       it('lists the admitted keys in bytewise order', async () => {
-        const r = await store(keyed, driver).list('docs');
+        const r = await store(fresh(keyed), driver).list('docs');
         answer(r, 'store.list');
         expect(r.stdout).toBe(listAnswer('docs', ALL_KEYS));
       });
@@ -57,11 +57,11 @@ for (const driver of DRIVERS) {
         ['nothing/', []],
         ['', ALL_KEYS],
       ])('narrows the list to the literal prefix %j', async (prefix, keys) => {
-        expect((await store(keyed, driver).list('docs', prefix)).stdout).toBe(listAnswer('docs', keys));
+        expect((await store(fresh(keyed), driver).list('docs', prefix)).stdout).toBe(listAnswer('docs', keys));
       });
 
       it('returns a value\'s bytes exactly, a NUL and an invalid UTF-8 byte included', async () => {
-        const r = await store(keyed, driver).get('docs', 'workspace/binary');
+        const r = await store(fresh(keyed), driver).get('docs', 'workspace/binary');
         expect(r.code).toBe(0);
         expect(r.stderr).toBe('');
         expect(r.bytes.equals(DOCS_KEYS[3][1])).toBe(true);
@@ -69,13 +69,13 @@ for (const driver of DRIVERS) {
       });
 
       it('scans every admitted key bytewise with its raw value in base64', async () => {
-        const r = await store(keyed, driver).scan('docs');
+        const r = await store(fresh(keyed), driver).scan('docs');
         answer(r, 'store.scan');
         expect(r.stdout).toBe(`${JSON.stringify({ namespace: 'docs', items: DOCS_KEYS.map(([key, v]) => ({ key, value_b64: v.toString('base64') })) })}\n`);
       });
 
       it('scans an empty namespace as an empty item list, and refuses a bad scan', async () => {
-        const s = store(empty, driver);
+        const s = store(fresh(empty), driver);
         expect((await s.scan('docs')).stdout).toBe('{"namespace":"docs","items":[]}\n');
         refused(await s.scan(), 'store.scan', 1, 'ERR_INVALID_ARGUMENT', 'store.scan takes one argument, the namespace');
         refused(await s.scan('Bad!'), 'store.scan', 1, 'ERR_INVALID_ARGUMENT', "malformed namespace 'Bad!'");
@@ -147,11 +147,11 @@ for (const driver of DRIVERS) {
     describe('the key rule and the wire refusals', () => {
       it.each(['/workspace/x', 'workspace/../x', 'workspace/./x', 'workspace/a b', 'workspace/a\tb', 'workspace/x/', 'workspace/x\\y'])(
         'refuses the malformed key %j', async (key) => {
-          refused(await store(empty, driver).put('docs', key, 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `malformed key '${key}'`);
+          refused(await store(fresh(empty), driver).put('docs', key, 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `malformed key '${key}'`);
         });
 
       it.each(['workspace', 'a/b/c', 'workspace/x/y'])('refuses %j outside the module pattern before touching the store', async (key) => {
-        refused(await store(empty, driver).put('docs', key, 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `key '${key}' does not match the namespace pattern '<repo>/<slug>'`);
+        refused(await store(fresh(empty), driver).put('docs', key, 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `key '${key}' does not match the namespace pattern '<repo>/<slug>'`);
       });
 
       it.each([
@@ -169,7 +169,7 @@ for (const driver of DRIVERS) {
         ['store.list', ['Bad!'], 1, 'ERR_INVALID_ARGUMENT', "malformed namespace 'Bad!'"],
         ['nosuch.op', [], 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'nosuch.op'"],
       ] as const)('%s %j refuses its one fixed line', async (fn, args, rc, code, message) => {
-        refused(await store(empty, driver).op(fn, args, 'x\n'), fn, rc, code, message);
+        refused(await store(fresh(empty), driver).op(fn, args, 'x\n'), fn, rc, code, message);
       });
     });
 
@@ -231,11 +231,11 @@ for (const driver of DRIVERS) {
         [['exact', 'abc'], 'query=x\n', "--limit takes a number, 0 for every result: 'abc'"],
         [['exact', '5', 'extra'], 'query=x\n', 'store.search takes the namespace, the mode, and an optional limit'],
       ] as const)('refuses the search wire %j %j', async (args, input, message) => {
-        refused(await store(keyed, driver).op('store.search', ['docs', ...args], input), 'store.search', 1, 'ERR_INVALID_ARGUMENT', message);
+        refused(await store(fresh(keyed), driver).op('store.search', ['docs', ...args], input), 'store.search', 1, 'ERR_INVALID_ARGUMENT', message);
       });
 
       it('refuses a mode the namespace does not declare, naming the declared ones', async () => {
-        refused(await store(keyed, driver).search('docs', 'fuzzy', '5', q('x')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
+        refused(await store(fresh(keyed), driver).search('docs', 'fuzzy', '5', q('x')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
           "mode 'fuzzy' is not declared by namespace 'docs'; declared modes: exact");
       });
 
@@ -278,12 +278,12 @@ for (const driver of DRIVERS) {
         ['key=workspace/b\naction=put\nvalue_b64=eA==\n', "action 1 (? '?'): a payload line outside an action"],
         ['action=put\nkey=workspace/b\nvalue_b64=***\n', "action 1 (put 'workspace/b'): malformed base64 value"],
       ])('refuses the malformed batch %j with its action context', async (input, message) => {
-        refused(await store(empty, driver).batch('docs', input), 'store.batch', 1, 'ERR_INVALID_ARGUMENT', message);
+        refused(await store(fresh(empty), driver).batch('docs', input), 'store.batch', 1, 'ERR_INVALID_ARGUMENT', message);
       });
 
       it.fails.each(['key=workspace/c', 'head=none', 'value_b64=eA=='])(
         'names the 1-based action of a duplicate %s line (known defect: the line says action 0)', async (dup) => {
-          refused(await store(empty, driver).batch('docs', `action=put\nkey=workspace/b\nhead=none\nvalue_b64=eA==\n${dup}\n`), 'store.batch', 1, 'ERR_INVALID_ARGUMENT',
+          refused(await store(fresh(empty), driver).batch('docs', `action=put\nkey=workspace/b\nhead=none\nvalue_b64=eA==\n${dup}\n`), 'store.batch', 1, 'ERR_INVALID_ARGUMENT',
             `action 1 (put 'workspace/b'): duplicate payload line '${dup.split('=')[0]}='`);
         });
 
@@ -304,7 +304,7 @@ for (const driver of DRIVERS) {
 
     describe('the card and the health', () => {
       it('answers its contract 3 descriptor card', async () => {
-        const r = await store(empty, driver).op('capability', []);
+        const r = await store(fresh(empty), driver).op('capability', []);
         answer(r, 'capability');
         expect(r.stdout).toBe(CARDS[driver]);
       });

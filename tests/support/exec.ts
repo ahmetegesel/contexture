@@ -14,6 +14,7 @@ export interface ExecOptions {
   cwd: string;
   input?: string | Buffer | null;
   env?: Record<string, string>;
+  group?: boolean;
 }
 
 const PASSED = ['PATH', 'HOME', 'USER', 'TZ'] as const;
@@ -33,8 +34,14 @@ export function exec(cmd: string, args: readonly string[], options: ExecOptions)
   return launch(cmd, args, options).result;
 }
 
-export function launch(cmd: string, args: readonly string[], { cwd, input = '', env = {} }: ExecOptions): { child: ChildProcess; result: Promise<Run> } {
-  const child = spawn(cmd, args, { cwd, env: cleanEnv(cwd, env), stdio: ['pipe', 'pipe', 'pipe'] });
+export interface Launched {
+  child: ChildProcess;
+  result: Promise<Run>;
+  signal: (sig: NodeJS.Signals) => void;
+}
+
+export function launch(cmd: string, args: readonly string[], { cwd, input = '', env = {}, group = false }: ExecOptions): Launched {
+  const child = spawn(cmd, args, { cwd, env: cleanEnv(cwd, env), stdio: ['pipe', 'pipe', 'pipe'], detached: group });
   const result = new Promise<Run>((done, fail) => {
     const out: Buffer[] = [];
     const err: Buffer[] = [];
@@ -53,5 +60,6 @@ export function launch(cmd: string, args: readonly string[], { cwd, input = '', 
   });
   child.stdin.on('error', () => undefined);
   if (input !== null) child.stdin.end(input);
-  return { child, result };
+  const signal = (sig: NodeJS.Signals) => (group && child.pid ? process.kill(-child.pid, sig) : child.kill(sig));
+  return { child, result, signal };
 }

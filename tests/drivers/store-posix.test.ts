@@ -52,7 +52,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
   });
 
   it('keeps no change log, even for a namespace that declares one', async () => {
-    refused(await store(empty, 'posix').changes('docs'), 'store.changes', 1, 'ERR_CAPABILITY_UNSUPPORTED',
+    refused(await store(fresh(empty), 'posix').changes('docs'), 'store.changes', 1, 'ERR_CAPABILITY_UNSUPPORTED',
       "the posix store keeps no change log; namespace 'docs' reports its delta through its module (changes: true)");
   });
 
