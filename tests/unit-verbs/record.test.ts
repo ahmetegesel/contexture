@@ -168,7 +168,7 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect((await unit(sb, 'entry', 'closure', 'n-unit', `${D}-n-t`, '--json')).stdout).toContain(`"closed":true,"closers":[{"by":"${D}-n-c","by_anchor":"A1","closer":{"kind":"CLOSES"`);
   });
 
-  it.for(['', 'true', 'false'])('the-record-r7: ctx unit record --thread="%s" refuses rc 1 before any write', async (thread) => {
+  it.for(['', 'true', 'false'])('[the-record-r7] ctx unit record --thread="%s" refuses rc 1 before any write', async (thread) => {
     const sb = fresh(sb0);
     const before = (await unit(sb, 'entry', 'list', 'x-unit', '--json')).stdout;
     const r = await unit(sb, 'record', 'x-unit', '--what=bad thread', `--thread=${thread}`);

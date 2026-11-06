@@ -95,7 +95,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(readFileSync(artifactPath(sb, 'sem-unit', 'lane/up-cr/recipe'), 'utf8').split('\n').filter((l) => l.endsWith('\r'))).toHaveLength(1);
   });
 
-  it('the-record-r17: lane show exits under a stdin held open, while lane report without --body waits on it', async () => {
+  it('[the-record-r17] lane show exits under a stdin held open, while lane report without --body waits on it', async () => {
     const sb = fresh(sb0);
     await must(lane(sb, 'report', 'sem-unit', 'sub-lane', '--body=held stdin report'));
     const shown = launch('./.contexture/ctx', ['lane', 'show', 'sem-unit', 'sub-lane', 'report'], { cwd: sb, input: null });
