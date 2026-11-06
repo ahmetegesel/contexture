@@ -39,6 +39,11 @@ lib/ranked.awk    the store ranked answer mapped into the record's search shape
 lib/refs.awk      the refs of a write payload
 lib/payfield.awk  one decoded payload value
 lib/b64           the store.batch value encoder
+lib/fold-*.awk    the fold verb's programs, each run with fold-lib.awk (the flat answer
+                  reader): fold-find-active.awk (the live fold start), fold-plan-gen.awk
+                  and fold-plan-load.awk (the plan written and read back),
+                  fold-carried-scan.awk (the carried open threads), fold-hint.awk (the
+                  record hint of a fetch), fold-check-scan.awk (the batches and defects)
 ```
 
 ## The artifact model
