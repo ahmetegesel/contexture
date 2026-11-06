@@ -235,7 +235,8 @@ matrix's eight scenarios, the twelve capture deltas, both delta sources,
 the doc touch at the logical address alone, and the governed set over a
 planted shebang list (the shebang script, the `.awk` engine, the plain file,
 the exclusions first, a claimed script's `STALE DOC`, a deleted path listed
-exactly, the folder and `<dir>/` lines),
+exactly, after a broader glob of the same doc too, the folder and `<dir>/`
+lines),
 and the pure helpers of `docs-io.sh`. `static/` runs the single-door census
 (`tests/census.awk` over `tests/census-allow.txt`, with three planted
 bypasses), the grammar agreement check (`tests/grammar-agreement.awk`, with

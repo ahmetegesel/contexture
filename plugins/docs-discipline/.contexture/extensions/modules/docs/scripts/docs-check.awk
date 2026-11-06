@@ -163,15 +163,12 @@ function process_doc_sources() {
         matched = 0
         exact_matched = 0
         for (i = 1; i <= n_globs; i++) {
-            if (source_matches(norm_file, globs[i])) {
-                matched = 1
-                exact_matched = (norm_file == globs[i])
-                break
-            }
+            if (norm_file == globs[i]) exact_matched = 1
+            if (!matched && source_matches(norm_file, globs[i])) matched = 1
         }
 
         if (matched) {
-            for (i = 1; i <= n_globs; i++) if (norm_file == globs[i]) listed[t_file] = 1
+            if (exact_matched) listed[t_file] = 1
             claimed[t_file] = 1
             file_claimants[t_file] = (file_claimants[t_file] ? file_claimants[t_file] ", " : "") curr_repo "/" curr_slug
             claimant_paths[t_file] = (claimant_paths[t_file] ? claimant_paths[t_file] "\n" : "") curr_file

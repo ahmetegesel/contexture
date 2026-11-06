@@ -12,7 +12,11 @@ let matrix: string;
 let corpus: string;
 let eng: string;
 let tools: string;
+let dead: string;
 beforeAll(async () => {
+  dead = sandbox('check-dead');
+  mkdirSync(join(dead, 'docs/workspace'), { recursive: true });
+  writeFileSync(join(dead, 'docs/workspace/dead.md'), '@doc capability dead\n  repo: workspace\n  description: "The dead-source unit."\n  sources: [src/**, src/old.sh, bin/*, bin/tool]\n');
   tools = sandbox('check-tools');
   mkdirSync(join(tools, 'docs/demo'), { recursive: true });
   writeFileSync(join(tools, 'docs/demo/tools.md'), '@doc capability tools\n  repo: demo\n  description: "The demo tools."\n  sources: [bin/*, lib/gone, etc/conf]\n');
@@ -173,6 +177,15 @@ describe('the check engine: the governed set, the code extensions with awk plus 
     expect(r.code, r.stdout + r.stderr).toBe(1);
     expect(r.stdout).toContain('STALE DOC: demo/tools (code deleted without doc update)');
     expect(r.stdout).toContain("DEAD SOURCE: demo/tools still explicitly lists deleted file 'projects/demo/lib/gone'");
+  });
+  it.each([
+    ['a code file', 'src/old.sh'],
+    ['an extensionless script', 'bin/tool'],
+  ])('%s listed exactly after a broader glob of the same doc reads its DEAD SOURCE once deleted, its doc riding', async (_, path) => {
+    const r = await check(dead, `D\t${path}\nM\tdocs/workspace/dead.md\n`);
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain('FRESH: workspace > dead (doc updated in change delta)');
+    expect(r.stdout).toContain(`DEAD SOURCE: workspace/dead still explicitly lists deleted file '${path}'`);
   });
   it('a deleted extensionless path a glob alone claims stays out', async () => {
     const r = await check(tools, 'D\tprojects/demo/bin/old\n');
