@@ -34,7 +34,7 @@ describe.concurrent('the hook points around the unit verbs', () => {
     expect(plain.bootstrap).toBe(0);
   });
 
-  it('HK-S1 [the-engine-r12]: stamp runs its five hooks in module then file order with CTX_ANCHOR the new anchor, the hook stdout before the transition line', async () => {
+  it('HK-S1 [the-engine-r12, modules-r5]: stamp runs its five hooks in module then file order with CTX_ANCHOR the new anchor, the hook stdout before the transition line', async () => {
     const sb = copy();
     const r = await unit(sb, 'stamp', 'zz-unit');
     expect(r.code).toBe(0);
@@ -135,7 +135,7 @@ describe.concurrent('the hook points around the unit verbs', () => {
     }
   });
 
-  it('HK-S6 [modules-r5]: the retired next refuses rc 1 naming active, and fires no hook', async () => {
+  it('HK-S6 [modules-r5, the-engine-r2]: the retired next refuses rc 1 naming active, and fires no hook', async () => {
     const sb = copy(tasked);
     const r = await unit(sb, 'next', 'zz-unit', 'fix-1 is next');
     expect(r.code).toBe(1);

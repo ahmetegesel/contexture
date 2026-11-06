@@ -80,7 +80,7 @@ describe.concurrent('dispatch', () => {
     expect(r.stdout).not.toContain('shadow');
   });
 
-  it('CT-XR2 [the-engine-r1]: an extension module dispatches with CTX_MODULE_DIR in the extension root and renders its own help', async () => {
+  it('CT-XR2 [the-engine-r1, the-engine-r6]: an extension module dispatches with CTX_MODULE_DIR in the extension root and renders its own help', async () => {
     const r = await run(sb, ['aaaext', 'hi']);
     expect(r.stdout).toBe(`ext hi\nmodule-dir=${real}/.contexture/extensions/modules/aaaext\n`);
     expect((await run(sb, ['aaaext', 'help'])).stdout).toContain('say hi from the extension root');

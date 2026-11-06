@@ -13,7 +13,7 @@ describe.concurrent('ctx run selection over the fixture sandbox', () => {
     sb = engineSandbox('run-selection');
   });
 
-  it('CT-R1 [the-engine-r10]: an explicit filter resolves in a filter-only module, and the stream signature selects it too', async () => {
+  it('CT-R1 [the-engine-r10, modules-r4]: an explicit filter resolves in a filter-only module, and the stream signature selects it too', async () => {
     expect((await run(sb, ['run', '--filter=probe'], { input: 'ZZMARK hello\n' })).stdout).toBe('P\n');
     expect((await run(sb, ['run'], { input: 'ZZMARK hello\n' })).stdout).toBe('P\n');
   });

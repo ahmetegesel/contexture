@@ -84,7 +84,7 @@ describe.concurrent('the hook runner, called directly through ctx _hooks', () =>
     expect(marker(sb)).toEqual([]);
   });
 
-  it('N13: null check: well-formed context names run the hook rc 0', async () => {
+  it('N13 [the-engine-r12]: null check: well-formed context names run the hook rc 0', async () => {
     const sb = stage('posix', 'hooks-args-ok');
     writeModule(sb, 'modules', 'ma', { files: { 'hooks/10-a.sh': hook('pt', record('ma-a')) } });
     expect((await run(sb, ['_hooks', 'pt', '_GOOD1', 'v', 'X', 'y'])).code).toBe(0);

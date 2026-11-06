@@ -10,14 +10,14 @@ const FILTERS = join(ROOT, 'base/.contexture/modules/run/filters');
 const PAIRS = join(ROOT, 'tests/filters/pairs');
 
 describe.concurrent('the run filters byte for byte through the staged ctx run --filter', () => {
-  it.each(pairs(FILTERS, PAIRS).map((p) => [p.name, p] as const))('%s', async (_name, pair) => {
+  it.each(pairs(FILTERS, PAIRS).map((p) => [p.name, p] as const))('[modules-r7] %s', async (_name, pair) => {
     const r = await viaFilter(stage('posix', 'pair'), pair.filter, pair.input);
     expect(r.code).toBe(0);
     expect(r.stderr).toBe('');
     expect(firstByteDifference(r.bytes, readFileSync(pair.expected))).toBe(-1);
   });
 
-  it.each(filterNames(FILTERS))('the %s filter carries a pair with its expected bytes', (filter) => {
+  it.each(filterNames(FILTERS))('[modules-r7] the %s filter carries a pair with its expected bytes', (filter) => {
     const owned = pairs(FILTERS, PAIRS).filter((p) => p.filter === filter);
     expect(owned.length).toBeGreaterThan(0);
     expect(owned.filter((p) => !existsSync(p.expected))).toEqual([]);
@@ -29,7 +29,7 @@ describe.concurrent('the run filters byte for byte through the staged ctx run --
     expect(owner('other-case', ['foo'])).toBe('');
   });
 
-  it('the byte compare names the first differing offset', () => {
+  it('[modules-r7] the byte compare names the first differing offset', () => {
     const expected = readFileSync(join(PAIRS, 'log-repeat.expected'));
     const planted = Buffer.from(expected);
     planted[3] ^= 1;

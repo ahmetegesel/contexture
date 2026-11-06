@@ -14,7 +14,7 @@ describe.concurrent('the ctx _reserved reader', () => {
     expect(r.stdout + r.stderr).toBe('');
   });
 
-  it.for(['unit', 'lane', 'zzz'])('MD-RS [the-engine-r2]: %s is free rc 1 (a builtin, the extension lane module, a free name)', async (name) => {
+  it.for(['unit', 'lane', 'zzz'])('MD-RS [the-engine-r2, modules-r6]: %s is free rc 1 (a builtin, the extension lane module, a free name)', async (name) => {
     expect((await run(sb, ['_reserved', name])).code).toBe(1);
   });
 
