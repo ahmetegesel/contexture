@@ -4,7 +4,7 @@
   "type": "module",
   "packageManager": "bun@1.3.13",
   "scripts": {
-    "test": "vitest run",
+    "test": "vitest run --project '!sqlite-smoke'",
     "test:harness": "vitest run --project harness",
     "test:drivers": "vitest run --project drivers",
     "test:storage-fts5": "vitest run --project storage-fts5",
@@ -23,6 +23,7 @@
     "test:packages": "vitest run --project packages",
     "test:base": "vitest run --project base",
     "test:integration": "vitest run --project integration",
+    "test:sqlite-smoke": "vitest run --project sqlite-smoke",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
