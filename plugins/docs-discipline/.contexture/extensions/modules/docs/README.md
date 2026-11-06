@@ -176,12 +176,14 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 - What a clean verdict cannot see: coverage is glob membership over the
   header sources, so a broad glob (`plugins/**`, `tests/**`) covers every path
   under it and the check never names the glob that matched; and under the
-  files driver a riding doc of the workspace repo, or an architecture or
-  overview doc, freshens every claimed file of its repo (`FRESH (BLANKET)`
-  and an `ARCH-COVERED` count in the body, while the verdict line and the
-  exit code read as a real clean). The check's output stays as it is; a
-  reader who needs ownership reads the owning doc of each changed path and
-  checks that its own claimant rode the delta.
+  files driver a riding doc whose slug is `architecture` or `overview`
+  freshens every claimed file of its repo, and any riding doc of the
+  workspace repo freshens every claimed file of every repo; the slug and the
+  repo decide, never the doc kind. Both print `FRESH (BLANKET)` and an
+  `ARCH-COVERED` count in the body, while the verdict line and the exit code
+  read as a real clean. The check's output stays as it is; a reader who needs
+  ownership reads the owning doc of each changed path and checks that its own
+  claimant rode the delta.
 
 ## Workspace root
 

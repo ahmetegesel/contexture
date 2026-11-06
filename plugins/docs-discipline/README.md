@@ -419,12 +419,15 @@ it walk below runs every one of these.
   operates at co-change level; whether a doc that rode reflects the substance
   is the reconcile step's judgment, never the gate's.
 - The check's satisfiers are generous by design: a touched unit reads fresh
-  when any claimant unit doc, the repository's architecture doc, or a
-  workspace doc rides the delta; the latter two are a repo-wide blanket, so
-  the check reports it (`FRESH (BLANKET)` plus an `ARCH-COVERED` count of the
-  files no riding claimant covered) instead of folding it silently into a
-  clean verdict, though the verdict line and the exit code still read as a
-  real clean; coverage counts only the listed extensions (`awk` among them)
+  when any claimant unit doc rides the delta, when a doc of its repository
+  whose slug is `architecture` or `overview` rides it, or when any doc of the
+  workspace repo rides it; the latter two are a blanket keyed on the slug and
+  the repo, never the doc kind, and a riding workspace doc reaches the
+  claimed files of every repository, not its own alone. The check reports
+  the blanket (`FRESH (BLANKET)` plus an `ARCH-COVERED` count of the files no
+  riding claimant covered) instead of folding it silently into a clean
+  verdict, though the verdict line and the exit code still read as a real
+  clean; coverage counts only the listed extensions (`awk` among them)
   and the extensionless scripts whose first line is a shebang; deleting a
   unit doc does not red the check. A doc rides only at its logical address,
   `docs/<repo>/<slug>.md` at the start of a delta path, so a code path that
@@ -732,11 +735,13 @@ UNCOVERED: projects/demo-orders/src/tools/report.ts
 (exit 1)
 ```
 
-An architecture, overview, or workspace doc riding a change marks every file
-in the repo fresh wholesale under the files driver. That is a blanket, not
-evidence: the check reports it instead of folding it into the clean verdict,
-and counts the files that no riding claimant covered (a store driver turns the
-blanket off).
+Under the files driver a riding doc whose slug is `architecture` or `overview`
+marks every claimed file of its repo fresh wholesale, and any riding doc of the
+workspace repo does so for every repo (below, the workspace system-map freshens
+a file of `demo-orders`); the slug and the repo decide, never the doc kind.
+That is a blanket, not evidence: the check reports it instead of folding it
+into the clean verdict, and counts the files that no riding claimant covered
+(a store driver turns the blanket off).
 
 ```sh
 printf 'M\tprojects/demo-orders/src/order/validate.ts\ndocs/workspace/system-map.md\n' | ./.contexture/ctx docs check demo-orders demo-web workspace
