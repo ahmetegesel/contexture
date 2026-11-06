@@ -8,7 +8,7 @@ pitfalls are unified in @pitfalls with full triggers and consequences.
 cross-references: an entry by its id; a block by #<block> in-doc or <slug>.md#<block> cross-doc (docs/workspace/conventions.md @rule docs/section-refs).
 the machine-readable schema at the foot (section 6, every line prefixed #%) restates these shapes one line each for the write verbs, and the plugin suite's agreement check keeps it, this prose, and the audit in step.
 a doc is written through the ctx docs write verbs (new or write for a first extraction; header, rule, pitfall, entry, section, replace, remove after), each checked against section 6 and the audit before it is stored.
-ids: a contract rule and a responsibility carry theirs on the entry's second line (<slug>-r<N>, <slug>-o<N>), a pitfall and a caveat at the entry head; a new entry takes the doc's highest number plus one; a removed id retires; a legacy keyless entry stays legitimate (ctx docs ids keys a corpus once).
+ids: a contract rule and a responsibility carry theirs on the entry's second line, a pitfall and a caveat at the entry head; a new entry's id is <slug>-<letter>-<token> (the letter r for a contract rule, o a responsibility, p a pitfall, c a caveat; the token five random lowercase letters or digits, drawn again while the doc holds the id), so a removed id retires and is not handed out again; a numbered id <slug>-<letter><N> stays valid as written, and --id names either form; an id never changes; a legacy keyless entry stays legitimate (ctx docs ids keys a corpus once).
 
 # kind definitions:
 #   conventions   = normative rules for repo or workspace
@@ -37,14 +37,14 @@ ids: a contract rule and a responsibility carry theirs on the entry's second lin
 
 [@responsibilities
   - "statement of what this unit owns and guarantees"
-    [id: <slug>-o<N>]
+    [id: <slug>-o-<token>]
   - "statement of business logic delegation"
-    [id: <slug>-o<N>]]
+    [id: <slug>-o-<token>]]
 
 [@contract
   # Checkable business invariants, state schemas (addressing keys and lifecycles), calculation formulas, validation sets, and ordering/uniqueness guarantees:
   - rule: "rule statement"
-    [id: <slug>-r<N>]
+    [id: <slug>-r-<token>]
     evidence: "greppable code symbol or config key"
     [detail ::
       continuation detail explaining the invariant, state key schemas, calculation equations,
@@ -66,14 +66,14 @@ ids: a contract rule and a responsibility carry theirs on the entry's second lin
 
 [@pitfalls
   # Failure modes, silent truncations, cache staleness, batch failure routing (e.g. lack of partial batch reporting), and hardcoded fallback landmines:
-  - id: <slug>-p<N>
+  - id: <slug>-p-<token>
     summary: "short pitfall statement"
     class: bug | tech-debt | gotcha | drift-risk
     severity: low | medium | high | critical
     trigger: "action, parameter, or condition causing the issue"
     consequence: "failure behavior, status code, data inconsistency"
     evidence: "greppable code symbol where issue originates"]
-# lifecycle: a fixed pitfall is removed and its id retires (never recycled); a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise; references re-point via a fresh journal entry (see docs/workspace/conventions.md @rule docs/fixed-pitfalls)
+# lifecycle: a fixed pitfall is removed and its id retires (never recycled: a new id is drawn, never the next number); a behavior change born of the fix lands as a contract @rule; a new pitfall only for a genuinely new surprise; references re-point via a fresh journal entry (see docs/workspace/conventions.md @rule docs/fixed-pitfalls)
 
 [@patterns
   - name: "design pattern name"
@@ -220,7 +220,7 @@ ids: a contract rule and a responsibility carry theirs on the entry's second lin
     points_to: <doc-slug>
 
 @caveats
-  - id: <slug>-c<N>
+  - id: <slug>-c-<token>
     text: "operational or architectural caveat"
 
 # --- 6. MACHINE-READABLE SCHEMA ---

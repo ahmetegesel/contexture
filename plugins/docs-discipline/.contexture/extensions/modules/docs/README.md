@@ -122,8 +122,15 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 - `docs-edit.awk` addresses what the schema names: an entry by its key (the
   id of an id-keyed block, the first field's value, `<from>><to>` for
   data_flow, `<direction>:<key>` for edges, or `#<N>`), a rule by
-  `<category>/<rule-slug>`, a block by name; a new entry's id is the doc's
-  highest number of that kind plus one; a field an entry lacks lands at its
+  `<category>/<rule-slug>`, a block by name; a new entry's id is
+  `<slug>-<letter>-<token>`, the token five characters of `0-9a-z` from a
+  Lehmer generator (16807 modulo 2147483647, exact in every awk's doubles, so a
+  seed draws the same token on every awk, which `rand()` does not), drawn
+  again while the doc or the run already holds it; the IO helper seeds each
+  engine run that can mint an id (`entry`, `ids`) with `DOCS_ID_SEED` when set,
+  else four bytes of `/dev/urandom`, else the process id beside the clock,
+  passed as `EDIT_SEED`; a numbered id `<slug>-<letter><N>` stays valid and
+  `--id` takes either form; a field an entry lacks lands at its
   schema position; a text value with a newline renders as a block scalar and
   a field written as one keeps that form; every untouched line passes byte for
   byte, and a doc without a final newline keeps it so.
@@ -254,7 +261,11 @@ from the plugin, and on fts5 the storage-fts5 plugin's driver copy with
 `storage.driver: fts5`; the engines run under the system awk. The logic runs
 once, on posix. `unit/` drives each engine alone over files: `docs-edit.awk`
 against the `tests/write/` goldens (every success byte for byte, every
-refusal), `docs-audit.awk`, `docs-query.awk` and `docs-nudge.awk` against
+refusal) and the opaque ids under a fixed seed (the draw, the draw again past
+an id the doc holds, `--id` in either form and the shapes it refuses, an
+opaque key, `ids` keeping every id present), `docs-audit.awk` (an opaque
+id's duplicate across the repo among its cases), `docs-query.awk` and
+`docs-nudge.awk` against
 committed expected output under `unit/expected/` (regenerated with
 `DOCS_WRITE_EXPECTED=1` and read by hand), the owner rule of `query --file`
 over the `tests/fixtures/owner` corpus (an exact later source over a broad
@@ -278,7 +289,10 @@ grammar field named like a value control stays settable through each field
 verb that does not take that control, the by-design id pairs of `entry` and
 `pitfall` allowed, with four plants), the one home of the glob rule (only
 `docs-glob.awk` defines its functions), and the package shape. `integration/` drives the verbs end to
-end: one success per write verb with its stored bytes, `remove --dry-run`
+end: one success per write verb with its stored bytes, the opaque ids
+(`DOCS_ID_SEED` and its draw again, a removed highest id never handed out
+again, two unseeded adds drawing apart, either form named by `--id`,
+addressed, and refused a second time), `remove --dry-run`
 printing the doc and writing nothing, the write pipeline's
 refusals leaving the stored doc unchanged, a dispatched verb SIGKILLed while
 it holds its scratch leaving nothing after the next dispatch, the read verbs

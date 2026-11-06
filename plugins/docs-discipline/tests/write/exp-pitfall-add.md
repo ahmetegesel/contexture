@@ -31,7 +31,7 @@
     consequence ::
       A consequence body.
     evidence: "pitSym"
-  - id: unit-p2
+  - id: unit-p-kb1uj
     summary: "The second pitfall"
     class: gotcha
     severity: low

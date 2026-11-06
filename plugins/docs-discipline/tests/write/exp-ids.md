@@ -6,16 +6,16 @@
 
 @responsibilities
   - "Own the fixture state"
-    id: unit-o1
+    id: unit-o-kb1uj
   - "Delegate the rest"
-    id: unit-o2
+    id: unit-o-p1cup
 
 @contract
   - rule: "The first invariant holds"
-    id: unit-r1
+    id: unit-r-07m9y
     evidence: "firstSym"
   - rule: "The second invariant holds"
-    id: unit-r2
+    id: unit-r-t5sws
     evidence: "secondSym"
     detail ::
       a detail body line

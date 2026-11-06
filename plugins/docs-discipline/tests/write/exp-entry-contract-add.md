@@ -12,7 +12,7 @@
   - rule: "The first invariant holds"
     evidence: "firstSym"
   - rule: "The middle invariant"
-    id: unit-r1
+    id: unit-r-kb1uj
     evidence: "midSym"
   - rule: "The second invariant holds"
     evidence: "secondSym"

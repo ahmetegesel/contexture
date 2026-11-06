@@ -25,8 +25,10 @@ export interface EditRequest {
   acts?: readonly Act[];
   payload?: string;
   stdin?: number;
+  seed?: string;
 }
 
+export const ID_SEED = '20261107';
 export const fixture = (name: string): string => join(WRITE, name);
 export const golden = (name: string): string => readFileSync(fixture(name), 'utf8');
 
@@ -54,6 +56,7 @@ export function edit(cwd: string, r: EditRequest): Promise<Run> {
     EDIT_OLD: r.old ?? '',
     EDIT_NEW: r.new ?? '',
     EDIT_NA: String(acts.length),
+    EDIT_SEED: r.seed ?? ID_SEED,
   };
   acts.forEach(([a, f, v = ''], i) => Object.assign(env, { [`EDIT_A_${i + 1}`]: a, [`EDIT_F_${i + 1}`]: f, [`EDIT_V_${i + 1}`]: v }));
   if (r.stdin !== undefined) env.EDIT_STDIN_N = String(r.stdin);

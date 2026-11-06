@@ -11,7 +11,8 @@
 #   EDIT_VERB (the verb named in messages), EDIT_OP (new, write, header, rule, entry,
 #   section, ids, show, replace), EDIT_REPO, EDIT_SLUG, EDIT_KIND, EDIT_BLOCK, EDIT_KEY,
 #   EDIT_AFTER, EDIT_FIRST, EDIT_REMOVE, EDIT_ID, EDIT_DRY, EDIT_NOEOL (the doc lacks a
-#   final newline), EDIT_OLD, EDIT_NEW, and the field actions: EDIT_NA with EDIT_A_<n>
+#   final newline), EDIT_OLD, EDIT_NEW, EDIT_SEED (the seed of a new id's draw), and the
+#   field actions: EDIT_NA with EDIT_A_<n>
 #   (set, unset, add, remove), EDIT_F_<n> (the field), EDIT_V_<n> (the value; trailing
 #   newlines dropped, so a value read from a file keeps its text); EDIT_STDIN_N names the action a --stdin value fills from the payload operand (never the environment, whatever its size).
 #
@@ -201,10 +202,11 @@ function check_value(b, f, v,    ty) {
     }
 }
 
-function check_id(b, v,    pre) {
+function check_id(b, v,    pre, t) {
     pre = DSLUG "-" id_letter(b)
-    if (index(v, pre) != 1 || substr(v, length(pre) + 1) !~ /^[1-9][0-9]*$/) {
-        refuse("an id of @" b " in this doc reads " pre "<N> (got '" v "') (ERR_SCHEMA_VIOLATION)")
+    t = substr(v, length(pre) + 1)
+    if (index(v, pre) != 1 || (t !~ /^[1-9][0-9]*$/ && t !~ /^-[0-9a-z][0-9a-z][0-9a-z][0-9a-z][0-9a-z]$/)) {
+        refuse("an id of @" b " in this doc reads " pre "<N> or " pre "-<5 lowercase letters or digits> (got '" v "') (ERR_SCHEMA_VIOLATION)")
     }
 }
 
@@ -605,9 +607,25 @@ function doc_ids(    i, v) {
     }
 }
 
-# one more than the highest <slug>-<letter><N> the doc carries
-function next_id(b) {
-    return DSLUG "-" id_letter(b) (max_id(b) + 1)
+# a new id, <slug>-<letter>-<token>: five characters of 0-9a-z from a Lehmer generator
+# (16807 modulo 2147483647, exact in every awk's doubles, so one seed draws the same token on
+# every awk) seeded by EDIT_SEED, drawn again while the doc or this run already holds it
+function new_id(b,    pre, t, k) {
+    if (!SEEDED) {
+        DRAW = (ENVIRON["EDIT_SEED"] + 0) % 2147483646 + 1
+        SEEDED = 1
+    }
+    pre = DSLUG "-" id_letter(b) "-"
+    doc_ids()
+    do {
+        t = ""
+        for (k = 1; k <= 5; k++) {
+            DRAW = (DRAW * 16807) % 2147483647
+            t = t substr("0123456789abcdefghijklmnopqrstuvwxyz", int(DRAW * 36 / 2147483647) + 1, 1)
+        }
+    } while ((pre t) in IDS || (pre t) in DRAWN)
+    DRAWN[pre t] = 1
+    return pre t
 }
 
 # ---------------------------------------------------------------- the ops
@@ -716,7 +734,7 @@ function op_rule(    b, p, t, i, f) {
     if (DRY) SHOW = t
 }
 
-function op_entry(    b, k, t, i, f, key, id, pos, nk, lastk, letter, newkey) {
+function op_entry(    b, k, t, i, f, key, id, pos, nk, lastk, newkey) {
     need_doc()
     if (!(BLOCK in BS)) refuse("unknown block '" BLOCK "' (list blocks: " list_blocks() ") (ERR_SCHEMA_VIOLATION)")
     if (BLOCK == "rule") refuse("a @rule block is written by ctx docs rule (ERR_INVALID_ARGUMENT)")
@@ -772,7 +790,6 @@ function op_entry(    b, k, t, i, f, key, id, pos, nk, lastk, letter, newkey) {
     UIND = 4
     # the head field first, whatever the flag order, so later fields land at their schema place
     f = BF[BLOCK]
-    letter = id_letter(BLOCK)
     id = ""
     if (BK[BLOCK] == "id") {
         if (IDSET != "") {
@@ -780,7 +797,7 @@ function op_entry(    b, k, t, i, f, key, id, pos, nk, lastk, letter, newkey) {
             doc_ids()
             if (IDSET in IDS) refuse("the id " IDSET " already exists in " REPO "/" SLUG " (ERR_ENTITY_EXISTS)")
             id = IDSET
-        } else id = next_id(BLOCK)
+        } else id = new_id(BLOCK)
     } else if (IDSET != "") refuse("@" BLOCK " carries no id; --id applies to an id-keyed block (ERR_INVALID_ARGUMENT)")
     for (i = 1; i <= NA; i++) if (AF[i] == "id") refuse("an id is assigned, or named by --id (ERR_INVALID_ARGUMENT)")
     if (f == "id") {
@@ -917,9 +934,6 @@ function op_ids(    b, k, bn, j, id, cnt, head, line, parts) {
     need_doc()
     cnt = 0
     LISTING = ""
-    # N continues past the highest id of each kind already in the doc
-    NEXTN["contract"] = max_id("contract")
-    NEXTN["responsibilities"] = max_id("responsibilities")
     for (b = 1; b <= NB; b++) {
         bn = BNM[b]
         if (bn != "contract" && bn != "responsibilities") continue
@@ -927,7 +941,7 @@ function op_ids(    b, k, bn, j, id, cnt, head, line, parts) {
         for (k = 1; k <= NE; k++) {
             load_unit(EST[k], EEN[k], 4, 1, bn)
             if (unit_find("id")) continue
-            id = DSLUG "-" id_letter(bn) (++NEXTN[bn])
+            id = new_id(bn)
             # the id rides the line after the entry's first field (its whole extent)
             j = split(UL[1], parts, "\n")
             line = EST[k] + j - 1
@@ -938,19 +952,6 @@ function op_ids(    b, k, bn, j, id, cnt, head, line, parts) {
         }
     }
     NOTE = "keyed " cnt
-}
-
-# the highest <N> of the doc's <slug>-<letter><N> ids of block b's kind (0 when none)
-function max_id(b,    pre, best, v, t) {
-    pre = DSLUG "-" id_letter(b)
-    best = 0
-    doc_ids()
-    for (v in IDS) {
-        if (index(v, pre) != 1) continue
-        t = substr(v, length(pre) + 1)
-        if (t ~ /^[1-9][0-9]*$/ && t + 0 > best) best = t + 0
-    }
-    return best
 }
 
 function op_show(    b, k) {

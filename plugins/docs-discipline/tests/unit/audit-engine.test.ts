@@ -79,4 +79,17 @@ describe('the audit engine', { concurrent: true }, () => {
     expect(r.code).toBe(1);
     expect(r.stderr).toContain("duplicate id 'unit-p5'");
   });
+
+  it('[docs-module-r7] an opaque id reads as one id: clean alone, a duplicate across the repo refused', async () => {
+    const dir = corpusDir('audit-opaque');
+    const unit = readFileSync(join(WRITE, 'unit.md'), 'utf8').replace('repo: wtest', 'repo: workspace').replace('  - id: unit-p1', '  - id: unit-p-kb1uj');
+    const dup = readFileSync(join(WRITE, 'dup.md'), 'utf8').replace('repo: wtest', 'repo: workspace');
+    plant(dir, 'docs/workspace/unit.md', unit);
+    plant(dir, 'docs/workspace/dup.md', dup);
+    expect((await audit(dir, docFiles(dir, 'workspace'))).code).toBe(0);
+    plant(dir, 'docs/workspace/dup.md', dup.replace('  - id: unit-p5', '  - id: unit-p-kb1uj'));
+    const r = await audit(dir, docFiles(dir, 'workspace'));
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain("docs/workspace/unit.md:26: error: duplicate id 'unit-p-kb1uj' in repo 'workspace' (first seen at docs/workspace/dup.md:6)");
+  });
 });

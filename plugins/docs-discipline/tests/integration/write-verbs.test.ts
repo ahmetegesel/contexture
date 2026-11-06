@@ -2,10 +2,11 @@ import { readdirSync, readFileSync, renameSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { launch, type Run } from '@support/exec';
+import { pathPlant } from '@support/plants';
 import { fresh } from '@support/snapshot';
 import { store } from '@support/store';
 import { docs, putDocs, stageSeed, STAGED_SCRIPTS } from '../support/corpus';
-import { fixture, golden } from '../support/edit';
+import { fixture, golden, ID_SEED } from '../support/edit';
 
 const read = (name: string): string => readFileSync(fixture(name), 'utf8');
 const WTEST = () => ({ 'wtest/unit': read('unit.md'), 'wtest/conv': read('conv.md'), 'wtest/map': read('map.md') });
@@ -17,8 +18,8 @@ beforeAll(async () => {
 
 const stored = (sb: string, slug: string): Promise<Run> => store(sb, 'posix').get('docs', `wtest/${slug}`);
 
-async function succeeds(sb: string, args: string[], slug: string, expected: string, input = ''): Promise<Run> {
-  const r = await docs(sb, args, { input });
+async function succeeds(sb: string, args: string[], slug: string, expected: string, input = '', env: Record<string, string> = {}): Promise<Run> {
+  const r = await docs(sb, args, { input, env });
   expect(r.code, r.stderr).toBe(0);
   const got = await stored(sb, slug);
   expect(got.code).toBe(0);
@@ -58,7 +59,7 @@ describe('the write verbs through ctx on posix: one success per verb, the stored
     await succeeds(fresh(wtest), ['pitfall', 'wtest', 'unit', 'unit-p1', '--severity=high', '--consequence=Now one line'], 'unit', golden('exp-pitfall-update.md'));
   });
   it('entry', async () => {
-    await succeeds(fresh(wtest), ['entry', 'wtest', 'unit', 'contract', '--rule=The middle invariant', '--evidence=midSym', '--after=#1'], 'unit', golden('exp-entry-contract-add.md'));
+    await succeeds(fresh(wtest), ['entry', 'wtest', 'unit', 'contract', '--rule=The middle invariant', '--evidence=midSym', '--after=#1'], 'unit', golden('exp-entry-contract-add.md'), '', { DOCS_ID_SEED: ID_SEED });
   });
   it('section', async () => {
     await succeeds(fresh(wtest), ['section', 'wtest', 'unit', 'see_also'], 'unit', golden('exp-section-replace.md'), read('see-also.block'));
@@ -81,7 +82,7 @@ describe('the write verbs through ctx on posix: one success per verb, the stored
     expect(r.stdout).toBe(`docs remove: wtest/unit removed\n${read('unit.md')}ctx docs remove: dry run, nothing written\n`);
   });
   it('W27 ids keys the legacy entries and names the count', async () => {
-    const r = await succeeds(fresh(wtest), ['ids', 'wtest'], 'unit', golden('exp-ids.md'));
+    const r = await succeeds(fresh(wtest), ['ids', 'wtest'], 'unit', golden('exp-ids.md'), '', { DOCS_ID_SEED: ID_SEED });
     expect(r.stdout).toContain('4 entries keyed');
   });
 });
@@ -185,5 +186,68 @@ describe('the write pipeline through ctx on posix', { concurrent: true }, () => 
     renameSync(join(sb, STAGED_SCRIPTS, 'doc.grammar'), join(sb, 'doc.grammar.away'));
     const r = await refuses(sb, ['write', 'wtest', 'probe'], 'probe', 2, 'the corpus grammar asset scripts/doc.grammar is missing', '@doc probe probe\n  repo: workspace\n');
     expect(r.stderr).toContain('reinstall the docs module');
+  });
+});
+
+describe('opaque ids through ctx on posix', { concurrent: true }, () => {
+  const SEEDED = { DOCS_ID_SEED: ID_SEED };
+  const PITFALL = ['--summary=s', '--class=bug', '--severity=low', '--trigger=t', '--consequence=c', '--evidence=e'];
+  const OPAQUE = /^unit-p-[0-9a-z]{5}$/;
+  const add = (sb: string, env: Record<string, string> = {}, ...more: string[]): Promise<Run> => docs(sb, ['pitfall', 'wtest', 'unit', ...more, ...PITFALL], { env });
+  const pitfallIds = async (sb: string): Promise<string[]> =>
+    (await stored(sb, 'unit')).stdout
+      .split('\n')
+      .filter((l) => l.startsWith('  - id: '))
+      .map((l) => l.slice(8));
+
+  it('[docs-module-r22] a fixed seed yields its id, and a second add under it draws again past the id it meets', async () => {
+    const sb = fresh(wtest);
+    expect((await add(sb, SEEDED)).code).toBe(0);
+    expect((await add(sb, SEEDED)).code).toBe(0);
+    expect(await pitfallIds(sb)).toEqual(['unit-p1', 'unit-p-kb1uj', 'unit-p-p1cup']);
+  });
+
+  it('[docs-module-r22] removing the highest id and adding again never hands the removed id out', async () => {
+    for (const env of [SEEDED, {}]) {
+      const sb = fresh(wtest);
+      expect((await docs(sb, ['pitfall', 'wtest', 'unit', 'unit-p1', '--remove'])).code).toBe(0);
+      expect((await add(sb, env)).code).toBe(0);
+      const ids = await pitfallIds(sb);
+      expect(ids).toHaveLength(1);
+      expect(ids[0]).not.toBe('unit-p1');
+      expect(ids[0]).toMatch(OPAQUE);
+    }
+  });
+
+  it('[docs-module-r22] with no fixed seed each call draws its own: two adds at once take different ids', async () => {
+    const pair = [fresh(wtest), fresh(wtest)];
+    expect((await Promise.all(pair.map((sb) => add(sb)))).map((r) => r.code)).toEqual([0, 0]);
+    const [a, b] = await Promise.all(pair.map(async (sb) => (await pitfallIds(sb))[1]));
+    expect([a, b]).toEqual([expect.stringMatching(OPAQUE), expect.stringMatching(OPAQUE)]);
+    expect(a).not.toBe(b);
+  });
+
+  it('[docs-module-r22] with /dev/urandom unread the seed is the process id beside the clock: two adds at once still draw apart', async () => {
+    const env = pathPlant('od', 'exit 1');
+    const pair = [fresh(wtest), fresh(wtest)];
+    expect((await Promise.all(pair.map((sb) => add(sb, env)))).map((r) => r.code)).toEqual([0, 0]);
+    const [a, b] = await Promise.all(pair.map(async (sb) => (await pitfallIds(sb))[1]));
+    expect([a, b]).toEqual([expect.stringMatching(OPAQUE), expect.stringMatching(OPAQUE)]);
+    expect(a).not.toBe(b);
+  });
+
+  it('[docs-module-r22] either id form named by --id addresses its entry and refuses a second entry under it', async () => {
+    for (const id of ['unit-p7', 'unit-p-zz9zz']) {
+      const sb = fresh(wtest);
+      expect((await add(sb, {}, `--id=${id}`)).code).toBe(0);
+      expect((await docs(sb, ['pitfall', 'wtest', 'unit', id, '--severity=high'])).code).toBe(0);
+      const shown = await docs(sb, ['query', 'wtest', 'unit', '--entry', `pitfalls/${id}`]);
+      expect([shown.code, shown.stdout.split('\n').slice(0, 4)]).toEqual([0, [`  - id: ${id}`, '    summary: "s"', '    class: bug', '    severity: high']]);
+      await refuses(sb, ['pitfall', 'wtest', 'unit', `--id=${id}`, ...PITFALL], 'unit', 1, `the id ${id} already exists`);
+    }
+  });
+
+  it('[docs-module-r22] an id of neither form refuses naming both', async () => {
+    await refuses(fresh(wtest), ['pitfall', 'wtest', 'unit', '--id=unit-p-K3X9M', ...PITFALL], 'unit', 1, "reads unit-p<N> or unit-p-<5 lowercase letters or digits> (got 'unit-p-K3X9M')");
   });
 });

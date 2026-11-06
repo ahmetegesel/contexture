@@ -82,7 +82,7 @@ describe('the edit engine: every success is the golden byte for byte', { concurr
   it('W10 rule remove', async () => {
     written(await edit(sb, { op: 'rule', slug: 'conv', doc: conv(), block: 'rule', key: 'docs/first', remove: true }), golden('exp-rule-remove.md'));
   });
-  it('W11 pitfall add takes the next id number', async () => {
+  it('W11 [docs-module-r22] pitfall add takes an opaque id drawn from the seed', async () => {
     const acts = [['set', 'summary', 'The second pitfall'], ['set', 'class', 'gotcha'], ['set', 'severity', 'low'], ['set', 'trigger', 'Another trigger'], ['set', 'consequence', 'Another consequence'], ['set', 'evidence', 'pitTwo']] as const;
     written(await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: unitDoc(), block: 'pitfalls', acts }), golden('exp-pitfall-add.md'));
   });
@@ -201,5 +201,45 @@ describe('the edit engine: every refusal is rc 1, no output, one line', { concur
   });
   it('W60 a block the kind lacks', async () => {
     refused(await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'conv', doc: conv(), block: 'pitfalls', acts: pitfallFields() }), 'a conventions doc carries no @pitfalls block');
+  });
+});
+
+describe('the edit engine: opaque ids beside the numbered ones', { concurrent: true }, () => {
+  const ids = (r: Run): string[] => r.stdout.split('\n').filter((l) => /^ {2}- id: |^ {4}id: /.test(l)).map((l) => l.replace(/^ *(- )?id: /, ''));
+  let opaqueDoc: string;
+  beforeAll(() => {
+    opaqueDoc = scratch('opaque.md', golden('unit.md').replace('  - id: unit-p1', '  - id: unit-p-kb1uj'));
+  });
+
+  it('[docs-module-r22] a new id is drawn from the seed, and a draw the doc already holds is drawn again', async () => {
+    const first = await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: unitDoc(), block: 'pitfalls', acts: pitfallFields() });
+    expect([first.code, ids(first)]).toEqual([0, ['unit-p1', 'unit-p-kb1uj']]);
+    const again = await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: opaqueDoc, block: 'pitfalls', acts: pitfallFields() });
+    expect([again.code, ids(again)]).toEqual([0, ['unit-p-kb1uj', 'unit-p-p1cup']]);
+    const other = await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: unitDoc(), block: 'pitfalls', acts: pitfallFields(), seed: '0' });
+    expect(ids(other)).toEqual(['unit-p1', 'unit-p-04rgj']);
+  });
+
+  it('[docs-module-r22] --id names an id in either form, and any other shape refuses naming both', async () => {
+    for (const id of ['unit-p7', 'unit-p-zz9zz']) {
+      const r = await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: unitDoc(), block: 'pitfalls', id, acts: pitfallFields() });
+      expect([r.code, ids(r)]).toEqual([0, ['unit-p1', id]]);
+    }
+    for (const id of ['unit-p-ZZ9ZZ', 'unit-p-abcd', 'unit-p-abcdef', 'unit-p0', 'unit-r-abcde', 'other-p-abcde', 'unit-p-ab_cd']) {
+      refused(await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: unitDoc(), block: 'pitfalls', id, acts: pitfallFields() }), `reads unit-p<N> or unit-p-<5 lowercase letters or digits> (got '${id}')`);
+    }
+  });
+
+  it('[docs-module-r22] an opaque id addresses its entry, and naming it again for a new entry refuses', async () => {
+    written(await edit(sb, { op: 'show', slug: 'unit', doc: opaqueDoc, block: 'pitfalls', key: 'unit-p-kb1uj' }), golden('exp-entry-show.txt').replace('unit-p1', 'unit-p-kb1uj'));
+    const changed = await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: opaqueDoc, block: 'pitfalls', key: 'unit-p-kb1uj', acts: [['set', 'severity', 'high']] });
+    expect([changed.code, changed.stdout]).toEqual([0, golden('unit.md').replace('  - id: unit-p1', '  - id: unit-p-kb1uj').replace('    severity: medium', '    severity: high')]);
+    refused(await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: opaqueDoc, block: 'pitfalls', id: 'unit-p-kb1uj', acts: pitfallFields() }), 'the id unit-p-kb1uj already exists');
+  });
+
+  it('[docs-module-r22] ids keys each keyless entry with an opaque id and keeps every id present', async () => {
+    const doc = scratch('mixed.md', golden('unit.md').replace('    evidence: "firstSym"', '    id: unit-r1\n    evidence: "firstSym"'));
+    const r = await edit(sb, { op: 'ids', slug: 'unit', doc });
+    expect([r.code, counted(r), ids(r)]).toEqual([0, '3', ['unit-o-kb1uj', 'unit-o-p1cup', 'unit-r1', 'unit-r-07m9y', 'unit-p1']]);
   });
 });

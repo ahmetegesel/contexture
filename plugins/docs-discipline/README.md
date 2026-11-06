@@ -43,7 +43,7 @@ owning repo's run, build, and test targets.
 | `ctx docs section` | a whole block from stdin: replace, create, or remove (rare) | `docs-edit.awk` |
 | `ctx docs replace` | counted exact replacement over a doc, a repo, or the corpus (sync sweeps; the total must equal `--count`) | `docs-edit.awk` |
 | `ctx docs remove` | a whole doc out of the corpus (`--dry-run` prints the doc it would delete and writes nothing) | none (the IO helper) |
-| `ctx docs ids` | the one-time migration: keyless contract rules and responsibilities gain `<slug>-r<N>` and `<slug>-o<N>` ids | `docs-edit.awk` |
+| `ctx docs ids` | the one-time migration: keyless contract rules and responsibilities gain `<slug>-r-<token>` and `<slug>-o-<token>` ids | `docs-edit.awk` |
 
 The help surface is engine-owned: `ctx docs help` lists the sixteen verbs and
 `ctx docs help <verb>` prints that verb's usage and detail lines. A sole
@@ -335,14 +335,22 @@ it walk below runs every one of these.
   return. Untouched lines stay byte for byte; a result equal to the stored doc
   writes nothing. Free text reaches the engines through the environment, never
   `awk -v`, so quotes and backslashes keep their bytes (a `--search` term too).
-- Ids: contract rules and responsibilities carry `<slug>-r<N>` and
-  `<slug>-o<N>` on the entry's second line (pitfalls `<slug>-p<N>` and caveats
-  `<slug>-c<N>` at the entry head, as before); a new entry takes the doc's
-  highest number plus one, a removed id retires (the one residual: removing
-  the highest id lets the next add reuse its number; name one with `--id` to
-  avoid it). `ctx docs ids` keys a legacy corpus once; a keyless legacy entry
-  stays legitimate and is addressed by `#<N>`. The audit keeps one id
-  namespace per repo across every id field.
+- Ids: contract rules and responsibilities carry theirs on the entry's second
+  line, pitfalls and caveats at the entry head. A new entry's id is
+  `<slug>-<letter>-<token>`: the letter `r` for a contract rule, `o` a
+  responsibility, `p` a pitfall, `c` a caveat, and the token five random
+  lowercase letters or digits (`docs-module-r-k3x9m`), drawn again while the
+  doc already holds the id. Nothing remembers a removed id and nothing counts
+  up, so a removed id is not handed out again: a later draw meets it only by
+  a one in 36^5 chance, where the numbered scheme handed the highest number
+  out again after its removal. Every numbered id (`<slug>-r<N>`,
+  `<slug>-o<N>`, `<slug>-p<N>`, `<slug>-c<N>`) stays valid as written, and
+  `--id` names an id in either form. Each verb call draws its own seed from
+  `/dev/urandom` (the process id and the clock where it cannot be read);
+  `DOCS_ID_SEED=<whole number>` fixes it, so a test gets the same ids on every
+  run and every awk. `ctx docs ids` keys a legacy corpus once; a keyless
+  legacy entry stays legitimate and is addressed by `#<N>`. The audit keeps
+  one id namespace per repo across every id field.
 - The corpus reaches the verbs only through the storage driver, by one door
   (`scripts/docs-io.sh`): a bare `ctx docs audit` reads the whole corpus, a
   repo name reads that repo's docs, and a doc path names a doc by its
@@ -552,9 +560,9 @@ this plugin beside `base/`, and was run as written; the outputs are verbatim
 from that run (long ones abbreviated with `...` where the full output repeats
 the shown shape; `<scratch>` in an output line stands for the absolute path of
 the scratch workspace; a nonzero exit shows as `(exit N)`). The staging builds
-a scratch workspace from the shipped copies: the base runtime, its unit
-module (the record and storage driver the verbs reach the corpus through), and this
-plugin's module (its grammar rides inside); it commits the corpus in a repository of its own,
+a scratch workspace from the shipped copies: the base runtime, the storage
+core, its unit module (the record and storage driver the verbs reach the
+corpus through), and this plugin's module (its grammar rides inside); it commits the corpus in a repository of its own,
 since the check reads a claimant outside git as untracked (the process-owned
 verdict) and never as stale. The commands then run through the staged `ctx`
 (in an adopted workspace the same commands run as `ctx docs ...`). The first
@@ -565,6 +573,7 @@ scratch="../../.contexture/tmp/docs-walk"
 rm -rf "$scratch"
 mkdir -p "$scratch/.contexture/modules" "$scratch/.contexture/extensions/modules" "$scratch/docs/workspace"
 cp ../../base/.contexture/ctx "$scratch/.contexture/ctx"
+cp -R ../../base/.contexture/storage "$scratch/.contexture/"
 cp -R ../../base/.contexture/modules/unit "$scratch/.contexture/modules/"
 cp -R .contexture/extensions/modules/docs "$scratch/.contexture/extensions/modules/"
 cp -R docs/workspace/. "$scratch/docs/workspace/"
@@ -888,9 +897,11 @@ Writing through the verbs. The one-time id migration keys the sample's
 contract rules and responsibilities; an entry is then read by its key, one
 field rewritten, an entry added beside a related one, and a source added to
 the header without reading the doc; a value outside its enum refuses and
-writes nothing:
+writes nothing. A new id is drawn at random, so the walk fixes the draw with
+`DOCS_ID_SEED` and the ids below are the ones it prints:
 
 ```sh
+export DOCS_ID_SEED=20261107
 ./.contexture/ctx docs ids
 ```
 
@@ -901,26 +912,26 @@ docs ids: 8 entries keyed
 ```
 
 ```sh
-./.contexture/ctx docs query demo-orders order-flow --entry contract/order-flow-r1
+./.contexture/ctx docs query demo-orders order-flow --entry contract/order-flow-r-07m9y
 ```
 
 ```text
   - rule: "A cart naming an unknown item id is rejected with a typed validation error"
-    id: order-flow-r1
+    id: order-flow-r-07m9y
     evidence: "validateCart"
     detail ::
       Unknown ids never reach persistence; the caller receives the offending id list.
 ```
 
 ```sh
-./.contexture/ctx docs entry demo-orders order-flow contract order-flow-r1 --detail="Unknown ids never reach persistence; the caller receives the offending id list and the cart stays unchanged."
-./.contexture/ctx docs entry demo-orders order-flow contract --rule="An accepted order publishes exactly one order-accepted event" --evidence=publishOrderAccepted --after=order-flow-r2
+./.contexture/ctx docs entry demo-orders order-flow contract order-flow-r-07m9y --detail="Unknown ids never reach persistence; the caller receives the offending id list and the cart stays unchanged."
+./.contexture/ctx docs entry demo-orders order-flow contract --rule="An accepted order publishes exactly one order-accepted event" --evidence=publishOrderAccepted --after=order-flow-r-t5sws
 ./.contexture/ctx docs header demo-orders order-flow --add-source='src/events/**'
 ```
 
 ```text
-docs entry: demo-orders/order-flow contract/order-flow-r1 updated (detail)
-docs entry: demo-orders/order-flow contract/order-flow-r3 added after contract/order-flow-r2
+docs entry: demo-orders/order-flow contract/order-flow-r-07m9y updated (detail)
+docs entry: demo-orders/order-flow contract/order-flow-r-kb1uj added after contract/order-flow-r-t5sws
 docs header: demo-orders/order-flow header updated (sources)
 ```
 
@@ -944,15 +955,15 @@ kept a block scalar, the new rule placed after its neighbor):
 ```text
 [order-flow > contract]
   - rule: "A cart naming an unknown item id is rejected with a typed validation error"
-    id: order-flow-r1
+    id: order-flow-r-07m9y
     evidence: "validateCart"
     detail ::
       Unknown ids never reach persistence; the caller receives the offending id list and the cart stays unchanged.
   - rule: "Prices are computed from the server-side price table, never from client totals"
-    id: order-flow-r2
+    id: order-flow-r-t5sws
     evidence: "priceCart"
   - rule: "An accepted order publishes exactly one order-accepted event"
-    id: order-flow-r3
+    id: order-flow-r-kb1uj
     evidence: "publishOrderAccepted"
 ```
 
@@ -1003,12 +1014,12 @@ A write lands in the store stamped with the workspace git HEAD, and
 `ctx docs changes` prints the corpus half of the delta:
 
 ```sh
-./.contexture/ctx docs entry demo-orders order-flow contract order-flow-r2 --detail="The price table is read once per checkout, at validation."
+./.contexture/ctx docs entry demo-orders order-flow contract order-flow-r-t5sws --detail="The price table is read once per checkout, at validation."
 ./.contexture/ctx docs changes
 ```
 
 ```text
-docs entry: demo-orders/order-flow contract/order-flow-r2 updated (detail)
+docs entry: demo-orders/order-flow contract/order-flow-r-t5sws updated (detail)
 M	docs/demo-orders/order-flow.md
 ```
 

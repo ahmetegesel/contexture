@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: key the corpus's keyless contract rules and responsibilities with ids (a one-time migration)
 # usage: ctx docs ids [<repo>] [--dry-run]
-# help: every @contract entry without an id gains <slug>-r<N> and every @responsibilities entry <slug>-o<N>, in document order, N continuing past the doc's highest id of that kind; the id rides the line after the entry's first line, and nothing else in the doc changes
+# help: every @contract entry without an id gains <slug>-r-<token> and every @responsibilities entry <slug>-o-<token>, in document order, each token five random lowercase letters or digits never matching an id the doc holds (DOCS_ID_SEED, a whole number, fixes the draw); every id present stays; the id rides the line after the entry's first line, and nothing else in the doc changes
 # help: one write per changed doc (grammar-checked by the audit over its repo first); a second run finds nothing to key and prints 0 entries keyed; --dry-run lists each entry it would key (doc, block, place, the new id, the entry's first 60 bytes) and writes nothing
 # help: exit codes: 0 keyed (or nothing to key, or the dry run printed); 1 a refusal (a missing repo, a grammar defect), nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs ids --dry-run

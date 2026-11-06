@@ -913,6 +913,19 @@ docs_exists() {
   return 2
 }
 
+# docs_id_seed: the seed of a new id's draw, fresh per engine run: DOCS_ID_SEED when set (a
+# whole number, so a test gets stable ids), else four bytes of /dev/urandom, else the
+# process id beside the clock
+docs_id_seed() {
+  if [ -n "${DOCS_ID_SEED:-}" ]; then
+    printf '%s\n' "$DOCS_ID_SEED"
+    return 0
+  fi
+  di_seed=$(od -An -N4 -tu4 /dev/urandom 2> /dev/null | tr -dc '0-9')
+  [ -n "$di_seed" ] || di_seed="$$$(date +%H%M%S)"
+  printf '%s\n' "$di_seed"
+}
+
 # docs_engine <op> <repo> <slug> <doc file> <out file>: the edit engine over one doc with
 # the request exported; its note (or refusal) lands in <out file>.note; rc 0, 1 a refusal,
 # 2 the engine's own failure
@@ -932,7 +945,9 @@ docs_engine() {
   EDIT_OLD=$DOCS_OLD
   EDIT_NEW=$DOCS_NEW
   EDIT_NA=$DOCS_NA
-  export EDIT_VERB EDIT_OP EDIT_REPO EDIT_SLUG EDIT_NOEOL EDIT_KIND EDIT_BLOCK EDIT_KEY EDIT_AFTER EDIT_FIRST EDIT_REMOVE EDIT_ID EDIT_DRY EDIT_OLD EDIT_NEW EDIT_NA
+  EDIT_SEED=""
+  case $1 in entry|ids) EDIT_SEED=$(docs_id_seed) ;; esac
+  export EDIT_VERB EDIT_OP EDIT_REPO EDIT_SLUG EDIT_NOEOL EDIT_KIND EDIT_BLOCK EDIT_KEY EDIT_AFTER EDIT_FIRST EDIT_REMOVE EDIT_ID EDIT_DRY EDIT_OLD EDIT_NEW EDIT_NA EDIT_SEED
   if awk -f "$DOCS_DIR/docs-edit.awk" part=1 "$DOCS_TEMPLATE" part=2 "$4" part=3 "${DOCS_PAYLOAD:-/dev/null}" > "$5" 2> "$5.note"; then
     return 0
   else
