@@ -27,7 +27,7 @@ async function lockedUnit(): Promise<string> {
 }
 
 describe.concurrent('the unit lock wait', () => {
-  it(`a live holder refuses the next writer ERR_STORAGE_LOCKED after its ${WAIT_S} s wait, in seconds under the sleep shim, and nothing lands`, async () => {
+  it(`[the-engine-r18] a live holder refuses the next writer ERR_STORAGE_LOCKED after its ${WAIT_S} s wait, in seconds under the sleep shim, and nothing lands`, async () => {
     const sb = await lockedUnit();
     const release = holdLock(sb, unitLock('lw-unit'), 'live');
     const [r, ms] = await timed(() => data(sb, 'task.add', ['lw-unit', 'lw-task'], taskPayload(), sleepShim()));
@@ -38,14 +38,14 @@ describe.concurrent('the unit lock wait', () => {
     refused(await data(sb, 'task.get', ['lw-unit', 'lw-task']), 'task.get', 1, 'ERR_ENTITY_NOT_FOUND', "task 'lw-task' not found in unit 'lw-unit'");
   });
 
-  it('a lock whose holder pid is gone is removed at once and the write lands', async () => {
+  it('[the-engine-r18] a lock whose holder pid is gone is removed at once and the write lands', async () => {
     const sb = await lockedUnit();
     holdLock(sb, unitLock('lw-unit'), 'dead');
     answer(await data(sb, 'task.add', ['lw-unit', 'lw-task'], taskPayload()), 'task.add');
     expect(existsSync(lockPath(sb, unitLock('lw-unit')))).toBe(false);
   });
 
-  it('a pid-less lock is removed after its grace and the write lands', async () => {
+  it('[the-engine-r18] a pid-less lock is removed after its grace and the write lands', async () => {
     const sb = await lockedUnit();
     holdLock(sb, unitLock('lw-unit'), 'pidless');
     answer(await data(sb, 'task.add', ['lw-unit', 'lw-task'], taskPayload(), sleepShim()), 'task.add');
@@ -56,7 +56,7 @@ describe.concurrent('the unit lock wait', () => {
 describe.concurrent('the namespace lock wait', () => {
   for (const driver of DRIVERS) {
     describe.skipIf(driver === 'fts5' && !fts5Available())(driver, () => {
-      it(`a live holder refuses store.put ERR_STORAGE_LOCKED after its ${WAIT_S} s wait, in seconds under the sleep shim, and nothing lands`, async () => {
+      it(`[the-engine-r18] a live holder refuses store.put ERR_STORAGE_LOCKED after its ${WAIT_S} s wait, in seconds under the sleep shim, and nothing lands`, async () => {
         const sb = stage(driver);
         const release = holdLock(sb, namespaceLock('unit'), 'live');
         const [r, ms] = await timed(() => driverOp(sb, driver, 'store.put', ['unit', 'lw-unit/note'], 'never lands\n', sleepShim()));
@@ -66,14 +66,14 @@ describe.concurrent('the namespace lock wait', () => {
         refused(await driverOp(sb, driver, 'store.get', ['unit', 'lw-unit/note']), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'lw-unit/note' not found in namespace 'unit'");
       });
 
-      it('a lock whose holder pid is gone is removed at once and store.put lands', async () => {
+      it('[the-engine-r18] a lock whose holder pid is gone is removed at once and store.put lands', async () => {
         const sb = stage(driver);
         holdLock(sb, namespaceLock('unit'), 'dead');
         answer(await driverOp(sb, driver, 'store.put', ['unit', 'lw-unit/note'], 'lands\n'), 'store.put');
         expect(existsSync(lockPath(sb, namespaceLock('unit')))).toBe(false);
       });
 
-      it('a pid-less lock is removed after its grace and store.put lands', async () => {
+      it('[the-engine-r18] a pid-less lock is removed after its grace and store.put lands', async () => {
         const sb = stage(driver);
         holdLock(sb, namespaceLock('unit'), 'pidless');
         answer(await driverOp(sb, driver, 'store.put', ['unit', 'lw-unit/note'], 'lands\n', sleepShim()), 'store.put');
@@ -83,10 +83,10 @@ describe.concurrent('the namespace lock wait', () => {
   }
 });
 
-describe.concurrent('[the-engine-r18] the unit locks and the namespace locks never share a folder, whatever the unit is named', () => {
+describe.concurrent('the unit locks and the namespace locks never share a folder, whatever the unit is named', () => {
   for (const driver of DRIVERS) {
     describe.skipIf(driver === 'fts5' && !fts5Available())(driver, () => {
-      it('a unit named store-unit bootstraps and takes writes like any other, and leaves no lock behind', async () => {
+      it('[the-engine-r18] a unit named store-unit bootstraps and takes writes like any other, and leaves no lock behind', async () => {
         const sb = stage(driver);
         const shim = sleepShim();
         answer(await data(sb, 'session.create', ['store-unit'], unitPayload(), shim), 'session.create');
@@ -99,7 +99,7 @@ describe.concurrent('[the-engine-r18] the unit locks and the namespace locks nev
     });
   }
 
-  it('a unit named after another namespace lock (store-docs) writes while a live writer holds that namespace lock', async () => {
+  it('[the-engine-r18] a unit named after another namespace lock (store-docs) writes while a live writer holds that namespace lock', async () => {
     const sb = stage();
     const release = holdLock(sb, namespaceLock('docs'), 'live');
     answer(await data(sb, 'session.create', ['store-docs'], unitPayload(), sleepShim()), 'session.create');

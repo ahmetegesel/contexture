@@ -43,20 +43,20 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
     empty = await docsStore('posix', false);
   });
 
-  it('a put that cannot create its temp refuses rc 2 and leaves the old value whole', async ({ onTestFinished }) => {
+  it('[the-engine-r18, the-engine-r19] a put that cannot create its temp refuses rc 2 and leaves the old value whole', async ({ onTestFinished }) => {
     const sb = await seeded(empty, 'posix', { 'workspace/atomic': 'atomic-old\n' });
     chmodPlant(join(sb, 'docs/workspace'), 0o500, 0o700, onTestFinished);
     refused(await store(sb, 'posix').put('docs', 'workspace/atomic', 'atomic-new\n'), 'store.put', 2, 'ERR_STORAGE_WRITE', "the storage write of key 'workspace/atomic' failed");
     expect((await store(sb, 'posix').get('docs', 'workspace/atomic')).stdout).toBe('atomic-old\n');
   });
 
-  it('a landed put leaves no temp under the store root', async () => {
+  it('[the-engine-r19] a landed put leaves no temp under the store root', async () => {
     const sb = await seeded(empty, 'posix', { 'workspace/a': 'a\n', 'workspace/b': 'b\n' });
     answer(await store(sb, 'posix').put('docs', 'workspace/a', 'a2\n'), 'store.put');
     expect(walk(join(sb, 'docs')).map((p) => p.slice(sb.length))).toEqual(['/docs/workspace', '/docs/workspace/a.md', '/docs/workspace/b.md']);
   });
 
-  it('a second action failing its write rolls the first back, names action 2, and removes the folder action 1 made', async ({ onTestFinished }) => {
+  it('[the-engine-r18, the-engine-r19, the-engine-r21] a second action failing its write rolls the first back, names action 2, and removes the folder action 1 made', async ({ onTestFinished }) => {
     const sb = fresh(empty);
     mkdirSync(join(sb, 'docs/ro'), { recursive: true });
     chmodPlant(join(sb, 'docs/ro'), 0o500, 0o700, onTestFinished);
@@ -67,7 +67,7 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
     expect(existsSync(join(sb, 'docs/a'))).toBe(false);
   });
 
-  it('a rename failing between the batch renames rolls the first back and leaves no stage', async () => {
+  it('[the-engine-r18, the-engine-r19] a rename failing between the batch renames rolls the first back and leaves no stage', async () => {
     const sb = await seeded(empty, 'posix', OLD);
     const mv = pathPlant('mv', 'for a in "$@"; do last=$a; done\ncase "$last" in */y.md) exit 1 ;; esac\nexec /bin/mv "$@"');
     const r = await store(sb, 'posix', mv).batch('docs', NEW);
@@ -77,7 +77,7 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
     expect(stages(sb)).toEqual([]);
   });
 
-  it('a batch whose undo log cannot be written refuses rc 2 before its first rename, so a later failing rename leaves nothing written', async () => {
+  it('[the-engine-r18, the-engine-r19, the-engine-r21] a batch whose undo log cannot be written refuses rc 2 before its first rename, so a later failing rename leaves nothing written', async () => {
     const sb = await seeded(empty, 'posix', OLD);
     const mv = pathPlant('mv', 'for a in "$@"; do last=$a; done\ncase "$last" in */y.md) exit 1 ;; esac\nexec /bin/mv "$@"');
     const undo = mktempPlant('case "$p" in */store-batch.*) /bin/mkdir "$p/undo" ;; esac');
@@ -86,12 +86,12 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
     refusedLike(r, 'store.batch', 2, 'ERR_STORAGE_WRITE', "action 1 (put 'workspace/x'): ");
   });
 
-  it('a list whose key listing cannot be written refuses rc 2 with its one line, never an empty answer', async () => {
+  it('[the-engine-r21] a list whose key listing cannot be written refuses rc 2 with its one line, never an empty answer', async () => {
     const sb = await seeded(empty, 'posix', OLD);
     refusedLike(await store(sb, 'posix', mktempPlant('case "$p" in */store-keys.*) chmod 400 "$p" ;; esac')).list('docs'), 'store.list', 2, 'ERR_STORAGE_WRITE');
   });
 
-  it('a TERM between the batch renames leaves both keys whole, no stage, and the lock released', async () => {
+  it('[the-engine-r18] a TERM between the batch renames leaves both keys whole, no stage, and the lock released', async () => {
     const sb = await seeded(empty, 'posix', OLD);
     const mark = join(sandbox('wa-mark'), 'mark');
     const mv = pathPlant('mv', `for a in "$@"; do last=$a; done\ncase "$last" in */y.md) : > "${mark}"; sleep 2 ;; esac\nexec /bin/mv "$@"`);
@@ -110,7 +110,7 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
 
 for (const driver of DRIVERS) {
   describe.skipIf(ROOT_USER || (driver === 'fts5' && !fts5Available()))(`a read-only store on ${driver}`, () => {
-    it('refuses put, delete, and batch rc 2 with one line each and keeps its bytes; writable again, it serves', async ({ onTestFinished }) => {
+    it('[the-engine-r18, the-engine-r21] refuses put, delete, and batch rc 2 with one line each and keeps its bytes; writable again, it serves', async ({ onTestFinished }) => {
       const sb = await seeded(await docsStore(driver, false), driver, OLD);
       const s = store(sb, driver);
       const ro = driver === 'fts5' ? [join(sb, '.contexture/sessions.db')] : [join(sb, 'docs/workspace/x.md'), join(sb, 'docs/workspace/y.md'), join(sb, 'docs/workspace')];
@@ -201,27 +201,27 @@ for (const driver of DRIVERS) {
 }
 
 for (const driver of DRIVERS) {
-  describe.skipIf(ROOT_USER || (driver === 'fts5' && !fts5Available()))(`[the-engine-r21] a write into a folder the ${driver} driver just made fails with its one refusal line`, { concurrent: true }, () => {
+  describe.skipIf(ROOT_USER || (driver === 'fts5' && !fts5Available()))(`a write into a folder the ${driver} driver just made fails with its one refusal line`, { concurrent: true }, () => {
     let empty: string;
     beforeAll(async () => {
       empty = await docsStore(driver, false);
     });
 
-    it('a put whose lock holder pid cannot be written refuses with nothing else on stderr and leaves no lock', async () => {
+    it('[the-engine-r18, the-engine-r21] a put whose lock holder pid cannot be written refuses with nothing else on stderr and leaves no lock', async () => {
       const sb = await seeded(empty, driver, OLD);
       refused(await store(sb, driver, readOnlyLockShim()).put('docs', 'workspace/x', 'never lands\n'), 'store.put', 2, 'ERR_STORAGE_WRITE', 'cannot write the store lock holder pid');
       expect(existsSync(lockPath(sb, namespaceLock('docs')))).toBe(false);
       expect(await bytesOf(sb, driver, Object.keys(OLD))).toEqual(Object.values(OLD));
     });
 
-    it('a batch whose value cannot be staged refuses rc 2 ERR_STORAGE_WRITE naming its action, with nothing else on stderr', async () => {
+    it('[the-engine-r21] a batch whose value cannot be staged refuses rc 2 ERR_STORAGE_WRITE naming its action, with nothing else on stderr', async () => {
       const sb = await seeded(empty, driver, OLD);
       const r = await store(sb, driver, scratchPlant(driver === 'fts5' ? 'batch-val.1' : 'val.1')).batch('docs', NEW);
       refused(r, 'store.batch', 2, 'ERR_STORAGE_WRITE', "action 1 (put 'workspace/x'): cannot stage the value");
       expect(await bytesOf(sb, driver, Object.keys(OLD))).toEqual(Object.values(OLD));
     });
 
-    it('a batch value both malformed and unstageable refuses as the input it is, rc 1 ERR_INVALID_ARGUMENT', async () => {
+    it('[the-engine-r18, the-engine-r21] a batch value both malformed and unstageable refuses as the input it is, rc 1 ERR_INVALID_ARGUMENT', async () => {
       const sb = await seeded(empty, driver, OLD);
       const r = await store(sb, driver, scratchPlant(driver === 'fts5' ? 'batch-val.1' : 'val.1')).batch('docs', 'action=put\nkey=workspace/x\nvalue_b64=***\n');
       refused(r, 'store.batch', 1, 'ERR_INVALID_ARGUMENT', "action 1 (put 'workspace/x'): malformed base64 value");
@@ -244,7 +244,7 @@ for (const driver of DRIVERS) {
       empty = await docsStore(driver, false);
     });
 
-    it('lands whole or refuses rc 2 with its one line and nothing written', async () => {
+    it('[the-engine-r18, the-engine-r21] lands whole or refuses rc 2 with its one line and nothing written', async () => {
       const sb = await seeded(empty, driver, OLD);
       const r = await store(sb, driver, manifestPlant()).batch('docs', NEW);
       const after = await bytesOf(sb, driver, Object.keys(OLD));
@@ -260,7 +260,7 @@ for (const driver of DRIVERS) {
   });
 }
 
-describe.skipIf(ROOT_USER || !fts5Available())('[the-engine-r21] an fts5 key listing into a scratch the call just made fails with its one refusal line', { concurrent: true }, () => {
+describe.skipIf(ROOT_USER || !fts5Available())('an fts5 key listing into a scratch the call just made fails with its one refusal line', { concurrent: true }, () => {
   let keyed: string;
   beforeAll(async () => {
     keyed = await docsStore('fts5', true);
@@ -270,12 +270,12 @@ describe.skipIf(ROOT_USER || !fts5Available())('[the-engine-r21] an fts5 key lis
     ['store.list', ['docs'], ''],
     ['store.scan', ['docs'], ''],
     ['store.search', ['docs', 'exact', '20'], 'query=a\n'],
-  ] as const)('%s refuses rc 2 with nothing else on stderr', async (fn, args, input) => {
+  ] as const)('[the-engine-r21] %s refuses rc 2 with nothing else on stderr', async (fn, args, input) => {
     const sb = fresh(keyed);
     refusedLike(await store(sb, 'fts5', scratchPlant('keys')).op(fn, args, input), fn, 2, 'ERR_STORAGE_READ');
   });
 
-  it('store.list whose filtered keys cannot be written refuses rc 2 with its one line, never a short answer', async () => {
+  it('[the-engine-r21] store.list whose filtered keys cannot be written refuses rc 2 with its one line, never a short answer', async () => {
     const sb = fresh(keyed);
     refusedLike(await store(sb, 'fts5', mktempPlant('case "$p" in */store-keys-out.*) chmod 400 "$p" ;; esac')).list('docs'), 'store.list', 2, 'ERR_STORAGE_WRITE');
   });

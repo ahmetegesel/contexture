@@ -34,27 +34,27 @@ async function refusal(sb: string, ns: string, rc: number, reason: string): Prom
 const probe = (fields: string) => `namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\n${fields}`;
 
 describe.concurrent('store-data, the data file reader', () => {
-  it('answers a docs-shaped declaration from the extension root on twelve lines, the data file path among them', async () => {
+  it('[modules-r10] answers a docs-shaped declaration from the extension root on twelve lines, the data file path among them', async () => {
     const sb = workspace();
     expect(await answerLines(sb, 'docs')).toEqual([
       'docs', 'docs', '.md', '<repo>/<slug>', 'true', join(moduleDir(sb, 'extensions', 'docs'), 'data'), '', '', '', 'key', 'line', 'exact',
     ]);
   });
 
-  it('a declaration of namespace and key alone takes the defaults: root the namespace, an empty suffix, changes false', async () => {
+  it('[modules-r10] a declaration of namespace and key alone takes the defaults: root the namespace, an empty suffix, changes false', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
     expect(await answerLines(sb, 'minimal')).toEqual(['minimal', 'minimal', '', '<a>/<b>', 'false', file, '', '', '', 'key', 'line', 'exact']);
   });
 
-  it('a second module declaring the namespace refuses, naming both owners', async () => {
+  it('[modules-r10, the-engine-p4] a second module declaring the namespace refuses, naming both owners', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'probe', probe('changes: false\n'));
     dataFile(sb, 'modules', 'probe2', probe('changes: true\n'));
     await refusal(sb, 'probe', 1, "namespace 'probe' is declared by more than one module: probe probe2");
   });
 
-  it('a declaration duplicated across the workspace and the extension roots refuses', async () => {
+  it('[modules-r10, the-engine-p4] a declaration duplicated across the workspace and the extension roots refuses', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'docs-copy', DOCS_SHAPED);
     await refusal(sb, 'docs', 1, "namespace 'docs' is declared by more than one module: docs-copy docs");
@@ -90,13 +90,13 @@ describe.concurrent('store-data, the data file reader', () => {
     ['a three-token document rule', probe('changes: false\nsearch: documents\ndocument: <a>/<b> body document\n'), 'line 7: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)'],
     ['a repeated mode', probe('search: flat\nmodes: exact, exact\n'), "duplicate mode 'exact'"],
     ['modes without exact', probe('search: flat\nmodes: hybrid\n'), 'the modes must include exact'],
-  ])('%s refuses rc 1 naming the rule', async (_, text, reason) => {
+  ])('[modules-r10] %s refuses rc 1 naming the rule', async (_, text, reason) => {
     const sb = workspace();
     dataFile(sb, 'modules', 'probe', text);
     await refusal(sb, 'probe', 1, reason);
   });
 
-  it('refuses a declaration with no key pattern, and finds none for a file with no namespace', async () => {
+  it('[modules-r10] refuses a declaration with no key pattern, and finds none for a file with no namespace', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'nokey', 'namespace: nokey\nroot: r\nsuffix: .txt\n');
     dataFile(sb, 'modules', 'nonamespace', 'key: <a>/<b>\n');
@@ -104,7 +104,7 @@ describe.concurrent('store-data, the data file reader', () => {
     await refusal(sb, 'nonamespace', 3, "namespace 'nonamespace' is declared by no module data file");
   });
 
-  it('answers a variable-depth <unit>/<path...> declaration and refuses a non-final <unit...>', async () => {
+  it('[modules-r10] answers a variable-depth <unit>/<path...> declaration and refuses a non-final <unit...>', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'variable', 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n');
     expect((await answerLines(sb, 'variable')).slice(0, 5)).toEqual(['variable', '.contexture/sessions', '.md', '<unit>/<path...>', 'false']);
@@ -112,7 +112,7 @@ describe.concurrent('store-data, the data file reader', () => {
     await refusal(sb, 'variable', 1, "malformed key pattern '<unit...>/<path>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)");
   });
 
-  it('the optional flat search keys are accepted and answered on the schema lines', async () => {
+  it('[modules-r10] the optional flat search keys are accepted and answered on the schema lines', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'searchy', probe('changes: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\nmodes: exact\n'));
     const lines = await answerLines(sb, 'probe');
@@ -120,7 +120,7 @@ describe.concurrent('store-data, the data file reader', () => {
     expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line', 'exact']);
   });
 
-  it('the document-set form answers its rules after the twelve lines, one tab-separated rule per line', async () => {
+  it('[modules-r10] the document-set form answers its rules after the twelve lines, one tab-separated rule per line', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'unitlike', [
       'namespace: unitlike', 'key: <unit>/<path...>', 'search: documents', 'modes: exact, hybrid, trigram',

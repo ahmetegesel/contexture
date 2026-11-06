@@ -41,7 +41,7 @@ for (const driver of DRIVERS) {
       empty = await docsStore(driver, false);
     });
 
-    it('a put holds the lock while it reads its payload and releases it once the key lands', async () => {
+    it('[the-engine-r18] a put holds the lock while it reads its payload and releases it once the key lands', async () => {
       const sb = fresh(empty);
       const { child, result } = launch(driverPath(sb, driver), ['store.put', 'docs', 'workspace/locked'], { cwd: sb, input: null });
       expect(await until(() => existsSync(lockPath(sb, LOCK)))).toBe(true);
@@ -51,7 +51,7 @@ for (const driver of DRIVERS) {
       expect((await store(sb, driver).get('docs', 'workspace/locked')).stdout).toBe('locked\n');
     });
 
-    it('a TERM while holding the lock releases it and lands nothing', async () => {
+    it('[the-engine-r18] a TERM while holding the lock releases it and lands nothing', async () => {
       const sb = fresh(empty);
       const before = scratch(sb);
       const { child, result, signal } = launch(driverPath(sb, driver), ['store.put', 'docs', 'workspace/held'], { cwd: sb, input: null, group: true });
@@ -76,7 +76,7 @@ for (const driver of DRIVERS) {
       await wait(200);
     }
 
-    it('a TERM while waiting on a live holder exits nonzero, lands nothing, and leaves no scratch of its own', async () => {
+    it('[the-engine-r18] a TERM while waiting on a live holder exits nonzero, lands nothing, and leaves no scratch of its own', async () => {
       const sb = fresh(empty);
       holdLock(sb, LOCK, 'live');
       const before = scratch(sb);
@@ -85,14 +85,14 @@ for (const driver of DRIVERS) {
       refused(await store(sb, driver).get('docs', 'workspace/waiter'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/waiter' not found in namespace 'docs'");
     });
 
-    it('a TERM while waiting leaves the live holder\'s lock in place', async () => {
+    it('[the-engine-r18] a TERM while waiting leaves the live holder\'s lock in place', async () => {
       const sb = fresh(empty);
       holdLock(sb, LOCK, 'live');
       await termWaiter(sb);
       expect(existsSync(join(lockPath(sb, LOCK), 'pid'))).toBe(true);
     });
 
-    it('a write refused under the lock releases it', async () => {
+    it('[the-engine-r18] a write refused under the lock releases it', async () => {
       const sb = fresh(empty);
       const s = store(sb, driver);
       refused(await s.batch('docs', [{ action: 'delete', key: 'workspace/absent' }]), 'store.batch', 1, 'ERR_ENTITY_NOT_FOUND',
@@ -101,7 +101,7 @@ for (const driver of DRIVERS) {
       answer(await s.put('docs', 'workspace/after', 'x\n'), 'store.put');
     });
 
-    it('two concurrent deletes of one key answer one success and one not found', async () => {
+    it('[the-engine-r18] two concurrent deletes of one key answer one success and one not found', async () => {
       const sb = fresh(empty);
       const s = store(sb, driver);
       answer(await s.put('docs', 'workspace/conc', 'x\n'), 'store.put');
@@ -111,7 +111,7 @@ for (const driver of DRIVERS) {
       refused(lost, 'store.delete', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/conc' not found in namespace 'docs'");
     });
 
-    it('eight concurrent batches on distinct keys all land with no residue, and a planted residue is seen', async () => {
+    it('[the-engine-r18] eight concurrent batches on distinct keys all land with no residue, and a planted residue is seen', async () => {
       const sb = fresh(empty);
       const s = store(sb, driver);
       const keys = Array.from({ length: 8 }, (_, i) => [`workspace/c${i}a`, `workspace/c${i}b`]);

@@ -45,7 +45,7 @@ describe('the resolver', { concurrent: true }, () => {
     posix = await seed(async () => undefined, 'posix', 'resolver');
   });
 
-  it('the storage core is no module: ctx help --all never lists it', async () => {
+  it('[modules-r1] the storage core is no module: ctx help --all never lists it', async () => {
     const r = await ctx(fresh(posix), 'help', '--all');
     expect(r.code).toBe(0);
     expect(r.stdout).not.toContain('module storage:');
@@ -61,7 +61,7 @@ describe('the resolver', { concurrent: true }, () => {
     ['require with no capability', ['require'], 1],
     ['has with two capabilities', ['has', 'store', 'store.changelog'], 1],
     ['require a malformed token', ['require', 'Bad!'], 1],
-  ])('answers %s on the configured posix driver', async (_, args, rc) => {
+  ])('[the-engine-r15] answers %s on the configured posix driver', async (_, args, rc) => {
     expect((await rsv(fresh(posix), args)).code).toBe(rc);
   });
 
@@ -73,7 +73,7 @@ describe('the resolver', { concurrent: true }, () => {
     ['the store family', {}, ['require', 'store', 'store.changelog'], 2],
     ['the store family', {}, ['require', 'search.mode.hybrid'], 2],
     ['the store family', {}, ['has', 'search.schema'], 1],
-  ] as const)('a planted card with %s answers %j rc %i', async (_, card, args, rc) => {
+  ] as const)('[the-engine-r15] a planted card with %s answers %j rc %i', async (_, card, args, rc) => {
     const sb = fresh(posix);
     const w = wrap(join(sb, 'w/driver'), driverPath(sb, 'posix'), card as Card);
     const r = await rsv(sb, [`--driver=${w}`, ...args]);
@@ -82,7 +82,7 @@ describe('the resolver', { concurrent: true }, () => {
     if (rc === 2) expect(r.stderr).toMatch(/\(ERR_CAPABILITY_UNSUPPORTED\)\n$/);
   });
 
-  it('caches a require verdict per driver path and capability set, apart from the dispatch verdict, and re-takes it for a touched driver', async () => {
+  it('[the-engine-r8, the-engine-r15] caches a require verdict per driver path and capability set, apart from the dispatch verdict, and re-takes it for a touched driver', async () => {
     const sb = fresh(posix);
     const w = wrap(join(sb, 'w-store'), driverPath(sb, 'posix'));
     answer(await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']), 'store.list');
@@ -98,7 +98,7 @@ describe('the resolver', { concurrent: true }, () => {
     expect((await rsv(sb, [`--driver=${w}`, 'require', 'store'])).code).toBe(2);
   });
 
-  it('[the-engine-r15] refuses require and has rc 2 ERR_DRIVER_NOT_FOUND for a removed bundled driver, whatever fresh verdict it cached', async () => {
+  it('[the-engine-r15, the-engine-r21] refuses require and has rc 2 ERR_DRIVER_NOT_FOUND for a removed bundled driver, whatever fresh verdict it cached', async () => {
     const sb = fresh(posix);
     expect((await rsv(sb, ['require', 'store'])).code).toBe(0);
     const cached = verdicts(sb).filter((v) => v.endsWith('.require.store'));
@@ -112,7 +112,7 @@ describe('the resolver', { concurrent: true }, () => {
     }
   });
 
-  it('takes the dispatch verdict again when the workspace configuration changes', async () => {
+  it('[the-engine-r8] takes the dispatch verdict again when the workspace configuration changes', async () => {
     const sb = fresh(posix);
     const w = wrap(join(sb, 'w-conf'), driverPath(sb, 'posix'));
     answer(await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']), 'store.list');
@@ -133,7 +133,7 @@ describe('the resolver', { concurrent: true }, () => {
     return [sb, w];
   }
 
-  it.skipIf(ROOT_USER)('caches nothing when the drawer is unwritable, and still verifies every call', async ({ onTestFinished }) => {
+  it.skipIf(ROOT_USER)('[the-engine-r8] caches nothing when the drawer is unwritable, and still verifies every call', async ({ onTestFinished }) => {
     const [sb, w] = unwritableDrawer(onTestFinished);
     const r = await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']);
     expect([r.code, r.stdout]).toEqual([0, '{"namespace":"unit","keys":[]}\n']);
@@ -142,19 +142,19 @@ describe('the resolver', { concurrent: true }, () => {
     expect((await rsv(sb, [`--driver=${w}`, 'store.list', 'unit'])).code).toBe(2);
   });
 
-  it.skipIf(ROOT_USER)('answers with a clean stderr when the drawer is unwritable', async ({ onTestFinished }) => {
+  it.skipIf(ROOT_USER)('[the-engine-r8] answers with a clean stderr when the drawer is unwritable', async ({ onTestFinished }) => {
     const [sb, w] = unwritableDrawer(onTestFinished);
     answer(await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']), 'store.list');
   });
 
-  it.skipIf(ROOT_USER)('answers a require with a clean stderr and caches nothing when the drawer is unwritable', async ({ onTestFinished }) => {
+  it.skipIf(ROOT_USER)('[the-engine-r8] answers a require with a clean stderr and caches nothing when the drawer is unwritable', async ({ onTestFinished }) => {
     const [sb, w] = unwritableDrawer(onTestFinished);
     const r = await rsv(sb, [`--driver=${w}`, 'require', 'store']);
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
     expect(verdicts(sb)).toEqual([]);
   });
 
-  it('passes the driver\'s own capability refusal line through the handshake', async () => {
+  it('[the-engine-r8] passes the driver\'s own capability refusal line through the handshake', async () => {
     const sb = fresh(posix);
     const w = join(sb, 'w-refuses');
     writeFileSync(w, '#!/bin/sh\nprintf \'capability: error: planted refusal (ERR_STORAGE_READ)\\n\' >&2\nexit 2\n', { mode: 0o755 });
@@ -163,7 +163,7 @@ describe('the resolver', { concurrent: true }, () => {
     expect(r.stderr).toContain('planted refusal (ERR_STORAGE_READ)');
   });
 
-  it('keeps its own ERROR line for a driver found nowhere, the one shape exception', async () => {
+  it('[the-engine-r21] keeps its own ERROR line for a driver found nowhere, the one shape exception', async () => {
     const r = await rsv(fresh(posix), ['resolve', 'no-such-driver']);
     expect([r.code, r.stdout]).toEqual([2, '']);
     expect(r.stderr).toBe("driver-resolver: ERROR: storage driver 'no-such-driver' not found in the core drivers, the extension drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n");
@@ -176,7 +176,7 @@ describe('the resolver', { concurrent: true }, () => {
       return r.stdout.trim();
     };
 
-    it('finds a driver in each tier: workspace, core, extension, module, base mirror, PATH, and by path', async () => {
+    it('[the-engine-r19] finds a driver in each tier: workspace, core, extension, module, base mirror, PATH, and by path', async () => {
       const sb = fresh(posix);
       const target = driverPath(sb, 'posix');
       const ws = wrap(join(sb, '.contexture/drivers/tierone/driver'), target);
@@ -222,14 +222,14 @@ for (const driver of DRIVERS) {
       snap = await seed(async () => undefined, driver, 'handshake');
     });
 
-    it('resolves the configured driver and answers its optional capabilities', async () => {
+    it('[the-engine-r15] resolves the configured driver and answers its optional capabilities', async () => {
       const sb = fresh(snap);
       expect((await rsv(sb, ['resolve'])).stdout).toBe(`${driverPath(sb, driver)}\n`);
       expect((await rsv(sb, ['has', 'store.changelog'])).code).toBe(driver === 'fts5' ? 0 : 1);
       expect((await rsv(sb, ['has', 'search.schema'])).code).toBe(driver === 'fts5' ? 0 : 1);
     });
 
-    it('serves a complete store card and lands a write through it', async () => {
+    it('[the-engine-r8] serves a complete store card and lands a write through it', async () => {
       const sb = fresh(snap);
       const w = wrap(join(sb, 'w-store'), driverPath(sb, driver), { optional: ['store.changelog'] });
       answer(await rsv(sb, [`--driver=${w}`, 'store.put', 'unit', 'unit/probe/x'], 'resolver fixture\n'), 'store.put');
@@ -245,7 +245,7 @@ for (const driver of DRIVERS) {
       ['a partial family', { optional: ['store'], store: SEVEN.filter((s) => s !== 'batch') }, ['seven data names']],
       ['a name outside the seven', { optional: ['store'], store: [...SEVEN, 'store.search'] }, ['seven data names']],
       ['an optional token outside the card', { optional: ['store', 'retired.token'] }, ['optional capability']],
-    ] as const)('halts %s rc 2 ERR_DRIVER_PROTOCOL, naming what is wrong', async (_, card, words) => {
+    ] as const)('[the-engine-r8] halts %s rc 2 ERR_DRIVER_PROTOCOL, naming what is wrong', async (_, card, words) => {
       const sb = fresh(snap);
       const w = wrap(join(sb, 'w-bad'), driverPath(sb, driver), card as Card);
       const r = await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']);

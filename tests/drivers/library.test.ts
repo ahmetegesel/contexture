@@ -28,7 +28,7 @@ for (const driver of DRIVERS) {
       snap = await seed(async (sb) => void dataFile(sb, 'modules', 'libprobe', LIBPROBE), driver, 'library');
     });
 
-    it('answers the store five through the core resolver', async () => {
+    it('[the-engine-r19] answers the store five through the core resolver', async () => {
       const sb = fresh(snap);
       expect((await lib(sb, 'store_put', ['libprobe', 'x/y'], 'library-value\n')).stdout).toBe('{"namespace":"libprobe","key":"x/y","op":"write"}\n');
       expect((await lib(sb, 'store_get', ['libprobe', 'x/y'])).stdout).toBe('library-value\n');
@@ -36,7 +36,7 @@ for (const driver of DRIVERS) {
       expect((await lib(sb, 'store_delete', ['libprobe', 'x/y'])).stdout).toBe('{"namespace":"libprobe","key":"x/y","op":"remove"}\n');
     });
 
-    it('answers the batch and the scan, and an escaped search query', async () => {
+    it('[the-engine-r9, the-engine-r19] answers the batch and the scan, and an escaped search query', async () => {
       const sb = fresh(snap);
       expect((await lib(sb, 'store_batch', ['libprobe'], batchPayload([{ action: 'put', key: 'x/y', head: 'none', value: 'library-value\n' }]))).stdout)
         .toBe('{"namespace":"libprobe","actions":1}\n');
@@ -45,14 +45,14 @@ for (const driver of DRIVERS) {
       expect([found.query, found.total_matches]).toEqual(['library-value', 1]);
     });
 
-    it('keeps the driver\'s one refusal line, the batch\'s action context included', async () => {
+    it('[the-engine-r21] keeps the driver\'s one refusal line, the batch\'s action context included', async () => {
       const sb = fresh(snap);
       refused(await lib(sb, 'store_get', ['libprobe', 'x/absent']), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'x/absent' not found in namespace 'libprobe'");
       refused(await lib(sb, 'store_batch', ['libprobe'], 'action=delete\nkey=x/absent\nhead=none\n'), 'store.batch', 1, 'ERR_ENTITY_NOT_FOUND',
         "action 1 (delete 'x/absent'): key 'x/absent' not found in namespace 'libprobe'");
     });
 
-    it('asks the driver\'s capabilities through store_require and store_has', async () => {
+    it('[the-engine-r15] asks the driver\'s capabilities through store_require and store_has', async () => {
       const sb = fresh(snap);
       expect((await lib(sb, 'store_require', ['store'])).code).toBe(0);
       expect((await lib(sb, 'store_has', ['store.changelog'])).code).toBe(driver === 'fts5' ? 0 : 1);
@@ -77,7 +77,7 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
 
   const get = async (ref: string) => lib(fresh(snap), 'data_get', [ref]);
 
-  it('data_emit prints the one-line envelope', async () => {
+  it('[the-engine-r19] data_emit prints the one-line envelope', async () => {
     expect((await lib(fresh(snap), 'data_emit', ['fixture#item', '{"x":1}'])).stdout).toBe('{"ref":"fixture#item","data":{"x":1}}\n');
   });
 
@@ -86,7 +86,7 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
     ['fixture#depth:1', '{"ref":"fixture#depth:8","data":{"name":"depth","value":"8"}}'],
     ['extprobe#item', '{"ref":"extprobe#item","data":{"name":"extension","value":"one"}}'],
     ['baseprobe#item', '{"ref":"baseprobe#item","data":{"name":"base","value":"one"}}'],
-  ])('data_get resolves %s (the workspace module, the eighth hop, the extension root, the base mirror)', async (ref, line) => {
+  ])('[the-engine-r19] data_get resolves %s (the workspace module, the eighth hop, the extension root, the base mirror)', async (ref, line) => {
     const r = await get(ref);
     expect(r.stderr).toBe('');
     expect(r.stdout).toBe(`${line}\n`);
@@ -95,7 +95,7 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
   it.each([
     ['fixture#deep:1', /^data_get: error: .*ref depth over the limit 8 \(ERR_INVALID_ARGUMENT\)\n$/],
     ['fixture#cycle:a', /^data_get: error: .*ref cycle \(ERR_INVALID_ARGUMENT\)\n$/],
-  ])('data_get refuses %s with one line and no answer', async (ref, line) => {
+  ])('[the-engine-r21] data_get refuses %s with one line and no answer', async (ref, line) => {
     const r = await get(ref);
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toMatch(line);
@@ -105,7 +105,7 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
     ['fixture#absent', 'ERR_ENTITY_NOT_FOUND', "ref 'fixture#absent': item 'absent' not found"],
     ['ghost#x', 'ERR_ENTITY_NOT_FOUND', "ref 'ghost#x': module 'ghost' not found"],
     ['nohash', 'ERR_INVALID_ARGUMENT', "ref 'nohash': a reference is <module>#<symbol>"],
-  ])('data_get re-frames %s as its fixed line', async (ref, code, message) => {
+  ])('[the-engine-r21] data_get re-frames %s as its fixed line', async (ref, code, message) => {
     refused(await get(ref), 'data_get', 1, code, message);
   });
 
@@ -123,7 +123,7 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
     expect(viaMirror.stdout).toBe('{"namespace":"libprobe","keys":[]}\n');
   });
 
-  it('refuses with the driver-not-found line when no resolver is found', async () => {
+  it('[the-engine-r21] refuses with the driver-not-found line when no resolver is found', async () => {
     const sb = sandbox('no-resolver');
     mkdirSync(join(sb, '.contexture/storage/scripts'), { recursive: true });
     writeFileSync(join(sb, LIBRARY), '');

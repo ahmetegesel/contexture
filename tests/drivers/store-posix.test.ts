@@ -20,27 +20,27 @@ describe('the posix store on disk', { concurrent: true }, () => {
     empty = await docsStore('posix', false);
   });
 
-  it('admits only the files the docs pattern names: one segment, three segments, a wrong suffix, and a blank are never keys', async () => {
+  it('[modules-r10] admits only the files the docs pattern names: one segment, three segments, a wrong suffix, and a blank are never keys', async () => {
     const sb = fresh(empty);
     for (const [key, value] of DOCS_KEYS) plant(sb, `docs/${key}.md`, value);
     for (const rel of ['docs/top.md', 'docs/workspace/deep/x.md', 'docs/workspace/notes.txt', 'docs/workspace/bad name.md']) plant(sb, rel, 'x\n');
     expect((await store(sb, 'posix').list('docs')).stdout).toBe(listAnswer('docs', DOCS_KEYS.map(([k]) => k)));
   });
 
-  it('maps a key to <root>/<key><suffix>, a payload with no trailing newline included', async () => {
+  it('[modules-r10] maps a key to <root>/<key><suffix>, a payload with no trailing newline included', async () => {
     const sb = fresh(empty);
     answer(await store(sb, 'posix').put('docs', 'workspace/nonl', 'no trailing newline'), 'store.put');
     expect(readFileSync(join(sb, 'docs/workspace/nonl.md'), 'utf8')).toBe('no trailing newline');
   });
 
-  it('maps the minimum declaration to <namespace>/<key> with an empty suffix', async () => {
+  it('[modules-r10] maps the minimum declaration to <namespace>/<key> with an empty suffix', async () => {
     const sb = fresh(empty);
     dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
     answer(await store(sb, 'posix').put('minimal', 'a/b', 'x\n'), 'store.put');
     expect(readFileSync(join(sb, 'minimal/a/b'), 'utf8')).toBe('x\n');
   });
 
-  it('maps the unit keys under .contexture/sessions and never lists a stray file there', async () => {
+  it('[modules-r10] maps the unit keys under .contexture/sessions and never lists a stray file there', async () => {
     const sb = fresh(empty);
     const s = store(sb, 'posix');
     answer(await s.put('unit', 'storage/state', 'x\n'), 'store.put');
@@ -51,12 +51,12 @@ describe('the posix store on disk', { concurrent: true }, () => {
     expect((await s.list('unit')).stdout).toBe(listAnswer('unit', ['storage/lanes/foo/report', 'storage/state']));
   });
 
-  it('keeps no change log, even for a namespace that declares one', async () => {
+  it('[the-engine-r19] keeps no change log, even for a namespace that declares one', async () => {
     refused(await store(fresh(empty), 'posix').changes('docs'), 'store.changes', 1, 'ERR_CAPABILITY_UNSUPPORTED',
       "the posix store keeps no change log; namespace 'docs' reports its delta through its module (changes: true)");
   });
 
-  it('refuses a ranked mode by name, and a mode the module does not declare by its declaration', async () => {
+  it('[modules-r10] refuses a ranked mode by name, and a mode the module does not declare by its declaration', async () => {
     const sb = fresh(empty);
     dataFile(sb, 'modules', 'searchdoc', SEARCH_DATA.searchdoc);
     dataFile(sb, 'modules', 'exactonly', 'namespace: exactonly\nroot: exact-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nmodes: exact\n');
@@ -66,7 +66,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
       "mode 'hybrid' is not declared by namespace 'exactonly'; declared modes: exact");
   });
 
-  it('scans planted files bytewise, admitting only the pattern\'s keys, a binary value in base64', async () => {
+  it('[the-engine-r19, modules-r10] scans planted files bytewise, admitting only the pattern\'s keys, a binary value in base64', async () => {
     const sb = fresh(empty);
     dataFile(sb, 'modules', 'scanprobe', 'namespace: scanprobe\nroot: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
     const values: [string, Buffer][] = [['x/B', Buffer.from('B\n')], ['x/a', Buffer.from('a\n')], ['x/aa', Buffer.from('aa\n')], ['x/bin', Buffer.from([0x61, 0, 0x62, 0xff])]];
@@ -77,7 +77,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
       `${JSON.stringify({ namespace: 'scanprobe', items: values.map(([key, v]) => ({ key, value_b64: v.toString('base64') })) })}\n`);
   });
 
-  it.skipIf(ROOT_USER)('refuses a scan meeting an unreadable file, naming its key, with no partial answer', async ({ onTestFinished }) => {
+  it.skipIf(ROOT_USER)('[the-engine-r21] refuses a scan meeting an unreadable file, naming its key, with no partial answer', async ({ onTestFinished }) => {
     const sb = fresh(empty);
     dataFile(sb, 'modules', 'scanprobe', 'namespace: scanprobe\nroot: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
     plant(sb, 'scan-root/x/a.txt', 'a\n');
@@ -86,7 +86,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
     refused(await store(sb, 'posix').scan('scanprobe'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'x/ro' in namespace 'scanprobe'");
   });
 
-  it('reports its health: degraded with no sessions folder, ok and absent when empty, ok and present once written', async () => {
+  it('[the-engine-r24] reports its health: degraded with no sessions folder, ok and absent when empty, ok and present once written', async () => {
     const sb = stage('posix');
     const health = async () => answer(await store(sb, 'posix').op('storage.health', []), 'storage.health');
     expect((await health()).health).toBe('degraded');
@@ -96,7 +96,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
     expect(await health()).toEqual({ driver: 'posix', health: 'ok', detail: 'sessions directory writable, unlocked', store: 'present' });
   });
 
-  it.skipIf(ROOT_USER)('reports an error when the sessions folder is not writable', async ({ onTestFinished }) => {
+  it.skipIf(ROOT_USER)('[the-engine-r24] reports an error when the sessions folder is not writable', async ({ onTestFinished }) => {
     const sb = stage('posix');
     mkdirSync(join(sb, '.contexture/sessions'));
     chmodPlant(join(sb, '.contexture/sessions'), 0o555, 0o755, onTestFinished);

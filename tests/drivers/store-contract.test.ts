@@ -42,11 +42,11 @@ for (const driver of DRIVERS) {
     });
 
     describe('reads', () => {
-      it('a fresh store lists no keys', async () => {
+      it('[the-engine-r19] a fresh store lists no keys', async () => {
         expect((await store(fresh(empty), driver).list('docs')).stdout).toBe(listAnswer('docs', []));
       });
 
-      it('lists the admitted keys in bytewise order', async () => {
+      it('[the-engine-r19] lists the admitted keys in bytewise order', async () => {
         const r = await store(fresh(keyed), driver).list('docs');
         answer(r, 'store.list');
         expect(r.stdout).toBe(listAnswer('docs', ALL_KEYS));
@@ -57,11 +57,11 @@ for (const driver of DRIVERS) {
         ['workspace/aa', ['workspace/aa']],
         ['nothing/', []],
         ['', ALL_KEYS],
-      ])('narrows the list to the literal prefix %j', async (prefix, keys) => {
+      ])('[the-engine-r19] narrows the list to the literal prefix %j', async (prefix, keys) => {
         expect((await store(fresh(keyed), driver).list('docs', prefix)).stdout).toBe(listAnswer('docs', keys));
       });
 
-      it('returns a value\'s bytes exactly, a NUL and an invalid UTF-8 byte included', async () => {
+      it('[the-engine-r19] returns a value\'s bytes exactly, a NUL and an invalid UTF-8 byte included', async () => {
         const r = await store(fresh(keyed), driver).get('docs', 'workspace/binary');
         expect(r.code).toBe(0);
         expect(r.stderr).toBe('');
@@ -69,13 +69,13 @@ for (const driver of DRIVERS) {
         expect(r.bytes.equals(Buffer.from([0x61, 0x00, 0x62, 0xfe]))).toBe(false);
       });
 
-      it('scans every admitted key bytewise with its raw value in base64', async () => {
+      it('[the-engine-r19] scans every admitted key bytewise with its raw value in base64', async () => {
         const r = await store(fresh(keyed), driver).scan('docs');
         answer(r, 'store.scan');
         expect(r.stdout).toBe(`${JSON.stringify({ namespace: 'docs', items: DOCS_KEYS.map(([key, v]) => ({ key, value_b64: v.toString('base64') })) })}\n`);
       });
 
-      it('scans an empty namespace as an empty item list, and refuses a bad scan', async () => {
+      it('[the-engine-r19, the-engine-r21] scans an empty namespace as an empty item list, and refuses a bad scan', async () => {
         const s = store(fresh(empty), driver);
         expect((await s.scan('docs')).stdout).toBe('{"namespace":"docs","items":[]}\n');
         refused(await s.scan(), 'store.scan', 1, 'ERR_INVALID_ARGUMENT', 'store.scan takes one argument, the namespace');
@@ -85,7 +85,7 @@ for (const driver of DRIVERS) {
     });
 
     describe('writes', () => {
-      it('puts a binary payload and a payload with no trailing newline byte for byte', async () => {
+      it('[the-engine-r9, the-engine-r19] puts a binary payload and a payload with no trailing newline byte for byte', async () => {
         const s = store(fresh(empty), driver);
         for (const [key, value] of [['workspace/bin', DOCS_KEYS[3][1]], ['workspace/nonl', Buffer.from('no trailing newline')]] as const) {
           expect((await s.put('docs', key, value)).stdout).toBe(`${JSON.stringify({ namespace: 'docs', key, op: 'write' })}\n`);
@@ -93,21 +93,21 @@ for (const driver of DRIVERS) {
         }
       });
 
-      it('echoes the op, escapes the key, and keeps quotes, tabs, and backslashes', async () => {
+      it('[the-engine-r9, the-engine-r19] echoes the op, escapes the key, and keeps quotes, tabs, and backslashes', async () => {
         const s = store(fresh(empty), driver);
         const rich = 'with quotes " and a tab\tand a backslash \\ and a newline\n';
         expect((await s.put('docs', 'workspace/q"uote', rich, '--op=replace', '--head=0123abcd')).stdout).toBe('{"namespace":"docs","key":"workspace/q\\"uote","op":"replace"}\n');
         expect((await s.get('docs', 'workspace/q"uote')).stdout).toBe(rich);
       });
 
-      it('deletes with the default remove op, then get and delete refuse not found', async () => {
+      it('[the-engine-r19, the-engine-r21] deletes with the default remove op, then get and delete refuse not found', async () => {
         const s = store(fresh(keyed), driver);
         expect((await s.del('docs', 'workspace/a')).stdout).toBe('{"namespace":"docs","key":"workspace/a","op":"remove"}\n');
         refused(await s.get('docs', 'workspace/a'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/a' not found in namespace 'docs'");
         refused(await s.del('docs', 'workspace/a'), 'store.delete', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/a' not found in namespace 'docs'");
       });
 
-      it('refuses an ASCII case twin, acts on the exact key alone, and the exact key still deletes', async () => {
+      it('[the-engine-r19] refuses an ASCII case twin, acts on the exact key alone, and the exact key still deletes', async () => {
         const s = store(fresh(empty), driver);
         answer(await s.put('docs', 'workspace/Alpha', 'Alpha\n'), 'store.put');
         refused(await s.put('docs', 'workspace/alpha', 'alpha\n'), 'store.put', 1, 'ERR_ENTITY_EXISTS',
@@ -117,7 +117,7 @@ for (const driver of DRIVERS) {
         answer(await s.del('docs', 'workspace/Alpha'), 'store.delete');
       });
 
-      it('holds a non-ASCII case pair exactly, or refuses the second where the filesystem folds it (posix)', async () => {
+      it('[the-engine-r19] holds a non-ASCII case pair exactly, or refuses the second where the filesystem folds it (posix)', async () => {
         const s = store(fresh(empty), driver);
         answer(await s.put('docs', 'workspace/Σ', 'Sigma\n'), 'store.put');
         const second = await s.put('docs', 'workspace/σ', 'sigma\n');
@@ -132,7 +132,7 @@ for (const driver of DRIVERS) {
         expect((await s.get('docs', 'workspace/Σ')).stdout).toBe('Sigma\n');
       });
 
-      it('keeps an empty value as zero bytes and a value past 1 MB byte for byte', async () => {
+      it('[the-engine-r9, the-engine-r19] keeps an empty value as zero bytes and a value past 1 MB byte for byte', async () => {
         const s = store(fresh(empty), driver);
         const big = Buffer.from(Array.from({ length: 1_200_000 }, (_, i) => (i * 131) % 256));
         for (const [key, value] of [['workspace/empty', Buffer.alloc(0)], ['workspace/big', big]] as const) {
@@ -147,11 +147,11 @@ for (const driver of DRIVERS) {
 
     describe('the key rule and the wire refusals', () => {
       it.each(['/workspace/x', 'workspace/../x', 'workspace/./x', 'workspace/a b', 'workspace/a\tb', 'workspace/x/', 'workspace/x\\y'])(
-        'refuses the malformed key %j', async (key) => {
+        '[the-engine-r21] refuses the malformed key %j', async (key) => {
           refused(await store(fresh(empty), driver).put('docs', key, 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `malformed key '${key}'`);
         });
 
-      it.each(['workspace', 'a/b/c', 'workspace/x/y'])('refuses %j outside the module pattern before touching the store', async (key) => {
+      it.each(['workspace', 'a/b/c', 'workspace/x/y'])('[modules-r10, the-engine-p4] refuses %j outside the module pattern before touching the store', async (key) => {
         refused(await store(fresh(empty), driver).put('docs', key, 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `key '${key}' does not match the namespace pattern '<repo>/<slug>'`);
       });
 
@@ -169,13 +169,13 @@ for (const driver of DRIVERS) {
         ['store.list', ['nosuch'], 1, 'ERR_ENTITY_NOT_FOUND', "namespace 'nosuch' is declared by no module data file"],
         ['store.list', ['Bad!'], 1, 'ERR_INVALID_ARGUMENT', "malformed namespace 'Bad!'"],
         ['nosuch.op', [], 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'nosuch.op'"],
-      ] as const)('%s %j refuses its one fixed line', async (fn, args, rc, code, message) => {
+      ] as const)('[the-engine-r9, the-engine-r21] %s %j refuses its one fixed line', async (fn, args, rc, code, message) => {
         refused(await store(fresh(empty), driver).op(fn, args, 'x\n'), fn, rc, code, message);
       });
     });
 
     describe('module data files through the driver', () => {
-      it('serves a second module\'s data file and filters the list by its pattern', async () => {
+      it('[modules-r10, the-engine-r19] serves a second module\'s data file and filters the list by its pattern', async () => {
         const sb = fresh(empty);
         dataFile(sb, 'modules', 'probe', 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
         const s = store(sb, driver);
@@ -183,13 +183,13 @@ for (const driver of DRIVERS) {
         expect((await s.list('probe')).stdout).toBe(listAnswer('probe', ['x/y']));
       });
 
-      it('maps the reader\'s refusals: a malformed declaration rc 1, an undeclared namespace not found', async () => {
+      it('[modules-r10] maps the reader\'s refusals: a malformed declaration rc 1, an undeclared namespace not found', async () => {
         const sb = fresh(empty);
         dataFile(sb, 'modules', 'probe', 'namespace: probe\nkey: <a>/<b>\nmode: fast\n');
         refused(await store(sb, driver).list('probe'), 'store.list', 1, 'ERR_INVALID_ARGUMENT', "unknown field 'mode' in the data file");
       });
 
-      it('serves the minimum declaration with its defaults and refuses its change log', async () => {
+      it('[modules-r10, the-engine-r19] serves the minimum declaration with its defaults and refuses its change log', async () => {
         const sb = fresh(empty);
         dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
         const s = store(sb, driver);
@@ -201,7 +201,7 @@ for (const driver of DRIVERS) {
         expect(r.stderr).toContain('changes: false');
       });
 
-      it('admits the unit module\'s <unit>/<path...> keys at any depth and refuses a bare unit', async () => {
+      it('[modules-r10] admits the unit module\'s <unit>/<path...> keys at any depth and refuses a bare unit', async () => {
         const s = store(fresh(empty), driver);
         expect((await s.put('unit', 'storage/state', 'x\n')).stdout).toBe('{"namespace":"unit","key":"storage/state","op":"write"}\n');
         answer(await s.put('unit', 'storage/lanes/foo/report', 'unit-lane\n'), 'store.put');
@@ -214,7 +214,7 @@ for (const driver of DRIVERS) {
     describe('search', () => {
       const q = (query: string) => `query=${query}\n`;
 
-      it('answers the shared exact rule over a document set', async () => {
+      it('[the-engine-r19, modules-r10] answers the shared exact rule over a document set', async () => {
         const sb = fresh(empty);
         dataFile(sb, 'modules', 'searchdoc', SEARCH_DATA.searchdoc);
         const s = store(sb, driver);
@@ -231,16 +231,16 @@ for (const driver of DRIVERS) {
         [['exact', '5'], 'query=x\nquery=y\n', "duplicate payload line 'query='"],
         [['exact', 'abc'], 'query=x\n', "--limit takes a number, 0 for every result: 'abc'"],
         [['exact', '5', 'extra'], 'query=x\n', 'store.search takes the namespace, the mode, and an optional limit'],
-      ] as const)('refuses the search wire %j %j', async (args, input, message) => {
+      ] as const)('[the-engine-r9, the-engine-r21] refuses the search wire %j %j', async (args, input, message) => {
         refused(await store(fresh(keyed), driver).op('store.search', ['docs', ...args], input), 'store.search', 1, 'ERR_INVALID_ARGUMENT', message);
       });
 
-      it('refuses a mode the namespace does not declare, naming the declared ones', async () => {
+      it('[modules-r10] refuses a mode the namespace does not declare, naming the declared ones', async () => {
         refused(await store(fresh(keyed), driver).search('docs', 'fuzzy', '5', q('x')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
           "mode 'fuzzy' is not declared by namespace 'docs'; declared modes: exact");
       });
 
-      it('re-frames a failing search engine as the store.search line alone', async () => {
+      it('[the-engine-r21] re-frames a failing search engine as the store.search line alone', async () => {
         const sb = fresh(keyed);
         const restore = plantScript(sb, 'store-search', 'printf "store-search: error: planted search read failure (ERR_STORAGE_READ)\\n" >&2\nexit 2');
         refused(await store(sb, driver).search('docs', 'exact', '20', q('a')), 'store.search', 2, 'ERR_STORAGE_READ', 'planted search read failure');
@@ -250,7 +250,7 @@ for (const driver of DRIVERS) {
     });
 
     describe('batch', () => {
-      it('applies puts and deletes in order and answers the action count', async () => {
+      it('[the-engine-r19] applies puts and deletes in order and answers the action count', async () => {
         const s = store(fresh(empty), driver);
         answer(await s.put('docs', 'workspace/bat1', 'one\n'), 'store.put');
         answer(await s.put('docs', 'workspace/bat2', 'two\n'), 'store.put');
@@ -264,7 +264,7 @@ for (const driver of DRIVERS) {
         expect((await s.get('docs', 'workspace/bat2')).stdout).toBe('one\n');
       });
 
-      it('names a semantic failure at action 2 and leaves action 1 unwritten', async () => {
+      it('[the-engine-r19, the-engine-r21] names a semantic failure at action 2 and leaves action 1 unwritten', async () => {
         const s = store(fresh(empty), driver);
         refused(await s.batch('docs', [{ action: 'put', key: 'workspace/bat4', value: 'two\n' }, { action: 'delete', key: 'workspace/bat9' }]),
           'store.batch', 1, 'ERR_ENTITY_NOT_FOUND', "action 2 (delete 'workspace/bat9'): key 'workspace/bat9' not found in namespace 'docs'");
@@ -279,7 +279,7 @@ for (const driver of DRIVERS) {
         ['key=workspace/b\naction=put\nvalue_b64=eA==\n', "action 1 (? '?'): a payload line outside an action"],
         ['action=put\nkey=workspace/b\nvalue_b64=***\n', "action 1 (put 'workspace/b'): malformed base64 value"],
         ['bogus=1\naction=put\nkey=workspace/b\nvalue_b64=eA==\n', "action 1 (? '?'): unknown payload line 'bogus=1'"],
-      ])('refuses the malformed batch %j with its action context', async (input, message) => {
+      ])('[the-engine-r9, the-engine-r21] refuses the malformed batch %j with its action context', async (input, message) => {
         refused(await store(fresh(empty), driver).batch('docs', input), 'store.batch', 1, 'ERR_INVALID_ARGUMENT', message);
       });
 
@@ -288,12 +288,12 @@ for (const driver of DRIVERS) {
         ['head=none', "duplicate payload line 'head='"],
         ['value_b64=eA==', "duplicate payload line 'value_b64='"],
         ['bogus=1', "unknown payload line 'bogus=1'"],
-      ])('names the 1-based action of a refused %s line inside it', async (line, message) => {
+      ])('[the-engine-r9, the-engine-r21] names the 1-based action of a refused %s line inside it', async (line, message) => {
         refused(await store(fresh(empty), driver).batch('docs', `action=put\nkey=workspace/a\nvalue_b64=eA==\naction=put\nkey=workspace/b\nhead=none\nvalue_b64=eA==\n${line}\n`),
           'store.batch', 1, 'ERR_INVALID_ARGUMENT', `action 2 (put 'workspace/b'): ${message}`);
       });
 
-      it('strips a carriage return from every payload line', async () => {
+      it('[the-engine-r9] strips a carriage return from every payload line', async () => {
         const s = store(fresh(empty), driver);
         expect((await s.batch('docs', 'action=put\r\nkey=workspace/crlf\r\nhead=none\r\nvalue_b64=eA==\r\n')).stdout).toBe('{"namespace":"docs","actions":1}\n');
         expect((await s.get('docs', 'workspace/crlf')).stdout).toBe('x');
@@ -301,7 +301,7 @@ for (const driver of DRIVERS) {
     });
 
     describe('faults the driver re-frames', () => {
-      it('a failing encoder leaves no partial scan answer and names the key', async () => {
+      it('[the-engine-r21] a failing encoder leaves no partial scan answer and names the key', async () => {
         const sb = fresh(keyed);
         plantScript(sb, 'store-b64', 'printf "store-b64: planted encoder failure\\n" >&2\nexit 2');
         refused(await store(sb, driver).scan('docs'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/B' in namespace 'docs'");
@@ -309,13 +309,13 @@ for (const driver of DRIVERS) {
     });
 
     describe('the card and the health', () => {
-      it('answers its contract 3 descriptor card', async () => {
+      it('[the-engine-r15, the-engine-r19] answers its contract 3 descriptor card', async () => {
         const r = await store(fresh(empty), driver).op('capability', []);
         answer(r, 'capability');
         expect(r.stdout).toBe(CARDS[driver]);
       });
 
-      it('reports the store absent on a fresh stage, then present and ok once a value lands', async () => {
+      it('[the-engine-r24] reports the store absent on a fresh stage, then present and ok once a value lands', async () => {
         const sb = stage(driver);
         const s = store(sb, driver);
         expect(answer(await s.op('storage.health', []), 'storage.health')).toEqual(HEALTH_ABSENT[driver]);
@@ -325,7 +325,7 @@ for (const driver of DRIVERS) {
         expect([after.driver, after.health, after.store]).toEqual([driver, 'ok', 'present']);
       });
 
-      it('reports locked while a writer holds the unit namespace lock, and ok once it is released or its holder is gone', async () => {
+      it('[the-engine-r24] reports locked while a writer holds the unit namespace lock, and ok once it is released or its holder is gone', async () => {
         const sb = stage(driver);
         const s = store(sb, driver);
         answer(await s.put('unit', 'probe/state', 'x\n'), 'store.put');

@@ -19,7 +19,7 @@ async function differential(profile: Profile, plant: (posix: string, fts5: strin
 }
 
 describe.skipIf(!fts5Available())('the differential store fuzzer, posix against fts5', { concurrent: true }, () => {
-  it('generates the seeded Lehmer sequence deterministically, every product under 2^53', () => {
+  it('[the-engine-r19] generates the seeded Lehmer sequence deterministically, every product under 2^53', () => {
     const seq = genSequence(SEED, STEPS);
     expect(seq).toEqual(genSequence(SEED, STEPS));
     expect(seq.slice(0, 2)).toEqual(['put|a/k1|p1', 'put|a/k2|p6']);
@@ -29,14 +29,14 @@ describe.skipIf(!fts5Available())('the differential store fuzzer, posix against 
   });
 
   it.each([['the key-value profile', KEY_VALUE], ['the unit-shaped profile', UNIT_SHAPED]] as const)(
-    'reads SAME over %s, and the run is not blind', async (_, profile) => {
+    '[the-engine-r19] reads SAME over %s, and the run is not blind', async (_, profile) => {
       const { plan, a, b, diff } = await differential(profile);
       expect(diff, diff >= 0 ? `${plan[diff].fn} ${plan[diff].args.join(' ')}: posix [${a[diff].code} ${a[diff].stdout}${a[diff].stderr}] fts5 [${b[diff].code} ${b[diff].stdout}${b[diff].stderr}]` : '').toBe(-1);
       expect(blindSpots(plan, a)).toEqual([]);
       expect(blindSpots(plan, b)).toEqual([]);
     });
 
-  it.skipIf(ROOT_USER)('a run whose every put fails reads blind, so a SAME verdict alone never passes', async () => {
+  it.skipIf(ROOT_USER)('[the-engine-r19] a run whose every put fails reads blind, so a SAME verdict alone never passes', async () => {
     const { plan, a, b } = await differential(KEY_VALUE, async (posix, fts5) => {
       await driverOp(fts5, 'fts5', 'store.put', ['unit', 'lay/state'], 'x\n');
       mkdirSync(join(posix, 'fuzz-root'), { recursive: true });
@@ -47,7 +47,7 @@ describe.skipIf(!fts5Available())('the differential store fuzzer, posix against 
     expect(blindSpots(plan, b)).toContain('a successful put');
   });
 
-  it('a planted extra byte on the fts5 store.list reads DIFF at the first list', async () => {
+  it('[the-engine-r19] a planted extra byte on the fts5 store.list reads DIFF at the first list', async () => {
     const { plan, diff } = await differential(KEY_VALUE, (_, fts5) => {
       const drv = driverPath(fts5, 'fts5');
       renameSync(drv, `${drv}.real`);
