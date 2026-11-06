@@ -64,6 +64,10 @@ export default defineConfig({
         extends: true,
         test: { name: 'base', include: ['base/**/*.test.ts'], maxConcurrency: 16 },
       },
+      {
+        extends: true,
+        test: { name: 'integration', include: ['integration/**/*.test.ts'], maxConcurrency: 16 },
+      },
     ],
   },
 });
