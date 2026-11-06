@@ -45,7 +45,7 @@ describe.concurrent('the ranked search mapping (ranked.awk) over a canned fts5 s
     writeFileSync(CANNED, r.bytes);
   });
 
-  it('UD-11: maps the store identities to the record ids of one unit in rank order, keeping the mode', async () => {
+  it('UD-11 [the-record-r13]: maps the store identities to the record ids of one unit in rank order, keeping the mode', async () => {
     const a = await ranked({});
     expect(a.mode).toBe('hybrid');
     const ids = identities(a.results);
@@ -54,7 +54,7 @@ describe.concurrent('the ranked search mapping (ranked.awk) over a canned fts5 s
     expect(a.results.length).toBe(a.total_matches);
   });
 
-  it('UD-11: --entity keeps one entity type and the limit caps after the complete walk', async () => {
+  it('UD-11 [the-record-r13]: --entity keeps one entity type and the limit caps after the complete walk', async () => {
     const all = await ranked({});
     const lanes = await ranked({ RQ_ENTITY: 'lane' });
     expect(identities(lanes.results)).toEqual(identities(all.results).filter((id) => id.startsWith('lane ')));
@@ -62,7 +62,7 @@ describe.concurrent('the ranked search mapping (ranked.awk) over a canned fts5 s
     expect([one.results.length, one.total_matches, identities(one.results)]).toEqual([1, all.total_matches, identities(all.results).slice(0, 1)]);
   });
 
-  it('UD-11: the posix data script refuses a ranked mode naming the declared modes', async () => {
+  it('UD-11 [the-record-r13]: the posix data script refuses a ranked mode naming the declared modes', async () => {
     const sb = stage('posix', 'ranked-posix');
     await seedNeedles(sb);
     refused(await data(sb, 'search.query', ['u1', '--mode=hybrid'], payload().kv('query', 'needle').toString()), 'search.query', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'hybrid' is not supported; declared modes: exact");

@@ -23,7 +23,7 @@ describe.concurrent('the journal entries through the unit data script', () => {
     refused(await data(sb, 'entry.get', [TUNIT, '2026-09-25-event-missing']), 'entry.get', 1, 'ERR_ENTITY_NOT_FOUND', "entry '2026-09-25-event-missing' not found in unit 'compliance-tasks'");
   });
 
-  it('TC12: a closer closes its target on entry.get and the board; entry.list keeps both', async () => {
+  it('TC12 [the-record-r3, the-record-r4]: a closer closes its target on entry.get and the board; entry.list keeps both', async () => {
     const sb = await at('T10');
     const r = await rec(sb, TUNIT, 1790000011, 'Closer event', { with: payload().kv('group', 'topic-group').kv('closers.count', '1').kcl(1, 'CLOSES', 'done', 'Closer event', ALPHA) });
     const closers = `[{"kind":"CLOSES","targets":["${ALPHA}"],"verdict":"done","reason":"Closer event","extra_text":null}]`;
@@ -36,13 +36,13 @@ describe.concurrent('the journal entries through the unit data script', () => {
     expect(slugs((await ok(sb, 'entry.list', [TUNIT])).entries)).toEqual(['2026-09-27-task-sample-completed', '2026-09-27-task-sample-dropped', ALPHA, BETA]);
   });
 
-  it('TC26: entry.record refuses a repeated given slug; the first entry intact', async () => {
+  it('TC26 [the-record-r6, the-record-r11]: entry.record refuses a repeated given slug; the first entry intact', async () => {
     const sb = await at('T12');
     refused(await rec(sb, TUNIT, 1790000026, 'A second beta', { with: payload().kv('slug', BETA) }), 'entry.record', 1, 'ERR_ENTITY_EXISTS', `entry '${BETA}' already exists in unit 'compliance-tasks'`);
     expect((await ok(sb, 'entry.get', [TUNIT, BETA])).entry.what).toBe('Closer event');
   });
 
-  it('TC27: a multi-target closer closes every target and keeps its verdict', async () => {
+  it('TC27 [the-record-r3, the-record-r4, the-record-r5]: a multi-target closer closes every target and keeps its verdict', async () => {
     const sb = await at('T17');
     answer(await rec(sb, TUNIT, 1790000040, 'Gamma', { thread: 'the human', with: payload().kv('group', 'topic-group') }), 'entry.record');
     answer(await rec(sb, TUNIT, 1790000041, 'Delta'), 'entry.record');
@@ -67,7 +67,7 @@ describe.concurrent('the journal entries through the unit data script', () => {
     expect(answerLine(await data(sb, 'entry.list', [TUNIT, '--anchor=A9']), 'entry.list')).toBe('{"unit":"compliance-tasks","entries":[]}');
   });
 
-  it('TC57: a legacy repeated slug reads positionally; the audit warns; a new repeat refuses (posix plant)', async () => {
+  it('TC57 [the-record-r6]: a legacy repeated slug reads positionally; the audit warns; a new repeat refuses (posix plant)', async () => {
     const sb = await at('empty');
     plantUnit(sb, 'tc57-u');
     const X = '2026-09-20-repeat';
@@ -96,7 +96,7 @@ describe.concurrent('the journal entries through the unit data script', () => {
     refused(await rec(sb, 'tc57-u', 1790000570, 'a new repeat', { with: payload().kv('slug', X) }), 'entry.record', 1, 'ERR_ENTITY_EXISTS', `entry '${X}' already exists in unit 'tc57-u'`);
   });
 
-  it('TC58: a closer naming an absent entry refuses rc1 ERR_ENTITY_NOT_FOUND, the journal unchanged', async () => {
+  it('TC58 [the-record-r5]: a closer naming an absent entry refuses rc1 ERR_ENTITY_NOT_FOUND, the journal unchanged', async () => {
     const sb = await at('empty');
     answer(await mk(sb, 'tc58-u'), 'session.create');
     answer(await rec(sb, 'tc58-u', 1790000580, 'a present entry'), 'entry.record');
@@ -105,7 +105,7 @@ describe.concurrent('the journal entries through the unit data script', () => {
     expect((await data(sb, 'entry.list', ['tc58-u'])).stdout).toBe(before);
   });
 
-  it('TC59: generated slugs take -1 while held; a held given slug refuses', async () => {
+  it('TC59 [the-record-r6, the-record-r11]: generated slugs take -1 while held; a held given slug refuses', async () => {
     const sb = await at('empty');
     const u = 'tc59-u';
     answer(await mk(sb, u), 'session.create');
@@ -118,7 +118,7 @@ describe.concurrent('the journal entries through the unit data script', () => {
     refused(await rec(sb, u, 1790000592, 'given and held', { with: payload().kv('slug', '2026-09-27-event-1790000590') }), 'entry.record', 1, 'ERR_ENTITY_EXISTS', "entry '2026-09-27-event-1790000590' already exists in unit 'tc59-u'");
   });
 
-  it('TC61: the append rule places the separators: each entry canonical with the kind after it, the posix journal its expected bytes', async () => {
+  it('TC61 [the-record-r20]: the append rule places the separators: each entry canonical with the kind after it, the posix journal its expected bytes', async () => {
     const sb = await at('empty');
     const u = 'tc61-u';
     await ok(sb, 'session.create', [u], payload().kv('objective', 'The append rule fixture').kv('attention', 'append rule fixture'));
@@ -137,7 +137,7 @@ describe.concurrent('the journal entries through the unit data script', () => {
     expect(readArtifact(sb, u, 'journal').equals(readFileSync(join(COMPLIANCE, 'tc61-expected-journal.md')))).toBe(true);
   });
 
-  it('TC68: entry.closure answers every later closer with its entry, anchor, and closer', async () => {
+  it('TC68 [the-record-r4]: entry.closure answers every later closer with its entry, anchor, and closer', async () => {
     const sb = await at('T37');
     const ZETA = '2026-09-27-event-1790000060';
     answer(await rec(sb, TUNIT, 1790000060, 'Supersedes gamma again', { with: closersOf('SUPERSEDES', 'superseded', 'a second closer', GAMMA) }), 'entry.record');
@@ -148,7 +148,7 @@ describe.concurrent('the journal entries through the unit data script', () => {
     refused(await data(sb, 'entry.closure', [TUNIT, '2026-01-01-absent']), 'entry.closure', 1, 'ERR_ENTITY_NOT_FOUND', "entry '2026-01-01-absent' not found in unit 'compliance-tasks'");
   });
 
-  it('UP-f: entry.record answers its refs after the thread and writes the REF line after THREAD; none when absent', async () => {
+  it('UP-f [the-record-r14]: entry.record answers its refs after the thread and writes the REF line after THREAD; none when absent', async () => {
     const sb = await at('empty');
     const u = 'upf-u';
     answer(await mk(sb, u), 'session.create');

@@ -60,7 +60,7 @@ const expected = (name: string): string => join(COMPLIANCE, 'views', `${name}.tx
 
 describe.concurrent('the text views (json.awk into render.awk) over canonical answers', () => {
   for (const v of VIEWS) {
-    it(`${v.name}: the ${v.view} view prints its expected text`, async () => {
+    it(`${v.name} [the-engine-r16]: the ${v.view} view prints its expected text`, async () => {
       const r = await renderView(sandbox('views'), v.view, await v.input(), v.env);
       expect([r.code, r.stderr]).toEqual([v.rc ?? 0, '']);
       expect(r.stdout.length).toBeGreaterThan(0);
@@ -71,7 +71,7 @@ describe.concurrent('the text views (json.awk into render.awk) over canonical an
     });
   }
 
-  it('null check: one changed answer value changes the board text', async () => {
+  it('[the-engine-r16] null check: one changed answer value changes the board text', async () => {
     const changed = golden('session.board').replace('"the first verb entry"', '"a planted entry"');
     expect(changed).not.toBe(golden('session.board'));
     const r = await renderView(sandbox('views'), 'board', changed);

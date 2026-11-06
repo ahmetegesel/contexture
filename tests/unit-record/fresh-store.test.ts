@@ -9,14 +9,14 @@ describe.concurrent('the fresh store through the unit data script', () => {
     expect(answerLine(await data(sb, 'session.list'), 'session.list')).toBe('{"store":"absent","units":[]}');
   });
 
-  it('TC24: a missing or malformed identifier refuses rc1 ERR_INVALID_ARGUMENT', async () => {
+  it('TC24 [the-engine-r9]: a missing or malformed identifier refuses rc1 ERR_INVALID_ARGUMENT', async () => {
     const sb = await at('empty');
     refusedLike(await data(sb, 'session.create'), 'session.create', 1, 'ERR_INVALID_ARGUMENT');
     refusedLike(await data(sb, 'task.get', [TUNIT, 'bad slug!']), 'task.get', 1, 'ERR_INVALID_ARGUMENT');
     refusedLike(await data(sb, 'session.load', ['../escape']), 'session.load', 1, 'ERR_INVALID_ARGUMENT');
   });
 
-  it('TC25: an unknown function refuses rc2 ERR_CAPABILITY_UNSUPPORTED, unit.export and unit.import among them', async () => {
+  it('TC25 [the-engine-r17, the-engine-r18]: an unknown function refuses rc2 ERR_CAPABILITY_UNSUPPORTED, unit.export and unit.import among them', async () => {
     const sb = await at('empty');
     refused(await data(sb, 'non_existent_subsystem.method'), 'non_existent_subsystem.method', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'non_existent_subsystem.method'");
     refused(await data(sb, 'unit.export', [TUNIT]), 'unit.export', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'unit.export'");

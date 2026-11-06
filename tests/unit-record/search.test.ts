@@ -20,14 +20,14 @@ function answers(file: string): { q: string; flags: string[]; want: string }[] {
 }
 
 describe.concurrent('the exact search through the unit data script', () => {
-  it('TC20: search.query --mode=exact answers exact results in the shared shape', async () => {
+  it('TC20 [the-record-r13]: search.query --mode=exact answers exact results in the shared shape', async () => {
     const sb = await at('T13');
     expect(answerLine(await data(sb, 'search.query', [TUNIT, '--mode=exact'], query('architectural')), 'search.query')).toBe(
       '{"unit":"compliance-tasks","query":"architectural","mode":"exact","total_matches":1,"results":[{"entity_type":"finding","entity_id":"FINDING_ALPHA","section":"knowledge","snippet":"Alpha architectural decision summary","score":0}]}',
     );
   });
 
-  it('TC38: search.query answers one shape, honors --limit and --entity, refuses an empty query', async () => {
+  it('TC38 [the-record-r13]: search.query answers one shape, honors --limit and --entity, refuses an empty query', async () => {
     const sb = await at('T37');
     const one = answer(await data(sb, 'search.query', [TUNIT, '--mode=exact', '--limit=1'], query('objective')), 'search.query');
     expect(Object.keys(one)).toEqual(['unit', 'query', 'mode', 'total_matches', 'results']);
@@ -44,7 +44,7 @@ describe.concurrent('the exact search through the unit data script', () => {
     refusedLike(await data(sb, 'search.query', [TUNIT, '--mode=exact'], query('')), 'search.query', 1, 'ERR_INVALID_ARGUMENT');
   });
 
-  it('TC39: --mode=exact answers one row per matching entity and section over the exact fixture; an undeclared mode refuses', async () => {
+  it('TC39 [the-record-r13]: --mode=exact answers one row per matching entity and section over the exact fixture; an undeclared mode refuses', async () => {
     const sb = await at('empty');
     const EX = 'compliance-exact';
     await ok(sb, 'session.create', [EX], payload().kv('objective', 'exact fixture, find the Needle in the state').kl('repos').kv('attention', 'plain'));
@@ -66,7 +66,7 @@ describe.concurrent('the exact search through the unit data script', () => {
     refused(await data(sb, 'search.query', [EX, '--mode=nosuchmode'], query('needle')), 'search.query', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'nosuchmode' is not supported; declared modes: exact");
   });
 
-  it('TC69: the exact query set over legacy text answers its fixed results under --mode=exact (posix plant)', async () => {
+  it('TC69 [the-record-r13]: the exact query set over legacy text answers its fixed results under --mode=exact (posix plant)', async () => {
     const sb = await at('empty');
     plantUnit(sb, 'legacy-u');
     const set = answers('tc69-exact.answers');

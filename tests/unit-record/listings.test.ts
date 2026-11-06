@@ -19,7 +19,7 @@ const byUnit = (units: Listed[], unit: string): Listed => {
 const SUMMARY_KEYS = ['unit', 'status', 'current_anchor', 'objective', 'repos', 'ref_sessions', 'extra_fields', 'extra_lines'];
 
 describe.concurrent('the listings and references through the unit data script', () => {
-  it('TC28: session.create refuses a held unit; session.list counts the active units; an absent unit refuses rc1', async () => {
+  it('TC28 [the-record-r11]: session.create refuses a held unit; session.list counts the active units; an absent unit refuses rc1', async () => {
     const sb = await at('T0');
     expect(answer(await mk(sb, SUNIT, 'store'), 'session.create').state.unit).toBe('compliance-store');
     refused(await mk(sb, SUNIT, 'store'), 'session.create', 1, 'ERR_ENTITY_EXISTS', "unit 'compliance-store' already exists");
@@ -33,7 +33,7 @@ describe.concurrent('the listings and references through the unit data script', 
     refused(await data(sb, 'task.add', ['no-such-unit', 't1'], payload().kv('objective', 'never lands').toString()), 'task.add', 1, 'ERR_ENTITY_NOT_FOUND', absent);
   });
 
-  it('TC54: session.active derives the first IN_PROGRESS task and reads no journal', async () => {
+  it('TC54 [the-record-r1]: session.active derives the first IN_PROGRESS task and reads no journal', async () => {
     const sb = await at('empty');
     const u = 'tc54-u';
     answer(await mk(sb, u), 'session.create');
@@ -54,7 +54,7 @@ describe.concurrent('the listings and references through the unit data script', 
     expect(r.stdout).not.toContain('"last_event"');
   });
 
-  it('UD-5: session.active derives the first open TODO task when none is in progress, with no journal or stored pointer fields', async () => {
+  it('UD-5 [the-record-r1]: session.active derives the first open TODO task when none is in progress, with no journal or stored pointer fields', async () => {
     const sb = await at('empty');
     answer(await mk(sb, 'ud5-u'), 'session.create');
     await ok(sb, 'task.add', ['ud5-u', 't1'], payload().kv('objective', 'a needle in the first task'));
@@ -65,7 +65,7 @@ describe.concurrent('the listings and references through the unit data script', 
     for (const absent of ['"open_threads"', '"last_event"', '"next_action"']) expect(r.stdout).not.toContain(absent);
   });
 
-  it('TC65: session.refs checks every named unit; load and refload answer the references', async () => {
+  it('TC65 [the-record-r1]: session.refs checks every named unit; load and refload answer the references', async () => {
     const sb = await at('T37');
     answer(await mk(sb, 'tc65-u'), 'session.create');
     const empty = await ok(sb, 'session.load', ['tc65-u']);

@@ -13,7 +13,7 @@ const status = async (sb: string, unit: string, slug: string): Promise<string> =
 const done = (evidence: string) => payload().kv('evidence', evidence).kv('date', DATE).toString();
 
 describe.concurrent('the tasks through the unit data script', () => {
-  it('TC05: task.add answers the TODO task with its block scalars; a repeated slug refuses rc1', async () => {
+  it('TC05 [the-record-r11, the-record-r12]: task.add answers the TODO task with its block scalars; a repeated slug refuses rc1', async () => {
     const sb = await at('T0');
     const add = payload().kv('objective', 'Sample task objective').kv('desc', 'Sample description\nwith a second line').kv('criteria', 'Acceptance criteria 1').kv('details', 'Implementation detail 1');
     expect(answerLine(await data(sb, 'task.add', [TUNIT, 'task-sample'], add.toString()), 'task.add')).toBe(task(T5));
@@ -29,14 +29,14 @@ describe.concurrent('the tasks through the unit data script', () => {
     expect(answerLine(await data(sb, 'task.get', [TUNIT, 'task-sample']), 'task.get')).toBe(task(T6));
   });
 
-  it('TC07: task.start answers IN_PROGRESS and writes no state pointer', async () => {
+  it('TC07 [the-record-r1, the-record-r11]: task.start answers IN_PROGRESS and writes no state pointer', async () => {
     const sb = await at('T6');
     expect(answerLine(await data(sb, 'task.start', [TUNIT, 'task-sample']), 'task.start')).toBe(task('{"slug":"task-sample","status":"IN_PROGRESS","objective":"Updated task objective"}'));
     expect(await status(sb, TUNIT, 'task-sample')).toBe('IN_PROGRESS');
     expect(answer(await data(sb, 'session.load', [TUNIT]), 'session.load').state).not.toHaveProperty('next_action');
   });
 
-  it('TC08: task.complete answers DONE with its receipt entry in the journal', async () => {
+  it('TC08 [the-record-r8]: task.complete answers DONE with its receipt entry in the journal', async () => {
     const sb = await at('T7');
     const receipt = receiptJson('2026-09-27-task-sample-completed', 2, 'backlog/task-sample: DONE (Verified via automated test suite)');
     expect(answerLine(await data(sb, 'task.complete', [TUNIT, 'task-sample'], done('Verified via automated test suite')), 'task.complete')).toBe(
@@ -48,7 +48,7 @@ describe.concurrent('the tasks through the unit data script', () => {
     );
   });
 
-  it('TC09: task.reopen, task.list, task.drop with its receipt; a dropped slug is gone and addable again', async () => {
+  it('TC09 [the-record-r11]: task.reopen, task.list, task.drop with its receipt; a dropped slug is gone and addable again', async () => {
     const sb = await at('T8');
     await ok(sb, 'task.add', [TUNIT, 'task-keeper'], payload().kv('objective', 'Keeper objective'));
     expect(answerLine(await data(sb, 'task.reopen', [TUNIT, 'task-sample']), 'task.reopen')).toBe(task('{"slug":"task-sample","status":"TODO","objective":"Updated task objective"}'));
@@ -78,7 +78,7 @@ describe.concurrent('the tasks through the unit data script', () => {
     expect(await list('DONE')).toBe('{"unit":"compliance-tasks","tasks":[{"slug":"task-keeper","status":"DONE","objective":"Keeper objective"}]}');
   });
 
-  it('TC35: task refs are a JSON array; task.update adds sections and clears refs', async () => {
+  it('TC35 [the-record-r14]: task refs are a JSON array; task.update adds sections and clears refs', async () => {
     const sb = await at('T0');
     const added = (await ok(sb, 'task.add', [TUNIT, 'task-refs'], payload().kv('objective', 'Refs task').kl('refs', 'backlog#one', 'knowledge#TWO'))).task;
     expect([added.refs, added.description]).toEqual([['backlog#one', 'knowledge#TWO'], null]);
@@ -89,7 +89,7 @@ describe.concurrent('the tasks through the unit data script', () => {
     expect([cleared.refs, cleared.description]).toEqual([[], 'Added description']);
   });
 
-  it('TC53: the status move matrix: every allowed move lands, every other refuses ERR_INVALID_TRANSITION', async () => {
+  it('TC53 [the-record-r11]: the status move matrix: every allowed move lands, every other refuses ERR_INVALID_TRANSITION', async () => {
     const sb = await at('empty');
     const u = 'tc53-u';
     answer(await mk(sb, u), 'session.create');
@@ -131,7 +131,7 @@ describe.concurrent('the tasks through the unit data script', () => {
     expect(await status(sb, u, 'm-done-reopen')).toBe('TODO');
   });
 
-  it('TC55: task.complete writes its receipt; entry.get equals it; a same-day repeat takes -1', async () => {
+  it('TC55 [the-record-r8]: task.complete writes its receipt; entry.get equals it; a same-day repeat takes -1', async () => {
     const sb = await at('empty');
     answer(await mk(sb, 'tc55-u'), 'session.create');
     await ok(sb, 'task.add', ['tc55-u', 'tc55-t'], payload().kv('objective', 'receipt task'));
@@ -146,7 +146,7 @@ describe.concurrent('the tasks through the unit data script', () => {
     expect(answerLine(await data(sb, 'session.audit', ['tc55-u']), 'session.audit')).toBe('{"unit":"tc55-u","clean":true,"findings":[],"open_threads":[]}');
   });
 
-  it('TC56: task.drop answers its receipt; a dropped slug is addable again; an active task refuses until reopened', async () => {
+  it('TC56 [the-record-r11]: task.drop answers its receipt; a dropped slug is addable again; an active task refuses until reopened', async () => {
     const sb = await at('empty');
     const u = 'tc56-u';
     answer(await mk(sb, u), 'session.create');

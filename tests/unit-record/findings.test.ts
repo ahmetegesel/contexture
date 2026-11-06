@@ -55,7 +55,7 @@ describe.concurrent('the knowledge findings through the unit data script', () =>
     expect([restored.superseded_by, restored.active]).toEqual([null, true]);
   });
 
-  it('TC72: supersedes needs its predecessor and a new successor; the active list leaves the superseded out', async () => {
+  it('TC72 [the-record-r11]: supersedes needs its predecessor and a new successor; the active list leaves the superseded out', async () => {
     const sb = await at('empty');
     const u = 'tc72-u';
     answer(await mk(sb, u), 'session.create');

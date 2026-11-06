@@ -7,7 +7,7 @@ import { at, BETA, RECIPE, REPORT, SUNIT, TUNIT, UNIT } from './chain';
 const dated = (key: string, value: string) => payload().kv(key, value).kv('date', DATE).toString();
 
 describe.concurrent('the refusals through the unit data script', () => {
-  it('TC21: every refused write leaves the unit\'s read answers byte-identical', async () => {
+  it('TC21 [the-record-r5, the-record-r9]: every refused write leaves the unit\'s read answers byte-identical', async () => {
     const sb = await at('T17');
     const before = await reads(sb, TUNIT);
     expect(before).toContain('"slug":"task-keeper"');
@@ -18,12 +18,12 @@ describe.concurrent('the refusals through the unit data script', () => {
     expect(await reads(sb, TUNIT)).toBe(before);
   });
 
-  it('TC23: a missing task refuses rc1 with the fixed ERR_ENTITY_NOT_FOUND line', async () => {
+  it('TC23 [the-record-r9, the-engine-r21]: a missing task refuses rc1 with the fixed ERR_ENTITY_NOT_FOUND line', async () => {
     const sb = await at('T0');
     refused(await data(sb, 'task.get', [TUNIT, 'nonexistent-task-slug']), 'task.get', 1, 'ERR_ENTITY_NOT_FOUND', "task 'nonexistent-task-slug' not found in unit 'compliance-tasks'");
   });
 
-  it('TC32: a repeated finding NAME and lane entry slug refuse rc1 ERR_ENTITY_EXISTS', async () => {
+  it('TC32 [the-record-r11]: a repeated finding NAME and lane entry slug refuse rc1 ERR_ENTITY_EXISTS', async () => {
     const sb = await at('SS31');
     await ok(sb, 'finding.add', [SUNIT, 'STORE_F'], payload().kv('summary', 'First'));
     refused(await data(sb, 'finding.add', [SUNIT, 'STORE_F'], payload().kv('summary', 'Repeat').toString()), 'finding.add', 1, 'ERR_ENTITY_EXISTS', "finding 'STORE_F' already exists in unit 'compliance-store'");
@@ -35,7 +35,7 @@ describe.concurrent('the refusals through the unit data script', () => {
     expect(journal.items.map((i: { what: string }) => i.what)).toEqual(['First']);
   });
 
-  it('TC52: every write function refuses a CLOSED unit rc1 ERR_UNIT_CLOSED and changes nothing', async () => {
+  it('TC52 [the-record-r9, the-record-r11]: every write function refuses a CLOSED unit rc1 ERR_UNIT_CLOSED and changes nothing', async () => {
     const sb = await at('empty');
     const u = 'tc52-u';
     answer(await mk(sb, u), 'session.create');
@@ -78,14 +78,14 @@ describe.concurrent('the refusals through the unit data script', () => {
     expect(await snapshot()).toEqual(before);
   });
 
-  it('TC75: refusals print one fixed stderr line and nothing on stdout', async () => {
+  it('TC75 [the-record-r9, the-engine-r21]: refusals print one fixed stderr line and nothing on stdout', async () => {
     const sb = await at('T37');
     refused(await data(sb, 'task.get', [TUNIT, 'no-such-task']), 'task.get', 1, 'ERR_ENTITY_NOT_FOUND', "task 'no-such-task' not found in unit 'compliance-tasks'");
     refused(await mk(sb, TUNIT), 'session.create', 1, 'ERR_ENTITY_EXISTS', "unit 'compliance-tasks' already exists");
     refused(await rec(sb, UNIT, 1790000750, 'into a closed unit'), 'entry.record', 1, 'ERR_UNIT_CLOSED', "unit 'compliance-u1' is CLOSED; a closed unit takes no writes");
   });
 
-  it('TC78: a malformed stored anchor refuses rc2 on session.stamp, entry.record, and the receipts, the unit unchanged (posix plant)', async () => {
+  it('TC78 [the-engine-r18]: a malformed stored anchor refuses rc2 on session.stamp, entry.record, and the receipts, the unit unchanged (posix plant)', async () => {
     const sb = await at('empty');
     const u = 'tc73-u';
     plantUnit(sb, u);

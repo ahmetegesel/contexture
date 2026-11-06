@@ -34,7 +34,7 @@ interface Plant {
 
 const PLANTS: Plant[] = [
   {
-    id: 'RA-1 a dangling closer',
+    id: 'RA-1 [the-record-p1] a dangling closer',
     artifact: 'journal',
     text: '\n@entry 2026-09-19-plant-dangling\n  ANCHOR: A2\n  WHAT: "planted dangling closer"\n  THREAD: none\n  CLOSES: 2026-01-01-nonexistent (done: nothing)\n',
     code: 'DANGLING_CLOSER',
@@ -94,7 +94,7 @@ const PLANTS: Plant[] = [
     view: 'UNHARVESTED KNOWLEDGE at line 3: 2026-09-19-plant-knowledge',
   },
   {
-    id: 'RA-7 a DONE task without its event',
+    id: 'RA-7 [the-record-r8] a DONE task without its event',
     artifact: 'backlog',
     text: '\n@task zz-plant-done\n  STATUS: DONE\n  OBJECTIVE: "planted done without event"\n',
     code: 'DONE_WITHOUT_EVENT',
@@ -104,7 +104,7 @@ const PLANTS: Plant[] = [
     view: 'DONE WITHOUT EVENT (backlog/zz-plant-done: DONE): zz-plant-done',
   },
   {
-    id: 'RA-9 a dated entry missing THREAD',
+    id: 'RA-9 [the-record-r7, the-record-p4] a dated entry missing THREAD',
     artifact: 'journal',
     text: '\n@entry 2026-09-19-plant-nothread\n  ANCHOR: A2\n  WHAT: "planted missing thread"\n',
     code: 'MISSING_THREAD',
@@ -116,7 +116,7 @@ const PLANTS: Plant[] = [
 ];
 
 describe.concurrent('the record audit', () => {
-  it('TC63: each record check a verb-built unit can carry yields exactly its finding; a clean unit answers its open threads', async () => {
+  it('TC63 [the-record-r7, the-record-p4]: each record check a verb-built unit can carry yields exactly its finding; a clean unit answers its open threads', async () => {
     const sb = await at('empty');
     await fixture(sb, 'tc63-unharvested', 'unharvested knowledge fixture');
     answer(await rec(sb, 'tc63-unharvested', 1790000631, 'a knowledge flag no closer names', { with: payload().kv('slug', '2026-09-20-flagged').kv('knowledge', 'true') }), 'entry.record');
@@ -135,7 +135,7 @@ describe.concurrent('the record audit', () => {
     );
   });
 
-  it('TC77: the record checks only legacy text carries (a dangling closer, DONE without its event) yield exactly their finding (posix plants)', async () => {
+  it('TC77 [the-record-r8, the-record-p1]: the record checks only legacy text carries (a dangling closer, DONE without its event) yield exactly their finding (posix plants)', async () => {
     const sb = await at('empty');
     plantUnit(sb, 'tc63-dangling');
     await wantAudit(sb, 'tc63-dangling', 'DANGLING_CLOSER', '2026-09-20-closer-a', '7', '"2026-09-19-absent-target"');
@@ -170,7 +170,7 @@ describe.concurrent('the record audit', () => {
     });
   }
 
-  it('RA-8: an IN_PROGRESS task audits clean without a state pointer; the retired absence check never fires', async () => {
+  it('RA-8 [the-record-r11]: an IN_PROGRESS task audits clean without a state pointer; the retired absence check never fires', async () => {
     const sb = fresh(await audited('unit'));
     appendArtifact(sb, AUD, 'backlog', '\n@task zz-plant-inp\n  STATUS: IN_PROGRESS\n  OBJECTIVE: "planted in progress, no state pointer"\n');
     const clean = answerLine(await engineCall(sb, 'session.audit', [AUD]), 'session.audit');
@@ -180,7 +180,7 @@ describe.concurrent('the record audit', () => {
     expect(view.stdout).not.toContain('IN_PROGRESS ABSENT FROM STATE');
   });
 
-  it('RA-0 through ctx: the audit verb exits 0 with the thread tail, 1 with the named line on a planted defect, 0 again after the repair', async () => {
+  it('RA-0 [the-record-p1] through ctx: the audit verb exits 0 with the thread tail, 1 with the named line on a planted defect, 0 again after the repair', async () => {
     const sb = await at('empty');
     expect((await ctx(sb, 'unit', 'bootstrap', AUD, 'audit matrix unit')).code).toBe(0);
     const clean = await ctx(sb, 'unit', 'audit', AUD);

@@ -43,7 +43,7 @@ describe.concurrent('the unit module\'s own data cases', () => {
     expect(await slugs(sb)).toEqual(['t1']);
   });
 
-  it('UD-2: data_get answers the canonical task ref and refuses a missing target naming it', async () => {
+  it('UD-2 [the-engine-r21]: data_get answers the canonical task ref and refuses a missing target naming it', async () => {
     const sb = await at();
     const got = await dataGet(sb, 'unit#u1/task/t1');
     expect(got.code).toBe(0);
@@ -53,7 +53,7 @@ describe.concurrent('the unit module\'s own data cases', () => {
     expect([missing.code, missing.stdout, missing.stderr]).toEqual([1, '', "data_get: error: ref 'unit#u1/task/missing': task 'missing' not found in unit 'u1' (ERR_ENTITY_NOT_FOUND)\n"]);
   });
 
-  it('UD-3: a write with a missing canonical ref refuses re-framed and lands nothing; a held ref lands; a file pointer and a legacy ref are exempt', async () => {
+  it('UD-3 [the-engine-r21]: a write with a missing canonical ref refuses re-framed and lands nothing; a held ref lands; a file pointer and a legacy ref are exempt', async () => {
     const sb = await at();
     const bad = await data(sb, 'task.add', ['u1', 't-bad'], task('bad ref task', 'unit#u1/task/missing'));
     expect([bad.code, bad.stderr]).toEqual([1, "task.add: error: ref 'unit#u1/task/missing': task 'missing' not found in unit 'u1' (ERR_ENTITY_NOT_FOUND)\n"]);
@@ -72,7 +72,7 @@ describe.concurrent('the unit module\'s own data cases', () => {
     expect([recipe.code, recipe.stdout.includes('"artifact":"recipe"')]).toEqual([0, true]);
   });
 
-  it('UD-8: a held canonical lane ref lands; a claim-shaped unit ref refuses naming the ref and lands nothing', async () => {
+  it('UD-8 [the-engine-r21]: a held canonical lane ref lands; a claim-shaped unit ref refuses naming the ref and lands nothing', async () => {
     const sb = await at();
     await ok(sb, 'lane.create', ['u1', 'l1'], '# a needle lane recipe\n');
     await ok(sb, 'lane.record', ['u1', 'l1'], payload().kv('what', 'a needle lane entry').kv('thread', 'none').kv('slug', 'lane-needle').kl('refs'));
@@ -90,7 +90,7 @@ describe.concurrent('the unit module\'s own data cases', () => {
     expect([got.code, got.stdout.includes('"data":{"unit":"u1","entry":{"kind":"entry"')]).toEqual([0, true]);
   });
 
-  it('UD-10: session.refs sets the read-only unit, session.load reads it, and the per-unit read stays inside its unit', async () => {
+  it('UD-10 [the-record-r1]: session.refs sets the read-only unit, session.load reads it, and the per-unit read stays inside its unit', async () => {
     const sb = await at();
     await ok(sb, 'task.add', ['u2', 't2'], task('ref target task'));
     await ok(sb, 'session.refs', ['u1', 'u2']);

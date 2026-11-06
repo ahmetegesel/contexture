@@ -8,13 +8,13 @@ const U1STATE = '{"unit":"compliance-u1","status":"ACTIVE","current_anchor":"A1"
 const dated = payload().kv('date', DATE).toString();
 
 describe.concurrent('the unit lifecycle through the unit data script', () => {
-  it('TC01: session.create answers the unit\'s state at A1 with no stored pointer', async () => {
+  it('TC01 [the-record-r1]: session.create answers the unit\'s state at A1 with no stored pointer', async () => {
     const sb = await at('empty');
     const create = payload().kv('objective', 'Compliance test session').kl('repos', 'alpha', 'beta').kv('attention', 'compliance fixture');
     expect(answerLine(await data(sb, 'session.create', [UNIT], create.toString()), 'session.create')).toBe(`{"unit":"compliance-u1","state":${U1STATE}}`);
   });
 
-  it('TC02: a repeated session.create refuses rc1 ERR_ENTITY_EXISTS; the state untouched', async () => {
+  it('TC02 [the-record-r11]: a repeated session.create refuses rc1 ERR_ENTITY_EXISTS; the state untouched', async () => {
     const sb = await at('U1');
     const again = payload().kv('objective', 'Duplicate session').kv('attention', 'again').toString();
     refused(await data(sb, 'session.create', [UNIT], again), 'session.create', 1, 'ERR_ENTITY_EXISTS', "unit 'compliance-u1' already exists");
@@ -35,7 +35,7 @@ describe.concurrent('the unit lifecycle through the unit data script', () => {
     expect(answerLine(await data(sb, 'entry.list', [UNIT]), 'entry.list')).toBe('{"unit":"compliance-u1","entries":[]}');
   });
 
-  it('TC04: session.stamp answers A1 to A2 with its dated anchor; session.close marks the unit CLOSED', async () => {
+  it('TC04 [the-record-r3]: session.stamp answers A1 to A2 with its dated anchor; session.close marks the unit CLOSED', async () => {
     const sb = await at('U1');
     expect(answerLine(await data(sb, 'session.stamp', [UNIT], dated), 'session.stamp')).toBe(
       '{"unit":"compliance-u1","previous_anchor":"A1","current_anchor":"A2","receipt":{"kind":"anchor","seq":2,"anchor":"A2","date":"2026-09-27","continues":null,"attention":null,"head_text":null,"extra_lines":[],"next":null}}',
@@ -47,7 +47,7 @@ describe.concurrent('the unit lifecycle through the unit data script', () => {
     expect(answer(await data(sb, 'session.load', [UNIT]), 'session.load').state.status).toBe('CLOSED');
   });
 
-  it('TC66: session.close and session.reopen refuse the move they cannot make', async () => {
+  it('TC66 [the-record-r11]: session.close and session.reopen refuse the move they cannot make', async () => {
     const sb = await at('empty');
     answer(await mk(sb, 'tc66-u'), 'session.create');
     expect(answer(await data(sb, 'session.close', ['tc66-u']), 'session.close').status).toBe('CLOSED');
@@ -57,7 +57,7 @@ describe.concurrent('the unit lifecycle through the unit data script', () => {
     expect(answer(await data(sb, 'session.load', ['tc66-u']), 'session.load').state.status).toBe('ACTIVE');
   });
 
-  it('TC73: session.stamp answers the canonical anchor, refuses a missing or malformed date, and the journal holds its line', async () => {
+  it('TC73 [the-record-r3]: session.stamp answers the canonical anchor, refuses a missing or malformed date, and the journal holds its line', async () => {
     const sb = await at('empty');
     answer(await mk(sb, 'tc73-s'), 'session.create');
     refused(await data(sb, 'session.stamp', ['tc73-s']), 'session.stamp', 1, 'ERR_INVALID_ARGUMENT', 'missing payload key date');

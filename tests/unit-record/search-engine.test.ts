@@ -20,7 +20,7 @@ async function written(): Promise<string> {
 }
 
 describe.concurrent('the exact search rule (search.awk) alone over the posix files', () => {
-  it('TC69 driver-free: the legacy fixture answers the fixed exact query set', async () => {
+  it('TC69 [the-record-r13] driver-free: the legacy fixture answers the fixed exact query set', async () => {
     const sb = sandbox('search-engine');
     plantUnit(sb, 'legacy-u');
     const lines = readFileSync(join(COMPLIANCE, 'tc69-exact.answers'), 'utf8').split('\n').filter(Boolean);
@@ -32,7 +32,7 @@ describe.concurrent('the exact search rule (search.awk) alone over the posix fil
     }
   });
 
-  it('matches case-insensitively, one row per entity and section with its first matching line as the snippet', async () => {
+  it('[the-record-r13] matches case-insensitively, one row per entity and section with its first matching line as the snippet', async () => {
     const sb = await written();
     const a = answer(await engineCall(sb, 'search.query', ['se-u', '--mode=exact', '--entity=task'], query('NEEDLE')), 'search.query');
     expect(a.results.map((r: { entity_id: string; snippet: string; score: number }) => [r.entity_id, r.snippet, r.score])).toEqual([
@@ -41,7 +41,7 @@ describe.concurrent('the exact search rule (search.awk) alone over the posix fil
     ]);
   });
 
-  it('never matches a column-0 grammar comment', async () => {
+  it('[the-record-r13] never matches a column-0 grammar comment', async () => {
     const sb = await written();
     const comment = answer(await engineCall(sb, 'search.query', ['se-u', '--mode=exact'], query('grammar comment')), 'search.query');
     expect([comment.total_matches, comment.results]).toEqual([0, []]);
@@ -49,7 +49,7 @@ describe.concurrent('the exact search rule (search.awk) alone over the posix fil
     expect(lane.results.map((r: { snippet: string }) => r.snippet)).toEqual(['thread the needle']);
   });
 
-  it('caps the results with --limit after the complete walk, total_matches counting every row', async () => {
+  it('[the-record-r13] caps the results with --limit after the complete walk, total_matches counting every row', async () => {
     const sb = await written();
     const all = answer(await engineCall(sb, 'search.query', ['se-u', '--mode=exact'], query('needle')), 'search.query');
     const one = answer(await engineCall(sb, 'search.query', ['se-u', '--mode=exact', '--limit=1'], query('needle')), 'search.query');

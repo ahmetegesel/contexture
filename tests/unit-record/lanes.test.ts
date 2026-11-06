@@ -11,7 +11,7 @@ const RECIPE_JSON = '"# recipe grammar\\nMISSION\\n  GOAL: \\"Subagent goal desc
 const laneEntry = (what: string, epoch: string) => payload().kv('what', what).kv('thread', 'none').kv('date', DATE).kv('epoch', epoch);
 
 describe.concurrent('the lanes through the unit data script', () => {
-  it('TC16: lane.create stores the recipe byte for byte with an empty journal and no report', async () => {
+  it('TC16 [the-record-r15]: lane.create stores the recipe byte for byte with an empty journal and no report', async () => {
     const sb = await at('T0');
     expect(answerLine(await data(sb, 'lane.create', [TUNIT, 'lane-worker'], RECIPE), 'lane.create')).toBe('{"unit":"compliance-tasks","lane":"lane-worker"}');
     const recipe = await data(sb, 'lane.get', [TUNIT, 'lane-worker', 'recipe']);
@@ -21,7 +21,7 @@ describe.concurrent('the lanes through the unit data script', () => {
     expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'lane-worker', 'report']), 'lane.get')).toBe('{"unit":"compliance-tasks","lane":"lane-worker","artifact":"report","content":null}');
   });
 
-  it('TC17: lane.record and lane.write_report land; lane.get reads the journal and the report back', async () => {
+  it('TC17 [the-record-r15]: lane.record and lane.write_report land; lane.get reads the journal and the report back', async () => {
     const sb = await at('T16');
     const record = payload().kl('refs', `journal#${ALPHA}`).kv('what', 'Subagent action trace WHAT').kv('thread', 'none').kv('date', DATE).kv('epoch', '1790000020').toString();
     expect(answerLine(await data(sb, 'lane.record', [TUNIT, 'lane-worker'], record), 'lane.record')).toBe(`{"unit":"compliance-tasks","lane":"lane-worker","entry":${LE}}`);
@@ -30,7 +30,7 @@ describe.concurrent('the lanes through the unit data script', () => {
     expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'lane-worker', 'report']), 'lane.get')).toBe('{"unit":"compliance-tasks","lane":"lane-worker","artifact":"report","content":"Subagent report findings\\n"}');
   });
 
-  it('TC31: a 2 MB lane report lands over stdin and reads back byte for byte', async () => {
+  it('TC31 [the-engine-r9]: a 2 MB lane report lands over stdin and reads back byte for byte', async () => {
     const sb = await at('T0');
     answer(await mk(sb, SUNIT, 'store'), 'session.create');
     await ok(sb, 'lane.create', [SUNIT, 's-lane'], '# recipe grammar\nMISSION\n  GOAL: "store lane"\n');
@@ -41,7 +41,7 @@ describe.concurrent('the lanes through the unit data script', () => {
     expect(report.content === big).toBe(true);
   });
 
-  it('TC71: lane.create refuses an existing lane; a lane without a report reads content null and an empty journal', async () => {
+  it('TC71 [the-record-r11, the-record-r15]: lane.create refuses an existing lane; a lane without a report reads content null and an empty journal', async () => {
     const sb = await at('T37');
     refused(await data(sb, 'lane.create', [TUNIT, 'lane-worker'], '# another recipe\n'), 'lane.create', 1, 'ERR_ENTITY_EXISTS', "lane 'lane-worker' already exists in unit 'compliance-tasks'");
     expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'lane-worker', 'recipe']), 'lane.get')).toBe(`{"unit":"compliance-tasks","lane":"lane-worker","artifact":"recipe","content":${RECIPE_JSON}}`);
@@ -51,7 +51,7 @@ describe.concurrent('the lanes through the unit data script', () => {
     refused(await data(sb, 'lane.get', [TUNIT, 'no-such-lane', 'recipe']), 'lane.get', 1, 'ERR_ENTITY_NOT_FOUND', "lane 'no-such-lane' not found in unit 'compliance-tasks'");
   });
 
-  it('TC79: a lane folder without an artifact is no lane: lane.get refuses it, the reads skip it, lane.create lands beside its files (posix plant)', async () => {
+  it('TC79 [the-record-r19]: a lane folder without an artifact is no lane: lane.get refuses it, the reads skip it, lane.create lands beside its files (posix plant)', async () => {
     const sb = await at('empty');
     const u = 'tc79-u';
     answer(await mk(sb, u), 'session.create');

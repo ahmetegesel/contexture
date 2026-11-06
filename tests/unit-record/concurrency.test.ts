@@ -5,7 +5,7 @@ import { answer, payload } from '../support/wire';
 import { at, TUNIT } from './chain';
 
 describe('concurrent writers of one unit', () => {
-  it('TC22: five entry.record calls at once land five entries with distinct suffixed slugs, no writer refused and none retried', async () => {
+  it('TC22 [the-record-r9]: five entry.record calls at once land five entries with distinct suffixed slugs, no writer refused and none retried', async () => {
     const sb = await at('T0');
     const X = '2026-09-27-event-1790000030';
     const write = payload().kv('what', 'concurrent writer').kv('thread', 'none').kv('date', DATE).kv('epoch', '1790000030').toString();

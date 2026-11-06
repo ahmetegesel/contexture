@@ -15,17 +15,17 @@ const planted = (unit: string): string => {
 };
 
 describe.concurrent('the record engine alone (canon.awk, model.awk, ops.awk) over the posix files', () => {
-  it('parses every legacy shape of the legacy fixture into the golden answers with no store, driver, or lock', async () => {
+  it('[the-record-r20] parses every legacy shape of the legacy fixture into the golden answers with no store, driver, or lock', async () => {
     const sb = planted('legacy-u');
     await holdsGoldens('legacy-u', 'legacy-u', (fn, args) => engineCall(sb, fn, args));
   });
 
-  it('answers the golden JSON of the verb-built unit', async () => {
+  it('[the-record-r20] answers the golden JSON of the verb-built unit', async () => {
     const sb = fresh(await verbBuilt(VU));
     await holdsGoldens(VU, 'verb-u', (fn, args) => engineCall(sb, fn, args));
   });
 
-  it('reads a legacy journal with carriage returns as its LF twin, no carriage return in any value', async () => {
+  it('[the-record-r12] reads a legacy journal with carriage returns as its LF twin, no carriage return in any value', async () => {
     const lf = planted('tc57-u');
     const crlf = planted('tc57-u');
     const journal = artifactPath(crlf, 'tc57-u', 'journal');
@@ -38,7 +38,7 @@ describe.concurrent('the record engine alone (canon.awk, model.awk, ops.awk) ove
     }
   });
 
-  it('a write rewrites the touched legacy item canonical and keeps every other item and value', async () => {
+  it('[the-record-r20] a write rewrites the touched legacy item canonical and keeps every other item and value', async () => {
     const sb = planted('legacy-u');
     const before = goldens('legacy-u', 'legacy-u').filter((g) => g.fn === 'task.get' && g.args[1] !== 'bare-refs-task');
     expect(before.length).toBe(3);
