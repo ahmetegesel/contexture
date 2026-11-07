@@ -38,10 +38,14 @@ compiles `graph.db` (relational tables plus the dual `fts_symbols` and
 `fts_docs` virtual tables). Retrieval runs directly on system `sqlite3`.
 A full load rebuilds the graph inside one transaction: it clears every table,
 the search indexes first so the delete triggers find them empty, then loads
-the streams, so each symbol and unit keeps one search row and a failed load
-leaves the graph as it was; the `sqlite3` command fallback runs the same
-statements and stops at its first error (`-bail`). A delta on the fallback
-applies the schema as well and re-links against the edges its own deletes
+the streams, keeping the last incoming row per id, so each symbol and unit
+keeps one search row and a failed load leaves the graph as it was (under
+`--clean`, which removes the database first, an empty graph); the `sqlite3`
+command fallback runs the same statements and stops at its first error
+(`-bail`). The loader records each unit under the markdown file holding it, a
+`DEFINES` edge from the file, so a delta removes a gone file's units whatever
+their ids. A delta on the fallback applies the schema as well, reads the
+graph whole however large, and re-links against the edges its own deletes
 leave, so both branches write the same graph and print the same summary.
 
 `bin/ast-doc-index` runs only inside a contexture drawer: `CTX_ROOT` when the
@@ -132,9 +136,12 @@ ancestors.
 pitfall before any `@doc` line skipped with its one warning, a code-only
 repository indexing rc 0, the full load's rebuild and its rollback, and a
 removed, renamed, or moved file leaving the graph after a full run, a bare
-delta, a named delta, and the query's inline delta, a `--src-dir` graph
-never widening; `delta-jit` also proves a failed inline delta's one stderr
-line. The `sqlite3` command fallback cases run with
+delta, a named delta, and the query's inline delta (a unit whose id comes
+from its header, a unit two files hold, thousands of removed files among
+them), an old file outside a `--src-dir` graph's folders kept out;
+`delta-jit` also proves a failed inline delta's one stderr line and the
+fallback delta over a graph past 1 MB, `pipeline` one search row for a name
+declared more than once. The `sqlite3` command fallback cases run with
 `NODE_OPTIONS=--no-experimental-sqlite` and skip, naming the need, where the
 host's node does not read it.
 `static/` holds the census of the module tree: no PATH edit, no
