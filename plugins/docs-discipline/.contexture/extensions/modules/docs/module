@@ -1,5 +1,5 @@
 # summary: the corpus-first documentation discipline: read (query, audit, check, gate, nudge, changes) and schema-checked write verbs over a typed-block corpus
-# version: 1.3.1
+# version: 1.4.0
 # description:
 # The docs module holds the agent-facing corpus: the typed-block docs an agent
 # reads before code. It keeps the corpus current with the code through the ctx

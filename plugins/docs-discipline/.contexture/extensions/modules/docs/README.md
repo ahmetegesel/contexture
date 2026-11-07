@@ -98,7 +98,11 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 - The nudge's unit form reads the active task through `ctx unit task list
   <unit> --status=progress` and `ctx unit resolve <unit> task#<slug>` (the
   text view of task show drops REFS, which the engine scores); the
-  backlog-file form refuses a path inside the sessions drawer.
+  backlog-file form refuses a path inside another module's store root (`docs_record_file`
+  reads every declared root through the storage library's `store_roots`, this module's
+  own `docs` namespace aside: a path spelled under a root, one physically under it, and,
+  for a root inside the drawer alone, one holding `/<root>/` anywhere), and with no
+  storage core to list the roots it refuses rc 2 and reads no file.
 - The write verbs run one pipeline in `docs-io.sh`: the arguments parsed
   (`docs_parse`: the verb's control flags, every other `--<field>=` as a field
   action, a control another verb takes included, so `ctx docs entry` sets a

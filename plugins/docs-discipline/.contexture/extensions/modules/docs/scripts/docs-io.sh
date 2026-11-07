@@ -343,19 +343,32 @@ docs_no_display() {
   return 0
 }
 
-# docs_record_file <path>: rc 0 when the path lies inside the record's sessions drawer (by
-# its spelling, or physically under the workspace's drawer): a record artifact is read
-# through ctx unit, never as a file (the single store)
+# docs_record_file <path>: rc 0 when the path lies inside the store root of a namespace
+# another module declares (every root the storage library's store_roots lists but this
+# module's own namespace, docs): by its workspace relative spelling, physically under the
+# workspace, or, for a root inside the drawer alone, by an unanchored spelling; rc 1 when it
+# lies in none; rc 2 when the storage core cannot list the roots. A value another module
+# stores is read through that module, never as a file (the single store)
 docs_record_file() {
-  case "$1" in
-    .contexture/sessions/*|*/.contexture/sessions/*) return 0 ;;
-  esac
-  [ -d "$DOCS_ROOT/.contexture/sessions" ] || return 1
-  rf_s=$(CDPATH= cd -- "$DOCS_ROOT/.contexture/sessions" 2>/dev/null && pwd -P) || return 1
+  command -v store_roots >/dev/null 2>&1 || return 2
+  rf_roots=$(store_roots < /dev/null 2>/dev/null) || return 2
   case "$1" in */*) rf_d=${1%/*} ;; *) rf_d=. ;; esac
-  rf_p=$(CDPATH= cd -- "${rf_d:-/}" 2>/dev/null && pwd -P) || return 1
-  case "$rf_p/" in "$rf_s"/*) return 0 ;; esac
-  return 1
+  rf_p=$(CDPATH= cd -- "${rf_d:-/}" 2>/dev/null && pwd -P) || rf_p=""
+  rf_tab=$(printf '\t')
+  rf_hit=1
+  while IFS="$rf_tab" read -r rf_ns rf_root; do
+    [ -n "$rf_root" ] && [ "$rf_ns" != docs ] || continue
+    case "$1" in "$rf_root"/*) rf_hit=0; break ;; esac
+    case "$rf_root" in
+      .contexture/*) case "$1" in */"$rf_root"/*) rf_hit=0; break ;; esac ;;
+    esac
+    [ -n "$rf_p" ] && [ -d "$DOCS_ROOT/$rf_root" ] || continue
+    rf_s=$(CDPATH= cd -- "$DOCS_ROOT/$rf_root" 2>/dev/null && pwd -P) || continue
+    case "$rf_p/" in "$rf_s"/*) rf_hit=0; break ;; esac
+  done <<EOF
+$rf_roots
+EOF
+  return "$rf_hit"
 }
 
 # docs_active_task <unit>: the unit's first IN_PROGRESS task (backlog order) through ctx

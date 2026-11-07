@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec } from '@support/exec';
@@ -167,9 +167,23 @@ describe('the nudge through its unit', { concurrent: true }, () => {
     expect(byUnit.stdout).toBe(byFile.stdout);
   });
 
-  it('RS5b [docs-module-r26] a path inside the sessions drawer refuses rc 1: a record artifact is read through its unit', async () => {
+  it('RS5b [docs-module-r26] a path inside another module\'s store root refuses rc 1: a record artifact is read through its unit', async () => {
     const r = await docs(fresh(corpus), ['nudge', '.contexture/sessions/nudge-demo/backlog.md', 'demo-orders']);
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain('read through its unit');
+    expect([r.code, r.stdout]).toEqual([1, '']);
+    expect(r.stderr).toBe("ctx docs nudge: a path inside another module's store root is read through that module, never as a file; a record artifact through its unit: ctx docs nudge <unit> [<repo>...]\n");
+  });
+
+  it('RS5b [docs-module-r26] on a base whose library has no store_roots the backlog-file form refuses rc 2 naming the storage core, and reads no file', async () => {
+    const sb = fresh(corpus);
+    const lib = join(sb, '.contexture/storage/scripts/library');
+    renameSync(lib, `${lib}.real`);
+    writeFileSync(lib, `. "${lib}.real"\nunset -f store_roots\n`);
+    const r = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
+    expect([r.code, r.stdout]).toEqual([2, '']);
+    expect(r.stderr).toBe('ctx docs nudge: the storage core cannot list the module store roots, so the file is not read (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n');
+    renameSync(`${lib}.real`, lib);
+    const served = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
+    expect(served.code, served.stderr).toBe(0);
+    expect(served.stdout).not.toBe('');
   });
 });

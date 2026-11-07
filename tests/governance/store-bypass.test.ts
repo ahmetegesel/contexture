@@ -10,7 +10,6 @@ const COMMENT = /^[ \t]*(#|\/\/)/;
 
 const UNIT = 'base/.contexture/modules/unit';
 const GRAPH = 'plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph';
-const DOCS_IO = 'plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-io.sh';
 
 const ALLOW: readonly [file: string, line: string, why: string][] = [
   [`${UNIT}/data`, 'root: .contexture/sessions', 'the unit namespace declaration the storage core reads'],
@@ -20,9 +19,6 @@ const ALLOW: readonly [file: string, line: string, why: string][] = [
   [`${GRAPH}/bin/graph-query`, '  SQLITE_BIN="$(command -v sqlite3 || true)"', 'the graph module queries its own graph database'],
   [`${GRAPH}/bin/graph-query`, '  echo "Error: sqlite3 binary not found." >&2', 'the graph module queries its own graph database'],
   [`${GRAPH}/loader/index-graph.ts`, "    const sqliteBin = fs.existsSync('/usr/bin/sqlite3') ? '/usr/bin/sqlite3' : 'sqlite3';", 'the graph loader writes its own graph database'],
-  [DOCS_IO, '    .contexture/sessions/*|*/.contexture/sessions/*) return 0 ;;', 'docs_record_file refuses a corpus path inside the record drawer'],
-  [DOCS_IO, '  [ -d "$DOCS_ROOT/.contexture/sessions" ] || return 1', 'docs_record_file refuses a corpus path inside the record drawer'],
-  [DOCS_IO, '  rf_s=$(CDPATH= cd -- "$DOCS_ROOT/.contexture/sessions" 2>/dev/null && pwd -P) || return 1', 'docs_record_file refuses a corpus path inside the record drawer'],
 ];
 
 const allowed = new Set(ALLOW.map(([file, line]) => `${file}\n${line}`));

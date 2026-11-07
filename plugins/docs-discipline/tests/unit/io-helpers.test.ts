@@ -1,8 +1,10 @@
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { DOCS_SHAPED, dataFile } from '@support/data-file';
 import { exec, type Run } from '@support/exec';
 import { sandbox } from '@support/sandbox';
+import { stage } from '@support/stage';
 import { SCRIPTS } from '../support/corpus';
 
 let sb: string;
@@ -80,12 +82,37 @@ describe('the pure helpers', { concurrent: true }, () => {
     expect((await sourced('docs_file_form "$1"', arg)).code).toBe(rc);
   });
 
+});
+
+describe('docs_record_file: a path inside another module\'s store root, read through store_roots', { concurrent: true }, () => {
+  let drawer: string;
+  beforeAll(() => {
+    drawer = stage('posix', 'record-file');
+    dataFile(drawer, 'extensions', 'docs', DOCS_SHAPED);
+    dataFile(drawer, 'modules', 'notes', 'namespace: notes\nkey: <a>/<b>\n');
+    mkdirSync(join(drawer, 'notes'));
+  });
+
+  const guard = (sb: string, path: string): Promise<Run> =>
+    exec('sh', ['-c', '. "$1/docs-io.sh"; docs_io_init "$1" nudge; docs_record_file "$2"', 'sh', SCRIPTS, path], { cwd: sb, env: { CTX_ROOT: sb } });
+
   it.each([
     ['.contexture/sessions/u/backlog.md', 0],
     ['/elsewhere/.contexture/sessions/u/backlog.md', 0],
     ['backlog.md', 1],
     ['docs/demo/x.md', 1],
+    ['notes/x.md', 0],
+    ['./notes/x.md', 0],
+    ['/elsewhere/notes/x.md', 1],
   ])('[docs-module-r26] docs_record_file %j is rc %i', async (path, rc) => {
-    expect((await sourced('DOCS_ROOT="$PWD"; docs_record_file "$1"', path)).code).toBe(rc);
+    const r = await guard(drawer, path);
+    expect([r.code, r.stderr]).toEqual([rc, '']);
+  });
+
+  it('[docs-module-r26] refuses rc 2 when no storage core lists the roots', async () => {
+    const bare = sandbox('record-file-bare');
+    mkdirSync(join(bare, '.contexture/modules'), { recursive: true });
+    expect((await guard(bare, 'backlog.md')).code).toBe(2);
+    expect((await sourced('DOCS_ROOT="$PWD"; docs_record_file "$1"', '.contexture/sessions/u/backlog.md')).code).toBe(2);
   });
 });
