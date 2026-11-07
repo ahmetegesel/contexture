@@ -370,10 +370,10 @@ ctx ast-doc-graph query stats
 @graph_stats
   DATABASE: <pilot-root>/graph.db
   SYMBOLS: 156
-  EDGES: 798
+  EDGES: 815
     CALLS: 336
     COVERS: 211
-    DEFINES: 156
+    DEFINES: 173
     GOVERNS: 62
     WARNS: 33
   DOCS: 17
@@ -434,10 +434,10 @@ Output from step 1:
 @graph_loaded
   DATABASE: <scratch>/pilot-test.db
   SYMBOLS: 156
-  EDGES: 798
+  EDGES: 815
     CALLS: 336
     COVERS: 211
-    DEFINES: 156
+    DEFINES: 173
     GOVERNS: 62
     WARNS: 33
   DOCS: 17
