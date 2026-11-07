@@ -8,12 +8,12 @@ const LOADER = join(ROOT, 'base/AGENTS.md');
 
 function loaderOk(text: string): boolean {
   return [
-    /FIRST: run \.contexture\/laws\/compose/,
+    /FIRST: run \.contexture\/ctx compose/,
     /composes the generated law layer AGENTS\.generated\.md/,
     /read AGENTS\.generated\.md WHOLE/,
     /read AGENTS\.workspace\.md then AGENTS\.local\.md/,
-    /absent or not executable/,
-    /missing payload path/,
+    /When \.contexture\/ctx is absent or not executable, or the compose exits non-zero/,
+    /missing or refused payload path/,
     /never edit this file/,
   ].every((re) => re.test(text));
 }
@@ -23,13 +23,13 @@ describe.concurrent('the loader (base/AGENTS.md)', () => {
     expect(existsSync(LOADER)).toBe(true);
     expect(statSync(LOADER).size).toBeLessThan(2048);
     const text = readFileSync(LOADER, 'utf8');
-    expect(text).toMatch(/^ {2}1\. FIRST: run \.contexture\/laws\/compose/m);
+    expect(text).toMatch(/^ {2}1\. FIRST: run \.contexture\/ctx compose from the workspace root/m);
     expect(text).toMatch(/composes the generated law layer AGENTS\.generated\.md or verifies it current/);
     expect(text).toMatch(/read AGENTS\.generated\.md WHOLE/);
     expect(text).toMatch(/read AGENTS\.workspace\.md then AGENTS\.local\.md/);
-    expect(text).toMatch(/absent or not executable/);
-    expect(text).toMatch(/core source \.contexture\/laws\/core\.md is absent or unreadable/);
-    expect(text).toMatch(/stop and report the missing payload path/);
+    expect(text).toMatch(/When \.contexture\/ctx is absent or not executable, or the compose exits non-zero/);
+    expect(text).toMatch(/stop and report its error line/);
+    expect(text).not.toMatch(/laws\/compose/);
     expect(text).not.toContain('source-of-truth:');
     expect(versionOf(text)).toBe(versionOf(readFileSync(CORE_SRC, 'utf8')));
   });

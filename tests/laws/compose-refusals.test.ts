@@ -1,6 +1,7 @@
 import { accessSync, appendFileSync, constants, copyFileSync, cpSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { exec } from '../support/exec';
 import { compose, DOCS_MOD, layer, layerBytes, synth, SYNTH } from '../support/laws';
 import { chmodPlant, ROOT_USER } from '../support/plants';
 import { fresh } from '../support/snapshot';
@@ -105,6 +106,20 @@ describe.concurrent('the compose refusals', () => {
     const sb = fresh(composed);
     rmSync(join(sb, '.contexture/laws/core.md'));
     await refusal(sb, 2, 'missing core law source');
+  });
+
+  it('[modules-r19] keeps the direct composer call working, and refuses it rc2 without the engine, writing nothing', async () => {
+    const sb = fresh(composed);
+    const before = layerBytes(sb);
+    const direct = () => exec('sh', ['.contexture/laws/compose'], { cwd: sb });
+    const ok = await direct();
+    expect(ok.code).toBe(0);
+    expect(ok.stderr).toBe('');
+    rmSync(join(sb, '.contexture/ctx'));
+    const r = await direct();
+    expect(r.code).toBe(2);
+    expect(r.stderr).toBe('compose: error: missing engine: .contexture/ctx\n');
+    expect(layerBytes(sb)).toEqual(before);
   });
 
   it('refuses rc1 an unknown argument', async () => {

@@ -24,7 +24,7 @@ function plantLegacy(sb: string): string {
   return p;
 }
 
-describe.concurrent("the loader's step 1 at boot (sh .contexture/laws/compose from the workspace root)", () => {
+describe.concurrent("the loader's step 1 at boot (.contexture/ctx compose from the workspace root)", () => {
   it('[modules-r19] reads an absent layer as stale for --check writing nothing, then composes it, and verifies it current silently', async () => {
     const sb = stage('posix', 'laws-boot-absent');
     expect(layerBytes(sb)).toBeUndefined();

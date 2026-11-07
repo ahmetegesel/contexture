@@ -152,12 +152,8 @@ rm -f "$state_file" || die 2 "cannot remove the install record"
 rmdir "$state_root" 2>/dev/null || true
 
 # the law layer: the removed package's version and law fragments leave the generated
-# layer's sources hash, so recompose after the removal. An absent composer is an older
-# core: nothing to do.
-compose=$ws_root/.contexture/laws/compose
-if [ -f "$compose" ]; then
-  ( cd "$ws_root" && sh "$compose" ) || die 2 "the law layer did not recompose after the removal; run .contexture/laws/compose and fix what it names (the package is removed)"
-fi
+# layer's sources hash, so recompose through ctx compose after the removal.
+"$ctx_bin" compose || die 2 "the law layer did not recompose after the removal; run .contexture/ctx compose and fix what it names (the package is removed)"
 
 printf 'package-uninstall: removed %s from .contexture/extensions (%s removed, %s preserved, %s already absent)\n' \
   "$pkg_name" "$removed" "$preserved" "$absent"

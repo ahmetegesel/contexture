@@ -52,10 +52,15 @@ describe.concurrent('the installer recompose', () => {
     expect(firstByteDifference(layerBytes(sb)!, before)).toBe(-1);
   });
 
-  it('installs into an older core without the composer rc0 and skips the recompose', async () => {
+  it('[modules-r19] fails the install rc2 in a payload without the composer, naming the missing composer, the overlay and its record in place and no layer', async () => {
     const sb = stage('posix', 'laws-install-nocompose');
     rmSync(join(sb, '.contexture/laws/compose'));
-    expect((await install(sb, lawPackage())).code).toBe(0);
+    const r = await install(sb, lawPackage());
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('ctx: compose: missing composer: .contexture/laws/compose');
+    expect(r.stderr).toContain('the law layer did not recompose');
+    expect(existsSync(join(sb, '.contexture/extensions/modules/pkgfix/module'))).toBe(true);
+    expect(existsSync(join(sb, '.contexture/extensions/.state/lawfix.files'))).toBe(true);
     expect(existsSync(layerPath(sb))).toBe(false);
   });
 });

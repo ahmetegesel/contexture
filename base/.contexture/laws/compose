@@ -1,7 +1,8 @@
 #!/bin/sh
 # compose: compose the generated law layer from the core law source, the installed
 # modules, and the standalone law parts; verify or recompose at install and boot.
-# Usage: compose [--check]; exit 0 current or composed, 1 a content refusal, 2 I/O.
+# Usage: ctx compose [--check], the engine builtin that execs this private composer;
+# exit 0 current or composed, 1 a content refusal, 2 I/O.
 set -u
 
 LC_ALL=C

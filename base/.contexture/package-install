@@ -569,12 +569,9 @@ while IFS= read -r mname; do
 done < "$scratch/modules"
 
 # the law layer: every package version and law fragment feeds the generated layer's
-# sources hash, so recompose after the record lands and the hooks run; a boot then reads
-# the set this install just changed. An absent composer is an older core: nothing to do.
-compose=$ws_root/.contexture/laws/compose
-if [ -f "$compose" ]; then
-  ( cd "$ws_root" && sh "$compose" ) || die 2 "the law layer did not recompose; run .contexture/laws/compose and fix what it names (the overlay and its record are in place)"
-fi
+# sources hash, so recompose through ctx compose after the record lands and the hooks
+# run; a boot then reads the set this install just changed.
+"$ctx_bin" compose || die 2 "the law layer did not recompose; run .contexture/ctx compose and fix what it names (the overlay and its record are in place)"
 
 printf 'package-install: installed %s (%s) into .contexture/extensions (%s files: %s added, %s updated; %s stale removed, %s preserved)\n' \
   "$pkg_name" "$pkg_summary" "$((added + updated))" "$added" "$updated" "$stale_removed" "$stale_kept"

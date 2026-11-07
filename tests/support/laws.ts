@@ -25,7 +25,7 @@ export function synth(overlay?: string): string {
 }
 
 export function compose(sb: string, ...args: string[]): Promise<Run> {
-  return exec('sh', ['.contexture/laws/compose', ...args], { cwd: sb });
+  return exec('sh', ['.contexture/ctx', 'compose', ...args], { cwd: sb });
 }
 
 export function layerPath(sb: string): string {
