@@ -4,6 +4,40 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.69.0] - 2026-11-07
+
+MINOR: the record's home moves to `.contexture/units`, gradually, and the drawer's paths keep one owner each. Every existing record keeps reading through the deprecated fallback root `.contexture/sessions`; a unit moves whole at its first write, inside the store's own write call, so a write stays one store call; `ctx unit migrate` sweeps the rest when the human chooses. `storage.health` probes the namespace it is given under one state table on both drivers, the docs guard reads every declared store root through the storage library, and a governance census holds the record root, the database name, and the lock literals to their owners. storage-fts5 1.2.0, docs-discipline 1.4.0.
+
+### Breaking
+
+- `storage.health` takes the namespace, required: `storage.health <namespace>`. A missing, extra, or malformed argument refuses rc 1 ERR_INVALID_ARGUMENT, an undeclared namespace rc 1 ERR_ENTITY_NOT_FOUND, a declaration the core cannot read rc 2 ERR_STORAGE_READ. The answer describes that namespace's store alone under one state table on both drivers; `ctx unit diagnose` passes `unit`. A custom driver adopts the argument. storage-fts5 1.2.0 and this base move together: with either one older, `ctx unit diagnose` reads storage health error until both are current.
+- Changed health answers: fts5 reads ok with the store absent for a database holding no key of the namespace (it read degraded); posix reads error for an unreadable root (a new row) and reports the true presence when unwritable; presence counts the named namespace alone, the fallback root included; no detail names a folder.
+- `store-data <namespace>` refuses a second argument rc 1, except the new `--with-fallback`. New forms for custom parsers: `store-data <namespace> --with-fallback` answers a declared fallback root as line 13 (an empty line when none) and the rules from line 14, and `store-data --list` answers every valid declaration, namespace TAB root, with a declared fallback root as a third column. The plain answer is unchanged.
+- The record's root is `.contexture/units`; the unit module declares `.contexture/sessions` as its deprecated fallback root. An updating adopter whose ignore file names `.contexture/sessions/` adds the same line for `.contexture/units/` before the next write moves a unit (docs/adoption.md, Updating 9).
+- A custom driver that maps a namespace root to files reads the new root alone from the plain store-data answer, so legacy units read as absent until it reads `--with-fallback`; a unit then moves at its first write only if the driver's own write path moves it, else through `ctx unit migrate` (when the driver declares `store.promote`) or by hand.
+- The docs nudge's backlog file guard refuses a path inside any other module's store root; docs-discipline 1.4.0 pairs with a base whose library carries `store_roots`, and on an older base the file form refuses rc 2 naming the storage core.
+
+### Added
+
+- The gradual move: the posix store reads a namespace's root first, then its declared fallback root, the root's copy shadowing a key both hold; put and batch write the root; a delete removes the key from both. Its write path (put, delete, batch) moves the written key's top folder from the fallback to the root by one rename under the namespace lock it already holds, so a unit moves whole at its first landing write and `ctx unit record` still makes two reads and one batch; a folder both roots hold refuses the write rc 1 ERR_ENTITY_EXISTS naming the prefix. CLOSED units never move by a write.
+- A run whose reads came from the fallback and that ends rc 0 prints once, after its answer: `WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses`. Every unit and lane verb relays it, audit, board, and diagnose among them. The deprecation window is open ended; a later release (the idea `legacy-sunset`) retires the fallback read, the move, and the sweep.
+- `ctx unit migrate (<unit> ...|--all)`: the sweep for the units nobody writes, through the optional store token `store.promote` (the posix card declares store and store.promote; the resolver accepts it beside store, store.changelog, and search.schema). It prints `migrated: <n>`, is idempotent, stops at the first unit held in both roots, and under fts5 prints that nothing moves. The unit verb count is 22.
+- The library's `store_roots` lists every declared store root (a fallback root on its own line); `fts5` namespace locks follow the posix lock folder rule.
+- A governance drawer literal census (`tests/governance/drawer-literals.test.ts`) holds the storage core, the drivers, the engine, the composer, the package overlay, the module roots, and the test TypeScript to the drawer layout's owners; `tests/support/drawer.ts` is the tests' one reader of the record root, the database name, and the lock layout.
+
+### Changed
+
+- storage-fts5 1.1.0 to 1.2.0; docs-discipline 1.3.1 to 1.4.0 (manifest and docs module file together).
+- The package installer refuses a package carrying `.contexture/units` or `.contexture/laws` as a core path.
+- The fts5 database keeps its name, sessions.db, and never reads either posix root.
+- The guides, the unit module and storage READMEs, and the corpus name the new root, the deprecated root, the move, the warning, and the sweep; the posix health detail no longer names the sessions directory.
+
+### Fixed
+
+- The posix driver no longer aborts a writer when USER is unset and the drawer's scratch folder is unwritable.
+
+Commits in the range: 9ee51d8, 41b6c6c, 12c127f, 306319e (the drawer path owners); 4a8125f, 0ec6457 (the record root move); 31720a1 (the updating guide); 0d57f4d, 961572d (the move in the write path and the warning wording); and the release commit.
+
 ## [0.68.0] - 2026-11-07
 
 MINOR: the generated law layer moves to the workspace root, and the shipped help, laws, and output say unit where they said session. The composed layer is now `AGENTS.generated.md` beside `AGENTS.md`, `AGENTS.workspace.md`, and `AGENTS.local.md`; the composer removes the layer an older composer left under `.contexture/laws/` at every boot, a temporary branch the idea `legacy-sunset` retires later. The unit and lane verbs, the laws, and the runtime messages name the unit, and the help lines that named the storage driver as the actor of a record operation name the unit module. docs-discipline 1.3.1.

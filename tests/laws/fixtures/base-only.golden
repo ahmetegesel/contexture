@@ -1,4 +1,4 @@
-# contexture v0.68.0: generated law layer; core cksum 788479460-12045; sources 3593399919-28434; never edit
+# contexture v0.69.0: generated law layer; core cksum 2903725421-12045; sources 1748475460-28434; never edit
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.

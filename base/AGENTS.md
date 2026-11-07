@@ -1,4 +1,4 @@
-# contexture v0.68.0: the base loader; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.69.0: the base loader; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @boot
   1. FIRST: run .contexture/laws/compose from the workspace root; it composes the generated law layer AGENTS.generated.md or verifies it current. When .contexture/laws/compose is absent or not executable, or its core source .contexture/laws/core.md is absent or unreadable, stop and report the missing payload path; never boot on a stale or partial law layer.
   2. read AGENTS.generated.md WHOLE; it is the law layer: the laws, the record, and the boot. Never edit it.

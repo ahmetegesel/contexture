@@ -254,3 +254,21 @@
     Lane gather-leak-audit (unit drawer-layout) found it out of scope for internals-leak-audit: the address is load bearing in the check and gate deltas under a tracked files corpus.
   REF: "unit#drawer-layout/lane/gather-leak-audit/report"
   STATUS: OPEN
+
+@idea package-list
+  DUMPED: 2026-11-07
+  WHAT ::
+    A read only ctx package list sub-verb: each installed package with its recorded version and the catalog version beside it, so the update step that reads each .contexture/extensions/.state/<name>.files version line and the catalog manifest by path (docs/adoption.md update step 8) goes through ctx.
+  WHY ::
+    The human chose the ctx package group shape for the install doorway, which leaves room for a list sub-verb (unit drawer-layout, compose-through-ctx); lane ground-compose-verb found the adoption step reading install records by path, the leak the human principle names.
+  REF: "unit#drawer-layout/lane/ground-compose-verb/report"
+  STATUS: OPEN
+
+@idea docs-edit-spin
+  DUMPED: 2026-11-07
+  WHAT ::
+    The docs module corpus edit engine docs-edit.awk (run as awk -f docs-edit.awk part=1 doc.grammar part=2 <old doc> part=3 /dev/null) spun forever at full CPU on some input: four orphaned runs from the scratch sandbox of lane review-c5-docs (unit docs-plugins) were found after 10h20m and killed (unit drawer-layout journal, ops group). Reproduce with a lane: read that lane s journal and report for the probes it ran around epoch 1794010302 to 1794010348, find the input class that loops (part=3 /dev/null suggests an edit with an empty payload or a removal), fix the loop so the engine refuses or finishes, and add a test with a timeout.
+  WHY ::
+    A write verb that hangs instead of refusing is the false result class the dont-fool-yourself law names; an agent calling ctx docs entry or section would wait forever and orphaned runs burn CPU for hours.
+  REF: "unit#docs-plugins/lane/review-c5-docs/report"
+  STATUS: OPEN
