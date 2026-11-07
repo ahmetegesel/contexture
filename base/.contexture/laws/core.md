@@ -34,19 +34,19 @@
 @boot
   1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) and .contexture/config (workspace configuration) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
-  3. get the field: .contexture/ctx unit active; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
-  4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
+  3. get the field: .contexture/ctx unit active and .contexture/ctx rhythm list; read the message against the candidates: a close unit match proposes continuing that unit, no match proposes bootstrapping a new one; the request read against each rhythm's use when names the rhythm that serves it, or none
+  4. propose the move and wait for the answer before anything works: the proposal names the unit and the rhythm: a propose match is asked, an auto match is stated as applying, no match names the design loop (@rhythms default); the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit and the rhythm (@laws#process-free): an active unit continues at 5, a new unit bootstraps at 10
   5. run .contexture/ctx unit load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, the reference units (ref_sessions) read-only)
-  6. read the rhythm index: .contexture/ctx unit index
+  6. read the rhythm in force: .contexture/ctx rhythm current <unit> (in force with its next gate, completed, stale, or none in force); read a confirmed rhythm's body with ctx rhythm show <name>
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp the new period: .contexture/ctx unit stamp <unit> (the anchor carries the period's number and date, no receipt text; a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
-  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit active prints it), following the invoked rhythm, the matching rhythm on its trigger, or the default (@rhythms)
+  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit active prints it) at the confirmed rhythm's next gate (ctx rhythm current names it), or in the default design loop when no rhythm is confirmed (@rhythms)
   10. new work: run .contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask
   ask:      grounded question, one at a time; answer opens next; until intent, constraints, and approach are settled
-  restate:  goal + intended approach, your words; where approaches diverge, name the tradeoff
+  restate:  goal + intended approach, your words; name the rhythm that serves the request and its next gate (ctx rhythm list, ctx rhythm current), or the design loop when none matches; where approaches diverge, name the tradeoff
   confirm:  human: go | ask; may interrupt anytime; never skipped, however small
   act:      work the chosen rhythm's steps (default: the design loop, @rhythms); execute all commands through .contexture/ctx run <cmd>; mid-act message: finish the act first, then address; halt ONLY on stop, hold, redirect, or a discovery that outgrew the confirmed intent (stop, say so, back to confirm)
   surface:  durable output, named by what it is
@@ -57,6 +57,7 @@
   contract :: names order + outcomes; references artifacts by name, never re-specifies grammars, never prescribes content; artifact dialect; one line per step `N. GATE: outcome`; human-invoked or agent-selected on its trigger; never in state, its presence stamped on the advancing entries, never maintained; replaces task progression only: artifact invariants (@record, @laws) hold across every rhythm. a gate closes by its artifact: DECIDE by the backlog, VERIFY/LAND by the completion receipt carrying its evidence, REFRESH by the harvest; a gate closed by memory is debt.
   trigger :: a rhythm opens with `use when: <the situations it serves>`: triggers only, never a workflow summary: a summary becomes the shortcut agents follow instead of the steps
   activation :: `activation: propose | auto`; propose is the default: the agent proposes the matching rhythm before applying it and the human confirms; auto is the team's explicit opt-in: the agent applies the rhythm on trigger without a separate ask; the acts still pass the @interact gates
+  verbs :: ctx rhythm list names each rhythm with its trigger and activation, ctx rhythm show <name> reads its body, ctx rhythm current <unit> names the rhythm in force and its next gate, and the board ends with the same line; the first entry after a rhythm is confirmed carries its first stamp (ctx unit record --rhythm), and every stamped write prints the next gate
   placement :: the per-turn surfaces carry interaction rules only; work patterns are rhythm material: extracted from the instruction stack at onboarding, proposed as they emerge
   default :: the design loop, when no rhythm is invoked; human rhythm replaces progression
   1. DISCUSS: explore problem space; grounded questions resolve intent
