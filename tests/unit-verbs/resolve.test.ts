@@ -141,7 +141,16 @@ describe.concurrent('ctx unit resolve', () => {
     }
   });
 
-  it.for(['lane#k-lane/notes', 'lanes/k-lane/report.md', 'lane#k-lane/notes#GOAL', 'lanes/k-lane/notes#GOAL', 'lanes/k-lane/x/recipe#GOAL', `lanes/k-lane/x/journal#${D}-k-l1`])(
+  it.for([
+    'lane#k-lane/notes',
+    'lanes/k-lane/report.md',
+    'lane#k-lane/notes#GOAL',
+    'lanes/k-lane/notes#GOAL',
+    'lanes/k-lane/x/recipe#GOAL',
+    `lanes/k-lane/x/journal#${D}-k-l1`,
+    'lanes/k-lane/x/report#FINDINGS',
+    'lanes/k-lane/x/report.md#c9',
+  ])(
     'X-i [the-record-r-7jaw4]: %s refuses rc 1 as an unsupported form',
     async (ref) => {
       const r = await unit(fresh(sb0), 'resolve', 'x-unit', ref);

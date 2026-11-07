@@ -105,13 +105,6 @@ case "$ref" in
         id="${rest#*/}"
         kind=lane
         ;;
-      lanes/*/report.md#*|lanes/*/report#*)
-        rest="${ref#lanes/}"
-        lane="${rest%%/*}"
-        id="${ref##*#}"
-        art=report
-        kind=claim
-        ;;
       lanes/*/*#*)
         rest="${ref#lanes/}"
         lane="${rest%%/*}"
@@ -119,7 +112,8 @@ case "$ref" in
         art="${rest%%#*}"
         id="${rest#*#}"
         case "$art" in
-          recipe) kind=claim ;;
+          report.md) art=report; kind=claim ;;
+          report|recipe) kind=claim ;;
           journal) kind=lentry ;;
           *) unsupported ;;
         esac
