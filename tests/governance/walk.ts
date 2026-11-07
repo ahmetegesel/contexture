@@ -17,6 +17,23 @@ export function walk(dir: string, skip: (path: string) => boolean = () => false)
 
 export const text = (path: string): string => readFileSync(path, 'utf8');
 
+export function kids(dir: string): string[] {
+  try {
+    return readdirSync(dir).sort().map((n) => join(dir, n));
+  } catch {
+    return [];
+  }
+}
+
+export function moduleDirs(root: string): string[] {
+  return [
+    ...kids(join(root, 'base/.contexture/modules')),
+    ...kids(join(root, 'base/.contexture/extensions/modules')),
+    ...kids(join(root, 'plugins')).flatMap((p) => kids(join(p, '.contexture/extensions/modules'))),
+    ...kids(join(root, 'tests/fixtures/worked-package/.contexture/extensions/modules')),
+  ];
+}
+
 export const git = (root: string, ...args: string[]) => spawnSync('git', ['-C', root, ...args], { encoding: 'utf8' });
 
 export function atTop(root: string = ROOT): boolean {

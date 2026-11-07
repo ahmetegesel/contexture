@@ -1,9 +1,9 @@
-import { appendFileSync, cpSync, readdirSync } from 'node:fs';
+import { appendFileSync, cpSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
-import { text, walk } from './walk';
+import { moduleDirs, text, walk } from './walk';
 
 const STORE_REACH = /\.contexture\/sessions|sessions\.db|storage\/drivers\/|drivers\/[a-z0-9_-]+\/driver|driver-resolver[^|;]* resolve([^a-z]|$)|sqlite3|tmp\/locks/;
 const COMMENT = /^[ \t]*(#|\/\/)/;
@@ -22,22 +22,6 @@ const ALLOW: readonly [file: string, line: string, why: string][] = [
 ];
 
 const allowed = new Set(ALLOW.map(([file, line]) => `${file}\n${line}`));
-
-function moduleDirs(root: string): string[] {
-  const kids = (dir: string) => {
-    try {
-      return readdirSync(dir).sort().map((n) => join(dir, n));
-    } catch {
-      return [];
-    }
-  };
-  return [
-    ...kids(join(root, 'base/.contexture/modules')),
-    ...kids(join(root, 'base/.contexture/extensions/modules')),
-    ...kids(join(root, 'plugins')).flatMap((p) => kids(join(p, '.contexture/extensions/modules'))),
-    ...kids(join(root, 'tests/fixtures/worked-package/.contexture/extensions/modules')),
-  ];
-}
 
 function scan(root: string) {
   const files = moduleDirs(root).flatMap((d) => walk(d)).filter((f) => !f.endsWith('.md'));
