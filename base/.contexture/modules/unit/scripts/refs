@@ -28,16 +28,16 @@ vb_slug_ok "$unit" || usage
 shift
 seen=" "
 for s in "$@"; do
-  vb_slug_ok "$s" || fail "ERROR: ref session malformed: $s"
+  vb_slug_ok "$s" || fail "ERROR: ref unit malformed: $s"
   [ "$s" = "$unit" ] && fail "ERROR: the unit cannot reference itself: $unit"
-  case "$seen" in *" $s "*) fail "ERROR: duplicate ref session: $s" ;; esac
+  case "$seen" in *" $s "*) fail "ERROR: duplicate ref unit: $s" ;; esac
   seen="$seen$s "
 done
 
 vb_call session.refs "$unit" "$@"
 if [ "$VB_RC" -eq 1 ]; then
   for s in "$@"; do
-    vb_err_has "unit '$s' not found" && fail "ERROR: no such session: $s"
+    vb_err_has "unit '$s' not found" && fail "ERROR: no such unit: $s"
   done
 fi
 vb_ok

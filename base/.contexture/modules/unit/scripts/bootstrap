@@ -75,7 +75,7 @@ vb_list repos "$@"
 vb_kv attention "fresh unit; objective: $objective; git: $(gitstate)"
 vb_call session.create "$slug"
 if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_ENTITY_EXISTS"; then
-  fail "ERROR: session exists: unit $slug"
+  fail "ERROR: already exists: unit $slug"
 fi
 vb_ok
 RV_PATH=state vb_render state RV_PATH=state

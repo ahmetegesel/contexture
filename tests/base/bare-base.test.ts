@@ -65,10 +65,10 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
     }
   });
 
-  it('an empty drawer reads no sessions yet', async () => {
+  it('an empty drawer reads no units yet', async () => {
     const r = await ctx(bare(), 'unit', 'active');
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('no sessions yet');
+    expect(r.stdout).toContain('no units yet');
   });
 });
 

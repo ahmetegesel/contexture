@@ -54,17 +54,17 @@ describe.concurrent('ctx unit load: paging, the refs form, and the warnings', ()
     expect((await unit(sb, 'load', 'page-unit', String(pages + 1))).code).toBe(1);
   });
 
-  it('F [the-record-r1]: the main load renders a ref session read-only with a path-free WRITE SCOPE; clearing the refs drops it', async () => {
+  it('F [the-record-r1]: the main load renders a reference unit read-only with a path-free WRITE SCOPE; clearing the refs drops it', async () => {
     const sb = fresh(refs);
     expect((await unit(sb, 'refs', 'ref-unit', 'ref-src')).code).toBe(0);
     const out = await loadAll(sb, 'ref-unit');
-    expect(out).toContain('REF SESSION: ref-src (READ-ONLY)');
-    expect(out).toMatch(/WRITE SCOPE: unit ref-unit \+ repos: .*ref sessions READ-ONLY/);
+    expect(out).toContain('REF UNIT: ref-src (READ-ONLY)');
+    expect(out).toMatch(/WRITE SCOPE: unit ref-unit \+ repos: .*ref units READ-ONLY/);
     expect(out).not.toContain('WRITE SCOPE: .contexture/sessions');
     expect(out).toContain('# --- ref knowledge ---');
     expect(out).not.toContain('# --- ref knowledge.md ---');
     expect((await unit(sb, 'refs', 'ref-unit')).code).toBe(0);
-    expect(await loadAll(sb, 'ref-unit')).not.toContain('REF SESSION:');
+    expect(await loadAll(sb, 'ref-unit')).not.toContain('REF UNIT:');
   });
 
   it('F: the refs form reads complete and read-only; a missing unit refuses rc 1', async () => {
@@ -75,7 +75,7 @@ describe.concurrent('ctx unit load: paging, the refs form, and the warnings', ()
     expect((await unit(sb, 'load', 'refs', 'nosuch')).code).toBe(1);
   });
 
-  it('RF3 [the-record-r14]: a ref session the store lacks warns naming the artifact and the unit, never a path (posix plant)', async () => {
+  it('RF3 [the-record-r14]: a reference unit the store lacks warns naming the artifact and the unit, never a path (posix plant)', async () => {
     const sb = fresh(refs);
     const state = readFileSync(artifactPath(sb, 'ref-unit', 'state'), 'utf8').split('\n').filter((l) => l && !l.startsWith('ref_sessions:'));
     plantArtifact(sb, 'ref-unit', 'state', [...state, 'ref_sessions: [f-ghost]', ''].join('\n'));

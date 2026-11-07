@@ -393,9 +393,9 @@ function load_knowledge(p, u, missing_note,   n, i, t, any) {
 function load_ref(p,   u) {
   u = sv(D(p) "unit")
   SEC = "ref " u
-  line("# === REF SESSION: " u " (READ-ONLY) ===")
+  line("# === REF UNIT: " u " (READ-ONLY) ===")
   line("# NOTICE: Read-only reference context. Do not edit, resolve, or append entries here.")
-  line("# All new tasks, active events, and state changes belong exclusively to the active session.")
+  line("# All new tasks, active events, and state changes belong exclusively to the active unit.")
   line("# --- ref knowledge ---")
   load_knowledge(D(p) "knowledge", u)
   line("# --- ref live journal ---")
@@ -508,7 +508,7 @@ function active_next(p,   nt, bp, tc, s) {
 # carries no last_event and no thread count; a missing backlog warns
 function v_active(   n, i, p, k, j, nact, ntot) {
   n = nn("units")
-  if (n == 0 && sv("store") == "absent") { line("no sessions yet"); return }
+  if (n == 0 && sv("store") == "absent") { line("no units yet"); return }
   nact = 0
   ntot = 0
   for (k = 1; k <= n; k++) {
@@ -526,7 +526,7 @@ function v_active(   n, i, p, k, j, nact, ntot) {
       for (j = 1; j <= ST_ol; j++) line("  " ST_obj[j])
     } else if (ST_status != "CLOSED") warn("WARNING: unrecognized status [" ST_status "] in state: unit " sv(D(p) "unit"))
   }
-  if (nact == 0) line("no active sessions")
+  if (nact == 0) line("no active units")
   line("closed: " (ntot - nact))
 }
 
@@ -547,7 +547,7 @@ function v_units(   n, i, p, j, known) {
 
 function v_refs_to(   n, i) {
   n = nn("referrers")
-  if (n == 0) fail("ERROR: no unit references session: " sv("unit"))
+  if (n == 0) fail("ERROR: no unit references " sv("unit"))
   line(sprintf("refs-to %s: %d units", sv("unit"), n))
   line("")
   for (i = 1; i <= n; i++) line("  " sv("referrers." i))

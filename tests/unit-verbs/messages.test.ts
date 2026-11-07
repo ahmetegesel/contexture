@@ -33,7 +33,7 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
 
   it('UP-a [the-record-r14]: bootstrap of an existing unit names the unit', async () => {
     const err = (await unit(fresh(sb0), 'bootstrap', 'u-unit', 'again')).stderr;
-    expect(err).toMatch(/^ERROR: session exists: unit u-unit$/m);
+    expect(err).toMatch(/^ERROR: already exists: unit u-unit$/m);
     pathFree(err);
   });
 

@@ -34,6 +34,6 @@ describe.concurrent('ctx unit units and refs-to', () => {
     expect(r.stdout + r.stderr).toBe('refs-to n-unit: 1 units\n\n  n-ref\n');
     const none = await unit(sb, 'refs-to', 'n-ref');
     expect(none.code).toBe(1);
-    expect(none.stderr).toMatch(/^ERROR: no unit references session: n-ref$/m);
+    expect(none.stderr).toMatch(/^ERROR: no unit references n-ref$/m);
   });
 });

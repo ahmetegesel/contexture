@@ -24,10 +24,10 @@ describe.concurrent('ctx unit active: the derived view', () => {
     }, 'posix', 'active-dp');
   });
 
-  it('V-e: active on an empty drawer answers rc 0 with no sessions yet', async () => {
+  it('V-e: active on an empty drawer answers rc 0 with no units yet', async () => {
     const r = await unit(stage('posix', 'active-empty'), 'active');
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('no sessions yet');
+    expect(r.stdout).toContain('no units yet');
   });
 
   it('R-g: active refuses an argument rc 1', async () => {

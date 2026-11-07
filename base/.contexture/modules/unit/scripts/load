@@ -18,7 +18,7 @@ usage() {
 }
 
 ref_hint() {
-  printf 'to read a reference session: ctx unit load refs <ref-slug>\n' >&2
+  printf 'to read a reference unit: ctx unit load refs <ref-slug>\n' >&2
   usage
 }
 
@@ -63,7 +63,7 @@ if [ "$1" = refs ]; then
   if [ "$VB_RC" -eq 1 ]; then
     for r in "$@"; do
       if vb_err_has "unit '$r' not found"; then
-        printf 'ERROR: no such session: %s\n' "$r" >&2
+        printf 'ERROR: no such unit: %s\n' "$r" >&2
         exit 1
       fi
     done
@@ -214,9 +214,9 @@ BEGIN {
   if (form == "refs") {
     if (page < npages) printf "REF LOAD INCOMPLETE (page %d of %d): keep reading the ref\n", page, npages
     else printf "REF LOAD COMPLETE: pages %d/%d\n", npages, npages
-    printf "session-load refs %s: %d lines, %d pages\n", refstr, total, npages
+    printf "unit-load refs %s: %d lines, %d pages\n", refstr, total, npages
     print_map()
-    printf "WRITE SCOPE: none; ref sessions READ-ONLY\n"
+    printf "WRITE SCOPE: none; ref units READ-ONLY\n"
     print ""
     page_header("refs", page)
     page_body(page)
@@ -236,9 +236,9 @@ BEGIN {
   fflush()
   if (fire_hooks("load-post", " CTX_UNIT \"" slug "\" CTX_LOAD_FORM main CTX_LOAD_PAGE " page) != 0)
     fail("ERROR: load-post point failed (block hook)")
-  printf "session-load %s: %d lines, %d pages\n", slug, total, npages
+  printf "unit-load %s: %d lines, %d pages\n", slug, total, npages
   print_map()
-  printf "WRITE SCOPE: unit %s + repos: [%s]; ref sessions READ-ONLY\n", slug, repos
+  printf "WRITE SCOPE: unit %s + repos: [%s]; ref units READ-ONLY\n", slug, repos
   print ""
   page_header(slug, page)
   page_body(page)
