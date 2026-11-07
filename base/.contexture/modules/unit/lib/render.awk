@@ -632,9 +632,11 @@ function oneline_nl(s) {
 
 # ------------------------------------------------------------------------------
 # resolve (kept): the item's span, trailing separator included; a lane report claim is the
-# report's block from the last "@<claim>" (or "@claim <claim>") line to the line before
-# the next column-0 ^@[A-Za-z] line (the v0.54.0 rule, base's since resolve is base's)
-function v_resolve(   k, n, L, i, found, e, t, claim, w, o) {
+# report's span from the last head naming it: an "@<claim>" (or "@claim <claim>") line
+# runs to the line before the next column-0 ^@[A-Za-z] line (the v0.54.0 rule, base's
+# since resolve is base's), a column-0 "<claim> ::" line to the line before the next
+# non-blank column-0 line, blank lines inside either span kept
+function v_resolve(   k, n, L, i, found, keyed, e, t, claim, w, o) {
   k = ENVIRON["RV_KIND"]
   if (k == "task") { put(span("task", "task")); return }
   if (k == "finding") { put(span("finding", "finding")); return }
@@ -643,18 +645,21 @@ function v_resolve(   k, n, L, i, found, e, t, claim, w, o) {
   n = split(sv("content"), L, "\n")
   if (n > 0 && L[n] == "") n--
   found = 0
+  keyed = 0
   for (i = 1; i <= n; i++) {
     t = L[i]
     sub(/[ \t\r]+$/, "", t)
-    if (t == "@" claim) found = i
+    if (t == "@" claim) { found = i; keyed = 0 }
+    else if (t == claim " ::") { found = i; keyed = 1 }
     else if (L[i] ~ /^@claim[ \t]/) {
       split(L[i], w, /[ \t]+/)
-      if (w[2] == claim) found = i
+      if (w[2] == claim) { found = i; keyed = 0 }
     }
   }
   if (!found) fail("resolve: error: reference '" ENVIRON["RV_REF"] "' not found in unit '" ENVIRON["RV_UNIT"] "' (ERR_ENTITY_NOT_FOUND)")
   e = found + 1
-  while (e <= n && L[e] !~ /^@[A-Za-z]/) e++
+  if (keyed) { while (e <= n && L[e] !~ /^[^ \t\r]/) e++ }
+  else { while (e <= n && L[e] !~ /^@[A-Za-z]/) e++ }
   e--
   o = ""
   for (i = found; i <= e; i++) o = o L[i] "\n"

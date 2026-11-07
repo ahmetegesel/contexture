@@ -45,6 +45,11 @@ unsupported() {
   exit 1
 }
 
+refuse_absent() {
+  printf "resolve: error: reference '%s' not found in unit '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ref" "$unit" >&2
+  exit 1
+}
+
 kind=""
 id=""
 lane=""
@@ -86,17 +91,37 @@ case "$ref" in
         id="${rest#*/report#}"
         kind=claim
         ;;
+      lane#*#*) unsupported ;;
+      lane#*/*)
+        rest="${ref#lane#}"
+        lane="${rest%%/*}"
+        id="${rest#*/}"
+        kind=lane
+        ;;
       lanes/*/report.md#*|lanes/*/report#*)
         rest="${ref#lanes/}"
         lane="${rest%%/*}"
         id="${ref##*#}"
         kind=claim
         ;;
+      lanes/*#*) unsupported ;;
+      lanes/*/*)
+        rest="${ref#lanes/}"
+        lane="${rest%%/*}"
+        id="${rest#*/}"
+        kind=lane
+        ;;
     esac
     ;;
 esac
 [ -n "$kind" ] && [ -n "$id" ] || unsupported
-[ "$kind" = claim ] && { vb_slug_ok "$lane" || unsupported; }
+case "$kind" in
+  claim) vb_slug_ok "$lane" || unsupported ;;
+  lane)
+    vb_slug_ok "$lane" || unsupported
+    case "$id" in recipe|journal|report) ;; *) unsupported ;; esac
+    ;;
+esac
 
 case "$kind" in
   task) vb_call task.get "$unit" "$id" ;;
@@ -106,11 +131,13 @@ case "$kind" in
   lane) vb_call lane.get "$unit" "$lane" "$id" ;;
 esac
 if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_ENTITY_NOT_FOUND" && ! vb_err_has "unit '$unit' not found"; then
-  printf "resolve: error: reference '%s' not found in unit '%s' (ERR_ENTITY_NOT_FOUND)\n" "$ref" "$unit" >&2
-  exit 1
+  refuse_absent
 fi
 if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_INVALID_ARGUMENT"; then
   unsupported
+fi
+if [ "$kind" = lane ] && [ "$id" != journal ] && [ "$VB_RC" -eq 0 ]; then
+  awk -f "$VB_JSON" < "$VB_DIR/ans" | grep -qx 'content:null' && refuse_absent
 fi
 vb_ok
 
