@@ -15,6 +15,7 @@ const recipeOf = async (sb: string, l: string): Promise<string> => (await must(l
 
 const S_TMP = 'never use /tmp or any path outside the workspace';
 const S_PROMPT = 'a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach';
+const S_BACKGROUND = 'never leave a background process running when you finish; a command that hangs is stopped, never abandoned';
 const bounded = (text: string): boolean => text.includes(S_TMP) && text.includes(S_PROMPT);
 const esc = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const lockSegments = lockPath('/', unitLock('u')).split('/').filter(Boolean);
@@ -32,7 +33,7 @@ const fed = { input: '# a recipe on stdin\nMISSION\n  GOAL: "never read"\n' };
 
 const prompt = (u: string, l: string): string[] => [
   `You are a dispatched subagent working lane ${l} of unit ${u}. Your full brief is the lane recipe: read it first and follow it exactly: .contexture/ctx lane show ${u} ${l} recipe`,
-  `Hard rules: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp/${l}/; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach. Every shell command runs through .contexture/ctx run. The record only through ctx: your record writes are your lane journal and your report, plus only what the recipe's write scope adds.`,
+  `Hard rules: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp/${l}/; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach. Every shell command runs through .contexture/ctx run; never leave a background process running when you finish; a command that hangs is stopped, never abandoned. The record only through ctx: your record writes are your lane journal and your report, plus only what the recipe's write scope adds.`,
   'Return a short summary only; the report carries the substance.',
 ];
 
@@ -85,7 +86,7 @@ const FULL_RECIPE = [
   '',
   'BOUNDARY (hard rules) ::',
   '  1. never use /tmp or any path outside the workspace; scratch only under .contexture/tmp/full-lane/; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach',
-  '  2. every shell command runs through the runner: .contexture/ctx run <cmd>, or piped through it',
+  '  2. every shell command runs through the runner: .contexture/ctx run <cmd>, or piped through it; never leave a background process running when you finish; a command that hangs is stopped, never abandoned',
   '  3. the record only through ctx: your record writes are your lane journal (ctx lane record sem-unit full-lane) and your report (ctx lane report sem-unit full-lane), plus only what the write scope adds',
   '  4. write scope: read only',
   '  5. a decision within this recipe is yours: decide it and journal it; a wall or a decision beyond it is drift: stop and report, never improvise past it',
@@ -146,12 +147,13 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(recipe).toContain(`  VERDICT: done, partial, or drifted, with one line why\n  ${LANE_BRIEF.report}\n  The report and the journal land`);
   });
 
-  it('[the-record-r15]: the recipe carries the boundary sentence, null checked, and for flags naming none no storage location, a planted --fact read by the same assertion', async () => {
+  it('[the-record-r15]: the recipe carries the boundary sentence, null checked, and the background process rule in its runner item, and for flags naming none no storage location, a planted --fact read by the same assertion', async () => {
     const sb = fresh(sb0);
     const created = await must(createLane(sb, 'sem-unit', 'clean-lane', ['--ref=lane#x-lane/report', '--fact=a plain fact']));
     const recipe = await recipeOf(sb, 'clean-lane');
     expect(bounded(recipe)).toBe(true);
     expect(bounded(recipe.split('\n').filter((l) => !l.includes(S_TMP)).join('\n'))).toBe(false);
+    expect(recipe.split('\n').filter((l) => l.includes(S_BACKGROUND))).toEqual([`  2. every shell command runs through the runner: .contexture/ctx run <cmd>, or piped through it; ${S_BACKGROUND}`]);
     expect(recipe).not.toMatch(LEAK);
     expect(created.stdout).not.toMatch(LEAK);
     await must(createLane(sb, 'sem-unit', 'leak-lane', [`--fact=the record sits in ${RECORD_ROOT}/x`]));
@@ -168,12 +170,13 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(recipe).toContain(`with one line why\n  ${odd}\n`);
   });
 
-  it('[the-record-r15]: a create prints the lane line and the dispatch prompt alone, rc 0 with an empty stderr; the stored recipe holds no prompt line', async () => {
+  it('[the-record-r15]: a create prints the lane line and the dispatch prompt alone, rc 0 with an empty stderr, the prompt carrying the background process rule; the stored recipe holds no prompt line', async () => {
     const sb = fresh(sb0);
     const r = await createLane(sb, 'sem-unit', 'p-lane');
     const lines = prompt('sem-unit', 'p-lane');
     expect([r.code, r.stdout, r.stderr]).toEqual([0, ['lane created: p-lane in sem-unit', '', "dispatch prompt (the subagent's launch message; never stored):", ...lines, ''].join('\n'), '']);
     expect(bounded(lines.join('\n'))).toBe(true);
+    expect(r.stdout.split('\n').filter((l) => l.includes(S_BACKGROUND))).toEqual([lines[1]]);
     const recipe = await recipeOf(sb, 'p-lane');
     for (const line of [...lines, 'dispatch prompt']) expect(recipe).not.toContain(line);
   });
@@ -237,7 +240,8 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     for (const flag of ['goal', 'branch', 'writes', 'scope', 'report']) expect(table.stdout).toMatch(new RegExp(`^ {2}--${flag}="\\.\\.\\." +required`, 'm'));
     for (const flag of ['ref', 'task', 'decision', 'rhythm', 'fact', 'substrate']) expect(table.stdout).toMatch(new RegExp(`^ {2}--${flag}=`, 'm'));
     expect(table.stdout).toContain('stdin is never read');
-    expect(table.stdout).toContain(prompt('<unit>', '<lane>')[0]);
+    for (const line of prompt('<unit>', '<lane>')) expect(table.stdout).toContain(line);
+    expect(table.stdout).toContain(S_BACKGROUND);
     expect(table.stdout).not.toMatch(LEAK);
     expect(table.stdout).not.toMatch(/rhythms\/|< \S/);
     expect((await lane(sb, 'show', 'sem-unit', 'h-lane', 'recipe')).code).toBe(1);
