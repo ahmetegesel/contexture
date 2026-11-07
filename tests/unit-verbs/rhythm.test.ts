@@ -127,6 +127,21 @@ describe.concurrent('ctx rhythm list: the rhythms over both roots', () => {
     expect(r.stderr).toBe("rhythm list: warning: nested (workspace): step 1 gate 'a numbered prose line' is outside the stamp grammar\n");
   });
 
+  it('[modules-r20, modules-r-6l2ti] a file whose name is not a rhythm name warns that it never lists when it holds an @rhythm line, stays silent when it holds none, and a rhythm named like an answer tag still lists', async () => {
+    const sb = stage('posix', 'rhythm-badname');
+    ws(sb, 'dotted.flow', '@rhythm dotted.flow\n  use when: u\n  1. GO: the gate\n');
+    ext(sb, 'my flow', '@rhythm my flow\n  use when: u\n  1. GO: the gate\n');
+    ws(sb, 'notes.old', '# notes\n');
+    ws(sb, 'skipped-flow', '@rhythm skipped-flow\n  use when: u\n  1. GO: the gate\n');
+    ws(sb, 'badname-flow', '@rhythm badname-flow\n  use when: u\n  1. GO: the gate\n');
+    const r = await rh(sb, 'list');
+    expect([r.code, lines(r.stdout)]).toEqual([0, ['badname-flow | workspace | use when: u | activation: propose', 'skipped-flow | workspace | use when: u | activation: propose', SELECT]]);
+    expect(lines(r.stderr)).toEqual([
+      'rhythm list: warning: dotted.flow (workspace): the file name is not a rhythm name (a letter or digit, then letters, digits, underscore, or dash), so it never lists',
+      'rhythm list: warning: my flow (extension): the file name is not a rhythm name (a letter or digit, then letters, digits, underscore, or dash), so it never lists',
+    ]);
+  });
+
   it('R-g [modules-r20]: list refuses an argument rc 1 with the usage', async () => {
     const r = await rh(stage('posix', 'rhythm-arg'), 'list', 'extra');
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'Usage: ctx rhythm list\nhelp: ctx rhythm help\n']);

@@ -6,7 +6,9 @@
 #   resolve <name>                           the answer lines below, rc 0; rc 1 naming the miss
 #   resolve --all                            the effective names in list order, one per line,
 #                                            then skipped TAB <name> TAB <origin> per file
-#                                            holding no @rhythm line
+#                                            holding no @rhythm line and badname TAB <name>
+#                                            TAB <origin> per file whose name fails the slug
+#                                            rule though it holds an @rhythm line
 #   resolve --body <name>                    the effective copy, byte for byte
 #   resolve --state <unit> [<slug> <stamp>]  the one line naming the rhythm in force
 # The answer: origin TAB workspace|extension; shadows TAB yes|no; declared TAB <@rhythm value>;
@@ -102,7 +104,11 @@ all() {
       [ -f "$rz_f" ] || continue
       rz_n=${rz_f##*/}
       rz_n=${rz_n%.md}
-      name_ok "$rz_n" || continue
+      if ! name_ok "$rz_n"; then
+        is_rhythm "$rz_f" && RZ_SKIPPED="${RZ_SKIPPED:-}badname	$rz_n	$rz_origin
+"
+        continue
+      fi
       if [ "$rz_origin" = extension ] && is_rhythm "$WS/$rz_n.md"; then continue; fi
       if is_rhythm "$rz_f"; then
         printf '%s\n' "$rz_n"

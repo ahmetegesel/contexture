@@ -3,7 +3,7 @@
 # usage: ctx rhythm list
 # help: one line per effective rhythm, <name> | <origin> | use when: <trigger> | activation: <propose|auto>: the workspace's own rhythms first, then the installed ones, each in name order; a name in both lists once, as the workspace copy, its origin reading workspace, shadows the extension copy
 # help: the last line is the select line: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop; read a rhythm with ctx rhythm show <name>
-# help: a grammar defect of a listed rhythm warns on stderr (rhythm list: warning: <name> (<origin>): <defect>) and the rhythm still lists, named by its file name, a missing use when reading (missing) and an activation other than propose or auto read as propose; a file holding no @rhythm line is no rhythm and warns that it holds none
+# help: a grammar defect of a listed rhythm warns on stderr (rhythm list: warning: <name> (<origin>): <defect>) and the rhythm still lists, named by its file name, a missing use when reading (missing) and an activation other than propose or auto read as propose; a file holding no @rhythm line is no rhythm and warns that it holds none; a file whose name is not a rhythm name (a letter or digit, then letters, digits, underscore, or dash) never lists, and warns so when it holds an @rhythm line
 # help: with no rhythm at all it prints the select line alone, rc 0
 # help: exit codes: 0 the list printed; 1 an argument given
 # help: example: ctx rhythm list
@@ -23,8 +23,11 @@ fi
 resolve="$dir/resolve"
 sh "$resolve" --all | while IFS= read -r line; do
   case "$line" in
-    skipped*)
+    "skipped	"*)
       printf '%s\n' "$line" | awk -F '	' '{ printf "rhythm list: warning: %s (%s): no @rhythm line\n", $2, $3 > "/dev/stderr" }'
+      ;;
+    "badname	"*)
+      printf '%s\n' "$line" | awk -F '	' '{ printf "rhythm list: warning: %s (%s): the file name is not a rhythm name (a letter or digit, then letters, digits, underscore, or dash), so it never lists\n", $2, $3 > "/dev/stderr" }'
       ;;
     *)
       sh "$resolve" "$line" | RL_NAME=$line awk -F '	' '
