@@ -1,4 +1,4 @@
-# contexture v0.69.0: generated law layer; core cksum 3918299898-12919; sources 511260904-29445; never edit
+# contexture v0.69.0: generated law layer; core cksum 2857089068-12979; sources 2771815065-29505; never edit
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -131,7 +131,7 @@
   every dispatch:
   - brief = the lane recipe, composed by ctx lane create from the dispatcher's parameters (ctx lane help create names each: the goal, the branch, the write scope, the scope steps, the report sections, and the optional refs, tasks, decisions, rhythm, facts, and substrate); it slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad dumps forbidden; names the active branch/worktree
   - subagent boot, read-only, before any work: the overlays, the state, the backlog, knowledge, the lane recipe, and every REF it names; the unit's record surfaces are never subagent-written
-  - the subagent's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
+  - the subagent's first journal entry is the load receipt: the refs loaded ride as --ref lines on that entry, never one per line inside the WHAT; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
   - subagent journals at action granularity via ctx lane record as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the lane journal is the audit trail and the resumption surface
   - report via ctx lane report; return = summary ONLY
   - the dispatcher reads the report, never the subagent journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining

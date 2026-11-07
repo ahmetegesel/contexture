@@ -92,7 +92,7 @@ const FULL_RECIPE = [
   '  5. a decision within this recipe is yours: decide it and journal it; a wall or a decision beyond it is drift: stop and report, never improvise past it',
   '',
   'BOOT (read only, before any work) ::',
-  "  the loader's law layer and both overlays (AGENTS.md, AGENTS.workspace.md, AGENTS.local.md); ctx unit load sem-unit until a page reads complete; this recipe (ctx lane show sem-unit full-lane recipe); every REF it names. Your first lane journal entry is the load receipt: the refs loaded, one per line; an unresolved REF is a brief defect: stop and report it.",
+  "  the loader's law layer and both overlays (AGENTS.md, AGENTS.workspace.md, AGENTS.local.md); ctx unit load sem-unit until a page reads complete; this recipe (ctx lane show sem-unit full-lane recipe); every REF it names. Your first lane journal entry is the load receipt: the refs loaded ride as --ref lines on that entry, never one per line inside the WHAT; an unresolved REF is a brief defect: stop and report it.",
   '',
   'JOURNAL ::',
   '  ctx lane record sem-unit full-lane at action granularity as things happen: every command whose result is not obvious, every claim, decision point, and drift notice; each WHAT carries the action, its result, and why the next step follows; an entry awaiting an act outside the lane carries --thread.',

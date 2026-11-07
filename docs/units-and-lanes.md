@@ -123,7 +123,7 @@ What makes subagents portable between agents is a contract: the subagent's own o
 
 The recipe is the brief in the record: the dispatcher gives the brief as the flags of `ctx lane create`, the verb composes and stores the recipe, and the subagent reads it with `ctx lane show <unit> <lane> recipe`. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch/worktree the subagent works on, so the subagent knows where to edit and commit; its working root sits in the write scope. A message-brief dies at compaction; a recipe in the record survives, and that persistence is the audit trail.
 
-Before any work, the subagent boots read-only: the overlays, the unit's state, backlog, and knowledge, the recipe, and every reference the recipe names. Its first journal entry is the load receipt: the refs loaded, one per line. An unresolved reference is a defect in the brief; the subagent stops and reports it, never working around the gap.
+Before any work, the subagent boots read-only: the overlays, the unit's state, backlog, and knowledge, the recipe, and every reference the recipe names. Its first journal entry is the load receipt: the refs loaded ride as `--ref` lines on that entry (`ctx lane record --ref`, repeatable), never one per line inside the one line `--what`. An unresolved reference is a defect in the brief; the subagent stops and reports it, never working around the gap.
 
 ### The subagent journal
 
