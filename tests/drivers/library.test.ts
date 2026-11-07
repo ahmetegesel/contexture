@@ -37,6 +37,12 @@ for (const driver of DRIVERS) {
       expect((await lib(sb, 'store_delete', ['libprobe', 'x/y'])).stdout).toBe('{"namespace":"libprobe","key":"x/y","op":"remove"}\n');
     });
 
+    it('[the-engine-r-b3r6t] store_promote reaches the driver\'s optional promotion through the core resolver', async () => {
+      const r = await lib(fresh(snap), 'store_promote', ['libprobe', 'x/']);
+      if (driver === 'posix') expect(answer(r, 'store.promote')).toEqual({ namespace: 'libprobe', prefix: 'x/', state: 'none' });
+      else refused(r, 'store.promote', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'store.promote'");
+    });
+
     it('[the-engine-r9, the-engine-r19] answers the batch and the scan, and an escaped search query', async () => {
       const sb = fresh(snap);
       expect((await lib(sb, 'store_batch', ['libprobe'], batchPayload([{ action: 'put', key: 'x/y', head: 'none', value: 'library-value\n' }]))).stdout)
@@ -139,6 +145,17 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
       env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(staged, '.contexture/storage/scripts/driver-resolver') },
     });
     expect([r.code, r.stderr, r.stdout]).toEqual([0, '', 'libprobe\tlibprobe-root\n']);
+  });
+
+  it('[the-engine-r26, the-engine-r-cj0ey] store_roots answers a declared fallback root on its own line after its root, reading the listing\'s third column', async () => {
+    const staged = fresh(snap);
+    const sb = sandbox('roots-fallback');
+    dataFile(sb, 'modules', 'libprobe', LIBPROBE);
+    dataFile(sb, 'modules', 'legacy', 'namespace: legacy\nroot: new-root\nfallback_root: old-root\nkey: <u>\n');
+    const r = await shFunction(sb, join(staged, LIBRARY), 'store_roots', [], {
+      env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(staged, '.contexture/storage/scripts/driver-resolver') },
+    });
+    expect([r.code, r.stderr, r.stdout]).toEqual([0, '', 'legacy\tnew-root\nlegacy\told-root\nlibprobe\tlibprobe-root\n']);
   });
 
   it('[the-engine-r21, the-engine-r26] store_roots refuses rc 2 with one line when no data reader is found', async () => {

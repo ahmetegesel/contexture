@@ -122,12 +122,61 @@ describe.concurrent('store-data, the data file reader', () => {
     expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line', 'exact']);
   });
 
-  it('[modules-r10] refuses an argument beyond the namespace, and beyond the listing flag, rc 1', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] refuses an argument beyond the namespace and --with-fallback, and beyond the listing flag, rc 1', async () => {
     const sb = workspace();
+    const usage = (arg: string) => `store-data: unexpected argument '${arg}' (store-data <namespace> [--with-fallback], or store-data --list)\n`;
     const one = await exec(STORE_DATA, ['docs', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
-    expect([one.code, one.stdout, one.stderr]).toEqual([1, '', "store-data: unexpected argument 'extra' (store-data <namespace>, or store-data --list)\n"]);
+    expect([one.code, one.stdout, one.stderr]).toEqual([1, '', usage('extra')]);
+    const two = await exec(STORE_DATA, ['docs', '--with-fallback', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+    expect([two.code, two.stdout, two.stderr]).toEqual([1, '', usage('extra')]);
     const list = await listing(sb, 'extra');
     expect([list.code, list.stdout, list.stderr]).toEqual([1, '', "store-data: unexpected argument 'extra' (store-data --list takes no argument)\n"]);
+  });
+
+  const legacy = (fallback: string, root = 'new-root') => `namespace: legacy\nroot: ${root}\nfallback_root: ${fallback}\nsuffix: .md\nkey: <u>/<path...>\nsearch: documents\ndocument: <u>/state state session -\n`;
+  const withFallback = (sb: string, ns: string) => exec(STORE_DATA, [ns, '--with-fallback'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+
+  it('[modules-r10, the-engine-r-cj0ey] accepts a fallback root and keeps the plain answer byte identical: twelve lines, then the rules', async () => {
+    const sb = workspace();
+    const file = dataFile(sb, 'modules', 'legacy', legacy('old-root'));
+    const lines = await answerLines(sb, 'legacy');
+    expect(lines).toEqual(['legacy', 'new-root', '.md', '<u>/<path...>', 'false', file, 'documents', '', '', 'head', 'line', 'exact', '<u>/state\tstate\tsession\t-']);
+    const other = workspace();
+    dataFile(other, 'modules', 'legacy', legacy('old-root').replace('fallback_root: old-root\n', ''));
+    const plain = await answerLines(other, 'legacy');
+    expect(lines.filter((_, i) => i !== 5)).toEqual(plain.filter((_, i) => i !== 5));
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] --with-fallback answers the fallback root as line 13 and the rules from line 14, an empty line 13 when none is declared', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'legacy', legacy('old-root'));
+    const r = await withFallback(sb, 'legacy');
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout.split('\n').slice(12)).toEqual(['old-root', '<u>/state\tstate\tsession\t-', '']);
+    const none = await withFallback(sb, 'docs');
+    expect([none.code, none.stderr]).toEqual([0, '']);
+    expect(none.stdout.split('\n').slice(11)).toEqual(['exact', '', '']);
+  });
+
+  it.each([
+    ['a malformed fallback root', legacy('../outside'), "malformed fallback root '../outside' (a workspace-relative folder inside the workspace)"],
+    ['a fallback root equal to the root', legacy('new-root'), "the fallback root 'new-root' equals the root"],
+    ['a fallback root inside the root', legacy('new-root/old'), "the fallback root 'new-root/old' and the root 'new-root' are nested"],
+    ['a root inside the fallback root', legacy('old', 'old/new'), "the fallback root 'old' and the root 'old/new' are nested"],
+    ['a fallback equal to the default root', 'namespace: legacy\nfallback_root: legacy\nkey: <u>\n', "the fallback root 'legacy' equals the root"],
+    ['a duplicate fallback root', 'namespace: legacy\nfallback_root: a\nfallback_root: b\nkey: <u>\n', "duplicate field 'fallback_root' in the data file"],
+  ])('[modules-r10, the-engine-r-cj0ey] %s refuses rc 1 naming the rule', async (_, text, reason) => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'legacy', text);
+    await refusal(sb, 'legacy', 1, reason);
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] the listing answers a declared fallback root as a third column, two columns otherwise', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'legacy', legacy('old-root'));
+    const r = await listing(sb);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toBe('docs\tdocs\nlegacy\tnew-root\told-root\n');
   });
 
   it('[modules-r10] the listing mode answers every valid declaration of both roots, namespace TAB root, sorted by namespace, the default root the namespace', async () => {

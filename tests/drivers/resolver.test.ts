@@ -227,6 +227,16 @@ for (const driver of DRIVERS) {
       expect((await rsv(sb, ['resolve'])).stdout).toBe(`${driverPath(sb, driver)}\n`);
       expect((await rsv(sb, ['has', 'store.changelog'])).code).toBe(driver === 'fts5' ? 0 : 1);
       expect((await rsv(sb, ['has', 'search.schema'])).code).toBe(driver === 'fts5' ? 0 : 1);
+      expect((await rsv(sb, ['has', 'store.promote'])).code).toBe(driver === 'posix' ? 0 : 1);
+    });
+
+    it('[the-engine-r8] serves a card declaring the store.promote token, and the check of the configured driver passes', async () => {
+      const sb = fresh(snap);
+      const w = wrap(join(sb, 'w-promote'), driverPath(sb, driver), { optional: ['store', 'store.promote'] });
+      answer(await rsv(sb, [`--driver=${w}`, 'store.list', 'unit']), 'store.list');
+      const check = await rsv(sb, ['check']);
+      expect([check.code, check.stderr]).toEqual([0, '']);
+      expect(check.stdout).toBe(`OK: storage driver '${driver}' verified at ${driverPath(sb, driver)}\n`);
     });
 
     it('[the-engine-r8] serves a complete store card and lands a write through it', async () => {

@@ -15,7 +15,7 @@ import { answer, refused, refusedLike } from '../support/wire';
 const ALL_KEYS = DOCS_KEYS.map(([k]) => k);
 
 const CARDS = {
-  posix: '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store"]}\n',
+  posix: '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store","store.promote"]}\n',
   fts5: '{"driver":"fts5","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n',
 };
 
@@ -321,6 +321,12 @@ for (const driver of DRIVERS) {
         const r = await store(fresh(empty), driver).op('capability', []);
         answer(r, 'capability');
         expect(r.stdout).toBe(CARDS[driver]);
+      });
+
+      it('[the-engine-r-b3r6t, the-engine-r19] store.promote: posix answers none for a namespace with no fallback root; fts5 declares no promotion and answers its unknown function line', async () => {
+        const r = await store(fresh(empty), driver).op('store.promote', ['docs', 'workspace/']);
+        if (driver === 'posix') expect(answer(r, 'store.promote')).toEqual({ namespace: 'docs', prefix: 'workspace/', state: 'none' });
+        else refused(r, 'store.promote', 2, 'ERR_CAPABILITY_UNSUPPORTED', "unknown function 'store.promote'");
       });
 
       it('[the-engine-r24] reports the store absent on a fresh stage, then present and ok once a value lands', async () => {

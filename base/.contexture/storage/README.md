@@ -26,14 +26,16 @@ the store. The health probes the named namespace's store, validated through `sto
 like any store function (a missing, extra, or malformed argument refuses rc 1
 `ERR_INVALID_ARGUMENT`, an undeclared namespace rc 1 `ERR_ENTITY_NOT_FOUND`, a
 declaration the core cannot read rc 2 `ERR_STORAGE_READ`), by one table on both drivers:
-the store not made (posix: the declared root absent; fts5: no database file, or a file
-holding no table) reads `degraded`, absent; made but unreadable reads `error`, absent;
-presence is then counted (posix: the first key the namespace's pattern admits under its
-root, never a stray file; fts5: the namespace's rows alone); unwritable reads `error`
-with that presence, as do the fts5 checks (another schema reads present, a failed
-integrity check, an sqlite3 older than 3.44 with the store by the file's existence);
-`locked` replaces `ok` whatever the presence; the detail names no folder.
-Seven data functions, called through the resolver:
+the store not made (posix: the declared root and the declared fallback root both absent;
+fts5: no database file, or a file holding no table) reads `degraded`, absent; made but
+unreadable (posix: either existing root) reads `error`, absent; presence is then counted
+(posix: the first key the namespace's pattern admits under its root or its fallback root,
+never a stray file; fts5: the namespace's rows alone); unwritable (posix: either existing
+root) reads `error` with that presence, as do the fts5 checks (another schema reads
+present, a failed integrity check, an sqlite3 older than 3.44 with the store by the
+file's existence); `locked` replaces `ok` whatever the presence; the detail names no
+folder, and the probe prints no fallback notice.
+Seven data functions and the optional promotion, called through the resolver:
 
 | function | argv | stdin | answer |
 |---|---|---|---|
@@ -45,6 +47,7 @@ Seven data functions, called through the resolver:
 | `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `head=<sha\|none>`, `value_b64=<base64>` for a put) | `{"namespace","actions":N}`; all or none |
 | `store.scan` | `<namespace>` | none | `{"namespace","items":[{"key","value_b64"}]}`: every admitted key, bytewise, its raw value in base64 |
 | `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,entity_type,entity_id,section,snippet,score}]}`; limit 0 answers every result |
+| `store.promote` | `<namespace> <prefix>` | none | `{"namespace","prefix","state"}`: optional (the `store.promote` token); moves the prefix (whole key segments ending in a slash) from the fallback root to the root; `moved`, or `none` when the fallback holds nothing for it or none is declared; the root already holding it refuses rc 1 `ERR_ENTITY_EXISTS` |
 
 Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a
 read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a
@@ -53,8 +56,19 @@ pattern filters list and scan and refuses a key outside it; `store.list` takes a
 literal bytewise key prefix (possibly ending on a slash) so a module reads its own keys
 without walking the namespace. The posix mapping is
 `<root>/<key><suffix>` under the workspace root, written by a same-directory temp moved
-over the key under one namespace scope lock, so a put lands whole or not at all. The
-batch holds that lock once, validates the whole action list against the live keys, stages
+over the key under one namespace scope lock, so a put lands whole or not at all. A
+namespace that declares a `fallback_root` is read from its root first, then from the
+fallback: `store.get`, `store.list` (the union, each key once, the root's copy
+shadowing), `store.scan`, `store.search`, and the key probe; `store.put` and
+`store.batch` write the root alone, and a delete (alone or as a batch action) removes the
+key from both roots, so an old value never resurfaces. A call that served a key from the
+fallback and answers rc 0 prints one stderr line, `<function>: notice: namespace '<ns>'
+was read from its deprecated fallback root`, naming no folder; a refusal keeps its one
+line. The optional `store.promote <namespace> <prefix>` moves the prefix's folder from the
+fallback to the root in one `mv` under the namespace lock (the root's parent folders made
+first, a killed writer's residue moving with the folder), the card declaring the
+`store.promote` token; fts5 keeps namespace and key with no root, never reads a fallback,
+and does not declare it. The batch holds that lock once, validates the whole action list against the live keys, stages
 a value per put, and commits every key under one store-scope undo log; its first failure
 prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and
 nothing is written. The namespace lock (`.contexture/tmp/locks/store-<namespace>.lock`
@@ -94,7 +108,9 @@ document per entity at write time and ranks those documents in the fts5 store in
 module with no schema falls back to the generic raw value. A ranked mode answers only
 where the configured driver declares it (fts5: `hybrid` and `trigram`); posix declares
 exact alone and refuses a ranked mode by name. The driver declares the optional
-`search.schema` token when it consumes a declared schema.
+`search.schema` token when it consumes a declared schema. Posix declares the optional
+tokens `store` and `store.promote`; the resolver refuses any optional token outside
+`store`, `store.changelog`, `search.schema`, and `store.promote`.
 
 ## Errors
 
@@ -119,12 +135,13 @@ check with a read before writing again.
 
 A module declares its data in a `data` file beside its `module` file, one `field: value`
 line per field and a line starting with `#` a comment. Only `namespace` and `key` are
-required; `root`, `suffix`, `changes`, and the search keys are optional:
+required; `root`, `fallback_root`, `suffix`, `changes`, and the search keys are optional:
 
 ```text
 namespace: <name>
 key: <segment>/<segment>            # or a final <segment...> for a variable-depth key
 root: <workspace-relative folder>   # optional; default: the namespace
+fallback_root: <folder>             # optional; a deprecated root read after the root
 suffix: <suffix>                    # optional; default: empty
 changes: true                       # optional; default: false
 search: flat|documents              # optional; the search schema form
@@ -141,16 +158,22 @@ key pattern carries one `<name>` placeholder per slash-separated segment, and it
 segment may instead be `<name...>`, which admits one or more key segments (a module's main
 and deeper keys share one pattern: `key: <unit>/<path...>` admits `unit/state` and
 `unit/lanes/x/report`). The root is a workspace-relative folder inside the workspace and
-defaults to the namespace; the suffix defaults to empty; `changes` is `true` or `false`
+defaults to the namespace; the fallback root, when declared, is such a folder too, neither
+equal to the root nor nested with it (one inside the other), and a file store reads it
+after the root and never writes it; the suffix defaults to empty; `changes` is `true` or `false`
 and defaults to `false`. The search form is `flat` (one document per key, section `body`;
 `format`, `fields`, and `title` shape the ranked document) or `documents` (the repeated
 `document` rule names the key pattern, the section, the entity type, and the optional
 column-0 head marker that starts an entity; a key no rule covers stays searchable as one
 generic document). The reader refuses an unknown field. The module directory beside the
 data file is the owner, and a second data file declaring the same namespace refuses.
-`store-data <namespace>` answers one namespace and refuses a second argument rc 1;
-`store-data --list` answers every valid declaration of both module roots, one
-`<namespace><TAB><root>` line each (the root the namespace when none is declared), sorted
+`store-data <namespace>` answers one namespace on twelve fixed lines, then the document
+rules, and never the fallback root, so a parser reading by position ignores the field;
+`store-data <namespace> --with-fallback` answers the fallback root as line 13 (an empty
+line when none is declared) and the rules from line 14, the form the posix driver reads;
+any other second argument refuses rc 1. `store-data --list` answers every valid
+declaration of both module roots, one `<namespace><TAB><root>` line each (the root the
+namespace when none is declared, then `<TAB><fallback root>` when one is declared), sorted
 by namespace, and leaves out a malformed declaration, a data file with no namespace, and a
 doubly declared namespace, one stderr line each, rc 0 (rc 2 with no module drawer).
 
@@ -179,10 +202,14 @@ through it; the module never names the driver. The library exports:
 
 - `store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_batch`,
   `store_scan`, `store_search`;
+- `store_promote <namespace> <prefix>`, the optional promotion (ask `store_has
+  store.promote` first);
 - `store_require <capability>...` and `store_has <capability>`;
 - `store_roots`, the declared roots read through `store-data --list` (found beside the
   resolver the library calls, then under the drawer, then in the base mirror), never the
-  driver; rc 2 with one `store.roots: error:` line when no data reader answers;
+  driver: one `<namespace><TAB><root>` line per declared root, a fallback root on its own
+  line after its root; rc 2 with one `store.roots: error:` line when no data reader
+  answers;
 - `data_get <ref>` and `data_emit <ref> <data>`.
 
 `data_get` resolves a module reference `<module>#<symbol>`: it finds the target module's

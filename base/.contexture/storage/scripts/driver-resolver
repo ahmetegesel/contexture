@@ -314,13 +314,14 @@ verify_capabilities() {
   esac
 
   # the optional tokens stay inside the card: store (implied by the family), store.changelog
-  # where the driver keeps a change log, and search.schema where it consumes a declared
-  # search schema; any other token refuses
+  # where the driver keeps a change log, search.schema where it consumes a declared search
+  # schema, and store.promote where it moves a key prefix from a declared fallback root to
+  # the root; any other token refuses
   cap_opt=" $(printf '%s\n' "$cap_json" | desc_field optional | tr '\n' ' ') "
   for cap_o in $cap_opt; do
     case "$cap_o" in
-      store|store.changelog|search.schema) ;;
-      *) printf 'driver-resolver: ERROR: driver '\''%s'\'' declares optional capability '\''%s'\'' outside store, store.changelog, search.schema (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_o" >&2; return 2 ;;
+      store|store.changelog|search.schema|store.promote) ;;
+      *) printf 'driver-resolver: ERROR: driver '\''%s'\'' declares optional capability '\''%s'\'' outside store, store.changelog, search.schema, store.promote (ERR_DRIVER_PROTOCOL)\n' "$driver_name" "$cap_o" >&2; return 2 ;;
     esac
   done
 
@@ -402,10 +403,10 @@ handshake_at_dispatch() {
   return 0
 }
 
-# The optional capabilities (store, store.changelog, search.schema) and the search modes
-# stay outside the dispatch handshake; the store family's array implies the store capability
-# even when the token is omitted, and a caller that needs one asks the resolver first (a
-# search mode reads search.mode.<m>):
+# The optional capabilities (store, store.changelog, search.schema, store.promote) and the
+# search modes stay outside the dispatch handshake; the store family's array implies the
+# store capability even when the token is omitted, and a caller that needs one asks the
+# resolver first (a search mode reads search.mode.<m>):
 #   require <capability>...  rc 0 when the configured driver declares every one; rc 2
 #                            ERR_CAPABILITY_UNSUPPORTED naming the missing ones otherwise
 #   has <capability>         rc 0 declared, rc 1 not declared, no message

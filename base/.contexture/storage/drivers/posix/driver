@@ -9,6 +9,13 @@
 # the document rules' entity_type and entity_id, collects every match, and applies the
 # limit (0 = all) after the walk.
 #
+# A namespace may declare a fallback root, a deprecated root the store reads after its
+# root and never writes: get, list, scan, search, and the key probe read the root first,
+# then the fallback, the root's copy shadowing; put and batch write the root alone, and a
+# delete removes the key from both. A call that served a key from the fallback and
+# answers rc 0 prints one notice line on stderr naming the function and the namespace.
+# The optional store.promote moves a whole key prefix from the fallback to the root.
+#
 # Writes: the namespace lock (.contexture/tmp/locks/store-<namespace>.lock, carrying its
 # holder pid) is held across the batch or put, each put is a same-directory temp renamed
 # over the key, and a batch commits every key under one store-scope undo log so a failed
@@ -153,6 +160,7 @@ STORE_LOCK=""
 STORE_BATCH_STAGE=""
 STORE_SDERR=""
 STORE_TEMPS=""
+STORE_FB_SERVED=0
 SB_ON=0
 
 # store_temp <path>: a read's temp file, named for store_cleanup as soon as mktemp answers it,
@@ -253,8 +261,8 @@ store_lock_held() {
 }
 
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
-# SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the caller's function name frames the
-# refusal. The storage core's store-data script owns the grammar (the core is
+# SD_NS, SD_ROOT, SD_FALLBACK (empty when none is declared), SD_SUFFIX, SD_KEYPAT,
+# SD_CHANGES; the caller's function name frames the refusal. The storage core's store-data script owns the grammar (the core is
 # base, so no module's parser enters base). The cleanup traps stand before the reader's
 # stderr file exists, so a HUP, INT, or TERM while the reader runs removes it. A scratch
 # file that cannot be made refuses as a write, and for the health probe, which writes
@@ -280,7 +288,7 @@ store_data() {
   trap 'store_cleanup; exit 143' TERM
   STORE_SDERR=$(mktemp "$(scratch_dir)/store-data.XXXXXX" 2>/dev/null) || refuse 2 "$sd_scratch_code" "cannot create the driver's scratch file"
   scratch_new "$STORE_SDERR" || refuse 2 "$sd_scratch_code" "$SCRATCH_FAILED"
-  sd_out=$(CTX_STORE_WORKSPACE="$sd_ws" "$sd_script" "$sd_ns" 2>"$STORE_SDERR")
+  sd_out=$(CTX_STORE_WORKSPACE="$sd_ws" "$sd_script" "$sd_ns" --with-fallback 2>"$STORE_SDERR")
   sd_rc=$?
   sd_msg=$(head -n 1 "$STORE_SDERR" 2>/dev/null)
   rm -f "$STORE_SDERR"
@@ -305,7 +313,8 @@ store_data() {
   SD_TITLE=$(printf '%s\n' "$sd_out" | sed -n '10p')
   SD_SNIPPET=$(printf '%s\n' "$sd_out" | sed -n '11p')
   SD_MODES=$(printf '%s\n' "$sd_out" | sed -n '12p')
-  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '13,$p')
+  SD_FALLBACK=$(printf '%s\n' "$sd_out" | sed -n '13p')
+  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '14,$p')
   STORE_WS=$sd_ws
 }
 
@@ -377,23 +386,43 @@ store_path() {
   printf '%s/%s/%s%s\n' "$STORE_WS" "$SD_ROOT" "$1" "$SD_SUFFIX"
 }
 
-# store_list_keys [<prefix>] [first]: every key in the namespace, bytewise, only those the
-# module pattern admits and, when a prefix is given, those that start with it; the folder
-# entries are read as stored, so a case twin of a key never appears. The key rule and the
-# module pattern run in one awk pass, and a prefix ending on a slash starts the walk at that
-# directory, so a per-unit read does not pay for the namespace. With first, the walk stops
-# at the first admitted key, the presence probe of the health.
+# store_list_keys [<prefix>] [first]: every key in the namespace, bytewise, the root's and
+# the fallback root's together, each key once; a key only the fallback holds sets
+# STORE_FB_SERVED when the call runs in the function's own shell. With first, the walk of
+# each root stops at its first admitted key.
 store_list_keys() {
-  sl_prefix=${1:-}
-  sl_first=${2:-}
-  sl_dir="$STORE_WS/$SD_ROOT"
+  if [ -z "$SD_FALLBACK" ]; then
+    store_list_root "$STORE_WS/$SD_ROOT" "${1:-}" "${2:-}"
+    return
+  fi
+  slk_p=$(store_list_root "$STORE_WS/$SD_ROOT" "${1:-}" "${2:-}")
+  slk_f=$(store_list_root "$STORE_WS/$SD_FALLBACK" "${1:-}" "${2:-}")
+  if [ -n "$slk_f" ] && [ -n "$( { printf '%s\n' "$slk_p" | sed 's/^/p /'; printf '%s\n' "$slk_f" | sed 's/^/f /'; } \
+    | LC_ALL=C awk '{ k = substr($0, 3); if (k == "") next; if (substr($0, 1, 1) == "p") p[k] = 1; else if (!(k in p)) { print 1; exit } }')" ]; then
+    STORE_FB_SERVED=1
+  fi
+  printf '%s\n%s\n' "$slk_p" "$slk_f" | LC_ALL=C awk 'NF' | LC_ALL=C sort -u
+}
+
+# store_list_root <folder> [<prefix>] [first]: every key under one root folder, bytewise,
+# only those the module pattern admits and, when a prefix is given, those that start with
+# it; the folder entries are read as stored, so a case twin of a key never appears. The key
+# rule and the module pattern run in one awk pass, and a prefix ending on a slash starts
+# the walk at that directory (or answers nothing when the root holds no such directory), so
+# a per-unit read does not pay for the namespace. With first, the walk stops at the first
+# admitted key, the presence probe of the health.
+store_list_root() {
+  sl_dir=$1
+  sl_prefix=${2:-}
+  sl_first=${3:-}
   [ -d "$sl_dir" ] || return 0
   sl_scan=$sl_dir
   if [ -n "$sl_prefix" ]; then
     case "$sl_prefix" in
       */)
         sl_sub=${sl_prefix%/}
-        [ -d "$sl_dir/$sl_sub" ] && sl_scan="$sl_dir/$sl_sub"
+        [ -d "$sl_dir/$sl_sub" ] || return 0
+        sl_scan="$sl_dir/$sl_sub"
         ;;
     esac
   fi
@@ -436,12 +465,40 @@ store_list_keys() {
     }' | LC_ALL=C sort
 }
 
-# store_key_exists <key>: the exact key the store lists (a case twin is absent). The walk
-# checks each path segment's stored spelling at its own directory, so a case fold in any
-# ancestor is refused and the namespace is never listed.
+# store_key_exists <key>: the exact key the store lists, in the root or the fallback root
 store_key_exists() {
-  ske_key=$1
-  ske_dir="$STORE_WS/$SD_ROOT"
+  store_key_exists_in "$STORE_WS/$SD_ROOT" "$1" && return 0
+  [ -n "$SD_FALLBACK" ] && store_key_exists_in "$STORE_WS/$SD_FALLBACK" "$1"
+}
+
+# store_read_path <key>: SR_PATH names the file a read of the key takes, the root's copy
+# first, then the fallback's (which sets STORE_FB_SERVED); rc 1 when neither root holds it
+store_read_path() {
+  SR_PATH=""
+  if store_key_exists_in "$STORE_WS/$SD_ROOT" "$1"; then
+    SR_PATH=$(store_path "$1")
+    return 0
+  fi
+  if [ -n "$SD_FALLBACK" ] && store_key_exists_in "$STORE_WS/$SD_FALLBACK" "$1"; then
+    SR_PATH="$STORE_WS/$SD_FALLBACK/$1$SD_SUFFIX"
+    STORE_FB_SERVED=1
+    return 0
+  fi
+  return 1
+}
+
+# store_notice: the one notice line of a call that served a key from the fallback root
+store_notice() {
+  [ "$STORE_FB_SERVED" -eq 1 ] || return 0
+  printf '%s: notice: namespace '\''%s'\'' was read from its deprecated fallback root\n' "$FN" "$SD_NS" >&2
+}
+
+# store_key_exists_in <folder> <key>: the exact key under one root folder (a case twin is
+# absent). The walk checks each path segment's stored spelling at its own directory, so a
+# case fold in any ancestor is refused and the namespace is never listed.
+store_key_exists_in() {
+  ske_key=$2
+  ske_dir=$1
   [ -d "$ske_dir" ] || return 1
   ske_rest=$ske_key
   while :; do
@@ -533,6 +590,7 @@ store_list() {
   escape_json_lines "$sn_tmp"
   rm -f "$sn_tmp"
   printf ']}\n'
+  store_notice
 }
 
 store_get() {
@@ -541,8 +599,9 @@ store_get() {
   sg_ns=$1; sg_key=$2
   store_data store.get "$sg_ns"
   store_key_for store.get "$sg_ns" "$sg_key"
-  store_key_exists "$sg_key" || refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
-  cat "$(store_path "$sg_key")" || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
+  store_read_path "$sg_key" || refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
+  cat "$SR_PATH" || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
+  store_notice
 }
 
 store_put() {
@@ -614,11 +673,12 @@ store_delete() {
     store_unlock
     refuse 1 ERR_ENTITY_NOT_FOUND "key '$sx_key' not found in namespace '$sx_ns'"
   fi
-  sx_path=$(store_path "$sx_key")
-  if ! rm -f "$sx_path" 2>/dev/null || [ -e "$sx_path" ]; then
-    store_unlock
-    refuse 2 ERR_STORAGE_WRITE "the storage remove of key '$sx_key' failed"
-  fi
+  for sx_path in "$(store_path "$sx_key")" ${SD_FALLBACK:+"$STORE_WS/$SD_FALLBACK/$sx_key$SD_SUFFIX"}; do
+    if ! rm -f "$sx_path" 2>/dev/null || [ -e "$sx_path" ]; then
+      store_unlock
+      refuse 2 ERR_STORAGE_WRITE "the storage remove of key '$sx_key' failed"
+    fi
+  done
   store_unlock
   printf '{"namespace":"%s","key":"%s","op":"%s"}\n' "$(escape_json "$sx_ns")" "$(escape_json "$sx_key")" "$(escape_json "$SF_OP")"
 }
@@ -848,10 +908,12 @@ batch_commit() {
         mv -f "$sb_val" "$sb_path" 2>/dev/null || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "the storage write of key '$sb_key' failed"
         ;;
       delete)
-        [ -f "$sb_path" ] || continue
-        sb_backup "$sb_path" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
-        sb_note f "$sb_path" "$SB_BAK" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
-        rm -f "$sb_path" 2>/dev/null && [ ! -f "$sb_path" ] || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
+        for sb_dp in "$sb_path" ${SD_FALLBACK:+"$STORE_WS/$SD_FALLBACK/$sb_key$SD_SUFFIX"}; do
+          [ -f "$sb_dp" ] || continue
+          sb_backup "$sb_dp" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
+          sb_note f "$sb_dp" "$SB_BAK" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
+          rm -f "$sb_dp" 2>/dev/null && [ ! -f "$sb_dp" ] || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "the storage remove of key '$sb_key' failed"
+        done
         ;;
     esac
   done < "$STORE_BATCH_STAGE/man"
@@ -905,7 +967,8 @@ store_scan() {
   sc_first=1
   while IFS= read -r sc_key; do
     [ -n "$sc_key" ] || continue
-    sc_path=$(store_path "$sc_key")
+    store_read_path "$sc_key" || continue
+    sc_path=$SR_PATH
     [ -f "$sc_path" ] || continue
     sc_v=$("$sc_b64" "$sc_path" 2>/dev/null) || { rm -f "$sc_keys" "$sc_out"; refuse 2 ERR_STORAGE_READ "cannot read key '$sc_key' in namespace '$sc_ns'"; }
     sc_sep=','
@@ -917,6 +980,7 @@ store_scan() {
   scratch_add "$sc_out" ']}\n' || { rm -f "$sc_out"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   cat "$sc_out"
   rm -f "$sc_out"
+  store_notice
 }
 
 # store_query_read: the query payload line, decoded (backslash, n, t, r), with a sentinel
@@ -989,7 +1053,8 @@ store_search() {
     || { rm -f "$ss_keytmp" "$ss_err" "$ss_man"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   while IFS= read -r ss_k; do
     [ -n "$ss_k" ] || continue
-    ss_p=$(store_path "$ss_k")
+    store_read_path "$ss_k" || continue
+    ss_p=$SR_PATH
     [ -f "$ss_p" ] || continue
     scratch_add "$ss_man" '%s\t%s\n' "$ss_k" "$ss_p" \
       || { rm -f "$ss_keytmp" "$ss_err" "$ss_man"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
@@ -1016,6 +1081,7 @@ store_search() {
   fi
   rm -f "$ss_err" "$ss_man"
   printf '%s\n' "$ss_out"
+  store_notice
   exit 0
 }
 
@@ -1025,32 +1091,73 @@ store_search() {
 # ==============================================================================
 # capability: the contract 3 store-only card at driver version 3.0.0: the driver, the
 # version, contract 3, the seven data names in the fixed order, the search modes, and the
-# optional tokens. The card carries no record function family; capability and
-# storage.health are the driver's own methods the handshake and the diagnose call.
+# optional tokens (store, and store.promote for the fallback root move). The card carries
+# no record function family; capability and storage.health are the driver's own methods
+# the handshake and the diagnose call.
 capability() {
-  printf '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store"]}\n'
+  printf '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store","store.promote"]}\n'
+}
+
+# store.promote <namespace> <prefix>: the optional move of one whole key prefix (whole key
+# segments ending in a slash) from the namespace's fallback root to its root, one folder
+# rename under the namespace lock; state moved, or none when the fallback holds no folder
+# for the prefix or the namespace declares no fallback; the root already holding a folder
+# for the prefix refuses rc 1 ERR_ENTITY_EXISTS with nothing moved.
+store_promote() {
+  FN=store.promote
+  [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.promote takes the namespace and a key prefix ending in a slash"
+  pm_ns=$1; pm_prefix=$2
+  case "$pm_prefix" in
+    */) store_key_ok "${pm_prefix%/}" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$pm_prefix' (whole key segments ending in a slash)" ;;
+    *) refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$pm_prefix' (whole key segments ending in a slash)" ;;
+  esac
+  store_data store.promote "$pm_ns"
+  pm_state=none
+  pm_src="$STORE_WS/$SD_FALLBACK/${pm_prefix%/}"
+  if [ -n "$SD_FALLBACK" ] && [ -d "$pm_src" ]; then
+    store_lock "$pm_ns"
+    pm_dst="$STORE_WS/$SD_ROOT/${pm_prefix%/}"
+    if [ -e "$pm_dst" ]; then
+      store_unlock
+      refuse 1 ERR_ENTITY_EXISTS "key prefix '$pm_prefix' is held in both roots of namespace '$pm_ns'"
+    fi
+    if ! mkdir -p "$(dirname "$pm_dst")" 2>/dev/null || ! mv "$pm_src" "$pm_dst" 2>/dev/null; then
+      store_unlock
+      refuse 2 ERR_STORAGE_WRITE "the move of key prefix '$pm_prefix' in namespace '$pm_ns' failed"
+    fi
+    store_unlock
+    pm_state=moved
+  fi
+  printf '{"namespace":"%s","prefix":"%s","state":"%s"}\n' "$(escape_json "$pm_ns")" "$(escape_json "$pm_prefix")" "$pm_state"
 }
 
 # storage.health <namespace>: a probe of the named namespace's store, never a write, and the
 # backend's health alone (no record count: the record's active listing is the unit
-# module's). The namespace's declared root is the store: absent reads degraded, unreadable
-# reads error, then presence is the first key the namespace's pattern admits; unwritable
-# reads error with that presence, and the namespace's store lock held reads locked in place
-# of ok. No detail names a folder.
+# module's). The namespace's declared root and fallback root are the store: neither made
+# reads degraded, either unreadable reads error, then presence is the first key the
+# namespace's pattern admits in either; either unwritable reads error with that presence,
+# and the namespace's store lock held reads locked in place of ok. No detail names a folder.
 storage_health() {
   store_data storage.health "$1"
-  sh_root="$STORE_WS/$SD_ROOT"
   sh_health="ok"
   sh_store="absent"
-  if [ ! -d "$sh_root" ]; then
+  sh_made=0; sh_unread=0; sh_unwrite=0
+  for sh_root in "$STORE_WS/$SD_ROOT" ${SD_FALLBACK:+"$STORE_WS/$SD_FALLBACK"}; do
+    [ -d "$sh_root" ] || continue
+    sh_made=1
+    if [ ! -r "$sh_root" ] || [ ! -x "$sh_root" ]; then sh_unread=1
+    elif [ ! -w "$sh_root" ]; then sh_unwrite=1
+    fi
+  done
+  if [ "$sh_made" -eq 0 ]; then
     sh_health="degraded"
     sh_detail="the store is not made yet (the first write makes it)"
-  elif [ ! -r "$sh_root" ] || [ ! -x "$sh_root" ]; then
+  elif [ "$sh_unread" -eq 1 ]; then
     sh_health="error"
     sh_detail="the store is not readable"
   else
     [ -n "$(store_list_keys "" first)" ] && sh_store="present"
-    if [ ! -w "$sh_root" ]; then
+    if [ "$sh_unwrite" -eq 1 ]; then
       sh_health="error"
       sh_detail="the store is not writable"
     elif store_lock_held "$SD_NS"; then
@@ -1086,6 +1193,7 @@ case "$cmd" in
   store.batch) store_batch "$@"; exit $? ;;
   store.scan) store_scan "$@"; exit $? ;;
   store.search) store_search "$@"; exit $? ;;
+  store.promote) store_promote "$@"; exit $? ;;
   storage.health)
     [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "storage.health takes the namespace"
     px_extra 1 "$@"

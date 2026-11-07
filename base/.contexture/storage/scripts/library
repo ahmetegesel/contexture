@@ -12,6 +12,7 @@
 #   store.batch <namespace>                                          (actions on stdin)
 #   store.scan <namespace>
 #   store.search <namespace> <query> <mode> [<limit>]                (query on stdin; 0 = all)
+#   store.promote <namespace> <prefix>                              (optional capability)
 #   store.require <capability>...
 #   store.has <capability>
 #   store.roots
@@ -21,16 +22,19 @@
 # The store functions and the two probes reach the configured driver through the storage
 # core's resolver; the caller uses the shell function names store_list, store_get,
 # store_put, store_delete, store_changes, store_batch, store_scan, store_search,
-# store_require, and store_has. The
+# store_promote, store_require, and store_has. store_promote moves a whole key prefix from
+# the namespace's fallback root to its root on a driver that declares store.promote (ask
+# store_has store.promote first). The
 # caller sets CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which
 # serves when CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact
 # resolver path; the core resolver is found under the drawer, then the base mirror.
 #
-# store_roots reads the module declarations, never the driver: one line per declared
-# namespace, the namespace and its store root separated by a tab, sorted by namespace,
-# through the storage core's data reader in its listing mode (store-data --list). A
-# malformed or doubly declared namespace is left out with its line on stderr; with no data
-# reader or no module drawer it refuses rc 2 with one line.
+# store_roots reads the module declarations, never the driver: one line per declared store
+# root, the namespace and the root separated by a tab, sorted by namespace, a namespace
+# that declares a fallback root answering it on a second line after its root, through the
+# storage core's data reader in its listing mode (store-data --list, whose third column
+# carries the fallback). A malformed or doubly declared namespace is left out with its line
+# on stderr; with no data reader or no module drawer it refuses rc 2 with one line.
 #
 # data_get <ref> resolves a module reference <module>#<symbol>: it finds the target
 # module's data script in the workspace modules, the workspace extensions, or the base
@@ -107,10 +111,12 @@ store_delete() { store_lib_call store.delete store.delete "$@"; }
 store_changes() { store_lib_call store.changes store.changes "$@"; }
 store_require() { store_lib_call store.require require "$@"; }
 store_has() { store_lib_call store.has has "$@"; }
+store_promote() { store_lib_call store.promote store.promote "$@"; }
 
-# store_roots: the declared store roots, namespace TAB root per line, from the storage
-# core's data reader found beside the resolver this library calls (the core scripts folder
-# holds both), then under the drawer, then in the base mirror, run from the workspace root
+# store_roots: the declared store roots, namespace TAB root per line (a fallback root on its
+# own line after the root), from the storage core's data reader found beside the resolver
+# this library calls (the core scripts folder holds both), then under the drawer, then in
+# the base mirror, run from the workspace root
 store_roots() {
   sr_root=$(store_lib_root)
   sr_script=""
@@ -124,7 +130,9 @@ store_roots() {
     printf 'store.roots: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
     return 2
   fi
-  CTX_STORE_WORKSPACE=$sr_root "$sr_script" --list
+  sr_out=$(CTX_STORE_WORKSPACE=$sr_root "$sr_script" --list) || return $?
+  [ -n "$sr_out" ] || return 0
+  printf '%s\n' "$sr_out" | LC_ALL=C awk -F '\t' '{ print $1 "\t" $2; if ($3 != "") print $1 "\t" $3 }'
 }
 
 # store_batch <namespace>: the transactional batch; the action list travels on stdin as

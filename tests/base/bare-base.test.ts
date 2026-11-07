@@ -98,7 +98,7 @@ const CARD = {
   contract: '3',
   store: ['list', 'get', 'put', 'delete', 'changes', 'batch', 'scan'],
   search_modes: ['exact'],
-  optional: ['store'],
+  optional: ['store', 'store.promote'],
 };
 
 describe('the bare base: the posix descriptor, the contract 3 store-only card', () => {
