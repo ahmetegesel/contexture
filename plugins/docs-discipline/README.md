@@ -159,7 +159,7 @@ into an existing file; `seed` means it is starting content to adapt; and
 1. Install the package into the extension root, on the human's go at the act:
 
    ```sh
-   sh plugins/docs-discipline/install
+   .contexture/ctx package install docs-discipline
    ```
 
    The installer overlays `.contexture/extensions/modules/docs` (the grammar

@@ -50,7 +50,7 @@ Each filter's header carries the exact `# match:` and `# command:` regexes; the 
 Install the pack into the extension root, on the human's go at the act:
 
 ```sh
-sh plugins/toolchain-filters/install
+.contexture/ctx package install toolchain-filters
 ```
 
 The install lands every filter at

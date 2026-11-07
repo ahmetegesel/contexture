@@ -43,7 +43,7 @@ rm -rf .adopt-contexture
 chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
 ```
 
-`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog to install from. `AGENTS.md` is the loader: run `.contexture/ctx compose` after the copy, and the loader verifies or recomposes the generated law layer `AGENTS.generated.md`, beside it at the root, at every boot.
+`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog `.contexture/ctx package install <name>` installs from, only on the human's explicit go at the act (the verb itself checks no go). `AGENTS.md` is the loader: run `.contexture/ctx compose` after the copy, and the loader verifies or recomposes the generated law layer `AGENTS.generated.md`, beside it at the root, at every boot.
 
 ### 2. Run the onboarding wizard
 

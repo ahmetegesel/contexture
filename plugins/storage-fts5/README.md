@@ -106,7 +106,7 @@ When proposing `storage-fts5` adoption to the repository maintainer:
 Install the driver into the extension root, on the maintainer's go at the act:
 
 ```sh
-sh plugins/storage-fts5/install
+.contexture/ctx package install storage-fts5
 ```
 
 The installer overlays the package's driver part at

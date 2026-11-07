@@ -5,7 +5,7 @@ import { ROOT } from '../support/root';
 import { stage } from '../support/stage';
 import { text } from './walk';
 
-const FORBID = /session\.sh|compact\.sh|session-[a-z]+\.awk|\.contexture\/scripts\/|laws\/compose(?![\w.-])/;
+const FORBID = /session\.sh|compact\.sh|session-[a-z]+\.awk|\.contexture\/scripts\/|laws\/compose(?![\w.-])|\.contexture\/package-(un)?install\b|plugins\/[^\s\/`'"]+\/(un)?install(?![\w.-])/;
 
 const SURFACES = [
   'base/AGENTS.md',
@@ -39,6 +39,20 @@ describe.concurrent('the main-surface forbid grep: no invocable raw tool path', 
 
   it('[modules-r19] the instrument reads the composer path and passes ctx compose and a test file name that only starts with it', () => {
     expect(hits('sh .contexture/laws/compose --check\nthe laws/compose-merge test\n.contexture/ctx compose\n')).toEqual(['sh .contexture/laws/compose --check']);
+  });
+
+  it('[the-engine-r22] the instrument reads the private installer paths and a plugin install script, and passes ctx package and the payload declaration', () => {
+    const body = [
+      'run .contexture/package-install plugins/x',
+      'sh .contexture/package-uninstall x',
+      'sh plugins/docs-discipline/install',
+      '`sh plugins/<name>/uninstall`',
+      '.contexture/ctx package install docs-discipline',
+      'base/.contexture/{ctx,package-install,package-uninstall,storage}',
+      'plugins/docs-discipline/installer-notes.md',
+      'the install part hook at .contexture/extensions/modules/docs/install',
+    ].join('\n');
+    expect(hits(body)).toEqual(body.split('\n').slice(0, 4));
   });
 
   it.each(SURFACES)('%s carries no raw tool path', (rel) => {

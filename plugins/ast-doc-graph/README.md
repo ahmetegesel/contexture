@@ -137,7 +137,7 @@ When proposing `ast-doc-graph` adoption to the repository maintainer:
 Install the package into the extension root, on the maintainer's go at the act:
 
 ```sh
-sh plugins/ast-doc-graph/install
+.contexture/ctx package install ast-doc-graph
 ```
 
 The installer overlays the module part at `.contexture/extensions/modules/ast-doc-graph/`,

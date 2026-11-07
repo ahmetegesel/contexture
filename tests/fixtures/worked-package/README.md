@@ -17,12 +17,13 @@ end:
   present one;
 - `.contexture/extensions/modules/notes/scripts/`: the private implementation
   `notes` and the three wrappers `put`, `show`, and `keys`;
-- `install` and `uninstall`: the package entry scripts that exec the core's
-  overlay installer and uninstaller;
 - `tests/notes.test.ts`: the test, a vitest file, which stages the shipped base
   in a sandbox, copies this package into the sandbox's catalog, installs it
-  there through its own `install` script, exercises the verbs over the store,
-  and proves the uninstall leaves the module data.
+  there through `ctx package install` with its package root path, exercises
+  the verbs over the store, and proves the uninstall leaves the module data.
+
+The package carries no install or uninstall script of its own: `ctx package
+install` and `ctx package uninstall` take its root.
 
 The test belongs to the `packages` vitest project, which also proves the
 package installer; run it from the repository's `tests/` folder:

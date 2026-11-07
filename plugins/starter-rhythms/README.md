@@ -19,7 +19,7 @@ The package installs its rhythms part into the extension root on the human's
 go at the act:
 
 ```sh
-sh plugins/starter-rhythms/install
+.contexture/ctx package install starter-rhythms
 ```
 
 The install lands `work.md` and `debug.md` under
