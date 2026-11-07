@@ -272,3 +272,12 @@
     A write verb that hangs instead of refusing is the false result class the dont-fool-yourself law names; an agent calling ctx docs entry or section would wait forever and orphaned runs burn CPU for hours.
   REF: "unit#docs-plugins/lane/review-c5-docs/report"
   STATUS: OPEN
+
+@idea fts5-refusal-gaps
+  DUMPED: 2026-11-07
+  WHAT ::
+    Two pre-existing defects under the storage-fts5 driver, found by lane exec-store-refusal of unit drawer-layout and left out of v0.70.0 by the human. F4: the unit data script's u_search reads sq_rc=$? inside an if ! store_search block, where it is always 0, so a refused ranked store search (reachable only on fts5) makes ctx unit search exit rc 0 beside its error line. F5: the fts5 db_init opens with an unsilenced mkdir -p of the database's parent folder, so a configured database path under a folder it cannot make prints mkdir's own line naming that folder before the refusal. Fix both with a proving test each, red before: the search refusal exits the store's rc through the shared u_store_refuse helper, and the mkdir is silenced or its failure refuses with the storage line that names no location; a storage-fts5 patch bump.
+  WHY ::
+    F4 is a false success, the result class the dont-fool-yourself law names: an agent reads rc 0 and trusts an empty answer. F5 leaks a storage location into an agent facing stderr, against the record rule that verb errors name no storage location.
+  REF: "unit#drawer-layout/lane/exec-store-refusal/report"
+  STATUS: OPEN
