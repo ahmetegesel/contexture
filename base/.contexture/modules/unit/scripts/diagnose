@@ -79,6 +79,7 @@ fi
 # never part of the backend's health answer
 vb_call storage.health unit
 if [ "$VB_RC" -eq 0 ]; then
+  [ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >&2
   health_line=$(vb_render health)
 else
   health_line=$(printf 'error\tthe storage driver did not report its health\tabsent')
@@ -92,6 +93,7 @@ health_store=${rest%%"$tab"*}
 active_count=0
 vb_call session.list
 if [ "$VB_RC" -eq 0 ]; then
+  [ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >&2
   active_count=$(awk '{ n += gsub(/"status":"ACTIVE"/, ""); } END { print n + 0 }' "$VB_DIR/ans")
 fi
 

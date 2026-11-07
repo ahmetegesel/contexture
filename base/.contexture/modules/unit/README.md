@@ -14,7 +14,7 @@ top README.
 
 The engine discovers `.contexture/modules/unit/`, reads the summary for `ctx help`, and
 builds the verb table from `scripts/*`: an extension-less file with a `# summary:` header
-is a verb. `scripts/data` carries no summary and is private; the 21 verbs are the record's
+is a verb. `scripts/data` carries no summary and is private; the 22 verbs are the record's
 public surface, and `ctx session` is retired (a line naming `ctx unit`).
 
 ## Layout
@@ -23,10 +23,12 @@ public surface, and `ctx session` is retired (a line naming `ctx unit`).
 module            the summary, the version, the description (the law compose preamble)
 laws              the record clauses: @record, @journal, @backlog, @query, @refresh,
                   @close, @handoff (the law compose fragment)
-data              the store declaration: namespace unit, root .contexture/sessions,
-                  suffix .md, key <unit>/<path...>, changes false, the document rules
-scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
-scripts/data      the 35 record operations over the store (sh, private)
+data              the store declaration: namespace unit, root .contexture/units,
+                  fallback_root .contexture/sessions, suffix .md, key <unit>/<path...>,
+                  changes false, the document rules
+scripts/<verb>    the 22 record verbs (sh), each sourcing lib/verb.sh
+scripts/data      the 35 record operations over the store (sh, private), and
+                  unit.promote, the sweep behind migrate, outside them
 lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
 lib/json.awk      the one flattener: a function's JSON answer to path=value lines
 lib/render.awk    the one renderer of every text view
@@ -50,7 +52,8 @@ lib/fold-*.awk    the fold verb's programs, each run with fold-lib.awk (the flat
 
 One store value per artifact file, the keys `<unit>/state`, `<unit>/backlog`,
 `<unit>/knowledge`, `<unit>/journal`, and `<unit>/lanes/<lane>/<recipe|journal|report>`,
-mapped by the data file to `.contexture/sessions/<unit>/<artifact>.md`. The values are the
+mapped by the data file to `.contexture/units/<unit>/<artifact>.md` (a unit not yet moved read
+from the fallback root, `.contexture/sessions/<unit>/<artifact>.md`). The values are the
 current file shapes, so the record order, the preambles, the anchors, the opaque items,
 the legacy shapes, and the positional liveness survive unchanged. The store is the
 configured driver; the module never names it.
@@ -102,6 +105,33 @@ posix and 29 s on fts5 with four more writers busy on other units, eight writers
 inside an agent's two-minute command budget at a moderate load; the driver's namespace
 lock waits the same 600 polls. Writers looping without pause can starve one waiter past
 any bound, since the polling lock keeps no queue.
+
+## The record root move
+
+The data file declares the root `.contexture/units` and the fallback root
+`.contexture/sessions`, the root releases before the move wrote. The posix store reads a
+unit from the root first, then from the fallback; nothing else in the module knows the
+folders. `u_commit` promotes the unit before its one `store.batch`, under the unit lock
+every write path holds: when `store_has store.promote` answers 0 it runs
+`store.promote unit <unit>/`, `moved` or `none` going on to the batch and a refusal (the
+unit held in both roots) refusing the write with the store's message, re-framed as
+`<function>: error: unit '<unit>': <message>`, and nothing written. So only a landing
+write moves a unit: a refused write, and every write to a CLOSED unit, moves nothing.
+
+The store prints one notice line on a rc 0 answer it served from the fallback; the data
+script collects the rc 0 store stderr of `u_keys_all`, `u_keys_prefix`, `u_add_key`, and
+`u_held` into the run's notice file and, only when the run ends rc 0 and after its
+answer, prints its own line once:
+`WARNING: the record was read from its deprecated root; move it: ctx unit migrate --all`.
+A refusal's stderr stays its one line, so every `head -n 1` reader of a refusal still reads
+the refusal. `vb_ok` relays the line in the verbs that call it; audit, board, and diagnose
+relay it themselves.
+
+`unit.promote <unit>...|--all` stands outside the 35 operations, as `data_get` does: it
+checks every named unit is held (or lists every unit by its state key under `--all`),
+promotes each under its unit lock, stops at the first refusal, and answers
+`{"promote":true,"migrated":N}`, or `{"promote":false,"migrated":0}` under a driver
+without the token; the sweep prints no warning. `ctx unit migrate` is its verb.
 
 ## The ref interface
 

@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
-import { RECORD_ROOT } from '@support/drawer';
+import { FALLBACK_ROOT, RECORD_ROOT } from '@support/drawer';
 import { exec, type Run } from '@support/exec';
 import { sandbox } from '@support/sandbox';
 import { stage } from '@support/stage';
@@ -100,6 +100,8 @@ describe('docs_record_file: a path inside another module\'s store root, read thr
   it.each([
     [`${RECORD_ROOT}/u/backlog.md`, 0],
     [`/elsewhere/${RECORD_ROOT}/u/backlog.md`, 0],
+    [`${FALLBACK_ROOT}/u/backlog.md`, 0],
+    [`/elsewhere/${FALLBACK_ROOT}/u/backlog.md`, 0],
     ['backlog.md', 1],
     ['docs/demo/x.md', 1],
     ['notes/x.md', 0],

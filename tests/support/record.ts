@@ -48,8 +48,8 @@ export function artifactPath(sb: string, unit: string, artifact: string): string
   return join(sb, RECORD_ROOT, unit, `${artifact.replace(/^lane\//, 'lanes/')}.md`);
 }
 
-export function plantUnit(sb: string, unit: string, fixture = unit): void {
-  const dest = join(sb, RECORD_ROOT, unit);
+export function plantUnit(sb: string, unit: string, fixture = unit, root = RECORD_ROOT): void {
+  const dest = join(sb, root, unit);
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dirname(dest), { recursive: true });
   cpSync(join(COMPLIANCE, 'units', fixture), dest, { recursive: true });

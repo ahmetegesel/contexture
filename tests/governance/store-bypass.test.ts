@@ -5,14 +5,15 @@ import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { moduleDirs, text, walk } from './walk';
 
-const STORE_REACH = /\.contexture\/sessions|sessions\.db|storage\/drivers\/|drivers\/[a-z0-9_-]+\/driver|driver-resolver[^|;]* resolve([^a-z]|$)|sqlite3|tmp\/locks/;
+const STORE_REACH = /\.contexture\/(sessions|units)|sessions\.db|storage\/drivers\/|drivers\/[a-z0-9_-]+\/driver|driver-resolver[^|;]* resolve([^a-z]|$)|sqlite3|tmp\/locks/;
 const COMMENT = /^[ \t]*(#|\/\/)/;
 
 const UNIT = 'base/.contexture/modules/unit';
 const GRAPH = 'plugins/ast-doc-graph/.contexture/extensions/modules/ast-doc-graph';
 
 const ALLOW: readonly [file: string, line: string, why: string][] = [
-  [`${UNIT}/data`, 'root: .contexture/sessions', 'the unit namespace declaration the storage core reads'],
+  [`${UNIT}/data`, 'root: .contexture/units', 'the unit namespace declaration the storage core reads'],
+  [`${UNIT}/data`, 'fallback_root: .contexture/sessions', 'the unit namespace declaration the storage core reads'],
   [`${UNIT}/scripts/data`, '  mkdir -p "$u_tmp/locks/unit" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the lock folder"', 'the unit lock folder, not a store file'],
   [`${UNIT}/scripts/data`, '  U_LT="$u_tmp/locks/unit/$1.lock"', 'the unit lock folder, not a store file'],
   [`${GRAPH}/bin/graph-query`, 'SQLITE_BIN="/usr/bin/sqlite3"', 'the graph module queries its own graph database'],

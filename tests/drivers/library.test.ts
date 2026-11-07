@@ -2,7 +2,7 @@ import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile, moduleDir } from '../support/data-file';
-import { RECORD_ROOT } from '../support/drawer';
+import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { sandbox } from '../support/sandbox';
 import { shFunction } from '../support/sh';
 import { fresh, seed } from '../support/snapshot';
@@ -130,11 +130,11 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
     expect(viaMirror.stdout).toBe('{"namespace":"libprobe","keys":[]}\n');
   });
 
-  it('[the-engine-r26] store_roots lists every declared root, namespace TAB root, through the storage core\'s data reader, never the driver', async () => {
+  it('[the-engine-r26, the-engine-r-cj0ey] store_roots lists every declared root, namespace TAB root, the unit\'s fallback root on its own line, through the storage core\'s data reader, never the driver', async () => {
     const sb = fresh(snap);
     const r = await lib(sb, 'store_roots');
     expect([r.code, r.stderr]).toEqual([0, '']);
-    expect(r.stdout).toBe(`extprobe\textprobe-root\nfixture\tfixture-root\nunit\t${RECORD_ROOT}\n`);
+    expect(r.stdout).toBe(`extprobe\textprobe-root\nfixture\tfixture-root\nunit\t${RECORD_ROOT}\nunit\t${FALLBACK_ROOT}\n`);
   });
 
   it('[the-engine-r26] store_roots finds the data reader beside the resolver the library calls, reading the workspace root\'s declarations', async () => {

@@ -61,7 +61,7 @@ Once confirmed, start your first unit of work:
 
 ### What happens next?
 
-1. **The agent creates the unit:** It initializes `.contexture/sessions/<your-task>/` with active tasks (`backlog.md`) and an append-only event log (`journal.md`).
+1. **The agent creates the unit:** It initializes `.contexture/units/<your-task>/` with active tasks (`backlog.md`) and an append-only event log (`journal.md`).
 2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates tasks, logs test proofs, and records decisions through semantic CLI verbs. You never manage the files manually.
 3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `ctx unit load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
 
@@ -85,7 +85,7 @@ The workspace couples root governance with a dedicated convention drawer:
     ├── modules/          The standard module folders: unit (the record engine), run (stream filters), and workspace additions
     ├── extensions/       The package overlay root: modules/ for package feature modules (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression
-    └── sessions/<unit>/  Isolated unit of work bounding context and lifecycle history
+    └── units/<unit>/     Isolated unit of work bounding context and lifecycle history
         ├── state.md      Where the unit stands: status, current anchor, objective, repos, and mounts
         ├── backlog.md    Living task queue with acceptance criteria and execution blueprints
         ├── journal.md    Append-only event stream rebuilding working context from scratch
@@ -96,7 +96,7 @@ The workspace couples root governance with a dedicated convention drawer:
 ## Core concepts
 
 ### Units
-A dedicated scope for your task (`.contexture/sessions/<name>/`). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
+A dedicated scope for your task (`.contexture/units/<name>/`; a unit an older release wrote under `.contexture/sessions/` still reads from there and moves at its next write, or with `ctx unit migrate --all`). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
 
 ### Subagents
 An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Managed via the top-level `ctx lane` module. Deep dive: [Units and subagents](docs/units-and-lanes.md).
@@ -159,6 +159,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit refs <unit> [<unit> ...] | Set the read-only reference units; zero units clears them |
 | ctx unit close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
 | ctx unit reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
+| ctx unit migrate <unit>... \| --all | The sweep of the record's root move: moves the named units, or every unit, from the deprecated root to the current one (every landing write already moves its own unit; a CLOSED unit moves only here); prints migrated: <n>, a second run migrated: 0; the first refusal stops it naming the unit |
 | ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw; capture files are unlinked before the command runs |
 
 The named looks (`entry show`, `entry closure`, `units`, `refs-to`, `resolve`) and search answer questions over the record, so agents never improvise greps that over-read: a look that misses is loud, rc=1 with a named error, never an empty success; search prints its zero count. The lists (`entry list` with `--group` or `--anchor`, `task list`, `finding list`) print nothing with rc 0 when nothing matches.
@@ -174,6 +175,6 @@ The dev loop:
 1. Edit `base/` directly: it is the shipping copy.
 2. Run the tests of the change from `tests/` (they stage the base runtime; `bun install --frozen-lockfile` once): `bun run test:changed`, or the area's project with `bun run test:<project>`; see [tests/README.md](tests/README.md).
 3. Ship: the release gate green (`bun run test:prerelease` from `tests/`), docs sync, commit, push, and the annotated tag in one breath. A plugin whose payload the release changes carries its manifest version bump (see [docs/plugins.md](docs/plugins.md)); the governance `plugin-versions` check reads red until it does.
-4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root, then compose the law layer (`sh .contexture/laws/compose`). The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched; it never removes a file either, so a payload path the release removed is deleted from the live drawer by hand (see [Adoption](docs/adoption.md)).
+4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root, then compose the law layer (`sh .contexture/laws/compose`). The copy carries only payload paths, so the record (units, and the deprecated sessions folder while units remain in it), rhythms, tmp, and workspace modules are never touched; it never removes a file either, so a payload path the release removed is deleted from the live drawer by hand (see [Adoption](docs/adoption.md)).
 
 `plugins/` is the tracked catalog of packaged overlays, installed into a workspace when wanted (see [docs/plugins.md](docs/plugins.md)); `docs/adoption.md` carries the same loop beside the adopter's view.

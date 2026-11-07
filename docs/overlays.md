@@ -18,7 +18,7 @@ The base deliberately draws the line:
 
 - The base provides mechanisms and file contracts; workflow policy lives in overlays or in git hooks, never in the shared base. A push restriction, for example, is one team's opinion, not a convention law.
 - The base carries generic workflow laws only. Product-specific rules belong to the product's own governance; mixing the two layers confuses both audiences.
-- Shared material carries the why; private state carries the work. The base and the shared overlay are copied between teams; sessions, rhythms, and the local file stay yours.
+- Shared material carries the why; private state carries the work. The base and the shared overlay are copied between teams; the record, rhythms, and the local file stay yours.
 
 Placement follows that line. A rule the whole convention should hold belongs in the base, upstream. A rule only your workspace holds belongs in the overlay. Extra recording rules, for instance, belong to an overlay rather than to a rhythm.
 
@@ -56,7 +56,7 @@ The order is simple: the loader, then the generated law layer, then the workspac
 
 The loader composes or verifies `AGENTS.generated.md` at the workspace root and reads it whole; the generated layer carries the core laws plus the installed modules' laws and preambles. The workspace overlay then extends that layer, and the local file extends the workspace. Where the two overlays conflict, the workspace's version wins and the local one is ignored, which is why the local file is described as yielding. Both sit below the laws: an overlay amends, it never overrides a guarantee the core carries. The boot order itself is open to amendment by an overlay, so the overlays are read at the very start of boot.
 
-The generated layer is gitignored and never edited. It sits at the root beside the loader and the overlays: a standalone repository ignores it with the root-anchored line `/AGENTS.generated.md` whatever its sessions and rhythms choice, and a deny-by-default workspace keeps it ignored by its `*` line, whitelisting the AGENTS files by name, never with an `AGENTS*.md` glob. The adoption page shows the line.
+The generated layer is gitignored and never edited. It sits at the root beside the loader and the overlays: a standalone repository ignores it with the root-anchored line `/AGENTS.generated.md` whatever its record and rhythms choice, and a deny-by-default workspace keeps it ignored by its `*` line, whitelisting the AGENTS files by name, never with an `AGENTS*.md` glob. The adoption page shows the line.
 
 ## Amend, never contradict
 
@@ -76,7 +76,7 @@ The reason is mechanical: a replaced generated section still loads. The loader i
 
 Overlays are workspace-owned. A sync of the upstream base never rewrites them, and the update guidance treats them as out of scope: what you adopted is the base, and what you wrote around it stays. The exception is semantic, not mechanical: a MAJOR update changes shapes, so the overlay receives a review even though nothing overwrites it.
 
-Tracking follows ownership. The workspace overlay is shared and tracked with the repository. The local file is personal; in standalone repositories most teams ignore it, and whether sessions and rhythms are tracked is a team choice made at onboarding. In parent meta-workspaces that whitelist shared files explicitly, `AGENTS.workspace.md` is on the list.
+Tracking follows ownership. The workspace overlay is shared and tracked with the repository. The local file is personal; in standalone repositories most teams ignore it, and whether the record and rhythms are tracked is a team choice made at onboarding. In parent meta-workspaces that whitelist shared files explicitly, `AGENTS.workspace.md` is on the list.
 
 Adoption is where the files begin: the onboarding flow proposes the workspace overlay and initializes the local one, then leaves you to grow them. The adoption page walks that flow. An upgrade that moves rules into a module's laws file (the docs laws and their clauses, the lane clauses) removes their overlay copies: the boot compose refuses a duplicate law slug across the generated layer and both overlays, so an adopter deletes the old overlay block rather than keeping two homes.
 

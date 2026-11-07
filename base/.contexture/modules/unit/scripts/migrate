@@ -1,0 +1,39 @@
+#!/bin/sh
+# summary: the sweep: move units from the store's deprecated root to its current root
+# usage: ctx unit migrate <unit> [<unit>...]
+# usage: ctx unit migrate --all
+# help: moves each named unit, or with --all every unit the store holds, whole from the store's deprecated root to its current root, each under its unit lock (unit.promote over the store's optional promotion); a unit already in the current root moves nothing
+# help: every landing write already moves the unit it writes, so the sweep is for the units nobody writes: a CLOSED unit never moves by a write, and while any unit stays behind every read of it warns naming this verb
+# help: prints one line, migrated: <n>, the units moved, so a second run prints migrated: 0; a store that keeps no deprecated root prints that nothing moves
+# help: the first refusal stops the run, its one line naming the unit; the units moved before it stay moved
+# help: exit codes: 0 swept, or nothing to move; 1 a bare call, a bad argument, an unknown unit, or a unit the store holds in both roots; 2 a storage failure
+# help: example: ctx unit migrate --all
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx unit migrate <unit> [<unit>...] | ctx unit migrate --all\n' >&2
+  printf 'help: ctx unit help migrate\n' >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h|help) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
+esac
+[ $# -ge 1 ] || usage
+if [ "$1" = --all ]; then
+  [ $# -eq 1 ] || vb_unknown migrate "$2"
+else
+  for u in "$@"; do
+    case "$u" in -*) vb_unknown migrate "$u" ;; esac
+    vb_unit migrate "$u"
+  done
+fi
+
+vb_call unit.promote "$@"
+vb_ok
+if [ "$(vb_field promote)" = false ]; then
+  printf 'nothing moves: the store keeps no fallback\n'
+else
+  printf 'migrated: %s\n' "$(vb_field migrated)"
+fi

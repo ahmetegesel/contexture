@@ -5,7 +5,7 @@ import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { kids, moduleDirs, text, walk } from './walk';
 
-const DRAWER_LITERAL = /\.contexture\/sessions|sessions\.db|tmp\/locks|locks\/unit|store-[^ \/]*\.lock/;
+const DRAWER_LITERAL = /\.contexture\/(sessions|units)|sessions\.db|tmp\/locks|locks\/unit|store-[^ \/]*\.lock/;
 const COMMENT = /^[ \t]*(#|\/\/)/;
 
 const UNIT = 'base/.contexture/modules/unit';
@@ -13,7 +13,8 @@ const POSIX = 'base/.contexture/storage/drivers/posix/driver';
 const FTS5 = 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/driver';
 
 const OWNERS: readonly [file: string, line: string, why: string][] = [
-  [`${UNIT}/data`, 'root: .contexture/sessions', 'the record root, declared once by the unit module'],
+  [`${UNIT}/data`, 'root: .contexture/units', 'the record root, declared once by the unit module'],
+  [`${UNIT}/data`, 'fallback_root: .contexture/sessions', 'the record\'s deprecated root, declared once by the unit module'],
   [`${UNIT}/scripts/data`, '  mkdir -p "$u_tmp/locks/unit" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot create the lock folder"', 'the unit lock folder (u_lock)'],
   [`${UNIT}/scripts/data`, '  U_LT="$u_tmp/locks/unit/$1.lock"', 'the unit lock (u_lock)'],
   [POSIX, '  sl_lock="$(get_lock_dir)/store-$1.lock"', 'the posix namespace lock (store_lock)'],
@@ -61,7 +62,7 @@ function scan(root: string) {
   return { counts, flagged, remainder };
 }
 
-const TEST_LITERAL = /\.contexture\/sessions|sessions\.db|tmp\/locks|locks\/unit|store-[^ \/]*\.lock|\.contexture,\s*sessions|tmp,\s*locks|locks,\s*unit/;
+const TEST_LITERAL = /\.contexture\/(sessions|units)|sessions\.db|tmp\/locks|locks\/unit|store-[^ \/]*\.lock|\.contexture,\s*(sessions|units)|tmp,\s*locks|locks,\s*unit/;
 const TEST_COMMENT = /^[ \t]*(\/\/|\*|\/\*)/;
 const HELPER = 'tests/support/drawer.ts';
 const QUOTING = ['tests/governance/store-bypass.test.ts', 'tests/governance/drawer-literals.test.ts'];
@@ -69,9 +70,9 @@ const LIST_OPEN = /^const (ALLOW|OWNERS|TEST_PATTERNS)\b.*= \[$/;
 const PLANTS_OPEN = /^ {2}it\.each\(\[$/;
 
 const TEST_PATTERNS: readonly [file: string, line: string, why: string][] = [
-  ['tests/governance/store-bypass.test.ts', "const STORE_REACH = /\\.contexture\\/sessions|sessions\\.db|storage\\/drivers\\/|drivers\\/[a-z0-9_-]+\\/driver|driver-resolver[^|;]* resolve([^a-z]|$)|sqlite3|tmp\\/locks/;", 'the store-bypass pattern'],
-  ['tests/governance/drawer-literals.test.ts', 'const DRAWER_LITERAL = /\\.contexture\\/sessions|sessions\\.db|tmp\\/locks|locks\\/unit|store-[^ \\/]*\\.lock/;', 'the census pattern'],
-  ['tests/governance/drawer-literals.test.ts', 'const TEST_LITERAL = /\\.contexture\\/sessions|sessions\\.db|tmp\\/locks|locks\\/unit|store-[^ \\/]*\\.lock|\\.contexture,\\s*sessions|tmp,\\s*locks|locks,\\s*unit/;', 'the census pattern over the tests'],
+  ['tests/governance/store-bypass.test.ts', "const STORE_REACH = /\\.contexture\\/(sessions|units)|sessions\\.db|storage\\/drivers\\/|drivers\\/[a-z0-9_-]+\\/driver|driver-resolver[^|;]* resolve([^a-z]|$)|sqlite3|tmp\\/locks/;", 'the store-bypass pattern'],
+  ['tests/governance/drawer-literals.test.ts', 'const DRAWER_LITERAL = /\\.contexture\\/(sessions|units)|sessions\\.db|tmp\\/locks|locks\\/unit|store-[^ \\/]*\\.lock/;', 'the census pattern'],
+  ['tests/governance/drawer-literals.test.ts', 'const TEST_LITERAL = /\\.contexture\\/(sessions|units)|sessions\\.db|tmp\\/locks|locks\\/unit|store-[^ \\/]*\\.lock|\\.contexture,\\s*(sessions|units)|tmp,\\s*locks|locks,\\s*unit/;', 'the census pattern over the tests'],
 ];
 
 const patternLines = new Set(TEST_PATTERNS.map(([file, line]) => `${file}\n${line}`));
@@ -142,6 +143,7 @@ describe.concurrent('the drawer literal census: the record root, the database na
     ['a lock folder in a copied composer', 'base/.contexture/laws/compose', 'rm -rf "$root/.contexture/tmp/locks/unit"'],
     ['a record root split by quoting', 'base/.contexture/storage/scripts/library', 'cat "$sr_root/.contexture/"sess"ions/u/state.md"'],
     ['a record root in an escaped regex', 'base/.contexture/storage/scripts/store-data', "grep -E '\\.contexture\\/sessions' \"$sd_file\""],
+    ['the new record root in a copied posix driver', POSIX, 'ls "$STORE_WS/.contexture/units"'],
   ])('[the-record-r10] %s reads red with exactly one remainder', (_name, rel, line) => {
     const r = scan(plantedTree(rel, line));
     expect(r.remainder).toHaveLength(1);
@@ -160,6 +162,7 @@ describe.concurrent('the drawer literal census: the record root, the database na
     ['a join split record root in a plugin test', 'plugins/docs-discipline/tests/unit/io-helpers.test.ts', "const planted = join(sb, '.contexture', 'sessions', 'u');"],
     ['a lock folder split by join in a support helper', 'tests/support/record.ts', "const held = join(sb, '.contexture', 'tmp', 'locks', 'store-unit.lock');"],
     ['the database name in a template literal', 'plugins/storage-fts5/tests/fts5-store.test.ts', 'const db = `${sb}/.contexture/sessions.db`;'],
+    ['a join split new record root in a core test', 'tests/drivers/store-posix.test.ts', "const planted = join(sb, '.contexture', 'units', 'u');"],
   ])('%s reads red with exactly one remainder', (_name, rel, line) => {
     const r = scanTests(plantedTree(rel, line));
     expect(r.remainder).toHaveLength(1);

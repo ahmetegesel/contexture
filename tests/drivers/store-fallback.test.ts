@@ -2,8 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
+import { FALLBACK_ROOT, FTS5_DB, RECORD_ROOT } from '../support/drawer';
 import { ROOT_USER, chmodPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
+import { fts5Available, stage } from '../support/stage';
 import { batchPayload, listAnswer, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
@@ -152,5 +154,19 @@ describe('the posix fallback root: reads after the root, writes to the root alon
     expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not writable', store: 'present' });
     chmodPlant(join(sb, 'old-root'), 0o311, 0o755, onTestFinished);
     expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not readable', store: 'absent' });
+  });
+});
+
+describe.skipIf(!fts5Available())('the fts5 store and the posix roots', () => {
+  it('[the-engine-r-b3r6t, plugins-p3] files planted under the record\'s root and its fallback root stay invisible to fts5, and its database keeps its name', async () => {
+    const sb = stage('fts5', 'fallback-fts5');
+    for (const root of [RECORD_ROOT, FALLBACK_ROOT]) plant(sb, `${root}/u/state.md`, `planted under ${root}\n`);
+    const s = store(sb, 'fts5');
+    expect(await s.list('unit')).toMatchObject({ code: 0, stdout: listAnswer('unit', []), stderr: '' });
+    refused(await s.get('unit', 'u/state'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'u/state' not found in namespace 'unit'");
+    answer(await s.put('unit', 'v/state', 'stored\n'), 'store.put');
+    expect(await s.list('unit')).toMatchObject({ code: 0, stdout: listAnswer('unit', ['v/state']), stderr: '' });
+    expect(existsSync(join(sb, FTS5_DB))).toBe(true);
+    expect(existsSync(join(sb, RECORD_ROOT, 'v'))).toBe(false);
   });
 });

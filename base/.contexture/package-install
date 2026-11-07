@@ -138,7 +138,7 @@ if [ -d "$pkg_root/.contexture" ]; then
     _b=${_e##*/}
     [ "$_b" = extensions ] && continue
     case "$_b" in
-      ctx|storage|modules|rhythms|sessions|tmp|ONBOARDING.md)
+      ctx|storage|modules|rhythms|sessions|units|laws|tmp|ONBOARDING.md)
         die 1 "core path refused: .contexture/$_b (a package overlays .contexture/extensions/ only)" ;;
       *)
         die 1 "path outside the extension root: .contexture/$_b (a package overlays .contexture/extensions/ only)" ;;

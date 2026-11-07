@@ -82,6 +82,20 @@ describe.concurrent('package-install: the collision classes', () => {
     expect(existsSync(join(sb, '.contexture/modules/x'))).toBe(false);
   });
 
+  it.each([
+    ['the record root', 'units', 'u/state.md'],
+    ['the law sources', 'laws', 'planted.md'],
+  ])('[modules-r15, the-engine-r22] a package carrying %s refuses rc1 as a core path and writes nothing there', async (_, folder, file) => {
+    const sb = sandbox();
+    const p = newPkg(sb, `pkg-${folder}`);
+    addFile(p, 'rhythms/core.md', 'the core-path fixture rhythm');
+    put(join(p, '.contexture', folder, file), 'x\n');
+    const r = await installPkg(sb, p);
+    expect(r.code).toBe(1);
+    expect(r.stderr).toContain(`core path refused: .contexture/${folder} (a package overlays .contexture/extensions/ only)`);
+    expect(existsSync(join(sb, '.contexture', folder, file))).toBe(false);
+  });
+
   it('[modules-r15, the-engine-r22] a path outside the extension root refuses rc1', async () => {
     const sb = sandbox();
     const p = newPkg(sb, 'pkgout');

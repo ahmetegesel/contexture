@@ -54,7 +54,7 @@
     overlay: <AGENTS.workspace.md @append blocks, which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
     rhythms: <work patterns found in the stack: each becomes a rhythm file proposal; none states none>
-    sessions: <existing session folders: adopted, archived, or left; none states none>
+    units: <existing unit folders, under the record root or the deprecated sessions root: adopted, archived, or left; none states none>
     symlinks: <harness entry points to wire; none states none>
     gitignore: <the strategy per topology>
     deletions: <existing rules superseded by the convention; none states none>
@@ -72,7 +72,7 @@
     standalone repo:
       never deny by default (*); do not alter project file tracking
       append personal amendments to existing .gitignore (AGENTS.local.md)
-      per confirmed plan: ignore or track .contexture/sessions/ and .contexture/rhythms/ based on team choice
+      per confirmed plan: ignore or track .contexture/units/ (and the deprecated .contexture/sessions/ while units remain in it) and .contexture/rhythms/ based on team choice
       always ignore the composed law layer with the root-anchored line /AGENTS.generated.md (built at install and boot, never tracked, never edited); a repository that ignored it at its old place replaces its .contexture/laws/AGENTS.generated.md ignore line with /AGENTS.generated.md once the update compose has removed the legacy file (update step 9, before the step 10 review)
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone

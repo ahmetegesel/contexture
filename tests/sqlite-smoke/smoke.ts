@@ -1,7 +1,7 @@
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { expect } from 'vitest';
-import { FTS5_DB, RECORD_ROOT, declaredRoot } from '../support/drawer';
+import { FALLBACK_ROOT, FTS5_DB, RECORD_ROOT, declaredRoots } from '../support/drawer';
 import { exec } from '../support/exec';
 import { probeFts5, stage } from '../support/stage';
 import { unit } from '../support/unit';
@@ -23,7 +23,7 @@ function dataFiles(sb: string): string[] {
 }
 
 export function namespaceRoots(sb: string): string[] {
-  return dataFiles(sb).map(declaredRoot).filter(Boolean).sort();
+  return dataFiles(sb).flatMap(declaredRoots).filter(Boolean).sort();
 }
 
 export const residue = (sb: string): string[] => namespaceRoots(sb).filter((root) => existsSync(join(sb, root)));
@@ -36,7 +36,7 @@ export async function storeKeys(sb: string, ns: string): Promise<string[]> {
 
 export async function inSqliteStore(sb: string, ns: string, keys: readonly string[]): Promise<void> {
   expect(existsSync(join(sb, FTS5_DB)), 'the store is the SQLite database').toBe(true);
-  expect(namespaceRoots(sb)).toContain(RECORD_ROOT);
+  expect(namespaceRoots(sb)).toEqual(expect.arrayContaining([RECORD_ROOT, FALLBACK_ROOT]));
   expect(residue(sb), 'a namespace root folder under a SQLite store is a posix residue').toEqual([]);
   expect(await storeKeys(sb, ns)).toEqual(expect.arrayContaining([...keys]));
 }

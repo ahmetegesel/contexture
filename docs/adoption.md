@@ -66,7 +66,7 @@ copy        the adoption set, derived from the tag
 overlay     which existing rules migrate into AGENTS.workspace.md
 local       AGENTS.local.md preferences
 rhythms     work patterns found in your stack, proposed as rhythm files
-sessions    existing session folders: adopted, archived, or left
+units       existing unit folders (the record root, or the deprecated sessions root): adopted, archived, or left
 symlinks    harness entry points to wire
 gitignore   the strategy for your topology
 deletions   existing rules the convention supersedes
@@ -76,9 +76,9 @@ questions   what only you can answer
 
 ## Topology and gitignore choices
 
-There is no universal `.gitignore` block; the topology decides, and the tracking of sessions and rhythms is a team choice either way.
+There is no universal `.gitignore` block; the topology decides, and the tracking of the record and rhythms is a team choice either way.
 
-Standalone repository (application code lives here): never deny by default, so existing project files keep tracking. Append your personal amendments (`AGENTS.local.md`) to the existing ignore file, and decide with the team whether `.contexture/sessions/` and `.contexture/rhythms/` are tracked or ignored. Tracked, the record travels with the repository; ignored, the record stays local. Both are defensible; the convention requires neither. Whatever the choice, ignore the composed law layer with the root-anchored line `/AGENTS.generated.md`: it is built at install and boot and never tracked. A repository that ignored the layer at its old place replaces its `.contexture/laws/AGENTS.generated.md` ignore line with `/AGENTS.generated.md` once the update's compose has removed the legacy file (Updating, step 9, before the step 10 review); never whitelist an `AGENTS*.md` glob, which would track the generated layer.
+Standalone repository (application code lives here): never deny by default, so existing project files keep tracking. Append your personal amendments (`AGENTS.local.md`) to the existing ignore file, and decide with the team whether `.contexture/units/` (with the deprecated `.contexture/sessions/` while units remain in it) and `.contexture/rhythms/` are tracked or ignored. Tracked, the record travels with the repository; ignored, the record stays local. Both are defensible; the convention requires neither. Whatever the choice, ignore the composed law layer with the root-anchored line `/AGENTS.generated.md`: it is built at install and boot and never tracked. A repository that ignored the layer at its old place replaces its `.contexture/laws/AGENTS.generated.md` ignore line with `/AGENTS.generated.md` once the update's compose has removed the legacy file (Updating, step 9, before the step 10 review); never whitelist an `AGENTS*.md` glob, which would track the generated layer.
 
 Parent workspace (multiple repositories, the workspace tracks convention configuration alone): deny by default and whitelist shared files explicitly:
 
@@ -135,7 +135,7 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 |---|---|---|
 | update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/` | installed into the extension root when wanted; shipped with every tag, never deleted at adoption close |
-| workspace-owned | `.contexture/sessions/`, `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/` | never touched |
+| workspace-owned | `.contexture/units/` (and the deprecated `.contexture/sessions/` while units remain in it), `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/` | never touched |
 
 The synced set is derived, never declared: `base/` is the payload; `git archive <tag> base/` copies it, `git ls-tree` enumerates it, and a `cmp` per file verifies it. No manifest exists to drift; the tag's index is the declaration. Overlays are never in `base/`, and they survive every sync untouched. `.contexture/ONBOARDING.md` rides the payload as adoption material: used once, deleted at close, redelivered by a later apply and deleted again.
 
@@ -143,7 +143,7 @@ In this repository the live root (`AGENTS.md` and `.contexture/`) is untracked w
 
 1. Edit `base/` directly: it is the shipping copy.
 2. Ship: docs sync, commit, push, and the annotated tag in one breath.
-3. Apply: first read the version actually live in the drawer by comparing its files against the tags (the payload compare below), never by assuming the previous tag; then `cp -R base/. .` from the repository root. The copy carries only payload paths, so sessions, rhythms, tmp, and workspace modules are never touched. A copy adds and replaces files but never removes one: delete from the live drawer every payload path removed since the live version (`git diff --name-status --diff-filter=D <live-tag> <tag> -- base/` lists them).
+3. Apply: first read the version actually live in the drawer by comparing its files against the tags (the payload compare below), never by assuming the previous tag; then `cp -R base/. .` from the repository root. The copy carries only payload paths, so the record, rhythms, tmp, and workspace modules are never touched. A copy adds and replaces files but never removes one: delete from the live drawer every payload path removed since the live version (`git diff --name-status --diff-filter=D <live-tag> <tag> -- base/` lists them).
 4. Compose the law layer right after the copy and the hand deletes: `sh .contexture/laws/compose`. The generated layer is gitignored, never shipped, and rebuilt after any package or payload change; the first boot verifies or recomposes it too, and the compose removes a legacy layer left at the old place. Then run the payload compare: it prints nothing once no removed path is left.
 5. Verify the live install: the boot load, the audit, and the ground check.
 
@@ -171,4 +171,4 @@ The base evolves upstream, and updating is judgment, not a script: the changes a
 10. Review the staged diff before committing; it shows you the changed base.
 11. Run your instruments against the result: the boot query, the audit, the ground check. After a MAJOR tag, review the overlay: its rules were written against the old shape, and the docs and lane clauses moved to the module laws (a duplicate slug refuses at boot).
 
-The payload applies cleanly, and your sessions, rhythms, tmp, and workspace modules are never touched; the classes hold on every update.
+The payload applies cleanly, and your record, rhythms, tmp, and workspace modules are never touched; the classes hold on every update.

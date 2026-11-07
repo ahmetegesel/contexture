@@ -1,7 +1,7 @@
 import { readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { RECORD_ROOT } from '../support/drawer';
+import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { exec } from '../support/exec';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
@@ -11,7 +11,7 @@ import { text, walk } from './walk';
 const AWKREPL = join(ROOT, 'tests/governance/awkrepl.awk');
 const PROSE = /\.(ts|js|json|md|py|sql)$/;
 const escaped = (s: string): string => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
-const SKIPPED = new RegExp(`/(node_modules|fixtures)(/|$)|/(\\.contexture/tmp|${escaped(RECORD_ROOT)})(/|$)`);
+const SKIPPED = new RegExp(`/(node_modules|fixtures)(/|$)|/(\\.contexture/tmp|${escaped(RECORD_ROOT)}|${escaped(FALLBACK_ROOT)})(/|$)`);
 
 function censusFiles(root = ROOT): string[] {
   const roots = [
@@ -39,7 +39,7 @@ describe.concurrent('the awk replacement census: no sub or gsub replacement carr
   it('[modules-r8] the exclusions match paths inside the repository, so a repository under a .contexture/tmp folder still reads its files', () => {
     const root = sandbox('census-root');
     const kept = ['base/.contexture/modules/m/scripts/v.sh', 'plugins/p/.contexture/x.awk', 'tests/lib.sh'];
-    const skipped = ['base/.contexture/tmp/t.awk', join('base', RECORD_ROOT, 'u/s.sh'), 'tests/fixtures/f.awk', 'tests/node_modules/n.sh', 'tests/notes.md'];
+    const skipped = ['base/.contexture/tmp/t.awk', join('base', RECORD_ROOT, 'u/s.sh'), join('base', FALLBACK_ROOT, 'u/s.sh'), 'tests/fixtures/f.awk', 'tests/node_modules/n.sh', 'tests/notes.md'];
     for (const f of [...kept, ...skipped]) put(join(root, f), 'x\n');
     expect(root).toContain('/.contexture/tmp/');
     expect(censusFiles(root).map((f) => relative(root, f))).toEqual(kept);
