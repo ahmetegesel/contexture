@@ -118,7 +118,7 @@ describe.skipIf(!fts5Available())('the fts5 store location', { concurrent: true 
   it.each([
     ['a workspace-relative path, under the workspace', '.contexture/elsewhere.db'],
     ['an absolute path, as given', 'absolute'],
-  ])('the storage.database configuration key places the store at %s, never the default file', async (_, path) => {
+  ])('[plugins-r12] the storage.database configuration key places the store at %s, never the default file', async (_, path) => {
     const sb = stage('fts5');
     dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
     const db = path === 'absolute' ? join(sandbox('placed'), 'store.db') : join(sb, path);
