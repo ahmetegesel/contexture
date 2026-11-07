@@ -26,7 +26,7 @@
 # matching the manifest; a path that escapes or carries blanks; a payload file
 # outside the extension root; a core path; an existing file no package recorded;
 # a path another package recorded; a module name against a builtin (unit,
-# run, lane), a workspace module, or a reserved name; a driver name against the
+# run, lane, rhythm), a workspace module, or a reserved name; a driver name against the
 # core posix driver or a driver that already resolves ahead of the extension
 # root; a duplicate namespace; a malformed module manifest; a driver part
 # without an executable.
@@ -246,7 +246,7 @@ while IFS= read -r mname; do
     _hooks|_module|_package|_reserved) die 1 "malformed module name '$mname' (an engine-private name)" ;;
   esac
   case "$mname" in
-    unit|run|lane) die 1 "module name '$mname' collides with a builtin" ;;
+    unit|run|lane|rhythm) die 1 "module name '$mname' collides with a builtin" ;;
   esac
   if [ -f "$payload_root/modules/$mname/module" ] || [ -d "$payload_root/modules/$mname/scripts" ]; then
     grep -Fqx "module modules/$mname" "$scratch/parts" || die 1 "module '$mname' is not declared as a module part"
