@@ -220,6 +220,16 @@ describe('the edit engine: opaque ids beside the numbered ones', { concurrent: t
     expect(ids(other)).toEqual(['unit-p1', 'unit-p-04rgj']);
   });
 
+  it('[docs-module-r22] a seed that is not a whole number draws as seed 0, so no seed sticks the draw on one token', async () => {
+    for (const seed of ['-1', '-7', 'nan', 'inf', '0x10', '1.5', 'abc']) {
+      const r = await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: unitDoc(), block: 'pitfalls', acts: pitfallFields(), seed });
+      expect([seed, r.code, ids(r)]).toEqual([seed, 0, ['unit-p1', 'unit-p-04rgj']]);
+    }
+    const doc = scratch('keyless.md', golden('unit.md'));
+    const keyed = await edit(sb, { op: 'ids', slug: 'unit', doc, seed: '-1' });
+    expect([keyed.code, ids(keyed)]).toEqual([0, ids(await edit(sb, { op: 'ids', slug: 'unit', doc, seed: '0' }))]);
+  });
+
   it('[docs-module-r22] --id names an id in either form, and any other shape refuses naming both', async () => {
     for (const id of ['unit-p7', 'unit-p-zz9zz']) {
       const r = await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: unitDoc(), block: 'pitfalls', id, acts: pitfallFields() });

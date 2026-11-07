@@ -348,9 +348,10 @@ it walk below runs every one of these.
   `--id` names an id in either form. Each verb call draws its own seed from
   `/dev/urandom` (the process id and the clock where it cannot be read);
   `DOCS_ID_SEED=<whole number>` fixes it, so a test gets the same ids on every
-  run and every awk. `ctx docs ids` keys a legacy corpus once; a keyless
-  legacy entry stays legitimate and is addressed by `#<N>`. The audit keeps
-  one id namespace per repo across every id field.
+  run and every awk (any other value draws as 0). `ctx docs ids` keys a
+  legacy corpus once; a keyless legacy entry stays legitimate and is
+  addressed by `#<N>`. The audit keeps one id namespace per repo across every
+  id field.
 - The corpus reaches the verbs only through the storage driver, by one door
   (`scripts/docs-io.sh`): a bare `ctx docs audit` reads the whole corpus, a
   repo name reads that repo's docs, and a doc path names a doc by its

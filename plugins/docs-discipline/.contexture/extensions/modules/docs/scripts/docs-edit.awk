@@ -609,10 +609,13 @@ function doc_ids(    i, v) {
 
 # a new id, <slug>-<letter>-<token>: five characters of 0-9a-z from a Lehmer generator
 # (16807 modulo 2147483647, exact in every awk's doubles, so one seed draws the same token on
-# every awk) seeded by EDIT_SEED, drawn again while the doc or this run already holds it
+# every awk) seeded by EDIT_SEED, a whole number (any other value reads as 0, so no seed leaves
+# the generator at a state outside 1 to 2147483646), drawn again while the doc or this run
+# already holds it
 function new_id(b,    pre, t, k) {
     if (!SEEDED) {
-        DRAW = (ENVIRON["EDIT_SEED"] + 0) % 2147483646 + 1
+        DRAW = ENVIRON["EDIT_SEED"]
+        DRAW = (DRAW ~ /^[0-9]+$/ ? DRAW + 0 : 0) % 2147483646 + 1
         SEEDED = 1
     }
     pre = DSLUG "-" id_letter(b) "-"

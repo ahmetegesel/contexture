@@ -129,9 +129,10 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   again while the doc or the run already holds it; the IO helper seeds each
   engine run that can mint an id (`entry`, `ids`) with `DOCS_ID_SEED` when set,
   else four bytes of `/dev/urandom`, else the process id beside the clock,
-  passed as `EDIT_SEED`; a numbered id `<slug>-<letter><N>` stays valid and
-  `--id` takes either form; a field an entry lacks lands at its
-  schema position; a text value with a newline renders as a block scalar and
+  passed as `EDIT_SEED`, which the engine reads as 0 unless it is a whole
+  number, so no seed leaves the generator outside its states; a numbered id
+  `<slug>-<letter><N>` stays valid and `--id` takes either form; a field an
+  entry lacks lands at its schema position; a text value with a newline renders as a block scalar and
   a field written as one keeps that form; every untouched line passes byte for
   byte, and a doc without a final newline keeps it so.
 - The verb scripts carry the `# summary:`/`# usage:`/`# help:` declarations;
@@ -262,8 +263,8 @@ from the plugin, and on fts5 the storage-fts5 plugin's driver copy with
 once, on posix. `unit/` drives each engine alone over files: `docs-edit.awk`
 against the `tests/write/` goldens (every success byte for byte, every
 refusal) and the opaque ids under a fixed seed (the draw, the draw again past
-an id the doc holds, `--id` in either form and the shapes it refuses, an
-opaque key, `ids` keeping every id present), `docs-audit.awk` (an opaque
+an id the doc holds, a seed that is not a whole number drawing as 0, `--id`
+in either form and the shapes it refuses, an opaque key, `ids` keeping every id present), `docs-audit.awk` (an opaque
 id's duplicate across the repo among its cases), `docs-query.awk` and
 `docs-nudge.awk` against
 committed expected output under `unit/expected/` (regenerated with
