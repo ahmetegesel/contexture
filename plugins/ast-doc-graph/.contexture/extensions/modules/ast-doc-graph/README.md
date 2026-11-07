@@ -90,8 +90,9 @@ one stderr notice naming the guess and the full index that records the root.
 
 The docs extractor reads the corpus as files: `bin/ast-doc-index` lists the
 regular markdown files of the workspace's `docs/` folder (else the
-repository root outside the exclusion folders) and `extractors/docs/extract-docs.ts` parses each listed
-file, never through `ctx docs` or the storage driver; a walk that finds no
+repository root outside the exclusion folders) and
+`extractors/docs/extract-docs.ts` parses each listed file, never through
+`ctx docs` or the storage driver; a walk that finds no
 markdown yields empty docs streams, never a refusal. Under the docs-discipline
 files driver that folder is the corpus; under a store driver it holds none, so
 the graph carries no docs, rules, or pitfalls (the code side is unaffected).
@@ -159,11 +160,11 @@ another root refusing (on both loader branches), one given another
 staying inside through a bare, a named, and an inline delta, a delta given
 `--no-reconcile` removing and adding nothing, and a graph without the record
 keeping the guess with its one notice, its refresh never removing a path the
-guessed root lacks nor counting one; `delta-jit` also proves a failed inline delta's one stderr line and the
-fallback delta over a graph past 1 MB, `pipeline` one search row for a name
-declared more than once. The `sqlite3` command fallback cases run with
-`NODE_OPTIONS=--no-experimental-sqlite` and skip, naming the need, where the
-host's node does not read it.
+guessed root lacks nor counting one; `delta-jit` also proves a failed inline
+delta's one stderr line and the fallback delta over a graph past 1 MB,
+`pipeline` one search row for a name declared more than once. The `sqlite3`
+command fallback cases run with `NODE_OPTIONS=--no-experimental-sqlite` and
+skip, naming the need, where the host's node does not read it.
 `static/` holds the census of the module tree: no PATH edit, no
 sibling-project glob, no pre-extension-root path, and no absolute system
 temp path, each with a planted null check. The tests skip, naming the
