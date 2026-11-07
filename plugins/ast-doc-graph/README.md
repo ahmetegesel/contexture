@@ -469,7 +469,8 @@ cd "$scratch"
 @graph_loaded
   DATABASE: <scratch>/graph.db
   SYMBOLS: 0
-  EDGES: 0
+  EDGES: 4
+    DEFINES: 4
   DOCS: 4
   RULES: 5
   PITFALLS: 3
@@ -477,7 +478,8 @@ cd "$scratch"
 @graph_stats
   DATABASE: ./graph.db
   SYMBOLS: 0
-  EDGES: 0
+  EDGES: 4
+    DEFINES: 4
   DOCS: 4
   RULES: 5
   PITFALLS: 3
