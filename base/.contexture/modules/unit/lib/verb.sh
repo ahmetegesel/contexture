@@ -151,7 +151,7 @@ vb_kv() {
   esac
 }
 
-# vb_doc_ok <field> <file>: a document (a recipe, a report) holding a NUL byte or bytes that
+# vb_doc_ok <field> <file>: a document (a report) holding a NUL byte or bytes that
 # are not valid UTF-8 refuses rc 1 naming it, before any driver call (end review item 10);
 # the NUL is found by size (tr drops it), so awk never reads one
 vb_doc_ok() {
