@@ -2,7 +2,8 @@
 # ctx: the workspace module engine: discovery, assembly, dispatch, run, hooks
 # Zero-install: POSIX /bin/sh, awk, and core OS utilities only.
 #
-# Usage: ctx [help [--all]] | ctx run <cmd> [args...] | ctx compose [--check] | ctx <module> [args...]
+# Usage: ctx [help [--all]] | ctx run <cmd> [args...] | ctx compose [--check] |
+#        ctx package install|uninstall <package> | ctx <module> [args...]
 # The help output is the contract surface; this header never prints.
 #
 # Maintainer note (off-path, never taught by help or top docs):
@@ -28,7 +29,7 @@
 # ignored. A module file without a summary warns and skips; a scripts/
 # directory without a module file warns and skips; a directory with neither
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
-# Reserved names are the unit verb set plus refresh, run, hooks, compose, and the
+# Reserved names are the unit verb set plus refresh, run, hooks, compose, package, and the
 # retired record verbs (append, amend, query, flip, drop, next, which print
 # their replacement); the builtin unit and run are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
@@ -45,7 +46,8 @@
 # a shadow unless its header carries "# ctx-filter-priority: over". The
 # built-in run owns the compaction selection body; runner notices read
 # [ctx: ...]. The built-in compose execs the core's private composer
-# (.contexture/laws/compose) before discovery.
+# (.contexture/laws/compose) before discovery, and the built-in package group
+# execs the private .contexture/package-install or package-uninstall.
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$dir/.." && pwd)
@@ -474,7 +476,7 @@ package_reader() {
 
 # ---------------------------------------------------------------------------
 # reserved names: the unit verb set (its scripts own the list) plus
-# refresh, run, hooks, and compose, and the retired record verbs (append, amend, query,
+# refresh, run, hooks, compose, and package, and the retired record verbs (append, amend, query,
 # flip, drop, next: a static list, so no module can claim a retired name and a
 # retired call prints its replacement); the builtin unit and run are allowed
 
@@ -549,7 +551,7 @@ EOF
 
 is_reserved() {
   case "$1" in
-    refresh|run|hooks|compose|append|amend|query|flip|drop|next)
+    refresh|run|hooks|compose|package|append|amend|query|flip|drop|next)
       return 0
       ;;
   esac
@@ -795,6 +797,9 @@ usage:
   ctx run <cmd> [args...]          run a command through stream compaction; the command's exit code is preserved
   cmd | ctx run                    pipe form: compact a stream
   ctx compose [--check]            compose the generated law layer, or verify it current; --check writes nothing
+EOF
+  printf '%s\n%s\n' "$package_install_line" "$package_uninstall_line"
+  cat <<'EOF'
   ctx <module> [args...]           dispatch to a module: arguments, streams, and exit code pass through
   ctx <module> help [<verb>]       the module's verb table; one verb's detail with <verb>
 EOF
@@ -1562,6 +1567,116 @@ EOF
 }
 
 # ---------------------------------------------------------------------------
+# package: the builtin group over the core's private package installer and
+# uninstaller, answered before discovery (a broken module never blocks the
+# install that fixes it); its sub-verb table is this case, never a module's
+# scripts; the verb resolves the package, refuses before the exec with one
+# line, and execs the private script from the workspace root with CTX_ROOT set
+# to this engine's root, so every line, exit code, and record passes through
+
+package_install_line="  ctx package install <package>    install or update a package (a plugins/ name or a package root path), on the human's explicit go at the act"
+package_uninstall_line="  ctx package uninstall <package>  remove an installed package (its name or its package root path), on the human's explicit go at the act"
+
+show_package_help() {
+  printf "ctx package: install or remove a package through the core package installer, each only on the human's explicit go at the act, which the verb never checks\n\n"
+  printf 'usage:\n%s\n%s\n' "$package_install_line" "$package_uninstall_line"
+  printf "  ctx package <sub-verb> --help    one sub-verb's detail\n"
+}
+
+show_package_verb_help() {
+  case "$1" in
+    install)
+      cat <<'EOF'
+usage: ctx package install <package>
+installs or updates the package into this workspace's extension root through the core package installer, records it, runs its part hooks, and recomposes the law layer
+<package>: a catalog name (letters, digits, dot, underscore, hyphen; not starting with a dot) names plugins/<name> at the workspace root; a value holding a slash is a package root path, read from the working folder; either way the package lands in the workspace this engine serves
+an install runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
+exit codes: 0 installed or updated; 1 a refusal (a usage error, a malformed name, no such package, a collision); 2 an environment or I/O failure (a missing installer, a read-only extension root, a failed part hook or recompose)
+EOF
+      ;;
+    uninstall)
+      cat <<'EOF'
+usage: ctx package uninstall <package>
+removes an installed package from this workspace's extension root through the core package uninstaller, running its part hooks first and preserving a file changed after install, then recomposes the law layer
+<package>: the installed package's name (its plugins/<name> folder, when present, passes as the package root); a value holding a slash is a package root path, read from the working folder; either way the package leaves the workspace this engine serves
+an uninstall runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
+exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed part hook or recompose)
+EOF
+      ;;
+  esac
+}
+
+package_builtin() {
+  case "${1:-}" in
+    ""|help|--help|-h)
+      if [ $# -gt 1 ]; then
+        ctx_err "package: $1 takes no argument; ctx package <sub-verb> --help prints one sub-verb's detail"
+        exit 1
+      fi
+      show_package_help
+      exit 0
+      ;;
+    install|uninstall) ;;
+    *)
+      ctx_err "package: unknown sub-verb: $1 (ctx package install or ctx package uninstall)"
+      exit 1
+      ;;
+  esac
+  pk_verb=$1
+  shift
+  if [ $# -eq 1 ]; then
+    case "$1" in
+      --help|-h)
+        show_package_verb_help "$pk_verb"
+        exit 0
+        ;;
+    esac
+  fi
+  if [ $# -ne 1 ]; then
+    ctx_err "package $pk_verb: usage: ctx package $pk_verb <package>"
+    exit 1
+  fi
+  case "$1" in
+    */*)
+      if [ ! -d "$1" ]; then
+        ctx_err "package $pk_verb: no package root at $1"
+        exit 1
+      fi
+      pk_arg=$(CDPATH= cd -- "$1" 2>/dev/null && pwd) || {
+        ctx_err "package $pk_verb: cannot resolve $1"
+        exit 2
+      }
+      ;;
+    ""|.*|*[!A-Za-z0-9._-]*)
+      ctx_err "package $pk_verb: malformed package name '$1' (letters, digits, dot, underscore, hyphen; not starting with a dot)"
+      exit 1
+      ;;
+    *)
+      if [ -d "$root/plugins/$1" ]; then
+        pk_arg=$root/plugins/$1
+      elif [ "$pk_verb" = install ]; then
+        ctx_err "package install: no package at plugins/$1 (name a package root path, a value holding a slash, instead)"
+        exit 1
+      else
+        pk_arg=$1
+      fi
+      ;;
+  esac
+  pk_script=$dir/package-$pk_verb
+  if [ ! -f "$pk_script" ]; then
+    ctx_err "package $pk_verb: missing package ${pk_verb}er: .contexture/package-$pk_verb"
+    exit 2
+  fi
+  if ! cd "$root"; then
+    ctx_err "package $pk_verb: cannot enter workspace root: $root"
+    exit 2
+  fi
+  CTX_ROOT=$root
+  export CTX_ROOT
+  exec sh "$pk_script" "$pk_arg"
+}
+
+# ---------------------------------------------------------------------------
 # top-level dispatch
 
 if [ $# -eq 0 ]; then
@@ -1601,6 +1716,10 @@ case "$1" in
   compose)
     shift
     compose_builtin "$@"
+    ;;
+  package)
+    shift
+    package_builtin "$@"
     ;;
   _hooks)
     shift

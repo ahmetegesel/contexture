@@ -38,16 +38,16 @@ describe.concurrent('discovery over both module roots', () => {
     expect(help.stderr.match(/reserved name refused \(shadow\): load/g)).toHaveLength(2);
   });
 
-  it('CT-XR1 [the-engine-r2, modules-r6]: a valid module named compose warns in each root and never lists, since the compose builtin holds the name', async () => {
-    const sb = engineSandbox('discovery-compose');
+  it.each(['compose', 'package'])('CT-XR1 [the-engine-r2, modules-r6]: a valid module named %s warns in each root and never lists, since the engine builtin holds the name', async (name) => {
+    const sb = engineSandbox(`discovery-${name}`);
     for (const root of ['modules', 'extensions'] as const) {
-      writeModule(sb, root, 'compose', { manifest: '# summary: a compose fixture module\n', files: { 'scripts/hi': shVerb('say hi', 'echo hi') } });
+      writeModule(sb, root, name, { manifest: `# summary: a ${name} fixture module\n`, files: { 'scripts/hi': shVerb('say hi', 'echo hi') } });
     }
     const r = await run(sb, ['help']);
     expect(r.code).toBe(0);
-    expect(r.stderr.match(/reserved name refused \(shadow\): compose$/gm)).toHaveLength(2);
-    expect(listed(r.stdout)).not.toContain('compose');
-    expect(r.stdout).not.toContain('a compose fixture module');
+    expect(r.stderr.match(new RegExp(`reserved name refused \\(shadow\\): ${name}$`, 'gm'))).toHaveLength(2);
+    expect(listed(r.stdout)).not.toContain(name);
+    expect(r.stdout).not.toContain(`a ${name} fixture module`);
   });
 
   it('[the-engine-r1, modules-r14]: an absent extension root is silent and lists no extension module', async () => {
