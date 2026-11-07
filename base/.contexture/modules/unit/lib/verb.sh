@@ -335,6 +335,39 @@ vb_verb_help() {
   return 0
 }
 
+# vb_rhythm_ok <rhythm>: a RHYTHM value is <name> <N> <GATE>, the step and its gate as <name>.md
+# declares them in the workspace rhythms root, or the extension rhythms root when the workspace
+# carries no copy: the one rule of every verb taking a RHYTHM value; a refusal is one stderr line, rc 1
+vb_rhythm_fail() {
+  printf '%s\n' "$1" >&2
+  exit 1
+}
+
+vb_rhythm_ok() {
+  vy_r=$1
+  set -f
+  # shellcheck disable=SC2086
+  set -- $vy_r
+  set +f
+  [ $# -eq 3 ] || vb_rhythm_fail "ERROR: RHYTHM malformed: $vy_r (the shape: <name> <N> <GATE>)"
+  vy_name=$1; vy_step=$2; vy_gate=$3
+  vb_slug_ok "$vy_name" || vb_rhythm_fail "ERROR: RHYTHM name malformed: $vy_name"
+  case "$vy_step" in ""|*[!0-9]*) vb_rhythm_fail "ERROR: RHYTHM step malformed: $vy_step" ;; esac
+  [ "$vy_step" -ge 1 ] || vb_rhythm_fail "ERROR: RHYTHM step malformed: $vy_step"
+  printf '%s\n' "$vy_gate" | grep -Eq '^[A-Z][A-Z_+]*$' || vb_rhythm_fail "ERROR: RHYTHM gate malformed: $vy_gate"
+  vy_path=".contexture/rhythms/$vy_name.md"
+  [ -f "$vy_path" ] || vy_path=".contexture/extensions/rhythms/$vy_name.md"
+  [ -f "$vy_path" ] || vb_rhythm_fail "ERROR: no such rhythm: $vy_name (looked under .contexture/rhythms/ and .contexture/extensions/rhythms/)"
+  vy_g=$(RS_STEP=$vy_step awk '
+    /^[ \t]*[0-9]+\.[ \t]*[A-Z][A-Z_+]*[ \t]*:/ {
+      s = $0; sub(/^[ \t]+/, "", s); n = s; sub(/\..*$/, "", n)
+      if (n + 0 == ENVIRON["RS_STEP"] + 0) { sub(/^[0-9]+\.[ \t]*/, "", s); sub(/[ \t]*:.*$/, "", s); print s; exit }
+    }' "$vy_path")
+  [ -n "$vy_g" ] || vb_rhythm_fail "ERROR: RHYTHM step $vy_step not in $vy_path"
+  [ "$vy_g" = "$vy_gate" ] || vb_rhythm_fail "ERROR: RHYTHM step $vy_step of $vy_name reads $vy_g, not $vy_gate"
+  return 0
+}
+
 # vb_unit <label> <unit>: the unit slug shape (B1), before any call
 vb_unit() {
   vb_slug_ok "$2" && return 0
