@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { FALLBACK_ROOT, FTS5_DB, lockPath, RECORD_ROOT, unitLock } from '../support/drawer';
+import { RECORD_LEAK, RECORD_ROOT } from '../support/drawer';
 import { launch } from '../support/exec';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
@@ -18,9 +18,7 @@ const S_TMP = 'never use /tmp or any path outside the workspace';
 const S_PROMPT = 'a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach';
 const S_BACKGROUND = 'never leave a background process running when you finish; a command that hangs is stopped, never abandoned';
 const bounded = (text: string): boolean => text.includes(S_TMP) && text.includes(S_PROMPT);
-const esc = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
-const lockSegments = lockPath('/', unitLock('u')).split('/').filter(Boolean);
-const LEAK = new RegExp([RECORD_ROOT, FALLBACK_ROOT, FTS5_DB.split('/').pop() ?? '', lockSegments.slice(1, 3).join('/'), lockSegments.slice(2, 4).join('/')].map(esc).concat(['lanes\\/[^ ]*\\/(recipe|journal|report)', '(state|backlog|journal|knowledge|recipe|report)\\.md', 'AGENTS\\.generated\\.md', 'ctx docs']).join('|'));
+const LEAK = new RegExp(`${RECORD_LEAK.source}|AGENTS\\.generated\\.md|ctx docs`);
 const PURPOSE = {
   goal: '--goal (the deliverable or decision the lane feeds, and where it stops)',
   branch: '--branch (the checkout or worktree and its branch, at a commit)',

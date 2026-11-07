@@ -46,3 +46,17 @@ export const namespaceLock = (namespace: string): string => `store-${namespace}.
 export function lockPath(sb: string, lock: string): string {
   return join(sb, '.contexture', 'tmp', 'locks', lock);
 }
+
+const escRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
+const LOCK_SEGMENTS = lockPath('/', unitLock('u')).split('/').filter(Boolean);
+
+export const RECORD_LEAK = new RegExp(
+  [RECORD_ROOT, FALLBACK_ROOT, FTS5_DB.split('/').pop() ?? '', LOCK_SEGMENTS.slice(1, 3).join('/'), LOCK_SEGMENTS.slice(2, 4).join('/')]
+    .map(escRe)
+    .concat(['lanes\\/[^ ]*\\/(recipe|journal|report)', '(state|backlog|journal|knowledge|recipe|report)\\.md', 'session folder', '\\.contexture\\/(extensions\\/)?modules\\/'])
+    .join('|'),
+);
+
+export const unquoted = (line: string): string => line.replace(/["'`\\]/g, '');
+
+export const leaks = (line: string): boolean => RECORD_LEAK.test(unquoted(line));
