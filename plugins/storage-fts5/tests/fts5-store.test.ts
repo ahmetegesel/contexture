@@ -1,7 +1,9 @@
+import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
 import { FTS5_DB } from '@support/drawer';
+import { pathPlant } from '@support/plants';
 import { SEARCH_DATA, SEARCH_VALUES } from '@support/search-fixture';
 import { fresh, seed } from '@support/snapshot';
 import { sqlite } from '@support/sqlite';
@@ -41,6 +43,16 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
     const s = store(sb, 'fts5');
     expect((await s.list('docs')).stdout).toBe(listAnswer('docs', ['workspace/a']));
     expect((await s.scan('docs')).stdout).toBe('{"namespace":"docs","items":[{"key":"workspace/a","value_b64":"YQo="}]}\n');
+  });
+
+  it('[the-engine-r21] a get whose value read fails prints its one refusal line, never the reader\'s own line naming the scratch', async () => {
+    const sb = fresh(docs);
+    const cat = ['/bin/cat', '/usr/bin/cat'].find((p) => existsSync(p));
+    if (!cat) throw new Error('no cat binary for the value read plant');
+    const plant = pathPlant('cat', `case "$1" in */key) printf 'cat: %s: Permission denied\\n' "$1" >&2; exit 1 ;; esac\nexec "${cat}" "$@"`);
+    const r = await store(sb, 'fts5', plant).get('docs', 'workspace/a');
+    expect(r.stderr).not.toContain('cat:');
+    refused(r, 'store.get', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/a' in namespace 'docs'");
   });
 
   it('[the-engine-r19] stores an empty value as a zero-length blob', async () => {

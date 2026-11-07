@@ -491,7 +491,7 @@ store_get() {
     refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
   }
   # the value's write is the answer: a short write exits rc 2, never a short value at rc 0
-  cat "$SCRATCH/key" || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
+  cat "$SCRATCH/key" 2>/dev/null || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
   exit 0
 }
 

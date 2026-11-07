@@ -83,6 +83,28 @@ describe.skipIf(!fts5Available())('the fts5 store schema', { concurrent: true },
   });
 });
 
+describe.skipIf(!fts5Available() || ROOT_USER)('the fts5 open refusals name no storage location', { concurrent: true }, () => {
+  it('[the-engine-r21] a database file the driver cannot read refuses get and list rc 2 ERR_STORAGE_READ, cannot read the store, naming no folder', async ({ onTestFinished }) => {
+    const { db, dir, s } = at('unreadable.db');
+    answer(await s.put('docs', 'workspace/kept', 'x\n'), 'store.put');
+    chmodPlant(db, 0o000, 0o644, onTestFinished);
+    for (const [r, fn] of [[await s.get('docs', 'workspace/kept'), 'store.get'], [await s.list('docs'), 'store.list']] as const) {
+      expect(r.stderr).not.toContain(dir);
+      refused(r, fn, 2, 'ERR_STORAGE_READ', 'cannot read the store');
+    }
+  });
+
+  it('[the-engine-r21] an empty database file the driver cannot write refuses the first put rc 2 ERR_STORAGE_WRITE, cannot create the store, naming no folder', async ({ onTestFinished }) => {
+    const { db, dir, s } = at('readonly.db');
+    writeFileSync(db, '');
+    chmodPlant(db, 0o444, 0o644, onTestFinished);
+    const r = await s.put('docs', 'workspace/new', 'never lands\n');
+    expect(r.stderr).not.toContain(dir);
+    refused(r, 'store.put', 2, 'ERR_STORAGE_WRITE', 'cannot create the store');
+    expect(readFileSync(db).length).toBe(0);
+  });
+});
+
 describe.skipIf(!fts5Available())('the fts5 storage.health over the database states', { concurrent: true }, () => {
   it('[the-engine-r24] a file with no table reads degraded with the store absent: the store is not made yet', async () => {
     const { db, s } = at('notable.db');
