@@ -29,7 +29,8 @@ describe.concurrent('the module law fragments', () => {
     expect(count(text, /^@append @/)).toBe(4);
     expect(text).toMatch(/^@append @layout$/m);
     expect(text).toContain('ctx docs query workspace conventions');
-    expect(text).toContain('.contexture/extensions/modules/docs/README.md');
+    expect(text).toContain('  the docs module: the corpus module\'s contract and verbs, read through ctx docs help');
+    expect(text).not.toContain('extensions/modules/docs/README.md');
     expect(text).toMatch(/^@append @boot$/m);
     expect(text).toContain('ctx docs query --index');
     expect(text).toMatch(/^@append @close$/m);

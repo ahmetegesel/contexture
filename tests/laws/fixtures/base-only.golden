@@ -1,4 +1,4 @@
-# contexture v0.69.0: generated law layer; core cksum 3560237416-14248; sources 155569957-31390; never edit
+# contexture v0.69.0: generated law layer; core cksum 1388028105-14175; sources 3850048407-30999; never edit
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -20,17 +20,14 @@
   .contexture/config = workspace configuration: module-scoped key: value declarations, loaded alongside overlays at boot
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall <package> (only on the human's explicit go at the act; the verb checks no go), ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
-  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library (the store seven and the data_get/data_emit refs), the store contract, and the posix driver; the store-only driver card (contract 3) with the record's 35 operations in the unit module at .contexture/modules/unit
+  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, and the store contract; a driver serves only the store (contract 3), and the record's 35 operations are the unit module's (ctx unit help)
 
 @module unit
   summary: the unit module: the record's 35 operations over the store, one value per artifact
   The unit module owns the record: the state, the backlog, the journal, the knowledge,
-  and the lanes, one store value per artifact under the namespace unit. Its data script
-  answers the 35 record operations over the store's get, list, and batch, keeping the
-  current file shapes so every legacy record reads unchanged; its data file declares the
-  artifact keys and the document-set search rules. Its scripts are the record's public
-  verb surface, dispatched as ctx unit; the data script is the record's module-side
-  implementation and the storage core's ref interface reaches it by unit#... references.
+  and the lanes, one store value per artifact under the namespace unit. It answers the
+  35 record operations over the store, and its verbs are the record's public surface,
+  dispatched as ctx unit.
   help: ctx unit help
 
 @module lane

@@ -2,9 +2,6 @@
 # version: 0.1.0
 # description:
 # The unit module owns the record: the state, the backlog, the journal, the knowledge,
-# and the lanes, one store value per artifact under the namespace unit. Its data script
-# answers the 35 record operations over the store's get, list, and batch, keeping the
-# current file shapes so every legacy record reads unchanged; its data file declares the
-# artifact keys and the document-set search rules. Its scripts are the record's public
-# verb surface, dispatched as ctx unit; the data script is the record's module-side
-# implementation and the storage core's ref interface reaches it by unit#... references.
+# and the lanes, one store value per artifact under the namespace unit. It answers the
+# 35 record operations over the store, and its verbs are the record's public surface,
+# dispatched as ctx unit.

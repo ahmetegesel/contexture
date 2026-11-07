@@ -101,6 +101,7 @@ const FULL_RECIPE = [
   'REPORT (ctx lane report sem-unit full-lane, the body on stdin; self-sufficient: the dispatcher reads only the report) ::',
   '  @report full-lane',
   '  VERDICT: done, partial, or drifted, with one line why',
+  '  each section opens at column 0 as <NAME> :: with its body indented two spaces, so lane#full-lane/report#<NAME> resolves it',
   '  CALLERS: each caller with its file and symbol',
   '  OPEN: anything the lane could not settle',
   '  The report and the journal land no matter the outcome; return a short summary only.',
@@ -145,7 +146,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(recipe.split('\n').slice(0, 5)).toEqual(['@recipe min-lane', '  UNIT: sem-unit', '  LANE: min-lane', `  BRANCH: ${LANE_BRIEF.branch}`, '']);
     expect(recipe).toContain(`\nSCOPE ::\n  1. ${LANE_BRIEF.scope}\n\nBOUNDARY`);
     expect(recipe).toContain(`  4. write scope: ${LANE_BRIEF.writes}\n`);
-    expect(recipe).toContain(`  VERDICT: done, partial, or drifted, with one line why\n  ${LANE_BRIEF.report}\n  The report and the journal land`);
+    expect(recipe).toContain(`  VERDICT: done, partial, or drifted, with one line why\n  each section opens at column 0 as <NAME> :: with its body indented two spaces, so lane#min-lane/report#<NAME> resolves it\n  ${LANE_BRIEF.report}\n  The report and the journal land`);
   });
 
   it('[the-record-r15]: the recipe carries the boundary sentence, null checked, and the background process rule in its runner item, and for flags naming none no storage location, a planted --fact read by the same assertion', async () => {
@@ -168,7 +169,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     const recipe = await recipeOf(sb, 'odd-lane');
     expect(recipe).toContain(`\nGOAL ::\n  ${odd}\n`);
     expect(recipe).toContain(`\nFACTS ::\n  ${odd}\n`);
-    expect(recipe).toContain(`with one line why\n  ${odd}\n`);
+    expect(recipe).toContain(`resolves it\n  ${odd}\n`);
   });
 
   it('[the-record-r15]: a create prints the lane line and the dispatch prompt alone, rc 0 with an empty stderr, the prompt carrying the background process rule; the stored recipe holds no prompt line', async () => {

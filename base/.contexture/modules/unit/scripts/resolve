@@ -1,11 +1,11 @@
 #!/bin/sh
-# summary: resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim)
+# summary: resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#<lane>/<recipe|journal|report>[#<claim>])
 # usage: ctx unit resolve <unit> <ref> [--json]
-# help: resolves domain references and normalizes legacy file-based references
+# help: resolves domain references and normalizes legacy references
 # help: arguments:
 # help:   <unit>      unit slug (the target unit for a legacy ref; a canonical ref carries its own)
-# help:   <ref>       abstract entity reference (task#slug, finding#NAME, entry#slug, lane#slug/report#claim), the canonical unit ref (unit#<unit>/task/<slug>, unit#<unit>/entry/<slug>, unit#<unit>/finding/<NAME>, unit#<unit>/lane/<lane>/<recipe|journal|report>), or the legacy file forms (backlog.md#slug, knowledge.md#NAME, journal.md#slug, lanes/<lane>/report.md#claim); each resolves the entity
-# help: the text view prints the item's span in the canonical layout (its canonical lines, its trailing separator included; a report claim from its @<claim> line to the next column-0 @ line; a lane artifact as its file content or its lane journal); --json prints the storage function's answer (task.get, finding.get, entry.get, or lane.get)
+# help:   <ref>       abstract entity reference (task#slug, finding#NAME, entry#slug, lane#<lane>/<recipe|journal|report>[#<claim>]), the legacy lane form lanes/<lane>/<recipe|journal|report>[#<claim>], the canonical unit ref (unit#<unit>/task/<slug>, unit#<unit>/entry/<slug>, unit#<unit>/finding/<NAME>, unit#<unit>/lane/<lane>/<recipe|journal|report>), or the legacy reference forms an older record holds; each resolves the entity
+# help: the text view prints the item's span in the canonical layout (its canonical lines, its trailing separator included; a report claim from its last @<claim> head to the next column-0 @ line, or from its last column-0 <claim> :: head to the next non-blank column-0 line, blank lines kept; a claim names the report alone); a lane artifact prints as ctx lane show prints it, an absent recipe or report refusing rc 1 as not found; --json prints the storage function's answer (task.get, finding.get, entry.get, or lane.get)
 # help:   --json      output JSON format
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
@@ -15,7 +15,7 @@ if [ $# -lt 2 ]; then
     case "$1" in
       --help|-h|help)
         printf 'usage: ctx unit resolve <unit> <ref> [--json]\n'
-        printf 'resolves abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim)\n'
+        printf 'resolves abstract entity references (task#slug, finding#NAME, entry#slug, lane#<lane>/<recipe|journal|report>[#<claim>])\n'
         printf 'options:\n'
         printf '  --json      output JSON format\n'
         exit 0

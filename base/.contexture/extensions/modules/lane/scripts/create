@@ -188,6 +188,7 @@ JOURNAL ::
 REPORT (ctx lane report @UNIT@ @LANE@, the body on stdin; self-sufficient: the dispatcher reads only the report) ::
   @report @LANE@
   VERDICT: done, partial, or drifted, with one line why
+  each section opens at column 0 as <NAME> :: with its body indented two spaces, so lane#@LANE@/report#<NAME> resolves it
 EOF
   lines report
   printf '  The report and the journal land no matter the outcome; return a short summary only.\n'

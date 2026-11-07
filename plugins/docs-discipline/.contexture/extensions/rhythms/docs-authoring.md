@@ -2,8 +2,8 @@
   use when: a workspace, repository, or unit has no docs yet, or a doc set needs writing from scratch
   activation: propose
   1. SYNC: checkout current with remote; clean working tree
-  2. MAP: recon subagent maps units; workspace scope seeds the workspace system map (workspace/system-map, @components) as the accumulating roadmap; component scope inventories code packages, datastores (tables/topics/buckets), auxiliary tools (utils/scripts), and cross-boundary exports; slices target into units with scoped sources globs; output lands in lanes/<slug>/report.md
-  3. BACKLOG: the MAP subagent report drives the declaration of work in backlog.md; one @task per mapped unit or component, referencing the subagent report; drafting never begins without a declared backlog
+  2. MAP: recon subagent maps units; workspace scope seeds the workspace system map (workspace/system-map, @components) as the accumulating roadmap; component scope inventories code packages, datastores (tables/topics/buckets), auxiliary tools (utils/scripts), and cross-boundary exports; slices target into units with scoped sources globs; output lands in the MAP lane's report (ctx lane show <unit> <lane> report)
+  3. BACKLOG: the MAP subagent report drives the declaration of work in the backlog (ctx unit task add); one @task per mapped unit or component, referencing the subagent report; drafting never begins without a declared backlog
   4. DRAFT: one subagent per unit, or per repo when units share context, parallel on independence; tasks advance through IN_PROGRESS as subagents dispatch; drafted per the docs module's grammar (the write verbs enforce it) and written through ctx docs write (a whole first extraction) or ctx docs new and the block verbs, establishing structural baseline (layers, stages, deployables, core responsibilities)
   5. INTERROGATE: adversarial deep-dive of the drafted units against the code per the grammar's method comments; drafts updated with grounded evidence, no unverified claims
   6. AUDIT: ctx docs audit over the drafts; zero errors

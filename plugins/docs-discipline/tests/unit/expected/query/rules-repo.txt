@@ -44,7 +44,7 @@ MUST docs/drift (universal, workspace)
   Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta under the files driver, ctx docs changes under a store driver); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands.
   evidence: .contexture/extensions/modules/docs/scripts/docs-check.awk
   anti: Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone: it reads every claimed file stale where a claimant is tracked, and CLEAN (PROCESS-OWNED) where none is, so its verdict says nothing about the docs
-  good: Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in the README's two-sided delta paragraph); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline
+  good: Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in ctx docs help check); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline
 
 MUST docs/greppable-evidence (universal, workspace)
   Document evidence using greppable code symbols, attributes, or configuration keys, never line numbers.

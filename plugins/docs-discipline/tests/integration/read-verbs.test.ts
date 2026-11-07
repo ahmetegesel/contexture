@@ -39,6 +39,16 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
   });
 
+  it('[docs-module-r4, docs-module-r15] ctx docs help check holds the pushed range form for both corpus halves, and the nudge help names its backlog file by a placeholder', async () => {
+    const sb = fresh(staged);
+    const check = await docs(sb, ['help', 'check']);
+    expect(check.code).toBe(0);
+    for (const part of ['--no-renames', 'git status --porcelain', 'ctx docs changes --since=']) expect(check.stdout).toContain(part);
+    const nudge = await docs(sb, ['help', 'nudge']);
+    expect(nudge.stdout).toMatch(/^ {2}ctx docs nudge <backlog-file> <repo>\.\.\.$/m);
+    expect(nudge.stdout).not.toContain('backlog.md');
+  });
+
   it('[docs-module-r1] query prints the engine answer unchanged', async () => {
     const r = await docs(fresh(corpus), ['query', 'demo-orders', 'order-flow']);
     expect(r.code).toBe(0);

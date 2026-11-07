@@ -21,7 +21,7 @@
   .contexture/config = workspace configuration: module-scoped key: value declarations, loaded alongside overlays at boot
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall <package> (only on the human's explicit go at the act; the verb checks no go), ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
-  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library (the store seven and the data_get/data_emit refs), the store contract, and the posix driver; the store-only driver card (contract 3) with the record's 35 operations in the unit module at .contexture/modules/unit
+  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, and the store contract; a driver serves only the store (contract 3), and the record's 35 operations are the unit module's (ctx unit help)
 
 @record
 
