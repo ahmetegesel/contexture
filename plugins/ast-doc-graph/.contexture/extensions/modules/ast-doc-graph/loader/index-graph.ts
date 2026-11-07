@@ -68,6 +68,11 @@ export interface IndexedFileRecord {
   hash: string;
 }
 
+export interface GraphRoots {
+  repo_root: string;
+  src_root: string;
+}
+
 /* Glob matching utilities */
 
 function globToRegex(glob: string): RegExp {
@@ -201,6 +206,16 @@ export function reconcileFiles(indexed: string[], discovered: string[], exists: 
   };
 }
 
+/* Two paths name one folder when they resolve alike or, both present, share a real path */
+export function sameFolder(a: string, b: string): boolean {
+  if (path.resolve(a) === path.resolve(b)) return true;
+  try {
+    return fs.realpathSync(a) === fs.realpathSync(b);
+  } catch {
+    return false;
+  }
+}
+
 function projectRelative(file: string, projectRoot: string): string {
   if (projectRoot && path.isAbsolute(file)) {
     const rel = path.relative(projectRoot, file);
@@ -263,9 +278,12 @@ Options:
   --file <path>           Individual modified file path
   --file-list <path>      A file of paths, one per line, read as --file each (a full load records them)
   --modified-files <list> Comma-separated list of modified files
-  --reconcile <path>      Read only: print D for each indexed file the disk lacks and A for each
-                          listed file the graph lacks inside a folder it covers, then exit
+  --reconcile <path>      Read only: refuse a root other than the recorded one, print S and the
+                          recorded source root, D for each indexed file the disk lacks, and A for
+                          each listed file the graph lacks inside a folder it covers, then exit
   --project-root <path>   Project root path for relative file resolution
+  --src-root <path>       The source scan root: a full load records it with the project root;
+                          a reconcile refuses one other than the recorded root
   --schema <file>         Path to schema.sql (default: ../schema.sql)
   --clean                 Remove existing database before indexing
   -h, --help              Display this help message
@@ -275,7 +293,11 @@ Options:
 /* A full load rebuilds the graph: the search indexes first, so the delete triggers find them empty */
 
 const CLEAR_GRAPH =
-  'DELETE FROM edges; DELETE FROM fts_symbols; DELETE FROM fts_docs; DELETE FROM pitfalls; DELETE FROM rules; DELETE FROM docs; DELETE FROM symbols; DELETE FROM indexed_files;';
+  'DELETE FROM edges; DELETE FROM fts_symbols; DELETE FROM fts_docs; DELETE FROM pitfalls; DELETE FROM rules; DELETE FROM docs; DELETE FROM symbols; DELETE FROM indexed_files; DELETE FROM graph_meta;';
+
+/* A graph loaded before the record holds no graph_meta table, so the read asks for the table first */
+const HAS_ROOTS = "SELECT count(*) AS n FROM sqlite_master WHERE type = 'table' AND name = 'graph_meta';";
+const READ_ROOTS = 'SELECT repo_root, src_root FROM graph_meta LIMIT 1;';
 
 /* SQL helper for fallback */
 
@@ -399,6 +421,7 @@ async function main(): Promise<void> {
   let rulesPath = '';
   let pitfallsPath = '';
   let projectRoot = '';
+  let srcRoot = '';
   let schemaPath = '';
   let explicitFiles: string[] = [];
   const fileLists: string[] = [];
@@ -438,6 +461,10 @@ async function main(): Promise<void> {
       projectRoot = args[++i];
     } else if (arg.startsWith('--project-root=')) {
       projectRoot = arg.slice('--project-root='.length);
+    } else if (arg === '--src-root') {
+      srcRoot = args[++i];
+    } else if (arg.startsWith('--src-root=')) {
+      srcRoot = arg.slice('--src-root='.length);
     } else if (arg === '--schema') {
       schemaPath = args[++i];
     } else if (arg.startsWith('--schema=')) {
@@ -501,13 +528,24 @@ async function main(): Promise<void> {
     explicitFiles.push(...readLines(list).map((f) => projectRelative(f, projectRoot)));
   }
   const existsUnderRoot = (rel: string): boolean => fs.existsSync(projectRoot ? path.resolve(projectRoot, rel) : path.resolve(rel));
-  const printReconcile = (indexed: string[]): void => {
+  const here = path.resolve(projectRoot || '.');
+  const roots: GraphRoots = { repo_root: here, src_root: path.resolve(here, srcRoot || '.') };
+  const printReconcile = (indexed: string[], recorded: GraphRoots | undefined): void => {
+    if (recorded && !sameFolder(here, recorded.repo_root)) {
+      console.error(`Error: the graph records the repository root ${recorded.repo_root}, not ${here}: run the delta with --repo-root ${recorded.repo_root}, or a full index of ${here} to rebuild the graph there`);
+      process.exit(1);
+    }
+    if (recorded && srcRoot && !sameFolder(roots.src_root, recorded.src_root)) {
+      console.error(`Error: the graph records the source root ${recorded.src_root}, not ${roots.src_root}: run the delta without --src-dir, or a full index with that --src-dir to rebuild the graph`);
+      process.exit(1);
+    }
     const discovered = readLines(reconcilePath).map((f) => projectRelative(f, projectRoot));
     const { added, gone } = reconcileFiles(indexed, discovered, existsUnderRoot);
     if (indexed.length > 0 && gone.length === indexed.length) {
-      console.error(`Error: every file the graph indexed is absent under ${path.resolve(projectRoot || '.')}: a delta there would empty the graph; run a full index of that repository to rebuild it`);
+      console.error(`Error: every file the graph indexed is absent under ${here}: a delta there would empty the graph; run a full index of that repository to rebuild it`);
       process.exit(1);
     }
+    if (recorded) console.log(`S\t${path.resolve(here, path.relative(recorded.repo_root, recorded.src_root))}`);
     for (const f of gone) console.log(`D\t${f}`);
     for (const f of added) console.log(`A\t${f}`);
   };
@@ -605,8 +643,9 @@ async function main(): Promise<void> {
     const db = new DatabaseSync(dbPath);
     if (reconcilePath) {
       const indexed = (db.prepare('SELECT file FROM indexed_files;').all() as any[]).map((r) => r.file);
+      const recorded = (db.prepare(HAS_ROOTS).get() as any).n > 0 ? (db.prepare(READ_ROOTS).get() as GraphRoots | undefined) : undefined;
       db.close();
-      printReconcile(indexed);
+      printReconcile(indexed, recorded);
       return;
     }
     db.exec('PRAGMA foreign_keys = ON;');
@@ -657,6 +696,7 @@ async function main(): Promise<void> {
       }
     } else {
       db.exec(CLEAR_GRAPH);
+      db.prepare('INSERT INTO graph_meta (repo_root, src_root) VALUES (?, ?);').run(roots.repo_root, roots.src_root);
     }
 
     // Insert incoming symbols
@@ -953,7 +993,8 @@ async function main(): Promise<void> {
     };
 
     if (reconcilePath) {
-      printReconcile(queryJson('SELECT file FROM indexed_files;').map((r: any) => r.file));
+      const recorded = queryJson(HAS_ROOTS)[0].n > 0 ? (queryJson(READ_ROOTS)[0] as GraphRoots | undefined) : undefined;
+      printReconcile(queryJson('SELECT file FROM indexed_files;').map((r: any) => r.file), recorded);
       return;
     }
 
@@ -1277,6 +1318,7 @@ async function main(): Promise<void> {
         schemaSql,
         'BEGIN TRANSACTION;',
         CLEAR_GRAPH,
+        `INSERT INTO graph_meta (repo_root, src_root) VALUES (${sqlEscape(roots.repo_root)}, ${sqlEscape(roots.src_root)});`,
       ];
 
       for (const s of symbols) {

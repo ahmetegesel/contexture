@@ -174,9 +174,10 @@ describe.skipIf(!sqliteFts5)('a removed corpus doc leaves the graph', { concurre
   it.skipIf(!fallbackReachable)('[ast-doc-graph-r1] on the sqlite3 command fallback a delta removes them all too, its read of the indexed files passing 1 MB (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', () =>
     removesMany(NO_NODE_SQLITE));
 
-  it('[ast-doc-graph-r1] a delta whose repository root holds none of the indexed files refuses rc 1 and leaves the graph', async () => {
+  it('[ast-doc-graph-r1] a delta on a graph without the recorded root (built before it) whose repository root holds none of the indexed files refuses rc 1 and leaves the graph', async () => {
     const repo = twoDocs('other-root');
     await indexed(repo);
+    sqlite(db(repo), 'DROP TABLE IF EXISTS graph_meta;');
     const other = sandbox('other-root-elsewhere');
     mkdirSync(join(other, '.contexture'));
     const r = await astDocIndex(other, ['--delta', '--db', db(repo)]);

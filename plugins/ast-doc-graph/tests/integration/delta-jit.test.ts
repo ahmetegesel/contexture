@@ -1,9 +1,8 @@
 import { appendFileSync, copyFileSync, mkdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { exec } from '@support/exec';
 import { sandbox } from '@support/sandbox';
-import { fresh } from '@support/snapshot';
 import { sqlite } from '@support/sqlite';
 import { astDocIndex, compilerApi, count, docsRepo, fallbackReachable, graphQuery, miniRepo, MODULE, NO_NODE_SQLITE, sqliteFts5, TYPESCRIPT } from '../support/graph';
 
@@ -19,15 +18,15 @@ function edit(sb: string, rel: string, text: string): void {
 const hasSymbol = (sb: string, qname: string) => count(db(sb), `SELECT count(*) FROM symbols WHERE qname = '${qname}';`) === 1;
 
 describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-time freshness', { concurrent: true }, () => {
-  let indexed: string;
-  beforeAll(async () => {
-    indexed = miniRepo('mini-delta');
-    const r = await astDocIndex(indexed, ['--clean']);
+  async function indexedMini(): Promise<string> {
+    const sb = miniRepo('mini-delta');
+    const r = await astDocIndex(sb, ['--clean']);
     if (r.code !== 0) throw new Error(`ast-doc-index: rc ${r.code}: ${r.stderr}`);
-  });
+    return sb;
+  }
 
   it('VP11 [ast-doc-graph-r1, ast-doc-graph-r6] --delta on one file adds its new symbol, keeps an unrelated one, and refreshes its indexed_files row', async () => {
-    const sb = fresh(indexed);
+    const sb = await indexedMini();
     const before = sqlite(db(sb), "SELECT mtime FROM indexed_files WHERE file = 'src/orders/validate.ts';").trim();
     edit(sb, 'src/orders/validate.ts', '\nexport function checkCart(cart: Cart): boolean {\n  return validateCart(cart);\n}\n');
     const r = await astDocIndex(sb, ['--delta', 'src/orders/validate.ts']);
@@ -38,7 +37,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
   });
 
   it('VP12 [ast-doc-graph-r16] a query micro-syncs one dirty file before it answers', async () => {
-    const sb = fresh(indexed);
+    const sb = await indexedMini();
     edit(sb, 'src/cart/store.ts', '\nexport function emptyCart(): number[] {\n  return [];\n}\n');
     expect(hasSymbol(sb, 'emptyCart')).toBe(false);
     const r = await graphQuery(sb, db(sb), 'symbol', 'emptyCart');
@@ -48,7 +47,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
   });
 
   it('VP13 [ast-doc-graph-r16] three dirty files print the advisory and sync nothing', async () => {
-    const sb = fresh(indexed);
+    const sb = await indexedMini();
     edit(sb, 'src/cart/store.ts', '\nexport const one = 1;\n');
     edit(sb, 'src/orders/price.ts', '\nexport const two = 2;\n');
     edit(sb, 'src/orders/validate.ts', '\nexport const three = 3;\n');
@@ -58,15 +57,14 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     expect(hasSymbol(sb, 'one')).toBe(false);
   });
 
-  it('[ast-doc-graph-r16] null check: a clean copy prints no advisory and syncs nothing', async () => {
-    const sb = fresh(indexed);
+  it('[ast-doc-graph-r16] null check: a clean graph prints no advisory and syncs nothing', async () => {
+    const sb = await indexedMini();
     const r = await graphQuery(sb, db(sb), 'stats');
     expect([r.code, r.stderr]).toEqual([0, '']);
   });
 
   it.skipIf(!fallbackReachable)('[ast-doc-graph-r6] a delta on the sqlite3 command fallback keeps the derived edges the built-in delta keeps, prints the same summary, and applies the schema (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', async () => {
-    const builtIn = fresh(indexed);
-    const fallback = fresh(indexed);
+    const [builtIn, fallback] = await Promise.all([indexedMini(), indexedMini()]);
     sqlite(db(fallback), 'DROP INDEX idx_edges_kind;');
     const runs = await Promise.all(
       [[builtIn, {}], [fallback, NO_NODE_SQLITE]].map(([sb, env]) => {

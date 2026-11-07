@@ -39,9 +39,12 @@ Usage:
   ast-doc-index help
 
 Options:
-  --repo-root <path>   Repository root directory (default: current directory)
+  --repo-root <path>   Repository root directory (default: current directory); a full index
+                       records it in the graph, and a delta naming another refuses
   --db <path>          Output SQLite database path (default: $GRAPH_DB or <repo-root>/graph.db)
-  --src-dir <path>     Source directory relative to repo root (default: scan whole repo root)
+  --src-dir <path>     Source directory relative to repo root (default: scan whole repo root);
+                       a full index records it, and a delta scans the recorded one, refusing
+                       another
   --cache-dir <path>   Keep the intermediate JSONL streams in this caller-owned folder
                        (default: one per-run folder inside CTX_SCRATCH_ROOT, else the
                        drawer's .contexture/tmp, removed at exit)
@@ -228,7 +231,7 @@ fi
 SCAN_DIR=""
 if [[ -n "$SRC_DIR" ]]; then
   if [[ -d "$REPO_ROOT/$SRC_DIR" ]]; then
-    SCAN_DIR="$REPO_ROOT/$SRC_DIR"
+    SCAN_DIR="$(cd "$REPO_ROOT/$SRC_DIR" && pwd)"
   elif [[ -d "$SRC_DIR" ]]; then
     SCAN_DIR="$(cd "$SRC_DIR" && pwd)"
   else
@@ -283,25 +286,31 @@ if [[ "$DELTA" == true ]]; then
     exit 1
   fi
 
-  # Reconcile: D for an indexed file the disk lacks, A for a discovered file the graph lacks in a folder it covers
+  # Reconcile: the loader refuses a root other than the recorded one, then prints S for the recorded
+  # source root, D for an indexed file the disk lacks, and A for a discovered file the graph lacks in a folder it covers
   DISCOVERED_LIST="$CACHE_DIR/discovered_files.txt"
   RECONCILED_LIST="$CACHE_DIR/reconciled_files.txt"
   {
     scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}"
     scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" "${EXCLUDES[@]}"
   } > "$DISCOVERED_LIST"
-  "$INDEX_GRAPH" --db "$DB_PATH" --project-root "$REPO_ROOT" --schema "$SCHEMA_SQL" --reconcile "$DISCOVERED_LIST" > "$RECONCILED_LIST"
+  RECONCILE_FLAGS=(--db "$DB_PATH" --project-root "$REPO_ROOT" --schema "$SCHEMA_SQL" --reconcile "$DISCOVERED_LIST")
+  [[ -z "$SRC_DIR" ]] || RECONCILE_FLAGS+=(--src-root "$SCAN_DIR")
+  "$INDEX_GRAPH" "${RECONCILE_FLAGS[@]}" > "$RECONCILED_LIST"
 
   DIRTY_LIST="$CACHE_DIR/dirty_files.txt"
   GONE_LIST="$CACHE_DIR/gone_files.txt"
   : > "$DIRTY_LIST"
   : > "$GONE_LIST"
+  RECORDED_SRC=""
   while IFS=$'\t' read -r mark f; do
     case "$mark" in
       A) printf '%s\n' "$f" >> "$DIRTY_LIST" ;;
       D) printf '%s\n' "$f" >> "$GONE_LIST" ;;
+      S) RECORDED_SRC="$f" ;;
     esac
   done < "$RECONCILED_LIST"
+  [[ -z "$RECORDED_SRC" ]] || SCAN_DIR="$RECORDED_SRC"
 
   if [[ ${#EXPLICIT_FILES[@]} -gt 0 ]]; then
     for raw_f in "${EXPLICIT_FILES[@]}"; do
@@ -320,6 +329,10 @@ if [[ "$DELTA" == true ]]; then
       fi
 
       target_abs="$(cd "$(dirname "$target_f")" && pwd)/$(basename "$target_f")"
+      if [[ -n "$RECORDED_SRC" && "$target_abs" =~ \.(ts|tsx)$ && "$target_abs" != "$SCAN_DIR/"* ]]; then
+        echo "Warning: outside the graph's source root $SCAN_DIR, skipping: $raw_f" >&2
+        continue
+      fi
       if [[ "$target_abs" == "$REPO_ROOT/"* ]]; then
         printf '%s\n' "${target_abs#"$REPO_ROOT"/}" >> "$DIRTY_LIST"
       else
@@ -451,6 +464,7 @@ LOADER_FLAGS=(
   --rules "$RULES_JSONL"
   --pitfalls "$PITFALLS_JSONL"
   --project-root "$REPO_ROOT"
+  --src-root "$SCAN_DIR"
   --schema "$SCHEMA_SQL"
   --file-list "$TS_FILE_LIST"
   --file-list "$MD_FILE_LIST"

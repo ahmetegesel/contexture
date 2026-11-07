@@ -225,6 +225,12 @@ CREATE TABLE IF NOT EXISTS indexed_files (
 
 CREATE INDEX IF NOT EXISTS idx_indexed_files_mtime ON indexed_files(mtime);
 
+/* One row: the absolute repository and source scan roots of the last full index */
+CREATE TABLE IF NOT EXISTS graph_meta (
+    repo_root TEXT NOT NULL,
+    src_root TEXT NOT NULL
+);
+
 /* ========================================================================= */
 /* 2. Full-Text Search (FTS5) Virtual Tables                                 */
 /* ========================================================================= */
@@ -324,7 +330,14 @@ The `indexed_files` table tracks modification times and cryptographic hashes of 
 * `hash` (string, required): SHA-256 hexadecimal content hash for content drift verification.
 * `indexed_at` (datetime, required): Timestamp when the file was processed into the database.
 
-### 3.2 Cascading Edge Deletion Triggers
+### 3.2 Recorded Roots (graph_meta)
+The `graph_meta` table holds one row, written by every full load in its transaction and never by a delta, so the graph knows the repository it indexed whatever folder its database sits in or a query runs from:
+* `repo_root` (string, required): The absolute repository root of the last full index (`--repo-root`, the working folder by default).
+* `src_root` (string, required): The absolute source scan root of that index (`--src-dir` resolved against the repository root, else the repository root).
+
+Every delta checks its roots against the row (Section 7.1) and the query scans them (Section 8.1). A graph loaded by an earlier release holds no row (a delta's schema application adds the empty table) until its next full index.
+
+### 3.3 Cascading Edge Deletion Triggers
 When files are updated incrementally, old symbols, docs, rules, and pitfalls are purged. Because SQLite foreign key constraints only apply to parent-child table relationships (`rules.doc_id` and `pitfalls.doc_id` referencing `docs.id`), graph edges (`edges` table) store arbitrary polymorphic entity identifiers. To guarantee zero orphan edges during delta updates:
 * `trg_symbols_del_edges`: Purges edges where `source` or `target` matches deleted symbol id.
 * `trg_docs_del_edges`: Purges edges where `source` or `target` matches deleted doc id.
@@ -545,15 +558,15 @@ WHERE e.target = :symbol_id
 
 Full repository rebuilds provide a reliable clean baseline, but re-parsing every source and documentation file on every minor change introduces unnecessary latency. The delta indexing pipeline provides sub-second incremental updates for modified files.
 
-A full load, with or without `--clean`, rebuilds the graph inside its one transaction: it deletes every row of `edges`, `fts_symbols`, `fts_docs`, `pitfalls`, `rules`, `docs`, `symbols`, and `indexed_files` (the search indexes first, so the delete triggers find them empty), then inserts the fresh streams. The loader keeps the last incoming row per id (what an `INSERT OR REPLACE` of them all would leave), so a name a source declares more than once (overloads, a const beside its type) adds no second search row. Each symbol and unit therefore keeps one search row across repeated runs, and a load that fails leaves the graph as it was (under `--clean`, which removes the database first, an empty graph); the sqlite3 command fallback runs the same statements with `-bail`, so it stops at its first error and the transaction rolls back.
+A full load, with or without `--clean`, rebuilds the graph inside its one transaction: it deletes every row of `edges`, `fts_symbols`, `fts_docs`, `pitfalls`, `rules`, `docs`, `symbols`, `indexed_files`, and `graph_meta` (the search indexes first, so the delete triggers find them empty), writes the run's repository and source roots as the one `graph_meta` row (Section 3.2), then inserts the fresh streams. The loader keeps the last incoming row per id (what an `INSERT OR REPLACE` of them all would leave), so a name a source declares more than once (overloads, a const beside its type) adds no second search row. Each symbol and unit therefore keeps one search row across repeated runs, and a load that fails leaves the graph as it was (under `--clean`, which removes the database first, an empty graph); the sqlite3 command fallback runs the same statements with `-bail`, so it stops at its first error and the transaction rolls back.
 
 ### 7.1 Pipeline Flow in Delta Mode
 A full index records every file it discovered in `indexed_files` (each TypeScript source and each markdown file of the docs walk, a source with no symbol and a markdown file with no unit included), so the table is the graph's file set and a delta can compare it with the disk.
 
 1. Change Detection:
-   * Reconcile: every delta first lists its discovery (the TypeScript sources under the scan root and the markdown files under the docs walk, the exclusion folders applied) and asks the loader, read only (`--reconcile`), which indexed files the disk no longer has (removed) and which discovered files the graph does not hold inside a folder it already covers for their kind, that folder or one above it up to the repository root holding an indexed file of the same kind (added). A file renamed or moved within the folders the graph covers therefore reads as its old path removed and its new path added whatever its modification time, while one moved, its time kept, to a folder the graph never covered leaves the graph until a full run or a delta naming it. The reconcile adds nothing outside the covered folders, but the scan root of a delta not given the full run's `--src-dir` (the query's inline delta among them) is the repository root, so a newer file outside that folder joins the graph through the timestamp comparison and its folder then counts as covered. When every indexed file is absent under the repository root, the reconcile refuses rc 1 rather than empty the graph (a delta run against another root); a root holding only some of them reads the rest as removed.
-   * Explicit file targets: Provided via `--file <path>` arguments or positional file arguments. A named file that is gone is removed when the graph held it, and warned and skipped otherwise.
-   * Timestamp comparison: When explicit targets are omitted, `ast-doc-index --delta` also takes every discovered file newer than `graph.db` (system `find -newer`). Standard non-source directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.worktrees`, tests) are excluded.
+   * Reconcile: every delta first lists its discovery (the TypeScript sources under the scan root and the markdown files under the docs walk, the exclusion folders applied) and asks the loader, read only (`--reconcile`), which indexed files the disk no longer has (removed) and which discovered files the graph does not hold inside a folder it already covers for their kind, that folder or one above it up to the repository root holding an indexed file of the same kind (added). A file renamed or moved within the folders the graph covers therefore reads as its old path removed and its new path added whatever its modification time, while one moved, its time kept, to a folder the graph never covered leaves the graph until a full run or a delta naming it. The reconcile adds nothing outside the covered folders. Before it lists anything, the reconcile reads the recorded roots (Section 3.2): a delta whose repository root is another folder than the recorded one (compared by path, then by real path) refuses rc 1 naming both, as does one given a `--src-dir` other than the recorded source root, and the graph is left untouched; otherwise the reconcile hands back the recorded source root, which the delta's timestamp comparison scans in place of its own, so a graph built with `--src-dir` never widens, the query's inline delta included. When every indexed file is absent under the repository root, the reconcile refuses rc 1 rather than empty the graph; for a graph loaded before the record this is the only root check, so a root holding only some of its files reads the rest as removed.
+   * Explicit file targets: Provided via `--file <path>` arguments or positional file arguments. A named file that is gone is removed when the graph held it, and warned and skipped otherwise; a named TypeScript file outside the recorded source root is warned and skipped.
+   * Timestamp comparison: When explicit targets are omitted, `ast-doc-index --delta` also takes every discovered file newer than `graph.db` (system `find -newer`), the TypeScript sources under the recorded source root. Standard non-source directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.worktrees`, tests) are excluded.
    * Early exit: If no file is dirty, added, or removed, the driver exits with code 0 and leaves the database untouched.
 2. Targeted Extraction:
    * Dirty and added TypeScript source files are piped directly to `extract-ts.sh` via standard input, avoiding whole-tree extraction.
@@ -581,9 +594,9 @@ To eliminate the operational complexity, memory footprint, and potential flakine
 
 ### 8.1 Pre-Query Freshness Check
 Every invocation of `graph-query` executes `check_and_sync_freshness` before evaluating the requested query:
-1. Repository Root Resolution: Discovers repository root by inspecting database directory ancestry (`.git`, `package.json`, `backend`, `docs`, `src`) or git toplevel.
-2. Fast Filesystem Scan: Executes system `find` comparing `.ts`, `.tsx`, and `.md` files against `graph.db` using `-newer`. The scan filters out standard build and artifact directories. On modern filesystems, this check completes in 1 to 5ms.
-3. Removed Files: Every file `indexed_files` holds that the disk no longer has counts as dirty too, so the inline delta removes it (unless every indexed file reads absent, the sign of a repository root other than the index's, when none counts). The check trusts the root step 1 guesses: a database kept outside the repository it indexes, where that guess lands on another root holding some of the indexed paths, has the rows of the paths that root lacks removed, so such a database is queried with `--no-sync`. This costs one existence test per indexed file on every synced query, so it grows with the graph's file count (about a tenth of a second for ten thousand files on a laptop); `--no-sync` skips it with the scan.
+1. Repository Root Resolution: Takes the repository and source roots the graph records (Section 3.2), never a guess, so a database kept outside its repository answers for that repository from any working folder; a recorded repository root that is absent (the repository moved) prints one notice on stderr (`[ast-doc-graph: the repository root the graph records, <root>, is absent; answering from the graph as it stands. Run a full ast-doc-index of the repository to rebuild it]`) and the query answers as the graph stands. A graph loaded before the record falls back to a guess: the database folder when it holds `.git`, `package.json`, `backend`, `docs`, or `src`, else the working folder's git toplevel, else the working folder.
+2. Fast Filesystem Scan: Executes system `find` comparing `.ts` and `.tsx` files under the source root and `.md` files under the repository root against `graph.db` using `-newer` (one walk when the two roots are the same folder). The scan filters out standard build and artifact directories. On modern filesystems, this check completes in 1 to 5ms.
+3. Removed Files: Every file `indexed_files` holds that the disk no longer has counts as dirty too, so the inline delta removes it (unless every indexed file reads absent, the sign of a repository root other than the index's, when none counts). For a graph without the record the check trusts the root step 1 guesses: such a database kept outside the repository it indexes, where that guess lands on another root holding some of the indexed paths, has the rows of the paths that root lacks removed, so it is queried with `--no-sync` until a full index records its root. This costs one existence test per indexed file on every synced query, so it grows with the graph's file count (about a tenth of a second for ten thousand files on a laptop); `--no-sync` skips it with the scan.
 
 ### 8.2 Lifecycle Threshold Bands
 The query CLI applies three threshold behaviors based on the count of dirty files discovered:

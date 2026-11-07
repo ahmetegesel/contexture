@@ -69,12 +69,20 @@ runs `find` from inside the scanned root, so the exclusion folders
 paths within the repository and never the folders the repository itself sits
 in: a repository under a `tests/` or `.worktrees/` folder indexes like any
 other. A full index hands the loader both discovery lists (`--file-list`), so
-`indexed_files` holds every file it discovered; every delta first asks the
-loader, read only (`--reconcile`), for the indexed files the disk lacks and
-the discovered files the graph lacks inside a folder it already covers for
-their kind, removes the first and indexes the second with the dirty ones,
-and refuses rc 1 when every indexed file is absent under its root. The
-query's freshness check counts an indexed file the disk lacks as dirty.
+`indexed_files` holds every file it discovered, and its repository and scan
+roots (`--project-root`, `--src-root`), which the loader writes as the one
+row of `graph_meta`; every delta first asks the loader, read only
+(`--reconcile`), which refuses rc 1 naming both roots when the delta's
+repository root, or a `--src-dir` it was given, differs from the record,
+hands back the recorded source root (an `S` line) for the delta's newer-than
+scan, and lists the indexed files the disk lacks and the discovered files
+the graph lacks inside a folder it already covers for their kind; the
+driver removes the first and indexes the second with the dirty ones, skips
+a named TypeScript file outside the recorded source root with a warning,
+and the reconcile refuses rc 1 when every indexed file is absent under its
+root. The query's freshness check reads `graph_meta` first and scans its
+roots, never guessing for a graph that holds the record, and counts an
+indexed file the disk lacks as dirty.
 
 The docs extractor reads the corpus as files: `bin/ast-doc-index` lists the
 regular markdown files of the workspace's `docs/` folder (else the
@@ -140,7 +148,12 @@ removed, renamed, or moved file leaving the graph after a full run, a bare
 delta, a named delta, and the query's inline delta (a unit whose id comes
 from its header, a unit two files hold, thousands of removed files among
 them), an old file outside a `--src-dir` graph's folders kept out;
-`delta-jit` also proves a failed inline delta's one stderr line and the
+`recorded-root` proves the recorded roots: the row a full index writes, a
+database kept outside its repository answering for it, a delta against
+another root refusing (on both loader branches), one given another
+`--src-dir` refusing, a moved repository's notice, a `--src-dir` graph staying inside through a bare,
+a named, and an inline delta, and a graph without the record keeping the
+guess; `delta-jit` also proves a failed inline delta's one stderr line and the
 fallback delta over a graph past 1 MB, `pipeline` one search row for a name
 declared more than once. The `sqlite3` command fallback cases run with
 `NODE_OPTIONS=--no-experimental-sqlite` and skip, naming the need, where the

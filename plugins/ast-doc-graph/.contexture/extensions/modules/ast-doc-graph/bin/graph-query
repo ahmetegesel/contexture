@@ -168,20 +168,30 @@ check_and_sync_freshness() {
     return 0
   fi
 
-  # Resolve repository root
-  local repo_root=""
-  if [[ -f "$DB_PATH" ]]; then
-    local db_dir
-    db_dir="$(cd "$(dirname "$DB_PATH")" && pwd)"
-    if [[ -d "$db_dir/.git" || -f "$db_dir/package.json" || -d "$db_dir/backend" || -d "$db_dir/docs" || -d "$db_dir/src" ]]; then
-      repo_root="$db_dir"
+  # The repository and source roots the graph's full index recorded, else a guess for a graph loaded before the record
+  local repo_root="" src_root="" recorded
+  recorded="$(sqlite_exec -separator "$SEP" "$DB_PATH" "SELECT repo_root, src_root FROM graph_meta LIMIT 1;" 2>/dev/null || true)"
+  if [[ -n "$recorded" ]]; then
+    IFS="$SEP" read -r repo_root src_root <<< "$recorded"
+    if [[ ! -d "$repo_root" ]]; then
+      echo "[ast-doc-graph: the repository root the graph records, $repo_root, is absent; answering from the graph as it stands. Run a full ast-doc-index of the repository to rebuild it]" >&2
+      return 0
     fi
-  fi
-  if [[ -z "$repo_root" ]] && git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1; then
-    repo_root="$(git -C "$PWD" rev-parse --show-toplevel)"
-  fi
-  if [[ -z "$repo_root" ]]; then
-    repo_root="$PWD"
+  else
+    if [[ -f "$DB_PATH" ]]; then
+      local db_dir
+      db_dir="$(cd "$(dirname "$DB_PATH")" && pwd)"
+      if [[ -d "$db_dir/.git" || -f "$db_dir/package.json" || -d "$db_dir/backend" || -d "$db_dir/docs" || -d "$db_dir/src" ]]; then
+        repo_root="$db_dir"
+      fi
+    fi
+    if [[ -z "$repo_root" ]] && git -C "$PWD" rev-parse --show-toplevel >/dev/null 2>&1; then
+      repo_root="$(git -C "$PWD" rev-parse --show-toplevel)"
+    fi
+    if [[ -z "$repo_root" ]]; then
+      repo_root="$PWD"
+    fi
+    src_root="$repo_root"
   fi
 
   # Resolve index driver
@@ -194,34 +204,41 @@ check_and_sync_freshness() {
     index_driver="$(command -v ast-doc-index)"
   fi
 
-  # Discover files newer than DB_PATH with standard excludes
+  # Discover files newer than DB_PATH with standard excludes: TypeScript under the source root, markdown under the repository root
   [[ -f "$DB_PATH" ]] || return 0
   local db_abs
   db_abs="$(cd "$(dirname "$DB_PATH")" && pwd)/$(basename "$DB_PATH")"
+  local newer=(
+    ! -name "*.d.ts"
+    ! -path "*/node_modules/*"
+    ! -path "*/dist/*"
+    ! -path "*/build/*"
+    ! -path "*/archive/*"
+    ! -path "*/.git/*"
+    ! -path "*/.contexture/*"
+    ! -path "*/.work/*"
+    ! -path "*/.idea/*"
+    ! -path "*/tests/*"
+    ! -path "*/test/*"
+    ! -path "*/__tests__/*"
+    ! -path "*/.worktrees/*"
+    ! -name "*.test.ts"
+    ! -name "*.test.tsx"
+    ! -name "*.spec.ts"
+    ! -name "*.spec.tsx"
+    -newer "$db_abs"
+  )
   local dirty_files=()
   while IFS= read -r f; do
     if [[ -n "$f" ]]; then
       dirty_files+=("$f")
     fi
-  done < <(scan_find "$repo_root" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.md" \) \
-    ! -name "*.d.ts" \
-    ! -path "*/node_modules/*" \
-    ! -path "*/dist/*" \
-    ! -path "*/build/*" \
-    ! -path "*/archive/*" \
-    ! -path "*/.git/*" \
-    ! -path "*/.contexture/*" \
-    ! -path "*/.work/*" \
-    ! -path "*/.idea/*" \
-    ! -path "*/tests/*" \
-    ! -path "*/test/*" \
-    ! -path "*/__tests__/*" \
-    ! -path "*/.worktrees/*" \
-    ! -name "*.test.ts" \
-    ! -name "*.test.tsx" \
-    ! -name "*.spec.ts" \
-    ! -name "*.spec.tsx" \
-    -newer "$db_abs" 2>/dev/null || true)
+  done < <(if [[ "$src_root" == "$repo_root" ]]; then
+      scan_find "$repo_root" -type f \( -name "*.ts" -o -name "*.tsx" -o -name "*.md" \) "${newer[@]}"
+    else
+      scan_find "$src_root" -type f \( -name "*.ts" -o -name "*.tsx" \) "${newer[@]}"
+      scan_find "$repo_root" -type f -name "*.md" "${newer[@]}"
+    fi 2>/dev/null || true)
 
   # An indexed file the disk no longer has is dirty too, unless every one reads gone (another root)
   local indexed_files=() indexed_file gone_files=() saved_ifs="$IFS"
