@@ -12,6 +12,7 @@ const sandbox = () => stage('posix', 'pkg-catalog');
 const PLUGINS = ['docs-discipline', 'ast-doc-graph', 'storage-fts5', 'toolchain-filters', 'starter-rhythms'] as const;
 const manifest = (p: string): string => join(ROOT, 'plugins', p, 'manifest');
 const FTS5 = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5');
+const SELECT = "select: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop (@rhythms default); read a rhythm with ctx rhythm show <name>";
 
 describe.concurrent('the real catalog installs through its own wrappers', () => {
   it('[plugins-r1, plugins-r2, plugins-r6, modules-r13, modules-r10] docs-discipline lands its module, grammar, and rhythms under the extension root, seeds the corpus, and serves its store; starter-rhythms owns work.md', async () => {
@@ -40,13 +41,16 @@ describe.concurrent('the real catalog installs through its own wrappers', () => 
     expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(false);
   });
 
-  it('[plugins-r6, modules-r20] starter-rhythms puts work and debug in the rhythm index with their use-when and activation', async () => {
+  it('[plugins-r6, modules-r20] starter-rhythms puts work and debug in the rhythm list with their use-when and activation', async () => {
     const sb = sandbox();
-    expect(out(await ctx(sb, 'unit', 'index'))).toBe('');
+    expect(out(await ctx(sb, 'rhythm', 'list'))).toBe(SELECT);
     expect((await wrapper(sb, catalogCopy(sb, 'starter-rhythms'), 'install')).code).toBe(0);
-    expect(out(await ctx(sb, 'unit', 'index')).split('\n')).toEqual([
-      'debug (.contexture/extensions/rhythms/debug.md) | use when: a failure needs root-cause: a bug, a flaky test, an unexpected behavior | activation: propose',
-      'work (.contexture/extensions/rhythms/work.md) | use when: a work request arrives and no other rhythm matches | activation: auto',
+    const listed = await ctx(sb, 'rhythm', 'list');
+    expect([listed.code, listed.stderr]).toEqual([0, '']);
+    expect(out(listed).split('\n')).toEqual([
+      'debug | extension | use when: a failure needs root-cause: a bug, a flaky test, an unexpected behavior | activation: propose',
+      'work | extension | use when: a work request arrives and no other rhythm matches | activation: auto',
+      SELECT,
     ]);
   });
 

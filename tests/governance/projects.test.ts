@@ -5,7 +5,7 @@ import config from '../vitest.config.mjs';
 import { ROOT } from '../support/root';
 
 const NO_SUITE: Record<string, string> = {
-  'starter-rhythms': 'a rhythms payload with no code: its install and its rhythm index are proven by the packages project (real-catalog)',
+  'starter-rhythms': 'a rhythms payload with no code: its install and its rhythms in ctx rhythm list are proven by the packages project (real-catalog)',
 };
 
 type Project = { test?: { name?: string } };

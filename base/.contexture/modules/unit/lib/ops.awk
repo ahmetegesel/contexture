@@ -264,7 +264,7 @@ function f_session_refload(   i, r, n) {
 function f_session_board() {
   parse_unit(U, "backlog journal")
   if (PRE[U "|journal"] == NULLV) nf("artifact", "journal")
-  board_out(U)
+  board_out(U, 1)
   answer("")
 }
 

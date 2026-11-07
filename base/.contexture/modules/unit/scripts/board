@@ -2,6 +2,7 @@
 # summary: the live board: unclosed journal entries with complete bodies, then the open tasks and the open threads
 # usage: ctx unit board <slug>
 # help: one form: the slug names the unit whose board the unit module returns (session.board); each tail is silent when empty; missing journal is fatal rc=1 with zero stdout; missing backlog warns on stderr and prints no tail
+# help: the board ends with the rhythm in force line, as ctx rhythm current prints it: the unit's last stamp, open or closed, which the same call answers, its gate resolved through the rhythm module; no line when the rhythm module is absent
 # help: exit codes: 0 live board printed; 1 missing journal or invalid unit slug
 # help: example: ctx unit board my-unit
 
@@ -30,5 +31,9 @@ if [ "$VB_RC" -ne 0 ]; then
 fi
 vb_render board
 rc=$?
+if [ "$rc" -eq 0 ]; then
+  rh_slug=$(vb_field rhythm.slug)
+  if [ -n "$rh_slug" ]; then vb_rhythm_state "$1" "$rh_slug" "$(vb_field rhythm.stamp)"; else vb_rhythm_state "$1"; fi
+fi
 [ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >&2
 exit "$rc"

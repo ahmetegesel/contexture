@@ -34,6 +34,13 @@ for vb_ud in "$VB_LIB/../scripts/data" \
              "${CTX_ROOT:-$PWD}/base/.contexture/modules/unit/scripts/data"; do
   if [ -x "$vb_ud" ]; then VB_UNIT_DATA=$vb_ud; break; fi
 done
+# the rhythm module's private resolve, run by path (summary-less, so ctx cannot dispatch it)
+VB_RHYTHM_RESOLVE=""
+for vb_rr in "$VB_LIB/../../../extensions/modules/rhythm/scripts/resolve" \
+             "${CTX_ROOT:-$PWD}/.contexture/extensions/modules/rhythm/scripts/resolve" \
+             "${CTX_ROOT:-$PWD}/base/.contexture/extensions/modules/rhythm/scripts/resolve"; do
+  if [ -f "$vb_rr" ]; then VB_RHYTHM_RESOLVE=$vb_rr; break; fi
+done
 VB_JSON="$VB_LIB/json.awk"
 VB_RENDER="$VB_LIB/render.awk"
 VB_DIR=""
@@ -336,9 +343,10 @@ vb_verb_help() {
   return 0
 }
 
-# vb_rhythm_ok <rhythm>: a RHYTHM value is <name> <N> <GATE>, the step and its gate as <name>.md
-# declares them in the workspace rhythms root, or the extension rhythms root when the workspace
-# carries no copy: the one rule of every verb taking a RHYTHM value; a refusal is one stderr line, rc 1
+# vb_rhythm_ok <rhythm>: a RHYTHM value is <name> <N> <GATE>, a step and its gate of the named
+# rhythm as the rhythm module's resolve answers it, the rhythm's @rhythm line naming its file:
+# the one rule of every verb taking a RHYTHM value; a refusal is one stderr line, rc 1. On
+# success VB_RHYTHM_LINE holds the next gate line a stamped write prints
 vb_rhythm_fail() {
   printf '%s\n' "$1" >&2
   exit 1
@@ -356,17 +364,36 @@ vb_rhythm_ok() {
   case "$vy_step" in ""|*[!0-9]*) vb_rhythm_fail "ERROR: RHYTHM step malformed: $vy_step" ;; esac
   [ "$vy_step" -ge 1 ] || vb_rhythm_fail "ERROR: RHYTHM step malformed: $vy_step"
   printf '%s\n' "$vy_gate" | grep -Eq '^[A-Z][A-Z_+]*$' || vb_rhythm_fail "ERROR: RHYTHM gate malformed: $vy_gate"
-  vy_path=".contexture/rhythms/$vy_name.md"
-  [ -f "$vy_path" ] || vy_path=".contexture/extensions/rhythms/$vy_name.md"
-  [ -f "$vy_path" ] || vb_rhythm_fail "ERROR: no such rhythm: $vy_name (looked under .contexture/rhythms/ and .contexture/extensions/rhythms/)"
-  vy_g=$(RS_STEP=$vy_step awk '
-    /^[ \t]*[0-9]+\.[ \t]*[A-Z][A-Z_+]*[ \t]*:/ {
-      s = $0; sub(/^[ \t]+/, "", s); n = s; sub(/\..*$/, "", n)
-      if (n + 0 == ENVIRON["RS_STEP"] + 0) { sub(/^[0-9]+\.[ \t]*/, "", s); sub(/[ \t]*:.*$/, "", s); print s; exit }
-    }' "$vy_path")
-  [ -n "$vy_g" ] || vb_rhythm_fail "ERROR: RHYTHM step $vy_step not in $vy_path"
-  [ "$vy_g" = "$vy_gate" ] || vb_rhythm_fail "ERROR: RHYTHM step $vy_step of $vy_name reads $vy_g, not $vy_gate"
+  vy_missing="ERROR: no such rhythm: $vy_name (ctx rhythm list names them)"
+  [ -n "$VB_RHYTHM_RESOLVE" ] || vb_rhythm_fail "$vy_missing"
+  vy_ans=$(sh "$VB_RHYTHM_RESOLVE" "$vy_name" < /dev/null 2>/dev/null) || vb_rhythm_fail "$vy_missing"
+  vy_out=$(printf '%s\n' "$vy_ans" | RS_NAME=$vy_name RS_STEP=$vy_step RS_GATE=$vy_gate awk -F '	' '
+    $1 == "declared" { d = substr($0, length($1) + 2) }
+    $1 == "step" { n++; K[n] = $2; G[n] = $3; o = $4; for (j = 5; j <= NF; j++) o = o "\t" $j; O[n] = o }
+    END {
+      if (d != ENVIRON["RS_NAME"]) { printf "declares\t%s\n", d; exit }
+      for (i = 1; i <= n; i++) if (K[i] + 0 == ENVIRON["RS_STEP"] + 0) break
+      if (i > n) { print "missing"; exit }
+      if (G[i] != ENVIRON["RS_GATE"]) { printf "reads\t%s\n", G[i]; exit }
+      if (i == n) { printf "line\trhythm: %s at %s %s, its last gate\n", ENVIRON["RS_NAME"], ENVIRON["RS_STEP"], G[i]; exit }
+      printf "line\trhythm: %s at %s %s; next gate: %s %s", ENVIRON["RS_NAME"], ENVIRON["RS_STEP"], G[i], K[i + 1], G[i + 1]
+      if (O[i + 1] != "") printf ": %s", O[i + 1]
+      printf "\n"
+    }')
+  case "$vy_out" in
+    declares*) vb_rhythm_fail "ERROR: RHYTHM $vy_name declares @rhythm ${vy_out#declares	}; a rhythm's file name and its @rhythm line must agree" ;;
+    missing) vb_rhythm_fail "ERROR: RHYTHM step $vy_step not in $vy_name" ;;
+    reads*) vb_rhythm_fail "ERROR: RHYTHM step $vy_step of $vy_name reads ${vy_out#reads	}, not $vy_gate" ;;
+  esac
+  VB_RHYTHM_LINE=${vy_out#line	}
   return 0
+}
+
+# vb_rhythm_state <unit> [<slug> <stamp>]: the rhythm in force line, as ctx rhythm current prints
+# it, through the rhythm module's resolve; nothing when the module is absent
+vb_rhythm_state() {
+  [ -n "$VB_RHYTHM_RESOLVE" ] || return 0
+  sh "$VB_RHYTHM_RESOLVE" --state "$@" < /dev/null
 }
 
 # vb_unit <label> <unit>: the unit slug shape (B1), before any call

@@ -61,7 +61,7 @@ describe.concurrent('the journal entries through the unit data script', () => {
     const sb = await at('T35');
     answer(await rec(sb, TUNIT, 1790000050, 'Other group', { with: payload().kv('group', 'other-group') }), 'entry.record');
     expect(answerLine(await data(sb, 'entry.list', [TUNIT, '--group=other-group']), 'entry.list')).toBe(
-      `{"unit":"compliance-tasks","entries":[{"slug":"${OTHER}","occurrence":1,"anchor":"A1","what":"Other group","group":"other-group"}]}`,
+      `{"unit":"compliance-tasks","entries":[{"slug":"${OTHER}","occurrence":1,"anchor":"A1","what":"Other group","group":"other-group","rhythm":null}]}`,
     );
     expect(slugs((await ok(sb, 'entry.list', [TUNIT, '--group=topic-group'])).entries)).toEqual([ALPHA, BETA, GAMMA]);
     expect(answerLine(await data(sb, 'entry.list', [TUNIT, '--anchor=A9']), 'entry.list')).toBe('{"unit":"compliance-tasks","entries":[]}');

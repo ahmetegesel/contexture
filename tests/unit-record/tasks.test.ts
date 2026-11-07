@@ -44,7 +44,7 @@ describe.concurrent('the tasks through the unit data script', () => {
     );
     expect(await status(sb, TUNIT, 'task-sample')).toBe('DONE');
     expect(answerLine(await data(sb, 'entry.list', [TUNIT]), 'entry.list')).toBe(
-      '{"unit":"compliance-tasks","entries":[{"slug":"2026-09-27-task-sample-completed","occurrence":1,"anchor":"A1","what":"backlog/task-sample: DONE (Verified via automated test suite)","group":null}]}',
+      '{"unit":"compliance-tasks","entries":[{"slug":"2026-09-27-task-sample-completed","occurrence":1,"anchor":"A1","what":"backlog/task-sample: DONE (Verified via automated test suite)","group":null,"rhythm":null}]}',
     );
   });
 

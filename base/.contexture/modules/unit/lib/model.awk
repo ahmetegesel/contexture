@@ -721,11 +721,12 @@ function anchor_json(k, i) {
 }
 
 function entryitem_json(k, i) {
-  return "{\"slug\":" jstr(X[k, i, "slug"]) ",\"occurrence\":" OCC[k, i] ",\"anchor\":" jnull(X[k, i, "anchor"]) ",\"what\":" jnull(X[k, i, "what"]) ",\"group\":" jnull(X[k, i, "group"]) "}"
+  return "{\"slug\":" jstr(X[k, i, "slug"]) ",\"occurrence\":" OCC[k, i] ",\"anchor\":" jnull(X[k, i, "anchor"]) ",\"what\":" jnull(X[k, i, "what"]) ",\"group\":" jnull(X[k, i, "group"]) ",\"rhythm\":" jnull(X[k, i, "rhythm"]) "}"
 }
 
-# the board of a unit whose journal is present (streamed)
-function board_out(u,   kb, kj, i, first, th) {
+# the board of a unit whose journal is present (streamed); withrhythm adds the unit's last
+# stamp in record order, open or closed ({slug, stamp}, null when none), session.board's alone
+function board_out(u, withrhythm,   kb, kj, i, first, th, last) {
   kb = u "|backlog"; kj = u "|journal"
   O("{\"unit\":" jstr(u) ",\"backlog_present\":" jbool(PRE[kb] != NULLV) ",\"live\":[")
   first = 1; th = ""
@@ -739,7 +740,13 @@ function board_out(u,   kb, kj, i, first, th) {
   O("],\"open_tasks\":[")
   first = 1
   for (i = 1; i <= NI[kb]; i++) if (IK[kb, i] == "task" && X[kb, i, "status"] != "DONE") { O((first ? "" : ",") jstr(X[kb, i, "slug"])); first = 0 }
-  O("],\"open_threads\":[" th "]}")
+  O("],\"open_threads\":[" th "]")
+  if (withrhythm) {
+    last = 0
+    for (i = 1; i <= NI[kj]; i++) if (IK[kj, i] == "entry" && X[kj, i, "rhythm"] != NULLV) last = i
+    O(",\"rhythm\":" (last ? "{\"slug\":" jstr(X[kj, last, "slug"]) ",\"stamp\":" jstr(X[kj, last, "rhythm"]) "}" : "null"))
+  }
+  O("}")
 }
 
 function backlog_out(u,   k, i) {

@@ -73,23 +73,25 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
   });
 });
 
-describe.concurrent('the bare base: the rhythm index without rhythms (BG1)', () => {
-  it('[modules-r20] an absent rhythms directory answers an empty index rc0 with no stderr', async () => {
-    const r = await ctx(bare(), 'unit', 'index');
-    expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
+const SELECT = "select: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop (@rhythms default); read a rhythm with ctx rhythm show <name>\n";
+
+describe.concurrent('the bare base: the rhythm list without rhythms (BG1)', () => {
+  it('[modules-r20] both rhythm roots absent print the select line alone rc0 with no stderr', async () => {
+    const r = await ctx(bare(), 'rhythm', 'list');
+    expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 0, stdout: SELECT, stderr: '' });
   });
 
-  it('[modules-r20] an empty rhythms directory answers the same', async () => {
+  it('[modules-r20] empty rhythm roots print the same', async () => {
     const sb = bare();
     mkdirSync(join(sb, '.contexture/rhythms'));
-    const r = await ctx(sb, 'unit', 'index');
-    expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
+    mkdirSync(join(sb, '.contexture/extensions/rhythms'));
+    const r = await ctx(sb, 'rhythm', 'list');
+    expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 0, stdout: SELECT, stderr: '' });
   });
 
-  it('[modules-r20] an argument still refuses rc1 with the usage line', async () => {
-    const r = await ctx(bare(), 'unit', 'index', 'extra');
-    expect(r.code).toBe(1);
-    expect(r.stderr).toMatch(/^Usage: ctx unit index$/m);
+  it('[modules-r20] an argument refuses rc1 with the usage line and the help pointer', async () => {
+    const r = await ctx(bare(), 'rhythm', 'list', 'extra');
+    expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 1, stdout: '', stderr: 'Usage: ctx rhythm list\nhelp: ctx rhythm help\n' });
   });
 });
 

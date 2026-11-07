@@ -45,7 +45,7 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     unlinkSync(shadow);
     const missing = await unit(sb, 'record', 'rh-unit', '--what=a missing rhythm refuses', '--rhythm=nosuch 1 OPEN');
     expect(missing.code).toBe(1);
-    expect(missing.stderr).toContain('no such rhythm: nosuch (looked under .contexture/rhythms/ and .contexture/extensions/rhythms/)');
+    expect(missing.stderr).toContain('ERROR: no such rhythm: nosuch (ctx rhythm list names them)');
   });
 
   it('S1-d [the-record-r6, the-record-r11]: a repeated record slug is refused', async () => {

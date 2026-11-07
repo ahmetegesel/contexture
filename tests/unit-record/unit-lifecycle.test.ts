@@ -28,7 +28,7 @@ describe.concurrent('the unit lifecycle through the unit data script', () => {
     expect(answerLine(load, 'session.load')).toBe(
       `{"unit":"compliance-u1","state":${U1STATE},"backlog":{"preamble":"","tasks":[]},"knowledge":{"preamble":"","findings":[]},"board":{"unit":"compliance-u1","backlog_present":true,"live":[],"open_tasks":[],"open_threads":[]},"refs":[]}`,
     );
-    expect(answerLine(await data(sb, 'session.board', [UNIT]), 'session.board')).toBe('{"unit":"compliance-u1","backlog_present":true,"live":[],"open_tasks":[],"open_threads":[]}');
+    expect(answerLine(await data(sb, 'session.board', [UNIT]), 'session.board')).toBe('{"unit":"compliance-u1","backlog_present":true,"live":[],"open_tasks":[],"open_threads":[],"rhythm":null}');
     expect(answerLine(await data(sb, 'search.query', [UNIT, '--mode=exact'], payload().kv('query', 'continues A0').toString()), 'search.query')).toBe(
       '{"unit":"compliance-u1","query":"continues A0","mode":"exact","total_matches":1,"results":[{"entity_type":"session","entity_id":"compliance-u1","section":"journal","snippet":"@anchor A1 (\\"continues A0\\", attention: compliance fixture)","score":0}]}',
     );

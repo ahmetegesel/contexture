@@ -4,8 +4,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { stage } from '../support/stage';
 import { lane, run, unit } from '../support/unit';
 
-export const DECLARED = ['active', 'audit', 'board', 'bootstrap', 'close', 'diagnose', 'entry', 'finding', 'fold', 'index', 'load', 'migrate', 'record', 'refresh', 'refs', 'refs-to', 'reopen', 'resolve', 'search', 'stamp', 'task', 'units'];
-const NO_ARG_OK = new Set(['active', 'diagnose', 'index']);
+export const DECLARED = ['active', 'audit', 'board', 'bootstrap', 'close', 'diagnose', 'entry', 'finding', 'fold', 'load', 'migrate', 'record', 'refresh', 'refs', 'refs-to', 'reopen', 'resolve', 'search', 'stamp', 'task', 'units'];
+const NO_ARG_OK = new Set(['active', 'diagnose']);
 const verbsIn = (help: string): string[] => (help.split(/^verbs:$/m)[1] ?? '').split(/\n\n/)[0]!.split('\n').filter((l) => /^ {2}[a-z]/.test(l));
 
 describe.concurrent('the unit and lane verb surface', () => {
@@ -14,11 +14,19 @@ describe.concurrent('the unit and lane verb surface', () => {
     sb = stage('posix', 'verb-surface');
   });
 
-  it('V-b [modules-r2]: the verb scripts on disk are the declared 22', () => {
+  it('V-b [modules-r2]: the verb scripts on disk are the declared 21', () => {
     const dir = join(sb, '.contexture/modules/unit/scripts');
     const verbs = readdirSync(dir).filter((f) => !f.startsWith('.') && /^# summary: /m.test(readFileSync(join(dir, f), 'utf8'))).sort();
     expect(verbs).toEqual(DECLARED);
-    expect(DECLARED).toHaveLength(22);
+    expect(DECLARED).toHaveLength(21);
+  });
+
+  it('V-b [the-engine-r5]: the retired ctx unit index refuses rc 1 as an unknown verb, the module help on stderr', async () => {
+    const r = await unit(sb, 'index');
+    expect([r.code, r.stdout]).toEqual([1, '']);
+    expect(r.stderr).toMatch(/^ctx: unknown verb: index$/m);
+    expect(r.stderr).toMatch(/^ctx unit: the unit module: /m);
+    expect(verbsIn((await unit(sb, 'help')).stdout).map((l) => l.trim().split(/ +/)[0])).not.toContain('index');
   });
 
   it('V-b: ctx session refuses rc 1 naming ctx unit; unit help answers rc 0', async () => {
@@ -52,11 +60,11 @@ describe.concurrent('the unit and lane verb surface', () => {
     expect(r.stderr).toContain('reserved name refused (shadow): flip');
   });
 
-  it('V-c [the-engine-r2, the-engine-r4]: unit help of a retired verb prints its replacement; the help tables list 22 unit and 4 lane verbs', async () => {
+  it('V-c [the-engine-r2, the-engine-r4]: unit help of a retired verb prints its replacement; the help tables list 21 unit and 4 lane verbs', async () => {
     const r = await unit(sb, 'help', 'query');
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^ctx unit query retired: use entry show/m);
-    expect(verbsIn((await unit(sb, 'help')).stdout)).toHaveLength(22);
+    expect(verbsIn((await unit(sb, 'help')).stdout)).toHaveLength(21);
     expect(verbsIn((await lane(sb, 'help')).stdout)).toHaveLength(4);
   });
 

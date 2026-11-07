@@ -6,7 +6,7 @@
 # help:   --what="..."         event description (required)
 # help:   --group=...          topic group token
 # help:   --thread=...         what the unit awaits (default: none)
-# help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of <name>.md under .contexture/rhythms/ or .contexture/extensions/rhythms/
+# help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of the named rhythm (ctx rhythm list names them, ctx rhythm show <name> prints one); a stamped write prints the next gate
 # help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes; repeatable, one REF line each
 # help:   --closes="<slug> (<verdict>: <reason>)"   closes journal entry targets (one or more slugs before the parenthesis); the verdict done, superseded, dropped, or folded; repeatable, one CLOSES line each
 # help:   --supersedes="<slug> (<verdict>: <reason>)"   supersedes journal entry targets, the same form; repeatable, one SUPERSEDES line each
@@ -208,3 +208,5 @@ vb_kv epoch "$(vb_epoch)"
 vb_call entry.record "$unit"
 vb_ok
 printf 'recorded entry: %s\n' "$(vb_field entry.slug)"
+[ -n "$rhythm" ] && printf '%s\n' "$VB_RHYTHM_LINE"
+exit 0

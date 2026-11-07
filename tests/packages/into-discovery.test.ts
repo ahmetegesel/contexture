@@ -12,10 +12,11 @@ const resolve = (sb: string, driver: string) =>
   exec('./.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb, env: { CTX_STORAGE_DRIVER: driver } });
 const lines = (text: string): string[] => text.replace(/\n+$/, '').split('\n');
 
-const RITUAL = 'fixture-ritual (.contexture/extensions/rhythms/fixture-ritual.md) | use when: a fixture needs the rhythm index | activation: propose';
-const WORKSPACE_RITUAL = 'workspace-ritual (.contexture/rhythms/workspace-ritual.md) | use when: the workspace half is proven | activation: propose';
+const RITUAL = 'fixture-ritual | extension | use when: a fixture needs the rhythm list | activation: propose';
+const WORKSPACE_RITUAL = 'workspace-ritual | workspace | use when: the workspace half is proven | activation: propose';
+const SELECT = "select: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop (@rhythms default); read a rhythm with ctx rhythm show <name>";
 
-describe.concurrent('package-install into discovery: the engine, the resolver, and the rhythm index see the overlay', () => {
+describe.concurrent('package-install into discovery: the engine, the resolver, and the rhythm list see the overlay', () => {
   it('[the-engine-r1, modules-r14] the installed module lists beside the base lane module and its verb dispatches', async () => {
     const sb = sandbox();
     const pa = newPkg(sb, 'pkga');
@@ -54,25 +55,25 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect((await ctx(sb, 'help')).stdout).not.toContain('shapefilters');
   });
 
-  it('[the-engine-r22, modules-r20] the rhythm index reads the extension root after the workspace, the law fragment is recorded, and the uninstall leaves the index', async () => {
+  it('[the-engine-r22, modules-r20] the rhythm list reads the extension root after the workspace, the law fragment is recorded, and the uninstall leaves the list', async () => {
     const sb = sandbox();
     const ri = newPkg(sb, 'pkgri');
     addModule(ri, 'rifixture');
-    addFile(ri, 'rhythms/fixture-ritual.md', '@rhythm fixture-ritual\n  use when: a fixture needs the rhythm index\n  activation: propose');
+    addFile(ri, 'rhythms/fixture-ritual.md', '@rhythm fixture-ritual\n  use when: a fixture needs the rhythm list\n  activation: propose\n  1. RITE: the fixture gate');
     expect((await installPkg(sb, ri)).code).toBe(0);
-    expect(out(await ctx(sb, 'unit', 'index'))).toBe(RITUAL);
+    const listed = await ctx(sb, 'rhythm', 'list');
+    expect([listed.code, listed.stdout, listed.stderr]).toEqual([0, `${RITUAL}\n${SELECT}\n`, '']);
     const rec = recordText(sb, 'pkgri');
     expect(rec).toContain('law .contexture/extensions/modules/rifixture/laws');
     const law = rec.split('\n').find((l) => l.startsWith('law '))!.slice(4);
     expect(existsSync(join(sb, law))).toBe(true);
     expect(readFileSync(join(sb, law), 'utf8')).toContain('rifixture-law');
-    put(join(sb, '.contexture/rhythms/workspace-ritual.md'), '@rhythm workspace-ritual\n  use when: the workspace half is proven\n');
-    const both = lines((await ctx(sb, 'unit', 'index')).stdout);
-    expect(both[0]).toBe(WORKSPACE_RITUAL);
-    expect(both.at(-1)).toBe(RITUAL);
+    put(join(sb, '.contexture/rhythms/workspace-ritual.md'), '@rhythm workspace-ritual\n  use when: the workspace half is proven\n  1. HALF: the workspace gate\n');
+    const both = await ctx(sb, 'rhythm', 'list');
+    expect([lines(both.stdout), both.stderr]).toEqual([[WORKSPACE_RITUAL, RITUAL, SELECT], '']);
     rmSync(join(sb, '.contexture/rhythms'), { recursive: true });
     expect((await uninstall(sb, ri)).code).toBe(0);
-    expect((await ctx(sb, 'unit', 'index')).stdout).not.toContain('fixture-ritual');
+    expect((await ctx(sb, 'rhythm', 'list')).stdout).toBe(`${SELECT}\n`);
   });
 
   it('[the-engine-r19, the-engine-r22, the-engine-r23] a driver package lands executable, resolves from the extension root, records its kind and name, stays unlisted, and uninstalls', async () => {

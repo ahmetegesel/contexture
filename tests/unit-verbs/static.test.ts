@@ -19,14 +19,12 @@ describe('the unit and lane verb scripts, read statically', () => {
     expect(hits).toEqual([]);
   });
 
-  it('[modules-r3] every unit and lane verb that reaches the record sources the shared verb library; index reads no record and refresh composes the board and audit verbs', () => {
+  it('[modules-r3] every unit and lane verb that reaches the record sources the shared verb library; refresh alone composes the board and audit verbs', () => {
     const verbs = verbScripts();
-    expect(verbs).toHaveLength(26);
+    expect(verbs).toHaveLength(25);
     const sources = (text: string): boolean => /^\. "\$\(CDPATH= cd -- "\$\(dirname -- "\$0"\)\/\.\.\/lib" && pwd\)\/verb\.sh"$/m.test(text) || (/^unit_lib=.*\/lib\/verb\.sh"$/m.test(text) && /^\. "\$unit_lib"$/m.test(text));
-    expect(verbs.filter(([, text]) => !sources(text)).map(([path]) => path.split('/').pop())).toEqual(['index', 'refresh']);
+    expect(verbs.filter(([, text]) => !sources(text)).map(([path]) => path.split('/').pop())).toEqual(['refresh']);
     const text = Object.fromEntries(verbs.map(([path, t]) => [path.split('/').pop(), t]));
-    expect(text.index).toMatch(/^#!\/usr\/bin\/awk -f$/m);
-    expect(text.index).not.toMatch(/scripts\/data|store|vb_call/);
     expect(text.refresh).toMatch(/^sh "\$dir\/audit" "\$slug"/m);
     expect(text.refresh).not.toMatch(/scripts\/data|vb_call/);
   });
