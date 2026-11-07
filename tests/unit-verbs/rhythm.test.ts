@@ -119,6 +119,14 @@ describe.concurrent('ctx rhythm list: the rhythms over both roots', () => {
     expect([stamped.code, stamped.stdout, stamped.stderr]).toEqual([1, '', 'ERROR: no such rhythm: plain (ctx rhythm list names them)\n']);
   });
 
+  it('[modules-r-6l2ti] a numbered prose line whose gate is malformed and whose number breaks the order warns once, as the gate defect, never also as a gap', async () => {
+    const sb = stage('posix', 'rhythm-nested');
+    ws(sb, 'nested', '@rhythm nested\n  use when: u\n  1. GO: g\n    1. a numbered prose line\n  2. END: e\n');
+    const r = await rh(sb, 'list');
+    expect([r.code, lines(r.stdout)]).toEqual([0, ['nested | workspace | use when: u | activation: propose', SELECT]]);
+    expect(r.stderr).toBe("rhythm list: warning: nested (workspace): step 1 gate 'a numbered prose line' is outside the stamp grammar\n");
+  });
+
   it('R-g [modules-r20]: list refuses an argument rc 1 with the usage', async () => {
     const r = await rh(stage('posix', 'rhythm-arg'), 'list', 'extra');
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'Usage: ctx rhythm list\nhelp: ctx rhythm help\n']);

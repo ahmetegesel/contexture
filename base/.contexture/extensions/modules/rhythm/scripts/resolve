@@ -46,9 +46,9 @@ END {
   if (declared != name) printf "defect\tits @rhythm line names '\''%s'\''\n", declared
   want = 1
   for (i = 1; i <= ns; i++) {
-    if (K[i] != want) printf "defect\tthe steps break their 1 to N order at step %d\n", K[i]
-    want = K[i] + 1
     if (G[i] !~ /^[A-Z][A-Z_+]*$/) printf "defect\tstep %d gate '\''%s'\'' is outside the stamp grammar\n", K[i], G[i]
+    else if (K[i] != want) printf "defect\tthe steps break their 1 to N order at step %d\n", K[i]
+    want = K[i] + 1
   }
   if (!ns) print "defect\tno step line"
 }'
