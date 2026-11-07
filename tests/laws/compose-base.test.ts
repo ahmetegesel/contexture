@@ -51,6 +51,14 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(count(g, /^ {2}branch\/worktree on demand/)).toBe(1);
   });
 
+  it("[modules-r19] composes the search delegation bullet: raw exploration runs in a lane, the docs map is the dispatcher's own read, and no corpus search sits among the delegated lookups", () => {
+    const bullets = layer(base).split('\n').filter((l) => l.startsWith('  - search delegation: '));
+    expect(bullets).toHaveLength(1);
+    expect(bullets[0]).toContain('the dispatcher never runs raw exploration: a lookup with unbounded output whose target it does not already hold (grep, find, a read to locate, a record sweep through ctx unit search, a census, an earlier recipe read to learn a brief) runs in a lane');
+    expect(bullets[0]).toContain("the docs map (the index, an owning doc, a ranked ctx docs query) is the dispatcher's own read, never delegated");
+    expect(bullets[0]).not.toContain('corpus search');
+  });
+
   it('[modules-r19] opens no custom section and seats the preambles between @layout and @record', () => {
     const g = layer(base);
     expect(count(g, /^@custom$/)).toBe(0);
