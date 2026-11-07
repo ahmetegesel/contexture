@@ -35,5 +35,5 @@ if [ "$rc" -eq 0 ]; then
   rh_slug=$(vb_field rhythm.slug)
   if [ -n "$rh_slug" ]; then vb_rhythm_state "$1" "$rh_slug" "$(vb_field rhythm.stamp)"; else vb_rhythm_state "$1"; fi
 fi
-[ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >&2
+vb_relay
 exit "$rc"

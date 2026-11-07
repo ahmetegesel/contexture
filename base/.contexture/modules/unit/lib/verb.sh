@@ -51,7 +51,11 @@ VB_NL='
 VB_CR=$(printf '\r')
 
 vb_cleanup() {
-  [ -n "$VB_DIR" ] && rm -rf "$VB_DIR"
+  vc_rc=$?
+  if [ -n "$VB_DIR" ]; then
+    [ "$vc_rc" -eq 0 ] && [ -s "$VB_DIR/relay" ] && awk '!seen[$0]++' "$VB_DIR/relay" >&2
+    rm -rf "$VB_DIR"
+  fi
   VB_DIR=""
   return 0
 }
@@ -224,11 +228,18 @@ vb_through() {
   exit "$VB_RC"
 }
 
-# vb_ok: the call succeeded, else the refusal passes through
+# vb_relay: a succeeded call's stderr (the warning of a read served from the store's
+# deprecated root) is held in the scratch, and the exit prints it once, after the answer,
+# only when the verb ends rc 0, so a refusing run prints its refusal line alone
+vb_relay() {
+  [ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >> "$VB_DIR/relay"
+  return 0
+}
+
+# vb_ok: the call succeeded, its stderr relayed, else the refusal passes through
 vb_ok() {
   [ "$VB_RC" -eq 0 ] || vb_through
-  [ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >&2
-  return 0
+  vb_relay
 }
 
 # vb_err_has <text>: the refusal line of the last call carries the text

@@ -30,5 +30,5 @@ if [ "$VB_RC" -ne 0 ]; then
 fi
 vb_render audit
 rc=$?
-[ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >&2
+vb_relay
 exit "$rc"

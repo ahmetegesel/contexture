@@ -44,7 +44,5 @@ fi
 view=active
 [ "$form" = all ] && view=list_all
 vb_call session.active
-[ "$VB_RC" -eq 0 ] || vb_through
-vb_render "$view" RV_REPO="$repo" RV_HAS_REPO="$has_repo" || exit $?
-[ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >&2
-exit 0
+vb_ok
+vb_render "$view" RV_REPO="$repo" RV_HAS_REPO="$has_repo"

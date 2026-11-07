@@ -128,8 +128,11 @@ answer, prints its own line once:
 `WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses`.
 The line is the reminder, never an instruction to the agent: the sweep is the human's
 choice. A refusal's stderr stays its one line, so every `head -n 1` reader of a refusal still reads
-the refusal. `vb_ok` relays the line in the verbs that call it; audit, board, and diagnose
-relay it themselves.
+the refusal. The verb library relays the line in one place: `vb_relay` holds a succeeded
+call's stderr in the verb's scratch, and the verb's exit prints it once, after the answer,
+only when the verb ends rc 0; `vb_ok` relays through it, and audit, board, diagnose, and
+list call it after their render, so a verb level refusal after a read (a load page out of
+range, a claim the report lacks, a unit no other unit references) prints its line alone.
 
 `unit.promote <unit>...|--all` stands outside the 35 operations, as `data_get` does: it
 checks every named unit is held (or lists every unit by its state key under `--all`),
