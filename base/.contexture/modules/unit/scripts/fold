@@ -59,8 +59,8 @@ the state; there is no digest, no checkpoint, and no marker.
    non-thread constituent only.
 
 4. Re-fetch. When this lane has no unclosed chunk, the fetch returns the lane boundary
-   and the next lane's instruction; stop. The orchestrator creates and dispatches that
-   lane with its manual.
+   and the next lane's instruction; stop. The orchestrator creates the next lane with
+   the printed ctx lane create command and dispatches it.
 
 5. Repair. A defect from the check is repaired with the ordinary supersession: a new
    entry with the same batch refs and closers closes the prior one:
@@ -101,7 +101,11 @@ help_table() {
   printf 'usage: ctx unit fold <unit> [--lane=<lane> [--merge] | --check | --finish]\n'
   printf '\n'
   manual_text '<unit>' '<lane>'
-  printf '\nThe plan and each lane boundary print this manual with the actual lane name.\n'
+  printf '\nThe plan and each lane boundary print this manual with the actual lane name, below the one line ctx lane create command with which the orchestrator creates the next lane.\n'
+}
+
+lane_command() {
+  printf '  .contexture/ctx run .contexture/ctx lane create %s %s --goal="consolidate the fold chunks the plan assigns to lane %s of unit %s, one ordinary journal entry per batch; stop at the lane boundary the fetch returns" --branch="the workspace checkout on its current branch; no file edit" --writes="no file edit and no commit; record writes: one consolidated entry per batch through ctx unit record %s, and a superseding entry when the check names a defect" --scope="read the loop and the rules: ctx unit fold --help, its <unit> and <lane> standing for %s and %s" --scope="fetch the next batch: ctx unit fold %s --lane=%s; a fetch never advances" --scope="write one ordinary entry per batch as the loop'"'"'s step 3 shows: the one line synthesis, one REF per constituent, one folded closer per constituent that carries no open thread, THREAD none" --scope="fetch again after each entry; when the fetch returns the lane boundary, stop and report" --report="BATCHES: each consolidated entry slug, the chunks it covers, and its constituent count" --report="OPEN: any refusal or defect met, with its command and output"\n' "$unit" "$1" "$1" "$unit" "$unit" "$unit" "$1" "$unit" "$1"
 }
 
 case "${1:-}" in
@@ -315,8 +319,8 @@ print_plan() {
   printf 'lanes: %s (one per anchor)\n' "$lane_n"
   set_chunk 1
   printf 'position: chunk 1 of %s; next lane %s\n' "$chunk_n" "$c_lane"
-  printf 'NEXT: create the first lane with its manual below (if absent), then fetch:\n'
-  printf '  .contexture/ctx run .contexture/ctx lane create %s %s   (recipe: the manual below)\n' "$unit" "$c_lane"
+  printf 'NEXT: create the first lane with this command (if absent), then fetch:\n'
+  lane_command "$c_lane"
   printf '  .contexture/ctx run .contexture/ctx unit fold %s --lane=%s\n' "$unit" "$c_lane"
   print_manual "$c_lane"
 }
@@ -589,9 +593,13 @@ progress() {
   fi
   next_open_chunk ""
   printf 'position: chunk %s of %s is next; next lane %s\n' "$no_id" "$chunk_n" "$no_lane_next"
-  printf 'NEXT: fetch lane %s (create it with its manual if absent):\n' "$no_lane_next"
-  printf '  .contexture/ctx run .contexture/ctx unit fold %s --lane=%s\n' "$unit" "$no_lane_next"
-  if ! lane_exists "$no_lane_next"; then
+  if lane_exists "$no_lane_next"; then
+    printf 'NEXT: fetch lane %s:\n' "$no_lane_next"
+    printf '  .contexture/ctx run .contexture/ctx unit fold %s --lane=%s\n' "$unit" "$no_lane_next"
+  else
+    printf 'NEXT: create lane %s with this command, then fetch it:\n' "$no_lane_next"
+    lane_command "$no_lane_next"
+    printf '  .contexture/ctx run .contexture/ctx unit fold %s --lane=%s\n' "$unit" "$no_lane_next"
     print_manual "$no_lane_next"
   fi
 }
@@ -612,8 +620,8 @@ fetch_lane() {
       exit 0
     fi
     printf 'LANE BOUNDARY: lane %s is done; the next lane is %s; stop.\n' "$lane" "$no_lane_next"
-    printf 'The orchestrator creates %s with its manual below and dispatches it:\n' "$no_lane_next"
-    printf '  .contexture/ctx run .contexture/ctx lane create %s %s   (recipe: the manual below)\n' "$unit" "$no_lane_next"
+    printf 'The orchestrator creates %s with this command and dispatches it:\n' "$no_lane_next"
+    lane_command "$no_lane_next"
     printf '  .contexture/ctx run .contexture/ctx unit fold %s --lane=%s\n' "$unit" "$no_lane_next"
     print_manual "$no_lane_next"
     exit 0

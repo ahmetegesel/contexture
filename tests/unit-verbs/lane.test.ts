@@ -28,6 +28,7 @@ const PURPOSE = {
 };
 const missing = (...flags: (keyof typeof PURPOSE)[]): string => `lane create: error: missing ${flags.map((f) => PURPOSE[f]).join(', ')}; the brief comes only as flags, stdin is never read: ctx lane help create (ERR_INVALID_ARGUMENT)\n`;
 const refusal = (message: string): string => `lane create: error: ${message} (ERR_INVALID_ARGUMENT)\n`;
+const fed = { input: '# a recipe on stdin\nMISSION\n  GOAL: "never read"\n' };
 
 const prompt = (u: string, l: string): string[] => [
   `You are a dispatched subagent working lane ${l} of unit ${u}. Your full brief is the lane recipe: read it first and follow it exactly: .contexture/ctx lane show ${u} ${l} recipe`,
@@ -194,7 +195,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     ['with a rhythm gate its step does not read, as ctx unit record refuses it', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe 1 WRONG'])], 'ERROR: RHYTHM step 1 of probe reads OPEN, not WRONG\n'],
   ] as const)('[the-record-r9, the-record-r-xbt3g]: lane create %s refuses rc 1 with its one stderr line, nothing written', async ([, argv, line]) => {
     const sb = fresh(sb0);
-    const r = await run(sb, ['lane', 'create', ...argv], { input: '# a recipe on stdin\nMISSION\n  GOAL: "never read"\n' });
+    const r = await run(sb, ['lane', 'create', ...argv], fed);
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', line]);
     const shown = await lane(sb, 'show', 'sem-unit', 'r-lane', 'recipe');
     expect(shown.code).toBe(1);

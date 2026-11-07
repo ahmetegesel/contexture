@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
+import { exec } from '../support/exec';
 import { fresh } from '../support/snapshot';
-import { must, unit } from '../support/unit';
+import { lane, must, unit } from '../support/unit';
 import { D, foldChain, foldRecord, type Plan, readPlan } from './fold-fixture';
 
 const at = foldChain('fold-protocol');
@@ -31,6 +32,23 @@ describe.concurrent('ctx unit fold: the consolidation protocol, one step per tes
     expect(p).toContain(`ctx run .contexture/ctx lane create fc-unit ${lanes.l1}`);
     expect(p).toContain(`ctx run .contexture/ctx unit fold fc-unit --lane=${lanes.l1}`);
     expect(p).toContain('ctx run .contexture/ctx unit record fc-unit');
+  });
+
+  it('FC2b [the-record-r15]: the plan and the progress print the one line ctx lane create command; run through sh, it creates the lane with the boundary rule and a fetch step in its recipe', async () => {
+    const sb = fresh(await at('fixture'));
+    const p = (await must(fold(sb))).stdout;
+    const { l1 } = readPlan(sb, p);
+    const command = p.split('\n').map((l) => l.trim()).find((l) => l.startsWith(`.contexture/ctx run .contexture/ctx lane create fc-unit ${l1} `)) ?? '';
+    expect(command).not.toMatch(/[$`]/);
+    expect((command.match(/"/g) ?? []).length).toBe(2 * (command.match(/ --[a-z]+="/g) ?? []).length);
+    const progress = (await must(fold(sb))).stdout;
+    expect(progress).toContain(`NEXT: create lane ${l1} with this command, then fetch it:\n  ${command}\n`);
+    expect((await exec('sh', ['-c', command], { cwd: sb })).code).toBe(0);
+    const recipe = (await must(lane(sb, 'show', 'fc-unit', l1, 'recipe'))).stdout;
+    expect(recipe).toContain('never use /tmp or any path outside the workspace');
+    expect(recipe).toContain('a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach');
+    expect(recipe).toMatch(new RegExp(`^ {2}\\d+\\. .*ctx unit fold fc-unit --lane=${l1}`, 'm'));
+    expect((await must(fold(sb))).stdout).toContain(`NEXT: fetch lane ${l1}:\n`);
   });
 
   it('FC3: a lane fetch hands the next chunk alone with its hint and never advances; a lane the plan does not name refuses', async () => {
