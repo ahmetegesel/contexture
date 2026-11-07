@@ -1,7 +1,7 @@
-import { accessSync, appendFileSync, constants, existsSync, writeFileSync } from 'node:fs';
+import { accessSync, appendFileSync, constants, existsSync, lstatSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { compose, count, layer, layerBytes } from '../support/laws';
+import { compose, count, layer, layerBytes, layerPath } from '../support/laws';
 import { chmodPlant, ROOT_USER } from '../support/plants';
 import { stage } from '../support/stage';
 import { firstByteDifference } from '../support/tree';
@@ -80,6 +80,25 @@ describe.concurrent('the legacy layer cleanup (the composer default mode, until 
     const again = await compose(sb);
     expect(again.code).toBe(0);
     expect(again.stderr).toBe('');
+  });
+
+  it('[modules-r19] replaces a root layer that is a symlink into the legacy path before the cleanup, so the root layer survives it', async () => {
+    const sb = stage('posix', 'laws-legacy-rootlink');
+    expect((await compose(sb)).code).toBe(0);
+    const current = layerBytes(sb)!;
+    renameSync(layerPath(sb), join(sb, LEGACY));
+    symlinkSync(LEGACY, layerPath(sb));
+    const check = await compose(sb, '--check');
+    expect(check.code).toBe(1);
+    expect(check.stderr).toContain('compose: stale: AGENTS.generated.md');
+    expect(lstatSync(layerPath(sb)).isSymbolicLink()).toBe(true);
+    const r = await compose(sb);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toBe(`compose: composed AGENTS.generated.md\n${REMOVED}\n`);
+    expect(lstatSync(layerPath(sb)).isSymbolicLink()).toBe(false);
+    expect(firstByteDifference(layerBytes(sb)!, current)).toBe(-1);
+    expect(existsSync(join(sb, LEGACY))).toBe(false);
+    expect((await compose(sb, '--check')).code).toBe(0);
   });
 
   it('[modules-r19] leaves a legacy layer in place under --check, printing no removal', async () => {

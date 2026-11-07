@@ -372,13 +372,16 @@ if [ -n "$_dup" ]; then
 fi
 
 if [ "$check_only" -eq 1 ]; then
-  if [ -f "$out" ] && cmp -s "$work/generated" "$out"; then
+  if [ ! -L "$out" ] && [ -f "$out" ] && cmp -s "$work/generated" "$out"; then
     exit 0
   fi
   printf 'compose: stale: AGENTS.generated.md\n' >&2
   exit 1
 fi
-if [ ! -f "$out" ] || ! cmp -s "$work/generated" "$out"; then
+if [ -L "$out" ] || [ ! -f "$out" ] || ! cmp -s "$work/generated" "$out"; then
+  if [ -L "$out" ]; then
+    rm -f "$out" 2>/dev/null || die 2 "cannot write AGENTS.generated.md"
+  fi
   mv -f "$work/generated" "$out" || die 2 "cannot write AGENTS.generated.md"
   printf 'compose: composed AGENTS.generated.md\n' >&2
 fi
