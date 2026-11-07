@@ -529,17 +529,17 @@ The classes, and what each one asks for:
 
 | flag | the defect | the repair |
 |---|---|---|
-| dangling closer | a `CLOSES:` or `SUPERSEDES:` names a slug no entry carries | fix the slug or the closer |
-| slugless closer | a closer carries no valid date-slug target | point it at real entries |
-| dateless entry slug | an entry name does not match the date-slug grammar | fix the entry's slug to the date-slug grammar |
-| inline marker | `THREAD:` or `KNOWLEDGE:` sits on the `@entry` line | move it to its own field line |
-| bracketed field | a field line wrapped in brackets, as a shape's optional marker copied verbatim | write the field bare, or omit it |
-| missing thread | a post-era `@entry` with no `THREAD` line | declare the `THREAD` line: what it awaits, or `none` |
+| dangling closer | a `CLOSES:` or `SUPERSEDES:` names a slug no entry carries | the human's edit of the slug or the closer |
+| slugless closer | a closer carries no valid date-slug target | the human's edit, pointing it at real entries |
+| dateless entry slug | an entry name does not match the date-slug grammar | the human's edit of the entry's slug to the date-slug grammar |
+| inline marker | `THREAD:` or `KNOWLEDGE:` sits on the `@entry` line | the human's edit, moving it to its own field line |
+| bracketed field | a field line wrapped in brackets, as a shape's optional marker copied verbatim | the human's edit, writing the field bare or omitting it |
+| missing thread | a post-era `@entry` with no `THREAD` line | the human's edit, declaring the `THREAD` line: what it awaits, or `none` |
 | unharvested knowledge | a `KNOWLEDGE: true` entry that no closer names | harvest it at the next refresh; the entry then closes by reference |
 | done without event | a `STATUS: DONE` task with no `backlog/<slug>: DONE` line in the journal | record the completion event |
 | legacy duplicate slug (warning) | an older journal repeating an entry slug | nothing: it reads by position and leaves rc unchanged; a new repeat is refused at the write |
 
-The audit is a repair instrument: fix what it flags and fill what is missing before the period ends; a note about a flag is not a repair. It runs at refresh, close, and handoff, and close and handoff expect exit 0.
+The audit is a repair instrument: fix what it flags and fill what is missing before the period ends; a note about a flag is not a repair. The verbs repair two classes: unharvested knowledge (a closer at the next refresh, `ctx unit record --closes`) and done without event (the completion event through `ctx unit record`, or `ctx unit task reopen` then `complete`, which writes the receipt). Every other class is a finding no verb can repair: it goes to the human, never to an agent's hand edit of the record or to an entry minted only to quiet it. The audit runs at refresh, close, and handoff, and close and handoff expect exit 0.
 
 ### ctx rhythm: the rhythm module
 

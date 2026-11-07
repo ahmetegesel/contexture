@@ -83,7 +83,7 @@ The artifact sweep, shared by rhythm boundaries, close, and handoff: the events 
 
 Two distinct ends:
 
-- Period end (a turn ends; the unit continues): run the refresh, then close the period's resolved threads by reference. The stray audit's checklist is the open-thread tail the journal audit prints: every thread that resolved this period closes now. The journal audit must exit 0; it is a repair instrument, and what it flags is fixed before the period ends, never noted. The folder stays ACTIVE.
+- Period end (a turn ends; the unit continues): run the refresh, then close the period's resolved threads by reference. The stray audit's checklist is the open-thread tail the journal audit prints: every thread that resolved this period closes now. The journal audit must exit 0; it is a repair instrument, and what it flags is fixed before the period ends, never noted; a finding no verb can repair goes to the human, never to an agent's hand edit of the record. The folder stays ACTIVE.
 - Unit close (the backlog completes, or the human ends the unit): append the closing events and the next-move decision, re-read the files and confirm consistency, promote durable knowledge by the harvest bar (the agent lands what deserves knowledge and drops the rest), then mark the unit CLOSED (`ctx unit close`).
 
 ### Handoff
