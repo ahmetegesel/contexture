@@ -89,6 +89,20 @@ describe.concurrent('ctx package: the refusals before the exec', () => {
     expect(treeState(sb)).toBe(before);
   });
 
+  it('[the-engine-r22] the group answers before discovery: a broken module adds no warning to its refusal or its help, while ctx help on the same sandbox warns', async () => {
+    const sb = sandbox('nodiscovery');
+    mkdirSync(join(sb, '.contexture/modules/orphan/scripts'), { recursive: true });
+    const refusal = await verb(sb, ['install', 'nosuch']);
+    expect(refusal.code).toBe(1);
+    expect(refusal.stderr).toBe('ctx: package install: no package at plugins/nosuch (name a package root path, a value holding a slash, instead)\n');
+    const help = await verb(sb, ['--help']);
+    expect(help.code).toBe(0);
+    expect(help.stderr).toBe('');
+    const top = await exec('./.contexture/ctx', ['help'], { cwd: sb });
+    expect(top.code).toBe(0);
+    expect(top.stderr).toContain('skipping module orphan: scripts/ without a module file');
+  });
+
   it.each([
     ['install', 'missing package installer: .contexture/package-install'],
     ['uninstall', 'missing package uninstaller: .contexture/package-uninstall'],
