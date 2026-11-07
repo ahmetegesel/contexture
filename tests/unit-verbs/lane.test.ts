@@ -1,10 +1,11 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, FTS5_DB, lockPath, RECORD_ROOT, unitLock } from '../support/drawer';
 import { launch } from '../support/exec';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
-import { createLane, LANE_BRIEF, lane, laneFlags, must, plantRhythms, run, seedUnit, unit } from '../support/unit';
+import { createLane, LANE_BRIEF, lane, laneFlags, must, plantRhythms, rhythm, run, seedUnit, unit } from '../support/unit';
 import { SHAPES } from './inputs';
 
 const D = '2026-09-27';
@@ -203,6 +204,17 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     const shown = await lane(sb, 'show', 'sem-unit', 'r-lane', 'recipe');
     expect(shown.code).toBe(1);
     expect(shown.stderr).toContain('ERR_ENTITY_NOT_FOUND');
+  });
+
+  it('[the-record-r-xbt3g, the-record-r-ep8la]: lane create refuses a rhythm whose @rhythm line names another with the exact line ctx unit record prints, nothing written', async () => {
+    const sb = fresh(sb0);
+    writeFileSync(join(sb, '.contexture/rhythms/b.md'), rhythm('beta', 'the misnamed rhythm', [['X', 'the x gate']]));
+    const line = "ERROR: RHYTHM b declares @rhythm beta; a rhythm's file name and its @rhythm line must agree\n";
+    const r = await run(sb, ['lane', 'create', 'sem-unit', 'b-lane', ...laneFlags(['--rhythm=b 1 X'])]);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', line]);
+    expect((await lane(sb, 'show', 'sem-unit', 'b-lane', 'recipe')).code).toBe(1);
+    const recorded = await unit(sb, 'record', 'sem-unit', '--what=the same stamp', '--rhythm=b 1 X');
+    expect([recorded.code, recorded.stderr]).toEqual([1, line]);
   });
 
   it.for([
