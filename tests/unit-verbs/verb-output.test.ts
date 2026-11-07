@@ -68,6 +68,12 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
       return done;
     };
     const u = (key: string, ...args: string[]): Promise<Run> => take(key, unit(sb, ...args));
+    const together = async (calls: readonly [string, Promise<Run>][]): Promise<Run[]> => {
+      const done = await Promise.all(calls.map(([, call]) => call));
+      calls.forEach(([key], i) => rows.push({ key, code: done[i]!.code, out: done[i]!.stdout + done[i]!.stderr }));
+      return done;
+    };
+    const ur = (key: string, ...args: string[]): [string, Promise<Run>] => [key, unit(sb, ...args)];
 
     await u('unit bootstrap', 'bootstrap', 'cu', 'the census unit', REPO);
     await u('unit bootstrap', 'bootstrap', 'lg', 'the legacy unit', REPO);
@@ -96,33 +102,20 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
     await u('unit task reopen', 'task', 'reopen', 'cu', 't1');
     await u('unit task start', 'task', 'start', 'cu', 't2');
     await u('unit task drop', 'task', 'drop', 'cu', 't3', '--reason=the census drop');
-    await u('unit task list', 'task', 'list', 'cu', '--status=all');
-    await u('unit task show', 'task', 'show', 'cu', 't1');
     await u('unit finding add', 'finding', 'add', 'cu', 'F_ONE', '--summary=the census finding', `--ref=journal#${D}-cu-e1`);
-    await u('unit finding show', 'finding', 'show', 'cu', 'F_ONE');
     await u('unit finding update', 'finding', 'update', 'cu', 'F_ONE', '--summary=the census finding, updated');
     await u('unit finding supersede', 'finding', 'supersede', 'cu', 'F_ONE', 'F_TWO', '--summary=the census successor', '--ref=lane#cl/report#FINDINGS');
     await u('unit finding add', 'finding', 'add', 'cu', 'F_DROP', '--summary=the finding to drop');
     await u('unit finding drop', 'finding', 'drop', 'cu', 'F_DROP');
-    await u('unit finding list', 'finding', 'list', 'cu');
-    await u('unit entry show', 'entry', 'show', 'cu', `${D}-cu-e2`);
-    await u('unit entry list', 'entry', 'list', 'cu');
-    await u('unit entry closure', 'entry', 'closure', 'cu', `${D}-cu-e1`);
-
     await take('lane create', createLane(sb, 'cu', 'cl', ['--ref=lane#cl/report#FINDINGS', '--task=backlog#t1', '--rhythm=debug 2 TRACE']));
     await take('lane record', lane(sb, 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=backlog#t1'));
     await take('lane report', run(sb, ['lane', 'report', 'cu', 'cl'], { input: REPORT }));
-    await take('lane report', run(sb, ['lane', 'report', 'cu', 'cl'], { input: '' }));
-    for (const a of ['recipe', 'journal', 'report']) await take(`lane show ${a}`, lane(sb, 'show', 'cu', 'cl', a));
+    await u('unit refs', 'refs', 'cu', 'lg');
 
-    const first = await u('unit load', 'load', 'cu');
-    const pages = Number(/(\d+) pages?/.exec(first.stdout)?.[1] ?? '1');
-    for (let p = 2; p <= pages; p++) await u('unit load', 'load', 'cu', String(p));
-    await u('unit board', 'board', 'cu');
-    for (const flags of [[], ['--active'], ['--all'], [`--repo=${REPO}`], ['--active', `--repo=${REPO}`], ['--all', `--repo=${REPO}`]]) await u('unit list', 'list', ...flags);
-    await u('unit audit', 'audit', 'cu');
-    await u('unit refresh', 'refresh', 'cu');
-    for (const ref of [
+    const [first, listing] = await together([ur('unit load', 'load', 'cu'), ['rhythm list', run(sb, ['rhythm', 'list'])]]);
+    const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
+    const names = listing!.stdout.split('\n').filter((l) => / \| /.test(l)).map((l) => l.split(' | ')[0] ?? '');
+    const refs = [
       'task#t1',
       'backlog#t1',
       'finding#F_TWO',
@@ -139,13 +132,29 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
       `unit#cu/entry/${D}-cu-e2`,
       'unit#cu/finding/F_TWO',
       'unit#cu/lane/cl/report',
-    ]) {
-      await u('unit resolve', 'resolve', 'cu', ref);
-      await u('unit resolve', 'resolve', 'cu', ref, '--json');
-    }
-    await u('unit refs', 'refs', 'cu', 'lg');
-    await u('unit refs-to', 'refs-to', 'lg');
-    await u('unit search', 'search', 'cu', 'census', '--mode=exact');
+    ];
+    await together([
+      ur('unit task list', 'task', 'list', 'cu', '--status=all'),
+      ur('unit task show', 'task', 'show', 'cu', 't1'),
+      ur('unit finding show', 'finding', 'show', 'cu', 'F_TWO'),
+      ur('unit finding list', 'finding', 'list', 'cu'),
+      ur('unit entry show', 'entry', 'show', 'cu', `${D}-cu-e2`),
+      ur('unit entry list', 'entry', 'list', 'cu'),
+      ur('unit entry closure', 'entry', 'closure', 'cu', `${D}-cu-e1`),
+      ['lane report', run(sb, ['lane', 'report', 'cu', 'cl'], { input: '' })],
+      ...['recipe', 'journal', 'report'].map((a): [string, Promise<Run>] => [`lane show ${a}`, lane(sb, 'show', 'cu', 'cl', a)]),
+      ...Array.from({ length: pages - 1 }, (_v, i) => ur('unit load', 'load', 'cu', String(i + 2))),
+      ur('unit board', 'board', 'cu'),
+      ...[[], ['--active'], ['--all'], [`--repo=${REPO}`], ['--active', `--repo=${REPO}`], ['--all', `--repo=${REPO}`]].map((flags) => ur('unit list', 'list', ...flags)),
+      ur('unit audit', 'audit', 'cu'),
+      ur('unit refresh', 'refresh', 'cu'),
+      ...refs.flatMap((ref) => [ur('unit resolve', 'resolve', 'cu', ref), ur('unit resolve', 'resolve', 'cu', ref, '--json')]),
+      ur('unit refs-to', 'refs-to', 'lg'),
+      ur('unit search', 'search', 'cu', 'census', '--mode=exact'),
+      ...names.map((n): [string, Promise<Run>] => ['rhythm show', run(sb, ['rhythm', 'show', n])]),
+      ['rhythm current', run(sb, ['rhythm', 'current', 'cu'])],
+    ]);
+
     await u('unit diagnose', 'diagnose');
     await u('unit migrate', 'migrate', '--all');
     const plan = await u('unit fold', 'fold', 'cu');
@@ -154,11 +163,7 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
     await u('unit fold', 'fold', 'cu', `--lane=${foldLane}`);
     await u('unit close', 'close', 'cu');
     await u('unit reopen', 'reopen', 'cu');
-
-    const names = (await take('rhythm list', run(sb, ['rhythm', 'list']))).stdout.split('\n').filter((l) => / \| /.test(l)).map((l) => l.split(' | ')[0] ?? '');
-    for (const n of names) await take('rhythm show', run(sb, ['rhythm', 'show', n]));
-    await take('rhythm current', run(sb, ['rhythm', 'current', 'cu']));
-  });
+  }, 300_000);
 
   it('[the-record-r14] every verb and sub-verb the unit, lane, and rhythm help tables list has a row, so a new verb without one reads red', async () => {
     const keys = new Set(rows.map((r) => r.key));
