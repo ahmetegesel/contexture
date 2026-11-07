@@ -92,6 +92,12 @@ describe.concurrent('the unit and lane verb surface', () => {
     expect(reopen.stdout + reopen.stderr).toMatch(/^usage: ctx unit reopen/m);
   });
 
+  it('X-h [the-engine-r7]: refresh --help and -h print its help table on stdout rc 0, the table ctx unit help refresh prints, never taken for a slug', async () => {
+    const table = await unit(sb, 'help', 'refresh');
+    expect(table.stdout).toMatch(/^ctx unit refresh: /);
+    for (const flag of ['--help', '-h']) expect(await unit(sb, 'refresh', flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, table.stdout, '']);
+  });
+
   it('UP-e [the-engine-r4, the-engine-r7]: finding update --help and the unit help table show --summary and --ref as optional', async () => {
     const optional = /update <unit> <NAME> \[--summary="\.\.\."\] \[--ref=\.\.\.\]/;
     const verbHelp = await unit(sb, 'finding', 'update', '--help');

@@ -15,6 +15,9 @@ usage_error() {
   exit 1
 }
 
+case "${1:-}" in
+  --help|-h) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
+esac
 [ "$#" -eq 1 ] || usage_error
 slug=$1
 case "$slug" in
