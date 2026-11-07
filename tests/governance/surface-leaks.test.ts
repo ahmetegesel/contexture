@@ -1,8 +1,8 @@
 import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { basename, dirname, join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
-import { FALLBACK_ROOT, FTS5_DB, leaks, RECORD_ROOT } from '../support/drawer';
+import { FALLBACK_ROOT, FTS5_DB, leaks, lockPath, namespaceLock, RECORD_ROOT, unitLock } from '../support/drawer';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { stage } from '../support/stage';
@@ -121,9 +121,32 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
   });
 
   it('the instrument flags each part of the pattern once its quotes and backslashes are stripped, and passes the ctx forms', () => {
-    const planted = [`${RECORD_ROOT}/u/state`, `${FALLBACK_ROOT}/u`, FTS5_DB, 'lanes/x/report', 'the backlog.md file', 'the session folder', "'.contexture/'modules/unit/data", '.contexture\\/extensions/modules/docs/README', `"${RECORD_ROOT}"`];
-    expect(planted.filter(leaks)).toEqual(planted);
-    expect(['ctx unit load u', 'ctx lane show u l report', 'lane#l/report#VERDICT', '.contexture/ctx compose', '.contexture/tmp/lane/', 'ctx docs help check'].filter(leaks)).toEqual([]);
+    const locks = lockPath('/', '');
+    const planted = [
+      `${RECORD_ROOT}/u/state`,
+      `${FALLBACK_ROOT}/u`,
+      FTS5_DB,
+      lockPath('/', unitLock('u')),
+      lockPath('/', namespaceLock('unit')),
+      namespaceLock('<namespace>'),
+      `the ${relative(join('/', '.contexture'), locks)} folder`,
+      `the ${join(basename(locks), dirname(unitLock('u')))} folder`,
+      'lanes/x/recipe',
+      'lanes/x/journal',
+      'lanes/x/report',
+      ...['state', 'backlog', 'journal', 'knowledge', 'recipe', 'report'].map((n) => `the ${n}.md file`),
+      'the session folder',
+      'the sessions folder',
+      'the sessions drawer',
+      'the sessions directory',
+      'run .contexture/modules',
+      'or .contexture/extensions/modules.',
+      "'.contexture/'modules/unit/data",
+      '.contexture\\/extensions/modules/docs/README',
+      `"${RECORD_ROOT}"`,
+    ];
+    expect(planted.filter((l) => !leaks(l))).toEqual([]);
+    expect(['ctx unit load u', 'ctx lane show u l report', 'lane#l/report#VERDICT', '.contexture/ctx compose', '.contexture/tmp/lane/', 'ctx docs help check', 'the lanes/x/ folder', 'units/x', 'sessions/x', 'the session', '.contexture/modulesx'].filter(leaks)).toEqual([]);
   });
 
   it('the file walk reads the loader, ONBOARDING, the core law source, every laws and module file, and every shipped rhythm, by directory, above its floor', () => {

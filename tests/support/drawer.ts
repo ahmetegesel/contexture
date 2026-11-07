@@ -49,11 +49,12 @@ export function lockPath(sb: string, lock: string): string {
 
 const escRe = (text: string): string => text.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const LOCK_SEGMENTS = lockPath('/', unitLock('u')).split('/').filter(Boolean);
+const NAMESPACE_LOCK = namespaceLock('\0').split('\0').map(escRe).join('[^ ]*');
 
 export const RECORD_LEAK = new RegExp(
   [RECORD_ROOT, FALLBACK_ROOT, FTS5_DB.split('/').pop() ?? '', LOCK_SEGMENTS.slice(1, 3).join('/'), LOCK_SEGMENTS.slice(2, 4).join('/')]
     .map(escRe)
-    .concat(['lanes\\/[^ ]*\\/(recipe|journal|report)', '(state|backlog|journal|knowledge|recipe|report)\\.md', 'session folder', '\\.contexture\\/(extensions\\/)?modules\\/'])
+    .concat([NAMESPACE_LOCK, 'lanes\\/[^ ]*\\/(recipe|journal|report)', '(state|backlog|journal|knowledge|recipe|report)\\.md', 'sessions? (folder|drawer|directory)', '\\.contexture\\/(extensions\\/)?modules\\b'])
     .join('|'),
 );
 
