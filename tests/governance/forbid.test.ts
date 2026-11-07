@@ -5,7 +5,7 @@ import { ROOT } from '../support/root';
 import { stage } from '../support/stage';
 import { text } from './walk';
 
-const FORBID = /session\.sh|compact\.sh|session-[a-z]+\.awk|\.contexture\/scripts\//;
+const FORBID = /session\.sh|compact\.sh|session-[a-z]+\.awk|\.contexture\/scripts\/|laws\/compose(?![\w.-])/;
 
 const SURFACES = [
   'base/AGENTS.md',
@@ -35,6 +35,10 @@ describe.concurrent('the main-surface forbid grep: no invocable raw tool path', 
   it('the instrument reads a planted raw tool path and passes the ctx form', () => {
     expect(hits('run .contexture/scripts/session.sh now\nrun ctx unit load\n')).toEqual(['run .contexture/scripts/session.sh now']);
     expect(hits('compact.sh\nsession-board.awk\n')).toHaveLength(2);
+  });
+
+  it('[modules-r19] the instrument reads the composer path and passes ctx compose and a test file name that only starts with it', () => {
+    expect(hits('sh .contexture/laws/compose --check\nthe laws/compose-merge test\n.contexture/ctx compose\n')).toEqual(['sh .contexture/laws/compose --check']);
   });
 
   it.each(SURFACES)('%s carries no raw tool path', (rel) => {

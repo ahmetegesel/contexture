@@ -23,7 +23,7 @@
     standalone repo: contains application code (src/, package.json, Cargo.toml, pyproject.toml, etc.)
     parent workspace: contains multiple independent repositories as subdirectories
   instruction stack first: the existing AGENTS.md and its derivations (CLAUDE.md, GEMINI.md, harness files) are the workspace's self-description: read them first and whole; they name the rules that matter and often where the rest live
-  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/laws/compose`, then read the loader, the generated law layer `AGENTS.generated.md` at the root, and the upstream README completely before mapping; fetch upstream, the URL lives in the generated layer's @update section, and the README carries the philosophy behind every judgment the mapping makes
+  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/ctx compose`, then read the loader, the generated law layer `AGENTS.generated.md` at the root, and the upstream README completely before mapping; fetch upstream, the URL lives in the generated layer's @update section, and the README carries the philosophy behind every judgment the mapping makes
   map from the destination: walk the convention's sections one by one against the workspace's material: for each capability, what feeds it, what conflicts with it, what belongs there; migration follows the destination, never the file list
   governance: map every rule surface against the incoming convention; each contradicts, overlaps, or complements it, and the plan must resolve each one; the stack guides the sweep, the sweep covers what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions)
   reading budget: rule-bearing surfaces read whole, they are small and dense; structure is derived by listing, never by reading; application code is out of scope
@@ -66,8 +66,8 @@
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx unit task add`; the move is the backlog's first IN_PROGRESS task, else its first open task (every status but DONE), and `.contexture/ctx unit active` derives it (a task start moves the task: `.contexture/ctx unit task start`); every task's completion journals its receipt (`.contexture/ctx unit task complete`) and the derived move advances with the backlog; drift updates the backlog in the same breath via `.contexture/ctx unit task update`
   base assets:
     copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
-    set script permissions: `chmod +x .contexture/ctx .contexture/laws/compose .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
-    compose the law layer: `sh .contexture/laws/compose`; it builds `AGENTS.generated.md` at the root from the core source and the installed modules, and the loader verifies or recomposes it at every boot
+    set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
+    compose the law layer: `.contexture/ctx compose`; it builds `AGENTS.generated.md` at the root from the core source and the installed modules, and the loader verifies or recomposes it at every boot
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
@@ -101,7 +101,7 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. verify the law layer: `sh .contexture/laws/compose --check` (the loader composes or verifies it at boot; an absent compose or core source is a broken payload, named loudly)
+  1. verify the law layer: `.contexture/ctx compose --check` (the loader composes or verifies it at boot; a refused compose is a broken payload, its error line naming the missing or refused path)
   2. run boot load: `.contexture/ctx unit load adopt-contexture` (read every page the map reports)
   3. run audit: `.contexture/ctx unit audit adopt-contexture` (must exit 0)
   4. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge

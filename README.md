@@ -40,10 +40,10 @@ git archive <tag> base/ plugins/ | tar -x -C .adopt-contexture
 cp -R .adopt-contexture/base/. .
 cp -R .adopt-contexture/plugins .
 rm -rf .adopt-contexture
-chmod +x .contexture/ctx .contexture/laws/compose .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
+chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
 ```
 
-`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog to install from. `AGENTS.md` is the loader: run `sh .contexture/laws/compose` after the copy, and the loader verifies or recomposes the generated law layer `AGENTS.generated.md`, beside it at the root, at every boot.
+`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog to install from. `AGENTS.md` is the loader: run `.contexture/ctx compose` after the copy, and the loader verifies or recomposes the generated law layer `AGENTS.generated.md`, beside it at the root, at every boot.
 
 ### 2. Run the onboarding wizard
 
@@ -76,12 +76,12 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.md             The loader: compose then load the generated law layer, delivered every turn
 ├── AGENTS.workspace.md   Shared workspace overlay, tracked in git for team-wide rules
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
-├── AGENTS.generated.md   The generated law layer, composed from .contexture/laws/ at install and boot; gitignored, never edited
+├── AGENTS.generated.md   The generated law layer, composed by ctx compose at install and boot; gitignored, never edited
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
     ├── config            Optional workspace configuration (storage.driver: posix)
     ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
-    ├── laws/             The law sources: core.md the core source, compose the composer
+    ├── laws/             The law sources: core.md the core source, and the composer, private behind ctx compose
     ├── modules/          The standard module folders: unit (the record engine), run (stream filters), and workspace additions
     ├── extensions/       The package overlay root: modules/ for package feature modules (the lane and rhythm modules ship here), storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression
@@ -177,6 +177,6 @@ The dev loop:
 1. Edit `base/` directly: it is the shipping copy.
 2. Run the tests of the change from `tests/` (they stage the base runtime; `bun install --frozen-lockfile` once): `bun run test:changed`, or the area's project with `bun run test:<project>`; see [tests/README.md](tests/README.md).
 3. Ship: the release gate green (`bun run test:prerelease` from `tests/`), docs sync, commit, push, and the annotated tag in one breath. A plugin whose payload the release changes carries its manifest version bump (see [docs/plugins.md](docs/plugins.md)); the governance `plugin-versions` check reads red until it does.
-4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root, then compose the law layer (`sh .contexture/laws/compose`). The copy carries only payload paths, so the record (units, and the deprecated sessions folder while units remain in it), rhythms, tmp, and workspace modules are never touched; it never removes a file either, so a payload path the release removed is deleted from the live drawer by hand (see [Adoption](docs/adoption.md)).
+4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root, then compose the law layer (`.contexture/ctx compose`). The copy carries only payload paths, so the record (units, and the deprecated sessions folder while units remain in it), rhythms, tmp, and workspace modules are never touched; it never removes a file either, so a payload path the release removed is deleted from the live drawer by hand (see [Adoption](docs/adoption.md)).
 
 `plugins/` is the tracked catalog of packaged overlays, installed into a workspace when wanted (see [docs/plugins.md](docs/plugins.md)); `docs/adoption.md` carries the same loop beside the adopter's view.
