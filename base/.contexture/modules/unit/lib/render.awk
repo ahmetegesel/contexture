@@ -666,17 +666,26 @@ function oneline_nl(s) {
 }
 
 # ------------------------------------------------------------------------------
-# resolve (kept): the item's span, trailing separator included; a lane report claim is the
-# report's span from the last head naming it: an "@<claim>" (or "@claim <claim>") line
-# runs to the line before the next column-0 ^@[A-Za-z] line (the v0.54.0 rule, base's
-# since resolve is base's), a column-0 "<claim> ::" line to the line before the next
-# non-blank column-0 line, blank lines inside either span kept
+# resolve (kept): the item's span, trailing separator included; a lane recipe or report
+# claim is the document's span from the last head naming it: an "@<claim>" (or "@claim
+# <claim>") line runs to the line before the next column-0 ^@[A-Za-z] line (the v0.54.0
+# rule, base's since resolve is base's), a column-0 "<claim> ::" line to the line before
+# the next non-blank column-0 line, blank lines inside either span kept; a lane journal
+# claim is the span of the last entry carrying that slug, as lane show prints it
 function v_resolve(   k, n, L, i, found, keyed, e, t, claim, w, o) {
   k = ENVIRON["RV_KIND"]
   if (k == "task") { put(span("task", "task")); return }
   if (k == "finding") { put(span("finding", "finding")); return }
   if (k == "entry") { put(span("entry", "entry")); return }
   claim = ENVIRON["RV_CLAIM"]
+  found = 0
+  if (k == "lentry") {
+    n = nn("items")
+    for (i = 1; i <= n; i++) if (kind("items." i, "entry") == "entry" && sv("items." i ".slug") == claim) found = i
+    if (!found) fail("resolve: error: reference '" ENVIRON["RV_REF"] "' not found in unit '" ENVIRON["RV_UNIT"] "' (ERR_ENTITY_NOT_FOUND)")
+    put(span("items." found, "entry"))
+    return
+  }
   n = split(sv("content"), L, "\n")
   if (n > 0 && L[n] == "") n--
   found = 0

@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fresh, seed } from '../support/snapshot';
-import { createLane, must, plantArtifact, run, seedUnit, unit } from '../support/unit';
+import { createLane, LANE_BRIEF, must, plantArtifact, run, seedUnit, unit } from '../support/unit';
 
 const D = '2026-09-27';
 
@@ -42,6 +42,7 @@ describe.concurrent('ctx unit resolve', () => {
       await must(run(sb, ['lane', 'report', 'x-unit', 'x-lane'], { input: '# x report\n\n@claim x1\n  VERDICT: "from stdin"\n' }));
       await must(createLane(sb, 'x-unit', 'k-lane'));
       await must(run(sb, ['lane', 'record', 'x-unit', 'k-lane', '--what=A lane event', `--slug=${D}-k-l1`]));
+      await must(run(sb, ['lane', 'record', 'x-unit', 'k-lane', '--what=A later lane event', `--slug=${D}-k-l2`, '--ref=lane#k-lane/recipe#GOAL']));
       await must(run(sb, ['lane', 'report', 'x-unit', 'k-lane'], { input: K_REPORT }));
       await must(createLane(sb, 'x-unit', 'e-lane'));
       plantArtifact(sb, 'x-unit', 'lanes/r-lane/report', '@report r-lane\nVERDICT: planted\n');
@@ -95,8 +96,50 @@ describe.concurrent('ctx unit resolve', () => {
     }
   });
 
-  it.for(['lane#k-lane/recipe#FINDINGS', 'lane#k-lane/journal#FINDINGS', 'lanes/k-lane/recipe#FINDINGS', 'lane#k-lane/notes', 'lanes/k-lane/report.md'])(
-    'X-i [the-record-r-7jaw4]: %s refuses rc 1 as an unsupported form, since a claim names the report alone',
+  it.for(['lane#k-lane/recipe#GOAL', 'lanes/k-lane/recipe#GOAL'])(
+    'X-m [the-record-r-7jaw4, the-record-r18]: the recipe claim %s prints the recipe span of its GOAL :: head by the report claim rule, and --json the lane.get recipe answer',
+    async (ref) => {
+      const sb = fresh(sb0);
+      expect(await unit(sb, 'resolve', 'x-unit', ref).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, `GOAL ::\n  ${LANE_BRIEF.goal}\n\n`, '']);
+      const shownJson = await run(sb, ['lane', 'show', 'x-unit', 'k-lane', 'recipe', '--json']);
+      expect(await unit(sb, 'resolve', 'x-unit', ref, '--json').then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, shownJson.stdout, '']);
+    },
+  );
+
+  it.for(['lane#k-lane/journal#', 'lanes/k-lane/journal#'])(
+    'X-m [the-record-r-7jaw4, the-record-r18]: the lane journal claim %s<slug> prints that entry as ctx lane show prints it, and --json the lane.get journal answer',
+    async (form) => {
+      const sb = fresh(sb0);
+      const [r1, r2] = await Promise.all([`${D}-k-l1`, `${D}-k-l2`].map((slug) => unit(sb, 'resolve', 'x-unit', `${form}${slug}`)));
+      expect([r1.code, r1.stderr, r2.code, r2.stderr]).toEqual([0, '', 0, '']);
+      expect(r1.stdout).toBe(`@entry ${D}-k-l1\n  WHAT: "A lane event"\n  THREAD: none\n\n`);
+      expect(r2.stdout).toMatch(new RegExp(`^@entry ${D}-k-l2\\n {2}WHAT: "A later lane event"\\n`));
+      const shown = await run(sb, ['lane', 'show', 'x-unit', 'k-lane', 'journal']);
+      expect(shown.stdout).toBe(r1.stdout + r2.stdout);
+      const shownJson = await run(sb, ['lane', 'show', 'x-unit', 'k-lane', 'journal', '--json']);
+      expect(await unit(sb, 'resolve', 'x-unit', `${form}${D}-k-l1`, '--json').then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, shownJson.stdout, '']);
+    },
+  );
+
+  it.for([
+    'lane#k-lane/recipe#FINDINGS',
+    'lane#k-lane/journal#FINDINGS',
+    'lanes/k-lane/recipe#FINDINGS',
+    'lanes/k-lane/journal#FINDINGS',
+    `lane#k-lane/journal#${D}-k-l9`,
+    `lane#nosuch-lane/journal#${D}-k-l1`,
+    'lane#nosuch-lane/recipe#GOAL',
+    'lane#r-lane/recipe#GOAL',
+  ])('X-m [the-record-r-7jaw4]: %s refuses rc 1, empty stdout, with the one not found line, in the text and --json views alike', async (ref) => {
+    const sb = fresh(sb0);
+    for (const view of [[], ['--json']]) {
+      const r = await unit(sb, 'resolve', 'x-unit', ref, ...view);
+      expect([r.code, r.stdout, r.stderr]).toEqual([1, '', notFound(ref)]);
+    }
+  });
+
+  it.for(['lane#k-lane/notes', 'lanes/k-lane/report.md', 'lane#k-lane/notes#GOAL', 'lanes/k-lane/notes#GOAL', 'lanes/k-lane/x/recipe#GOAL', `lanes/k-lane/x/journal#${D}-k-l1`])(
+    'X-i [the-record-r-7jaw4]: %s refuses rc 1 as an unsupported form',
     async (ref) => {
       const r = await unit(fresh(sb0), 'resolve', 'x-unit', ref);
       expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `resolve: error: unsupported ref format: '${ref}' (ERR_INVALID_ARGUMENT)\n`]);
