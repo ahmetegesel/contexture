@@ -1,0 +1,35 @@
+#!/bin/sh
+# summary: print one rhythm whole, then the stamp line that advances it
+# usage: ctx rhythm show <name>
+# help: prints the effective copy of the named rhythm byte for byte (the workspace copy when it shadows an installed one), then the stamp line: stamp: ctx unit record <unit> --rhythm="<name> <N> <GATE>" on each entry that advances this rhythm
+# help: a name no rhythm carries refuses rc 1 (ERR_ENTITY_NOT_FOUND, ctx rhythm list names them); a malformed name (a slash, a leading dot) refuses rc 1 before any read (ERR_INVALID_ARGUMENT)
+# help: exit codes: 0 the rhythm printed; 1 a missing or malformed name, or not exactly one argument
+# help: example: ctx rhythm show work
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$dir/../../../../.." && pwd)
+
+case "${1:-}" in
+  --help|-h) [ $# -eq 1 ] && exec "${CTX_BIN:-$root/.contexture/ctx}" rhythm help show ;;
+esac
+if [ $# -ne 1 ]; then
+  printf 'Usage: ctx rhythm show <name>\n' >&2
+  printf 'help: ctx rhythm help\n' >&2
+  exit 1
+fi
+name=$1
+case "$name" in
+  ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*)
+    printf "rhythm show: error: malformed rhythm name '%s' (ERR_INVALID_ARGUMENT)\n" "$name" >&2
+    exit 1
+    ;;
+esac
+
+resolve="$dir/resolve"
+if ! sh "$resolve" "$name" > /dev/null 2>&1; then
+  printf 'rhythm show: error: no such rhythm: %s (ctx rhythm list names them) (ERR_ENTITY_NOT_FOUND)\n' "$name" >&2
+  exit 1
+fi
+sh "$resolve" --body "$name" || exit 2
+[ -n "$(sh "$resolve" --body "$name" | tail -c 1)" ] && printf '\n'
+printf 'stamp: ctx unit record <unit> --rhythm="%s <N> <GATE>" on each entry that advances this rhythm\n' "$name"

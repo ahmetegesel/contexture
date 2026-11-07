@@ -1,0 +1,66 @@
+#!/bin/sh
+# summary: name the rhythm in force in a unit and its next gate, read from the unit's last stamp
+# usage: ctx rhythm current <unit>
+# help: prints one line, read from the unit's last stamped entry in record order, open or closed: rhythm in force: <name> at <N> <GATE> (entry <slug>); next gate: <N+1> <GATE>: <outcome>
+# help: the other lines: rhythm completed: <name> at its last gate <N> <GATE> (entry <slug>); rhythm stale: <stamp> (entry <slug>) matches no step of the effective rhythm; read it: ctx rhythm show <name>; rhythm none in force in <unit>: the design loop runs until the human confirms a rhythm (ctx rhythm list)
+# help: the board ends with the same line; a stamped ctx unit record prints the next gate when it writes
+# help: a malformed unit refuses rc 1 before any read; a unit the store does not hold refuses rc 1 with the entry listing's own line
+# help: exit codes: 0 the line printed; 1 a malformed or missing unit
+# help: example: ctx rhythm current my-unit
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+drawer=$(CDPATH= cd -- "$dir/../../../.." && pwd)
+root=$(CDPATH= cd -- "$drawer/.." && pwd)
+bin="${CTX_BIN:-$root/.contexture/ctx}"
+
+case "${1:-}" in
+  --help|-h) [ $# -eq 1 ] && exec "$bin" rhythm help current ;;
+esac
+if [ $# -ne 1 ]; then
+  printf 'Usage: ctx rhythm current <unit>\n' >&2
+  printf 'help: ctx rhythm help\n' >&2
+  exit 1
+fi
+unit=$1
+case "$unit" in
+  ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*)
+    printf "rhythm current: error: malformed unit '%s' (ERR_INVALID_ARGUMENT)\n" "$unit" >&2
+    exit 1
+    ;;
+esac
+
+json="$drawer/modules/unit/lib/json.awk"
+if [ ! -f "$json" ]; then
+  printf 'rhythm current: error: the unit module is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+  exit 2
+fi
+answer=$("$bin" unit entry list "$unit" --json < /dev/null) || exit $?
+last=$(printf '%s\n' "$answer" | awk -f "$json" | awk '
+  function dec(s,   o, i, n, c) {
+    o = ""; n = length(s)
+    for (i = 1; i <= n; i++) {
+      c = substr(s, i, 1)
+      if (c == "\\" && i < n) {
+        i++; c = substr(s, i, 1)
+        if (c == "n") c = "\n"; else if (c == "t") c = "\t"; else if (c == "r") c = "\r"
+      }
+      o = o c
+    }
+    return o
+  }
+  /^entries\.[0-9]+\.(slug|rhythm)=/ {
+    p = $0; sub(/^entries\./, "", p); k = p; sub(/\..*$/, "", k)
+    f = p; sub(/^[0-9]+\./, "", f); v = f; sub(/^[a-z]+=/, "", v); sub(/=.*$/, "", f)
+    if (f == "slug") S[k] = v
+    else { R[k] = v; at = k }
+  }
+  END { if (at != "") printf "%s\n%s\n", dec(S[at]), dec(R[at]) }') || exit 2
+
+resolve="$dir/resolve"
+if [ -z "$last" ]; then
+  sh "$resolve" --state "$unit"
+else
+  slug=$(printf '%s\n' "$last" | sed -n 1p)
+  stamp=$(printf '%s\n' "$last" | sed -n '2,$p')
+  sh "$resolve" --state "$unit" "$slug" "$stamp"
+fi

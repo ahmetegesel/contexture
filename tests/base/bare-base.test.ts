@@ -28,15 +28,16 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
     expect(runnable(join(sb, '.contexture/storage/drivers/posix/driver'))).toBe(true);
   });
 
-  it('[the-engine-r1, modules-r14] help lists the unit module, then the extension-root lane module, and never the storage core', async () => {
+  it('[the-engine-r1, modules-r14] help lists the unit module, then the extension-root lane and rhythm modules, and never the storage core', async () => {
     const sb = bare();
     const help = await ctx(sb, 'help');
     expect(help.code).toBe(0);
-    expect(modules(help.stdout)).toEqual(['unit', 'lane']);
+    expect(modules(help.stdout)).toEqual(['unit', 'lane', 'rhythm']);
     const all = await ctx(sb, 'help', '--all');
     expect(all.code).toBe(0);
     expect(all.stdout).toContain('module unit:');
     expect(all.stdout).toContain('module lane:');
+    expect(all.stdout).toContain('module rhythm:');
     expect(all.stdout).not.toContain('module storage:');
   });
 

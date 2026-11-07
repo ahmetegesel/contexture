@@ -45,14 +45,14 @@ describe('the payload path tables', () => {
       expect(tracked.some((p) => p.startsWith(root))).toBe(true);
     });
 
-    it('[modules-r1] the payload modules are exactly lane, run, and unit; the storage core is not a module', () => {
+    it('[modules-r1] the payload modules are exactly lane, rhythm, run, and unit; the storage core is not a module', () => {
       const modules = new Set<string>();
       for (const p of tracked) {
         const parts = p.split('/');
         if (parts[1] === '.contexture' && parts[2] === 'modules' && parts.length > 4) modules.add(parts[3]);
         if (parts[1] === '.contexture' && parts[2] === 'extensions' && parts[3] === 'modules' && parts.length > 5) modules.add(parts[4]);
       }
-      expect([...modules].sort()).toEqual(['lane', 'run', 'unit']);
+      expect([...modules].sort()).toEqual(['lane', 'rhythm', 'run', 'unit']);
     });
   });
 });

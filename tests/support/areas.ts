@@ -22,6 +22,7 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['base/.contexture/modules/run/**', ['filters', 'engine', 'toolchain-filters', 'governance']],
   ['base/.contexture/modules/unit/**', ['unit-record', 'unit-verbs', 'hooks', 'base', 'integration', 'sqlite-smoke', 'governance']],
   ['base/.contexture/extensions/modules/lane/**', ['unit-verbs', 'base', 'integration', 'governance']],
+  ['base/.contexture/extensions/modules/rhythm/**', ['unit-verbs', 'base', 'packages', 'laws', 'engine', 'integration', 'governance']],
   ['base/.contexture/storage/**', ['drivers', 'storage-fts5', 'unit-record', 'base', 'integration', 'sqlite-smoke', 'docs-discipline', 'governance']],
   ['plugins/*/manifest', ['packages', 'governance']],
   ['plugins/*/.contexture/**', ['governance']],

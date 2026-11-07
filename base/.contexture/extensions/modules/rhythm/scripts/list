@@ -1,0 +1,48 @@
+#!/bin/sh
+# summary: list the rhythms with their triggers and activations, then the select line that says what to do with them
+# usage: ctx rhythm list
+# help: one line per effective rhythm, <name> | <origin> | use when: <trigger> | activation: <propose|auto>: the workspace's own rhythms first, then the installed ones, each in name order; a name in both lists once, as the workspace copy, its origin reading workspace, shadows the extension copy
+# help: the last line is the select line: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop; read a rhythm with ctx rhythm show <name>
+# help: a grammar defect of a listed rhythm warns on stderr (rhythm list: warning: <name> (<origin>): <defect>) and the rhythm still lists, named by its file name, a missing use when reading (missing) and an activation other than propose or auto read as propose; a file holding no @rhythm line is no rhythm and warns that it holds none
+# help: with no rhythm at all it prints the select line alone, rc 0
+# help: exit codes: 0 the list printed; 1 an argument given
+# help: example: ctx rhythm list
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+root=$(CDPATH= cd -- "$dir/../../../../.." && pwd)
+
+case "${1:-}" in
+  --help|-h) [ $# -eq 1 ] && exec "${CTX_BIN:-$root/.contexture/ctx}" rhythm help list ;;
+esac
+if [ $# -ne 0 ]; then
+  printf 'Usage: ctx rhythm list\n' >&2
+  printf 'help: ctx rhythm help\n' >&2
+  exit 1
+fi
+
+resolve="$dir/resolve"
+sh "$resolve" --all | while IFS= read -r line; do
+  case "$line" in
+    skipped*)
+      printf '%s\n' "$line" | awk -F '	' '{ printf "rhythm list: warning: %s (%s): no @rhythm line\n", $2, $3 > "/dev/stderr" }'
+      ;;
+    *)
+      sh "$resolve" "$line" | RL_NAME=$line awk -F '	' '
+        { v = substr($0, length($1) + 2) }
+        $1 == "origin" { o = v }
+        $1 == "shadows" { s = v }
+        $1 == "use" { u = v }
+        $1 == "activation" { a = v }
+        $1 == "defect" { d[++nd] = v }
+        END {
+          shown = o
+          if (s == "yes") shown = o ", shadows the extension copy"
+          if (u == "") u = "(missing)"
+          if (a != "auto") a = "propose"
+          printf "%s | %s | use when: %s | activation: %s\n", ENVIRON["RL_NAME"], shown, u, a
+          for (i = 1; i <= nd; i++) printf "rhythm list: warning: %s (%s): %s\n", ENVIRON["RL_NAME"], o, d[i] > "/dev/stderr"
+        }'
+      ;;
+  esac
+done
+printf '%s\n' "select: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop (@rhythms default); read a rhythm with ctx rhythm show <name>"

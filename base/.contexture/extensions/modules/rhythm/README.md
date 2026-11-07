@@ -1,0 +1,24 @@
+# rhythm: the process surface
+
+The rhythm module ships with the base in the extension root, beside the lane module. A rhythm is a workflow pattern: an `@rhythm <name>` line, a `use when:` trigger line, an `activation:` line (`propose` or `auto`), and numbered steps `N. GATE: outcome`. The module lists the workspace's and the installed rhythms, prints one whole, and names the rhythm in force in a unit with its next gate, so an agent selects, reads, and resumes a rhythm through ctx and never reads a rhythm file by its path. It holds no laws file (the rhythm law stays in the core's `@rhythms`) and no data file (it reads no store).
+
+## Verbs
+
+- `ctx rhythm list`: one line per effective rhythm, `<name> | <origin> | use when: <trigger> | activation: <propose|auto>`, the workspace's own rhythms first and the installed ones after them, each in name order; a name both carry lists once, as the workspace copy, its origin reading `workspace, shadows the extension copy`. The last line is the select line, which says what to do with the list: a propose match is proposed and waits for the human's confirm, an auto match applies and says so, no match runs the design loop (the `@rhythms` default), and `ctx rhythm show <name>` reads a rhythm. A grammar defect of a listed rhythm warns on stderr, `rhythm list: warning: <name> (<origin>): <defect>`, and the rhythm still lists, named by its file name; a file holding no `@rhythm` line is no rhythm and warns `<name> (<origin>): no @rhythm line`. With no rhythm at all the verb prints the select line alone, rc 0; an argument refuses rc 1.
+- `ctx rhythm show <name>`: the effective copy byte for byte (the workspace copy when it shadows an installed one), then the stamp line, `stamp: ctx unit record <unit> --rhythm="<name> <N> <GATE>" on each entry that advances this rhythm`. A name no rhythm carries refuses rc 1 (`ERR_ENTITY_NOT_FOUND`); a malformed name (a slash, a leading dot) refuses rc 1 before any read (`ERR_INVALID_ARGUMENT`).
+- `ctx rhythm current <unit>`: one line from the unit's last stamped entry in record order, open or closed, read through `ctx unit entry list <unit> --json` and the unit module's flattener, never a search snippet: `rhythm in force: <name> at <N> <GATE> (entry <slug>); next gate: <N+1> <GATE>: <outcome>`, `rhythm completed: <name> at its last gate <N> <GATE> (entry <slug>)`, `rhythm stale: <stamp> (entry <slug>) matches no step of the effective rhythm; read it: ctx rhythm show <name>` (a step that no longer reads its gate, a rhythm that no longer resolves, or a legacy stamp of another shape), or `rhythm none in force in <unit>: the design loop runs until the human confirms a rhythm (ctx rhythm list)`. A malformed unit refuses rc 1 before any read; a unit the store does not hold refuses with the listing's own line.
+
+Each verb answers a sole `--help` or `-h` with the table `ctx rhythm help <verb>` prints.
+
+## The private resolve
+
+`scripts/resolve` carries no summary line, so ctx never lists or dispatches it; it is run by path, by this module's verbs, by the unit verb library (the stamp check of `ctx unit record` and `ctx lane create`, and the board's closing line), and by the governance grammar census, so every caller shares one rule and the unit module never parses a rhythm file. It reads the two rhythm roots of the drawer it sits in: the workspace copy of `<name>` first, else the installed copy; a name failing the slug rule refuses before any read.
+
+- `resolve <name>`: tab separated lines, in order: `origin` (workspace or extension), `shadows` (yes or no), `declared` (the `@rhythm` value), `use`, `activation` (each empty when absent), one `step <k> <gate> <outcome>` per step line in file order, and one `defect <text>` per grammar defect; rc 1 with one stderr line for a missing or malformed name.
+- `resolve --all`: the effective names in list order, then one `skipped <name> <origin>` line per file holding no `@rhythm` line.
+- `resolve --body <name>`: the effective copy's bytes, which `show` prints.
+- `resolve --state <unit> [<slug> <stamp>]`: the one line `current` and the board print.
+
+## The grammar
+
+A step line is any line opening with a number, a dot, and a blank; its gate is the text between the dot and the first colon, trimmed, and must read `[A-Z][A-Z_+]*`, the stamp grammar; the step numbers in file order run 1 to N with no gap or repeat; every other line (a `ground:` line, prose) is free. The defects: no use when line; an activation that is neither propose nor auto (read as propose); an `@rhythm` name that is not the file name; the steps breaking their 1 to N order; a gate outside the stamp grammar (a step line with a malformed gate counts once, never also as a gap); no step line. A missing activation line reads propose with no defect, as the `@rhythms` activation law makes it the default.

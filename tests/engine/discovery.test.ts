@@ -29,7 +29,7 @@ describe.concurrent('discovery over both module roots', () => {
   it('CT-XR1 [the-engine-r1, modules-r14]: the workspace modules list before the extension modules, each root in byte order; collisions stay unlisted', () => {
     expect(help.stdout).toContain('an extension fixture module');
     for (const hidden of ['the extension good that must not shadow', 'a reserved extension module', 'a builtin collision']) expect(help.stdout).not.toContain(hidden);
-    expect(listed(help.stdout)).toEqual(['good', 'unit', 'aaaext', 'filterext', 'hookext', 'lane']);
+    expect(listed(help.stdout)).toEqual(['good', 'unit', 'aaaext', 'filterext', 'hookext', 'lane', 'rhythm']);
   });
 
   it('CT-XR1 [the-engine-r1, modules-r14, modules-r6]: the workspace name, builtin, and reserved collisions in the extension root warn', () => {

@@ -1,0 +1,170 @@
+#!/bin/sh
+# resolve: the rhythm module's one rule, private (no summary line, so ctx never lists or
+# dispatches it) and run by path: by the module's verbs, by the unit verb library for
+# ctx unit record, ctx lane create, and the board, and by the governance census. It reads the
+# two rhythm roots of the drawer it sits in, the workspace root first, then the extension root.
+#   resolve <name>                           the answer lines below, rc 0; rc 1 naming the miss
+#   resolve --all                            the effective names in list order, one per line,
+#                                            then skipped TAB <name> TAB <origin> per file
+#                                            holding no @rhythm line
+#   resolve --body <name>                    the effective copy, byte for byte
+#   resolve --state <unit> [<slug> <stamp>]  the one line naming the rhythm in force
+# The answer: origin TAB workspace|extension; shadows TAB yes|no; declared TAB <@rhythm value>;
+# use TAB <use when value>; activation TAB <activation value>; step TAB <k> TAB <gate> TAB
+# <outcome> per step line in file order; defect TAB <text> per grammar defect.
+
+LC_ALL=C
+export LC_ALL
+drawer=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." 2>/dev/null && pwd) || exit 2
+WS="$drawer/rhythms"
+EXT="$drawer/extensions/rhythms"
+
+# the grammar: an @rhythm line, a use when line, an activation line (propose or auto, propose
+# when absent), and step lines N. GATE: outcome numbered 1 to N with gates in the stamp grammar
+RZ_PARSE='
+function trim(s) { sub(/^[ \t]+/, "", s); sub(/[ \t]+$/, "", s); return s }
+BEGIN { name = ENVIRON["RZ_NAME"]; ns = 0 }
+!seen && /^@rhythm[ \t]+[^ \t]/ { seen = 1; declared = trim(substr($0, 8)); next }
+!hasuse && /^  use when:/ { hasuse = 1; use = trim(substr($0, index($0, ":") + 1)); next }
+!hasact && /^  activation:/ { hasact = 1; act = trim(substr($0, index($0, ":") + 1)); next }
+/^[ \t]*[0-9]+\.[ \t]/ {
+  s = $0
+  sub(/^[ \t]+/, "", s)
+  k = s
+  sub(/\..*$/, "", k)
+  r = substr(s, length(k) + 2)
+  c = index(r, ":")
+  if (c) { g = trim(substr(r, 1, c - 1)); o = trim(substr(r, c + 1)) } else { g = trim(r); o = "" }
+  ns++
+  K[ns] = k + 0; G[ns] = g; OC[ns] = o
+}
+END {
+  printf "declared\t%s\nuse\t%s\nactivation\t%s\n", declared, use, act
+  for (i = 1; i <= ns; i++) printf "step\t%d\t%s\t%s\n", K[i], G[i], OC[i]
+  if (!hasuse) print "defect\tno use when line"
+  if (hasact && act != "propose" && act != "auto") printf "defect\tactivation '\''%s'\'' is neither propose nor auto, read as propose\n", act
+  if (declared != name) printf "defect\tits @rhythm line names '\''%s'\''\n", declared
+  want = 1
+  for (i = 1; i <= ns; i++) {
+    if (K[i] != want) printf "defect\tthe steps break their 1 to N order at step %d\n", K[i]
+    want = K[i] + 1
+    if (G[i] !~ /^[A-Z][A-Z_+]*$/) printf "defect\tstep %d gate '\''%s'\'' is outside the stamp grammar\n", K[i], G[i]
+  }
+  if (!ns) print "defect\tno step line"
+}'
+
+name_ok() {
+  case "$1" in
+    ""|[!A-Za-z0-9]*|*[!A-Za-z0-9_-]*) return 1 ;;
+  esac
+  return 0
+}
+
+is_rhythm() {
+  [ -f "$1" ] && grep -q '^@rhythm[[:blank:]][[:blank:]]*[^[:blank:]]' "$1" 2>/dev/null
+}
+
+# locate <name>: the effective copy (RZ_FILE), its origin, and whether it shadows the other root
+locate() {
+  RZ_FILE=""; RZ_ORIGIN=""; RZ_SHADOWS=no
+  if is_rhythm "$WS/$1.md"; then
+    RZ_FILE="$WS/$1.md"; RZ_ORIGIN=workspace
+    is_rhythm "$EXT/$1.md" && RZ_SHADOWS=yes
+  elif is_rhythm "$EXT/$1.md"; then
+    RZ_FILE="$EXT/$1.md"; RZ_ORIGIN=extension
+  else
+    return 1
+  fi
+  return 0
+}
+
+refuse_name() {
+  if ! name_ok "$1"; then
+    printf "rhythm: error: malformed rhythm name '%s' (ERR_INVALID_ARGUMENT)\n" "$1" >&2
+    exit 1
+  fi
+  if ! locate "$1"; then
+    printf 'rhythm: error: no such rhythm: %s (ctx rhythm list names them) (ERR_ENTITY_NOT_FOUND)\n' "$1" >&2
+    exit 1
+  fi
+}
+
+answer() {
+  printf 'origin\t%s\nshadows\t%s\n' "$RZ_ORIGIN" "$RZ_SHADOWS"
+  RZ_NAME=$1 awk "$RZ_PARSE" "$RZ_FILE"
+}
+
+all() {
+  for rz_root in "$WS" "$EXT"; do
+    [ "$rz_root" = "$WS" ] && rz_origin=workspace || rz_origin=extension
+    [ -d "$rz_root" ] || continue
+    for rz_f in "$rz_root"/*.md; do
+      [ -f "$rz_f" ] || continue
+      rz_n=${rz_f##*/}
+      rz_n=${rz_n%.md}
+      name_ok "$rz_n" || continue
+      if [ "$rz_origin" = extension ] && is_rhythm "$WS/$rz_n.md"; then continue; fi
+      if is_rhythm "$rz_f"; then
+        printf '%s\n' "$rz_n"
+      else
+        RZ_SKIPPED="${RZ_SKIPPED}skipped	$rz_n	$rz_origin
+"
+      fi
+    done
+  done
+  printf '%s' "${RZ_SKIPPED:-}"
+}
+
+state() {
+  rz_unit=$1
+  if [ $# -lt 3 ]; then
+    printf 'rhythm none in force in %s: the design loop runs until the human confirms a rhythm (ctx rhythm list)\n' "$rz_unit"
+    return 0
+  fi
+  rz_slug=$2
+  rz_stamp=$3
+  set -f
+  # shellcheck disable=SC2086
+  set -- $rz_stamp
+  set +f
+  rz_first=${1:-}
+  if [ $# -eq 3 ] && name_ok "$1" && locate "$1"; then
+    rz_line=$(answer "$1" | RS_NAME=$1 RS_N=$2 RS_G=$3 RS_SLUG=$rz_slug awk -F '	' '
+      $1 == "step" { n++; K[n] = $2; G[n] = $3; o = $4; for (j = 5; j <= NF; j++) o = o "\t" $j; O[n] = o }
+      END {
+        for (i = 1; i <= n; i++) if (K[i] + 0 == ENVIRON["RS_N"] + 0) break
+        if (i > n || G[i] != ENVIRON["RS_G"]) exit
+        if (i == n) { printf "rhythm completed: %s at its last gate %s %s (entry %s)\n", ENVIRON["RS_NAME"], K[i], G[i], ENVIRON["RS_SLUG"]; exit }
+        printf "rhythm in force: %s at %s %s (entry %s); next gate: %s %s", ENVIRON["RS_NAME"], K[i], G[i], ENVIRON["RS_SLUG"], K[i + 1], G[i + 1]
+        if (O[i + 1] != "") printf ": %s", O[i + 1]
+        printf "\n"
+      }')
+    if [ -n "$rz_line" ]; then
+      printf '%s\n' "$rz_line"
+      return 0
+    fi
+  fi
+  printf 'rhythm stale: %s (entry %s) matches no step of the effective rhythm; read it: ctx rhythm show %s\n' "$rz_stamp" "$rz_slug" "$rz_first"
+}
+
+case "${1:-}" in
+  --all)
+    [ $# -eq 1 ] || exit 1
+    all
+    ;;
+  --body)
+    [ $# -eq 2 ] || exit 1
+    refuse_name "$2"
+    cat "$RZ_FILE"
+    ;;
+  --state)
+    [ $# -eq 2 ] || [ $# -eq 4 ] || exit 1
+    shift
+    state "$@"
+    ;;
+  *)
+    [ $# -eq 1 ] || exit 1
+    refuse_name "$1"
+    answer "$1"
+    ;;
+esac

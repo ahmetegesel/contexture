@@ -1,4 +1,4 @@
-# contexture v0.69.0: generated law layer; core cksum 2857089068-12979; sources 2771815065-29505; never edit
+# contexture v0.69.0: generated law layer; core cksum 2857089068-12979; sources 1603231258-29819; never edit
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -39,6 +39,14 @@
   recipe, journal, and report apart from the main record, so a dispatch
   trace never contaminates the unit's journal.
   help: ctx lane help
+
+@module rhythm
+  summary: the rhythms: list them, show one, and name the rhythm in force
+  The rhythm module is the process surface: it lists the workspace's and the
+  installed rhythms with their triggers and activations, prints one rhythm
+  whole, and names the rhythm in force in a unit with its next gate, so an
+  agent selects, reads, and resumes a rhythm through ctx, never by a path.
+  help: ctx rhythm help
 
 @record
   unit of work = the unit; outlives working periods, dies with the unit; shapes defined in @record; this section: the map: what each artifact records and why; the workflows live in their sections.

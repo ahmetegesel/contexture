@@ -1,0 +1,7 @@
+# summary: the rhythms: list them, show one, and name the rhythm in force
+# version: 1.0.0
+# description:
+# The rhythm module is the process surface: it lists the workspace's and the
+# installed rhythms with their triggers and activations, prints one rhythm
+# whole, and names the rhythm in force in a unit with its next gate, so an
+# agent selects, reads, and resumes a rhythm through ctx, never by a path.
