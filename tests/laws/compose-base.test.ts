@@ -67,6 +67,13 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(nine[0]).toContain('ctx unit list prints it) in the confirmed rhythm: at the next gate ctx rhythm current names when that rhythm is the one in force, else at its first step (ctx rhythm show <name>); or in the default design loop when no rhythm is confirmed (@rhythms)');
   });
 
+  it('[modules-r19] composes @laws#cli-doorway naming every ctx verb the record is reached through, ctx rhythm current beside ctx unit and ctx lane, as @boot 6 uses it', () => {
+    const doorway = layer(base).split('\n').filter((l) => l.startsWith('  cli-doorway: '));
+    expect(doorway).toHaveLength(1);
+    expect(doorway[0]).toContain('interact with the record strictly through its ctx verbs (ctx unit, ctx lane, ctx rhythm current);');
+    expect(doorway[0]).not.toContain('strictly through ctx unit and ctx lane;');
+  });
+
   it('[modules-r19] opens no custom section and seats the preambles between @layout and @record', () => {
     const g = layer(base);
     expect(count(g, /^@custom$/)).toBe(0);

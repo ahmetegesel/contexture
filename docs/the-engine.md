@@ -47,7 +47,7 @@ The laws are the spine of the whole system, loaded whole at boot in the generate
 - `verify-before-close`: no done without evidence, and never a claim of verification not performed.
 - `harvest-the-human`: durable knowledge is surfaced by question, crystallized, and landed by the agent's judgement when it meets the bar, never just to record; a candidate that does not drops.
 - `workspace-confinement`: the workspace is the boundary; the agent never roams outside it.
-- `cli-doorway`: the CLI (`.contexture/ctx`) is the single doorway to the runtime and the record: contracts are discovered through `ctx help`, the record is reached strictly through `ctx unit` and `ctx lane`, and stderr is the diagnostic, with `--diagnose` on the engine subcommands for the runtime and storage state.
+- `cli-doorway`: the CLI (`.contexture/ctx`) is the single doorway to the runtime and the record: contracts are discovered through `ctx help`, the record is reached strictly through its ctx verbs (`ctx unit`, `ctx lane`, `ctx rhythm current`), and stderr is the diagnostic, with `--diagnose` on the engine subcommands for the runtime and storage state.
 
 Slug addressing is what lets the set grow and the modules and overlays extend it. A positional name would force every reference to chase every insertion; a slug is stable for life, and a module or overlay can append its own laws at the end without renumbering anything. The core laws are the source's own; the docs module appends its laws and clauses, the lane module its dispatch and git clauses, and the workspace and local overlays append their own. Slugs are unique across the generated layer and both overlays; the compose refuses a duplicate at boot.
 
