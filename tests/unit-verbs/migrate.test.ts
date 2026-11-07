@@ -1,10 +1,10 @@
-import { cpSync, existsSync, mkdirSync, renameSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { fresh, seed } from '../support/snapshot';
 import { fts5Available, stage } from '../support/stage';
-import { must, seedUnit, unit } from '../support/unit';
+import { must, run, seedUnit, unit } from '../support/unit';
 
 const WARNING = 'WARNING: the record was read from its deprecated root; move it: ctx unit migrate --all\n';
 
@@ -76,6 +76,23 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     expect(await unit(legacy, 'migrate', 'leg-u')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
   });
 
+  it('[the-record-r-4gj4k] a landing write makes one store call, as before the root move: a record on a unit in the root and on a unit in the fallback each reach the resolver for its two reads and its one batch alone', async () => {
+    const sb = fresh(snap);
+    toFallback(sb, 'leg-u');
+    const log = join(sb, 'resolver-calls');
+    const counting = join(sb, 'counting-resolver');
+    writeFileSync(counting, '#!/bin/sh\nprintf \'%s\\n\' "$1" >> "$COUNT_LOG"\nexec "$REAL_RESOLVER" "$@"\n', { mode: 0o755 });
+    const env = { CTX_STORE_RESOLVER: counting, COUNT_LOG: log, REAL_RESOLVER: join(sb, '.contexture/storage/scripts/driver-resolver') };
+    const calls = async (slug: string): Promise<string[]> => {
+      writeFileSync(log, '');
+      await must(run(sb, ['unit', 'record', slug, '--what=a counted write'], { env }));
+      return readFileSync(log, 'utf8').split('\n').filter(Boolean);
+    };
+    expect(await calls('new-u')).toEqual(['store.get', 'store.get', 'store.batch']);
+    expect(await calls('leg-u')).toEqual(['store.get', 'store.get', 'store.batch']);
+    expect(held(sb, 'leg-u')).toEqual([true, false]);
+  });
+
   it('[the-record-r-4gj4k] ctx unit migrate on a legacy unit leaves the load, board, and audit stdout byte identical, the stderr losing only the warning', async () => {
     const sb = fresh(snap);
     toFallback(sb, 'leg-u');
@@ -119,13 +136,13 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     expect(held(sb, 'shut-u')).toEqual([true, true]);
   });
 
-  it('[the-record-r-4gj4k] a promotion refusal refuses the write and writes nothing', async () => {
+  it('[the-record-r-4gj4k] a write to a unit both roots hold refuses with the store\'s line and writes nothing', async () => {
     const sb = fresh(snap);
     toFallback(sb, 'leg-u');
     mkdirSync(join(sb, RECORD_ROOT, 'leg-u'));
     const r = await unit(sb, 'record', 'leg-u', '--what=a write that cannot promote');
     expect(r.code).toBe(1);
-    expect(r.stderr).toBe("entry.record: error: unit 'leg-u': key prefix 'leg-u/' is held in both roots of namespace 'unit' (ERR_ENTITY_EXISTS)\n");
+    expect(r.stderr).toBe("entry.record: error: action 1 (put 'leg-u/journal'): key prefix 'leg-u/' is held in both roots of namespace 'unit' (ERR_ENTITY_EXISTS)\n");
     expect((await unit(sb, 'load', 'leg-u')).stdout).not.toContain('a write that cannot promote');
   });
 

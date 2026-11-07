@@ -12,9 +12,12 @@
 # A namespace may declare a fallback root, a deprecated root the store reads after its
 # root and never writes: get, list, scan, search, and the key probe read the root first,
 # then the fallback, the root's copy shadowing; put and batch write the root alone, and a
-# delete removes the key from both. A call that served a key from the fallback and
-# answers rc 0 prints one notice line on stderr naming the function and the namespace.
-# The optional store.promote moves a whole key prefix from the fallback to the root.
+# delete removes the key from both. Under the namespace lock a put, a delete, and a batch
+# first move each written key's top segment folder from the fallback to the root when the
+# fallback alone holds it (one rename; both roots holding it refuses). A call that served
+# a key from the fallback and answers rc 0 prints one notice line on stderr naming the
+# function and the namespace. The optional store.promote moves a whole key prefix from the
+# fallback to the root.
 #
 # Writes: the namespace lock (.contexture/tmp/locks/store-<namespace>.lock, carrying its
 # holder pid) is held across the batch or put, each put is a same-directory temp renamed
@@ -604,6 +607,29 @@ store_get() {
   store_notice
 }
 
+# store_lift <folder>: the fallback root's folder (a key prefix without its slash) moved to
+# the root by one rename, under the namespace lock the caller holds; rc 0 when it moved or
+# the fallback holds no such folder (a namespace without a fallback checks no folder), rc 1
+# when the root holds it too, rc 2 when the move failed. The caller frames the refusal.
+store_lift() {
+  [ -n "$SD_FALLBACK" ] && [ -d "$STORE_WS/$SD_FALLBACK/$1" ] || return 0
+  lf_to="$STORE_WS/$SD_ROOT/$1"
+  [ -e "$lf_to" ] && return 1
+  { [ -d "${lf_to%/*}" ] || mkdir -p "${lf_to%/*}"; } 2>/dev/null || return 2
+  mv "$STORE_WS/$SD_FALLBACK/$1" "$lf_to" 2>/dev/null || return 2
+}
+
+# store_lift_for <namespace> <key>: store_lift of the key's top segment folder before a put
+# or a delete writes it, a refusal in the function's own frame
+store_lift_for() {
+  store_lift "${2%%/*}"
+  case $? in
+    0) return 0 ;;
+    1) store_unlock; refuse 1 ERR_ENTITY_EXISTS "key prefix '${2%%/*}/' is held in both roots of namespace '$1'" ;;
+    *) store_unlock; refuse 2 ERR_STORAGE_WRITE "the move of key prefix '${2%%/*}/' in namespace '$1' failed" ;;
+  esac
+}
+
 store_put() {
   FN=store.put
   [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.put takes the namespace, the key, and optional flags"
@@ -628,6 +654,7 @@ store_put() {
     store_unlock
     store_fold_refusal "$sp_ns" "$sp_key" "$sp_fold"
   fi
+  store_lift_for "$sp_ns" "$sp_key"
   mkdir -p "$(dirname "$sp_path")" 2>/dev/null || {
     store_unlock
     refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
@@ -673,6 +700,7 @@ store_delete() {
     store_unlock
     refuse 1 ERR_ENTITY_NOT_FOUND "key '$sx_key' not found in namespace '$sx_ns'"
   fi
+  store_lift_for "$sx_ns" "$sx_key"
   for sx_path in "$(store_path "$sx_key")" ${SD_FALLBACK:+"$STORE_WS/$SD_FALLBACK/$sx_key$SD_SUFFIX"}; do
     if ! rm -f "$sx_path" 2>/dev/null || [ -e "$sx_path" ]; then
       store_unlock
@@ -851,6 +879,25 @@ batch_validate() {
   done < "$STORE_BATCH_STAGE/man"
 }
 
+# batch_lift: each action's top key segment folder moved from the fallback root to the root
+# (store_lift) after the validation and before the commit, each folder checked once; a
+# folder both roots hold refuses with the action's line and nothing written
+batch_lift() {
+  [ -n "$SD_FALLBACK" ] || return 0
+  bl_last=""
+  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
+    bl_top=${sb_key%%/*}
+    [ "$bl_top" = "$bl_last" ] && continue
+    bl_last=$bl_top
+    store_lift "$bl_top"
+    case $? in
+      0) ;;
+      1) batch_refuse 1 "$sb_i" "$sb_op" "$sb_key" ERR_ENTITY_EXISTS "key prefix '$bl_top/' is held in both roots of namespace '$SB_NS'" ;;
+      *) batch_refuse 2 "$sb_i" "$sb_op" "$sb_key" ERR_STORAGE_WRITE "the move of key prefix '$bl_top/' in namespace '$SB_NS' failed" ;;
+    esac
+  done < "$STORE_BATCH_STAGE/man"
+}
+
 # sb_note <f|d> <path> <backup>: one undo step; the store-scope log the batch commits under.
 # A step the log cannot hold answers nonzero before its change is made, so a rollback never
 # misses a landed step
@@ -938,6 +985,7 @@ store_batch() {
   batch_parse
   store_lock "$SB_NS"
   batch_validate
+  batch_lift
   batch_commit
   store_cleanup
   printf '{"namespace":"%s","actions":%s}\n' "$(escape_json "$SB_NS")" "$SB_N"
@@ -1116,15 +1164,12 @@ store_promote() {
   pm_src="$STORE_WS/$SD_FALLBACK/${pm_prefix%/}"
   if [ -n "$SD_FALLBACK" ] && [ -d "$pm_src" ]; then
     store_lock "$pm_ns"
-    pm_dst="$STORE_WS/$SD_ROOT/${pm_prefix%/}"
-    if [ -e "$pm_dst" ]; then
-      store_unlock
-      refuse 1 ERR_ENTITY_EXISTS "key prefix '$pm_prefix' is held in both roots of namespace '$pm_ns'"
-    fi
-    if ! mkdir -p "$(dirname "$pm_dst")" 2>/dev/null || ! mv "$pm_src" "$pm_dst" 2>/dev/null; then
-      store_unlock
-      refuse 2 ERR_STORAGE_WRITE "the move of key prefix '$pm_prefix' in namespace '$pm_ns' failed"
-    fi
+    store_lift "${pm_prefix%/}"
+    case $? in
+      0) ;;
+      1) store_unlock; refuse 1 ERR_ENTITY_EXISTS "key prefix '$pm_prefix' is held in both roots of namespace '$pm_ns'" ;;
+      *) store_unlock; refuse 2 ERR_STORAGE_WRITE "the move of key prefix '$pm_prefix' in namespace '$pm_ns' failed" ;;
+    esac
     store_unlock
     pm_state=moved
   fi

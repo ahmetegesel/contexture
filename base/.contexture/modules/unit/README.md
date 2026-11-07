@@ -111,12 +111,15 @@ any bound, since the polling lock keeps no queue.
 The data file declares the root `.contexture/units` and the fallback root
 `.contexture/sessions`, the root releases before the move wrote. The posix store reads a
 unit from the root first, then from the fallback; nothing else in the module knows the
-folders. `u_commit` promotes the unit before its one `store.batch`, under the unit lock
-every write path holds: when `store_has store.promote` answers 0 it runs
-`store.promote unit <unit>/`, `moved` or `none` going on to the batch and a refusal (the
-unit held in both roots) refusing the write with the store's message, re-framed as
-`<function>: error: unit '<unit>': <message>`, and nothing written. So only a landing
-write moves a unit: a refused write, and every write to a CLOSED unit, moves nothing.
+folders. The move is the store's own: `u_commit` makes its one `store.batch`, as before
+the move, and the posix driver, inside that call and under the namespace lock it already
+holds, moves the unit's folder from the fallback to the root by one rename before it
+writes, so a unit moves whole at its first landing write and a write stays one store call.
+A unit both roots hold refuses the write with the store's batch line, re-framed as
+`<function>: error: action 1 (put '<key>'): key prefix '<unit>/' is held in both roots of
+namespace 'unit' (ERR_ENTITY_EXISTS)`, and nothing written. So only a landing write moves
+a unit: a refused write, and every write to a CLOSED unit, refused before any store call,
+moves nothing.
 
 The store prints one notice line on a rc 0 answer it served from the fallback; the data
 script collects the rc 0 store stderr of `u_keys_all`, `u_keys_prefix`, `u_add_key`, and
@@ -129,7 +132,9 @@ relay it themselves.
 
 `unit.promote <unit>...|--all` stands outside the 35 operations, as `data_get` does: it
 checks every named unit is held (or lists every unit by its state key under `--all`),
-promotes each under its unit lock, stops at the first refusal, and answers
+promotes each under its unit lock through `store.promote unit <unit>/` (asking
+`store_has store.promote` once first), stops at the first refusal, re-framed as
+`unit.promote: error: unit '<unit>': <message>`, and answers
 `{"promote":true,"migrated":N}`, or `{"promote":false,"migrated":0}` under a driver
 without the token; the sweep prints no warning. `ctx unit migrate` is its verb.
 

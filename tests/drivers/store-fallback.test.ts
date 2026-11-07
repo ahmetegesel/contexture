@@ -23,7 +23,7 @@ function twoRoots(sb: string): void {
   plant(sb, 'old-root/b/state.md', 'old b\n');
 }
 
-describe('the posix fallback root: reads after the root, writes to the root alone, and the promotion', { concurrent: true }, () => {
+describe('the posix fallback root: reads after the root, writes to the root after moving the written folder there, and the promotion', { concurrent: true }, () => {
   let snap: string;
   beforeAll(async () => {
     snap = await seed(async (sb) => {
@@ -73,34 +73,49 @@ describe('the posix fallback root: reads after the root, writes to the root alon
     refused(await store(sb, 'posix').get('legacy', 'b/missing'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'b/missing' not found in namespace 'legacy'");
   });
 
-  it('[the-engine-r-b3r6t] a put writes the root alone, and the root\'s copy then shadows the fallback\'s', async () => {
+  it('[the-engine-r-b3r6t] a put to a key whose top folder the fallback alone holds first moves that folder to the root, its other keys and residue with it, then writes the root', async () => {
     const sb = fresh(snap);
     twoRoots(sb);
+    plant(sb, 'old-root/b/lanes/l/report.md', 'report\n');
+    plant(sb, 'old-root/b/.tmp.residue', 'a killed writer residue\n');
     const s = store(sb, 'posix');
-    answer(await s.put('legacy', 'b/state', 'new b\n'), 'store.put');
-    expect(readFileSync(join(sb, 'new-root/b/state.md'), 'utf8')).toBe('new b\n');
-    expect(readFileSync(join(sb, 'old-root/b/state.md'), 'utf8')).toBe('old b\n');
-    expect(await s.get('legacy', 'b/state')).toMatchObject({ code: 0, stdout: 'new b\n', stderr: '' });
+    answer(await s.put('legacy', 'b/journal', 'j\n'), 'store.put');
+    expect([existsSync(join(sb, 'old-root/b')), existsSync(join(sb, 'old-root/a/state.md'))]).toEqual([false, true]);
+    expect(['b/state.md', 'b/lanes/l/report.md', 'b/.tmp.residue', 'b/journal.md'].map((p) => readFileSync(join(sb, 'new-root', p), 'utf8'))).toEqual(['old b\n', 'report\n', 'a killed writer residue\n', 'j\n']);
+    expect(await s.get('legacy', 'b/state')).toMatchObject({ code: 0, stdout: 'old b\n', stderr: '' });
   });
 
-  it('[the-engine-r-b3r6t] a delete removes the key from both roots, so no old value resurfaces, and a fallback alone key deletes too', async () => {
+  it('[the-engine-r-b3r6t] a delete of a key the fallback alone holds moves its top folder to the root first and removes the key there, so no old value resurfaces', async () => {
     const sb = fresh(snap);
-    twoRoots(sb);
+    plant(sb, 'old-root/b/state.md', 'old b\n');
+    plant(sb, 'old-root/b/journal.md', 'old j\n');
     const s = store(sb, 'posix');
-    answer(await s.del('legacy', 'a/state'), 'store.delete');
-    expect([existsSync(join(sb, 'new-root/a/state.md')), existsSync(join(sb, 'old-root/a/state.md'))]).toEqual([false, false]);
-    refused(await s.get('legacy', 'a/state'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'a/state' not found in namespace 'legacy'");
     answer(await s.del('legacy', 'b/state'), 'store.delete');
-    expect(existsSync(join(sb, 'old-root/b/state.md'))).toBe(false);
+    expect([existsSync(join(sb, 'old-root/b')), existsSync(join(sb, 'new-root/b/state.md'))]).toEqual([false, false]);
+    expect(readFileSync(join(sb, 'new-root/b/journal.md'), 'utf8')).toBe('old j\n');
+    refused(await s.get('legacy', 'b/state'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'b/state' not found in namespace 'legacy'");
   });
 
-  it('[the-engine-r-b3r6t] a batch puts to the root alone and its delete removes both copies', async () => {
+  it('[the-engine-r-b3r6t] a batch moves each written top folder the fallback alone holds to the root before it commits, its puts and deletes then acting on the root', async () => {
     const sb = fresh(snap);
-    twoRoots(sb);
+    plant(sb, 'new-root/a/state.md', 'new a\n');
+    plant(sb, 'old-root/b/state.md', 'old b\n');
     const s = store(sb, 'posix');
     answer(await s.batch('legacy', batchPayload([{ action: 'delete', key: 'a/state' }, { action: 'put', key: 'b/journal', value: 'j\n' }, { action: 'delete', key: 'b/state' }])), 'store.batch');
-    expect(['new-root/a/state.md', 'old-root/a/state.md', 'old-root/b/state.md', 'old-root/b/journal.md'].map((p) => existsSync(join(sb, p)))).toEqual([false, false, false, false]);
+    expect(['new-root/a/state.md', 'old-root/b', 'new-root/b/state.md'].map((p) => existsSync(join(sb, p)))).toEqual([false, false, false]);
     expect(readFileSync(join(sb, 'new-root/b/journal.md'), 'utf8')).toBe('j\n');
+  });
+
+  it('[the-engine-r-b3r6t] a put, a delete, or a batch on a key whose top folder both roots hold refuses rc 1 ERR_ENTITY_EXISTS naming the prefix, nothing written or moved', async () => {
+    const sb = fresh(snap);
+    twoRoots(sb);
+    const s = store(sb, 'posix');
+    const both = "key prefix 'a/' is held in both roots of namespace 'legacy'";
+    refused(await s.put('legacy', 'a/journal', 'j\n'), 'store.put', 1, 'ERR_ENTITY_EXISTS', both);
+    refused(await s.del('legacy', 'a/state'), 'store.delete', 1, 'ERR_ENTITY_EXISTS', both);
+    refused(await s.batch('legacy', batchPayload([{ action: 'put', key: 'a/journal', value: 'j\n' }, { action: 'put', key: 'b/journal', value: 'j\n' }])), 'store.batch', 1, 'ERR_ENTITY_EXISTS', `action 1 (put 'a/journal'): ${both}`);
+    expect(['new-root/a/journal.md', 'new-root/b', 'old-root/b/journal.md'].map((p) => existsSync(join(sb, p)))).toEqual([false, false, false]);
+    expect(['new-root/a/state.md', 'old-root/a/state.md', 'old-root/b/state.md'].map((p) => readFileSync(join(sb, p), 'utf8'))).toEqual(['new a\n', 'old a\n', 'old b\n']);
   });
 
   it('[the-engine-r-b3r6t] store.promote moves a whole prefix from the fallback to the root in one rename, its residue with it, making the root', async () => {

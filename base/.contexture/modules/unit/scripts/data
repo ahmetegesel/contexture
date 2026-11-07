@@ -26,11 +26,12 @@
 # and a file pointer stay as stored, the forward-only rule of the two ref shapes.
 #
 # The store root moves gradually: the data file declares a fallback root the store reads
-# after its root. Every write lands through u_commit, which first promotes the unit (the
-# store's optional store.promote, under the unit lock), so a unit moves whole at its first
-# landing write; unit.promote, outside the record's 35 operations as data_get is, moves the
-# named units or every unit for ctx unit migrate. A run whose reads came from the fallback
-# and that ends rc 0 prints one warning line after its answer, naming the sweep.
+# after its root, and the posix store's own write moves a unit's folder from the fallback
+# to the root, so a unit moves whole at its first landing write with no call of its own;
+# unit.promote, outside the record's 35 operations as data_get is, moves the named units
+# or every unit for ctx unit migrate through the store's optional store.promote. A run
+# whose reads came from the fallback and that ends rc 0 prints one warning line after its
+# answer.
 #
 # Usage: data <function> [<args>...]   (the function wire of the storage contract)
 # Exit codes: 0 the answer; 1 a semantic refusal; 2 a storage or driver failure.
@@ -448,34 +449,12 @@ u_awk() {
   return 0
 }
 
-# u_promote <unit>: the unit's keys moved whole from the store's fallback root to its root
-# (store.promote) when the configured driver declares the capability, under the unit lock
-# the caller holds; U_PROMOTED reads moved or none; a refusal refuses the run with the
-# store's message, naming the unit, and nothing is written
-u_promote() {
-  U_PROMOTED=none
-  store_has store.promote < /dev/null 2>/dev/null || return 0
-  u_new "$U_SCR/promote.out" "$U_SCR/promote.err"
-  store_promote "$U_NS" "$1/" > "$U_SCR/promote.out" 2> "$U_SCR/promote.err" < /dev/null
-  up_rc=$?
-  if [ "$up_rc" -ne 0 ]; then
-    up_msg=$(head -n 1 "$U_SCR/promote.err" 2>/dev/null)
-    case "$up_msg" in
-      store.promote:\ error:\ *) up_msg=${up_msg#store.promote: error: } ;;
-    esac
-    [ -n "$up_msg" ] || up_msg="the store promotion failed (ERR_STORAGE_WRITE)"
-    printf '%s: error: unit '\''%s'\'': %s\n' "$FN" "$1" "$up_msg" >&2
-    exit "$up_rc"
-  fi
-  if grep -q '"state":"moved"' "$U_SCR/promote.out" 2>/dev/null; then U_PROMOTED=moved; fi
-  return 0
-}
-
 # u_unit_promote <unit>...|--all: outside the record's 35 operations, as data_get is: the
 # named units (each one the store holds), or every unit the store lists by its state key,
-# promoted one by one, each under its unit lock; the first refusal stops the run. The
-# answer is {"promote":true,"migrated":N}, or {"promote":false,"migrated":0} under a driver
-# that keeps no fallback root
+# promoted one by one (store.promote), each under its unit lock; the first refusal stops
+# the run with the store's message, naming the unit. The answer is
+# {"promote":true,"migrated":N}, or {"promote":false,"migrated":0} under a driver that
+# keeps no fallback root
 u_unit_promote() {
   FN=unit.promote
   [ $# -ge 1 ] || u_refuse 1 ERR_INVALID_ARGUMENT "unit.promote takes the units or --all"
@@ -505,10 +484,21 @@ u_unit_promote() {
   while IFS= read -r up_u; do
     [ -n "$up_u" ] || continue
     u_lock "$up_u"
-    u_promote "$up_u"
+    u_new "$U_SCR/promote.out" "$U_SCR/promote.err"
+    store_promote "$U_NS" "$up_u/" > "$U_SCR/promote.out" 2> "$U_SCR/promote.err" < /dev/null
+    up_rc=$?
+    if [ "$up_rc" -ne 0 ]; then
+      up_msg=$(head -n 1 "$U_SCR/promote.err" 2>/dev/null)
+      case "$up_msg" in
+        store.promote:\ error:\ *) up_msg=${up_msg#store.promote: error: } ;;
+      esac
+      [ -n "$up_msg" ] || up_msg="the store promotion failed (ERR_STORAGE_WRITE)"
+      printf '%s: error: unit '\''%s'\'': %s\n' "$FN" "$up_u" "$up_msg" >&2
+      exit "$up_rc"
+    fi
     rm -rf "$U_LOCK" 2>/dev/null
     U_LOCK=""
-    [ "$U_PROMOTED" = moved ] && up_n=$((up_n + 1))
+    grep -q '"state":"moved"' "$U_SCR/promote.out" 2>/dev/null && up_n=$((up_n + 1))
   done < "$U_SCR/promote.units"
   printf '{"promote":true,"migrated":%s}\n' "$up_n"
 }
@@ -542,7 +532,6 @@ u_commit() {
       printf 'value_b64=%s\n' "$uc_b64"
     } >> "$U_SCR/batch"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   done < "$U_STAGE/manifest"
-  u_promote "$U_UNIT"
   store_batch "$U_NS" < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
   uc_rc=$?
   if [ "$uc_rc" -ne 0 ]; then

@@ -61,7 +61,14 @@ namespace that declares a `fallback_root` is read from its root first, then from
 fallback: `store.get`, `store.list` (the union, each key once, the root's copy
 shadowing), `store.scan`, `store.search`, and the key probe; `store.put` and
 `store.batch` write the root alone, and a delete (alone or as a batch action) removes the
-key from both roots, so an old value never resurfaces. A call that served a key from the
+key from both roots, so an old value never resurfaces. Before it writes, a put, a delete,
+or a batch (after its validation) moves each written key's top segment folder from the
+fallback to the root under the namespace lock it already holds, when the fallback alone
+holds it: one `mv`, the root made first when absent, so a module's write moves its folder
+whole with no call of its own; a folder already in the root, or a namespace without a
+fallback, costs one folder check at most and no process; a folder both roots hold refuses
+rc 1 `ERR_ENTITY_EXISTS` naming the prefix (a batch in its action line) with nothing
+written. A call that served a key from the
 fallback and answers rc 0 prints one stderr line, `<function>: notice: namespace '<ns>'
 was read from its deprecated fallback root`, naming no folder; a refusal keeps its one
 line. The optional `store.promote <namespace> <prefix>` moves the prefix's folder from the
