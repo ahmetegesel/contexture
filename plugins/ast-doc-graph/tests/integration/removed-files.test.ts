@@ -230,7 +230,7 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('a removed or renamed TypeScript 
     expect(sqlite(db(fallback), "SELECT file FROM symbols WHERE qname = 'validateCart';").trim()).toBe('src/orders/check.ts');
   });
 
-  it('[ast-doc-graph-r1] a delta adds an unindexed file only inside the folders the graph covers, so a --src-dir graph never widens', async () => {
+  it('[ast-doc-graph-r1] a delta adds an unindexed file with an old time only inside the folders the graph covers, so an old file outside a --src-dir graph stays out', async () => {
     const repo = miniRepo('scoped-ts');
     mkdirSync(join(repo, 'tools'));
     writeFileSync(join(repo, 'tools/extra.ts'), 'export function extraWork(): number {\n  return 1;\n}\n');
