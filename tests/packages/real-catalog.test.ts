@@ -40,7 +40,7 @@ describe.concurrent('the real catalog installs through its own wrappers', () => 
     expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(false);
   });
 
-  it('[plugins-r6] starter-rhythms puts work and debug in the rhythm index with their use-when and activation', async () => {
+  it('[plugins-r6, modules-r20] starter-rhythms puts work and debug in the rhythm index with their use-when and activation', async () => {
     const sb = sandbox();
     expect(out(await ctx(sb, 'unit', 'index'))).toBe('');
     expect((await wrapper(sb, catalogCopy(sb, 'starter-rhythms'), 'install')).code).toBe(0);

@@ -13,14 +13,14 @@ function rhythmStage(label: string): string {
 }
 
 describe.concurrent('ctx unit index: the rhythm index over both roots', () => {
-  it('V-d: index renders the workspace rhythm, then the extension rhythm', async () => {
+  it('V-d [modules-r20]: index renders the workspace rhythm, then the extension rhythm', async () => {
     const out = (await unit(rhythmStage('index'), 'index')).stdout;
     expect(out).toMatch(/^probe \(.*probe\.md\) \| use when: the suite needs an index line \| activation: propose/m);
     expect(out).toMatch(/^extprobe \(.*extprobe\.md\) \| use when: the suite needs an extension index line \| activation: propose/m);
     expect(names(out)).toEqual(['probe', 'extprobe']);
   });
 
-  it('V-d BG1: an absent workspace rhythms directory answers rc 0 with the extension rhythm alone', async () => {
+  it('V-d BG1 [modules-r20]: an absent workspace rhythms directory answers rc 0 with the extension rhythm alone', async () => {
     const sb = rhythmStage('index-bg1');
     renameSync(join(sb, '.contexture/rhythms'), join(sb, '.contexture/rhythms.bg1'));
     const r = await unit(sb, 'index');
@@ -28,14 +28,14 @@ describe.concurrent('ctx unit index: the rhythm index over both roots', () => {
     expect(names(r.stdout + r.stderr)).toEqual(['extprobe']);
   });
 
-  it('V-d BG1: both rhythms directories absent answer an empty index rc 0, no stderr', async () => {
+  it('V-d BG1 [modules-r20]: both rhythms directories absent answer an empty index rc 0, no stderr', async () => {
     const sb = stage('posix', 'index-none');
     const r = await unit(sb, 'index');
     expect(r.code).toBe(0);
     expect(r.stdout + r.stderr).toBe('');
   });
 
-  it('R-g: index refuses an argument rc 1', async () => {
+  it('R-g [modules-r20]: index refuses an argument rc 1', async () => {
     expect((await unit(stage('posix', 'index-arg'), 'index', 'extra')).code).toBe(1);
   });
 });

@@ -73,19 +73,19 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
 });
 
 describe.concurrent('the bare base: the rhythm index without rhythms (BG1)', () => {
-  it('an absent rhythms directory answers an empty index rc0 with no stderr', async () => {
+  it('[modules-r20] an absent rhythms directory answers an empty index rc0 with no stderr', async () => {
     const r = await ctx(bare(), 'unit', 'index');
     expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
   });
 
-  it('an empty rhythms directory answers the same', async () => {
+  it('[modules-r20] an empty rhythms directory answers the same', async () => {
     const sb = bare();
     mkdirSync(join(sb, '.contexture/rhythms'));
     const r = await ctx(sb, 'unit', 'index');
     expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 0, stdout: '', stderr: '' });
   });
 
-  it('an argument still refuses rc1 with the usage line', async () => {
+  it('[modules-r20] an argument still refuses rc1 with the usage line', async () => {
     const r = await ctx(bare(), 'unit', 'index', 'extra');
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^Usage: ctx unit index$/m);

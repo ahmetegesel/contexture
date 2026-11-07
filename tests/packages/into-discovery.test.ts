@@ -54,7 +54,7 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
     expect((await ctx(sb, 'help')).stdout).not.toContain('shapefilters');
   });
 
-  it('[the-engine-r22] the rhythm index reads the extension root after the workspace, the law fragment is recorded, and the uninstall leaves the index', async () => {
+  it('[the-engine-r22, modules-r20] the rhythm index reads the extension root after the workspace, the law fragment is recorded, and the uninstall leaves the index', async () => {
     const sb = sandbox();
     const ri = newPkg(sb, 'pkgri');
     addModule(ri, 'rifixture');
