@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, rmSync } from 'node:fs';
+import { appendFileSync, cpSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { artifactPath } from '../support/record';
@@ -64,6 +64,19 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     const sb = fresh(sb0);
     const r = await execBytes(sb, ctxArgs('lane', 'record', 'in-unit', 'in-lane', flag('what', BAD)));
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'lane record: error: what is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n']);
+  });
+
+  it('E3-d [the-record-r12]: under a workspace whose path holds a lane/scripts pair, the unit verbs keep their own labels and the lane verbs theirs', async () => {
+    const ws = join(fresh(sb0), 'lane', 'scripts', 'ws');
+    cpSync(sb0, ws, { recursive: true });
+    for (const [argv, line] of [
+      [['unit', 'record', 'in-unit', flag('what', BAD)], 'record: error: what is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n'],
+      [['unit', 'task', 'add', 'in-unit', 'in-u8', flag('objective', BAD)], 'task: error: objective is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n'],
+      [['lane', 'record', 'in-unit', 'in-lane', flag('what', BAD)], 'lane record: error: what is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n'],
+    ] as const) {
+      const r = await execBytes(ws, ctxArgs(...argv));
+      expect([r.code, r.stdout, r.stderr]).toEqual([1, '', line]);
+    }
   });
 
   it('lane show with the unit module data script absent refuses rc 2 under its own label', async () => {
