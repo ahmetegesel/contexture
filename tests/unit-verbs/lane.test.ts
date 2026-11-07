@@ -192,8 +192,12 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     ['with a malformed unit', ['bad.unit', 'r-lane', ...laneFlags()], refusal("malformed unit 'bad.unit'")],
     ['with a malformed lane', ['sem-unit', 'bad.lane', ...laneFlags()], refusal("malformed lane 'bad.lane'")],
     ['with a malformed ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref=lanes/'])], `lane create: error: malformed ref 'lanes/': ${SHAPES}\n`],
+    ['with an empty ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref='])], `lane create: error: malformed ref '': ${SHAPES}\n`],
+    ['with an empty ref in the spaced form', ['sem-unit', 'r-lane', ...laneFlags(['--ref', ''])], `lane create: error: malformed ref '': ${SHAPES}\n`],
     ['with a malformed task', ['sem-unit', 'r-lane', ...laneFlags(['--task=probe-task'])], refusal("malformed task 'probe-task': a task is backlog#<slug>")],
+    ['with an empty task', ['sem-unit', 'r-lane', ...laneFlags(['--task='])], refusal("malformed task '': a task is backlog#<slug>")],
     ['with a malformed decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision=journal#bad slug'])], refusal("malformed decision 'journal#bad slug': a decision is journal#<slug>")],
+    ['with an empty decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision='])], refusal("malformed decision '': a decision is journal#<slug>")],
     ['with a malformed rhythm', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe one OPEN'])], 'ERROR: RHYTHM step malformed: one\n'],
     ['with a rhythm gate its step does not read, as ctx unit record refuses it', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe 1 WRONG'])], 'ERROR: RHYTHM step 1 of probe reads OPEN, not WRONG\n'],
   ] as const)('[the-record-r9, the-record-r-xbt3g]: lane create %s refuses rc 1 with its one stderr line, nothing written', async ([, argv, line]) => {
