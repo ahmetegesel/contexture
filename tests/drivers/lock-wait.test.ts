@@ -3,7 +3,8 @@ import { performance } from 'node:perf_hooks';
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
 import { driverOp } from '../support/driver';
-import { holdLock, lockPath, namespaceLock, sleepShim, unitLock } from '../support/locks';
+import { lockPath, namespaceLock, unitLock } from '../support/drawer';
+import { holdLock, sleepShim } from '../support/locks';
 import { DRIVERS, fts5Available, stage } from '../support/stage';
 import { answer, payload, refused } from '../support/wire';
 

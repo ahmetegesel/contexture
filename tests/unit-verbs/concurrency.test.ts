@@ -1,15 +1,17 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { RECORD_ROOT } from '../support/drawer';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
 import { seedUnit, unit } from '../support/unit';
 
 const D = '2026-09-27';
+const P2 = join(RECORD_ROOT, 'p2');
 const RESIDUE: readonly [string, RegExp][] = [
-  ['.contexture/sessions/p2', /^\.tmp/],
-  ['.contexture/sessions/p2', /\.XXXXXX$/],
+  [P2, /^\.tmp/],
+  [P2, /\.XXXXXX$/],
   ['.contexture/tmp', /^rec\./],
   ['.contexture/tmp', /^fts5-ws\./],
   ['.contexture/tmp', /^posix\./],
@@ -59,7 +61,7 @@ describe.concurrent('concurrent writers of one unit serialize: no refusal, no re
     }
   });
 
-  it.for(['.contexture/sessions/p2/.tmpplant', '.contexture/sessions/p2/plant.XXXXXX', '.contexture/tmp/rec.plant', '.contexture/tmp/fts5-ws.plant', '.contexture/tmp/posix.plant', '.contexture/tmp/verb.plant'])('L-c [the-record-r9]: a single planted leak %s reads as residue, while the retired one-ls probe misses it', async (plant) => {
+  it.for([join(P2, '.tmpplant'), join(P2, 'plant.XXXXXX'), '.contexture/tmp/rec.plant', '.contexture/tmp/fts5-ws.plant', '.contexture/tmp/posix.plant', '.contexture/tmp/verb.plant'])('L-c [the-record-r9]: a single planted leak %s reads as residue, while the retired one-ls probe misses it', async (plant) => {
     const sb = fresh(p2);
     const path = join(sb, plant);
     mkdirSync(dirname(path), { recursive: true });

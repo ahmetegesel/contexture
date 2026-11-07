@@ -2,6 +2,7 @@ import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile, moduleDir } from '../support/data-file';
+import { RECORD_ROOT } from '../support/drawer';
 import { exec } from '../support/exec';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
@@ -107,9 +108,9 @@ describe.concurrent('store-data, the data file reader', () => {
 
   it('[modules-r10] answers a variable-depth <unit>/<path...> declaration and refuses a non-final <unit...>', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'variable', 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n');
-    expect((await answerLines(sb, 'variable')).slice(0, 5)).toEqual(['variable', '.contexture/sessions', '.md', '<unit>/<path...>', 'false']);
-    dataFile(sb, 'modules', 'variable', 'namespace: variable\nroot: .contexture/sessions\nsuffix: .md\nkey: <unit...>/<path>\nchanges: false\n');
+    dataFile(sb, 'modules', 'variable', `namespace: variable\nroot: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n`);
+    expect((await answerLines(sb, 'variable')).slice(0, 5)).toEqual(['variable', RECORD_ROOT, '.md', '<unit>/<path...>', 'false']);
+    dataFile(sb, 'modules', 'variable', `namespace: variable\nroot: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit...>/<path>\nchanges: false\n`);
     await refusal(sb, 'variable', 1, "malformed key pattern '<unit...>/<path>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)");
   });
 

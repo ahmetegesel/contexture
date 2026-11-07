@@ -1,6 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { RECORD_ROOT } from '../support/drawer';
 import { ROOT } from '../support/root';
 
 const MODULES = ['base/.contexture/modules/unit/scripts', 'base/.contexture/extensions/modules/lane/scripts'];
@@ -8,9 +9,10 @@ const verbScripts = (): [string, string][] =>
   MODULES.flatMap((dir) => readdirSync(join(ROOT, dir)).map((f) => [`${dir}/${f}`, readFileSync(join(ROOT, dir, f), 'utf8')] as [string, string])).filter(([, text]) => /^# summary: /m.test(text));
 
 describe('the unit and lane verb scripts, read statically', () => {
-  it('UP-d [the-record-r14]: no verb script prints a sessions path in a message (comments and the WRITE SCOPE line aside)', () => {
+  it('UP-d [the-record-r14]: no verb script prints the record root in a message (comments and the WRITE SCOPE line aside)', () => {
+    const root = RECORD_ROOT.replace(/^\./, '');
     const hits = MODULES.flatMap((dir) => readdirSync(join(ROOT, dir)).flatMap((f) => readFileSync(join(ROOT, dir, f), 'utf8').split('\n').map((line, i) => `${dir}/${f}:${i + 1}:${line}`)))
-      .filter((l) => l.includes('contexture/sessions') && !/:\d+:#/.test(l) && !l.includes('WRITE SCOPE'));
+      .filter((l) => l.includes(root) && !/:\d+:#/.test(l) && !l.includes('WRITE SCOPE'));
     expect(hits).toEqual([]);
   });
 

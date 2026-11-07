@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { lockPath } from './drawer';
 import { pathPlant } from './plants';
 import { sandbox } from './sandbox';
 
@@ -29,14 +30,6 @@ export function catShim(): { env: Record<string, string>; reads: () => string[] 
 
 function exitedPid(): number {
   return Number(spawnSync('sh', ['-c', 'echo $$'], { encoding: 'utf8' }).stdout.trim());
-}
-
-export const unitLock = (unit: string): string => join('unit', `${unit}.lock`);
-
-export const namespaceLock = (namespace: string): string => `store-${namespace}.lock`;
-
-export function lockPath(sb: string, lock: string): string {
-  return join(sb, '.contexture', 'tmp', 'locks', lock);
 }
 
 export function holdLock(sb: string, lock: string, holder: Holder): () => void {

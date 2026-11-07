@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
-import { holdLock, namespaceLock } from '../support/locks';
+import { namespaceLock } from '../support/drawer';
+import { holdLock } from '../support/locks';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
 import { plantScript } from '../support/store';

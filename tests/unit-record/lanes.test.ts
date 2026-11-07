@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
+import { RECORD_ROOT } from '../support/drawer';
 import { DATE, mk, ok, reads } from '../support/record';
 import { answer, answerLine, payload, refused } from '../support/wire';
 import { ALPHA, at, RECIPE, REPORT, SUNIT, TUNIT } from './chain';
@@ -58,7 +59,7 @@ describe.concurrent('the lanes through the unit data script', () => {
     const search = () => data(sb, 'search.query', [u, '--mode=exact', '--entity=lane'], payload().kv('query', 'ghost').toString());
     const before = await reads(sb, u);
     const searched = answerLine(await search(), 'search.query');
-    const ghost = join(sb, '.contexture/sessions', u, 'lanes/ghost');
+    const ghost = join(sb, RECORD_ROOT, u, 'lanes/ghost');
     mkdirSync(ghost, { recursive: true });
     writeFileSync(join(ghost, 'notes.txt'), 'a stray file, no lane artifact\n');
     for (const artifact of ['recipe', 'journal', 'report']) {

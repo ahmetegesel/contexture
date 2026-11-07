@@ -2,6 +2,7 @@ import { existsSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
+import { FTS5_DB, RECORD_ROOT } from '../support/drawer';
 import { exec } from '../support/exec';
 import { ROOT } from '../support/root';
 import { DRIVERS, fts5Available, probeFts5, stage } from '../support/stage';
@@ -46,8 +47,8 @@ describe('stage', () => {
         const resolved = JSON.parse(diag.stdout).driver;
         expect({ name: resolved.name, descriptor: resolved.descriptor.driver }).toEqual({ name: driver, descriptor: driver });
         expect({
-          posix: existsSync(join(sb, '.contexture/sessions/probe-unit')),
-          fts5: existsSync(join(sb, '.contexture/sessions.db')),
+          posix: existsSync(join(sb, RECORD_ROOT, 'probe-unit')),
+          fts5: existsSync(join(sb, FTS5_DB)),
         }).toEqual({ posix: driver === 'posix', fts5: driver === 'fts5' });
       });
     });

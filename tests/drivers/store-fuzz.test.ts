@@ -1,6 +1,7 @@
 import { chmodSync, mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { FTS5_DB } from '../support/drawer';
 import { driverOp, driverPath } from '../support/driver';
 import { KEY_VALUE, type Profile, UNIT_SHAPED, blindSpots, calls, firstDifference, genSequence, replay, side } from '../support/fuzz';
 import { ROOT_USER } from '../support/plants';
@@ -41,7 +42,7 @@ describe.skipIf(!fts5Available())('the differential store fuzzer, posix against 
       await driverOp(fts5, 'fts5', 'store.put', ['unit', 'lay/state'], 'x\n');
       mkdirSync(join(posix, 'fuzz-root'), { recursive: true });
       chmodSync(join(posix, 'fuzz-root'), 0o555);
-      sqlite(join(fts5, '.contexture/sessions.db'), "CREATE TRIGGER blind BEFORE INSERT ON store WHEN NEW.namespace = 'fuzz' BEGIN SELECT RAISE(ABORT, 'blind'); END;");
+      sqlite(join(fts5, FTS5_DB),"CREATE TRIGGER blind BEFORE INSERT ON store WHEN NEW.namespace = 'fuzz' BEGIN SELECT RAISE(ABORT, 'blind'); END;");
     });
     expect(blindSpots(plan, a)).toContain('a successful put');
     expect(blindSpots(plan, b)).toContain('a successful put');

@@ -1,5 +1,6 @@
 import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { RECORD_ROOT } from './drawer';
 import { exec, type Run } from './exec';
 import { ROOT } from './root';
 
@@ -9,7 +10,7 @@ const SEARCH = ['canon.awk', 'model.awk', 'search.awk'].flatMap((p) => ['-f', jo
 const IDENT = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 const PARTS = ['backlog', 'journal', 'knowledge'] as const;
 
-const store = (sb: string): string => join(sb, '.contexture/sessions');
+const store = (sb: string): string => join(sb, RECORD_ROOT);
 
 function keys(sb: string, prefix = ''): string[] {
   const found: string[] = [];

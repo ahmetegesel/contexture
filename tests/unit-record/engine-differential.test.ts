@@ -2,6 +2,7 @@ import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
+import { RECORD_ROOT } from '../support/drawer';
 import { engineCall } from '../support/engine';
 import type { Run } from '../support/exec';
 import { DATE } from '../support/record';
@@ -52,7 +53,7 @@ const OPS: Op[] = [
 ];
 
 function artifacts(sb: string): Record<string, string> {
-  const root = join(sb, '.contexture/sessions');
+  const root = join(sb, RECORD_ROOT);
   const out: Record<string, string> = {};
   const walk = (dir: string, rel: string) => {
     for (const name of readdirSync(dir).sort()) {

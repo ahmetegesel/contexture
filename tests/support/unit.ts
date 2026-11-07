@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { data } from './data';
+import { RECORD_ROOT } from './drawer';
 import { exec, type Run } from './exec';
 import { artifactPath } from './record';
 
@@ -71,7 +72,7 @@ export async function unitChecksum(sb: string, unitSlug: string, lanes: readonly
   const slugs = [...new Set([...entries.stdout.matchAll(/"slug":"([^"]*)"/g)].map((m) => m[1] ?? ''))].sort();
   for (const s of slugs) await said('entry.get', unitSlug, s);
   for (const l of lanes) for (const a of ['recipe', 'journal', 'report']) await said('lane.get', unitSlug, l, a);
-  const files = await exec('sh', ['-c', 'd=.contexture/sessions/$1; [ -d "$d" ] || exit 0; find "$d" -type f -name "*.md" | LC_ALL=C sort | while IFS= read -r f; do printf "%s\\n" "$f"; cat "$f"; done', 'sh', unitSlug], { cwd: sb });
+  const files = await exec('sh', ['-c', 'd=$2/$1; [ -d "$d" ] || exit 0; find "$d" -type f -name "*.md" | LC_ALL=C sort | while IFS= read -r f; do printf "%s\\n" "$f"; cat "$f"; done', 'sh', unitSlug, RECORD_ROOT], { cwd: sb });
   picture.push(files.stdout);
   return picture.join('\n');
 }

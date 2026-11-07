@@ -5,7 +5,8 @@ import { setTimeout as wait } from 'node:timers/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { driverPath } from '../support/driver';
 import { launch } from '../support/exec';
-import { lockPath, namespaceLock, readOnlyLockShim } from '../support/locks';
+import { FTS5_DB, lockPath, namespaceLock } from '../support/drawer';
+import { readOnlyLockShim } from '../support/locks';
 import { ROOT_USER, chmodPlant, mktempPlant, pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { fresh } from '../support/snapshot';
@@ -113,7 +114,7 @@ for (const driver of DRIVERS) {
     it('[the-engine-r18, the-engine-r21] refuses put, delete, and batch rc 2 with one line each and keeps its bytes; writable again, it serves', async ({ onTestFinished }) => {
       const sb = await seeded(await docsStore(driver, false), driver, OLD);
       const s = store(sb, driver);
-      const ro = driver === 'fts5' ? [join(sb, '.contexture/sessions.db')] : [join(sb, 'docs/workspace/x.md'), join(sb, 'docs/workspace/y.md'), join(sb, 'docs/workspace')];
+      const ro = driver === 'fts5' ? [join(sb, FTS5_DB)] : [join(sb, 'docs/workspace/x.md'), join(sb, 'docs/workspace/y.md'), join(sb, 'docs/workspace')];
       for (const p of ro) chmodPlant(p, p.endsWith('workspace') ? 0o555 : 0o444, p.endsWith('workspace') ? 0o755 : 0o644, onTestFinished);
       for (const [fn, r] of [
         ['store.put', await s.put('docs', 'workspace/x', 'never lands\n')],

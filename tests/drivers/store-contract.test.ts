@@ -2,7 +2,8 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
-import { holdLock, namespaceLock, sleepShim } from '../support/locks';
+import { RECORD_ROOT, namespaceLock } from '../support/drawer';
+import { holdLock, sleepShim } from '../support/locks';
 import { ROOT_USER, chmodPlant, pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { NEEDLE_ROWS, SEARCH_DATA, SEARCH_VALUES, searchAnswer } from '../support/search-fixture';
@@ -366,7 +367,7 @@ for (const driver of DRIVERS) {
 
       it('[the-engine-r24] scopes presence and the lock to the named namespace: a docs key and a held docs lock leave unit absent and unlocked', async () => {
         const sb = fresh(keyed);
-        if (driver === 'posix') mkdirSync(join(sb, '.contexture/sessions'), { recursive: true });
+        if (driver === 'posix') mkdirSync(join(sb, RECORD_ROOT), { recursive: true });
         const s = store(sb, driver);
         expect(await healthOf(s, 'unit')).toMatchObject({ health: 'ok', store: 'absent' });
         expect(await healthOf(s, 'docs')).toMatchObject({ health: 'ok', store: 'present' });

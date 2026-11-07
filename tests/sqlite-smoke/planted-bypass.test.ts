@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { RECORD_ROOT } from '../support/drawer';
 import { DATE } from '../support/record';
 import { put } from '../support/tree';
 import { must, unit } from '../support/unit';
@@ -12,8 +13,8 @@ const BYPASS = [
   '# usage: ctx unit record <unit> --what="..." [--slug=...]',
   'u=$1; shift',
   'for a; do case $a in --what=*) what=${a#--what=} ;; --slug=*) slug=${a#--slug=} ;; esac; done',
-  'mkdir -p "$CTX_ROOT/.contexture/sessions/$u"',
-  `printf '\\n@entry %s\\n  WHAT: "%s"\\n' "$slug" "$what" >> "$CTX_ROOT/.contexture/sessions/$u/journal.md"`,
+  `mkdir -p "$CTX_ROOT/${RECORD_ROOT}/$u"`,
+  `printf '\\n@entry %s\\n  WHAT: "%s"\\n' "$slug" "$what" >> "$CTX_ROOT/${RECORD_ROOT}/$u/journal.md"`,
   `printf 'recorded: %s\\n' "$slug"`,
   '',
 ].join('\n');
@@ -26,7 +27,7 @@ describe('the SQLite smoke set: a planted record verb that bypasses the store re
     const real = readFileSync(record);
     put(record, BYPASS, 0o755);
     const slug = `${DATE}-sq-planted`;
-    expect(await recordAndList(sb, 'sq-plant', slug, 'the planted entry')).toEqual({ code: 0, listed: false, residue: ['.contexture/sessions'] });
+    expect(await recordAndList(sb, 'sq-plant', slug, 'the planted entry')).toEqual({ code: 0, listed: false, residue: [RECORD_ROOT] });
     put(record, real, 0o755);
     expect(await recordAndList(sb, 'sq-plant', `${DATE}-sq-restored`, 'the restored entry')).toMatchObject({ code: 0, listed: true });
   });

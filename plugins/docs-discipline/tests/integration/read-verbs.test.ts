@@ -1,6 +1,7 @@
 import { mkdirSync, readFileSync, readdirSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { RECORD_ROOT } from '@support/drawer';
 import { exec } from '@support/exec';
 import { sandbox } from '@support/sandbox';
 import { fresh } from '@support/snapshot';
@@ -168,7 +169,7 @@ describe('the nudge through its unit', { concurrent: true }, () => {
   });
 
   it('RS5b [docs-module-r26] a path inside another module\'s store root refuses rc 1: a record artifact is read through its unit', async () => {
-    const r = await docs(fresh(corpus), ['nudge', '.contexture/sessions/nudge-demo/backlog.md', 'demo-orders']);
+    const r = await docs(fresh(corpus), ['nudge', `${RECORD_ROOT}/nudge-demo/backlog.md`, 'demo-orders']);
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toBe("ctx docs nudge: a path inside another module's store root is read through that module, never as a file; a record artifact through its unit: ctx docs nudge <unit> [<repo>...]\n");
   });

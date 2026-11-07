@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
+import { RECORD_ROOT } from '../support/drawer';
 import { driverOp } from '../support/driver';
 import type { Run } from '../support/exec';
 import { DATE } from '../support/record';
@@ -25,7 +26,7 @@ async function landsEveryLayer(sb: string, key: string, needle: string, write: R
   for (const [layer, read] of layers) await shows(layer, read, 'before', false);
   await must(write());
   for (const [layer, read] of layers) await shows(layer, read, 'after', true);
-  expect(readFileSync(join(sb, '.contexture/sessions', `${key}.md`)).equals((await stored(sb, key)).bytes), `the posix file ${key}.md is the stored value`).toBe(true);
+  expect(readFileSync(join(sb, RECORD_ROOT, `${key}.md`)).equals((await stored(sb, key)).bytes), `the posix file ${key}.md is the stored value`).toBe(true);
 }
 
 let seeded: string;
@@ -112,7 +113,7 @@ describe.concurrent('a verb on a driver that fails the capability handshake (the
     const r = await run(sb, ['unit', 'bootstrap', 'z-unit', 'handshake unit'], { env: { CTX_STORAGE_DRIVER: 'z-bad' } });
     expect(r.code).toBe(2);
     expect(r.stdout + r.stderr).toContain('not the seven data names in the fixed order (ERR_DRIVER_PROTOCOL)');
-    expect(existsSync(join(sb, '.contexture/sessions/z-unit'))).toBe(false);
+    expect(existsSync(join(sb, RECORD_ROOT, 'z-unit'))).toBe(false);
     expect((await data(sb, 'session.load', ['z-unit'])).code).toBe(1);
     expect(calls(log).length).toBeGreaterThan(0);
     expect(calls(log).filter((c) => c !== 'capability')).toEqual([]);
@@ -124,6 +125,6 @@ describe.concurrent('a verb on a driver that fails the capability handshake (the
     const r = await run(sb, ['unit', 'bootstrap', 'z-unit', 'handshake unit'], { env: { CTX_STORAGE_DRIVER: 'z-good' } });
     expect(r.code, r.stderr).toBe(0);
     expect(calls(log).filter((c) => c !== 'capability').length).toBeGreaterThan(0);
-    expect(existsSync(join(sb, '.contexture/sessions/z-unit/state.md'))).toBe(true);
+    expect(existsSync(join(sb, RECORD_ROOT, 'z-unit/state.md'))).toBe(true);
   });
 });

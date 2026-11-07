@@ -3,7 +3,8 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
 import { launch } from '../support/exec';
-import { catShim, holdLock, lockPath, readOnlyLockShim, sleepShim, unitLock } from '../support/locks';
+import { RECORD_ROOT, lockPath, unitLock } from '../support/drawer';
+import { catShim, holdLock, readOnlyLockShim, sleepShim } from '../support/locks';
 import { ROOT_USER, mktempPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { lane, must, run, seedUnit, unit, unitChecksum, waitFor } from '../support/unit';
@@ -36,7 +37,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it.skipIf(ROOT_USER)('W-a [the-record-r9, the-record-r12, the-engine-r18]: every typed write on a read-only store exits 2, changes nothing, leaves no temp, and releases the lock', async () => {
     const sb = fresh(sb0);
-    const unitDir = join(sb, '.contexture/sessions/w-unit');
+    const unitDir = join(sb, RECORD_ROOT, 'w-unit');
     const laneDir = join(unitDir, 'lanes/w-lane');
     const files = [unitDir, laneDir].flatMap((d) => readdirSync(d).filter((f) => f.endsWith('.md')).map((f) => join(d, f)));
     const before = await unitChecksum(sb, 'w-unit', ['w-lane']);

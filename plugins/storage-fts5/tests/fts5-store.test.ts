@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
+import { FTS5_DB } from '@support/drawer';
 import { SEARCH_DATA, SEARCH_VALUES } from '@support/search-fixture';
 import { fresh, seed } from '@support/snapshot';
 import { sqlite } from '@support/sqlite';
@@ -8,7 +9,7 @@ import { fts5Available } from '@support/stage';
 import { listAnswer, store } from '@support/store';
 import { answer, refused } from '@support/wire';
 
-const db = (sb: string) => join(sb, '.contexture/sessions.db');
+const db = (sb: string) => join(sb, FTS5_DB);
 const rows = (sb: string, sql: string) => sqlite(db(sb), sql).split('\n').filter(Boolean);
 const changeCount = (sb: string) => Number(sqlite(db(sb), 'SELECT count(*) FROM store_changes;'));
 const q = (query: string) => `query=${query}\n`;

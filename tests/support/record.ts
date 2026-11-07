@@ -1,6 +1,7 @@
 import { appendFileSync, cpSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { data } from './data';
+import { RECORD_ROOT } from './drawer';
 import type { Run } from './exec';
 import { ROOT } from './root';
 import { answer, payload, type Payload } from './wire';
@@ -44,11 +45,11 @@ export function entryJson(slug: string, occ: number, seq: number, anchor: string
 export const receiptJson = (slug: string, seq: number, what: string): string => entryJson(slug, 1, seq, '"A1"', what, 'null', '"none"', '[]', '[]', 'null');
 
 export function artifactPath(sb: string, unit: string, artifact: string): string {
-  return join(sb, '.contexture/sessions', unit, `${artifact.replace(/^lane\//, 'lanes/')}.md`);
+  return join(sb, RECORD_ROOT, unit, `${artifact.replace(/^lane\//, 'lanes/')}.md`);
 }
 
 export function plantUnit(sb: string, unit: string, fixture = unit): void {
-  const dest = join(sb, '.contexture/sessions', unit);
+  const dest = join(sb, RECORD_ROOT, unit);
   rmSync(dest, { recursive: true, force: true });
   mkdirSync(dirname(dest), { recursive: true });
   cpSync(join(COMPLIANCE, 'units', fixture), dest, { recursive: true });

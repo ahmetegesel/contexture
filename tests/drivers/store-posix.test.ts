@@ -4,7 +4,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
 import { driverPath } from '../support/driver';
 import { exec } from '../support/exec';
-import { holdLock, namespaceLock } from '../support/locks';
+import { RECORD_ROOT, namespaceLock } from '../support/drawer';
+import { holdLock } from '../support/locks';
 import { ROOT_USER, chmodPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { SEARCH_DATA } from '../support/search-fixture';
@@ -50,14 +51,14 @@ describe('the posix store on disk', { concurrent: true }, () => {
     expect(readFileSync(join(sb, 'minimal/a/b'), 'utf8')).toBe('x\n');
   });
 
-  it('[modules-r10] maps the unit keys under .contexture/sessions and never lists a stray file there', async () => {
+  it('[modules-r10] maps the unit keys under the declared record root and never lists a stray file there', async () => {
     const sb = fresh(empty);
     const s = store(sb, 'posix');
     answer(await s.put('unit', 'storage/state', 'x\n'), 'store.put');
     answer(await s.put('unit', 'storage/lanes/foo/report', 'unit-lane\n'), 'store.put');
-    expect(existsSync(join(sb, '.contexture/sessions/storage/state.md'))).toBe(true);
-    expect(existsSync(join(sb, '.contexture/sessions/storage/lanes/foo/report.md'))).toBe(true);
-    plant(sb, '.contexture/sessions/stray.md', 'stray\n');
+    expect(existsSync(join(sb, RECORD_ROOT, 'storage/state.md'))).toBe(true);
+    expect(existsSync(join(sb, RECORD_ROOT, 'storage/lanes/foo/report.md'))).toBe(true);
+    plant(sb, join(RECORD_ROOT, 'stray.md'), 'stray\n');
     expect((await s.list('unit')).stdout).toBe(listAnswer('unit', ['storage/lanes/foo/report', 'storage/state']));
   });
 
@@ -100,11 +101,11 @@ describe('the posix store on disk', { concurrent: true }, () => {
     const sb = stage('posix');
     const health = () => healthOf(sb, 'unit');
     expect(await health()).toEqual({ driver: 'posix', health: 'degraded', detail: 'the store is not made yet (the first write makes it)', store: 'absent' });
-    mkdirSync(join(sb, '.contexture/sessions'));
+    mkdirSync(join(sb, RECORD_ROOT));
     const empty = { driver: 'posix', health: 'ok', detail: 'the store is writable and holds no key of the namespace yet', store: 'absent' };
     expect(await health()).toEqual(empty);
-    plant(sb, '.contexture/sessions/stray.md', 'one segment, never a key\n');
-    plant(sb, '.contexture/sessions/u/.tmp.plant', 'a killed writer residue\n');
+    plant(sb, join(RECORD_ROOT, 'stray.md'), 'one segment, never a key\n');
+    plant(sb, join(RECORD_ROOT, 'u/.tmp.plant'), 'a killed writer residue\n');
     expect(await health()).toEqual(empty);
     const release = holdLock(sb, namespaceLock('unit'), 'live');
     expect(await health()).toEqual({ driver: 'posix', health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'absent' });
@@ -117,8 +118,8 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it.skipIf(ROOT_USER)('[the-engine-r24] reports an unwritable root as error with its true presence, ahead of a held lock', async ({ onTestFinished }) => {
     const sb = stage('posix');
-    mkdirSync(join(sb, '.contexture/sessions'));
-    const root = join(sb, '.contexture/sessions');
+    const root = join(sb, RECORD_ROOT);
+    mkdirSync(root);
     chmodPlant(root, 0o555, 0o755, onTestFinished);
     expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not writable', store: 'absent' });
     chmodSync(root, 0o755);
@@ -131,7 +132,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
   it.skipIf(ROOT_USER)('[the-engine-r24] reports an unreadable root as error with the store absent', async ({ onTestFinished }) => {
     const sb = stage('posix');
     answer(await store(sb, 'posix').put('unit', 'u/state', 'x\n'), 'store.put');
-    chmodPlant(join(sb, '.contexture/sessions'), 0o311, 0o755, onTestFinished);
+    chmodPlant(join(sb, RECORD_ROOT), 0o311, 0o755, onTestFinished);
     expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not readable', store: 'absent' });
   });
 

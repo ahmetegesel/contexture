@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
 import { driverPath } from '@support/driver';
 import { exec } from '@support/exec';
-import { holdLock, namespaceLock } from '@support/locks';
+import { FTS5_DB, namespaceLock } from '@support/drawer';
+import { holdLock } from '@support/locks';
 import { ROOT_USER, chmodPlant } from '@support/plants';
 import { sandbox } from '@support/sandbox';
 import { sqlite } from '@support/sqlite';
@@ -150,7 +151,7 @@ describe.skipIf(!fts5Available())('the fts5 store location', { concurrent: true 
     const s = store(sb, 'fts5');
     answer(await s.put('docs', 'workspace/placed', 'placed\n'), 'store.put');
     expect(sqlite(db, "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/placed');
-    expect(existsSync(join(sb, '.contexture/sessions.db'))).toBe(false);
+    expect(existsSync(join(sb, FTS5_DB))).toBe(false);
     expect((await s.get('docs', 'workspace/placed')).stdout).toBe('placed\n');
   });
 

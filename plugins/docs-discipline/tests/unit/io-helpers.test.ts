@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
+import { RECORD_ROOT } from '@support/drawer';
 import { exec, type Run } from '@support/exec';
 import { sandbox } from '@support/sandbox';
 import { stage } from '@support/stage';
@@ -97,8 +98,8 @@ describe('docs_record_file: a path inside another module\'s store root, read thr
     exec('sh', ['-c', '. "$1/docs-io.sh"; docs_io_init "$1" nudge; docs_record_file "$2"', 'sh', SCRIPTS, path], { cwd: sb, env: { CTX_ROOT: sb } });
 
   it.each([
-    ['.contexture/sessions/u/backlog.md', 0],
-    ['/elsewhere/.contexture/sessions/u/backlog.md', 0],
+    [`${RECORD_ROOT}/u/backlog.md`, 0],
+    [`/elsewhere/${RECORD_ROOT}/u/backlog.md`, 0],
     ['backlog.md', 1],
     ['docs/demo/x.md', 1],
     ['notes/x.md', 0],
@@ -113,6 +114,6 @@ describe('docs_record_file: a path inside another module\'s store root, read thr
     const bare = sandbox('record-file-bare');
     mkdirSync(join(bare, '.contexture/modules'), { recursive: true });
     expect((await guard(bare, 'backlog.md')).code).toBe(2);
-    expect((await sourced('DOCS_ROOT="$PWD"; docs_record_file "$1"', '.contexture/sessions/u/backlog.md')).code).toBe(2);
+    expect((await sourced('DOCS_ROOT="$PWD"; docs_record_file "$1"', `${RECORD_ROOT}/u/backlog.md`)).code).toBe(2);
   });
 });

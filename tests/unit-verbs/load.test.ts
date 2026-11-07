@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { RECORD_ROOT } from '../support/drawer';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
@@ -60,7 +61,7 @@ describe.concurrent('ctx unit load: paging, the refs form, and the warnings', ()
     const out = await loadAll(sb, 'ref-unit');
     expect(out).toContain('REF UNIT: ref-src (READ-ONLY)');
     expect(out).toMatch(/WRITE SCOPE: unit ref-unit \+ repos: .*ref units READ-ONLY/);
-    expect(out).not.toContain('WRITE SCOPE: .contexture/sessions');
+    expect(out).not.toContain(`WRITE SCOPE: ${RECORD_ROOT}`);
     expect(out).toContain('# --- ref knowledge ---');
     expect(out).not.toContain('# --- ref knowledge.md ---');
     expect((await unit(sb, 'refs', 'ref-unit')).code).toBe(0);
