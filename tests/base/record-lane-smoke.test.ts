@@ -37,7 +37,7 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     expect((await unit(sb, 'task', 'show', U, 'base-t1')).stdout).toContain('OBJECTIVE: "the base-only task"');
     await must(unit(sb, 'task', 'start', U, 'base-t1'));
     expect((await unit(sb, 'task', 'show', U, 'base-t1')).stdout).toContain('STATUS: IN_PROGRESS');
-    expect((await unit(sb, 'active')).stdout).toMatch(/^ {2}next: base-t1 \(IN_PROGRESS\)$/m);
+    expect((await unit(sb, 'list')).stdout).toMatch(/^ {2}next: base-t1 \(IN_PROGRESS\)$/m);
     await must(unit(sb, 'task', 'update', U, 'base-t1', '--desc=two words'));
     await must(unit(sb, 'task', 'complete', U, 'base-t1', '--evidence=the smoke passed'));
     await must(unit(sb, 'task', 'drop', U, 'base-t2', '--reason=not needed'));

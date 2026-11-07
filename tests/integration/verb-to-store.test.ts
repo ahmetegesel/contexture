@@ -41,7 +41,7 @@ describe.concurrent('a unit verb reaches the store through the data script, the 
     const sb = stage('posix', 'chain-state');
     await landsEveryLayer(sb, `${U}/state`, 'the chain objective',
       () => unit(sb, 'bootstrap', U, 'the chain objective'),
-      () => unit(sb, 'active'),
+      () => unit(sb, 'list'),
       () => data(sb, 'session.load', [U]));
   });
 

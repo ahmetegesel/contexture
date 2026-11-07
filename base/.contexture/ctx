@@ -485,10 +485,10 @@ retired_replacement() {
   case "$1" in
     append) printf 'use record, task add, finding add' ;;
     amend) printf 'use task update' ;;
-    query) printf 'use entry show, entry list, entry closure, finding show, resolve, search, units, refs-to, lane show' ;;
+    query) printf 'use entry show, entry list, entry closure, finding show, resolve, search, list, refs-to, lane show' ;;
     flip) printf 'use task start, complete, reopen' ;;
     drop) printf 'use task drop' ;;
-    next) printf 'use active (the next task is derived from the backlog)' ;;
+    next) printf 'use list (the next task is derived from the backlog)' ;;
     *) return 1 ;;
   esac
 }

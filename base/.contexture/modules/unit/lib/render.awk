@@ -15,7 +15,7 @@
 # prints for the same data, so every backend's answer renders the same text; no item
 # carries stored bytes.
 #
-# Views: board, load, refload, audit, close, active, units, refs_to, closure, task_list,
+# Views: board, load, refload, audit, close, active, list_all, refs_to, closure, task_list,
 # task_show, entry_show, entry_list, finding_show, finding_list, search, resolve,
 # lane_doc, lane_journal, diagnose, state, field. The load views print tagged lines
 # ("<section> TAB <line>") the load verb pages; every other view prints its text. A
@@ -243,7 +243,7 @@ function block(p, k,   t) {
 }
 
 # ------------------------------------------------------------------------------
-# the state line groups (the v0.54.0 rule of active and units): each column-0 key line
+# the state line groups (the v0.54.0 rule of the unit listings): each column-0 key line
 # and the indented lines after it until an empty line or the next column-0 line; the last
 # group of a key wins
 function st_groups(text, loose,   n, L, i, ln, cur) {
@@ -503,17 +503,49 @@ function active_next(p,   nt, bp, tc, s) {
   return "next: " s
 }
 
+# the list's repo filter (RV_HAS_REPO, RV_REPO): a unit passes when no repo is asked or its
+# repos name the asked one
+function list_keeps(p,   n, i) {
+  if (ENVIRON["RV_HAS_REPO"] != "1") return 1
+  n = nn(D(p) "repos")
+  for (i = 1; i <= n; i++) if (sv(D(p) "repos." i) == ENVIRON["RV_REPO"]) return 1
+  return 0
+}
+
+# list_miss(): an asked repo no unit, ACTIVE or CLOSED, touches refuses before any line,
+# naming every repo the units know, bytewise and unique
+function list_miss(   n, i, j, m, t, K, nk, SEEN) {
+  if (ENVIRON["RV_HAS_REPO"] != "1") return
+  n = nn("units")
+  nk = 0
+  for (i = 1; i <= n; i++) {
+    if (list_keeps("units." i)) return
+    m = nn("units." i ".repos")
+    for (j = 1; j <= m; j++) {
+      t = sv("units." i ".repos." j)
+      if (!(t in SEEN)) { SEEN[t] = 1; K[++nk] = t }
+    }
+  }
+  for (i = 2; i <= nk; i++) { t = K[i]; for (j = i - 1; j >= 1 && K[j] > t; j--) K[j + 1] = K[j]; K[j + 1] = t }
+  t = ""
+  for (i = 1; i <= nk; i++) t = t (i > 1 ? ", " : "") K[i]
+  fail("ERROR: no unit touches repo: " ENVIRON["RV_REPO"] " (known: " t ")")
+}
+
 # active: every ACTIVE unit bytewise by name (the answer's order), with its anchor, the
-# derived next line, and objective line group; the active view reads no journal, so it
-# carries no last_event and no thread count; a missing backlog warns
+# derived next line, and objective line group, the units an asked repo keeps; the active
+# view reads no journal, so it carries no last_event and no thread count; a missing
+# backlog warns
 function v_active(   n, i, p, k, j, nact, ntot) {
   n = nn("units")
   if (n == 0 && sv("store") == "absent") { line("no units yet"); return }
+  list_miss()
   nact = 0
   ntot = 0
   for (k = 1; k <= n; k++) {
     i = k
     p = "units." i
+    if (!list_keeps(p)) continue
     ntot++
     st_groups(state_text(p), 1)
     if (ST_status == "ACTIVE") {
@@ -530,18 +562,21 @@ function v_active(   n, i, p, k, j, nact, ntot) {
   line("closed: " (ntot - nact))
 }
 
-# units (the former query units): the units touching a repo with their anchor line group
-function v_units(   n, i, p, j, known) {
+# list_all: every unit, ACTIVE and CLOSED, bytewise by name (the answer's order), one line
+# each, <slug> [<STATUS>] <current_anchor>, the status as stored, the units an asked repo
+# keeps; no closed count
+function v_list_all(   n, i, p, a) {
   n = nn("units")
-  if (n == 0) fail("ERROR: no unit touches repo: " sv("repo") " (known: " list_join("known_repos", ", ") ")")
-  line(sprintf("units %s: %d units", sv("repo"), n))
-  line("")
+  if (n == 0 && sv("store") == "absent") { line("no units yet"); return }
+  list_miss()
   for (i = 1; i <= n; i++) {
     p = "units." i
-    if (i > 1) line("")
-    st_groups(state_text(p), 0)
-    line(sv(D(p) "unit") " " ((ST_status == "ACTIVE") ? "[ACTIVE]" : "[CLOSED]"))
-    if (ST_anchor != "") line("  " ST_anchor)
+    if (!list_keeps(p)) continue
+    st_groups(state_text(p), 1)
+    a = ST_anchor
+    sub(/^current_anchor:[ \t]*/, "", a)
+    sub(/[ \t\r]+$/, "", a)
+    line(sv(D(p) "unit") " [" ST_status "]" (a == "" ? "" : " " a))
   }
 }
 
@@ -741,7 +776,7 @@ BEGIN {
   else if (view == "audit") v_audit("")
   else if (view == "close") v_close()
   else if (view == "active") v_active()
-  else if (view == "units") v_units()
+  else if (view == "list_all") v_list_all()
   else if (view == "refs_to") v_refs_to()
   else if (view == "closure") v_closure()
   else if (view == "task_list") v_task_list()

@@ -54,12 +54,12 @@ describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, 
     expect((await unit(sb, 'reopen', 'rw-unit')).code).toBe(1);
     expect((await unit(sb, 'reopen', 'nosuch')).code).toBe(1);
     expect((await unit(sb, 'close', 'rw-unit')).code).toBe(0);
-    expect((await unit(sb, 'active')).stdout).not.toMatch(/^rw-unit$/m);
+    expect((await unit(sb, 'list')).stdout).not.toMatch(/^rw-unit$/m);
     const r = await unit(sb, 'reopen', 'rw-unit');
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('REOPENED: rw-unit');
     expect((await unit(sb, 'load', 'rw-unit', '1')).stdout).toMatch(/^status: ACTIVE/m);
-    expect((await unit(sb, 'active')).stdout).toMatch(/^rw-unit$/m);
+    expect((await unit(sb, 'list')).stdout).toMatch(/^rw-unit$/m);
   });
 
   it('E3-f [the-record-r3]: stamp takes the unit alone; a receipt text refuses and leaves the anchor; the anchor carries its number and date only', async () => {

@@ -30,7 +30,9 @@ const VIEWS: View[] = [
   { name: 'finding_list', view: 'finding_list', input: async () => golden('finding.list.all') },
   { name: 'lane_journal', view: 'lane_journal', input: async () => golden('lane.get.verb-lane.journal') },
   { name: 'lane_doc', view: 'lane_doc', input: async () => golden('lane.get.verb-lane.report') },
-  { name: 'units', view: 'units', input: fromEngine('session.units', 'alpha') },
+  { name: 'list_all', view: 'list_all', input: fromEngine('session.active') },
+  { name: 'list_all-repo', view: 'list_all', env: { RV_HAS_REPO: '1', RV_REPO: 'alpha' }, input: fromEngine('session.active') },
+  { name: 'active-repo', view: 'active', env: { RV_HAS_REPO: '1', RV_REPO: 'alpha' }, input: fromEngine('session.active') },
   { name: 'active', view: 'active', input: fromEngine('session.active') },
   { name: 'refs_to', view: 'refs_to', input: literal('{"unit":"tc67-c","referrers":["tc67-a","tc67-b"]}') },
   {

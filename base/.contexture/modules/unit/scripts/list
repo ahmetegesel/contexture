@@ -1,0 +1,50 @@
+#!/bin/sh
+# summary: the units at a glance: every ACTIVE unit with its next move, or every unit, by repo
+# usage: ctx unit list [--active|--all] [--repo=<repo>]
+# help: no flag or --active: every ACTIVE unit bytewise by name, its slug, then the current_anchor, the derived next line, and the objective lines of its canonical state, a blank line between units, then the closed count (closed: <n>)
+# help: --all: one line per unit, ACTIVE and CLOSED, bytewise by name, <slug> [<STATUS>] <current_anchor>, the status as stored; no closed count
+# help: --repo=<repo>: only the units whose repos name the repo, in the form the set flag picks; with --active the closed count counts the CLOSED units touching it; no unit, ACTIVE or CLOSED, touching the repo refuses rc 1 naming the repos the units know
+# help: the next line is derived at presentation from the backlog, never stored: the first IN_PROGRESS task, else the first open task (the board's rule, every status but DONE), as "next: <slug> (<status>)"; the no-work forms are "next: none (no backlog)", "next: none (empty backlog)", and "next: none (no open task)"
+# help: the view reads no journal: it carries no thread count and no last_event date line
+# help: the unit module answers every form in one call (session.active, bytewise by name): every state, then each ACTIVE unit's backlog; an ACTIVE unit without a backlog warns on stderr and reads none; a state whose status is neither exact ACTIVE nor CLOSED warns in the --active form and counts as closed
+# help: a store not created yet prints "no units yet" rc 0 whatever the flags; --active with --all, a flag given twice, an empty --repo, any other flag, or an argument refuses rc 1 with the usage, and a malformed repo refuses rc 1 naming it
+# help: a refusing run prints its refusal line alone; a run that read a unit from the record's deprecated root and answers rc 0 prints its one warning after the answer
+# help: exit codes: 0 the units printed (or "no units yet"); 1 a bad argument, or no unit touches the repo
+# help: example: ctx unit list --all --repo=my-repo
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'Usage: ctx unit list [--active|--all] [--repo=<repo>]\n' >&2
+  printf 'help: ctx unit help\n' >&2
+  exit 1
+}
+
+case "${1:-}" in
+  --help|-h) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
+esac
+
+form=""
+repo=""
+has_repo=0
+for a in "$@"; do
+  case "$a" in
+    --active|--all) [ -z "$form" ] || usage; form=${a#--} ;;
+    --repo=*) [ "$has_repo" -eq 0 ] || usage; has_repo=1; repo=${a#--repo=}; [ -n "$repo" ] || usage ;;
+    *) usage ;;
+  esac
+done
+[ -n "$form" ] || form=active
+if [ "$has_repo" -eq 1 ]; then
+  case "$repo" in
+    [!A-Za-z0-9._-]*|*[!A-Za-z0-9._/-]*) printf "list: error: malformed repo '%s' (ERR_INVALID_ARGUMENT)\n" "$repo" >&2; exit 1 ;;
+  esac
+fi
+
+view=active
+[ "$form" = all ] && view=list_all
+vb_call session.active
+[ "$VB_RC" -eq 0 ] || vb_through
+vb_render "$view" RV_REPO="$repo" RV_HAS_REPO="$has_repo" || exit $?
+[ -s "$VB_DIR/err" ] && cat "$VB_DIR/err" >&2
+exit 0

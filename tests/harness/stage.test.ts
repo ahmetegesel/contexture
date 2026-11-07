@@ -39,7 +39,7 @@ describe('stage', () => {
         const sb = stage(driver);
         const boot = await ctx(sb, 'unit', 'bootstrap', 'probe-unit', 'staging probe');
         expect(boot.code, boot.stderr).toBe(0);
-        const active = await ctx(sb, 'unit', 'active');
+        const active = await ctx(sb, 'unit', 'list');
         expect(active.code, active.stderr).toBe(0);
         expect(active.stdout).toMatch(/^probe-unit$/m);
         const diag = await ctx(sb, 'unit', 'diagnose', '--json');

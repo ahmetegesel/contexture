@@ -56,7 +56,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
   it('[the-record-r-4gj4k] the board, the audit, the listing, and diagnose relay the warning once each', async () => {
     const sb = fresh(snap);
     toFallback(sb, 'leg-u');
-    for (const args of [['board', 'leg-u'], ['audit', 'leg-u'], ['active'], ['diagnose']]) {
+    for (const args of [['board', 'leg-u'], ['audit', 'leg-u'], ['list'], ['diagnose']]) {
       const r = await unit(sb, ...args);
       expect([r.code, r.stderr], args.join(' ')).toEqual([0, WARNING]);
     }
@@ -121,7 +121,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 2\n', stderr: '' });
     expect([held(sb, 'leg-u'), held(sb, 'shut-u'), held(sb, 'new-u')]).toEqual([[true, false], [true, false], [true, false]]);
     expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
-    expect((await unit(sb, 'active')).stderr).toBe('');
+    expect((await unit(sb, 'list')).stderr).toBe('');
   });
 
   it('[the-record-r-4gj4k] the first refusal stops the sweep, its line naming the unit held in both roots, rc 1; the units before it stay moved', async () => {

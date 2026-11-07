@@ -135,11 +135,11 @@ describe.concurrent('the hook points around the unit verbs', () => {
     }
   });
 
-  it('HK-S6 [modules-r5, the-engine-r2]: the retired next refuses rc 1 naming active, and fires no hook', async () => {
+  it('HK-S6 [modules-r5, the-engine-r2]: the retired next refuses rc 1 naming list, and fires no hook', async () => {
     const sb = copy(tasked);
     const r = await unit(sb, 'next', 'zz-unit', 'fix-1 is next');
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain('ctx unit next retired: use active');
+    expect(r.stderr).toContain('ctx unit next retired: use list');
     expect(marker(sb)).toEqual([]);
   });
 

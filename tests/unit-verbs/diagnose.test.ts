@@ -24,7 +24,7 @@ describe.concurrent('ctx unit diagnose', () => {
 
   it('X-q [the-engine-r24]: diagnose counts the ACTIVE units exactly, in the text and --json views', async () => {
     const sb = fresh(sb0);
-    expect((await unit(sb, 'active')).stdout.split('\n').filter((l) => /^[a-z0-9][a-z0-9_-]*$/.test(l))).toHaveLength(2);
+    expect((await unit(sb, 'list')).stdout.split('\n').filter((l) => /^[a-z0-9][a-z0-9_-]*$/.test(l))).toHaveLength(2);
     expect((await unit(sb, 'diagnose')).stdout).toMatch(/active units: {4}2$/m);
     expect((await unit(sb, 'diagnose', '--json')).stdout).toMatch(/"active_units":2\}\}\n?$/);
   });

@@ -21,13 +21,13 @@ beforeAll(async () => {
 });
 
 describe.concurrent('the SQLite smoke set: every command family lands in the fts5 store and nowhere else (C14 runtime half)', () => {
-  it('SF1 [the-record-r2, the-record-r10] the unit lifecycle: bootstrap, active, units, stamp, close, the closed refusal, reopen, board', async () => {
+  it('SF1 [the-record-r2, the-record-r10] the unit lifecycle: bootstrap, list, list --all --repo, stamp, close, the closed refusal, reopen, board', async () => {
     const sb = sqliteStage('sf1');
     await must(unit(sb, 'bootstrap', 'sf1', 'the lifecycle unit', 'sq-repo'));
-    expect(await show(sb, 'active')).toContain('sf1');
-    expect(await show(sb, 'units', 'sq-repo')).toContain('sf1 [ACTIVE]');
+    expect(await show(sb, 'list')).toContain('sf1');
+    expect(await show(sb, 'list', '--all', '--repo=sq-repo')).toContain('sf1 [ACTIVE]');
     await must(unit(sb, 'stamp', 'sf1'));
-    expect(await show(sb, 'active')).toMatch(/^ {2}current_anchor: A2$/m);
+    expect(await show(sb, 'list')).toMatch(/^ {2}current_anchor: A2$/m);
     await must(unit(sb, 'close', 'sf1'));
     expect((await unit(sb, 'record', 'sf1', '--what=a write into a closed unit')).code).toBe(1);
     await must(unit(sb, 'reopen', 'sf1'));

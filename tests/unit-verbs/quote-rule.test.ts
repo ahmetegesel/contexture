@@ -56,7 +56,7 @@ describe.concurrent('one quote rule for every one-line quoted field', () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'bootstrap', 'u-obj', OBJ)).code).toBe(0);
     expect((await unit(sb, 'load', 'u-obj', '1')).stdout.split('\n')).toContain(`objective: "${OBJ}"`);
-    expect((await unit(sb, 'active')).stdout).toContain('objective: "the "quoted" objective of the human');
+    expect((await unit(sb, 'list')).stdout).toContain('objective: "the "quoted" objective of the human');
     expect((await unit(sb, 'load', 'u-obj')).stdout).toContain(`objective: "${OBJ}"`);
     expect((await unit(sb, 'audit', 'u-obj')).code).toBe(0);
     expect((await unit(sb, 'bootstrap', 'u-nl', 'first\nsecond')).code).toBe(1);

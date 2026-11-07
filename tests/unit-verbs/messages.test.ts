@@ -118,7 +118,7 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
   it('UP-b [the-record-r14]: active names the state and the unit of an unknown status (posix plant)', async () => {
     const sb = stage('posix', 'messages-status');
     plantArtifact(sb, 'up-odd', 'state', state('odd', { status: 'WEIRD' }));
-    const err = (await unit(sb, 'active')).stderr;
+    const err = (await unit(sb, 'list')).stderr;
     expect(err).toMatch(/^WARNING: unrecognized status \[WEIRD\] in state: unit up-odd$/m);
     pathFree(err);
   });

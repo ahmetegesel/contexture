@@ -2,7 +2,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { fresh, seed } from '../support/snapshot';
 import { must, seedUnit, unit } from '../support/unit';
 
-describe.concurrent('ctx unit units and refs-to', () => {
+describe.concurrent('ctx unit list --all --repo and refs-to', () => {
   let sb0: string;
   beforeAll(async () => {
     sb0 = await seed(async (sb) => {
@@ -12,17 +12,15 @@ describe.concurrent('ctx unit units and refs-to', () => {
     }, 'posix', 'units');
   });
 
-  it('N-b: units lists the unit touching a repo with its anchor and no stored pointer', async () => {
-    const r = await unit(fresh(sb0), 'units', 'n-repo');
+  it('N-b [the-record-r-lst33]: list --all --repo lists the unit touching a repo with its anchor and no stored pointer', async () => {
+    const r = await unit(fresh(sb0), 'list', '--all', '--repo=n-repo');
     expect(r.code).toBe(0);
-    const lines = r.stdout.split('\n');
-    expect([lines[0], lines[2]]).toEqual(['units n-repo: 1 units', 'n-unit [ACTIVE]']);
-    expect(r.stdout).toMatch(/^ {2}current_anchor: A1$/m);
+    expect(r.stdout).toBe('n-unit [ACTIVE] A1\n');
     expect(r.stdout).not.toContain('next_action');
   });
 
-  it('N-b: units of a repo no unit touches refuses naming the known repos', async () => {
-    const r = await unit(fresh(sb0), 'units', 'no-such-repo');
+  it('N-b [the-record-r-lst33]: list --all --repo of a repo no unit touches refuses naming the known repos', async () => {
+    const r = await unit(fresh(sb0), 'list', '--all', '--repo=no-such-repo');
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^ERROR: no unit touches repo: no-such-repo \(known: .*n-other, n-repo/m);
   });
