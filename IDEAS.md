@@ -227,3 +227,30 @@
   WHY :: Found by the corpus homes lane (lanes/exec-homes-docs/report F4, docs-module-p2); it matters more now that test titles cite rule ids for the coverage report; the human chose to record it rather than fix it in unit docs-plugins.
   REF: "plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-edit.awk"
   STATUS: PICKED docs-plugins
+
+@idea legacy-sunset
+  DUMPED: 2026-11-07
+  WHAT ::
+    One global retirement of the temporary legacy branches the drawer-layout moves add, once adopters had time to move: (1) the composer boot cleanup that removes a legacy .contexture/laws/AGENTS.generated.md; (2) the posix fallback read of .contexture/sessions (the unit data file fallback_root, the store-data opt-in answer, the deprecation line); (3) the move on first write promotion and store.promote; (4) ctx unit migrate. The removal release refuses rc 2 while units remain in the old root, naming ctx unit migrate --all, so nothing disappears silently; the changelog names the end.
+  WHY ::
+    The human ruled both deprecation windows open ended (unit drawer-layout, journal 2026-11-07-event-1794033554 and 2026-11-07-event-1794033824): the legacy logic retires by a separate global task after a while, never on a date fixed now.
+  REF: "unit#drawer-layout/entry/2026-11-07-event-1794033824"
+  STATUS: OPEN
+
+@idea audit-repair-verb
+  DUMPED: 2026-11-07
+  WHAT ::
+    A repair path for the audit grammar findings no verb can fix today (bracketed field lines, inline markers on entry lines, dateless slugs on the append-only journal): a verb that supersedes or rewrites the broken entry through the record, so the only repair is never a hand edit of the stored journal.
+  WHY ::
+    Lane gather-leak-audit (unit drawer-layout) found the audit help plus a stored line number leaves a hand edit as the only repair, a file act against the cli-doorway law; internals-leak-audit rewords the help to send such findings to the human until a verb exists.
+  REF: "unit#drawer-layout/lane/gather-leak-audit/report"
+  STATUS: OPEN
+
+@idea corpus-logical-address
+  DUMPED: 2026-11-07
+  WHAT ::
+    The docs verbs print the corpus logical address docs/<repo>/<slug>.md, which under the files driver is the real file path, the corpus twin of the record path leak. Decide whether ctx docs query prints <repo>/<slug> while the check and gate keep the path form their deltas need, a docs-discipline contract change with a plugin bump.
+  WHY ::
+    Lane gather-leak-audit (unit drawer-layout) found it out of scope for internals-leak-audit: the address is load bearing in the check and gate deltas under a tracked files corpus.
+  REF: "unit#drawer-layout/lane/gather-leak-audit/report"
+  STATUS: OPEN

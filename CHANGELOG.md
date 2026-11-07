@@ -4,6 +4,34 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.68.0] - 2026-11-07
+
+MINOR: the generated law layer moves to the workspace root, and the shipped help, laws, and output say unit where they said session. The composed layer is now `AGENTS.generated.md` beside `AGENTS.md`, `AGENTS.workspace.md`, and `AGENTS.local.md`; the composer removes the layer an older composer left under `.contexture/laws/` at every boot, a temporary branch the idea `legacy-sunset` retires later. The unit and lane verbs, the laws, and the runtime messages name the unit, and the help lines that named the storage driver as the actor of a record operation name the unit module. docs-discipline 1.3.1.
+
+### Breaking
+
+- The generated law layer's path is `AGENTS.generated.md` at the workspace root, no longer `.contexture/laws/AGENTS.generated.md`. A standalone repository replaces its ignore line `.contexture/laws/AGENTS.generated.md` with `/AGENTS.generated.md`; a parent workspace that whitelists `.contexture/` drops its re-ignore line, since its deny by default line keeps a root file ignored; never whitelist an `AGENTS*.md` glob. Make the ignore edit after the update's compose has removed the legacy file (docs/adoption.md, Updating step 9).
+- A harness entry point that is a copy of the old loader, rather than a symlink to `AGENTS.md`, still reads `.contexture/laws/AGENTS.generated.md`, which the first compose removes: it now stops at boot instead of booting on a stale layer. Refresh such copies, and any overlay, script, or tool text naming the old path.
+- The composer's stderr lines changed: `compose: composed AGENTS.generated.md`, `compose: stale: AGENTS.generated.md`, and `compose: error: cannot write AGENTS.generated.md` (they named the old path); two are new: `compose: removed legacy .contexture/laws/AGENTS.generated.md`, and `compose: error: cannot remove the legacy .contexture/laws/AGENTS.generated.md, the root layer already written` (rc 2).
+- The runtime messages say unit: `session-load` reads `unit-load`; `no sessions yet` reads `no units yet`; `no active sessions` reads `no active units`; `# === REF SESSION: <u> (READ-ONLY) ===` reads `# === REF UNIT: <u> (READ-ONLY) ===`; `the active session` reads `the active unit`; `ref sessions READ-ONLY` reads `ref units READ-ONLY`; `to read a reference session` reads `to read a reference unit`; `ERROR: no such session` reads `ERROR: no such unit`; `ERROR: ref session malformed` and `ERROR: duplicate ref session` read `ref unit`; `ERROR: session exists: unit <slug>` reads `ERROR: already exists: unit <slug>`; `ERROR: no unit references session: <u>` reads `ERROR: no unit references <u>`. A script matching the old text needs the new.
+- The core law layout changed: `@layout` gains the `AGENTS.generated.md` line and names `.contexture/laws/` the law sources (core.md and the composer). An overlay that replaces `@layout` needs a re-check.
+
+### Changed
+
+- The composer's default mode, whether it rewrote the layer or found it current, removes a legacy `.contexture/laws/AGENTS.generated.md` (a symlink included) with one notice; `--check` never removes it. No fallback read of the old path: the compose rebuilds the layer from its sources.
+- The shipped help, the laws, and the module laws name the unit where they named the session: `ctx unit audit` is the unit audit, `ctx unit diagnose` reads storage diagnostics: configuration, storage driver, and storage health, `ctx unit refs` takes `[<unit> ...]`, search, stamp, resolve, and the lane verbs speak of units; the laws read the active unit's live surfaces, the reference units (ref_sessions) read only, every journal entry of the unit, cross-unit, the unit audit, and the subagent's journal and report staying in the unit's record. The kept names stay by ruling: the on-disk root `.contexture/sessions` and `sessions.db`, the `session.*` record operation names, the search entity type `session`, the config keys `session.storage.driver` and `session.storage.database`, the stored field `ref_sessions`, and the `ctx session retired` message. diagnose's posix health detail still names the sessions directory until the storage probe is redesigned.
+- Fifteen help lines that said the storage driver composes the slug, injects the anchor, or holds the record rules name the unit module, which does that work under contract 3.
+- docs-discipline 1.3.0 to 1.3.1, its manifest and its docs module file together: its laws say retrieval at boot and composed into the generated layer.
+- The update and dev loop steps (docs/adoption.md) run the compose right after the copy and the hand deletes, then the payload compare without `-x`: a leftover legacy layer prints as a missed delete, and the live version detection reads the one line `Only in .contexture/laws: AGENTS.generated.md`, on a drawer composed before v0.68.0, as the legacy layer. tests/README.md names the golden regeneration command.
+- The guides, the onboarding, and the README tree seat the generated layer at the root, call `.contexture/laws/` the law sources, and say unit where they said session in concept wording.
+
+### Fixed
+
+- A root `AGENTS.generated.md` that is a symbolic link reads as stale under `--check`, and a default run replaces it with the composed file before the legacy cleanup, so the cleanup never leaves the root layer dangling after an rc 0 run.
+- The guides no longer call the laws folder the law layer or say everything but the overlays lives in the drawer, and the adoption update step says live units.
+
+Commits in the range: 0048f28 (the generated layer at the root); 241960a, 263b10b (the unit wording and the runtime messages); d57da32, bbc6745, e8e7748 (the review fixes); and the release commit.
+
 ## [0.67.0] - 2026-11-07
 
 MINOR: false results ended in both plugins, opaque corpus ids, and rule id coverage. docs-discipline 1.3.0 reads paths git quotes, never lets an untracked corpus read fresh, stages its scratch in the swept per-verb root, previews ctx docs remove, ranks owners across repos, and gives a new corpus entry an opaque id that is never handed out again; ast-doc-graph 1.2.0 drops the rows of removed files, records its repository and source roots, and ends six silent failures; the pre-release set reports every corpus contract rule id covered by a test or reasoned in a tracked table.
