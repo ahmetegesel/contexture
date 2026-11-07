@@ -50,6 +50,8 @@ Options:
                        drawer's .contexture/tmp, removed at exit)
   --delta              Incremental update: the named files, else those newer than the
                        database, plus every file added or removed since the last index
+  --no-reconcile       With --delta: the named or newer files alone, no file removed or
+                       added (the query's refresh of a graph that records no root)
   --file <path>        Target file to update in delta mode (can be repeated)
   --clean              Recreate the database and empty a --cache-dir folder
   --help, -h           Display this help manual
@@ -73,6 +75,7 @@ SRC_DIR=""
 CACHE_DIR=""
 CLEAN=false
 DELTA=false
+RECONCILE=true
 EXPLICIT_FILES=()
 
 while [[ $# -gt 0 ]]; do
@@ -127,6 +130,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --delta)
       DELTA=true
+      shift
+      ;;
+    --no-reconcile)
+      RECONCILE=false
       shift
       ;;
     --file)
@@ -287,7 +294,8 @@ if [[ "$DELTA" == true ]]; then
   fi
 
   # Reconcile: the loader refuses a root other than the recorded one, then prints S for the recorded
-  # source root, D for an indexed file the disk lacks, and A for a discovered file the graph lacks in a folder it covers
+  # source root, D for an indexed file the disk lacks, and A for a discovered file the graph lacks in a
+  # folder it covers; --no-reconcile keeps the refusals and the S line, never a D or an A
   DISCOVERED_LIST="$CACHE_DIR/discovered_files.txt"
   RECONCILED_LIST="$CACHE_DIR/reconciled_files.txt"
   {
@@ -305,8 +313,8 @@ if [[ "$DELTA" == true ]]; then
   RECORDED_SRC=""
   while IFS=$'\t' read -r mark f; do
     case "$mark" in
-      A) printf '%s\n' "$f" >> "$DIRTY_LIST" ;;
-      D) printf '%s\n' "$f" >> "$GONE_LIST" ;;
+      A) [[ "$RECONCILE" == false ]] || printf '%s\n' "$f" >> "$DIRTY_LIST" ;;
+      D) [[ "$RECONCILE" == false ]] || printf '%s\n' "$f" >> "$GONE_LIST" ;;
       S) RECORDED_SRC="$f" ;;
     esac
   done < "$RECONCILED_LIST"

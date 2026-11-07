@@ -168,8 +168,9 @@ check_and_sync_freshness() {
     return 0
   fi
 
-  # The repository and source roots the graph's full index recorded, else a guess for a graph loaded before the record
-  local repo_root="" src_root="" recorded
+  # The repository and source roots the graph's full index recorded, else a guess for a graph loaded
+  # before the record, whose refresh then removes and adds no file beyond the newer ones
+  local repo_root="" src_root="" recorded no_reconcile=""
   recorded="$(sqlite_exec -separator "$SEP" "$DB_PATH" "SELECT repo_root, src_root FROM graph_meta LIMIT 1;" 2>/dev/null || true)"
   if [[ -n "$recorded" ]]; then
     IFS="$SEP" read -r repo_root src_root <<< "$recorded"
@@ -192,6 +193,8 @@ check_and_sync_freshness() {
       repo_root="$PWD"
     fi
     src_root="$repo_root"
+    no_reconcile="--no-reconcile"
+    echo "[ast-doc-graph: the graph records no repository root, so its refresh takes $repo_root as a guess and removes no file. Run a full ast-doc-index of the repository to record its root]" >&2
   fi
 
   # Resolve index driver
@@ -240,13 +243,16 @@ check_and_sync_freshness() {
       scan_find "$repo_root" -type f -name "*.md" "${newer[@]}"
     fi 2>/dev/null || true)
 
-  # An indexed file the disk no longer has is dirty too, unless every one reads gone (another root)
+  # For a graph that records its roots, an indexed file the disk no longer has is dirty too,
+  # unless every one reads gone (another root)
   local indexed_files=() indexed_file gone_files=() saved_ifs="$IFS"
-  IFS=$'\n'
-  set -f
-  indexed_files=($(sqlite_exec "$DB_PATH" "SELECT file FROM indexed_files;" 2>/dev/null || true))
-  set +f
-  IFS="$saved_ifs"
+  if [[ -z "$no_reconcile" ]]; then
+    IFS=$'\n'
+    set -f
+    indexed_files=($(sqlite_exec "$DB_PATH" "SELECT file FROM indexed_files;" 2>/dev/null || true))
+    set +f
+    IFS="$saved_ifs"
+  fi
   for indexed_file in ${indexed_files[@]+"${indexed_files[@]}"}; do
     [[ "$indexed_file" == /* ]] || indexed_file="$repo_root/$indexed_file"
     [[ -e "$indexed_file" ]] || gone_files+=("$indexed_file")
@@ -261,7 +267,7 @@ check_and_sync_freshness() {
   elif [[ "$dirty_count" -le 2 ]]; then
     if [[ -n "$index_driver" && -x "$index_driver" ]]; then
       local sync_err sync_rc=0 reason
-      sync_err="$("$index_driver" --repo-root "$repo_root" --db "$DB_PATH" --delta "${dirty_files[@]}" 2>&1 >/dev/null)" || sync_rc=$?
+      sync_err="$("$index_driver" --repo-root "$repo_root" --db "$DB_PATH" --delta ${no_reconcile:+"$no_reconcile"} "${dirty_files[@]}" 2>&1 >/dev/null)" || sync_rc=$?
       if [[ "$sync_rc" -ne 0 ]]; then
         reason="$(printf '%s\n' "$sync_err" | grep -m 1 -E '^(Error|Fatal)' || printf '%s\n' "$sync_err" | grep -v '^[[:space:]]*$' | tail -n 1 || true)"
         echo "[ast-doc-graph: the inline delta index failed (rc $sync_rc${reason:+: $reason}); answering from the graph as it stands. Run ast-doc-index --delta to refresh]" >&2

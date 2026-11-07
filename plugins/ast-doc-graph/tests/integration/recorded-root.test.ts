@@ -1,4 +1,4 @@
-import { appendFileSync, mkdirSync, renameSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
+import { appendFileSync, mkdirSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { exec } from '@support/exec';
@@ -46,6 +46,8 @@ function later(repo: string, db: string, rel: string, text = ''): void {
 
 const query = (cwd: string, db: string, ...args: string[]) => exec(join(MODULE, 'bin/graph-query'), [...args, '--db', db], { cwd });
 const docs = (db: string) => count(db, 'SELECT count(*) FROM docs;');
+const noRecord = (guess: string) =>
+  `[ast-doc-graph: the graph records no repository root, so its refresh takes ${guess} as a guess and removes no file. Run a full ast-doc-index of the repository to record its root]\n`;
 const symbolsIn = (db: string, prefix: string) => count(db, `SELECT count(*) FROM symbols WHERE file LIKE '${prefix}%';`);
 
 async function indexed(repo: string, args: string[]): Promise<void> {
@@ -64,8 +66,8 @@ describe.skipIf(!sqliteFts5)('the recorded repository root', { concurrent: true 
     expect(sqlite(db, "SELECT repo_root || '|' || src_root FROM graph_meta;").trim()).toBe(`${repo}|${repo}`);
   });
 
-  function outsideDb(label: string): { repo: string; other: string; db: string } {
-    const repo = twoDocs(sandbox(`${label}-repo`));
+  function outsideDb(label: string, slugs = ['alpha', 'beta']): { repo: string; other: string; db: string } {
+    const repo = write(sandbox(`${label}-repo`), Object.fromEntries(slugs.map((s) => [`docs/workspace/${s}.md`, unitDoc(s)])));
     const other = write(sandbox(`${label}-db`), { 'docs/workspace/alpha.md': unitDoc('alpha') });
     mkdirSync(join(other, '.contexture'));
     return { repo, other, db: join(other, 'graph.db') };
@@ -78,6 +80,21 @@ describe.skipIf(!sqliteFts5)('the recorded repository root', { concurrent: true 
     expect([r.code, r.stderr]).toEqual([0, '']);
     expect(r.stdout.split('\n')).toContain('  DOCS: 2');
     expect(docs(db)).toBe(2);
+  });
+
+  it('[ast-doc-graph-r1] a delta given --no-reconcile re-indexes only its named or newer files: a gone file keeps its rows and an old unindexed one in a covered folder stays out', async () => {
+    const repo = twoDocs(sandbox('no-reconcile'));
+    const db = join(repo, 'graph.db');
+    await indexed(repo, ['--clean']);
+    rmSync(join(repo, 'docs/workspace/beta.md'));
+    write(repo, { 'docs/workspace/gamma.md': unitDoc('gamma') });
+    const old = new Date(statSync(db).mtimeMs - 10_000);
+    utimesSync(join(repo, 'docs/workspace/gamma.md'), old, old);
+    later(repo, db, 'docs/workspace/alpha.md', '  - rule: "alpha also holds"\n    evidence: "alphaWork"\n');
+    const r = await astDocIndex(repo, ['--delta', '--no-reconcile']);
+    expect(r.code, r.stderr).toBe(0);
+    expect(sqlite(db, 'SELECT id FROM docs ORDER BY id;').trim().split('\n')).toEqual(['doc:workspace:alpha', 'doc:workspace:beta']);
+    expect(count(db, "SELECT count(*) FROM rules WHERE doc_id = 'doc:workspace:alpha';")).toBe(2);
   });
 
   it('[ast-doc-graph-r1] a delta whose repository root differs from the recorded one refuses rc 1 naming both and leaves the graph', async () => {
@@ -119,15 +136,36 @@ describe.skipIf(!sqliteFts5)('the recorded repository root', { concurrent: true 
     expect(docs(db)).toBe(2);
   });
 
-  it('[ast-doc-graph-r16] a graph without the record, built before it, keeps the guessed root: a query in its repository still syncs a dirty doc', async () => {
+  it('[ast-doc-graph-r16] a graph without the record, built before it, keeps the guessed root: a query in its repository still syncs a dirty doc and prints the one notice', async () => {
     const repo = twoDocs(sandbox('recorded-none'));
     const db = join(repo, 'graph.db');
     await indexed(repo, ['--clean']);
     sqlite(db, 'DROP TABLE IF EXISTS graph_meta;');
     later(repo, db, 'docs/workspace/beta.md', '  - rule: "beta also holds"\n    evidence: "betaWork"\n');
     const r = await query(repo, db, 'stats');
-    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect([r.code, r.stderr]).toEqual([0, noRecord(repo)]);
     expect(r.stdout.split('\n')).toContain('  RULES: 3');
+  });
+
+  it("[ast-doc-graph-r16] a graph without the record loses no row through the query's refresh: a newer file under a guessed root holding only some of its paths still syncs, and the rest stay", async () => {
+    const { repo, other, db } = outsideDb('recorded-none-outside');
+    await indexed(repo, ['--clean', '--db', db]);
+    sqlite(db, 'DROP TABLE graph_meta;');
+    later(other, db, 'docs/workspace/alpha.md', '  - rule: "alpha also holds"\n    evidence: "alphaWork"\n');
+    const r = await query(repo, db, 'stats');
+    expect(r.code).toBe(0);
+    expect(r.stdout.split('\n')).toContain('  DOCS: 2');
+    expect(count(db, 'SELECT count(*) FROM rules;')).toBe(3);
+    expect(r.stderr).toBe(noRecord(other));
+  });
+
+  it('[ast-doc-graph-r16] a graph without the record counts no gone file: three paths the guessed root lacks print the notice alone, never the advisory', async () => {
+    const { repo, other, db } = outsideDb('recorded-none-gone', ['alpha', 'beta', 'gamma', 'delta']);
+    await indexed(repo, ['--clean', '--db', db]);
+    sqlite(db, 'DROP TABLE graph_meta;');
+    const r = await query(repo, db, 'stats');
+    expect([r.code, r.stderr]).toEqual([0, noRecord(other)]);
+    expect(docs(db)).toBe(4);
   });
 });
 

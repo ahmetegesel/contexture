@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: run the indexing pipeline: full or --delta, over a repository root
-# usage: ctx ast-doc-graph index [--repo-root <path>] [--src-dir <dir>] [--db <path>] [--cache-dir <path>] [--clean | --delta] [files...]
-# help: discovers TypeScript sources and docs units, runs the extractors, and compiles the SQLite graph; --clean rebuilds the database from scratch, --delta re-indexes changed files (all changed by default, or the named files)
+# usage: ctx ast-doc-graph index [--repo-root <path>] [--src-dir <dir>] [--db <path>] [--cache-dir <path>] [--clean | --delta [--no-reconcile]] [files...]
+# help: discovers TypeScript sources and docs units, runs the extractors, and compiles the SQLite graph; --clean rebuilds the database from scratch, --delta re-indexes changed files (all changed by default, or the named files), removing those the disk no longer has, and refuses rc 1 when its --repo-root or a given --src-dir differs from the roots the last full index recorded; --no-reconcile keeps a delta to the changed or named files, removing and adding no other (the query's refresh of a graph that records no root)
 # help: runs inside a contexture drawer (the workspace under ctx; run directly, a repository root holding its .contexture folder) and refuses rc 1 outside one; the intermediate streams live in a per-run folder inside the verb's scratch, removed at exit, or in a caller-owned --cache-dir
 # help: the extractors need a runner (a project-local tsx, else tsx or Node with type stripping on the caller's PATH) and, for TypeScript sources, a TypeScript 5 or 6 compiler API reachable from the module or the target repository, or named by AST_DOC_GRAPH_TYPESCRIPT (a package folder or its entry file, the only candidate when set); with none the index refuses rc 1 naming each typescript found; sqlite3 with FTS5 compiles and queries the graph
 # help: example: ctx ast-doc-graph index --repo-root . --clean

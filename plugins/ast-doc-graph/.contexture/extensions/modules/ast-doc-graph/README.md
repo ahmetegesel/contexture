@@ -82,7 +82,11 @@ a named TypeScript file outside the recorded source root with a warning,
 and the reconcile refuses rc 1 when every indexed file is absent under its
 root. The query's freshness check reads `graph_meta` first and scans its
 roots, never guessing for a graph that holds the record, and counts an
-indexed file the disk lacks as dirty.
+indexed file the disk lacks as dirty. A graph without the record (an
+earlier release loaded it) gets the guess, counts no gone file, and has its
+inline delta run with `--no-reconcile`, which keeps the reconcile's refusals
+but removes and adds nothing, so only its newer files sync; the query prints
+one stderr notice naming the guess and the full index that records the root.
 
 The docs extractor reads the corpus as files: `bin/ast-doc-index` lists the
 regular markdown files of the workspace's `docs/` folder (else the
@@ -151,9 +155,11 @@ them), an old file outside a `--src-dir` graph's folders kept out;
 `recorded-root` proves the recorded roots: the row a full index writes, a
 database kept outside its repository answering for it, a delta against
 another root refusing (on both loader branches), one given another
-`--src-dir` refusing, a moved repository's notice, a `--src-dir` graph staying inside through a bare,
-a named, and an inline delta, and a graph without the record keeping the
-guess; `delta-jit` also proves a failed inline delta's one stderr line and the
+`--src-dir` refusing, a moved repository's notice, a `--src-dir` graph
+staying inside through a bare, a named, and an inline delta, a delta given
+`--no-reconcile` removing and adding nothing, and a graph without the record
+keeping the guess with its one notice, its refresh never removing a path the
+guessed root lacks nor counting one; `delta-jit` also proves a failed inline delta's one stderr line and the
 fallback delta over a graph past 1 MB, `pipeline` one search row for a name
 declared more than once. The `sqlite3` command fallback cases run with
 `NODE_OPTIONS=--no-experimental-sqlite` and skip, naming the need, where the
