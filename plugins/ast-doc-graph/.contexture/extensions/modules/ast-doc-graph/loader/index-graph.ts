@@ -940,22 +940,19 @@ async function main(): Promise<void> {
     // Fallback to /usr/bin/sqlite3 CLI
     const sqliteBin = fs.existsSync('/usr/bin/sqlite3') ? '/usr/bin/sqlite3' : 'sqlite3';
 
+    // A read takes the whole answer however large, and a failed read fails the load, never an empty table
+    const queryJson = (sql: string): any[] => {
+      const res = execFileSync(sqliteBin, [dbPath, '-json', sql], { encoding: 'utf8', maxBuffer: Infinity });
+      return res.trim() ? JSON.parse(res) : [];
+    };
+
     if (reconcilePath) {
-      const out = execFileSync(sqliteBin, [dbPath, '-json', 'SELECT file FROM indexed_files;'], { encoding: 'utf8' });
-      printReconcile((out.trim() ? JSON.parse(out) : []).map((r: any) => r.file));
+      printReconcile(queryJson('SELECT file FROM indexed_files;').map((r: any) => r.file));
       return;
     }
 
     if (delta) {
       // Query existing state to re-link edges
-      const queryJson = (sql: string): any[] => {
-        try {
-          const res = execFileSync(sqliteBin, [dbPath, '-json', sql], { encoding: 'utf8' });
-          return res.trim() ? JSON.parse(res) : [];
-        } catch {
-          return [];
-        }
-      };
 
       const existingSymbolsRaw = queryJson('SELECT id, name, qname, kind, file, line_start, line_end, signature, docstring FROM symbols;');
       const existingDocsRaw = queryJson('SELECT id, repo, kind, summary, sources, keywords FROM docs;');
@@ -963,14 +960,9 @@ async function main(): Promise<void> {
       const existingPitfallsRaw = queryJson('SELECT id, doc_id, severity, type, statement, trigger, evidence_symbols, evidence_raw FROM pitfalls;');
       const existingEdgesRaw = queryJson('SELECT source, target, kind FROM edges;');
 
-      // Also query docs covering modifiedFiles
-      for (const file of modifiedFiles) {
-        if (file.endsWith('.md')) {
-          const coveredDocs = queryJson(`SELECT source FROM edges WHERE target = '${file.replace(/'/g, "''")}' AND kind = 'COVERS' AND source LIKE 'doc:%';`);
-          for (const row of coveredDocs) {
-            if (row.source) docIdsToDelete.add(row.source);
-          }
-        }
+      // Also the docs covering modified markdown files, read from the edges in hand
+      for (const e of existingEdgesRaw) {
+        if (e.kind === 'COVERS' && String(e.source).startsWith('doc:') && String(e.target).endsWith('.md') && modifiedFiles.has(e.target)) docIdsToDelete.add(e.source);
       }
       for (const id of unitsDefinedOnlyBy(existingEdgesRaw, modifiedFiles)) docIdsToDelete.add(id);
       const unitIds = existingDocsRaw.map((d: any) => d.id);

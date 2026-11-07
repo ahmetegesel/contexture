@@ -1,11 +1,11 @@
-import { appendFileSync, statSync, utimesSync } from 'node:fs';
+import { appendFileSync, copyFileSync, mkdirSync, statSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec } from '@support/exec';
 import { sandbox } from '@support/sandbox';
 import { fresh } from '@support/snapshot';
 import { sqlite } from '@support/sqlite';
-import { astDocIndex, compilerApi, count, docsRepo, fallbackReachable, graphQuery, miniRepo, MODULE, NO_NODE_SQLITE, sqliteFts5 } from '../support/graph';
+import { astDocIndex, compilerApi, count, docsRepo, fallbackReachable, graphQuery, miniRepo, MODULE, NO_NODE_SQLITE, sqliteFts5, TYPESCRIPT } from '../support/graph';
 
 const db = (sb: string) => join(sb, 'graph.db');
 
@@ -81,6 +81,33 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the delta index and the just-in-
     expect(count(db(fallback), "SELECT count(*) FROM sqlite_master WHERE name = 'idx_edges_kind';")).toBe(1);
     const summary = (out: string) => out.split('\n').filter((l) => !l.startsWith('  DATABASE: '));
     expect(summary(runs[1].stdout)).toEqual(summary(runs[0].stdout));
+  });
+});
+
+describe.skipIf(!sqliteFts5 || !compilerApi() || !fallbackReachable)('a wide graph on the sqlite3 command fallback (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', { concurrent: true }, () => {
+  it('[ast-doc-graph-r6, ast-doc-graph-r9] a delta reads the whole graph past 1 MB, so a bare name two methods carry stays ambiguous and governs neither, as on the built-in branch', async () => {
+    const repo = sandbox('fallback-wide');
+    mkdirSync(join(repo, 'node_modules'));
+    symlinkSync(TYPESCRIPT, join(repo, 'node_modules/typescript'));
+    mkdirSync(join(repo, 'src/a'), { recursive: true });
+    mkdirSync(join(repo, 'src/b'));
+    mkdirSync(join(repo, 'docs/workspace'), { recursive: true });
+    writeFileSync(join(repo, 'src/a/run.ts'), 'export class A {\n  runWork(): number {\n    return 1;\n  }\n}\n');
+    writeFileSync(join(repo, 'src/b/run.ts'), 'export class B {\n  runWork(): number {\n    return 2;\n  }\n}\n');
+    writeFileSync(join(repo, 'docs/workspace/wide.md'), '@doc structural wide\n  repo: workspace\n  description: "wide probe"\n  sources: [lib/**]\n  keywords: [wide]\n@contract\n  - rule: "runWork stays ambiguous"\n    evidence: "runWork"\n');
+    const full = await astDocIndex(repo, ['--clean']);
+    expect(full.code, full.stderr).toBe(0);
+    sqlite(db(repo), `WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 4999) INSERT INTO symbols (id, name, qname, kind, file, line_start, line_end, signature, docstring) SELECT 'sym:src/pad/pad.ts:pad' || i, 'pad' || i, 'pad' || i, 'function', 'src/pad/pad.ts', 1, 2, NULL, '${'a padding docstring '.repeat(15)}' FROM n; PRAGMA wal_checkpoint(TRUNCATE);`);
+    const fallback = join(sandbox('fallback-wide-db'), 'graph.db');
+    copyFileSync(db(repo), fallback);
+    edit(repo, 'src/b/run.ts', '\n');
+    for (const [target, env] of [[db(repo), {}], [fallback, NO_NODE_SQLITE]] as const) {
+      const r = await exec(join(MODULE, 'bin/ast-doc-index'), ['--repo-root', repo, '--db', target, '--delta', 'src/b/run.ts'], { cwd: repo, env });
+      expect(r.code, r.stderr).toBe(0);
+    }
+    const governs = (target: string) => sqlite(target, "SELECT source || ' ' || target FROM edges WHERE kind = 'GOVERNS' ORDER BY 1;");
+    expect(governs(db(repo))).toBe('');
+    expect(governs(fallback)).toBe('');
   });
 });
 
