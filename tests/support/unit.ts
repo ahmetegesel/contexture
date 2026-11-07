@@ -44,7 +44,7 @@ export const LANE_BRIEF: Readonly<Record<string, string>> = {
   branch: 'the sandbox checkout on its current branch',
   writes: 'read only',
   scope: 'answer the test question; stop when it is answered',
-  report: 'FINDINGS: each answer with its grounding',
+  report: 'FINDINGS :: each answer with its grounding',
 };
 
 export function laneFlags(extra: readonly string[] = []): string[] {

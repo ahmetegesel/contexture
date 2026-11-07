@@ -669,8 +669,9 @@ function oneline_nl(s) {
 # resolve (kept): the item's span, trailing separator included; a lane recipe or report
 # claim is the document's span from the last head naming it: an "@<claim>" (or "@claim
 # <claim>") line runs to the line before the next column-0 ^@[A-Za-z] line (the v0.54.0
-# rule, base's since resolve is base's), a column-0 "<claim> ::" line to the line before
-# the next non-blank column-0 line, blank lines inside either span kept; a lane journal
+# rule, base's since resolve is base's), a column-0 "<claim> ::" line, its text on that
+# line or below, to the line before the next non-blank column-0 line, blank lines inside
+# either span kept; a lane journal
 # claim is the span of the last entry carrying that slug, as lane show prints it
 function v_resolve(   k, n, L, i, found, keyed, e, t, claim, w, o) {
   k = ENVIRON["RV_KIND"]
@@ -694,7 +695,7 @@ function v_resolve(   k, n, L, i, found, keyed, e, t, claim, w, o) {
     t = L[i]
     sub(/[ \t\r]+$/, "", t)
     if (t == "@" claim) { found = i; keyed = 0 }
-    else if (t == claim " ::") { found = i; keyed = 1 }
+    else if (t == claim " ::" || substr(t, 1, length(claim) + 4) == claim " :: ") { found = i; keyed = 1 }
     else if (L[i] ~ /^@claim[ \t]/) {
       split(L[i], w, /[ \t]+/)
       if (w[2] == claim) { found = i; keyed = 0 }

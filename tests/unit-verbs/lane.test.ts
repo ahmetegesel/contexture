@@ -42,8 +42,8 @@ const FULL = [
   '--writes=read only',
   '--scope=list every probe caller; done when each names its file and symbol',
   '--scope', 'mark the callers the task touches',
-  '--report=CALLERS: each caller with its file and symbol',
-  '--report=OPEN: anything the lane could not settle',
+  '--report=CALLERS :: each caller with its file and symbol',
+  '--report=OPEN :: anything the lane could not settle',
   `--ref=journal#${D}-x-e1`,
   '--ref=lane#x-lane/report',
   '--ref', 'lanes/x-lane/report',
@@ -98,10 +98,10 @@ const FULL_RECIPE = [
   '',
   'REPORT (ctx lane report sem-unit full-lane, the body on stdin; self-sufficient: the dispatcher reads only the report) ::',
   '  @report full-lane',
-  '  VERDICT: done, partial, or drifted, with one line why',
-  '  each section opens at column 0 as <NAME> :: with its body indented two spaces, so lane#full-lane/report#<NAME> resolves it',
-  '  CALLERS: each caller with its file and symbol',
-  '  OPEN: anything the lane could not settle',
+  '  VERDICT :: done, partial, or drifted, with one line why',
+  '  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so lane#full-lane/report#<NAME> resolves it',
+  '  CALLERS :: each caller with its file and symbol',
+  '  OPEN :: anything the lane could not settle',
   '  The report and the journal land no matter the outcome; return a short summary only.',
   '',
 ].join('\n');
@@ -145,7 +145,18 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(recipe).toContain(`\nSCOPE ::\n  1. ${LANE_BRIEF.scope}\n\nBOUNDARY`);
     expect(recipe).toContain(`  4. write scope: ${LANE_BRIEF.writes}\n`);
     expect(recipe.split('\n').filter((l) => l.includes('every REF it names'))).toEqual([expect.stringContaining('every REF it names, and each TASKS and DECISIONS item whole (ctx unit task show sem-unit <slug>, ctx unit entry show sem-unit <slug>)')]);
-    expect(recipe).toContain(`  VERDICT: done, partial, or drifted, with one line why\n  each section opens at column 0 as <NAME> :: with its body indented two spaces, so lane#min-lane/report#<NAME> resolves it\n  ${LANE_BRIEF.report}\n  The report and the journal land`);
+    expect(recipe).toContain(`  VERDICT :: done, partial, or drifted, with one line why\n  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so lane#min-lane/report#<NAME> resolves it\n  ${LANE_BRIEF.report}\n  The report and the journal land`);
+  });
+
+  it('[the-record-r15, the-record-r-7jaw4]: a report written to the REPORT block, its VERDICT :: head and the --report sections dedented to column 0 with their text inline or indented below, resolves every section by its name', async () => {
+    const sb = fresh(sb0);
+    await must(createLane(sb, 'sem-unit', 'tpl-lane', ['--report=CALLERS :: each caller with its file and symbol']));
+    const recipe = await recipeOf(sb, 'tpl-lane');
+    const heads = recipe.split('\n').filter((l) => /^ {2}[A-Z]+ :: /.test(l)).map((l) => l.slice(2, l.indexOf(' :: ')));
+    expect(heads).toEqual(['VERDICT', 'CALLERS']);
+    await must(report(sb, 'sem-unit', 'tpl-lane', ['@report tpl-lane', 'VERDICT :: done, every caller mapped', 'CALLERS :: c1 in a.ts#f', '  c2 in b.ts#g', ''].join('\n')));
+    expect(await unit(sb, 'resolve', 'sem-unit', 'lane#tpl-lane/report#VERDICT').then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'VERDICT :: done, every caller mapped\n', '']);
+    expect(await unit(sb, 'resolve', 'sem-unit', 'lane#tpl-lane/report#CALLERS').then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'CALLERS :: c1 in a.ts#f\n  c2 in b.ts#g\n', '']);
   });
 
   it('[the-record-r15]: the recipe carries the boundary sentence, null checked, and the background process rule in its runner item, and for flags naming none no storage location, a planted --fact read by the same assertion', async () => {
@@ -256,6 +267,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     for (const flag of ['goal', 'branch', 'writes', 'scope', 'report']) expect(table.stdout).toMatch(new RegExp(`^ {2}--${flag}="\\.\\.\\." +required`, 'm'));
     for (const flag of ['ref', 'task', 'decision', 'rhythm', 'fact', 'substrate']) expect(table.stdout).toMatch(new RegExp(`^ {2}--${flag}=`, 'm'));
     expect(table.stdout).toContain('stdin is never read');
+    expect(table.stdout).toContain(' --report="CALLERS :: each caller with its file and symbol"');
     for (const line of prompt('<unit>', '<lane>')) expect(table.stdout).toContain(line);
     expect(table.stdout).toContain(S_BACKGROUND);
     expect(table.stdout).not.toMatch(LEAK);

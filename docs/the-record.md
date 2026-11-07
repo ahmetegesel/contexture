@@ -176,7 +176,7 @@ A REF names its target exactly in one of the two pointer shapes of the laws' ref
 - Tasks: `task#<slug>`
 - Journal entries: `entry#<slug>`
 - Findings: `finding#<NAME>`
-- Subagent lane artifacts and claims: `lane#<lane-slug>/<recipe|journal|report>[#<claim>]` (a journal claim names a lane journal entry slug and prints that entry as `ctx lane show` prints it; a recipe or report claim names a section: an `@<claim>` head runs to the next column-0 `@` line, a column-0 `<claim> ::` head to the next non-blank column-0 line, blank lines inside either span kept, and the last head naming the claim, in either form, wins)
+- Subagent lane artifacts and claims: `lane#<lane-slug>/<recipe|journal|report>[#<claim>]` (a journal claim names a lane journal entry slug and prints that entry as `ctx lane show` prints it; a recipe or report claim names a section: an `@<claim>` head runs to the next column-0 `@` line, a column-0 `<claim> ::` head, its text on that line or its body below, to the next non-blank column-0 line, blank lines inside either span kept, and the last head naming the claim, in either form, wins)
 - Canonical module refs: `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, `unit#<unit>/lane/<lane>/<recipe|journal|report>` (the ref carries its target unit)
 
 The resolution verb resolves references directly:

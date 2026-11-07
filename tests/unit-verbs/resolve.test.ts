@@ -7,6 +7,8 @@ const D = '2026-09-27';
 const K_REPORT = [
   '@report k-lane',
   'VERDICT: done',
+  'VERDICT2 :: inline text',
+  '  its continuation',
   'FINDINGS ::',
   '  F0 the first head, shadowed by the later one',
   'STALE :: ',
@@ -67,7 +69,8 @@ describe.concurrent('ctx unit resolve', () => {
     ['FINDINGS', 'FINDINGS ::\n  F1 the finding\n  INNER ::\n\n  F2 after a blank line\n\n'],
     ['CRITERIA', 'CRITERIA ::  \n  C1 met\n'],
     ['STALE', 'STALE :: \n'],
-  ] as const)('X-g [the-record-r-7jaw4]: a %s :: claim prints from its last column-0 head to the line before the next non-blank column-0 line, blank lines kept', async ([key, span]) => {
+    ['VERDICT2', 'VERDICT2 :: inline text\n  its continuation\n'],
+  ] as const)('X-g [the-record-r-7jaw4]: a %s :: claim, its text inline or below, prints from its last column-0 head to the line before the next non-blank column-0 line, blank lines kept', async ([key, span]) => {
     const sb = fresh(sb0);
     for (const ref of [`lane#k-lane/report#${key}`, `lanes/k-lane/report#${key}`]) {
       expect(await unit(sb, 'resolve', 'x-unit', ref).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, span, '']);

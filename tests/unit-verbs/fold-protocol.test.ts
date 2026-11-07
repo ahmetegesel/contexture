@@ -48,6 +48,7 @@ describe.concurrent('ctx unit fold: the consolidation protocol, one step per tes
     expect(recipe).toContain('never use /tmp or any path outside the workspace');
     expect(recipe).toContain('a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach');
     expect(recipe).toMatch(new RegExp(`^ {2}\\d+\\. .*ctx unit fold fc-unit --lane=${l1}`, 'm'));
+    expect(recipe).toContain('\n  BATCHES :: each consolidated entry slug, the chunks it covers, and its constituent count\n  OPEN :: any refusal or defect met, with its command and output\n');
     expect(recipe).toContain("\n  4. write scope: no file edit and no commit; record writes: one consolidated entry per batch through ctx unit record fc-unit, and a superseding entry when the check names a defect; the consolidated and superseding entries are granted to this lane over the general rule that a subagent never writes the unit's record\n");
     expect((await must(fold(sb))).stdout).toContain(`NEXT: fetch lane ${l1}:\n`);
   });

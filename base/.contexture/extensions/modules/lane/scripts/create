@@ -17,7 +17,7 @@
 # help: stdin is never read: the brief comes only as flags, and the verb writes the fixed blocks itself (the boundary, the boot, the journal, and the report), so no dispatcher forgets them
 # help: every value is one line of valid UTF-8 (a newline, a carriage return, or another byte refuses naming the flag); an empty value counts as missing, while an empty --ref, --task, or --decision refuses as malformed, as every REF write does; a flag that is not repeatable given twice refuses; a missing required flag refuses naming each with its purpose; a refusal writes nothing
 # help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1; no task, entry, or ref is looked up
-# help: example: ctx lane create my-unit gather-cache --goal="map the cache callers for the cache task; stop at the report" --branch="the workspace checkout on main at abc1234" --writes="read only" --scope="list every caller of the cache; done when each names its file and symbol" --report="CALLERS: each caller with its file and symbol"
+# help: example: ctx lane create my-unit gather-cache --goal="map the cache callers for the cache task; stop at the report" --branch="the workspace checkout on main at abc1234" --writes="read only" --scope="list every caller of the cache; done when each names its file and symbol" --report="CALLERS :: each caller with its file and symbol"
 # help: the dispatch prompt it prints, its three lines quoted (a re-dispatch fills <unit> and <lane>): "You are a dispatched subagent working lane <lane> of unit <unit>. Your full brief is the lane recipe: read it first and follow it exactly: .contexture/ctx lane show <unit> <lane> recipe" "Hard rules: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp/<lane>/; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach. Every shell command runs through .contexture/ctx run; never leave a background process running when you finish; a command that hangs is stopped, never abandoned. The record only through ctx: your record writes are your lane journal and your report, plus only what the recipe's write scope adds." "Return a short summary only; the report carries the substance."
 
 unit_lib="${CTX_ROOT:-.}/.contexture/modules/unit/lib/verb.sh"
@@ -190,8 +190,8 @@ JOURNAL ::
 
 REPORT (ctx lane report @UNIT@ @LANE@, the body on stdin; self-sufficient: the dispatcher reads only the report) ::
   @report @LANE@
-  VERDICT: done, partial, or drifted, with one line why
-  each section opens at column 0 as <NAME> :: with its body indented two spaces, so lane#@LANE@/report#<NAME> resolves it
+  VERDICT :: done, partial, or drifted, with one line why
+  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so lane#@LANE@/report#<NAME> resolves it
 EOF
   lines report
   printf '  The report and the journal land no matter the outcome; return a short summary only.\n'
