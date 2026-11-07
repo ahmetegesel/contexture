@@ -83,6 +83,21 @@ u_refuse() {
   exit "$1"
 }
 
+# u_store_refuse <rc> <store function> <stderr file> <fallback>: a refused store call as
+# the function's one line, carrying the store's message and code: the store's refusal line
+# (its first line opening "<store function>: error: ", else its first line whole, as a
+# resolver line rides), the prefix stripped, or the fallback when the store printed
+# nothing; the store's own line never reaches the verb
+u_store_refuse() {
+  usr_msg=$(USR_P="$2: error: " LC_ALL=C awk '
+    NR == 1 { f = $0 }
+    m == "" && index($0, ENVIRON["USR_P"]) == 1 { m = substr($0, length(ENVIRON["USR_P"]) + 1) }
+    END { print (m != "" ? m : f) }' "$3" 2>/dev/null)
+  [ -n "$usr_msg" ] || usr_msg=$4
+  printf '%s: error: %s\n' "${FN:-unit}" "$usr_msg" >&2
+  exit "$1"
+}
+
 # u_new <file>...: each of this run's scratch files made empty; u_put <file> <format>
 # [<args>...]: one printf appended to such a file. Both are silent (a shell reports a
 # failing redirect before a trailing 2>/dev/null applies, so the group carries it) and
@@ -207,9 +222,7 @@ u_keys_all() {
   store_list "$U_NS" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
   case $? in
     0) u_note "$U_SCR/list.err"; u_keys_parse < "$U_SCR/list.ans" ;;
-    *) [ -s "$U_SCR/list.err" ] && cat "$U_SCR/list.err" >&2
-       printf '%s: error: the store list failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
-       exit 2 ;;
+    *) u_store_refuse 2 store.list "$U_SCR/list.err" "the store list failed (ERR_STORAGE_READ)" ;;
   esac
 }
 
@@ -218,9 +231,7 @@ u_keys_prefix() {
   store_list "$U_NS" "$1" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
   case $? in
     0) u_note "$U_SCR/list.err"; u_keys_parse < "$U_SCR/list.ans" ;;
-    *) [ -s "$U_SCR/list.err" ] && cat "$U_SCR/list.err" >&2
-       printf '%s: error: the store list failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
-       exit 2 ;;
+    *) u_store_refuse 2 store.list "$U_SCR/list.err" "the store list failed (ERR_STORAGE_READ)" ;;
   esac
 }
 
@@ -237,9 +248,7 @@ u_add_key() {
   case "$U_GRC" in
     0) U_ADD_RC=0; u_note "$U_SCR/get.err" ;;
     1) rm -f "$U_ART"; U_NART=$((U_NART - 1)); return 0 ;;
-    *) [ -s "$U_SCR/get.err" ] && cat "$U_SCR/get.err" >&2
-       printf '%s: error: the store read failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
-       exit "$U_GRC" ;;
+    *) u_store_refuse "$U_GRC" store.get "$U_SCR/get.err" "the store read failed (ERR_STORAGE_READ)" ;;
   esac
   u_put "$U_SCR/man" 'F\t%s\t%s\n' "$1" "$U_ART"
   u_put "$U_SCR/files" '%s\n' "$U_ART"
@@ -535,15 +544,7 @@ u_commit() {
   done < "$U_STAGE/manifest"
   store_batch "$U_NS" < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
   uc_rc=$?
-  if [ "$uc_rc" -ne 0 ]; then
-    uc_msg=$(head -n 1 "$U_SCR/batch.err" 2>/dev/null)
-    case "$uc_msg" in
-      store.batch:\ error:\ *) uc_msg=${uc_msg#store.batch: error: } ;;
-    esac
-    [ -n "$uc_msg" ] || uc_msg="the store batch failed (ERR_STORAGE_WRITE)"
-    printf '%s: error: %s\n' "$FN" "$uc_msg" >&2
-    exit "$uc_rc"
-  fi
+  [ "$uc_rc" -eq 0 ] || u_store_refuse "$uc_rc" store.batch "$U_SCR/batch.err" "the store batch failed (ERR_STORAGE_WRITE)"
   cat "$U_SCR/answer"
 }
 
@@ -696,9 +697,7 @@ u_held() {
   case "$uh_rc" in
     0) u_note "$U_SCR/held.err"; return 0 ;;
     1) return 1 ;;
-    *) [ -s "$U_SCR/held.err" ] && cat "$U_SCR/held.err" >&2
-       printf '%s: error: the store read failed (ERR_STORAGE_READ)\n' "${FN:-unit}" >&2
-       exit "$uh_rc" ;;
+    *) u_store_refuse "$uh_rc" store.get "$U_SCR/held.err" "the store read failed (ERR_STORAGE_READ)" ;;
   esac
 }
 

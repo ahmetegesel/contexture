@@ -128,7 +128,13 @@ answer, prints its own line once:
 `WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses`.
 The line is the reminder, never an instruction to the agent: the sweep is the human's
 choice. A refusal's stderr stays its one line, so every `head -n 1` reader of a refusal still reads
-the refusal. The verb library relays the line in one place: `vb_relay` holds a succeeded
+the refusal. A store call those four make, and `u_commit`'s `store.batch`, refuses through
+one helper, `u_store_refuse`: the store's refusal line (its first line opening
+`<store function>: error: `, else its first line whole, as a resolver line rides) is
+re-framed with the record function's own name and printed once, so an unreadable state
+reads `session.board: error: cannot read key '<unit>/state' in namespace 'unit'
+(ERR_STORAGE_READ)` alone, the store's code kept, the rc as before (2 for a list, the
+store's for a read or the batch), and the store's own line never reaches the verb. The verb library relays the line in one place: `vb_relay` holds a succeeded
 call's stderr in the verb's scratch, and the verb's exit prints it once, after the answer,
 only when the verb ends rc 0; `vb_ok` relays through it in every verb that calls it (list
 before its render, fold on its board read, which every fold view makes first), and audit,

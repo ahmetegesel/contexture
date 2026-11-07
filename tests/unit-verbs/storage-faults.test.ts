@@ -3,9 +3,9 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
 import { launch } from '../support/exec';
-import { RECORD_ROOT, lockPath, unitLock } from '../support/drawer';
+import { RECORD_ROOT, lockPath, namespaceLock, unitLock } from '../support/drawer';
 import { catShim, holdLock, readOnlyLockShim, sleepShim } from '../support/locks';
-import { ROOT_USER, mktempPlant } from '../support/plants';
+import { ROOT_USER, chmodPlant, mktempPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { createLane, lane, must, run, seedUnit, unit, unitChecksum, waitFor } from '../support/unit';
 import { refused } from '../support/wire';
@@ -173,5 +173,62 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stdout}] [${r.stderr}]`).toBe(before);
     expect([r.code, r.stdout], r.stderr).toEqual([2, '']);
     expect(r.stderr).toMatch(/^task\.complete: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
+  });
+});
+
+const READ_ROWS: readonly [string, string[], string][] = [
+  ['state', ['unit', 'list'], 'session.active'],
+  ['state', ['unit', 'load', 'r-unit'], 'session.load'],
+  ['state', ['unit', 'board', 'r-unit'], 'session.board'],
+  ['state', ['unit', 'search', 'r-unit', 'probe', '--mode=exact'], 'search.query'],
+  ['journal', ['unit', 'load', 'r-unit'], 'session.load'],
+  ['journal', ['unit', 'board', 'r-unit'], 'session.board'],
+];
+
+const LIST_ROWS: readonly [string[], string][] = [
+  [['unit', 'list'], 'session.active'],
+  [['lane', 'show', 'r-unit', 'nolane', 'report'], 'lane.get'],
+];
+
+const LOCKED = "the store namespace 'unit' is locked (60 s timeout)";
+
+describe.concurrent('a record function whose store call refuses: its own one line, carrying the store\'s message and code', () => {
+  let snap: string;
+  beforeAll(async () => {
+    snap = await seed(async (sb) => {
+      await seedUnit(sb, 'r-unit', 'store refusal unit');
+      await must(unit(sb, 'record', 'r-unit', '--what=a seeded entry'));
+    }, 'posix', 'store-refusal');
+  });
+
+  for (const [artifact, argv, fn] of READ_ROWS) {
+    it.skipIf(ROOT_USER)(`[the-engine-r21] an unreadable ${artifact} through ctx ${argv.join(' ')} refuses rc 2 with the ${fn} line alone, the store's message and code, never the store's own line`, async ({ onTestFinished }) => {
+      const sb = fresh(snap);
+      chmodPlant(join(sb, RECORD_ROOT, 'r-unit', `${artifact}.md`), 0o000, 0o644, onTestFinished);
+      refused(await run(sb, argv), fn, 2, 'ERR_STORAGE_READ', `cannot read key 'r-unit/${artifact}' in namespace 'unit'`);
+    });
+  }
+
+  it.for(LIST_ROWS.map(([argv, fn]) => [argv.join(' '), argv, fn] as const))('[the-engine-r21] a store.list that cannot make its scratch through ctx %s refuses rc 2 with the record function\'s line alone, keeping the store\'s ERR_STORAGE_WRITE', async ([, argv, fn]) => {
+    const sb = fresh(snap);
+    const r = await run(sb, argv, { env: mktempPlant('case "$p" in */store-keys.*) rm -f "$p"; exit 1 ;; esac') });
+    refused(r, fn, 2, 'ERR_STORAGE_WRITE', "cannot create the driver's scratch file");
+  });
+
+  it('[the-engine-r21] a held namespace lock refuses ctx unit record with the entry.record line alone and writes nothing; a planted relay of the store\'s line reads red', async () => {
+    const sb = fresh(snap);
+    const planted = fresh(snap);
+    const script = join(planted, '.contexture/modules/unit/scripts/data');
+    const text = readFileSync(script, 'utf8');
+    const reframe = 'u_store_refuse "$uc_rc" store.batch "$U_SCR/batch.err" "the store batch failed (ERR_STORAGE_WRITE)"';
+    const relay = text.replace(reframe, `{ cat "$U_SCR/batch.err" >&2; ${reframe}; }`);
+    expect(relay, 'the plant finds the batch re-frame').not.toBe(text);
+    writeFileSync(script, relay);
+    const before = await unitChecksum(sb, 'r-unit');
+    for (const s of [sb, planted]) holdLock(s, namespaceLock('unit'), 'live');
+    const [real, plant] = await Promise.all([sb, planted].map((s) => run(s, ['unit', 'record', 'r-unit', '--what=never lands'], { env: sleepShim() })));
+    refused(real, 'entry.record', 2, 'ERR_STORAGE_LOCKED', LOCKED);
+    expect(await unitChecksum(sb, 'r-unit')).toBe(before);
+    expect([plant.code, plant.stdout, plant.stderr]).toEqual([2, '', `store.batch: error: ${LOCKED} (ERR_STORAGE_LOCKED)\nentry.record: error: ${LOCKED} (ERR_STORAGE_LOCKED)\n`]);
   });
 });
