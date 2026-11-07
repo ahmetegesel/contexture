@@ -1,4 +1,4 @@
-# contexture v0.69.0: generated law layer; core cksum 2142490136-14089; sources 3731690621-30929; never edit
+# contexture v0.69.0: generated law layer; core cksum 3560237416-14248; sources 155569957-31390; never edit
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -9,7 +9,7 @@
   verify-before-close: verify before close: no done without evidence; never claim verification you did not perform; re-read the record, confirm consistency.
   harvest-the-human: harvest the human: question to surface durable knowledge; crystallize into compact candidates; land when deserved, never just to record; the agent lands a candidate that meets the bar and drops the rest, with no approval gate; developing ideas stay in the journal.
   workspace-confinement: the current workspace (the repo/worktree the agent was started in) is the boundary; never read, write, search, or otherwise reach outside it unless the human specifically asks for that act; an apparent outside need stops and asks: the agent never roams; the harness's saved copy of a command's own truncated output is the agent's own output, sanctioned to read, read-only, the named file alone; the temp-file routing stays unsanctioned.
-  cli-doorway: the CLI (.contexture/ctx) is the single doorway to the runtime and the record; discover contracts through ctx help; interact with the record strictly through ctx unit and ctx lane; stderr is the diagnostic, augmented by --diagnose on engine subcommands to inspect runtime and storage state.
+  cli-doorway: the CLI (.contexture/ctx) is the single doorway to the runtime and the record; discover contracts through ctx help; interact with the record strictly through ctx unit and ctx lane; stderr is the diagnostic, augmented by --diagnose on engine subcommands to inspect runtime and storage state; the record's storage is the driver's: an agent never lists, reads, or writes it by path, whatever it learns of it, and a need ctx does not serve is a gap to report.
 
 @layout
   AGENTS.md       = the loader: the harness's every-turn file; its first instruction composes or verifies the generated layer, then loads it whole
@@ -51,13 +51,13 @@
 @record
   unit of work = the unit; outlives working periods, dies with the unit; shapes defined in @record; this section: the map: what each artifact records and why; the workflows live in their sections.
   dialect: typed blocks at column 0, bodies indent 2; :: opens a block scalar; | means alternation only; [ ] wraps optional parts in value examples, never around field names; -> means flow; # starts a comment. lowercase keys on the state (status: ACTIVE); spellings are contractual; laws are slug-addressed: `slug: statement`, referenced @laws#<slug>; slugs are unique across the merged base + overlays.
-  references: a pointer names its target exactly, in one of two shapes: <target>#<symbol> (journal#slug, backlog#task, knowledge#NAME, lanes/<lane>/report#claim, a file#symbol) or a whole target path holding a / and ending in a name (lanes/<lane>/recipe, a repository file path, a root-level file as ./README.md or README.md#<section>; never a lone /, a trailing /, or ./), one token without blanks, control characters, or double quotes; a law points by section and step (@refresh); the verbs refuse any other REF or REFS value on a new write, a legacy value reads as stored; a vague prose mention is a defect
+  references: a pointer names its target exactly, in one of two shapes: <target>#<symbol> (journal#slug, backlog#task, knowledge#NAME, a lane artifact as lane#<lane>/<recipe|journal|report>[#<claim>], a file#symbol) or a whole target path holding a / and ending in a name (a repository file path, a root-level file as ./README.md or README.md#<section>; never a lone /, a trailing /, or ./), one token without blanks, control characters, or double quotes; a law points by section and step (@refresh); the verbs refuse any other REF or REFS value on a new write, a legacy value reads as stored; a vague prose mention is a defect
   unit status   = unit lifecycle (status: ACTIVE | CLOSED); journal entries and findings carry no status: closure and supersession by reference only.
-  the state    = where the unit stands: its status, current anchor, objective, repos, and optional ref_sessions; the only artifact updated directly; read WHOLE at boot via ctx unit load; terse by design, the map, not the content: detail lives behind refs; refreshed as the work moves via ctx unit stamp, refs, close, reopen; the next move is never stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first open task, the board's rule: every status but DONE; ctx unit active prints it).
+  the state    = where the unit stands: its status, current anchor, objective, repos, and optional ref_sessions; the only artifact updated directly; read WHOLE at boot via ctx unit load; terse by design, the map, not the content: detail lives behind refs; refreshed as the work moves via ctx unit stamp, refs, close, reopen; the next move is never stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first open task, the board's rule: every status but DONE; ctx unit list prints it).
   the backlog  = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog; written via ctx unit task (add, update, start, complete, reopen, drop, list, show).
   the journal  = the single recording surface: append-only events + @anchor declarations; the workflow in @journal; written via ctx unit record, stamp.
-  knowledge    = settled findings: what is true, what was decided and why, what was ruled out; full lifecycle CRUD via ctx unit finding (add, show, update, supersede, drop, list); an intent to act takes the @task shape in the backlog (ctx unit task add), a developing idea stays a journal event; REF -> the full version in append-only artifacts: target#symbol (journal#entry, lanes/x/report#claim), never a dynamic surface; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
-  lanes/       = dispatch units, one lane per subagent: recipe (brief) + journal (incremental trace) + report (evidence); the dispatcher creates a lane via ctx lane create (the brief as its parameters; the verb composes the recipe); subagents manage artifacts via ctx lane (show, record, report); re-dispatch resumes from the lane; the contract in @subagents.
+  knowledge    = settled findings: what is true, what was decided and why, what was ruled out; full lifecycle CRUD via ctx unit finding (add, show, update, supersede, drop, list); an intent to act takes the @task shape in the backlog (ctx unit task add), a developing idea stays a journal event; REF -> the full version in append-only artifacts: target#symbol (journal#entry, lane#<lane>/<recipe|journal|report>[#<claim>]), never a dynamic surface; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
+  lanes        = dispatch units, one lane per subagent: recipe (brief) + journal (incremental trace) + report (evidence); the dispatcher creates a lane via ctx lane create (the brief as its parameters; the verb composes the recipe); subagents manage artifacts via ctx lane (show, record, report); re-dispatch resumes from the lane; the contract in @subagents.
 
 @journal
   why :: the journal rebuilds the working context from scratch: a fresh boot loads the active entries (live = not closed) and nothing else; what that reconstruction needs is what deserves an entry; the importance bar is the reader who comes back with only the record
@@ -76,7 +76,7 @@
   the schema guides the task shape: @task <slug> with STATUS (TODO | IN_PROGRESS | DONE), OBJECTIVE, REFS, DESCRIPTION ::, ACCEPTANCE CRITERIA ::, IMPLEMENTATION DETAILS ::; the writer holds the volume
   evolution: tasks can be added, updated, reordered, or dropped; mid-stride pivots insert a new task without rewriting the standing ones
   dedicated containers: DESCRIPTION carries context and scope, ACCEPTANCE CRITERIA carries checkable done-conditions, IMPLEMENTATION DETAILS carries the specification and the execution blueprint: the requirements and decisions the change must honor, and how it lands; omit ornament, never substance
-  REFS names its targets exactly (the two shapes of @record references): journal items (journal#slug), subagent reports (lanes/x/report#claim), knowledge findings (knowledge#NAME), a code symbol (file#symbol), or a whole target path (lanes/x/recipe); the spec stands alone: a ref navigates, it never substitutes for the meaning
+  REFS names its targets exactly (the two shapes of @record references): journal items (journal#slug), subagent lanes (lane#<lane>/<recipe|journal|report>[#<claim>]), knowledge findings (knowledge#NAME), a code symbol (file#symbol), or a whole target path (a repository file path); the spec stands alone: a ref navigates, it never substitutes for the meaning
   compose from the record (@laws#compose-from-record): material living only in the conversation lands in the record first, then the task references it
   readiness: a task marked IN_PROGRESS is executable as written; every needed decision lives in the task or behind a REF
   activation: before IN_PROGRESS, the executor scans the task: placeholders, checkable criteria, resolving REFs; a failing task returns, never execute around a gap
@@ -87,14 +87,14 @@
 @query
   surfaces: universal search, reference resolution, the journal + knowledge.
   search: universal search over all unit records and artifacts: ctx unit search <unit> "<query>" --mode=M [--limit=N]; --mode is required, no default: exact (one rule on every backend) or a mode the configured backend declares (ctx unit diagnose lists them).
-  resolution: ctx unit resolve <unit> <ref> resolves abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim) directly to formatted blocks.
+  resolution: ctx unit resolve <unit> <ref> resolves abstract entity references (task#slug, finding#NAME, entry#slug, lane#<lane>/<recipe|journal|report>[#<claim>]) directly to formatted blocks.
   journal:   live = not closed: the load list = every entry whose slug no CLOSES/SUPERSEDES names, across all anchors. anchors are period ordering, never liveness. .contexture/ctx unit board streams active entries with complete bodies in one shot, then the open threads with their targets and the open task slugs with their nudge; no per-entry Read tool loops, no range spanning.
     command:
       .contexture/ctx unit board <unit>
   thread tail: ctx unit audit prints open THREAD entries beside the audit; the frequent stray check; receipts never enter it.
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
-  queries: named looks: ctx unit entry closure, ctx unit units, ctx unit refs-to (the forms in .contexture/ctx unit help; --help and -h are the same table); a miss is rc=1 with a named error, never an empty success.
-  cross-repo: .contexture/ctx unit units <repo>: units touching a repo; objective is human-facing only.
+  queries: named looks: ctx unit entry closure, ctx unit list --repo, ctx unit refs-to (the forms in .contexture/ctx unit help; --help and -h are the same table); a miss is rc=1 with a named error, never an empty success.
+  cross-repo: .contexture/ctx unit list --all --repo=<repo>: units touching a repo; objective is human-facing only.
   cross-unit: .contexture/ctx unit refs-to <unit>: units referencing a unit.
   group: .contexture/ctx unit entry list <unit> --group=<token> = the agent's topic thread across anchors, open or closed; resume runs through the backlog's derived move, never through the group alone.
   artifact-grounding: the record is the ground: a report or recipe claimed to ground work needs a REF in the loaded record.
@@ -102,13 +102,13 @@
 @boot
   1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) and .contexture/config (workspace configuration) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
-  3. get the field: .contexture/ctx unit active and .contexture/ctx rhythm list; read the message against the candidates: a close unit match proposes continuing that unit, no match proposes bootstrapping a new one; the request read against each rhythm's use when names the rhythm that serves it, or none
+  3. get the field: .contexture/ctx unit list and .contexture/ctx rhythm list; read the message against the candidates: a close unit match proposes continuing that unit, no match proposes bootstrapping a new one; the request read against each rhythm's use when names the rhythm that serves it, or none
   4. propose the move and wait for the answer before anything works: the proposal names the unit and the rhythm: a propose match is asked, an auto match is stated as applying, no match names the design loop (@rhythms default); the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit and the rhythm (@laws#process-free): an active unit continues at 5, a new unit bootstraps at 10
   5. run .contexture/ctx unit load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, the reference units (ref_sessions) read-only)
   6. read the rhythm in force: .contexture/ctx rhythm current <unit> (in force with its next gate, completed, stale, or none in force); read a confirmed rhythm's body with ctx rhythm show <name>
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp the new period: .contexture/ctx unit stamp <unit> (the anchor carries the period's number and date, no receipt text; a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
-  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit active prints it) at the confirmed rhythm's next gate (ctx rhythm current names it), or in the default design loop when no rhythm is confirmed (@rhythms)
+  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit list prints it) at the confirmed rhythm's next gate (ctx rhythm current names it), or in the default design loop when no rhythm is confirmed (@rhythms)
   10. new work: run .contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
 
 @interact
@@ -130,7 +130,7 @@
   default :: the design loop, when no rhythm is invoked; human rhythm replaces progression
   1. DISCUSS: explore problem space; grounded questions resolve intent
   2. DECIDE: human verdict settles; triggers harvest candidate
-  3. BACKLOG: intent updates the backlog (ctx unit task add); the move is the backlog's first IN_PROGRESS task, else its first open task (every status but DONE), and ctx unit active derives it
+  3. BACKLOG: intent updates the backlog (ctx unit task add); the move is the backlog's first IN_PROGRESS task, else its first open task (every status but DONE), and ctx unit list derives it
   4. EXECUTE: work active task; drift updates backlog in same breath
   5. VERIFY: task acceptance criteria proven; journal records completion, the backlog's derived move advances
   6. REFRESH: run @refresh
@@ -156,7 +156,7 @@
   - journal every dispatch: the subagent's lane slug
   branch/worktree: the recipe names the branch/worktree the subagent works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every subagent of the unit works there; the subagent's journal and report stay in the unit's record
   landing: the dispatcher owns it: review the branch (or its PR), merge, remove the worktree, delete the branch; a subagent never merges or prunes
-  boundary-warning: every lane recipe and dispatch prompt carries the explicit rule: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach; ctx lane create writes it into the recipe's BOUNDARY block and into the dispatch prompt it prints
+  boundary-warning: every lane recipe and dispatch prompt carries the explicit rule: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach; and never leave a background process running when you finish, a command that hangs stopped, never abandoned; ctx lane create writes both into the recipe's BOUNDARY block and into the dispatch prompt it prints
   drift: an edit outside the declared roots, a code change without its journal line, or a command run raw without .contexture/ctx run, is drift
 
 @refresh
@@ -166,7 +166,7 @@
   period end (turn ends; unit continues):
     1. refresh (@refresh): the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by ctx unit audit is the checklist: every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. unit audit: .contexture/ctx unit audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event) with line numbers, and warns on a legacy duplicate slug without failing; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note
+    3. unit audit: .contexture/ctx unit audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event) with line numbers, and warns on a legacy duplicate slug without failing; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note; a grammar finding no verb can repair goes to the human, never to a hand edit
     4. unit stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision

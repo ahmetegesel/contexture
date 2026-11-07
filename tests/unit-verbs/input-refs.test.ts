@@ -83,6 +83,22 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
     expect(recipe).toContain(`\nREFS ::\n${given.map((r) => `  ${r}\n`).join('')}\nSCOPE ::\n`);
   });
 
+  it('E3-e [the-record-r18]: record, lane record, lane create, task add, and finding add each land one lane# value and one legacy lanes/ value, read back as written', async () => {
+    const sb = fresh(sb0);
+    const pair = ['lane#e3-lane/report#VERDICT', 'lanes/e3-lane/recipe'];
+    const lines = pair.map((r) => `  REF: "${r}"`);
+    await must(unit(sb, 'record', 'e3-unit', '--what=lane refs', `--slug=${D}-e3-lane-refs`, ...refs(...pair)));
+    expect((await unit(sb, 'entry', 'show', 'e3-unit', `${D}-e3-lane-refs`)).stdout.split('\n').filter((l) => l.startsWith('  REF: '))).toEqual(lines);
+    await must(lane(sb, 'record', 'e3-unit', 'e3-lane', '--what=lane refs in the lane', `--slug=${D}-e3-lane-l`, ...refs(...pair)));
+    expect((await lane(sb, 'show', 'e3-unit', 'e3-lane', 'journal')).stdout.split(`@entry ${D}-e3-lane-l`)[1]!.split('\n').filter((l) => l.startsWith('  REF: '))).toEqual(lines);
+    await must(createLane(sb, 'e3-unit', 'e3-pair', refs(...pair)));
+    expect((await lane(sb, 'show', 'e3-unit', 'e3-pair', 'recipe')).stdout).toContain(`\nREFS ::\n  ${pair[0]}\n  ${pair[1]}\n\n`);
+    await must(unit(sb, 'task', 'add', 'e3-unit', 'e3-pair-task', '--objective=lane refs', `--refs=${pair.join(', ')}`));
+    expect((await unit(sb, 'task', 'show', 'e3-unit', 'e3-pair-task')).stdout).toContain(`  REFS: [${pair.join(', ')}]\n`);
+    await must(unit(sb, 'finding', 'add', 'e3-unit', 'E3_PAIR', '--summary=lane refs', ...refs(...pair)));
+    expect((await unit(sb, 'finding', 'show', 'e3-unit', 'E3_PAIR')).stdout.split('\n').filter((l) => l.startsWith('  REF: '))).toEqual(lines);
+  });
+
   it('E3-c [the-record-r18]: a legacy free-text REF reads as stored (posix plant)', async () => {
     const sb = fresh(sb0);
     appendArtifact(sb, 'e3-unit', 'journal', '\n@entry 2026-09-20-e3-legacy\n  ANCHOR: A1\n  WHAT: "legacy ref"\n  THREAD: none\n  REF: "a free text legacy reference"\n');

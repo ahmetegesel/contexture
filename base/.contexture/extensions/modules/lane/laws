@@ -2,7 +2,7 @@
 @append @subagents
   branch/worktree: the recipe names the branch/worktree the subagent works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every subagent of the unit works there; the subagent's journal and report stay in the unit's record
   landing: the dispatcher owns it: review the branch (or its PR), merge, remove the worktree, delete the branch; a subagent never merges or prunes
-  boundary-warning: every lane recipe and dispatch prompt carries the explicit rule: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach; ctx lane create writes it into the recipe's BOUNDARY block and into the dispatch prompt it prints
+  boundary-warning: every lane recipe and dispatch prompt carries the explicit rule: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach; and never leave a background process running when you finish, a command that hangs stopped, never abandoned; ctx lane create writes both into the recipe's BOUNDARY block and into the dispatch prompt it prints
   drift: an edit outside the declared roots, a code change without its journal line, or a command run raw without .contexture/ctx run, is drift
 
 @append @git
