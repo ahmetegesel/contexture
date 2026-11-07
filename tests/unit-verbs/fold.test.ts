@@ -60,6 +60,14 @@ describe.concurrent('ctx unit fold: the surface, the handoff, and the input rule
     expect((await unit(sb, 'record', 'fc-empty', `--closes=${D}-fc-long-1 (folded: \rbad)`)).code).toBe(1);
   });
 
+  it('FC18: on a fresh plan with no batch the progress view answers rc 0 and the check rc 1, each with an empty stderr', async () => {
+    const sb = stage('posix', 'fold-fresh');
+    await foldUnit(sb, 'fc-fresh', ['e1', 'e2', 'e3', 'e4'], { lanes: [] });
+    const progress = await unit(sb, 'fold', 'fc-fresh');
+    const check = await unit(sb, 'fold', 'fc-fresh', '--check');
+    expect([progress.code, progress.stderr, check.code, check.stderr]).toEqual([0, '', 1, '']);
+  });
+
   it('FC14: the fetch hands one chunk at a time; a single-chunk lane has no merge partner; the one batch checks clean', async () => {
     const sb = stage('posix', 'fold-one');
     const plan = await foldUnit(sb, 'fc-one', ['e1', 'e2']);
