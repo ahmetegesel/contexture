@@ -9,7 +9,7 @@ import { DATE } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
 import { put } from '../support/tree';
-import { lane, must, run, unit } from '../support/unit';
+import { createLane, lane, must, run, unit } from '../support/unit';
 
 const U = 'vs';
 
@@ -73,7 +73,7 @@ describe.concurrent('a unit verb reaches the store through the data script, the 
   it('[the-engine-r16, the-record-r10] lane: the recipe, the journal, and the report the extension-root lane module writes land every way (C6)', async () => {
     const sb = fresh(seeded);
     const writes: [string, string, Read][] = [
-      ['recipe', 'the chain recipe', () => run(sb, ['lane', 'create', U, 'chain-lane'], { input: '# the chain recipe\n' })],
+      ['recipe', 'the chain recipe', () => createLane(sb, U, 'chain-lane', ['--goal=the chain recipe'])],
       ['journal', 'the chain lane event', () => lane(sb, 'record', U, 'chain-lane', '--what=the chain lane event')],
       ['report', 'the chain report', () => run(sb, ['lane', 'report', U, 'chain-lane'], { input: '# the chain report\n' })],
     ];

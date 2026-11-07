@@ -7,7 +7,7 @@ import { RECORD_ROOT, lockPath, unitLock } from '../support/drawer';
 import { catShim, holdLock, readOnlyLockShim, sleepShim } from '../support/locks';
 import { ROOT_USER, mktempPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
-import { lane, must, run, seedUnit, unit, unitChecksum, waitFor } from '../support/unit';
+import { createLane, lane, must, run, seedUnit, unit, unitChecksum, waitFor } from '../support/unit';
 import { refused } from '../support/wire';
 
 const scratch = (sb: string): string[] => readdirSync(join(sb, '.contexture/tmp')).filter((f) => f !== 'locks').sort();
@@ -31,7 +31,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
       await must(unit(sb, 'task', 'add', 'w-unit', 'w-a', '--objective=Task A'));
       await must(unit(sb, 'task', 'add', 'w-unit', 'w-b', '--objective=Task B'));
       await must(unit(sb, 'finding', 'add', 'w-unit', 'W_ONE', '--summary=One'));
-      await must(run(sb, ['lane', 'create', 'w-unit', 'w-lane'], { input: '# recipe grammar\nMISSION\n  GOAL: "w lane"\n' }));
+      await must(createLane(sb, 'w-unit', 'w-lane'));
     }, 'posix', 'faults');
   });
 

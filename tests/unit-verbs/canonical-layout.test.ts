@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
-import { lane, must, plantArtifact, run, seedUnit, unit } from '../support/unit';
+import { createLane, lane, must, plantArtifact, run, seedUnit, unit } from '../support/unit';
 
 const D = '2026-09-27';
 const WS = 'kept line\n   \n\t';
@@ -26,7 +26,7 @@ describe.concurrent('every item reads in the one canonical layout, every value k
       await must(unit(sb, 'task', 'add', 'cl-verbs', 'cl-v', '--objective=a verb task', '--desc=a body'));
       await must(unit(sb, 'record', 'cl-verbs', '--what=a verb entry', `--slug=${D}-cl-v`));
       await must(unit(sb, 'finding', 'add', 'cl-verbs', 'CL_V', '--summary=a verb finding'));
-      await must(run(sb, ['lane', 'create', 'cl-verbs', 'cl-vl'], { input: '# recipe\n' }));
+      await must(createLane(sb, 'cl-verbs', 'cl-vl'));
       await must(lane(sb, 'record', 'cl-verbs', 'cl-vl', '--what=a lane entry'));
     }, 'posix', 'canonical');
   });

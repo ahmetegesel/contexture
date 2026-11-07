@@ -3,7 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { launch } from '../support/exec';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
-import { lane, must, run, seedUnit, unit } from '../support/unit';
+import { createLane, lane, must, run, seedUnit, unit } from '../support/unit';
 
 const D = '2026-09-27';
 const RECIPE = '# recipe grammar\nblocks at column 0; fields indent 2;\nMISSION\n  GOAL: "lane test subagent"\n';
@@ -16,9 +16,9 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
   beforeAll(async () => {
     sb0 = await seed(async (sb) => {
       await seedUnit(sb, 'sem-unit', 'semantic interface test');
-      await must(run(sb, ['lane', 'create', 'sem-unit', 'sub-lane'], { input: RECIPE }));
+      await must(createLane(sb, 'sem-unit', 'sub-lane', ['--goal=lane test subagent']));
       await seedUnit(sb, 'x-unit', 'defect regression unit');
-      await must(run(sb, ['lane', 'create', 'x-unit', 'x-lane'], { input: '# recipe grammar\nMISSION\n  GOAL: "x lane"\n' }));
+      await must(createLane(sb, 'x-unit', 'x-lane'));
       await must(lane(sb, 'record', 'x-unit', 'x-lane', '--what=First lane event', `--slug=${D}-x-l1`));
     }, 'posix', 'lane');
   });

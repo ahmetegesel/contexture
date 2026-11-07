@@ -2,7 +2,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
-import { execBytes, lane, must, run, seedUnit, unit, unitChecksum } from '../support/unit';
+import { createLane, execBytes, lane, must, run, seedUnit, unit, unitChecksum } from '../support/unit';
 import { latin1, UTF8_OK } from './inputs';
 
 const D = '2026-09-27';
@@ -22,7 +22,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
       await seedUnit(sb, 'in-unit', 'input bytes unit');
       await must(unit(sb, 'task', 'add', 'in-unit', 'in-task', '--objective=a task'));
       await must(unit(sb, 'finding', 'add', 'in-unit', 'IN_ONE', '--summary=One'));
-      await must(run(sb, ['lane', 'create', 'in-unit', 'in-lane'], { input: '# recipe grammar\nMISSION\n  GOAL: "in lane"\n' }));
+      await must(createLane(sb, 'in-unit', 'in-lane'));
     }, 'posix', 'input-bytes');
   });
 

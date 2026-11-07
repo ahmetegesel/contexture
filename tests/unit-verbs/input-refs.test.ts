@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { appendArtifact } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
-import { lane, must, run, seedUnit, unit, unitChecksum } from '../support/unit';
+import { createLane, lane, must, run, seedUnit, unit, unitChecksum } from '../support/unit';
 import { SHAPES } from './inputs';
 
 const D = '2026-09-27';
@@ -26,7 +26,7 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
       await must(unit(sb, 'record', 'e3-unit', '--what=the target', `--slug=${D}-e3-t`));
       await must(unit(sb, 'finding', 'add', 'e3-unit', 'E3_ONE', '--summary=one'));
       await must(unit(sb, 'task', 'add', 'e3-unit', 'e3-task', '--objective=a task'));
-      await must(run(sb, ['lane', 'create', 'e3-unit', 'e3-lane'], { input: 'the e3 recipe\n' }));
+      await must(createLane(sb, 'e3-unit', 'e3-lane'));
     }, 'posix', 'input-refs');
   });
 

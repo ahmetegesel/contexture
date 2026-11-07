@@ -39,6 +39,23 @@ export async function seedUnit(sb: string, slug: string, objective = `${slug} ob
   await must(unit(sb, 'bootstrap', slug, objective));
 }
 
+export const LANE_BRIEF: Readonly<Record<string, string>> = {
+  goal: 'the test lane goal; it stops at its report',
+  branch: 'the sandbox checkout on its current branch',
+  writes: 'read only',
+  scope: 'answer the test question; stop when it is answered',
+  report: 'FINDINGS: each answer with its grounding',
+};
+
+export function laneFlags(extra: readonly string[] = []): string[] {
+  const given = new Set(extra.map((f) => /^--([a-z]+)/.exec(f)?.[1]));
+  return [...Object.entries(LANE_BRIEF).filter(([name]) => !given.has(name)).map(([name, v]) => `--${name}=${v}`), ...extra];
+}
+
+export function createLane(sb: string, unitSlug: string, laneSlug: string, extra: readonly string[] = []): Promise<Run> {
+  return run(sb, ['lane', 'create', unitSlug, laneSlug], { input: `${laneFlags(extra).join('\n')}\n` });
+}
+
 export function rhythm(name: string, use: string, gates: readonly [string, string][]): string {
   return [`@rhythm ${name}`, `  use when: ${use}`, '  activation: propose', ...gates.map(([g, t], i) => `  ${i + 1}. ${g}: ${t}`), ''].join('\n');
 }

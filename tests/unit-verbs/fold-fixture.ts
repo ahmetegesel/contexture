@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { seedSteps } from '../support/snapshot';
-import { must, run, seedUnit, unit } from '../support/unit';
+import { createLane, must, seedUnit, unit } from '../support/unit';
 
 export const D = '2026-09-27';
 
@@ -59,7 +59,7 @@ export async function foldUnit(sb: string, u: string, whats: readonly string[], 
   }
   const r = await must(unit(sb, 'fold', u));
   const plan = r.stdout + r.stderr;
-  for (const n of lanes) await must(run(sb, ['lane', 'create', u, laneOf(plan, n) ?? ''], { input: 'fold defect lane\n' }));
+  for (const n of lanes) await must(createLane(sb, u, laneOf(plan, n) ?? ''));
   return plan;
 }
 
@@ -93,7 +93,7 @@ export function foldChain(id: string): (name: string) => Promise<string> {
         const r = await must(unit(sb, 'fold', 'fc-unit'));
         writeFileSync(join(sb, 'fold-plan.txt'), r.stdout + r.stderr);
         const { l1, l2, l3 } = readPlan(sb);
-        for (const l of [l1, l2, l3]) await must(run(sb, ['lane', 'create', 'fc-unit', l], { input: `fold fixture lane ${l}\n` }));
+        for (const l of [l1, l2, l3]) await must(createLane(sb, 'fc-unit', l));
       },
     },
     { name: 'batch1', build: async (sb) => void (await foldRecord(sb, 'batch1')) },

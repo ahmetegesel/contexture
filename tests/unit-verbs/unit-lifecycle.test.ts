@@ -2,7 +2,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { artifactPath } from '../support/record';
 import { stage } from '../support/stage';
-import { lane, must, run, seedUnit, unit } from '../support/unit';
+import { createLane, lane, must, seedUnit, unit } from '../support/unit';
 
 const anchor = async (sb: string, u: string): Promise<string | undefined> => (await unit(sb, 'load', u)).stdout.split('\n').find((l) => l.startsWith('current_anchor: '));
 
@@ -85,7 +85,7 @@ describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, 
   it('X-o [the-record-r11]: a CLOSED unit refuses typed writes through the verbs and nothing lands', async () => {
     const sb = stage('posix', 'life-closed');
     await seedUnit(sb, 'x-closed', 'closed unit');
-    await must(run(sb, ['lane', 'create', 'x-closed', 'x-cl'], { input: '# recipe grammar\n' }));
+    await must(createLane(sb, 'x-closed', 'x-cl'));
     await must(unit(sb, 'close', 'x-closed'));
     expect((await unit(sb, 'task', 'add', 'x-closed', 'x-late', '--objective=Added while closed')).code).toBe(1);
     expect((await unit(sb, 'task', 'show', 'x-closed', 'x-late')).code).toBe(1);

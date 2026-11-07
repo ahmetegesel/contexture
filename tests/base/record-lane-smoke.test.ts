@@ -1,11 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { DATE } from '../support/record';
 import { fresh, seedSteps } from '../support/snapshot';
-import { lane, must, run, unit } from '../support/unit';
+import { createLane, lane, must, run, unit } from '../support/unit';
 
 const U = 'baseonly';
 const S1 = `${DATE}-base-probe-1`;
-const RECIPE = '# probe lane\n\n@claim probe-claim\n  VERDICT: "the lane claim"\n';
 const REPORT = '# probe report\n\n@claim probe-claim\n  VERDICT: "the lane claim"\n';
 
 const snap = seedSteps('base-smoke', [
@@ -24,7 +23,7 @@ const snap = seedSteps('base-smoke', [
       await must(unit(sb, 'record', U, '--what=the second probe entry', '--group=base-only', `--closes=${S1} (done: closed by the smoke)`));
       await must(unit(sb, 'finding', 'add', U, 'BASE_OLD', '--summary=the old finding', `--ref=journal#${S1}`));
       await must(unit(sb, 'finding', 'supersede', U, 'BASE_OLD', 'BASE_NEW', '--summary=the new finding'));
-      await must(run(sb, ['lane', 'create', U, 'base-lane'], { input: RECIPE }));
+      await must(createLane(sb, U, 'base-lane'));
       await must(lane(sb, 'record', U, 'base-lane', '--what=a lane event', `--ref=journal#${S1}`));
       await must(run(sb, ['lane', 'report', U, 'base-lane'], { input: REPORT }));
     },

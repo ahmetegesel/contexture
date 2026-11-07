@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { stage } from '../support/stage';
-import { must, run, seedUnit, unit } from '../support/unit';
+import { createLane, must, seedUnit, unit } from '../support/unit';
 import { batch, D, foldUnit, laneOf, SHAPES } from './fold-fixture';
 
 const check = (sb: string, u: string) => unit(sb, 'fold', u, '--check');
@@ -149,7 +149,7 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
     expect(plan).toMatch(new RegExp(`1 {2}\\[A1\\] ANCHOR.*from ${D}-fc-thread-1 to ${D}-fc-thread-3 \\(3 entries\\)`));
     const start = /^fold start: (\S+)/m.exec(plan)?.[1] ?? '';
     const lane = laneOf(plan, 1) ?? '';
-    await must(run(sb, ['lane', 'create', 'fc-thread', lane], { input: 'fold thread lane\n' }));
+    await must(createLane(sb, 'fc-thread', lane));
     const fetch = (await must(unit(sb, 'fold', 'fc-thread', `--lane=${lane}`))).stdout;
     for (const line of ["THREAD: the human's verdict", `ref="journal#${D}-fc-thread-2"`, 'NOTE: carried open threads stay live']) expect(fetch).toContain(line);
     expect(fetch).not.toContain(`closes="${D}-fc-thread-2`);
@@ -179,7 +179,7 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
     await must(unit(sb, 'record', 'fc-thread-close', '--what=A note', `--slug=${D}-fc-thread-close-1`));
     await must(unit(sb, 'record', 'fc-thread-close', '--what=Open thread: awaiting the human', "--thread=the human's verdict", `--slug=${D}-fc-thread-close-2`));
     const plan = (await must(unit(sb, 'fold', 'fc-thread-close'))).stdout;
-    await must(run(sb, ['lane', 'create', 'fc-thread-close', laneOf(plan, 1) ?? ''], { input: 'fold thread close lane\n' }));
+    await must(createLane(sb, 'fc-thread-close', laneOf(plan, 1) ?? ''));
     await batch(sb, 'fc-thread-close', 'Bad batch: closes the open thread', [1, 2], '--group=fc', '--thread=none');
     expect(await red(sb, 'fc-thread-close', 'THREAD_CLOSED')).toContain(`${D}-fc-thread-close-2`);
   });

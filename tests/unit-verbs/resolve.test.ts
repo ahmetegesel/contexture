@@ -1,6 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { fresh, seed } from '../support/snapshot';
-import { must, run, seedUnit, unit } from '../support/unit';
+import { createLane, must, run, seedUnit, unit } from '../support/unit';
 
 const D = '2026-09-27';
 
@@ -13,7 +13,7 @@ describe.concurrent('ctx unit resolve', () => {
       await must(unit(sb, 'finding', 'add', 'x-unit', 'X_FINDING', '--summary=First'));
       await must(unit(sb, 'finding', 'add', 'x-unit', 'ARCH_V2', '--summary=Architecture decision version 2'));
       await must(unit(sb, 'record', 'x-unit', '--what=Resolvable entry', `--slug=${D}-x-e1`));
-      await must(run(sb, ['lane', 'create', 'x-unit', 'x-lane'], { input: '# recipe grammar\nMISSION\n  GOAL: "x lane"\n' }));
+      await must(createLane(sb, 'x-unit', 'x-lane'));
       await must(run(sb, ['lane', 'record', 'x-unit', 'x-lane', '--what=Second lane event', `--slug=${D}-x-l2`, '--thread=the dispatcher']));
       await must(run(sb, ['lane', 'report', 'x-unit', 'x-lane'], { input: '# x report\n\n@claim x1\n  VERDICT: "from stdin"\n' }));
     }, 'posix', 'resolve');

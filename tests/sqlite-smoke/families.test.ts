@@ -6,7 +6,7 @@ import { wrapper } from '../support/packages';
 import { DATE } from '../support/record';
 import { ROOT } from '../support/root';
 import { fresh, seed } from '../support/snapshot';
-import { lane, must, run, unit } from '../support/unit';
+import { createLane, lane, must, run, unit } from '../support/unit';
 import { inSqliteStore, needFts5, recordAndList, sqliteStage } from './smoke';
 
 const U = 'sq';
@@ -81,9 +81,9 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/knowledge`]);
   });
 
-  it('SF5 [the-record-r2, the-record-r10] the lane family: create with the recipe on stdin, record, report; lane show and resolve read them', async () => {
+  it('SF5 [the-record-r2, the-record-r10] the lane family: create from its brief flags, record, report; lane show and resolve read them', async () => {
     const sb = fresh(seeded);
-    await must(run(sb, ['lane', 'create', U, 'sq-lane'], { input: '# the sqlite recipe\n' }));
+    await must(createLane(sb, U, 'sq-lane', ['--goal=the sqlite recipe']));
     await must(lane(sb, 'record', U, 'sq-lane', '--what=the sqlite lane event'));
     await must(run(sb, ['lane', 'report', U, 'sq-lane'], { input: '# the sqlite report\n\n@claim sq-claim\n  VERDICT: "the sqlite claim"\n' }));
     expect((await must(lane(sb, 'show', U, 'sq-lane', 'recipe'))).stdout).toContain('the sqlite recipe');
