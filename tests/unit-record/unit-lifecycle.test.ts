@@ -47,7 +47,7 @@ describe.concurrent('the unit lifecycle through the unit data script', () => {
     expect(answer(await data(sb, 'session.load', [UNIT]), 'session.load').state.status).toBe('CLOSED');
   });
 
-  it('TC66 [the-record-r11]: session.close and session.reopen refuse the move they cannot make', async () => {
+  it('TC66: session.close and session.reopen refuse the move they cannot make', async () => {
     const sb = await at('empty');
     answer(await mk(sb, 'tc66-u'), 'session.create');
     expect(answer(await data(sb, 'session.close', ['tc66-u']), 'session.close').status).toBe('CLOSED');
