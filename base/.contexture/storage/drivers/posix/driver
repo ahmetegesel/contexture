@@ -603,7 +603,7 @@ store_get() {
   store_data store.get "$sg_ns"
   store_key_for store.get "$sg_ns" "$sg_key"
   store_read_path "$sg_key" || refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
-  cat "$SR_PATH" || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
+  cat "$SR_PATH" 2>/dev/null || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
   store_notice
 }
 

@@ -97,6 +97,15 @@ describe('the posix store on disk', { concurrent: true }, () => {
     refused(await store(sb, 'posix').scan('scanprobe'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'x/ro' in namespace 'scanprobe'");
   });
 
+  it.skipIf(ROOT_USER)('[the-engine-r21] refuses a get of an unreadable key file with its one refusal line, naming no folder', async ({ onTestFinished }) => {
+    const sb = fresh(empty);
+    plant(sb, 'docs/workspace/ro.md', 'unreadable\n');
+    chmodPlant(join(sb, 'docs/workspace/ro.md'), 0o000, 0o600, onTestFinished);
+    const r = await store(sb, 'posix').get('docs', 'workspace/ro');
+    expect(r.stderr).not.toContain('docs/workspace');
+    refused(r, 'store.get', 2, 'ERR_STORAGE_READ', "cannot read key 'workspace/ro' in namespace 'docs'");
+  });
+
   it('[the-engine-r24] reports its health over the declared root: degraded before it is made, ok and absent while it holds no key or only residue, ok and present once written, locked whatever the presence', async () => {
     const sb = stage('posix');
     const health = () => healthOf(sb, 'unit');
