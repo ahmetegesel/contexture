@@ -600,7 +600,7 @@ plugins/             the tracked catalog of packaged overlays: copied into a wor
   tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand; each verb stages under its own root, removed on return and swept by the next dispatch after a kill)
 ```
 
-The root belongs to the harness: AGENTS.md has to sit where the harness looks for repository instructions, and the overlays sit beside it. Everything else lives in the drawer. An adopting workspace keeps its own files at the root, freely; the drawer's contents are the convention's, and the two never mix. The repository that builds the convention tracks this layout mirrored under `base/` (`base/AGENTS.md`, `base/.contexture/`); its own installation at the root is untracked working state.
+The root belongs to the harness: AGENTS.md has to sit where the harness looks for repository instructions, and the overlays and the generated law layer sit beside it. Everything else lives in the drawer. An adopting workspace keeps its own files at the root, freely; the drawer's contents are the convention's, and the two never mix. The repository that builds the convention tracks this layout mirrored under `base/` (`base/AGENTS.md`, `base/.contexture/`); its own installation at the root is untracked working state.
 
 ### One home, three classes
 

@@ -29,7 +29,7 @@ The standard module folder is a directory under `.contexture/modules/` (the work
 - `scripts/`, `hooks/`, `install`, and `uninstall` are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
 - A package ships this folder as its module part; the package overlay installs it whole, and the folder is the single source for the engine, the compose, the storage, and the installer.
 
-The builtin `unit` and `run` modules ship with the base under `.contexture/modules/`; the builtin `lane` module ships under `.contexture/extensions/modules/`, the base's first extension-root module; the storage core at `.contexture/storage/` is not a module but rides the same payload; the law layer at `.contexture/laws/` (the core law source and the composer) rides it too; a module you add is workspace-owned. See Payload.
+The builtin `unit` and `run` modules ship with the base under `.contexture/modules/`; the builtin `lane` module ships under `.contexture/extensions/modules/`, the base's first extension-root module; the storage core at `.contexture/storage/` is not a module but rides the same payload; the law sources at `.contexture/laws/` (the core law source and the composer) ride it too; a module you add is workspace-owned. See Payload.
 
 ### The interface rule
 
@@ -376,7 +376,7 @@ The builtin run module, `.contexture/modules/run/`. It has no module file and no
 
 ## Payload
 
-A module you add is workspace-owned: updates never touch it. The builtin `unit` and `run` modules, the storage core, and the law layer ride the update payload under `.contexture/modules/`, `.contexture/storage/`, and `.contexture/laws/`; the builtin `lane` module rides it under `.contexture/extensions/modules/`, the base's first extension-root module; a package's installed files live under the same extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
+A module you add is workspace-owned: updates never touch it. The builtin `unit` and `run` modules, the storage core, and the law sources ride the update payload under `.contexture/modules/`, `.contexture/storage/`, and `.contexture/laws/`; the builtin `lane` module rides it under `.contexture/extensions/modules/`, the base's first extension-root module; a package's installed files live under the same extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
 
 ## Where the rest lives
 
