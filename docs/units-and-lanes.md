@@ -159,7 +159,8 @@ The report is the one document the subagent writes whole: the lane verbs store a
 ### Dispatch discipline
 
 - The dispatcher reads the report, never the subagent journal. A thin report triggers a re-dispatch, never journal-mining.
-- A subagent's "passed" is never the gate. The dispatcher re-verifies the load-bearing claims itself. *In practice:* a subagent reports that nothing uses a field; the dispatcher re-runs the search, case-insensitively, with every separator spelling, and finds the field in use. The absence claim dies; the fresh search was the gate.
+- The dispatcher never searches. A lookup whose target it does not already hold (a grep, a find, a read to locate, `ctx unit search`, a corpus search, a census, an earlier recipe read to learn how to brief) runs in a lane and comes back as a report, so the search never fills the dispatcher's context with what it did not need. Its own reads are named targets (the boot, `ctx unit task show`, `entry show`, `resolve`, `ctx lane show`) and the re-run of a command a report names. Where the harness cannot dispatch a subagent, the agent searches in place.
+- A subagent's "passed" is never the gate. The dispatcher re-verifies the load-bearing claims by re-running the commands the report names. *In practice:* a subagent reports that nothing uses a field; the dispatcher re-runs the report's own command and sees it return nothing, but the command searched one spelling, so the doubt goes to a fresh lane, which searches case-insensitively with every separator spelling and finds the field in use. The absence claim dies; the fresh lane's search was the gate.
 - Subagents run in the background: the turn ends at launch, and the conversation never blocks on a subagent.
 - Parallel subagents are only for independent domains. Shared state or ordering means sequential, however tempting the fan-out.
 

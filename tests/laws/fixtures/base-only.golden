@@ -1,4 +1,4 @@
-# contexture v0.69.0: generated law layer; core cksum 2903725421-12045; sources 1748475460-28434; never edit
+# contexture v0.69.0: generated law layer; core cksum 3918299898-12919; sources 511260904-29445; never edit
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -49,7 +49,7 @@
   the backlog  = the current declaration: actionable tasks (objective + status + description + acceptance criteria + implementation details + refs); the workflow in @backlog; written via ctx unit task (add, update, start, complete, reopen, drop, list, show).
   the journal  = the single recording surface: append-only events + @anchor declarations; the workflow in @journal; written via ctx unit record, stamp.
   knowledge    = settled findings: what is true, what was decided and why, what was ruled out; full lifecycle CRUD via ctx unit finding (add, show, update, supersede, drop, list); an intent to act takes the @task shape in the backlog (ctx unit task add), a developing idea stays a journal event; REF -> the full version in append-only artifacts: target#symbol (journal#entry, lanes/x/report#claim), never a dynamic surface; no REF, no story = hypothesis, never base a task on it; claims outlive their anchors, unlike journal entries; every finding lands via the harvest (@refresh).
-  lanes/       = dispatch units, one lane per subagent: recipe (brief) + journal (incremental trace) + report (evidence); the dispatcher creates a lane via ctx lane create (the recipe on stdin); subagents manage artifacts via ctx lane (show, record, report); re-dispatch resumes from the lane; the contract in @subagents.
+  lanes/       = dispatch units, one lane per subagent: recipe (brief) + journal (incremental trace) + report (evidence); the dispatcher creates a lane via ctx lane create (the brief as its parameters; the verb composes the recipe); subagents manage artifacts via ctx lane (show, record, report); re-dispatch resumes from the lane; the contract in @subagents.
 
 @journal
   why :: the journal rebuilds the working context from scratch: a fresh boot loads the active entries (live = not closed) and nothing else; what that reconstruction needs is what deserves an entry; the importance bar is the reader who comes back with only the record
@@ -129,24 +129,25 @@
 @subagents
   dispatch: a step that names a subagent runs as a dispatched subagent: its own context, its own lane, its own report
   every dispatch:
-  - brief = the lane recipe; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad dumps forbidden; names the active branch/worktree
+  - brief = the lane recipe, composed by ctx lane create from the dispatcher's parameters (ctx lane help create names each: the goal, the branch, the write scope, the scope steps, the report sections, and the optional refs, tasks, decisions, rhythm, facts, and substrate); it slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad dumps forbidden; names the active branch/worktree
   - subagent boot, read-only, before any work: the overlays, the state, the backlog, knowledge, the lane recipe, and every REF it names; the unit's record surfaces are never subagent-written
   - the subagent's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
   - subagent journals at action granularity via ctx lane record as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the lane journal is the audit trail and the resumption surface
   - report via ctx lane report; return = summary ONLY
   - the dispatcher reads the report, never the subagent journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
+  - search delegation: the dispatcher never searches: a lookup whose target it does not already hold (grep, find, a read to locate, ctx unit search, a corpus search, a census, an earlier recipe read to learn a brief) runs in a lane and returns as a report; the dispatcher's own reads are named targets (the boot, ctx unit task show, entry show, resolve, ctx lane show) and the re-run of a command a report names; where the harness cannot dispatch, the agent searches in place
   - background: the turn ends at launch; never block the conversation on a subagent; parallel subagents only for independent domains: shared state or ordering means sequential
   - drift: a decision within the brief is the subagent's; it decides and journals it; a wall or a decision beyond the brief is drift, never improvised past; pause and ask for steering where the harness supports it, else stop, report found | standing | drifted, abort gracefully
   - report and journal land NO MATTER the outcome: the action trace is the exact stopping point, so a steer continues live and a re-dispatch resumes from the lane, never rebuilds
   - a subagent that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
-  - a subagent's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
+  - a subagent's "passed" is NEVER the gate; the dispatcher re-verifies load-bearing claims by re-running the commands the report names; a doubted absence claim goes to a fresh lane
   - read the report WHOLE, no exception; an unread part wears the look of review
   - command streams: subagents execute all commands through .contexture/ctx run <cmd> (runner mode prefix) or pipe through it to preserve context window capacity; raw execution is forbidden
-  - lane operations execute through top-level ctx lane: the dispatcher creates the lane with its recipe (ctx lane create, the recipe on stdin); the subagent works it (ctx lane show, record, report); the recipe specifies the unit and lane name for the subagent
+  - lane operations execute through top-level ctx lane: the dispatcher creates the lane from its brief parameters (ctx lane create composes the recipe, writes its fixed blocks, and prints the dispatch prompt); the subagent works it (ctx lane show, record, report); the recipe names the unit and lane for the subagent
   - journal every dispatch: the subagent's lane slug
   branch/worktree: the recipe names the branch/worktree the subagent works on; by default the workspace checkout on its current branch; when a unit warrants isolation the dispatcher gives it .worktrees/<unit> on branch unit/<slug>, and every subagent of the unit works there; the subagent's journal and report stay in the unit's record
   landing: the dispatcher owns it: review the branch (or its PR), merge, remove the worktree, delete the branch; a subagent never merges or prunes
-  boundary-warning: every lane recipe and dispatch prompt carries the explicit rule: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach
+  boundary-warning: every lane recipe and dispatch prompt carries the explicit rule: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach; ctx lane create writes it into the recipe's BOUNDARY block and into the dispatch prompt it prints
   drift: an edit outside the declared roots, a code change without its journal line, or a command run raw without .contexture/ctx run, is drift
 
 @refresh

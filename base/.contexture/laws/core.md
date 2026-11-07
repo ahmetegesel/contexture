@@ -69,20 +69,21 @@
 @subagents
   dispatch: a step that names a subagent runs as a dispatched subagent: its own context, its own lane, its own report
   every dispatch:
-  - brief = the lane recipe; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad dumps forbidden; names the active branch/worktree
+  - brief = the lane recipe, composed by ctx lane create from the dispatcher's parameters (ctx lane help create names each: the goal, the branch, the write scope, the scope steps, the report sections, and the optional refs, tasks, decisions, rhythm, facts, and substrate); it slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad dumps forbidden; names the active branch/worktree
   - subagent boot, read-only, before any work: the overlays, the state, the backlog, knowledge, the lane recipe, and every REF it names; the unit's record surfaces are never subagent-written
   - the subagent's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
   - subagent journals at action granularity via ctx lane record as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the lane journal is the audit trail and the resumption surface
   - report via ctx lane report; return = summary ONLY
   - the dispatcher reads the report, never the subagent journal: the report is the only window and must be self-sufficient; a thin report triggers re-dispatch, never journal-mining
+  - search delegation: the dispatcher never searches: a lookup whose target it does not already hold (grep, find, a read to locate, ctx unit search, a corpus search, a census, an earlier recipe read to learn a brief) runs in a lane and returns as a report; the dispatcher's own reads are named targets (the boot, ctx unit task show, entry show, resolve, ctx lane show) and the re-run of a command a report names; where the harness cannot dispatch, the agent searches in place
   - background: the turn ends at launch; never block the conversation on a subagent; parallel subagents only for independent domains: shared state or ordering means sequential
   - drift: a decision within the brief is the subagent's; it decides and journals it; a wall or a decision beyond the brief is drift, never improvised past; pause and ask for steering where the harness supports it, else stop, report found | standing | drifted, abort gracefully
   - report and journal land NO MATTER the outcome: the action trace is the exact stopping point, so a steer continues live and a re-dispatch resumes from the lane, never rebuilds
   - a subagent that cannot write its report returns the artifact verbatim; dispatcher persists byte-clean
-  - a subagent's "passed" is NEVER the gate; dispatcher re-verifies load-bearing claims
+  - a subagent's "passed" is NEVER the gate; the dispatcher re-verifies load-bearing claims by re-running the commands the report names; a doubted absence claim goes to a fresh lane
   - read the report WHOLE, no exception; an unread part wears the look of review
   - command streams: subagents execute all commands through .contexture/ctx run <cmd> (runner mode prefix) or pipe through it to preserve context window capacity; raw execution is forbidden
-  - lane operations execute through top-level ctx lane: the dispatcher creates the lane with its recipe (ctx lane create, the recipe on stdin); the subagent works it (ctx lane show, record, report); the recipe specifies the unit and lane name for the subagent
+  - lane operations execute through top-level ctx lane: the dispatcher creates the lane from its brief parameters (ctx lane create composes the recipe, writes its fixed blocks, and prints the dispatch prompt); the subagent works it (ctx lane show, record, report); the recipe names the unit and lane for the subagent
   - journal every dispatch: the subagent's lane slug
 
 @refresh
