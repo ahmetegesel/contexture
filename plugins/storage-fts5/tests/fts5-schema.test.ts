@@ -3,6 +3,8 @@ import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSyn
 import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
+import { driverPath } from '@support/driver';
+import { exec } from '@support/exec';
 import { ROOT_USER, chmodPlant } from '@support/plants';
 import { sandbox } from '@support/sandbox';
 import { sqlite } from '@support/sqlite';
@@ -128,5 +130,15 @@ describe.skipIf(!fts5Available())('the fts5 store location', { concurrent: true 
     expect(sqlite(db, "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/placed');
     expect(existsSync(join(sb, '.contexture/sessions.db'))).toBe(false);
     expect((await s.get('docs', 'workspace/placed')).stdout).toBe('placed\n');
+  });
+
+  it('[plugins-r12] a relative storage.database value resolves against the workspace root, so a call from a folder under it writes the same store', async () => {
+    const sb = stage('fts5');
+    dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
+    appendFileSync(join(sb, '.contexture/config'), 'storage.database: .contexture/elsewhere.db\n');
+    mkdirSync(join(sb, 'sub/folder'), { recursive: true });
+    answer(await exec('sh', ['-c', 'cd sub/folder && exec "$0" store.put docs workspace/nested', driverPath(sb, 'fts5')], { cwd: sb, input: 'nested\n' }), 'store.put');
+    expect(sqlite(join(sb, '.contexture/elsewhere.db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/nested');
+    expect(existsSync(join(sb, 'sub/folder/.contexture'))).toBe(false);
   });
 });
