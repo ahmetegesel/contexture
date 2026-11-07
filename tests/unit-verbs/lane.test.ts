@@ -243,11 +243,11 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(recipe).not.toContain('a stdin recipe');
   });
 
-  it('[the-engine-r4, the-engine-r7]: ctx lane help create and ctx lane create --help, -h, and help, alone or after the unit and lane, print the same table rc 0', async () => {
+  it('[the-engine-r4, the-engine-r7]: ctx lane help create and ctx lane create --help, -h, and help, alone, after the unit, or after the unit and lane, print the same table rc 0', async () => {
     const sb = fresh(sb0);
     const table = await lane(sb, 'help', 'create');
     expect(table.code).toBe(0);
-    for (const args of [['--help'], ['-h'], ['help'], ['sem-unit', 'h-lane', '--help'], ['sem-unit', 'h-lane', '-h'], ['sem-unit', 'h-lane', 'help']]) {
+    for (const args of [['--help'], ['-h'], ['help'], ['sem-unit', '--help'], ['sem-unit', '-h'], ['sem-unit', 'help'], ['sem-unit', 'h-lane', '--help'], ['sem-unit', 'h-lane', '-h'], ['sem-unit', 'h-lane', 'help']]) {
       const r = await lane(sb, 'create', ...args);
       expect([r.code, r.stdout, r.stderr]).toEqual([0, table.stdout, '']);
     }

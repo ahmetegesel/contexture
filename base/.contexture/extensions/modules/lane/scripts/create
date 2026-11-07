@@ -35,6 +35,9 @@ fail() {
 case "${1:-}" in
   --help|-h|help) [ $# -eq 1 ] && { vb_verb_help lane "$0"; exit 0; } ;;
 esac
+case "${2:-}" in
+  --help|-h|help) [ $# -eq 2 ] && { vb_verb_help lane "$0"; exit 0; } ;;
+esac
 case "${3:-}" in
   --help|-h|help) [ $# -eq 3 ] && { vb_verb_help lane "$0"; exit 0; } ;;
 esac
