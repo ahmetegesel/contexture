@@ -151,7 +151,7 @@ describe.concurrent('the hook points around the unit verbs', () => {
     expect(marker(sb)).toEqual([]);
   });
 
-  it('HK-S7 [modules-r5]: close fires the close hooks only, never the refresh hooks, and prints CLOSED', async () => {
+  it('HK-S7 [modules-r5, the-record-r21]: close fires the close hooks only, never the refresh hooks, and prints CLOSED', async () => {
     const sb = copy();
     const r = await unit(sb, 'close', 'zz-unit');
     expect(r.code).toBe(0);

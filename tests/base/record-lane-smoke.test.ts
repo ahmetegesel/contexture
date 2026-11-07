@@ -88,7 +88,7 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     expect((await unit(sb, 'fold', U)).code).toBe(0);
   });
 
-  it('[the-record-r11] stamp, refresh, close, the closed refusal, reopen, and a write after reopen', async () => {
+  it('[the-record-r11, the-record-r21] stamp, refresh, close, the closed refusal, reopen, and a write after reopen', async () => {
     const sb = fresh(await snap('written'));
     await must(unit(sb, 'stamp', U));
     await must(unit(sb, 'refresh', U));

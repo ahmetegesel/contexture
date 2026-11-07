@@ -21,7 +21,7 @@ describe.concurrent('the unit verbs run standalone, without CTX_MODULE_DIR or CT
     expect(r.stdout).toContain('LOAD');
   });
 
-  it('S2: close runs the audit through the backend and prints CLOSED', async () => {
+  it('S2 [the-record-r21]: close runs the audit through the backend and prints CLOSED', async () => {
     const r = await script(fresh(sb0), 'close', 'u2');
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('CLOSED: u2');

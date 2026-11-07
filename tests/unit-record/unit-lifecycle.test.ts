@@ -35,7 +35,7 @@ describe.concurrent('the unit lifecycle through the unit data script', () => {
     expect(answerLine(await data(sb, 'entry.list', [UNIT]), 'entry.list')).toBe('{"unit":"compliance-u1","entries":[]}');
   });
 
-  it('TC04 [the-record-r3]: session.stamp answers A1 to A2 with its dated anchor; session.close marks the unit CLOSED', async () => {
+  it('TC04 [the-record-r3, the-record-r21]: session.stamp answers A1 to A2 with its dated anchor; session.close marks the unit CLOSED', async () => {
     const sb = await at('U1');
     expect(answerLine(await data(sb, 'session.stamp', [UNIT], dated), 'session.stamp')).toBe(
       '{"unit":"compliance-u1","previous_anchor":"A1","current_anchor":"A2","receipt":{"kind":"anchor","seq":2,"anchor":"A2","date":"2026-09-27","continues":null,"attention":null,"head_text":null,"extra_lines":[],"next":null}}',
@@ -47,7 +47,7 @@ describe.concurrent('the unit lifecycle through the unit data script', () => {
     expect(answer(await data(sb, 'session.load', [UNIT]), 'session.load').state.status).toBe('CLOSED');
   });
 
-  it('TC66: session.close and session.reopen refuse the move they cannot make', async () => {
+  it('TC66 [the-record-r21]: session.close and session.reopen refuse the move they cannot make', async () => {
     const sb = await at('empty');
     answer(await mk(sb, 'tc66-u'), 'session.create');
     expect(answer(await data(sb, 'session.close', ['tc66-u']), 'session.close').status).toBe('CLOSED');
