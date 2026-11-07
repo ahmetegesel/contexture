@@ -1,11 +1,13 @@
-import { cpSync, existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdirSync, readdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { FALLBACK_ROOT, leaks, RECORD_ROOT } from '../support/drawer';
+import { FALLBACK_ROOT, leaks, namespaceLock, RECORD_ROOT, unitLock } from '../support/drawer';
 import type { Run } from '../support/exec';
+import { holdLock, sleepShim } from '../support/locks';
+import { ROOT_USER } from '../support/plants';
 import { ROOT } from '../support/root';
 import { stage } from '../support/stage';
-import { lane, laneFlags, run } from '../support/unit';
+import { lane, laneFlags, must, run } from '../support/unit';
 
 const D = '2026-09-27';
 const REPO = 'census-repo';
@@ -69,13 +71,16 @@ function keyOf(tables: Tables, argv: readonly string[]): string {
 
 describe('the verb output census: no unit, lane, or rhythm verb prints the record storage', () => {
   let rows: Row[];
+  let refusals: Row[];
   let sb: string;
   let tables: Tables;
 
   beforeAll(async () => {
     sb = staged('verb-output');
+    const rb = staged('verb-output-refusals');
     tables = await readTables(sb);
     rows = [];
+    refusals = [];
     const push = (argv: readonly string[], done: Run): void => void rows.push({ key: keyOf(tables, argv), code: done.code, out: done.stdout + done.stderr });
     const take = async (argv: string[], input = ''): Promise<Run> => {
       const done = await run(sb, argv, { input });
@@ -90,94 +95,134 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
       return done;
     };
 
-    await u('bootstrap', 'cu', 'the census unit', REPO);
-    await u('bootstrap', 'lg', 'the legacy unit', REPO);
-    await u('bootstrap', 'lh', 'the unit nobody writes', 'other-repo');
-    await u('task', 'add', 'lg', 'lg-task', '--objective=the legacy task');
-    await u('record', 'lg', '--what=the legacy entry', `--slug=${D}-lg-e1`);
-    toFallback(sb, 'lg');
-    toFallback(sb, 'lh');
-    await u('load', 'lg');
-    await u('board', 'lg');
-    await u('audit', 'lg');
-    await u('list');
-    await u('list', '--all');
-    await u('resolve', 'lg', 'task#lg-task');
-    await u('resolve', 'lg', `entry#${D}-lg-e1`);
-    await u('record', 'lg', '--what=the first landing write moves the unit', `--slug=${D}-lg-e2`);
+    const refuse = async (): Promise<void> => {
+      const keep = (why: string, argv: readonly string[], done: Run): void => void refusals.push({ key: `${keyOf(tables, argv)} (${why})`, code: done.code, out: done.stdout + done.stderr });
+      const R = (why: string, argv: string[], env?: Record<string, string>): Promise<void> => run(rb, argv, { env }).then((done) => keep(why, argv, done));
+      await must(run(rb, U('bootstrap', 'ru', 'the refusal unit')));
+      await must(run(rb, U('bootstrap', 'rl', 'the unit in both roots')));
+      await must(run(rb, ['lane', 'create', 'ru', 'rk', ...laneFlags()]));
+      toFallback(rb, 'rl');
+      cpSync(join(rb, FALLBACK_ROOT, 'rl'), join(rb, RECORD_ROOT, 'rl'), { recursive: true });
+      await Promise.all([
+        R('a missing unit', U('load', 'nounit')),
+        R('a write to a missing unit', U('record', 'nounit', '--what=the missing unit write')),
+        R('a missing task', U('task', 'show', 'ru', 'nope')),
+        R('a missing finding', U('finding', 'show', 'ru', 'NOPE')),
+        R('a missing entry', U('entry', 'show', 'ru', 'nope')),
+        R('a missing reference', U('resolve', 'ru', 'task#nope')),
+        R('a missing plan', U('fold', 'ru', '--check')),
+        R('a missing unit to move', U('migrate', 'nounit')),
+        R('a missing lane', ['lane', 'show', 'ru', 'nolane']),
+        R('a write to a missing lane', ['lane', 'record', 'ru', 'nolane', '--what=the missing lane write']),
+        R('a missing rhythm', ['rhythm', 'show', 'nosuch']),
+        R('a missing unit for the rhythm', ['rhythm', 'current', 'nounit']),
+      ]);
+      const shim = sleepShim();
+      for (const [why, lock] of [['a held unit lock', unitLock('ru')], ['a held namespace lock', namespaceLock('unit')]] as const) {
+        const release = holdLock(rb, lock, 'live');
+        await R(why, U('record', 'ru', '--what=the locked write'), shim);
+        release();
+      }
+      if (!ROOT_USER) {
+        chmodSync(join(rb, RECORD_ROOT, 'ru'), 0o555);
+        await R('a read only unit folder', U('record', 'ru', '--what=the read only write'));
+        chmodSync(join(rb, RECORD_ROOT, 'ru'), 0o755);
+      }
+      await R('a unit in both roots', U('record', 'rl', '--what=the write to both roots'));
+    };
 
-    await u('record', 'cu', '--what=the first census entry', `--slug=${D}-cu-e1`, '--thread=the census reader');
-    await u('record', 'cu', '--what=a stamped census entry', `--slug=${D}-cu-e2`, '--rhythm=debug 1 REPRODUCE', `--ref=journal#${D}-cu-e1`);
-    await u('record', 'cu', '--what=the census reader answered', `--slug=${D}-cu-e3`, `--closes=${D}-cu-e1 (done: answered)`);
-    await u('stamp', 'cu');
-    for (const t of ['t1', 't2', 't3']) await u('task', 'add', 'cu', t, `--objective=the census task ${t}`, '--refs=lane#cl/report#FINDINGS');
-    await u('task', 'update', 'cu', 't1', '--desc=the census description', '--criteria=the census criterion');
-    await u('task', 'start', 'cu', 't1');
-    await u('task', 'complete', 'cu', 't1', '--evidence=the census evidence');
-    await u('task', 'reopen', 'cu', 't1');
-    await u('task', 'start', 'cu', 't2');
-    await u('task', 'drop', 'cu', 't3', '--reason=the census drop');
-    await u('finding', 'add', 'cu', 'F_ONE', '--summary=the census finding', `--ref=journal#${D}-cu-e1`);
-    await u('finding', 'update', 'cu', 'F_ONE', '--summary=the census finding, updated');
-    await u('finding', 'supersede', 'cu', 'F_ONE', 'F_TWO', '--summary=the census successor', '--ref=lane#cl/report#FINDINGS');
-    await u('finding', 'add', 'cu', 'F_DROP', '--summary=the finding to drop');
-    await u('finding', 'drop', 'cu', 'F_DROP');
-    await take(['lane', 'create', 'cu', 'cl', ...laneFlags(['--ref=lane#cl/report#FINDINGS', '--task=backlog#t1', '--rhythm=debug 2 TRACE'])]);
-    await take(['lane', 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=backlog#t1']);
-    await take(['lane', 'report', 'cu', 'cl'], REPORT);
-    await u('refs', 'cu', 'lg');
+    const census = async (): Promise<void> => {
+      await u('bootstrap', 'cu', 'the census unit', REPO);
+      await u('bootstrap', 'lg', 'the legacy unit', REPO);
+      await u('bootstrap', 'lh', 'the unit nobody writes', 'other-repo');
+      await u('task', 'add', 'lg', 'lg-task', '--objective=the legacy task');
+      await u('record', 'lg', '--what=the legacy entry', `--slug=${D}-lg-e1`);
+      toFallback(sb, 'lg');
+      toFallback(sb, 'lh');
+      await u('load', 'lg');
+      await u('board', 'lg');
+      await u('audit', 'lg');
+      await u('list');
+      await u('list', '--all');
+      await u('resolve', 'lg', 'task#lg-task');
+      await u('resolve', 'lg', `entry#${D}-lg-e1`);
+      await u('record', 'lg', '--what=the first landing write moves the unit', `--slug=${D}-lg-e2`);
 
-    const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
-    const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
-    const names = listing!.stdout.split('\n').filter((l) => / \| /.test(l)).map((l) => l.split(' | ')[0] ?? '');
-    const refs = [
-      'task#t1',
-      'backlog#t1',
-      'finding#F_TWO',
-      'knowledge#F_TWO',
-      `entry#${D}-cu-e2`,
-      `journal#${D}-cu-e2`,
-      'lane#cl/recipe',
-      'lane#cl/journal',
-      'lane#cl/report',
-      'lane#cl/report#FINDINGS',
-      'lanes/cl/report',
-      'lanes/cl/report#FINDINGS',
-      'unit#cu/task/t1',
-      `unit#cu/entry/${D}-cu-e2`,
-      'unit#cu/finding/F_TWO',
-      'unit#cu/lane/cl/report',
-    ];
-    await together([
-      U('task', 'list', 'cu', '--status=all'),
-      U('task', 'show', 'cu', 't1'),
-      U('finding', 'show', 'cu', 'F_TWO'),
-      U('finding', 'list', 'cu'),
-      U('entry', 'show', 'cu', `${D}-cu-e2`),
-      U('entry', 'list', 'cu'),
-      U('entry', 'closure', 'cu', `${D}-cu-e1`),
-      ['lane', 'report', 'cu', 'cl'],
-      ...['recipe', 'journal', 'report'].map((a) => ['lane', 'show', 'cu', 'cl', a]),
-      ...Array.from({ length: pages - 1 }, (_v, i) => U('load', 'cu', String(i + 2))),
-      U('board', 'cu'),
-      ...[[], ['--active'], ['--all'], [`--repo=${REPO}`], ['--active', `--repo=${REPO}`], ['--all', `--repo=${REPO}`]].map((flags) => U('list', ...flags)),
-      U('audit', 'cu'),
-      U('refresh', 'cu'),
-      ...refs.flatMap((ref) => [U('resolve', 'cu', ref), U('resolve', 'cu', ref, '--json')]),
-      U('refs-to', 'lg'),
-      U('search', 'cu', 'census', '--mode=exact'),
-      ...names.map((n) => ['rhythm', 'show', n]),
-      ['rhythm', 'current', 'cu'],
-    ]);
+      await u('record', 'cu', '--what=the first census entry', `--slug=${D}-cu-e1`, '--thread=the census reader');
+      await u('record', 'cu', '--what=a stamped census entry', `--slug=${D}-cu-e2`, '--rhythm=debug 1 REPRODUCE', `--ref=journal#${D}-cu-e1`);
+      await u('record', 'cu', '--what=the census reader answered', `--slug=${D}-cu-e3`, `--closes=${D}-cu-e1 (done: answered)`);
+      await u('stamp', 'cu');
+      for (const t of ['t1', 't2', 't3']) await u('task', 'add', 'cu', t, `--objective=the census task ${t}`, '--refs=lane#cl/report#FINDINGS');
+      await u('task', 'update', 'cu', 't1', '--desc=the census description', '--criteria=the census criterion');
+      await u('task', 'start', 'cu', 't1');
+      await u('task', 'complete', 'cu', 't1', '--evidence=the census evidence');
+      await u('task', 'reopen', 'cu', 't1');
+      await u('task', 'start', 'cu', 't2');
+      await u('task', 'drop', 'cu', 't3', '--reason=the census drop');
+      await u('finding', 'add', 'cu', 'F_ONE', '--summary=the census finding', `--ref=journal#${D}-cu-e1`);
+      await u('finding', 'update', 'cu', 'F_ONE', '--summary=the census finding, updated');
+      await u('finding', 'supersede', 'cu', 'F_ONE', 'F_TWO', '--summary=the census successor', '--ref=lane#cl/report#FINDINGS');
+      await u('finding', 'add', 'cu', 'F_DROP', '--summary=the finding to drop');
+      await u('finding', 'drop', 'cu', 'F_DROP');
+      await take(['lane', 'create', 'cu', 'cl', ...laneFlags(['--ref=lane#cl/report#FINDINGS', '--task=backlog#t1', '--rhythm=debug 2 TRACE'])]);
+      await take(['lane', 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=backlog#t1']);
+      await take(['lane', 'report', 'cu', 'cl'], REPORT);
+      await u('refs', 'cu', 'lg');
 
-    await u('diagnose');
-    await u('migrate', '--all');
-    const plan = await u('fold', 'cu');
-    await u('fold', 'cu');
-    const foldLane = /--lane=([A-Za-z0-9_-]+)/.exec(plan.stdout)?.[1] ?? '';
-    await u('fold', 'cu', `--lane=${foldLane}`);
-    await u('close', 'cu');
-    await u('reopen', 'cu');
+      const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
+      const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
+      const names = listing!.stdout.split('\n').filter((l) => / \| /.test(l)).map((l) => l.split(' | ')[0] ?? '');
+      const refs = [
+        'task#t1',
+        'backlog#t1',
+        'finding#F_TWO',
+        'knowledge#F_TWO',
+        `entry#${D}-cu-e2`,
+        `journal#${D}-cu-e2`,
+        'lane#cl/recipe',
+        'lane#cl/journal',
+        'lane#cl/report',
+        'lane#cl/report#FINDINGS',
+        'lanes/cl/report',
+        'lanes/cl/report#FINDINGS',
+        'unit#cu/task/t1',
+        `unit#cu/entry/${D}-cu-e2`,
+        'unit#cu/finding/F_TWO',
+        'unit#cu/lane/cl/report',
+      ];
+      await together([
+        U('task', 'list', 'cu', '--status=all'),
+        U('task', 'show', 'cu', 't1'),
+        U('finding', 'show', 'cu', 'F_TWO'),
+        U('finding', 'list', 'cu'),
+        U('entry', 'show', 'cu', `${D}-cu-e2`),
+        U('entry', 'list', 'cu'),
+        U('entry', 'closure', 'cu', `${D}-cu-e1`),
+        ['lane', 'report', 'cu', 'cl'],
+        ...['recipe', 'journal', 'report'].map((a) => ['lane', 'show', 'cu', 'cl', a]),
+        ...Array.from({ length: pages - 1 }, (_v, i) => U('load', 'cu', String(i + 2))),
+        U('board', 'cu'),
+        ...[[], ['--active'], ['--all'], [`--repo=${REPO}`], ['--active', `--repo=${REPO}`], ['--all', `--repo=${REPO}`]].map((flags) => U('list', ...flags)),
+        U('audit', 'cu'),
+        U('refresh', 'cu'),
+        ...refs.flatMap((ref) => [U('resolve', 'cu', ref), U('resolve', 'cu', ref, '--json')]),
+        U('refs-to', 'lg'),
+        U('search', 'cu', 'census', '--mode=exact'),
+        ...names.map((n) => ['rhythm', 'show', n]),
+        ['rhythm', 'current', 'cu'],
+      ]);
+
+      await u('diagnose');
+      await u('migrate', '--all');
+      const plan = await u('fold', 'cu');
+      await u('fold', 'cu');
+      const foldLane = /--lane=([A-Za-z0-9_-]+)/.exec(plan.stdout)?.[1] ?? '';
+      await u('fold', 'cu', `--lane=${foldLane}`);
+      await u('close', 'cu');
+      await u('reopen', 'cu');
+    };
+
+    await Promise.all([census(), refuse()]);
   }, 300_000);
 
   it('[the-record-r14] every verb and sub-verb the unit, lane, and rhythm help tables list has a row keyed from the argv it ran, above the table floor, so a new verb without one reads red', () => {
@@ -200,6 +245,12 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
 
   it('[the-record-r14] no row prints a record root, the database, the lock layout, a lane artifact path, an artifact file name, or a module implementation path', () => {
     expect(hitsOf(rows)).toEqual([]);
+  });
+
+  it('[the-record-r14] every refusal row, a missing entity per verb family, a write under a held unit lock and under a held namespace lock, a write into a read only unit folder, and a write to a unit in both roots, answers rc not 0 with a line and prints no record storage', () => {
+    expect(refusals.length).toBeGreaterThanOrEqual(ROOT_USER ? 15 : 16);
+    expect(refusals.filter((r) => r.code === 0 || r.out.trim() === '').map((r) => `${r.key}: rc ${r.code}: ${r.out.split('\n')[0]}`)).toEqual([]);
+    expect(hitsOf(refusals)).toEqual([]);
   });
 
   it('[the-record-r14, the-record-r16] a lane report holding a planted record path, read back through ctx lane show, leaves exactly one remainder', async () => {
