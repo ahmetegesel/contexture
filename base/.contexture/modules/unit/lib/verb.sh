@@ -103,9 +103,10 @@ function utf8_ok(s,   n, i, j, c, need, lo, hi) {
 }
 '
 
-# vb_label: the verb's name in its refusals (the lane verbs as "lane <verb>")
+# vb_label: the verb's name in its refusals (the lane verbs as "lane <verb>"), read from the
+# running script, since a lane verb points VB_SELF at this library to find it
 vb_label() {
-  case "${VB_SELF:-$0}" in
+  case "$0" in
     */lane/scripts/*) printf 'lane %s' "${0##*/}" ;;
     *) printf '%s' "${0##*/}" ;;
   esac

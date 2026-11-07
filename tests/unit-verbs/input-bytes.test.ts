@@ -1,4 +1,5 @@
-import { appendFileSync, readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
@@ -52,12 +53,24 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
   it.for([
     ['a report holding a NUL', Buffer.from('a report\0with a NUL\n'), 'the report holds a NUL byte'],
     ['a report not UTF-8', latin1('a report \xc0\x80\n'), 'the report is not valid UTF-8'],
-  ] as const)('E3-d [the-record-r9, the-record-r12]: lane report refuses %s on stdin naming it, nothing landed', async ([, doc, message]) => {
+  ] as const)('E3-d [the-record-r9, the-record-r12]: lane report refuses %s on stdin with its one line under its own label, nothing landed', async ([, doc, message]) => {
     const sb = fresh(sb0);
     const r = await run(sb, ['lane', 'report', 'in-unit', 'in-lane'], { input: doc });
-    expect(r.code).toBe(1);
-    expect(r.stderr).toMatch(new RegExp(`error: ${message} \\(ERR_INVALID_ARGUMENT\\)\\n$`));
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `lane report: error: ${message} (ERR_INVALID_ARGUMENT)\n`]);
     expect((await lane(sb, 'show', 'in-unit', 'in-lane', 'report')).stdout.trim()).toBe('');
+  });
+
+  it('E3-d [the-record-r12]: lane record refuses a --what that is not UTF-8 under its own label', async () => {
+    const sb = fresh(sb0);
+    const r = await execBytes(sb, ctxArgs('lane', 'record', 'in-unit', 'in-lane', flag('what', BAD)));
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'lane record: error: what is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n']);
+  });
+
+  it('lane show with the unit module data script absent refuses rc 2 under its own label', async () => {
+    const sb = fresh(sb0);
+    rmSync(join(sb, '.contexture/modules/unit/scripts/data'));
+    const r = await lane(sb, 'show', 'in-unit', 'in-lane', 'recipe');
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', 'lane show: error: the unit module data script is not installed (ERR_DRIVER_NOT_FOUND)\n']);
   });
 
   it('E3-d [the-record-r12]: valid UTF-8 of every length lands in a WHAT and a lane create --goal and reads back byte for byte', async () => {
