@@ -16,6 +16,7 @@ function workspace(): string {
 }
 
 const storeData = (sb: string, ns: string) => exec(STORE_DATA, [ns], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+const listing = (sb: string, ...extra: string[]) => exec(STORE_DATA, ['--list', ...extra], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
 
 async function answerLines(sb: string, ns: string): Promise<string[]> {
   const r = await storeData(sb, ns);
@@ -118,6 +119,52 @@ describe.concurrent('store-data, the data file reader', () => {
     const lines = await answerLines(sb, 'probe');
     expect(lines.slice(0, 5)).toEqual(['probe', 'probe-root', '.txt', '<a>/<b>', 'false']);
     expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line', 'exact']);
+  });
+
+  it('[modules-r10] refuses an argument beyond the namespace, and beyond the listing flag, rc 1', async () => {
+    const sb = workspace();
+    const one = await exec(STORE_DATA, ['docs', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+    expect([one.code, one.stdout, one.stderr]).toEqual([1, '', "store-data: unexpected argument 'extra' (store-data <namespace>, or store-data --list)\n"]);
+    const list = await listing(sb, 'extra');
+    expect([list.code, list.stdout, list.stderr]).toEqual([1, '', "store-data: unexpected argument 'extra' (store-data --list takes no argument)\n"]);
+  });
+
+  it('[modules-r10] the listing mode answers every valid declaration of both roots, namespace TAB root, sorted by namespace, the default root the namespace', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
+    dataFile(sb, 'modules', 'probe', probe('changes: false\n'));
+    dataFile(sb, 'extensions', 'alpha', 'namespace: alpha\nroot: .contexture/alpha-root\nkey: <a>\n');
+    const r = await listing(sb);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toBe('alpha\t.contexture/alpha-root\ndocs\tdocs\nminimal\tminimal\nprobe\tprobe-root\n');
+  });
+
+  it('[modules-r10, the-engine-p4] the listing leaves out a malformed declaration, a namespace token it cannot serve, a file with no namespace, and a doubly declared namespace, one stderr line each, rc 0', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'probe', probe('mode: fast\n'));
+    dataFile(sb, 'modules', 'nonamespace', 'key: <a>/<b>\n');
+    dataFile(sb, 'modules', 'badtoken', 'namespace: Bad!\nkey: <a>\n');
+    dataFile(sb, 'modules', 'twice', 'namespace: twice\nkey: <a>\n');
+    dataFile(sb, 'extensions', 'twice2', 'namespace: twice\nkey: <a>\n');
+    const r = await listing(sb);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe('docs\tdocs\n');
+    expect(r.stderr).toBe([
+      "store-data: the data file of module 'badtoken' declares a malformed namespace 'Bad!'",
+      "store-data: the data file of module 'nonamespace' declares no namespace",
+      "store-data: namespace 'probe': unknown field 'mode' in the data file",
+      "store-data: namespace 'twice' is declared by more than one module: twice twice2",
+      '',
+    ].join('\n'));
+  });
+
+  it('the listing mode answers rc 2 with one line on an absent module drawer, and nothing for a drawer declaring nothing', async () => {
+    const absent = await listing(sandbox('no-drawer'));
+    expect([absent.code, absent.stdout]).toEqual([2, '']);
+    expect(absent.stderr).toMatch(/^store-data: .+\n$/);
+    const sb = sandbox('empty-drawer');
+    mkdirSync(join(sb, '.contexture/modules'), { recursive: true });
+    expect(await listing(sb)).toMatchObject({ code: 0, stdout: '', stderr: '' });
   });
 
   it('[modules-r10] the document-set form answers its rules after the twelve lines, one tab-separated rule per line', async () => {

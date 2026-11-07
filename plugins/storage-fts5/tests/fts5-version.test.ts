@@ -24,13 +24,13 @@ describe.skipIf(!fts5Available())('the sqlite3 version guard', { concurrent: tru
   it('[the-engine-r24] 3.43.2: a store function refuses rc 2 naming the version, and the health reports error', async () => {
     const s = under('3.43.2');
     refused(await s.put('docs', 'workspace/version', 'version probe\n'), 'store.put', 2, 'ERR_DRIVER_NOT_FOUND', 'the fts5 driver needs sqlite3 3.44 or later, this one is 3.43.2');
-    const health = answer(await s.op('storage.health', []), 'storage.health');
+    const health = answer(await s.op('storage.health', ['docs']), 'storage.health');
     expect([health.health, health.detail]).toEqual(['error', 'sqlite3 3.43.2 is older than the 3.44 the driver needs']);
   });
 
   it('[the-engine-r24] 3.44.0: a store function answers and the health reports ok', async () => {
     const s = under('3.44.0');
     answer(await s.put('docs', 'workspace/version', 'version probe\n'), 'store.put');
-    expect(answer(await s.op('storage.health', []), 'storage.health').health).toBe('ok');
+    expect(answer(await s.op('storage.health', ['docs']), 'storage.health')).toMatchObject({ health: 'ok', store: 'present' });
   });
 });

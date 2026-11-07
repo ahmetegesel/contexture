@@ -109,7 +109,7 @@ describe('the bare base: the posix descriptor, the contract 3 store-only card', 
     expect(r.code).toBe(0);
     const d = JSON.parse(r.stdout);
     expect(d.driver.name).toBe('posix');
-    expect(d.storage.health).toBe('ok');
+    expect([d.storage.health, d.storage.store]).toEqual(['ok', 'present']);
     const card = d.driver.descriptor;
     expect(isDeepStrictEqual(card, CARD)).toBe(true);
     const missing = { ...card, store: card.store.filter((s: string) => s !== 'batch') };

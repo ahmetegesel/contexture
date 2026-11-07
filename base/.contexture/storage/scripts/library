@@ -14,6 +14,7 @@
 #   store.search <namespace> <query> <mode> [<limit>]                (query on stdin; 0 = all)
 #   store.require <capability>...
 #   store.has <capability>
+#   store.roots
 #   data.get <ref>
 #   data.emit <ref> <data>
 #
@@ -24,6 +25,12 @@
 # caller sets CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which
 # serves when CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact
 # resolver path; the core resolver is found under the drawer, then the base mirror.
+#
+# store_roots reads the module declarations, never the driver: one line per declared
+# namespace, the namespace and its store root separated by a tab, sorted by namespace,
+# through the storage core's data reader in its listing mode (store-data --list). A
+# malformed or doubly declared namespace is left out with its line on stderr; with no data
+# reader or no module drawer it refuses rc 2 with one line.
 #
 # data_get <ref> resolves a module reference <module>#<symbol>: it finds the target
 # module's data script in the workspace modules, the workspace extensions, or the base
@@ -100,6 +107,25 @@ store_delete() { store_lib_call store.delete store.delete "$@"; }
 store_changes() { store_lib_call store.changes store.changes "$@"; }
 store_require() { store_lib_call store.require require "$@"; }
 store_has() { store_lib_call store.has has "$@"; }
+
+# store_roots: the declared store roots, namespace TAB root per line, from the storage
+# core's data reader found beside the resolver this library calls (the core scripts folder
+# holds both), then under the drawer, then in the base mirror, run from the workspace root
+store_roots() {
+  sr_root=$(store_lib_root)
+  sr_script=""
+  sr_beside=""
+  if sr_resolver=$(store_lib_resolver); then sr_beside="${sr_resolver%/*}/store-data"; fi
+  for sr_c in "$sr_beside" "$sr_root/.contexture/storage/scripts/store-data" \
+              "$sr_root/base/.contexture/storage/scripts/store-data"; do
+    if [ -n "$sr_c" ] && [ -x "$sr_c" ]; then sr_script=$sr_c; break; fi
+  done
+  if [ -z "$sr_script" ]; then
+    printf 'store.roots: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+    return 2
+  fi
+  CTX_STORE_WORKSPACE=$sr_root "$sr_script" --list
+}
 
 # store_batch <namespace>: the transactional batch; the action list travels on stdin as
 # the driver's escaped payload lines (action=<put|delete>, key=<escaped key>,

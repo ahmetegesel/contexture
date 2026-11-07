@@ -123,6 +123,30 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
     expect(viaMirror.stdout).toBe('{"namespace":"libprobe","keys":[]}\n');
   });
 
+  it('[the-engine-r26] store_roots lists every declared root, namespace TAB root, through the storage core\'s data reader, never the driver', async () => {
+    const sb = fresh(snap);
+    const r = await lib(sb, 'store_roots');
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toBe('extprobe\textprobe-root\nfixture\tfixture-root\nunit\t.contexture/sessions\n');
+  });
+
+  it('[the-engine-r26] store_roots finds the data reader beside the resolver the library calls, reading the workspace root\'s declarations', async () => {
+    const staged = fresh(snap);
+    const sb = sandbox('roots-beside');
+    dataFile(sb, 'modules', 'libprobe', LIBPROBE);
+    const r = await shFunction(sb, join(staged, LIBRARY), 'store_roots', [], {
+      env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(staged, '.contexture/storage/scripts/driver-resolver') },
+    });
+    expect([r.code, r.stderr, r.stdout]).toEqual([0, '', 'libprobe\tlibprobe-root\n']);
+  });
+
+  it('[the-engine-r21, the-engine-r26] store_roots refuses rc 2 with one line when no data reader is found', async () => {
+    const sb = sandbox('no-reader');
+    mkdirSync(join(sb, '.contexture/modules'), { recursive: true });
+    const r = await shFunction(sb, join(fresh(snap), LIBRARY), 'store_roots', [], { env: { CTX_STORE_ROOT: sb } });
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', 'store.roots: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n']);
+  });
+
   it('[the-engine-r21, the-engine-r26] refuses with the driver-not-found line when no resolver is found', async () => {
     const sb = sandbox('no-resolver');
     mkdirSync(join(sb, '.contexture/storage/scripts'), { recursive: true });

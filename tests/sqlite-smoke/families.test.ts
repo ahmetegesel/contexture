@@ -126,7 +126,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     const sb = fresh(seeded);
     const d = JSON.parse(await show(sb, 'diagnose', '--json'));
     expect(d.driver.name).toBe('fts5');
-    expect(d.storage.health).toBe('ok');
+    expect([d.storage.health, d.storage.store]).toEqual(['ok', 'present']);
     expect(d.driver.descriptor.search_modes).toEqual(['exact', 'hybrid', 'trigram']);
     const cap = await exec('.contexture/storage/scripts/driver-resolver', ['capability'], { cwd: sb });
     expect(cap.code, cap.stderr).toBe(0);

@@ -1,8 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
+import { driverPath } from '../support/driver';
+import { exec } from '../support/exec';
+import { holdLock, namespaceLock } from '../support/locks';
 import { ROOT_USER, chmodPlant } from '../support/plants';
+import { sandbox } from '../support/sandbox';
 import { SEARCH_DATA } from '../support/search-fixture';
 import { fresh } from '../support/snapshot';
 import { stage } from '../support/stage';
@@ -12,6 +16,12 @@ import { answer, refused } from '../support/wire';
 function plant(sb: string, rel: string, bytes: string | Buffer): void {
   mkdirSync(dirname(join(sb, rel)), { recursive: true });
   writeFileSync(join(sb, rel), bytes);
+}
+
+async function healthOf(sb: string, namespace: string): Promise<{ driver: string; health: string; detail: string; store: string }> {
+  const a = answer(await store(sb, 'posix').op('storage.health', [namespace]), 'storage.health');
+  expect(a.detail, 'a health detail names no folder').not.toContain('/');
+  return a;
 }
 
 describe('the posix store on disk', { concurrent: true }, () => {
@@ -86,22 +96,69 @@ describe('the posix store on disk', { concurrent: true }, () => {
     refused(await store(sb, 'posix').scan('scanprobe'), 'store.scan', 2, 'ERR_STORAGE_READ', "cannot read key 'x/ro' in namespace 'scanprobe'");
   });
 
-  it('[the-engine-r24] reports its health: degraded with no sessions folder, ok and absent when empty, ok and present once written', async () => {
+  it('[the-engine-r24] reports its health over the declared root: degraded before it is made, ok and absent while it holds no key or only residue, ok and present once written, locked whatever the presence', async () => {
     const sb = stage('posix');
-    const health = async () => answer(await store(sb, 'posix').op('storage.health', []), 'storage.health');
-    expect((await health()).health).toBe('degraded');
+    const health = () => healthOf(sb, 'unit');
+    expect(await health()).toEqual({ driver: 'posix', health: 'degraded', detail: 'the store is not made yet (the first write makes it)', store: 'absent' });
     mkdirSync(join(sb, '.contexture/sessions'));
-    expect(await health()).toEqual({ driver: 'posix', health: 'ok', detail: 'sessions directory writable, no artifact stored yet', store: 'absent' });
+    const empty = { driver: 'posix', health: 'ok', detail: 'the store is writable and holds no key of the namespace yet', store: 'absent' };
+    expect(await health()).toEqual(empty);
+    plant(sb, '.contexture/sessions/stray.md', 'one segment, never a key\n');
+    plant(sb, '.contexture/sessions/u/.tmp.plant', 'a killed writer residue\n');
+    expect(await health()).toEqual(empty);
+    const release = holdLock(sb, namespaceLock('unit'), 'live');
+    expect(await health()).toEqual({ driver: 'posix', health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'absent' });
+    release();
     answer(await store(sb, 'posix').put('unit', 'u/state', 'x\n'), 'store.put');
-    expect(await health()).toEqual({ driver: 'posix', health: 'ok', detail: 'sessions directory writable, unlocked', store: 'present' });
+    expect(await health()).toEqual({ driver: 'posix', health: 'ok', detail: 'the store is writable and unlocked', store: 'present' });
+    holdLock(sb, namespaceLock('unit'), 'live');
+    expect(await health()).toEqual({ driver: 'posix', health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'present' });
   });
 
-  it.skipIf(ROOT_USER)('[the-engine-r24] reports an error when the sessions folder is not writable', async ({ onTestFinished }) => {
+  it.skipIf(ROOT_USER)('[the-engine-r24] reports an unwritable root as error with its true presence, ahead of a held lock', async ({ onTestFinished }) => {
     const sb = stage('posix');
     mkdirSync(join(sb, '.contexture/sessions'));
-    chmodPlant(join(sb, '.contexture/sessions'), 0o555, 0o755, onTestFinished);
-    expect(answer(await store(sb, 'posix').op('storage.health', []), 'storage.health')).toEqual({
-      driver: 'posix', health: 'error', detail: 'sessions directory is not writable', store: 'absent',
-    });
+    const root = join(sb, '.contexture/sessions');
+    chmodPlant(root, 0o555, 0o755, onTestFinished);
+    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not writable', store: 'absent' });
+    chmodSync(root, 0o755);
+    answer(await store(sb, 'posix').put('unit', 'u/state', 'x\n'), 'store.put');
+    chmodSync(root, 0o555);
+    holdLock(sb, namespaceLock('unit'), 'live');
+    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not writable', store: 'present' });
+  });
+
+  it.skipIf(ROOT_USER)('[the-engine-r24] reports an unreadable root as error with the store absent', async ({ onTestFinished }) => {
+    const sb = stage('posix');
+    answer(await store(sb, 'posix').put('unit', 'u/state', 'x\n'), 'store.put');
+    chmodPlant(join(sb, '.contexture/sessions'), 0o311, 0o755, onTestFinished);
+    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not readable', store: 'absent' });
+  });
+
+  it('[the-engine-r24] follows a declared root other than the namespace, and reads no other namespace\'s root', async () => {
+    const sb = stage('posix');
+    dataFile(sb, 'modules', 'deeproot', 'namespace: deeproot\nroot: nested/deep-root\nsuffix: .txt\nkey: <a>/<b>\n');
+    const health = () => healthOf(sb, 'deeproot');
+    expect((await health()).health).toBe('degraded');
+    mkdirSync(join(sb, 'deeproot'));
+    plant(sb, 'deeproot/a/b.txt', 'the default root, never the declared one\n');
+    expect((await health()).health).toBe('degraded');
+    mkdirSync(join(sb, 'nested/deep-root'), { recursive: true });
+    expect(await health()).toMatchObject({ health: 'ok', store: 'absent' });
+    answer(await store(sb, 'posix').put('deeproot', 'a/b', 'x\n'), 'store.put');
+    expect(existsSync(join(sb, 'nested/deep-root/a/b.txt'))).toBe(true);
+    expect(await health()).toMatchObject({ health: 'ok', store: 'present' });
+    expect((await healthOf(sb, 'unit')).health).toBe('degraded');
+  });
+
+  it.skipIf(ROOT_USER)('a writer with USER unset and the drawer\'s scratch folder unwritable lands its put through the per-user lock folder', async ({ onTestFinished }) => {
+    const sb = stage('posix');
+    dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
+    const temp = sandbox('no-user-temp');
+    chmodPlant(join(sb, '.contexture/tmp'), 0o555, 0o755, onTestFinished);
+    const r = await exec('env', ['-u', 'USER', driverPath(sb, 'posix'), 'store.put', 'minimal', 'a/b'], { cwd: sb, input: 'x\n', env: { TMPDIR: temp } });
+    expect(r.stderr).toBe('');
+    expect(r.stdout).toBe('{"namespace":"minimal","key":"a/b","op":"write"}\n');
+    expect(readFileSync(join(sb, 'minimal/a/b'), 'utf8')).toBe('x\n');
   });
 });

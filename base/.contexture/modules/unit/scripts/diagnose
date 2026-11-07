@@ -74,10 +74,10 @@ else
   driver_err=$(cat "$VB_DIR/caperr" "$VB_DIR/cap")
 fi
 
-# 4. Storage health: the driver reports its own backend (storage.health); the ACTIVE unit
-# count is the record's own listing (session.list), never part of the backend's health
-# answer
-vb_call storage.health
+# 4. Storage health: the driver reports the store of the module's own namespace
+# (storage.health unit); the ACTIVE unit count is the record's own listing (session.list),
+# never part of the backend's health answer
+vb_call storage.health unit
 if [ "$VB_RC" -eq 0 ]; then
   health_line=$(vb_render health)
 else

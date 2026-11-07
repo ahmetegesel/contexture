@@ -37,15 +37,20 @@
 # same namespace, in either root, refuses. The script validates the fields before any
 # store function maps a key to a path.
 #
-# Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, or two
-# declarations of the namespace; 2 the module drawer is absent or unreadable; 3 the
-# namespace is declared nowhere. The one-line reason goes to stderr.
+# The listing mode, store-data --list, answers every valid declaration in both roots, one
+# line each, the namespace and its root (the namespace when none is declared) separated by
+# a tab, sorted by namespace. A malformed declaration, a data file declaring no namespace,
+# and a namespace two data files declare are left out, each with one line on stderr, since
+# such a namespace serves no store value; the listing still answers rc 0.
+#
+# Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, two
+# declarations of the namespace, or an argument beyond the namespace or the listing flag;
+# 2 the module drawer is absent or unreadable; 3 the namespace is declared nowhere. The
+# one-line reason goes to stderr.
 
 set -u
 LC_ALL=C
 export LC_ALL
-
-SD_NAMESPACE="${1:-}"
 
 sd_fail() {
   printf 'store-data: %s\n' "$1" >&2
@@ -57,9 +62,20 @@ sd_env() {
   exit 2
 }
 
-# the namespace token: lowercase letters, digits, dot, underscore, hyphen
+SD_LIST=0
+SD_NAMESPACE="${1:-}"
 case "$SD_NAMESPACE" in
-  ''|[!a-z0-9._-]*|*[!a-z0-9._-]*) sd_fail "malformed namespace '$SD_NAMESPACE'" ;;
+  --list)
+    [ $# -le 1 ] || sd_fail "unexpected argument '$2' (store-data --list takes no argument)"
+    SD_LIST=1
+    ;;
+  *)
+    [ $# -le 1 ] || sd_fail "unexpected argument '$2' (store-data <namespace>, or store-data --list)"
+    # the namespace token: lowercase letters, digits, dot, underscore, hyphen
+    case "$SD_NAMESPACE" in
+      ''|[!a-z0-9._-]*|*[!a-z0-9._-]*) sd_fail "malformed namespace '$SD_NAMESPACE'" ;;
+    esac
+    ;;
 esac
 
 # the workspace root: CTX_STORE_WORKSPACE from the caller, else the walk up from PWD
@@ -77,8 +93,8 @@ fi
 sd_modules="$SD_WS/.contexture/modules"
 sd_extension_modules="$SD_WS/.contexture/extensions/modules"
 
-# the owner scan: the first namespace value of each candidate data file, one awk pass over
-# every file in both roots; the workspace modules first, then the extension modules
+# the candidate data files of both roots: the workspace modules first, then the extension
+# modules
 set --
 for sd_file in "$sd_modules"/*/data; do
   [ -f "$sd_file" ] || continue
@@ -91,60 +107,11 @@ if [ -d "$sd_extension_modules" ]; then
   done
 fi
 
-sd_owner_files=""
-if [ $# -gt 0 ]; then
-  sd_owner_files=$(SD_WANT_NS="$SD_NAMESPACE" LC_ALL=C awk '
-    BEGIN { want = ENVIRON["SD_WANT_NS"] }
-    FNR == 1 { found = 0 }
-    found { next }
-    {
-      line = $0
-      sub(/\r$/, "", line)
-      if (line ~ /^#/) next
-      if (line !~ /[^[:space:]]/) next
-      c = index(line, ":")
-      if (c == 0) next
-      key = substr(line, 1, c - 1)
-      val = substr(line, c + 1)
-      gsub(/^[[:space:]]+/, "", key)
-      gsub(/[[:space:]]+$/, "", key)
-      if (key != "namespace") next
-      gsub(/^[[:space:]]+/, "", val)
-      gsub(/[[:space:]]+$/, "", val)
-      found = 1
-      if (val == want) print FILENAME
-    }
-  ' "$@")
-fi
-
-sd_found=""
-sd_count=0
-sd_owners=""
-if [ -n "$sd_owner_files" ]; then
-  sd_ifs=$IFS
-  IFS='
-'
-  for sd_file in $sd_owner_files; do
-    sd_count=$((sd_count + 1))
-    sd_found=$sd_file
-    sd_mod=${sd_file%/*}
-    sd_mod=${sd_mod##*/}
-    sd_owners="$sd_owners $sd_mod"
-  done
-  IFS=$sd_ifs
-fi
-
-if [ "$sd_count" -eq 0 ]; then
-  printf 'store-data: namespace '\''%s'\'' is declared by no module data file\n' "$SD_NAMESPACE" >&2
-  exit 3
-fi
-if [ "$sd_count" -gt 1 ]; then
-  sd_fail "namespace '$SD_NAMESPACE' is declared by more than one module:$sd_owners"
-fi
-
-# the parse and the rule checks: one awk pass over the owner file; the answer is the twelve
-# lines plus the document rules, a refusal is the one prefixed line and exit 1
-SD_WANT_NS="$SD_NAMESPACE" SD_PATH="$sd_found" SD_FNAME="${sd_found##*/}" LC_ALL=C awk '
+# sd_parse <namespace> <data file>: the parse and the rule checks, one awk pass over the
+# owner file; the answer is the twelve lines plus the document rules, a refusal is the one
+# prefixed line and exit 1
+sd_parse() {
+SD_WANT_NS="$1" SD_PATH="$2" SD_FNAME="${2##*/}" LC_ALL=C awk '
 function fail(msg) {
   printf "store-data: %s\n", msg > "/dev/stderr"
   bad = 1
@@ -351,5 +318,125 @@ END {
   print modes
   printf "%s", docs
 }
-' "$sd_found"
+' "$2"
+}
+
+# sd_first_ns <data file>: the file's first namespace value, empty when it declares none
+sd_first_ns() {
+  LC_ALL=C awk '
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line ~ /^#/) next
+      if (line !~ /[^[:space:]]/) next
+      c = index(line, ":")
+      if (c == 0) next
+      key = substr(line, 1, c - 1)
+      gsub(/^[[:space:]]+/, "", key)
+      gsub(/[[:space:]]+$/, "", key)
+      if (key != "namespace") next
+      val = substr(line, c + 1)
+      gsub(/^[[:space:]]+/, "", val)
+      gsub(/[[:space:]]+$/, "", val)
+      print val
+      exit
+    }
+  ' "$1"
+}
+
+# the listing mode: each data file's first namespace, grouped by namespace in the scan
+# order (so a doubly declared namespace names its owners as the one namespace form does),
+# then each namespace declared once parsed whole, its root answered, in namespace order
+if [ "$SD_LIST" -eq 1 ]; then
+  sd_tab=$(printf '\t')
+  sd_rows=""
+  for sd_file in "$@"; do
+    sd_mod=${sd_file%/*}
+    sd_mod=${sd_mod##*/}
+    sd_v=$(sd_first_ns "$sd_file")
+    case "$sd_v" in
+      '')
+        printf 'store-data: the data file of module '\''%s'\'' declares no namespace\n' "$sd_mod" >&2
+        continue
+        ;;
+      [!a-z0-9._-]*|*[!a-z0-9._-]*)
+        printf 'store-data: the data file of module '\''%s'\'' declares a malformed namespace '\''%s'\''\n' "$sd_mod" "$sd_v" >&2
+        continue
+        ;;
+    esac
+    sd_rows="$sd_rows$sd_v$sd_tab$sd_mod$sd_tab$sd_file
+"
+  done
+  printf '%s' "$sd_rows" | LC_ALL=C awk -F '\t' '
+    !($1 in n) { order[++k] = $1 }
+    { n[$1]++; owners[$1] = owners[$1] " " $2; file[$1] = $3 }
+    END { for (i = 1; i <= k; i++) { s = order[i]; printf "%s\t%d\t%s\t%s\n", s, n[s], owners[s], file[s] } }
+  ' | LC_ALL=C sort | while IFS="$sd_tab" read -r sd_ns sd_n sd_owners sd_file; do
+    if [ "$sd_n" -gt 1 ]; then
+      printf 'store-data: namespace '\''%s'\'' is declared by more than one module:%s\n' "$sd_ns" "$sd_owners" >&2
+      continue
+    fi
+    if sd_out=$(sd_parse "$sd_ns" "$sd_file" 2>&1); then
+      printf '%s\t%s\n' "$sd_ns" "$(printf '%s\n' "$sd_out" | sed -n '2p')"
+    else
+      printf 'store-data: namespace '\''%s'\'': %s\n' "$sd_ns" "${sd_out#store-data: }" >&2
+    fi
+  done
+  exit 0
+fi
+
+# the owner scan: the first namespace value of each candidate data file, one awk pass over
+# every file in both roots, in the scan order
+sd_owner_files=""
+if [ $# -gt 0 ]; then
+  sd_owner_files=$(SD_WANT_NS="$SD_NAMESPACE" LC_ALL=C awk '
+    BEGIN { want = ENVIRON["SD_WANT_NS"] }
+    FNR == 1 { found = 0 }
+    found { next }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line ~ /^#/) next
+      if (line !~ /[^[:space:]]/) next
+      c = index(line, ":")
+      if (c == 0) next
+      key = substr(line, 1, c - 1)
+      val = substr(line, c + 1)
+      gsub(/^[[:space:]]+/, "", key)
+      gsub(/[[:space:]]+$/, "", key)
+      if (key != "namespace") next
+      gsub(/^[[:space:]]+/, "", val)
+      gsub(/[[:space:]]+$/, "", val)
+      found = 1
+      if (val == want) print FILENAME
+    }
+  ' "$@")
+fi
+
+sd_found=""
+sd_count=0
+sd_owners=""
+if [ -n "$sd_owner_files" ]; then
+  sd_ifs=$IFS
+  IFS='
+'
+  for sd_file in $sd_owner_files; do
+    sd_count=$((sd_count + 1))
+    sd_found=$sd_file
+    sd_mod=${sd_file%/*}
+    sd_mod=${sd_mod##*/}
+    sd_owners="$sd_owners $sd_mod"
+  done
+  IFS=$sd_ifs
+fi
+
+if [ "$sd_count" -eq 0 ]; then
+  printf 'store-data: namespace '\''%s'\'' is declared by no module data file\n' "$SD_NAMESPACE" >&2
+  exit 3
+fi
+if [ "$sd_count" -gt 1 ]; then
+  sd_fail "namespace '$SD_NAMESPACE' is declared by more than one module:$sd_owners"
+fi
+
+sd_parse "$SD_NAMESPACE" "$sd_found"
 exit $?

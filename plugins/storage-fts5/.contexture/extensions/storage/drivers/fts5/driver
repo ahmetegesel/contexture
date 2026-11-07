@@ -72,6 +72,15 @@ if ! mkdir -p "$DB_TMP" 2>/dev/null || [ ! -w "$DB_TMP" ]; then
   DB_TMP="${TMPDIR:-/tmp}"
 fi
 
+# the namespace locks live under the drawer's scratch folder while it is writable, else
+# under the per-user folder in the system temp: the posix driver's rule, so a writer and the
+# health probe meet one lock for a namespace whichever driver holds it
+if [ -d "$ROOT/.contexture/tmp" ] && [ -w "$ROOT/.contexture/tmp" ]; then
+  LOCK_BASE="$ROOT/.contexture/tmp"
+else
+  LOCK_BASE="${TMPDIR:-/tmp}/contexture-${USER:-}"
+fi
+
 # scratch_base: the per-verb root ctx exported (created on first use), else the drawer;
 # every transient file stages here so a killed verb's root holds its residue
 scratch_base() {
@@ -197,7 +206,7 @@ store_unlock() {
   su_lock=$STORE_LOCK
   STORE_LOCK=""
   rm -rf "$su_lock" 2>/dev/null
-  su_base="$DB_TMP/locks"
+  su_base="$LOCK_BASE/locks"
   su_p=$(dirname "$su_lock")
   while [ "$su_p" != "$su_base" ] && [ "$su_p" != "/" ]; do
     rmdir "$su_p" 2>/dev/null || break
@@ -214,7 +223,7 @@ store_unlock() {
 # where sleep refuses a fraction, a poll sleeps 1 s and counts as ten). STORE_LOCK names
 # the folder only once mkdir holds it, so a waiter's interrupt trap removes nothing.
 store_lock() {
-  sl_lock="$DB_TMP/locks/store-$1.lock"
+  sl_lock="$LOCK_BASE/locks/store-$1.lock"
   mkdir -p "$(dirname "$sl_lock")" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot make the store lock folder"
   sl_n=0
   sl_miss=0
@@ -250,7 +259,7 @@ store_lock() {
 # the waiter's rule: a pid-less lock is held, a lock whose pid is gone is not, since the
 # next writer removes it.
 store_lock_held() {
-  lh_lock="$DB_TMP/locks/store-$1.lock"
+  lh_lock="$LOCK_BASE/locks/store-$1.lock"
   [ -d "$lh_lock" ] || return 1
   lh_pid=$(cat "$lh_lock/pid" 2>/dev/null)
   case "$lh_pid" in
@@ -263,10 +272,15 @@ store_lock_held() {
 # SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the storage core's store-data script
 # owns the grammar (the core is base, never the docs module: no module's parser
 # enters base). The reader's stderr file is named in STORE_SDERR while it exists, so the
-# exit cleanup a HUP, INT, or TERM runs removes it.
+# exit cleanup a HUP, INT, or TERM runs removes it. A scratch file that cannot be made
+# refuses as a write, and for the health probe, which writes nothing, as a read.
 store_data() {
   FN=$1
   sd_ns=$2
+  case "$FN" in
+    storage.health) sd_scratch_code=ERR_STORAGE_READ ;;
+    *) sd_scratch_code=ERR_STORAGE_WRITE ;;
+  esac
   sd_script=""
   for sd_c in "$MODULE_DIR/../../storage/scripts/store-data" \
               "$ROOT/.contexture/storage/scripts/store-data" \
@@ -274,8 +288,8 @@ store_data() {
     if [ -x "$sd_c" ]; then sd_script=$sd_c; break; fi
   done
   [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage core data reader is not installed"
-  STORE_SDERR=$(mktemp "$(scratch_base)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
-  scratch_new "$STORE_SDERR" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  STORE_SDERR=$(mktemp "$(scratch_base)/store-data.XXXXXX" 2>/dev/null) || refuse 2 "$sd_scratch_code" "cannot create the driver's scratch file"
+  scratch_new "$STORE_SDERR" || refuse 2 "$sd_scratch_code" "$SCRATCH_FAILED"
   sd_out=$(CTX_STORE_WORKSPACE="$ROOT" "$sd_script" "$sd_ns" 2>"$STORE_SDERR")
   sd_rc=$?
   sd_msg=$(head -n 1 "$STORE_SDERR" 2>/dev/null)
@@ -1118,12 +1132,16 @@ capability() {
   printf '{"driver":"fts5","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n'
 }
 
-# storage.health: a probe, never a write, and the backend's own health alone (no record
-# count: the record's active listing is the unit module's). An absent database reports
-# degraded with store absent (the store starts at the first write), a store holding no key
-# reports degraded, a store at another schema reports error, and a healthy store reports
-# locked in place of ok while a writer holds the record namespace's lock
+# storage.health <namespace>: a probe of the named namespace's store, never a write, and the
+# backend's health alone (no record count: the record's active listing is the unit
+# module's). An absent database, or a file holding no table, reads degraded with the store
+# absent (the first write lays the schema); an unreadable file reads error with the store
+# absent, and a store at another schema error with it present; then presence counts the
+# namespace's keys alone, an unwritable file or a failed integrity check reads error with
+# that presence, and the namespace's store lock held reads locked in place of ok. No detail
+# names a folder.
 storage_health() {
+  store_data storage.health "$1"
   # an sqlite3 older than the driver's minimum serves no function (db_init refuses each), so
   # the probe reports error naming it, never ok (lanes/si-f5-fts5-review/report F3)
   sh_sv=$(sq :memory: "SELECT sqlite_version();" 2>/dev/null)
@@ -1145,7 +1163,7 @@ storage_health() {
   sh_v=${sh_p%%|*}
   sh_t=${sh_p#*|}
   if [ "$sh_t" = 0 ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database present, no key stored yet","store":"absent"}\n'
+    printf '{"driver":"fts5","health":"degraded","detail":"database present, its schema not laid yet (the first write lays it)","store":"absent"}\n'
     exit 0
   fi
   if [ "$sh_v" != "$DB_SCHEMA_VERSION" ]; then
@@ -1154,17 +1172,22 @@ storage_health() {
     printf '{"driver":"fts5","health":"error","detail":"database at schema %s; this driver reads %s and has no upgrade path","store":"present"}\n' "$sh_v" "$DB_SCHEMA_VERSION"
     exit 0
   fi
-  sh_n=$(sq "$DB_PATH" "SELECT count(*) FROM store;" 2>/dev/null) || sh_n=0
-  if [ "$sh_n" = 0 ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database present, no key stored yet","store":"absent"}\n'
-  elif [ ! -w "$DB_PATH" ]; then
-    printf '{"driver":"fts5","health":"error","detail":"database file not writable","store":"present"}\n'
+  sh_n=$(sq "$DB_PATH" "SELECT count(*) FROM store WHERE namespace = '$(sql_escape "$SD_NS")';" 2>/dev/null) || {
+    printf '{"driver":"fts5","health":"error","detail":"database unreadable","store":"absent"}\n'
+    exit 0
+  }
+  sh_st=absent
+  [ "${sh_n:-0}" = 0 ] || sh_st=present
+  if [ ! -w "$DB_PATH" ]; then
+    printf '{"driver":"fts5","health":"error","detail":"database file not writable","store":"%s"}\n' "$sh_st"
   elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
-    printf '{"driver":"fts5","health":"error","detail":"database integrity check failed","store":"present"}\n'
-  elif store_lock_held unit; then
-    printf '{"driver":"fts5","health":"locked","detail":"%s","store":"present"}\n' "the store namespace 'unit' is locked by a writer"
-  else
+    printf '{"driver":"fts5","health":"error","detail":"database integrity check failed","store":"%s"}\n' "$sh_st"
+  elif store_lock_held "$SD_NS"; then
+    printf '{"driver":"fts5","health":"locked","detail":"%s","store":"%s"}\n' "the store namespace '$SD_NS' is locked by a writer" "$sh_st"
+  elif [ "$sh_st" = present ]; then
     printf '{"driver":"fts5","health":"ok","detail":"database present and writable","store":"present"}\n'
+  else
+    printf '{"driver":"fts5","health":"ok","detail":"database present and writable, no key of the namespace stored yet","store":"absent"}\n'
   fi
   exit 0
 }
@@ -1181,8 +1204,9 @@ case "$CMD" in
   store.search) store_search "$@" ;;
 
   storage.health)
-    [ $# -eq 0 ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$1'"
-    storage_health
+    [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "storage.health takes the namespace"
+    [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "unexpected argument '$2'"
+    storage_health "$1"
     ;;
   *) refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$CMD'" ;;
 esac

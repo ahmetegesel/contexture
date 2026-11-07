@@ -8,7 +8,7 @@ library, and the posix driver.
 ```text
 storage/
   scripts/driver-resolver   the resolver: selection, the capability handshake, dispatch
-  scripts/store-data        the private reader and validator of a module's data file
+  scripts/store-data        the private reader and validator of a module's data file, and its listing
   scripts/store-search      the private exact and document-derivation search engine
   scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
   scripts/store-b64         the private base64 encoder of a stored value
@@ -20,8 +20,19 @@ storage/
 ## The store contract
 
 The store-only driver card is contract 3: the driver answers `capability` and
-`storage.health` as its own methods and the seven data functions plus the search entry,
-and the record's 35 operations live in the unit module's data script over the store.
+`storage.health <namespace>` as its own methods and the seven data functions plus the
+search entry, and the record's 35 operations live in the unit module's data script over
+the store. The health probes the named namespace's store, validated through `store-data`
+like any store function (a missing, extra, or malformed argument refuses rc 1
+`ERR_INVALID_ARGUMENT`, an undeclared namespace rc 1 `ERR_ENTITY_NOT_FOUND`, a
+declaration the core cannot read rc 2 `ERR_STORAGE_READ`), by one table on both drivers:
+the store not made (posix: the declared root absent; fts5: no database file, or a file
+holding no table) reads `degraded`, absent; made but unreadable reads `error`, absent;
+presence is then counted (posix: the first key the namespace's pattern admits under its
+root, never a stray file; fts5: the namespace's rows alone); unwritable reads `error`
+with that presence, as do the fts5 checks (another schema reads present, a failed
+integrity check, an sqlite3 older than 3.44 with the store by the file's existence);
+`locked` replaces `ok` whatever the presence; the detail names no folder.
 Seven data functions, called through the resolver:
 
 | function | argv | stdin | answer |
@@ -46,8 +57,10 @@ over the key under one namespace scope lock, so a put lands whole or not at all.
 batch holds that lock once, validates the whole action list against the live keys, stages
 a value per put, and commits every key under one store-scope undo log; its first failure
 prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and
-nothing is written. The namespace lock (`.contexture/tmp/locks/store-<namespace>.lock`, the
-same rule in the fts5 driver; the unit module's unit locks keep their own folder,
+nothing is written. The namespace lock (`.contexture/tmp/locks/store-<namespace>.lock`
+while the drawer's scratch folder is writable, else under the per-user
+`contexture-<user>` folder in the system temp, one rule for a writer and the health probe
+on both drivers; the unit module's unit locks keep their own folder,
 `locks/unit/`, so no unit name meets a namespace lock) carries its holder's pid: a waiter polls every 0.1 s, removes
 a lock whose pid is gone at once, gives a pid-less lock ten polls of grace, and refuses a
 live holder rc 2 `ERR_STORAGE_LOCKED` after 600 polls (60 s of sleep), the unit lock's
@@ -55,8 +68,9 @@ wait (the unit module's README names why and how it was sized); where `sleep` re
 fraction, a poll sleeps 1 s and counts as ten. A write interrupted (HUP, INT, TERM) while
 it holds the lock releases it; a writer interrupted while it still waits removes nothing,
 so the live holder keeps its lock and no third writer enters beside it. While a writer
-holds the record namespace's lock (`store-unit.lock`), `storage.health` reports `locked`
-in place of `ok` on either driver; a pid-less lock counts as held, a lock whose holder pid
+holds the named namespace's lock (`store-<namespace>.lock`), `storage.health <namespace>`
+reports `locked` in place of `ok` on either driver, and another namespace's lock leaves it
+unlocked; a pid-less lock counts as held, a lock whose holder pid
 is gone does not, since the next writer removes it. The scan answers the namespace's admitted keys with the raw value in
 base64, no limit; the module decodes and stops after the keys it needs. The change log is
 optional per namespace; a namespace declaring `changes: false`, or a driver without the
@@ -134,6 +148,11 @@ and defaults to `false`. The search form is `flat` (one document per key, sectio
 column-0 head marker that starts an entity; a key no rule covers stays searchable as one
 generic document). The reader refuses an unknown field. The module directory beside the
 data file is the owner, and a second data file declaring the same namespace refuses.
+`store-data <namespace>` answers one namespace and refuses a second argument rc 1;
+`store-data --list` answers every valid declaration of both module roots, one
+`<namespace><TAB><root>` line each (the root the namespace when none is declared), sorted
+by namespace, and leaves out a malformed declaration, a data file with no namespace, and a
+doubly declared namespace, one stderr line each, rc 0 (rc 2 with no module drawer).
 
 ## Discovery and selection
 
@@ -161,6 +180,9 @@ through it; the module never names the driver. The library exports:
 - `store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_batch`,
   `store_scan`, `store_search`;
 - `store_require <capability>...` and `store_has <capability>`;
+- `store_roots`, the declared roots read through `store-data --list` (found beside the
+  resolver the library calls, then under the drawer, then in the base mirror), never the
+  driver; rc 2 with one `store.roots: error:` line when no data reader answers;
 - `data_get <ref>` and `data_emit <ref> <data>`.
 
 `data_get` resolves a module reference `<module>#<symbol>`: it finds the target module's

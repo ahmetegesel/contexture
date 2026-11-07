@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
 import { driverPath } from '@support/driver';
 import { exec } from '@support/exec';
+import { holdLock, namespaceLock } from '@support/locks';
 import { ROOT_USER, chmodPlant } from '@support/plants';
 import { sandbox } from '@support/sandbox';
 import { sqlite } from '@support/sqlite';
@@ -20,7 +21,7 @@ function at(dbName: string) {
   dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
   const dir = sandbox('db');
   const db = join(dir, dbName);
-  return { db, dir, s: store(sb, 'fts5', { CTX_STORAGE_SQLITE_PATH: db }) };
+  return { db, dir, sb, s: store(sb, 'fts5', { CTX_STORAGE_SQLITE_PATH: db }) };
 }
 
 const version = (db: string) => sqlite(db, 'PRAGMA user_version;').trim();
@@ -29,7 +30,11 @@ const backups = (dir: string, db: string) => readdirSync(dir).filter((n) => ![ba
 const digest = (db: string) => createHash('sha256').update(Buffer.concat([db, `${db}-wal`].filter(existsSync).map((p) => readFileSync(p)))).digest('hex');
 
 const schemaRefusal = (v: number) => `the store is at schema ${v}; this driver reads 5 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs`;
-const health = async (s: ReturnType<typeof store>) => answer(await s.op('storage.health', []), 'storage.health');
+async function health(s: ReturnType<typeof store>, namespace = 'docs'): Promise<{ driver: string; health: string; detail: string; store: string }> {
+  const a = answer(await s.op('storage.health', [namespace]), 'storage.health');
+  expect(a.detail, 'a health detail names no folder').not.toContain('/');
+  return a;
+}
 
 describe.skipIf(!fts5Available())('the fts5 store schema', { concurrent: true }, () => {
   it('[the-engine-r16] an absent store: the first write lays schema 5, store-only, with no backup', async () => {
@@ -70,7 +75,7 @@ describe.skipIf(!fts5Available())('the fts5 store schema', { concurrent: true },
     expect(readFileSync(db).equals(pre)).toBe(true);
     expect(backups(dir, db)).toEqual([]);
     if (v === 4) {
-      expect(answer(await s.op('storage.health', []), 'storage.health')).toEqual({
+      expect(await health(s)).toEqual({
         driver: 'fts5', health: 'error', detail: 'database at schema 4; this driver reads 5 and has no upgrade path', store: 'present',
       });
     }
@@ -78,15 +83,30 @@ describe.skipIf(!fts5Available())('the fts5 store schema', { concurrent: true },
 });
 
 describe.skipIf(!fts5Available())('the fts5 storage.health over the database states', { concurrent: true }, () => {
-  it('[the-engine-r24] a database holding no key reads degraded with the store absent: a file with no table, and a schema 5 store whose last key was deleted', async () => {
-    const { db, s } = at('nokey.db');
-    const none = { driver: 'fts5', health: 'degraded', detail: 'database present, no key stored yet', store: 'absent' };
+  it('[the-engine-r24] a file with no table reads degraded with the store absent: the store is not made yet', async () => {
+    const { db, s } = at('notable.db');
     writeFileSync(db, '');
-    expect(await health(s)).toEqual(none);
+    expect(await health(s)).toEqual({ driver: 'fts5', health: 'degraded', detail: 'database present, its schema not laid yet (the first write lays it)', store: 'absent' });
+  });
+
+  it('[the-engine-r24] a schema 5 store holding no key of the namespace reads ok with the store absent: its last key deleted, or only another namespace\'s keys', async () => {
+    const { db, s } = at('nokey.db');
+    const none = { driver: 'fts5', health: 'ok', detail: 'database present and writable, no key of the namespace stored yet', store: 'absent' };
     answer(await s.put('docs', 'workspace/gone', 'x\n'), 'store.put');
     answer(await s.del('docs', 'workspace/gone'), 'store.delete');
     expect(version(db)).toBe('5');
     expect(await health(s)).toEqual(none);
+    answer(await s.put('docs', 'workspace/kept', 'x\n'), 'store.put');
+    expect(await health(s)).toEqual({ driver: 'fts5', health: 'ok', detail: 'database present and writable', store: 'present' });
+    expect(await health(s, 'unit')).toEqual(none);
+  });
+
+  it('[the-engine-r24] counts the named namespace\'s keys and its lock alone: a held unit lock reads locked with the store absent over a docs-only store', async () => {
+    const { sb, s } = at('scoped.db');
+    answer(await s.put('docs', 'workspace/kept', 'x\n'), 'store.put');
+    holdLock(sb, namespaceLock('unit'), 'live');
+    expect(await health(s, 'unit')).toEqual({ driver: 'fts5', health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'absent' });
+    expect(await health(s)).toMatchObject({ health: 'ok', store: 'present' });
   });
 
   it('[the-engine-r24] a file that is not a database reads error, the database unreadable, with the store absent', async () => {
@@ -95,11 +115,13 @@ describe.skipIf(!fts5Available())('the fts5 storage.health over the database sta
     expect(await health(s)).toEqual({ driver: 'fts5', health: 'error', detail: 'database unreadable', store: 'absent' });
   });
 
-  it.skipIf(ROOT_USER)('[the-engine-r24] a database file the driver cannot write reads error with the store present', async ({ onTestFinished }) => {
-    const { db, s } = at('ro.db');
+  it.skipIf(ROOT_USER)('[the-engine-r24] a database file the driver cannot write reads error with the namespace\'s true presence, ahead of a held lock', async ({ onTestFinished }) => {
+    const { db, sb, s } = at('ro.db');
     answer(await s.put('docs', 'workspace/kept', 'x\n'), 'store.put');
     chmodPlant(db, 0o444, 0o644, onTestFinished);
+    holdLock(sb, namespaceLock('docs'), 'live');
     expect(await health(s)).toEqual({ driver: 'fts5', health: 'error', detail: 'database file not writable', store: 'present' });
+    expect(await health(s, 'unit')).toEqual({ driver: 'fts5', health: 'error', detail: 'database file not writable', store: 'absent' });
   });
 
   it('[the-engine-r24] a database failing its integrity check reads error with the store present, while its store table still counts', async () => {

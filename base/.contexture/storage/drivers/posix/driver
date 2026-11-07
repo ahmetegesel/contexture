@@ -40,7 +40,7 @@ get_tmp_dir() {
   elif mkdir -p "$ws/.contexture/tmp" 2>/dev/null && [ -w "$ws/.contexture/tmp" ]; then
     printf '%s/.contexture/tmp\n' "$ws"
   else
-    d="${TMPDIR:-/tmp}/contexture-$USER"
+    d="${TMPDIR:-/tmp}/contexture-${USER:-}"
     mkdir -p "$d" 2>/dev/null || true
     printf '%s\n' "$d"
   fi
@@ -256,10 +256,16 @@ store_lock_held() {
 # SD_NS, SD_ROOT, SD_SUFFIX, SD_KEYPAT, SD_CHANGES; the caller's function name frames the
 # refusal. The storage core's store-data script owns the grammar (the core is
 # base, so no module's parser enters base). The cleanup traps stand before the reader's
-# stderr file exists, so a HUP, INT, or TERM while the reader runs removes it.
+# stderr file exists, so a HUP, INT, or TERM while the reader runs removes it. A scratch
+# file that cannot be made refuses as a write, and for the health probe, which writes
+# nothing, as a read.
 store_data() {
   FN=$1
   sd_ns=$2
+  case "$FN" in
+    storage.health) sd_scratch_code=ERR_STORAGE_READ ;;
+    *) sd_scratch_code=ERR_STORAGE_WRITE ;;
+  esac
   sd_ws=$(find_workspace_root)
   sd_script=""
   for sd_c in "$SCRIPT_DIR/../../scripts/store-data" \
@@ -272,8 +278,8 @@ store_data() {
   trap 'store_cleanup; exit 129' HUP
   trap 'store_cleanup; exit 130' INT
   trap 'store_cleanup; exit 143' TERM
-  STORE_SDERR=$(mktemp "$(scratch_dir)/store-data.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
-  scratch_new "$STORE_SDERR" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  STORE_SDERR=$(mktemp "$(scratch_dir)/store-data.XXXXXX" 2>/dev/null) || refuse 2 "$sd_scratch_code" "cannot create the driver's scratch file"
+  scratch_new "$STORE_SDERR" || refuse 2 "$sd_scratch_code" "$SCRATCH_FAILED"
   sd_out=$(CTX_STORE_WORKSPACE="$sd_ws" "$sd_script" "$sd_ns" 2>"$STORE_SDERR")
   sd_rc=$?
   sd_msg=$(head -n 1 "$STORE_SDERR" 2>/dev/null)
@@ -371,13 +377,15 @@ store_path() {
   printf '%s/%s/%s%s\n' "$STORE_WS" "$SD_ROOT" "$1" "$SD_SUFFIX"
 }
 
-# store_list_keys [<prefix>]: every key in the namespace, bytewise, only those the module
-# pattern admits and, when a prefix is given, those that start with it; the folder entries
-# are read as stored, so a case twin of a key never appears. The key rule and the module
-# pattern run in one awk pass, and a prefix ending on a slash starts the walk at that
-# directory, so a per-unit read does not pay for the namespace.
+# store_list_keys [<prefix>] [first]: every key in the namespace, bytewise, only those the
+# module pattern admits and, when a prefix is given, those that start with it; the folder
+# entries are read as stored, so a case twin of a key never appears. The key rule and the
+# module pattern run in one awk pass, and a prefix ending on a slash starts the walk at that
+# directory, so a per-unit read does not pay for the namespace. With first, the walk stops
+# at the first admitted key, the presence probe of the health.
 store_list_keys() {
   sl_prefix=${1:-}
+  sl_first=${2:-}
   sl_dir="$STORE_WS/$SD_ROOT"
   [ -d "$sl_dir" ] || return 0
   sl_scan=$sl_dir
@@ -389,9 +397,9 @@ store_list_keys() {
         ;;
     esac
   fi
-  find "$sl_scan" -type f -print 2>/dev/null | SL_DIR="$sl_dir" SL_SUFFIX="$SD_SUFFIX" SL_KEYPAT="$SD_KEYPAT" SL_PREFIX="$sl_prefix" LC_ALL=C awk '
+  find "$sl_scan" -type f -print 2>/dev/null | SL_DIR="$sl_dir" SL_SUFFIX="$SD_SUFFIX" SL_KEYPAT="$SD_KEYPAT" SL_PREFIX="$sl_prefix" SL_FIRST="$sl_first" LC_ALL=C awk '
     BEGIN {
-      dir = ENVIRON["SL_DIR"]; sfx = ENVIRON["SL_SUFFIX"]; pre = ENVIRON["SL_PREFIX"]
+      dir = ENVIRON["SL_DIR"]; sfx = ENVIRON["SL_SUFFIX"]; pre = ENVIRON["SL_PREFIX"]; first = (ENVIRON["SL_FIRST"] != "")
       m = split(ENVIRON["SL_KEYPAT"], p, "/")
       for (i = 1; i <= m; i++) multi[i] = (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
     }
@@ -424,6 +432,7 @@ store_list_keys() {
       }
       if (pre != "" && substr(key, 1, length(pre)) != pre) next
       print key
+      if (first) exit
     }' | LC_ALL=C sort
 }
 
@@ -1022,32 +1031,35 @@ capability() {
   printf '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store"]}\n'
 }
 
-# storage.health: a probe, never a write, and the backend's own health alone (no record
-# count: the record's active listing is the unit module's). The sessions drawer is the
-# record namespace's root; a drawer holding no artifact reports store absent, an
-# unwritable drawer reports error, and a writable one reports locked in place of ok while a
-# writer holds the record namespace's lock
+# storage.health <namespace>: a probe of the named namespace's store, never a write, and the
+# backend's health alone (no record count: the record's active listing is the unit
+# module's). The namespace's declared root is the store: absent reads degraded, unreadable
+# reads error, then presence is the first key the namespace's pattern admits; unwritable
+# reads error with that presence, and the namespace's store lock held reads locked in place
+# of ok. No detail names a folder.
 storage_health() {
-  sh_ws=$(find_workspace_root)
-  sh_sess="$sh_ws/.contexture/sessions"
+  store_data storage.health "$1"
+  sh_root="$STORE_WS/$SD_ROOT"
   sh_health="ok"
   sh_store="absent"
-  if [ ! -d "$sh_sess" ]; then
+  if [ ! -d "$sh_root" ]; then
     sh_health="degraded"
-    sh_detail="sessions directory does not exist yet (will be created on bootstrap)"
-  elif [ ! -w "$sh_sess" ]; then
+    sh_detail="the store is not made yet (the first write makes it)"
+  elif [ ! -r "$sh_root" ] || [ ! -x "$sh_root" ]; then
     sh_health="error"
-    sh_detail="sessions directory is not writable"
+    sh_detail="the store is not readable"
   else
-    if [ -n "$(ls -A "$sh_sess" 2>/dev/null)" ]; then
-      sh_store="present"
-      sh_detail="sessions directory writable, unlocked"
-    else
-      sh_detail="sessions directory writable, no artifact stored yet"
-    fi
-    if store_lock_held unit; then
+    [ -n "$(store_list_keys "" first)" ] && sh_store="present"
+    if [ ! -w "$sh_root" ]; then
+      sh_health="error"
+      sh_detail="the store is not writable"
+    elif store_lock_held "$SD_NS"; then
       sh_health="locked"
-      sh_detail="the store namespace 'unit' is locked by a writer"
+      sh_detail="the store namespace '$SD_NS' is locked by a writer"
+    elif [ "$sh_store" = present ]; then
+      sh_detail="the store is writable and unlocked"
+    else
+      sh_detail="the store is writable and holds no key of the namespace yet"
     fi
   fi
   printf '{"driver":"posix","health":"%s","detail":"%s","store":"%s"}\n' "$sh_health" "$sh_detail" "$sh_store"
@@ -1075,8 +1087,9 @@ case "$cmd" in
   store.scan) store_scan "$@"; exit $? ;;
   store.search) store_search "$@"; exit $? ;;
   storage.health)
-    px_extra 0 "$@"
-    storage_health
+    [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "storage.health takes the namespace"
+    px_extra 1 "$@"
+    storage_health "$1"
     exit 0
     ;;
   *) refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$cmd'" ;;

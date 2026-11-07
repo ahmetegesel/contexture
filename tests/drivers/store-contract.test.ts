@@ -1,14 +1,15 @@
-import { writeFileSync } from 'node:fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
-import { holdLock, namespaceLock } from '../support/locks';
+import { holdLock, namespaceLock, sleepShim } from '../support/locks';
+import { ROOT_USER, chmodPlant, pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
 import { NEEDLE_ROWS, SEARCH_DATA, SEARCH_VALUES, searchAnswer } from '../support/search-fixture';
 import { fresh } from '../support/snapshot';
 import { DRIVERS, fts5Available, stage } from '../support/stage';
 import { DOCS_KEYS, docsStore, listAnswer, plantScript, store } from '../support/store';
-import { answer, refused } from '../support/wire';
+import { answer, refused, refusedLike } from '../support/wire';
 
 const ALL_KEYS = DOCS_KEYS.map(([k]) => k);
 
@@ -18,9 +19,15 @@ const CARDS = {
 };
 
 const HEALTH_ABSENT = {
-  posix: { driver: 'posix', health: 'degraded', detail: 'sessions directory does not exist yet (will be created on bootstrap)', store: 'absent' },
+  posix: { driver: 'posix', health: 'degraded', detail: 'the store is not made yet (the first write makes it)', store: 'absent' },
   fts5: { driver: 'fts5', health: 'degraded', detail: 'database not created yet (will be initialized on the first write)', store: 'absent' },
 };
+
+async function healthOf(s: ReturnType<typeof store>, namespace: string): Promise<{ driver: string; health: string; detail: string; store: string }> {
+  const a = answer(await s.op('storage.health', [namespace]), 'storage.health');
+  expect(a.detail, 'a health detail names no folder').not.toContain('/');
+  return a;
+}
 
 function folds(): boolean {
   const dir = sandbox('fold-probe');
@@ -318,9 +325,9 @@ for (const driver of DRIVERS) {
       it('[the-engine-r24] reports the store absent on a fresh stage, then present and ok once a value lands', async () => {
         const sb = stage(driver);
         const s = store(sb, driver);
-        expect(answer(await s.op('storage.health', []), 'storage.health')).toEqual(HEALTH_ABSENT[driver]);
+        expect(await healthOf(s, 'unit')).toEqual(HEALTH_ABSENT[driver]);
         answer(await s.put('unit', 'probe/state', 'x\n'), 'store.put');
-        const after = answer(await s.op('storage.health', []), 'storage.health');
+        const after = await healthOf(s, 'unit');
         expect(Object.keys(after)).toEqual(['driver', 'health', 'detail', 'store']);
         expect([after.driver, after.health, after.store]).toEqual([driver, 'ok', 'present']);
       });
@@ -329,7 +336,7 @@ for (const driver of DRIVERS) {
         const sb = stage(driver);
         const s = store(sb, driver);
         answer(await s.put('unit', 'probe/state', 'x\n'), 'store.put');
-        const health = async () => answer(await s.op('storage.health', []), 'storage.health');
+        const health = () => healthOf(s, 'unit');
         const release = holdLock(sb, namespaceLock('unit'), 'live');
         expect(await health()).toEqual({ driver, health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'present' });
         release();
@@ -338,6 +345,53 @@ for (const driver of DRIVERS) {
         expect((await health()).health).toBe('locked');
         holdLock(sb, namespaceLock('unit'), 'dead');
         expect((await health()).health).toBe('ok');
+      });
+
+      it.each([
+        ['no argument', [], 'ERR_INVALID_ARGUMENT', 'storage.health takes the namespace'],
+        ['an extra argument', ['unit', 'extra'], 'ERR_INVALID_ARGUMENT', "unexpected argument 'extra'"],
+        ['a malformed namespace', ['Bad!'], 'ERR_INVALID_ARGUMENT', "malformed namespace 'Bad!'"],
+        ['an undeclared namespace', ['nosuch'], 'ERR_ENTITY_NOT_FOUND', "namespace 'nosuch' is declared by no module data file"],
+      ])('[the-engine-r24] refuses %s rc 1 before any probe', async (_, args, code, message) => {
+        refused(await store(fresh(empty), driver).op('storage.health', args), 'storage.health', 1, code, message);
+      });
+
+      it('[the-engine-r24] refuses rc 2 ERR_STORAGE_READ when the core cannot read the declaration or stage its reader\'s stderr', async () => {
+        const sb = fresh(empty);
+        const restore = plantScript(sb, 'store-data', 'printf "store-data: planted unreadable drawer\\n" >&2\nexit 2');
+        refused(await store(sb, driver).op('storage.health', ['unit']), 'storage.health', 2, 'ERR_STORAGE_READ', 'planted unreadable drawer');
+        restore();
+        refused(await store(sb, driver, pathPlant('mktemp', 'exit 1')).op('storage.health', ['unit']), 'storage.health', 2, 'ERR_STORAGE_READ', "cannot create the driver's scratch file");
+      });
+
+      it('[the-engine-r24] scopes presence and the lock to the named namespace: a docs key and a held docs lock leave unit absent and unlocked', async () => {
+        const sb = fresh(keyed);
+        if (driver === 'posix') mkdirSync(join(sb, '.contexture/sessions'), { recursive: true });
+        const s = store(sb, driver);
+        expect(await healthOf(s, 'unit')).toMatchObject({ health: 'ok', store: 'absent' });
+        expect(await healthOf(s, 'docs')).toMatchObject({ health: 'ok', store: 'present' });
+        const release = holdLock(sb, namespaceLock('docs'), 'live');
+        expect(await healthOf(s, 'unit')).toMatchObject({ health: 'ok', store: 'absent' });
+        expect(await healthOf(s, 'docs')).toEqual({ driver, health: 'locked', detail: "the store namespace 'docs' is locked by a writer", store: 'present' });
+        release();
+        holdLock(sb, namespaceLock('unit'), 'live');
+        expect(await healthOf(s, 'unit')).toMatchObject({ health: 'locked', store: 'absent' });
+        expect(await healthOf(s, 'docs')).toMatchObject({ health: 'ok', store: 'present' });
+      });
+
+      it.skipIf(ROOT_USER)('[the-engine-r24] finds the lock by the one folder rule: with the drawer\'s scratch folder unwritable, under the per-user folder in the system temp', async ({ onTestFinished }) => {
+        const sb = fresh(keyed);
+        const temp = sandbox('lock-temp');
+        const s = store(sb, driver, { TMPDIR: temp });
+        answer(await s.put('docs', 'workspace/held', 'x\n'), 'store.put');
+        holdLock(sb, namespaceLock('docs'), 'live');
+        chmodPlant(join(sb, '.contexture/tmp'), 0o555, 0o755, onTestFinished);
+        expect((await healthOf(s, 'docs')).health).toBe('ok');
+        const lock = join(temp, `contexture-${process.env.USER ?? ''}`, 'locks', namespaceLock('docs'));
+        mkdirSync(lock, { recursive: true });
+        writeFileSync(join(lock, 'pid'), `${process.pid}\n`);
+        expect((await healthOf(s, 'docs')).health).toBe('locked');
+        refusedLike(await store(sb, driver, { ...sleepShim(), TMPDIR: temp }).put('docs', 'workspace/held', 'y\n'), 'store.put', 2, 'ERR_STORAGE_LOCKED');
       });
     });
   });

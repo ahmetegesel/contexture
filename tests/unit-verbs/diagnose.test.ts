@@ -1,6 +1,8 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { holdLock, namespaceLock } from '../support/locks';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
+import { plantScript } from '../support/store';
 import { must, seedUnit, unit } from '../support/unit';
 
 describe.concurrent('ctx unit diagnose', () => {
@@ -32,6 +34,25 @@ describe.concurrent('ctx unit diagnose', () => {
     await must(unit(sb, 'close', 'd-only'));
     expect((await unit(sb, 'diagnose', '--json')).stdout).toMatch(/"active_units":0\}\}\n?$/);
     expect((await unit(sb, 'diagnose')).stdout).toMatch(/active units: {4}0$/m);
+  });
+
+  it('X-f [the-engine-r24]: diagnose probes the unit namespace\'s own store: its lock reads locked, another namespace\'s lock does not', async () => {
+    const sb = fresh(sb0);
+    const health = async () => JSON.parse((await unit(sb, 'diagnose', '--json')).stdout).storage;
+    expect(await health()).toMatchObject({ health: 'ok', store: 'present' });
+    const release = holdLock(sb, namespaceLock('docs'), 'live');
+    expect((await health()).health).toBe('ok');
+    release();
+    holdLock(sb, namespaceLock('unit'), 'live');
+    expect(await health()).toMatchObject({ health: 'locked', store: 'present' });
+  });
+
+  it('X-f [the-engine-r24]: diagnose prints a health the driver cannot report as error with the store absent', async () => {
+    const sb = fresh(sb0);
+    plantScript(sb, 'store-data', 'printf "store-data: planted unreadable drawer\\n" >&2\nexit 2');
+    const r = await unit(sb, 'diagnose', '--json');
+    expect(r.code).toBe(0);
+    expect(JSON.parse(r.stdout).storage).toMatchObject({ health: 'error', store: 'absent' });
   });
 
   it('D: diagnose answers rc 0; --json carries the workspace root and the capability descriptor; --diagnose answers rc 0', async () => {
