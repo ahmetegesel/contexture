@@ -5,17 +5,21 @@ import { FALLBACK_ROOT, leaks, RECORD_ROOT } from '../support/drawer';
 import type { Run } from '../support/exec';
 import { ROOT } from '../support/root';
 import { stage } from '../support/stage';
-import { createLane, lane, run, unit } from '../support/unit';
+import { lane, laneFlags, run } from '../support/unit';
 
 const D = '2026-09-27';
 const REPO = 'census-repo';
 const REPORT = ['@report cl', 'VERDICT: done', '', 'FINDINGS ::', '  F1 the census finding', '', 'OPEN ::', '  none', ''].join('\n');
+const MODULES = ['unit', 'lane', 'rhythm'];
+const REQUIRED_FLOOR = 43;
 
 interface Row {
   key: string;
   code: number;
   out: string;
 }
+
+type Tables = Map<string, Map<string, string[]>>;
 
 function staged(label: string): string {
   const sb = stage('posix', label);
@@ -43,76 +47,87 @@ const listed = (help: string): [string, string][] =>
       return [m?.[1] ?? '', m?.[2] ?? ''];
     });
 
-async function required(sb: string): Promise<string[]> {
-  const keys: string[] = [];
-  for (const module of ['unit', 'lane', 'rhythm']) {
-    for (const [verb, summary] of listed((await run(sb, [module, 'help'])).stdout)) {
-      const subs = /\(([a-z, ]+)\)$/.exec(summary)?.[1]?.split(/, */) ?? [];
-      if (subs.length) for (const s of subs) keys.push(`${module} ${verb} ${s}`);
-      else keys.push(`${module} ${verb}`);
-    }
+async function readTables(sb: string): Promise<Tables> {
+  const tables: Tables = new Map();
+  for (const module of MODULES) {
+    const verbs = new Map<string, string[]>();
+    for (const [verb, summary] of listed((await run(sb, [module, 'help'])).stdout)) verbs.set(verb, /\(([a-z, ]+)\)$/.exec(summary)?.[1]?.split(/, */) ?? []);
+    tables.set(module, verbs);
   }
-  return keys;
+  return tables;
+}
+
+const required = (tables: Tables): string[] =>
+  [...tables].flatMap(([module, verbs]) => [...verbs].flatMap(([verb, subs]) => (subs.length ? subs.map((s) => `${module} ${verb} ${s}`) : [`${module} ${verb}`])));
+
+function keyOf(tables: Tables, argv: readonly string[]): string {
+  const [module = '', verb = ''] = argv;
+  const subs = tables.get(module)?.get(verb) ?? [];
+  const sub = argv.slice(2).find((a) => subs.includes(a));
+  return [module, verb, ...(sub ? [sub] : [])].join(' ');
 }
 
 describe('the verb output census: no unit, lane, or rhythm verb prints the record storage', () => {
   let rows: Row[];
   let sb: string;
+  let tables: Tables;
 
   beforeAll(async () => {
     sb = staged('verb-output');
+    tables = await readTables(sb);
     rows = [];
-    const take = async (key: string, r: Promise<Run>): Promise<Run> => {
-      const done = await r;
-      rows.push({ key, code: done.code, out: done.stdout + done.stderr });
+    const push = (argv: readonly string[], done: Run): void => void rows.push({ key: keyOf(tables, argv), code: done.code, out: done.stdout + done.stderr });
+    const take = async (argv: string[], input = ''): Promise<Run> => {
+      const done = await run(sb, argv, { input });
+      push(argv, done);
       return done;
     };
-    const u = (key: string, ...args: string[]): Promise<Run> => take(key, unit(sb, ...args));
-    const together = async (calls: readonly [string, Promise<Run>][]): Promise<Run[]> => {
-      const done = await Promise.all(calls.map(([, call]) => call));
-      calls.forEach(([key], i) => rows.push({ key, code: done[i]!.code, out: done[i]!.stdout + done[i]!.stderr }));
+    const u = (...args: string[]): Promise<Run> => take(['unit', ...args]);
+    const U = (...args: string[]): string[] => ['unit', ...args];
+    const together = async (argvs: readonly string[][]): Promise<Run[]> => {
+      const done = await Promise.all(argvs.map((argv) => run(sb, argv)));
+      argvs.forEach((argv, i) => push(argv, done[i]!));
       return done;
     };
-    const ur = (key: string, ...args: string[]): [string, Promise<Run>] => [key, unit(sb, ...args)];
 
-    await u('unit bootstrap', 'bootstrap', 'cu', 'the census unit', REPO);
-    await u('unit bootstrap', 'bootstrap', 'lg', 'the legacy unit', REPO);
-    await u('unit bootstrap', 'bootstrap', 'lh', 'the unit nobody writes', 'other-repo');
-    await u('unit task add', 'task', 'add', 'lg', 'lg-task', '--objective=the legacy task');
-    await u('unit record', 'record', 'lg', '--what=the legacy entry', `--slug=${D}-lg-e1`);
+    await u('bootstrap', 'cu', 'the census unit', REPO);
+    await u('bootstrap', 'lg', 'the legacy unit', REPO);
+    await u('bootstrap', 'lh', 'the unit nobody writes', 'other-repo');
+    await u('task', 'add', 'lg', 'lg-task', '--objective=the legacy task');
+    await u('record', 'lg', '--what=the legacy entry', `--slug=${D}-lg-e1`);
     toFallback(sb, 'lg');
     toFallback(sb, 'lh');
-    await u('unit load', 'load', 'lg');
-    await u('unit board', 'board', 'lg');
-    await u('unit audit', 'audit', 'lg');
-    await u('unit list', 'list');
-    await u('unit list', 'list', '--all');
-    await u('unit resolve', 'resolve', 'lg', 'task#lg-task');
-    await u('unit resolve', 'resolve', 'lg', `entry#${D}-lg-e1`);
-    await u('unit record', 'record', 'lg', '--what=the first landing write moves the unit', `--slug=${D}-lg-e2`);
+    await u('load', 'lg');
+    await u('board', 'lg');
+    await u('audit', 'lg');
+    await u('list');
+    await u('list', '--all');
+    await u('resolve', 'lg', 'task#lg-task');
+    await u('resolve', 'lg', `entry#${D}-lg-e1`);
+    await u('record', 'lg', '--what=the first landing write moves the unit', `--slug=${D}-lg-e2`);
 
-    await u('unit record', 'record', 'cu', '--what=the first census entry', `--slug=${D}-cu-e1`, '--thread=the census reader');
-    await u('unit record', 'record', 'cu', '--what=a stamped census entry', `--slug=${D}-cu-e2`, '--rhythm=debug 1 REPRODUCE', `--ref=journal#${D}-cu-e1`);
-    await u('unit record', 'record', 'cu', '--what=the census reader answered', `--slug=${D}-cu-e3`, `--closes=${D}-cu-e1 (done: answered)`);
-    await u('unit stamp', 'stamp', 'cu');
-    for (const t of ['t1', 't2', 't3']) await u('unit task add', 'task', 'add', 'cu', t, `--objective=the census task ${t}`, '--refs=lane#cl/report#FINDINGS');
-    await u('unit task update', 'task', 'update', 'cu', 't1', '--desc=the census description', '--criteria=the census criterion');
-    await u('unit task start', 'task', 'start', 'cu', 't1');
-    await u('unit task complete', 'task', 'complete', 'cu', 't1', '--evidence=the census evidence');
-    await u('unit task reopen', 'task', 'reopen', 'cu', 't1');
-    await u('unit task start', 'task', 'start', 'cu', 't2');
-    await u('unit task drop', 'task', 'drop', 'cu', 't3', '--reason=the census drop');
-    await u('unit finding add', 'finding', 'add', 'cu', 'F_ONE', '--summary=the census finding', `--ref=journal#${D}-cu-e1`);
-    await u('unit finding update', 'finding', 'update', 'cu', 'F_ONE', '--summary=the census finding, updated');
-    await u('unit finding supersede', 'finding', 'supersede', 'cu', 'F_ONE', 'F_TWO', '--summary=the census successor', '--ref=lane#cl/report#FINDINGS');
-    await u('unit finding add', 'finding', 'add', 'cu', 'F_DROP', '--summary=the finding to drop');
-    await u('unit finding drop', 'finding', 'drop', 'cu', 'F_DROP');
-    await take('lane create', createLane(sb, 'cu', 'cl', ['--ref=lane#cl/report#FINDINGS', '--task=backlog#t1', '--rhythm=debug 2 TRACE']));
-    await take('lane record', lane(sb, 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=backlog#t1'));
-    await take('lane report', run(sb, ['lane', 'report', 'cu', 'cl'], { input: REPORT }));
-    await u('unit refs', 'refs', 'cu', 'lg');
+    await u('record', 'cu', '--what=the first census entry', `--slug=${D}-cu-e1`, '--thread=the census reader');
+    await u('record', 'cu', '--what=a stamped census entry', `--slug=${D}-cu-e2`, '--rhythm=debug 1 REPRODUCE', `--ref=journal#${D}-cu-e1`);
+    await u('record', 'cu', '--what=the census reader answered', `--slug=${D}-cu-e3`, `--closes=${D}-cu-e1 (done: answered)`);
+    await u('stamp', 'cu');
+    for (const t of ['t1', 't2', 't3']) await u('task', 'add', 'cu', t, `--objective=the census task ${t}`, '--refs=lane#cl/report#FINDINGS');
+    await u('task', 'update', 'cu', 't1', '--desc=the census description', '--criteria=the census criterion');
+    await u('task', 'start', 'cu', 't1');
+    await u('task', 'complete', 'cu', 't1', '--evidence=the census evidence');
+    await u('task', 'reopen', 'cu', 't1');
+    await u('task', 'start', 'cu', 't2');
+    await u('task', 'drop', 'cu', 't3', '--reason=the census drop');
+    await u('finding', 'add', 'cu', 'F_ONE', '--summary=the census finding', `--ref=journal#${D}-cu-e1`);
+    await u('finding', 'update', 'cu', 'F_ONE', '--summary=the census finding, updated');
+    await u('finding', 'supersede', 'cu', 'F_ONE', 'F_TWO', '--summary=the census successor', '--ref=lane#cl/report#FINDINGS');
+    await u('finding', 'add', 'cu', 'F_DROP', '--summary=the finding to drop');
+    await u('finding', 'drop', 'cu', 'F_DROP');
+    await take(['lane', 'create', 'cu', 'cl', ...laneFlags(['--ref=lane#cl/report#FINDINGS', '--task=backlog#t1', '--rhythm=debug 2 TRACE'])]);
+    await take(['lane', 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=backlog#t1']);
+    await take(['lane', 'report', 'cu', 'cl'], REPORT);
+    await u('refs', 'cu', 'lg');
 
-    const [first, listing] = await together([ur('unit load', 'load', 'cu'), ['rhythm list', run(sb, ['rhythm', 'list'])]]);
+    const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
     const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
     const names = listing!.stdout.split('\n').filter((l) => / \| /.test(l)).map((l) => l.split(' | ')[0] ?? '');
     const refs = [
@@ -134,42 +149,46 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
       'unit#cu/lane/cl/report',
     ];
     await together([
-      ur('unit task list', 'task', 'list', 'cu', '--status=all'),
-      ur('unit task show', 'task', 'show', 'cu', 't1'),
-      ur('unit finding show', 'finding', 'show', 'cu', 'F_TWO'),
-      ur('unit finding list', 'finding', 'list', 'cu'),
-      ur('unit entry show', 'entry', 'show', 'cu', `${D}-cu-e2`),
-      ur('unit entry list', 'entry', 'list', 'cu'),
-      ur('unit entry closure', 'entry', 'closure', 'cu', `${D}-cu-e1`),
-      ['lane report', run(sb, ['lane', 'report', 'cu', 'cl'], { input: '' })],
-      ...['recipe', 'journal', 'report'].map((a): [string, Promise<Run>] => [`lane show ${a}`, lane(sb, 'show', 'cu', 'cl', a)]),
-      ...Array.from({ length: pages - 1 }, (_v, i) => ur('unit load', 'load', 'cu', String(i + 2))),
-      ur('unit board', 'board', 'cu'),
-      ...[[], ['--active'], ['--all'], [`--repo=${REPO}`], ['--active', `--repo=${REPO}`], ['--all', `--repo=${REPO}`]].map((flags) => ur('unit list', 'list', ...flags)),
-      ur('unit audit', 'audit', 'cu'),
-      ur('unit refresh', 'refresh', 'cu'),
-      ...refs.flatMap((ref) => [ur('unit resolve', 'resolve', 'cu', ref), ur('unit resolve', 'resolve', 'cu', ref, '--json')]),
-      ur('unit refs-to', 'refs-to', 'lg'),
-      ur('unit search', 'search', 'cu', 'census', '--mode=exact'),
-      ...names.map((n): [string, Promise<Run>] => ['rhythm show', run(sb, ['rhythm', 'show', n])]),
-      ['rhythm current', run(sb, ['rhythm', 'current', 'cu'])],
+      U('task', 'list', 'cu', '--status=all'),
+      U('task', 'show', 'cu', 't1'),
+      U('finding', 'show', 'cu', 'F_TWO'),
+      U('finding', 'list', 'cu'),
+      U('entry', 'show', 'cu', `${D}-cu-e2`),
+      U('entry', 'list', 'cu'),
+      U('entry', 'closure', 'cu', `${D}-cu-e1`),
+      ['lane', 'report', 'cu', 'cl'],
+      ...['recipe', 'journal', 'report'].map((a) => ['lane', 'show', 'cu', 'cl', a]),
+      ...Array.from({ length: pages - 1 }, (_v, i) => U('load', 'cu', String(i + 2))),
+      U('board', 'cu'),
+      ...[[], ['--active'], ['--all'], [`--repo=${REPO}`], ['--active', `--repo=${REPO}`], ['--all', `--repo=${REPO}`]].map((flags) => U('list', ...flags)),
+      U('audit', 'cu'),
+      U('refresh', 'cu'),
+      ...refs.flatMap((ref) => [U('resolve', 'cu', ref), U('resolve', 'cu', ref, '--json')]),
+      U('refs-to', 'lg'),
+      U('search', 'cu', 'census', '--mode=exact'),
+      ...names.map((n) => ['rhythm', 'show', n]),
+      ['rhythm', 'current', 'cu'],
     ]);
 
-    await u('unit diagnose', 'diagnose');
-    await u('unit migrate', 'migrate', '--all');
-    const plan = await u('unit fold', 'fold', 'cu');
-    await u('unit fold', 'fold', 'cu');
+    await u('diagnose');
+    await u('migrate', '--all');
+    const plan = await u('fold', 'cu');
+    await u('fold', 'cu');
     const foldLane = /--lane=([A-Za-z0-9_-]+)/.exec(plan.stdout)?.[1] ?? '';
-    await u('unit fold', 'fold', 'cu', `--lane=${foldLane}`);
-    await u('unit close', 'close', 'cu');
-    await u('unit reopen', 'reopen', 'cu');
+    await u('fold', 'cu', `--lane=${foldLane}`);
+    await u('close', 'cu');
+    await u('reopen', 'cu');
   }, 300_000);
 
-  it('[the-record-r14] every verb and sub-verb the unit, lane, and rhythm help tables list has a row, so a new verb without one reads red', async () => {
+  it('[the-record-r14] every verb and sub-verb the unit, lane, and rhythm help tables list has a row keyed from the argv it ran, above the table floor, so a new verb without one reads red', () => {
+    const want = required(tables);
+    expect(want.length).toBeGreaterThanOrEqual(REQUIRED_FLOOR);
+    for (const module of MODULES) expect(want.some((k) => k.startsWith(`${module} `))).toBe(true);
     const keys = new Set(rows.map((r) => r.key));
-    const missing = (await required(sb)).filter((k) => ![...keys].some((have) => have === k || have.startsWith(`${k} `)));
-    expect(missing).toEqual([]);
-    expect(rows.filter((r) => r.key.startsWith('unit fold')).length).toBe(3);
+    expect(want.filter((k) => !keys.has(k))).toEqual([]);
+    expect(rows.filter((r) => r.key === 'unit fold').length).toBe(3);
+    expect(keyOf(tables, ['lane', 'show', 'cu', 'cl', 'journal'])).toBe('lane show journal');
+    expect(keyOf(tables, ['unit', 'task', 'add', 'cu', 't1'])).toBe('unit task add');
   });
 
   it('[the-record-r14, the-record-r-4gj4k] every row answers rc 0, the legacy unit read before its first landing write, the store swept after', () => {
