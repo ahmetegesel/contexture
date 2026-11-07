@@ -155,7 +155,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim), the canonical unit refs (unit#<unit>/task/<slug>, entry, finding, and lane artifact forms; a canonical ref carries its own unit), and the legacy file forms to the entity block |
 | ctx unit units <repo> | Each unit touching the repo: slug, status, anchor |
 | ctx unit refs-to <unit> | Each unit referencing the unit |
-| ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from the unit's main journal: create (the dispatcher's act, the recipe on stdin), record, report, show |
+| ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from the unit's main journal: create (the dispatcher's act: the brief as flags, from which it composes the recipe and prints the dispatch prompt), record, report, show |
 | ctx unit refs <unit> [<unit> ...] | Set the read-only reference units; zero units clears them |
 | ctx unit close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
 | ctx unit reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |

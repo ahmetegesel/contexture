@@ -2,7 +2,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
-import { createLane, execBytes, lane, must, run, seedUnit, unit, unitChecksum } from '../support/unit';
+import { createLane, execBytes, lane, laneFlags, must, run, seedUnit, unit, unitChecksum } from '../support/unit';
 import { latin1, UTF8_OK } from './inputs';
 
 const D = '2026-09-27';
@@ -35,6 +35,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['task complete --evidence', 'evidence', ['unit', 'task', 'complete', 'in-unit', 'in-task', flag('evidence', BAD)]],
     ['finding add --summary', 'summary', ['unit', 'finding', 'add', 'in-unit', 'IN_U8', flag('summary', BAD)]],
     ['lane record --what', 'what', ['lane', 'record', 'in-unit', 'in-lane', flag('what', BAD)]],
+    ['lane create --goal', 'goal', ['lane', 'create', 'in-unit', 'in-u8-lane', flag('goal', BAD), ...laneFlags(['--goal=']).slice(0, -1)]],
     ['bootstrap objective', 'objective', ['unit', 'bootstrap', 'in-u8-unit', BAD]],
     ['search query', 'query', ['unit', 'search', 'in-unit', BAD, '--mode=exact']],
     ['lane report --body', 'the report', ['lane', 'report', 'in-unit', 'in-lane', flag('body', BAD)]],
@@ -49,26 +50,22 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
   });
 
   it.for([
-    ['create', 'a recipe not UTF-8', latin1('a recipe \xff\n'), 'the recipe is not valid UTF-8'],
-    ['create', 'a recipe holding a NUL', Buffer.from('a recipe\0with a NUL\n'), 'the recipe holds a NUL byte'],
-    ['report', 'a report holding a NUL', Buffer.from('a report\0with a NUL\n'), 'the report holds a NUL byte'],
-    ['report', 'a report not UTF-8', latin1('a report \xc0\x80\n'), 'the report is not valid UTF-8'],
-  ] as const)('E3-d [the-record-r9, the-record-r12]: lane %s refuses %s on stdin naming it, nothing landed', async ([verb, , doc, message]) => {
+    ['a report holding a NUL', Buffer.from('a report\0with a NUL\n'), 'the report holds a NUL byte'],
+    ['a report not UTF-8', latin1('a report \xc0\x80\n'), 'the report is not valid UTF-8'],
+  ] as const)('E3-d [the-record-r9, the-record-r12]: lane report refuses %s on stdin naming it, nothing landed', async ([, doc, message]) => {
     const sb = fresh(sb0);
-    const r = await run(sb, ['lane', verb, 'in-unit', verb === 'create' ? 'in-u8-lane' : 'in-lane'], { input: doc });
+    const r = await run(sb, ['lane', 'report', 'in-unit', 'in-lane'], { input: doc });
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(new RegExp(`error: ${message} \\(ERR_INVALID_ARGUMENT\\)\\n$`));
-    expect((await lane(sb, 'show', 'in-unit', 'in-u8-lane', 'recipe')).code).toBe(1);
     expect((await lane(sb, 'show', 'in-unit', 'in-lane', 'report')).stdout.trim()).toBe('');
   });
 
-  it('E3-d [the-record-r12]: valid UTF-8 of every length lands in a WHAT and a recipe and reads back byte for byte', async () => {
+  it('E3-d [the-record-r12]: valid UTF-8 of every length lands in a WHAT and a lane create --goal and reads back byte for byte', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'record', 'in-unit', `--what=${UTF8_OK}`, `--slug=${D}-e3-u8ok`)).code).toBe(0);
     expect((await unit(sb, 'entry', 'show', 'in-unit', `${D}-e3-u8ok`)).stdout).toContain(`WHAT: "${UTF8_OK}"`);
-    const recipe = `# recipe ${UTF8_OK}\n`;
-    await must(run(sb, ['lane', 'create', 'in-unit', 'in-u8-lane'], { input: recipe }));
-    expect((await lane(sb, 'show', 'in-unit', 'in-u8-lane', 'recipe')).stdout).toBe(recipe);
+    await must(createLane(sb, 'in-unit', 'in-u8-lane', [`--goal=${UTF8_OK}`]));
+    expect((await lane(sb, 'show', 'in-unit', 'in-u8-lane', 'recipe')).stdout).toContain(`\nGOAL ::\n  ${UTF8_OK}\n\n`);
   });
 
   it('E3-e [the-record-r12]: a legacy entry holding a byte that is not UTF-8 reads as stored (posix plant)', async () => {

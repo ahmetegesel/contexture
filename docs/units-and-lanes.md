@@ -103,7 +103,7 @@ Units stay independent. Each keeps its own record; cross-references between unit
 
 ## Subagents, the delegated unit
 
-When the agent hands work to a subagent, the dispatch gets its own lane inside the unit the work belongs to, created by the dispatcher with its brief: `ctx lane create <unit> <lane>`, the recipe on stdin. A lane holds the three artifacts the dispatch needs to be self-contained: the recipe (the brief it received), the lane journal (the trace of what it did), and the report (the evidence it leaves). Under the posix driver they are the files `recipe.md`, `journal.md`, and `report.md` in the folder `lanes/<slug>/`; under another driver they live in its store; either way the lane verbs (`ctx lane show`, `record`, `report`) are the only way in.
+When the agent hands work to a subagent, the dispatch gets its own lane inside the unit the work belongs to, created by the dispatcher from its brief: `ctx lane create <unit> <lane>` takes the brief as flags and composes the recipe from them. A lane holds the three artifacts the dispatch needs to be self-contained: the recipe (the brief it received), the lane journal (the trace of what it did), and the report (the evidence it leaves). Under the posix driver they are the files `recipe.md`, `journal.md`, and `report.md` in the folder `lanes/<slug>/`; under another driver they live in its store; either way the lane verbs (`ctx lane show`, `record`, `report`) are the only way in.
 
 Delegation is first-class; an orchestrating agent is the clearest example, not a special citizen: it learns from every report while its own context stays lean, and the detail never enters its window.
 
@@ -121,7 +121,7 @@ What makes subagents portable between agents is a contract: the subagent's own o
 
 ### The recipe, and the subagent's boot
 
-The recipe is the brief in the record: the dispatcher lands it with `ctx lane create`, and the subagent reads it with `ctx lane show <unit> <lane> recipe`. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch/worktree the subagent works on, so the subagent knows where to edit and commit; its working root sits in the write scope. A message-brief dies at compaction; a recipe in the record survives, and that persistence is the audit trail.
+The recipe is the brief in the record: the dispatcher gives the brief as the flags of `ctx lane create`, the verb composes and stores the recipe, and the subagent reads it with `ctx lane show <unit> <lane> recipe`. It slices the parent's attention into exact references (entry slugs, line ranges, artifact symbols) and isolated facts one per line; broad folder dumps are forbidden. It sequences the tasks with their exit conditions and fences writes with an explicit scope. It also names the active branch/worktree the subagent works on, so the subagent knows where to edit and commit; its working root sits in the write scope. A message-brief dies at compaction; a recipe in the record survives, and that persistence is the audit trail.
 
 Before any work, the subagent boots read-only: the overlays, the unit's state, backlog, and knowledge, the recipe, and every reference the recipe names. Its first journal entry is the load receipt: the refs loaded, one per line. An unresolved reference is a defect in the brief; the subagent stops and reports it, never working around the gap.
 
@@ -139,66 +139,22 @@ The contract names no channel: steering is a harness capability, and plain files
 
 ### The report
 
-The report is the dispatcher's only window into the dispatch, landed with `ctx lane report` (the body on stdin, any size). It must be self-sufficient: an orientation block that mirrors the recipe's tasks with their proven exit conditions, claims each carrying an epistemic mark (VERIFIED, INFERRED, or ABSENT), verbatim evidence, and the structural detail the dispatcher needs to re-verify and decide, and typed risks naming what was skipped and what rests on inference. The dispatcher reads it whole, no exception; an unread part wears the look of review.
+The report is the dispatcher's only window into the dispatch, landed with `ctx lane report` (the body on stdin, any size). It must be self-sufficient: the sections the recipe's `REPORT` block names, each claim carrying its grounding (a file and symbol, a command and its output, or a record reference), verbatim evidence, the structural detail the dispatcher needs to re-verify and decide, and what was skipped and what rests on inference. The dispatcher reads it whole, no exception; an unread part wears the look of review.
 
 A subagent that cannot write its report returns the artifact verbatim: nothing before it, nothing after it, and the dispatcher persists it byte-clean.
 
-### The recipe and report grammar
+### The brief and the composed recipe
 
-The lane verbs store and return the two documents raw; no parser enforces their shape. The canonical blocks, in the shared dialect, are: typed blocks at column 0, fields indented two spaces, tasks four.
+The dispatcher never writes a recipe by hand: it gives the brief as the flags of `ctx lane create`, and the verb composes the recipe from them, so every recipe has one shape and its fixed parts are never forgotten. `ctx lane help create` names each flag with its purpose.
 
-```text
-# recipe
-@context: "what this subagent is"
+- Required: `--goal` (the deliverable or decision the lane feeds, and where it stops), `--branch` (the checkout or worktree and its branch, at a commit), `--writes` (read only, or the roots it edits and how it commits), at least one `--scope` (a step or question with its exit condition; the verb numbers the steps in the given order), and at least one `--report` (a section the report owes: its name and what it carries).
+- Optional: `--ref` (an exact pointer the subagent reads at boot), `--task` (exactly `backlog#<slug>`), `--decision` (exactly `journal#<slug>`), `--rhythm` (`<name> <N> <GATE>`, checked by the rule `ctx unit record` checks a rhythm by), `--fact` (one isolated constraint), and `--substrate` (where code, tests, and commits land, for a worktree lane). Every value is one line.
 
-MISSION
-  GOAL: "the deliverable or decision"
-  TASKS:
-    1. <name>: <the task's intent>; exit: "<verifiable condition>"
+The composed recipe reads, in the shared dialect (heads at column 0, bodies indented two spaces): the `@recipe <lane>` header with `UNIT`, `LANE`, `BRANCH`, and the given `RHYTHM`, `TASKS`, and `DECISIONS`; `GOAL`; the given `REFS`; `SCOPE`; the given `FACTS` and `SUBSTRATE`; then the blocks the verb writes itself: `BOUNDARY (hard rules)` (the `/tmp` and permission prompt rule with the lane's scratch folder, the runner rule, the record door: the lane journal and the report plus only what the write scope adds, the write scope, and the drift rule), `BOOT` (the law layer and both overlays, the unit load, the recipe, every reference, the load receipt), `JOURNAL`, and `REPORT` (`@report <lane>`, the `VERDICT` line, the `--report` sections in order, and the line that the report and the journal land whatever the outcome). A workspace or personal rule (an install rule, a writing rule) rides `--fact` or `--writes`.
 
-GROUND_AND_REFS
-  SOURCE_OF_TRUTH: <file#symbol-or-lines>
-  BRANCH: <the active branch the subagent works on>  # required
-  [UNIT: <unit-slug>]               # unit name for ctx lane commands
-  [LANE: <lane-slug>]               # subagent lane name for ctx lane commands
-  REFS: [<file#symbol>, <journal#entry>, <knowledge#finding>]
-  [FACTS ::
-    exact isolated constraints from parent attention; one statement per line;
-    verbatim quotes or conditions; never conversational prose]
-  WRITE_SCOPE: [., <explicit target files or dirs>]
-  drift: stop + report; never improvise
-  COMMAND_POLICY: execute all shell commands through .contexture/ctx run <cmd>
+On success the verb prints the dispatch prompt, the launch message the harness hands the subagent, in three lines: the recipe read, the boundary and runner rules, and the summary only return. The prompt is never stored; a re-dispatch of an existing lane fills `<unit>` and `<lane>` in the template `ctx lane help create` prints. The verb never reads stdin, so a script that pipes a recipe meets the one line refusal naming the five required flags.
 
-OUTPUTS
-  JOURNAL: ctx lane record <unit> <lane>
-  REPORT: ctx lane report <unit> <lane>
-  RETURN: summary only: verdicts + residual risks
-  RESUME: ctx lane show <unit> <lane> recipe, then journal; continue from the last uncompleted task
-```
-
-```text
-# report
-@orientation
-  STATUS: COMPLETE | PARTIAL | DRIFTED
-  TASKS:
-    1. <task-name>: DONE | DRIFTED | BLOCKED (exit: "<proven-condition>")
-  LOAD_BEARING: [<claim-name>, ...]   # claims the dispatcher must re-verify
-
-@claim <name>
-  VERDICT: "the claim's conclusion"
-  EVIDENCE: <file:line or ref> ("exact verbatim quote or exit code")
-  MARK: VERIFIED | INFERRED | ABSENT  # mandatory; ABSENT = case-insensitive,
-                                      # all spellings, checked place it lives
-  [DETAILS ::
-    structural observations the dispatcher needs to re-verify and decide;
-    omit ornament, never substance]
-
-@risks
-  UNVERIFIED: <what was skipped or unprovable; one line per condition>
-  THIN: <areas relying on inference rather than hard tool verification>
-```
-
-The recipe slices the parent's attention into exact references and isolated facts; the report is the dispatcher's only window, so every claim carries its evidence and its mark.
+The report is the one document the subagent writes whole: the lane verbs store and return it raw, its sections are the ones the recipe's `REPORT` block names, and every claim carries its grounding.
 
 ### Dispatch discipline
 

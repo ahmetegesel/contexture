@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
 import { RECORD_ROOT } from '../support/drawer';
-import { DATE, mk, ok, reads } from '../support/record';
+import { artifactPath, DATE, mk, ok, reads } from '../support/record';
 import { answer, answerLine, payload, refused } from '../support/wire';
 import { ALPHA, at, RECIPE, REPORT, SUNIT, TUNIT } from './chain';
 
@@ -29,6 +29,14 @@ describe.concurrent('the lanes through the unit data script', () => {
     expect(answerLine(await data(sb, 'lane.write_report', [TUNIT, 'lane-worker'], REPORT), 'lane.write_report')).toBe('{"unit":"compliance-tasks","lane":"lane-worker","bytes":25}');
     expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'lane-worker', 'journal']), 'lane.get')).toBe(`{"unit":"compliance-tasks","lane":"lane-worker","artifact":"journal","preamble":"","items":[${LE}]}`);
     expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'lane-worker', 'report']), 'lane.get')).toBe('{"unit":"compliance-tasks","lane":"lane-worker","artifact":"report","content":"Subagent report findings\\n"}');
+  });
+
+  it('UP-c [the-record-r16]: lane.create keeps a recipe line ending in a carriage return byte for byte, in lane.get and in the posix file', async () => {
+    const sb = await at('T0');
+    const crlf = '# recipe grammar\r\nMISSION\n  GOAL: "a CRLF recipe"\n';
+    await ok(sb, 'lane.create', [TUNIT, 'up-cr'], crlf);
+    expect(answer(await data(sb, 'lane.get', [TUNIT, 'up-cr', 'recipe']), 'lane.get').content).toBe(crlf);
+    expect(readFileSync(artifactPath(sb, TUNIT, 'lane/up-cr/recipe'), 'utf8')).toBe(crlf);
   });
 
   it('TC31 [the-engine-r9]: a 2 MB lane report lands over stdin and reads back byte for byte', async () => {

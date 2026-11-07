@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { appendArtifact } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
-import { createLane, lane, must, run, seedUnit, unit, unitChecksum } from '../support/unit';
+import { createLane, lane, laneFlags, must, run, seedUnit, unit, unitChecksum } from '../support/unit';
 import { SHAPES } from './inputs';
 
 const D = '2026-09-27';
@@ -14,6 +14,7 @@ const PATHS: readonly [string, (bad: string) => string[]][] = [
   ['finding update --ref', (v) => ['unit', 'finding', 'update', 'e3-unit', 'E3_ONE', `--ref=${v}`]],
   ['finding supersede --ref', (v) => ['unit', 'finding', 'supersede', 'e3-unit', 'E3_ONE', 'E3_THREE', '--summary=three', `--ref=${v}`]],
   ['lane record --ref', (v) => ['lane', 'record', 'e3-unit', 'e3-lane', '--what=lane probe', `--ref=${v}`]],
+  ['lane create --ref', (v) => ['lane', 'create', 'e3-unit', 'e3-new', ...laneFlags([`--ref=${v}`])]],
   ['task add --refs', (v) => ['unit', 'task', 'add', 'e3-unit', 'e3-bad', '--objective=bad refs', `--refs=journal#x ${v}`]],
   ['task update --refs', (v) => ['unit', 'task', 'update', 'e3-unit', 'e3-task', `--refs=${v}`]],
 ];
@@ -72,6 +73,14 @@ describe.concurrent('the REF shapes on every write path through the verbs', () =
     expect((await unit(sb, 'finding', 'supersede', 'e3-unit', 'E3_ONE', 'E3_THREE', '--summary=three', ...refs('lanes/e3-lane/report#claim'))).code).toBe(0);
     expect((await lane(sb, 'record', 'e3-unit', 'e3-lane', '--what=e7 lane refs ok', ...refs(...SEVEN))).code).toBe(0);
     expect((await lane(sb, 'show', 'e3-unit', 'e3-lane', 'journal')).stdout).toContain('e7 lane refs ok');
+  });
+
+  it('E3-b [the-record-r18]: lane create lands the seven shapes and both lane report forms in its REFS block, one ref per line', async () => {
+    const sb = fresh(sb0);
+    const given = [...SEVEN, 'lane#e3-lane/report', 'lanes/e3-lane/report'];
+    await must(createLane(sb, 'e3-unit', 'e7-lane', refs(...given)));
+    const recipe = (await lane(sb, 'show', 'e3-unit', 'e7-lane', 'recipe')).stdout;
+    expect(recipe).toContain(`\nREFS ::\n${given.map((r) => `  ${r}\n`).join('')}\nSCOPE ::\n`);
   });
 
   it('E3-c [the-record-r18]: a legacy free-text REF reads as stored (posix plant)', async () => {

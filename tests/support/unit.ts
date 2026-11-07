@@ -53,7 +53,7 @@ export function laneFlags(extra: readonly string[] = []): string[] {
 }
 
 export function createLane(sb: string, unitSlug: string, laneSlug: string, extra: readonly string[] = []): Promise<Run> {
-  return run(sb, ['lane', 'create', unitSlug, laneSlug], { input: `${laneFlags(extra).join('\n')}\n` });
+  return run(sb, ['lane', 'create', unitSlug, laneSlug, ...laneFlags(extra)]);
 }
 
 export function rhythm(name: string, use: string, gates: readonly [string, string][]): string {
