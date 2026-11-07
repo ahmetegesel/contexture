@@ -4,7 +4,7 @@
 # usage: ctx docs nudge <backlog-file> <repo>...
 # help: reads the active task (the unit's first IN_PROGRESS task in backlog order, through ctx unit task list and ctx unit resolve) and prints the matched docs, the top pitfalls, and (when the task names setup verbs) the owning operational doc's run, build, and test targets with its toolchain note
 # help: the corpus comes from the configured storage driver: the whole corpus, or the named repos' docs
-# help: the backlog-file form (a first argument holding a / or ending in .md; any other value names a unit) reads a backlog outside the record (the plugin's demo); a path inside another module's store root refuses (the roots the storage core's store_roots lists): a record artifact is read through its unit, never as a file; with no storage core to list the roots it refuses rc 2 and reads no file
+# help: the backlog-file form (a first argument holding a / or ending in .md; any other value names a unit) reads a backlog outside the record (the plugin's demo); a path inside another module's store root (every root the storage library lists from the module declarations) refuses: a record artifact is read through its unit, never as a file; with no storage core to list the roots it refuses rc 2 and reads no file
 # help: exit codes: 0 the nudge printed (matched docs may be none; nothing when the unit has no IN_PROGRESS task); 1 a unit, repo, doc, or backlog path refused; 2 unreadable input (the awk engine's own failure), a storage driver without a corpus, or no storage core to list the module store roots
 # help: example: ctx docs nudge storage
 

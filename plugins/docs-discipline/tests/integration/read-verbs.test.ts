@@ -188,6 +188,13 @@ describe('the nudge through its unit', { concurrent: true }, () => {
     expect(bare.stderr).toContain("unit 'mybacklog' not found");
   });
 
+  it('RS5b [docs-module-r26] the nudge help names the refused roots by the module declarations the storage library lists them from, never by an internal function name', async () => {
+    const help = await docs(fresh(corpus), ['help', 'nudge']);
+    expect(help.code).toBe(0);
+    expect(help.stdout).toContain("a path inside another module's store root (every root the storage library lists from the module declarations) refuses");
+    expect(help.stdout).not.toContain('store_roots');
+  });
+
   it.each([RECORD_ROOT, FALLBACK_ROOT])('RS5b [docs-module-r26] a path inside another module\'s store root (%s, its root or its fallback root) refuses rc 1: a record artifact is read through its unit', async (root) => {
     const r = await docs(fresh(corpus), ['nudge', `${root}/nudge-demo/backlog.md`, 'demo-orders']);
     expect([r.code, r.stdout]).toEqual([1, '']);
