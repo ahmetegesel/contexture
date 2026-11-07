@@ -23,9 +23,10 @@ sh plugins/starter-rhythms/install
 ```
 
 The install lands `work.md` and `debug.md` under
-`.contexture/extensions/rhythms/`, where the rhythm index reads them. To own
+`.contexture/extensions/rhythms/`, where `ctx rhythm list` reads them. To own
 and edit a rhythm, copy it into the workspace's own `.contexture/rhythms/`:
-those copies are your team's. Onboarding offers this plugin when a team brings
+those copies are your team's, and the list labels such a copy as shadowing
+the installed one. Onboarding offers this plugin when a team brings
 no rhythm of its own, and removes the plugins folder with ONBOARDING at
 adoption close. The upstream copy stays the distributable one: workspace edits
 never travel back.
@@ -117,8 +118,9 @@ the suite.
 ## Needs
 
 None beyond the base: the plugin is plain markdown, with no scripts and no
-dependencies. `ctx unit index` reads whatever rhythm files land in
-`.contexture/rhythms/` and `.contexture/extensions/rhythms/`.
+dependencies. The base's rhythm module (`ctx rhythm list`, `show`, and
+`current`) reads whatever rhythm files land in `.contexture/rhythms/` and
+`.contexture/extensions/rhythms/`, and checks their grammar as it reads them.
 
 ## Contributing
 

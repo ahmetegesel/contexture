@@ -47,14 +47,15 @@ The first thing the agent does in a fresh context, mechanically:
 
 1. Read the overlays: the workspace overlay, then the local amendments. Both are tiny; where they disagree, the workspace wins.
 2. Boot unconditionally. The first message of a fresh context is the move signal whatever its shape, a question as much as a task.
-3. Get the field and match. One command lists the candidates, and the message is read against them:
+3. Get the field and match. Two commands list the candidates, the units and the rhythms, and the message is read against them:
 
    ```
    .contexture/ctx unit active
+   .contexture/ctx rhythm list
    ```
 
-   A close match proposes continuing that unit; no match proposes a new one.
-4. Propose the move and wait. Even a message that names its unit explicitly gets the proposal stated as a confirmation. The human's reply settles the unit before anything loads.
+   A close unit match proposes continuing that unit; no match proposes a new one. The request read against each rhythm's `use when` names the rhythm that serves it, or none.
+4. Propose the move and wait. The proposal names the unit and the rhythm: a propose match is asked, an auto match is stated as applying, and no match names the default design loop. Even a message that names its unit explicitly gets the proposal stated as a confirmation. The human's reply settles the unit and the rhythm before anything loads; the human still chooses the process.
 5. Run the load and keep calling until a page reads complete (read every page the map reports):
 
    ```bash
@@ -63,14 +64,14 @@ The first thing the agent does in a fresh context, mechanically:
    ```
 
    The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The backlog section renders its DONE task blocks compactly (the task line, status, objective, description); open and statusless blocks render whole, and the file itself is never edited. The load is one subtraction: live means not closed; anchors order periods, never liveness. Knowledge loads fully; it is small, and every line is a settled decision. Reference units are consulted on demand with `load refs <ref_1> ... <ref_N>`: they stream read-only under their own banner, map, and tail, apart from the unit load.
-6. Run the rhythm index: one line per rhythm, its trigger, and its activation policy.
+6. Read the rhythm in force: `.contexture/ctx rhythm current <unit>` prints one line, the rhythm in force with its next gate, completed, stale, or none in force, from the unit's last stamp; `ctx rhythm show <name>` prints a confirmed rhythm's body.
 7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the unit files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
 8. Stamp the new period: the stamp moves `current_anchor` to the next anchor and appends the anchor line with the period's number and today's date (`@anchor A<N> <date>`), no receipt text: the anchor orders periods, and the git state and anything else worth keeping land as journal entries. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `.contexture/ctx unit entry list <unit> --anchor=A<N>` lists the entries written in one period:
 
    ```bash
    .contexture/ctx unit stamp <unit>
    ```
-9. Continue from the backlog's derived move (the first `IN_PROGRESS` task, else the first open task, every status but `DONE`; `ctx unit active` prints it), following the invoked rhythm, the matching rhythm on its trigger, or the default loop.
+9. Continue from the backlog's derived move (the first `IN_PROGRESS` task, else the first open task, every status but `DONE`; `ctx unit active` prints it) at the confirmed rhythm's next gate (`ctx rhythm current` names it), or in the default design loop when no rhythm is confirmed. The first entry after a rhythm is confirmed carries its first stamp (`ctx unit record --rhythm`), and every stamped write prints the next gate.
 
 New work bootstraps a unit instead of joining one: run `.contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]`; the storage driver creates the unit whole (the state at A1 with its folded first anchor, an empty backlog and knowledge), and the verb prints the state and the first-task reminder; then continue at step 6.
 

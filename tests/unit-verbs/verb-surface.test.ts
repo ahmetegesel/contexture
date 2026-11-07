@@ -21,7 +21,7 @@ describe.concurrent('the unit and lane verb surface', () => {
     expect(DECLARED).toHaveLength(21);
   });
 
-  it('V-b [the-engine-r5]: the retired ctx unit index refuses rc 1 as an unknown verb, the module help on stderr', async () => {
+  it('V-b [the-engine-r5]: the retired index verb of the unit module refuses rc 1 as an unknown verb, the module help on stderr', async () => {
     const r = await unit(sb, 'index');
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toMatch(/^ctx: unknown verb: index$/m);

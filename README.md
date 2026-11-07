@@ -83,7 +83,7 @@ The workspace couples root governance with a dedicated convention drawer:
     ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
     ├── laws/             The law sources: core.md the core source, compose the composer
     ├── modules/          The standard module folders: unit (the record engine), run (stream filters), and workspace additions
-    ├── extensions/       The package overlay root: modules/ for package feature modules (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms
+    ├── extensions/       The package overlay root: modules/ for package feature modules (the lane and rhythm modules ship here), storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression
     └── units/<unit>/     Isolated unit of work bounding context and lifecycle history
         ├── state.md      Where the unit stands: status, current anchor, objective, repos, and mounts
@@ -141,12 +141,14 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, reference units read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
 | ctx unit load refs <ref_1> ... <ref_N> [<page>] | The refs load: those units alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
 | ctx unit stamp <unit> | Stamps the new period: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with its number and date (@anchor A<N> <date>), no receipt text; a text argument refuses rc 1 |
-| ctx unit board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
+| ctx unit board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge, ending with the rhythm in force line `ctx rhythm current` prints |
 | ctx unit audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event) and the open-thread tail; exits nonzero on any defect |
 | ctx unit fold <unit> [--lane=<lane> \| --check \| --finish] | The consolidation fold: the first no-lane call plans the live scope, records the fold start, and prints the plan (the carried open threads included), the first lane's manual, and the first act; a lane call fetches the next unclosed chunk, its entries, and the lane's remaining chunks; the lane writes an ordinary entry whose REFs name the batch and whose CLOSES fold its non-thread constituents, while open threads stay live and are carried; --check proves the closed receipts are the scope minus the carried threads and the audit is clean; --finish writes the receipt and closes the fold start (docs/the-record.md) |
-| ctx unit index | One line per rhythm: name, path, use when, activation |
+| ctx rhythm list | One line per rhythm: name, origin (workspace, the workspace copy shadowing an installed one, or extension), use when, activation; then the select line that says what to do with them; a grammar defect warns on stderr |
+| ctx rhythm show <name> | One rhythm whole, then the stamp line that advances it |
+| ctx rhythm current <unit> | The rhythm in force in the unit and its next gate, read from the unit's last stamp (in force, completed, stale, or none in force) |
 | ctx unit task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags; the unit module enforces the status moves (start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop refused for an IN_PROGRESS task; reopen it first) and writes the completion or drop receipt in the same write; show prints the canonical block |
-| ctx unit record <unit> --what="..." [--flags] | Append an immutable journal event (--group, --thread, --rhythm, --knowledge, --slug, and the repeatable --ref, --closes, --supersedes); the unit module injects the active anchor and composes the slug from the local date and time |
+| ctx unit record <unit> --what="..." [--flags] | Append an immutable journal event (--group, --thread, --rhythm, --knowledge, --slug, and the repeatable --ref, --closes, --supersedes); the unit module injects the active anchor and composes the slug from the local date and time; a stamped write (--rhythm) prints the next gate line and refuses a rhythm whose @rhythm line names another |
 | ctx unit entry show <unit> <slug> | The entry's canonical block (the last occurrence of a repeated legacy slug) |
 | ctx unit entry list <unit> [--anchor=A<N>] [--group=<token>] | One line per entry occurrence (anchor, slug, WHAT), open or closed; `--group` is the topic thread, `--anchor` one period |
 | ctx unit entry closure <unit> <slug> | Open, or closed with the verdict of the first closer, then every later closer naming it with its line |
