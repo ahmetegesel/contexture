@@ -6,6 +6,7 @@ import { count, DOCS_MOD } from '../support/laws';
 
 const DOCS_LAWS = join(DOCS_MOD, 'laws');
 const LANE_LAWS = join(ROOT, 'base/.contexture/extensions/modules/lane/laws');
+const UNIT_LAWS = join(ROOT, 'base/.contexture/modules/unit/laws');
 
 function lawSlugs(text: string): string[] {
   const out: string[] = [];
@@ -43,5 +44,12 @@ describe.concurrent('the module law fragments', () => {
     for (const clause of ['branch/worktree', 'landing', 'boundary-warning', 'drift']) expect(text).toMatch(new RegExp(`^ {2}${clause}: `, 'm'));
     expect(text).toMatch(/^@append @git$/m);
     expect(text).toMatch(/^ {2}branch\/worktree on demand: /m);
+  });
+
+  it('[the-record-r-lst33] names the unit listing among the unit laws\' named looks by a form the verb runs, ctx unit list --repo=<repo>', () => {
+    const queries = readFileSync(UNIT_LAWS, 'utf8').split('\n').filter((l) => l.startsWith('  queries: named looks: '));
+    expect(queries).toHaveLength(1);
+    expect(queries[0]).toContain('named looks: ctx unit entry closure, ctx unit list --repo=<repo>, ctx unit refs-to (');
+    expect(queries[0]).not.toMatch(/ctx unit list --repo(?!=<repo>)/);
   });
 });
