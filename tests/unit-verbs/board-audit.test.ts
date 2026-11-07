@@ -11,6 +11,15 @@ describe.concurrent('ctx unit board and audit', () => {
     expect((await unit(stage('posix', 'audit-missing'), 'audit', 'nosuch')).code).toBe(1);
   });
 
+  it('R-h: ctx unit help audit sends every finding no verb can repair, a missing THREAD and a dangling closer among them, to the human, never to an entry minted only to quiet it', async () => {
+    const help = await unit(stage('posix', 'audit-help'), 'help', 'audit');
+    expect(help.code).toBe(0);
+    const human = help.stdout.split('\n').filter((l) => l.includes('goes to the human'));
+    expect(human).toHaveLength(1);
+    expect(human[0]).toContain('a finding no verb can repair (a bracketed field line, an inline marker, a dateless slug, a missing THREAD, a slugless or dangling closer)');
+    expect(human[0]).toContain('never to a hand edit of the record or to an entry minted only to quiet it');
+  });
+
   it('S1-e [the-record-r6]: a legacy repeated slug warns in the audit with rc 0; a closer closes the occurrences before it; entry show reads the last (posix plant)', async () => {
     const sb = stage('posix', 'audit-dup');
     await seedUnit(sb, 'dup-audit', 'duplicate slug unit');
