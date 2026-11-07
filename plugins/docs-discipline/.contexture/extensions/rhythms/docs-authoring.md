@@ -10,6 +10,6 @@
   7. COVERAGE: ctx docs check over the repository's tracked files; uncovered paths widen a unit's sources or insert a new @task into the backlog
   8. RECONCILE: semantic depth and boundary audit in subagents; thin docs return to INTERROGATE; merges, splits, and cross-unit edges settle in the backlog; audit and coverage re-verified
   9. PROJECT: ctx docs query for the new units and their file owners; the projection reads clean
-  10. TRACE & ACCUMULATE: a cross-repository boundary trace subagent verifies the system map's claims against code, traces new boundaries, and links connected unit docs with reciprocal @see_also pointers
+  10. TRACE+ACCUMULATE: a cross-repository boundary trace subagent verifies the system map's claims against code, traces new boundaries, and links connected unit docs with reciprocal @see_also pointers
   11. REFRESH: run @refresh
   ground: the procedure lives in the workspace conventions, @rule docs/authoring (ctx docs query workspace --rules docs/authoring)
