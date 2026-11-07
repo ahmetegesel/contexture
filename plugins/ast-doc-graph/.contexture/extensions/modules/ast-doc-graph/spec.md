@@ -90,6 +90,7 @@ Captures documentation unit metadata.
 * `summary` (string, required): One-line summary describing the document purpose.
 * `sources` (array of strings, required): Glob patterns or relative paths of source files governed by this document.
 * `keywords` (array of strings, required): Topics and conceptual keywords.
+* `file` (string, optional): The project-relative path of the markdown file holding the unit; the loader records the unit under it as a `DEFINES` edge from that file.
 
 Sample line:
 ```json
@@ -560,7 +561,7 @@ A full index records every file it discovered in `indexed_files` (each TypeScrip
    * Unchanged and removed files are omitted from extractor execution, minimizing AST parser overhead.
 3. Ingestion and Atomic Transaction:
    * The loader begins an exclusive database transaction.
-   * Previous entities belonging to modified or removed files are removed: `DELETE FROM symbols WHERE file = ?`, every edge from or to the file, and `DELETE FROM docs WHERE id = ?` for each unit the file held (the candidate ids of its path, plus each unit whose first existing `resolveDocFile` candidate is that file, present or gone).
+   * Previous entities belonging to modified or removed files are removed: `DELETE FROM symbols WHERE file = ?`, every edge from or to the file, and `DELETE FROM docs WHERE id = ?` for each unit the file held: each unit the file `DEFINES` that no file the delta leaves holds too, the candidate ids of its path, and each unit whose first existing `resolveDocFile` candidate is that file, present or gone (the last two also serve a graph loaded before units carried their `DEFINES` edge).
    * Cascading triggers automatically purge corresponding edges and FTS5 index entries.
    * Fresh symbols, docs, rules, pitfalls, and syntactic edges are inserted.
 4. Edge Re-linking:

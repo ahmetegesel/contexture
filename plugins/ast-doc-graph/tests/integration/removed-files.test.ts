@@ -89,6 +89,30 @@ describe.skipIf(!sqliteFts5)('a removed corpus doc leaves the graph', { concurre
     expect(rowsOf(repo, 'doc:workspace:beta', 'docs/beta.md')).toEqual([0, 0, 0, 0, 0]);
   });
 
+  it.each(runs.slice(1))('[ast-doc-graph-r1] a removed doc whose unit id comes from its header and differs from its file name leaves after %s', async (_run, run) => {
+    const repo = twoDocs('removed-header');
+    writeFileSync(join(repo, 'docs/guide.md'), unitDoc('user-guide'));
+    await indexed(repo);
+    expect(rowsOf(repo, 'doc:workspace:user-guide', 'docs/guide.md')).toEqual([1, 1, 1, 3, 1]);
+    rmSync(join(repo, 'docs/guide.md'));
+    await run(repo, 'docs/guide.md');
+    expect(rowsOf(repo, 'doc:workspace:user-guide', 'docs/guide.md')).toEqual([0, 0, 0, 0, 0]);
+    expect(count(db(repo), 'SELECT count(*) FROM docs;')).toBe(2);
+  });
+
+  it('[ast-doc-graph-r1] a unit two files hold stays while one of them remains', async () => {
+    const repo = twoDocs('removed-shared');
+    writeFileSync(join(repo, 'docs/one.md'), unitDoc('shared'));
+    writeFileSync(join(repo, 'docs/two.md'), unitDoc('shared'));
+    await indexed(repo);
+    rmSync(join(repo, 'docs/one.md'));
+    await indexed(repo, ['--delta']);
+    expect(count(db(repo), "SELECT count(*) FROM docs WHERE id = 'doc:workspace:shared';")).toBe(1);
+    rmSync(join(repo, 'docs/two.md'));
+    await indexed(repo, ['--delta']);
+    expect(count(db(repo), "SELECT count(*) FROM docs WHERE id = 'doc:workspace:shared';")).toBe(0);
+  });
+
   it('[ast-doc-graph-r1] a renamed doc reads as the old removed and the new added after a bare delta, its time unchanged', async () => {
     const repo = twoDocs('renamed-doc');
     await indexed(repo);
@@ -118,16 +142,19 @@ describe.skipIf(!sqliteFts5)('a removed corpus doc leaves the graph', { concurre
     expect(count(db(repo), 'SELECT count(*) FROM docs;')).toBe(2);
   });
 
-  it.skipIf(!fallbackReachable)('[ast-doc-graph-r1] on the sqlite3 command fallback a bare delta removes a removed doc, a depth-1 one among them (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', async () => {
+  it.skipIf(!fallbackReachable)('[ast-doc-graph-r1] on the sqlite3 command fallback a bare delta removes a removed doc, a depth-1 one and one whose unit id comes from its header among them (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', async () => {
     const repo = twoDocs('removed-doc-fallback', 'docs/beta.md');
     writeFileSync(join(repo, 'docs/workspace/gamma.md'), unitDoc('gamma'));
+    writeFileSync(join(repo, 'docs/guide.md'), unitDoc('user-guide'));
     await indexed(repo);
     rmSync(join(repo, 'docs/beta.md'));
     rmSync(join(repo, 'docs/workspace/gamma.md'));
+    rmSync(join(repo, 'docs/guide.md'));
     const r = await astDocIndex(repo, ['--delta'], { env: NO_NODE_SQLITE });
     expect(r.code, r.stderr).toBe(0);
     expect(rowsOf(repo, 'doc:workspace:beta', 'docs/beta.md')).toEqual([0, 0, 0, 0, 0]);
     expect(rowsOf(repo, 'doc:workspace:gamma', 'docs/workspace/gamma.md')).toEqual([0, 0, 0, 0, 0]);
+    expect(rowsOf(repo, 'doc:workspace:user-guide', 'docs/guide.md')).toEqual([0, 0, 0, 0, 0]);
     expect(rowsOf(repo, 'doc:workspace:alpha', 'docs/workspace/alpha.md')).toEqual([1, 1, 1, 3, 1]);
   });
 

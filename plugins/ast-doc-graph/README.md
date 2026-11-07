@@ -98,7 +98,9 @@ The SQLite database schema (`schema.sql`) defines five primary relational tables
 `symbols`, `edges`, `docs`, `rules`, and `pitfalls`.
 
 During database ingestion, the loader reads the raw syntactic edges emitted by the
-AST extractor (`CALLS`, `DEFINES`) and computes three categories of semantic governance
+AST extractor (`CALLS`, `DEFINES`), records each documentation unit under the markdown
+file that holds it (a `DEFINES` edge from the file to the unit, so a delta removes the
+unit with its file whatever its id), and computes three categories of semantic governance
 edges:
 
 1. `GOVERNS`: Established between a contract rule and a code symbol when the rule evidence references the symbol's qualified name (`qname`), or bare name disambiguated by the parent document's `sources` globs.

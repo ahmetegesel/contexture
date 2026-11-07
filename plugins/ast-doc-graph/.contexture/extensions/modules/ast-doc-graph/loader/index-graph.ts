@@ -37,6 +37,7 @@ export interface DocRecord {
   summary: string;
   sources: string[];
   keywords: string[];
+  file?: string;
 }
 
 export interface DocRuleRecord {
@@ -162,6 +163,13 @@ export function unitsOfFile(file: string, docIds: string[], exists: (rel: string
     const at = candidates.indexOf(norm);
     return at >= 0 && candidates.slice(0, at).every((c) => !exists(c));
   });
+}
+
+/* The units the given files hold (a markdown file DEFINES its unit) that no file outside them holds too */
+export function unitsDefinedOnlyBy(edges: EdgeRecord[], files: Set<string>): string[] {
+  const units = edges.filter((e) => e.kind === 'DEFINES' && e.target.startsWith('doc:'));
+  const heldElsewhere = new Set(units.filter((e) => !files.has(e.source)).map((e) => e.target));
+  return [...new Set(units.filter((e) => files.has(e.source) && !heldElsewhere.has(e.target)).map((e) => e.target))];
 }
 
 function fileKind(file: string): string | null {
@@ -535,6 +543,7 @@ async function main(): Promise<void> {
   const docs = readJsonl<DocRecord>(docsPath);
   const rules = readJsonl<DocRuleRecord>(rulesPath);
   const pitfalls = readJsonl<DocPitfallRecord>(pitfallsPath);
+  for (const d of docs) if (d.file) rawEdges.push({ source: d.file, target: d.id, kind: 'DEFINES' });
 
   // 2. Identify modified files and target docs
   const modifiedFiles = new Set<string>();
@@ -602,6 +611,8 @@ async function main(): Promise<void> {
 
     if (delta) {
       // Delta mode: delete records for modified files and target docs
+      const unitDefines = db.prepare("SELECT source, target, kind FROM edges WHERE kind = 'DEFINES' AND target LIKE 'doc:%';").all() as EdgeRecord[];
+      for (const id of unitsDefinedOnlyBy(unitDefines, modifiedFiles)) docIdsToDelete.add(id);
       const deleteSymbolsStmt = db.prepare('DELETE FROM symbols WHERE file = ?;');
       const deleteEdgesBySourceStmt = db.prepare('DELETE FROM edges WHERE source = ?;');
       for (const file of modifiedFiles) {
@@ -961,6 +972,7 @@ async function main(): Promise<void> {
           }
         }
       }
+      for (const id of unitsDefinedOnlyBy(existingEdgesRaw, modifiedFiles)) docIdsToDelete.add(id);
       const unitIds = existingDocsRaw.map((d: any) => d.id);
       for (const f of modifiedFiles) {
         if (f.endsWith('.md')) for (const id of unitsOfFile(f, unitIds, existsUnderRoot)) docIdsToDelete.add(id);

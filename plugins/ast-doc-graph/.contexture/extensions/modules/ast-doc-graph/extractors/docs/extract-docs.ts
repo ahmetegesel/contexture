@@ -17,6 +17,7 @@ export interface DocRecord {
   summary: string;
   sources: string[];
   keywords: string[];
+  file?: string;
 }
 
 export interface DocRuleRecord {
@@ -660,6 +661,7 @@ export function parseDocMarkdown(content: string, filePath: string, projectRoot?
       summary: docHeader.description || '',
       sources: docHeader.sources,
       keywords: docHeader.keywords,
+      file: projectRoot ? path.relative(projectRoot, filePath) : filePath,
     };
   }
 
