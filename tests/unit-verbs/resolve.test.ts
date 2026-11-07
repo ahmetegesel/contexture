@@ -83,6 +83,18 @@ describe.concurrent('ctx unit resolve', () => {
     }
   });
 
+  it.for([
+    ['an @BOTH head, then a BOTH :: head', '@report b-lane\n@BOTH\n  the at body\nBOTH ::\n  the keyed body\n\nNEXT ::\n  after\n', 'BOTH ::\n  the keyed body\n\n'],
+    ['a BOTH :: head, then an @BOTH head', '@report b-lane\nBOTH ::\n  the keyed body\n@BOTH\n  the at body\n\nNEXT ::\n  still the at span\n@end\n', '@BOTH\n  the at body\n\nNEXT ::\n  still the at span\n'],
+  ] as const)('X-l [the-record-r-7jaw4]: a report naming one claim in both head forms, %s, resolves the span of the last head in its own form', async ([, report, span]) => {
+    const sb = fresh(sb0);
+    await must(createLane(sb, 'x-unit', 'b-lane'));
+    await must(run(sb, ['lane', 'report', 'x-unit', 'b-lane'], { input: report }));
+    for (const ref of ['lane#b-lane/report#BOTH', 'lanes/b-lane/report#BOTH']) {
+      expect(await unit(sb, 'resolve', 'x-unit', ref).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, span, '']);
+    }
+  });
+
   it.for(['lane#k-lane/recipe#FINDINGS', 'lane#k-lane/journal#FINDINGS', 'lanes/k-lane/recipe#FINDINGS', 'lane#k-lane/notes', 'lanes/k-lane/report.md'])(
     'X-i [the-record-r-7jaw4]: %s refuses rc 1 as an unsupported form, since a claim names the report alone',
     async (ref) => {
