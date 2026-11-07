@@ -43,13 +43,13 @@ ref_sessions: [design-notes]
 - `status:` is `ACTIVE` or `CLOSED`.
 - `current_anchor:` is the current value of the anchor counter, `A<N>`. A fresh unit starts at `A1`, the bootstrap's folded first anchor, and each stamp adds one.
 - `objective:` is what the unit is for: one quoted line, an embedded double or single quote is text, an embedded newline refuses.
-- the next move is not a state field: it is derived at presentation from the backlog, the first `IN_PROGRESS` task, else the first open task, open being the board's rule of every status but `DONE` (`ctx unit active` prints it); a unit with no open task has none.
+- the next move is not a state field: it is derived at presentation from the backlog, the first `IN_PROGRESS` task, else the first open task, open being the board's rule of every status but `DONE` (`ctx unit list` prints it); a unit with no open task has none.
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference units mounted at boot; boot loads their knowledge and active journal.
 
 The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `active`, `units`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the store's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
 
-The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `session.list` answers it. A unit whose last item carries no date answers null, and lane journals never enter the derivation. `ctx unit active` reads no journal, so it prints no date and orders its units bytewise by name.
+The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `session.list` answers it. A unit whose last item carries no date answers null, and lane journals never enter the derivation. `ctx unit list` reads no journal, so it prints no date and orders its units bytewise by name.
 
 ## Backlog tasks, the declaration
 
@@ -69,7 +69,7 @@ The backlog holds actionable tasks as a living queue: the current declaration of
     requirements to honor, decisions made, how it lands
 ```
 
-Three fields carry the task's identity: `STATUS` (`TODO`, `IN_PROGRESS`, `DONE`), `OBJECTIVE`, and, when present, `REFS`. The typed verbs write only those three; a legacy record may carry another status, and it stays open: the board lists every task whose status is not `DONE`, the derived next reads it after any `IN_PROGRESS`, and `ctx unit active` prints it as stored. Three block containers carry technical substance:
+Three fields carry the task's identity: `STATUS` (`TODO`, `IN_PROGRESS`, `DONE`), `OBJECTIVE`, and, when present, `REFS`. The typed verbs write only those three; a legacy record may carry another status, and it stays open: the board lists every task whose status is not `DONE`, the derived next reads it after any `IN_PROGRESS`, and `ctx unit list` prints it as stored. Three block containers carry technical substance:
 
 - `DESCRIPTION` carries context, problem statement, and scope.
 - `ACCEPTANCE CRITERIA` carries checkable done conditions.
@@ -82,7 +82,7 @@ Agents mutate the backlog through typed CLI verbs, the only write inputs (no mar
 - `ctx unit task add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: creates a task in `TODO` status.
 - `ctx unit task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]`: updates the given fields in place; `--refs` replaces the list and `--refs=""` clears it; an update carrying no field refuses rc 1.
 - `ctx unit task start <unit> <slug>`: moves a `TODO` task to `IN_PROGRESS`; the state is not written.
-- `ctx unit active`: the pre-boot field: each ACTIVE unit bytewise by name, with its anchor, the derived next line (`next: <slug> (<status>)`, or an explicit none form), and its objective.
+- `ctx unit list [--active|--all] [--repo=<repo>]`: the pre-boot field: with no flag or `--active` each ACTIVE unit bytewise by name, with its anchor, the derived next line (`next: <slug> (<status>)`, or an explicit none form), and its objective, then the closed count; `--all` one line per unit with its status as stored and its anchor; `--repo` the units touching the repo, a repo no unit touches refusing rc 1 naming the known repos. It replaces the retired `active` and `units` verbs.
 - `ctx unit task complete <unit> <slug> --evidence="..."`: atomically moves a `TODO` or `IN_PROGRESS` task to `DONE` and records its completion receipt (`<date>-<slug>-completed`, `WHAT: "backlog/<slug>: DONE (<evidence>)"`) in the journal.
 - `ctx unit task reopen <unit> <slug>`: moves an `IN_PROGRESS` or `DONE` task back to `TODO`.
 - `ctx unit task drop <unit> <slug> [--reason="..."]`: removes the task and records its drop receipt (`backlog/<slug>: DROPPED (<reason>)`) in the journal; an `IN_PROGRESS` task refuses (reopen it first).
@@ -119,7 +119,7 @@ Fields on journal entries, in the canonical order every read prints and the reco
 - `GROUP:` topic thread identifier, stable within the unit.
 - `RHYTHM: <name> <N> <GATE>` records process milestones: the stamp of a step and gate of the named rhythm, checked through the rhythm module (`ctx rhythm show <name>` prints the rhythm; `ctx rhythm current <unit>` reads the unit's last stamp back as the rhythm in force).
 - `THREAD: <what it awaits>` names external acts awaiting completion, or `none` for receipts.
-- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several. A reference takes one of two shapes, `<target>#<symbol>` or a whole target path holding a `/` and ending in a name (`lanes/<lane>/recipe`; a root-level file as `./README.md`, or `README.md#<section>`; a lone `/`, a trailing `/` as in `lanes/`, and `./` name no target), one token without blanks, control characters, or double quotes (an ASCII control byte such as a form feed or a vertical tab counts as a blank, and so does a Unicode blank such as a no-break space or U+2028); the verbs refuse any other value on a new write, naming both shapes, and a legacy value reads as stored.
+- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several. A reference takes one of two shapes, `<target>#<symbol>` (a lane artifact as `lane#<lane>/<recipe|journal|report>[#<claim>]`) or a whole target path holding a `/` and ending in a name (a repository file path; a root-level file as `./README.md`, or `README.md#<section>`; a lone `/`, a trailing `/` as in `lanes/`, and `./` name no target), one token without blanks, control characters, or double quotes (an ASCII control byte such as a form feed or a vertical tab counts as a blank, and so does a Unicode blank such as a no-break space or U+2028); the verbs refuse any other value on a new write, naming both shapes, and a legacy value reads as stored, the legacy lane form `lanes/<lane>/<recipe|journal|report>[#<claim>]` among them, which the verbs still accept and resolve.
 - `CLOSES:` or `SUPERSEDES:` closes an earlier entry by reference with a verdict word and reason. One line may name several targets (`CLOSES: <slug> <slug> (folded: reason)`) and an entry may carry several closer lines; every date-slug before the first spaced paren or spaced hyphen is a target.
 - `KNOWLEDGE: true` flags entries for durable knowledge harvesting.
 
@@ -176,7 +176,7 @@ A REF names its target exactly in one of the two pointer shapes of the laws' ref
 - Tasks: `task#<slug>`
 - Journal entries: `entry#<slug>`
 - Findings: `finding#<NAME>`
-- Subagent claims: `lane#<lane-slug>/report#<claim-slug>`
+- Subagent lane artifacts and claims: `lane#<lane-slug>/<recipe|journal|report>[#<claim>]` (a claim names a report section: its last `@<claim>` head to the next column-0 `@` line, or its last column-0 `<claim> ::` head to the next non-blank column-0 line)
 - Canonical module refs: `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, `unit#<unit>/lane/<lane>/<recipe|journal|report>` (the ref carries its target unit)
 
 The resolution verb resolves references directly:
@@ -185,7 +185,7 @@ The resolution verb resolves references directly:
 .contexture/ctx unit resolve <unit> <ref>
 ```
 
-When given legacy file-based paths (such as `knowledge.md#NAME`, `journal.md#slug`, `backlog.md#slug`), the CLI normalizes them transparently to entity lookups. Agents author pure entity syntax natively; a canonical ref minted by a write resolves directly.
+When given the legacy forms an older record holds (the file-based paths such as `knowledge.md#NAME`, `journal.md#slug`, `backlog.md#slug`, and the legacy lane form `lanes/<lane>/<recipe|journal|report>[#<claim>]`), the CLI normalizes them transparently to entity lookups. Agents author the entity syntax natively, `lane#` for a lane; a canonical ref minted by a write resolves directly.
 
 ## Universal search and snippet consumption
 

@@ -61,7 +61,7 @@ Once confirmed, start your first unit of work:
 
 ### What happens next?
 
-1. **The agent creates the unit:** It initializes `.contexture/units/<your-task>/` with active tasks (`backlog.md`) and an append-only event log (`journal.md`).
+1. **The agent creates the unit:** It runs `ctx unit bootstrap`, which initializes `.contexture/units/<your-task>/` with active tasks (`backlog.md`) and an append-only event log (`journal.md`).
 2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates tasks, logs test proofs, and records decisions through semantic CLI verbs. You never manage the files manually.
 3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `ctx unit load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
 
@@ -136,7 +136,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 |---|---|
 | ctx help | The runtime summary: `ctx run`, `ctx unit` with its verbs, and every discovered module with its summary line |
 | ctx unit help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
-| ctx unit active | The field: each ACTIVE unit bytewise by name, with its slug, anchor, the derived next line (the first IN_PROGRESS task, else the first open task, every status but DONE; `next: <slug> (<status>)`, or an explicit none form), and objective, then the closed count; the view reads no journal |
+| ctx unit list [--active\|--all] [--repo=<repo>] | The field: with no flag or --active each ACTIVE unit bytewise by name, with its slug, anchor, the derived next line (the first IN_PROGRESS task, else the first open task, every status but DONE; `next: <slug> (<status>)`, or an explicit none form), and objective, then the closed count; --all one line per unit, ACTIVE and CLOSED (slug, status as stored, anchor); --repo keeps the units touching the repo and refuses rc 1 naming the known repos when none does; the view reads no journal |
 | ctx unit bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the first-task reminder |
 | ctx unit load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, reference units read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
 | ctx unit load refs <ref_1> ... <ref_N> [<page>] | The refs load: those units alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
@@ -154,8 +154,8 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit entry closure <unit> <slug> | Open, or closed with the verdict of the first closer, then every later closer naming it with its line |
 | ctx unit finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list; `--ref` repeats |
 | ctx unit search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet, score); --mode is required, no default: exact on every driver or a mode the configured driver declares (ctx unit diagnose lists them); a search without it refuses rc 1 naming the declared modes |
-| ctx unit resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim), the canonical unit refs (unit#<unit>/task/<slug>, entry, finding, and lane artifact forms; a canonical ref carries its own unit), and the legacy file forms to the entity block |
-| ctx unit units <repo> | Each unit touching the repo: slug, status, anchor |
+| ctx unit resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#<lane>/<recipe\|journal\|report>[#<claim>]), the legacy lanes/<lane>/... form, the canonical unit refs (unit#<unit>/task/<slug>, entry, finding, and lane artifact forms; a canonical ref carries its own unit), and the legacy reference forms to the entity block; a lane artifact prints as `ctx lane show` prints it, an absent one refusing rc 1; a claim names a report section, its last `@<claim>` head to the next column-0 `@` line, or its last column-0 `<KEY> ::` head to the next column-0 line |
+| ctx unit list --all --repo=<repo> | Each unit touching the repo: slug, status, anchor |
 | ctx unit refs-to <unit> | Each unit referencing the unit |
 | ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from the unit's main journal: create (the dispatcher's act: the brief as flags, from which it composes the recipe and prints the dispatch prompt), record, report, show |
 | ctx unit refs <unit> [<unit> ...] | Set the read-only reference units; zero units clears them |

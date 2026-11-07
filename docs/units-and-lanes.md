@@ -25,7 +25,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
   lanes/         dispatched work, one folder per subagent
 ```
 
-`state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the objective, the repos it touches, and optional reference units (`ref_sessions`). Nothing else; detail lives behind references. The next move is not stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first open task, every status but DONE). The state is not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
+`state.md` holds the state, the only artifact updated in place, and only through `ctx unit stamp`, `refs`, `close`, and `reopen`. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the objective, the repos it touches, and optional reference units (`ref_sessions`). Nothing else; detail lives behind references. The next move is not stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first open task, every status but DONE). The state is not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
 
 `backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence (`ctx unit task complete`), and the completion receipt lands in the journal in the same write.
 
@@ -50,7 +50,7 @@ The first thing the agent does in a fresh context, mechanically:
 3. Get the field and match. Two commands list the candidates, the units and the rhythms, and the message is read against them:
 
    ```
-   .contexture/ctx unit active
+   .contexture/ctx unit list
    .contexture/ctx rhythm list
    ```
 
@@ -71,7 +71,7 @@ The first thing the agent does in a fresh context, mechanically:
    ```bash
    .contexture/ctx unit stamp <unit>
    ```
-9. Continue from the backlog's derived move (the first `IN_PROGRESS` task, else the first open task, every status but `DONE`; `ctx unit active` prints it) at the confirmed rhythm's next gate (`ctx rhythm current` names it), or in the default design loop when no rhythm is confirmed. The first entry after a rhythm is confirmed carries its first stamp (`ctx unit record --rhythm`), and every stamped write prints the next gate.
+9. Continue from the backlog's derived move (the first `IN_PROGRESS` task, else the first open task, every status but `DONE`; `ctx unit list` prints it) at the confirmed rhythm's next gate (`ctx rhythm current` names it), or in the default design loop when no rhythm is confirmed. The first entry after a rhythm is confirmed carries its first stamp (`ctx unit record --rhythm`), and every stamped write prints the next gate.
 
 New work bootstraps a unit instead of joining one: run `.contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]`; the storage driver creates the unit whole (the state at A1 with its folded first anchor, an empty backlog and knowledge), and the verb prints the state and the first-task reminder; then continue at step 6.
 
