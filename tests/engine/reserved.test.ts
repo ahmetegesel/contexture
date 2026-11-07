@@ -8,7 +8,7 @@ describe.concurrent('the ctx _reserved reader', () => {
     sb = stage('posix', 'reserved');
   });
 
-  it.for(['refresh', 'record', 'run', 'hooks', 'help', 'next', 'flip'])('MD-RS [the-engine-r2, modules-r6]: %s is reserved rc 0', async (name) => {
+  it.for(['refresh', 'record', 'run', 'hooks', 'compose', 'help', 'next', 'flip'])('MD-RS [the-engine-r2, modules-r6]: %s is reserved rc 0', async (name) => {
     const r = await run(sb, ['_reserved', name]);
     expect(r.code).toBe(0);
     expect(r.stdout + r.stderr).toBe('');

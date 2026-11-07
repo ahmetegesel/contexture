@@ -32,6 +32,10 @@ describe.concurrent('the changed-files map selects a project for every tracked p
     expect(projectsOf('plugins/toolchain-filters/tests/x.test.ts')).not.toContain('governance');
   });
 
+  it('an engine change selects the laws and packages projects, which reach the composer and the installers through it', () => {
+    expect(projectsOf('base/.contexture/ctx')).toEqual(expect.arrayContaining(['engine', 'laws', 'packages']));
+  });
+
   it('the map names only declared projects, and every declared project is reachable from it', () => {
     const named = new Set(AREAS.flatMap(([, ps]) => ps));
     expect([...named].filter((p) => p !== EVERY && !projects.includes(p))).toEqual([]);

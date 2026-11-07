@@ -38,6 +38,18 @@ describe.concurrent('discovery over both module roots', () => {
     expect(help.stderr.match(/reserved name refused \(shadow\): load/g)).toHaveLength(2);
   });
 
+  it('CT-XR1 [the-engine-r2, modules-r6]: a valid module named compose warns in each root and never lists, since the compose builtin holds the name', async () => {
+    const sb = engineSandbox('discovery-compose');
+    for (const root of ['modules', 'extensions'] as const) {
+      writeModule(sb, root, 'compose', { manifest: '# summary: a compose fixture module\n', files: { 'scripts/hi': shVerb('say hi', 'echo hi') } });
+    }
+    const r = await run(sb, ['help']);
+    expect(r.code).toBe(0);
+    expect(r.stderr.match(/reserved name refused \(shadow\): compose$/gm)).toHaveLength(2);
+    expect(listed(r.stdout)).not.toContain('compose');
+    expect(r.stdout).not.toContain('a compose fixture module');
+  });
+
   it('[the-engine-r1, modules-r14]: an absent extension root is silent and lists no extension module', async () => {
     const sb = engineSandbox('discovery-noext');
     rmSync(`${sb}/.contexture/extensions`, { recursive: true });

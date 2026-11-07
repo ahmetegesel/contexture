@@ -136,6 +136,7 @@ describe.concurrent('package-install: the collision classes', () => {
     ['the lane builtin', 'pkgbuiltinlane', 'lane', 'collides with a builtin'],
     ['the rhythm builtin', 'pkgbuiltinrhythm', 'rhythm', 'collides with a builtin'],
     ['a reserved name', 'pkgreserved', 'refresh', 'reserved name'],
+    ['the compose builtin', 'pkgcompose', 'compose', 'reserved name'],
   ])('[modules-r15, modules-r14] a module named after %s refuses rc1 naming its class', async (_label, pkg, module, message) => {
     const sb = sandbox();
     const p = newPkg(sb, pkg);

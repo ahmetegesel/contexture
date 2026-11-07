@@ -2,7 +2,7 @@
 # ctx: the workspace module engine: discovery, assembly, dispatch, run, hooks
 # Zero-install: POSIX /bin/sh, awk, and core OS utilities only.
 #
-# Usage: ctx [help [--all]] | ctx run <cmd> [args...] | ctx <module> [args...]
+# Usage: ctx [help [--all]] | ctx run <cmd> [args...] | ctx compose [--check] | ctx <module> [args...]
 # The help output is the contract surface; this header never prints.
 #
 # Maintainer note (off-path, never taught by help or top docs):
@@ -28,7 +28,7 @@
 # ignored. A module file without a summary warns and skips; a scripts/
 # directory without a module file warns and skips; a directory with neither
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
-# Reserved names are the unit verb set plus refresh, run, hooks, and the
+# Reserved names are the unit verb set plus refresh, run, hooks, compose, and the
 # retired record verbs (append, amend, query, flip, drop, next, which print
 # their replacement); the builtin unit and run are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
@@ -44,7 +44,8 @@
 # first) and modules/*/filters/ (name-sorted after); a later match warns as
 # a shadow unless its header carries "# ctx-filter-priority: over". The
 # built-in run owns the compaction selection body; runner notices read
-# [ctx: ...].
+# [ctx: ...]. The built-in compose execs the core's private composer
+# (.contexture/laws/compose) before discovery.
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$dir/.." && pwd)
@@ -473,7 +474,7 @@ package_reader() {
 
 # ---------------------------------------------------------------------------
 # reserved names: the unit verb set (its scripts own the list) plus
-# refresh, run, and hooks, and the retired record verbs (append, amend, query,
+# refresh, run, hooks, and compose, and the retired record verbs (append, amend, query,
 # flip, drop, next: a static list, so no module can claim a retired name and a
 # retired call prints its replacement); the builtin unit and run are allowed
 
@@ -548,7 +549,7 @@ EOF
 
 is_reserved() {
   case "$1" in
-    refresh|run|hooks|append|amend|query|flip|drop|next)
+    refresh|run|hooks|compose|append|amend|query|flip|drop|next)
       return 0
       ;;
   esac
@@ -793,6 +794,7 @@ usage:
   ctx help [--all]                 this summary; --all also prints every module's help block
   ctx run <cmd> [args...]          run a command through stream compaction; the command's exit code is preserved
   cmd | ctx run                    pipe form: compact a stream
+  ctx compose [--check]            compose the generated law layer, or verify it current; --check writes nothing
   ctx <module> [args...]           dispatch to a module: arguments, streams, and exit code pass through
   ctx <module> help [<verb>]       the module's verb table; one verb's detail with <verb>
 EOF
@@ -1535,6 +1537,31 @@ hook_files() {
 }
 
 # ---------------------------------------------------------------------------
+# compose: the builtin over the core's private composer, answered before
+# discovery so no discovery warning reaches its stderr; argv, streams, and the
+# exit code pass through the exec, and only a sole --help or -h is its own
+
+compose_builtin() {
+  if [ $# -eq 1 ]; then
+    case "$1" in
+      --help|-h)
+        cat <<'EOF'
+usage: ctx compose [--check]
+composes the generated law layer from the core law source and the laws of the effective modules, or verifies it current; --check writes nothing and reads a stale layer as rc 1
+exit codes: 0 current or composed; 1 stale under --check, or a content refusal; 2 an I/O refusal or a missing composer
+EOF
+        exit 0
+        ;;
+    esac
+  fi
+  if [ ! -f "$dir/laws/compose" ]; then
+    ctx_err "compose: missing composer: .contexture/laws/compose"
+    exit 2
+  fi
+  exec sh "$dir/laws/compose" "$@"
+}
+
+# ---------------------------------------------------------------------------
 # top-level dispatch
 
 if [ $# -eq 0 ]; then
@@ -1570,6 +1597,10 @@ case "$1" in
   run)
     shift
     run_body "$@"
+    ;;
+  compose)
+    shift
+    compose_builtin "$@"
     ;;
   _hooks)
     shift

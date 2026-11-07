@@ -14,7 +14,7 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['tests/fixtures/worked-package/**', ['packages', 'sqlite-smoke']],
   ['base/AGENTS.md', ['laws']],
   ['base/.contexture/ONBOARDING.md', ['governance']],
-  ['base/.contexture/ctx', ['engine', 'filters', 'hooks', 'base', 'integration', 'governance']],
+  ['base/.contexture/ctx', ['engine', 'filters', 'hooks', 'laws', 'packages', 'base', 'integration', 'governance']],
   ['base/.contexture/laws/**', ['laws']],
   ['base/.contexture/laws/compose', ['governance']],
   ['base/.contexture/package-install', ['packages', 'laws', 'governance']],
