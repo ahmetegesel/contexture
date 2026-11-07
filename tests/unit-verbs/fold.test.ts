@@ -19,6 +19,8 @@ describe.concurrent('ctx unit fold: the surface, the handoff, and the input rule
     const help = (await unit(sb, 'fold', '--help')).stdout;
     for (const line of ['# Consolidation fold lane', 'one ordinary journal entry', 'ctx run .contexture/ctx unit record', 'thread=none', 'supersedes=', 'no digest', 'Every step through the runner']) expect(help).toContain(line);
     expect(help).not.toContain('CHAPTER FOLD: <Title>');
+    const table = (await unit(sb, 'help', 'fold')).stdout;
+    expect(table).toContain("prints the plan (the carried open threads included), the first lane's ctx lane create command and its manual, and the first act");
   });
 
   it('FC1: fold refuses a malformed or absent unit, a lane call with no active fold, a payload, a NUL payload, and an unknown option', async () => {

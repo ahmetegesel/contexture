@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: the consolidation fold: plan, fetch, check, finish, progress
 # usage: ctx unit fold <unit> [--lane=<lane> [--merge] | --check | --finish]
-# help: the plan (the first no-lane call) freezes the live scope, partitions it once in journal order into chunks, records the fold start (the plan JSON), and prints the plan (the carried open threads included), the first lane's manual, and the first act
+# help: the plan (the first no-lane call) freezes the live scope, partitions it once in journal order into chunks, records the fold start (the plan JSON), and prints the plan (the carried open threads included), the first lane's ctx lane create command and its manual, and the first act
 # help: a lane fetch (--lane, no payload) returns the lane's next unclosed chunk, its entries, the lane's remaining chunks (no other chunk's entries), and the next act; --merge adds the immediately following chunk's entries only, for a recorded same-topic merge; a fetch never advances and the lane writes the consolidated entry with the ordinary ctx unit record verb; a carried open thread is REF'd as context, never closed
 # help: --check reads the batches from the live post-plan entries' closers and refs, proves the closed receipts are the scope minus the carried open threads (whole consecutive chunks in one lane), no non-thread scoped entry remains live, and the audit is clean; it writes nothing
 # help: --finish re-runs the check and, when clean, writes the receipt FOLD FINISH v4 with the covered and carried counts and closes the fold start done; a live receipt refuses a second one
