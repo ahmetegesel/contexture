@@ -55,27 +55,48 @@ const table = (help: string, head: string): [string, string][] =>
       return [m?.[1] ?? '', m?.[2] ?? ''];
     });
 
-async function helpForms(sb: string): Promise<string[][]> {
-  const forms: string[][] = [['help', '--all']];
+function builtins(help: string): string[][] {
+  const forms: string[][] = [];
+  for (const l of ((help.split(/^usage:$/m)[1] ?? '').split(/\n\n/)[0] ?? '').split('\n')) {
+    const m = /^ {2}ctx ([a-z][a-z-]*)(?: ([a-z][a-z-]*))?(?: |$)/.exec(l);
+    if (!m?.[1] || m[1] === 'help') continue;
+    if (!forms.some((f) => f.length === 2 && f[0] === m[1])) forms.push([m[1], '--help']);
+    if (m[2]) forms.push([m[1], m[2], '--help']);
+  }
+  return forms;
+}
+
+async function helpForms(sb: string): Promise<{ checked: string[][]; own: string[][] }> {
+  const top = (await ctx(sb, 'help')).stdout;
+  const checked: string[][] = [['help', '--all']];
   const own: string[][] = [];
-  for (const [m] of table((await ctx(sb, 'help')).stdout, 'modules')) {
-    forms.push([m, 'help']);
+  for (const [m] of table(top, 'modules')) {
+    checked.push([m, 'help']);
     for (const [v, summary] of table((await ctx(sb, m, 'help')).stdout, 'verbs')) {
-      forms.push([m, 'help', v]);
+      checked.push([m, 'help', v]);
       own.push([m, v, '--help']);
       const subs = /\(([a-z, ]+)\)$/.exec(summary)?.[1]?.split(/, */) ?? [];
       if (subs.length && /<subcommand>/.test((await ctx(sb, m, 'help', v)).stdout)) for (const s of subs) own.push([m, v, s, '--help']);
     }
   }
-  forms.push(['run', '--help'], ['compose', '--help'], ['package', '--help'], ['package', 'install', '--help'], ['package', 'uninstall', '--help']);
-  return [...forms, ...own];
+  checked.push(...builtins(top));
+  return { checked, own };
 }
 
-async function scanHelp(sb: string): Promise<{ forms: string[][]; empty: string[]; hits: Hit[] }> {
-  const forms = await helpForms(sb);
+interface HelpScan {
+  forms: string[][];
+  empty: string[];
+  errors: string[];
+  hits: Hit[];
+}
+
+async function scanHelp(sb: string): Promise<HelpScan> {
+  const { checked, own } = await helpForms(sb);
+  const forms = [...checked, ...own];
   const runs = await Promise.all(forms.map((f) => ctx(sb, ...f)));
   const empty = forms.filter((_f, i) => (runs[i]!.stdout + runs[i]!.stderr).trim() === '').map((f) => f.join(' '));
-  return { forms, empty, hits: runs.flatMap((r, i) => scanText(`ctx ${forms[i]!.join(' ')}`, r.stdout + r.stderr)) };
+  const errors = checked.flatMap((f, i) => (runs[i]!.code !== 0 || runs[i]!.stderr !== '' ? [`ctx ${f.join(' ')}: rc ${runs[i]!.code}: ${runs[i]!.stderr.split('\n')[0]}`] : []));
+  return { forms, empty, errors, hits: runs.flatMap((r, i) => scanText(`ctx ${forms[i]!.join(' ')}`, r.stdout + r.stderr)) };
 }
 
 const same = (a: Hit, b: Hit): boolean => a.key === b.key && a.line === b.line;
@@ -93,7 +114,7 @@ function copyFiles(label: string): string {
 
 describe.concurrent('the agent surface census: no shipped law, rhythm, or help names the record storage or a module implementation path', () => {
   let files: { files: string[]; hits: Hit[] };
-  let help: { forms: string[][]; empty: string[]; hits: Hit[] };
+  let help: HelpScan;
   beforeAll(async () => {
     files = scanFiles(ROOT);
     help = await scanHelp(staged('surface-leaks'));
@@ -120,11 +141,12 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(surfaceFiles(copy).length).toBeLessThan(FILE_FLOOR);
   });
 
-  it('the help scan reads ctx help --all, every module table, every verb each table lists, each verb\'s own --help and each sub-verb\'s of a verb taking a <subcommand>, and the engine builtins, each printing, above its floor', () => {
+  it('the help scan reads ctx help --all, every module table, every verb each table lists, each verb\'s own --help and each sub-verb\'s of a verb taking a <subcommand>, and the engine builtins its usage block lists, each printing, above its floor', () => {
     expect(help.forms.length).toBeGreaterThanOrEqual(HELP_FLOOR);
     expect(help.empty).toEqual([]);
+    expect(help.errors).toEqual([]);
     const keys = help.forms.map((f) => f.join(' '));
-    for (const must of ['help --all', 'unit help list', 'unit help resolve', 'lane help create', 'rhythm help show', 'docs help nudge', 'docs help check', 'compose --help', 'package uninstall --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help']) expect(keys).toContain(must);
+    for (const must of ['help --all', 'unit help list', 'unit help resolve', 'lane help create', 'rhythm help show', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'package --help', 'package install --help', 'package uninstall --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help']) expect(keys).toContain(must);
     expect(keys).not.toContain('lane show recipe --help');
   });
 
@@ -133,6 +155,15 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(remainder(flagged)).toEqual([]);
     expect(flagged).toHaveLength(ALLOW.length);
     for (const a of ALLOW) expect(flagged.some((h) => same(a, h))).toBe(true);
+  });
+
+  it('a builtin renamed away from the dispatch while its usage line stays reads in the error list', async () => {
+    const sb = staged('surface-leaks-builtin');
+    const engine = join(sb, '.contexture/ctx');
+    const body = readFileSync(engine, 'utf8');
+    expect(body.split('\n').filter((l) => l === '  compose)')).toHaveLength(1);
+    writeFileSync(engine, body.replace(/^ {2}compose\)$/m, '  composed)'));
+    expect((await scanHelp(sb)).errors).toEqual(['ctx compose --help: rc 1: ctx: unknown command: compose']);
   });
 
   it('a planted laws line leaves exactly one remainder', () => {
