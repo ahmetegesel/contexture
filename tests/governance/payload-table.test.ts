@@ -16,6 +16,21 @@ function roots(decl: string): string[] {
 
 const under = (path: string, root: string) => path === root || path.startsWith(`${root}/`);
 
+const updatingStep = (n: number): string => {
+  const body = text(join(ROOT, 'docs/adoption.md'));
+  const updating = body.slice(body.indexOf('\n## Updating\n'));
+  return updating.match(new RegExp(`^${n}\\. .*$`, 'm'))?.[0] ?? '';
+};
+
+describe.concurrent('the Updating path', () => {
+  it('step 8 deletes the catalog paths the range removed, or refreshes the catalog whole, since catalog meta moves no version', () => {
+    const step = updatingStep(8);
+    expect(step).toMatch(/^8\. Update the installed packages: /);
+    expect(step).toContain('git diff --name-status --diff-filter=D <live-tag> <tag> -- plugins/');
+    expect(step).toContain('git archive <tag> plugins/ | tar -x -C <your-repo>');
+  });
+});
+
 describe('the payload path tables', () => {
   it('the declaration is one string in adoption.md and the-engine.md', () => {
     expect(declaration('docs/the-engine.md')).toBe(declaration('docs/adoption.md'));
