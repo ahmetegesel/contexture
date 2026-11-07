@@ -1,8 +1,8 @@
 #!/bin/sh
-# package-install: the package overlay installer (a private core script, never a
-# verb; the package's own install script execs it). Run it only on the human's
-# go at the act. Usage: package-install <package-root>; CTX_ROOT names the
-# workspace (default: the package root's ../..).
+# package-install: the package overlay installer, the private core script behind
+# ctx package install <package>, which execs it with CTX_ROOT set to its own
+# workspace. Run it only on the human's go at the act. Usage: package-install
+# <package-root>; CTX_ROOT names the workspace (default: the package root's ../..).
 #
 # The overlay scope: the package's .contexture/extensions tree, and nothing
 # else. A package path under .contexture outside extensions refuses as a core
@@ -121,7 +121,7 @@ if [ -n "${CTX_ROOT:-}" ]; then
   [ -d "$CTX_ROOT" ] || die 2 "CTX_ROOT names no directory: $CTX_ROOT"
   ws_root=$(CDPATH= cd -- "$CTX_ROOT" 2>/dev/null && pwd) || die 2 "cannot resolve CTX_ROOT"
 else
-  ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run plugins/<package>/install or set CTX_ROOT)"
+  ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run .contexture/ctx package install <package> or set CTX_ROOT)"
 fi
 ctx_bin=$ws_root/.contexture/ctx
 [ -x "$ctx_bin" ] || die 2 "no engine at $ctx_bin (adopt the base first)"

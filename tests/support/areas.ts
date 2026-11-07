@@ -26,8 +26,6 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['base/.contexture/storage/**', ['drivers', 'storage-fts5', 'unit-record', 'base', 'integration', 'sqlite-smoke', 'docs-discipline', 'governance']],
   ['plugins/*/manifest', ['packages', 'governance']],
   ['plugins/*/.contexture/**', ['governance']],
-  ['plugins/*/install', ['packages']],
-  ['plugins/*/uninstall', ['packages']],
   ['plugins/*/README.md', ['governance']],
   ['plugins/storage-fts5/**', ['storage-fts5', 'drivers', 'sqlite-smoke']],
   ['plugins/docs-discipline/**', ['docs-discipline', 'packages', 'governance']],

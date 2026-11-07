@@ -1,9 +1,9 @@
 #!/bin/sh
-# package-uninstall: the package overlay remover (a private core script, never a
-# verb; the package's own uninstall script execs it). Run it on the human's go
-# at the act. Usage: package-uninstall <package-root|package-name>; CTX_ROOT
-# names the workspace (default: the package root's ../.., or the current
-# directory for a bare package name).
+# package-uninstall: the package overlay remover, the private core script behind
+# ctx package uninstall <package>, which execs it with CTX_ROOT set to its own
+# workspace. Run it on the human's go at the act. Usage: package-uninstall
+# <package-root|package-name>; CTX_ROOT names the workspace (default: the
+# package root's ../.., or the current directory for a bare package name).
 #
 # The uninstall runs the installed module folders' uninstall part hooks in
 # module-name order, then removes the overlay files the package's record
@@ -43,7 +43,7 @@ if [ -n "${CTX_ROOT:-}" ]; then
   [ -d "$CTX_ROOT" ] || die 2 "CTX_ROOT names no directory: $CTX_ROOT"
   ws_root=$(CDPATH= cd -- "$CTX_ROOT" 2>/dev/null && pwd) || die 2 "cannot resolve CTX_ROOT"
 elif [ -n "$pkg_root" ]; then
-  ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run plugins/<package>/uninstall or set CTX_ROOT)"
+  ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run .contexture/ctx package uninstall <package> or set CTX_ROOT)"
 else
   ws_root=$(pwd) || die 2 "cannot resolve the workspace root"
 fi
