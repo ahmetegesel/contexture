@@ -1,8 +1,8 @@
 #!/bin/sh
-# summary: the units referencing a session (the cross-session look)
+# summary: the units referencing a unit (the cross-unit look)
 # usage: ctx unit refs-to <unit> [--json]
 # help: every unit whose ref_sessions name the unit (session.refs_to); none refuses rc 1
-# help: exit codes: 0 referrers listed; 1 no unit references the session, or a bad argument
+# help: exit codes: 0 referrers listed; 1 no unit references the unit, or a bad argument
 # help: example: ctx unit refs-to my-unit
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"

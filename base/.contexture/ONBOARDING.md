@@ -4,8 +4,8 @@
   instructions for an agent onboarding contexture into any repository (greenfield or existing).
 
 @phases
-  the adoption session bootstraps at phase 1 and every phase journals as it happens; the record carries the whole history: findings, proposals, verdicts, changes
-  1. ISOLATE: create a dedicated branch; never onboard on main; bootstrap the adoption session
+  the adoption unit bootstraps at phase 1 and every phase journals as it happens; the record carries the whole history: findings, proposals, verdicts, changes
+  1. ISOLATE: create a dedicated branch; never onboard on main; bootstrap the adoption unit
   2. ASSESS: inventory topology, instruction surfaces, and harnesses; derive the installation plan
   3. PROPOSE: present the derived plan; the human confirms, amends, or discusses; no workspace write before the verdict
   4. EXECUTE: configure, migrate, and symlink strictly per the confirmed plan, running the default rhythm; drift halts and re-confirms
@@ -15,7 +15,7 @@
   1. inspect git: `git status -s`; halt if uncommitted changes exist
   2. branch: `git checkout -b adopt-contexture` (or team branch convention)
   3. never execute onboarding directly on main/master/production branches
-  4. bootstrap the adoption session: `.contexture/ctx unit bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
+  4. bootstrap the adoption unit: `.contexture/ctx unit bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
   5. journal the phase (`.contexture/ctx unit record`): the branch and the starting git state
 
 @assess

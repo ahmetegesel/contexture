@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: the live board: unclosed journal entries with complete bodies, then the open tasks and the open threads
 # usage: ctx unit board <slug>
-# help: one form: the slug names the unit whose board the storage driver returns (session.board); each tail is silent when empty; missing journal is fatal rc=1 with zero stdout; missing backlog warns on stderr and prints no tail
+# help: one form: the slug names the unit whose board the unit module returns (session.board); each tail is silent when empty; missing journal is fatal rc=1 with zero stdout; missing backlog warns on stderr and prints no tail
 # help: exit codes: 0 live board printed; 1 missing journal or invalid unit slug
 # help: example: ctx unit board my-unit
 

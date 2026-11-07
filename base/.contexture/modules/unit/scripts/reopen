@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: mark a CLOSED unit ACTIVE again; the reverse of close
 # usage: ctx unit reopen <slug>
-# help: the storage driver reopens the unit (session.reopen); the unit lifecycle resumes; use when closed work needs another pass (a fix to verify, a finding to test)
+# help: the unit module reopens the unit (session.reopen); the unit lifecycle resumes; use when closed work needs another pass (a fix to verify, a finding to test)
 # help: exit codes: 0 unit marked ACTIVE; 1 unit not found, not CLOSED, or bad slug
 # help: example: ctx unit reopen my-unit
 

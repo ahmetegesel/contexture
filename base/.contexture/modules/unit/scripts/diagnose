@@ -1,7 +1,7 @@
 #!/bin/sh
-# summary: session diagnostics: configuration, storage driver, and storage health
+# summary: storage diagnostics: configuration, storage driver, and storage health
 # usage: ctx unit diagnose [--json]
-# help: inspect workspace session configuration, the resolved storage driver and its
+# help: inspect the workspace configuration, the resolved storage driver and its
 # help: capability descriptor (the contract, the functions, the search modes, the
 # help: optional capabilities), and the storage backend health (storage.health).
 
@@ -15,7 +15,7 @@ for arg in "$@"; do
       ;;
     --help|-h)
       printf 'usage: ctx unit diagnose [--json]\n'
-      printf 'inspect session configuration, resolved storage driver, capabilities, and health\n'
+      printf 'inspect the workspace configuration, resolved storage driver, capabilities, and health\n'
       exit 0
       ;;
     *)

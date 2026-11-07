@@ -3,7 +3,7 @@
 # usage: ctx unit bootstrap <slug> "<objective>" [<repos>]
 # help: validates every argument before any write; refusals rc=1 with zero partial writes (existing slug, malformed slug, empty objective, embedded newline or carriage return, extra arguments)
 # help: the objective is one line (an embedded double or single quote is text); optional repos is a comma-separated list of repository names
-# help: the storage driver creates the unit whole (session.create) with the A1 attention base composes (fresh unit; objective: <objective>; git: <the branch line of git status>)
+# help: the unit module creates the unit whole (session.create) with the A1 attention base composes (fresh unit; objective: <objective>; git: <the branch line of git status>)
 # help: exit codes: 0 unit created at A1; 1 unit exists, missing arguments, or malformed input
 # help: example: ctx unit bootstrap my-feature "Implement feature X"
 

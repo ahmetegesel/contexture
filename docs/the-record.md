@@ -4,7 +4,7 @@ The conversation is a scratchpad; the record is the memory. When a context windo
 
 ## Storage abstraction and entity domains
 
-Under @laws#source-of-truth the record is the only source of truth, and the configured storage backend holds it: one authoritative store. The engine completely decouples session machinery from physical disk layouts and file formats. Every verb reaches the record through the configured driver and nothing else, so the record is one store whichever driver holds it. Base maps every command to one storage function and renders the typed data it returns, and each backend stores the record its own way and enforces the record rules itself. The data model is one for every backend: every item answers typed fields and reads in one canonical layout (field order, spacing, and quoting are layout, never data), and an item stored in an older shape keeps every value in named fields (a legacy status, extra fields, head text, extra lines), so every backend returns the same data and prints the same text for the same record, and an older record reads back with nothing lost. In the default POSIX driver each artifact is a markdown file in its unit folder, written in the record grammar below; a store backend such as the storage-fts5 plugin keeps the record in its store, described in its module README. No command moves a record between backends: a record reaches another backend through the agent re-entering it with the ordinary verbs, so a store other than posix holds only what the verbs write and older record shapes live in posix files alone.
+Under @laws#source-of-truth the record is the only source of truth, and the configured storage backend holds it: one authoritative store. The engine completely decouples the record machinery from physical disk layouts and file formats. Every verb reaches the record through the configured driver and nothing else, so the record is one store whichever driver holds it. Base maps every command to one storage function and renders the typed data it returns, and each backend stores the record its own way and enforces the record rules itself. The data model is one for every backend: every item answers typed fields and reads in one canonical layout (field order, spacing, and quoting are layout, never data), and an item stored in an older shape keeps every value in named fields (a legacy status, extra fields, head text, extra lines), so every backend returns the same data and prints the same text for the same record, and an older record reads back with nothing lost. In the default POSIX driver each artifact is a markdown file in its unit folder, written in the record grammar below; a store backend such as the storage-fts5 plugin keeps the record in its store, described in its module README. No command moves a record between backends: a record reaches another backend through the agent re-entering it with the ordinary verbs, so a store other than posix holds only what the verbs write and older record shapes live in posix files alone.
 
 For agents, under @laws#cli-doorway, the record is an abstract structured domain surface, never raw files on disk: agents reach it strictly through the `ctx unit` and `ctx lane` verbs, never reading, editing, or grepping storage files or database tables directly.
 
@@ -28,9 +28,9 @@ In the POSIX baseline driver, these domains map to four files and the lanes fold
 | `knowledge.md` | findings store: settled findings with references and summaries |
 | `lanes/<lane>/` | subagent directories holding recipe.md, journal.md, and report.md |
 
-## Session state
+## Unit state
 
-The session state is the map, not the content: detail lives behind references, never inside the state itself.
+The unit state is the map, not the content: detail lives behind references, never inside the state itself.
 
 ```text
 status: ACTIVE
@@ -45,7 +45,7 @@ ref_sessions: [design-notes]
 - `objective:` is what the unit is for: one quoted line, an embedded double or single quote is text, an embedded newline refuses.
 - the next move is not a state field: it is derived at presentation from the backlog, the first `IN_PROGRESS` task, else the first open task, open being the board's rule of every status but `DONE` (`ctx unit active` prints it); a unit with no open task has none.
 - `repos:` lists affected repositories.
-- `ref_sessions:` lists optional read-only reference sessions mounted at boot; boot loads their knowledge and active journal.
+- `ref_sessions:` lists optional read-only reference units mounted at boot; boot loads their knowledge and active journal.
 
 The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `active`, `units`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the store's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
 
@@ -53,7 +53,7 @@ The state carries no date. Recency is journal-derived: a unit's `last_event` is 
 
 ## Backlog tasks, the declaration
 
-The backlog holds actionable tasks as a living queue: the current declaration of work, written to be executed from no matter when the agent looks. Tasks advance, update, and drop as the work teaches; the journal holds the history; the unit objective lives in the session state.
+The backlog holds actionable tasks as a living queue: the current declaration of work, written to be executed from no matter when the agent looks. Tasks advance, update, and drop as the work teaches; the journal holds the history; the unit objective lives in the unit state.
 
 ```text
 @task auth-cookie-sessions
@@ -131,7 +131,7 @@ Agents record events via `ctx unit record`:
 .contexture/ctx unit record <unit> --what="..." [--group=...] [--thread=...] [--rhythm="<name> <N> <GATE>"] [--ref=...]... [--closes=...]... [--supersedes=...]... [--knowledge] [--slug=...]
 ```
 
-The command sends the current local date and time, the storage driver takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` and `--supersedes` take only the explicit form `<slug> (<verdict>: <reason>)` (one or more target slugs before the parenthesis, each naming an entry the journal already holds, as in `--closes="<slug> <slug> (dropped: reason)"`), the verdict one of `done`, `superseded`, `dropped`, `folded` and the reason non-empty; a bare target list refuses rc 1 naming the form, since the closer carries the resolution itself, and a reason holding a parenthesis refuses naming the rule. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal reads in the canonical layout, every value kept, and its file bytes stay as they are. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the state `objective`) on every write path: an embedded double quote is text (the typed verbs and `bootstrap` store it), and every reader returns it verbatim.
+The command sends the current local date and time, the unit module takes the active anchor from the state and composes the slug (`<date>-event-<epoch>`, a held slug taking `-1`), and `THREAD` defaults to `none` if omitted. `--ref`, `--closes`, and `--supersedes` repeat, one line each. `--closes` and `--supersedes` take only the explicit form `<slug> (<verdict>: <reason>)` (one or more target slugs before the parenthesis, each naming an entry the journal already holds, as in `--closes="<slug> <slug> (dropped: reason)"`), the verdict one of `done`, `superseded`, `dropped`, `folded` and the reason non-empty; a bare target list refuses rc 1 naming the form, since the closer carries the resolution itself, and a reason holding a parenthesis refuses naming the rule. Every flag value lands as one line of the entry block, so a value carrying a newline (or a carriage return) is refused rc 1 before any write; the same holds for every one-line field of the typed verbs (`task` objective, refs, evidence, reason; `finding` ref and supersedes; `lane record` what, thread, slug), while the block scalars (`--desc`, `--criteria`, `--details`, `--summary`) keep their newlines as body lines. An entry already in the journal reads in the canonical layout, every value kept, and its file bytes stay as they are. One quote rule holds for every one-line quoted field (`WHAT`, a task `OBJECTIVE`, the state `objective`) on every write path: an embedded double quote is text (the typed verbs and `bootstrap` store it), and every reader returns it verbatim.
 
 To inspect entries:
 - `ctx unit entry show <unit> <slug> [--json]`: prints the entry's canonical block (every field it carries); `--json` prints the typed entry: its fields, `refs` as a list, its closers, and the closure derived by position (`closed`, `closed_by`, `close_reason`).

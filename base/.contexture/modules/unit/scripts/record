@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: record an append-only journal event with auto-injected date and anchor
 # usage: ctx unit record <unit> --what="..." [--group=...] [--thread=...] [--rhythm="<name> <N> <GATE>"] [--ref=...]... [--closes=...]... [--supersedes=...]... [--knowledge] [--slug=...]
-# help: records an append-only journal event; the storage driver injects the active anchor and composes the slug from the local date and time (entry.record)
+# help: records an append-only journal event; the unit module takes the active anchor from the state and composes the slug from the local date and time the verb sends (entry.record)
 # help: options:
 # help:   --what="..."         event description (required)
 # help:   --group=...          topic group token

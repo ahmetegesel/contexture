@@ -1,9 +1,9 @@
 #!/bin/sh
 # summary: display subagent lane artifacts (recipe, journal, report)
 # usage: ctx lane show <unit> <lane-slug> [recipe|journal|report] [--json]
-# help: displays specified artifact from subagent lane container (defaults to report); the storage driver answers the document or the journal (lane.get) and the text view prints it as stored, its trailing newlines collapsed to one
+# help: displays specified artifact from subagent lane container (defaults to report); the unit module answers the document or the journal (lane.get) and the text view prints it as stored, its trailing newlines collapsed to one
 # help: arguments:
-# help:   <unit>        session unit slug
+# help:   <unit>        unit slug
 # help:   <lane-slug>   subagent lane slug
 # help:   [artifact]    artifact name: report (default), recipe, or journal
 # help:   --json        output JSON format

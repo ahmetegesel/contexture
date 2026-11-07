@@ -1,7 +1,7 @@
 #!/bin/sh
-# summary: universal search across session records and artifacts
+# summary: universal search across unit records and artifacts
 # usage: ctx unit search <unit> "<query>" --mode=MODE [options]
-# help: searches session records (tasks, entries, findings, lanes) for query terms
+# help: searches unit records (tasks, entries, findings, lanes) for query terms
 # help: options:
 # help:   --json              output JSON format
 # help:   --limit=N           maximum number of results returned (default 20)
@@ -20,7 +20,7 @@ fi
 case "$1" in
   --help|-h|help)
     printf 'usage: ctx unit search <unit> "<query>" --mode=MODE [options]\n'
-    printf 'searches session records (tasks, entries, findings, lanes) for query terms\n'
+    printf 'searches unit records (tasks, entries, findings, lanes) for query terms\n'
     printf 'options:\n'
     printf '  --json              output JSON format\n'
     printf '  --limit=N           maximum number of results returned (default 20)\n'

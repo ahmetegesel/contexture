@@ -2,7 +2,7 @@
 
 @laws
   source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
-  load-only-needed: load only what you need: the active session's live surfaces; closed sessions untouched unless the task needs them.
+  load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
   compact-streams: all shell commands execute through the ctx runner (runner mode prefix: .contexture/ctx run <cmd>); never run raw commands without compaction when the runner is present; preserve context window capacity unconditionally.
   writer-holds-volume: the schema holds the shape, the writer holds the volume: guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance.
   process-free: process is free: rhythms human-chosen, never imposed; govern OUTPUT, not process.
@@ -36,7 +36,7 @@
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
   3. get the field: .contexture/ctx unit active; read the message against the candidates: a close match proposes continuing that unit, no match proposes bootstrapping a new one
   4. propose the move and wait for the answer before anything works: the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit: an active unit continues at 5, a new unit bootstraps at 10
-  5. run .contexture/ctx unit load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, ref sessions read-only)
+  5. run .contexture/ctx unit load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, the reference units (ref_sessions) read-only)
   6. read the rhythm index: .contexture/ctx unit index
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp the new period: .contexture/ctx unit stamp <unit> (the anchor carries the period's number and date, no receipt text; a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
@@ -70,7 +70,7 @@
   dispatch: a step that names a subagent runs as a dispatched subagent: its own context, its own lane, its own report
   every dispatch:
   - brief = the lane recipe; slices parent context (exact refs: journal#entry, knowledge#finding, file#symbol/lines; FACTS one per line); broad dumps forbidden; names the active branch/worktree
-  - subagent boot, read-only, before any work: the overlays, the state, the backlog, knowledge, the lane recipe, and every REF it names; session surfaces are never subagent-written
+  - subagent boot, read-only, before any work: the overlays, the state, the backlog, knowledge, the lane recipe, and every REF it names; the unit's record surfaces are never subagent-written
   - the subagent's first journal entry is the load receipt: refs loaded, one per line; an unresolved REF is a brief defect: pause-ask for steering where the harness supports it, else stop and report it, never work around the gap
   - subagent journals at action granularity via ctx lane record as things happen, never batched to the end: every state-changing action (a file written, a command run with a non-obvious result), claim formed, decision point taken, and drift notice lands as a WHAT carrying action + result + why-next; only task receipts batch, at task completion; an entry awaiting an act outside the subagent (the dispatcher's read, the human, another subagent) carries THREAD: <what it awaits>; the lane journal is the audit trail and the resumption surface
   - report via ctx lane report; return = summary ONLY

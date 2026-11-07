@@ -1,7 +1,7 @@
 #!/bin/sh
-# summary: record subagent lane journal events isolated from main session journal
+# summary: record subagent lane journal events isolated from the unit's main journal
 # usage: ctx lane record <unit> <lane-slug> --what="..." [--slug=...] [--thread=...] [--ref=...]...
-# help: appends an append-only event to the subagent lane journal (lane.record); the storage driver composes the slug from the local date and time, a second event in the same second taking a suffix
+# help: appends an append-only event to the subagent lane journal (lane.record); the unit module composes the slug from the local date and time the verb sends, a second event in the same second taking a suffix
 # help: options:
 # help:   --what="..."         event description (required)
 # help:   --slug=...           override entry slug (default auto-generated with date)

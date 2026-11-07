@@ -42,7 +42,7 @@ describe.concurrent('the base-only composition (unit plus lane, no docs)', () =>
 
   it('[modules-r12, modules-r19] composes the unit record clause and the lane subagent, boundary-warning, and git clauses', () => {
     const g = layer(base);
-    expect(count(g, /^ {2}unit of work = session unit/)).toBe(1);
+    expect(count(g, /^ {2}unit of work = the unit/)).toBe(1);
     expect(count(g, /^ {2}branch\/worktree: the recipe names/)).toBe(1);
     expect(count(g, /^ {2}boundary-warning: every lane recipe/)).toBe(1);
     expect(count(g, /^ {2}branch\/worktree on demand/)).toBe(1);

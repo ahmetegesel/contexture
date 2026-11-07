@@ -14,7 +14,7 @@ Either path ends the same way: name your first unit of work and the record start
 
 Point an agent at `.contexture/ONBOARDING.md`. It adopts the base alone, and the proposal phase gates twice: the agent stops and waits for you there. The plugin catalog is optional; the manual path below lands its reference copy, and each plugin's README carries its adoption through the package installer.
 
-1. ISOLATE: it creates a dedicated branch, never working on main, halts if the tree carries uncommitted changes, and bootstraps the adoption session. The record starts before the first edit, so the whole adoption history lands as it happens.
+1. ISOLATE: it creates a dedicated branch, never working on main, halts if the tree carries uncommitted changes, and bootstraps the adoption unit. The record starts before the first edit, so the whole adoption history lands as it happens.
 2. ASSESS: it reads your instruction stack first and whole (the existing `AGENTS.md` and its derivations), then reads the generated law layer and this project's README completely. It maps the convention's sections against your workspace one by one: what feeds each capability, what conflicts with it, what belongs there. Structure comes from listings; application code is out of scope; and it asks you what evidence cannot answer: resolutions, history, intent.
 3. PROPOSE: it presents the installation plan in two gated segments (next section). Nothing is written before your verdict.
 4. EXECUTE: it lands the confirmed plan, running the default loop. Drift halts execution and re-confirms.
@@ -123,7 +123,7 @@ git status
 git diff
 ```
 
-The first loads the adoption session: the map plus every page; the second must exit 0; the last two are the review surface you read alongside the adoption record.
+The first loads the adoption unit: the map plus every page; the second must exit 0; the last two are the review surface you read alongside the adoption record.
 
 Then the adoption procedure goes away. Delete `.contexture/ONBOARDING.md`: it is the procedure, used once, not the convention; remove any gitignore whitelist line naming it. The `plugins/` folder stays: it is the tracked catalog, installable into an existing setup whenever the workspace wants one of its overlays.
 

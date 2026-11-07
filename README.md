@@ -138,8 +138,8 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
 | ctx unit active | The field: each ACTIVE unit bytewise by name, with its slug, anchor, the derived next line (the first IN_PROGRESS task, else the first open task, every status but DONE; `next: <slug> (<status>)`, or an explicit none form), and objective, then the closed count; the view reads no journal |
 | ctx unit bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the first-task reminder |
-| ctx unit load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, ref sessions read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
-| ctx unit load refs <ref_1> ... <ref_N> [<page>] | The refs load: those sessions alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
+| ctx unit load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, reference units read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
+| ctx unit load refs <ref_1> ... <ref_N> [<page>] | The refs load: those units alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
 | ctx unit stamp <unit> | Stamps the new period: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with its number and date (@anchor A<N> <date>), no receipt text; a text argument refuses rc 1 |
 | ctx unit board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge |
 | ctx unit audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event) and the open-thread tail; exits nonzero on any defect |
@@ -154,9 +154,9 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json] | Universal search across all entity domains in one result shape for every driver (entity_type, entity_id, section, snippet, score); --mode is required, no default: exact on every driver or a mode the configured driver declares (ctx unit diagnose lists them); a search without it refuses rc 1 naming the declared modes |
 | ctx unit resolve <unit> <ref> | Resolve abstract entity references (task#slug, finding#NAME, entry#slug, lane#slug/report#claim), the canonical unit refs (unit#<unit>/task/<slug>, entry, finding, and lane artifact forms; a canonical ref carries its own unit), and the legacy file forms to the entity block |
 | ctx unit units <repo> | Each unit touching the repo: slug, status, anchor |
-| ctx unit refs-to <session> | Each unit referencing the session |
+| ctx unit refs-to <unit> | Each unit referencing the unit |
 | ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from the unit's main journal: create (the dispatcher's act, the recipe on stdin), record, report, show |
-| ctx unit refs <unit> [<session> ...] | Set the read-only reference sessions; zero sessions clears them |
+| ctx unit refs <unit> [<unit> ...] | Set the read-only reference units; zero units clears them |
 | ctx unit close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
 | ctx unit reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
 | ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw; capture files are unlinked before the command runs |

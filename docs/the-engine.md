@@ -38,8 +38,8 @@ The core law source fixes the block order; the installed modules' law fragments 
 
 The laws are the spine of the whole system, loaded whole at boot in the generated layer. Each law reads `slug: statement`, and a reference addresses the slug, as in `@laws#verify-before-close`. Core laws include:
 
-- `source-of-truth`: session records are the only source of truth, never the conversation.
-- `load-only-needed`: load only what the work needs; closed sessions stay untouched unless the task calls for them.
+- `source-of-truth`: the record is the only source of truth, never the conversation.
+- `load-only-needed`: load only what the work needs; closed units stay untouched unless the task calls for them.
 - `compact-streams`: all shell commands execute through the ctx runner to preserve context window capacity.
 - `writer-holds-volume`: the schema holds the shape, the writer holds the volume.
 - `process-free`: process is free and human-chosen; govern the output, not the process.
@@ -448,7 +448,7 @@ Read every page the map reports. A missing state is fatal (`ERROR: missing state
 
 The cut is budgeted twice, about 500 lines or about 40KB, whichever binds first, so a page stays under the harness's output cap in practice; the one residual is a single block that exceeds the budget alone, and it renders whole on its own page. If a harness still truncates such a page, it prints a notice naming its saved copy of the command's output: that copy is the command's own output, and reading it is sanctioned by `@laws#workspace-confinement`, read-only, that named file alone. Routing the same content through temp files stays unsanctioned. The in-workspace fallbacks need nothing outside: `ctx unit board`, `ctx unit task show`, and `ctx unit resolve` recover the same content through the verbs.
 
-The refs form is the on-demand consult: it streams the named sessions alone, each composed exactly as the unit load composes a reference, and pages them locally with its own map, banner, and tail, so a large reference never truncates. A missing ref is fatal; zero refs, or a numeric token in a ref position, prints the usage at rc 1; a session named `refs` stays reachable through the escape hatch `ctx unit load refs refs`.
+The refs form is the on-demand consult: it streams the named units alone, each composed exactly as the unit load composes a reference, and pages them locally with its own map, banner, and tail, so a large reference never truncates. A missing ref is fatal; zero refs, or a numeric token in a ref position, prints the usage at rc 1; a unit named `refs` stays reachable through the escape hatch `ctx unit load refs refs`.
 
 ### ctx unit stamp: the new period
 
@@ -462,7 +462,7 @@ The unit module moves `current_anchor` from `A<N>` to `A<N+1>` and appends the a
 
 ### ctx unit board: the board
 
-Returns the live board: every unclosed entry with its body whole, then the open task slugs and the open threads with their targets, each list under its nudge line; an empty list prints nothing. Live means unclosed: the set is the journal entries that no later closure names. Takes one form, a session slug:
+Returns the live board: every unclosed entry with its body whole, then the open task slugs and the open threads with their targets, each list under its nudge line; an empty list prints nothing. Live means unclosed: the set is the journal entries that no later closure names. Takes one form, a unit slug:
 
 ```bash
 .contexture/ctx unit board <unit>
@@ -470,17 +470,17 @@ Returns the live board: every unclosed entry with its body whole, then the open 
 
 The unit module answers the board (`session.board`): the live entry occurrences in journal order with their spans, the backlog slugs whose status is not DONE, and the live threaded entries; base renders them under the opener that names the counts, and a missing backlog is loud on stderr with no tail. Liveness is positional: a closer closes the occurrences of each target slug that stand before it, and the closure parse reads the target field only, so a slug mentioned in a closure's reason prose can never close anything. The output is the set, whole, with no hand-picking and no per-entry reads. Any other invocation of `ctx unit board` fails loudly: a path, an extra argument, or a flag.
 
-`ctx unit load` renders this board for the load's journal section; run directly, `ctx unit board` is the updated board: the open entries, the open threads, and the open tasks in one stream. The refs form renders the board per reference session, so a consulted session streams its live entries too.
+`ctx unit load` renders this board for the load's journal section; run directly, `ctx unit board` is the updated board: the open entries, the open threads, and the open tasks in one stream. The refs form renders the board per reference unit, so a consulted unit streams its live entries too.
 
 ### The state acts: refs, close, reopen
 
 ```bash
-.contexture/ctx unit refs <unit> [<session> ...]
+.contexture/ctx unit refs <unit> [<unit> ...]
 .contexture/ctx unit close <unit>
 .contexture/ctx unit reopen <unit>
 ```
 
-The next move is not a state act: `ctx unit active` derives it from the backlog (the first `IN_PROGRESS` task, else the first open task, the board's rule of every status but `DONE`; a legacy or unknown status reads as stored), and the load's backlog page carries it, so no verb stores a pointer and `ctx unit next` retired (below). `refs` sets the read-only mounts; every named session must exist and differ from the unit, no name twice; zero sessions clears them. `close` marks the unit `CLOSED`: the unit module answers the unit's audit and its open tasks with the move, base prints them as warnings on stderr (it never refuses for them), then the close hooks fire. `reopen` marks a `CLOSED` unit `ACTIVE` again so its work can resume; each refuses a unit already in the target status (`ERR_INVALID_TRANSITION`). Every form validates its inputs before any write: a refusal is loud, rc 1 with zero partial writes, and a landing prints what it wrote.
+The next move is not a state act: `ctx unit active` derives it from the backlog (the first `IN_PROGRESS` task, else the first open task, the board's rule of every status but `DONE`; a legacy or unknown status reads as stored), and the load's backlog page carries it, so no verb stores a pointer and `ctx unit next` retired (below). `refs` sets the read-only mounts; every named unit must exist and differ from the unit, no name twice; zero units clears them. `close` marks the unit `CLOSED`: the unit module answers the unit's audit and its open tasks with the move, base prints them as warnings on stderr (it never refuses for them), then the close hooks fire. `reopen` marks a `CLOSED` unit `ACTIVE` again so its work can resume; each refuses a unit already in the target status (`ERR_INVALID_TRANSITION`). Every form validates its inputs before any write: a refusal is loud, rc 1 with zero partial writes, and a landing prints what it wrote.
 
 ### Retired verbs
 
@@ -507,7 +507,7 @@ No command moves a record between storage backends, since a move can need judgme
 
 ### ctx unit audit: the repair instrument
 
-Returns the record's defects, each flagged with a line or a slug, and exits nonzero when any fires. Takes one form, a session slug:
+Returns the record's defects, each flagged with a line or a slug, and exits nonzero when any fires. Takes one form, a unit slug:
 
 ```bash
 .contexture/ctx unit audit <unit>
@@ -559,7 +559,7 @@ The first no-lane call computes the live scope of the unit (every live entry at 
 
 ### One audit per grammar
 
-The runtime and the built-in modules are payload instruments, shipped with the convention and identical everywhere. A session can also carry an audit of its own for a grammar the payload does not know yet; the session's bank audit is the precedent. It stays session-local until its grammar proves generic, then it can promote to the payload as a sibling. The separation is deliberate: no experimental checks inside a shipped script, and each audit derives its siblings rather than being handed their paths. Refresh and handoff run every audit in play, and the receipt carries the results.
+The runtime and the built-in modules are payload instruments, shipped with the convention and identical everywhere. A unit can also carry an audit of its own for a grammar the payload does not know yet; the unit's bank audit is the precedent. It stays unit-local until its grammar proves generic, then it can promote to the payload as a sibling. The separation is deliberate: no experimental checks inside a shipped script, and each audit derives its siblings rather than being handed their paths. Refresh and handoff run every audit in play, and the receipt carries the results.
 
 ## The completeness loop
 

@@ -25,7 +25,7 @@ The unit is also the memory boundary. A returning session loads that one unit, n
   lanes/         dispatched work, one folder per subagent
 ```
 
-`state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the objective, the repos it touches, and optional reference sessions (`ref_sessions`). Nothing else; detail lives behind references. The next move is not stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first open task, every status but DONE). The state is not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
+`state.md` is the only file edited freely. It says where the unit stands: its status (ACTIVE or CLOSED), its current anchor, the objective, the repos it touches, and optional reference units (`ref_sessions`). Nothing else; detail lives behind references. The next move is not stored: it is derived from the backlog at presentation (the first IN_PROGRESS task, else the first open task, every status but DONE). The state is not a log: it gets overwritten, never appended to, so it can never become history in disguise. An agent's attention is finite, so every working period starts by reading exactly this one small file, whole.
 
 `backlog.md` is the work declared ahead: a living queue of tasks, each with a status, an objective, references, and containers for its substantive detail. It evolves as the work teaches: a mid-stride pivot, a bug fix, or a new task inserts or appends without rewriting what stands; a task that turned out wrong or unneeded is dropped. A task completes with its evidence (`ctx unit task complete`), and the completion receipt lands in the journal in the same write.
 
@@ -62,9 +62,9 @@ The first thing the agent does in a fresh context, mechanically:
    .contexture/ctx unit load refs <ref_1> ... <ref_N> [<page>]
    ```
 
-   The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The backlog section renders its DONE task blocks compactly (the task line, status, objective, description); open and statusless blocks render whole, and the file itself is never edited. The load is one subtraction: live means not closed; anchors order periods, never liveness. Knowledge loads fully; it is small, and every line is a settled decision. Reference sessions are consulted on demand with `load refs <ref_1> ... <ref_N>`: they stream read-only under their own banner, map, and tail, apart from the unit load.
+   The map names each section and its pages: state, backlog, knowledge, the live journal, and any declared `ref_sessions` under read-only banners. The backlog section renders its DONE task blocks compactly (the task line, status, objective, description); open and statusless blocks render whole, and the file itself is never edited. The load is one subtraction: live means not closed; anchors order periods, never liveness. Knowledge loads fully; it is small, and every line is a settled decision. Reference units are consulted on demand with `load refs <ref_1> ... <ref_N>`: they stream read-only under their own banner, map, and tail, apart from the unit load.
 6. Run the rhythm index: one line per rhythm, its trigger, and its activation policy.
-7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the session files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
+7. Ground check with `git status -sb`. The working tree and the upstream delta are machine-derived facts; the unit files are claims. In a mismatch, the tree wins, and the reconciliation journals as work, never as a note.
 8. Stamp the new period: the stamp moves `current_anchor` to the next anchor and appends the anchor line with the period's number and today's date (`@anchor A<N> <date>`), no receipt text: the anchor orders periods, and the git state and anything else worth keeping land as journal entries. A boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor. `.contexture/ctx unit entry list <unit> --anchor=A<N>` lists the entries written in one period:
 
    ```bash
@@ -109,7 +109,7 @@ Delegation is first-class; an orchestrating agent is the clearest example, not a
 
 The memory is in the record, so nothing depends on the subagent surviving. If a subagent stalls or dies, its lane still holds the brief, the trace, and the report so far; a re-dispatch resumes from the lane, continuing from the last uncompleted task, never rebuilding from scratch. A crash costs the dispatch, not the work.
 
-One writer per surface: the unit's main journal records the dispatch (the subagent's lane slug), and the subagent records the execution. The subagent never writes session surfaces; the dispatcher never mines the subagent journal for what the report should carry.
+One writer per surface: the unit's main journal records the dispatch (the subagent's lane slug), and the subagent records the execution. The subagent never writes the unit's record surfaces; the dispatcher never mines the subagent journal for what the report should carry.
 
 The lane does the containment work. It is a derived structure: write isolation, auditability, and crash resumption fall out of the lane itself, and the standard journal grammar applies inside. Nothing extra needs remembering, and `AGENTS.md` stays lean.
 
@@ -159,7 +159,7 @@ MISSION
 GROUND_AND_REFS
   SOURCE_OF_TRUTH: <file#symbol-or-lines>
   BRANCH: <the active branch the subagent works on>  # required
-  [UNIT: <unit-slug>]               # session unit name for ctx lane commands
+  [UNIT: <unit-slug>]               # unit name for ctx lane commands
   [LANE: <lane-slug>]               # subagent lane name for ctx lane commands
   REFS: [<file#symbol>, <journal#entry>, <knowledge#finding>]
   [FACTS ::

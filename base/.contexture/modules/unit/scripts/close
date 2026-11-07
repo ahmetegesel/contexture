@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: mark the unit CLOSED; warns on open tasks and audit findings, never refuses for them
 # usage: ctx unit close <slug>
-# help: the storage driver closes the unit and answers its audit and open tasks (session.close); base prints their warnings on stderr, then the close hooks fire; the unit lifecycle ends; closure and supersession by reference only
+# help: the unit module closes the unit and answers its audit and open tasks (session.close); base prints their warnings on stderr, then the close hooks fire; the unit lifecycle ends; closure and supersession by reference only
 # help: exit codes: 0 unit marked CLOSED; 1 unit not found, already CLOSED, or bad slug
 # help: example: ctx unit close my-unit
 

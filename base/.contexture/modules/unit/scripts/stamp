@@ -1,7 +1,7 @@
 #!/bin/sh
-# summary: stamp the new period: bump the session anchor and append its anchor line
+# summary: stamp the new period: bump the unit's anchor and append its anchor line
 # usage: ctx unit stamp <slug>
-# help: the storage driver moves current_anchor from A<N> to A<N+1> and appends the anchor line with its number and today's date, @anchor A<N+1> <date>, in one atomic write (session.stamp); prints the transition; the anchor carries no receipt text: a text argument refuses rc=1 (ERR_INVALID_ARGUMENT) naming the form ctx unit stamp <unit>
+# help: the unit module moves current_anchor from A<N> to A<N+1> and appends the anchor line with its number and today's date, @anchor A<N+1> <date>, in one atomic write (session.stamp); prints the transition; the anchor carries no receipt text: a text argument refuses rc=1 (ERR_INVALID_ARGUMENT) naming the form ctx unit stamp <unit>
 # help: exit codes: 0 anchor bumped and transition printed; 1 a text argument, a missing or CLOSED unit; 2 a malformed stored anchor
 # help: example: ctx unit stamp my-unit
 

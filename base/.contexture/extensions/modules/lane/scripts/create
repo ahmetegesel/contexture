@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: create a subagent lane with its recipe
 # usage: ctx lane create <unit> <lane-slug>  (stdin: the recipe)
-# help: the dispatcher's act: the storage driver creates the lane with the recipe stored byte for byte (normalized to end with one newline) and an empty lane journal (lane.create); the recipe is required on stdin
+# help: the dispatcher's act: the unit module creates the lane with the recipe stored byte for byte (normalized to end with one newline) and an empty lane journal (lane.create); the recipe is required on stdin
 # help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1; a recipe holding a NUL byte or bytes that are not valid UTF-8 refuses rc 1 (ERR_INVALID_ARGUMENT) before any write
 # help: example: ctx lane create my-unit my-lane < recipe.md
 
