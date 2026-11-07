@@ -1,8 +1,8 @@
 import { existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { exec } from '../support/exec';
 import { compose, count, layer, layerBytes, layerPath } from '../support/laws';
+import { install, uninstall } from '../support/packages';
 import { sandbox } from '../support/sandbox';
 import { stage } from '../support/stage';
 import { firstByteDifference, put } from '../support/tree';
@@ -16,8 +16,6 @@ function lawPackage(): string {
   return pkg;
 }
 
-const install = (sb: string, pkg: string) => exec('sh', ['.contexture/package-install', pkg], { cwd: sb, env: { CTX_ROOT: sb } });
-const uninstall = (sb: string, name: string) => exec('sh', ['.contexture/package-uninstall', name], { cwd: sb, env: { CTX_ROOT: sb } });
 
 describe.concurrent('the installer recompose', () => {
   it('[modules-r19] recomposes the layer when a law-bearing package installs, and restores it byte for byte when it uninstalls', async () => {

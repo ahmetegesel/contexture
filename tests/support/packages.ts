@@ -59,7 +59,7 @@ export function writeManifest(pkg: string, version = '1.0.0'): void {
 }
 
 export function install(sb: string, pkg: string): Promise<Run> {
-  return exec('./.contexture/package-install', [pkg], { cwd: sb });
+  return exec('./.contexture/ctx', ['package', 'install', pkg], { cwd: sb });
 }
 
 export function installPkg(sb: string, pkg: string, version = '1.0.0'): Promise<Run> {
@@ -68,15 +68,10 @@ export function installPkg(sb: string, pkg: string, version = '1.0.0'): Promise<
 }
 
 export function uninstall(sb: string, target: string): Promise<Run> {
-  return exec('./.contexture/package-uninstall', [target], { cwd: sb });
+  return exec('./.contexture/ctx', ['package', 'uninstall', target], { cwd: sb });
 }
 
 export function catalogCopy(sb: string, plugin: string): string {
-  const p = join(sb, 'catalog', plugin);
-  cpSync(join(ROOT, 'plugins', plugin), p, { recursive: true });
-  return p;
-}
-
-export function wrapper(sb: string, pkg: string, verb: 'install' | 'uninstall'): Promise<Run> {
-  return exec('sh', [join(pkg, verb)], { cwd: sb, env: { CTX_ROOT: sb } });
+  cpSync(join(ROOT, 'plugins', plugin), join(sb, 'plugins', plugin), { recursive: true });
+  return plugin;
 }

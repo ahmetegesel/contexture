@@ -2,7 +2,7 @@ import { cpSync, existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ctx, ctxIn } from '../../../support/ctx';
-import { extPath, out, recordPath, wrapper } from '../../../support/packages';
+import { extPath, install, out, recordPath, uninstall } from '../../../support/packages';
 import { ROOT } from '../../../support/root';
 import { fresh, seed } from '../../../support/snapshot';
 import { stage } from '../../../support/stage';
@@ -18,7 +18,7 @@ function catalog(sb: string): string {
 let installed: string;
 beforeAll(async () => {
   installed = await seed(async (sb) => {
-    expect((await wrapper(sb, catalog(sb), 'install')).code).toBe(0);
+    expect((await install(sb, catalog(sb))).code).toBe(0);
   }, 'posix', 'worked-installed');
 });
 
@@ -37,7 +37,7 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
 
   it('[modules-r18, modules-r13] the install lands the module, its laws, data, and part hook, lists it, and the hook seeds the welcome note through the verb', async () => {
     const sb = stage('posix', 'worked-install');
-    const r = await wrapper(sb, catalog(sb), 'install');
+    const r = await install(sb, catalog(sb));
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('installed worked-package');
     for (const f of ['module', 'laws', 'data', 'install']) expect(existsSync(extPath(sb, `modules/notes/${f}`))).toBe(true);
@@ -65,7 +65,7 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
   it('[modules-r18] a re-install never overwrites a present note', async () => {
     const sb = fresh(installed);
     expect((await ctxIn(sb, 'an edited welcome\n', 'notes', 'put', 'welcome/readme')).code).toBe(0);
-    const r = await wrapper(sb, pkgIn(sb), 'install');
+    const r = await install(sb, pkgIn(sb));
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('already present; left unchanged');
     expect(out(await ctx(sb, 'notes', 'show', 'welcome/readme'))).toBe('an edited welcome');
@@ -74,7 +74,7 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
   it('[modules-r18] the uninstall removes the module and its record and leaves the store data', async () => {
     const sb = fresh(installed);
     expect((await ctxIn(sb, 'the first test note\n', 'notes', 'put', 'demo/first')).code).toBe(0);
-    expect((await wrapper(sb, pkgIn(sb), 'uninstall')).code).toBe(0);
+    expect((await uninstall(sb, pkgIn(sb))).code).toBe(0);
     expect(existsSync(extPath(sb, 'modules/notes/module'))).toBe(false);
     expect(existsSync(recordPath(sb, 'worked-package'))).toBe(false);
     expect(existsSync(join(sb, 'notes/demo/first'))).toBe(true);

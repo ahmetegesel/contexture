@@ -2,7 +2,7 @@ import { cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec } from '../support/exec';
-import { wrapper } from '../support/packages';
+import { install } from '../support/packages';
 import { DATE } from '../support/record';
 import { ROOT } from '../support/root';
 import { fresh, seed } from '../support/snapshot';
@@ -138,7 +138,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     const sb = sqliteStage('sf9');
     const pkg = join(sb, 'catalog/worked-package');
     cpSync(join(ROOT, 'tests/fixtures/worked-package'), pkg, { recursive: true });
-    const installed = await wrapper(sb, pkg, 'install');
+    const installed = await install(sb, pkg);
     expect(installed.code, installed.stderr).toBe(0);
     await must(run(sb, ['notes', 'put', 'demo/first'], { input: 'the first sqlite note\n' }));
     expect((await must(run(sb, ['notes', 'show', 'demo/first']))).stdout).toBe('the first sqlite note\n');

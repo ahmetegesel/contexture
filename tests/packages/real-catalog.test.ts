@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
 import { exec } from '../support/exec';
-import { catalogCopy, extPath, isExec, out, wrapper } from '../support/packages';
+import { catalogCopy, extPath, install, isExec, out, uninstall } from '../support/packages';
 import { ROOT } from '../support/root';
 import { stage } from '../support/stage';
 import { put } from '../support/tree';
@@ -14,11 +14,11 @@ const manifest = (p: string): string => join(ROOT, 'plugins', p, 'manifest');
 const FTS5 = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5');
 const SELECT = "select: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop (@rhythms default); read a rhythm with ctx rhythm show <name>";
 
-describe.concurrent('the real catalog installs through its own wrappers', () => {
+describe.concurrent('the real catalog installs by catalog name through ctx package', () => {
   it('[plugins-r1, plugins-r2, plugins-r6, modules-r13, modules-r10] docs-discipline lands its module, grammar, and rhythms under the extension root, seeds the corpus, and serves its store; starter-rhythms owns work.md', async () => {
     const sb = sandbox();
     const docs = catalogCopy(sb, 'docs-discipline');
-    expect((await wrapper(sb, docs, 'install')).code).toBe(0);
+    expect((await install(sb, docs)).code).toBe(0);
     expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(true);
     expect(existsSync(extPath(sb, 'modules/docs/scripts/doc.grammar'))).toBe(true);
     expect(existsSync(extPath(sb, 'templates/doc.md'))).toBe(false);
@@ -32,19 +32,19 @@ describe.concurrent('the real catalog installs through its own wrappers', () => 
     expect(sd[5]).toBe(join(realpathSync(sb), '.contexture/extensions/modules/docs/data'));
     expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).stdout).toContain('conventions: conventions');
     const starter = catalogCopy(sb, 'starter-rhythms');
-    expect((await wrapper(sb, starter, 'install')).code).toBe(0);
+    expect((await install(sb, starter)).code).toBe(0);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(true);
     expect(readFileSync(extPath(sb, 'rhythms/work.md'), 'utf8')).toContain('a work request arrives');
-    expect((await wrapper(sb, starter, 'uninstall')).code).toBe(0);
+    expect((await uninstall(sb, starter)).code).toBe(0);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(false);
-    expect((await wrapper(sb, docs, 'uninstall')).code).toBe(0);
+    expect((await uninstall(sb, docs)).code).toBe(0);
     expect(existsSync(extPath(sb, 'modules/docs/module'))).toBe(false);
   });
 
   it('[plugins-r6, modules-r20] starter-rhythms puts work and debug in the rhythm list with their use-when and activation', async () => {
     const sb = sandbox();
     expect(out(await ctx(sb, 'rhythm', 'list'))).toBe(SELECT);
-    expect((await wrapper(sb, catalogCopy(sb, 'starter-rhythms'), 'install')).code).toBe(0);
+    expect((await install(sb, catalogCopy(sb, 'starter-rhythms'))).code).toBe(0);
     const listed = await ctx(sb, 'rhythm', 'list');
     expect([listed.code, listed.stderr]).toEqual([0, '']);
     expect(out(listed).split('\n')).toEqual([
@@ -57,13 +57,13 @@ describe.concurrent('the real catalog installs through its own wrappers', () => 
   it('[the-engine-r19, the-engine-r23, plugins-r6] storage-fts5 resolves from the extension root ahead of the transitional module tier, never lists, and uninstalls', async () => {
     const sb = sandbox();
     const fts5 = catalogCopy(sb, 'storage-fts5');
-    expect((await wrapper(sb, fts5, 'install')).code).toBe(0);
+    expect((await install(sb, fts5)).code).toBe(0);
     expect(isExec(extPath(sb, 'storage/drivers/fts5/driver'))).toBe(true);
     put(join(sb, '.contexture/modules/storage-fts5/drivers/fts5'), '#!/bin/sh\nexit 0\n', 0o755);
     const got = await exec('./.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb, env: { CTX_STORAGE_DRIVER: 'fts5' } });
     expect(out(got)).toBe(join(realpathSync(sb), '.contexture/extensions/storage/drivers/fts5/driver'));
     expect((await ctx(sb, 'help', '--all')).stdout).not.toContain('storage-fts5');
-    expect((await wrapper(sb, fts5, 'uninstall')).code).toBe(0);
+    expect((await uninstall(sb, fts5)).code).toBe(0);
     expect(existsSync(extPath(sb, 'storage/drivers/fts5/driver'))).toBe(false);
   });
 
@@ -71,11 +71,11 @@ describe.concurrent('the real catalog installs through its own wrappers', () => 
     ['ast-doc-graph', 'modules/ast-doc-graph/module'],
     ['toolchain-filters', 'modules/toolchain-filters/filters'],
     ['starter-rhythms', 'rhythms/work.md'],
-  ])('[plugins-r6] %s installs and uninstalls through its wrappers, leaving nothing of its own', async (plugin, landed) => {
+  ])('[plugins-r6] %s installs and uninstalls by its catalog name, leaving nothing of its own', async (plugin, landed) => {
     const sb = sandbox();
     const p = catalogCopy(sb, plugin);
-    expect((await wrapper(sb, p, 'install')).code).toBe(0);
-    expect((await wrapper(sb, p, 'uninstall')).code).toBe(0);
+    expect((await install(sb, p)).code).toBe(0);
+    expect((await uninstall(sb, p)).code).toBe(0);
     expect(existsSync(extPath(sb, landed))).toBe(false);
   });
 });
