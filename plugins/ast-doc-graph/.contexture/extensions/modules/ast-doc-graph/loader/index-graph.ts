@@ -234,6 +234,11 @@ function readJsonl<T>(filePath: string): T[] {
   return items;
 }
 
+/* The last incoming row per id, what inserting them all with INSERT OR REPLACE leaves, so a repeated id adds no search row */
+function lastById<T extends { id: string }>(rows: T[]): T[] {
+  return [...new Map(rows.map((r) => [r.id, r])).values()];
+}
+
 /* CLI usage */
 
 function printUsage(): void {
@@ -538,12 +543,13 @@ async function main(): Promise<void> {
   }
 
   // 1. Read all JSONL inputs
-  const symbols = readJsonl<SymbolRecord>(symbolsPath);
+  const symbols = lastById(readJsonl<SymbolRecord>(symbolsPath));
   const rawEdges = readJsonl<EdgeRecord>(edgesPath);
-  const docs = readJsonl<DocRecord>(docsPath);
-  const rules = readJsonl<DocRuleRecord>(rulesPath);
-  const pitfalls = readJsonl<DocPitfallRecord>(pitfallsPath);
-  for (const d of docs) if (d.file) rawEdges.push({ source: d.file, target: d.id, kind: 'DEFINES' });
+  const docRecords = readJsonl<DocRecord>(docsPath);
+  for (const d of docRecords) if (d.file) rawEdges.push({ source: d.file, target: d.id, kind: 'DEFINES' });
+  const docs = lastById(docRecords);
+  const rules = lastById(readJsonl<DocRuleRecord>(rulesPath));
+  const pitfalls = lastById(readJsonl<DocPitfallRecord>(pitfallsPath));
 
   // 2. Identify modified files and target docs
   const modifiedFiles = new Set<string>();

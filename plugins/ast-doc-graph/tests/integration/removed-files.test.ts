@@ -105,10 +105,10 @@ describe.skipIf(!sqliteFts5)('a removed corpus doc leaves the graph', { concurre
     writeFileSync(join(repo, 'docs/one.md'), unitDoc('shared'));
     writeFileSync(join(repo, 'docs/two.md'), unitDoc('shared'));
     await indexed(repo);
-    rmSync(join(repo, 'docs/one.md'));
+    rmSync(join(repo, 'docs/two.md'));
     await indexed(repo, ['--delta']);
     expect(count(db(repo), "SELECT count(*) FROM docs WHERE id = 'doc:workspace:shared';")).toBe(1);
-    rmSync(join(repo, 'docs/two.md'));
+    rmSync(join(repo, 'docs/one.md'));
     await indexed(repo, ['--delta']);
     expect(count(db(repo), "SELECT count(*) FROM docs WHERE id = 'doc:workspace:shared';")).toBe(0);
   });

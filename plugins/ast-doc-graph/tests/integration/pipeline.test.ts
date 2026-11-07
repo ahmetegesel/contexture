@@ -61,6 +61,26 @@ describe.skipIf(!sqliteFts5 || !compilerApi())('the full index of the mini repos
   it.skipIf(!fallbackReachable)('[ast-doc-graph-r6] the sqlite3 command fallback keeps one search row per symbol and unit over repeated full runs (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', () =>
     repeatedFullRuns(NO_NODE_SQLITE));
 
+  const REPEATS = 'export function parseKind(a: string): string;\nexport function parseKind(a: number): string;\nexport function parseKind(a: string | number): string {\n  return String(a);\n}\n\nexport const Status = { on: "on" } as const;\nexport type Status = (typeof Status)[keyof typeof Status];\n';
+
+  async function oneRowPerId(env: Record<string, string>): Promise<void> {
+    const sb = miniRepo('repeated-ids');
+    writeFileSync(join(sb, 'src/orders/kinds.ts'), REPEATS);
+    for (const args of [['--clean'], ['--delta', 'src/orders/kinds.ts']]) {
+      if (args[0] === '--delta') writeFileSync(join(sb, 'src/orders/kinds.ts'), `${REPEATS}\n`);
+      const r = await astDocIndex(sb, args, { env });
+      expect(r.code, r.stderr).toBe(0);
+      expect(count(db(sb), "SELECT count(*) FROM symbols WHERE file = 'src/orders/kinds.ts';")).toBe(2);
+      expect(count(db(sb), 'SELECT count(*) FROM fts_symbols;')).toBe(count(db(sb), 'SELECT count(*) FROM symbols;'));
+      if (args[0] === '--clean') expect(r.stdout.split('\n')).toContain(`  SYMBOLS: ${count(db(sb), 'SELECT count(*) FROM symbols;')}`);
+    }
+  }
+
+  it('[ast-doc-graph-r6] a name a source declares more than once (overloads, a const beside its type) keeps one symbol and one search row, and the summary counts the rows it loads', () => oneRowPerId({}));
+
+  it.skipIf(!fallbackReachable)('[ast-doc-graph-r6] on the sqlite3 command fallback a name declared more than once keeps one symbol and one search row too (needs a node that NODE_OPTIONS=--no-experimental-sqlite keeps from loading node:sqlite)', () =>
+    oneRowPerId(NO_NODE_SQLITE));
+
   it('[ast-doc-graph-r15] the cycle priceCart and roundTotal reads once each way', async () => {
     const sb = fresh(indexed);
     const r = await graphQuery(sb, db(sb), 'callers', 'priceCart', '--no-sync');
