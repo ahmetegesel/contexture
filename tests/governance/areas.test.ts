@@ -36,6 +36,10 @@ describe.concurrent('the changed-files map selects a project for every tracked p
     expect(projectsOf('base/.contexture/ctx')).toEqual(expect.arrayContaining(['engine', 'laws', 'packages']));
   });
 
+  it('a composer change selects the engine project, whose builtin cases pin the composer usage and pass through', () => {
+    expect(projectsOf('base/.contexture/laws/compose')).toEqual(expect.arrayContaining(['engine', 'laws', 'governance']));
+  });
+
   it('the map names only declared projects, and every declared project is reachable from it', () => {
     const named = new Set(AREAS.flatMap(([, ps]) => ps));
     expect([...named].filter((p) => p !== EVERY && !projects.includes(p))).toEqual([]);
