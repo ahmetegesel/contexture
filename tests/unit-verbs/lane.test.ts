@@ -91,7 +91,7 @@ const FULL_RECIPE = [
   '  5. a decision within this recipe is yours: decide it and journal it; a wall or a decision beyond it is drift: stop and report, never improvise past it',
   '',
   'BOOT (read only, before any work) ::',
-  "  the loader's law layer and both overlays (AGENTS.md, AGENTS.workspace.md, AGENTS.local.md); ctx unit load sem-unit until a page reads complete; this recipe (ctx lane show sem-unit full-lane recipe); every REF it names. Your first lane journal entry is the load receipt: the refs loaded ride as --ref lines on that entry, never one per line inside the WHAT; an unresolved REF is a brief defect: stop and report it.",
+  "  the loader's law layer and both overlays (AGENTS.md, AGENTS.workspace.md, AGENTS.local.md); ctx unit load sem-unit until a page reads complete; this recipe (ctx lane show sem-unit full-lane recipe); every REF it names, and each TASKS and DECISIONS item whole (ctx unit task show sem-unit <slug>, ctx unit entry show sem-unit <slug>), since the load carries only the live journal and the open tasks whole. Your first lane journal entry is the load receipt: the refs loaded ride as --ref lines on that entry, never one per line inside the WHAT; an unresolved REF is a brief defect: stop and report it.",
   '',
   'JOURNAL ::',
   '  ctx lane record sem-unit full-lane at action granularity as things happen: every command whose result is not obvious, every claim, decision point, and drift notice; each WHAT carries the action, its result, and why the next step follows; an entry awaiting an act outside the lane carries --thread.',
@@ -144,6 +144,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(recipe.split('\n').slice(0, 5)).toEqual(['@recipe min-lane', '  UNIT: sem-unit', '  LANE: min-lane', `  BRANCH: ${LANE_BRIEF.branch}`, '']);
     expect(recipe).toContain(`\nSCOPE ::\n  1. ${LANE_BRIEF.scope}\n\nBOUNDARY`);
     expect(recipe).toContain(`  4. write scope: ${LANE_BRIEF.writes}\n`);
+    expect(recipe.split('\n').filter((l) => l.includes('every REF it names'))).toEqual([expect.stringContaining('every REF it names, and each TASKS and DECISIONS item whole (ctx unit task show sem-unit <slug>, ctx unit entry show sem-unit <slug>)')]);
     expect(recipe).toContain(`  VERDICT: done, partial, or drifted, with one line why\n  each section opens at column 0 as <NAME> :: with its body indented two spaces, so lane#min-lane/report#<NAME> resolves it\n  ${LANE_BRIEF.report}\n  The report and the journal land`);
   });
 
