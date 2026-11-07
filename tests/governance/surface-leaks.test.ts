@@ -9,7 +9,7 @@ import { stage } from '../support/stage';
 import { kids, walk } from './walk';
 
 const FILE_FLOOR = 16;
-const HELP_FLOOR = 56;
+const HELP_FLOOR = 118;
 const DOCS_WORK = 'plugins/docs-discipline/docs/work.md';
 const ONBOARDING = 'base/.contexture/ONBOARDING.md';
 
@@ -46,20 +46,29 @@ function staged(label: string): string {
   return sb;
 }
 
-const listed = (help: string, head: string): string[] =>
+const table = (help: string, head: string): [string, string][] =>
   ((help.split(new RegExp(`^${head}:$`, 'm'))[1] ?? '').split(/\n\n/)[0] ?? '')
     .split('\n')
     .filter((l) => /^ {2}[a-z]/.test(l))
-    .map((l) => l.trim().split(/ +/)[0] ?? '');
+    .map((l) => {
+      const m = /^ {2}(\S+) *(.*)$/.exec(l);
+      return [m?.[1] ?? '', m?.[2] ?? ''];
+    });
 
 async function helpForms(sb: string): Promise<string[][]> {
   const forms: string[][] = [['help', '--all']];
-  for (const m of listed((await ctx(sb, 'help')).stdout, 'modules')) {
+  const own: string[][] = [];
+  for (const [m] of table((await ctx(sb, 'help')).stdout, 'modules')) {
     forms.push([m, 'help']);
-    for (const v of listed((await ctx(sb, m, 'help')).stdout, 'verbs')) forms.push([m, 'help', v]);
+    for (const [v, summary] of table((await ctx(sb, m, 'help')).stdout, 'verbs')) {
+      forms.push([m, 'help', v]);
+      own.push([m, v, '--help']);
+      const subs = /\(([a-z, ]+)\)$/.exec(summary)?.[1]?.split(/, */) ?? [];
+      if (subs.length && /<subcommand>/.test((await ctx(sb, m, 'help', v)).stdout)) for (const s of subs) own.push([m, v, s, '--help']);
+    }
   }
   forms.push(['run', '--help'], ['compose', '--help'], ['package', '--help'], ['package', 'install', '--help'], ['package', 'uninstall', '--help']);
-  return forms;
+  return [...forms, ...own];
 }
 
 async function scanHelp(sb: string): Promise<{ forms: string[][]; empty: string[]; hits: Hit[] }> {
@@ -111,11 +120,12 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(surfaceFiles(copy).length).toBeLessThan(FILE_FLOOR);
   });
 
-  it('the help scan reads ctx help --all, every module table, every verb each table lists, and the engine builtins, each printing, above its floor', () => {
+  it('the help scan reads ctx help --all, every module table, every verb each table lists, each verb\'s own --help and each sub-verb\'s of a verb taking a <subcommand>, and the engine builtins, each printing, above its floor', () => {
     expect(help.forms.length).toBeGreaterThanOrEqual(HELP_FLOOR);
     expect(help.empty).toEqual([]);
     const keys = help.forms.map((f) => f.join(' '));
-    for (const must of ['help --all', 'unit help list', 'unit help resolve', 'lane help create', 'rhythm help show', 'docs help nudge', 'docs help check', 'compose --help', 'package uninstall --help']) expect(keys).toContain(must);
+    for (const must of ['help --all', 'unit help list', 'unit help resolve', 'lane help create', 'rhythm help show', 'docs help nudge', 'docs help check', 'compose --help', 'package uninstall --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help']) expect(keys).toContain(must);
+    expect(keys).not.toContain('lane show recipe --help');
   });
 
   it('every flagged line stands on the exact allow list, the flagged count equal to the list, so a dead entry reads red', () => {
@@ -138,12 +148,16 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(remainder(scanFiles(copy).hits)).toEqual([{ key: rhythm, line: `  9. PLANT: open ${FTS5_DB} and read the units` }]);
   });
 
-  it('a planted verb help header leaves exactly one remainder', async () => {
+  it('a planted verb help header leaves exactly one remainder in each form printing it, the module detail and the verb\'s own --help', async () => {
     const sb = staged('surface-leaks-help');
     const script = join(sb, '.contexture/extensions/modules/rhythm/scripts/list');
     const body = readFileSync(script, 'utf8').split('\n');
     body.splice(2, 0, `# help: the planted line names ${FALLBACK_ROOT}/<unit>`);
     writeFileSync(script, body.join('\n'));
-    expect(remainder((await scanHelp(sb)).hits)).toEqual([{ key: 'ctx rhythm help list', line: `  the planted line names ${FALLBACK_ROOT}/<unit>` }]);
+    const line = `  the planted line names ${FALLBACK_ROOT}/<unit>`;
+    expect(remainder((await scanHelp(sb)).hits)).toEqual([
+      { key: 'ctx rhythm help list', line },
+      { key: 'ctx rhythm list --help', line },
+    ]);
   });
 });
