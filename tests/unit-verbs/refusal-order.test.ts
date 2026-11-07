@@ -5,6 +5,7 @@ import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { exec } from '../support/exec';
 import { fresh, seed } from '../support/snapshot';
 import { createLane, must, run, unit } from '../support/unit';
+import { laneOf } from './fold-fixture';
 
 const D = '2026-09-27';
 const WARNING = 'WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses\n';
@@ -38,6 +39,7 @@ const ROWS: readonly [string[], string | RegExp][] = [
 
 describe.concurrent('the refusal order over a unit in the deprecated root: a refusing run prints its refusal alone, a rc 0 run its one warning after the answer', () => {
   let snap: string;
+  let foldLane = '';
   beforeAll(async () => {
     snap = await seed(async (sb) => {
       await must(unit(sb, 'bootstrap', 'lg', 'the legacy unit', 'r1'));
@@ -48,8 +50,11 @@ describe.concurrent('the refusal order over a unit in the deprecated root: a ref
       await must(createLane(sb, 'lg', 'll'));
       await must(run(sb, ['lane', 'report', 'lg', 'll'], { input: '@report ll\nVERDICT: done\nFINDINGS ::\n  F1\n' }));
       await must(createLane(sb, 'lg', 'le'));
+      await must(unit(sb, 'bootstrap', 'fg', 'the legacy unit a fold plan holds'));
+      for (const n of [1, 2, 3, 4]) await must(unit(sb, 'record', 'fg', `--what=fold note ${n}`, `--slug=${D}-fg-${n}`));
+      foldLane = laneOf((await must(unit(sb, 'fold', 'fg'))).stdout, 1) ?? '';
       mkdirSync(join(sb, FALLBACK_ROOT), { recursive: true });
-      renameSync(join(sb, RECORD_ROOT, 'lg'), join(sb, FALLBACK_ROOT, 'lg'));
+      for (const u of ['lg', 'fg']) renameSync(join(sb, RECORD_ROOT, u), join(sb, FALLBACK_ROOT, u));
     }, 'posix', 'refusal-order');
   });
 
@@ -69,6 +74,12 @@ describe.concurrent('the refusal order over a unit in the deprecated root: a ref
     expect(r.stdout).toContain('2026-10-01-lg-bad');
   });
 
+  it('[the-record-r-4gj4k] ctx unit fold --check over a unit in the deprecated root whose fresh plan holds no batch ends rc 1 with no warning', async () => {
+    const r = await run(fresh(snap), ['unit', 'fold', 'fg', '--check']);
+    expect([r.code, r.stderr]).toEqual([1, '']);
+    expect(r.stdout).toContain('fold check: fg');
+  });
+
   it.for(
     [
       ['unit', 'load', 'lg'],
@@ -77,9 +88,13 @@ describe.concurrent('the refusal order over a unit in the deprecated root: a ref
       ['unit', 'resolve', 'lg', 'lane#ll/report#FINDINGS'],
       ['unit', 'list', '--all', '--repo=r1'],
       ['lane', 'show', 'lg', 'll', 'report'],
+      ['unit', 'fold', 'fg'],
+      ['unit', 'fold', 'fg', '--lane=<lane>'],
     ].map((argv) => [argv.join(' '), argv] as const),
-  )('[the-record-r-4gj4k] ctx %s over the same unit answers rc 0 and prints the warning once, after its answer', async ([, argv]) => {
+  )('[the-record-r-4gj4k] ctx %s over a unit in the deprecated root answers rc 0 and prints the warning once, after its answer', async ([, given]) => {
     const sb = fresh(snap);
+    const argv = given.map((a) => a.replace('<lane>', foldLane));
+    expect(foldLane).not.toBe('');
     const r = await run(sb, argv);
     expect([r.code, r.stderr]).toEqual([0, WARNING]);
     expect(r.stdout.length).toBeGreaterThan(0);

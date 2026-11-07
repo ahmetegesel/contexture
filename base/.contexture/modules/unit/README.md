@@ -130,9 +130,11 @@ The line is the reminder, never an instruction to the agent: the sweep is the hu
 choice. A refusal's stderr stays its one line, so every `head -n 1` reader of a refusal still reads
 the refusal. The verb library relays the line in one place: `vb_relay` holds a succeeded
 call's stderr in the verb's scratch, and the verb's exit prints it once, after the answer,
-only when the verb ends rc 0; `vb_ok` relays through it, and audit, board, diagnose, and
-list call it after their render, so a verb level refusal after a read (a load page out of
-range, a claim the report lacks, a unit no other unit references) prints its line alone.
+only when the verb ends rc 0; `vb_ok` relays through it in every verb that calls it (list
+before its render, fold on its board read, which every fold view makes first), and audit,
+board, and diagnose call it after their render, so a verb level refusal after a read (a
+load page out of range, a claim the report lacks, a unit no other unit references) prints
+its line alone, and a fold check with defects ends rc 1 with no warning.
 A verb that runs other verbs as its children holds their relays: refresh runs board and
 audit each with a scratch root of its own and `VB_RELAY_HOLD` naming refresh's own held
 relay, so a child ending rc 0 hands its held warning to that hold instead of printing it,

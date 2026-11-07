@@ -163,7 +163,7 @@ fi
 
 read_board() {
   vb_call session.board "$unit"
-  [ "$VB_RC" -eq 0 ] || vb_through
+  vb_ok
   LC_ALL=C awk -f "$VB_JSON" < "$VB_DIR/ans" > "$VB_DIR/board.flat" || fold_corrupt "cannot flatten the board answer"
 }
 
