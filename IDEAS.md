@@ -140,7 +140,7 @@
   WHAT :: Verify the ast-doc-graph TypeScript extraction and the pilot suite in a TypeScript-capable repository (need-gated here: no compiler, no pilot).
   WHY :: The plugin's TS side is unproven in this workspace; a capable repo closes the gate.
   REF: "plugins/ast-doc-graph/tests/run.sh"
-  STATUS: OPEN
+  STATUS: DROPPED met: the ast-doc-graph vitest project proves the TypeScript extraction (typescript 6.0.3 pinned, 78 tests at v0.66.0, the TypeScript 7 stub included), and the cited plugins/ast-doc-graph/tests/run.sh is retired; closed at the human's word in unit docs-plugins
 
 @idea recording-commands
   DUMPED: 2026-09-23
@@ -213,3 +213,17 @@
     The human wants the runner used far more than it is; the evidence is in the storage unit journal: lanes driver-test-run-x, driver-test-run-y, driver-test-compare, driver-retest-run-x, driver-retest-run-y, shared-ref-fixes, awk-portability, verb-consistency reported raw commands, and the main agent ran raw checks too. The human rejects a harness mechanism (a hook rewriting commands); the fix is rules and prose, discussed separately from the storage unit. The idea harness-auto-runner proposes the harness route this direction rejects.
   REF: "journal#2026-09-26-event-1790452331"
   STATUS: OPEN
+
+@idea docs-query-workspace-prefix
+  DUMPED: 2026-11-06
+  WHAT :: ctx docs query --file strips a leading <repo>/ prefix for every repo, the workspace included, while ctx docs check reads a workspace doc's path as given; so in a repository with a top-level folder literally named workspace, --file workspace/<path> names an owner through the query that the check reads as UNCOVERED. Decide which reading is right and make the two agree.
+  WHY :: Found by the docs-discipline cluster review (lanes/review-docs-cluster/report F6, probed); rare, since it needs that exact folder name; the human chose to record it rather than fix it in unit docs-plugins.
+  REF: "plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-query.awk"
+  STATUS: PICKED docs-plugins
+
+@idea docs-retired-id-memory
+  DUMPED: 2026-11-06
+  WHAT :: A corpus doc's next id is its highest present id plus one, so removing the highest-numbered contract rule, responsibility, or pitfall lets the next new entry of that kind take the same id, and a journal entry, a report, or a test title citing the old id silently names a different entry; the grammar says a removed id retires, which holds only below the highest. Remember retired ids per doc so a new entry never reuses one (the workaround today: --id).
+  WHY :: Found by the corpus homes lane (lanes/exec-homes-docs/report F4, docs-module-p2); it matters more now that test titles cite rule ids for the coverage report; the human chose to record it rather than fix it in unit docs-plugins.
+  REF: "plugins/docs-discipline/.contexture/extensions/modules/docs/scripts/docs-edit.awk"
+  STATUS: PICKED docs-plugins
