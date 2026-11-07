@@ -37,7 +37,18 @@ describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, 
     expect((await unit(sb, 'task', 'show', 'rw-unit', 'rw-task')).stdout).toContain('OBJECTIVE: "rewrite / & task"');
   });
 
-  it('S1-b: reopen refuses an ACTIVE or missing unit; close then reopen flips the status back and lists the unit again', async () => {
+  it('[the-record-r21] close warns on an open task on stderr and still closes rc 0, printing CLOSED', async () => {
+    const sb = stage('posix', 'life-close-warn');
+    await seedUnit(sb, 'cw-unit');
+    await must(unit(sb, 'task', 'add', 'cw-unit', 'cw-open', '--objective=Left open at close'));
+    const r = await unit(sb, 'close', 'cw-unit');
+    expect(r.code).toBe(0);
+    expect(r.stderr).toMatch(/^WARNING: open tasks: cw-open$/m);
+    expect(r.stdout).toMatch(/^CLOSED: cw-unit$/m);
+    expect((await unit(sb, 'load', 'cw-unit', '1')).stdout).toMatch(/^status: CLOSED/m);
+  });
+
+  it('S1-b [the-record-r21]: reopen refuses an ACTIVE or missing unit; close then reopen flips the status back and lists the unit again', async () => {
     const sb = stage('posix', 'life-reopen');
     await seedUnit(sb, 'rw-unit');
     expect((await unit(sb, 'reopen', 'rw-unit')).code).toBe(1);
