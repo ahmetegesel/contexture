@@ -39,15 +39,15 @@ async function wants(ns: string, query: string, limit: number, line: string): Pr
 }
 
 describe.concurrent('store-search exact, the shared search rule', () => {
-  it('[modules-r10] answers one row per entity and section over the document set, the first matching line, in bytewise key order', () =>
+  it('[the-engine-r27, modules-r10] answers one row per entity and section over the document set, the first matching line, in bytewise key order', () =>
     wants('searchdoc', 'needle', 20, searchAnswer('searchdoc', 'needle', 3, NEEDLE_ROWS)));
 
-  it('applies the limit after the complete walk, and limit 0 answers every result', async () => {
+  it('[the-engine-r27] applies the limit after the complete walk, and limit 0 answers every result', async () => {
     await wants('searchdoc', 'needle', 1, searchAnswer('searchdoc', 'needle', 3, NEEDLE_ROWS.slice(0, 1)));
     await wants('searchdoc', 'needle', 0, searchAnswer('searchdoc', 'needle', 3, NEEDLE_ROWS));
   });
 
-  it('[modules-r10] answers two entities of one key and section as two rows, and the state as its own row', async () => {
+  it('[the-engine-r27, modules-r10] answers two entities of one key and section as two rows, and the state as its own row', async () => {
     await wants('searchdoc', 'alpha', 20, searchAnswer('searchdoc', 'alpha', 1, [row('u1/backlog', 'task', 'alpha', 'backlog', '@task alpha')]));
     await wants('searchdoc', 'status', 20, searchAnswer('searchdoc', 'status', 3, [
       row('u1/backlog', 'task', 'alpha', 'backlog', 'TODO'),
@@ -56,17 +56,17 @@ describe.concurrent('store-search exact, the shared search rule', () => {
     ]));
   });
 
-  it('never matches a column-0 comment line', () => wants('searchdoc', 'period', 20, searchAnswer('searchdoc', 'period', 0, [])));
+  it('[the-engine-r27] never matches a column-0 comment line', () => wants('searchdoc', 'period', 20, searchAnswer('searchdoc', 'period', 0, [])));
 
-  it('folds ASCII case', () => wants('searchdoc', 'NEEDLE IN', 20, searchAnswer('searchdoc', 'NEEDLE IN', 1, [NEEDLE_ROWS[1]])));
+  it('[the-engine-r27] folds ASCII case', () => wants('searchdoc', 'NEEDLE IN', 20, searchAnswer('searchdoc', 'NEEDLE IN', 1, [NEEDLE_ROWS[1]])));
 
-  it('[modules-r10] searches the flat form as one document in section body, its id the key', () =>
+  it('[the-engine-r27, modules-r10] searches the flat form as one document in section body, its id the key', () =>
     wants('flatdoc', 'needle', 20, searchAnswer('flatdoc', 'needle', 1, [row('f1/x', 'document', 'f1/x', 'body', 'flat needle value')])));
 
-  it('[modules-r10] searches a module with no search schema through the generic fallback', () =>
+  it('[the-engine-r27, modules-r10] searches a module with no search schema through the generic fallback', () =>
     wants('genericdoc', 'needle', 20, searchAnswer('genericdoc', 'needle', 1, [row('g1/x', 'document', 'g1/x', 'body', 'generic needle value')])));
 
-  it('[modules-r10] matches the raw value of a flat JSON schema, never the extracted fields', () =>
+  it('[the-engine-r27, modules-r10] matches the raw value of a flat JSON schema, never the extracted fields', () =>
     wants('jsondoc', 'needle', 20, searchAnswer('jsondoc', 'needle', 1, [row('j1/x', 'document', 'j1/x', 'body', '{"title":"Needle title","body":"body needle"}')])));
 });
 

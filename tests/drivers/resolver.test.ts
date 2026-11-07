@@ -196,7 +196,7 @@ describe('the resolver', { concurrent: true }, () => {
       expect(await resolved(sb, [ws])).toBe(ws);
     });
 
-    it('takes the name from --driver, then -d, then CTX_STORAGE_DRIVER, then the config, the legacy key, storage.conf, else posix', async () => {
+    it('[the-engine-r25] takes the name from --driver, then -d, then CTX_STORAGE_DRIVER, then the config, the legacy key, storage.conf, else posix', async () => {
       const sb = fresh(posix);
       const target = driverPath(sb, 'posix');
       for (const n of ['one', 'two', 'three', 'four', 'five', 'six']) wrap(join(sb, `.contexture/drivers/${n}/driver`), target);

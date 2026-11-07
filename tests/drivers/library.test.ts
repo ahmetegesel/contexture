@@ -109,7 +109,7 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
     refused(await get(ref), 'data_get', 1, code, message);
   });
 
-  it('finds the resolver through CTX_STORE_RESOLVER, then the drawer, then the base mirror', async () => {
+  it('[the-engine-r26] finds the resolver through CTX_STORE_RESOLVER, then the drawer, then the base mirror', async () => {
     const sb = fresh(snap);
     dataFile(sb, 'modules', 'libprobe', LIBPROBE);
     const resolver = join(sb, '.contexture/storage/scripts/driver-resolver');
@@ -123,7 +123,7 @@ describe('the library\'s ref interface and resolver lookup', { concurrent: true 
     expect(viaMirror.stdout).toBe('{"namespace":"libprobe","keys":[]}\n');
   });
 
-  it('[the-engine-r21] refuses with the driver-not-found line when no resolver is found', async () => {
+  it('[the-engine-r21, the-engine-r26] refuses with the driver-not-found line when no resolver is found', async () => {
     const sb = sandbox('no-resolver');
     mkdirSync(join(sb, '.contexture/storage/scripts'), { recursive: true });
     writeFileSync(join(sb, LIBRARY), '');

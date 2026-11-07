@@ -214,7 +214,7 @@ for (const driver of DRIVERS) {
     describe('search', () => {
       const q = (query: string) => `query=${query}\n`;
 
-      it('[the-engine-r19, modules-r10] answers the shared exact rule over a document set', async () => {
+      it('[the-engine-r19, the-engine-r27, modules-r10] answers the shared exact rule over a document set', async () => {
         const sb = fresh(empty);
         dataFile(sb, 'modules', 'searchdoc', SEARCH_DATA.searchdoc);
         const s = store(sb, driver);

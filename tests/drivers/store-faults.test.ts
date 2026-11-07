@@ -145,7 +145,7 @@ for (const driver of DRIVERS) {
       ['store.put', 'SIGINT'],
       ['store.put', 'SIGTERM'],
       ['store.get', 'SIGTERM'],
-    ] as const)('%s under a group %s leaves no store-data scratch', async (fn, sig) => {
+    ] as const)('[the-engine-r28] %s under a group %s leaves no store-data scratch', async (fn, sig) => {
       const sb = fresh(empty);
       const mark = join(sandbox('store-data-mark'), 'mark');
       plantScript(sb, 'store-data', `: > "${mark}"\nexec sleep 30`);
@@ -185,7 +185,7 @@ for (const driver of DRIVERS) {
     });
 
     it.each(READS.filter((r) => r[0] === driver).map((r) => r.slice(1) as unknown as [string, NodeJS.Signals, readonly string[], string, readonly string[]]))(
-      '%s under a group %s leaves none of its read temps', async (fn, sig, args, cmd, temps) => {
+      '[the-engine-r28] %s under a group %s leaves none of its read temps', async (fn, sig, args, cmd, temps) => {
         const sb = fresh(keyed);
         const mark = join(sandbox('read-mark'), 'mark');
         const before = scratch(sb);
