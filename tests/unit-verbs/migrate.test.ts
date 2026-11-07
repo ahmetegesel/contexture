@@ -6,7 +6,7 @@ import { fresh, seed } from '../support/snapshot';
 import { fts5Available, stage } from '../support/stage';
 import { must, run, seedUnit, unit } from '../support/unit';
 
-const WARNING = 'WARNING: the record was read from its deprecated root; move it: ctx unit migrate --all\n';
+const WARNING = 'WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses\n';
 
 function toFallback(sb: string, slug: string): void {
   mkdirSync(join(sb, FALLBACK_ROOT), { recursive: true });

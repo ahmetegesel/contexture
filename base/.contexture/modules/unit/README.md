@@ -125,8 +125,9 @@ The store prints one notice line on a rc 0 answer it served from the fallback; t
 script collects the rc 0 store stderr of `u_keys_all`, `u_keys_prefix`, `u_add_key`, and
 `u_held` into the run's notice file and, only when the run ends rc 0 and after its
 answer, prints its own line once:
-`WARNING: the record was read from its deprecated root; move it: ctx unit migrate --all`.
-A refusal's stderr stays its one line, so every `head -n 1` reader of a refusal still reads
+`WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses`.
+The line is the reminder, never an instruction to the agent: the sweep is the human's
+choice. A refusal's stderr stays its one line, so every `head -n 1` reader of a refusal still reads
 the refusal. `vb_ok` relays the line in the verbs that call it; audit, board, and diagnose
 relay it themselves.
 

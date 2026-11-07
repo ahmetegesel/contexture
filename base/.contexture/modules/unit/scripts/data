@@ -503,13 +503,14 @@ u_unit_promote() {
   printf '{"promote":true,"migrated":%s}\n' "$up_n"
 }
 
-# u_warn: after a rc 0 run's answer, once, the line naming the sweep when a read of the run
-# was served from the store's deprecated fallback root; the sweep itself prints none
+# u_warn: after a rc 0 run's answer, once, the reminder of the root move when a read of the
+# run was served from the store's deprecated fallback root: each unit moves at its next
+# write, and the sweep is the human's choice; the sweep itself prints none
 u_warn() {
   [ "$cmd" = unit.promote ] && return 0
   [ -n "$U_SCR" ] && [ -s "$U_SCR/notice" ] || return 0
   grep -q 'was read from its deprecated fallback root' "$U_SCR/notice" 2>/dev/null || return 0
-  printf 'WARNING: the record was read from its deprecated root; move it: ctx unit migrate --all\n' >&2
+  printf 'WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses\n' >&2
 }
 
 # u_commit: one store.batch, every staged artifact all or none, then the answer
