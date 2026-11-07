@@ -77,8 +77,8 @@ and refuses rc 1 when every indexed file is absent under its root. The
 query's freshness check counts an indexed file the disk lacks as dirty.
 
 The docs extractor reads the corpus as files: `bin/ast-doc-index` lists the
-regular markdown files of the workspace's `docs/` folder (else the whole
-repository root) and `extractors/docs/extract-docs.ts` parses each listed
+regular markdown files of the workspace's `docs/` folder (else the
+repository root outside the exclusion folders) and `extractors/docs/extract-docs.ts` parses each listed
 file, never through `ctx docs` or the storage driver; a walk that finds no
 markdown yields empty docs streams, never a refusal. Under the docs-discipline
 files driver that folder is the corpus; under a store driver it holds none, so
@@ -134,7 +134,8 @@ need, when a TypeScript 5 or 6 is reachable from the module or the sandbox
 ancestors.
 `integration/docs-walk`, `rebuild`, and `removed-files` prove a rule or
 pitfall before any `@doc` line skipped with its one warning, a code-only
-repository indexing rc 0, the full load's rebuild and its rollback, and a
+repository indexing rc 0, a repository with no docs folder walking its root
+outside the exclusion folders, the full load's rebuild and its rollback, and a
 removed, renamed, or moved file leaving the graph after a full run, a bare
 delta, a named delta, and the query's inline delta (a unit whose id comes
 from its header, a unit two files hold, thousands of removed files among

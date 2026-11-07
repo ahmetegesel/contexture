@@ -409,11 +409,14 @@ if [[ "$DELTA" == true ]]; then
 fi
 
 # Full indexing mode
-# Step 1: Discover the TypeScript sources and the markdown files of the docs walk
+# Step 1: Discover the TypeScript sources and the markdown files of the docs walk, the
+# repository root walked outside the exclusion folders when it holds no docs folder
 TS_FILE_LIST="$CACHE_DIR/ts_files.txt"
 scan_find "$SCAN_DIR" "${TS_SOURCES[@]}" "${EXCLUDES[@]}" | sort > "$TS_FILE_LIST"
 MD_FILE_LIST="$CACHE_DIR/md_files.txt"
-scan_find "$DOCS_SCAN_DIR" -type f -name "*.md" | sort > "$MD_FILE_LIST"
+DOCS_WALK=(-type f -name "*.md")
+[[ "$DOCS_SCAN_DIR" != "$REPO_ROOT" ]] || DOCS_WALK+=("${EXCLUDES[@]}")
+scan_find "$DOCS_SCAN_DIR" "${DOCS_WALK[@]}" | sort > "$MD_FILE_LIST"
 
 TS_COUNT="$(wc -l < "$TS_FILE_LIST" | tr -d ' ')"
 

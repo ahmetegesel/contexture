@@ -1,6 +1,8 @@
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { sandbox } from '@support/sandbox';
+import { sqlite } from '@support/sqlite';
 import { astDocIndex, compilerApi, count, docsRepo, miniRepo, sqliteFts5 } from '../support/graph';
 
 const GUIDE = [
@@ -24,6 +26,19 @@ describe.skipIf(!sqliteFts5)('the docs walk', { concurrent: true }, () => {
     const named = r.stderr.split('\n').filter((l) => l.includes('guide.md'));
     expect(named).toEqual(['Warning: skipping 2 rule or pitfall entries before any @doc line in docs/guide.md']);
     expect(count(join(repo, 'graph.db'), "SELECT count(*) FROM rules WHERE doc_id = 'doc:orders:order-flow';")).toBe(2);
+  });
+
+  it('[ast-doc-graph-r2] a repository with no docs folder walks its root outside the exclusion folders, so no node_modules or tests markdown is read or recorded', async () => {
+    const repo = sandbox('walk-root');
+    const doc = (slug: string) => `@doc structural ${slug}\n  repo: workspace\n  description: "${slug} probe"\n  sources: [src/**]\n  keywords: [${slug}]\n`;
+    for (const [rel, slug] of [['README.md', 'readme'], ['guide/intro.md', 'intro'], ['node_modules/pkg/README.md', 'pkg'], ['tests/notes.md', 'notes']]) {
+      mkdirSync(join(repo, rel, '..'), { recursive: true });
+      writeFileSync(join(repo, rel), doc(slug));
+    }
+    const r = await astDocIndex(repo, ['--clean']);
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout.split('\n')).toContain('  DOCS: 2');
+    expect(sqlite(join(repo, 'graph.db'), "SELECT file FROM indexed_files ORDER BY file;").trim().split('\n')).toEqual(['README.md', 'guide/intro.md']);
   });
 
   it.skipIf(!compilerApi()).each<[string, (repo: string) => void]>([

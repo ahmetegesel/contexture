@@ -177,8 +177,8 @@ ctx ast-doc-graph index --repo-root . --clean
 The driver discovers TypeScript files and documentation units, runs the extractors,
 and compiles `graph.db` in the repository root. A repository without TypeScript
 never runs the TypeScript extractor, and a docs walk (the `docs/` folder, else the
-repository root) that finds no markdown yields an empty docs side, so a docs-only
-or a code-only repository indexes rc 0.
+repository root outside the exclusion folders) that finds no markdown yields an
+empty docs side, so a docs-only or a code-only repository indexes rc 0.
 
 The index runs only inside a contexture drawer: under `ctx` the drawer is the
 workspace (`CTX_ROOT`), so `--repo-root` may name any repository; run directly,
@@ -186,7 +186,7 @@ workspace (`CTX_ROOT`), so `--repo-root` may name any repository; run directly,
 folder. Outside a drawer it refuses rc 1 before any write, naming the need.
 
 #### Multi-Directory Repository Root Discovery
-When `--src-dir` is omitted, `ast-doc-index` automatically scans the entire repository root, discovering TypeScript source code across `components/`, `pages/`, `services/`, `backend/`, and any other source directories in the project. The scanner enforces standard exclusion directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.work`, `.idea`, `tests`, `__tests__`, `.worktrees`) so generated bundles and test fixtures never contaminate the graph. The exclusions match paths inside the scanned root only: a repository that itself sits under such a folder (a checkout under `.worktrees/`, a fixture under `tests/`) still indexes.
+When `--src-dir` is omitted, `ast-doc-index` automatically scans the entire repository root, discovering TypeScript source code across `components/`, `pages/`, `services/`, `backend/`, and any other source directories in the project. The scanner enforces standard exclusion directories (`node_modules`, `dist`, `build`, `archive`, `.git`, `.contexture`, `.work`, `.idea`, `tests`, `__tests__`, `.worktrees`) so generated bundles and test fixtures never contaminate the graph. The exclusions match paths inside the scanned root only: a repository that itself sits under such a folder (a checkout under `.worktrees/`, a fixture under `tests/`) still indexes. The docs walk of a repository with no `docs/` folder reads the repository root outside the same exclusion folders, so a dependency's markdown under `node_modules` never joins the graph.
 
 #### Incremental Delta Indexing (--delta)
 To update the database after code or documentation edits without running a full rebuild:
