@@ -178,6 +178,16 @@ describe('the nudge through its unit', { concurrent: true }, () => {
     expect(byUnit.stdout).toBe(byFile.stdout);
   });
 
+  it('RS5b [docs-module-r26] the nudge help states the backlog-file form rule, a first argument holding a / or ending in .md, and a bare name names a unit, refusing rc 1 when the store holds none', async () => {
+    const sb = fresh(corpus);
+    const help = await docs(sb, ['help', 'nudge']);
+    expect(help.code).toBe(0);
+    expect(help.stdout).toContain('the backlog-file form (a first argument holding a / or ending in .md; any other value names a unit) reads a backlog outside the record');
+    const bare = await docs(sb, ['nudge', 'mybacklog', 'workspace']);
+    expect([bare.code, bare.stdout]).toEqual([1, '']);
+    expect(bare.stderr).toContain("unit 'mybacklog' not found");
+  });
+
   it.each([RECORD_ROOT, FALLBACK_ROOT])('RS5b [docs-module-r26] a path inside another module\'s store root (%s, its root or its fallback root) refuses rc 1: a record artifact is read through its unit', async (root) => {
     const r = await docs(fresh(corpus), ['nudge', `${root}/nudge-demo/backlog.md`, 'demo-orders']);
     expect([r.code, r.stdout]).toEqual([1, '']);
