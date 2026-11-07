@@ -16,7 +16,8 @@
   AGENTS.md       = the loader: the harness's every-turn file; its first instruction composes or verifies the generated layer, then loads it whole
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
-  .contexture/laws/ = the law layer: core.md the core law source, compose the composer, AGENTS.generated.md the generated whole (composed at install and boot, gitignored; never edit)
+  AGENTS.generated.md = the generated law layer: composed from .contexture/laws at install and boot, gitignored; never edit
+  .contexture/laws/ = the law sources: core.md the core law source, compose the composer
   .contexture/config = workspace configuration: module-scoped key: value declarations, loaded alongside overlays at boot
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms

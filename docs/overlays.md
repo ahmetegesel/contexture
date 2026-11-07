@@ -54,9 +54,9 @@ Each law reads `slug: statement`, and references to a law are `@laws#<slug>`. Sl
 
 The order is simple: the loader, then the generated law layer, then the workspace overlay, then your local file.
 
-The loader composes or verifies `.contexture/laws/AGENTS.generated.md` and reads it whole; the generated layer carries the core laws plus the installed modules' laws and preambles. The workspace overlay then extends that layer, and the local file extends the workspace. Where the two overlays conflict, the workspace's version wins and the local one is ignored, which is why the local file is described as yielding. Both sit below the laws: an overlay amends, it never overrides a guarantee the core carries. The boot order itself is open to amendment by an overlay, so the overlays are read at the very start of boot.
+The loader composes or verifies `AGENTS.generated.md` at the workspace root and reads it whole; the generated layer carries the core laws plus the installed modules' laws and preambles. The workspace overlay then extends that layer, and the local file extends the workspace. Where the two overlays conflict, the workspace's version wins and the local one is ignored, which is why the local file is described as yielding. Both sit below the laws: an overlay amends, it never overrides a guarantee the core carries. The boot order itself is open to amendment by an overlay, so the overlays are read at the very start of boot.
 
-The generated layer is gitignored and never edited. A workspace that tracks `.contexture/` adds one deny line for `.contexture/laws/AGENTS.generated.md` wherever its tracking is configured; a standalone repository adds it whatever its sessions and rhythms choice. The adoption page shows the line.
+The generated layer is gitignored and never edited. It sits at the root beside the loader and the overlays: a standalone repository ignores it with the root-anchored line `/AGENTS.generated.md` whatever its sessions and rhythms choice, and a deny-by-default workspace keeps it ignored by its `*` line, whitelisting the AGENTS files by name, never with an `AGENTS*.md` glob. The adoption page shows the line.
 
 ## Amend, never contradict
 

@@ -13,7 +13,8 @@ export const DRIVERS: readonly Driver[] = ALL.filter((d) => SELECTED.split(',').
 
 const BASE = join(ROOT, 'base');
 const FTS5_DRIVER = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5');
-const UNSHIPPED = [join('.contexture', 'tmp'), join('.contexture', 'laws', 'AGENTS.generated.md')];
+// the legacy layer path stays unshipped until the idea legacy-sunset retires the composer's cleanup
+const UNSHIPPED = [join('.contexture', 'tmp'), 'AGENTS.generated.md', join('.contexture', 'laws', 'AGENTS.generated.md')];
 
 let fts5: boolean | undefined;
 export function fts5Available(): boolean {

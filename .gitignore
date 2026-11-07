@@ -32,6 +32,6 @@
 # the base engine's scratch drawer stays untracked like the live one
 base/.contexture/tmp/
 # the composed law layer is built at install and boot, never tracked
-base/.contexture/laws/AGENTS.generated.md
+base/AGENTS.generated.md
 # local tooling stays untracked
 /tools/

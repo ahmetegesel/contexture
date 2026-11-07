@@ -10,7 +10,8 @@ export LC_ALL
 dir=$(CDPATH="" cd -- "$(dirname -- "$0")" && pwd) || exit 2
 root=$(CDPATH="" cd -- "$dir/../.." && pwd) || exit 2
 core=$dir/core.md
-out=$dir/AGENTS.generated.md
+out=$root/AGENTS.generated.md
+legacy=$dir/AGENTS.generated.md
 ctx_bin=$root/.contexture/ctx
 tab=$(printf '\t')
 
@@ -374,12 +375,15 @@ if [ "$check_only" -eq 1 ]; then
   if [ -f "$out" ] && cmp -s "$work/generated" "$out"; then
     exit 0
   fi
-  printf 'compose: stale: .contexture/laws/AGENTS.generated.md\n' >&2
+  printf 'compose: stale: AGENTS.generated.md\n' >&2
   exit 1
 fi
-if [ -f "$out" ] && cmp -s "$work/generated" "$out"; then
-  exit 0
+if [ ! -f "$out" ] || ! cmp -s "$work/generated" "$out"; then
+  mv -f "$work/generated" "$out" || die 2 "cannot write AGENTS.generated.md"
+  printf 'compose: composed AGENTS.generated.md\n' >&2
 fi
-mv -f "$work/generated" "$out" || die 2 "cannot write .contexture/laws/AGENTS.generated.md"
-printf 'compose: composed .contexture/laws/AGENTS.generated.md\n' >&2
+if [ -e "$legacy" ] || [ -L "$legacy" ]; then
+  rm -f "$legacy" 2>/dev/null || die 2 "cannot remove the legacy .contexture/laws/AGENTS.generated.md, the root layer already written"
+  printf 'compose: removed legacy .contexture/laws/AGENTS.generated.md\n' >&2
+fi
 exit 0

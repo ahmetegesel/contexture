@@ -43,7 +43,7 @@ rm -rf .adopt-contexture
 chmod +x .contexture/ctx .contexture/laws/compose .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
 ```
 
-`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog to install from. `AGENTS.md` is the loader: run `sh .contexture/laws/compose` after the copy, and the loader verifies or recomposes the generated law layer `.contexture/laws/AGENTS.generated.md` at every boot.
+`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog to install from. `AGENTS.md` is the loader: run `sh .contexture/laws/compose` after the copy, and the loader verifies or recomposes the generated law layer `AGENTS.generated.md`, beside it at the root, at every boot.
 
 ### 2. Run the onboarding wizard
 
@@ -76,11 +76,12 @@ The workspace couples root governance with a dedicated convention drawer:
 ├── AGENTS.md             The loader: compose then load the generated law layer, delivered every turn
 ├── AGENTS.workspace.md   Shared workspace overlay, tracked in git for team-wide rules
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
+├── AGENTS.generated.md   The generated law layer, composed from .contexture/laws/ at install and boot; gitignored, never edited
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
     ├── config            Optional workspace configuration (storage.driver: posix)
     ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
-    ├── laws/             The law layer: core.md the core source, compose the composer, AGENTS.generated.md the generated whole (built at install and boot; gitignored)
+    ├── laws/             The law sources: core.md the core source, compose the composer
     ├── modules/          The standard module folders: unit (the record engine), run (stream filters), and workspace additions
     ├── extensions/       The package overlay root: modules/ for package feature modules (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression

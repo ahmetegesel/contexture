@@ -23,7 +23,7 @@
     standalone repo: contains application code (src/, package.json, Cargo.toml, pyproject.toml, etc.)
     parent workspace: contains multiple independent repositories as subdirectories
   instruction stack first: the existing AGENTS.md and its derivations (CLAUDE.md, GEMINI.md, harness files) are the workspace's self-description: read them first and whole; they name the rules that matter and often where the rest live
-  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/laws/compose`, then read the loader, the generated law layer `.contexture/laws/AGENTS.generated.md`, and the upstream README completely before mapping; fetch upstream, the URL lives in the generated layer's @update section, and the README carries the philosophy behind every judgment the mapping makes
+  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/laws/compose`, then read the loader, the generated law layer `AGENTS.generated.md` at the root, and the upstream README completely before mapping; fetch upstream, the URL lives in the generated layer's @update section, and the README carries the philosophy behind every judgment the mapping makes
   map from the destination: walk the convention's sections one by one against the workspace's material: for each capability, what feeds it, what conflicts with it, what belongs there; migration follows the destination, never the file list
   governance: map every rule surface against the incoming convention; each contradicts, overlaps, or complements it, and the plan must resolve each one; the stack guides the sweep, the sweep covers what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions)
   reading budget: rule-bearing surfaces read whole, they are small and dense; structure is derived by listing, never by reading; application code is out of scope
@@ -67,13 +67,13 @@
   base assets:
     copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
     set script permissions: `chmod +x .contexture/ctx .contexture/laws/compose .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
-    compose the law layer: `sh .contexture/laws/compose`; it builds `.contexture/laws/AGENTS.generated.md` from the core source and the installed modules, and the loader verifies or recomposes it at every boot
+    compose the law layer: `sh .contexture/laws/compose`; it builds `AGENTS.generated.md` at the root from the core source and the installed modules, and the loader verifies or recomposes it at every boot
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
       append personal amendments to existing .gitignore (AGENTS.local.md)
       per confirmed plan: ignore or track .contexture/sessions/ and .contexture/rhythms/ based on team choice
-      always ignore the composed law layer: .contexture/laws/AGENTS.generated.md (built at install and boot, never tracked, never edited)
+      always ignore the composed law layer with the root-anchored line /AGENTS.generated.md (built at install and boot, never tracked, never edited); a repository that ignored it at its old place replaces its .contexture/laws/AGENTS.generated.md ignore line with /AGENTS.generated.md once the update compose has removed the legacy file (update step 9, before the step 10 review)
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
       whitelist shared files explicitly:
@@ -83,9 +83,8 @@
         !README.md
         !.contexture/
         !.contexture/**
-        .contexture/laws/AGENTS.generated.md
         (and active harness symlinks: !CLAUDE.md, !GEMINI.md)
-      one deny line for the generated law layer follows any .contexture whitelist: it is composed, gitignored, never edited
+      the generated law layer AGENTS.generated.md sits at the root under the deny-by-default (*), so it stays ignored with no line of its own: whitelist the AGENTS files by name, never with an AGENTS*.md glob, which would track it; a workspace that re-ignored it at its old place drops its .contexture/laws/AGENTS.generated.md re-ignore line once the update compose has removed the legacy file (update step 9, before the step 10 review)
   migration:
     if existing AGENTS.md, CLAUDE.md, or other instruction files exist:
       extract project-specific guidelines (architecture, test/build commands, code style)

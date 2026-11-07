@@ -8,7 +8,7 @@ The division of labor is deliberate. The model does the work; the machinery hold
 
 ## The instruction files: the loader every turn
 
-A coding harness reads its repository instruction file before it acts. In a contexture workspace `AGENTS.md` is the loader: the only file guaranteed to be in front of the agent every turn, and deliberately a few lines. Its first instruction runs the compose (which composes or verifies the generated layer), then loads `.contexture/laws/AGENTS.generated.md` whole, then chains `AGENTS.workspace.md` and `AGENTS.local.md`. An absent compose or core source is a broken payload: the instruction stops and names the missing path, never booting on a stale or partial layer.
+A coding harness reads its repository instruction file before it acts. In a contexture workspace `AGENTS.md` is the loader: the only file guaranteed to be in front of the agent every turn, and deliberately a few lines. Its first instruction runs the compose (which composes or verifies the generated layer), then loads `AGENTS.generated.md` whole from the workspace root, then chains `AGENTS.workspace.md` and `AGENTS.local.md`. An absent compose or core source is a broken payload: the instruction stops and names the missing path, never booting on a stale or partial layer.
 
 The four delivery files split by ownership. `AGENTS.md` is the base loader; the generated layer is the composed law set, the core law source plus the installed modules' preambles and clauses; the workspace overlay is the shared, tracked amendment; the local file is the personal amendment. The loader is the every-turn cost, under a kilobyte; the generated layer and the overlays are boot reads. The generated layer is gitignored and built at install and boot, never edited. Measured at the v0.61.1 base: the three-file stack it replaces is 34,994 bytes every turn; the loader is 856 bytes, and the boot whole (the generated layer plus both overlays) measured 36,693 bytes with the docs module installed.
 
@@ -579,19 +579,20 @@ Why this holds together:
 
 ## The drawer layout
 
-Everything the convention installs or uses lives under `.contexture/`, except the files a harness must find at the repository root:
+Everything the convention installs or uses lives under `.contexture/`, except the files that sit at the repository root: the loader a harness must find there, the overlays, and the generated law layer beside them:
 
 ```text
 AGENTS.md            the loader: compose or verify, then load the generated layer whole; delivered every turn
 AGENTS.workspace.md  the shared overlay
 AGENTS.local.md      your amendments
+AGENTS.generated.md  the generated law layer: composed from .contexture/laws/ at install and boot; gitignored, never edited
 plugins/             the tracked catalog of packaged overlays: copied into a workspace when wanted
 .contexture/
   ONBOARDING.md      the adoption guideline (removed when the adoption closes)
   ctx                the runtime: discovery, help assembly, dispatch, the run engine, and hooks
   package-install    the package overlay installer: overlays a package's .contexture/extensions tree, records it, runs the part hooks
   package-uninstall  the package overlay remover: runs the part hooks, removes the recorded files, preserves a changed file
-  laws/              the law layer: core.md the core law source, compose the composer, AGENTS.generated.md the generated whole (built at install and boot; gitignored)
+  laws/              the law sources: core.md the core law source, compose the composer
   modules/           unit (the record engine), run (stream filters), and workspace additions
   extensions/        the package overlay root: modules/ (the lane module ships here), storage/drivers/ for package drivers, rhythms/ for package rhythms, .state/ for the installed-path records
   rhythms/           your process patterns

@@ -9,8 +9,8 @@ const LOADER = join(ROOT, 'base/AGENTS.md');
 function loaderOk(text: string): boolean {
   return [
     /FIRST: run \.contexture\/laws\/compose/,
-    /composes the generated law layer \.contexture\/laws\/AGENTS\.generated\.md/,
-    /read \.contexture\/laws\/AGENTS\.generated\.md WHOLE/,
+    /composes the generated law layer AGENTS\.generated\.md/,
+    /read AGENTS\.generated\.md WHOLE/,
     /read AGENTS\.workspace\.md then AGENTS\.local\.md/,
     /absent or not executable/,
     /missing payload path/,
@@ -24,8 +24,8 @@ describe.concurrent('the loader (base/AGENTS.md)', () => {
     expect(statSync(LOADER).size).toBeLessThan(2048);
     const text = readFileSync(LOADER, 'utf8');
     expect(text).toMatch(/^ {2}1\. FIRST: run \.contexture\/laws\/compose/m);
-    expect(text).toMatch(/composes the generated law layer \.contexture\/laws\/AGENTS\.generated\.md or verifies it current/);
-    expect(text).toMatch(/read \.contexture\/laws\/AGENTS\.generated\.md WHOLE/);
+    expect(text).toMatch(/composes the generated law layer AGENTS\.generated\.md or verifies it current/);
+    expect(text).toMatch(/read AGENTS\.generated\.md WHOLE/);
     expect(text).toMatch(/read AGENTS\.workspace\.md then AGENTS\.local\.md/);
     expect(text).toMatch(/absent or not executable/);
     expect(text).toMatch(/core source \.contexture\/laws\/core\.md is absent or unreadable/);

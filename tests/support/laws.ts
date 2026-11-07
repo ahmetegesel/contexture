@@ -9,7 +9,7 @@ export const SYNTH = join(LAW_FIXTURES, 'synthetic');
 export const GOLDEN = join(LAW_FIXTURES, 'base-only.golden');
 export const CORE_SRC = join(ROOT, 'base/.contexture/laws/core.md');
 export const DOCS_MOD = join(ROOT, 'plugins/docs-discipline/.contexture/extensions/modules/docs');
-export const LAYER = '.contexture/laws/AGENTS.generated.md';
+export const LAYER = 'AGENTS.generated.md';
 
 export function synth(overlay?: string): string {
   const sb = sandbox('synth');

@@ -30,7 +30,7 @@ describe.concurrent('the installer recompose', () => {
     expect(count(layer(sb), /^@module pkgfix$/)).toBe(1);
     expect(count(layer(sb), /^ {2}pkgfix-law: the installer fixture law$/)).toBe(1);
     expect(firstByteDifference(layerBytes(sb)!, before)).not.toBe(-1);
-    expect(installed.stderr).toContain('compose: composed .contexture/laws/AGENTS.generated.md');
+    expect(installed.stderr).toContain('compose: composed AGENTS.generated.md');
     expect((await compose(sb, '--check')).code).toBe(0);
 
     expect((await uninstall(sb, 'lawfix')).code).toBe(0);
