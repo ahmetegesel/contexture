@@ -40,7 +40,7 @@
   6. read the rhythm in force: .contexture/ctx rhythm current <unit> (in force with its next gate, completed, stale, or none in force); read a confirmed rhythm's body with ctx rhythm show <name>
   7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
   8. stamp the new period: .contexture/ctx unit stamp <unit> (the anchor carries the period's number and date, no receipt text; a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
-  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit list prints it) at the confirmed rhythm's next gate (ctx rhythm current names it), or in the default design loop when no rhythm is confirmed (@rhythms)
+  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit list prints it) in the confirmed rhythm: at the next gate ctx rhythm current names when that rhythm is the one in force, else at its first step (ctx rhythm show <name>); or in the default design loop when no rhythm is confirmed (@rhythms)
   10. new work: run .contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
 
 @interact

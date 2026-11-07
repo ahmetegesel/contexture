@@ -59,6 +59,14 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(bullets[0]).not.toContain('corpus search');
   });
 
+  it('[modules-r19] composes @boot 9 with a start gate for a newly confirmed rhythm: the next gate ctx rhythm current names when that rhythm is in force, else its first step', () => {
+    const g = layer(base);
+    const nine = g.split('\n').filter((l) => l.startsWith('  9. continue from the backlog'));
+    expect(nine).toHaveLength(1);
+    expect(count(g, /else at its first step \(ctx rhythm show <name>\)/)).toBe(1);
+    expect(nine[0]).toContain('ctx unit list prints it) in the confirmed rhythm: at the next gate ctx rhythm current names when that rhythm is the one in force, else at its first step (ctx rhythm show <name>); or in the default design loop when no rhythm is confirmed (@rhythms)');
+  });
+
   it('[modules-r19] opens no custom section and seats the preambles between @layout and @record', () => {
     const g = layer(base);
     expect(count(g, /^@custom$/)).toBe(0);

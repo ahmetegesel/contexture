@@ -71,7 +71,7 @@ The first thing the agent does in a fresh context, mechanically:
    ```bash
    .contexture/ctx unit stamp <unit>
    ```
-9. Continue from the backlog's derived move (the first `IN_PROGRESS` task, else the first open task, every status but `DONE`; `ctx unit list` prints it) at the confirmed rhythm's next gate (`ctx rhythm current` names it), or in the default design loop when no rhythm is confirmed. The first entry after a rhythm is confirmed carries its first stamp (`ctx unit record --rhythm`), and every stamped write prints the next gate.
+9. Continue from the backlog's derived move (the first `IN_PROGRESS` task, else the first open task, every status but `DONE`; `ctx unit list` prints it) in the confirmed rhythm: at the next gate `ctx rhythm current` names when that rhythm is the one in force, else at its first step (`ctx rhythm show <name>`); or in the default design loop when no rhythm is confirmed. The first entry after a rhythm is confirmed carries its first stamp (`ctx unit record --rhythm`), and every stamped write prints the next gate.
 
 New work bootstraps a unit instead of joining one: run `.contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]`; the storage driver creates the unit whole (the state at A1 with its folded first anchor, an empty backlog and knowledge), and the verb prints the state and the first-task reminder; then continue at step 6.
 
