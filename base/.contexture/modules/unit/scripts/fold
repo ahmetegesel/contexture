@@ -446,7 +446,7 @@ next_open_chunk() {
 
 partial_check() {
   rm -f "$VB_DIR/defects" "$VB_DIR/batches.tsv" "$VB_DIR/chunk_open.tsv" "$VB_DIR/external.tsv" "$VB_DIR/summary"
-  : > "$VB_DIR/carried.tsv"
+  : > "$VB_DIR/carried.tsv"; : > "$VB_DIR/batches.tsv"
   LC_ALL=C awk -f "$VB_LIB/fold-lib.awk" -f "$VB_LIB/fold-check-scan.awk" -v dir="$VB_DIR" -v fs="$fold_slug" -v mode=partial -v nscope="$scope_n" -v nchunk="$chunk_n"
   if [ -s "$VB_DIR/defects" ]; then
     print_defects
@@ -499,7 +499,7 @@ print_batches() {
 
 run_check_full() {
   rm -f "$VB_DIR/defects" "$VB_DIR/batches.tsv" "$VB_DIR/chunk_open.tsv" "$VB_DIR/external.tsv" "$VB_DIR/summary"
-  : > "$VB_DIR/carried.tsv"
+  : > "$VB_DIR/carried.tsv"; : > "$VB_DIR/batches.tsv"
   LC_ALL=C awk -f "$VB_LIB/fold-lib.awk" -f "$VB_LIB/fold-check-scan.awk" -v dir="$VB_DIR" -v fs="$fold_slug" -v mode=full -v nscope="$scope_n" -v nchunk="$chunk_n"
   read_summary
   run_audit
