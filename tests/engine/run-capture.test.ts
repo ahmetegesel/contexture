@@ -1,3 +1,4 @@
+import { readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it, onTestFinished } from 'vitest';
 import { chmodPlant, ROOT_USER } from '../support/plants';
@@ -6,14 +7,20 @@ import { stage } from '../support/stage';
 import { run } from '../support/unit';
 
 describe.concurrent('ctx run capture', () => {
-  it('CT-RD [the-engine-r14]: run --diagnose reports the temp directory, the anonymous capture, and the builtin filters rc 0', async () => {
+  it('CT-RD [the-engine-r14]: run --diagnose reports the temp directory, the anonymous capture, and the builtin filters by name, never their folder, rc 0', async () => {
     const sb = stage('posix', 'run-capture');
     const r = await run(sb, ['run', '--diagnose']);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('runner compaction diagnostics');
     expect(r.stdout).toContain(`temp directory:  ${join(sb, '.contexture/tmp')} (writable)`);
     expect(r.stdout).toContain('capture mode:    anonymous');
-    expect(r.stdout).toContain('builtin filters:');
+    const names = readdirSync(join(sb, '.contexture/modules/run/filters'), { withFileTypes: true })
+      .filter((d) => d.isFile())
+      .map((d) => d.name.replace(/\.awk$/, ''))
+      .sort();
+    expect(names.length).toBeGreaterThan(0);
+    expect(r.stdout.split('\n')).toContain(`  builtin filters: ${names.join(' ')}`);
+    expect(r.stdout).not.toContain(join('modules', 'run', 'filters'));
   });
 
   it('CT-RD [the-engine-r14]: the wrapped command never sees the runner capture files, while it sees its own', async () => {

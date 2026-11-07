@@ -914,19 +914,16 @@ run_body() {
       printf '  capture mode:    anonymous (names removed before the command)\n'
     fi
     printf '  bypass config:   COMPACT_DISABLE=%s COMPACT_DEBUG=%s\n' "${COMPACT_DISABLE:-0}" "${COMPACT_DEBUG:-0}"
-    printf '  builtin filters: %s\n' "$FILTERS_DIR"
+    bf=""
     if [ -d "$FILTERS_DIR" ]; then
-      bf=""
       for f in "$FILTERS_DIR"/*; do
         [ -f "$f" ] || continue
         name=$(basename "$f")
         name=${name%.awk}
         bf="$bf $name"
       done
-      printf '    filters:%s\n' "$bf"
-    else
-      printf '    (none)\n'
     fi
+    printf '  builtin filters:%s\n' "${bf:- (none)}"
     mf_count=0
     for bn in $(filter_module_names); do
       fd=$(module_dir "$bn") || continue

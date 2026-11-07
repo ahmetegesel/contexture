@@ -9,7 +9,7 @@ import { stage } from '../support/stage';
 import { kids, walk } from './walk';
 
 const FILE_FLOOR = 16;
-const HELP_FLOOR = 118;
+const HELP_FLOOR = 120;
 const DOCS_WORK = 'plugins/docs-discipline/docs/work.md';
 const ONBOARDING = 'base/.contexture/ONBOARDING.md';
 
@@ -74,12 +74,14 @@ async function helpForms(sb: string): Promise<{ checked: string[][]; own: string
     checked.push([m, 'help']);
     for (const [v, summary] of table((await ctx(sb, m, 'help')).stdout, 'verbs')) {
       checked.push([m, 'help', v]);
+      if (v === 'diagnose') checked.push([m, '--diagnose']);
       own.push([m, v, '--help']);
       const subs = /\(([a-z, ]+)\)$/.exec(summary)?.[1]?.split(/, */) ?? [];
       if (subs.length && /<subcommand>/.test((await ctx(sb, m, 'help', v)).stdout)) for (const s of subs) own.push([m, v, s, '--help']);
     }
   }
   checked.push(...builtins(top));
+  for (const [b] of builtins(top).filter((f) => f.length === 2)) if (/\[--diagnose\]/.test((await ctx(sb, b!, '--help')).stdout)) checked.push([b!, '--diagnose']);
   return { checked, own };
 }
 
@@ -164,12 +166,12 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(surfaceFiles(copy).length).toBeLessThan(FILE_FLOOR);
   });
 
-  it('the help scan reads ctx help --all, every module table, every verb each table lists, each verb\'s own --help and each sub-verb\'s of a verb taking a <subcommand>, and the engine builtins its usage block lists, each printing, above its floor', () => {
+  it('the help scan reads ctx help --all, every module table, every verb each table lists, each verb\'s own --help and each sub-verb\'s of a verb taking a <subcommand>, the engine builtins its usage block lists, and the --diagnose of a module listing diagnose and of a builtin whose usage names it, each printing, above its floor', () => {
     expect(help.forms.length).toBeGreaterThanOrEqual(HELP_FLOOR);
     expect(help.empty).toEqual([]);
     expect(help.errors).toEqual([]);
     const keys = help.forms.map((f) => f.join(' '));
-    for (const must of ['help --all', 'unit help list', 'unit help resolve', 'lane help create', 'rhythm help show', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'package --help', 'package install --help', 'package uninstall --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help']) expect(keys).toContain(must);
+    for (const must of ['help --all', 'unit help list', 'unit help resolve', 'lane help create', 'rhythm help show', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'package --help', 'package install --help', 'package uninstall --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
     expect(keys).not.toContain('lane show recipe --help');
   });
 
