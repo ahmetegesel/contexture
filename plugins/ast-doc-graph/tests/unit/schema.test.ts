@@ -14,7 +14,7 @@ describe.skipIf(!sqliteFts5)('the graph schema over the seeded rows', { concurre
     expect(count(seededDb('schema-trigram'), "SELECT count(*) FROM fts_symbols WHERE fts_symbols MATCH 'start';")).toBe(2);
   });
 
-  it('TD4 [ast-doc-graph-r15] the unicode61 docs search finds the cascade doc', () => {
+  it('TD4 the unicode61 docs search finds the cascade doc', () => {
     expect(count(seededDb('schema-unicode'), "SELECT count(*) FROM fts_docs WHERE fts_docs MATCH 'cascade';")).toBeGreaterThanOrEqual(1);
   });
 
