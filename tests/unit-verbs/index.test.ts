@@ -1,4 +1,4 @@
-import { renameSync } from 'node:fs';
+import { mkdirSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { stage } from '../support/stage';
@@ -33,6 +33,20 @@ describe.concurrent('ctx unit index: the rhythm index over both roots', () => {
     const r = await unit(sb, 'index');
     expect(r.code).toBe(0);
     expect(r.stdout + r.stderr).toBe('');
+  });
+
+  it('[modules-r20] a folder lists in name order, a missing use when reads (missing), a missing activation reads propose, and a file without an @rhythm line lists nothing', async () => {
+    const sb = stage('posix', 'index-defaults');
+    const dir = join(sb, '.contexture/rhythms');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'b.md'), '@rhythm beta\n  use when: the second one\n  activation: auto\n');
+    writeFileSync(join(dir, 'a.md'), '@rhythm alpha\n');
+    writeFileSync(join(dir, 'c.md'), '# notes\n  use when: never listed\n');
+    const r = await unit(sb, 'index');
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toBe(
+      'alpha (.contexture/rhythms/a.md) | use when: (missing) | activation: propose\nbeta (.contexture/rhythms/b.md) | use when: the second one | activation: auto\n',
+    );
   });
 
   it('R-g [modules-r20]: index refuses an argument rc 1', async () => {
