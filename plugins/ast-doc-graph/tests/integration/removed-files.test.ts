@@ -158,6 +158,16 @@ describe.skipIf(!sqliteFts5)('a removed corpus doc leaves the graph', { concurre
     expect(rowsOf(repo, 'doc:workspace:alpha', 'docs/workspace/alpha.md')).toEqual([1, 1, 1, 3, 1]);
   });
 
+  it('[ast-doc-graph-r1] a delta that removes more files than one command line holds removes them all', async () => {
+    const repo = twoDocs('removed-many');
+    await indexed(repo);
+    sqlite(db(repo), "WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 24999) INSERT INTO indexed_files (file, mtime, hash) SELECT 'docs/workspace/archive/a-folder-long-enough-to-fill-a-command-line/entry-' || i || '.md', 0, '' FROM n;");
+    rmSync(join(repo, 'docs/workspace/beta.md'));
+    await indexed(repo, ['--delta']);
+    expect(count(db(repo), 'SELECT count(*) FROM indexed_files;')).toBe(1);
+    expect(rowsOf(repo, 'doc:workspace:beta', 'docs/workspace/beta.md')).toEqual([0, 0, 0, 0, 0]);
+  });
+
   it('[ast-doc-graph-r1] a delta whose repository root holds none of the indexed files refuses rc 1 and leaves the graph', async () => {
     const repo = twoDocs('other-root');
     await indexed(repo);

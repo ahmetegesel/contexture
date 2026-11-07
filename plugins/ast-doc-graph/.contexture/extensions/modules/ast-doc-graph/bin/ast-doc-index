@@ -383,7 +383,13 @@ if [[ "$DELTA" == true ]]; then
     : > "$PITFALLS_JSONL"
   fi
 
-  # Ingest delta into SQLite database
+  # Ingest delta into SQLite database, the modified and removed files listed in a file, never one argument each
+  DELTA_LIST="$CACHE_DIR/delta_files.txt"
+  {
+    [[ ${#DIRTY_TS[@]} -eq 0 ]] || printf '%s\n' "${DIRTY_TS[@]}"
+    [[ ${#DIRTY_DOCS[@]} -eq 0 ]] || printf '%s\n' "${DIRTY_DOCS[@]}"
+    [[ ${#REMOVED[@]} -eq 0 ]] || printf '%s\n' "${REMOVED[@]}"
+  } > "$DELTA_LIST"
   LOADER_FLAGS=(
     --db "$DB_PATH"
     --symbols "$SYMBOLS_JSONL"
@@ -394,22 +400,8 @@ if [[ "$DELTA" == true ]]; then
     --project-root "$REPO_ROOT"
     --schema "$SCHEMA_SQL"
     --delta
+    --file-list "$DELTA_LIST"
   )
-  if [[ ${#DIRTY_TS[@]} -gt 0 ]]; then
-    for f in "${DIRTY_TS[@]}"; do
-      LOADER_FLAGS+=(--file "$f")
-    done
-  fi
-  if [[ ${#DIRTY_DOCS[@]} -gt 0 ]]; then
-    for f in "${DIRTY_DOCS[@]}"; do
-      LOADER_FLAGS+=(--file "$f")
-    done
-  fi
-  if [[ ${#REMOVED[@]} -gt 0 ]]; then
-    for f in "${REMOVED[@]}"; do
-      LOADER_FLAGS+=(--file "$f")
-    done
-  fi
 
   "$INDEX_GRAPH" "${LOADER_FLAGS[@]}"
   touch "$DB_PATH"
