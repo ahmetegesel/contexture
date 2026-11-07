@@ -4,7 +4,7 @@
 # help: prints one line, read from the unit's last stamped entry in record order, open or closed: rhythm in force: <name> at <N> <GATE> (entry <slug>); next gate: <N+1> <GATE>: <outcome>
 # help: the other lines: rhythm completed: <name> at its last gate <N> <GATE> (entry <slug>); rhythm stale: <stamp> (entry <slug>) matches no step of the effective rhythm; read it: ctx rhythm show <name>; rhythm none in force in <unit>: the design loop runs until the human confirms a rhythm (ctx rhythm list)
 # help: the board ends with the same line; a stamped ctx unit record prints the next gate when it writes
-# help: a malformed unit refuses rc 1 before any read; a unit the store does not hold refuses rc 1 with the entry listing's own line
+# help: a malformed unit refuses rc 1 before any read; a unit the store does not hold refuses rc 1 with the entry listing's own line; a unit served from the deprecated root prints its line, then the listing's one warning after it
 # help: exit codes: 0 the line printed; 1 a malformed or missing unit
 # help: example: ctx rhythm current my-unit
 
@@ -30,12 +30,18 @@ case "$unit" in
 esac
 
 json="$drawer/modules/unit/lib/json.awk"
-if [ ! -f "$json" ]; then
+lib="$drawer/modules/unit/lib/verb.sh"
+if [ ! -f "$json" ] || [ ! -f "$lib" ]; then
   printf 'rhythm current: error: the unit module is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
   exit 2
 fi
-answer=$("$bin" unit entry list "$unit" --json < /dev/null) || exit $?
-last=$(printf '%s\n' "$answer" | awk -f "$json" | awk '
+VB_SELF=$lib
+. "$lib"
+vb_tmp
+"$bin" unit entry list "$unit" --json < /dev/null > "$VB_DIR/ans" 2> "$VB_DIR/err"
+VB_RC=$?
+vb_ok
+last=$(awk -f "$json" < "$VB_DIR/ans" | awk '
   function dec(s,   o, i, n, c) {
     o = ""; n = length(s)
     for (i = 1; i <= n; i++) {

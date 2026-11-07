@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, unlinkSync, writeFileSync 
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
-import type { Run } from '../support/exec';
+import { exec, type Run } from '../support/exec';
 import { appendArtifact } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
@@ -246,11 +246,15 @@ describe.concurrent('ctx rhythm current, the board line, and the stamped record'
     expect((await rh(sb, 'current')).code).toBe(1);
   });
 
-  it('[modules-r-zv4ny, the-record-r-4gj4k, the-record-r-njns2] current and the board of a unit served from the deprecated root print their line and the warning once', async () => {
+  it('[modules-r-zv4ny, the-record-r-4gj4k, the-record-r-njns2] current and the board of a unit served from the deprecated root print their line and the warning once, current its warning after its line', async () => {
     const sb = fresh(cur);
     mkdirSync(join(sb, FALLBACK_ROOT), { recursive: true });
     renameSync(join(sb, RECORD_ROOT, 'force-u'), join(sb, FALLBACK_ROOT, 'force-u'));
     expect(await rh(sb, 'current', 'force-u')).toMatchObject({ code: 0, stdout: `${IN_FORCE}\n`, stderr: WARNING });
+    const merged = await exec('sh', ['-c', './.contexture/ctx rhythm current force-u 2>&1'], { cwd: sb });
+    expect(merged.stdout).toBe(`${IN_FORCE}\n${WARNING}`);
+    const missing = await exec('sh', ['-c', './.contexture/ctx rhythm current no-such-u 2>&1'], { cwd: sb });
+    expect([missing.code, missing.stdout]).toEqual([1, "entry.list: error: unit 'no-such-u' not found (ERR_ENTITY_NOT_FOUND)\n"]);
     const board = await unit(sb, 'board', 'force-u');
     expect([board.code, last(board.stdout), board.stderr]).toEqual([0, IN_FORCE, WARNING]);
   });
