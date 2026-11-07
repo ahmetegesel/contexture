@@ -12,8 +12,6 @@ plugins/<name>/
       modules/<name>/    a standard module folder: manifest, laws, data, part hooks, verbs, hooks, filters, and its private assets
       storage/drivers/<name>/  a storage driver (the driver kind)
       rhythms/           rhythm files
-  install                the package installer entry (overlays the declared parts into .contexture/extensions)
-  uninstall              the package remover (runs the part hooks, removes the recorded files)
   README.md              plugin-meta: adoption, the plugin's needs, contribution
   tests/                 plugin-meta: the plugin's own vitest project, never installed
   AGENTS.workspace.md    root overlay fragments: reference material, never installed

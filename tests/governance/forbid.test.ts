@@ -55,6 +55,14 @@ describe.concurrent('the main-surface forbid grep: no invocable raw tool path', 
     expect(hits(body)).toEqual(body.split('\n').slice(0, 4));
   });
 
+  it('[plugins-r1] the plugin tree lists no package root install or uninstall entry', () => {
+    const rootScript = /^ {2}(un)?install +/m;
+    const tree = text(join(ROOT, 'docs/plugins.md')).match(/^plugins\/<name>\/\n(?: .*\n)+/m)?.[0] ?? '';
+    expect(tree).toMatch(/^ {2}manifest +/m);
+    expect('plugins/<name>/\n  manifest   the declaration\n  install    the installer\n').toMatch(rootScript);
+    expect(tree).not.toMatch(rootScript);
+  });
+
   it.each(SURFACES)('%s carries no raw tool path', (rel) => {
     expect(hits(text(join(ROOT, rel)))).toEqual([]);
   });
