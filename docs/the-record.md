@@ -47,7 +47,7 @@ ref_sessions: [design-notes]
 - `repos:` lists affected repositories.
 - `ref_sessions:` lists optional read-only reference units mounted at boot; boot loads their knowledge and active journal.
 
-The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `active`, `units`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the store's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
+The state is refreshed as the work moves, via `ctx unit stamp`, `ctx unit refs`, `ctx unit close`, and `ctx unit reopen`. A legacy `next_action` line already stored is ignored by the record reads (the load, `list`, and the exact search) and erased by the next state write; a new state never carries one. On an indexed backend the ranked search reads the store's document derived from the raw value at write time, so an unwritten legacy line may still match there until a state write rewrites it.
 
 The state carries no date. Recency is journal-derived: a unit's `last_event` is the date its last main-journal item carries, so the field stays current without a state write and `session.list` answers it. A unit whose last item carries no date answers null, and lane journals never enter the derivation. `ctx unit list` reads no journal, so it prints no date and orders its units bytewise by name.
 
