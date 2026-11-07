@@ -133,6 +133,11 @@ call's stderr in the verb's scratch, and the verb's exit prints it once, after t
 only when the verb ends rc 0; `vb_ok` relays through it, and audit, board, diagnose, and
 list call it after their render, so a verb level refusal after a read (a load page out of
 range, a claim the report lacks, a unit no other unit references) prints its line alone.
+A verb that runs other verbs as its children holds their relays: refresh runs board and
+audit each with a scratch root of its own and `VB_RELAY_HOLD` naming refresh's own held
+relay, so a child ending rc 0 hands its held warning to that hold instead of printing it,
+and refresh's exit prints the merged relay once, deduplicated, after its answer, only when
+refresh ends rc 0.
 
 `unit.promote <unit>...|--all` stands outside the 35 operations, as `data_get` does: it
 checks every named unit is held (or lists every unit by its state key under `--all`),

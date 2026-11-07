@@ -1,4 +1,4 @@
-import { mkdirSync, renameSync } from 'node:fs';
+import { appendFileSync, mkdirSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
@@ -61,10 +61,19 @@ describe.concurrent('the refusal order over a unit in the deprecated root: a ref
     else expect(r.stderr).toMatch(line);
   });
 
+  it('[the-record-r-4gj4k] ctx unit refresh over the same unit, its audit failing on a planted entry without THREAD, ends rc 1 with no warning', async () => {
+    const sb = fresh(snap);
+    appendFileSync(join(sb, FALLBACK_ROOT, 'lg', 'journal.md'), `\n@entry 2026-10-01-lg-bad\n  ANCHOR: A1\n  WHAT: "an entry with no thread"\n`);
+    const r = await run(sb, ['unit', 'refresh', 'lg']);
+    expect([r.code, r.stderr]).toEqual([1, '']);
+    expect(r.stdout).toContain('2026-10-01-lg-bad');
+  });
+
   it.for(
     [
       ['unit', 'load', 'lg'],
       ['unit', 'board', 'lg'],
+      ['unit', 'refresh', 'lg'],
       ['unit', 'resolve', 'lg', 'lane#ll/report#FINDINGS'],
       ['unit', 'list', '--all', '--repo=r1'],
       ['lane', 'show', 'lg', 'll', 'report'],

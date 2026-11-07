@@ -53,7 +53,10 @@ VB_CR=$(printf '\r')
 vb_cleanup() {
   vc_rc=$?
   if [ -n "$VB_DIR" ]; then
-    [ "$vc_rc" -eq 0 ] && [ -s "$VB_DIR/relay" ] && awk '!seen[$0]++' "$VB_DIR/relay" >&2
+    if [ "$vc_rc" -eq 0 ] && [ -s "$VB_DIR/relay" ]; then
+      # a verb run as a child of another verb hands its held warning to the parent's hold
+      if [ -n "${VB_RELAY_HOLD:-}" ]; then cat "$VB_DIR/relay" >> "$VB_RELAY_HOLD"; else awk '!seen[$0]++' "$VB_DIR/relay" >&2; fi
+    fi
     rm -rf "$VB_DIR"
   fi
   VB_DIR=""
