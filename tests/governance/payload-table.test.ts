@@ -1,8 +1,10 @@
 import { spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FTS5_DB } from '../support/drawer';
 import { ROOT } from '../support/root';
+import { sandbox } from '../support/sandbox';
 import { atTop, git, kids, text } from './walk';
 
 const SHIPPED = 'base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/run,modules/unit,extensions,ONBOARDING.md}';
@@ -32,7 +34,15 @@ const updatingStep = (n: number): string => stepOf('Updating', n);
 
 const listing = (tree: string): string => `git diff --name-only --no-renames --diff-filter=D <live-tag> <tag> -- ${tree}`;
 
-const REMOVE_EMPTIED = 'while IFS= read -r p; do rm -f "$p"; rmdir -p "$(dirname "$p")" 2>/dev/null; done';
+const REMOVE_EMPTIED = 'while IFS= read -r p; do rm -f "$p"; rmdir -p "$(dirname "$p")" 2>/dev/null || :; done';
+
+const loopAfterListing = (step: string, tree: string): string => {
+  const head = `${listing(tree)} | `;
+  const at = step.indexOf(head);
+  if (at < 0) return '';
+  const rest = step.slice(at + head.length);
+  return rest.slice(0, rest.indexOf('`'));
+};
 
 const deleteListings = (body: string): string[] => body.match(/git diff [^`\n]*--diff-filter=D[^`\n]*/g) ?? [];
 
@@ -65,6 +75,21 @@ describe.concurrent('the Updating path', () => {
     expect(step).toMatch(new RegExp(`^${n}\\. `));
     expect(step).toContain(`${listing(tree)} | `);
     expect(step).toContain(REMOVE_EMPTIED);
+  });
+
+  it('the step 6 removal loop ends rc 0, deleting every listed path, removing the folders it empties, and keeping a folder that still holds an entry', () => {
+    const loop = loopAfterListing(updatingStep(6), 'base/');
+    expect(loop).toContain('while IFS= read -r p');
+    const tree = sandbox('removal-loop');
+    mkdirSync(join(tree, 'gone/deep'), { recursive: true });
+    mkdirSync(join(tree, 'kept'));
+    for (const f of ['gone/deep/x', 'kept/y', 'kept/z']) writeFileSync(join(tree, f), '');
+    const run = spawnSync('sh', ['-c', `printf '%s\\n' "$@" | ${loop}`, 'sh', 'base/gone/deep/x', 'base/kept/y'], { cwd: tree, encoding: 'utf8' });
+    expect(run.status).toBe(0);
+    expect(existsSync(join(tree, 'gone/deep/x'))).toBe(false);
+    expect(existsSync(join(tree, 'kept/y'))).toBe(false);
+    expect(existsSync(join(tree, 'gone'))).toBe(false);
+    expect(existsSync(join(tree, 'kept/z'))).toBe(true);
   });
 
   it('no guide lists removed paths with rename detection on, which reports a moved file as a rename and leaves it off the list', () => {
