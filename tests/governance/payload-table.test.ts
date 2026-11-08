@@ -55,6 +55,13 @@ const compareFilter = (): string => {
   return line.slice(COMPARE.length).replace(/^\s*\|\s*/, '');
 };
 
+const compareReading = (): string => guide().split('\n').find((l) => l.startsWith('Each `Only in .contexture...` line')) ?? '';
+
+const tagsAsked = (): string[] => (compareReading().match(/`git log --tags [^`]*`/g) ?? []).map((c) => c.slice(1, -1));
+
+const shipped = (command: string, placeholder: string, path: string): string =>
+  spawnSync('sh', ['-c', command.replace(placeholder, path)], { cwd: ROOT, encoding: 'utf8' }).stdout.trim();
+
 const throughFilter = (filter: string, lines: string[]): string[] =>
   spawnSync('sh', ['-c', `printf '%s\\n' "$@" | ${filter || 'cat'}`, 'sh', ...lines], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
 
@@ -124,6 +131,23 @@ describe.concurrent('the Updating path', () => {
     const files = ['config', 'storage.conf', db, `${db}-wal`, `${db}-shm`, '.DS_Store'].map((f) => `Only in .contexture: ${f}`);
     expect(compareFilter()).not.toBe('');
     expect(throughFilter(compareFilter(), [...leftovers, ...owned, ...files])).toEqual(leftovers);
+  });
+
+  it("the compare's reading tells a missed delete from the workspace's own by the tags: shipped under base/, or a module folder a plugin shipped before v0.60", () => {
+    const reading = compareReading();
+    expect(reading).toContain('a printed path some tag shipped under `base/` is a missed delete (`git log --tags --format=%h -1 -- base/.contexture/<path>` names a commit');
+    expect(reading).toContain("a folder under `.contexture/modules/` some tag shipped under a plugin's `.contexture`, that plugin's home from before v0.60 (`git log --tags --format=%h -1 -- 'plugins/*/.contexture/modules/<name>/*'` names a commit)");
+    expect(reading).toContain("any other path, where both print nothing, is the workspace's own");
+  });
+
+  it.skipIf(!rooted)("the reading's tags commands name the leftovers and a pre v0.60 plugin home, and nothing for the workspace's own names", () => {
+    const [base, plugin] = [tagsAsked().find((c) => c.includes('<path>')) ?? '', tagsAsked().find((c) => c.includes('<name>')) ?? ''];
+    expect(base).not.toBe('');
+    expect(plugin).not.toBe('');
+    for (const path of ['modules/session', 'modules/lane', 'templates']) expect(shipped(base, '<path>', path)).toMatch(/^[0-9a-f]{4,}$/);
+    expect(shipped(plugin, '<name>', 'docs')).toMatch(/^[0-9a-f]{4,}$/);
+    for (const path of ['modules/feedback', 'setups', 'config', 'modules/docs']) expect(shipped(base, '<path>', path)).toBe('');
+    for (const name of ['feedback', 'unit']) expect(shipped(plugin, '<name>', name)).toBe('');
   });
 });
 
