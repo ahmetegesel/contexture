@@ -608,8 +608,10 @@ store_get() {
 }
 
 # store_fallback_drop: the fallback root folder removed when it holds nothing; rmdir refuses
-# silently while any entry remains, so the answer is always rc 0 and nothing is printed
+# silently while any entry remains, so the answer is always rc 0 and nothing is printed; a
+# namespace that declares no fallback removes nothing
 store_fallback_drop() {
+  [ -n "$SD_FALLBACK" ] || return 0
   rmdir "$STORE_WS/$SD_FALLBACK" 2>/dev/null
   return 0
 }
