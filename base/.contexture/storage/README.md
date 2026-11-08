@@ -78,8 +78,9 @@ fallback to the root in one `mv` under the namespace lock (the root's parent fol
 first, a killed writer's residue moving with the folder), the card declaring the
 `store.promote` token; a move that empties the fallback root removes it as the write
 path's does, and a `none` answer over an empty fallback root removes that root too, so a
-sweep over a fully moved store leaves no empty deprecated root; fts5 keeps namespace and key with no root, never reads a fallback,
-and does not declare it. The batch holds that lock once, validates the whole action list against the live keys, stages
+sweep over a fully moved store leaves no empty deprecated root, while a store holding no
+unit keeps its empty root, the sweep then promoting nothing; fts5 keeps namespace and key
+with no root, never reads a fallback, and does not declare it. The batch holds that lock once, validates the whole action list against the live keys, stages
 a value per put, and commits every key under one store-scope undo log; its first failure
 prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and
 nothing is written. The namespace lock (`.contexture/tmp/locks/store-<namespace>.lock`
