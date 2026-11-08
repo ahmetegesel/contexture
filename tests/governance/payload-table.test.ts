@@ -1,6 +1,7 @@
 import { spawnSync } from 'node:child_process';
-import { join } from 'node:path';
+import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { FTS5_DB } from '../support/drawer';
 import { ROOT } from '../support/root';
 import { atTop, git, kids, text } from './walk';
 
@@ -91,11 +92,13 @@ describe.concurrent('the Updating path', () => {
     expect(deleteListings(planted).filter((c) => !c.includes('--no-renames'))).toHaveLength(1);
   });
 
-  it('the payload compare prints a leftover module folder and the retired templates folder, and drops only the workspace-owned top folders', () => {
+  it('the payload compare prints a leftover module folder and the retired templates folder, and drops only the workspace-owned top folders and files', () => {
     const leftovers = ['Only in .contexture/modules: session', 'Only in .contexture/modules: lane', 'Only in .contexture: templates'];
     const owned = ['Only in .contexture: units', 'Only in .contexture: sessions', 'Only in .contexture: rhythms', 'Only in .contexture: tmp'];
+    const db = basename(FTS5_DB);
+    const files = ['config', 'storage.conf', db, `${db}-wal`, `${db}-shm`, '.DS_Store'].map((f) => `Only in .contexture: ${f}`);
     expect(compareFilter()).not.toBe('');
-    expect(throughFilter(compareFilter(), [...leftovers, ...owned])).toEqual(leftovers);
+    expect(throughFilter(compareFilter(), [...leftovers, ...owned, ...files])).toEqual(leftovers);
   });
 });
 
