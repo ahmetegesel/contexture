@@ -134,6 +134,21 @@ describe('the posix fallback root: reads after the root, writes to the root afte
     expect(readFileSync(join(file, 'old-root/notes.txt'), 'utf8')).toBe('not a key\n');
   });
 
+  it('[the-engine-r-b3r6t] a put, a delete, or a batch that moves nothing leaves an empty fallback root in place, each answer clean', async () => {
+    const writes: [string, (s: ReturnType<typeof store>) => Promise<Run>][] = [
+      ['store.put', (s) => s.put('legacy', 'a/journal', 'j\n')],
+      ['store.delete', (s) => s.del('legacy', 'a/state')],
+      ['store.batch', (s) => s.batch('legacy', [{ action: 'put', key: 'a/journal', value: 'j\n' }])],
+    ];
+    for (const [fn, write] of writes) {
+      const sb = fresh(snap);
+      plant(sb, 'new-root/a/state.md', 'new a\n');
+      mkdirSync(join(sb, 'old-root'));
+      answer(await write(store(sb, 'posix')), fn);
+      expect(existsSync(join(sb, 'old-root')), fn).toBe(true);
+    }
+  });
+
   it('[the-engine-r-b3r6t] store.promote removes the fallback root its move empties, and an empty fallback root when it answers none', async () => {
     const moved = fresh(snap);
     plant(moved, 'old-root/b/state.md', 'old b\n');
