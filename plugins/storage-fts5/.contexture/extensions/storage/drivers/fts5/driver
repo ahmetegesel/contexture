@@ -1135,7 +1135,8 @@ capability() {
 # storage.health <namespace>: a probe of the named namespace's store, never a write, and the
 # backend's health alone (no record count: the record's active listing is the unit
 # module's). An absent database, or a file holding no table, reads degraded with the store
-# absent (the first write lays the schema); an unreadable file reads error with the store
+# absent (an absent file is made by its first write, a file holding no table gets the
+# schema at its first store read or write); an unreadable file reads error with the store
 # absent, and a store at another schema error with it present; then presence counts the
 # namespace's keys alone, an unwritable file or a failed integrity check reads error with
 # that presence, and the namespace's store lock held reads locked in place of ok. No detail
@@ -1163,7 +1164,7 @@ storage_health() {
   sh_v=${sh_p%%|*}
   sh_t=${sh_p#*|}
   if [ "$sh_t" = 0 ]; then
-    printf '{"driver":"fts5","health":"degraded","detail":"database present, its schema not laid yet (the first write lays it)","store":"absent"}\n'
+    printf '{"driver":"fts5","health":"degraded","detail":"database present, its schema not laid yet (the first store read or write lays it)","store":"absent"}\n'
     exit 0
   fi
   if [ "$sh_v" != "$DB_SCHEMA_VERSION" ]; then

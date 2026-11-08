@@ -53,8 +53,10 @@ value. A mode the module does not declare or the driver does not serve refuses r
 
 ## Schema and open path
 
-The store is at schema version 5 (`PRAGMA user_version`). A new or empty database gets the
-whole schema on its first write. A version 5 store opens with one read. A store at any
+The store is at schema version 5 (`PRAGMA user_version`). An absent database file is made
+with the whole schema by its first write (a read of an absent file makes nothing), and an
+existing empty file gets the whole schema on its first open, read or write. A version 5
+store opens with one read. A store at any
 other version refuses every function rc 2 `ERR_STORAGE_SCHEMA` naming its version and the
 way forward, is never written, and gets no backup: the plugin carries no upgrade path, so
 an older store is moved aside and its record re-entered into a fresh one through the ctx

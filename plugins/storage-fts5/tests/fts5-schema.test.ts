@@ -109,7 +109,10 @@ describe.skipIf(!fts5Available())('the fts5 storage.health over the database sta
   it('[the-engine-r24] a file with no table reads degraded with the store absent: the store is not made yet', async () => {
     const { db, s } = at('notable.db');
     writeFileSync(db, '');
-    expect(await health(s)).toEqual({ driver: 'fts5', health: 'degraded', detail: 'database present, its schema not laid yet (the first write lays it)', store: 'absent' });
+    expect(await health(s)).toEqual({ driver: 'fts5', health: 'degraded', detail: 'database present, its schema not laid yet (the first store read or write lays it)', store: 'absent' });
+    answer(await s.op('store.list', ['docs']), 'store.list');
+    expect(version(db)).toBe('5');
+    expect(await health(s)).toMatchObject({ health: 'ok', store: 'absent' });
   });
 
   it('[the-engine-r24] a schema 5 store holding no key of the namespace reads ok with the store absent: its last key deleted, or only another namespace\'s keys', async () => {
