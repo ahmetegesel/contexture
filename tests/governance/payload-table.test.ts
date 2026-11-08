@@ -26,7 +26,7 @@ describe.concurrent('the Updating path', () => {
   it('step 8 deletes the catalog paths the range removed, or refreshes the catalog whole, since catalog meta moves no version', () => {
     const step = updatingStep(8);
     expect(step).toMatch(/^8\. Update the installed packages: /);
-    expect(step).toContain('git diff --name-status --diff-filter=D <live-tag> <tag> -- plugins/');
+    expect(step).toContain('git diff --name-only --no-renames --diff-filter=D <live-tag> <tag> -- plugins/');
     expect(step).toContain('git archive <tag> plugins/ | tar -x -C <your-repo>');
   });
 });
