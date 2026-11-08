@@ -195,6 +195,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/^ctx unit migrate: /);
     expect(r.stdout).toContain('ctx unit migrate --all');
+    expect(r.stdout).toContain('a root still holding anything stays, and a store holding no unit keeps its empty root');
     expect(r.stdout).not.toMatch(/\.contexture|\//);
   });
 });

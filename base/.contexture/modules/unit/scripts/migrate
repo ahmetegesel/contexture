@@ -5,7 +5,7 @@
 # help: moves each named unit, or with --all every unit the store holds, whole from the store's deprecated root to its current root, each under its unit lock (unit.promote over the store's optional promotion); a unit already in the current root moves nothing
 # help: every landing write already moves the unit it writes, so the sweep is for the units nobody writes: a CLOSED unit never moves by a write, and while any unit stays behind every read of it warns naming this verb
 # help: prints one line, migrated: <n>, the units moved, so a second run prints migrated: 0; a store that keeps no deprecated root prints that nothing moves
-# help: the deprecated root is removed once it is empty: by the move that empties it, and by a sweep that finds it empty, which still prints migrated: 0; a root still holding anything stays
+# help: the deprecated root is removed once it is empty: by the move that empties it, and by a sweep that finds it empty, which still prints migrated: 0; a root still holding anything stays, and a store holding no unit keeps its empty root
 # help: the first refusal stops the run, its one line naming the unit; the units moved before it stay moved
 # help: exit codes: 0 swept, or nothing to move; 1 a bare call, a bad argument, an unknown unit, or a unit the store holds in both roots; 2 a storage failure
 # help: example: ctx unit migrate --all
