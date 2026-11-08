@@ -99,6 +99,27 @@ describe.concurrent('the Updating path', () => {
   });
 });
 
+const topology = (name: 'standalone repo' | 'parent workspace'): string[] => {
+  const lines = text(join(ROOT, 'base/.contexture/ONBOARDING.md')).split('\n');
+  const start = lines.indexOf(`    ${name}:`);
+  if (start < 0) return [];
+  const end = lines.findIndex((l, i) => i > start && /^ {0,4}\S/.test(l));
+  return lines.slice(start + 1, end < 0 ? undefined : end);
+};
+
+describe.concurrent("the adoption procedure's gitignore guidance", () => {
+  it('a standalone repository ignores the scratch drawer', () => {
+    expect(topology('standalone repo').some((l) => l.includes('always ignore the scratch drawer with the line .contexture/tmp/'))).toBe(true);
+  });
+
+  it('a deny-by-default workspace re-ignores the scratch drawer after the drawer whitelist', () => {
+    const lines = topology('parent workspace');
+    const whitelist = lines.indexOf('        !.contexture/**');
+    expect(whitelist).toBeGreaterThan(0);
+    expect(lines.findIndex((l) => l.includes('the line .contexture/tmp/ follows !.contexture/**'))).toBeGreaterThan(whitelist);
+  });
+});
+
 describe('the payload path tables', () => {
   it('the declaration is one string in adoption.md and the-engine.md', () => {
     expect(declaration('docs/the-engine.md')).toBe(declaration('docs/adoption.md'));
