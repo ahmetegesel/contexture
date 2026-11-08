@@ -607,16 +607,25 @@ store_get() {
   store_notice
 }
 
+# store_fallback_drop: the fallback root folder removed when it holds nothing; rmdir refuses
+# silently while any entry remains, so the answer is always rc 0 and nothing is printed
+store_fallback_drop() {
+  rmdir "$STORE_WS/$SD_FALLBACK" 2>/dev/null
+  return 0
+}
+
 # store_lift <folder>: the fallback root's folder (a key prefix without its slash) moved to
-# the root by one rename, under the namespace lock the caller holds; rc 0 when it moved or
-# the fallback holds no such folder (a namespace without a fallback checks no folder), rc 1
-# when the root holds it too, rc 2 when the move failed. The caller frames the refusal.
+# the root by one rename, under the namespace lock the caller holds, then the fallback root
+# dropped when the move emptied it; rc 0 when it moved or the fallback holds no such folder
+# (a namespace without a fallback checks no folder), rc 1 when the root holds it too, rc 2
+# when the move failed. The caller frames the refusal.
 store_lift() {
   [ -n "$SD_FALLBACK" ] && [ -d "$STORE_WS/$SD_FALLBACK/$1" ] || return 0
   lf_to="$STORE_WS/$SD_ROOT/$1"
   [ -e "$lf_to" ] && return 1
   { [ -d "${lf_to%/*}" ] || mkdir -p "${lf_to%/*}"; } 2>/dev/null || return 2
   mv "$STORE_WS/$SD_FALLBACK/$1" "$lf_to" 2>/dev/null || return 2
+  store_fallback_drop
 }
 
 # store_lift_for <namespace> <key>: store_lift of the key's top segment folder before a put
@@ -1150,7 +1159,8 @@ capability() {
 # segments ending in a slash) from the namespace's fallback root to its root, one folder
 # rename under the namespace lock; state moved, or none when the fallback holds no folder
 # for the prefix or the namespace declares no fallback; the root already holding a folder
-# for the prefix refuses rc 1 ERR_ENTITY_EXISTS with nothing moved.
+# for the prefix refuses rc 1 ERR_ENTITY_EXISTS with nothing moved. A move that empties the
+# fallback root, or a none answer over an empty fallback root, removes that root.
 store_promote() {
   FN=store.promote
   [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.promote takes the namespace and a key prefix ending in a slash"
@@ -1172,6 +1182,8 @@ store_promote() {
     esac
     store_unlock
     pm_state=moved
+  elif [ -n "$SD_FALLBACK" ]; then
+    store_fallback_drop
   fi
   printf '{"namespace":"%s","prefix":"%s","state":"%s"}\n' "$(escape_json "$pm_ns")" "$(escape_json "$pm_prefix")" "$pm_state"
 }

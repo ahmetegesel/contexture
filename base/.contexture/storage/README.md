@@ -47,7 +47,7 @@ Seven data functions and the optional promotion, called through the resolver:
 | `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `head=<sha\|none>`, `value_b64=<base64>` for a put) | `{"namespace","actions":N}`; all or none |
 | `store.scan` | `<namespace>` | none | `{"namespace","items":[{"key","value_b64"}]}`: every admitted key, bytewise, its raw value in base64 |
 | `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,entity_type,entity_id,section,snippet,score}]}`; limit 0 answers every result |
-| `store.promote` | `<namespace> <prefix>` | none | `{"namespace","prefix","state"}`: optional (the `store.promote` token); moves the prefix (whole key segments ending in a slash) from the fallback root to the root; `moved`, or `none` when the fallback holds nothing for it or none is declared; the root already holding it refuses rc 1 `ERR_ENTITY_EXISTS` |
+| `store.promote` | `<namespace> <prefix>` | none | `{"namespace","prefix","state"}`: optional (the `store.promote` token); moves the prefix (whole key segments ending in a slash) from the fallback root to the root; `moved`, or `none` when the fallback holds nothing for it or none is declared; a move that empties the fallback root, or a `none` answer over an empty one, removes that root; the root already holding it refuses rc 1 `ERR_ENTITY_EXISTS` |
 
 Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a
 read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a
@@ -65,8 +65,10 @@ key from both roots, so an old value never resurfaces. Before it writes, a put, 
 or a batch (after its validation) moves each written key's top segment folder from the
 fallback to the root under the namespace lock it already holds, when the fallback alone
 holds it: one `mv`, the root made first when absent, so a module's write moves its folder
-whole with no call of its own; a folder already in the root, or a namespace without a
-fallback, costs one folder check at most and no process; a folder both roots hold refuses
+whole with no call of its own; the move that empties the fallback root removes that
+root (one `rmdir`, which refuses silently while any entry remains, so a root still
+holding a folder or a file stays and nothing is printed); a folder already in the root,
+or a namespace without a fallback, costs one folder check at most and no process; a folder both roots hold refuses
 rc 1 `ERR_ENTITY_EXISTS` naming the prefix (a batch in its action line) with nothing
 written. A call that served a key from the
 fallback and answers rc 0 prints one stderr line, `<function>: notice: namespace '<ns>'
@@ -74,7 +76,9 @@ was read from its deprecated fallback root`, naming no folder; a refusal keeps i
 line. The optional `store.promote <namespace> <prefix>` moves the prefix's folder from the
 fallback to the root in one `mv` under the namespace lock (the root's parent folders made
 first, a killed writer's residue moving with the folder), the card declaring the
-`store.promote` token; fts5 keeps namespace and key with no root, never reads a fallback,
+`store.promote` token; a move that empties the fallback root removes it as the write
+path's does, and a `none` answer over an empty fallback root removes that root too, so a
+sweep over a fully moved store leaves no empty deprecated root; fts5 keeps namespace and key with no root, never reads a fallback,
 and does not declare it. The batch holds that lock once, validates the whole action list against the live keys, stages
 a value per put, and commits every key under one store-scope undo log; its first failure
 prints `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`, 1-based, and

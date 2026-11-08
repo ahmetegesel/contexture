@@ -62,13 +62,14 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     }
   });
 
-  it('[the-record-r-4gj4k] a legacy unit\'s first stamp moves it whole; afterwards the load prints no warning and migrate moves nothing; its views equal a twin stamped in the root', async () => {
+  it('[the-record-r-4gj4k] a legacy unit\'s first stamp moves it whole, removing the deprecated root it empties; afterwards the load prints no warning and migrate moves nothing; its views equal a twin stamped in the root', async () => {
     const legacy = fresh(snap);
     const twin = fresh(snap);
     toFallback(legacy, 'leg-u');
     const stamp = await unit(legacy, 'stamp', 'leg-u');
     expect([stamp.code, stamp.stdout]).toEqual([0, 'transition: A1 -> A2\n']);
     expect(held(legacy, 'leg-u')).toEqual([true, false]);
+    expect(existsSync(join(legacy, FALLBACK_ROOT))).toBe(false);
     await must(unit(twin, 'stamp', 'leg-u'));
     const after = await views(legacy, 'leg-u');
     expect(after.stderr).toEqual(['', '', '']);
@@ -122,6 +123,37 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     expect([held(sb, 'leg-u'), held(sb, 'shut-u'), held(sb, 'new-u')]).toEqual([[true, false], [true, false], [true, false]]);
     expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
     expect((await unit(sb, 'list')).stderr).toBe('');
+  });
+
+  it('[the-record-r-4gj4k] a sweep that moves the last units out of the deprecated root removes that root', async () => {
+    const sb = fresh(snap);
+    toFallback(sb, 'leg-u');
+    toFallback(sb, 'shut-u');
+    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 2\n', stderr: '' });
+    expect(existsSync(join(sb, FALLBACK_ROOT))).toBe(false);
+  });
+
+  it('[the-record-r-4gj4k] a deprecated root still holding a unit or another entry stays', async () => {
+    const unitLeft = fresh(snap);
+    toFallback(unitLeft, 'leg-u');
+    toFallback(unitLeft, 'shut-u');
+    expect(await unit(unitLeft, 'migrate', 'leg-u')).toMatchObject({ code: 0, stdout: 'migrated: 1\n', stderr: '' });
+    expect(held(unitLeft, 'shut-u')).toEqual([false, true]);
+    const entryLeft = fresh(snap);
+    toFallback(entryLeft, 'leg-u');
+    writeFileSync(join(entryLeft, FALLBACK_ROOT, 'notes.txt'), 'not a unit\n');
+    expect(await unit(entryLeft, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 1\n', stderr: '' });
+    expect(readFileSync(join(entryLeft, FALLBACK_ROOT, 'notes.txt'), 'utf8')).toBe('not a unit\n');
+  });
+
+  it('[the-record-r-4gj4k] ctx unit migrate --all removes an already emptied deprecated root, migrated: 0; with no deprecated root it answers as before', async () => {
+    const sb = fresh(snap);
+    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
+    expect(existsSync(join(sb, FALLBACK_ROOT))).toBe(false);
+    mkdirSync(join(sb, FALLBACK_ROOT));
+    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
+    expect(existsSync(join(sb, FALLBACK_ROOT))).toBe(false);
+    expect([held(sb, 'leg-u'), held(sb, 'new-u'), held(sb, 'shut-u')]).toEqual([[true, false], [true, false], [true, false]]);
   });
 
   it('[the-record-r-4gj4k] the first refusal stops the sweep, its line naming the unit held in both roots, rc 1; the units before it stay moved', async () => {

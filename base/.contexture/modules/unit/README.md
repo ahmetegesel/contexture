@@ -115,6 +115,8 @@ folders. The move is the store's own: `u_commit` makes its one `store.batch`, as
 the move, and the posix driver, inside that call and under the namespace lock it already
 holds, moves the unit's folder from the fallback to the root by one rename before it
 writes, so a unit moves whole at its first landing write and a write stays one store call.
+The move that empties the fallback root removes that folder in the same call, while a
+fallback root still holding any entry stays, with nothing printed either way.
 A unit both roots hold refuses the write with the store's batch line, re-framed as
 `<function>: error: action 1 (put '<key>'): key prefix '<unit>/' is held in both roots of
 namespace 'unit' (ERR_ENTITY_EXISTS)`, and nothing written. So only a landing write moves
@@ -153,7 +155,11 @@ promotes each under its unit lock through `store.promote unit <unit>/` (asking
 `store_has store.promote` once first), stops at the first refusal, re-framed as
 `unit.promote: error: unit '<unit>': <message>`, and answers
 `{"promote":true,"migrated":N}`, or `{"promote":false,"migrated":0}` under a driver
-without the token; the sweep prints no warning. `ctx unit migrate` is its verb.
+without the token; the sweep prints no warning. The posix promotion removes the fallback
+root its move empties, and an empty fallback root when it answers `none`, so `--all` over
+a fully moved store prints `migrated: 0` and leaves no empty deprecated root (a store
+listing no unit reaches no promotion, and its fallback root stays). `ctx unit migrate` is
+its verb.
 
 ## The ref interface
 

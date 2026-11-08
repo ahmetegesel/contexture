@@ -96,7 +96,7 @@ The workspace couples root governance with a dedicated convention drawer:
 ## Core concepts
 
 ### Units
-A dedicated scope for your task (`.contexture/units/<name>/`; a unit an older release wrote under `.contexture/sessions/` still reads from there and moves at its next write, or with `ctx unit migrate --all`). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
+A dedicated scope for your task (`.contexture/units/<name>/`; a unit an older release wrote under `.contexture/sessions/` still reads from there and moves at its next write, or with `ctx unit migrate --all`, the emptied old folder removed). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
 
 ### Subagents
 An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Managed via the top-level `ctx lane` module. Deep dive: [Units and subagents](docs/units-and-lanes.md).
@@ -161,7 +161,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit refs <unit> [<unit> ...] | Set the read-only reference units; zero units clears them |
 | ctx unit close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
 | ctx unit reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
-| ctx unit migrate <unit>... \| --all | The sweep of the record's root move: moves the named units, or every unit, from the deprecated root to the current one (every landing write already moves its own unit; a CLOSED unit moves only here); prints migrated: <n>, a second run migrated: 0; the first refusal stops it naming the unit |
+| ctx unit migrate <unit>... \| --all | The sweep of the record's root move: moves the named units, or every unit, from the deprecated root to the current one (every landing write already moves its own unit; a CLOSED unit moves only here); prints migrated: <n>, a second run migrated: 0; the deprecated root is removed once empty, even by a sweep that moves nothing; the first refusal stops it naming the unit |
 | ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw; capture files are unlinked before the command runs |
 
 The named looks (`entry show`, `entry closure`, `list --repo=<repo>`, `refs-to`, `resolve`) and search answer questions over the record, so agents never improvise greps that over-read: a look that misses is loud, rc=1 with a named error, never an empty success; search prints its zero count. The lists (`entry list` with `--group` or `--anchor`, `task list`, `finding list`) print nothing with rc 0 when nothing matches.

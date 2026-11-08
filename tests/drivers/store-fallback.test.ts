@@ -6,6 +6,7 @@ import { FALLBACK_ROOT, FTS5_DB, RECORD_ROOT } from '../support/drawer';
 import { ROOT_USER, chmodPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { fts5Available, stage } from '../support/stage';
+import type { Run } from '../support/exec';
 import { batchPayload, listAnswer, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
@@ -104,6 +105,45 @@ describe('the posix fallback root: reads after the root, writes to the root afte
     answer(await s.batch('legacy', batchPayload([{ action: 'delete', key: 'a/state' }, { action: 'put', key: 'b/journal', value: 'j\n' }, { action: 'delete', key: 'b/state' }])), 'store.batch');
     expect(['new-root/a/state.md', 'old-root/b', 'new-root/b/state.md'].map((p) => existsSync(join(sb, p)))).toEqual([false, false, false]);
     expect(readFileSync(join(sb, 'new-root/b/journal.md'), 'utf8')).toBe('j\n');
+  });
+
+  it('[the-engine-r-b3r6t] a put, a delete, or a batch whose move empties the fallback root removes that root, with nothing extra printed', async () => {
+    const writes: [string, (s: ReturnType<typeof store>) => Promise<Run>][] = [
+      ['store.put', (s) => s.put('legacy', 'b/journal', 'j\n')],
+      ['store.delete', (s) => s.del('legacy', 'b/state')],
+      ['store.batch', (s) => s.batch('legacy', [{ action: 'put', key: 'b/journal', value: 'j\n' }])],
+    ];
+    for (const [fn, write] of writes) {
+      const sb = fresh(snap);
+      plant(sb, 'old-root/b/state.md', 'old b\n');
+      answer(await write(store(sb, 'posix')), fn);
+      expect([existsSync(join(sb, 'old-root')), existsSync(join(sb, 'new-root/b'))], fn).toEqual([false, true]);
+    }
+  });
+
+  it('[the-engine-r-b3r6t] a move that leaves a folder or a file in the fallback root keeps that root', async () => {
+    const folder = fresh(snap);
+    plant(folder, 'old-root/b/state.md', 'old b\n');
+    plant(folder, 'old-root/c/state.md', 'old c\n');
+    answer(await store(folder, 'posix').put('legacy', 'b/journal', 'j\n'), 'store.put');
+    expect(['old-root', 'old-root/b', 'old-root/c/state.md'].map((p) => existsSync(join(folder, p)))).toEqual([true, false, true]);
+    const file = fresh(snap);
+    plant(file, 'old-root/b/state.md', 'old b\n');
+    plant(file, 'old-root/notes.txt', 'not a key\n');
+    expect(answer(await store(file, 'posix').op('store.promote', ['legacy', 'b/']), 'store.promote')).toEqual({ namespace: 'legacy', prefix: 'b/', state: 'moved' });
+    expect(readFileSync(join(file, 'old-root/notes.txt'), 'utf8')).toBe('not a key\n');
+  });
+
+  it('[the-engine-r-b3r6t] store.promote removes the fallback root its move empties, and an empty fallback root when it answers none', async () => {
+    const moved = fresh(snap);
+    plant(moved, 'old-root/b/state.md', 'old b\n');
+    expect(answer(await store(moved, 'posix').op('store.promote', ['legacy', 'b/']), 'store.promote')).toEqual({ namespace: 'legacy', prefix: 'b/', state: 'moved' });
+    expect(existsSync(join(moved, 'old-root'))).toBe(false);
+    const none = fresh(snap);
+    plant(none, 'new-root/a/state.md', 'new a\n');
+    mkdirSync(join(none, 'old-root'));
+    expect(answer(await store(none, 'posix').op('store.promote', ['legacy', 'a/']), 'store.promote')).toEqual({ namespace: 'legacy', prefix: 'a/', state: 'none' });
+    expect([existsSync(join(none, 'old-root')), existsSync(join(none, 'new-root/a/state.md'))]).toEqual([false, true]);
   });
 
   it('[the-engine-r-b3r6t] a put, a delete, or a batch on a key whose top folder both roots hold refuses rc 1 ERR_ENTITY_EXISTS naming the prefix, nothing written or moved', async () => {
