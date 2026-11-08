@@ -3,7 +3,12 @@
 # usage: ctx unit diagnose [--json]
 # help: inspect the workspace configuration, the resolved storage driver and its
 # help: capability descriptor (the contract, the functions, the search modes, the
-# help: optional capabilities), and the storage backend health (storage.health).
+# help: optional capabilities), and the storage backend health (storage.health), then the
+# help: ACTIVE unit count from the record's own listing; a listing that refuses prints
+# help: active units: unknown (<its refusal's message>), null in --json, never a count.
+# help: exit codes: 0 the diagnosis printed, a part it could not read named in its own line
+# help: (a driver error, a health error, an unknown count); 1 an unrecognized option; 2 the
+# help: storage resolver missing or no scratch folder.
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
@@ -90,11 +95,17 @@ rest=${health_line#*"$tab"}
 health_detail=${rest%%"$tab"*}
 rest=${rest#*"$tab"}
 health_store=${rest%%"$tab"*}
-active_count=0
+# a listing that refuses leaves the count unknown, never 0: the text names the refusal's
+# message, --json reads null
+active_count=""
+active_err=""
 vb_call session.list
 if [ "$VB_RC" -eq 0 ]; then
   vb_relay
   active_count=$(awk '{ n += gsub(/"status":"ACTIVE"/, ""); } END { print n + 0 }' "$VB_DIR/ans")
+else
+  active_err=$(awk 'NR == 1 { sub(/^[^ ]*: error: /, ""); print; exit }' "$VB_DIR/err" 2>/dev/null)
+  [ -n "$active_err" ] || active_err="the record's listing did not answer"
 fi
 
 # jstr <text>: one JSON string in the contract form
@@ -115,7 +126,7 @@ if [ "$format" = "json" ]; then
   printf '{"workspace_root":%s,"config":{"status":%s,"driver":%s},"driver":{"name":%s,"source":%s,"status":%s,"descriptor":%s},"storage":{"health":%s,"detail":%s,"store":%s,"active_units":%s}}\n' \
     "$(jstr "$root")" "$(jstr "$config_status")" "$(jstr "${config_driver:-none}")" \
     "$(jstr "$driver_name")" "$(jstr "$driver_source")" "$(jstr "$driver_status")" "$desc" \
-    "$(jstr "$health_status")" "$(jstr "$health_detail")" "$(jstr "$health_store")" "${active_count:-0}"
+    "$(jstr "$health_status")" "$(jstr "$health_detail")" "$(jstr "$health_store")" "${active_count:-null}"
 else
   printf 'ctx unit: storage and configuration diagnostics\n'
   printf '  workspace root:  %s\n' "$root"
@@ -133,5 +144,9 @@ else
     printf '  driver status:   error (%s)\n' "$driver_err"
   fi
   printf '  storage health:  %s (%s)\n' "$health_status" "$health_detail"
-  printf '  active units:    %d\n' "${active_count:-0}"
+  if [ -n "$active_count" ]; then
+    printf '  active units:    %d\n' "$active_count"
+  else
+    printf '  active units:    unknown (%s)\n' "$active_err"
+  fi
 fi

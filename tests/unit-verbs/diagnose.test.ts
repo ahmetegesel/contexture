@@ -1,6 +1,8 @@
+import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { namespaceLock } from '../support/drawer';
+import { RECORD_ROOT, namespaceLock } from '../support/drawer';
 import { holdLock } from '../support/locks';
+import { ROOT_USER, chmodPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
 import { plantScript } from '../support/store';
@@ -27,6 +29,19 @@ describe.concurrent('ctx unit diagnose', () => {
     expect((await unit(sb, 'list')).stdout.split('\n').filter((l) => /^[a-z0-9][a-z0-9_-]*$/.test(l))).toHaveLength(2);
     expect((await unit(sb, 'diagnose')).stdout).toMatch(/active units: {4}2$/m);
     expect((await unit(sb, 'diagnose', '--json')).stdout).toMatch(/"active_units":2\}\}\n?$/);
+  });
+
+  it.skipIf(ROOT_USER)('X-q [the-engine-r24]: diagnose never reports an ACTIVE count it could not read: a refused listing reads unknown with its message, null in --json, every other line printed, rc 0', async ({ onTestFinished }) => {
+    const sb = fresh(sb0);
+    chmodPlant(join(sb, RECORD_ROOT, 'x-one', 'state.md'), 0o000, 0o644, onTestFinished);
+    const text = await unit(sb, 'diagnose');
+    expect([text.code, text.stderr]).toEqual([0, '']);
+    expect(text.stdout).not.toMatch(/active units: +\d/);
+    expect(text.stdout).toMatch(/^ {2}active units: {4}unknown \(cannot read key 'x-one\/state' in namespace 'unit' \(ERR_STORAGE_READ\)\)$/m);
+    for (const line of ['workspace root:', 'configuration:', 'storage driver:', 'driver status:', 'search modes:', 'storage health:']) expect(text.stdout).toContain(line);
+    const json = await unit(sb, 'diagnose', '--json');
+    expect([json.code, json.stderr]).toEqual([0, '']);
+    expect(JSON.parse(json.stdout).storage).toMatchObject({ active_units: null, health: expect.any(String) });
   });
 
   it('X-q [the-engine-r24]: diagnose counts zero ACTIVE units when every unit is CLOSED', async () => {
