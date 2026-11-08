@@ -85,14 +85,14 @@ u_refuse() {
 
 # u_store_refuse <rc> <store function> <stderr file> <fallback>: a refused store call as
 # the function's one line, carrying the store's message and code: the store's refusal line
-# (its first line opening "<store function>: error: ", else its first line whole, as a
-# resolver line rides), the prefix stripped, or the fallback when the store printed
-# nothing; the store's own line never reaches the verb
+# (its first line opening "<store function>: error: ", the prefix stripped, else a first
+# line that is the resolver's own line, whole), or the call's fixed fallback line with its
+# code when the store printed neither; the store's own line never reaches the verb
 u_store_refuse() {
   usr_msg=$(USR_P="$2: error: " LC_ALL=C awk '
     NR == 1 { f = $0 }
     m == "" && index($0, ENVIRON["USR_P"]) == 1 { m = substr($0, length(ENVIRON["USR_P"]) + 1) }
-    END { print (m != "" ? m : f) }' "$3" 2>/dev/null)
+    END { if (m == "" && index(f, "driver-resolver: ") == 1) m = f; print m }' "$3" 2>/dev/null)
   [ -n "$usr_msg" ] || usr_msg=$4
   printf '%s: error: %s\n' "${FN:-unit}" "$usr_msg" >&2
   exit "$1"

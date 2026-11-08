@@ -192,6 +192,31 @@ const LIST_ROWS: readonly [string[], string][] = [
 
 const LOCKED = "the store namespace 'unit' is locked (60 s timeout)";
 
+const STORE_ROWS: readonly [string, string[], string, string, string][] = [
+  ['store.get', ['unit', 'board', 'r-unit'], 'session.board', 'ERR_STORAGE_READ', 'the store read failed'],
+  ['store.list', ['unit', 'list'], 'session.active', 'ERR_STORAGE_READ', 'the store list failed'],
+  ['store.batch', ['unit', 'record', 'r-unit', '--what=never lands'], 'entry.record', 'ERR_STORAGE_WRITE', 'the store batch failed'],
+];
+
+type WrapMode = 'silent' | 'foreign' | 'before';
+
+function wrapResolver(sb: string, call: string, mode: WrapMode): Record<string, string> {
+  const path = join(sb, 'wrapper-resolver');
+  writeFileSync(path, [
+    '#!/bin/sh',
+    'if [ "$1" = "$WRAP_CALL" ]; then',
+    '  case "$WRAP_MODE" in',
+    '    silent) exit 2 ;;',
+    `    foreign) printf 'probe: a foreign line naming %s\\n' "$WRAP_NAMED" >&2; exit 2 ;;`,
+    `    before) printf 'probe: a foreign line naming %s\\n' "$WRAP_NAMED" >&2 ;;`,
+    '  esac',
+    'fi',
+    'exec "$REAL_RESOLVER" "$@"',
+    '',
+  ].join('\n'), { mode: 0o755 });
+  return { CTX_STORE_RESOLVER: path, REAL_RESOLVER: join(sb, '.contexture/storage/scripts/driver-resolver'), WRAP_CALL: call, WRAP_MODE: mode, WRAP_NAMED: join(sb, RECORD_ROOT) };
+}
+
 describe.concurrent('a record function whose store call refuses: its own one line, carrying the store\'s message and code', () => {
   let snap: string;
   beforeAll(async () => {
@@ -230,5 +255,23 @@ describe.concurrent('a record function whose store call refuses: its own one lin
     refused(real, 'entry.record', 2, 'ERR_STORAGE_LOCKED', LOCKED);
     expect(await unitChecksum(sb, 'r-unit')).toBe(before);
     expect([plant.code, plant.stdout, plant.stderr]).toEqual([2, '', `store.batch: error: ${LOCKED} (ERR_STORAGE_LOCKED)\nentry.record: error: ${LOCKED} (ERR_STORAGE_LOCKED)\n`]);
+  });
+
+  for (const mode of ['silent', 'foreign'] as const) {
+    for (const [call, argv, fn, code, fallback] of STORE_ROWS) {
+      const said = mode === 'silent' ? 'prints nothing' : 'prints only a foreign line naming a folder';
+      it(`[the-engine-r21] a ${call} that ${said} refuses ctx ${argv.join(' ')} with the ${fn} line carrying the call's fixed message and code, the unit unchanged`, async () => {
+        const sb = fresh(snap);
+        const before = await unitChecksum(sb, 'r-unit');
+        refused(await run(sb, argv, { env: wrapResolver(sb, call, mode) }), fn, 2, code, fallback);
+        expect(await unitChecksum(sb, 'r-unit')).toBe(before);
+      });
+    }
+  }
+
+  it.skipIf(ROOT_USER)('[the-engine-r21] a foreign line before the store\'s own refusal leaves the store\'s line alone as the session.board message', async ({ onTestFinished }) => {
+    const sb = fresh(snap);
+    chmodPlant(join(sb, RECORD_ROOT, 'r-unit', 'state.md'), 0o000, 0o644, onTestFinished);
+    refused(await run(sb, ['unit', 'board', 'r-unit'], { env: wrapResolver(sb, 'store.get', 'before') }), 'session.board', 2, 'ERR_STORAGE_READ', "cannot read key 'r-unit/state' in namespace 'unit'");
   });
 });
