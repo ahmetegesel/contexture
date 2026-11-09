@@ -12,7 +12,7 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ...CORE.map((p): readonly [string, readonly string[]] => [`tests/${p}/**`, [p]]),
   ['tests/fixtures/compliance/**', ['unit-record']],
   ['tests/fixtures/worked-package/**', ['packages', 'sqlite-smoke']],
-  ['base/AGENTS.md', ['laws']],
+  ['base/AGENTS.md', ['laws', 'governance']],
   ['base/.contexture/ONBOARDING.md', ['governance']],
   ['base/.contexture/ctx', ['engine', 'filters', 'hooks', 'laws', 'packages', 'base', 'integration', 'governance']],
   ['base/.contexture/laws/**', ['laws']],

@@ -1,7 +1,7 @@
-# contexture v0.71.0: the core law source; the compose merges the installed modules' laws beneath it
+# contexture v0.72.0: the core law source; the compose merges the installed modules' laws beneath it
 
 @laws
-  source-of-truth: the record = ONLY source of truth; never conversation. the record survives compaction, tool change, break; conversation does not.
+  source-of-truth: the record is the work's durable memory, what a fresh context resumes from: the events that happened, the decisions made, and the state they left, across compaction, tool change, and break; because the work's continuity depends on it, it holds whatever else that continuity needs, the reasons, the open threads, and the evidence behind them; the workspace and the commands' results show what is, and the loaded layer and its sequences say what to do.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
   compact-streams: all shell commands execute through the ctx runner (runner mode prefix: .contexture/ctx run <cmd>); never run raw commands without compaction when the runner is present; preserve context window capacity unconditionally.
   writer-holds-volume: the schema holds the shape, the writer holds the volume: guidance names what deserves the record, never how much; token efficiency is the dialect, never a cap on content; omit ornament, never substance.
