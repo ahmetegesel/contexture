@@ -32,6 +32,8 @@ The sections below are the blocks the generated layer carries, in the order the 
 | `@git` | the gitignore strategy for the workspace |
 | `@update` | how the base evolves upstream |
 
+The loader names the generic core sections only: `@laws`, `@layout`, `@module`, `@boot`, `@interact`, `@rhythms`, `@subagents`, `@refresh`, `@close`, `@handoff`, `@git`, and `@update`. The four record sections (`@record`, `@journal`, `@backlog`, `@query`) are the unit module's framing, supplied by its laws file; each `@module` preamble belongs to its module.
+
 The core law source fixes the block order; the installed modules' law fragments append under these keywords, and a new keyword creates a custom section after `@update`. The module preambles stand after `@layout`, before `@boot`.
 
 ### The laws
