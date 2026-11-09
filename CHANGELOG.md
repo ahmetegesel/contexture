@@ -28,7 +28,7 @@ MINOR: the builtin lane and rhythm modules move from the extension root to the w
 
 - The law golden regenerates: the compose output changes in line 1's sources hash and in the `@module` order (lane, rhythm, and unit come first with the workspace modules), nothing else; `tests/laws/fixtures/base-only.golden` follows.
 
-Commits in the range: 300a327 (the payload move), 0d6c18f (the shared builtin reader), and the docs, tests, golden, and release commits.
+Commits in the range: 300a327 (the payload move); 0d6c18f (the shared builtin reader); 372954e (the guides, the payload declaration, and the update path); d55bed1 (the tests, the compare seed, and the v0.71.0 golden); 9473c51 (the docs review fixes); d9d583e (the composer skip pin); and the release commit.
 
 ## [0.70.2] - 2026-11-08
 
