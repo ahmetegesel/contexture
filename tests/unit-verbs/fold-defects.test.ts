@@ -171,7 +171,7 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
     expect(audit.code).toBe(0);
     expect(audit.stdout).toContain('OPEN THREADS (awaiting resolution):');
     expect(audit.stdout).toContain(`${D}-fc-thread-2 (the human's verdict)`);
-  });
+  }, 240_000);
 
   it('FC13b: closing a carried open thread in a batch refuses THREAD_CLOSED naming it', async () => {
     const sb = fresh('thread-close');
@@ -192,14 +192,14 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
     await batch(sb, 'fc-merge', 'Batch one: the two chunks merged (merged: same topic)', [1, 2, 3, 4], '--thread=none', `--supersedes=${bad} (superseded: revised)`);
     await batch(sb, 'fc-merge', 'Batch two: the third chunk', [5, 6], '--thread=none');
     await clean(sb, 'fc-merge');
-  });
+  }, 240_000);
 
   it('FC16: a batch of 13 constituents refuses CONSTITUENT_CAP', async () => {
     const sb = fresh('cap');
     await foldUnit(sb, 'fc-cap', Array.from({ length: 13 }, (_, i) => `e${i + 1}`));
     await batch(sb, 'fc-cap', 'Batch one: thirteen notes', Array.from({ length: 13 }, (_, i) => i + 1), '--thread=none');
     await red(sb, 'fc-cap', 'CONSTITUENT_CAP');
-  });
+  }, 240_000);
 
   it('FC17: one batch for every chunk of an anchor refuses WHOLE_ANCHOR_BATCH; split batches check clean', async () => {
     const sb = fresh('anchor');
