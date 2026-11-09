@@ -83,7 +83,7 @@ The workspace couples root governance with a dedicated convention drawer:
     ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
     ├── laws/             The law sources: core.md the core source, and the composer, private behind ctx compose
     ├── modules/          The standard module folders: unit (the record engine), run (stream filters), lane (the subagent lanes), rhythm (the process surface), and workspace additions
-    ├── extensions/       The package overlay root: storage/drivers/ for package drivers, rhythms/ for package rhythms
+    ├── extensions/       The package overlay root: modules/ for package feature modules, storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression
     └── units/<unit>/     Isolated unit of work bounding context and lifecycle history
         ├── state.md      Where the unit stands: status, current anchor, objective, repos, and mounts

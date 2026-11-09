@@ -610,7 +610,7 @@ plugins/             the tracked catalog of packaged overlays: copied into a wor
   package-uninstall  the package overlay remover, private behind ctx package uninstall: runs the part hooks, removes the recorded files, preserves a changed file
   laws/              the law sources: core.md the core law source, and the composer, private behind ctx compose
   modules/           unit (the record engine), run (stream filters), lane (the subagent lanes), rhythm (the process surface), and workspace additions
-  extensions/        the package overlay root: storage/drivers/ for package drivers, rhythms/ for package rhythms, .state/ for the installed-path records
+  extensions/        the package overlay root: modules/ for package feature modules, storage/drivers/ for package drivers, rhythms/ for package rhythms, .state/ for the installed-path records
   rhythms/           your process patterns
   units/             the units of work (sessions/, the deprecated root, holds a unit until it moves and is removed once it is empty)
   tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand; each verb stages under its own root, removed on return and swept by the next dispatch after a kill)
