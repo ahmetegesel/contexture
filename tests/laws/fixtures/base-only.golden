@@ -1,4 +1,4 @@
-# contexture v0.72.0: generated law layer; core cksum 3845011359-14832; sources 1235378215-31663; never edit
+# contexture v0.72.0: generated law layer; core cksum 2271898171-14832; sources 391036944-31663; never edit
 @laws
   source-of-truth: the record is the work's durable memory, what a fresh context resumes from: the events that happened, the decisions made, and the state they left, across compaction, tool change, and break; because the work's continuity depends on it, it holds whatever else that continuity needs, the reasons, the open threads, and the evidence behind them; the workspace and the commands' results show what is, and the loaded layer and its sequences say what to do.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -13,9 +13,9 @@
 
 @layout
   AGENTS.md       = the loader: the harness's every-turn file; its first instruction composes or verifies the generated layer, then loads it whole
+  AGENTS.generated.md = the generated law layer: composed by ctx compose at install and boot, gitignored; never edit
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
-  AGENTS.generated.md = the generated law layer: composed by ctx compose at install and boot, gitignored; never edit
   .contexture/laws/ = the law sources: core.md the core law source
   .contexture/config = workspace configuration: module-scoped key: value declarations, loaded alongside overlays at boot
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall <package> (only on the human's explicit go at the act; the verb checks no go), ctx <module>
@@ -44,6 +44,18 @@
   35 record operations over the store, and its verbs are the record's public surface,
   dispatched as ctx unit.
   help: ctx unit help
+
+@boot
+  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) and .contexture/config (workspace configuration) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
+  2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
+  3. get the field: .contexture/ctx unit list and .contexture/ctx rhythm list; read the message against the candidates: a close unit match proposes continuing that unit, no match proposes bootstrapping a new one; the request read against each rhythm's use when names the rhythm that serves it, or none
+  4. propose the move and wait for the answer before anything works: the proposal names the unit and the rhythm: a propose match is asked, an auto match is stated as applying, no match names the design loop (@rhythms default); the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit and the rhythm (@laws#process-free): an active unit continues at 5, a new unit bootstraps at 10
+  5. run .contexture/ctx unit load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, the reference units (ref_sessions) read-only)
+  6. read the rhythm in force: .contexture/ctx rhythm current <unit> (in force with its next gate, completed, stale, or none in force); read a confirmed rhythm's body with ctx rhythm show <name>
+  7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
+  8. stamp the new period: .contexture/ctx unit stamp <unit> (the anchor carries the period's number and date, no receipt text; a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
+  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit list prints it) in the confirmed rhythm: at the next gate ctx rhythm current names when that rhythm is the one in force, else at its first step (ctx rhythm show <name>); or in the default design loop when no rhythm is confirmed (@rhythms)
+  10. new work: run .contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
 
 @record
   unit of work = the unit; outlives working periods, dies with the unit; shapes defined in @record; this section: the map: what each artifact records and why; the workflows live in their sections.
@@ -95,18 +107,6 @@
   cross-unit: .contexture/ctx unit refs-to <unit>: units referencing a unit.
   group: .contexture/ctx unit entry list <unit> --group=<token> = the agent's topic thread across anchors, open or closed; resume runs through the backlog's derived move, never through the group alone.
   artifact-grounding: the record is the ground: a report or recipe claimed to ground work needs a REF in the loaded record.
-
-@boot
-  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) and .contexture/config (workspace configuration) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
-  2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
-  3. get the field: .contexture/ctx unit list and .contexture/ctx rhythm list; read the message against the candidates: a close unit match proposes continuing that unit, no match proposes bootstrapping a new one; the request read against each rhythm's use when names the rhythm that serves it, or none
-  4. propose the move and wait for the answer before anything works: the proposal names the unit and the rhythm: a propose match is asked, an auto match is stated as applying, no match names the design loop (@rhythms default); the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit and the rhythm (@laws#process-free): an active unit continues at 5, a new unit bootstraps at 10
-  5. run .contexture/ctx unit load <unit>; keep calling until a page reads complete; read every page the map reports (state, backlog, knowledge, the live journal, the reference units (ref_sessions) read-only)
-  6. read the rhythm in force: .contexture/ctx rhythm current <unit> (in force with its next gate, completed, stale, or none in force); read a confirmed rhythm's body with ctx rhythm show <name>
-  7. ground check: git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record; a mismatch journals as work, never as a note
-  8. stamp the new period: .contexture/ctx unit stamp <unit> (the anchor carries the period's number and date, no receipt text; a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
-  9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit list prints it) in the confirmed rhythm: at the next gate ctx rhythm current names when that rhythm is the one in force, else at its first step (ctx rhythm show <name>); or in the default design loop when no rhythm is confirmed (@rhythms)
-  10. new work: run .contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask

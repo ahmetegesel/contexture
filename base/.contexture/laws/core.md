@@ -14,22 +14,14 @@
 
 @layout
   AGENTS.md       = the loader: the harness's every-turn file; its first instruction composes or verifies the generated layer, then loads it whole
+  AGENTS.generated.md = the generated law layer: composed by ctx compose at install and boot, gitignored; never edit
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
-  AGENTS.generated.md = the generated law layer: composed by ctx compose at install and boot, gitignored; never edit
   .contexture/laws/ = the law sources: core.md the core law source
   .contexture/config = workspace configuration: module-scoped key: value declarations, loaded alongside overlays at boot
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall <package> (only on the human's explicit go at the act; the verb checks no go), ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
   .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store (contract 3), and the record's 35 operations are the unit module's (ctx unit help)
-
-@record
-
-@journal
-
-@backlog
-
-@query
 
 @boot
   1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) and .contexture/config (workspace configuration) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
@@ -42,6 +34,14 @@
   8. stamp the new period: .contexture/ctx unit stamp <unit> (the anchor carries the period's number and date, no receipt text; a boot is a fresh context load, never a turn boundary; turns inside one working context journal under the standing anchor)
   9. continue from the backlog's derived move (the first IN_PROGRESS task, else the first open task, every status but DONE; ctx unit list prints it) in the confirmed rhythm: at the next gate ctx rhythm current names when that rhythm is the one in force, else at its first step (ctx rhythm show <name>); or in the default design loop when no rhythm is confirmed (@rhythms)
   10. new work: run .contexture/ctx unit bootstrap <slug> "<objective>" [<repos>]; declare the first task; continue at 6
+
+@record
+
+@journal
+
+@backlog
+
+@query
 
 @interact
   :: ask -> restate -> confirm -> act -> surface -> ask

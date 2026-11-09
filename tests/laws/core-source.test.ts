@@ -6,7 +6,7 @@ import { ROOT } from '../support/root';
 import { blockClauses, CORE_SRC } from '../support/laws';
 
 const COMPOSE_SRC = join(ROOT, 'base/.contexture/laws/compose');
-const SKELETON = 'laws layout record journal backlog query boot interact rhythms subagents refresh close handoff git update';
+const SKELETON = 'laws layout boot record journal backlog query interact rhythms subagents refresh close handoff git update';
 
 describe.concurrent('the core law source and the composer', () => {
   it('ships the core source and an executable composer that parses under sh -n', async () => {

@@ -18,11 +18,11 @@ The sections below are the blocks the generated layer carries, in the order the 
 |---|---|
 | `@laws` | the slug-addressed laws |
 | `@layout` | where every file lives and what it is for |
+| `@boot` | the sequence that starts every working period |
 | `@record` | the artifact map: what each artifact records and why |
 | `@journal` | the event workflow: formation, substance, liveness, markings |
 | `@backlog` | the task workflow |
 | `@query` | how the agent decides what to load |
-| `@boot` | the sequence that starts every working period |
 | `@interact` | how the agent treats the human |
 | `@rhythms` | the rhythm contract and the default design loop |
 | `@subagents` | the dispatch contract |
@@ -32,7 +32,7 @@ The sections below are the blocks the generated layer carries, in the order the 
 | `@git` | the gitignore strategy for the workspace |
 | `@update` | how the base evolves upstream |
 
-The core law source fixes the block order; the installed modules' law fragments append under these keywords, and a new keyword creates a custom section after `@update`. The module preambles stand after `@layout`.
+The core law source fixes the block order; the installed modules' law fragments append under these keywords, and a new keyword creates a custom section after `@update`. The module preambles stand after `@layout`, before `@boot`.
 
 ### The laws
 

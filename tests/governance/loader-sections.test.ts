@@ -8,7 +8,7 @@ const LOADER = join(ROOT, 'base/AGENTS.md');
 const MODULE_OWNED = ['record', 'journal', 'backlog', 'query'];
 const COMPOSER = ['module'];
 const CORE_OWNED = ['laws', 'layout', 'module', 'boot', 'interact', 'rhythms', 'subagents', 'refresh', 'close', 'handoff', 'git', 'update'];
-const SKELETON = 'laws layout record journal backlog query boot interact rhythms subagents refresh close handoff git update';
+const SKELETON = 'laws layout boot record journal backlog query interact rhythms subagents refresh close handoff git update';
 
 const coreBlocks = (core: string): string[] =>
   core.split('\n').filter((l) => /^@[A-Za-z0-9._-]+$/.test(l)).map((l) => l.slice(1));

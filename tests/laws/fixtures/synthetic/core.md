@@ -7,6 +7,9 @@
 @layout
   AGENTS.md = the loader fixture
 
+@boot
+  1. the fixture boot
+
 @record
 
 @journal
@@ -14,9 +17,6 @@
 @backlog
 
 @query
-
-@boot
-  1. the fixture boot
 
 @interact
   ask: the fixture
