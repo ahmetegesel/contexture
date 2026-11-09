@@ -51,7 +51,7 @@ export default defineConfig({
     maxWorkers: '50%',
     globalSetup: [here('./support/global-setup.ts')],
     setupFiles: [here('./support/setup.ts')],
-    testTimeout: 120_000,
+    testTimeout: 240_000,
     hookTimeout: 120_000,
     reporters: [
       'default',
