@@ -4,6 +4,32 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.71.0] - 2026-11-09
+
+MINOR: the builtin lane and rhythm modules move from the extension root to the workspace modules root, beside unit and run, so the extension root holds only installed packages. The help listing and the composed law layer list them with the workspace modules, the builtin set becomes one shared engine reader, the update path seeds its tag tree with `extensions/modules` when the drawer holds the package overlay root, and the law golden regenerates. No plugin payload changes, so no plugin version moves and no re-install is needed.
+
+### Breaking
+
+- The payload moves 12 files: `base/.contexture/extensions/modules/lane/{laws,module,scripts/create,scripts/record,scripts/report,scripts/show}` to `base/.contexture/modules/lane/` and `base/.contexture/extensions/modules/rhythm/{README.md,module,scripts/current,scripts/list,scripts/resolve,scripts/show}` to `base/.contexture/modules/rhythm/`, byte for byte except the rhythm README line that names its root. `base/.contexture/extensions` then carries no tracked payload file. Updating past this release deletes the 12 old live paths by its removed-path listing (Updating step 6) and the apply adds the new ones; the emptied `extensions/modules/lane` and `extensions/modules/rhythm` folders go while `.contexture/extensions` itself stays where installed packages live. A leftover lane or rhythm under the extension root now collides with a builtin, warns `skipping extension module <name>: collides with a builtin`, and is skipped.
+- `ctx help` lists lane and rhythm with the workspace modules, before the installed extension modules, where they listed after them; the composed law layer's `@module` order follows. The per-verb output is unchanged.
+- The payload declaration drops `extensions` and names `modules/lane` and `modules/rhythm`: `base/AGENTS.md` and `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/unit,ONBOARDING.md}`.
+
+### Added
+
+- The engine's one builtin reader: `is_builtin` and its private verb `ctx _builtin` hold `unit`, `run`, `lane`, and `rhythm`, and the engine's discovery, reserved exemption, extension skip, filter and hook scans, the composer, and the package installer all read it, so the builtin sets can no longer split.
+
+### Changed
+
+- The unit verb library's rhythm resolve candidates and the four rhythm scripts' drawer depth move from the extension root to the workspace modules root, so `ctx rhythm list`, `show`, `current`, and the stamp check of `ctx unit record --rhythm` and `ctx lane create --rhythm` read the moved module.
+- The update path's payload compare seeds the scratch tag-tree copy with `extensions/modules` when the live drawer holds `.contexture/extensions`, since `diff -rq` does not descend into a folder the tag side lacks: an installed package under the extension root reads as the workspace's own, its install record naming its files, while a module folder under `extensions/modules` a tag shipped under `base/` still prints and reads a missed delete by the tags.
+- The corpus (not shipped): the modules, the-engine, system-map, and operations docs name the four builtins and the shared reader, place lane and rhythm in the workspace modules root, carry the moved payload declaration, and the operations apply step carries the compare seed and the extension-root reading.
+
+### Fixed
+
+- The law golden regenerates: the compose output changes in line 1's sources hash and in the `@module` order (lane, rhythm, and unit come first with the workspace modules), nothing else; `tests/laws/fixtures/base-only.golden` follows.
+
+Commits in the range: 300a327 (the payload move), 0d6c18f (the shared builtin reader), and the docs, tests, golden, and release commits.
+
 ## [0.70.2] - 2026-11-08
 
 PATCH: the update path lists every removed payload path and shows every leftover. The removed path listings of Updating steps 6 and 8 and the dev loop run with rename detection off and remove the folders their deletes empty, ending a successful run rc 0; the payload compare shows a module folder or the templates folder left behind while dropping the workspace's own folders and files at the drawer's top; its reading tells a missed delete from the workspace's own by the tags; the adoption procedure and the guide name the `.contexture/tmp/` ignore line. The payload change is `.contexture/ONBOARDING.md` alone; no plugin payload changes, so docs-discipline and storage-fts5 are unchanged.

@@ -545,7 +545,7 @@ The audit is a repair instrument: fix what it flags and fill what is missing bef
 
 ### ctx rhythm: the rhythm module
 
-The rhythm module ships with the base in the extension root, beside the lane module, and is the one surface for rhythms: an agent selects, reads, and resumes a rhythm through it and never reads a rhythm file by its path. Its three verbs:
+The rhythm module ships with the base in the workspace modules root, beside the lane module, and is the one surface for rhythms: an agent selects, reads, and resumes a rhythm through it and never reads a rhythm file by its path. Its three verbs:
 
 ```bash
 .contexture/ctx rhythm list
@@ -609,8 +609,8 @@ plugins/             the tracked catalog of packaged overlays: copied into a wor
   package-install    the package overlay installer, private behind ctx package install: overlays a package's .contexture/extensions tree, records it, runs the part hooks
   package-uninstall  the package overlay remover, private behind ctx package uninstall: runs the part hooks, removes the recorded files, preserves a changed file
   laws/              the law sources: core.md the core law source, and the composer, private behind ctx compose
-  modules/           unit (the record engine), run (stream filters), and workspace additions
-  extensions/        the package overlay root: modules/ (the lane and rhythm modules ship here), storage/drivers/ for package drivers, rhythms/ for package rhythms, .state/ for the installed-path records
+  modules/           unit (the record engine), run (stream filters), lane (the subagent lanes), rhythm (the process surface), and workspace additions
+  extensions/        the package overlay root: storage/drivers/ for package drivers, rhythms/ for package rhythms, .state/ for the installed-path records
   rhythms/           your process patterns
   units/             the units of work (sessions/, the deprecated root, holds a unit until it moves and is removed once it is empty)
   tmp/               gitignored scratch: engines and agents prefer it over system temp (created on demand; each verb stages under its own root, removed on return and swept by the next dispatch after a kill)
@@ -626,7 +626,7 @@ Placement follows the class of the file, never convenience:
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/run,modules/unit,extensions,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/unit,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/`: packaged overlays | copied into a workspace when wanted; never deleted at adoption close |
 | live workspace | the untracked root: `AGENTS.md`, `.contexture/` (units and the deprecated sessions, rhythms, tmp, workspace-added modules) | never touched by an update |
 

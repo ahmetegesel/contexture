@@ -29,7 +29,7 @@ The standard module folder is a directory under `.contexture/modules/` (the work
 - `scripts/`, `hooks/`, `install`, and `uninstall` are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
 - A package ships this folder as its module part; the package overlay installs it whole, and the folder is the single source for the engine, the compose, the storage, and the installer.
 
-The builtin `unit` and `run` modules ship with the base under `.contexture/modules/`; the builtin `lane` and `rhythm` modules ship under `.contexture/extensions/modules/`, the base's extension-root modules; the storage core at `.contexture/storage/` is not a module but rides the same payload; the law sources at `.contexture/laws/` (the core law source and the composer) ride it too; a module you add is workspace-owned. See Payload.
+The builtin `unit`, `run`, `lane`, and `rhythm` modules ship with the base under `.contexture/modules/`; the storage core at `.contexture/storage/` is not a module but rides the same payload; the law sources at `.contexture/laws/` (the core law source and the composer) ride it too; a module you add is workspace-owned. See Payload.
 
 ### The interface rule
 
@@ -159,7 +159,7 @@ Filters declare themselves with their own header vocabulary; see Filters.
 - `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines.
 - `ctx help --all` prints the top summary plus every module's block.
 - A duplicate verb name inside one module shadows: the engine warns and the first file name in byte order wins.
-- Reserved names cannot be module names: the unit verb set (its twenty-two verbs plus `help`, so twenty-three names), plus `run` and `hooks`, plus the retired record verbs (`append`, `amend`, `query`, `flip`, `drop`, and `next`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `unit` and `run` directories are exempt.
+- Reserved names cannot be module names: the unit verb set (its twenty-two verbs plus `help`, so twenty-three names), plus `run` and `hooks`, plus the retired record verbs (`append`, `amend`, `query`, `flip`, `drop`, and `next`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `unit`, `run`, `lane`, and `rhythm` directories are exempt.
 - Help is engine-owned: no module ships a help script.
 
 ## Dispatch
@@ -357,7 +357,7 @@ The package shows the whole path the sections above describe: a module part unde
 
 ### the storage core: not a module
 
-The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file (in the workspace modules and the extension modules alike), the module-facing `scripts/library` (the store seven, `store_promote` where the driver declares it, `store_require` and `store_has`, `store_roots` over the data reader's listing mode, one line per declared root and its fallback, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The unit verbs and the docs module reach the core resolver directly; the lane module, under the extension root, sources the unit lib from `CTX_ROOT`, and the unit verb library reaches the rhythm module's private `scripts/resolve` by path the same way, for the stamp check and the board's closing line. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
+The storage core at `.contexture/storage/` is not a module: `ctx help` does not list it, and it carries no verbs. It owns the driver resolver (`scripts/driver-resolver`), the private `scripts/store-data` reader that validates a module's data file (in the workspace modules and the extension modules alike), the module-facing `scripts/library` (the store seven, `store_promote` where the driver declares it, `store_require` and `store_has`, `store_roots` over the data reader's listing mode, one line per declared root and its fallback, and the `data_get`/`data_emit` ref interface with its depth-8 and cycle rules), and the posix driver under `drivers/posix/`. The unit verbs and the docs module reach the core resolver directly; the lane module sources the unit lib from `CTX_ROOT`, and the unit verb library reaches the rhythm module's private `scripts/resolve` by path the same way, for the stamp check and the board's closing line. The seven store functions, the search schema, the data file grammar, and the library are in [The engine](the-engine.md) (The module store); the core's README carries the contract.
 
 ### unit: the record's data module
 
@@ -377,7 +377,7 @@ The builtin run module, `.contexture/modules/run/`. It has no module file and no
 
 ## Payload
 
-A module you add is workspace-owned: updates never touch it. The builtin `unit` and `run` modules, the storage core, and the law sources ride the update payload under `.contexture/modules/`, `.contexture/storage/`, and `.contexture/laws/`; the builtin `lane` and `rhythm` modules ride it under `.contexture/extensions/modules/`, the base's extension-root modules; a package's installed files live under the same extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
+A module you add is workspace-owned: updates never touch it. The builtin `unit`, `run`, `lane`, and `rhythm` modules, the storage core, and the law sources ride the update payload under `.contexture/modules/`, `.contexture/storage/`, and `.contexture/laws/`; a package's installed files live under the extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
 
 ## Where the rest lives
 
