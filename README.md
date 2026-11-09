@@ -43,7 +43,7 @@ rm -rf .adopt-contexture
 chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
 ```
 
-`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog `.contexture/ctx package install <name>` installs from, only on the human's explicit go at the act (the verb itself checks no go). `AGENTS.md` is the loader: run `.contexture/ctx compose` after the copy, and the loader verifies or recomposes the generated law layer `AGENTS.generated.md`, beside it at the root, at every boot.
+`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog `.contexture/ctx package install <name>` installs from, only on the human's explicit go at the act (the verb itself checks no go). `AGENTS.md` is the loader: run `.contexture/ctx compose` after the copy, and the loader verifies or recomposes the generated law layer `AGENTS.generated.md`, beside it at the root, at every boot. Its second instruction names the layer's generic core sections and says every module adds its own sections, clauses, and duties, followed as steps in the framed order, gates included; the laws bind.
 
 ### 2. Run the onboarding wizard
 
@@ -73,10 +73,10 @@ The workspace couples root governance with a dedicated convention drawer:
 
 ```text
 .
-├── AGENTS.md             The loader: compose then load the generated law layer, delivered every turn
+├── AGENTS.md             The loader: compose, then load the generated law layer whole; the core generic sections plus each module's; delivered every turn
 ├── AGENTS.workspace.md   Shared workspace overlay, tracked in git for team-wide rules
 ├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
-├── AGENTS.generated.md   The generated law layer, composed by ctx compose at install and boot; gitignored, never edited
+├── AGENTS.generated.md   The composed law layer: the core generic sections plus every module's sections, clauses, and duties; composed at install and boot, gitignored, never edited
 └── .contexture/          The convention drawer, isolating machinery from project code
     ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
     ├── config            Optional workspace configuration (storage.driver: posix)
