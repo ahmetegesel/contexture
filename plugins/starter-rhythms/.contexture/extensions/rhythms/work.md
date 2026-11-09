@@ -7,7 +7,7 @@
   4. GROUND: ground subagents verify the plan against the record and the repo; per-task corrections return
   5. AMEND: corrections land in place; material changes return to the human
   6. EXECUTE: one subagent per task (small same-shape tasks batch); parallel on independence; the change lands with its own checks, the docs delta riding it
-  7. GUARDS: the mechanical checks green before any review (the audits; the framing leak check: the loader names only the core-owned sections and the core restates no module's framing; the change's own checks)
+  7. GUARDS: the mechanical checks green before any review (the audits; the framing leak check: the loader names only the generic sections and the core restates no module's framing; the change's own checks)
   8. REVIEW+HARDEN+VERIFY: one fresh subagent; independent review, findings hardened, the guards re-proven
   9. LAND: one act after the gates green, the human's sign-off first (the shape lives in @git; a PR-bound landing hands to its rhythm)
   10. REFRESH: run @refresh
