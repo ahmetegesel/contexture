@@ -133,9 +133,9 @@ for _d in "$root"/.contexture/modules/*; do
   [ -d "$_d" ] || continue
   _name=${_d##*/}
   case "$_name" in
-    ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved) continue ;;
+    ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin) continue ;;
   esac
-  if "$ctx_bin" _reserved "$_name" >/dev/null 2>&1 && [ "$_name" != unit ] && [ "$_name" != run ]; then
+  if "$ctx_bin" _reserved "$_name" >/dev/null 2>&1 && ! "$ctx_bin" _builtin "$_name" >/dev/null 2>&1; then
     continue
   fi
   ws_names="$ws_names$_name "
@@ -146,11 +146,12 @@ for _d in "$root"/.contexture/extensions/modules/*; do
   [ -d "$_d" ] || continue
   _name=${_d##*/}
   case "$_name" in
-    ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|unit|run) continue ;;
+    ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin) continue ;;
   esac
   case "$ws_names" in
     *" $_name "*) continue ;;
   esac
+  "$ctx_bin" _builtin "$_name" >/dev/null 2>&1 && continue
   "$ctx_bin" _reserved "$_name" >/dev/null 2>&1 && continue
   [ -f "$_d/module" ] || continue
   add_module "$_name" "$_d"

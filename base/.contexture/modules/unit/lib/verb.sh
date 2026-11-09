@@ -36,9 +36,9 @@ for vb_ud in "$VB_LIB/../scripts/data" \
 done
 # the rhythm module's private resolve, run by path (summary-less, so ctx cannot dispatch it)
 VB_RHYTHM_RESOLVE=""
-for vb_rr in "$VB_LIB/../../../extensions/modules/rhythm/scripts/resolve" \
-             "${CTX_ROOT:-$PWD}/.contexture/extensions/modules/rhythm/scripts/resolve" \
-             "${CTX_ROOT:-$PWD}/base/.contexture/extensions/modules/rhythm/scripts/resolve"; do
+for vb_rr in "$VB_LIB/../../rhythm/scripts/resolve" \
+             "${CTX_ROOT:-$PWD}/.contexture/modules/rhythm/scripts/resolve" \
+             "${CTX_ROOT:-$PWD}/base/.contexture/modules/rhythm/scripts/resolve"; do
   if [ -f "$vb_rr" ]; then VB_RHYTHM_RESOLVE=$vb_rr; break; fi
 done
 VB_JSON="$VB_LIB/json.awk"

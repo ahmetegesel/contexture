@@ -10,8 +10,10 @@
 # discovery reads .contexture/modules/<name>/ and .contexture/extensions/modules/<name>/;
 # the directory name is the module name. The workspace modules list first, then the
 # extension modules; an extension name colliding with a workspace module, a builtin
-# (unit, run), or a reserved name is warned and skipped, never a silent shadow (the
-# package installer refuses the collision; the engine only reports it). The standard module folder is the manifest ("module"), the
+# (unit, run, lane, rhythm), or a reserved name is warned and skipped, never a silent
+# shadow (the package installer refuses the collision; the engine only reports it).
+# The builtin set is read through is_builtin and the private reader ctx _builtin <name>
+# (rc0 for a builtin, rc1 otherwise); the standard module folder is the manifest ("module"), the
 # typed-block law fragment ("laws"), the store declaration ("data"), the
 # optional part hooks ("install" and "uninstall"), scripts/, hooks/, and
 # filters/. The manifest carries "# summary: <line>" (the engine's listing),
@@ -22,7 +24,10 @@
 # is the one package-manifest parser (the package root's manifest: summary, version,
 # kind feature|driver, the repeated part lines, and a driver name for the driver kind;
 # requires is reserved and refused); ctx _reserved <name> answers the engine's reserved set
-# (rc0 reserved, rc1 not) for the package installer; discovery validates every
+# (rc0 reserved, rc1 not) for the package installer and the composer; ctx _builtin <name>
+# answers the engine's builtin set (unit, run, lane, rhythm; rc0 builtin, rc1 not) for the
+# package installer and the composer, so discovery, the builtins, and both readers agree;
+# discovery validates every
 # manifest and skips a malformed one with a warning. scripts/<verb> files are verbs named by file name,
 # marked by their own "# summary:" header, with repeatable "# usage:" and
 # "# help:" detail lines. A scripts file without a summary is private and
@@ -31,7 +36,7 @@
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
 # Reserved names are the unit verb set plus refresh, run, hooks, compose, package, and the
 # retired record verbs (append, amend, query, flip, drop, next, which print
-# their replacement); the builtin unit and run are allowed. A duplicate verb shadows: first file name
+# their replacement); the builtin unit, run, lane, and rhythm are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
 # ctx help --all, ctx <module> help, ctx <module> help <verb>, and bare
 # ctx <module> (module table, rc0). Dispatch validates the verb engine-side
@@ -478,7 +483,8 @@ package_reader() {
 # reserved names: the unit verb set (its scripts own the list) plus
 # refresh, run, hooks, compose, and package, and the retired record verbs (append, amend, query,
 # flip, drop, next: a static list, so no module can claim a retired name and a
-# retired call prints its replacement); the builtin unit and run are allowed
+# retired call prints its replacement); the builtin unit, run, lane, and rhythm are allowed
+# (read through is_builtin, never a literal set at the sites)
 
 # retired_replacement <verb>: the replacement of a retired record verb
 retired_replacement() {
@@ -563,6 +569,19 @@ is_reserved() {
   return 1
 }
 
+# is_builtin <name>: the shipped builtin modules, the one set discovery exempts
+# from the reserved names and skips in the extension root; the private reader
+# ctx _builtin (beside _reserved) answers it for the package installer and the
+# composer, so no site carries the names as its own literal
+is_builtin() {
+  case "$1" in
+    unit|run|lane|rhythm)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 # ---------------------------------------------------------------------------
 # discovery
 
@@ -581,11 +600,11 @@ scan_module_dirs() {
       bn=${d%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin)
           continue
           ;;
       esac
-      if is_reserved "$bn" && [ "$bn" != "unit" ] && [ "$bn" != "run" ]; then
+      if is_reserved "$bn" && ! is_builtin "$bn"; then
         continue
       fi
       ws="$ws $bn"
@@ -598,13 +617,14 @@ scan_module_dirs() {
       bn=${d%/}
       bn=${bn##*/}
       case "$bn" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|unit|run)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin)
           continue
           ;;
       esac
       case " $ws " in
         *" $bn "*) continue ;;
       esac
+      is_builtin "$bn" && continue
       is_reserved "$bn" && continue
       ext="$ext $bn"
     done
@@ -629,11 +649,11 @@ module_names() {
       n=${d%/}
       n=${n##*/}
       case "$n" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin)
           continue
           ;;
       esac
-      if is_reserved "$n" && [ "$n" != "unit" ] && [ "$n" != "run" ]; then
+      if is_reserved "$n" && ! is_builtin "$n"; then
         ctx_err "reserved name refused (shadow): $n"
         continue
       fi
@@ -665,16 +685,14 @@ module_names() {
       n=${d%/}
       n=${n##*/}
       case "$n" in
-        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved)
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin)
           continue
           ;;
       esac
-      case "$n" in
-        unit|run)
-          ctx_err "skipping extension module $n: collides with a builtin"
-          continue
-          ;;
-      esac
+      if is_builtin "$n"; then
+        ctx_err "skipping extension module $n: collides with a builtin"
+        continue
+      fi
       case " $ws_all " in
         *" $n "*)
           ctx_err "skipping extension module $n: collides with a workspace module"
@@ -990,7 +1008,7 @@ run_body() {
         bn=${fd%/}
         bn=${bn##*/}
         case "$bn" in
-          ""|.*|*[[:space:]]*|run|_hooks|_module|_package|_reserved)
+          ""|.*|*[[:space:]]*|run|_hooks|_module|_package|_reserved|_builtin)
             continue
             ;;
         esac
@@ -1007,13 +1025,14 @@ run_body() {
         bn=${fd%/}
         bn=${bn##*/}
         case "$bn" in
-          ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|unit|run)
+          ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin)
             continue
             ;;
         esac
         case " $ws " in
           *" $bn "*) continue ;;
         esac
+        is_builtin "$bn" && continue
         if is_reserved "$bn"; then
           continue
         fi
@@ -1739,6 +1758,17 @@ case "$1" in
     fi
     load_unit_verbs
     if is_reserved "$1"; then
+      exit 0
+    fi
+    exit 1
+    ;;
+  _builtin)
+    shift
+    if [ $# -ne 1 ]; then
+      ctx_err "_builtin: usage: ctx _builtin <name>"
+      exit 1
+    fi
+    if is_builtin "$1"; then
       exit 0
     fi
     exit 1

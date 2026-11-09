@@ -9,7 +9,7 @@
 # help: example: ctx rhythm list
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root=$(CDPATH= cd -- "$dir/../../../../.." && pwd)
+root=$(CDPATH= cd -- "$dir/../../../.." && pwd)
 
 case "${1:-}" in
   --help|-h) [ $# -eq 1 ] && exec "${CTX_BIN:-$root/.contexture/ctx}" rhythm help list ;;

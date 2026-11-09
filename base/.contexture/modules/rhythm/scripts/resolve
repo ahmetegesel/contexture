@@ -17,7 +17,7 @@
 
 LC_ALL=C
 export LC_ALL
-drawer=$(CDPATH= cd -- "$(dirname -- "$0")/../../../.." 2>/dev/null && pwd) || exit 2
+drawer=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." 2>/dev/null && pwd) || exit 2
 WS="$drawer/rhythms"
 EXT="$drawer/extensions/rhythms"
 

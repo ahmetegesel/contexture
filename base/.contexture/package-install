@@ -243,11 +243,11 @@ while IFS= read -r mname; do
     *[!A-Za-z0-9._-]*) die 1 "malformed module name '$mname' (letters, digits, dot, underscore, hyphen)" ;;
   esac
   case "$mname" in
-    _hooks|_module|_package|_reserved) die 1 "malformed module name '$mname' (an engine-private name)" ;;
+    _hooks|_module|_package|_reserved|_builtin) die 1 "malformed module name '$mname' (an engine-private name)" ;;
   esac
-  case "$mname" in
-    unit|run|lane|rhythm) die 1 "module name '$mname' collides with a builtin" ;;
-  esac
+  if "$ctx_bin" _builtin "$mname" >/dev/null 2>&1; then
+    die 1 "module name '$mname' collides with a builtin"
+  fi
   if [ -f "$payload_root/modules/$mname/module" ] || [ -d "$payload_root/modules/$mname/scripts" ]; then
     grep -Fqx "module modules/$mname" "$scratch/parts" || die 1 "module '$mname' is not declared as a module part"
   fi

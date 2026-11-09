@@ -9,7 +9,7 @@
 # help: example: ctx rhythm current my-unit
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-drawer=$(CDPATH= cd -- "$dir/../../../.." && pwd)
+drawer=$(CDPATH= cd -- "$dir/../../.." && pwd)
 root=$(CDPATH= cd -- "$drawer/.." && pwd)
 bin="${CTX_BIN:-$root/.contexture/ctx}"
 
