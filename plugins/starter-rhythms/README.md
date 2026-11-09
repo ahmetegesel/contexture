@@ -58,16 +58,17 @@ necessity.
    closes when the facts and the open questions are on the table.
 2. DISCUSS: talk it through with the human. Facts, constraints, and decisions
    are journaled as they surface, so the conversation leaves a trace.
-3. DECIDE: the human's verdict. The work lands in the backlog as tasks: what
-   to do, how it will be judged, and how it will be executed.
+3. DECIDE: the human's verdict on the specification. The work lands in the
+   backlog as tasks: what to do, how it will be judged, and how it will be
+   executed.
 4. GROUND: independent subagents check the plan against the record and the
    repository before anything is built. Mistakes surface here, not mid-build.
 5. AMEND: the corrections land in place; anything material goes back to the
    human.
 6. EXECUTE: one subagent per task (small same-shape tasks batch), parallel
    where independent. Each change lands with its own checks.
-7. GUARDS: the mechanical checks run green before any review: the audits and
-   whatever the change carries.
+7. GUARDS: the mechanical checks run green before any review: the audits, the
+   framing leak check, and whatever the change carries.
 8. REVIEW+HARDEN+VERIFY: one fresh subagent reviews independently, findings
    are fixed, and the guards are proven again.
 9. LAND: one act once the gates are green, after the human's sign-off. Where
@@ -132,8 +133,8 @@ naming, and the test convention are in `docs/plugins.md`.
 
 - Gates close by their artifacts, never by memory. A task done without its
   journal event is a defect the audit prints.
-- The record (state, backlog, journal, knowledge) is the source of truth,
-  never the conversation.
+- The record is the work's durable memory, what a fresh context resumes from;
+  it holds the reasons, the open threads, and the evidence.
 - This README is the plugin's explanation; the package lands its rhythms under
   `.contexture/extensions/rhythms/`, and your team's own live rhythms belong in
   `.contexture/rhythms/`.
