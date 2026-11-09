@@ -1,0 +1,3 @@
+# lane leftover fragment: an extension module a builtin name shadows
+@append @laws
+  lane-leftover-law: a stale extension lane law the composer must never compose

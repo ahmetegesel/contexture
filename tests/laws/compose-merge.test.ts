@@ -36,6 +36,15 @@ describe.concurrent('the synthetic merge', () => {
     expect(count(g, /alpha-extra-law: a standalone law part/)).toBe(1);
   });
 
+  it('[modules-r14, modules-r19] skips the extension modules the builtins shadow: no lane or rhythm preamble or leftover law composes', () => {
+    const g = layer(sb);
+    expect(count(g, /^@module lane$/)).toBe(0);
+    expect(count(g, /^@module rhythm$/)).toBe(0);
+    expect(g).not.toContain('lane-leftover-law');
+    expect(g).not.toContain('rhythm-leftover-law');
+    expect(count(g, /^@module /)).toBe(4);
+  });
+
   it('[modules-r11, modules-r19] writes each preamble from its manifest: the summary, the indented description, the help pointer', () => {
     const g = layer(sb);
     const beta = moduleBlock(g, 'beta');

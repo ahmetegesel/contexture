@@ -1,0 +1,4 @@
+# summary: rhythm the builtin-collision fixture module
+# version: 9.9.9
+# description:
+# An extension module named for a builtin; the composer must skip it.
