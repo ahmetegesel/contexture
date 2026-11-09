@@ -1,6 +1,6 @@
 # rhythm: the process surface
 
-The rhythm module ships with the base in the extension root, beside the lane module. A rhythm is a workflow pattern: an `@rhythm <name>` line, a `use when:` trigger line, an `activation:` line (`propose` or `auto`), and numbered steps `N. GATE: outcome`. The module lists the workspace's and the installed rhythms, prints one whole, and names the rhythm in force in a unit with its next gate, so an agent selects, reads, and resumes a rhythm through ctx and never reads a rhythm file by its path. It holds no laws file (the rhythm law stays in the core's `@rhythms`) and no data file (it reads no store).
+The rhythm module ships with the base in the workspace modules root, beside the lane module. A rhythm is a workflow pattern: an `@rhythm <name>` line, a `use when:` trigger line, an `activation:` line (`propose` or `auto`), and numbered steps `N. GATE: outcome`. The module lists the workspace's and the installed rhythms, prints one whole, and names the rhythm in force in a unit with its next gate, so an agent selects, reads, and resumes a rhythm through ctx and never reads a rhythm file by its path. It holds no laws file (the rhythm law stays in the core's `@rhythms`) and no data file (it reads no store).
 
 ## Verbs
 
