@@ -14,6 +14,7 @@ describe.concurrent('package-install: the overlay, the record, and the modes', (
     const sb = sandbox();
     const ro = newPkg(sb, 'pkgro');
     addModule(ro, 'ro');
+    mkdirSync(extPath(sb), { recursive: true });
     chmodPlant(extPath(sb), 0o555, 0o755, onTestFinished);
     const before = treeState(extPath(sb));
     const r = await installPkg(sb, ro);
@@ -129,7 +130,7 @@ describe.concurrent('package-install: the mid-write rollback and the payload pat
     const p = newPkg(sb, 'pkgrb');
     addModule(p, 'alpha');
     addFile(p, 'rhythms/x.md', 'the x rhythm');
-    mkdirSync(extPath(sb, 'rhythms'));
+    mkdirSync(extPath(sb, 'rhythms'), { recursive: true });
     chmodPlant(extPath(sb, 'rhythms'), 0o555, 0o755, onTestFinished);
     const before = treeState(extPath(sb));
     const r = await installPkg(sb, p);
@@ -144,7 +145,7 @@ describe.concurrent('package-install: the mid-write rollback and the payload pat
     const p = newPkg(sb, 'pkgrb');
     addModule(p, 'alpha');
     addFile(p, 'rhythms/x.md', 'the x rhythm');
-    mkdirSync(extPath(sb, 'rhythms'));
+    mkdirSync(extPath(sb, 'rhythms'), { recursive: true });
     chmodPlant(extPath(sb, 'rhythms'), 0o555, 0o755, onTestFinished);
     const before = treeState(extPath(sb));
     expect((await installPkg(sb, p)).code).toBe(2);

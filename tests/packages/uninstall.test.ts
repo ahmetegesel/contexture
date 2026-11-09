@@ -41,7 +41,7 @@ describe.concurrent('package-uninstall: the removal and the changed-file preserv
     expect(readFileSync(extPath(sb, 'rhythms/u.md'), 'utf8')).toBe('edited after install\n');
     expect(existsSync(extPath(sb, 'modules/u/module'))).toBe(false);
     expect(existsSync(recordPath(sb, 'pkgu'))).toBe(false);
-    expect(existsSync(extPath(sb, 'modules/lane/module'))).toBe(true);
+    expect(existsSync(join(sb, '.contexture/modules/lane/module'))).toBe(true);
     const again = await uninstall(sb, pu);
     expect(again.code).toBe(1);
     expect(again.stderr).toContain('not installed');

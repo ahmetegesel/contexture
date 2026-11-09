@@ -7,7 +7,7 @@ import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { atTop, git, kids, text } from './walk';
 
-const SHIPPED = 'base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/run,modules/unit,extensions,ONBOARDING.md}';
+const SHIPPED = 'base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/unit,ONBOARDING.md}';
 
 const rooted = atTop();
 
@@ -131,6 +131,27 @@ describe.concurrent('the Updating path', () => {
     const files = ['config', 'storage.conf', db, `${db}-wal`, `${db}-shm`, '.DS_Store'].map((f) => `Only in .contexture: ${f}`);
     expect(compareFilter()).not.toBe('');
     expect(throughFilter(compareFilter(), [...leftovers, ...owned, ...files])).toEqual(leftovers);
+  });
+
+  it('the compare seeds the tag tree with extensions/modules when the drawer holds the extension root, so an installed package reads workspace owned and a leftover lane still reads a missed delete', () => {
+    expect(guide()).toContain('if [ -d .contexture/extensions ]; then mkdir -p <tag-tree>/base/.contexture/extensions/modules; fi');
+    const reading = compareReading();
+    expect(reading).toContain('when the live drawer holds `.contexture/extensions`, seed the scratch tag-tree copy with `extensions/modules` before the diff');
+    expect(reading).toContain('while a module folder under `extensions/modules` a tag shipped under `base/` still prints and reads a missed delete by the tags');
+  });
+
+  it('the seed makes the compare descend into the extension root: the unseeded diff hides the package overlay behind one line, the seeded one prints the package and the leftover lane', () => {
+    const tree = sandbox('compare-seed');
+    const tag = join(tree, 'tag');
+    const live = join(tree, 'live/.contexture');
+    mkdirSync(join(tag, 'base/.contexture'), { recursive: true });
+    mkdirSync(join(live, 'extensions/modules/docs'), { recursive: true });
+    mkdirSync(join(live, 'extensions/modules/lane'), { recursive: true });
+    const diff = (): string[] =>
+      spawnSync('sh', ['-c', `diff -rq '${join(tag, 'base/.contexture')}' '${live}'`], { encoding: 'utf8' }).stdout.split('\n').filter(Boolean);
+    expect(diff()).toEqual([`Only in ${live}: extensions`]);
+    mkdirSync(join(tag, 'base/.contexture/extensions/modules'), { recursive: true });
+    expect(diff()).toEqual([`Only in ${live}/extensions/modules: docs`, `Only in ${live}/extensions/modules: lane`]);
   });
 
   it("the compare's reading tells a missed delete from the workspace's own by the tags: shipped under base/, or a module folder a plugin shipped before v0.60", () => {

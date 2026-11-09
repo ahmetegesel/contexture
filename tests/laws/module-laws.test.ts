@@ -5,7 +5,7 @@ import { ROOT } from '../support/root';
 import { count, DOCS_MOD } from '../support/laws';
 
 const DOCS_LAWS = join(DOCS_MOD, 'laws');
-const LANE_LAWS = join(ROOT, 'base/.contexture/extensions/modules/lane/laws');
+const LANE_LAWS = join(ROOT, 'base/.contexture/modules/lane/laws');
 const UNIT_LAWS = join(ROOT, 'base/.contexture/modules/unit/laws');
 
 function lawSlugs(text: string): string[] {

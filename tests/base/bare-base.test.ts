@@ -1,4 +1,4 @@
-import { accessSync, constants, existsSync, mkdirSync, renameSync } from 'node:fs';
+import { accessSync, constants, existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { describe, expect, it } from 'vitest';
@@ -28,11 +28,11 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
     expect(runnable(join(sb, '.contexture/storage/drivers/posix/driver'))).toBe(true);
   });
 
-  it('[the-engine-r1, modules-r14] help lists the unit module, then the extension-root lane and rhythm modules, and never the storage core', async () => {
+  it('[the-engine-r1, modules-r14] help lists lane, rhythm, and unit from the workspace modules root, and never the storage core', async () => {
     const sb = bare();
     const help = await ctx(sb, 'help');
     expect(help.code).toBe(0);
-    expect(modules(help.stdout)).toEqual(['unit', 'lane', 'rhythm']);
+    expect(modules(help.stdout)).toEqual(['lane', 'rhythm', 'unit']);
     const all = await ctx(sb, 'help', '--all');
     expect(all.code).toBe(0);
     expect(all.stdout).toContain('module unit:');
@@ -41,19 +41,19 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
     expect(all.stdout).not.toContain('module storage:');
   });
 
-  it('[the-engine-r1, the-engine-r4] the lane module dispatches from the extension root', async () => {
+  it('[the-engine-r1, the-engine-r4] the lane module dispatches from the workspace modules root', async () => {
     const r = await ctx(bare(), 'lane', 'help');
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('create');
   });
 
-  it('[the-engine-r1, modules-r14] an absent extension root is silent and lists no extension module', async () => {
+  it('[the-engine-r1, modules-r14] the stage carries no extension root and lists no extension module', async () => {
     const sb = bare();
-    renameSync(join(sb, '.contexture/extensions'), join(sb, '.contexture/extensions.away'));
+    expect(existsSync(join(sb, '.contexture/extensions'))).toBe(false);
     const r = await ctx(sb, 'help');
     expect(r.code).toBe(0);
     expect(r.stderr).toBe('');
-    expect(modules(r.stdout)).toEqual(['unit']);
+    expect(modules(r.stdout)).toEqual(['lane', 'rhythm', 'unit']);
   });
 
   it('[the-engine-r5] ctx run answers its help, and docs and storage-fts5 are unknown without their plugins', async () => {
@@ -84,7 +84,7 @@ describe.concurrent('the bare base: the rhythm list without rhythms (BG1)', () =
   it('[modules-r20] empty rhythm roots print the same', async () => {
     const sb = bare();
     mkdirSync(join(sb, '.contexture/rhythms'));
-    mkdirSync(join(sb, '.contexture/extensions/rhythms'));
+    mkdirSync(join(sb, '.contexture/extensions/rhythms'), { recursive: true });
     const r = await ctx(sb, 'rhythm', 'list');
     expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({ code: 0, stdout: SELECT, stderr: '' });
   });

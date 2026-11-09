@@ -43,6 +43,12 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(moduleBlock(g, 'rhythm')).toContain('help: ctx rhythm help');
   });
 
+  it('[modules-r19] seats the module preambles in the workspace order: lane, rhythm, unit', () => {
+    const g = layer(base);
+    expect(lineOf(g, /^@module lane$/)).toBeLessThan(lineOf(g, /^@module rhythm$/));
+    expect(lineOf(g, /^@module rhythm$/)).toBeLessThan(lineOf(g, /^@module unit$/));
+  });
+
   it('[modules-r12, modules-r19] composes the unit record clause and the lane subagent, boundary-warning, and git clauses', () => {
     const g = layer(base);
     expect(count(g, /^ {2}unit of work = the unit/)).toBe(1);

@@ -114,6 +114,6 @@ describe.concurrent('the real package manifests', () => {
 
   it('[plugins-r9, modules-r12] the lane-isolation package is retired into the lane module laws', () => {
     expect(existsSync(join(ROOT, 'plugins/lane-isolation'))).toBe(false);
-    expect(readFileSync(join(ROOT, 'base/.contexture/extensions/modules/lane/laws'), 'utf8')).toContain('branch/worktree');
+    expect(readFileSync(join(ROOT, 'base/.contexture/modules/lane/laws'), 'utf8')).toContain('branch/worktree');
   });
 });

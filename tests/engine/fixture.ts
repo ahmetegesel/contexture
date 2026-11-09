@@ -43,6 +43,8 @@ export function engineSandbox(label: string): string {
   });
   writeModule(sb, 'extensions', 'load', { manifest: '# summary: a reserved extension module\n' });
   writeModule(sb, 'extensions', 'unit', { manifest: '# summary: a builtin collision\n' });
+  writeModule(sb, 'extensions', 'lane', { manifest: '# summary: a lane leftover collision\n' });
+  writeModule(sb, 'extensions', 'rhythm', { manifest: '# summary: a rhythm leftover collision\n' });
   writeModule(sb, 'extensions', 'hookext', {
     manifest: '# summary: the extension hook fixture\n',
     files: { 'hooks/10-ext.sh': hook('load-pre', 'echo "HOOK ext" >> marker.log') },

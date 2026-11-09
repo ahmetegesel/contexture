@@ -4,8 +4,8 @@ import { describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { ROOT } from '../support/root';
 
-const MODULES = ['base/.contexture/modules/unit/scripts', 'base/.contexture/extensions/modules/lane/scripts'];
-const MESSAGE_SCAN = [...MODULES, 'base/.contexture/extensions/modules/rhythm/scripts'];
+const MODULES = ['base/.contexture/modules/unit/scripts', 'base/.contexture/modules/lane/scripts'];
+const MESSAGE_SCAN = [...MODULES, 'base/.contexture/modules/rhythm/scripts'];
 const verbScripts = (): [string, string][] =>
   MODULES.flatMap((dir) => readdirSync(join(ROOT, dir)).map((f) => [`${dir}/${f}`, readFileSync(join(ROOT, dir, f), 'utf8')] as [string, string])).filter(([, text]) => /^# summary: /m.test(text));
 

@@ -70,7 +70,7 @@ describe.concurrent('a unit verb reaches the store through the data script, the 
       () => data(sb, 'finding.get', [U, 'CHAIN_FINDING']));
   });
 
-  it('[the-engine-r16, the-record-r10] lane: the recipe, the journal, and the report the extension-root lane module writes land every way (C6)', async () => {
+  it('[the-engine-r16, the-record-r10] lane: the recipe, the journal, and the report the workspace modules root lane module writes land every way (C6)', async () => {
     const sb = fresh(seeded);
     const writes: [string, string, Read][] = [
       ['recipe', 'the chain recipe', () => createLane(sb, U, 'chain-lane', ['--goal=the chain recipe'])],

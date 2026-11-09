@@ -154,7 +154,7 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
   it('the file walk reads the loader, ONBOARDING, the core law source, every laws and module file, and every shipped rhythm, by directory, above its floor', () => {
     const rel = files.files.map((f) => relative(ROOT, f));
     expect(rel.length).toBeGreaterThanOrEqual(FILE_FLOOR);
-    for (const must of ['base/AGENTS.md', ONBOARDING, 'base/.contexture/laws/core.md', 'base/.contexture/modules/unit/laws', 'base/.contexture/modules/unit/module', 'base/.contexture/extensions/modules/lane/laws', 'plugins/docs-discipline/.contexture/extensions/modules/docs/laws', 'plugins/docs-discipline/.contexture/extensions/rhythms/docs-drift.md', DOCS_WORK]) {
+    for (const must of ['base/AGENTS.md', ONBOARDING, 'base/.contexture/laws/core.md', 'base/.contexture/modules/unit/laws', 'base/.contexture/modules/unit/module', 'base/.contexture/modules/lane/laws', 'plugins/docs-discipline/.contexture/extensions/modules/docs/laws', 'plugins/docs-discipline/.contexture/extensions/rhythms/docs-drift.md', DOCS_WORK]) {
       expect(rel).toContain(must);
     }
   });
@@ -206,7 +206,7 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
 
   it('a planted verb help header leaves exactly one remainder in each form printing it, the module detail and the verb\'s own --help', async () => {
     const sb = staged('surface-leaks-help');
-    const script = join(sb, '.contexture/extensions/modules/rhythm/scripts/list');
+    const script = join(sb, '.contexture/modules/rhythm/scripts/list');
     const body = readFileSync(script, 'utf8').split('\n');
     body.splice(2, 0, `# help: the planted line names ${FALLBACK_ROOT}/<unit>`);
     writeFileSync(script, body.join('\n'));

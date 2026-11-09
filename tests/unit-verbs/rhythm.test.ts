@@ -275,7 +275,7 @@ describe.concurrent('ctx rhythm current, the board line, and the stamped record'
   it('[the-record-r-njns2] with the rhythm module absent the board prints its view alone, rc 0, empty stderr', async () => {
     const sb = fresh(cur);
     const before = await unit(sb, 'board', 'force-u');
-    rmSync(join(sb, '.contexture/extensions/modules/rhythm'), { recursive: true });
+    rmSync(join(sb, '.contexture/modules/rhythm'), { recursive: true });
     const r = await unit(sb, 'board', 'force-u');
     expect([r.code, r.stderr]).toEqual([0, '']);
     expect(r.stdout).toBe(before.stdout.replace(`${IN_FORCE}\n`, ''));

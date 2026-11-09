@@ -28,13 +28,13 @@ describe.concurrent('discovery over both module roots', () => {
 
   it('CT-XR1 [the-engine-r1, modules-r14]: the workspace modules list before the extension modules, each root in byte order; collisions stay unlisted', () => {
     expect(help.stdout).toContain('an extension fixture module');
-    for (const hidden of ['the extension good that must not shadow', 'a reserved extension module', 'a builtin collision']) expect(help.stdout).not.toContain(hidden);
-    expect(listed(help.stdout)).toEqual(['good', 'unit', 'aaaext', 'filterext', 'hookext', 'lane', 'rhythm']);
+    for (const hidden of ['the extension good that must not shadow', 'a reserved extension module', 'a builtin collision', 'a lane leftover collision', 'a rhythm leftover collision']) expect(help.stdout).not.toContain(hidden);
+    expect(listed(help.stdout)).toEqual(['good', 'lane', 'rhythm', 'unit', 'aaaext', 'filterext', 'hookext']);
   });
 
   it('CT-XR1 [the-engine-r1, modules-r14, modules-r6]: the workspace name, builtin, and reserved collisions in the extension root warn', () => {
     expect(help.stderr).toContain('skipping extension module good: collides with a workspace module');
-    expect(help.stderr).toContain('skipping extension module unit: collides with a builtin');
+    for (const builtin of ['unit', 'lane', 'rhythm']) expect(help.stderr).toContain(`skipping extension module ${builtin}: collides with a builtin`);
     expect(help.stderr.match(/reserved name refused \(shadow\): load/g)).toHaveLength(2);
   });
 
@@ -55,7 +55,7 @@ describe.concurrent('discovery over both module roots', () => {
     rmSync(`${sb}/.contexture/extensions`, { recursive: true });
     const r = await run(sb, ['help']);
     expect(r.code).toBe(0);
-    expect(listed(r.stdout)).toEqual(['good', 'unit']);
+    expect(listed(r.stdout)).toEqual(['good', 'lane', 'rhythm', 'unit']);
     expect(r.stderr).not.toMatch(/extension/);
   });
 });

@@ -1,4 +1,4 @@
-import { cpSync, renameSync } from 'node:fs';
+import { cpSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
@@ -40,9 +40,9 @@ describe.concurrent('the bare base: the store-data owner scan over both module r
     });
   });
 
-  it('[modules-r10] an absent extension root is silent to the owner scan', async () => {
+  it('[modules-r10] the stage carries no extension root, so the owner scan reads silent', async () => {
     const sb = probeStage();
-    renameSync(join(sb, '.contexture/extensions'), join(sb, '.contexture/extensions.away'));
+    expect(existsSync(join(sb, '.contexture/extensions'))).toBe(false);
     const r = await storeData(sb, 'probe');
     expect({ code: r.code, stderr: r.stderr }).toEqual({ code: 0, stderr: '' });
   });
