@@ -106,6 +106,23 @@ Parent workspace (multiple repositories, the workspace tracks convention configu
 
 The generated law layer, `AGENTS.generated.md`, sits at the root under the deny-by-default `*`, so the block keeps it ignored with no line of its own: whitelist the AGENTS files by name, never with an `AGENTS*.md` glob, which would track the generated layer. The scratch drawer is the other way round: the `!.contexture/**` whitelist re-includes it, so its line `.contexture/tmp/` follows the whitelist, the later line winning. A workspace that re-ignored the layer at its old place drops its `.contexture/laws/AGENTS.generated.md` re-ignore line once the update's compose has removed the legacy file (Updating, step 9, before the step 10 review). The last two stand for the harness entry points you wire; keep only the ones in use. This repository keeps a stricter shape: its live root (the same `AGENTS.md` and `.contexture/`) is untracked working state, its agent-facing corpus is never committed (untracked working state at `docs/workspace/` under the files driver, the store alone under a store driver), and the shippable core is tracked mirrored under `base/` (see Payload classes and syncing).
 
+## The module catalog
+
+The builtins ship with the base and need no install. The packages install through `.contexture/ctx package install <name>` on the human's explicit go at the act; you choose them, and the agent reads the installed surfaces through `ctx help --all`. The module manifests and each package's manifest under `plugins/<name>/manifest` carry the summaries, versions, and descriptions this catalog restates.
+
+| module | what it gives | when to install |
+|---|---|---|
+| `unit` (builtin) | the record's 35 operations over the store, one value per artifact: the state, backlog, journal, knowledge, and lane artifacts | ships with the base; no install |
+| `run` (builtin) | the base filter pack: diff, directory listing, and log filters selected by command identity or stream signature for `ctx run`; filter-only and silent in `ctx help` | ships with the base; no install |
+| `lane` (builtin) | the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's artifacts within the unit's record | ships with the base; no install |
+| `rhythm` (builtin) | the process surface: list the rhythms with their triggers and activations, show one whole, and name the rhythm in force with its next gate | ships with the base; no install |
+| `docs-discipline` (package) | the corpus-first documentation discipline: the docs module's read and schema-checked write verbs, and its close gate over a typed-block corpus | install when agents should consult a corpus before code; its change-aware checks need git |
+| `ast-doc-graph` (package) | the AST and documentation graph: index the workspace's TypeScript code and documentation corpus into one queryable graph, then query symbols, call graphs, rules, and pitfalls | install when the workspace holds TypeScript sources or a corpus to link |
+| `toolchain-filters` (package) | the toolchain filter pack: pytest, vitest and jest, cargo test, go test, and compiler error filters for `ctx run` | install when the workspace runs those toolchains; adopt only the filters its streams match |
+| `starter-rhythms` (package) | the starter work and debug rhythms, to copy and edit into the workspace's own | install when no team rhythm emerged from the instruction stack |
+| `storage-fts5` (package) | the SQLite FTS5 storage driver: the record and the corpus in one store with dual full-text indexing and exact, hybrid, and trigram search | install when the workspace wants that store; needs `sqlite3` 3.44 or later with FTS5 |
+| `git` (package) | the git management discipline: the gitignore strategy, the branch and worktree mechanics, and the boot ground check, as a module with laws and no verbs | a choice with no default; install when the workspace is a git repository and wants those mechanics; the docs-discipline change-aware checks need git the tool either way |
+
 ## Migration, overlays, symlinks
 
 Existing instruction files do not vanish; their project-specific rules move to overlays. Extract architecture, build and test commands, code style, and the rest from `AGENTS.md`, `CLAUDE.md`, or whatever the workspace uses, and place them in `AGENTS.workspace.md` under the appropriate blocks (`@append @laws`, and so on). Migration follows the destination, never the file list: the instruction stack guides the sweep, and the sweep covers what the stack misses: contributing guides, style and lint configs, CI rules, documentation conventions. Existing rules the convention supersedes are listed in the plan's `deletions` field; nothing disappears silently.

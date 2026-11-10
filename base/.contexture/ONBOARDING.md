@@ -30,6 +30,19 @@
   reading budget: rule-bearing surfaces read whole, they are small and dense; structure is derived by listing, never by reading; application code is out of scope
   ask freely: derive what evidence answers, and ask the human what only they know: resolutions, history, intent; a wrong assumption costs more than a question
 
+@modules
+  the module catalog: the builtins ship with the base and need no install; the packages install through `.contexture/ctx package install <name>` on the human's go at the act; the human chooses the packages, and the agent reads the installed surfaces through `ctx help --all`; each module's manifest and each package's manifest under `plugins/<name>/manifest` carries its summary, version, and description, and the catalog restates them.
+  builtin unit: the record's 35 operations over the store, one value per artifact: the state, the backlog, the journal, the knowledge, and the lane artifacts that keep the work across compaction and harness change; no install.
+  builtin run: the base filter pack: diff, directory listing, and log filters selected by command identity or stream signature, so command output compacts through `ctx run`; filter-only, so it stays silent in `ctx help`; no install.
+  builtin lane: the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's recipe, journal, and report kept as lane artifacts within the unit's record; no install.
+  builtin rhythm: the process surface: `ctx rhythm` lists the rhythms with their triggers and activations, shows one whole, and names the rhythm in force with its next gate; no install.
+  package docs-discipline: the corpus-first documentation discipline: the docs module's read verbs (query, audit, check, gate, nudge, changes), its schema-checked write verbs, and its close gate over a typed-block corpus; install it when agents should consult a corpus before code; its change-aware checks need git.
+  package ast-doc-graph: the AST and documentation graph: index the workspace's TypeScript code and documentation corpus into one queryable graph, then query symbols, call graphs, rules, and pitfalls; install it when the workspace holds TypeScript sources or a corpus to link.
+  package toolchain-filters: the toolchain filter pack: pytest, vitest and jest, cargo test, go test, and compiler error filters for `ctx run`; install it when the workspace runs those toolchains, and adopt only the filters its streams match.
+  package starter-rhythms: the starter work and debug rhythms, to copy and edit into the workspace's own; install it when no team rhythm emerged from the instruction stack.
+  package storage-fts5: the SQLite FTS5 storage driver: the record and the corpus in one store with dual full-text indexing and exact, hybrid, and trigram search; install it when the workspace wants that store; it needs `sqlite3` 3.44 or later with FTS5.
+  package git: the git management discipline: the gitignore strategy, the branch and worktree mechanics, and the boot ground check, as a module with its laws and no verbs; a choice with no default, install it when the workspace is a git repository and wants those mechanics; the docs-discipline change-aware checks need git the tool either way.
+
 @propose
   the flow runs in two segments; each ends at a gate that hands control to the human and waits: ask in chat and end the turn; the gate is the loop's exit, never skipped, never merged; every gate and verdict journals into the adoption record
 

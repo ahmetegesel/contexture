@@ -14,6 +14,7 @@ contexture is a convention, not a tool: lightweight, abstracted, extensible. Pla
 
 - [Why contexture](#why-contexture)
 - [Installation](#installation)
+- [The module catalog](#the-module-catalog)
 - [Architecture](#architecture)
 - [Core concepts](#core-concepts)
 - [Docs](#docs)
@@ -66,6 +67,21 @@ Once confirmed, start your first unit of work:
 3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `ctx unit load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
 
 For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
+
+## The module catalog
+
+The builtins ship with the base and need no install. The packages in `plugins/` install through `.contexture/ctx package install <name>` on the human's explicit go at the act; the install writes only inside the workspace's extension root and recomposes the law layer. You choose the packages from this catalog, and the agent reads the installed surfaces through `ctx help --all`; the module manifests and each package's manifest under `plugins/<name>/manifest` carry the summaries, versions, and descriptions it restates.
+
+- **`unit` (builtin)**: the record's 35 operations over the store, one value per artifact; it keeps the state, backlog, journal, knowledge, and lane artifacts across compaction. No install.
+- **`run` (builtin)**: the base filter pack for `ctx run`: diff, directory listing, and log filters selected by command identity or stream signature; filter-only, so it stays silent in `ctx help`. No install.
+- **`lane` (builtin)**: the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's recipe, journal, and report kept as lane artifacts within the unit's record. No install.
+- **`rhythm` (builtin)**: the process surface: `ctx rhythm` lists the rhythms with their triggers and activations, shows one whole, and names the rhythm in force with its next gate. No install.
+- **`docs-discipline`**: the corpus-first documentation discipline: the docs module's read verbs (query, audit, check, gate, nudge, changes), schema-checked write verbs, and close gate over a typed-block corpus. Install it when agents should consult a corpus before code; its change-aware checks need git.
+- **`ast-doc-graph`**: the AST and documentation graph: index the workspace's TypeScript code and documentation corpus into one queryable graph, then query symbols, call graphs, rules, and pitfalls. Install it when the workspace holds TypeScript sources or a corpus to link.
+- **`toolchain-filters`**: the toolchain filter pack: pytest, vitest and jest, cargo test, go test, and compiler error filters for `ctx run`. Install it when the workspace runs those toolchains, and adopt only the filters its streams match.
+- **`starter-rhythms`**: the starter work and debug rhythms, to copy and edit into the workspace's own. Install it when no team rhythm emerged from the instruction stack.
+- **`storage-fts5`**: the SQLite FTS5 storage driver, holding the record and the corpus in one store with dual full-text indexing and exact, hybrid, and trigram search. Install it when the workspace wants that store; it needs `sqlite3` 3.44 or later with FTS5.
+- **`git`**: the git management discipline: the gitignore strategy, the branch and worktree mechanics, and the boot ground check, as a module with laws and no verbs. A choice with no default: install it when the workspace is a git repository and wants those mechanics; the docs-discipline change-aware checks need git the tool either way.
 
 ## Architecture
 
@@ -129,6 +145,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 - [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
 - [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
 - [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and the generic module store with its change log and search schema
+- [Git management](plugins/git/): The gitignore strategy, the branch and worktree mechanics, and the boot ground check
 - [Tests](tests/): The test suite (vitest projects that run the shipped product as child processes), upstream only; see [tests/README.md](tests/README.md)
 - [Maintaining contexture](#maintaining-contexture): The `base/` dev loop: edit, ship, apply
 
