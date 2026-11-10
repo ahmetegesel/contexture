@@ -29,7 +29,7 @@ The standard module folder is a directory under `.contexture/modules/` (the work
 - `scripts/`, `hooks/`, `install`, and `uninstall` are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
 - A package ships this folder as its module part; the package overlay installs it whole, and the folder is the single source for the engine, the compose, the storage, and the installer.
 
-The builtin `unit`, `run`, `lane`, and `rhythm` modules ship with the base under `.contexture/modules/`; the storage core at `.contexture/storage/` is not a module but rides the same payload; the law sources at `.contexture/laws/` (the core law source and the composer) ride it too; a module you add is workspace-owned. See Payload.
+The builtin `unit`, `lane`, and `rhythm` modules ship with the base under `.contexture/modules/`; the `run` builtin's filter pack is a filter-only directory there, silent and unlisted; the storage core at `.contexture/storage/` is not a module but rides the same payload; the law sources at `.contexture/laws/` (the core law source and the composer) ride it too; a module you add is workspace-owned. See Payload.
 
 ### The interface rule
 
@@ -59,11 +59,11 @@ The module file is the standard folder's manifest. Its fields and their readers:
 - The block order is summary, version, description; the description stands last because its block runs to the end of the file.
 - The module name is the directory name; the summary is the only field the engine reads.
 - A plain `# comment` never opens with `# <token>:` — that shape is a field, and an unknown field refuses.
-- The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose calls the field reads and the package installer validates every module part, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid: the unit module carries one, and the version and description are for the modules that ship as packages.
+- The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose calls the field reads and the package installer validates every module part, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid, and a manifest may carry a description with no version line: the ast-doc-graph module carries a summary and a description, and its package manifest carries the install version.
 
 ### The laws file
 
-A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the eight docs laws and its layout, boot, and close clauses; the lane module's file carries the lane-isolation subagent clauses; the git module's file, the git package, carries the `@git` section and the boot ground check. A module contributes to a core generic section or its own artifact, never into a workspace-owned rhythm or another module's framing; its functional instructions never contradict another module's or the core's.
+A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the nine docs laws and its layout, boot, and close clauses; the lane module's file carries the lane-isolation subagent clauses; the git module's file, the git package, carries the `@git` section and the boot ground check. A module contributes to a core generic section or its own artifact, never into a workspace-owned rhythm or another module's framing; its functional instructions never contradict another module's or the core's.
 
 ### The law layer and the compose
 
@@ -379,7 +379,7 @@ The builtin run module, `.contexture/modules/run/`. It has no module file and no
 
 ## Payload
 
-A module you add is workspace-owned: updates never touch it. The builtin `unit`, `run`, `lane`, and `rhythm` modules, the storage core, and the law sources ride the update payload under `.contexture/modules/`, `.contexture/storage/`, and `.contexture/laws/`; a package's installed files live under the extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
+A module you add is workspace-owned: updates never touch it. The builtin `unit`, `lane`, and `rhythm` modules, the `run` builtin's filter pack, the storage core, and the law sources ride the update payload under `.contexture/modules/`, `.contexture/storage/`, and `.contexture/laws/`; a package's installed files live under the extension root and no update touches them. The source repository tracks the payload mirrored under `base/`, and an update applies it onto the live drawer byte for byte. Either way, keep `scripts/` and `hooks/` files executable. The classes and the sync mechanics live in `docs/the-engine.md` (The drawer layout) and `docs/adoption.md` (Payload classes and syncing).
 
 ## Where the rest lives
 
