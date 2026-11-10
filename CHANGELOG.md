@@ -4,6 +4,18 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.78.0] - 2026-11-10
+
+MINOR: the core `@subagents` duty bar. The every-dispatch bullets become six numbered steps with a gate each: the brief, the boot, the load receipt, the journal, the report, and the dispatcher's read. The seven cross-cutting rules stay prose: search delegation, background, drift, report and journal landing, command streams, lane operations, and the journal every dispatch. The cannot-write fallback rides the report step; the passed-never-the-gate and read-the-report-whole rules ride the dispatcher's read step; the unresolved-REF rule moves into the boot gate. The lane module's four clauses (branch/worktree, landing, boundary-warning, drift) stay prose and unchanged, since they are the module's framing, and compose after the core steps. The core and base stamps read v0.78.0 and the base-only golden is regenerated. No plugin payload, manifest, or catalog path changes, so no plugin version moves and no package install runs; the adoption is the plain base apply plus the compose.
+
+### Changed
+
+- The core `@subagents` section (`base/.contexture/laws/core.md`): the six procedural bullets become numbered steps with a gate each (brief, boot, load receipt, journal, report, read); the seven cross-cutting rules stay prose; the cannot-write fallback rides the report step, and the passed-never-the-gate and read-the-report-whole rules ride the dispatcher's read step; the unresolved-REF rule moves from the load receipt to the boot gate; the lane module's four clauses are unchanged.
+- The base stamps: `base/AGENTS.md` and `base/.contexture/laws/core.md` read v0.78.0, and the base-only golden is regenerated (the header moving with the new core cksum and sources hash, the `@subagents` block reworked, every other line byte-equal).
+- The payload: no plugin payload, manifest, or catalog path changes, so no package version moves and the live adoption is a plain base apply plus compose, with no package install.
+
+Commits in the range: 5616761 (the `@subagents` sequence and its gates, the v0.78.0 stamps, and the regenerated golden); and the release commit.
+
 ## [0.77.0] - 2026-11-10
 
 MINOR: the dont-fool move. `dont-fool-yourself` moves from the docs module's laws into the core `@laws` as its own law, after `cli-doorway` as the eleventh core law, its text unchanged and its slug carried once in the composed layer. The core's composed law set reads eleven; the docs module's law set falls from nine to eight and `docs-discipline` re-installs at 1.7.0, the module and manifest in lockstep. `base/AGENTS.md` and the core header read v0.77.0 and the base-only golden is regenerated. The guides read the eight docs laws and the eleventh core-law bullet, and the corpus's `modules-r12` and `plugins-r2` rules read eight through the docs write verbs. The adoption runs in one breath: apply the base, re-install `docs-discipline` 1.7.0, then compose, because an installed 1.6.0 module beside the new core carries the law twice and the compose refuses the duplicate slug; a base-only upgrade that does not re-install in the same breath stops at that refusal.
