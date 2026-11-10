@@ -4,6 +4,25 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.77.0] - 2026-11-10
+
+MINOR: the dont-fool move. `dont-fool-yourself` moves from the docs module's laws into the core `@laws` as its own law, after `cli-doorway` as the eleventh core law, its text unchanged and its slug carried once in the composed layer. The core's composed law set reads eleven; the docs module's law set falls from nine to eight and `docs-discipline` re-installs at 1.7.0, the module and manifest in lockstep. `base/AGENTS.md` and the core header read v0.77.0 and the base-only golden is regenerated. The guides read the eight docs laws and the eleventh core-law bullet, and the corpus's `modules-r12` and `plugins-r2` rules read eight through the docs write verbs. The adoption runs in one breath: apply the base, re-install `docs-discipline` 1.7.0, then compose, because an installed 1.6.0 module beside the new core carries the law twice and the compose refuses the duplicate slug; a base-only upgrade that does not re-install in the same breath stops at that refusal.
+
+### Added
+
+- The `dont-fool-yourself` law in the core (`base/.contexture/laws/core.md`), after `cli-doorway` as the eleventh core law, its text byte-identical to the former docs law: every failure here returns something indistinguishable from a correct result and only a mechanical check catches it; null-check the instrument; grep locates and reading answers; absence claims are the highest-evidence claim and license deletion; the parts must sum to the named whole; read the exit code of the command you care about; read the primary record over a derived view.
+
+### Changed
+
+- The docs module (1.7.0): the module and manifest read 1.7.0 and the laws file carries the eight remaining docs laws; the docs module keeps its use of the law, read from the core.
+- The base stamps: `base/AGENTS.md` and `base/.contexture/laws/core.md` read v0.77.0, the base-only golden is regenerated (its header moving with the new core cksum and sources hash, its body gaining the one law line), and the loader stays under its 2,048 B cap.
+- The test pins: `tests/laws/module-laws.test.ts` and `tests/governance/overlay.test.ts` drop the moved slug, so the overlay's moved-law pin names the eight docs laws; the compose's duplicate-slug refusal keeps the overlay restatement guard directly tested.
+- The guides: `docs/modules.md` reads the eight docs laws and `docs/the-engine.md` gains the eleventh core-law bullet.
+- The corpus (not shipped): the workspace modules and plugins docs read the eight docs laws, through the docs write verbs, and the audit reads clean.
+- The payload: `docs-discipline` moves to 1.7.0 and no other plugin version changes; the adoption applies the base, re-installs `docs-discipline` 1.7.0, then composes, the re-install before any compose.
+
+Commits in the range: fa04179 (the dont-fool move into the core, the docs module's eight laws and 1.7.0, the pins, the golden, and the guide counts); and the release commit.
+
 ## [0.76.0] - 2026-11-10
 
 MINOR: the module catalog. `ONBOARDING.md`, `docs/adoption.md`, and the README carry a one-line-per-module catalog of the four builtins (`unit`, `run`, `lane`, `rhythm`) and the six packages (`docs-discipline`, `ast-doc-graph`, `toolchain-filters`, `starter-rhythms`, `storage-fts5`, `git`), each line naming what the module gives and when to install it. The builtins ship with the base and need no install; the packages install through `.contexture/ctx package install <name>` on the human's explicit go at the act. The catalog names the audience split (the human chooses the packages, the agent reads the installed surfaces through `ctx help --all`) and the carriers (the module files and the package manifests under `plugins/<name>/manifest` for the summaries and versions, the module preambles and package READMEs for the descriptions). `run` reads as the base filter pack, filter-only and silent in `ctx help`, distinct from the toolchain filter pack; `git` is named unconditionally as a choice with no default, and the docs-discipline change-aware checks need git the tool either way. The README gains the catalog section, its TOC line, and the Git management line in the Docs list. The base and core stamps read v0.76.0 and the base-only golden is regenerated. No plugin payload or manifest changes, so no plugin version moves and no re-install is needed.
