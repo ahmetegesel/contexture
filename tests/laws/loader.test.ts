@@ -11,7 +11,7 @@ function loaderOk(text: string): boolean {
     /FIRST: run \.contexture\/ctx compose/,
     /composes the generated law layer AGENTS\.generated\.md/,
     /read AGENTS\.generated\.md WHOLE: the composed law layer\./,
-    /Its generic sections are @laws, @layout, @module, @boot, @interact, @rhythms, @subagents, @refresh, @close, @handoff, @git, @update;/,
+    /Its generic sections are @laws, @layout, @module, @boot, @interact, @rhythms, @subagents, @refresh, @close, @handoff, @update;/,
     /every module adds its own sections, clauses, and duties/,
     /follow each duty as steps in the framed order, gates included/,
     /Laws bind\./,
@@ -40,7 +40,7 @@ describe.concurrent('the loader (base/AGENTS.md)', () => {
 
   it('[modules-r19] pins the frame instruction at @boot step 2 and leaves step 3 byte for byte', () => {
     const lines = readFileSync(LOADER, 'utf8').split('\n');
-    expect(lines[3]).toBe('  2. read AGENTS.generated.md WHOLE: the composed law layer. Its generic sections are @laws, @layout, @module, @boot, @interact, @rhythms, @subagents, @refresh, @close, @handoff, @git, @update; every module adds its own sections, clauses, and duties, so expect more than this list, and follow each duty as steps in the framed order, gates included. Laws bind. Never edit it.');
+    expect(lines[3]).toBe('  2. read AGENTS.generated.md WHOLE: the composed law layer. Its generic sections are @laws, @layout, @module, @boot, @interact, @rhythms, @subagents, @refresh, @close, @handoff, @update; every module adds its own sections, clauses, and duties, so expect more than this list, and follow each duty as steps in the framed order, gates included. Laws bind. Never edit it.');
     expect(lines[4]).toBe("  3. read AGENTS.workspace.md then AGENTS.local.md: the shared overlay and the local amendments; they amend the generated layer by section, never contradict it; where they conflict, the workspace wins. Then run the generated layer's @boot.");
   });
 

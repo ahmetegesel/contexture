@@ -49,12 +49,13 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(lineOf(g, /^@module rhythm$/)).toBeLessThan(lineOf(g, /^@module unit$/));
   });
 
-  it('[modules-r12, modules-r19] composes the unit record clause and the lane subagent, boundary-warning, and git clauses', () => {
+  it('[modules-r12, modules-r19] composes the unit record clause and the lane subagent and boundary-warning clauses, and no git section', () => {
     const g = layer(base);
     expect(count(g, /^ {2}unit of work = the unit/)).toBe(1);
     expect(count(g, /^ {2}branch\/worktree: the recipe names/)).toBe(1);
     expect(count(g, /^ {2}boundary-warning: every lane recipe/)).toBe(1);
-    expect(count(g, /^ {2}branch\/worktree on demand/)).toBe(1);
+    expect(count(g, /^@git$/)).toBe(0);
+    expect(count(g, /^ {2}branch\/worktree on demand/)).toBe(0);
   });
 
   it("[modules-r19] composes the search delegation bullet: raw exploration runs in a lane, the docs map is the dispatcher's own read, and no corpus search sits among the delegated lookups", () => {

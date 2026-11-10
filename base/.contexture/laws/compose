@@ -16,7 +16,7 @@ legacy=$dir/AGENTS.generated.md
 ctx_bin=$root/.contexture/ctx
 tab=$(printf '\t')
 
-EXPECTED_BLOCKS="laws layout boot record journal backlog query interact rhythms subagents refresh close handoff git update"
+EXPECTED_BLOCKS="laws layout boot record journal backlog query interact rhythms subagents refresh close handoff update"
 
 check_only=0
 case "${1:-}" in

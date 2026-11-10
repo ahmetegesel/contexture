@@ -6,7 +6,7 @@ import { ROOT } from '../support/root';
 import { blockClauses, CORE_SRC } from '../support/laws';
 
 const COMPOSE_SRC = join(ROOT, 'base/.contexture/laws/compose');
-const SKELETON = 'laws layout boot record journal backlog query interact rhythms subagents refresh close handoff git update';
+const SKELETON = 'laws layout boot record journal backlog query interact rhythms subagents refresh close handoff update';
 
 describe.concurrent('the core law source and the composer', () => {
   it('ships the core source and an executable composer that parses under sh -n', async () => {
@@ -18,7 +18,7 @@ describe.concurrent('the core law source and the composer', () => {
     expect(r.stderr).toBe('');
   });
 
-  it('keeps the 15-block skeleton in order, the version on line 1, the storage layout line, and an empty @record', () => {
+  it('keeps the 14-block skeleton in order, the version on line 1, the storage layout line, and an empty @record', () => {
     const core = readFileSync(CORE_SRC, 'utf8');
     const blocks = core.split('\n').filter((l) => /^@[A-Za-z0-9._-]+$/.test(l)).map((l) => l.slice(1));
     expect(blocks.join(' ')).toBe(SKELETON);

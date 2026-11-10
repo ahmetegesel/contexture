@@ -38,12 +38,11 @@ describe.concurrent('the module law fragments', () => {
     expect(text).toContain('ctx docs gate');
   });
 
-  it('[modules-r12] keeps the lane subagent clauses and the git clause in the lane module', () => {
+  it('[modules-r12] keeps the lane subagent clauses in the lane module', () => {
     const text = readFileSync(LANE_LAWS, 'utf8');
     expect(text).toMatch(/^@append @subagents$/m);
     for (const clause of ['branch/worktree', 'landing', 'boundary-warning', 'drift']) expect(text).toMatch(new RegExp(`^ {2}${clause}: `, 'm'));
-    expect(text).toMatch(/^@append @git$/m);
-    expect(text).toMatch(/^ {2}branch\/worktree on demand: /m);
+    expect(text).not.toMatch(/^@append @git$/m);
   });
 
   it('[the-record-r-lst33] names the unit listing among the unit laws\' named looks by a form the verb runs, ctx unit list --repo=<repo>', () => {

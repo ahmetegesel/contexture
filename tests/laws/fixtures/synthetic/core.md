@@ -33,8 +33,5 @@
 
 @handoff
 
-@git
-  the fixture git line
-
 @update
   the fixture update line
