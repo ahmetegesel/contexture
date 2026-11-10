@@ -77,13 +77,13 @@ New work bootstraps a unit instead of joining one: run `.contexture/ctx unit boo
 
 ### Refresh
 
-The artifact sweep, shared by rhythm boundaries, close, and handoff: the events journaled, the backlog statuses advanced, the derived move read from the backlog, the harvest run over every open flag (one candidate each; a candidate that meets the bar lands in knowledge and its entry closes by reference; one that does not drops), and the journal audit run. It keeps the record current mid-flight, so nothing waits for the period end.
+The artifact sweep, shared by rhythm boundaries, close, and handoff: the events journaled, the backlog statuses advanced, the derived move read from the backlog, the harvest run over every open flag (one candidate each; a candidate that meets the bar lands in knowledge and its entry closes by reference; one that does not drops), and the unit audit run. It keeps the record current mid-flight, so nothing waits for the period end.
 
 ### Close
 
 Two distinct ends:
 
-- Period end (a turn ends; the unit continues): run the refresh, then close the period's resolved threads by reference. The stray audit's checklist is the open-thread tail the journal audit prints: every thread that resolved this period closes now. The journal audit must exit 0; it is a repair instrument, and what it flags is fixed before the period ends, never noted; a finding no verb can repair goes to the human, never to an agent's hand edit of the record. The folder stays ACTIVE.
+- Period end (a turn ends; the unit continues): run the refresh, then close the period's resolved threads by reference. The stray audit's checklist is the open-thread tail the unit audit prints: every thread that resolved this period closes now. The unit audit must exit 0; it is a repair instrument, and what it flags is fixed before the period ends, never noted; a finding no verb can repair goes to the human, never to an agent's hand edit of the record. The folder stays ACTIVE.
 - Unit close (the backlog completes, or the human ends the unit): append the closing events and the next-move decision, re-read the files and confirm consistency, promote durable knowledge by the harvest bar (the agent lands what deserves knowledge and drops the rest), run every installed close gate (a red gate stops the close), then mark the unit CLOSED (`ctx unit close`).
 
 ### Handoff
