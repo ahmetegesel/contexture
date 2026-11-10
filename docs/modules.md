@@ -186,7 +186,7 @@ ctx <module> <verb> [args...]
 
 A hook is a file under `<root>/<name>/hooks/` declaring `# ctx-hook: <point>`, where `<root>` is `.contexture/modules/` or `.contexture/extensions/modules/`. The engine runs the declared hooks implicitly when that point fires — there is no `ctx hooks` verb to call, and `hooks` is a reserved name. The workspace modules' hooks run first (name order), then the extension modules' (name order).
 
-Six points ship:
+Seven points ship:
 
 | point | fires |
 |---|---|
@@ -195,9 +195,10 @@ Six points ship:
 | `close` | at the end of `ctx unit close` |
 | `load-pre` | in the main form of `ctx unit load`, before the load map |
 | `load-post` | in the main form of `ctx unit load`, after the load banner |
+| `load-end` | in the main form of `ctx unit load`, once, on the last page, after the page body and the final load-complete line |
 | `refresh` | after `ctx unit refresh` runs its board and audit |
 
-Boot is not a point. The refs form of `ctx unit load` fires no load hooks.
+Boot is not a point. The refs form of `ctx unit load` fires no load hooks. The docs module ships two handlers on these points: `task-landing` nudges a task when it starts, and `load-end` nudges the unit's in-progress tasks at the session load's end; the points are the unit module's, and a workspace without the docs module fires them silently.
 
 Every hook runs with:
 
@@ -212,6 +213,7 @@ Every hook runs with:
 | `close` | `CTX_UNIT` |
 | `load-pre` | `CTX_UNIT`, `CTX_LOAD_FORM=main`, `CTX_LOAD_PAGE` |
 | `load-post` | `CTX_UNIT`, `CTX_LOAD_FORM=main`, `CTX_LOAD_PAGE` |
+| `load-end` | `CTX_UNIT`, `CTX_LOAD_FORM=main`, `CTX_LOAD_PAGE` (the last page) |
 | `refresh` | `CTX_UNIT` |
 
 Order: module names in `LC_ALL=C` order first, then each module's hook files in `LC_ALL=C` file-name order.
