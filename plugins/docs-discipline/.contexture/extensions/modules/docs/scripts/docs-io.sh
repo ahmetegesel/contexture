@@ -374,8 +374,8 @@ EOF
 # docs_task_files <unit> [<slug>...]: the named tasks' blocks through ctx unit resolve,
 # or with none the unit's IN_PROGRESS tasks (backlog order) through ctx unit task list;
 # each block verbatim (task show's text view drops REFS) in its own scratch file:
-# DOCS_TASKS lists the files, empty when no task is active; the unit verbs' rc and
-# messages pass through
+# DOCS_TASKS lists the files one path per line, empty when no task is active, so a
+# scratch path holding a space never splits; the unit verbs' rc and messages pass through
 docs_task_files() {
   DOCS_TASKS=""
   tf_ctx=""
@@ -391,8 +391,13 @@ docs_task_files() {
   docs_scratch || return 2
   tf_unit=$1
   shift
-  tf_slugs=$*
-  if [ -z "$tf_slugs" ]; then
+  tf_slugs=""
+  if [ "$#" -gt 0 ]; then
+    for tf_slug in "$@"; do
+      tf_slugs="$tf_slugs$tf_slug
+"
+    done
+  else
     if tf_list=$( (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$tf_ctx" unit task list "$tf_unit" --status=progress < /dev/null) ); then
       :
     else
@@ -402,14 +407,18 @@ docs_task_files() {
   fi
   [ -n "$tf_slugs" ] || return 0
   tf_n=0
-  for tf_slug in $tf_slugs; do
+  while IFS= read -r tf_slug; do
+    [ -n "$tf_slug" ] || continue
     tf_n=$((tf_n + 1))
     if (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$tf_ctx" unit resolve "$tf_unit" "task#$tf_slug" < /dev/null) > "$DOCS_SCRATCH/task-$tf_n"; then
-      DOCS_TASKS="$DOCS_TASKS $DOCS_SCRATCH/task-$tf_n"
+      DOCS_TASKS="$DOCS_TASKS$DOCS_SCRATCH/task-$tf_n
+"
     else
       return $?
     fi
-  done
+  done <<EOF
+$tf_slugs
+EOF
   return 0
 }
 
@@ -734,23 +743,27 @@ docs_exec() {
   exit $?
 }
 
-# docs_exec_tasks <command> <task file>...: the command over one task file and DOCS_PATHS
-# (appended) per file as the verb's last act, one engine run per task; exits on the first
-# failure. The scratch goes on exit.
+# docs_exec_tasks <command>: the command over DOCS_TASKS (one task file per line) and
+# DOCS_PATHS (appended) per file as the verb's last act, one engine run per task; exits on
+# the first failure. A line is one path whole, so a scratch path holding a space never
+# splits. The scratch goes on exit.
 docs_exec_tasks() {
   et_cmd=$1
   shift
-  for et_task in "$@"; do
+  while IFS= read -r et_task; do
+    [ -n "$et_task" ] || continue
     set -- "$et_task"
     while IFS= read -r de_p; do
       set -- "$@" "$de_p"
     done < "$DOCS_PATHS"
     if [ "$DOCS_CD" -eq 1 ]; then
-      ( docs_git_env; cd "$DOCS_MOUNT" || exit 2; "$et_cmd" "$@" ) || exit $?
+      ( docs_git_env; cd "$DOCS_MOUNT" || exit 2; "$et_cmd" "$@" < /dev/null ) || exit $?
     else
-      "$et_cmd" "$@" || exit $?
+      "$et_cmd" "$@" < /dev/null || exit $?
     fi
-  done
+  done <<EOF
+$DOCS_TASKS
+EOF
   exit 0
 }
 

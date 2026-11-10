@@ -87,6 +87,8 @@ helper-output	gate	    run_engine_over_corpus -f "$AWK_AUDIT"
 helper-output	gate	        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v delta_source=log
 helper-output	gate	        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG"
 helper-output	nudge	  docs_args 0 1 "$@" || exit $?
+helper-output	nudge	  set -- "$@" "$nf_t"
+helper-output	nudge	docs_task_files "$first" "$@" || exit $?
 helper-output	nudge	  docs_exec "$dir/docs-nudge.awk" "$first"
 helper-output	query	  set -- "$@" "$DOC_PATH"
 helper-output	query	done < "$DOCS_PATHS"

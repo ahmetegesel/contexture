@@ -67,7 +67,8 @@ for nf_a in $*; do
     --task=*)
       nf_t=${nf_a#--task=}
       [ -n "$nf_t" ] || { echo "ctx docs nudge: --task=<slug> needs a task slug" >&2; exit 1; }
-      nf_tasks="$nf_tasks $nf_t"
+      nf_tasks="$nf_tasks$nf_t
+"
       ;;
     --task)
       echo "ctx docs nudge: --task=<slug> needs a task slug" >&2
@@ -86,7 +87,14 @@ set -f
 docs_args 1 1 $nf_repos || exit $?
 set +f
 docs_no_display
-docs_task_files "$first" $nf_tasks || exit $?
+set --
+while IFS= read -r nf_t; do
+  [ -n "$nf_t" ] || continue
+  set -- "$@" "$nf_t"
+done <<EOF
+$nf_tasks
+EOF
+docs_task_files "$first" "$@" || exit $?
 [ -n "$DOCS_TASKS" ] || exit 0
 export DOCS_NUDGE_TASK=1
-docs_exec_tasks "$dir/docs-nudge.awk" $DOCS_TASKS
+docs_exec_tasks "$dir/docs-nudge.awk"
