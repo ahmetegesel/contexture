@@ -108,7 +108,7 @@ Every package carries a `manifest` at its root, beside `README.md` and `tests/`:
 - The three version lines are distinct: the package version (this manifest: install, upgrade, the generated law hash), the driver descriptor version (the driver's `capability`, `3.0.0` at the storage core's split descriptor), and the storage contract (`3` today): the store-only card, with the record's rules in the unit module over the store.
 - The private reader `ctx _package <manifest> validate|summary|version|kind|parts|driver` is the one parser; the installer refuses a package without a manifest and a malformed one. The reader refuses an unknown field, a duplicate field or part path, a bad part type or path, a feature/driver mismatch, and a `# requires:` line.
 
-The shipped catalog's shapes: `docs-discipline` (a module with its laws and its private grammar inside it, plus rhythms), `ast-doc-graph` (a module), `storage-fts5` (a driver), `toolchain-filters` (filters only), `starter-rhythms` (rhythms only), and `git` (a module with its laws, no verbs); the `lane-isolation` folder is removed and its clauses live in the lane module's laws.
+The shipped catalog's shapes: `docs-discipline` (a module with its laws and its private grammar inside it, plus rhythms), `ast-doc-graph` (a module), `storage-fts5` (a driver), `toolchain-filters` (filters only), `starter-rhythms` (rhythms only), and `git` (a module with its laws, no verbs); the `lane-isolation` folder is removed, with its subagent clauses in the lane module's laws and its git clauses in the git package.
 
 ### The install and uninstall part hooks
 
