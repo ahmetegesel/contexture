@@ -9,6 +9,6 @@
   6. EXECUTE: one subagent per task (small same-shape tasks batch); parallel on independence; the doc change lands with its code change through the ctx docs write verbs (docs-are-code)
   7. GUARDS: the mechanical checks green before any review (ctx docs audit over the corpus, ctx docs check over the delta; the framing leak check: the loader names only the generic sections and the core restates no module's framing; the change's own checks)
   8. REVIEW+HARDEN+VERIFY: one fresh subagent; independent review, findings hardened, the docs gate re-proven (ctx docs audit, ctx docs check, ctx docs gate)
-  9. LAND: one act after the gates green, the human's sign-off first (the shape lives in @git)
+  9. LAND: one act after the gates green, the human's sign-off first (the shape lives in @git when the git package is installed)
   10. REFRESH: run @refresh
   ground: the rules live in the workspace conventions (ctx docs query workspace --rules); the grammar is enforced by the ctx docs write verbs
