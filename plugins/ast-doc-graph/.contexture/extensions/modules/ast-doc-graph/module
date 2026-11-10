@@ -1,1 +1,6 @@
-# summary: the AST and documentation graph: index TypeScript code and docs corpora into SQLite, then query symbols, call graphs, rules, and pitfalls
+# summary: the AST and documentation graph: index the workspace's TypeScript code and documentation corpus into a queryable graph, then query symbols, call graphs, rules, and pitfalls
+# description:
+# The ast-doc-graph module owns the code and documentation graph: it indexes the
+# workspace's TypeScript sources and docs corpus into one graph and answers symbol,
+# call-graph, rule, and pitfall queries over it, so an agent navigates code and docs
+# by relationship rather than by search.
