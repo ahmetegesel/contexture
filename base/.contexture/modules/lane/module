@@ -1,6 +1,6 @@
 # summary: subagent lane management: create, record, report, show
 # version: 1.0.0
 # description:
-# The lane module is the subagent dispatch surface: each lane keeps its
-# recipe, journal, and report apart from the main record, so a dispatch
-# trace never contaminates the unit's journal.
+# The lane module is the subagent dispatch surface: each lane keeps its recipe,
+# journal, and report as lane artifacts within the unit's record, apart from the
+# unit's journal, so a dispatch trace never contaminates it.

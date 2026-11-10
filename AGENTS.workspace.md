@@ -8,9 +8,6 @@
   corpus-untracked-here: under the files driver this repository's agent-facing corpus is gitignored working state at docs/workspace/, and its guides (docs/*.md plus README.md) stay tracked files
   inner-workings: a feature's inner workings are known only inside its implementation; every user or agent facing act goes through ctx; shipped agent facing text names no record storage path or module implementation path (the governance surface census and the verb output census hold it) and no private tool path (the forbid census holds it)
 
-@append @backlog
-  ideas: the upstream idea and need dump is managed and queried strictly through the ideas module (ctx ideas list, show, add, pick, drop); ideas land as light @idea entries and are picked up from there; dump freely, the agent appends on the human's word and proposes a dump when a discovery would otherwise die in conversation; loaded on demand only via ctx ideas show <slug>, never at boot; picking up = bootstrap the unit and flip the entry to PICKED <unit>; entries are never deleted
-
 @append @git
   version: MAJOR = breaking (fields removed, shapes changed); MINOR = new sections, features; PATCH = fixes, wording
   bumps: agent applies PATCH + MINOR at ship, no ask; MAJOR = human verdict alone, agent proposes only

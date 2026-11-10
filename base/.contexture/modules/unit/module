@@ -2,6 +2,6 @@
 # version: 0.1.0
 # description:
 # The unit module owns the record: the state, the backlog, the journal, the knowledge,
-# and the lanes, one store value per artifact under the namespace unit. It answers the
-# 35 record operations over the store, and its verbs are the record's public surface,
-# dispatched as ctx unit.
+# and the lane artifacts, one record value per artifact. It answers the 35 record
+# operations over the store, and its verbs are the record's public surface, dispatched
+# as ctx unit.
