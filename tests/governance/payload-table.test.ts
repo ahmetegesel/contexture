@@ -211,7 +211,7 @@ describe.concurrent('the git package onboarding facts', () => {
     expect(readme()).toContain('independent of that module');
   });
 
-  it.fails('[plugins-r6, plugins-o2] the onboarding guide asks the git choice with no default and states the docs dependency fact (the guides lane lands this text and flips this pin)', () => {
+  it('[plugins-r6, plugins-o2] the onboarding guide asks the git choice with no default and states the docs dependency fact', () => {
     const onboarding = text(join(ROOT, 'base/.contexture/ONBOARDING.md'));
     const adoption = text(join(ROOT, 'docs/adoption.md'));
     expect(onboarding.split('\n').find((l) => /^ {4}git: <.*no default/.test(l))).toBeDefined();

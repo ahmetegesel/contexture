@@ -84,7 +84,7 @@ Adoption is where the files begin: the onboarding flow proposes the workspace ov
 
 Contexture's own overlays are live examples of the grammar in use. The clauses below are this workspace's policy; the shape is the point. The full files sit at the repository root.
 
-`AGENTS.workspace.md` adds a law and extends the git section:
+`AGENTS.workspace.md` adds a law and extends the git section the git package contributes (without the package the overlay still loads, but `@append @git` addresses no section):
 
 ```
 # contexture's workspace overlay; wins over AGENTS.local.md

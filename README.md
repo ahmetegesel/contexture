@@ -51,7 +51,7 @@ Prompt your AI agent:
 
 > "Read `.contexture/ONBOARDING.md` and prepare the adoption proposal."
 
-The agent inspects your workspace topology, drafts gitignore rules and harness symlinks, and pauses for your confirmation before writing changes.
+The agent inspects your workspace topology, drafts gitignore rules, the git package choice, and harness symlinks, and pauses for your confirmation before writing changes.
 
 ### 3. Start your first session
 

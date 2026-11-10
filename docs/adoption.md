@@ -41,10 +41,16 @@ chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/f
 
 The compose builds `AGENTS.generated.md` at the root, a sibling to `AGENTS.md`, `AGENTS.workspace.md`, and `AGENTS.local.md`, from the core law source, `.contexture/laws/core.md`, and the installed modules' laws. It is gitignored and never edited; the loader composes or verifies it at every boot through `.contexture/ctx compose`, so a stale or absent layer cannot boot: an absent engine or a refused compose is a broken payload the agent stops on, reporting the compose's error line, which names the missing or refused path.
 
-Then configure the choices the agent would have proposed: the gitignore posture for your topology, your overlays, and the harness symlinks. If no team rhythm emerged from your instruction stack, the starter-rhythms plugin is the starting set: install it on the human's go and edit the installed copies freely.
+Then configure the choices the agent would have proposed: the gitignore posture for your topology, the git package choice (no default; the docs-discipline module's change-aware checks need git), your overlays, and the harness symlinks. If no team rhythm emerged from your instruction stack, the starter-rhythms plugin is the starting set: install it on the human's go and edit the installed copies freely.
 
 ```
 .contexture/ctx package install starter-rhythms
+```
+
+The git package is a separate choice with no default: install it on the human's go as well.
+
+```
+.contexture/ctx package install git
 ```
 
 `ctx package install <name>` takes a catalog name (the folder under `plugins/`) or a package root path (a value holding a slash), always installs into the workspace whose engine runs it, and runs only on the human's explicit go at the act, a gate the verb itself never checks. The install reads the package `manifest` (summary, version, kind, parts, and the driver name for a driver package), overlays only the declared parts under `.contexture/extensions/`, records every installed path and mode under `.contexture/extensions/.state/<package>.files`, refuses a collision (a path outside the extension root, a core path, an existing non-recorded file, another package's file, a module or driver name collision, a duplicate namespace, a declared part that is absent, a payload path outside the declared parts), runs the module part hooks after the record, and recomposes the generated law layer (a compose refusal surfaces loudly, never as a stale layer). A re-install of the recorded files is an update; `.contexture/ctx package uninstall <name>` removes the unchanged recorded files, preserves and reports a file changed after install, and recomposes the law layer.
@@ -69,6 +75,7 @@ rhythms     work patterns found in your stack, proposed as rhythm files
 units       existing unit folders (the record root, or the deprecated sessions root): adopted, archived, or left
 symlinks    harness entry points to wire
 gitignore   the strategy for your topology
+git         the git package: install it or leave it out; no default; the docs-discipline module's change-aware checks need git
 deletions   existing rules the convention supersedes
 untouched   what deliberately stays outside contexture
 questions   what only you can answer
@@ -77,6 +84,8 @@ questions   what only you can answer
 ## Topology and gitignore choices
 
 There is no universal `.gitignore` block; the topology decides, and the tracking of the record and rhythms is a team choice either way.
+
+The git package is a choice of its own, with no default: it carries the gitignore strategy, the branch and worktree mechanics, and the boot ground check as a module with its laws and no verbs, and the core names no git. The docs-discipline module's git dependency is a fact either way: its change-aware verbs, the check, the gate, and the drift read git's delta, the change log stamps the workspace git HEAD, and a workspace without git keeps the audit, the query, and the writes and loses the change-aware checks.
 
 Standalone repository (application code lives here): never deny by default, so existing project files keep tracking. Append your personal amendments (`AGENTS.local.md`) to the existing ignore file, and decide with the team whether `.contexture/units/` (with the deprecated `.contexture/sessions/` while units remain in it) and `.contexture/rhythms/` are tracked or ignored. Tracked, the record travels with the repository; ignored, the record stays local. Both are defensible; the convention requires neither. A repository updating past the record's root move gives `.contexture/units/` the line its ignore file holds for `.contexture/sessions/` (Updating, step 9). Whatever the choice, ignore the composed law layer with the root-anchored line `/AGENTS.generated.md`: it is built at install and boot and never tracked; and ignore the scratch drawer with the line `.contexture/tmp/`, where the engine stages its own scratch at every call (Updating, step 9). A repository that ignored the layer at its old place replaces its `.contexture/laws/AGENTS.generated.md` ignore line with `/AGENTS.generated.md` once the update's compose has removed the legacy file (Updating, step 9, before the step 10 review); never whitelist an `AGENTS*.md` glob, which would track the generated layer.
 

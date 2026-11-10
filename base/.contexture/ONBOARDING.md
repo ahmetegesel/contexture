@@ -22,6 +22,7 @@
   topology:
     standalone repo: contains application code (src/, package.json, Cargo.toml, pyproject.toml, etc.)
     parent workspace: contains multiple independent repositories as subdirectories
+  git: the git package is a choice with no default, and the docs module's git dependency is a fact: its change-aware verbs, the check, the gate, and the drift read git's delta, the change log stamps the workspace git HEAD, and a workspace without git keeps the audit, the query, and the writes and loses the change-aware checks
   instruction stack first: the existing AGENTS.md and its derivations (CLAUDE.md, GEMINI.md, harness files) are the workspace's self-description: read them first and whole; they name the rules that matter and often where the rest live
   know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/ctx compose`, then read the loader, the generated law layer `AGENTS.generated.md` at the root, and the upstream README completely before mapping; fetch upstream, the URL lives in the generated layer's @update section, and the README carries the philosophy behind every judgment the mapping makes
   map from the destination: walk the convention's sections one by one against the workspace's material: for each capability, what feeds it, what conflicts with it, what belongs there; migration follows the destination, never the file list
@@ -57,6 +58,7 @@
     units: <existing unit folders, under the record root or the deprecated sessions root: adopted, archived, or left; none states none>
     symlinks: <harness entry points to wire; none states none>
     gitignore: <the strategy per topology>
+    git: <the git package: install it or leave it out; no default; the docs-discipline module's change-aware checks need git>
     deletions: <existing rules superseded by the convention; none states none>
     untouched: <what deliberately stays outside contexture>
   @questions
@@ -68,6 +70,7 @@
     copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
     set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
     compose the law layer: `.contexture/ctx compose`; it builds `AGENTS.generated.md` at the root from the core source and the installed modules, and the loader verifies or recomposes it at every boot
+    install the chosen packages on the human's go: `.contexture/ctx package install git` lands the git package's `@git` section and boot ground clause; any other chosen package installs the same way
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking

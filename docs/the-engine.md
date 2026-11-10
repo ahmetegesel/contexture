@@ -8,7 +8,7 @@ The division of labor is deliberate. The model does the work; the machinery hold
 
 ## The instruction files: the loader every turn
 
-A coding harness reads its repository instruction file before it acts. In a contexture workspace `AGENTS.md` is the loader: the only file guaranteed to be in front of the agent every turn, and deliberately a few lines. Its first instruction runs `.contexture/ctx compose` (which composes or verifies the generated layer), then loads `AGENTS.generated.md` whole from the workspace root, then chains `AGENTS.workspace.md` and `AGENTS.local.md`. The second instruction frames the layer it loads: its generic sections are `@laws`, `@layout`, `@module`, `@boot`, `@interact`, `@rhythms`, `@subagents`, `@refresh`, `@close`, `@handoff`, `@git`, and `@update`; every module adds its own sections, clauses, and duties, so the layer carries more than that list, and each duty is followed as steps in its framed order, gates included; the laws bind. An absent engine or a refused compose is a broken payload: the instruction stops and reports the compose's error line, which names the missing or refused path, never booting on a stale or partial layer.
+A coding harness reads its repository instruction file before it acts. In a contexture workspace `AGENTS.md` is the loader: the only file guaranteed to be in front of the agent every turn, and deliberately a few lines. Its first instruction runs `.contexture/ctx compose` (which composes or verifies the generated layer), then loads `AGENTS.generated.md` whole from the workspace root, then chains `AGENTS.workspace.md` and `AGENTS.local.md`. The second instruction frames the layer it loads: its generic sections are `@laws`, `@layout`, `@module`, `@boot`, `@interact`, `@rhythms`, `@subagents`, `@refresh`, `@close`, `@handoff`, and `@update`; every module adds its own sections, clauses, and duties, so the layer carries more than that list, and each duty is followed as steps in its framed order, gates included; the laws bind. An absent engine or a refused compose is a broken payload: the instruction stops and reports the compose's error line, which names the missing or refused path, never booting on a stale or partial layer.
 
 The four delivery files split by ownership. `AGENTS.md` is the base loader; the generated layer is the composed law set, the core law source plus the installed modules' preambles and clauses; the workspace overlay is the shared, tracked amendment; the local file is the personal amendment. The loader is the every-turn cost, about a kilobyte; the generated layer and the overlays are boot reads. The generated layer is gitignored and built at install and boot, never edited. Measured at the v0.61.1 base: the three-file stack it replaces is 34,994 bytes every turn; the loader is 856 bytes, and the boot whole (the generated layer plus both overlays) measured 36,693 bytes with the docs module installed.
 
@@ -29,12 +29,11 @@ The sections below are the blocks the generated layer carries, in the order the 
 | `@refresh` | the artifact sweep |
 | `@close` | period end and unit close |
 | `@handoff` | the proof before context death |
-| `@git` | the gitignore strategy for the workspace |
 | `@update` | how the base evolves upstream |
 
-The loader names the generic core sections only: `@laws`, `@layout`, `@module`, `@boot`, `@interact`, `@rhythms`, `@subagents`, `@refresh`, `@close`, `@handoff`, `@git`, and `@update`. The four record sections (`@record`, `@journal`, `@backlog`, `@query`) are the unit module's framing, supplied by its laws file; each `@module` preamble belongs to its module.
+The loader names the generic core sections only: `@laws`, `@layout`, `@module`, `@boot`, `@interact`, `@rhythms`, `@subagents`, `@refresh`, `@close`, `@handoff`, and `@update`. The four record sections (`@record`, `@journal`, `@backlog`, `@query`) are the unit module's framing, supplied by its laws file; each `@module` preamble belongs to its module.
 
-The core law source fixes the block order; the installed modules' law fragments append under these keywords, and a new keyword creates a custom section after `@update`. The module preambles stand after `@layout`, before `@boot`.
+The core law source fixes the block order; the installed modules' law fragments append under these keywords, and a new keyword creates a custom section after `@update`. The git package is the worked example: its laws create the `@git` section after `@update`. The module preambles stand after `@layout`, before `@boot`.
 
 ### The laws
 
@@ -51,7 +50,7 @@ The laws are the spine of the whole system, loaded whole at boot in the generate
 - `workspace-confinement`: the workspace is the boundary; the agent never roams outside it.
 - `cli-doorway`: the CLI (`.contexture/ctx`) is the single doorway to the runtime and the record: contracts are discovered through `ctx help`, the record is reached strictly through its ctx verbs (`ctx unit`, `ctx lane`, `ctx rhythm current`), and stderr is the diagnostic, with `--diagnose` on the engine subcommands for the runtime and storage state.
 
-Slug addressing is what lets the set grow and the modules and overlays extend it. A positional name would force every reference to chase every insertion; a slug is stable for life, and a module or overlay can append its own laws at the end without renumbering anything. The core laws are the source's own; the docs module appends its laws and clauses, the lane module its dispatch and git clauses, and the workspace and local overlays append their own. Slugs are unique across the generated layer and both overlays; the compose refuses a duplicate at boot.
+Slug addressing is what lets the set grow and the modules and overlays extend it. A positional name would force every reference to chase every insertion; a slug is stable for life, and a module or overlay can append its own laws at the end without renumbering anything. The core laws are the source's own; the docs module appends its laws and clauses, the lane module its dispatch clauses, the git package its git laws, and the workspace and local overlays append their own. Slugs are unique across the generated layer and both overlays; the compose refuses a duplicate at boot.
 
 ### The overlays beside it
 
