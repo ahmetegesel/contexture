@@ -1,4 +1,4 @@
-# contexture v0.75.0: the base loader; workspaces overlay it via AGENTS.workspace.md, never edit this file
+# contexture v0.76.0: the base loader; workspaces overlay it via AGENTS.workspace.md, never edit this file
 @boot
   1. FIRST: run .contexture/ctx compose from the workspace root; it composes the generated law layer AGENTS.generated.md or verifies it current. When .contexture/ctx is absent or not executable, or the compose exits non-zero, stop and report its error line, which names the missing or refused payload path; never boot on a stale or partial law layer.
   2. read AGENTS.generated.md WHOLE: the composed law layer. Its generic sections are @laws, @layout, @module, @boot, @interact, @rhythms, @subagents, @refresh, @close, @handoff, @update; every module adds its own sections, clauses, and duties, so expect more than this list, and follow each duty as steps in the framed order, gates included. Laws bind. Never edit it.
