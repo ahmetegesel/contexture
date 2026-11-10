@@ -242,7 +242,13 @@ BEGIN {
   print ""
   page_header(slug, page)
   page_body(page)
-  if (page < npages) printf "keep reading: ctx unit load %s %d (%d pages remain)\n", slug, page + 1, npages - page
-  else printf "load complete: pages %d/%d\n", npages, npages
+  if (page < npages) {
+    printf "keep reading: ctx unit load %s %d (%d pages remain)\n", slug, page + 1, npages - page
+  } else {
+    printf "load complete: pages %d/%d\n", npages, npages
+    fflush()
+    if (fire_hooks("load-end", " CTX_UNIT \"" slug "\" CTX_LOAD_FORM main CTX_LOAD_PAGE " page) != 0)
+      fail("ERROR: load-end point failed (block hook)")
+  }
   exit 0
 }' < "$VB_DIR/lines"

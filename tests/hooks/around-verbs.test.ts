@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec } from '../support/exec';
+import { hook, writeModule } from '../support/modules';
 import { fresh } from '../support/snapshot';
 import { unit } from '../support/unit';
 import { clearMarker, ctxLine, hookSandbox, marker } from './fixture';
@@ -85,6 +86,49 @@ describe.concurrent('the hook points around the unit verbs', () => {
     expect(marker(sb).filter((l) => l.includes('point=load-pre'))).toHaveLength(4);
     const posts = marker(sb).filter((l) => l.includes('point=load-post'));
     expect(posts).toEqual([ctxLine('az-load-post', 'load-post', { form: 'main', page: '1' }), ctxLine('zz-load-post', 'load-post', { form: 'main', page: '1' })]);
+  });
+
+  it('HK-S9 [modules-r5]: load-end fires once, on the last page, after the page body and the load-complete line, never on page 1, while load-pre and load-post fire on both pages', async () => {
+    const sb = copy();
+    const first = await unit(sb, 'load', 'zz-unit', '1');
+    expect(first.code).toBe(0);
+    const pages = Number(/^\[load zz-unit \| [^|]* \| page 1\/(\d+) \| /m.exec(first.stdout)?.[1] ?? 0);
+    expect(pages).toBeGreaterThan(1);
+    expect(first.stdout).not.toMatch(/point=load-end/);
+    expect(first.stdout).toMatch(/^keep reading: ctx unit load zz-unit 2 \(/m);
+    expect(marker(sb).filter((l) => l.includes('point=load-end'))).toEqual([]);
+    expect(marker(sb).filter((l) => l.includes('point=load-pre'))).toHaveLength(4);
+    expect(marker(sb).filter((l) => l.includes('point=load-post'))).toHaveLength(2);
+    clearMarker(sb);
+    const last = await unit(sb, 'load', 'zz-unit', String(pages));
+    expect(last.code).toBe(0);
+    const end = (label: string): string => ctxLine(label, 'load-end', { form: 'main', page: String(pages) });
+    expect(marker(sb).filter((l) => l.includes('point=load-end'))).toEqual([end('az-load-end'), end('zz-load-end')]);
+    const out = last.stdout.split('\n');
+    const complete = out.findIndex((l) => /^load complete: pages \d+\/\d+$/.test(l));
+    const az = out.indexOf(`HOOK ${end('az-load-end')}`);
+    const zz = out.indexOf(`HOOK ${end('zz-load-end')}`);
+    expect(complete).toBeGreaterThanOrEqual(0);
+    expect(az).toBeGreaterThan(complete);
+    expect(zz).toBeGreaterThan(az);
+    expect(marker(sb).filter((l) => l.includes('point=load-pre'))).toHaveLength(4);
+    expect(marker(sb).filter((l) => l.includes('point=load-post'))).toHaveLength(2);
+  });
+
+  it('HK-S10 [the-engine-r13, modules-r5]: a failing block hook at load-end fails the load rc 1 with the record already printed', async () => {
+    const sb = copy();
+    const first = await unit(sb, 'load', 'zz-unit', '1');
+    const pages = Number(/^\[load zz-unit \| [^|]* \| page 1\/(\d+) \| /m.exec(first.stdout)?.[1] ?? 0);
+    expect(pages).toBeGreaterThan(1);
+    clearMarker(sb);
+    writeModule(sb, 'modules', 'aa-block-end', { files: { 'hooks/90-load-end-fail.sh': hook('load-end', 'echo "FAIL aa-load-end-block point=$CTX_HOOK_POINT" >> marker.log\nexit 3', true) } });
+    const r = await unit(sb, 'load', 'zz-unit', String(pages));
+    expect(r.code).toBe(1);
+    expect(r.stdout).toContain(`load complete: pages ${pages}/${pages}`);
+    expect(r.stdout).toContain('[load zz-unit | journal |');
+    expect(r.stderr).toContain('hook blocked the point at load-end: aa-block-end: 90-load-end-fail.sh (rc=3)');
+    expect(r.stderr).toContain('ERROR: load-end point failed (block hook)');
+    expect(marker(sb).filter((l) => l.includes('point=load-end'))).toEqual(['FAIL aa-load-end-block point=load-end']);
   });
 
   it('HK-S4 [modules-r5]: load refs fires neither load point', async () => {
