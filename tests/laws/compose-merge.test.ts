@@ -132,10 +132,10 @@ describe.concurrent('the discovery filters and the docs composition', () => {
     const g = layer(sb);
     expect(count(g, /^@module docs$/)).toBe(1);
     expect(moduleBlock(g, 'docs')).toMatch(/^ {2}summary: the corpus-first documentation discipline/m);
-    expect(moduleBlock(g, 'docs')).toMatch(/^ {2}The docs module holds the agent-facing corpus/m);
+    expect(moduleBlock(g, 'docs')).toMatch(/^ {2}The docs module owns the corpus discipline/m);
     expect(count(g, /^ {2}docs-first: /)).toBe(1);
     expect(count(g, /^ {2}the corpus conventions \(repo workspace, slug conventions\): /)).toBe(1);
-    expect(count(g, /^ {2}boot order addition: /)).toBe(1);
+    expect(count(g, /^ {2}before the first specific lookup: /)).toBe(1);
     expect(count(g, /^ {2}docs gate \(unit close\): /)).toBe(1);
   });
 });

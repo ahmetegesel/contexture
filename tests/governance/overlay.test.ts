@@ -7,7 +7,7 @@ import { text } from './walk';
 const overlay = (): string => text(join(ROOT, 'AGENTS.workspace.md'));
 const has = (body: string, line: RegExp): boolean => body.split('\n').some((l) => line.test(l));
 
-const MOVED_LAWS = ['docs-first', 'docs-are-code', 'corpus-untracked', 'corpus-reconcile', 'gap', 'harness-free', 'dont-fool-yourself', 'docs-audience-separation'];
+const MOVED_LAWS = ['docs-first', 'docs-are-code', 'git-dependency', 'corpus-untracked', 'corpus-reconcile', 'gap', 'harness-free', 'dont-fool-yourself', 'docs-audience-separation'];
 
 const MOVED_CLAUSES: [string, RegExp][] = [
   ['the docs layout clause', /^@append @layout$/],
