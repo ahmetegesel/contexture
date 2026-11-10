@@ -30,6 +30,7 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['plugins/storage-fts5/**', ['storage-fts5', 'drivers', 'sqlite-smoke']],
   ['plugins/docs-discipline/**', ['docs-discipline', 'packages', 'governance']],
   ['plugins/ast-doc-graph/**', ['ast-doc-graph', 'governance']],
+  ['plugins/git/**', ['packages', 'laws', 'governance']],
   ['plugins/toolchain-filters/**', ['toolchain-filters']],
   ['plugins/starter-rhythms/**', ['packages']],
   ['docs/**', ['governance']],

@@ -1,0 +1,7 @@
+# the git module's law fragment: the git section and the boot ground check the package contributes
+@append @git
+  the gitignore strategy is decided per topology and team choice at onboarding; parent workspaces deny by default and whitelist shared files explicitly (AGENTS.md, AGENTS.workspace.md, README.md, .contexture/).
+  branch/worktree on demand: create .worktrees/<unit> on branch unit/<slug> when isolation helps; push -u origin unit/<slug> when a PR is wanted; the branch merges per the workspace's flow and the worktree prunes after; cleanup order: git worktree remove .worktrees/<unit>, then git branch -d unit/<slug>; git worktree prune clears stale metadata
+
+@append @boot
+  ground check (a git workspace): git status -sb; the working tree and the upstream delta are facts the record must carry: uncommitted changes and unpushed commits reconcile before work continues; git wins over the record

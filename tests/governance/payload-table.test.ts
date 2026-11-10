@@ -193,6 +193,33 @@ describe.concurrent("the adoption procedure's gitignore guidance", () => {
   });
 });
 
+describe.concurrent('the git package onboarding facts', () => {
+  const readme = (): string => text(join(ROOT, 'plugins/git/README.md'));
+  const needs = (): string => text(join(ROOT, 'plugins/docs-discipline/README.md'));
+
+  it("[plugins-r6, plugins-o2] the git package is a stated choice, never a default: its README installs it on the human's go at the act and names its uninstall", () => {
+    expect(text(join(ROOT, 'plugins/git/manifest'))).toContain('# part: module modules/git');
+    expect(readme()).toContain("on the human's go at the act");
+    expect(readme()).toContain('never a default');
+    expect(readme()).toContain('.contexture/ctx package install git');
+    expect(readme()).toContain('.contexture/ctx package uninstall git');
+  });
+
+  it("[plugins-r6, plugins-o2] the docs dependency is a fact: the docs module's change-aware checks need git the tool, and the git package is independent of that module", () => {
+    expect(needs()).toContain("git for the close gate's delta");
+    expect(readme()).toContain('change-aware checks need git the tool');
+    expect(readme()).toContain('independent of that module');
+  });
+
+  it.fails('[plugins-r6, plugins-o2] the onboarding guide asks the git choice with no default and states the docs dependency fact (the guides lane lands this text and flips this pin)', () => {
+    const onboarding = text(join(ROOT, 'base/.contexture/ONBOARDING.md'));
+    const adoption = text(join(ROOT, 'docs/adoption.md'));
+    expect(onboarding.split('\n').find((l) => /^ {4}git: <.*no default/.test(l))).toBeDefined();
+    expect(adoption.split('\n').find((l) => /^git +the git package: .*no default/.test(l))).toBeDefined();
+    expect(onboarding + adoption).toContain('change-aware checks need git');
+  });
+});
+
 describe('the payload path tables', () => {
   it('the declaration is one string in adoption.md and the-engine.md', () => {
     expect(declaration('docs/the-engine.md')).toBe(declaration('docs/adoption.md'));

@@ -25,6 +25,7 @@ const SURFACES = [
   'plugins/toolchain-filters/tests/README.md',
   'plugins/docs-discipline/README.md',
   'plugins/ast-doc-graph/README.md',
+  'plugins/git/README.md',
   'plugins/storage-fts5/README.md',
   'tests/README.md',
 ];

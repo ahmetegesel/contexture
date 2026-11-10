@@ -3,13 +3,14 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
 import { exec } from '../support/exec';
+import { compose, count, layer, layerBytes, lineOf } from '../support/laws';
 import { catalogCopy, extPath, install, isExec, out, uninstall } from '../support/packages';
 import { ROOT } from '../support/root';
 import { stage } from '../support/stage';
-import { put } from '../support/tree';
+import { firstByteDifference, put } from '../support/tree';
 
 const sandbox = () => stage('posix', 'pkg-catalog');
-const PLUGINS = ['docs-discipline', 'ast-doc-graph', 'storage-fts5', 'toolchain-filters', 'starter-rhythms'] as const;
+const PLUGINS = ['docs-discipline', 'ast-doc-graph', 'storage-fts5', 'toolchain-filters', 'starter-rhythms', 'git'] as const;
 const manifest = (p: string): string => join(ROOT, 'plugins', p, 'manifest');
 const FTS5 = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5');
 const SELECT = "select: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop (@rhythms default); read a rhythm with ctx rhythm show <name>";
@@ -78,6 +79,27 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     expect((await uninstall(sb, p)).code).toBe(0);
     expect(existsSync(extPath(sb, landed))).toBe(false);
   });
+
+  it('[plugins-r6, modules-r19] git lands its module and laws, creates the @git section after @update with both clauses, appends the boot ground clause, and uninstalls to the pre-install layer bytes', async () => {
+    const sb = sandbox();
+    expect((await compose(sb)).code).toBe(0);
+    const before = layerBytes(sb);
+    expect(before).toBeDefined();
+    const git = catalogCopy(sb, 'git');
+    expect((await install(sb, git)).code).toBe(0);
+    expect(existsSync(extPath(sb, 'modules/git/module'))).toBe(true);
+    expect(existsSync(extPath(sb, 'modules/git/laws'))).toBe(true);
+    const g = layer(sb);
+    expect(count(g, /^@module git$/)).toBe(1);
+    expect(count(g, /^@git$/)).toBe(1);
+    expect(lineOf(g, /^@git$/)).toBeGreaterThan(lineOf(g, /^@update$/));
+    expect(count(g, /^ {2}the gitignore strategy is decided per topology/)).toBe(1);
+    expect(count(g, /^ {2}branch\/worktree on demand/)).toBe(1);
+    expect(count(g, /^ {2}ground check \(a git workspace\)/)).toBe(1);
+    expect((await uninstall(sb, git)).code).toBe(0);
+    expect(existsSync(extPath(sb, 'modules/git/module'))).toBe(false);
+    expect(firstByteDifference(layerBytes(sb)!, before!)).toBe(-1);
+  });
 });
 
 describe.concurrent('the real package manifests', () => {
@@ -98,6 +120,8 @@ describe.concurrent('the real package manifests', () => {
     expect(await pkgv('ast-doc-graph', 'kind')).toBe('feature');
     expect(await pkgv('toolchain-filters', 'parts')).toBe('filters modules/toolchain-filters/filters');
     expect(await pkgv('starter-rhythms', 'parts')).toBe('rhythms rhythms');
+    expect(await pkgv('git', 'kind')).toBe('feature');
+    expect(await pkgv('git', 'parts')).toBe('module modules/git');
     expect(await pkgv('storage-fts5', 'kind')).toBe('driver');
     expect(await pkgv('storage-fts5', 'driver')).toBe('fts5');
     expect(await pkgv('storage-fts5', 'parts')).toBe('driver storage/drivers/fts5');

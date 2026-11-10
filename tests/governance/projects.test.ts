@@ -6,6 +6,7 @@ import { ROOT } from '../support/root';
 
 const NO_SUITE: Record<string, string> = {
   'starter-rhythms': 'a rhythms payload with no code: its install and its rhythms in ctx rhythm list are proven by the packages project (real-catalog)',
+  'git': 'a law and preamble package with no code: its install, compose after @update, and uninstall are proven by the packages and laws projects',
 };
 
 type Project = { test?: { name?: string } };

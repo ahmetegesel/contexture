@@ -1,0 +1,4 @@
+# summary: the git management discipline: the gitignore strategy, the branch and worktree mechanics, and the boot ground check
+# version: 1.0.0
+# kind: feature
+# part: module modules/git
