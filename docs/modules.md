@@ -145,7 +145,7 @@ A file without a `# summary:` is private: discovery ignores it and it never appe
 # ctx-hook-mode: block      (optional)
 ```
 
-One point per hook file; write another file for another point. The mode is per hook file. The six points are named under Hooks.
+One point per hook file; write another file for another point. The mode is per hook file. The seven points are named under Hooks.
 
 ### Filters
 
