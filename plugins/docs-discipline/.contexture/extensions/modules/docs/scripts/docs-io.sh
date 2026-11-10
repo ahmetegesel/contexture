@@ -371,36 +371,46 @@ EOF
   return "$rf_hit"
 }
 
-# docs_active_task <unit>: the unit's first IN_PROGRESS task (backlog order) through ctx
-# unit task list, its block verbatim through ctx unit resolve task# (task show's text
-# view drops REFS) into scratch: DOCS_TASK names the file, empty when no task is active;
-# the unit verbs' rc and messages pass through
-docs_active_task() {
-  DOCS_TASK=""
-  at_ctx=""
+# docs_task_files <unit> [<slug>...]: the named tasks' blocks through ctx unit resolve,
+# or with none the unit's IN_PROGRESS tasks (backlog order) through ctx unit task list;
+# each block verbatim (task show's text view drops REFS) in its own scratch file:
+# DOCS_TASKS lists the files, empty when no task is active; the unit verbs' rc and
+# messages pass through
+docs_task_files() {
+  DOCS_TASKS=""
+  tf_ctx=""
   if [ -x "$DOCS_ROOT/.contexture/ctx" ]; then
-    at_ctx="$DOCS_ROOT/.contexture/ctx"
+    tf_ctx="$DOCS_ROOT/.contexture/ctx"
   elif [ -n "${CTX_BIN:-}" ] && [ -x "$CTX_BIN" ]; then
-    at_ctx=$CTX_BIN
+    tf_ctx=$CTX_BIN
   fi
-  if [ -z "$at_ctx" ]; then
+  if [ -z "$tf_ctx" ]; then
     printf '%s: no ctx runtime at the workspace root (need: .contexture/ctx) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
     return 2
   fi
   docs_scratch || return 2
-  if at_list=$( (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$at_ctx" unit task list "$1" --status=progress < /dev/null) ); then
-    :
-  else
-    return $?
+  tf_unit=$1
+  shift
+  tf_slugs=$*
+  if [ -z "$tf_slugs" ]; then
+    if tf_list=$( (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$tf_ctx" unit task list "$tf_unit" --status=progress < /dev/null) ); then
+      :
+    else
+      return $?
+    fi
+    tf_slugs=$(printf '%s\n' "$tf_list" | awk '$1 == "[IN_PROGRESS]" { s = $2; sub(/:$/, "", s); print s }')
   fi
-  at_slug=$(printf '%s\n' "$at_list" | awk '$1 == "[IN_PROGRESS]" { s = $2; sub(/:$/, "", s); print s; exit }')
-  [ -n "$at_slug" ] || return 0
-  if (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$at_ctx" unit resolve "$1" "task#$at_slug" < /dev/null) > "$DOCS_SCRATCH/task"; then
-    DOCS_TASK="$DOCS_SCRATCH/task"
-    return 0
-  else
-    return $?
-  fi
+  [ -n "$tf_slugs" ] || return 0
+  tf_n=0
+  for tf_slug in $tf_slugs; do
+    tf_n=$((tf_n + 1))
+    if (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$tf_ctx" unit resolve "$tf_unit" "task#$tf_slug" < /dev/null) > "$DOCS_SCRATCH/task-$tf_n"; then
+      DOCS_TASKS="$DOCS_TASKS $DOCS_SCRATCH/task-$tf_n"
+    else
+      return $?
+    fi
+  done
+  return 0
 }
 
 # docs_delta_source: DOCS_DELTA is log when the configured driver keeps a store change log
@@ -722,6 +732,26 @@ docs_exec() {
   fi
   "$@"
   exit $?
+}
+
+# docs_exec_tasks <command> <task file>...: the command over one task file and DOCS_PATHS
+# (appended) per file as the verb's last act, one engine run per task; exits on the first
+# failure. The scratch goes on exit.
+docs_exec_tasks() {
+  et_cmd=$1
+  shift
+  for et_task in "$@"; do
+    set -- "$et_task"
+    while IFS= read -r de_p; do
+      set -- "$@" "$de_p"
+    done < "$DOCS_PATHS"
+    if [ "$DOCS_CD" -eq 1 ]; then
+      ( docs_git_env; cd "$DOCS_MOUNT" || exit 2; "$et_cmd" "$@" ) || exit $?
+    else
+      "$et_cmd" "$@" || exit $?
+    fi
+  done
+  exit 0
 }
 
 # ---------------------------------------------------------------------------------------

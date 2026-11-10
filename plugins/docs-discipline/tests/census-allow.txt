@@ -88,8 +88,6 @@ helper-output	gate	        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK"
 helper-output	gate	        run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG"
 helper-output	nudge	  docs_args 0 1 "$@" || exit $?
 helper-output	nudge	  docs_exec "$dir/docs-nudge.awk" "$first"
-helper-output	nudge	docs_args 1 1 "$@" || exit $?
-helper-output	nudge	docs_exec "$dir/docs-nudge.awk" "$DOCS_TASK"
 helper-output	query	  set -- "$@" "$DOC_PATH"
 helper-output	query	done < "$DOCS_PATHS"
 helper-output	query	    -f "$AWK_GLOB" \
@@ -126,7 +124,8 @@ topology-probe	gate	    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PR
 topology-probe	gate	        if [ -e "$WORKSPACE_ROOT/.git" ]; then
 topology-probe	gate	        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.git" ]; then
 usage-text	check	  echo "Usage: git diff --name-status | ctx docs check <repo>..." >&2
-usage-text	nudge	  echo "Usage: ctx docs nudge <unit> [<repo>...] (or: ctx docs nudge <backlog-file> <repo>...)" >&2
+usage-text	nudge	  echo "Usage: ctx docs nudge <unit> [--task=<slug>]... [<repo>...] (or: ctx docs nudge <backlog-file> <repo>...)" >&2
+usage-text	nudge	        echo "ctx docs nudge: --task is the unit form's; the backlog-file form names repos alone" >&2
 usage-text	query	  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index" >&2
 engine-output	docs-edit.awk	    print s > "/dev/stderr"
 false-positive	docs-edit.awk	        sep = (f1 == "from") ? ">" : ":"

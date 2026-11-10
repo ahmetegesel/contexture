@@ -2,7 +2,7 @@ import { copyFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { corpusDir, matches, SAMPLE, TESTS } from '../support/corpus';
-import { nudge } from '../support/engines';
+import { docFiles, nudge } from '../support/engines';
 
 let corpus: string;
 beforeAll(() => {
@@ -22,5 +22,14 @@ describe('the nudge engine', { concurrent: true }, () => {
     writeFileSync(join(corpus, 'empty-task.md'), '@task tidy-notes\n  STATUS: IN_PROGRESS\n  OBJECTIVE: "Tidy the meeting notes"\n');
     const r = await nudge(corpus, 'empty-task.md');
     expect(r.stdout).not.toContain('order-flow-p1');
+  });
+
+  it('[docs-module-r26] a named task nudges whatever its status under the force, and no other way', async () => {
+    writeFileSync(join(corpus, 'done-task.md'), '@task done-task\n  STATUS: DONE\n  OBJECTIVE: "Tidy the meeting notes"\n');
+    const plain = await nudge(corpus, 'done-task.md');
+    expect([plain.code, plain.stdout]).toEqual([0, '']);
+    const forced = await nudge(corpus, 'done-task.md', docFiles(corpus), { DOCS_NUDGE_TASK: '1' });
+    expect(forced.code).toBe(0);
+    expect(forced.stdout).toContain("[CONTEXT NUDGE: Task 'done-task']");
   });
 });

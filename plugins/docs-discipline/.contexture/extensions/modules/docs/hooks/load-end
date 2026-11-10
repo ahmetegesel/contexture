@@ -1,0 +1,6 @@
+#!/bin/sh
+# ctx-hook: load-end
+# the unit module's load-end point: nudge the unit's in-progress tasks
+[ -n "${CTX_UNIT:-}" ] || exit 0
+[ -x "${CTX_BIN:-}" ] || exit 0
+exec "$CTX_BIN" docs nudge "$CTX_UNIT"

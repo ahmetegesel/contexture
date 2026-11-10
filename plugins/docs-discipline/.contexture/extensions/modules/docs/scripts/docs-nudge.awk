@@ -14,6 +14,7 @@ BEGIN {
     num_matched = 0
     num_pitfalls = 0
     setup_intent = 0
+    force = (ENVIRON["DOCS_NUDGE_TASK"] != "")
 }
 
 function clean_text(txt,    t) {
@@ -95,7 +96,7 @@ FNR == 1 {
     if (file_idx == 1) {
         init_stop_words()
     } else if (file_idx == 2) {
-        if (curr_status == "IN_PROGRESS" && active_slug == "") {
+        if ((force || curr_status == "IN_PROGRESS") && active_slug == "") {
             active_slug = curr_slug
             active_obj = curr_obj
             active_refs = curr_refs
@@ -240,7 +241,7 @@ file_idx >= 2 {
 }
 
 END {
-    if (active_slug == "" && curr_status == "IN_PROGRESS") {
+    if (active_slug == "" && (force || curr_status == "IN_PROGRESS")) {
         active_slug = curr_slug
     }
     if (active_slug == "") exit 0

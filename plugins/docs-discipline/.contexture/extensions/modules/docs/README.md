@@ -7,7 +7,7 @@ map: it is not linked from the workspace's boot, laws, or help.
 
 ## Layout
 
-The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the store declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; this README is off-path.
+The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the store declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; `hooks/` holds the two handler files the unit module's points run: `task-landing` nudges a task that starts, `load-end` nudges the unit's in-progress tasks; both call `ctx docs nudge` and carry no block mode; this README is off-path.
 
 | verb | engine |
 |---|---|
@@ -95,10 +95,15 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   a copy its new side) and its spelling lands in the scratch list `unread`,
   which `docs_delta_unread` names in one `[GATE NOTICE]` or `[CHECK NOTICE]`
   line on stderr; a plain line passes byte for byte.
-- The nudge's unit form reads the active task through `ctx unit task list
-  <unit> --status=progress` and `ctx unit resolve <unit> task#<slug>` (the
-  text view of task show drops REFS, which the engine scores); the
-  backlog-file form refuses a path inside another module's store root (`docs_record_file`
+- The nudge's unit form nudges the named tasks (`--task=<slug>`, repeatable), or
+  with none every IN_PROGRESS task in backlog order: each slug's block is read
+  through `ctx unit task list <unit> --status=progress` and `ctx unit resolve
+  <unit> task#<slug>` (the text view of task show drops REFS, which the engine
+  scores) into its own scratch file, and the engine runs once per task, so a
+  unit with two in-progress tasks prints two blocks; a named task is nudged
+  whatever its status (the force). The backlog-file form keeps its one-backlog
+  first-IN_PROGRESS read, names repos alone, and refuses `--task`; it refuses a
+  path inside another module's store root (`docs_record_file`
   reads every declared root through the storage library's `store_roots`, this module's
   own `docs` namespace aside: a path spelled under a root, one physically under it, and,
   for a root inside the drawer alone, one holding `/<root>/` anywhere), and with no
@@ -305,7 +310,11 @@ and their misses,
 the check verb's shebang read under the workspace root from a working folder
 elsewhere, the check verb over a plain quoted git delta (a non-ASCII path, a
 quote and a backslash, the control-character notice with a rename's readable
-side), the unit-form nudge against the backlog-file form, the part hooks,
+side), the unit-form nudge against the backlog-file form, the nudge's named
+tasks and in-progress default (the force, the empty default, an unknown task's
+refusal), the handler files on the unit's points (a task add prints no nudge, a
+start one, complete, reopen, and drop none, a load's last page the in-progress
+tasks, and a failing nudge warns without blocking), the part hooks,
 and the gate (the matrix with an empty `TMPDIR` watch, the git mode in a
 workspace with its own repository, a shebang script in the default delta,
 the clean-tree notice, the drift warnings, `--drift`

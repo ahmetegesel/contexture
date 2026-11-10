@@ -110,7 +110,7 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
 
   it.each([
     ['check', 'Usage: git diff --name-status | ctx docs check <repo>...'],
-    ['nudge', 'Usage: ctx docs nudge <unit> [<repo>...]'],
+    ['nudge', 'Usage: ctx docs nudge <unit> [--task=<slug>]... [<repo>...]'],
   ])('[docs-module-r4] a bare %s refuses rc 1 with its usage', async (verb, usage) => {
     const r = await docs(fresh(corpus), [verb]);
     expect([r.code, r.stdout]).toEqual([1, '']);
@@ -198,7 +198,7 @@ describe('the nudge through its unit', { concurrent: true }, () => {
   it.each([RECORD_ROOT, FALLBACK_ROOT])('RS5b [docs-module-r26] a path inside another module\'s store root (%s, its root or its fallback root) refuses rc 1: a record artifact is read through its unit', async (root) => {
     const r = await docs(fresh(corpus), ['nudge', `${root}/nudge-demo/backlog.md`, 'demo-orders']);
     expect([r.code, r.stdout]).toEqual([1, '']);
-    expect(r.stderr).toBe("ctx docs nudge: a path inside another module's store root is read through that module, never as a file; a record artifact through its unit: ctx docs nudge <unit> [<repo>...]\n");
+    expect(r.stderr).toBe("ctx docs nudge: a path inside another module's store root is read through that module, never as a file; a record artifact through its unit: ctx docs nudge <unit> [--task=<slug>]... [<repo>...]\n");
   });
 
   it('RS5b [docs-module-r26] on a base whose library has no store_roots the backlog-file form refuses rc 2 naming the storage core, and reads no file', async () => {
@@ -213,5 +213,76 @@ describe('the nudge through its unit', { concurrent: true }, () => {
     const served = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
     expect(served.code, served.stderr).toBe(0);
     expect(served.stdout).not.toBe('');
+  });
+});
+
+describe('the nudge tasks through its unit', { concurrent: true }, () => {
+  let multi: string;
+  beforeAll(async () => {
+    multi = await stageSeed('posix', 'nudge-multi', async (sb) => {
+      await putDocs(sb, 'posix', fixtureDocs());
+      for (const args of [
+        ['bootstrap', 'nudge-multi', 'the multi-task nudge'],
+        ['task', 'add', 'nudge-multi', 'alpha', '--objective=Install the local toolchain and run the demo-orders service', '--desc=Set up the environment and run the build.'],
+        ['task', 'add', 'nudge-multi', 'beta', '--objective=Run the checkout integration test for demo-web'],
+        ['task', 'add', 'nudge-multi', 'gamma', '--objective=Tidy the meeting notes'],
+        ['task', 'start', 'nudge-multi', 'alpha'],
+        ['task', 'start', 'nudge-multi', 'beta'],
+        ['task', 'complete', 'nudge-multi', 'gamma', '--evidence=the notes are tidy'],
+        ['bootstrap', 'nudge-idle', 'the idle nudge'],
+        ['task', 'add', 'nudge-idle', 'later', '--objective=Tidy the meeting notes'],
+      ]) {
+        const r = await unit(sb, ...args);
+        if (r.code !== 0) throw new Error(`unit ${args.join(' ')}: ${r.stderr}`);
+      }
+    });
+  });
+
+  it('RS5c [docs-module-r26] with no task the unit form nudges every IN_PROGRESS task in backlog order', async () => {
+    const r = await docs(fresh(multi), ['nudge', 'nudge-multi']);
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout.split('\n').filter((l) => l.startsWith('[CONTEXT NUDGE: Task '))).toEqual(["[CONTEXT NUDGE: Task 'alpha']", "[CONTEXT NUDGE: Task 'beta']"]);
+  });
+
+  it('RS5c [docs-module-r26] --task names the tasks, repeatable', async () => {
+    const one = await docs(fresh(multi), ['nudge', 'nudge-multi', '--task=alpha']);
+    expect([one.code, one.stderr]).toEqual([0, '']);
+    expect(one.stdout).toContain("[CONTEXT NUDGE: Task 'alpha']");
+    expect(one.stdout).not.toContain("Task 'beta'");
+    const two = await docs(fresh(multi), ['nudge', 'nudge-multi', '--task=alpha', '--task=beta']);
+    expect(two.code, two.stderr).toBe(0);
+    expect(two.stdout.match(/^\[CONTEXT NUDGE: Task '/gm)).toHaveLength(2);
+  });
+
+  it('RS5c [docs-module-r26] a named task nudges whatever its status (the force)', async () => {
+    const r = await docs(fresh(multi), ['nudge', 'nudge-multi', '--task=gamma']);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toContain("[CONTEXT NUDGE: Task 'gamma']");
+  });
+
+  it('RS5c [docs-module-r26] no named task and none in progress prints nothing rc 0; a named one still nudges', async () => {
+    const none = await docs(fresh(multi), ['nudge', 'nudge-idle']);
+    expect([none.code, none.stdout, none.stderr]).toEqual([0, '', '']);
+    const named = await docs(fresh(multi), ['nudge', 'nudge-idle', '--task=later']);
+    expect([named.code, named.stderr]).toEqual([0, '']);
+    expect(named.stdout).toContain("[CONTEXT NUDGE: Task 'later']");
+  });
+
+  it('RS5c [docs-module-r26] a named task the unit lacks refuses rc 1, and a missing or empty value refuses rc 1', async () => {
+    const missing = await docs(fresh(multi), ['nudge', 'nudge-multi', '--task=nosuch-task']);
+    expect([missing.code, missing.stdout]).toEqual([1, '']);
+    expect(missing.stderr).toContain('task#nosuch-task');
+    const empty = await docs(fresh(multi), ['nudge', 'nudge-multi', '--task=']);
+    expect([empty.code, empty.stdout]).toEqual([1, '']);
+    expect(empty.stderr).toContain('--task=<slug> needs a task slug');
+    const bare = await docs(fresh(multi), ['nudge', 'nudge-multi', '--task']);
+    expect([bare.code, bare.stdout]).toEqual([1, '']);
+    expect(bare.stderr).toContain('--task=<slug> needs a task slug');
+  });
+
+  it('RS5c [docs-module-r26] the backlog-file form refuses --task', async () => {
+    const r = await docs(fresh(multi), ['nudge', 'backlog.md', 'demo-orders', '--task=alpha']);
+    expect([r.code, r.stdout]).toEqual([1, '']);
+    expect(r.stderr).toContain('--task is the unit form');
   });
 });

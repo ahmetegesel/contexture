@@ -1,11 +1,11 @@
 #!/bin/sh
-# summary: the task nudge over the active task and the corpus
-# usage: ctx docs nudge <unit> [<repo>...]
+# summary: the task nudge over the named or in-progress tasks and the corpus
+# usage: ctx docs nudge <unit> [--task=<slug>]... [<repo>...]
 # usage: ctx docs nudge <backlog-file> <repo>...
-# help: reads the active task (the unit's first IN_PROGRESS task in backlog order, through ctx unit task list and ctx unit resolve) and prints the matched docs, the top pitfalls, and (when the task names setup verbs) the owning operational doc's run, build, and test targets with its toolchain note
+# help: reads the named tasks (--task, repeatable), or with none the unit's IN_PROGRESS tasks in backlog order, through ctx unit task list and ctx unit resolve, and prints for each task the matched docs, the top pitfalls, and (when the task names setup verbs) the owning operational doc's run, build, and test targets with its toolchain note
 # help: the corpus comes from the configured storage driver: the whole corpus, or the named repos' docs
 # help: the backlog-file form (a first argument holding a / or ending in .md; any other value names a unit) reads a backlog outside the record (the plugin's demo); a path inside another module's store root (every root the storage library lists from the module declarations) refuses: a record artifact is read through its unit, never as a file; with no storage core to list the roots it refuses rc 2 and reads no file
-# help: exit codes: 0 the nudge printed (matched docs may be none; nothing when the unit has no IN_PROGRESS task); 1 a unit, repo, doc, or backlog path refused; 2 unreadable input (the awk engine's own failure), a storage driver without a corpus, or no storage core to list the module store roots
+# help: exit codes: 0 the nudge printed (matched docs may be none; nothing when the unit has no in-progress task and none is named); 1 a unit, task, repo, doc, or backlog path refused; 2 unreadable input (the awk engine's own failure), a storage driver without a corpus, or no storage core to list the module store roots
 # help: example: ctx docs nudge storage
 
 case "$1" in
@@ -20,7 +20,7 @@ case "$1" in
 esac
 
 if [ "$#" -eq 0 ]; then
-  echo "Usage: ctx docs nudge <unit> [<repo>...] (or: ctx docs nudge <backlog-file> <repo>...)" >&2
+  echo "Usage: ctx docs nudge <unit> [--task=<slug>]... [<repo>...] (or: ctx docs nudge <backlog-file> <repo>...)" >&2
   echo "help: ctx docs help nudge" >&2
   exit 1
 fi
@@ -32,12 +32,21 @@ first=$1
 shift
 
 if docs_file_form "$first"; then
+  # the backlog-file form names repos alone; the task parameter is the unit form's
+  for nf_a in $*; do
+    case "$nf_a" in
+      --task=*|--task)
+        echo "ctx docs nudge: --task is the unit form's; the backlog-file form names repos alone" >&2
+        exit 1
+        ;;
+    esac
+  done
   # the backlog-file form: a value another module stores is never read as a file (the
   # single store)
   docs_record_file "$first"
   case $? in
     0)
-      echo "ctx docs nudge: a path inside another module's store root is read through that module, never as a file; a record artifact through its unit: ctx docs nudge <unit> [<repo>...]" >&2
+      echo "ctx docs nudge: a path inside another module's store root is read through that module, never as a file; a record artifact through its unit: ctx docs nudge <unit> [--task=<slug>]... [<repo>...]" >&2
       exit 1
       ;;
     2)
@@ -50,10 +59,34 @@ if docs_file_form "$first"; then
   docs_exec "$dir/docs-nudge.awk" "$first"
 fi
 
-# the unit form: the active task through ctx unit (the configured store)
-docs_args 1 1 "$@" || exit $?
+# the unit form: the named tasks, or with none the in-progress tasks, through ctx unit
+nf_tasks=""
+nf_repos=""
+for nf_a in $*; do
+  case "$nf_a" in
+    --task=*)
+      nf_t=${nf_a#--task=}
+      [ -n "$nf_t" ] || { echo "ctx docs nudge: --task=<slug> needs a task slug" >&2; exit 1; }
+      nf_tasks="$nf_tasks $nf_t"
+      ;;
+    --task)
+      echo "ctx docs nudge: --task=<slug> needs a task slug" >&2
+      exit 1
+      ;;
+    -*)
+      echo "ctx docs nudge: unknown option: $nf_a" >&2
+      exit 1
+      ;;
+    *)
+      nf_repos="$nf_repos $nf_a"
+      ;;
+  esac
+done
+set -f
+docs_args 1 1 $nf_repos || exit $?
+set +f
 docs_no_display
-docs_active_task "$first" || exit $?
-[ -n "$DOCS_TASK" ] || exit 0
-DOCS_KEEP=1
-docs_exec "$dir/docs-nudge.awk" "$DOCS_TASK"
+docs_task_files "$first" $nf_tasks || exit $?
+[ -n "$DOCS_TASKS" ] || exit 0
+export DOCS_NUDGE_TASK=1
+docs_exec_tasks "$dir/docs-nudge.awk" $DOCS_TASKS

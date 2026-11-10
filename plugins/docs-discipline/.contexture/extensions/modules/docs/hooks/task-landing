@@ -1,0 +1,7 @@
+#!/bin/sh
+# ctx-hook: task-landing
+# the unit module's task-landing point: nudge the task that just started
+[ "${CTX_ACT:-}" = start ] || exit 0
+[ -n "${CTX_UNIT:-}" ] && [ -n "${CTX_SLUGS:-}" ] || exit 0
+[ -x "${CTX_BIN:-}" ] || exit 0
+exec "$CTX_BIN" docs nudge "$CTX_UNIT" --task="$CTX_SLUGS"

@@ -16,4 +16,8 @@ describe('the docs-discipline package shape', () => {
   it.each(['install', 'uninstall'])('[plugins-r2, modules-r13] ships the %s part hook executable', (hook) => {
     expect(() => accessSync(join(MODULE, hook), constants.X_OK)).not.toThrow();
   });
+
+  it.each(['task-landing', 'load-end'])('[plugins-r2, modules-r5] ships the %s handler executable', (hook) => {
+    expect(() => accessSync(join(MODULE, 'hooks', hook), constants.X_OK)).not.toThrow();
+  });
 });

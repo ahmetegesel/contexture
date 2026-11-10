@@ -57,6 +57,6 @@ export function check(dir: string, delta: string, { log = false, files = docFile
   return awk(dir, [engine('docs-glob.awk'), engine('docs-check.awk')], { input: delta, args: files, env, vars: log ? { delta_source: 'log' } : {} });
 }
 
-export function nudge(dir: string, task: string, files: readonly string[] = docFiles(dir)): Promise<Run> {
-  return awk(dir, engine('docs-nudge.awk'), { args: [task, ...files], env: ceiling(dir) });
+export function nudge(dir: string, task: string, files: readonly string[] = docFiles(dir), env: Record<string, string> = {}): Promise<Run> {
+  return awk(dir, engine('docs-nudge.awk'), { args: [task, ...files], env: { ...ceiling(dir), ...env } });
 }

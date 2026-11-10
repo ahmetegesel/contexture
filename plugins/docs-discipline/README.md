@@ -22,7 +22,7 @@ driver such as the storage-fts5 plugin's in its store) and every verb reaches
 them through it; the write verbs change a doc block by block; `ctx docs query` serves the index, the projections, the lookups, and the
 rule and pitfall views; `ctx docs check` compares a git change delta against
 the corpus (coverage, freshness, dead sources); `ctx docs gate` runs the audit
-and the check as one close check; `ctx docs nudge` extracts the active task's
+and the check as one close check; `ctx docs nudge` extracts a task's
 intent and injects the matched docs, the top pitfalls, and (on setup verbs) the
 owning repo's run, build, and test targets.
 
@@ -53,7 +53,7 @@ What lands where:
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the sixteen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
+| `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the two handler files on the unit module's points, the sixteen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed (ctx docs write) |
 | `AGENTS.workspace.md` | retired: no root overlay fragment ships; the laws, layout, boot, and close live in the module's laws file | retired |
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
@@ -132,9 +132,9 @@ The agent reads the workspace and answers, without writing anything:
   with named namespaces, its own test layout), the adoption adapts the
   copied module on the spot and records the local deltas so a future
   re-copy re-applies them.
-- Should the close gate and the nudge be wired into a harness trigger, or
-  run manually at close? The plugin ships no trigger; the wiring is the
-  adopter's choice.
+- Should the close gate be wired into a harness trigger, or run manually at
+  close? The nudge rides the unit module's hook points; the gate ships no
+  trigger, and the wiring is the adopter's choice.
 
 ## Propose
 
@@ -288,16 +288,19 @@ it walk below runs every one of these.
   local one. A default run on a clean tree checks an empty delta and says so
   in a `[GATE NOTICE]` on stderr; close a committed range (a unit's, or a
   release's since the previous tag) with `ctx docs gate --since=<rev>`.
-- Setup tasks: run `ctx docs nudge <unit>` when the unit's active task names
-  setup verbs; it reads the first IN_PROGRESS task through `ctx unit` (the
-  record's own store, never the backlog as a file) and prints the owning
-  operational doc's run, build, and test targets plus the top pitfalls.
+- Setup tasks: the module's handlers run `ctx docs nudge` when a task starts and
+  at the session load's end, so a task naming setup verbs gets the owning
+  operational doc's run, build, and test targets plus the top pitfalls; to nudge
+  named tasks by hand, run `ctx docs nudge <unit> --task=<slug>` (it reads the
+  record through `ctx unit`, never the backlog as a file).
 
 ## Limits and status
 
-- Harness-free by design: nothing fires automatically. The close gate and the
-  nudge are invoked at their moments (boot, close, a setup task), or wired
-  into the adopter's own trigger surface. This plugin ships no trigger.
+- Harness-free by design: the ctx engine runs the module's two handler files on
+  the unit module's points, `task-landing` (a started task) and `load-end` (the
+  unit's in-progress tasks); a workspace without the docs module fires the
+  points silently. The close gate stays the close step's, and the plugin ships
+  no harness trigger.
 - The five read verbs ride the private engines under
   `.contexture/extensions/modules/docs/scripts/`: audit, check, and nudge hand their
   engine the logical paths the IO helper materialized from the store, query
@@ -544,7 +547,9 @@ project also runs the single-door census (`tests/census.awk` over
 edit engine's tests hold every write against the expected docs under
 `tests/write/` (a changed rendering updates its golden on purpose), and the
 query and nudge engines' tests hold their answers against the committed
-expected output under `tests/unit/expected/`. Keep the module's grammar (`scripts/doc.grammar`), its
+expected output under `tests/unit/expected/`; the handler files on the unit's
+points have their integration cases (a started task's nudge, the load's
+in-progress nudge, and the warn-don't-block runner). Keep the module's grammar (`scripts/doc.grammar`), its
 machine-readable schema (section 6), and the audit in step: the project's
 grammar agreement check (`tests/grammar-agreement.awk`) fails on any
 difference among the three, and the flag collision check
@@ -701,7 +706,7 @@ The edge view:
 ```
 
 The nudge over the demo backlog, the corpus named by its repos (in a
-workspace with a record, `ctx docs nudge <unit>` reads the active task
+workspace with a record, `ctx docs nudge <unit>` reads the in-progress tasks
 through `ctx unit` instead):
 
 ```sh
@@ -1069,7 +1074,9 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `.contexture/extensions/modules/docs/scripts/query` | reworked from the source CLI: the workspace root and the corpus from the IO helper (`CTX_ROOT`, the `DOCS_WORKSPACE_ROOT` override), the usage strings are ctx forms, valueless-flag validation (a missing value refuses loudly), an unknown-option refusal, a no-such-repo refusal, an empty-corpus refusal, a no-match note on an empty projection, the help forms moved into the declarations, the free-text options exported to the engine's environment, and `--entry` through the edit engine |
 | `.contexture/extensions/modules/docs/scripts/check` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, and delegation to `docs-check.awk` over the corpus the IO helper resolved, in the engine's store mode (`-v delta_source=log`) when the driver keeps a change log; the delta staged in the scratch and read by name, the shebang list drawn from it first |
 | `.contexture/extensions/modules/docs/scripts/changes` | authored fresh: the corpus half of a delta from the store's change log (the net status computed in the IO helper), refusing under the files driver |
-| `.contexture/extensions/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, the unit form (the active task through `ctx unit task list` and `ctx unit resolve task#`), the backlog-file form refusing a path inside another module's store root (read through the storage library's `store_roots`, rc 2 without it), and delegation to `docs-nudge.awk` over the corpus the IO helper resolved |
+| `.contexture/extensions/modules/docs/scripts/nudge` | authored fresh from the docs-query precedent: the help forms moved into the declarations, the zero-argument refusal, the unit form (the named tasks, or with none every in-progress task, through `ctx unit task list` and `ctx unit resolve task#`), the backlog-file form keeping its own shape and refusing `--task` plus a path inside another module's store root (read through the storage library's `store_roots`, rc 2 without it), and delegation to `docs-nudge.awk` over the corpus the IO helper resolved |
+| `.contexture/extensions/modules/docs/hooks/task-landing` | authored fresh: the unit module's task-landing handler; on `CTX_ACT=start` it calls `ctx docs nudge <CTX_UNIT> --task=$CTX_SLUGS`, and it carries no block mode |
+| `.contexture/extensions/modules/docs/hooks/load-end` | authored fresh: the unit module's load-end handler; it calls `ctx docs nudge <CTX_UNIT>` for the unit's in-progress tasks, and it carries no block mode |
 | `.contexture/extensions/modules/docs/scripts/gate` | neutralized from the source gate: comment header, one workspace root variable (from the IO helper: `DOCS_WORKSPACE_ROOT`, `CTX_ROOT` fallback), the corpus read once through the IO helper into its scratch, the product-repos directory parameterized (`DOCS_PRODUCT_REPOS_DIR`, default `projects/`), the test matrix re-authored over self-planted fixtures, an unknown-argument refusal, the help moved into the declarations, the store mode (the git half without the workspace root's corpus paths plus `ctx docs changes`, the check's store mode, the drift deferral notice), and the `--since=<rev>` range with every form's delta staged in the IO helper's scratch and the delta notices on stderr |
 | `.contexture/extensions/modules/docs/scripts/docs-io.sh` | authored fresh: the one door to the corpus (sourced by every verb, never run): the root and the resolver, the `store` requirement, the list and get materialized into the module's scratch, the logical address rule, the store mode's delta source, change window, and code-half filter, the staged delta the check reads by name with the `--since` base it shares with the gate, the governed set's shebang list read from the staged delta's extensionless paths, and the write side (the argument parser, the field actions in the environment, the grammar check over a scratch copy of the corpus, the store put stamped with the op and the HEAD, the multi-doc pipeline of replace and ids) |
 | `.contexture/extensions/modules/docs/scripts/new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `remove`, `ids` | authored fresh: the write verbs, each a thin script over the IO helper's write pipeline with its help in the declarations |
