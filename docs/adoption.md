@@ -108,7 +108,7 @@ The generated law layer, `AGENTS.generated.md`, sits at the root under the deny-
 
 ## The module catalog
 
-The builtins ship with the base and need no install. The packages install through `.contexture/ctx package install <name>` on the human's explicit go at the act; you choose them, and the agent reads the installed surfaces through `ctx help --all`. The module manifests and each package's manifest under `plugins/<name>/manifest` carry the summaries, versions, and descriptions this catalog restates.
+The builtins ship with the base and need no install. The packages install through `.contexture/ctx package install <name>` on the human's explicit go at the act; you choose them, and the agent reads the installed surfaces through `ctx help --all`. The module files and the package manifests under `plugins/<name>/manifest` carry the summaries and versions, and the module preambles and package READMEs carry the descriptions this catalog restates.
 
 | module | what it gives | when to install |
 |---|---|---|

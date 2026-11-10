@@ -31,7 +31,7 @@
   ask freely: derive what evidence answers, and ask the human what only they know: resolutions, history, intent; a wrong assumption costs more than a question
 
 @modules
-  the module catalog: the builtins ship with the base and need no install; the packages install through `.contexture/ctx package install <name>` on the human's go at the act; the human chooses the packages, and the agent reads the installed surfaces through `ctx help --all`; each module's manifest and each package's manifest under `plugins/<name>/manifest` carries its summary, version, and description, and the catalog restates them.
+  the module catalog: the builtins ship with the base and need no install; the packages install through `.contexture/ctx package install <name>` on the human's go at the act; the human chooses the packages, and the agent reads the installed surfaces through `ctx help --all`; the module files and the package manifests under `plugins/<name>/manifest` carry the summaries and versions, and the module preambles and package READMEs carry the descriptions the catalog restates.
   builtin unit: the record's 35 operations over the store, one value per artifact: the state, the backlog, the journal, the knowledge, and the lane artifacts that keep the work across compaction and harness change; no install.
   builtin run: the base filter pack: diff, directory listing, and log filters selected by command identity or stream signature, so command output compacts through `ctx run`; filter-only, so it stays silent in `ctx help`; no install.
   builtin lane: the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's recipe, journal, and report kept as lane artifacts within the unit's record; no install.

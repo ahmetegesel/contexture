@@ -70,7 +70,7 @@ For manual installation, custom topology setups (parent workspaces vs standalone
 
 ## The module catalog
 
-The builtins ship with the base and need no install. The packages in `plugins/` install through `.contexture/ctx package install <name>` on the human's explicit go at the act; the install writes only inside the workspace's extension root and recomposes the law layer. You choose the packages from this catalog, and the agent reads the installed surfaces through `ctx help --all`; the module manifests and each package's manifest under `plugins/<name>/manifest` carry the summaries, versions, and descriptions it restates.
+The builtins ship with the base and need no install. The packages in `plugins/` install through `.contexture/ctx package install <name>` on the human's explicit go at the act; the install lands the package's extension-root files and recomposes the law layer; a first docs-discipline install also seeds the corpus conventions when none exists. You choose the packages from this catalog, and the agent reads the installed surfaces through `ctx help --all`; the module files and the package manifests under `plugins/<name>/manifest` carry the summaries and versions, and the module preambles and package READMEs carry the descriptions the catalog restates.
 
 - **`unit` (builtin)**: the record's 35 operations over the store, one value per artifact; it keeps the state, backlog, journal, knowledge, and lane artifacts across compaction. No install.
 - **`run` (builtin)**: the base filter pack for `ctx run`: diff, directory listing, and log filters selected by command identity or stream signature; filter-only, so it stays silent in `ctx help`. No install.
