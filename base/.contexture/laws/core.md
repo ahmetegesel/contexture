@@ -1,4 +1,4 @@
-# contexture v0.72.0: the core law source; the compose merges the installed modules' laws beneath it
+# contexture v0.73.0: the core law source; the compose merges the installed modules' laws beneath it
 
 @laws
   source-of-truth: the record is the work's durable memory, what a fresh context resumes from: the events that happened, the decisions made, and the state they left, across compaction, tool change, and break; because the work's continuity depends on it, it holds whatever else that continuity needs, the reasons, the open threads, and the evidence behind them; the workspace and the commands' results show what is, and the loaded layer and its sequences say what to do.

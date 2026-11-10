@@ -1,4 +1,4 @@
-# contexture v0.72.0: generated law layer; core cksum 2271898171-14832; sources 391036944-31663; never edit
+# contexture v0.73.0: generated law layer; core cksum 1832686367-14832; sources 2847581579-31663; never edit
 @laws
   source-of-truth: the record is the work's durable memory, what a fresh context resumes from: the events that happened, the decisions made, and the state they left, across compaction, tool change, and break; because the work's continuity depends on it, it holds whatever else that continuity needs, the reasons, the open threads, and the evidence behind them; the workspace and the commands' results show what is, and the loaded layer and its sequences say what to do.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.

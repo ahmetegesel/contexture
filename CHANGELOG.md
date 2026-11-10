@@ -4,6 +4,31 @@ All notable changes to contexture are documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html): a major bump breaks existing artifacts, a minor bump adds sections or features, and a patch bump fixes wording.
 
+## [0.73.0] - 2026-11-10
+
+MINOR: the unit's session load fires a load-end point and the docs module uses the unit's hook points to nudge the docs at the moment a task starts and when a load ends. The unit load script fires load-end once, on the last page, after the page body and the load-complete line, with the unit, form, and page context, and the shipped points become seven; the docs module ships two handler files, task-landing (only on `CTX_ACT=start`, passing the started task) and load-end (the unit's in-progress tasks), and its nudge takes repeatable `--task` with the in-progress tasks as the default; the nudge's task list is carried one path per line, so a workspace root holding a space never word-splits, and a space-bearing case proves it; docs-discipline becomes 1.5.0; the guides follow. No payload or catalog path is removed, and no plugin apart from docs-discipline changes version.
+
+### Added
+
+- The load-end hook point (the unit module): the load script fires it once, when the page is the last, after the page body and the load-complete line, with the unit, form, and page context, and a block hook fails the load rc 1; load-pre and load-post still fire on every page. The presence census expects the seven derived points (stamp, task-landing, close, load-pre, load-post, load-end, refresh), and `tests/hooks/around-verbs.test.ts` pins the once-at-last-page firing and the block stop.
+- The docs module's two handler files (`plugins/docs-discipline/.contexture/extensions/modules/docs/hooks/task-landing` and `hooks/load-end`, mode 0755): task-landing runs the nudge only when `CTX_ACT=start`, passing the started task from `CTX_SLUGS`, and load-end runs the nudge on the unit's in-progress tasks at the load's end; both are non-block and small, and with the docs module absent the unit's points fire silently.
+- The nudge's task parameter (`--task=<slug>`, repeatable, the unit form only): a named task nudges regardless of status, the backlog-file form refuses the parameter, and with no task the default reads every IN_PROGRESS task through `ctx unit task list`; `docs_task_files` and `docs_exec_tasks` replace `docs_active_task`, the engine forces a named task through `DOCS_NUDGE_TASK`, and the handler, nudge, force, and package tests pin the behaviors.
+- The space-bearing workspace case (`plugins/docs-discipline/tests/integration/space-root.test.ts`): the nudge's default and `--task` forms and both handler files run rc 0 with empty stderr under a workspace root holding a space.
+
+### Changed
+
+- docs-discipline becomes 1.5.0: the module and the manifest, the README's hook and nudge prose, and the census allow-list follow; the two hook files are the module's use of the unit's points, not a new point of its own.
+- The guides: `docs/modules.md` ships the seven points with load-end's firing and last-page context, names the two handler files, and its Hook files cross-reference reads seven; `docs/plugins.md` carries the handler files; `tests/README.md` names the hook coverage.
+- The corpus (not shipped): the modules doc gains the seven points and the handler sentence, the engine doc names the unit's point dependency, the docs-module doc carries the nudge's named or in-progress tasks, the operations doc carries the responsibility, the plugins doc carries the handlers, and the docs-module dependency names the unit's points; all through the docs write verbs, and the audit reads clean.
+- The payload: no removed path in the range; the removed-path listing reads empty over `base/` and `plugins/`, so Updating steps 6 and 8 have nothing to delete, and the adoption is a plain apply.
+
+### Fixed
+
+- The nudge's task-file list and the handlers no longer word-split under a workspace root holding a space: `docs_task_files` writes one task-file path per line and `docs_exec_tasks` reads the list line by line, and the nudge builds the named slugs safely; before, a root with a space split the awk file argument. The new space-bearing case proves the fix, and the two new nudge lines join the census allow-list.
+- The guides count the shipped hook points as seven: `docs/modules.md`'s Hook files cross-reference now matches the same guide's Seven points ship and the corpus's seven names.
+
+Commits in the range: 20d7eec (the load-end point, its fixtures, and the seven-point census); 3e3a439 (the docs handlers, the task nudge, and docs-discipline 1.5.0); f2fe097 (the guides); 0318ca3 (the space fix and its case); 51d69c6 (the seven-points guide line); and the release commit.
+
 ## [0.72.0] - 2026-11-10
 
 MINOR: the composed law layer is framed for the agent that reads it. The loader names the layer's generic core sections and states that every module adds its own sections, clauses, and duties, each duty followed as steps in the framed order with its gates, and that the laws bind; the source-of-truth law becomes the positive record law; the corpus gains the module independence rule and the framing leak rule; a governance census derives the loader's named set from the core law source and reads red on a module-owned section, a custom name, or a missing module; the core block order puts the boot after the layout and the layout lists the read order; both work rhythms take the verdict-on-the-specification and framing-leak steps, and starter-rhythms becomes 1.1.0; the guides follow. No payload or catalog path is removed, and no plugin apart from starter-rhythms changes version.
