@@ -63,7 +63,7 @@ The module file is the standard folder's manifest. Its fields and their readers:
 
 ### The laws file
 
-A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the nine docs laws and its layout, boot, and close clauses; the lane module's file carries the lane-isolation subagent clauses; the git module's file, the git package, carries the `@git` section and the boot ground check. A module contributes to a core generic section or its own artifact, never into a workspace-owned rhythm or another module's framing; its functional instructions never contradict another module's or the core's.
+A module that contributes law clauses ships a `laws` file beside its manifest: a typed-block fragment in the overlay grammar (`@append @laws`, `@append @subagents`, `@append @git`, and so on). The compose reads every installed module's laws file and merges its clauses under the block keyword; a module with no laws file is valid. The docs module's file carries the eight docs laws and its layout, boot, and close clauses; the lane module's file carries the lane-isolation subagent clauses; the git module's file, the git package, carries the `@git` section and the boot ground check. A module contributes to a core generic section or its own artifact, never into a workspace-owned rhythm or another module's framing; its functional instructions never contradict another module's or the core's.
 
 ### The law layer and the compose
 

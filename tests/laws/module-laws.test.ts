@@ -23,10 +23,10 @@ function lawSlugs(text: string): string[] {
 }
 
 describe.concurrent('the module law fragments', () => {
-  it('[modules-r12, plugins-r2] keeps the nine docs laws and the layout, boot, and close clauses in the docs module', () => {
+  it('[modules-r12, plugins-r2] keeps the eight docs laws and the layout, boot, and close clauses in the docs module', () => {
     expect(existsSync(DOCS_LAWS)).toBe(true);
     const text = readFileSync(DOCS_LAWS, 'utf8');
-    expect(lawSlugs(text)).toEqual(['docs-first', 'docs-are-code', 'git-dependency', 'corpus-untracked', 'corpus-reconcile', 'gap', 'harness-free', 'dont-fool-yourself', 'docs-audience-separation']);
+    expect(lawSlugs(text)).toEqual(['docs-first', 'docs-are-code', 'git-dependency', 'corpus-untracked', 'corpus-reconcile', 'gap', 'harness-free', 'docs-audience-separation']);
     expect(count(text, /^@append @/)).toBe(4);
     expect(text).toMatch(/^@append @layout$/m);
     expect(text).toContain('ctx docs query workspace conventions');
