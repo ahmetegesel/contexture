@@ -84,7 +84,7 @@
   WHAT :: Give the toolchain-filters plugin a tests/run.sh invoking its fixture pairs, so the plugin test convention holds and the upstream runner stops printing INFO for it.
   WHY :: Every other plugin with mechanical pieces carries a runner; the pairs currently ride the root filters suite.
   REF: "plugins/toolchain-filters/README.md"
-  STATUS: OPEN
+  STATUS: DROPPED overtaken by the v0.64.0 vitest migration: the plugin's own project runs its pairs, the INFO is gone, and tests/run.sh is ship-gate retired
 
 @idea guides-truth-read
   DUMPED: 2026-09-23
@@ -98,14 +98,14 @@
   WHAT :: Extend the pipeline's self-proof to a planted failure per core suite (today only filters, session, and governance are planted).
   WHY :: The runner's per-suite rc contract is proven on three paths only; the other suites' failure paths are unexercised.
   REF: "tests/run.sh"
-  STATUS: OPEN
+  STATUS: DROPPED the shell runner and its suites are retired; the harness proves the failure contract once and dont-fool-yourself covers per-instrument null checks
 
 @idea fresh-checkout-paths
   DUMPED: 2026-09-23
   WHAT :: Exercise the fresh-checkout skip paths (the ctx suite's ideas section and the docs-discipline plugin suite's exit-77) in a drawer-less sandbox.
   WHY :: The pipeline's behavior on a clean clone is untested; the live drawer always exists here.
   REF: "tests/ctx-tests.sh"
-  STATUS: OPEN
+  STATUS: DROPPED both named skip paths retired in the shell-to-vitest port; drawer-less staging is the normal path and the reporter skip is harness-proven
 
 @idea onboarding-redelivery
   DUMPED: 2026-09-23
@@ -119,14 +119,14 @@
   WHAT :: The governance payload check reads git ls-files (the index); add a HEAD-only checkout case so a fresh clone's payload check is exercised.
   WHY :: The index equals the commit in this repo's flow, so the HEAD-only path is unproven.
   REF: "tests/governance-tests.sh"
-  STATUS: OPEN
+  STATUS: DROPPED no HEAD-only branch exists: a clone's index is its HEAD, the live 74=74 state already ran the suite, and the index read is the v0.78.0 ship-breath behavior
 
 @idea apply-not-mirror
   DUMPED: 2026-09-23
   WHAT :: Name or prune the apply's additive-overwrite semantics in the apply flow: an upstream-deleted payload file lingers in the live drawer until removed by hand.
   WHY :: The semantics are by design but unstated where the loop is taught.
   REF: "README.md#maintaining-contexture"
-  STATUS: OPEN
+  STATUS: DROPPED the naming route already landed at the idea's own REF; the prune route contradicts judgment-not-a-script and risks over-deletion
 
 @idea dead-source-globs
   DUMPED: 2026-09-23
@@ -154,7 +154,7 @@
   WHAT :: Build a workspace-confined content-addressed recall store for elided and truncated outputs (the rtk recall cache's native analog): the compact filters elide content, the store keeps the full bytes retrievable by hash on demand.
   WHY :: The filters trade bytes for recall; a local store closes the loss without leaving the workspace or shipping telemetry.
   REF: ".contexture/sessions/recall-cache/knowledge.md"
-  STATUS: OPEN
+  STATUS: DROPPED fully subsumed by token-reduction-tools' four recall-cache tasks; nothing survives the merge
 
 @idea fts5-repo-search
   DUMPED: 2026-09-23
@@ -203,7 +203,7 @@
   WHY ::
     The storage unit put the Linux containers (mawk, gawk, busybox) into its portability proof; busybox is the one awk that breaks the old escapes, so the rest of the plugin frame should hold there too. The human moved these out of backlog#awk-escape-portability to the ideas list.
   REF: "lanes/awk-portability/report#open"
-  STATUS: OPEN
+  STATUS: DROPPED three defects fixed, deleted, or closed by the harness rework; the one live line is self-test-only in a mode the workspace no longer runs
 
 @idea ctx-run-adoption
   DUMPED: 2026-09-26
@@ -271,7 +271,7 @@
   WHY ::
     A write verb that hangs instead of refusing is the false result class the dont-fool-yourself law names; an agent calling ctx docs entry or section would wait forever and orphaned runs burn CPU for hours.
   REF: "unit#docs-plugins/lane/review-c5-docs/report"
-  STATUS: OPEN
+  STATUS: DROPPED the loop was the seed outside whole numbers, already fixed in fc6749b (v0.67.0) and pinned; only a test-timeout nit remains
 
 @idea fts5-refusal-gaps
   DUMPED: 2026-11-07
@@ -280,4 +280,25 @@
   WHY ::
     F4 is a false success, the result class the dont-fool-yourself law names: an agent reads rc 0 and trusts an empty answer. F5 leaks a storage location into an agent facing stderr, against the record rule that verb errors name no storage location.
   REF: "unit#drawer-layout/lane/exec-store-refusal/report"
+  STATUS: DROPPED the human's standing policy: drop any fts5 idea encountered
+
+@idea extension-marketplace
+  DUMPED: 2026-11-11
+  WHAT :: A public extension marketplace modelled on the DeepSeek harness approach: extensions are discovered by a label on their GitHub repos, and distribution runs from the repo itself through the existing package install doorway. Discovery and distribution are the primary jobs; the audience reaches the public. The label name and convention, and whether curation is the label alone or a small verified list or manifest ritual, settle inside the picking unit.
+  WHY :: Extensions beyond this repository's plugins/ cannot be found or installed today; a labeled-repo convention turns GitHub into the registry without a bespoke service.
+  REF: "docs/plugins.md"
+  STATUS: OPEN
+
+@idea personal-memory
+  DUMPED: 2026-11-11
+  WHAT :: A personal memory layer with two faces: the agent's durable memory of the human (preferences, conventions, settled decisions) and the human's own queryable second brain. It rides the knowledge-promotion design as both a second promotion target (personal findings land in the human's own store through the same general interface, apart from repo corpora) and the personal layer beside the corpus. It crosses workspaces by design, an explicit exception to workspace-confinement. Queryable, with automatic relevance injection the intended default rather than a boot load or a manual lookup. Storage, privacy, retrieval, and schema settle in the picking unit.
+  WHY :: The unit record is unit-scoped and the corpus workspace-scoped, so the human's own durable knowledge and preferences have no home and no cross-workspace continuity.
+  REF: "unit#knowledge-promotion"
+  STATUS: OPEN
+
+@idea rust-driver
+  DUMPED: 2026-11-11
+  WHAT :: An official Rust storage driver, first experimental, to measure the performance improvement across all three workloads: record-store throughput and latency for many small writes, corpus search, and large unit loads. It is a separate selectable driver alongside posix and fts5, contract 3 store-only, never replacing them. Zero-install binds the core, not extensions, so a prebuilt binary per platform or a build at install is acceptable. Whether it implements the store directly or wraps an embedded engine, its distribution shape, and the benchmark method settle in the picking unit; official means it lands in this repo as a storage-driver package once proven.
+  WHY :: The performance hypothesis spans the three daily-cost paths; a Rust driver tests whether the storage layer is the bottleneck without touching the core, and its separation keeps posix and fts5 untouched.
+  REF: "docs/plugins.md"
   STATUS: OPEN
