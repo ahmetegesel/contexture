@@ -302,3 +302,39 @@
   WHY :: The performance hypothesis spans the three daily-cost paths; a Rust driver tests whether the storage layer is the bottleneck without touching the core, and its separation keeps posix and fts5 untouched.
   REF: "docs/plugins.md"
   STATUS: OPEN
+
+@idea extension-authoring-guidance
+  DUMPED: 2026-11-12
+  WHAT ::
+    Guidance that users and their agents can reach and follow while writing an extension, so a module, a package, a driver, or a container lands without breaking contexture. Today the guidance is human-facing only: the module and plugin guides and the notes worked example under the test fixtures, files a human must know to open. The shape (a guide served through ctx, an authoring rhythm, a checklist verb, a scaffold) settles in the picking unit.
+  WHY ::
+    Contexture is a transparent, open workspace convention, never a black box, and it is easy to break without knowing what one does. The container redesign in knowledge-promotion moves logic, freshness, and middle layers into extensions, so authoring them safely becomes the common path rather than the rare one.
+  REF: "docs/modules.md#worked-examples"
+  STATUS: OPEN
+
+@idea unit-objective-verb
+  DUMPED: 2026-11-12
+  WHAT ::
+    A ctx unit verb that rewords an ACTIVE unit's objective after bootstrap (for example ctx unit objective <unit> "<text>"), with the same one-line validation bootstrap applies and a journal receipt of the old and new wording, so a unit whose work outgrows its first framing can say so in its state.
+  WHY ::
+    Today only bootstrap sets the objective, so a pivoted unit keeps a stale objective in its state while the cli-doorway law forbids writing the state by path; knowledge-promotion hit it when its design became a foundation redesign and had to carry the new wording in a journal entry instead.
+  REF: "unit#knowledge-promotion"
+  STATUS: OPEN
+
+@idea harvest-explicit-verdict
+  DUMPED: 2026-11-12
+  WHAT ::
+    Make every KNOWLEDGE-flagged journal entry end in an explicit harvest verdict, landed or discarded, so no candidate drops silently. Today the audit's unharvested check reads only flagged entries with no closer, so closing a flagged entry for any other reason (a resolved THREAD, a supersession) removes it from the check without a harvest. Candidate shapes for the picking unit: the audit keeps a flagged entry on its list until a finding's REF names it or a closer carries a harvest verdict (harvested or discarded) naming it; or the record verb refuses to close a flagged entry with any other verdict; the closer grammar and the harvest step of @refresh move together.
+  WHY ::
+    The harvest is the only path from the journal into knowledge, and a silent drop is the false result class the dont-fool-yourself law names: the audit exits 0 while knowledge is lost. knowledge-promotion hit it four times in one period, caught only by a re-read.
+  REF: "journal#2026-11-12-event-1794514739"
+  STATUS: OPEN
+
+@idea ideas-ref-and-edit
+  DUMPED: 2026-11-12
+  WHAT ::
+    Two gaps in the ideas verbs, met while dumping harvest-explicit-verdict. First, an idea cannot be corrected: the verbs are add, pick, drop, list, and show, so a wrong field (a REF, a typo in WHAT) stays as written. Second, an idea's REF has no unit-qualified form for a journal entry: journal#<slug> means nothing outside its unit, so an idea pointing into a unit's journal names the slug alone and the reader must guess the unit. The picking unit decides whether ideas gain an edit verb with a receipt, and which REF shape names an entry inside a unit (the canonical unit#<unit>/... form resolve already takes for lanes is the precedent).
+  WHY ::
+    Ideas outlive the conversation that dumped them, so a pointer that cannot be fixed or resolved decays into prose, which the record rules call a defect. The container redesign in knowledge-promotion would likely cover the edit half, since ideas would become a container written through the core.
+  REF: "unit#knowledge-promotion"
+  STATUS: OPEN
