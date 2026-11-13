@@ -2,7 +2,7 @@
 
 The docs module ships with the docs-discipline plugin. The package install
 overlays this directory at `<workspace>/.contexture/extensions/modules/docs/`;
-the engine discovers its seventeen verbs. This page is the off-path maintainer
+the engine discovers its eighteen verbs. This page is the off-path maintainer
 map: it is not linked from the workspace's boot, laws, or help.
 
 ## Layout
@@ -13,8 +13,9 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 |---|---|
 | `audit` | `scripts/docs-audit.awk` |
 | `check` | `scripts/docs-check.awk` behind `scripts/docs-glob.awk` |
-| `query` | `scripts/docs-query.awk` behind `scripts/docs-glob.awk` (`--entry`: `scripts/docs-edit.awk`) |
+| `query` | `scripts/docs-query.awk` behind `scripts/docs-glob.awk` (`--entry`: `scripts/docs-edit.awk`); the retired `--search` form refuses naming `search` |
 | `get` | `scripts/docs-entity.awk` over the one doc read through `docs-io.sh`, behind the grammar asset (the block shapes and keys) |
+| `search` | `scripts/docs-entity.awk` over the materialized corpus (or one repo's docs), behind the grammar asset; the arguments parse in `docs-io.sh` (`docs_search`) |
 | `nudge` | `scripts/docs-nudge.awk` |
 | `gate` | self-contained; uses `scripts/docs-audit.awk`, and `scripts/docs-check.awk` behind `scripts/docs-glob.awk` |
 | `changes` | none: the corpus half of a delta from the store's change log, computed in `docs-io.sh` |

@@ -17,7 +17,7 @@ describe.skipIf(!fts5Available())('the read verbs on the fts5 store answer what 
   it.each([
     ['the index', ['query', '--index'], 'query/index.txt'],
     ['a projection', ['query', 'demo-orders', 'order-flow'], 'query/projection.txt'],
-    ['a search', ['query', '--search', 'checkout'], 'query/search-word.txt'],
+    ['a search', ['search', 'checkout', '--limit=50'], 'search/word.txt'],
     ['the rules of a repo', ['query', 'workspace', '--rules'], 'query/rules-repo.txt'],
     ['the pitfalls', ['query', '--pitfalls'], 'query/pitfalls.txt'],
     ['the nudge of the sample backlog', ['nudge', 'backlog.md', 'demo-orders', 'demo-web', 'workspace'], 'nudge/sample-backlog.txt'],

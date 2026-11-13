@@ -76,7 +76,6 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
   });
 
   it.each([
-    ['search', ['etest', '--search', 'zz_no_such_term'], "no match for 'zz_no_such_term'"],
     ['rules', ['etest', '--rules', 'nosuchcategory'], "no rules match in category 'nosuchcategory'"],
     ['pitfalls', ['etest', '--pitfalls', '--severity', 'critical'], "no pitfalls match at severity 'critical'"],
     ['edge', ['etest', '--edge', 'nosuchchannel'], "no edges match channel 'nosuchchannel'"],
@@ -88,10 +87,15 @@ describe('the read verbs through ctx on posix', { concurrent: true }, () => {
     expect(r.stderr).toContain(message);
   });
 
-  it('EC4 [docs-module-r5] the verb passes a backslash search through the environment, literal', async () => {
-    const r = await docs(fresh(corpus), ['query', 'etest', '--search', 'zz\\tqq']);
+  it('EC4 [docs-module-r-yyfxd] the search verb passes a backslash term through the environment, literal', async () => {
+    const r = await docs(fresh(corpus), ['search', 'zz\\tqq', '--repo=etest']);
     expect(r.code).toBe(0);
     expect(r.stdout).toContain('The marker reads zz\\tqq on disk');
+  });
+
+  it('[docs-module-r5] the retired query --search form refuses rc 1 naming ctx docs search', async () => {
+    const r = await docs(fresh(corpus), ['query', 'etest', '--search', 'checkout']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'ctx docs query: --search is retired: use ctx docs search "<term>" [--repo=<repo>]\n']);
   });
 
   it('EC6 [docs-module-r2] a draft path reads the stored doc by its address, never the file', async () => {

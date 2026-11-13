@@ -1185,6 +1185,92 @@ docs_get() {
   return 2
 }
 
+# docs_search_refuse <message>: one search refusal line, rc 1
+docs_search_refuse() {
+  printf '%s: %s (ERR_INVALID_ARGUMENT)\n' "$DOCS_VERB" "$1" >&2
+  return 1
+}
+
+# docs_search "<term>" [--repo=<repo>] [--type=<t>] [--mode=<m>] [--limit=N] [--json]: the
+# search verb: the shared flags in the --flag=value form only, then the entity engine over
+# the materialized corpus (or one repo's docs). The docs search answers exact alone, the
+# docs namespace declaring no search schema: a direct call naming another mode refuses
+# naming exact, while under the ctx search fan-out (CTX_SEARCH_FANOUT=1) it falls back to
+# exact, which its answer's mode says; a type the module does not hold refuses on a direct
+# call and answers zero hits under the fan-out. Zero hits is an answer, rc 0.
+docs_search() {
+  ds_q=""; ds_qset=0; ds_repo=""; ds_type=""; ds_mode=exact; ds_limit=20; ds_json=0
+  for ds_a in "$@"; do
+    case "$ds_a" in
+      --repo=*) ds_repo=${ds_a#--repo=} ;;
+      --type=*) ds_type=${ds_a#--type=} ;;
+      --mode=*) ds_mode=${ds_a#--mode=} ;;
+      --limit=*) ds_limit=${ds_a#--limit=} ;;
+      --json) ds_json=1 ;;
+      -*) docs_search_refuse "unknown option '$ds_a' (the --flag=value forms: --repo=, --type=, --mode=, --limit=, and --json)"; return 1 ;;
+      *)
+        if [ "$ds_qset" -eq 1 ]; then docs_search_refuse "unexpected argument '$ds_a' (one query)"; return 1; fi
+        ds_q=$ds_a; ds_qset=1
+        ;;
+    esac
+  done
+  if [ "$ds_qset" -eq 0 ]; then
+    echo "Usage: ctx docs search \"<term>\" [--repo=<repo>] [--type=<type>] [--mode=exact] [--limit=N] [--json]" >&2
+    return 1
+  fi
+  ds_cr=$(printf '\r')
+  case "$ds_q" in *"$ds_cr"*) docs_search_refuse "a carriage return in the query"; return 1 ;; esac
+  case "$ds_q" in *"
+"*) docs_search_refuse "a newline in the query (one line)"; return 1 ;; esac
+  case "$ds_q" in *[![:space:]]*) ;; *) docs_search_refuse "empty query"; return 1 ;; esac
+  case "$ds_limit" in ""|*[!0-9]*|0*) docs_search_refuse "--limit takes a positive whole number: '$ds_limit'"; return 1 ;; esac
+  ds_none=0
+  case "$ds_type" in
+    ""|rule|responsibility|contract|pitfall|caveat|entry|doc) ;;
+    *)
+      if [ "${CTX_SEARCH_FANOUT:-}" = 1 ]; then ds_none=1
+      else docs_search_refuse "unknown type '$ds_type' (rule, responsibility, contract, pitfall, caveat, entry, doc)"; return 1
+      fi
+      ;;
+  esac
+  case "$ds_mode" in
+    exact) ;;
+    ""|[!a-z]*|*[!a-z0-9_-]*) docs_search_refuse "malformed mode '$ds_mode'"; return 1 ;;
+    *)
+      if [ "${CTX_SEARCH_FANOUT:-}" = 1 ]; then ds_mode=exact
+      else
+        printf "%s: mode '%s' cannot be answered by the docs search; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n" "$DOCS_VERB" "$ds_mode" >&2
+        return 1
+      fi
+      ;;
+  esac
+  if [ -n "$ds_repo" ] && ! docs_key_valid "$ds_repo"; then docs_search_refuse "malformed repo: $ds_repo"; return 1; fi
+  docs_template || return 2
+  if docs_corpus "$ds_repo"; then
+    :
+  else
+    ds_rc=$?
+    case "$DOCS_ERR" in
+      repo) printf '%s: no such repo: %s (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$ds_repo" >&2; return 1 ;;
+      empty) ds_none=1 ;;
+      *) return "$ds_rc" ;;
+    esac
+  fi
+  set --
+  if [ "$ds_none" -eq 0 ]; then
+    while IFS= read -r ds_p; do
+      set -- "$@" "$ds_p"
+    done < "$DOCS_PATHS"
+  fi
+  DE_MODE=search DE_QUERY=$ds_q DE_TYPE=$ds_type DE_LIMIT=$ds_limit DE_JSON=$ds_json
+  export DE_MODE DE_QUERY DE_TYPE DE_LIMIT DE_JSON
+  if [ "$#" -eq 0 ]; then
+    awk -f "$DOCS_DIR/docs-entity.awk" part=1 "$DOCS_TEMPLATE" part=2 /dev/null
+  else
+    docs_engine_run awk -f "$DOCS_DIR/docs-entity.awk" part=1 "$DOCS_TEMPLATE" part=2 "$@"
+  fi
+}
+
 # docs_remove_doc <repo> <slug>: store.delete with op remove, stamped with the HEAD; a dry
 # run prints the verb's line and the stored doc whole, then writes nothing
 docs_remove_doc() {

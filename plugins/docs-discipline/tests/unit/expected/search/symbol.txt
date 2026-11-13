@@ -1,0 +1,5 @@
+docs search "validateCart": 3 matches, 3 shown
+  doc docs#demo-orders/order-flow/header: evidence: "validateCart"
+  pitfall docs#demo-orders/order-flow/order-flow-p1: evidence: "validateCart"
+  entry docs#workspace/system-map/stages/Checkout: evidence: "validateCart"
+read one: ctx docs get <repo>/<slug>/<key> (the address after docs#)

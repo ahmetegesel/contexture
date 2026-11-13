@@ -22,9 +22,6 @@ const CASES: [string, Query][] = [
   ['section', { repo: 'demo-orders', slug: 'order-flow', section: 'pitfalls' }],
   ['owner-claimed', { mode: 'file', repo: 'demo-orders', file: 'projects/demo-orders/src/order/validate.ts' }],
   ['owner-root-file', { mode: 'file', repo: 'workspace', file: 'AGENTS.workspace.md' }],
-  ['search-word', { mode: 'search', search: 'checkout' }],
-  ['search-phrase', { mode: 'search', search: 'checkout handoff' }],
-  ['search-symbol', { mode: 'search', search: 'validateCart' }],
   ['rules-repo', { mode: 'rules', repo: 'workspace' }],
   ['rules-category', { mode: 'rules', repo: 'workspace', category: 'docs' }],
   ['pitfalls', { mode: 'pitfalls' }],
@@ -42,7 +39,6 @@ describe('the query engine over the staged corpus, against committed expected ou
 
   it.each<[string, Query]>([
     ['an unclaimed path', { mode: 'file', repo: 'demo-orders', file: 'nowhere/unclaimed.ts' }],
-    ['a term with no hit', { mode: 'search', search: 'zzqqxx' }],
     ['an absent section', { repo: 'demo-orders', slug: 'order-flow', section: 'nosuchsection' }],
     ['an absent channel', { mode: 'edge', channel: 'nosuchchannel' }],
   ])('[docs-module-r5] prints nothing for %s (the verb maps the miss to rc 1)', async (_, q) => {
@@ -64,20 +60,6 @@ describe('the query engine over the engine fixtures', { concurrent: true }, () =
     expect(r.stdout).not.toContain('(over.md)');
   });
 
-  it('[docs-module-r5] finds a multibyte word under LC_ALL=C', async () => {
-    const r = await query(engine, { mode: 'search', repo: 'etr', search: 'değil' });
-    expect(r.code).toBe(0);
-    expect(r.stdout).toContain('Kayıt değil, belge yazılır');
-    expect(r.stdout).toContain('Bir kuralın değil, bir notun yeri');
-  });
-
-  it('EC4 [docs-module-r5] keeps a backslash in the search text literal', async () => {
-    const r = await query(engine, { mode: 'search', repo: 'etest', search: 'zz\\tqq' });
-    expect(r.code).toBe(0);
-    expect(r.stdout).toContain('The marker reads zz\\tqq on disk');
-    const tab = await query(engine, { mode: 'search', repo: 'etest', search: 'zz\tqq' });
-    expect(tab.stdout).toBe('');
-  });
 });
 
 describe('the query engine --file: the most specific owner by the check glob predicate', { concurrent: true }, () => {

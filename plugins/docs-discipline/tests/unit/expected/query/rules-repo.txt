@@ -26,7 +26,7 @@ MUST docs/prompt-to-doc (universal, workspace)
   Every task begins with a docs query before inspecting or reading code files.
   evidence: .contexture/extensions/modules/docs/scripts/query
   anti: Reading source files directly before querying the corpus
-  good: Querying the corpus first (search or file owner), then reading the owning doc and its pitfalls
+  good: Querying the corpus first (ctx docs search or file owner), then reading the owning doc and its pitfalls
 
 MUST docs/stop-gate (universal, workspace)
   Close transactions must pass ctx docs gate cleanly, enforcing syntax integrity, coverage completeness, and doc freshness.

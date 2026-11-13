@@ -19,7 +19,7 @@ asset inside the module, enforced by the write verbs), and the workspace gets it
 `docs/workspace/<slug>.md` (the conventions and the map); the configured
 storage driver holds them (the files driver as those very files, a store
 driver such as the storage-fts5 plugin's in its store) and every verb reaches
-them through it; the write verbs change a doc block by block; `ctx docs query` serves the index, the projections, the lookups, and the
+them through it; the write verbs change a doc block by block; `ctx docs search` finds the entities a term names and `ctx docs get` prints one; `ctx docs query` serves the index, the projections, the lookups, and the
 rule and pitfall views; `ctx docs check` compares a git change delta against
 the corpus (coverage, freshness, dead sources); `ctx docs gate` runs the audit
 and the check as one close check; `ctx docs nudge` extracts a task's
@@ -28,7 +28,8 @@ owning repo's run, build, and test targets.
 
 | verb | what it is | engine (private) |
 |---|---|---|
-| `ctx docs query` | the retrieval CLI: index, projection, section, owner (the most specific claimant by the check's own glob rule), search, rules, pitfalls, edges; `--entry <block>/<key>` prints one entry's raw lines | `docs-query.awk` behind `docs-glob.awk` (`--entry`: `docs-edit.awk`) |
+| `ctx docs query` | the retrieval CLI: index, projection, section, owner (the most specific claimant by the check's own glob rule), rules, pitfalls, edges; `--entry <block>/<key>` prints one entry's raw lines; the retired `--search` form refuses naming `ctx docs search` | `docs-query.awk` behind `docs-glob.awk` (`--entry`: `docs-edit.awk`) |
+| `ctx docs search` | the entity search: `"<term>"` by the shared exact rule (a case-insensitive substring of one line), one row per matching entity (module, container, type, id, address, snippet, read), `--repo=`, `--type=`, `--mode=exact`, `--limit=` (default 20), `--json` answering `{query, mode, total, rows}`; zero hits is rc 0; a sole `help` points to `ctx docs help search`, while `help` with arguments after it is the query, as `ctx search` hands it; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit) | `docs-entity.awk` (the block shapes and keys from the grammar) |
 | `ctx docs get` | one corpus entity whole by its path `<repo>/<slug>/<key>` (an entry's id, `rule/<category>/<rule-slug>`, `<block>/<key>` for another one-token key, or `header`), its stored lines quotes kept; the read a search row names | `docs-entity.awk` (the block shapes and keys from the grammar) |
 | `ctx docs audit` | the grammar and integrity audit: header, blocks, indentation, rule fields, the pitfall required fields and class/severity enums, symbol-only evidence, duplicate ids | `docs-audit.awk` |
 | `ctx docs check` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | `docs-check.awk` behind `docs-glob.awk` |
@@ -46,7 +47,7 @@ owning repo's run, build, and test targets.
 | `ctx docs remove` | a whole doc out of the corpus (`--dry-run` prints the doc it would delete and writes nothing) | none (the IO helper) |
 | `ctx docs ids` | the one-time migration: keyless contract rules and responsibilities gain `<slug>-r-<token>` and `<slug>-o-<token>` ids | `docs-edit.awk` |
 
-The help surface is engine-owned: `ctx docs help` lists the seventeen verbs and
+The help surface is engine-owned: `ctx docs help` lists the eighteen verbs and
 `ctx docs help <verb>` prints that verb's usage and detail lines. A sole
 `help` argument to a verb refuses with a pointer to the ctx form.
 
@@ -54,7 +55,7 @@ What lands where:
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the two handler files on the unit module's points, the seventeen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
+| `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the two handler files on the unit module's points, the eighteen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed (ctx docs write) |
 | `AGENTS.workspace.md` | retired: no root overlay fragment ships; the laws, layout, boot, and close live in the module's laws file | retired |
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
@@ -302,11 +303,12 @@ it walk below runs every one of these.
   unit's in-progress tasks); a workspace without the docs module fires the
   points silently. The close gate stays the close step's, and the plugin ships
   no harness trigger.
-- The six engine read verbs ride the private engines under
+- The seven engine read verbs ride the private engines under
   `.contexture/extensions/modules/docs/scripts/`: audit, check, and nudge hand their
   engine the logical paths the IO helper materialized from the store, query
   drives its engine with parsed options over the helper's paths, get runs the
-  entity engine over the one doc it reads and the grammar asset, and gate is
+  entity engine over the one doc it reads and search over the materialized
+  corpus, both behind the grammar asset, and gate is
   self-contained over the audit and check engines. The engines' shebang names
   `/usr/bin/awk` (the same launcher form the base scripts use). A system whose
   awk lives elsewhere invokes the engines via `awk -f <path>` instead. The
@@ -339,7 +341,7 @@ it walk below runs every one of these.
   field (a text field with a newline renders as a block scalar), a carriage
   return. Untouched lines stay byte for byte; a result equal to the stored doc
   writes nothing. Free text reaches the engines through the environment, never
-  `awk -v`, so quotes and backslashes keep their bytes (a `--search` term too).
+  `awk -v`, so quotes and backslashes keep their bytes (a `ctx docs search` term too).
 - Ids: contract rules and responsibilities carry theirs on the entry's second
   line, pitfalls and caveats at the entry head. A new entry's id is
   `<slug>-<letter>-<token>`: the letter `r` for a contract rule, `o` a

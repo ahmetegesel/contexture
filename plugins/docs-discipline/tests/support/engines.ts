@@ -26,7 +26,6 @@ export interface Query {
   slug?: string;
   section?: string;
   file?: string;
-  search?: string;
   category?: string;
   severity?: string;
   channel?: string;
@@ -37,13 +36,26 @@ export function query(dir: string, q: Query, files: readonly string[] = docFiles
     DOCS_Q_SLUG: q.slug ?? '',
     DOCS_Q_SECTION: q.section ?? '',
     DOCS_Q_FILE: q.file ?? '',
-    DOCS_Q_SEARCH: q.search ?? '',
     DOCS_Q_CATEGORY: q.category ?? '',
     DOCS_Q_SEVERITY: q.severity ?? '',
     DOCS_Q_CHANNEL: q.channel ?? '',
     ...ceiling(dir),
   };
   return awk(dir, [engine('docs-glob.awk'), engine('docs-query.awk')], { args: files, env, vars: { mode: q.mode ?? '', repo: q.repo ?? '' } });
+}
+
+export interface Entities {
+  mode: 'get' | 'search';
+  key?: string;
+  query?: string;
+  type?: string;
+  limit?: number;
+  json?: boolean;
+}
+
+export function entities(dir: string, e: Entities, files: readonly string[] = docFiles(dir)): Promise<Run> {
+  const env = { DE_MODE: e.mode, DE_KEY: e.key ?? '', DE_QUERY: e.query ?? '', DE_TYPE: e.type ?? '', DE_LIMIT: String(e.limit ?? 20), DE_JSON: e.json ? '1' : '', ...ceiling(dir) };
+  return awk(dir, engine('docs-entity.awk'), { args: ['part=1', join(SCRIPTS, 'doc.grammar'), 'part=2', ...files], env });
 }
 
 export interface CheckOptions {

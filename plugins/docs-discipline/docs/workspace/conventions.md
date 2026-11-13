@@ -64,7 +64,7 @@
   evidence: ".contexture/extensions/modules/docs/scripts/query"
   caution: "Reading code files before querying docs causes hallucinated assumptions and misses documented contracts and pitfalls."
   anti: "Reading source files directly before querying the corpus"
-  good: "Querying the corpus first (search or file owner), then reading the owning doc and its pitfalls"
+  good: "Querying the corpus first (ctx docs search or file owner), then reading the owning doc and its pitfalls"
 
 @rule docs/stop-gate
   directive: must

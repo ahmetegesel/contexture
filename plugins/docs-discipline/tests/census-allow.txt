@@ -128,7 +128,7 @@ topology-probe	gate	        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.g
 usage-text	check	  echo "Usage: git diff --name-status | ctx docs check <repo>..." >&2
 usage-text	nudge	  echo "Usage: ctx docs nudge <unit> [--task=<slug>]... [<repo>...] (or: ctx docs nudge <backlog-file> <repo>...)" >&2
 usage-text	nudge	        echo "ctx docs nudge: --task is the unit form's; the backlog-file form names repos alone" >&2
-usage-text	query	  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index" >&2
+usage-text	query	  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --rules | --pitfalls | --index" >&2
 engine-output	docs-edit.awk	    print s > "/dev/stderr"
 false-positive	docs-edit.awk	        sep = (f1 == "from") ? ">" : ":"
 helper-source	entry	. "$dir/docs-io.sh"
@@ -161,3 +161,6 @@ helper-output	query	QUERY_OUT=$(docs_engine_run awk -v mode="$MODE" \
 helper-source	get	. "$dir/docs-io.sh"
 usage-text	get	  echo "Usage: ctx docs get <repo>/<slug>/<key>" >&2
 false-positive	docs-entity.awk	      if (v1 != "" && v2 != "") k = EB "/" v1 ((f1 == "from") ? ">" : ":") v2
+helper-source	search	. "$dir/docs-io.sh"
+usage-text	query	      echo "ctx docs query: --search is retired: use ctx docs search \"<term>\" [--repo=<repo>]" >&2
+helper-output	search	docs_search "$@"

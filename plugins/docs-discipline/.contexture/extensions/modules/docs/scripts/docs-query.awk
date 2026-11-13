@@ -2,7 +2,7 @@
 # docs-query.awk: retrieval projection engine for the workspace docs (private engine; the query verb wraps it)
 # Usage: ctx docs query <repo> <slug> [--section <name>] | <repo> --file <path> | --index (the full table: ctx docs help query)
 # Help: ctx docs help query
-# Supports: projection, section slicing, rules query, pitfall scan, file owner lookup, corpus search, edges, index.
+# Supports: projection, section slicing, rules query, pitfall scan, file owner lookup, edges, index.
 # Runs behind docs-glob.awk (awk -f docs-glob.awk -f docs-query.awk), the glob rule it shares
 # with the check.
 
@@ -13,7 +13,6 @@ BEGIN {
     slug = ENVIRON["DOCS_Q_SLUG"]
     section = ENVIRON["DOCS_Q_SECTION"]
     file = ENVIRON["DOCS_Q_FILE"]
-    search = ENVIRON["DOCS_Q_SEARCH"]
     category = ENVIRON["DOCS_Q_CATEGORY"]
     severity = ENVIRON["DOCS_Q_SEVERITY"]
     channel = ENVIRON["DOCS_Q_CHANNEL"]
@@ -110,25 +109,6 @@ mode == "file" {
             owner_head = "OWNER: " curr_slug " (" curr_kind (curr_role ? ", " curr_role : "") ") [" curr_repo "]"
             owner_summary = "SUMMARY: " curr_desc
             owner_doc = "DOC: " curr_file
-        }
-    }
-    next
-}
-
-# ─── MODE: SEARCH ────────────────────────────────────────────────────────────
-mode == "search" {
-    if (search != "") {
-        s_lower = tolower(search)
-        line_lower = tolower($0)
-        if (index(line_lower, s_lower) > 0) {
-            clean_line = $0
-            sub(/^[ ]+/, "  ", clean_line)
-            if (!seen_search_doc[curr_file]++) {
-                print "[" curr_repo " > " curr_slug " (" curr_kind ")]"
-            }
-            if (clean_line !~ /^@doc/) {
-                print clean_line
-            }
         }
     }
     next

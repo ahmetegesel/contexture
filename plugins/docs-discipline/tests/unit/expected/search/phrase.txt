@@ -1,0 +1,5 @@
+docs search "checkout handoff": 3 matches, 3 shown
+  doc docs#demo-web/cart-ui/header: description: "Storefront cart interaction: add, remove, quantity edits, and the checkout handoff"
+  entry docs#demo-web/cart-ui/see_also/order-flow: why: "The order API side of the checkout handoff"
+  entry docs#workspace/system-map/components/demo-web: responsibilities: "Storefront cart interaction and checkout handoff"
+read one: ctx docs get <repo>/<slug>/<key> (the address after docs#)

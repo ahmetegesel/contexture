@@ -1,14 +1,13 @@
 #!/bin/sh
-# summary: the corpus retrieval CLI: index, projection, section, owner, search, rules, pitfalls, and edges
+# summary: the corpus retrieval CLI: index, projection, section, owner, rules, pitfalls, and edges
 # usage: ctx docs query <repo> <slug> [--section <name>]
 # usage: ctx docs query <repo> <slug> --entry <block>/<key>
 # usage: ctx docs query [<repo>] --file <path>
-# usage: ctx docs query <repo> --search <term>
 # usage: ctx docs query <repo> --rules [category]
 # usage: ctx docs query <repo> --pitfalls [--severity <level>]
 # usage: ctx docs query --edge <channel>
 # usage: ctx docs query --index [repo]
-# help: projects the typed-block corpus down to one answer, so no one reads the corpus to find it: the index, a doc projection, a section, the owner of a code path, a search, the rules, the pitfalls, or the edges
+# help: projects the typed-block corpus down to one answer, so no one reads the corpus to find it: the index, a doc projection, a section, the owner of a code path, the rules, the pitfalls, or the edges; a search is ctx docs search (the retired --search form refuses naming it)
 # help: --entry <block>/<key> prints one entry's raw lines, quotes kept (the verbatim text a ctx docs entry, pitfall, or rule write starts from); keys as ctx docs entry takes them (an id, a first field's value, <from>><to>, <direction>:<key>, #<N>), a rule as rule/<category>/<rule-slug>
 # help: --file <path> names one owner by the check's own glob rule: a doc claims the path (a child repository's doc with a projects/<repo>/ or <repo>/ prefix stripped when present, the path kept as given otherwise and always for a workspace doc, as the check reads it) when a header source equals it or matches it as a glob, and among several claimants the answer is the doc whose best claiming source has the longest literal part before its first wildcard (* or {; a source without one counts its whole length), then the fewest wildcards, then the earlier doc in corpus order; without a repo argument every repo's docs claim, a claimant's best source read with the prefix it stripped as literal text, so a child repository's exact source beats a workspace glob
 # help: exit codes: 0 with an answer; 1 no match, a missing repo, or a bad option; 2 unreadable input (the awk engine's own failure)
@@ -27,7 +26,7 @@ case "$1" in
 esac
 
 if [ "$#" -eq 0 ]; then
-  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --search <term> | --rules | --pitfalls | --index" >&2
+  echo "Usage: ctx docs query <repo> <slug> | --file <path> | --rules | --pitfalls | --index" >&2
   echo "help: ctx docs help query" >&2
   exit 1
 fi
@@ -46,7 +45,6 @@ REPO=""
 SLUG=""
 SECTION=""
 FILE=""
-SEARCH=""
 CATEGORY=""
 SEVERITY=""
 CHANNEL=""
@@ -64,10 +62,8 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --search)
-      [ $# -ge 2 ] || { echo "ctx docs query: --search needs a value" >&2; exit 1; }
-      MODE="search"
-      SEARCH="$2"
-      shift 2
+      echo "ctx docs query: --search is retired: use ctx docs search \"<term>\" [--repo=<repo>]" >&2
+      exit 1
       ;;
     --rules)
       MODE="rules"
@@ -151,11 +147,10 @@ done < "$DOCS_PATHS"
 DOCS_Q_SLUG=$SLUG
 DOCS_Q_SECTION=$SECTION
 DOCS_Q_FILE=$FILE
-DOCS_Q_SEARCH=$SEARCH
 DOCS_Q_CATEGORY=$CATEGORY
 DOCS_Q_SEVERITY=$SEVERITY
 DOCS_Q_CHANNEL=$CHANNEL
-export DOCS_Q_SLUG DOCS_Q_SECTION DOCS_Q_FILE DOCS_Q_SEARCH DOCS_Q_CATEGORY DOCS_Q_SEVERITY DOCS_Q_CHANNEL
+export DOCS_Q_SLUG DOCS_Q_SECTION DOCS_Q_FILE DOCS_Q_CATEGORY DOCS_Q_SEVERITY DOCS_Q_CHANNEL
 QUERY_OUT=$(docs_engine_run awk -v mode="$MODE" \
     -v repo="$REPO" \
     -f "$AWK_GLOB" \
@@ -168,7 +163,6 @@ fi
 # plausible-but-empty success (--index always prints its completion marker)
 if [ -z "$QUERY_OUT" ] && [ "$MODE" != "index" ]; then
   case "$MODE" in
-    search) echo "ctx docs query: no match for '$SEARCH'" >&2 ;;
     rules) echo "ctx docs query: no rules match${CATEGORY:+ in category '$CATEGORY'}" >&2 ;;
     pitfalls) echo "ctx docs query: no pitfalls match${SEVERITY:+ at severity '$SEVERITY'}" >&2 ;;
     edge) echo "ctx docs query: no edges match channel '$CHANNEL'" >&2 ;;
