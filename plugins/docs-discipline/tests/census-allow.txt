@@ -158,3 +158,6 @@ git-delta	gate	        { aggregate_git_changes | docs_code_half; docs_changes_em
 git-delta	gate	        aggregate_git_changes | sort -u | docs_delta_stage
 false-positive	query	      if [ $# -gt 0 ] && [ "$(echo "$1" | cut -c 1-2)" != "--" ]; then
 helper-output	query	QUERY_OUT=$(docs_engine_run awk -v mode="$MODE" \
+helper-source	get	. "$dir/docs-io.sh"
+usage-text	get	  echo "Usage: ctx docs get <repo>/<slug>/<key>" >&2
+false-positive	docs-entity.awk	      if (v1 != "" && v2 != "") k = EB "/" v1 ((f1 == "from") ? ">" : ":") v2

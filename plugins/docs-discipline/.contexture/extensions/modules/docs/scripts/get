@@ -1,0 +1,41 @@
+#!/bin/sh
+# summary: print one corpus entity whole, by its path: <repo>/<slug>/<key>
+# usage: ctx docs get <repo>/<slug>/<key>
+# help: the path is everything after docs# in an entity's address (ctx docs search prints it as the row's read); the key is an id keyed entry's id (a responsibility, a contract rule, a pitfall, a caveat), rule/<category>/<rule-slug> for a conventions rule, <block>/<key> for another keyed entry (the key ctx docs entry takes, when it is one token), or header for the doc's header block
+# help: prints the entity's stored lines whole, quotes kept; read only, never a doc listing; an entry keyed by more than one token, or known only by its place, belongs to the header entity
+# help: exit codes: 0 printed; 1 a malformed path, no such doc, or no such entity (ERR_ENTITY_NOT_FOUND); 2 a storage driver failure or a driver without a corpus
+# help: example: ctx docs get workspace/the-engine/the-engine-r8
+
+case "$1" in
+  help|--help|-h)
+    if [ "$#" -ne 1 ]; then
+      echo "ctx docs get: help takes no further arguments" >&2
+      exit 1
+    fi
+    echo "help: ctx docs help get" >&2
+    exit 1
+    ;;
+esac
+
+if [ "$#" -ne 1 ]; then
+  echo "Usage: ctx docs get <repo>/<slug>/<key>" >&2
+  exit 1
+fi
+case "$1" in
+  -*)
+    printf "ctx docs get: unknown option '%s' (ctx docs get <repo>/<slug>/<key>) (ERR_INVALID_ARGUMENT)\n" "$1" >&2
+    exit 1
+    ;;
+  ?*/?*/?*) ;;
+  *)
+    printf "ctx docs get: malformed path '%s' (<repo>/<slug>/<key>) (ERR_INVALID_ARGUMENT)\n" "$1" >&2
+    exit 1
+    ;;
+esac
+
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+. "$dir/docs-io.sh"
+docs_io_init "$dir" get
+
+dg_rest=${1#*/}
+docs_get "${1%%/*}" "${dg_rest%%/*}" "${dg_rest#*/}"

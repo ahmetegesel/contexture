@@ -164,21 +164,21 @@ Thirty-eight functions, each called by the verb in the last column: the driver's
 | `task.reopen` | unit, slug | none | `{unit, task: TaskItem}` | `unit task reopen` |
 | `task.drop` | unit, slug | reason, date | `{unit, slug, receipt: Entry}` | `unit task drop` |
 | `task.list` | unit, status (`TODO`, `IN_PROGRESS`, `DONE`, `all`) | none | `{unit, tasks: [TaskItem]}` in backlog order | `unit task list` |
-| `task.get` | unit, slug | none | `{unit, task: Task}` | `unit task show`, `unit resolve task#` |
+| `task.get` | unit, slug | none | `{unit, task: Task}` | `unit task show`, `unit get`, `unit resolve task#` |
 | `entry.record` | unit | what, group, thread, rhythm, knowledge (`true` or `false`), refs (list), closers (list of kind, targets, verdict, reason), slug (optional), date, epoch | `{unit, entry: Entry}` | `unit record` |
-| `entry.get` | unit, slug | none | `{unit, entry: Entry}`, the last occurrence, with closed, closed_by, close_reason | `unit entry show`, `unit resolve entry#` |
+| `entry.get` | unit, slug | none | `{unit, entry: Entry}`, the last occurrence, with closed, closed_by, close_reason | `unit entry show`, `unit get`, `unit resolve entry#` |
 | `entry.list` | unit, `--anchor=A<N>`, `--group=<token>` | none | `{unit, entries: [EntryItem]}` in journal order, every occurrence | `unit entry list` |
 | `entry.closure` | unit, slug | none | Closure | `unit entry closure` |
 | `finding.add` | unit, NAME | summary, refs (list), supersedes, supersedes_reason (default `superseded`) | `{unit, finding: Finding}` | `unit finding add` |
 | `finding.update` | unit, NAME | summary and or refs (a present key replaces) | `{unit, finding: Finding}` | `unit finding update` |
 | `finding.supersede` | unit, OLD, NEW | summary, refs (list), reason (default `superseded`) | `{unit, superseded: OLD, finding: Finding}` | `unit finding supersede` |
 | `finding.drop` | unit, NAME | none | `{unit, name}` | `unit finding drop` |
-| `finding.get` | unit, NAME | none | `{unit, finding: Finding}` | `unit finding show`, `unit resolve finding#` |
+| `finding.get` | unit, NAME | none | `{unit, finding: Finding}` | `unit finding show`, `unit get`, `unit resolve finding#` |
 | `finding.list` | unit, `active` or `all` | none | `{unit, findings: [FindingItem]}` in knowledge order | `unit finding list` |
 | `lane.create` | unit, lane | the recipe, raw | `{unit, lane}`; the recipe stored byte for byte and an empty journal (preamble `""`) | `lane create` |
 | `lane.record` | unit, lane | what, thread, refs (list), slug (optional), date, epoch | `{unit, lane, entry: LaneEntry}` | `lane record` |
 | `lane.write_report` | unit, lane | the report, raw | `{unit, lane, bytes}` | `lane report` (a write) |
-| `lane.get` | unit, lane, `recipe`, `journal`, or `report` | none | LaneDoc for recipe and report, LaneJournal for journal | `lane show`, `lane report` (a read), `unit resolve lane#` |
+| `lane.get` | unit, lane, `recipe`, `journal`, or `report` | none | LaneDoc for recipe and report, LaneJournal for journal | `lane show`, `lane report` (a read), `unit get`, `unit resolve lane#` |
 | `search.query` | unit, `--mode=M` (base always sends one), `--limit=N`, `--entity=T` | query | Search | `unit search` |
 
 Base composes `date` (the client's local date, `YYYY-MM-DD`) and `epoch` for every function that generates a slug; the unit module composes and suffixes the slug and takes the anchor from the unit's current_anchor, so the slug follows the caller's clock under every driver.
@@ -414,11 +414,14 @@ Every finding write refuses a `CLOSED` unit.
 #### Reference resolution: ctx unit resolve
 - `ctx unit resolve <unit> <ref> [--json]`: resolves abstract domain references (`task#slug`, `entry#slug`, `finding#NAME`, and the lane shape `lane#<lane>/<recipe|journal|report>[#<claim>]`), the legacy lane form `lanes/<lane>/<recipe|journal|report>[#<claim>]`, the canonical unit refs (`unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, `unit#<unit>/lane/<lane>/<recipe|journal|report>`; a canonical ref carries its own target unit), and the legacy file forms (`backlog.md#slug`, `journal.md#slug`, `knowledge.md#NAME`, `lanes/<lane>/report.md#claim`) on every driver. Base parses the reference and makes exactly one call (`task.get`, `entry.get`, `finding.get`, or `lane.get`); the text view prints the item's span (its canonical lines, its trailing separator included); a recipe or report claim is cut from the last head naming it, an `@<claim>` or `@claim <claim>` line running to the next column-0 `@` line, a column-0 `<KEY> ::` line, its text on that line or its body below (trailing blanks ignored), to the next non-blank column-0 line, blank lines kept; a journal claim names a lane journal entry slug and prints the span of the last entry carrying it, as `ctx lane show` prints that entry; a claim on any other artifact name is an unsupported form; a whole lane artifact, in any of the three shapes, prints byte for byte what `ctx lane show` prints, and an absent recipe or report refuses rc 1 as a miss in both views (`ctx lane show` keeps its one empty line); `--json` prints the function's answer. A miss refuses rc 1 (`resolve: error: reference '<ref>' not found in unit '<unit>' (ERR_ENTITY_NOT_FOUND)`), an unsupported form rc 1 `ERR_INVALID_ARGUMENT`.
 
+#### One entity by its path: ctx unit get
+- `ctx unit get <unit>/<kind>/<id> [--json]`: prints exactly one record entity whole in its canonical layout, the path being everything after `unit#` in the entity's address: `<unit>/task/<slug>` (with its `REFS`, which the `task show` text view leaves out), `<unit>/entry/<slug>`, `<unit>/finding/<NAME>`, `<unit>/lane/<lane>/recipe` and `<unit>/lane/<lane>/report` (whole, or one section with `/<SECTION>`, the span `resolve` cuts for a claim), and `<unit>/lane/<lane>/journal/<slug>` (one lane journal entry). It never prints a container listing or the unit state (such a path refuses rc 1 naming the forms), takes no lock, so a `get` inside a write is safe, and a missing entity refuses rc 1 with `get: error: '<path>' not found (ERR_ENTITY_NOT_FOUND)`, so a dangling reference reads gone. `--json` prints the one entity as JSON: the storage function's answer for a task, an entry, a finding, or a whole recipe or report; `{unit, lane, artifact, section, content}` for a section, its content the lines the text form prints; and `{unit, lane, artifact, entry}` for a lane journal entry, that entry's object alone, never the lane journal. `get` is the shared read verb: a module that answers search answers get, so a search row's read is always `ctx <module> get <path>`; the docs module answers `ctx docs get <repo>/<slug>/<key>` the same way. `resolve` stays beside it.
+
 #### The named looks: ctx unit list and refs-to
 - `ctx unit list [--active|--all] [--repo=<repo>]`: the default and `--active` print each ACTIVE unit bytewise by name, its slug, `current_anchor`, derived `next:` line, and objective lines, a blank line between units, then `closed: <n>`; `--all` prints one line per unit, ACTIVE and CLOSED, `<slug> [<STATUS>] <current_anchor>`, the status as stored; `--repo=<repo>` keeps the units whose repos name the repo in either form (the `--active` closed count then counting the CLOSED units touching it), and a repo no unit touches refuses rc 1 naming the repos the units know; a store not created yet prints `no units yet` whatever the flags; `--active` with `--all`, a repeated flag, an empty `--repo`, any other flag (`--json` among them), or an argument refuses rc 1 with the usage; a refusal prints its line alone, never the deprecation warning. The retired `active` and `units` verbs of `ctx unit` each refuse rc 1 as an unknown verb, and `list` takes their place among the reserved module names.
 - `ctx unit refs-to <unit> [--json]`: `refs-to <unit>: <n> units`, then one `  <unit>` line per unit whose `ref_sessions` name it; none refuses rc 1.
 
-Together with `entry show`, `entry list`, `entry closure`, `finding show`, and `resolve`, these answer the foreseeable questions over the record in bounded form, so no one improvises a grep that over-reads: every miss is loud, rc 1 with a named error, never a plausible empty.
+Together with `entry show`, `entry list`, `entry closure`, `finding show`, `get`, and `resolve`, these answer the foreseeable questions over the record in bounded form, so no one improvises a grep that over-reads: every miss is loud, rc 1 with a named error, never a plausible empty.
 
 ### Subagent lane management: ctx lane
 
@@ -497,7 +500,7 @@ The next move is not a state act: `ctx unit list` derives it from the backlog (t
 |---|---|
 | `append` | `record`, `task add`, `finding add` |
 | `amend` | `task update` |
-| `query` | `entry show`, `entry list` (`--group`, `--anchor`), `entry closure`, `finding show`, `resolve`, `search`, `list`, `refs-to`, `lane show` |
+| `query` | `entry show`, `entry list` (`--group`, `--anchor`), `entry closure`, `finding show`, `get`, `resolve`, `search`, `list`, `refs-to`, `lane show` |
 | `flip` | `task start`, `complete`, `reopen` |
 | `drop` | `task drop` |
 | `next` | `list` (the next task is derived from the backlog) |

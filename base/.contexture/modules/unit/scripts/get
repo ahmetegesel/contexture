@@ -1,0 +1,162 @@
+#!/bin/sh
+# summary: print one record entity whole, by its path: <unit>/<kind>/<id>
+# usage: ctx unit get <unit>/<kind>/<id> [--json]
+# help: the path is everything after unit# in an entity's address (a search row's read names it): <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/recipe and <unit>/lane/<lane>/report (whole, or one section with /<SECTION>), and <unit>/lane/<lane>/journal/<slug> (one lane journal entry)
+# help: prints exactly one entity in its canonical layout, its REFS included; never a container listing and never the unit state; read only, it takes no lock; a section is the span ctx unit resolve cuts for a claim (from an @<SECTION> head to the next column-0 @ line, or from a column-0 <SECTION> :: head to the next non-blank column-0 line)
+# help: a missing entity refuses rc 1 with get: error: '<path>' not found (ERR_ENTITY_NOT_FOUND), so a dangling reference reads gone
+# help:   --json      the one entity as JSON: the storage function's answer for a task, an entry, a finding, or a whole recipe or report (task.get, entry.get, finding.get, lane.get); a section answers {unit, lane, artifact, section, content}, its content the lines the text form prints, and a lane journal entry {unit, lane, artifact, entry}, that entry's object alone
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+usage() {
+  printf 'usage: ctx unit get <unit>/<kind>/<id> [--json]\n'
+  printf 'prints one record entity whole: <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/<recipe|report>[/<SECTION>], <unit>/lane/<lane>/journal/<slug>\n'
+  printf 'options:\n'
+  printf '  --json      output JSON format\n'
+}
+
+if [ $# -eq 0 ]; then
+  usage >&2
+  exit 1
+fi
+case "$1" in
+  --help|-h|help)
+    usage
+    exit 0
+    ;;
+esac
+
+path="$1"
+shift
+json_out=0
+for a in "$@"; do
+  case "$a" in
+    --json) json_out=1 ;;
+    *) vb_unknown get "$a" ;;
+  esac
+done
+
+malformed() {
+  printf "get: error: malformed path '%s': <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/<recipe|report>[/<SECTION>], or <unit>/lane/<lane>/journal/<slug> (ERR_INVALID_ARGUMENT)\n" "$path" >&2
+  exit 1
+}
+
+absent() {
+  printf "get: error: '%s' not found (ERR_ENTITY_NOT_FOUND)\n" "$path" >&2
+  exit 1
+}
+
+case "$path" in -*) vb_unknown get "$path" ;; esac
+unit="${path%%/*}"
+[ "$unit" != "$path" ] || malformed
+vb_slug_ok "$unit" || malformed
+rest="${path#*/}"
+kind=""
+id=""
+lane=""
+art=""
+case "$rest" in
+  task/*|entry/*|finding/*)
+    kind="${rest%%/*}"
+    id="${rest#*/}"
+    vb_slug_ok "$id" || malformed
+    ;;
+  lane/*)
+    rest="${rest#lane/}"
+    lane="${rest%%/*}"
+    [ "$lane" != "$rest" ] || malformed
+    vb_slug_ok "$lane" || malformed
+    rest="${rest#*/}"
+    art="${rest%%/*}"
+    if [ "$art" = "$rest" ]; then
+      case "$art" in recipe|report) kind=lane ;; *) malformed ;; esac
+    else
+      id="${rest#*/}"
+      vb_slug_ok "$id" || malformed
+      case "$art" in
+        recipe|report) kind=claim ;;
+        journal) kind=lentry ;;
+        *) malformed ;;
+      esac
+    fi
+    ;;
+  *) malformed ;;
+esac
+
+case "$kind" in
+  task) vb_call task.get "$unit" "$id" ;;
+  entry) vb_call entry.get "$unit" "$id" ;;
+  finding) vb_call finding.get "$unit" "$id" ;;
+  lane|claim) vb_call lane.get "$unit" "$lane" "$art" ;;
+  lentry) vb_call lane.get "$unit" "$lane" journal ;;
+esac
+if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_ENTITY_NOT_FOUND" && ! vb_err_has "unit '$unit' not found"; then
+  absent
+fi
+if [ "$VB_RC" -eq 0 ] && { [ "$kind" = lane ] || [ "$kind" = claim ]; }; then
+  awk -f "$VB_JSON" < "$VB_DIR/ans" | grep -qx 'content:null' && absent
+fi
+vb_ok
+
+miss="get: error: '$path' not found (ERR_ENTITY_NOT_FOUND)"
+if [ "$json_out" -eq 1 ]; then
+  case "$kind" in
+    claim)
+      vb_render resolve RV_KIND=claim RV_CLAIM="$id" RV_MISS="$miss" > "$VB_DIR/one" || exit 1
+      GJ_HEAD="{\"unit\":\"$unit\",\"lane\":\"$lane\",\"artifact\":\"$art\",\"section\":\"$id\",\"content\":" awk '
+        BEGIN { for (i = 1; i < 32; i++) ORD[sprintf("%c", i)] = i }
+        { t = t $0 "\n" }
+        END {
+          n = split(t, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]
+          n = split(o, p, /"/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\"" p[i]
+          n = split(o, p, /\n/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "n" p[i]
+          n = split(o, p, /\t/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "t" p[i]
+          if (o ~ /[\001-\037]/) { r = ""; for (i = 1; i <= length(o); i++) { c = substr(o, i, 1); r = r ((c in ORD) ? sprintf("\\u%04x", ORD[c]) : c) }; o = r }
+          printf "%s\"%s\"}\n", ENVIRON["GJ_HEAD"], o
+        }' "$VB_DIR/one"
+      ;;
+    lentry)
+      vb_render resolve RV_KIND=lentry RV_CLAIM="$id" RV_MISS="$miss" > /dev/null || exit 1
+      # the last entry item carrying the slug, as the text form picks it, then its object cut
+      # from the answer by a walk that splits on the quotes and counts brackets outside them
+      at=$(awk -f "$VB_JSON" < "$VB_DIR/ans" | awk -v s="$id" '
+        /^items\.[0-9]+\.kind=/ { i = $0; sub(/^items\./, "", i); sub(/\..*$/, "", i); v = $0; sub(/^[^=]*=/, "", v); K[i + 0] = v; if (i + 0 > n) n = i + 0 }
+        /^items\.[0-9]+\.slug=/ { i = $0; sub(/^items\./, "", i); sub(/\..*$/, "", i); v = $0; sub(/^[^=]*=/, "", v); S[i + 0] = v; if (i + 0 > n) n = i + 0 }
+        END { for (i = 1; i <= n; i++) if ((K[i] == "" || K[i] == "entry") && S[i] == s) f = i; print f + 0 }')
+      awk -v want="$at" -v head="{\"unit\":\"$unit\",\"lane\":\"$lane\",\"artifact\":\"journal\",\"entry\":" '
+        { t = t (NR > 1 ? "\n" : "") $0 }
+        END {
+          k = index(t, "\"items\":[")
+          if (!k || want < 1) exit 2
+          pos = k + 9
+          m = split(substr(t, pos), P, /"/)
+          inside = 0; depth = 0; cnt = 0
+          for (j = 1; j <= m; j++) {
+            if (!inside) {
+              for (c = 1; c <= length(P[j]); c++) {
+                ch = substr(P[j], c, 1)
+                if (ch == "{" || ch == "[") { if (depth == 0) { cnt++; st = pos + c - 1 } depth++ }
+                else if (ch == "}" || ch == "]") {
+                  if (depth == 0) exit 2
+                  depth--
+                  if (depth == 0 && cnt == want) { printf "%s%s}\n", head, substr(t, st, pos + c - st); exit 0 }
+                }
+              }
+              inside = 1
+            } else {
+              b = 0; while (b < length(P[j]) && substr(P[j], length(P[j]) - b, 1) == "\\") b++
+              if (b % 2 == 0) inside = 0
+            }
+            pos += length(P[j]) + 1
+          }
+          exit 2
+        }' "$VB_DIR/ans" || exit 2
+      ;;
+    *) vb_json ;;
+  esac
+  exit 0
+fi
+case "$kind" in
+  lane) vb_render lane_doc ;;
+  *) vb_render resolve RV_KIND="$kind" RV_CLAIM="$id" RV_MISS="$miss" ;;
+esac

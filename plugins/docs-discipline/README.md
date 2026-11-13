@@ -29,6 +29,7 @@ owning repo's run, build, and test targets.
 | verb | what it is | engine (private) |
 |---|---|---|
 | `ctx docs query` | the retrieval CLI: index, projection, section, owner (the most specific claimant by the check's own glob rule), search, rules, pitfalls, edges; `--entry <block>/<key>` prints one entry's raw lines | `docs-query.awk` behind `docs-glob.awk` (`--entry`: `docs-edit.awk`) |
+| `ctx docs get` | one corpus entity whole by its path `<repo>/<slug>/<key>` (an entry's id, `rule/<category>/<rule-slug>`, `<block>/<key>` for another one-token key, or `header`), its stored lines quotes kept; the read a search row names | `docs-entity.awk` (the block shapes and keys from the grammar) |
 | `ctx docs audit` | the grammar and integrity audit: header, blocks, indentation, rule fields, the pitfall required fields and class/severity enums, symbol-only evidence, duplicate ids | `docs-audit.awk` |
 | `ctx docs check` | the change check: coverage, freshness, and dead sources over a status-prefixed delta | `docs-check.awk` behind `docs-glob.awk` |
 | `ctx docs gate` | the close gate: audit then check over the aggregated working-tree delta (a committed range with `--since=<rev>`, or the incoming remote delta with `--drift`), plus a self-planted eight-scenario matrix | self-contained |
@@ -45,7 +46,7 @@ owning repo's run, build, and test targets.
 | `ctx docs remove` | a whole doc out of the corpus (`--dry-run` prints the doc it would delete and writes nothing) | none (the IO helper) |
 | `ctx docs ids` | the one-time migration: keyless contract rules and responsibilities gain `<slug>-r-<token>` and `<slug>-o-<token>` ids | `docs-edit.awk` |
 
-The help surface is engine-owned: `ctx docs help` lists the sixteen verbs and
+The help surface is engine-owned: `ctx docs help` lists the seventeen verbs and
 `ctx docs help <verb>` prints that verb's usage and detail lines. A sole
 `help` argument to a verb refuses with a pointer to the ctx form.
 
@@ -53,7 +54,7 @@ What lands where:
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the two handler files on the unit module's points, the sixteen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
+| `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the two handler files on the unit module's points, the seventeen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
 | `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed (ctx docs write) |
 | `AGENTS.workspace.md` | retired: no root overlay fragment ships; the laws, layout, boot, and close live in the module's laws file | retired |
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
@@ -301,10 +302,11 @@ it walk below runs every one of these.
   unit's in-progress tasks); a workspace without the docs module fires the
   points silently. The close gate stays the close step's, and the plugin ships
   no harness trigger.
-- The five read verbs ride the private engines under
+- The six engine read verbs ride the private engines under
   `.contexture/extensions/modules/docs/scripts/`: audit, check, and nudge hand their
   engine the logical paths the IO helper materialized from the store, query
-  drives its engine with parsed options over the helper's paths, and gate is
+  drives its engine with parsed options over the helper's paths, get runs the
+  entity engine over the one doc it reads and the grammar asset, and gate is
   self-contained over the audit and check engines. The engines' shebang names
   `/usr/bin/awk` (the same launcher form the base scripts use). A system whose
   awk lives elsewhere invokes the engines via `awk -f <path>` instead. The

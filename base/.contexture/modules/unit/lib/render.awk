@@ -673,8 +673,10 @@ function oneline_nl(s) {
 # line or below, to the line before the next non-blank column-0 line, blank lines inside
 # either span kept; a lane journal
 # claim is the span of the last entry carrying that slug, as lane show prints it
-function v_resolve(   k, n, L, i, found, keyed, e, t, claim, w, o) {
+function v_resolve(   k, n, L, i, found, keyed, e, t, claim, w, o, miss) {
   k = ENVIRON["RV_KIND"]
+  miss = ENVIRON["RV_MISS"]
+  if (miss == "") miss = "resolve: error: reference '" ENVIRON["RV_REF"] "' not found in unit '" ENVIRON["RV_UNIT"] "' (ERR_ENTITY_NOT_FOUND)"
   if (k == "task") { put(span("task", "task")); return }
   if (k == "finding") { put(span("finding", "finding")); return }
   if (k == "entry") { put(span("entry", "entry")); return }
@@ -683,7 +685,7 @@ function v_resolve(   k, n, L, i, found, keyed, e, t, claim, w, o) {
   if (k == "lentry") {
     n = nn("items")
     for (i = 1; i <= n; i++) if (kind("items." i, "entry") == "entry" && sv("items." i ".slug") == claim) found = i
-    if (!found) fail("resolve: error: reference '" ENVIRON["RV_REF"] "' not found in unit '" ENVIRON["RV_UNIT"] "' (ERR_ENTITY_NOT_FOUND)")
+    if (!found) fail(miss)
     put(span("items." found, "entry"))
     return
   }
@@ -701,7 +703,7 @@ function v_resolve(   k, n, L, i, found, keyed, e, t, claim, w, o) {
       if (w[2] == claim) { found = i; keyed = 0 }
     }
   }
-  if (!found) fail("resolve: error: reference '" ENVIRON["RV_REF"] "' not found in unit '" ENVIRON["RV_UNIT"] "' (ERR_ENTITY_NOT_FOUND)")
+  if (!found) fail(miss)
   e = found + 1
   if (keyed) { while (e <= n && L[e] !~ /^[^ \t\r]/) e++ }
   else { while (e <= n && L[e] !~ /^@[A-Za-z]/) e++ }

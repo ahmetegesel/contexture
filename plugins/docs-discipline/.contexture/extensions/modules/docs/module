@@ -1,4 +1,4 @@
-# summary: the corpus-first documentation discipline: read (query, audit, check, gate, nudge, changes) and schema-checked write verbs over a typed-block corpus
+# summary: the corpus-first documentation discipline: read (query, get, audit, check, gate, nudge, changes) and schema-checked write verbs over a typed-block corpus
 # version: 1.8.0
 # description:
 # The docs module owns the corpus discipline: the typed-block grammar, the read and

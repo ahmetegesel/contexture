@@ -14,7 +14,7 @@ top README.
 
 The engine discovers `.contexture/modules/unit/`, reads the summary for `ctx help`, and
 builds the verb table from `scripts/*`: an extension-less file with a `# summary:` header
-is a verb. `scripts/data` carries no summary and is private; the 22 verbs are the record's
+is a verb. `scripts/data` carries no summary and is private; the 21 verbs are the record's
 public surface, and `ctx session` is retired (a line naming `ctx unit`).
 
 ## Layout
@@ -26,7 +26,7 @@ laws              the record clauses: @record, @journal, @backlog, @query, @refr
 data              the store declaration: namespace unit, root .contexture/units,
                   fallback_root .contexture/sessions, suffix .md, key <unit>/<path...>,
                   changes false, the document rules
-scripts/<verb>    the 22 record verbs (sh), each sourcing lib/verb.sh
+scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
 scripts/data      the 35 record operations over the store (sh, private), and
                   unit.promote, the sweep behind migrate, outside them
 lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
@@ -176,7 +176,9 @@ unit#<unit>/lane/<lane>/<recipe|journal|report>
 
 A new write validates its canonical `unit#...` refs through the storage core's `data_get`
 before anything lands and refuses a missing target, re-framed with the write's function
-and the ref. The public `ctx unit resolve <unit> <ref>` accepts the same canonical forms
+and the ref. `ctx unit get <unit>/<kind>/<id>` prints the one entity a canonical ref's
+path names (the lane section and lane journal entry forms beside them), read only and lock
+free. The public `ctx unit resolve <unit> <ref>` accepts the same canonical forms
 (the ref carries its target unit) beside the abstract and legacy forms, so a canonical ref
 stored in a source item resolves to its entity. A legacy record target (`journal#<slug>`,
 `task#<slug>`, `knowledge#<NAME>`, `lanes/<lane>/report#<claim>`) and a file pointer stay

@@ -179,11 +179,14 @@ A REF names its target exactly in one of the two pointer shapes of the laws' ref
 - Subagent lane artifacts and claims: `lane#<lane-slug>/<recipe|journal|report>[#<claim>]` (a journal claim names a lane journal entry slug and prints that entry as `ctx lane show` prints it; a recipe or report claim names a section: an `@<claim>` head runs to the next column-0 `@` line, a column-0 `<claim> ::` head, its text on that line or its body below, to the next non-blank column-0 line, blank lines inside either span kept, and the last head naming the claim, in either form, wins)
 - Canonical module refs: `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, `unit#<unit>/lane/<lane>/<recipe|journal|report>` (the ref carries its target unit)
 
-The resolution verb resolves references directly:
+The resolution verb resolves references directly, and the shared read verb prints one entity by its path, everything after `unit#` in its address:
 
 ```bash
 .contexture/ctx unit resolve <unit> <ref>
+.contexture/ctx unit get <unit>/<kind>/<id>
 ```
+
+`ctx unit get` takes `<unit>/task/<slug>`, `<unit>/entry/<slug>`, `<unit>/finding/<NAME>`, `<unit>/lane/<lane>/<recipe|report>` (whole, or one section with `/<SECTION>`), and `<unit>/lane/<lane>/journal/<slug>`; it prints exactly one entity whole in its canonical layout (a task with its `REFS`), never a container listing or the unit state, takes no lock, and refuses a missing entity rc 1 with a named not found, so a dangling reference reads gone.
 
 When given the legacy forms an older record holds (the file-based paths such as `knowledge.md#NAME`, `journal.md#slug`, `backlog.md#slug`, and the legacy lane form `lanes/<lane>/<recipe|journal|report>[#<claim>]`), the CLI normalizes them transparently to entity lookups. Agents author the entity syntax natively, `lane#` for a lane; a canonical ref minted by a write resolves directly.
 
@@ -204,7 +207,7 @@ On an indexed backend, a ranked mode returns high-density contextual snippets or
 Agents follow a snippet-first consumption protocol:
 1. Run `ctx unit search <unit> "<query>" --mode=<mode>` to locate candidates.
 2. Review the compact snippets (and, on a ranked backend, the scores).
-3. Fetch full entity blocks on demand using targeted commands (`ctx unit task show`, `entry show`, `finding show`, or `resolve`).
+3. Fetch full entity blocks on demand using targeted commands (`ctx unit get <path>`, `task show`, `entry show`, `finding show`, or `resolve`).
 
 When human users prompt in non-English languages (such as Turkish), agents translate conceptual terms into English search keywords before querying the record, synthesize findings from the English record, and respond to the user in their language.
 

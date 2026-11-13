@@ -1162,6 +1162,29 @@ docs_show() {
   cat "$DOCS_SCRATCH/new"
 }
 
+# docs_get <repo> <slug> <key>: one entity's stored lines (the get verb): the doc read
+# through store.get, then the entity engine behind the grammar asset (the block shapes and
+# keys); rc 1 names an absent doc or entity, rc 2 a storage or engine failure
+docs_get() {
+  docs_keys_ok "$1" "$2" || return 1
+  docs_require || return 2
+  docs_scratch || return 2
+  docs_template || return 2
+  docs_read_doc "$1" "$2" "$DOCS_SCRATCH/doc" || return $?
+  if DE_MODE=get DE_KEY=$3 awk -f "$DOCS_DIR/docs-entity.awk" part=1 "$DOCS_TEMPLATE" part=2 "$DOCS_SCRATCH/doc" > "$DOCS_SCRATCH/entity"; then
+    cat "$DOCS_SCRATCH/entity"
+    return 0
+  else
+    dg_rc=$?
+  fi
+  if [ "$dg_rc" -eq 3 ]; then
+    printf "%s: no entity '%s' in %s/%s (ERR_ENTITY_NOT_FOUND)\n" "$DOCS_VERB" "$3" "$1" "$2" >&2
+    return 1
+  fi
+  printf '%s: the entity engine failed (rc %s) (ERR_STORAGE_READ)\n' "$DOCS_VERB" "$dg_rc" >&2
+  return 2
+}
+
 # docs_remove_doc <repo> <slug>: store.delete with op remove, stamped with the HEAD; a dry
 # run prints the verb's line and the stored doc whole, then writes nothing
 docs_remove_doc() {
