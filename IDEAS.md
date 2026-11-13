@@ -347,3 +347,26 @@
     The gap law: the corpus names knowledge and the finding verbs but never the fields, so the question took a source read through a lane. Moved out of knowledge-promotion, whose objective became the core foundation for workspace data.
   REF: "unit#knowledge-promotion"
   STATUS: OPEN
+
+@idea docs-guide-surface
+  DUMPED: 2026-11-13
+  WHAT :: Give the docs discipline a typed surface for the tracked product guides (the user manual, the product vision) that the code-grounded corpus cannot carry: a guide template, a guide-authoring rhythm, or a light check parallel to the corpus audit.
+  WHY :: The corpus is code-grounded by design, so product depth and the user manual fall to untyped tracked guides; the retired four-pillar template was the last guide shape, and the discipline now has no shape or check for it.
+  REF: "unit#synaptiq-integration/entry/2026-11-13-event-1794598562"
+  STATUS: OPEN
+
+@idea ctx-run-archive-corruption
+  DUMPED: 2026-11-13
+  WHAT :: Make ctx run pass a binary stream through untouched: a git archive piped through the runner is corrupted (747520 bytes raw, and an unrecognized archive or a short stream through the runner), so the documented install must dodge it with one sh -c or COMPACT_DISABLE=1.
+  WHY :: The runner classifies by command identity and stream signature; a binary archive matches no filter yet the stream is altered, a false result class the dont-fool-yourself law names, and every adopter's install hits it.
+  REF: "unit#synaptiq-integration/entry/2026-11-13-event-1794602713"
+  STATUS: OPEN
+
+@idea knowledge-promotion-extension
+  DUMPED: 2026-11-13
+  WHAT ::
+    An extension that promotes durable, general unit findings into workspace containers on the new foundation: it chooses a target among the declared containers by their descriptions (or the docs corpus for code-anchored facts), maps a finding onto the target container's fields (the NAME collides across units, so generated ids or a name field), decides whether a kind field marks what can go stale (a fact) against what is history (a decision, a ruled-out option), writes the record through the target's own verbs, and closes the loop with a pointer: a finding update carrying the promoted record's full address (resending every REF, and what becomes of the SUMMARY), written before the unit closes. It may also carry the delivery tiers: injecting discoverable knowledge where it is needed.
+  WHY ::
+    Contexture promises modularity and foundations, never big things; promotion was never a core promise. The knowledge-promotion unit turned into the foundation that makes this possible (containers with descriptions, full address refs, the shared get, the write-time ref check) and parked the rest here so it does not die in its record.
+  REF: "unit#knowledge-promotion/entry/2026-11-13-event-1794604940"
+  STATUS: OPEN
