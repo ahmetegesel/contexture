@@ -370,3 +370,12 @@
     Contexture promises modularity and foundations, never big things; promotion was never a core promise. The knowledge-promotion unit turned into the foundation that makes this possible (containers with descriptions, full address refs, the shared get, the write-time ref check) and parked the rest here so it does not die in its record.
   REF: "unit#knowledge-promotion/entry/2026-11-13-event-1794604940"
   STATUS: OPEN
+
+@idea contexture-corpus-runtime-coverage
+  DUMPED: 2026-11-13
+  WHAT ::
+    The contexture workspace corpus leaves 11 base runtime files unclaimed (ctx, package-install, package-uninstall, laws/compose, and 7 storage scripts), so a contexture delta touching them fails ctx docs check.
+  WHY ::
+    The review-phase1 guard run surfaced the pre-existing coverage gap while checking the synaptiq install commit; it is out of scope for the synaptiq migration but the corpus guard reads it on any contexture delta.
+  REF: "lane#review-phase1/report"
+  STATUS: OPEN
