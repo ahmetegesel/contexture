@@ -338,3 +338,12 @@
     Ideas outlive the conversation that dumped them, so a pointer that cannot be fixed or resolved decays into prose, which the record rules call a defect. The container redesign in knowledge-promotion would likely cover the edit half, since ideas would become a container written through the core.
   REF: "unit#knowledge-promotion"
   STATUS: OPEN
+
+@idea finding-schema-doc
+  DUMPED: 2026-11-13
+  WHAT ::
+    The record's owning corpus doc gains a contract rule naming what a unit finding holds as it stands: NAME (upper case on write), SUMMARY, REF lines, an optional SUPERSEDES, the derived active and superseded_by, untyped extra fields kept, no classification field, the audit's single knowledge check (unharvested KNOWLEDGE flags), and the two knowledge filters (search by the finding entity, list active only); the modules doc's storage declaration rule may gain the unit module's own declaration as its example. All of it path-free, written through the ctx docs verbs. Starting text: the DOC_GAP section of the knowledge-schema-census lane report in unit knowledge-promotion.
+  WHY ::
+    The gap law: the corpus names knowledge and the finding verbs but never the fields, so the question took a source read through a lane. Moved out of knowledge-promotion, whose objective became the core foundation for workspace data.
+  REF: "unit#knowledge-promotion"
+  STATUS: OPEN
