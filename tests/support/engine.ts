@@ -5,6 +5,7 @@ import { exec, type Run } from './exec';
 import { ROOT } from './root';
 
 export const UNIT_LIB = join(ROOT, 'base/.contexture/modules/unit/lib');
+export const CORE_JSON = join(ROOT, 'base/.contexture/storage/scripts/json.awk');
 const ENGINE = ['canon.awk', 'model.awk', 'ops.awk'].flatMap((p) => ['-f', join(UNIT_LIB, p)]);
 const SEARCH = ['canon.awk', 'model.awk', 'search.awk'].flatMap((p) => ['-f', join(UNIT_LIB, p)]);
 const IDENT = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
@@ -266,7 +267,7 @@ async function searchCall(sb: string, argv: readonly string[], input: string, m:
 }
 
 export async function renderView(cwd: string, view: string, answer: string, env: Record<string, string> = {}): Promise<Run> {
-  const flat = await exec('awk', ['-f', join(UNIT_LIB, 'json.awk')], { cwd, input: answer });
+  const flat = await exec('awk', ['-f', CORE_JSON], { cwd, input: answer });
   if (flat.code !== 0) return flat;
   return exec('awk', ['-f', join(UNIT_LIB, 'render.awk')], { cwd, input: flat.stdout, env: { RV_VIEW: view, ...env } });
 }

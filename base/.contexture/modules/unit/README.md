@@ -30,13 +30,11 @@ scripts/<verb>    the 22 record verbs (sh), each sourcing lib/verb.sh
 scripts/data      the 35 record operations over the store (sh, private), and
                   unit.promote, the sweep behind migrate, outside them
 lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
-lib/json.awk      the one flattener: a function's JSON answer to path=value lines
 lib/render.awk    the one renderer of every text view
 lib/canon.awk     the canonical renderer and the JSON string form
 lib/model.awk     the legacy parse, the typed items, the derived fields, the schema JSON
 lib/ops.awk       the record rules: the writes, the reads, the audit, the liveness
 lib/search.awk    the exact search over the canonical render
-lib/store-json.awk the flattener for the store.search ranked answer
 lib/ranked.awk    the store ranked answer mapped into the record's search shape
 lib/refs.awk      the refs of a write payload
 lib/payfield.awk  one decoded payload value

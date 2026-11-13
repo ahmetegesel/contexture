@@ -12,6 +12,8 @@ storage/
   scripts/store-search      the private exact and document-derivation search engine
   scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
   scripts/store-b64         the private base64 encoder of a stored value
+  scripts/json.awk          the one JSON flattener: a storage answer to path=value lines, read
+                            by the unit, rhythm, and docs modules
   scripts/library           the module-facing interface, sourced by a module's scripts
   drivers/posix/            the zero-dependency baseline driver (sh and awk)
   README.md                 this contract

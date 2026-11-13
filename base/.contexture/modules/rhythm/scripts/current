@@ -29,9 +29,13 @@ case "$unit" in
     ;;
 esac
 
-json="$drawer/modules/unit/lib/json.awk"
+json="$drawer/storage/scripts/json.awk"
 lib="$drawer/modules/unit/lib/verb.sh"
-if [ ! -f "$json" ] || [ ! -f "$lib" ]; then
+if [ ! -f "$json" ]; then
+  printf 'rhythm current: error: the storage core is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+  exit 2
+fi
+if [ ! -f "$lib" ]; then
   printf 'rhythm current: error: the unit module is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
   exit 2
 fi

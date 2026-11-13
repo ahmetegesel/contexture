@@ -1,7 +1,7 @@
 # verb.sh: the shared shell of the unit and lane verbs (contract 3, docs/the-engine.md,
 # The descriptor and the handshake). A verb sources this file, checks its input shape, calls
-# exactly one function per record act, and renders the answer with lib/json.awk (the one
-# flattener) and lib/render.awk (the one renderer). No verb reads or writes a record
+# exactly one function per record act, and renders the answer with the storage core's
+# json.awk (the one flattener) and lib/render.awk (the one renderer). No verb reads or writes a record
 # artifact itself: the record's 35 operations are the unit module data script's over the
 # configured store, and its record rules (a CLOSED unit, a repeated key, the status
 # moves) are the module's; capability and storage.health stay the driver's,
@@ -41,7 +41,14 @@ for vb_rr in "$VB_LIB/../../rhythm/scripts/resolve" \
              "${CTX_ROOT:-$PWD}/base/.contexture/modules/rhythm/scripts/resolve"; do
   if [ -f "$vb_rr" ]; then VB_RHYTHM_RESOLVE=$vb_rr; break; fi
 done
-VB_JSON="$VB_LIB/json.awk"
+# the storage core's flattener decodes every answer; the core beside the module wins, then
+# the workspace drawer, then the base mirror
+VB_JSON="$VB_LIB/../../../storage/scripts/json.awk"
+for vb_js in "$VB_JSON" \
+             "${CTX_ROOT:-$PWD}/.contexture/storage/scripts/json.awk" \
+             "${CTX_ROOT:-$PWD}/base/.contexture/storage/scripts/json.awk"; do
+  if [ -f "$vb_js" ]; then VB_JSON=$vb_js; break; fi
+done
 VB_RENDER="$VB_LIB/render.awk"
 VB_DIR=""
 VB_PAY=""

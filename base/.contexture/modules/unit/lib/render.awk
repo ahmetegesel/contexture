@@ -1,6 +1,6 @@
 # render.awk: the one renderer of base (contract 2, docs/the-engine.md, the rendering of
 # every text view). Base maps a command to one storage function; the function answers
-# JSON; lib/json.awk flattens it into path lines; this program reads those lines on
+# JSON; the storage core's json.awk flattens it into path lines; this program reads those lines on
 # stdin and prints the view ENVIRON["RV_VIEW"] names. Every backend's answer renders
 # through the same code, so every backend prints the same text for the same record.
 #

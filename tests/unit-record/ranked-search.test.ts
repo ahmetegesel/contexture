@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
-import { UNIT_LIB } from '../support/engine';
+import { CORE_JSON, UNIT_LIB } from '../support/engine';
 import { exec } from '../support/exec';
 import { COMPLIANCE, ok } from '../support/record';
 import { sandbox } from '../support/sandbox';
@@ -24,7 +24,7 @@ async function seedNeedles(sb: string): Promise<void> {
 
 async function ranked(env: Record<string, string>): Promise<any> {
   const cwd = sandbox('ranked');
-  const flat = await exec('awk', ['-f', join(UNIT_LIB, 'store-json.awk')], { cwd, input: readFileSync(CANNED) });
+  const flat = await exec('awk', ['-f', CORE_JSON], { cwd, input: readFileSync(CANNED) });
   expect(flat.code, flat.stderr).toBe(0);
   const mapped = await exec('awk', MAPPED, { cwd, input: flat.stdout, env: { RQ_UNIT: 'u1', RQ_QUERY: 'needle', RQ_MODE: 'hybrid', RQ_LIMIT: '20', RQ_ENTITY: 'all', ...env } });
   return answer(mapped, 'ranked.awk');

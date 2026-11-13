@@ -46,11 +46,10 @@ docs_io_init() {
   [ -n "$di_root" ] || di_root=$(CDPATH= cd -- "$1/../../.." && pwd)
   DOCS_ROOT="${DOCS_WORKSPACE_ROOT:-${CTX_ROOT:-$di_root}}"
   DOCS_ROOT_P=$(CDPATH= cd -- "$DOCS_ROOT" 2>/dev/null && pwd) || DOCS_ROOT_P=""
-  # the storage core and the unit lib resolve from CTX_ROOT, never a relative walk:
-  # the docs module may sit under the extension root, one level deeper than the
-  # workspace modules root, so a relative climb would leave the core's tree. The core
-  # resolver and the base mirror are tried in that order; the JSON decoder is the unit
-  # module's (the resolver's sibling lib is not the decoder's home).
+  # the storage core resolves from CTX_ROOT, never a relative walk: the docs module may
+  # sit under the extension root, one level deeper than the workspace modules root, so a
+  # relative climb would leave the core's tree. The core drawer and the base mirror are
+  # tried in that order for the resolver, the library, and the JSON decoder alike.
   di_ctx="${CTX_ROOT:-$DOCS_ROOT}"
   DOCS_RESOLVER=""
   for di_c in "$di_ctx/.contexture/storage/scripts/driver-resolver" \
@@ -63,8 +62,8 @@ docs_io_init() {
     if [ -f "$di_c" ]; then DOCS_LIB=$di_c; break; fi
   done
   DOCS_JSON=""
-  for di_c in "$di_ctx/.contexture/modules/unit/lib/json.awk" \
-              "$di_ctx/base/.contexture/modules/unit/lib/json.awk"; do
+  for di_c in "$di_ctx/.contexture/storage/scripts/json.awk" \
+              "$di_ctx/base/.contexture/storage/scripts/json.awk"; do
     if [ -f "$di_c" ]; then DOCS_JSON=$di_c; break; fi
   done
   if [ -n "$DOCS_LIB" ]; then
@@ -139,7 +138,7 @@ docs_keys() {
     return "$dk_rc"
   fi
   if [ -z "$DOCS_JSON" ]; then
-    printf '%s: the storage answer decoder is missing (need: the unit module lib/json.awk) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    printf '%s: the storage answer decoder is missing (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
     DOCS_KEYS=""
     return 2
   fi
@@ -606,7 +605,7 @@ docs_corpus_untracked() {
 # <seq> TAB <at> TAB <op> TAB <key> TAB <head> TAB <prior>, oldest first
 docs_store_changes_rows() {
   if [ -z "$DOCS_JSON" ]; then
-    printf '%s: the storage answer decoder is missing (need: the unit module lib/json.awk) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    printf '%s: the storage answer decoder is missing (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
     return 2
   fi
   if ! awk -f "$DOCS_JSON" < "$1" > "$2.flat" 2> "$2.err"; then

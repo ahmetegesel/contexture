@@ -1,7 +1,9 @@
-# json.awk: the unit module's JSON flattener (the storage contract's answer form).
+# json.awk: the storage core's one JSON flattener (docs/the-engine.md, The wire).
 #
-# A storage function answers one compact JSON object; the ranked search path decodes the
-# store.search answer here, once, into path lines; no code greps JSON.
+# A storage function answers one compact JSON object; every reader decodes it here, once,
+# into path lines (the unit module's renderer, the ranked search mapping, the rhythm
+# module's current verb, and the docs module's store reads);
+# no verb greps JSON.
 #
 # Input: the answer on stdin (one JSON text; lines are joined with a newline, which JSON
 # reads as whitespace). Output, one line per value, in document order:

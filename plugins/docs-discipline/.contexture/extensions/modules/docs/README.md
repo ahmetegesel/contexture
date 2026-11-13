@@ -58,7 +58,7 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   `store.list`, reads each key with `store.get` into the module's scratch at
   `docs/<repo>/<slug>.md`, and runs the engines there; no driver parses a doc
   and no mount is materialized by a driver. The store answer is flattened with
-  the unit module's `lib/json.awk`. Every view prints the logical address
+  the storage core's flattener (`scripts/json.awk`). Every view prints the logical address
   `docs/<repo>/<slug>.md`, whatever the caller's spelling and whatever the
   driver; the old display-path mapping and the draft-path refusal retire
   because the stored bytes are what a verb reads. Driver calls run from the
@@ -238,7 +238,7 @@ The instruments resolve the workspace root in this order:
 `docs-io.sh` resolves it once for every verb and hands the same root to the
 storage driver (as its cwd and `CTX_ROOT`), so the corpus the driver serves
 and the root the verb reports agree. The storage core's resolver and library
-and the unit module's JSON decoder resolve from that same `CTX_ROOT` (the
+and its JSON decoder resolve from that same `CTX_ROOT` (the
 core drawer or the base mirror), never by a relative climb from the module
 folder, so the docs module works under the modules root and the extension root
 alike; the grammar asset is the one path resolved beside the module. The gate's git
