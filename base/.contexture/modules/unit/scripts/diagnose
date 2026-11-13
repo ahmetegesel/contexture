@@ -139,7 +139,8 @@ else
   printf '  storage driver:  %s (source: %s)\n' "$driver_name" "$driver_source"
   if [ "$driver_status" = "ok" ]; then
     printf '  driver status:   ok\n'
-    awk -f "$VB_JSON" < "$VB_DIR/cap" | RV_VIEW=diagnose awk -f "$VB_RENDER"
+    reg=$("$VB_RESOLVER" modes < /dev/null 2>/dev/null | awk -F '\t' '$1 != "" { o = o (o == "" ? "" : ", ") $1 } END { print o }')
+    awk -f "$VB_JSON" < "$VB_DIR/cap" | RV_MODES="$reg" RV_VIEW=diagnose awk -f "$VB_RENDER"
   else
     printf '  driver status:   error (%s)\n' "$driver_err"
   fi

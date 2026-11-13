@@ -27,7 +27,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       }, 'fts5', 'fts5-docs'),
       seed(async (sb) => {
         dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
-        dataFile(sb, 'modules', 'exactonly', 'namespace: exactonly\nroot: exact-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nmodes: exact\n');
+        dataFile(sb, 'modules', 'exactonly', 'namespace: exactonly\nroot: exact-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
         const s = store(sb, 'fts5');
         for (const ns of Object.keys(SEARCH_DATA)) {
           dataFile(sb, 'modules', ns, SEARCH_DATA[ns]);
@@ -74,15 +74,22 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       if (mode === 'hybrid') for (const r of a.results) expect(r.score).toBeGreaterThan(0);
     });
 
-    it.each([['flatdoc', 'f1/x'], ['genericdoc', 'g1/x'], ['jsondoc', 'j1/x']])('[plugins-r8] ranks the %s module as one body document', async (ns, key) => {
+    it.each([['flatdoc', 'f1/x'], ['jsondoc', 'j1/x']])('[plugins-r8] ranks the %s module as one body document', async (ns, key) => {
       const a = await ranked(ns, 'hybrid', 'needle');
       expect(a.results).toEqual([expect.objectContaining({ key, entity_type: 'document', entity_id: key, section: 'body' })]);
       expect(a.results[0].score).toBeGreaterThan(0);
     });
 
-    it('[modules-r10] refuses a mode the module does not declare, by name', async () => {
-      refused(await store(fresh(searched), 'fts5').search('exactonly', 'hybrid', '20', q('needle')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
-        "mode 'hybrid' is not declared by namespace 'exactonly'; declared modes: exact");
+    it.each(['exactonly', 'genericdoc'])('[plugins-r8] refuses a ranked mode on the %s module, which declares no search schema, naming exact as the answerable mode', async (ns) => {
+      for (const mode of ['hybrid', 'trigram']) {
+        refused(await store(fresh(searched), 'fts5').search(ns, mode, '20', q('needle')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
+          `mode '${mode}' needs a declared search schema; answerable modes: exact`);
+      }
+    });
+
+    it('[the-engine-r8] refuses a mode the driver does not register, naming its registry', async () => {
+      refused(await store(fresh(searched), 'fts5').search('searchdoc', 'fuzzy', '20', q('needle')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
+        "mode 'fuzzy' is not registered; registered modes: exact, hybrid, trigram");
     });
 
     it('[plugins-r8] answers a query holding a double quote on one line, a lone quote with no rows', async () => {

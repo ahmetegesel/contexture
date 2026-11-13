@@ -119,9 +119,14 @@ module writes through the store, and the core never re-renders a module's gramma
 legacy value is searched as stored). The document set comes from the search schema: the
 flat form indexes one document per key (section `body`), the document-set form derives one
 document per entity at write time and ranks those documents in the fts5 store index; a
-module with no schema falls back to the generic raw value. A ranked mode answers only
-where the configured driver declares it (fts5: `hybrid` and `trigram`); posix declares
-exact alone and refuses a ranked mode by name. The driver declares the optional
+module with no schema falls back to the generic raw value for exact. Search modes are
+registered by the driver, never declared by a module: the descriptor's `search_modes` is a
+list of `{name, description}` objects, `driver-resolver modes` prints the registry one
+`name<TAB>description` line per mode, and the library's `store_modes [<namespace>]`
+answers it, or with a namespace the modes that namespace can answer. A ranked mode answers
+only where the configured driver registers it (fts5: `hybrid` and `trigram`) and only over
+a namespace whose data file declares a search schema; posix registers exact alone and
+refuses any other mode naming its registry. The driver declares the optional
 `search.schema` token when it consumes a declared schema. Posix declares the optional
 tokens `store` and `store.promote`; the resolver refuses any optional token outside
 `store`, `store.changelog`, `search.schema`, and `store.promote`.
@@ -163,7 +168,6 @@ format: text|json                   # optional; flat only; default text
 fields: <field>, <field>            # optional; flat only; the JSON fields to rank
 title: <field>|key|head             # optional; flat default key, documents default head
 snippet: line                       # optional; default line
-modes: exact, hybrid, trigram       # optional; default exact; exact is required
 document: <key-pattern> <section> <entity-type> <head-marker|->   # repeatable
 ```
 
@@ -181,10 +185,12 @@ and defaults to `false`. The search form is `flat` (one document per key, sectio
 column-0 head marker that starts an entity; a key no rule covers stays searchable as one
 generic document). The reader refuses an unknown field. The module directory beside the
 data file is the owner, and a second data file declaring the same namespace refuses.
-`store-data <namespace>` answers one namespace on twelve fixed lines, then the document
+`store-data <namespace>` answers one namespace on eleven fixed lines, then the document
 rules, and never the fallback root, so a parser reading by position ignores the field;
-`store-data <namespace> --with-fallback` answers the fallback root as line 13 (an empty
-line when none is declared) and the rules from line 14, the form the posix driver reads;
+`store-data <namespace> --with-fallback` answers the fallback root as line 12 (an empty
+line when none is declared) and the rules from line 13, the form the posix driver reads;
+a data file names no search modes, and a `modes` line refuses as an unknown field naming
+the fix;
 any other second argument refuses rc 1. `store-data --list` answers every valid
 declaration of both module roots, one `<namespace><TAB><root>` line each (the root the
 namespace when none is declared, then `<TAB><fallback root>` when one is declared), sorted

@@ -31,12 +31,12 @@ describe.concurrent('ctx unit search on posix', () => {
     expect(out).not.toContain('"file":');
   });
 
-  it('X-m E3-2 [the-record-r13]: a search without --mode refuses before any call naming the declared modes; diagnose lists them', async () => {
+  it('X-m E3-2 [the-record-r13]: a search without --mode refuses before any call naming the registered modes; diagnose lists them', async () => {
     const sb = fresh(sb0);
     const r = await search(sb, 'task');
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^search: error: --mode is required/m);
-    expect(r.stderr).toMatch(/declared modes: exact \(ERR_INVALID_ARGUMENT\)$/m);
+    expect(r.stderr).toMatch(/registered modes: exact \(ERR_INVALID_ARGUMENT\)$/m);
     expect((await search(sb, 'task', '--json')).stdout).toBe('');
     expect((await unit(sb, 'diagnose')).stdout).toMatch(/^ {2}search modes: {4}exact$/m);
   });

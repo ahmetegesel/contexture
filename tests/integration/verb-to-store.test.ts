@@ -89,7 +89,7 @@ const STORE = ['list', 'get', 'put', 'delete', 'changes', 'batch', 'scan'];
 
 function plantDriver(sb: string, name: string, without?: string): string {
   const log = join(sb, `${name}.calls`);
-  const card = JSON.stringify({ driver: name, version: '3.0.0', contract: '3', store: STORE.filter((s) => s !== without), search_modes: ['exact'], optional: [] });
+  const card = JSON.stringify({ driver: name, version: '3.0.0', contract: '3', store: STORE.filter((s) => s !== without), search_modes: [{ name: 'exact', description: 'the exact rule' }], optional: [] });
   put(
     join(sb, '.contexture/extensions/storage/drivers', name, 'driver'),
     [

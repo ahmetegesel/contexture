@@ -747,23 +747,16 @@ u_search() {
   u_scratch
   u_want_held "$U_UNIT"
   u_payload
-  u_sq_modes=$(store_lib_call capability capability 2>/dev/null | LC_ALL=C awk '
-    {
-      if (!match($0, /"search_modes":\[/)) next
-      s = substr($0, RSTART + RLENGTH)
-      sub(/\].*$/, "", s)
-      n = split(s, P, /","/)
-      o = ""
-      for (i = 1; i <= n; i++) { v = P[i]; gsub(/"/, "", v); o = o (i > 1 ? ", " : "") v }
-      print o
-    }')
+  # the modes this namespace can answer: the driver's registry filtered by the unit's
+  # declared search schema, read through the storage core's library
+  u_sq_modes=$(store_modes "$U_NS" 2>/dev/null | cut -f 1 | LC_ALL=C awk '{ o = o (NR > 1 ? ", " : "") $0 } END { print o }')
   if [ -n "$u_sq_modes" ]; then
     u_sq_ok=0
     for u_sq_m in $(printf '%s' "$u_sq_modes" | tr ',' ' '); do
       [ "$u_sq_m" = "$sq_mode" ] && u_sq_ok=1
     done
     if [ "$u_sq_ok" -eq 0 ]; then
-      printf '%s: error: mode '\''%s'\'' is not supported; declared modes: %s (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$sq_mode" "$u_sq_modes" >&2
+      printf '%s: error: mode '\''%s'\'' is not supported; answerable modes: %s (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$sq_mode" "$u_sq_modes" >&2
       exit 1
     fi
   fi

@@ -17,7 +17,7 @@
 #     search schema's signature, stored with each row.
 #
 # The schema grammar is store-data's: search flat|documents, format text|json (flat),
-# fields (flat), title, snippet, modes, and the repeatable document rule
+# fields (flat), title, snippet, and the repeatable document rule
 # <key-pattern> <section> <entity-type> <head-marker|->. The exact rule is one line of the
 # raw value, ASCII-case folded, a column-0 comment never matching, one result per entity
 # and section, the first matching line as the snippet. A key no document rule covers

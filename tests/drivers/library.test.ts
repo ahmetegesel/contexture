@@ -8,7 +8,7 @@ import { shFunction } from '../support/sh';
 import { fresh, seed } from '../support/snapshot';
 import { DRIVERS, type Driver, fts5Available } from '../support/stage';
 import { batchPayload } from '../support/store';
-import { answer, refused } from '../support/wire';
+import { answer, refused, refusedLike } from '../support/wire';
 
 const LIBRARY = '.contexture/storage/scripts/library';
 const LIBPROBE = 'namespace: libprobe\nroot: libprobe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n';
@@ -35,6 +35,19 @@ for (const driver of DRIVERS) {
       expect((await lib(sb, 'store_get', ['libprobe', 'x/y'])).stdout).toBe('library-value\n');
       expect((await lib(sb, 'store_list', ['libprobe'])).stdout).toBe('{"namespace":"libprobe","keys":["x/y"]}\n');
       expect((await lib(sb, 'store_delete', ['libprobe', 'x/y'])).stdout).toBe('{"namespace":"libprobe","key":"x/y","op":"remove"}\n');
+    });
+
+    it('[the-engine-r8] store_modes answers the registry, and per namespace the modes it can answer: a ranked mode only under a declared search schema', async () => {
+      const sb = fresh(snap);
+      dataFile(sb, 'modules', 'schemaprobe', 'namespace: schemaprobe\nroot: schemaprobe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\n');
+      const names = (out: string) => out.split('\n').filter(Boolean).map((l) => l.split('\t')[0]);
+      const registry = driver === 'posix' ? ['exact'] : ['exact', 'hybrid', 'trigram'];
+      const all = await lib(sb, 'store_modes');
+      expect([all.code, all.stderr, names(all.stdout)]).toEqual([0, '', registry]);
+      for (const line of all.stdout.split('\n').filter(Boolean)) expect(line).toMatch(/^[a-z]+\t\S.*$/);
+      expect(names((await lib(sb, 'store_modes', ['schemaprobe'])).stdout)).toEqual(registry);
+      expect(names((await lib(sb, 'store_modes', ['libprobe'])).stdout)).toEqual(['exact']);
+      refusedLike(await lib(sb, 'store_modes', ['nosuchns']), 'store.modes', 1, 'ERR_ENTITY_NOT_FOUND');
     });
 
     it('[the-engine-r-b3r6t] store_promote reaches the driver\'s optional promotion through the core resolver', async () => {

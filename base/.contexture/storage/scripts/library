@@ -12,6 +12,7 @@
 #   store.batch <namespace>                                          (actions on stdin)
 #   store.scan <namespace>
 #   store.search <namespace> <query> <mode> [<limit>]                (query on stdin; 0 = all)
+#   store.modes [<namespace>]
 #   store.promote <namespace> <prefix>                              (optional capability)
 #   store.require <capability>...
 #   store.has <capability>
@@ -113,23 +114,29 @@ store_require() { store_lib_call store.require require "$@"; }
 store_has() { store_lib_call store.has has "$@"; }
 store_promote() { store_lib_call store.promote store.promote "$@"; }
 
+# store_lib_data: the storage core's data reader, found beside the resolver this library
+# calls (the core scripts folder holds both), then under the drawer, then in the base mirror
+store_lib_data() {
+  sld_root=$(store_lib_root)
+  sld_beside=""
+  if sld_resolver=$(store_lib_resolver); then sld_beside="${sld_resolver%/*}/store-data"; fi
+  for sld_c in "$sld_beside" "$sld_root/.contexture/storage/scripts/store-data" \
+               "$sld_root/base/.contexture/storage/scripts/store-data"; do
+    if [ -n "$sld_c" ] && [ -x "$sld_c" ]; then printf '%s\n' "$sld_c"; return 0; fi
+  done
+  return 1
+}
+
 # store_roots: the declared store roots, namespace TAB root per line (a fallback root on its
 # own line after the root), from the storage core's data reader found beside the resolver
 # this library calls (the core scripts folder holds both), then under the drawer, then in
 # the base mirror, run from the workspace root
 store_roots() {
   sr_root=$(store_lib_root)
-  sr_script=""
-  sr_beside=""
-  if sr_resolver=$(store_lib_resolver); then sr_beside="${sr_resolver%/*}/store-data"; fi
-  for sr_c in "$sr_beside" "$sr_root/.contexture/storage/scripts/store-data" \
-              "$sr_root/base/.contexture/storage/scripts/store-data"; do
-    if [ -n "$sr_c" ] && [ -x "$sr_c" ]; then sr_script=$sr_c; break; fi
-  done
-  if [ -z "$sr_script" ]; then
+  sr_script=$(store_lib_data) || {
     printf 'store.roots: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
     return 2
-  fi
+  }
   sr_out=$(CTX_STORE_WORKSPACE=$sr_root "$sr_script" --list) || return $?
   [ -n "$sr_out" ] || return 0
   printf '%s\n' "$sr_out" | LC_ALL=C awk -F '\t' '{ print $1 "\t" $2; if ($3 != "") print $1 "\t" $3 }'
@@ -168,6 +175,42 @@ store_lib_escape() {
 store_search() {
   ss_ns=${1:-}; ss_q=${2:-}; ss_mode=${3:-}; ss_lim=${4:-20}
   printf 'query=%s\n' "$(store_lib_escape "$ss_q")" | store_lib_call store.search store.search "$ss_ns" "$ss_mode" "$ss_lim"
+}
+
+# store_modes [<namespace>]: the search mode registry, one name TAB description line per
+# mode in the configured driver's order, the modes being registered by the driver's
+# descriptor and never declared by a module (exact is always among them). With a namespace it
+# answers the modes that namespace can answer: exact always, a ranked mode only when the
+# namespace's data file declares a search schema, since a ranked mode reads the documents a
+# schema derives. A namespace no data file declares refuses rc 1 ERR_ENTITY_NOT_FOUND, a
+# malformed one rc 1 ERR_INVALID_ARGUMENT, a missing reader or resolver rc 2.
+store_modes() {
+  if [ $# -gt 1 ]; then
+    printf 'store.modes: error: store.modes takes at most a namespace (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  sm_reg=$(store_lib_call store.modes modes < /dev/null) || return $?
+  if [ $# -eq 0 ]; then
+    [ -z "$sm_reg" ] || printf '%s\n' "$sm_reg"
+    return 0
+  fi
+  sm_script=$(store_lib_data) || {
+    printf 'store.modes: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+    return 2
+  }
+  sm_out=$(CTX_STORE_WORKSPACE=$(store_lib_root) "$sm_script" "$1" 2>&1)
+  sm_rc=$?
+  if [ "$sm_rc" -ne 0 ]; then
+    sm_msg=$(printf '%s\n' "$sm_out" | head -n 1)
+    sm_msg=${sm_msg#store-data: }
+    case "$sm_rc" in
+      3) printf 'store.modes: error: %s (ERR_ENTITY_NOT_FOUND)\n' "$sm_msg" >&2; return 1 ;;
+      2) printf 'store.modes: error: %s (ERR_STORAGE_READ)\n' "$sm_msg" >&2; return 2 ;;
+      *) printf 'store.modes: error: %s (ERR_INVALID_ARGUMENT)\n' "$sm_msg" >&2; return 1 ;;
+    esac
+  fi
+  sm_form=$(printf '%s\n' "$sm_out" | sed -n '7p')
+  printf '%s\n' "$sm_reg" | SM_FORM="$sm_form" LC_ALL=C awk -F '\t' '$1 != "" && ($1 == "exact" || ENVIRON["SM_FORM"] != "")'
 }
 
 # data_lib_ref_ok <ref>: one <module>#<symbol> token, both sides non-empty, no blank or

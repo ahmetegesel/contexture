@@ -36,17 +36,17 @@ async function refusal(sb: string, ns: string, rc: number, reason: string): Prom
 const probe = (fields: string) => `namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\n${fields}`;
 
 describe.concurrent('store-data, the data file reader', () => {
-  it('[modules-r10] answers a docs-shaped declaration from the extension root on twelve lines, the data file path among them', async () => {
+  it('[modules-r10] answers a docs-shaped declaration from the extension root on eleven lines, the data file path among them', async () => {
     const sb = workspace();
     expect(await answerLines(sb, 'docs')).toEqual([
-      'docs', 'docs', '.md', '<repo>/<slug>', 'true', join(moduleDir(sb, 'extensions', 'docs'), 'data'), '', '', '', 'key', 'line', 'exact',
+      'docs', 'docs', '.md', '<repo>/<slug>', 'true', join(moduleDir(sb, 'extensions', 'docs'), 'data'), '', '', '', 'key', 'line',
     ]);
   });
 
   it('[modules-r10] a declaration of namespace and key alone takes the defaults: root the namespace, an empty suffix, changes false', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
-    expect(await answerLines(sb, 'minimal')).toEqual(['minimal', 'minimal', '', '<a>/<b>', 'false', file, '', '', '', 'key', 'line', 'exact']);
+    expect(await answerLines(sb, 'minimal')).toEqual(['minimal', 'minimal', '', '<a>/<b>', 'false', file, '', '', '', 'key', 'line']);
   });
 
   it('[modules-r10, the-engine-p4] a second module declaring the namespace refuses, naming both owners', async () => {
@@ -90,8 +90,7 @@ describe.concurrent('store-data, the data file reader', () => {
     ['a document form with a format', probe('search: documents\nformat: text\ndocument: <a>/<b> body document -\n'), 'the document-set search form takes no format or fields'],
     ['a document rule on the flat form', probe('search: flat\ndocument: <a>/<b> body document -\n'), 'a document rule needs the document-set search form'],
     ['a three-token document rule', probe('changes: false\nsearch: documents\ndocument: <a>/<b> body document\n'), 'line 7: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)'],
-    ['a repeated mode', probe('search: flat\nmodes: exact, exact\n'), "duplicate mode 'exact'"],
-    ['modes without exact', probe('search: flat\nmodes: hybrid\n'), 'the modes must include exact'],
+    ['a modes line, the driver registering the modes', probe('search: flat\nmodes: exact\n'), "unknown field 'modes' in the data file: the search modes are the configured driver's registry, so remove the modes line"],
   ])('[modules-r10] %s refuses rc 1 naming the rule', async (_, text, reason) => {
     const sb = workspace();
     dataFile(sb, 'modules', 'probe', text);
@@ -116,10 +115,10 @@ describe.concurrent('store-data, the data file reader', () => {
 
   it('[modules-r10] the optional flat search keys are accepted and answered on the schema lines', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'searchy', probe('changes: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\nmodes: exact\n'));
+    dataFile(sb, 'modules', 'searchy', probe('changes: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\n'));
     const lines = await answerLines(sb, 'probe');
     expect(lines.slice(0, 5)).toEqual(['probe', 'probe-root', '.txt', '<a>/<b>', 'false']);
-    expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line', 'exact']);
+    expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line']);
   });
 
   it('[modules-r10, the-engine-r-cj0ey] refuses an argument beyond the namespace and --with-fallback, and beyond the listing flag, rc 1', async () => {
@@ -136,26 +135,26 @@ describe.concurrent('store-data, the data file reader', () => {
   const legacy = (fallback: string, root = 'new-root') => `namespace: legacy\nroot: ${root}\nfallback_root: ${fallback}\nsuffix: .md\nkey: <u>/<path...>\nsearch: documents\ndocument: <u>/state state session -\n`;
   const withFallback = (sb: string, ns: string) => exec(STORE_DATA, [ns, '--with-fallback'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
 
-  it('[modules-r10, the-engine-r-cj0ey] accepts a fallback root and keeps the plain answer byte identical: twelve lines, then the rules', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] accepts a fallback root and keeps the plain answer byte identical: eleven lines, then the rules', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'legacy', legacy('old-root'));
     const lines = await answerLines(sb, 'legacy');
-    expect(lines).toEqual(['legacy', 'new-root', '.md', '<u>/<path...>', 'false', file, 'documents', '', '', 'head', 'line', 'exact', '<u>/state\tstate\tsession\t-']);
+    expect(lines).toEqual(['legacy', 'new-root', '.md', '<u>/<path...>', 'false', file, 'documents', '', '', 'head', 'line', '<u>/state\tstate\tsession\t-']);
     const other = workspace();
     dataFile(other, 'modules', 'legacy', legacy('old-root').replace('fallback_root: old-root\n', ''));
     const plain = await answerLines(other, 'legacy');
     expect(lines.filter((_, i) => i !== 5)).toEqual(plain.filter((_, i) => i !== 5));
   });
 
-  it('[modules-r10, the-engine-r-cj0ey] --with-fallback answers the fallback root as line 13 and the rules from line 14, an empty line 13 when none is declared', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] --with-fallback answers the fallback root as line 12 and the rules from line 13, an empty line 12 when none is declared', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'legacy', legacy('old-root'));
     const r = await withFallback(sb, 'legacy');
     expect([r.code, r.stderr]).toEqual([0, '']);
-    expect(r.stdout.split('\n').slice(12)).toEqual(['old-root', '<u>/state\tstate\tsession\t-', '']);
+    expect(r.stdout.split('\n').slice(11)).toEqual(['old-root', '<u>/state\tstate\tsession\t-', '']);
     const none = await withFallback(sb, 'docs');
     expect([none.code, none.stderr]).toEqual([0, '']);
-    expect(none.stdout.split('\n').slice(11)).toEqual(['exact', '', '']);
+    expect(none.stdout.split('\n').slice(10)).toEqual(['line', '', '']);
   });
 
   it.each([
@@ -217,14 +216,14 @@ describe.concurrent('store-data, the data file reader', () => {
     expect(await listing(sb)).toMatchObject({ code: 0, stdout: '', stderr: '' });
   });
 
-  it('[modules-r10] the document-set form answers its rules after the twelve lines, one tab-separated rule per line', async () => {
+  it('[modules-r10] the document-set form answers its rules after the eleven lines, one tab-separated rule per line', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'unitlike', [
-      'namespace: unitlike', 'key: <unit>/<path...>', 'search: documents', 'modes: exact, hybrid, trigram',
+      'namespace: unitlike', 'key: <unit>/<path...>', 'search: documents',
       'document: <unit>/state state session -', 'document: <unit>/journal journal entry @entry', '',
     ].join('\n'));
     const lines = await answerLines(sb, 'unitlike');
-    expect(lines.slice(6, 12)).toEqual(['documents', '', '', 'head', 'line', 'exact,hybrid,trigram']);
-    expect(lines.slice(12)).toEqual(['<unit>/state\tstate\tsession\t-', '<unit>/journal\tjournal\tentry\t@entry']);
+    expect(lines.slice(6, 11)).toEqual(['documents', '', '', 'head', 'line']);
+    expect(lines.slice(11)).toEqual(['<unit>/state\tstate\tsession\t-', '<unit>/journal\tjournal\tentry\t@entry']);
   });
 });

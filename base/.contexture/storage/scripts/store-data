@@ -1,9 +1,9 @@
 #!/bin/sh
 # store-data: the storage core's private reader and validator of a module's data file
 # (no summary line, so discovery ignores it). It answers one namespace with the effective
-# store fields on twelve lines, in this order: namespace, root, suffix, key pattern,
-# changes, the data file path, the search form, the format, the fields, the title, the
-# snippet, and the modes. The search form's document rules follow, one per line, as four
+# store fields on eleven lines, in this order: namespace, root, suffix, key pattern,
+# changes, the data file path, the search form, the format, the fields, the title, and the
+# snippet. The search form's document rules follow, one per line, as four
 # tab-separated values: the key pattern, the section, the entity type, and the head marker
 # (or - for none).
 #
@@ -32,18 +32,17 @@
 #         flat default key; documents default head)
 #   snippet: line                                                            (optional;
 #         default line)
-#   modes: <comma-separated modes>                                           (optional;
-#         default exact; exact is required)
 #   document: <key-pattern> <section> <entity-type> <head-marker|->          (optional;
 #         repeatable; the document-set search schema)
 # The module directory beside the data file is the owner; a second data file declaring the
 # same namespace, in either root, refuses. The script validates the fields before any
-# store function maps a key to a path.
+# store function maps a key to a path. A data file names no search modes: the modes are the
+# configured driver's registry, so a modes line refuses as an unknown field naming the fix.
 #
-# The plain answer never carries the fallback root, so a parser that reads the twelve lines
+# The plain answer never carries the fallback root, so a parser that reads the eleven lines
 # by position ignores the field by construction. store-data <namespace> --with-fallback
-# answers the fallback root as line 13 (an empty line when none is declared) and the
-# document rules from line 14; a file store asks for it, a store with no root never does.
+# answers the fallback root as line 12 (an empty line when none is declared) and the
+# document rules from line 13; a file store asks for it, a store with no root never does.
 #
 # The listing mode, store-data --list, answers every valid declaration in both roots, one
 # line each, the namespace and its root (the namespace when none is declared) separated by
@@ -122,7 +121,7 @@ if [ -d "$sd_extension_modules" ]; then
 fi
 
 # sd_parse <namespace> <data file>: the parse and the rule checks, one awk pass over the
-# owner file; the answer is the twelve lines plus the document rules, a refusal is the one
+# owner file; the answer is the eleven lines plus the document rules, a refusal is the one
 # prefixed line and exit 1
 sd_parse() {
 SD_WANT_NS="$1" SD_PATH="$2" SD_FNAME="${2##*/}" SD_WITH_FB="$SD_WITH_FB" LC_ALL=C awk '
@@ -181,8 +180,8 @@ BEGIN {
   path = ENVIRON["SD_PATH"]
   fname = ENVIRON["SD_FNAME"]
   seen_ns = seen_root = seen_suffix = seen_key = seen_changes = seen_fb = 0
-  seen_search = seen_format = seen_fields = seen_title = seen_snippet = seen_modes = 0
-  ns = root = suffix = key = changes = search = format = fields = title = snippet = modes = fb = ""
+  seen_search = seen_format = seen_fields = seen_title = seen_snippet = 0
+  ns = root = suffix = key = changes = search = format = fields = title = snippet = fb = ""
   docs = ""
   doc_count = 0
   lineno = 0
@@ -231,8 +230,7 @@ BEGIN {
     if (seen_snippet) fail("duplicate field '\''snippet'\'' in the data file")
     seen_snippet = 1; snippet = value
   } else if (field == "modes") {
-    if (seen_modes) fail("duplicate field '\''modes'\'' in the data file")
-    seen_modes = 1; modes = value
+    fail("unknown field '\''modes'\'' in the data file: the search modes are the configured driver'\''s registry, so remove the modes line")
   } else if (field == "document") {
     doc_count++
     n = split(value, p, /[[:space:]]+/)
@@ -307,25 +305,6 @@ END {
   if (seen_snippet && snippet != "line") fail("malformed snippet '\''" snippet "'\'' (line)")
   if (!seen_snippet) snippet = "line"
 
-  if (seen_modes) {
-    gsub(/[[:space:]]/, "", modes)
-    if (modes == "" || modes ~ /^,/ || modes ~ /,$/ || index(modes, ",,")) fail("malformed modes '\''" modes "'\''")
-    n = split(modes, p, ",")
-    mnorm = ""
-    mseen = " "
-    for (i = 1; i <= n; i++) {
-      m = p[i]
-      if (m !~ /^[a-z][a-z0-9_-]*$/) fail("malformed mode '\''" m "'\''")
-      if (index(mseen, " " m " ")) fail("duplicate mode '\''" m "'\''")
-      mseen = mseen m " "
-      if (mnorm == "") mnorm = m; else mnorm = mnorm "," m
-    }
-    if (!index(mseen, " exact ")) fail("the modes must include exact")
-    modes = mnorm
-  } else {
-    modes = "exact"
-  }
-
   print ns
   print root
   print suffix
@@ -337,7 +316,6 @@ END {
   print fields
   print title
   print snippet
-  print modes
   if (ENVIRON["SD_WITH_FB"] == "1") print fb
   printf "%s", docs
 }
@@ -402,7 +380,7 @@ if [ "$SD_LIST" -eq 1 ]; then
       continue
     fi
     if sd_out=$(sd_parse "$sd_ns" "$sd_file" 2>&1); then
-      sd_fb=$(printf '%s\n' "$sd_out" | sed -n '13p')
+      sd_fb=$(printf '%s\n' "$sd_out" | sed -n '12p')
       printf '%s\t%s%s\n' "$sd_ns" "$(printf '%s\n' "$sd_out" | sed -n '2p')" "${sd_fb:+$sd_tab$sd_fb}"
     else
       printf 'store-data: namespace '\''%s'\'': %s\n' "$sd_ns" "${sd_out#store-data: }" >&2

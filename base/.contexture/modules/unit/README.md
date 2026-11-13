@@ -195,8 +195,10 @@ complete walk; the store's rank order is kept. The store answers a default docum
 identity as its artifact key, so the data script maps it to the record id: the unit for a
 session document (state, backlog, knowledge, journal), the lane for a lane document, and a
 lane entry keeps its `<lane>/` prefix; a result outside the record's artifact shape or the
-sections the record searches is dropped. A ranked mode the configured driver does not
-declare refuses with the store's line, re-framed as `search.query`.
+sections the record searches is dropped. A mode the unit's records cannot answer (the
+configured driver's registry through the library's `store_modes`, a ranked mode only where
+the unit's data file declares its search schema) refuses before any store search, rc 1
+`ERR_CAPABILITY_UNSUPPORTED` naming the answerable modes.
 
 ## The tests
 

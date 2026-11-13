@@ -314,9 +314,8 @@ store_data() {
   SD_FIELDS=$(printf '%s\n' "$sd_out" | sed -n '9p')
   SD_TITLE=$(printf '%s\n' "$sd_out" | sed -n '10p')
   SD_SNIPPET=$(printf '%s\n' "$sd_out" | sed -n '11p')
-  SD_MODES=$(printf '%s\n' "$sd_out" | sed -n '12p')
-  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '13,$p')
-  SD_SIG=$(printf '%s\n' "$SD_FORM" "$SD_FORMAT" "$SD_FIELDS" "$SD_TITLE" "$SD_SNIPPET" "$SD_MODES" "$SD_DOCS" | cksum | awk '{ print $1 "-" $2 }')
+  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '12,$p')
+  SD_SIG=$(printf '%s\n' "$SD_FORM" "$SD_FORMAT" "$SD_FIELDS" "$SD_TITLE" "$SD_SNIPPET" "$SD_DOCS" | cksum | awk '{ print $1 "-" $2 }')
 }
 
 # store_key_ok <key>: the generic key rule: no blanks, control characters, leading slash,
@@ -1050,14 +1049,13 @@ store_search() {
     ''|*[!0-9]*) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a number, 0 for every result: '$ss_lim'" ;;
   esac
   store_data store.search "$ss_ns"
-  case ",$SD_MODES," in
-    *",$ss_mode,"*) ;;
-    *) refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not declared by namespace '$ss_ns'; declared modes: $SD_MODES" ;;
-  esac
   case "$ss_mode" in
     exact|hybrid|trigram) ;;
-    *) refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not supported; declared modes: exact, hybrid, trigram" ;;
+    *) refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not registered; registered modes: exact, hybrid, trigram" ;;
   esac
+  if [ "$ss_mode" != exact ] && [ -z "$SD_FORM" ]; then
+    refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' needs a declared search schema; answerable modes: exact"
+  fi
   ss_q=$(store_query_read) || exit $?
   ss_q=${ss_q%X}
   case "$ss_q" in *[![:space:]]*) ;; *) refuse 1 ERR_INVALID_ARGUMENT "the search query is empty" ;; esac
@@ -1129,7 +1127,7 @@ refuse() {
 # optional tokens. The card carries no record function family; capability and
 # storage.health are the driver's own methods the handshake and the diagnose call.
 capability() {
-  printf '{"driver":"fts5","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n'
+  printf '{"driver":"fts5","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":[{"name":"exact","description":"a case-insensitive substring of one line, the first matching line as the snippet, alike on every driver"},{"name":"hybrid","description":"ranked full-text search over the derived documents, the word index and the trigram index fused by reciprocal rank"},{"name":"trigram","description":"ranked substring search over the derived documents through the trigram index alone"}],"optional":["store","store.changelog","search.schema"]}\n'
 }
 
 # storage.health <namespace>: a probe of the named namespace's store, never a write, and the

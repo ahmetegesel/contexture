@@ -315,9 +315,8 @@ store_data() {
   SD_FIELDS=$(printf '%s\n' "$sd_out" | sed -n '9p')
   SD_TITLE=$(printf '%s\n' "$sd_out" | sed -n '10p')
   SD_SNIPPET=$(printf '%s\n' "$sd_out" | sed -n '11p')
-  SD_MODES=$(printf '%s\n' "$sd_out" | sed -n '12p')
-  SD_FALLBACK=$(printf '%s\n' "$sd_out" | sed -n '13p')
-  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '14,$p')
+  SD_FALLBACK=$(printf '%s\n' "$sd_out" | sed -n '12p')
+  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '13,$p')
   STORE_WS=$sd_ws
 }
 
@@ -1076,8 +1075,8 @@ store_query_read() {
 }
 
 # store_search <namespace> <mode> [<limit>]: the exact rule over the raw stored values; the
-# query travels on stdin as a query= payload line. A ranked mode refuses here (posix
-# declares exact alone), and a mode the module does not declare refuses too.
+# query travels on stdin as a query= payload line. Any other mode refuses here, since posix
+# registers exact alone.
 store_search() {
   FN=store.search
   [ $# -ge 2 ] && [ $# -le 3 ] || refuse 1 ERR_INVALID_ARGUMENT "store.search takes the namespace, the mode, and an optional limit"
@@ -1089,11 +1088,7 @@ store_search() {
     ''|*[!0-9]*) refuse 1 ERR_INVALID_ARGUMENT "--limit takes a number, 0 for every result: '$ss_lim'" ;;
   esac
   store_data store.search "$ss_ns"
-  case ",$SD_MODES," in
-    *",$ss_mode,"*) ;;
-    *) refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not declared by namespace '$ss_ns'; declared modes: $SD_MODES" ;;
-  esac
-  [ "$ss_mode" = exact ] || refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not supported; declared modes: exact"
+  [ "$ss_mode" = exact ] || refuse 1 ERR_CAPABILITY_UNSUPPORTED "mode '$ss_mode' is not registered; registered modes: exact"
   ss_q=$(store_query_read) || exit $?
   ss_q=${ss_q%X}
   case "$ss_q" in *[![:space:]]*) ;; *) refuse 1 ERR_INVALID_ARGUMENT "the search query is empty" ;; esac
@@ -1154,7 +1149,7 @@ store_search() {
 # no record function family; capability and storage.health are the driver's own methods
 # the handshake and the diagnose call.
 capability() {
-  printf '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store","store.promote"]}\n'
+  printf '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":[{"name":"exact","description":"a case-insensitive substring of one line, the first matching line as the snippet, alike on every driver"}],"optional":["store","store.promote"]}\n'
 }
 
 # store.promote <namespace> <prefix>: the optional move of one whole key prefix (whole key

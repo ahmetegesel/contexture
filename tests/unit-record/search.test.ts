@@ -63,7 +63,7 @@ describe.concurrent('the exact search through the unit data script', () => {
     const set = answers('tc39-exact.answers');
     expect(set.length).toBeGreaterThan(0);
     for (const { q, flags, want } of set) expect(answerLine(await data(sb, 'search.query', [EX, ...flags], query(q)), `search.query ${q}`)).toBe(want);
-    refused(await data(sb, 'search.query', [EX, '--mode=nosuchmode'], query('needle')), 'search.query', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'nosuchmode' is not supported; declared modes: exact");
+    refused(await data(sb, 'search.query', [EX, '--mode=nosuchmode'], query('needle')), 'search.query', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'nosuchmode' is not supported; answerable modes: exact");
   });
 
   it('TC69 [the-record-r13]: the exact query set over legacy text answers its fixed results under --mode=exact (posix plant)', async () => {

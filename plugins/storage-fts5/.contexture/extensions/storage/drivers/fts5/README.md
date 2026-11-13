@@ -47,9 +47,12 @@ values, computed by the storage core's shared engine on every driver. A ranked m
 schema writes one document per key in section `body` (the raw value for text, the declared
 JSON fields for JSON); a document-set schema writes one document per entity at write time,
 from the data file's document rules. A namespace whose stored schema signature differs is
-re-derived whole before a ranked search, and a module with no schema ranks the generic raw
-value. A mode the module does not declare or the driver does not serve refuses rc 1
-`ERR_CAPABILITY_UNSUPPORTED` naming the declared modes.
+re-derived whole before a ranked search; the signature hashes the search schema alone,
+since a data file names no modes. The descriptor registers `exact`, `hybrid`, and
+`trigram` as `{name, description}` objects; a mode outside them refuses rc 1
+`ERR_CAPABILITY_UNSUPPORTED` naming the registered modes, and a ranked mode over a
+namespace whose data file declares no search schema refuses rc 1 naming `exact` as the
+answerable mode (its writes still derive the generic raw value document).
 
 ## Schema and open path
 

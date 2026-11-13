@@ -6,7 +6,7 @@ import { RECORD_ROOT, namespaceLock } from '../support/drawer';
 import { holdLock, sleepShim } from '../support/locks';
 import { ROOT_USER, chmodPlant, pathPlant } from '../support/plants';
 import { sandbox } from '../support/sandbox';
-import { NEEDLE_ROWS, SEARCH_DATA, SEARCH_VALUES, searchAnswer } from '../support/search-fixture';
+import { NEEDLE_ROWS, SEARCH_DATA, SEARCH_VALUES, modeList, searchAnswer } from '../support/search-fixture';
 import { fresh } from '../support/snapshot';
 import { DRIVERS, fts5Available, stage } from '../support/stage';
 import { DOCS_KEYS, docsStore, listAnswer, plantScript, store } from '../support/store';
@@ -15,8 +15,8 @@ import { answer, refused, refusedLike } from '../support/wire';
 const ALL_KEYS = DOCS_KEYS.map(([k]) => k);
 
 const CARDS = {
-  posix: '{"driver":"posix","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact"],"optional":["store","store.promote"]}\n',
-  fts5: '{"driver":"fts5","version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":["exact","hybrid","trigram"],"optional":["store","store.changelog","search.schema"]}\n',
+  posix: `${JSON.stringify({ driver: 'posix', version: '3.0.0', contract: '3', store: ['list', 'get', 'put', 'delete', 'changes', 'batch', 'scan'], search_modes: modeList('exact'), optional: ['store', 'store.promote'] })}\n`,
+  fts5: `${JSON.stringify({ driver: 'fts5', version: '3.0.0', contract: '3', store: ['list', 'get', 'put', 'delete', 'changes', 'batch', 'scan'], search_modes: modeList('exact', 'hybrid', 'trigram'), optional: ['store', 'store.changelog', 'search.schema'] })}\n`,
 };
 
 const HEALTH_ABSENT = {
@@ -243,9 +243,9 @@ for (const driver of DRIVERS) {
         refused(await store(fresh(keyed), driver).op('store.search', ['docs', ...args], input), 'store.search', 1, 'ERR_INVALID_ARGUMENT', message);
       });
 
-      it('[modules-r10] refuses a mode the namespace does not declare, naming the declared ones', async () => {
+      it('[the-engine-r8] refuses a mode the driver does not register, naming its registry', async () => {
         refused(await store(fresh(keyed), driver).search('docs', 'fuzzy', '5', q('x')), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
-          "mode 'fuzzy' is not declared by namespace 'docs'; declared modes: exact");
+          `mode 'fuzzy' is not registered; registered modes: ${driver === 'posix' ? 'exact' : 'exact, hybrid, trigram'}`);
       });
 
       it('[the-engine-r21] re-frames a failing search engine as the store.search line alone', async () => {

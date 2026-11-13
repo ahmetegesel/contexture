@@ -67,14 +67,11 @@ describe('the posix store on disk', { concurrent: true }, () => {
       "the posix store keeps no change log; namespace 'docs' reports its delta through its module (changes: true)");
   });
 
-  it('[modules-r10] refuses a ranked mode by name, and a mode the module does not declare by its declaration', async () => {
+  it('[the-engine-r8] refuses a ranked mode by its registry, exact alone, even on a namespace declaring a search schema', async () => {
     const sb = fresh(empty);
     dataFile(sb, 'modules', 'searchdoc', SEARCH_DATA.searchdoc);
-    dataFile(sb, 'modules', 'exactonly', 'namespace: exactonly\nroot: exact-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nmodes: exact\n');
     const s = store(sb, 'posix');
-    refused(await s.search('searchdoc', 'hybrid', '20', 'query=needle\n'), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'hybrid' is not supported; declared modes: exact");
-    refused(await s.search('exactonly', 'hybrid', '20', 'query=needle\n'), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED',
-      "mode 'hybrid' is not declared by namespace 'exactonly'; declared modes: exact");
+    refused(await s.search('searchdoc', 'hybrid', '20', 'query=needle\n'), 'store.search', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'hybrid' is not registered; registered modes: exact");
   });
 
   it('[the-engine-r19, modules-r10] scans planted files bytewise, admitting only the pattern\'s keys, a binary value in base64', async () => {

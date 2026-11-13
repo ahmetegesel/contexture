@@ -48,7 +48,7 @@ const DOCS_PAYLOADS: Record<string, Buffer> = {
 
 export const KEY_VALUE: Profile = {
   ns: 'fuzz',
-  data: 'namespace: fuzz\nroot: fuzz-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\nmodes: exact\n',
+  data: 'namespace: fuzz\nroot: fuzz-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\n',
   key: (k) => k,
   payload: (p) => DOCS_PAYLOADS[p],
   needle: 'needle',

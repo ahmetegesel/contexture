@@ -106,10 +106,10 @@ function json_field(text, name,    pat, s, i, c, out, esc) {
   return trim(s)
 }
 
-# parse_data(file): the search schema into form, fmt, title, snippet, modes, fields, and
-# the document rules
+# parse_data(file): the search schema into form, fmt, title, snippet, fields, and the
+# document rules
 function parse_data(file,    line, k, v, n, a, seen_format, seen_fields, seen_title, seen_snippet) {
-  form = ""; fmt = ""; title = "key"; snippet = "line"; modes = "exact"
+  form = ""; fmt = ""; title = "key"; snippet = "line"
   ndoc = 0; nfields = 0
   seen_format = 0; seen_fields = 0; seen_title = 0; seen_snippet = 0
   while ((getline line < file) > 0) {
@@ -126,7 +126,6 @@ function parse_data(file,    line, k, v, n, a, seen_format, seen_fields, seen_ti
     else if (k == "fields") { fs = v; seen_fields = 1 }
     else if (k == "title") { title = v; seen_title = 1 }
     else if (k == "snippet") { snippet = v; seen_snippet = 1 }
-    else if (k == "modes") modes = v
     else if (k == "document") {
       ndoc++
       n = split(v, a, /[ \t]+/)
@@ -151,7 +150,6 @@ function parse_data(file,    line, k, v, n, a, seen_format, seen_fields, seen_ti
       if (t != "") { nfields++; fields[nfields] = t }
     }
   }
-  nmodes = split(modes, mode_a, ",")
 }
 
 # pat_match(pat, key): a document key pattern against a key; a <name> placeholder per

@@ -100,7 +100,7 @@ const CARD = {
   version: '3.0.0',
   contract: '3',
   store: ['list', 'get', 'put', 'delete', 'changes', 'batch', 'scan'],
-  search_modes: ['exact'],
+  search_modes: [{ name: 'exact', description: 'a case-insensitive substring of one line, the first matching line as the snippet, alike on every driver' }],
   optional: ['store', 'store.promote'],
 };
 

@@ -6,7 +6,6 @@ suffix: .md
 key: <unit>/<path...>
 changes: false
 search: documents
-modes: exact, hybrid, trigram
 document: <unit>/state state session -
 document: <unit>/backlog backlog session -
 document: <unit>/backlog backlog task @task

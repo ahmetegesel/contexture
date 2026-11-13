@@ -62,10 +62,10 @@ describe.concurrent('the ranked search mapping (ranked.awk) over a canned fts5 s
     expect([one.results.length, one.total_matches, identities(one.results)]).toEqual([1, all.total_matches, identities(all.results).slice(0, 1)]);
   });
 
-  it('UD-11 [the-record-r13]: the posix data script refuses a ranked mode naming the declared modes', async () => {
+  it('UD-11 [the-record-r13]: the posix data script refuses a ranked mode naming the answerable modes', async () => {
     const sb = stage('posix', 'ranked-posix');
     await seedNeedles(sb);
-    refused(await data(sb, 'search.query', ['u1', '--mode=hybrid'], payload().kv('query', 'needle').toString()), 'search.query', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'hybrid' is not supported; declared modes: exact");
+    refused(await data(sb, 'search.query', ['u1', '--mode=hybrid'], payload().kv('query', 'needle').toString()), 'search.query', 1, 'ERR_CAPABILITY_UNSUPPORTED', "mode 'hybrid' is not supported; answerable modes: exact");
     expect(answerLine(await data(sb, 'search.query', ['u1', '--mode=exact', '--entity=finding'], payload().kv('query', 'needle').toString()), 'search.query')).toContain('"total_matches":0,"results":[]');
   });
 });

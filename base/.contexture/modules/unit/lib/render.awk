@@ -752,9 +752,10 @@ function v_lane_journal(   n, i, t, o) {
 }
 
 # ------------------------------------------------------------------------------
-# diagnose (changed): the descriptor as lines; the base lines arrive in the environment
+# diagnose (changed): the descriptor as lines; the base lines and the mode registry's names
+# (the resolver's one registry reader) arrive in the environment
 function v_diagnose(   m, s) {
-  m = list_join("search_modes", ", ")
+  m = ENVIRON["RV_MODES"]
   s = list_join("store", ", ")
   printf "  contract:        %s (%s %s)\n", sv("contract"), sv("driver"), sv("version")
   printf "  functions:       %d declared\n", nn("functions")

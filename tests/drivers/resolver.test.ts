@@ -23,11 +23,13 @@ interface Card {
   contract?: string;
   store?: string[];
   mode?: string;
+  modes?: string;
   extra?: string;
 }
 
-function wrap(path: string, target: string, { optional = [], contract = '3', store = SEVEN, mode = 'exact', extra = '' }: Card = {}): string {
-  const card = `{"driver":"planted","version":"3.0.0","contract":"${contract}","store":[${store.map((s) => `"${s}"`).join(',')}],"search_modes":["${mode}"],"optional":[${optional.map((s) => `"${s}"`).join(',')}]${extra}}`;
+function wrap(path: string, target: string, { optional = [], contract = '3', store = SEVEN, mode = 'exact', modes, extra = '' }: Card = {}): string {
+  const list = modes ?? `[{"name":"${mode}","description":"the ${mode} rule"}]`;
+  const card = `{"driver":"planted","version":"3.0.0","contract":"${contract}","store":[${store.map((s) => `"${s}"`).join(',')}],"search_modes":${list},"optional":[${optional.map((s) => `"${s}"`).join(',')}]${extra}}`;
   mkdirSync(join(path, '..'), { recursive: true });
   writeFileSync(path, `#!/bin/sh\nif [ "\${1:-}" = capability ]; then\n  echo '${card}'\n  exit 0\nfi\nexec "${target}" "$@"\n`, { mode: 0o755 });
   utimesSync(path, PAST, PAST);
@@ -43,6 +45,21 @@ describe('the resolver', { concurrent: true }, () => {
   let posix: string;
   beforeAll(async () => {
     posix = await seed(async () => undefined, 'posix', 'resolver');
+  });
+
+  it('[the-engine-r8] modes prints the registry, one name TAB description line per mode, from the posix card', async () => {
+    const r = await rsv(fresh(posix), ['modes']);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toBe('exact\ta case-insensitive substring of one line, the first matching line as the snippet, alike on every driver\n');
+  });
+
+  it('[the-engine-r8] the pair reader reads a description holding a bracket, a brace, a comma, and an escaped quote whole, in the card\'s order', async () => {
+    const sb = fresh(posix);
+    const modes = '[{"name":"exact","description":"one ] line, with {a} \\"quote\\""},{"description":"second","name":"near"}]';
+    const w = wrap(join(sb, 'w-pairs'), driverPath(sb, 'posix'), { modes });
+    const r = await rsv(sb, [`--driver=${w}`, 'modes']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'exact\tone ] line, with {a} "quote"\nnear\tsecond\n', '']);
+    expect((await rsv(sb, [`--driver=${w}`, 'has', 'search.mode.near'])).code).toBe(0);
   });
 
   it('[modules-r1] the storage core is no module: ctx help --all never lists it', async () => {
@@ -252,6 +269,8 @@ for (const driver of DRIVERS) {
       ['a functions field', { extra: ',"functions":["session.list"]' }, ['record function family']],
       ['the store token without the family', { optional: ['store'], store: [] }, ['no store family']],
       ['no exact mode', { mode: 'hybrid' }, ['exact']],
+      ['a bare name mode list', { modes: '["exact"]' }, ['not a list of name and description objects']],
+      ['a mode without a description', { modes: '[{"name":"exact"}]' }, ['not a list of name and description objects']],
       ['a partial family', { optional: ['store'], store: SEVEN.filter((s) => s !== 'batch') }, ['seven data names']],
       ['a name outside the seven', { optional: ['store'], store: [...SEVEN, 'store.search'] }, ['seven data names']],
       ['an optional token outside the card', { optional: ['store', 'retired.token'] }, ['optional capability']],
