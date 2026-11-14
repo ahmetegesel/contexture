@@ -1,0 +1,221 @@
+#!/bin/sh
+# store-pack: the storage core's private codec of the batched store.get answer (no summary
+# line, so discovery ignores it). Both drivers pack with it, so their answers are byte
+# identical, and the module library unpacks with it.
+#
+# Usage:
+#   store-pack pack <namespace> <manifest>
+#     manifest lines are <key><TAB><value-path>, or <key><TAB> for a key the store does not
+#     hold, in the asked order; the answer is one compact JSON line {namespace, items:[...]},
+#     one item per line: {key, value} with the value's bytes as a JSON string, {key,
+#     value_b64} for a value holding a NUL byte, {key, missing: true} for an absent key.
+#     A value that cannot be read exits 3 with its key alone on stderr.
+#   store-pack unpack <answer> <targets>
+#     targets lines are <key><TAB><path> in the asked order; each present value lands in its
+#     path byte for byte, and one line per key prints: 1<TAB><key> or 0<TAB><key>. An answer
+#     that does not carry exactly the asked keys refuses rc 2.
+#
+# The value string escapes the backslash, the double quote, the tab, the carriage return,
+# and the newline between lines, every other byte below 0x20 as \u00XX; bytes from 0x80
+# pass as stored. Inside a value every double quote is escaped, so the item separator and
+# the key's closing quote cannot occur in one.
+
+set -u
+LC_ALL=C
+export LC_ALL
+
+SP_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
+
+sp_fail() {
+  printf 'store-pack: error: %s (%s)\n' "$2" "$3" >&2
+  exit "$1"
+}
+
+SP_LIB='
+function sjoin(s, sep, lit,    n, p, i, o) { n = split(s, p, sep); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o lit p[i]; return o }
+function ctl_init(   i, c) {
+  for (i = 1; i < 32; i++) {
+    c = sprintf("%c", i)
+    CTL_ENC[c] = (i == 9) ? "\\" "t" : (i == 13) ? "\\" "r" : sprintf("\\" "u%04x", i)
+    CTL_DEC[sprintf("u%04x", i)] = c
+  }
+}
+function enc(s,   n, i, o, c) {
+  s = sjoin(s, "\\", "\\" "\\")
+  s = sjoin(s, "\"", "\\" "\"")
+  if (s !~ /[\001-\037]/) return s
+  o = ""; n = length(s)
+  for (i = 1; i <= n; i++) { c = substr(s, i, 1); o = o ((c in CTL_ENC) ? CTL_ENC[c] : c) }
+  return o
+}
+function dec_part(s,   n, P, i, o, e) {
+  if (!index(s, "\\")) return s
+  n = split(s, P, /\\/)
+  o = P[1]
+  for (i = 2; i <= n; i++) {
+    e = substr(P[i], 1, 1)
+    if (e == "n") o = o "\n" substr(P[i], 2)
+    else if (e == "t") o = o "\t" substr(P[i], 2)
+    else if (e == "r") o = o "\r" substr(P[i], 2)
+    else if (e == "\"" || e == "/") o = o e substr(P[i], 2)
+    else if (e == "u" && (substr(P[i], 1, 5) in CTL_DEC)) o = o CTL_DEC[substr(P[i], 1, 5)] substr(P[i], 6)
+    else { BAD = 1; return "" }
+  }
+  return o
+}
+function dec(s,   n, S, i, o) {
+  n = split(s, S, /\\\\/)
+  o = dec_part(S[1])
+  for (i = 2; i <= n; i++) o = o "\\" dec_part(S[i])
+  return o
+}
+'
+
+sp_pack() {
+  [ $# -eq 2 ] || sp_fail 1 "pack takes the namespace and the manifest" ERR_INVALID_ARGUMENT
+  pk_ns=$1; pk_man=$2
+  [ -f "$pk_man" ] || sp_fail 2 "cannot read the manifest" ERR_STORAGE_READ
+  set --
+  while IFS='	' read -r pk_k pk_p; do
+    [ -n "$pk_p" ] && set -- "$@" "$pk_p"
+  done < "$pk_man"
+  { : > "$pk_man.sizes" && : > "$pk_man.nul"; } 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
+  if [ $# -gt 0 ]; then
+    wc -c "$@" > "$pk_man.sizes" 2>/dev/null || {
+      for pk_p in "$@"; do
+        if ! { wc -c < "$pk_p"; } > /dev/null 2>&1; then
+          awk -F '\t' -v p="$pk_p" '$2 == p { print $1; exit }' "$pk_man" >&2
+          exit 3
+        fi
+      done
+      sp_fail 2 "cannot size the values" ERR_STORAGE_READ
+    }
+    pk_sum=0
+    pk_i=0
+    while read -r pk_c pk_rest; do
+      pk_i=$((pk_i + 1))
+      [ "$pk_i" -le $# ] || break
+      pk_sum=$((pk_sum + pk_c))
+    done < "$pk_man.sizes"
+    pk_kept=$(cat "$@" | tr -d '\000' | wc -c)
+    if [ "$((pk_kept + 0))" -ne "$pk_sum" ]; then
+      pk_i=0
+      for pk_p in "$@"; do
+        pk_i=$((pk_i + 1))
+        pk_all=$(wc -c < "$pk_p")
+        pk_non=$(tr -d '\000' < "$pk_p" | wc -c)
+        [ "$((pk_all + 0))" -eq "$((pk_non + 0))" ] || printf '%s\n' "$pk_i" >> "$pk_man.nul"
+      done
+    fi
+  fi
+  SP_NS="$pk_ns" SP_B64="$SP_DIR/store-b64" awk -F '\t' "$SP_LIB"'
+    function sq(s) { return "'\''" sjoin(s, "'\''", "'\''\\'\'''\''") "'\''" }
+    BEGIN { ORS = ""; ctl_init(); nf = 0 }
+    FILENAME == ARGV[1] { SZ[++nz] = $1 + 0; next }
+    FILENAME == ARGV[2] { NUL[$1 + 0] = 1; next }
+    {
+      if (!started) { printf "{\"namespace\":\"%s\",\"items\":[", enc(ENVIRON["SP_NS"]); started = 1 }
+      k = $1; p = substr($0, length(k) + 2)
+      printf "%s{\"key\":\"%s\",", (FNR > 1 ? "," : ""), enc(k)
+      if (p == "") { printf "\"missing\":true}"; next }
+      nf++
+      if (nf in NUL) {
+        v = ""
+        if ((ENVIRON["SP_B64"] " " sq(p) | getline v) <= 0) { print k > "/dev/stderr"; exit 3 }
+        close(ENVIRON["SP_B64"] " " sq(p))
+        printf "\"value_b64\":\"%s\"}", v
+        next
+      }
+      printf "\"value\":\""
+      tot = 0; nl = 0
+      while ((r = (getline t < p)) > 0) {
+        if (nl) printf "\\n"
+        printf "%s", enc(t)
+        nl++; tot += length(t) + 1
+      }
+      close(p)
+      if (r < 0) { print k > "/dev/stderr"; exit 3 }
+      if (nl && tot == SZ[nf]) printf "\\n"
+      else if (nl && tot != SZ[nf] + 1) { print k > "/dev/stderr"; exit 3 }
+      else if (!nl && SZ[nf] != 0) { print k > "/dev/stderr"; exit 3 }
+      printf "\"}"
+    }
+    END {
+      if (!started) printf "{\"namespace\":\"%s\",\"items\":[", enc(ENVIRON["SP_NS"])
+      printf "]}\n"
+    }' "$pk_man.sizes" "$pk_man.nul" "$pk_man"
+  pk_rc=$?
+  rm -f "$pk_man.sizes" "$pk_man.nul"
+  return "$pk_rc"
+}
+
+sp_unpack() {
+  [ $# -eq 2 ] || sp_fail 1 "unpack takes the answer and the targets" ERR_INVALID_ARGUMENT
+  up_ans=$1; up_t=$2
+  [ -f "$up_ans" ] && [ -f "$up_t" ] || sp_fail 2 "cannot read the answer or the targets" ERR_STORAGE_READ
+  : > "$up_t.b64" 2>/dev/null || sp_fail 2 "cannot write the codec's scratch" ERR_STORAGE_WRITE
+  UP_B64="$up_t.b64" awk -F '\t' "$SP_LIB"'
+    BEGIN { ctl_init() }
+    FILENAME == ARGV[1] { NT++; TK[NT] = $1; TP[NT] = substr($0, length($1) + 2); next }
+    FNR == 1 {
+      line = $0
+      h = index(line, "\"items\":[")
+      if (h == 0 || substr(line, length(line) - 1) != "]}") exit 4
+      rest = substr(line, h + 9, length(line) - h - 10)
+      n = (rest == "") ? 0 : split(rest, IT, /[}],[{]"key":"/)
+      if (n != NT) exit 4
+      for (i = 1; i <= n; i++) {
+        it = IT[i]
+        if (i == 1) { if (substr(it, 1, 8) != "{\"key\":\"") exit 4; it = substr(it, 9) }
+        if (i == n) { if (substr(it, length(it)) != "}") exit 4; it = substr(it, 1, length(it) - 1) }
+        q = index(it, "\",\"")
+        if (q == 0) exit 4
+        BAD = 0
+        k = dec(substr(it, 1, q - 1))
+        if (BAD || k != TK[i]) exit 4
+        tail = substr(it, q + 3)
+        if (tail == "missing\":true") { print "0\t" k; continue }
+        if (substr(tail, 1, 8) == "value\":\"" && substr(tail, length(tail)) == "\"") {
+          v = dec(substr(tail, 9, length(tail) - 9))
+          if (BAD) exit 4
+          printf "%s", v > TP[i]
+          close(TP[i])
+          print "1\t" k
+          continue
+        }
+        if (substr(tail, 1, 12) == "value_b64\":\"" && substr(tail, length(tail)) == "\"") {
+          print i "\t" substr(tail, 13, length(tail) - 13) > ENVIRON["UP_B64"]
+          print "1\t" k
+          continue
+        }
+        exit 4
+      }
+      done = 1
+    }
+    END { if (!done) exit 4 }' "$up_t" "$up_ans" > "$up_t.status"
+  up_rc=$?
+  if [ "$up_rc" -ne 0 ]; then
+    rm -f "$up_t.b64" "$up_t.status"
+    [ "$up_rc" -eq 4 ] && sp_fail 2 "the batched answer does not carry the asked keys" ERR_STORAGE_READ
+    sp_fail 2 "cannot write the batched values" ERR_STORAGE_WRITE
+  fi
+  if [ -s "$up_t.b64" ]; then
+    up_flag=""
+    for up_f in -d -D; do
+      if printf 'QQ==' | base64 "$up_f" > /dev/null 2>&1; then up_flag=$up_f; break; fi
+    done
+    [ -n "$up_flag" ] || { rm -f "$up_t.b64" "$up_t.status"; sp_fail 2 "no base64 decoder for a value holding a NUL byte" ERR_STORAGE_READ; }
+    while IFS='	' read -r up_i up_v; do
+      up_p=$(awk -F '\t' -v n="$up_i" 'NR == n + 0 { print substr($0, length($1) + 2); exit }' "$up_t")
+      printf '%s' "$up_v" | base64 "$up_flag" > "$up_p" 2>/dev/null || { rm -f "$up_t.b64" "$up_t.status"; sp_fail 2 "cannot write the batched values" ERR_STORAGE_WRITE; }
+    done < "$up_t.b64"
+  fi
+  cat "$up_t.status"
+  rm -f "$up_t.b64" "$up_t.status"
+}
+
+case "${1:-}" in
+  pack) shift; sp_pack "$@"; exit $? ;;
+  unpack) shift; sp_unpack "$@"; exit $? ;;
+  *) sp_fail 1 "unknown mode '${1:-}' (pack or unpack)" ERR_INVALID_ARGUMENT ;;
+esac

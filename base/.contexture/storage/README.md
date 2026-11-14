@@ -12,6 +12,7 @@ storage/
   scripts/store-search      the private exact and document-derivation search engine
   scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
   scripts/store-b64         the private base64 encoder of a stored value
+  scripts/store-pack        the private codec of a batched store.get answer: pack, unpack
   scripts/json.awk          the one JSON flattener: a storage answer to path=value lines, read
                             by the unit, rhythm, and docs modules
   scripts/library           the module-facing interface, sourced by a module's scripts
@@ -42,7 +43,7 @@ Seven data functions and the optional promotion, called through the resolver:
 | function | argv | stdin | answer |
 |---|---|---|---|
 | `store.list` | `<namespace> [<prefix>]` | none | `{"namespace","keys"}`: every key the module pattern admits, bytewise; the optional literal key prefix narrows it |
-| `store.get` | `<namespace> <key>` | none | the raw bytes of the key, no JSON; absent rc 1 `ERR_ENTITY_NOT_FOUND` |
+| `store.get` | `<namespace> <key> [<key>...]` | none | one key: the raw bytes of the key, no JSON; absent rc 1 `ERR_ENTITY_NOT_FOUND`. Two or more: `{"namespace","items":[...]}`, one item per asked key in the asked order: `{"key","value"}`, `{"key","value_b64"}` for a value holding a NUL byte, or `{"key","missing":true}` |
 | `store.put` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | the raw bytes | `{"namespace","key","op"}`; atomic per key |
 | `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | none | `{"namespace","key","op"}` |
 | `store.changes` | `<namespace>` | `head=<sha\|none>` lines | `{"namespace","changes":[...]}` oldest first |
@@ -50,6 +51,22 @@ Seven data functions and the optional promotion, called through the resolver:
 | `store.scan` | `<namespace>` | none | `{"namespace","items":[{"key","value_b64"}]}`: every admitted key, bytewise, its raw value in base64 |
 | `store.search` | `<namespace> <mode> [<limit>]` | `query=<escaped>` | `{"namespace","query","mode","total_matches","results":[{key,entity_type,entity_id,section,snippet,score}]}`; limit 0 answers every result |
 | `store.promote` | `<namespace> <prefix>` | none | `{"namespace","prefix","state"}`: optional (the `store.promote` token); moves the prefix (whole key segments ending in a slash) from the fallback root to the root; `moved`, or `none` when the fallback holds nothing for it or none is declared; a move that empties the fallback root, or a `none` answer over an empty one, removes that root; the root already holding it refuses rc 1 `ERR_ENTITY_EXISTS` |
+
+The batched `store.get` is the one key read made once for many keys: every key passes the
+key rule and the pattern first, and the first that fails refuses the whole call rc 1 with
+the one key form's line; an absent key is an item marked missing, never a refusal; a present
+key that cannot be read refuses the whole call rc 2 with the one key form's line; a key read
+from a deprecated fallback root prints the one notice. The value travels as a JSON string:
+the backslash, the double quote, the tab, the carriage return, and the newline between
+lines escaped, every other byte below 0x20 as `\u00XX`, and the bytes from 0x80 as stored, so
+the posix driver encodes per line and the reader decodes per escape; a value holding a NUL
+byte, which awk cannot carry, travels in base64 instead. Inside a value every double quote
+is escaped, so the item separator and a key's closing quote cannot occur in one. Both
+drivers pack the line with `store-pack`, so their answers are byte identical; the posix
+driver finds the asked keys by listing their own folders alone, one level each, as the
+walk of their common folder would list them (the exact stored spelling, the root's copy
+first), so a read across many units never walks the namespace, and fts5 writes them in one
+`sqlite3` call.
 
 Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a
 read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a
@@ -222,6 +239,11 @@ through it; the module never names the driver. The library exports:
 
 - `store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_batch`,
   `store_scan`, `store_search`;
+- `store_get_into <namespace> <targets>`, the batched read into files: the targets file
+  holds one `<key><TAB><path>` line per key in the asked order; one `store.get` call answers
+  every key (the one key form for a single key), each present value lands in its path byte
+  for byte through `store-pack unpack`, and one `1<TAB><key>` or `0<TAB><key>` line per key
+  prints on stdout; a refused call passes its rc and its one line through;
 - `store_promote <namespace> <prefix>`, the optional promotion (ask `store_has
   store.promote` first);
 - `store_require <capability>...` and `store_has <capability>`;

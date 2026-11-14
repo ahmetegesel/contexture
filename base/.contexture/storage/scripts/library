@@ -5,7 +5,8 @@
 # target module's data script:
 #
 #   store.list <namespace> [<prefix>]
-#   store.get <namespace> <key>
+#   store.get <namespace> <key> [<key>...]                          (two or more: one JSON line)
+#   store.get.into <namespace> <targets>                            (the batched read into files)
 #   store.put <namespace> <key> [--op=<op>] [--head=<sha|none>]     (payload on stdin)
 #   store.delete <namespace> <key> [--op=<op>] [--head=<sha|none>]
 #   store.changes <namespace>                                        (heads on stdin)
@@ -25,7 +26,9 @@
 # store_put, store_delete, store_changes, store_batch, store_scan, store_search,
 # store_promote, store_require, and store_has. store_promote moves a whole key prefix from
 # the namespace's fallback root to its root on a driver that declares store.promote (ask
-# store_has store.promote first). The
+# store_has store.promote first). store_get with one key answers the raw value; with two
+# or more it answers the driver's one batched line, which store_get_into decodes into files.
+# The
 # caller sets CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which
 # serves when CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact
 # resolver path; the core resolver is found under the drawer, then the base mirror.
@@ -125,6 +128,60 @@ store_lib_data() {
     if [ -n "$sld_c" ] && [ -x "$sld_c" ]; then printf '%s\n' "$sld_c"; return 0; fi
   done
   return 1
+}
+
+# store_get_into <namespace> <targets>: the batched read into files. <targets> holds one
+# <key> TAB <path> line per key in the asked order; one store.get call answers every key
+# (the one key form for a single key), each present value lands in its path byte for byte,
+# and one line per key prints on stdout in the asked order: 1 TAB <key> for a present key,
+# 0 TAB <key> for an absent one. A refused call passes its rc and its one stderr line
+# through with nothing on stdout, and a read served from a deprecated root keeps its notice
+# on stderr. The scratch is <targets>.ans and <targets>.err, beside the caller's file.
+store_get_into() {
+  sgi_ns=$1
+  sgi_t=$2
+  set --
+  while IFS='	' read -r sgi_k sgi_p; do
+    [ -n "$sgi_k" ] && set -- "$@" "$sgi_k"
+  done < "$sgi_t"
+  [ $# -gt 0 ] || return 0
+  if [ $# -eq 1 ]; then
+    sgi_p=$(LC_ALL=C awk -F '\t' 'NF { print substr($0, length($1) + 2); exit }' "$sgi_t")
+    store_get "$sgi_ns" "$1" > "$sgi_p" 2> "$sgi_t.err" < /dev/null
+    sgi_rc=$?
+    if [ "$sgi_rc" -eq 0 ]; then
+      cat "$sgi_t.err" >&2
+      printf '1\t%s\n' "$1"
+      return 0
+    fi
+    rm -f "$sgi_p"
+    if [ "$sgi_rc" -eq 1 ] && [ "$(cat "$sgi_t.err")" = "store.get: error: key '$1' not found in namespace '$sgi_ns' (ERR_ENTITY_NOT_FOUND)" ]; then
+      printf '0\t%s\n' "$1"
+      return 0
+    fi
+    cat "$sgi_t.err" >&2
+    return "$sgi_rc"
+  fi
+  store_get "$sgi_ns" "$@" > "$sgi_t.ans" 2> "$sgi_t.err" < /dev/null
+  sgi_rc=$?
+  if [ "$sgi_rc" -ne 0 ]; then
+    cat "$sgi_t.err" >&2
+    return "$sgi_rc"
+  fi
+  sgi_pack=""
+  if sgi_r=$(store_lib_resolver); then sgi_pack="${sgi_r%/*}/store-pack"; fi
+  sgi_root=$(store_lib_root)
+  for sgi_c in "$sgi_pack" "$sgi_root/.contexture/storage/scripts/store-pack" "$sgi_root/base/.contexture/storage/scripts/store-pack"; do
+    if [ -n "$sgi_c" ] && [ -x "$sgi_c" ]; then sgi_pack=$sgi_c; break; fi
+    sgi_pack=""
+  done
+  if [ -z "$sgi_pack" ]; then
+    printf 'store.get: error: the storage core codec is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+    return 2
+  fi
+  "$sgi_pack" unpack "$sgi_t.ans" "$sgi_t" || return 2
+  cat "$sgi_t.err" >&2
+  return 0
 }
 
 # store_roots: the declared store roots, namespace TAB root per line (a fallback root on its

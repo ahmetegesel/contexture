@@ -406,13 +406,34 @@ store_list_keys() {
   printf '%s\n%s\n' "$slk_p" "$slk_f" | LC_ALL=C awk 'NF' | LC_ALL=C sort -u
 }
 
+# store_dir_exact <folder> <path>: the path's folders under <folder>, each segment in its
+# stored spelling at its own directory, so a case twin of a folder is absent
+store_dir_exact() {
+  sde_dir=$1
+  sde_rest=$2
+  while [ -n "$sde_rest" ]; do
+    case "$sde_rest" in
+      */*) sde_seg=${sde_rest%%/*}; sde_rest=${sde_rest#*/} ;;
+      *) sde_seg=$sde_rest; sde_rest= ;;
+    esac
+    sde_hit=0
+    for sde_e in "$sde_dir"/* "$sde_dir"/.[!.]* "$sde_dir"/..?*; do
+      if [ "${sde_e##*/}" = "$sde_seg" ]; then sde_hit=1; break; fi
+    done
+    [ "$sde_hit" -eq 1 ] || return 1
+    sde_dir="$sde_dir/$sde_seg"
+    [ -d "$sde_dir" ] || return 1
+  done
+}
+
 # store_list_root <folder> [<prefix>] [first]: every key under one root folder, bytewise,
 # only those the module pattern admits and, when a prefix is given, those that start with
 # it; the folder entries are read as stored, so a case twin of a key never appears. The key
 # rule and the module pattern run in one awk pass, and a prefix ending on a slash starts
-# the walk at that directory (or answers nothing when the root holds no such directory), so
-# a per-unit read does not pay for the namespace. With first, the walk stops at the first
-# admitted key, the presence probe of the health.
+# the walk at that directory in its stored spelling (or answers nothing when the root holds
+# no such directory, a case twin of it included), so a per-unit read does not pay for the
+# namespace. With first, the walk stops at the first admitted key, the presence probe of
+# the health.
 store_list_root() {
   sl_dir=$1
   sl_prefix=${2:-}
@@ -424,6 +445,7 @@ store_list_root() {
       */)
         sl_sub=${sl_prefix%/}
         [ -d "$sl_dir/$sl_sub" ] || return 0
+        store_dir_exact "$sl_dir" "$sl_sub" || return 0
         sl_scan="$sl_dir/$sl_sub"
         ;;
     esac
@@ -465,6 +487,60 @@ store_list_root() {
       print key
       if (first) exit
     }' | LC_ALL=C sort
+}
+
+# store_list_asked <folder> <prefix> <keys> <scratch>: the keys of the file <keys> (each under
+# <prefix>, the key rule and the pattern already passed) that the root folder holds, as the
+# walk of the prefix's folder would list them: each folder on the way a directory and each
+# key a regular file in its stored spelling, a symbolic link never followed. Only the folders
+# of the asked keys are read, one level each, in one find per entry type, so a read across
+# many units pays for the folders it asks, never for the namespace.
+store_list_asked() {
+  la_dir=$1; la_pre=$2; la_keys=$3; la_st=$4
+  [ -d "$la_dir" ] || return 0
+  la_scan=$la_dir
+  if [ -n "$la_pre" ]; then
+    la_sub=${la_pre%/}
+    [ -d "$la_dir/$la_sub" ] || return 0
+    store_dir_exact "$la_dir" "$la_sub" || return 0
+    la_scan="$la_dir/$la_sub"
+  fi
+  [ ! -h "$la_scan" ] || return 0
+  la_ops=$(LA_PRE="$la_pre" LC_ALL=C awk '{
+      n = split(substr($0, length(ENVIRON["LA_PRE"]) + 1), s, "/")
+      f = "."
+      for (i = 1; i < n; i++) { f = f "/" s[i]; if (!(f in seen)) { seen[f] = 1; print f "/." } }
+    }' "$la_keys") || return 1
+  : > "$la_st.d" && : > "$la_st.f" || return 1
+  (
+    CDPATH="" cd "$la_scan" 2>/dev/null || exit 0
+    set -f
+    IFS='
+'
+    find . $la_ops ! -name . -prune -type d -print > "$la_st.d" 2>/dev/null
+    find . $la_ops ! -name . -prune -type f -print > "$la_st.f" 2>/dev/null
+    exit 0
+  )
+  LA_PRE="$la_pre" LA_SFX="$SD_SUFFIX" LC_ALL=C awk '
+    function entry(l,    r, i) {
+      if (substr(l, 1, 2) != "./") return ""
+      r = substr(l, 3)
+      i = index(r, "/./")
+      if (i) return substr(r, 1, i - 1) SUBSEP substr(r, i + 3)
+      return SUBSEP r
+    }
+    FILENAME == ARGV[1] { e = entry($0); if (e != "") D[e] = 1; next }
+    FILENAME == ARGV[2] { e = entry($0); if (e != "") F[e] = 1; next }
+    {
+      n = split(substr($0, length(ENVIRON["LA_PRE"]) + 1), s, "/")
+      f = ""
+      ok = 1
+      for (i = 1; i < n; i++) {
+        if (!((f SUBSEP s[i]) in D)) { ok = 0; break }
+        f = (i == 1 ? s[i] : f "/" s[i])
+      }
+      if (ok && ((f SUBSEP s[n] ENVIRON["LA_SFX"]) in F)) print
+    }' "$la_st.d" "$la_st.f" "$la_keys"
 }
 
 # store_key_exists <key>: the exact key the store lists, in the root or the fallback root
@@ -597,12 +673,90 @@ store_list() {
 
 store_get() {
   FN=store.get
-  [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.get takes the namespace and the key"
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.get takes the namespace and the key"
+  [ $# -eq 2 ] || { store_get_many "$@"; return; }
   sg_ns=$1; sg_key=$2
   store_data store.get "$sg_ns"
   store_key_for store.get "$sg_ns" "$sg_key"
   store_read_path "$sg_key" || refuse 1 ERR_ENTITY_NOT_FOUND "key '$sg_key' not found in namespace '$sg_ns'"
   cat "$SR_PATH" 2>/dev/null || refuse 2 ERR_STORAGE_READ "cannot read key '$sg_key' in namespace '$sg_ns'"
+  store_notice
+}
+
+# store_get_many <namespace> <key> <key>...: the batched read, one compact JSON line
+# {namespace, items} packed by the storage core's codec, one item per asked key in the asked
+# order. Every key passes the key rule and the pattern first (the first failure refuses
+# with the one key form's line); presence is the exact stored spelling the walk of the
+# keys' common folder would list, read from the asked keys' own folders alone, the root's
+# copy first, then the fallback's; an absent key is an item marked missing, and a present
+# key that cannot be read refuses rc 2.
+store_get_many() {
+  gm_ns=$1
+  shift
+  store_data store.get "$gm_ns"
+  gm_bad=$(GM_PAT="$SD_KEYPAT" LC_ALL=C awk 'BEGIN {
+    m = split(ENVIRON["GM_PAT"], p, "/")
+    multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    for (a = 1; a < ARGC; a++) {
+      s = ARGV[a]
+      ok = (s != "" && substr(s, 1, 1) != "/" && substr(s, length(s), 1) != "/" && s !~ /[[:cntrl:]]/ && !index(s, " ") && !index(s, "\\"))
+      if (ok) { n = split(s, k, "/"); for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") ok = 0 }
+      if (!ok) { printf "malformed\t%s", s; exit }
+      shape = (m >= 1)
+      if (shape) { if (multi) { if (n < m) shape = 0 } else if (n != m) shape = 0 }
+      for (i = 1; shape && i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[i] == "") shape = 0
+      if (shape && !multi && (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[m] == "")) shape = 0
+      if (!shape) { printf "pattern\t%s", s; exit }
+    }
+  }' "$@")
+  case "$gm_bad" in
+    malformed*) refuse 1 ERR_INVALID_ARGUMENT "malformed key '${gm_bad#*	}'" ;;
+    pattern*) refuse 1 ERR_INVALID_ARGUMENT "key '${gm_bad#*	}' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
+  gm_pack=""
+  for gm_c in "$SCRIPT_DIR/../../scripts/store-pack" "$STORE_WS/.contexture/storage/scripts/store-pack" "$STORE_WS/base/.contexture/storage/scripts/store-pack"; do
+    if [ -x "$gm_c" ]; then gm_pack=$gm_c; break; fi
+  done
+  [ -n "$gm_pack" ] || refuse 2 ERR_STORAGE_READ "the storage core codec is not installed"
+  STORE_BATCH_STAGE=$(mktemp -d "$(scratch_dir)/store-get.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  gm_dir=$STORE_BATCH_STAGE
+  case "$1" in */*) gm_pre=${1%/*} ;; *) gm_pre="" ;; esac
+  for gm_k in "$@"; do
+    while [ -n "$gm_pre" ]; do
+      case "$gm_k" in "$gm_pre"/*) break ;; esac
+      case "$gm_pre" in */*) gm_pre=${gm_pre%/*} ;; *) gm_pre="" ;; esac
+    done
+  done
+  [ -z "$gm_pre" ] || gm_pre="$gm_pre/"
+  { printf '%s\n' "$@" > "$gm_dir/keys" \
+      && store_list_asked "$STORE_WS/$SD_ROOT" "$gm_pre" "$gm_dir/keys" "$gm_dir/r" > "$gm_dir/root" \
+      && : > "$gm_dir/fallback"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  if [ -n "$SD_FALLBACK" ]; then
+    { store_list_asked "$STORE_WS/$SD_FALLBACK" "$gm_pre" "$gm_dir/keys" "$gm_dir/f" > "$gm_dir/fallback"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  fi
+  gm_fb=$(GM_MAN="$gm_dir/man" GM_WS="$STORE_WS" GM_ROOT="$SD_ROOT" GM_FB="$SD_FALLBACK" GM_SFX="$SD_SUFFIX" LC_ALL=C awk '
+    FILENAME == ARGV[1] { R[$0] = 1; next }
+    FILENAME == ARGV[2] { F[$0] = 1; next }
+    {
+      if ($0 in R) p = ENVIRON["GM_WS"] "/" ENVIRON["GM_ROOT"] "/" $0 ENVIRON["GM_SFX"]
+      else if ($0 in F) { p = ENVIRON["GM_WS"] "/" ENVIRON["GM_FB"] "/" $0 ENVIRON["GM_SFX"]; fb = 1 }
+      else p = ""
+      print $0 "\t" p > ENVIRON["GM_MAN"]
+    }
+    END { close(ENVIRON["GM_MAN"]); if (fb) print 1 }' "$gm_dir/root" "$gm_dir/fallback" "$gm_dir/keys") || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  [ -f "$gm_dir/man" ] || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  [ -n "$gm_fb" ] && STORE_FB_SERVED=1
+  while IFS='	' read -r gm_k gm_p; do
+    [ -n "$gm_p" ] || continue
+    [ -f "$gm_p" ] && [ -r "$gm_p" ] || refuse 2 ERR_STORAGE_READ "cannot read key '$gm_k' in namespace '$gm_ns'"
+  done < "$gm_dir/man"
+  "$gm_pack" pack "$gm_ns" "$gm_dir/man" > "$gm_dir/answer" 2> "$gm_dir/err"
+  case $? in
+    0) ;;
+    3) refuse 2 ERR_STORAGE_READ "cannot read key '$(head -n 1 "$gm_dir/err")' in namespace '$gm_ns'" ;;
+    *) refuse 2 ERR_STORAGE_READ "the batched read of namespace '$gm_ns' failed" ;;
+  esac
+  cat "$gm_dir/answer" 2>/dev/null || refuse 2 ERR_STORAGE_READ "the batched read of namespace '$gm_ns' failed"
   store_notice
 }
 

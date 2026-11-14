@@ -471,9 +471,70 @@ store_list() {
   exit 0
 }
 
+# store_get_many <namespace> <key> <key>...: the batched read, one compact JSON line
+# {namespace, items} packed by the storage core's codec, one item per asked key in the asked
+# order: every key passes the key rule and the pattern first (the first failure refuses with
+# the one key form's line), one sqlite3 call writes each present key's value into the
+# call's scratch, and an absent key is an item marked missing
+store_get_many() {
+  gm_ns=$1
+  shift
+  store_data store.get "$gm_ns"
+  gm_bad=$(GM_PAT="$SD_KEYPAT" LC_ALL=C awk 'BEGIN {
+    m = split(ENVIRON["GM_PAT"], p, "/")
+    multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    for (a = 1; a < ARGC; a++) {
+      s = ARGV[a]
+      ok = (s != "" && substr(s, 1, 1) != "/" && substr(s, length(s), 1) != "/" && s !~ /[[:cntrl:]]/ && !index(s, " ") && !index(s, "\\"))
+      if (ok) { n = split(s, k, "/"); for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") ok = 0 }
+      if (!ok) { printf "malformed\t%s", s; exit }
+      shape = (m >= 1)
+      if (shape) { if (multi) { if (n < m) shape = 0 } else if (n != m) shape = 0 }
+      for (i = 1; shape && i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[i] == "") shape = 0
+      if (shape && !multi && (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[m] == "")) shape = 0
+      if (!shape) { printf "pattern\t%s", s; exit }
+    }
+  }' "$@")
+  case "$gm_bad" in
+    malformed*) refuse 1 ERR_INVALID_ARGUMENT "malformed key '${gm_bad#*	}'" ;;
+    pattern*) refuse 1 ERR_INVALID_ARGUMENT "key '${gm_bad#*	}' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
+  gm_pack=""
+  for gm_c in "$MODULE_DIR/../../storage/scripts/store-pack" \
+              "$ROOT/.contexture/storage/scripts/store-pack" \
+              "$ROOT/base/.contexture/storage/scripts/store-pack"; do
+    if [ -x "$gm_c" ]; then gm_pack=$gm_c; break; fi
+  done
+  [ -n "$gm_pack" ] || refuse 2 ERR_STORAGE_READ "the storage core codec is not installed"
+  scratch
+  { printf '%s\n' "$@" > "$SCRATCH/keys" && : > "$SCRATCH/present"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  if [ -f "$DB_PATH" ]; then
+    db_init
+    GM_NS="$gm_ns" GM_DIR="$SCRATCH" LC_ALL=C awk '
+      function q(s,   n, p, i, o) { n = split(s, p, "'\''"); o = p[1]; for (i = 2; i <= n; i++) o = o "'\'''\''" p[i]; return "'\''" o "'\''" }
+      { printf "SELECT %d, writefile(%s, value) FROM store WHERE namespace = %s AND key = %s;\n", NR, q(ENVIRON["GM_DIR"] "/value." NR), q(ENVIRON["GM_NS"]), q($0) }
+    ' "$SCRATCH/keys" > "$SCRATCH/read.sql" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+    sq -bail -separator '	' "$DB_PATH" < "$SCRATCH/read.sql" > "$SCRATCH/present" 2>/dev/null \
+      || refuse 2 ERR_STORAGE_READ "the batched read of namespace '$gm_ns' failed"
+  fi
+  GM_DIR="$SCRATCH" LC_ALL=C awk -F '\t' '
+    FILENAME == ARGV[1] { P[$1 + 0] = 1; next }
+    { print $0 "\t" ((FNR in P) ? ENVIRON["GM_DIR"] "/value." FNR : "") }
+  ' "$SCRATCH/present" "$SCRATCH/keys" > "$SCRATCH/man" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  "$gm_pack" pack "$gm_ns" "$SCRATCH/man" > "$SCRATCH/answer" 2> "$SCRATCH/pack.err"
+  case $? in
+    0) ;;
+    3) refuse 2 ERR_STORAGE_READ "cannot read key '$(head -n 1 "$SCRATCH/pack.err")' in namespace '$gm_ns'" ;;
+    *) refuse 2 ERR_STORAGE_READ "the batched read of namespace '$gm_ns' failed" ;;
+  esac
+  cat "$SCRATCH/answer" 2>/dev/null || refuse 2 ERR_STORAGE_READ "the batched read of namespace '$gm_ns' failed"
+  exit 0
+}
+
 store_get() {
   FN=store.get
-  [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.get takes the namespace and the key"
+  [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.get takes the namespace and the key"
+  [ $# -eq 2 ] || store_get_many "$@"
   sg_ns=$1; sg_key=$2
   store_data store.get "$sg_ns"
   store_key_for store.get "$sg_ns" "$sg_key"

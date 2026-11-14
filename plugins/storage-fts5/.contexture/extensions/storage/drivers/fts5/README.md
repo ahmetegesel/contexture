@@ -31,7 +31,9 @@ the value as opaque bytes, `store_changes` holds the optional generic change log
 at, namespace, key, op, head, prior), and `store_docs` holds the documents the search
 schema derives at write time (`store_docs_schema` stores each namespace's schema
 signature). The seven data functions answer natively over those tables: `store.list` is
-bytewise and pattern-filtered, `store.get` returns the raw bytes, `store.put` and
+bytewise and pattern-filtered, `store.get` returns the raw bytes of one key, and for two
+or more keys writes every present value in one `sqlite3` call and answers the one batched
+line the storage core's codec packs (an absent key marked missing), `store.put` and
 `store.delete` are one transaction with their change-log row, `store.changes` answers the
 rows of the heads it is given oldest first, `store.batch` runs its whole action list in
 one `BEGIN IMMEDIATE` transaction with one change row per action (all or none; the first
