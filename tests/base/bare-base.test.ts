@@ -25,6 +25,7 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
     for (const absent of ['.contexture/rhythms', 'docs', 'plugins']) expect(existsSync(join(sb, absent)), absent).toBe(false);
     expect(runnable(join(sb, '.contexture/storage/scripts/driver-resolver'))).toBe(true);
     expect(existsSync(join(sb, '.contexture/storage/scripts/library'))).toBe(true);
+    expect(existsSync(join(sb, '.contexture/storage/scripts/store-fields.awk'))).toBe(true);
     expect(runnable(join(sb, '.contexture/storage/drivers/posix/driver'))).toBe(true);
   });
 

@@ -23,6 +23,11 @@
 #   lib.utf8_ok <string>, lib.utf8_file_ok <file>                   (the shared checks)
 #   lib.ref_ok <label> <ref>
 #   lib.lock <namespace>, lib.unlock                                (the library lock)
+#   fields.decl_check <declaration>                                 (the field validator)
+#   fields.apply <declaration> <old record> <actions> <new record>
+#   fields.effective <declaration> <record>
+#   fields.conforms <declaration> <record>
+#   fields.reserved_ok <name>
 #
 # The store functions and the two probes reach the configured driver through the storage
 # core's resolver; the caller uses the shell function names store_list, store_get,
@@ -67,6 +72,16 @@
 # write: lib_lock <namespace> takes it, lib_unlock releases it, and the caller releases it
 # in its exit trap too. It lives in its own lock family, never at a driver's namespace lock,
 # so a holder calls every store function freely; one process holds one library lock.
+#
+# The field validator is opt in: a module that declares fields for a container hands the
+# declaration (one field line per line) and the record files to the fields functions, which
+# run the storage core's store-fields.awk engine; a module declaring none never calls them.
+# Every value is a string; a rule tying fields together is the module's own. A refusal is
+# rc 1 with one line: ERR_INVALID_ARGUMENT for malformed input (a declaration line, an
+# action, a value that is not UTF-8 or holds a newline in a line field), ERR_SCHEMA_VIOLATION
+# for a write breaking the declaration (an unknown field, a value outside its one-of set, a
+# required field left absent). ERR_SCHEMA_VIOLATION is a library owned tier 1 code, which the
+# docs module uses too.
 
 # store_lib_root: the workspace root the store calls run in
 store_lib_root() {
@@ -399,6 +414,140 @@ lib_unlock() {
     LIB_LOCK=""
   fi
   return 0
+}
+
+# LIB_FIELDS_RESERVED and LIB_FIELDS_RESERVED_PREFIXES: the field names a declaration may not
+# take, since each field becomes a flag (--<name>, --add-<name>, --remove-<name>) beside the
+# shared flags and the value controls --unset and --stdin
+LIB_FIELDS_RESERVED='json limit type mode container id ref unset stdin'
+LIB_FIELDS_RESERVED_PREFIXES='add- remove-'
+
+# fields_reserved_ok <name>: rc 1 for a reserved field name, rc 0 otherwise; silent
+fields_reserved_ok() {
+  for frk_n in $LIB_FIELDS_RESERVED; do
+    [ "${1:-}" = "$frk_n" ] && return 1
+  done
+  for frk_p in $LIB_FIELDS_RESERVED_PREFIXES; do
+    case "${1:-}" in "$frk_p"*) return 1 ;; esac
+  done
+  return 0
+}
+
+# store_lib_fields: the storage core's field validator engine, found beside the resolver this
+# library calls (the core scripts folder holds both), then under the drawer, then in the base
+# mirror
+store_lib_fields() {
+  slf_root=$(store_lib_root)
+  slf_beside=""
+  if slf_r=$(store_lib_resolver); then slf_beside="${slf_r%/*}/store-fields.awk"; fi
+  for slf_c in "$slf_beside" "$slf_root/.contexture/storage/scripts/store-fields.awk" \
+               "$slf_root/base/.contexture/storage/scripts/store-fields.awk"; do
+    if [ -n "$slf_c" ] && [ -f "$slf_c" ]; then printf '%s\n' "$slf_c"; return 0; fi
+  done
+  return 1
+}
+
+# fields_run <mode> <label> <declaration> <record> <actions>: one engine run, its answer on
+# stdout and its refusal line on stderr; an unreadable input file refuses rc 2 naming its role
+fields_run() {
+  fr_mode=$1
+  fr_label=$2
+  shift 2
+  fr_awk=$(store_lib_fields) || {
+    printf '%s: error: the storage core field validator is not installed (ERR_DRIVER_NOT_FOUND)\n' "$fr_label" >&2
+    return 2
+  }
+  for fr_role in declaration record actions; do
+    if [ ! -f "$1" ] || [ ! -r "$1" ]; then
+      [ "$1" = /dev/null ] || {
+        printf '%s: error: cannot read the %s file (ERR_STORAGE_READ)\n' "$fr_label" "$fr_role" >&2
+        return 2
+      }
+    fi
+    case $fr_role in
+      declaration) fr_d=$1 ;;
+      record) fr_r=$1 ;;
+      actions) fr_a=$1 ;;
+    esac
+    shift
+  done
+  fr_prog=$(cat "$fr_awk") || {
+    printf '%s: error: cannot read the storage core field validator (ERR_STORAGE_READ)\n' "$fr_label" >&2
+    return 2
+  }
+  SF_MODE=$fr_mode SF_LABEL=$fr_label SF_TODAY=$(date +%Y-%m-%d) SF_RESERVED=$LIB_FIELDS_RESERVED \
+    SF_RESERVED_PREFIXES=$LIB_FIELDS_RESERVED_PREFIXES LC_ALL=C \
+    awk "$LIB_UTF8_AWK$fr_prog" part=1 "$fr_d" part=2 "$fr_r" part=3 "$fr_a" < /dev/null
+}
+
+# fields_decl_check <declaration>: every field line of a declaration file checked: the name
+# (lowercase letters, digits, underscore, and dash, starting with a letter, never reserved,
+# never twice), the clauses in their fixed order, a block taking no list, one-of, or default,
+# a list no default, a required field no default, a default inside its one-of set (the
+# dynamic today with none); rc 0 silent, or rc 1 with one line naming the field and clause
+fields_decl_check() {
+  if [ $# -ne 1 ]; then
+    printf 'fields.decl_check: error: takes one declaration file (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  fields_run decl fields.decl_check "$1" /dev/null /dev/null > /dev/null
+}
+
+# fields_apply <declaration> <old record> <actions> <new record>: a write's actions applied to
+# the old record (an empty one means create), the canonical result written to the new record
+# file; checks in order: the action lines and block bodies, UTF-8, a newline or carriage
+# return in a line value (a carriage return in a block), an empty value, an unknown field
+# (an unset of a leftover field the record holds is accepted), a value outside its one-of
+# set, the action against the field's shape, an item added twice or removed absent, a
+# required field an unset or remove leaves absent, then a required field absent from the
+# result. Defaults fill at create only (today the write's date); an update leaves an absent
+# field absent. A refusal writes nothing, and the old record is never touched.
+fields_apply() {
+  if [ $# -ne 4 ]; then
+    printf 'fields.apply: error: takes a declaration, an old record, an actions file, and a new record file (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  fa_tmp="$4.fields.$$"
+  : > "$fa_tmp" 2>/dev/null || {
+    printf 'fields.apply: error: cannot write the new record (ERR_STORAGE_WRITE)\n' >&2
+    return 2
+  }
+  fields_run apply fields.apply "$1" "$2" "$3" > "$fa_tmp"
+  fa_rc=$?
+  if [ "$fa_rc" -ne 0 ]; then
+    rm -f "$fa_tmp"
+    return "$fa_rc"
+  fi
+  mv -f "$fa_tmp" "$4" 2>/dev/null || {
+    rm -f "$fa_tmp"
+    printf 'fields.apply: error: cannot write the new record (ERR_STORAGE_WRITE)\n' >&2
+    return 2
+  }
+  return 0
+}
+
+# fields_effective <declaration> <record>: the record on stdout with each absent field that
+# carries a static default filled with it, computed at read and never stored (a today default
+# is never computed at read), so a reader and a filter agree
+fields_effective() {
+  if [ $# -ne 2 ]; then
+    printf 'fields.effective: error: takes a declaration and a record file (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  fields_run effective fields.effective "$1" "$2" /dev/null
+}
+
+# fields_conforms <declaration> <record>: one stdout line <field>: <reason> per field that
+# breaks the current declaration (a required field absent, a value outside its one-of set, a
+# single field holding several values, a shape other than the declared one, a leftover field
+# no longer declared), rc 1 when any line printed, rc 0 when the record conforms; a refusal
+# prints its one line on stderr and nothing on stdout
+fields_conforms() {
+  if [ $# -ne 2 ]; then
+    printf 'fields.conforms: error: takes a declaration and a record file (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  fields_run conforms fields.conforms "$1" "$2" /dev/null
 }
 
 # store_search <namespace> <query> <mode> [<limit>]: the library's search entry; the query

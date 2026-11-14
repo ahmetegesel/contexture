@@ -13,6 +13,7 @@ storage/
   scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
   scripts/store-b64         the private base64 encoder of a stored value
   scripts/store-pack        the private codec of a batched store.get answer: pack, unpack
+  scripts/store-fields.awk  the private field validator engine the library's fields functions run
   scripts/json.awk          the one JSON flattener: a storage answer to path=value lines, read
                             by the unit, rhythm, and docs modules
   scripts/library           the module-facing interface, sourced by a module's scripts
@@ -162,9 +163,12 @@ data declaration is `ERR_INVALID_ARGUMENT`, an undeclared namespace
 answer, so a read failure midway prints no partial line. The library's ref interface
 re-frames a target refusal as `data_get: error: ref '<ref>': <message> (<CODE>)`; a chain
 over 8 hops or a cycle refuses `ERR_INVALID_ARGUMENT`; the source write's re-frame and its
-refusal before writing are the unit module's. A module may mint its own tier 1 code
-(the docs module's `ERR_SCHEMA_VIOLATION` is the precedent); core codes are never
-redefined. The resolver's `driver-resolver: ERROR: ...` line is the one shape exception,
+refusal before writing are the unit module's. `ERR_SCHEMA_VIOLATION` is a tier 1 code the
+library owns, outside the core code table: its field validator answers it for a write that
+breaks a container's declaration, and the docs module for a write its grammar refuses (a
+field its edit engine checks, or a result that fails its grammar audit), rc 1 and nothing
+written. A module may still mint its own tier 1 code; core codes are
+never redefined. The resolver's `driver-resolver: ERROR: ...` line is the one shape exception,
 and the library passes it through unchanged.
 
 The interrupt rule: rc 0 means the write landed; after an interrupt any other exit means
@@ -279,7 +283,36 @@ through it; the module never names the driver. The library exports:
   after 600 polls 0.1 s apart). A malformed namespace or a second lock in one process
   refuses rc 1 `ERR_INVALID_ARGUMENT`, an unwritable folder or pid rc 2
   `ERR_STORAGE_WRITE`. `lib_unlock` removes the lock the process holds (a no-op when none);
-  the caller also calls it from its exit trap, so a signal frees the lock.
+  the caller also calls it from its exit trap, so a signal frees the lock;
+- the field validator, opt in, run over files the module stages (no storage read or write):
+  `fields_decl_check <declaration>`, `fields_apply <declaration> <old record> <actions>
+  <new record>`, `fields_effective <declaration> <record>`, `fields_conforms <declaration>
+  <record>`, and `fields_reserved_ok <name>`, the engine being `scripts/store-fields.awk`
+  (found beside the resolver, then under the drawer, then in the base mirror).
+  A declaration holds one field line per field:
+
+  ```text
+  <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]
+  ```
+
+  The name is lowercase letters, digits, underscore, and dash starting with a letter,
+  never reserved (`json`, `limit`, `type`, `mode`, `container`, `id`, `ref`, `unset`,
+  `stdin`, any `add-` or `remove-` name); a block takes no list, one-of, or default, a list
+  no default, a required field no default, and `today` is the one dynamic default (the
+  write's date, never with a one-of set). An actions file holds one tab separated action
+  per line: `set`, `add`, or `remove <field> <value>` (the value in the payload escape),
+  `unset <field>`, or `block <field> <base64 body>` (the body through `store-b64`; its one
+  final newline dropped), the write forms `--<field>=`, `--add-<field>=`,
+  `--remove-<field>=`, `--unset=`, and `--stdin=` one to one. A record is the unit record
+  dialect: `name: "value"` per line value (the payload escape, a double quote as text), a
+  list one line per item, a block `name ::` with its body indented two spaces, the declared
+  fields in declaration order, a leftover after them in encounter order. `fields_apply`
+  checks in a fixed order (the actions, UTF-8, a newline in a line value, an empty value,
+  an unknown field, a value outside its one-of set, the action against the field's shape,
+  a required field left absent), fills the defaults at create only, and writes the
+  canonical result, nothing on a refusal; `fields_effective` fills an absent static
+  default at read and never stores it; `fields_conforms` prints one `<field>: <reason>`
+  line per field breaking the declaration and exits 1 when any prints.
 
 `data_get` resolves a module reference `<module>#<symbol>`: it finds the target module's
 data script in the workspace modules, the workspace extensions, or the base mirror of
