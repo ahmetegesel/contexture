@@ -1,0 +1,812 @@
+{
+ "backslash/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":3,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-two\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-two\",\"snippet\":\"the second entry, a backslash \\\\ kept\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-two\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/report\",\"type\":\"lane\",\"id\":\"search-lane/report\",\"address\":\"unit#search-verbs/lane/search-lane/report\",\"snippet\":\"VERDICT :: the walk landed, a \\\\ backslash and a \\\"quote\\\"\",\"read\":\"ctx unit get search-verbs/lane/search-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "backslash/all/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 3 matches, 3 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\n  entry unit#search-verbs/entry/2026-09-27-search-two: the second entry, a backslash \\ kept\n  lane unit#search-verbs/lane/search-lane/report: VERDICT :: the walk landed, a \\ backslash and a \"quote\"\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "backslash/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "backslash/closed/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 0 matches\n",
+  "stderr": ""
+ },
+ "backslash/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":3,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-two\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-two\",\"snippet\":\"the second entry, a backslash \\\\ kept\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-two\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/report\",\"type\":\"lane\",\"id\":\"search-lane/report\",\"address\":\"unit#search-verbs/lane/search-lane/report\",\"snippet\":\"VERDICT :: the walk landed, a \\\\ backslash and a \\\"quote\\\"\",\"read\":\"ctx unit get search-verbs/lane/search-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "backslash/default/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 3 matches, 3 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\n  entry unit#search-verbs/entry/2026-09-27-search-two: the second entry, a backslash \\ kept\n  lane unit#search-verbs/lane/search-lane/report: VERDICT :: the walk landed, a \\ backslash and a \"quote\"\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "backslash/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":3,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-two\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-two\",\"snippet\":\"the second entry, a backslash \\\\ kept\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-two\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/report\",\"type\":\"lane\",\"id\":\"search-lane/report\",\"address\":\"unit#search-verbs/lane/search-lane/report\",\"snippet\":\"VERDICT :: the walk landed, a \\\\ backslash and a \\\"quote\\\"\",\"read\":\"ctx unit get search-verbs/lane/search-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "backslash/fanout/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 3 matches, 3 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\n  entry unit#search-verbs/entry/2026-09-27-search-two: the second entry, a backslash \\ kept\n  lane unit#search-verbs/lane/search-lane/report: VERDICT :: the walk landed, a \\ backslash and a \"quote\"\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "backslash/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "backslash/finding/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 0 matches\n",
+  "stderr": ""
+ },
+ "backslash/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "backslash/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 0 matches\n",
+  "stderr": ""
+ },
+ "backslash/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":2,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/report\",\"type\":\"lane\",\"id\":\"search-lane/report\",\"address\":\"unit#search-verbs/lane/search-lane/report\",\"snippet\":\"VERDICT :: the walk landed, a \\\\ backslash and a \\\"quote\\\"\",\"read\":\"ctx unit get search-verbs/lane/search-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "backslash/lane/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 2 matches, 2 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\n  lane unit#search-verbs/lane/search-lane/report: VERDICT :: the walk landed, a \\ backslash and a \"quote\"\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "backslash/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-two\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-two\",\"snippet\":\"the second entry, a backslash \\\\ kept\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-two\"}]}\n",
+  "stderr": ""
+ },
+ "backslash/limit/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 1 match, 1 shown\n  entry unit#search-verbs/entry/2026-09-27-search-two: the second entry, a backslash \\ kept\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "backslash/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"backslash\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "backslash/unit/text": {
+  "code": 0,
+  "stdout": "search \"backslash\": 1 match, 1 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":29,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"First line of the description.\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"four-space-blank\",\"address\":\"unit#legacy-u/task/four-space-blank\",\"snippet\":\"The serializer's four space blank body line\",\"read\":\"ctx unit get legacy-u/task/four-space-blank\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"SUMMARY_FIRST\",\"address\":\"unit#legacy-u/finding/SUMMARY_FIRST\",\"snippet\":\"The posix serializer wrote SUMMARY before REF.\",\"read\":\"ctx unit get legacy-u/finding/SUMMARY_FIRST\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-double-what\",\"address\":\"unit#legacy-u/entry/2026-09-20-double-what\",\"snippet\":\"the first WHAT\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-double-what\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"session\",\"id\":\"legacy-u\",\"snippet\":\"@anchor A2 (\\\"continues A1\\\", attention: the posix stamp quoted form)\",\"read\":\"ctx unit load legacy-u\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"the human\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-10-no-anchor\",\"address\":\"unit#legacy-u/entry/2026-09-10-no-anchor\",\"snippet\":\"backlog/four-space-blank: DONE (landed before the legacy walk)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-10-no-anchor\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/recipe\",\"type\":\"lane\",\"id\":\"legacy-lane/recipe\",\"address\":\"unit#legacy-u/lane/legacy-lane/recipe\",\"snippet\":\"the legacy lane\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/recipe\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/journal\",\"type\":\"lane_entry\",\"id\":\"legacy-lane/journal/2026-09-20-lane-repeat\",\"address\":\"unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat\",\"snippet\":\"the first occurrence of a repeated lane slug\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat\"},{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"the canon task of a closed unit\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-closed/knowledge\",\"type\":\"finding\",\"id\":\"CLOSED_FINDING\",\"address\":\"unit#search-closed/finding/CLOSED_FINDING\",\"snippet\":\"the closed reading of LEGACY_CANON\",\"read\":\"ctx unit get search-closed/finding/CLOSED_FINDING\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"the canon task of the verb unit\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"done-task\",\"address\":\"unit#search-verbs/task/done-task\",\"snippet\":\"completed in the walk\",\"read\":\"ctx unit get search-verbs/task/done-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"active-task\",\"address\":\"unit#search-verbs/task/active-task\",\"snippet\":\"started in the walk\",\"read\":\"ctx unit get search-verbs/task/active-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V1\",\"address\":\"unit#search-verbs/finding/SEARCH_V1\",\"snippet\":\"the first reading\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V1\"},{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V2\",\"address\":\"unit#search-verbs/finding/SEARCH_V2\",\"snippet\":\"SEARCH_V1 (replaced by the walk)\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V2\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-done-task-completed\",\"address\":\"unit#search-verbs/entry/2026-09-27-done-task-completed\",\"snippet\":\"backlog/done-task: DONE (the walk verified it)\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-done-task-completed\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-one\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-one\",\"snippet\":\"the first entry names the canon-task\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-one\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-two\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-two\",\"snippet\":\"the second entry, a backslash \\\\ kept\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-two\"}]}\n",
+  "stderr": ""
+ },
+ "common/all/text": {
+  "code": 0,
+  "stdout": "search \"the\": 29 matches, 20 shown\n  task unit#legacy-u/task/canon-task: First line of the description.\n  task unit#legacy-u/task/four-space-blank: The serializer's four space blank body line\n  finding unit#legacy-u/finding/SUMMARY_FIRST: The posix serializer wrote SUMMARY before REF.\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  entry unit#legacy-u/entry/2026-09-20-double-what: the first WHAT\n  session legacy-u/journal: @anchor A2 (\"continues A1\", attention: the posix stamp quoted form)\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: the human\n  entry unit#legacy-u/entry/2026-09-10-no-anchor: backlog/four-space-blank: DONE (landed before the legacy walk)\n  lane unit#legacy-u/lane/legacy-lane/recipe: the legacy lane\n  lane_entry unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat: the first occurrence of a repeated lane slug\n  task unit#search-closed/task/canon-task [closed]: the canon task of a closed unit\n  finding unit#search-closed/finding/CLOSED_FINDING [closed]: the closed reading of LEGACY_CANON\n  task unit#search-verbs/task/canon-task: the canon task of the verb unit\n  task unit#search-verbs/task/done-task: completed in the walk\n  task unit#search-verbs/task/active-task: started in the walk\n  finding unit#search-verbs/finding/SEARCH_V1: the first reading\n  finding unit#search-verbs/finding/SEARCH_V2: SEARCH_V1 (replaced by the walk)\n  entry unit#search-verbs/entry/2026-09-27-done-task-completed: backlog/done-task: DONE (the walk verified it)\n  entry unit#search-verbs/entry/2026-09-27-search-one: the first entry names the canon-task\n  entry unit#search-verbs/entry/2026-09-27-search-two: the second entry, a backslash \\ kept\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":2,\"rows\":[{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"the canon task of a closed unit\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-closed/knowledge\",\"type\":\"finding\",\"id\":\"CLOSED_FINDING\",\"address\":\"unit#search-closed/finding/CLOSED_FINDING\",\"snippet\":\"the closed reading of LEGACY_CANON\",\"read\":\"ctx unit get search-closed/finding/CLOSED_FINDING\",\"label\":\"closed\"}]}\n",
+  "stderr": ""
+ },
+ "common/closed/text": {
+  "code": 0,
+  "stdout": "search \"the\": 2 matches, 2 shown\n  task unit#search-closed/task/canon-task [closed]: the canon task of a closed unit\n  finding unit#search-closed/finding/CLOSED_FINDING [closed]: the closed reading of LEGACY_CANON\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":27,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"First line of the description.\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"four-space-blank\",\"address\":\"unit#legacy-u/task/four-space-blank\",\"snippet\":\"The serializer's four space blank body line\",\"read\":\"ctx unit get legacy-u/task/four-space-blank\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"SUMMARY_FIRST\",\"address\":\"unit#legacy-u/finding/SUMMARY_FIRST\",\"snippet\":\"The posix serializer wrote SUMMARY before REF.\",\"read\":\"ctx unit get legacy-u/finding/SUMMARY_FIRST\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-double-what\",\"address\":\"unit#legacy-u/entry/2026-09-20-double-what\",\"snippet\":\"the first WHAT\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-double-what\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"session\",\"id\":\"legacy-u\",\"snippet\":\"@anchor A2 (\\\"continues A1\\\", attention: the posix stamp quoted form)\",\"read\":\"ctx unit load legacy-u\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"the human\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-10-no-anchor\",\"address\":\"unit#legacy-u/entry/2026-09-10-no-anchor\",\"snippet\":\"backlog/four-space-blank: DONE (landed before the legacy walk)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-10-no-anchor\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/recipe\",\"type\":\"lane\",\"id\":\"legacy-lane/recipe\",\"address\":\"unit#legacy-u/lane/legacy-lane/recipe\",\"snippet\":\"the legacy lane\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/recipe\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/journal\",\"type\":\"lane_entry\",\"id\":\"legacy-lane/journal/2026-09-20-lane-repeat\",\"address\":\"unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat\",\"snippet\":\"the first occurrence of a repeated lane slug\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"the canon task of the verb unit\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"done-task\",\"address\":\"unit#search-verbs/task/done-task\",\"snippet\":\"completed in the walk\",\"read\":\"ctx unit get search-verbs/task/done-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"active-task\",\"address\":\"unit#search-verbs/task/active-task\",\"snippet\":\"started in the walk\",\"read\":\"ctx unit get search-verbs/task/active-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V1\",\"address\":\"unit#search-verbs/finding/SEARCH_V1\",\"snippet\":\"the first reading\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V1\"},{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V2\",\"address\":\"unit#search-verbs/finding/SEARCH_V2\",\"snippet\":\"SEARCH_V1 (replaced by the walk)\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V2\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-done-task-completed\",\"address\":\"unit#search-verbs/entry/2026-09-27-done-task-completed\",\"snippet\":\"backlog/done-task: DONE (the walk verified it)\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-done-task-completed\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-one\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-one\",\"snippet\":\"the first entry names the canon-task\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-one\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-two\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-two\",\"snippet\":\"the second entry, a backslash \\\\ kept\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-two\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-three\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-three\",\"snippet\":\"closes the second entry\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-three\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/recipe\",\"type\":\"lane\",\"id\":\"search-lane/recipe\",\"address\":\"unit#search-verbs/lane/search-lane/recipe\",\"snippet\":\"walk the search, the canon-task first\",\"read\":\"ctx unit get search-verbs/lane/search-lane/recipe\"}]}\n",
+  "stderr": ""
+ },
+ "common/default/text": {
+  "code": 0,
+  "stdout": "search \"the\": 27 matches, 20 shown\n  task unit#legacy-u/task/canon-task: First line of the description.\n  task unit#legacy-u/task/four-space-blank: The serializer's four space blank body line\n  finding unit#legacy-u/finding/SUMMARY_FIRST: The posix serializer wrote SUMMARY before REF.\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  entry unit#legacy-u/entry/2026-09-20-double-what: the first WHAT\n  session legacy-u/journal: @anchor A2 (\"continues A1\", attention: the posix stamp quoted form)\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: the human\n  entry unit#legacy-u/entry/2026-09-10-no-anchor: backlog/four-space-blank: DONE (landed before the legacy walk)\n  lane unit#legacy-u/lane/legacy-lane/recipe: the legacy lane\n  lane_entry unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat: the first occurrence of a repeated lane slug\n  task unit#search-verbs/task/canon-task: the canon task of the verb unit\n  task unit#search-verbs/task/done-task: completed in the walk\n  task unit#search-verbs/task/active-task: started in the walk\n  finding unit#search-verbs/finding/SEARCH_V1: the first reading\n  finding unit#search-verbs/finding/SEARCH_V2: SEARCH_V1 (replaced by the walk)\n  entry unit#search-verbs/entry/2026-09-27-done-task-completed: backlog/done-task: DONE (the walk verified it)\n  entry unit#search-verbs/entry/2026-09-27-search-one: the first entry names the canon-task\n  entry unit#search-verbs/entry/2026-09-27-search-two: the second entry, a backslash \\ kept\n  entry unit#search-verbs/entry/2026-09-27-search-three: closes the second entry\n  lane unit#search-verbs/lane/search-lane/recipe: walk the search, the canon-task first\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":26,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"First line of the description.\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"four-space-blank\",\"address\":\"unit#legacy-u/task/four-space-blank\",\"snippet\":\"The serializer's four space blank body line\",\"read\":\"ctx unit get legacy-u/task/four-space-blank\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"SUMMARY_FIRST\",\"address\":\"unit#legacy-u/finding/SUMMARY_FIRST\",\"snippet\":\"The posix serializer wrote SUMMARY before REF.\",\"read\":\"ctx unit get legacy-u/finding/SUMMARY_FIRST\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-double-what\",\"address\":\"unit#legacy-u/entry/2026-09-20-double-what\",\"snippet\":\"the first WHAT\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-double-what\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"the human\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-10-no-anchor\",\"address\":\"unit#legacy-u/entry/2026-09-10-no-anchor\",\"snippet\":\"backlog/four-space-blank: DONE (landed before the legacy walk)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-10-no-anchor\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/recipe\",\"type\":\"lane\",\"id\":\"legacy-lane/recipe\",\"address\":\"unit#legacy-u/lane/legacy-lane/recipe\",\"snippet\":\"the legacy lane\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/recipe\"},{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"the canon task of a closed unit\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-closed/knowledge\",\"type\":\"finding\",\"id\":\"CLOSED_FINDING\",\"address\":\"unit#search-closed/finding/CLOSED_FINDING\",\"snippet\":\"the closed reading of LEGACY_CANON\",\"read\":\"ctx unit get search-closed/finding/CLOSED_FINDING\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"the canon task of the verb unit\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"done-task\",\"address\":\"unit#search-verbs/task/done-task\",\"snippet\":\"completed in the walk\",\"read\":\"ctx unit get search-verbs/task/done-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"active-task\",\"address\":\"unit#search-verbs/task/active-task\",\"snippet\":\"started in the walk\",\"read\":\"ctx unit get search-verbs/task/active-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V1\",\"address\":\"unit#search-verbs/finding/SEARCH_V1\",\"snippet\":\"the first reading\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V1\"},{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V2\",\"address\":\"unit#search-verbs/finding/SEARCH_V2\",\"snippet\":\"SEARCH_V1 (replaced by the walk)\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V2\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-done-task-completed\",\"address\":\"unit#search-verbs/entry/2026-09-27-done-task-completed\",\"snippet\":\"backlog/done-task: DONE (the walk verified it)\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-done-task-completed\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-one\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-one\",\"snippet\":\"the first entry names the canon-task\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-one\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-two\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-two\",\"snippet\":\"the second entry, a backslash \\\\ kept\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-two\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-three\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-three\",\"snippet\":\"closes the second entry\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-three\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/recipe\",\"type\":\"lane\",\"id\":\"search-lane/recipe\",\"address\":\"unit#search-verbs/lane/search-lane/recipe\",\"snippet\":\"walk the search, the canon-task first\",\"read\":\"ctx unit get search-verbs/lane/search-lane/recipe\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/report\",\"type\":\"lane\",\"id\":\"search-lane/report\",\"address\":\"unit#search-verbs/lane/search-lane/report\",\"snippet\":\"VERDICT :: the walk landed, a \\\\ backslash and a \\\"quote\\\"\",\"read\":\"ctx unit get search-verbs/lane/search-lane/report\"},{\"module\":\"unit\",\"container\":\"tc57-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-repeat\",\"address\":\"unit#tc57-u/entry/2026-09-20-repeat\",\"snippet\":\"awaits the first answer\",\"read\":\"ctx unit get tc57-u/entry/2026-09-20-repeat\"},{\"module\":\"unit\",\"container\":\"tc57-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-closer\",\"address\":\"unit#tc57-u/entry/2026-09-20-closer\",\"snippet\":\"closes the first occurrence\",\"read\":\"ctx unit get tc57-u/entry/2026-09-20-closer\"},{\"module\":\"unit\",\"container\":\"tc57-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-after\",\"address\":\"unit#tc57-u/entry/2026-09-20-after\",\"snippet\":\"an entry after the closer\",\"read\":\"ctx unit get tc57-u/entry/2026-09-20-after\"},{\"module\":\"unit\",\"container\":\"tc63-dangling/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-closer-a\",\"address\":\"unit#tc63-dangling/entry/2026-09-20-closer-a\",\"snippet\":\"names an entry the journal lacks\",\"read\":\"ctx unit get tc63-dangling/entry/2026-09-20-closer-a\"},{\"module\":\"unit\",\"container\":\"tc64-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-inline\",\"address\":\"unit#tc64-u/entry/2026-09-20-inline\",\"snippet\":\"an inline marker on the head line\",\"read\":\"ctx unit get tc64-u/entry/2026-09-20-inline\"}]}\n",
+  "stderr": ""
+ },
+ "common/fanout/text": {
+  "code": 0,
+  "stdout": "search \"the\": 26 matches, 26 shown\n  task unit#legacy-u/task/canon-task: First line of the description.\n  task unit#legacy-u/task/four-space-blank: The serializer's four space blank body line\n  finding unit#legacy-u/finding/SUMMARY_FIRST: The posix serializer wrote SUMMARY before REF.\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  entry unit#legacy-u/entry/2026-09-20-double-what: the first WHAT\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: the human\n  entry unit#legacy-u/entry/2026-09-10-no-anchor: backlog/four-space-blank: DONE (landed before the legacy walk)\n  lane unit#legacy-u/lane/legacy-lane/recipe: the legacy lane\n  task unit#search-closed/task/canon-task [closed]: the canon task of a closed unit\n  finding unit#search-closed/finding/CLOSED_FINDING [closed]: the closed reading of LEGACY_CANON\n  task unit#search-verbs/task/canon-task: the canon task of the verb unit\n  task unit#search-verbs/task/done-task: completed in the walk\n  task unit#search-verbs/task/active-task: started in the walk\n  finding unit#search-verbs/finding/SEARCH_V1: the first reading\n  finding unit#search-verbs/finding/SEARCH_V2: SEARCH_V1 (replaced by the walk)\n  entry unit#search-verbs/entry/2026-09-27-done-task-completed: backlog/done-task: DONE (the walk verified it)\n  entry unit#search-verbs/entry/2026-09-27-search-one: the first entry names the canon-task\n  entry unit#search-verbs/entry/2026-09-27-search-two: the second entry, a backslash \\ kept\n  entry unit#search-verbs/entry/2026-09-27-search-three: closes the second entry\n  lane unit#search-verbs/lane/search-lane/recipe: walk the search, the canon-task first\n  lane unit#search-verbs/lane/search-lane/report: VERDICT :: the walk landed, a \\ backslash and a \"quote\"\n  entry unit#tc57-u/entry/2026-09-20-repeat: awaits the first answer\n  entry unit#tc57-u/entry/2026-09-20-closer: closes the first occurrence\n  entry unit#tc57-u/entry/2026-09-20-after: an entry after the closer\n  entry unit#tc63-dangling/entry/2026-09-20-closer-a: names an entry the journal lacks\n  entry unit#tc64-u/entry/2026-09-20-inline: an inline marker on the head line\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":4,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"SUMMARY_FIRST\",\"address\":\"unit#legacy-u/finding/SUMMARY_FIRST\",\"snippet\":\"The posix serializer wrote SUMMARY before REF.\",\"read\":\"ctx unit get legacy-u/finding/SUMMARY_FIRST\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V1\",\"address\":\"unit#search-verbs/finding/SEARCH_V1\",\"snippet\":\"the first reading\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V1\"},{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V2\",\"address\":\"unit#search-verbs/finding/SEARCH_V2\",\"snippet\":\"SEARCH_V1 (replaced by the walk)\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V2\"}]}\n",
+  "stderr": ""
+ },
+ "common/finding/text": {
+  "code": 0,
+  "stdout": "search \"the\": 4 matches, 4 shown\n  finding unit#legacy-u/finding/SUMMARY_FIRST: The posix serializer wrote SUMMARY before REF.\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  finding unit#search-verbs/finding/SEARCH_V1: the first reading\n  finding unit#search-verbs/finding/SEARCH_V2: SEARCH_V1 (replaced by the walk)\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":2,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/journal\",\"type\":\"lane_entry\",\"id\":\"legacy-lane/journal/2026-09-20-lane-repeat\",\"address\":\"unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat\",\"snippet\":\"the first occurrence of a repeated lane slug\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/journal\",\"type\":\"lane_entry\",\"id\":\"search-lane/journal/2026-09-27-search-lane-one\",\"address\":\"unit#search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one\",\"snippet\":\"a lane step over the canon-task\",\"read\":\"ctx unit get search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one\"}]}\n",
+  "stderr": ""
+ },
+ "common/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"the\": 2 matches, 2 shown\n  lane_entry unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat: the first occurrence of a repeated lane slug\n  lane_entry unit#search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one: a lane step over the canon-task\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":3,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/recipe\",\"type\":\"lane\",\"id\":\"legacy-lane/recipe\",\"address\":\"unit#legacy-u/lane/legacy-lane/recipe\",\"snippet\":\"the legacy lane\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/recipe\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/recipe\",\"type\":\"lane\",\"id\":\"search-lane/recipe\",\"address\":\"unit#search-verbs/lane/search-lane/recipe\",\"snippet\":\"walk the search, the canon-task first\",\"read\":\"ctx unit get search-verbs/lane/search-lane/recipe\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/report\",\"type\":\"lane\",\"id\":\"search-lane/report\",\"address\":\"unit#search-verbs/lane/search-lane/report\",\"snippet\":\"VERDICT :: the walk landed, a \\\\ backslash and a \\\"quote\\\"\",\"read\":\"ctx unit get search-verbs/lane/search-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "common/lane/text": {
+  "code": 0,
+  "stdout": "search \"the\": 3 matches, 3 shown\n  lane unit#legacy-u/lane/legacy-lane/recipe: the legacy lane\n  lane unit#search-verbs/lane/search-lane/recipe: walk the search, the canon-task first\n  lane unit#search-verbs/lane/search-lane/report: VERDICT :: the walk landed, a \\ backslash and a \"quote\"\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":12,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-double-what\",\"address\":\"unit#legacy-u/entry/2026-09-20-double-what\",\"snippet\":\"the first WHAT\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-double-what\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"the human\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-10-no-anchor\",\"address\":\"unit#legacy-u/entry/2026-09-10-no-anchor\",\"snippet\":\"backlog/four-space-blank: DONE (landed before the legacy walk)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-10-no-anchor\"}]}\n",
+  "stderr": ""
+ },
+ "common/limit/text": {
+  "code": 0,
+  "stdout": "search \"the\": 12 matches, 3 shown\n  entry unit#legacy-u/entry/2026-09-20-double-what: the first WHAT\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: the human\n  entry unit#legacy-u/entry/2026-09-10-no-anchor: backlog/four-space-blank: DONE (landed before the legacy walk)\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "common/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"the\",\"mode\":\"exact\",\"total\":10,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"First line of the description.\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"four-space-blank\",\"address\":\"unit#legacy-u/task/four-space-blank\",\"snippet\":\"The serializer's four space blank body line\",\"read\":\"ctx unit get legacy-u/task/four-space-blank\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"SUMMARY_FIRST\",\"address\":\"unit#legacy-u/finding/SUMMARY_FIRST\",\"snippet\":\"The posix serializer wrote SUMMARY before REF.\",\"read\":\"ctx unit get legacy-u/finding/SUMMARY_FIRST\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-double-what\",\"address\":\"unit#legacy-u/entry/2026-09-20-double-what\",\"snippet\":\"the first WHAT\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-double-what\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"session\",\"id\":\"legacy-u\",\"snippet\":\"@anchor A2 (\\\"continues A1\\\", attention: the posix stamp quoted form)\",\"read\":\"ctx unit load legacy-u\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"the human\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-10-no-anchor\",\"address\":\"unit#legacy-u/entry/2026-09-10-no-anchor\",\"snippet\":\"backlog/four-space-blank: DONE (landed before the legacy walk)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-10-no-anchor\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/recipe\",\"type\":\"lane\",\"id\":\"legacy-lane/recipe\",\"address\":\"unit#legacy-u/lane/legacy-lane/recipe\",\"snippet\":\"the legacy lane\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/recipe\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/journal\",\"type\":\"lane_entry\",\"id\":\"legacy-lane/journal/2026-09-20-lane-repeat\",\"address\":\"unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat\",\"snippet\":\"the first occurrence of a repeated lane slug\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat\"}]}\n",
+  "stderr": ""
+ },
+ "common/unit/text": {
+  "code": 0,
+  "stdout": "search \"the\": 10 matches, 10 shown\n  task unit#legacy-u/task/canon-task: First line of the description.\n  task unit#legacy-u/task/four-space-blank: The serializer's four space blank body line\n  finding unit#legacy-u/finding/SUMMARY_FIRST: The posix serializer wrote SUMMARY before REF.\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  entry unit#legacy-u/entry/2026-09-20-double-what: the first WHAT\n  session legacy-u/journal: @anchor A2 (\"continues A1\", attention: the posix stamp quoted form)\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: the human\n  entry unit#legacy-u/entry/2026-09-10-no-anchor: backlog/four-space-blank: DONE (landed before the legacy walk)\n  lane unit#legacy-u/lane/legacy-lane/recipe: the legacy lane\n  lane_entry unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-repeat: the first occurrence of a repeated lane slug\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "entry-slug/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":6,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"@entry 2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"2026-09-20-legacy-one (replaced in a legacy spelling)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/journal\",\"type\":\"lane_entry\",\"id\":\"legacy-lane/journal/2026-09-20-lane-canon\",\"address\":\"unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon\"}]}\n",
+  "stderr": ""
+ },
+ "entry-slug/all/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 6 matches, 6 shown\n  task unit#legacy-u/task/canon-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  task unit#legacy-u/task/bare-refs-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  finding unit#legacy-u/finding/LEGACY_CANON: journal#2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: @entry 2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: 2026-09-20-legacy-one (replaced in a legacy spelling)\n  lane_entry unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon: journal#2026-09-20-legacy-one\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "entry-slug/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "entry-slug/closed/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 0 matches\n",
+  "stderr": ""
+ },
+ "entry-slug/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":6,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"@entry 2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"2026-09-20-legacy-one (replaced in a legacy spelling)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/journal\",\"type\":\"lane_entry\",\"id\":\"legacy-lane/journal/2026-09-20-lane-canon\",\"address\":\"unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon\"}]}\n",
+  "stderr": ""
+ },
+ "entry-slug/default/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 6 matches, 6 shown\n  task unit#legacy-u/task/canon-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  task unit#legacy-u/task/bare-refs-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  finding unit#legacy-u/finding/LEGACY_CANON: journal#2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: @entry 2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: 2026-09-20-legacy-one (replaced in a legacy spelling)\n  lane_entry unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon: journal#2026-09-20-legacy-one\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "entry-slug/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":5,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"@entry 2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"2026-09-20-legacy-one (replaced in a legacy spelling)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"}]}\n",
+  "stderr": ""
+ },
+ "entry-slug/fanout/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 5 matches, 5 shown\n  task unit#legacy-u/task/canon-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  task unit#legacy-u/task/bare-refs-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  finding unit#legacy-u/finding/LEGACY_CANON: journal#2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: @entry 2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: 2026-09-20-legacy-one (replaced in a legacy spelling)\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "entry-slug/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"}]}\n",
+  "stderr": ""
+ },
+ "entry-slug/finding/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 1 match, 1 shown\n  finding unit#legacy-u/finding/LEGACY_CANON: journal#2026-09-20-legacy-one\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "entry-slug/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/journal\",\"type\":\"lane_entry\",\"id\":\"legacy-lane/journal/2026-09-20-lane-canon\",\"address\":\"unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon\"}]}\n",
+  "stderr": ""
+ },
+ "entry-slug/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 1 match, 1 shown\n  lane_entry unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon: journal#2026-09-20-legacy-one\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "entry-slug/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "entry-slug/lane/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 0 matches\n",
+  "stderr": ""
+ },
+ "entry-slug/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":2,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"@entry 2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"2026-09-20-legacy-one (replaced in a legacy spelling)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"}]}\n",
+  "stderr": ""
+ },
+ "entry-slug/limit/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 2 matches, 2 shown\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: @entry 2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: 2026-09-20-legacy-one (replaced in a legacy spelling)\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "entry-slug/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"2026-09-20-legacy-one\",\"mode\":\"exact\",\"total\":6,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"@entry 2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-21-legacy-three\",\"address\":\"unit#legacy-u/entry/2026-09-21-legacy-three\",\"snippet\":\"2026-09-20-legacy-one (replaced in a legacy spelling)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-21-legacy-three\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/journal\",\"type\":\"lane_entry\",\"id\":\"legacy-lane/journal/2026-09-20-lane-canon\",\"address\":\"unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon\",\"snippet\":\"journal#2026-09-20-legacy-one\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon\"}]}\n",
+  "stderr": ""
+ },
+ "entry-slug/unit/text": {
+  "code": 0,
+  "stdout": "search \"2026-09-20-legacy-one\": 6 matches, 6 shown\n  task unit#legacy-u/task/canon-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  task unit#legacy-u/task/bare-refs-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  finding unit#legacy-u/finding/LEGACY_CANON: journal#2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: @entry 2026-09-20-legacy-one\n  entry unit#legacy-u/entry/2026-09-21-legacy-three: 2026-09-20-legacy-one (replaced in a legacy spelling)\n  lane_entry unit#legacy-u/lane/legacy-lane/journal/2026-09-20-lane-canon: journal#2026-09-20-legacy-one\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "field/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":12,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"four-space-blank\",\"address\":\"unit#legacy-u/task/four-space-blank\",\"snippet\":\"DONE\",\"read\":\"ctx unit get legacy-u/task/four-space-blank\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"statusless-task\",\"address\":\"unit#legacy-u/task/statusless-task\",\"snippet\":\"@task statusless-task\",\"read\":\"ctx unit get legacy-u/task/statusless-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-status\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-status\",\"snippet\":\"@entry 2026-09-20-legacy-status\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-status\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-two\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-two\",\"snippet\":\"2026-09-20-legacy-status (no verdict word here)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-two\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"COMPLETE\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"},{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"done-task\",\"address\":\"unit#search-verbs/task/done-task\",\"snippet\":\"DONE\",\"read\":\"ctx unit get search-verbs/task/done-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"active-task\",\"address\":\"unit#search-verbs/task/active-task\",\"snippet\":\"IN_PROGRESS\",\"read\":\"ctx unit get search-verbs/task/active-task\"},{\"module\":\"unit\",\"container\":\"tc63-done/backlog\",\"type\":\"task\",\"id\":\"t-done\",\"address\":\"unit#tc63-done/task/t-done\",\"snippet\":\"DONE\",\"read\":\"ctx unit get tc63-done/task/t-done\"}]}\n",
+  "stderr": ""
+ },
+ "field/all/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 12 matches, 12 shown\n  task unit#legacy-u/task/canon-task: TODO\n  task unit#legacy-u/task/bare-refs-task: TODO\n  task unit#legacy-u/task/four-space-blank: DONE\n  task unit#legacy-u/task/statusless-task: @task statusless-task\n  entry unit#legacy-u/entry/2026-09-20-legacy-status: @entry 2026-09-20-legacy-status\n  entry unit#legacy-u/entry/2026-09-20-legacy-two: 2026-09-20-legacy-status (no verdict word here)\n  lane unit#legacy-u/lane/legacy-lane/report: COMPLETE\n  task unit#search-closed/task/canon-task [closed]: TODO\n  task unit#search-verbs/task/canon-task: TODO\n  task unit#search-verbs/task/done-task: DONE\n  task unit#search-verbs/task/active-task: IN_PROGRESS\n  task unit#tc63-done/task/t-done: DONE\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "field/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"}]}\n",
+  "stderr": ""
+ },
+ "field/closed/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 1 match, 1 shown\n  task unit#search-closed/task/canon-task [closed]: TODO\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "field/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":11,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"four-space-blank\",\"address\":\"unit#legacy-u/task/four-space-blank\",\"snippet\":\"DONE\",\"read\":\"ctx unit get legacy-u/task/four-space-blank\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"statusless-task\",\"address\":\"unit#legacy-u/task/statusless-task\",\"snippet\":\"@task statusless-task\",\"read\":\"ctx unit get legacy-u/task/statusless-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-status\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-status\",\"snippet\":\"@entry 2026-09-20-legacy-status\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-status\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-two\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-two\",\"snippet\":\"2026-09-20-legacy-status (no verdict word here)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-two\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"COMPLETE\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"done-task\",\"address\":\"unit#search-verbs/task/done-task\",\"snippet\":\"DONE\",\"read\":\"ctx unit get search-verbs/task/done-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"active-task\",\"address\":\"unit#search-verbs/task/active-task\",\"snippet\":\"IN_PROGRESS\",\"read\":\"ctx unit get search-verbs/task/active-task\"},{\"module\":\"unit\",\"container\":\"tc63-done/backlog\",\"type\":\"task\",\"id\":\"t-done\",\"address\":\"unit#tc63-done/task/t-done\",\"snippet\":\"DONE\",\"read\":\"ctx unit get tc63-done/task/t-done\"}]}\n",
+  "stderr": ""
+ },
+ "field/default/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 11 matches, 11 shown\n  task unit#legacy-u/task/canon-task: TODO\n  task unit#legacy-u/task/bare-refs-task: TODO\n  task unit#legacy-u/task/four-space-blank: DONE\n  task unit#legacy-u/task/statusless-task: @task statusless-task\n  entry unit#legacy-u/entry/2026-09-20-legacy-status: @entry 2026-09-20-legacy-status\n  entry unit#legacy-u/entry/2026-09-20-legacy-two: 2026-09-20-legacy-status (no verdict word here)\n  lane unit#legacy-u/lane/legacy-lane/report: COMPLETE\n  task unit#search-verbs/task/canon-task: TODO\n  task unit#search-verbs/task/done-task: DONE\n  task unit#search-verbs/task/active-task: IN_PROGRESS\n  task unit#tc63-done/task/t-done: DONE\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "field/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":12,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"four-space-blank\",\"address\":\"unit#legacy-u/task/four-space-blank\",\"snippet\":\"DONE\",\"read\":\"ctx unit get legacy-u/task/four-space-blank\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"statusless-task\",\"address\":\"unit#legacy-u/task/statusless-task\",\"snippet\":\"@task statusless-task\",\"read\":\"ctx unit get legacy-u/task/statusless-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-status\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-status\",\"snippet\":\"@entry 2026-09-20-legacy-status\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-status\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-two\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-two\",\"snippet\":\"2026-09-20-legacy-status (no verdict word here)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-two\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"COMPLETE\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"},{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"done-task\",\"address\":\"unit#search-verbs/task/done-task\",\"snippet\":\"DONE\",\"read\":\"ctx unit get search-verbs/task/done-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"active-task\",\"address\":\"unit#search-verbs/task/active-task\",\"snippet\":\"IN_PROGRESS\",\"read\":\"ctx unit get search-verbs/task/active-task\"},{\"module\":\"unit\",\"container\":\"tc63-done/backlog\",\"type\":\"task\",\"id\":\"t-done\",\"address\":\"unit#tc63-done/task/t-done\",\"snippet\":\"DONE\",\"read\":\"ctx unit get tc63-done/task/t-done\"}]}\n",
+  "stderr": ""
+ },
+ "field/fanout/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 12 matches, 12 shown\n  task unit#legacy-u/task/canon-task: TODO\n  task unit#legacy-u/task/bare-refs-task: TODO\n  task unit#legacy-u/task/four-space-blank: DONE\n  task unit#legacy-u/task/statusless-task: @task statusless-task\n  entry unit#legacy-u/entry/2026-09-20-legacy-status: @entry 2026-09-20-legacy-status\n  entry unit#legacy-u/entry/2026-09-20-legacy-two: 2026-09-20-legacy-status (no verdict word here)\n  lane unit#legacy-u/lane/legacy-lane/report: COMPLETE\n  task unit#search-closed/task/canon-task [closed]: TODO\n  task unit#search-verbs/task/canon-task: TODO\n  task unit#search-verbs/task/done-task: DONE\n  task unit#search-verbs/task/active-task: IN_PROGRESS\n  task unit#tc63-done/task/t-done: DONE\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "field/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "field/finding/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 0 matches\n",
+  "stderr": ""
+ },
+ "field/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "field/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 0 matches\n",
+  "stderr": ""
+ },
+ "field/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"COMPLETE\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "field/lane/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 1 match, 1 shown\n  lane unit#legacy-u/lane/legacy-lane/report: COMPLETE\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "field/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":2,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-status\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-status\",\"snippet\":\"@entry 2026-09-20-legacy-status\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-status\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-two\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-two\",\"snippet\":\"2026-09-20-legacy-status (no verdict word here)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-two\"}]}\n",
+  "stderr": ""
+ },
+ "field/limit/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 2 matches, 2 shown\n  entry unit#legacy-u/entry/2026-09-20-legacy-status: @entry 2026-09-20-legacy-status\n  entry unit#legacy-u/entry/2026-09-20-legacy-two: 2026-09-20-legacy-status (no verdict word here)\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "field/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"STATUS\",\"mode\":\"exact\",\"total\":7,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"TODO\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"four-space-blank\",\"address\":\"unit#legacy-u/task/four-space-blank\",\"snippet\":\"DONE\",\"read\":\"ctx unit get legacy-u/task/four-space-blank\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"statusless-task\",\"address\":\"unit#legacy-u/task/statusless-task\",\"snippet\":\"@task statusless-task\",\"read\":\"ctx unit get legacy-u/task/statusless-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-status\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-status\",\"snippet\":\"@entry 2026-09-20-legacy-status\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-status\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-two\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-two\",\"snippet\":\"2026-09-20-legacy-status (no verdict word here)\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-two\"},{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"COMPLETE\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "field/unit/text": {
+  "code": 0,
+  "stdout": "search \"STATUS\": 7 matches, 7 shown\n  task unit#legacy-u/task/canon-task: TODO\n  task unit#legacy-u/task/bare-refs-task: TODO\n  task unit#legacy-u/task/four-space-blank: DONE\n  task unit#legacy-u/task/statusless-task: @task statusless-task\n  entry unit#legacy-u/entry/2026-09-20-legacy-status: @entry 2026-09-20-legacy-status\n  entry unit#legacy-u/entry/2026-09-20-legacy-two: 2026-09-20-legacy-status (no verdict word here)\n  lane unit#legacy-u/lane/legacy-lane/report: COMPLETE\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "finding/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":6,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"@finding LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"knowledge#LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"},{\"module\":\"unit\",\"container\":\"search-closed/knowledge\",\"type\":\"finding\",\"id\":\"CLOSED_FINDING\",\"address\":\"unit#search-closed/finding/CLOSED_FINDING\",\"snippet\":\"the closed reading of LEGACY_CANON\",\"read\":\"ctx unit get search-closed/finding/CLOSED_FINDING\",\"label\":\"closed\"}]}\n",
+  "stderr": ""
+ },
+ "finding/all/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 6 matches, 6 shown\n  task unit#legacy-u/task/canon-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  task unit#legacy-u/task/bare-refs-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  finding unit#legacy-u/finding/LEGACY_CANON: @finding LEGACY_CANON\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: knowledge#LEGACY_CANON\n  finding unit#search-closed/finding/CLOSED_FINDING [closed]: the closed reading of LEGACY_CANON\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "finding/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-closed/knowledge\",\"type\":\"finding\",\"id\":\"CLOSED_FINDING\",\"address\":\"unit#search-closed/finding/CLOSED_FINDING\",\"snippet\":\"the closed reading of LEGACY_CANON\",\"read\":\"ctx unit get search-closed/finding/CLOSED_FINDING\",\"label\":\"closed\"}]}\n",
+  "stderr": ""
+ },
+ "finding/closed/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 1 match, 1 shown\n  finding unit#search-closed/finding/CLOSED_FINDING [closed]: the closed reading of LEGACY_CANON\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "finding/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":5,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"@finding LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"knowledge#LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"}]}\n",
+  "stderr": ""
+ },
+ "finding/default/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 5 matches, 5 shown\n  task unit#legacy-u/task/canon-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  task unit#legacy-u/task/bare-refs-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  finding unit#legacy-u/finding/LEGACY_CANON: @finding LEGACY_CANON\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: knowledge#LEGACY_CANON\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "finding/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":6,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"@finding LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"knowledge#LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"},{\"module\":\"unit\",\"container\":\"search-closed/knowledge\",\"type\":\"finding\",\"id\":\"CLOSED_FINDING\",\"address\":\"unit#search-closed/finding/CLOSED_FINDING\",\"snippet\":\"the closed reading of LEGACY_CANON\",\"read\":\"ctx unit get search-closed/finding/CLOSED_FINDING\",\"label\":\"closed\"}]}\n",
+  "stderr": ""
+ },
+ "finding/fanout/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 6 matches, 6 shown\n  task unit#legacy-u/task/canon-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  task unit#legacy-u/task/bare-refs-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  finding unit#legacy-u/finding/LEGACY_CANON: @finding LEGACY_CANON\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: knowledge#LEGACY_CANON\n  finding unit#search-closed/finding/CLOSED_FINDING [closed]: the closed reading of LEGACY_CANON\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "finding/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":2,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"@finding LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"}]}\n",
+  "stderr": ""
+ },
+ "finding/finding/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 2 matches, 2 shown\n  finding unit#legacy-u/finding/LEGACY_CANON: @finding LEGACY_CANON\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "finding/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "finding/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 0 matches\n",
+  "stderr": ""
+ },
+ "finding/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "finding/lane/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 0 matches\n",
+  "stderr": ""
+ },
+ "finding/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"knowledge#LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"}]}\n",
+  "stderr": ""
+ },
+ "finding/limit/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 1 match, 1 shown\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: knowledge#LEGACY_CANON\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "finding/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"LEGACY_CANON\",\"mode\":\"exact\",\"total\":5,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"bare-refs-task\",\"address\":\"unit#legacy-u/task/bare-refs-task\",\"snippet\":\"[journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\",\"read\":\"ctx unit get legacy-u/task/bare-refs-task\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_CANON\",\"address\":\"unit#legacy-u/finding/LEGACY_CANON\",\"snippet\":\"@finding LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_CANON\"},{\"module\":\"unit\",\"container\":\"legacy-u/knowledge\",\"type\":\"finding\",\"id\":\"LEGACY_SUCCESSOR\",\"address\":\"unit#legacy-u/finding/LEGACY_SUCCESSOR\",\"snippet\":\"LEGACY_CANON (replaced by the successor)\",\"read\":\"ctx unit get legacy-u/finding/LEGACY_SUCCESSOR\"},{\"module\":\"unit\",\"container\":\"legacy-u/journal\",\"type\":\"entry\",\"id\":\"2026-09-20-legacy-one\",\"address\":\"unit#legacy-u/entry/2026-09-20-legacy-one\",\"snippet\":\"knowledge#LEGACY_CANON\",\"read\":\"ctx unit get legacy-u/entry/2026-09-20-legacy-one\"}]}\n",
+  "stderr": ""
+ },
+ "finding/unit/text": {
+  "code": 0,
+  "stdout": "search \"LEGACY_CANON\": 5 matches, 5 shown\n  task unit#legacy-u/task/canon-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  task unit#legacy-u/task/bare-refs-task: [journal#2026-09-20-legacy-one, knowledge#LEGACY_CANON]\n  finding unit#legacy-u/finding/LEGACY_CANON: @finding LEGACY_CANON\n  finding unit#legacy-u/finding/LEGACY_SUCCESSOR: LEGACY_CANON (replaced by the successor)\n  entry unit#legacy-u/entry/2026-09-20-legacy-one: knowledge#LEGACY_CANON\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "rare/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "rare/all/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 1 match, 1 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "rare/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "rare/closed/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 0 matches\n",
+  "stderr": ""
+ },
+ "rare/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "rare/default/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 1 match, 1 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "rare/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "rare/fanout/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 1 match, 1 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "rare/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "rare/finding/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 0 matches\n",
+  "stderr": ""
+ },
+ "rare/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "rare/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 0 matches\n",
+  "stderr": ""
+ },
+ "rare/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "rare/lane/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 1 match, 1 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "rare/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "rare/limit/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 0 matches\n",
+  "stderr": ""
+ },
+ "rare/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"çalışma\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/lane/legacy-lane/report\",\"type\":\"lane\",\"id\":\"legacy-lane/report\",\"address\":\"unit#legacy-u/lane/legacy-lane/report\",\"snippet\":\"a report \\\\ backslash, a\\ttab, çalışma\",\"read\":\"ctx unit get legacy-u/lane/legacy-lane/report\"}]}\n",
+  "stderr": ""
+ },
+ "rare/unit/text": {
+  "code": 0,
+  "stdout": "search \"çalışma\": 1 match, 1 shown\n  lane unit#legacy-u/lane/legacy-lane/report: a report \\ backslash, a\ttab, çalışma\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "successor/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V2\",\"address\":\"unit#search-verbs/finding/SEARCH_V2\",\"snippet\":\"@finding SEARCH_V2\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V2\"}]}\n",
+  "stderr": ""
+ },
+ "successor/all/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 1 match, 1 shown\n  finding unit#search-verbs/finding/SEARCH_V2: @finding SEARCH_V2\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "successor/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "successor/closed/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 0 matches\n",
+  "stderr": ""
+ },
+ "successor/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V2\",\"address\":\"unit#search-verbs/finding/SEARCH_V2\",\"snippet\":\"@finding SEARCH_V2\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V2\"}]}\n",
+  "stderr": ""
+ },
+ "successor/default/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 1 match, 1 shown\n  finding unit#search-verbs/finding/SEARCH_V2: @finding SEARCH_V2\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "successor/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V2\",\"address\":\"unit#search-verbs/finding/SEARCH_V2\",\"snippet\":\"@finding SEARCH_V2\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V2\"}]}\n",
+  "stderr": ""
+ },
+ "successor/fanout/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 1 match, 1 shown\n  finding unit#search-verbs/finding/SEARCH_V2: @finding SEARCH_V2\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "successor/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-verbs/knowledge\",\"type\":\"finding\",\"id\":\"SEARCH_V2\",\"address\":\"unit#search-verbs/finding/SEARCH_V2\",\"snippet\":\"@finding SEARCH_V2\",\"read\":\"ctx unit get search-verbs/finding/SEARCH_V2\"}]}\n",
+  "stderr": ""
+ },
+ "successor/finding/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 1 match, 1 shown\n  finding unit#search-verbs/finding/SEARCH_V2: @finding SEARCH_V2\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "successor/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "successor/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 0 matches\n",
+  "stderr": ""
+ },
+ "successor/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "successor/lane/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 0 matches\n",
+  "stderr": ""
+ },
+ "successor/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "successor/limit/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 0 matches\n",
+  "stderr": ""
+ },
+ "successor/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"SEARCH_V2\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "successor/unit/text": {
+  "code": 0,
+  "stdout": "search \"SEARCH_V2\": 0 matches\n",
+  "stderr": ""
+ },
+ "task-slug/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":6,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-one\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-one\",\"snippet\":\"the first entry names the canon-task\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-one\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/recipe\",\"type\":\"lane\",\"id\":\"search-lane/recipe\",\"address\":\"unit#search-verbs/lane/search-lane/recipe\",\"snippet\":\"walk the search, the canon-task first\",\"read\":\"ctx unit get search-verbs/lane/search-lane/recipe\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/journal\",\"type\":\"lane_entry\",\"id\":\"search-lane/journal/2026-09-27-search-lane-one\",\"address\":\"unit#search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one\",\"snippet\":\"a lane step over the canon-task\",\"read\":\"ctx unit get search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one\"}]}\n",
+  "stderr": ""
+ },
+ "task-slug/all/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 6 matches, 6 shown\n  task unit#legacy-u/task/canon-task: @task canon-task\n  task unit#search-closed/task/canon-task [closed]: @task canon-task\n  task unit#search-verbs/task/canon-task: @task canon-task\n  entry unit#search-verbs/entry/2026-09-27-search-one: the first entry names the canon-task\n  lane unit#search-verbs/lane/search-lane/recipe: walk the search, the canon-task first\n  lane_entry unit#search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one: a lane step over the canon-task\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "task-slug/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"}]}\n",
+  "stderr": ""
+ },
+ "task-slug/closed/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 1 match, 1 shown\n  task unit#search-closed/task/canon-task [closed]: @task canon-task\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "task-slug/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":5,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-one\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-one\",\"snippet\":\"the first entry names the canon-task\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-one\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/recipe\",\"type\":\"lane\",\"id\":\"search-lane/recipe\",\"address\":\"unit#search-verbs/lane/search-lane/recipe\",\"snippet\":\"walk the search, the canon-task first\",\"read\":\"ctx unit get search-verbs/lane/search-lane/recipe\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/journal\",\"type\":\"lane_entry\",\"id\":\"search-lane/journal/2026-09-27-search-lane-one\",\"address\":\"unit#search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one\",\"snippet\":\"a lane step over the canon-task\",\"read\":\"ctx unit get search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one\"}]}\n",
+  "stderr": ""
+ },
+ "task-slug/default/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 5 matches, 5 shown\n  task unit#legacy-u/task/canon-task: @task canon-task\n  task unit#search-verbs/task/canon-task: @task canon-task\n  entry unit#search-verbs/entry/2026-09-27-search-one: the first entry names the canon-task\n  lane unit#search-verbs/lane/search-lane/recipe: walk the search, the canon-task first\n  lane_entry unit#search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one: a lane step over the canon-task\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "task-slug/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":5,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get legacy-u/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-closed/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-closed/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get search-closed/task/canon-task\",\"label\":\"closed\"},{\"module\":\"unit\",\"container\":\"search-verbs/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#search-verbs/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get search-verbs/task/canon-task\"},{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-one\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-one\",\"snippet\":\"the first entry names the canon-task\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-one\"},{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/recipe\",\"type\":\"lane\",\"id\":\"search-lane/recipe\",\"address\":\"unit#search-verbs/lane/search-lane/recipe\",\"snippet\":\"walk the search, the canon-task first\",\"read\":\"ctx unit get search-verbs/lane/search-lane/recipe\"}]}\n",
+  "stderr": ""
+ },
+ "task-slug/fanout/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 5 matches, 5 shown\n  task unit#legacy-u/task/canon-task: @task canon-task\n  task unit#search-closed/task/canon-task [closed]: @task canon-task\n  task unit#search-verbs/task/canon-task: @task canon-task\n  entry unit#search-verbs/entry/2026-09-27-search-one: the first entry names the canon-task\n  lane unit#search-verbs/lane/search-lane/recipe: walk the search, the canon-task first\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "task-slug/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "task-slug/finding/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 0 matches\n",
+  "stderr": ""
+ },
+ "task-slug/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/journal\",\"type\":\"lane_entry\",\"id\":\"search-lane/journal/2026-09-27-search-lane-one\",\"address\":\"unit#search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one\",\"snippet\":\"a lane step over the canon-task\",\"read\":\"ctx unit get search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one\"}]}\n",
+  "stderr": ""
+ },
+ "task-slug/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 1 match, 1 shown\n  lane_entry unit#search-verbs/lane/search-lane/journal/2026-09-27-search-lane-one: a lane step over the canon-task\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "task-slug/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-verbs/lane/search-lane/recipe\",\"type\":\"lane\",\"id\":\"search-lane/recipe\",\"address\":\"unit#search-verbs/lane/search-lane/recipe\",\"snippet\":\"walk the search, the canon-task first\",\"read\":\"ctx unit get search-verbs/lane/search-lane/recipe\"}]}\n",
+  "stderr": ""
+ },
+ "task-slug/lane/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 1 match, 1 shown\n  lane unit#search-verbs/lane/search-lane/recipe: walk the search, the canon-task first\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "task-slug/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"search-verbs/journal\",\"type\":\"entry\",\"id\":\"2026-09-27-search-one\",\"address\":\"unit#search-verbs/entry/2026-09-27-search-one\",\"snippet\":\"the first entry names the canon-task\",\"read\":\"ctx unit get search-verbs/entry/2026-09-27-search-one\"}]}\n",
+  "stderr": ""
+ },
+ "task-slug/limit/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 1 match, 1 shown\n  entry unit#search-verbs/entry/2026-09-27-search-one: the first entry names the canon-task\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "task-slug/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"canon-task\",\"mode\":\"exact\",\"total\":1,\"rows\":[{\"module\":\"unit\",\"container\":\"legacy-u/backlog\",\"type\":\"task\",\"id\":\"canon-task\",\"address\":\"unit#legacy-u/task/canon-task\",\"snippet\":\"@task canon-task\",\"read\":\"ctx unit get legacy-u/task/canon-task\"}]}\n",
+  "stderr": ""
+ },
+ "task-slug/unit/text": {
+  "code": 0,
+  "stdout": "search \"canon-task\": 1 match, 1 shown\n  task unit#legacy-u/task/canon-task: @task canon-task\nread one: ctx unit get <path> (the address after unit#)\n",
+  "stderr": ""
+ },
+ "zero/all/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/all/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ },
+ "zero/closed/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/closed/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ },
+ "zero/default/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/default/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ },
+ "zero/fanout/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/fanout/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ },
+ "zero/finding/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/finding/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ },
+ "zero/lane-entry/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/lane-entry/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ },
+ "zero/lane/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/lane/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ },
+ "zero/limit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/limit/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ },
+ "zero/unit/json": {
+  "code": 0,
+  "stdout": "{\"query\":\"zz-no-such-needle\",\"mode\":\"exact\",\"total\":0,\"rows\":[]}\n",
+  "stderr": ""
+ },
+ "zero/unit/text": {
+  "code": 0,
+  "stdout": "search \"zz-no-such-needle\": 0 matches\n",
+  "stderr": ""
+ }
+}
