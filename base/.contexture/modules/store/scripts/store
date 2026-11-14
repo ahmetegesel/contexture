@@ -54,6 +54,11 @@ trap 'cleanup; trap - EXIT; exit 129' HUP
 trap 'cleanup; trap - EXIT; exit 130' INT
 trap 'cleanup; trap - EXIT; exit 143' TERM
 
+NL='
+'
+TAB='	'
+CR=$(printf '\r')
+
 CONTAINERS_DECL='description: required line
 minting: required line one-of given|generated
 fields: optional line list'
@@ -145,6 +150,7 @@ parse_writes() {
       *) die 1 ERR_INVALID_ARGUMENT "unknown argument '$(store_lib_escape "$pw_a")' (a write takes --<field>=<value>, --add-<field>=<item>, --remove-<field>=<item>, --unset=<field>, or --stdin=<field>)" ;;
     esac
     [ -n "$pw_f" ] || die 1 ERR_INVALID_ARGUMENT "argument '$(store_lib_escape "$pw_a")' names no field"
+    case "$pw_f" in *"$NL"*|*"$TAB"*|*"$CR"*) die 1 ERR_INVALID_ARGUMENT "argument '$(store_lib_escape "$pw_a")' names a malformed field" ;; esac
     if [ "$pw_op" = block ]; then
       [ -z "$pw_stdin" ] || die 1 ERR_INVALID_ARGUMENT "one block per call: --stdin names '$pw_stdin' already"
       pw_stdin=$pw_f
@@ -178,8 +184,7 @@ decl_fields_check() {
 # print_record <container> <id> <record file>
 print_record() {
   if [ "$json" = 1 ]; then
-    pr_lists=""
-    [ "$1" = containers ] && pr_lists='fields retired'
+    if [ "$1" = containers ]; then pr_lists="fields retired"; else pr_lists=$(list_names); fi
     printf '{"container":"%s","id":"%s","address":"store#%s/%s","record":' "$1" "$2" "$1" "$2"
     rec json "$pr_lists" < "$3"
     printf '}\n'
@@ -196,9 +201,149 @@ split_path() {
     *) PC=$1; PI="" ;;
   esac
   word_ok "$PC" || die 1 ERR_INVALID_ARGUMENT "malformed container name '$(store_lib_escape "$PC")' (letters, digits, underscore, and dash, starting with a letter or digit)"
+  [ "$PC" != containers ] || id_shape
+}
+
+# id_shape: PI checked against the slug rule
+id_shape() {
   if [ -n "$PI" ] && ! word_ok "$PI"; then
     die 1 ERR_INVALID_ARGUMENT "malformed id '$(store_lib_escape "$PI")' (letters, digits, underscore, and dash, starting with a letter or digit)"
   fi
+}
+
+# live_for_write: the container PC declared and live, else the write breaks the schema
+live_for_write() {
+  decl_load "$PC"
+  case "$DSTATE" in
+    absent) die 1 ERR_SCHEMA_VIOLATION "container '$PC' is not declared (put containers/$PC declares it)" ;;
+    dropped) die 1 ERR_SCHEMA_VIOLATION "container '$PC' is dropped (put containers/$PC declares it again)" ;;
+  esac
+}
+
+# live_for_read: the container PC declared and live, else it reads not found
+live_for_read() {
+  decl_load "$PC"
+  case "$DSTATE" in
+    absent) die 1 ERR_ENTITY_NOT_FOUND "container '$PC' is not declared" ;;
+    dropped) die 1 ERR_ENTITY_NOT_FOUND "container '$PC' is dropped" ;;
+  esac
+}
+
+# retired_has <id>: rc 0 when the declaration's retired list holds the id, whatever its case
+retired_has() {
+  rh_id=$(lower "$1")
+  rec values retired < "$SCR/d.rec" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz' | grep -Fqx -- "$rh_id"
+}
+
+# twin_of <id>: the stored id of PC equal to the id whatever its case, printed; rc 1 when none
+twin_of() {
+  keys "$PC/" > "$SCR/twin.keys"
+  TO_ID=$(lower "$1") awk -v p="$PC/" '{ k = substr($0, length(p) + 1); if (tolower(k) == ENVIRON["TO_ID"]) { print k; found = 1; exit } } END { exit !found }' "$SCR/twin.keys"
+}
+
+# id_free <id>: refuses an id a record holds (in any case) or the declaration retired
+id_free() {
+  if if_twin=$(twin_of "$1"); then
+    [ "$if_twin" = "$1" ] && die 1 ERR_ENTITY_EXISTS "record '$PC/$1' already exists"
+    die 1 ERR_ENTITY_EXISTS "record '$PC/$1' already exists as '$PC/$if_twin' (ids are unique whatever their case)"
+  fi
+  retired_has "$1" && die 1 ERR_ENTITY_EXISTS "id '$1' is retired in container '$PC' (a deleted id is never handed out again)"
+  return 0
+}
+
+# mint: a generated id, the date and five random lowercase letters or digits, drawn until
+# no record holds it and the declaration never retired it
+mint() {
+  mi_n=0
+  keys "$PC/" > "$SCR/mint.keys"
+  while [ "$mi_n" -lt 50 ]; do
+    mi_n=$((mi_n + 1))
+    mi_r=$(od -An -N5 -tu1 /dev/urandom 2>/dev/null | awk -v s="$$$mi_n" 'BEGIN { c = "abcdefghijklmnopqrstuvwxyz0123456789" }
+      { for (i = 1; i <= NF; i++) out = out substr(c, $i % 36 + 1, 1) }
+      END { if (length(out) != 5) { srand(s); out = ""; for (i = 1; i <= 5; i++) out = out substr(c, int(rand() * 36) + 1, 1) } print out }')
+    mi_id="$(date +%Y-%m-%d)-$mi_r"
+    MI_ID=$mi_id awk -v p="$PC/" 'tolower(substr($0, length(p) + 1)) == ENVIRON["MI_ID"] { found = 1 } END { exit !found }' "$SCR/mint.keys" && continue
+    retired_has "$mi_id" && continue
+    PI=$mi_id
+    return 0
+  done
+  die 2 ERR_STORAGE_WRITE "no free id drawn for container '$PC' in 50 draws"
+}
+
+# split_refs: the ref actions moved out of $SCR/acts into $SCR/refacts, since ref is the
+# built in list field of every container, kept by the store beside the declared fields
+split_refs() {
+  awk -F '\t' '$2 == "ref"' "$SCR/acts" > "$SCR/refacts"
+  awk -F '\t' '$2 != "ref"' "$SCR/acts" > "$SCR/acts.core"
+  mv "$SCR/acts.core" "$SCR/acts"
+}
+
+# apply_refs <old ref values file> <new ref lines file>: the ref actions applied to the old
+# items in order, each added ref checked (UTF-8, then the full address shape) last
+apply_refs() {
+  cp "$1" "$SCR/refs.items"
+  while IFS='	' read -r ar_op ar_f ar_e; do
+    case "$ar_op" in
+      set) die 1 ERR_INVALID_ARGUMENT "field 'ref' is a list: add or remove its items" ;;
+      block) die 1 ERR_INVALID_ARGUMENT "field 'ref' is a line field, not a block" ;;
+      unset) : > "$SCR/refs.items"; continue ;;
+    esac
+    ar_v=$(printf '%s' "$ar_e" | REC_MODE=unesc awk -f "$REC_AWK"; printf x)
+    ar_v=${ar_v%x}
+    [ -n "$ar_v" ] || die 1 ERR_INVALID_ARGUMENT "field 'ref': an empty value (unset removes a field)"
+    if [ "$ar_op" = add ]; then
+      lib_utf8_ok "$ar_v" || die 1 ERR_INVALID_ARGUMENT "field 'ref': the value is not valid UTF-8"
+      lib_ref_ok "$FN" "$ar_v" || exit $?
+      grep -Fqx -- "$ar_v" "$SCR/refs.items" && die 1 ERR_INVALID_ARGUMENT "field 'ref' already holds '$ar_v'"
+      printf '%s\n' "$ar_v" >> "$SCR/refs.items"
+    else
+      case "$ar_v" in *"
+"*) die 1 ERR_INVALID_ARGUMENT "field 'ref' holds no item '$ar_e'" ;; esac
+      grep -Fqx -- "$ar_v" "$SCR/refs.items" || die 1 ERR_INVALID_ARGUMENT "field 'ref' holds no item '$ar_e'"
+      AR_V=$ar_v awk '$0 != ENVIRON["AR_V"]' "$SCR/refs.items" > "$SCR/refs.next"
+      mv "$SCR/refs.next" "$SCR/refs.items"
+    fi
+  done < "$SCR/refacts"
+  while IFS= read -r ar_v; do printf 'ref: "%s"\n' "$(store_lib_escape "$ar_v")"; done < "$SCR/refs.items" > "$2"
+}
+
+# declared_names: the declared field names of PC, blank separated
+declared_names() {
+  sed 's/:.*//' "$SCR/d.fields" | tr '\n' ' '
+}
+
+# list_names: the declared list fields of PC and the built in ref, blank separated
+list_names() {
+  awk '$4 == "list" { sub(/:$/, "", $1); printf "%s ", $1 }' "$SCR/d.fields"
+  printf 'ref'
+}
+
+# compose <core record> <ref lines> <out>: the ref lines placed after the declared fields
+compose() {
+  REC_FILE=$2 REC_MODE=insert REC_ARG=$(declared_names) awk -f "$REC_AWK" < "$1" > "$3"
+}
+
+# effective <stored record> <out>: the record with each absent static default filled at read
+effective() {
+  rec strip ref < "$1" > "$SCR/eff.core"
+  rec keep ref < "$1" > "$SCR/eff.refs"
+  lib_or_die fields_effective "$SCR/d.fields" "$SCR/eff.core" > "$SCR/eff.filled"
+  compose "$SCR/eff.filled" "$SCR/eff.refs" "$2"
+}
+
+# record_missing: the missing record PC/PI refused, naming a retired id as retired
+record_missing() {
+  retired_has "$PI" && die 1 ERR_ENTITY_NOT_FOUND "record '$PC/$PI' is retired (a deleted id is never handed out again)"
+  die 1 ERR_ENTITY_NOT_FOUND "record '$PC/$PI' not found"
+}
+
+# retire_into <retired lines> <out>: the declaration of PC with the lines added after the ids
+# it already retired, before its state
+retire_into() {
+  rec strip 'retired state' < "$SCR/d.rec" > "$SCR/ri.base"
+  rec keep retired < "$SCR/d.rec" > "$SCR/ri.ret"
+  rec keep state < "$SCR/d.rec" > "$SCR/ri.state"
+  cat "$SCR/ri.base" "$SCR/ri.ret" "$1" "$SCR/ri.state" > "$2"
 }
 
 json=0
@@ -222,7 +367,12 @@ case "$verb" in
       print_record containers "$PI" "$SCR/d.rec"
       exit 0
     fi
-    die 1 ERR_INVALID_ARGUMENT "container '$PC': only containers/<name> is served yet"
+    live_for_read
+    id_shape
+    fetch "$PC/$PI" "$SCR/rec" || record_missing
+    effective "$SCR/rec" "$SCR/rec.eff"
+    print_record "$PC" "$PI" "$SCR/rec.eff"
+    exit 0
     ;;
   list)
     lc=""
@@ -293,7 +443,72 @@ case "$verb" in
       printf '%s\n' "$PI"
       exit 0
     fi
-    die 1 ERR_INVALID_ARGUMENT "container '$PC': only containers/<name> is served yet"
+    lib_or_die lib_lock
+    live_for_write
+    if [ "$DMINT" = generated ]; then
+      [ -z "$PI" ] || die 1 ERR_INVALID_ARGUMENT "container '$PC' mints its ids (generated): put $PC takes no id"
+      mint
+    else
+      [ -n "$PI" ] || die 1 ERR_INVALID_ARGUMENT "container '$PC' takes given ids: put $PC/<id>"
+      id_shape
+      id_free "$PI"
+    fi
+    split_refs
+    : > "$SCR/empty"
+    lib_or_die fields_apply "$SCR/d.fields" "$SCR/empty" "$SCR/acts" "$SCR/new"
+    apply_refs "$SCR/empty" "$SCR/new.refs"
+    compose "$SCR/new" "$SCR/new.refs" "$SCR/new.rec"
+    lib_or_die store_put "$PC/$PI" < "$SCR/new.rec" > /dev/null
+    printf '%s\n' "$PI"
+    exit 0
+    ;;
+  set)
+    [ $# -ge 1 ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store set <container>/<id> [--<field>=<value>]... [--add-<field>=<item>]... [--remove-<field>=<item>]... [--unset=<field>]... [--stdin=<field>]'
+    sp=$1
+    shift
+    case "$sp" in -*) die 1 ERR_INVALID_ARGUMENT 'set takes the path first (usage: ctx store set <container>/<id> [flags])' ;; esac
+    parse_writes "$@"
+    [ -s "$SCR/acts" ] || die 1 ERR_INVALID_ARGUMENT 'set takes at least one field flag'
+    split_path "$sp"
+    [ -n "$PI" ] || die 1 ERR_INVALID_ARGUMENT "set changes one entity: <container>/<id>"
+    if [ "$PC" = containers ]; then
+      die 1 ERR_INVALID_ARGUMENT "set containers/<name> is not served yet"
+    fi
+    lib_or_die lib_lock
+    live_for_write
+    id_shape
+    fetch "$PC/$PI" "$SCR/old" || record_missing
+    split_refs
+    rec strip ref < "$SCR/old" > "$SCR/old.core"
+    rec values ref < "$SCR/old" > "$SCR/old.refs"
+    lib_or_die fields_apply "$SCR/d.fields" "$SCR/old.core" "$SCR/acts" "$SCR/new"
+    apply_refs "$SCR/old.refs" "$SCR/new.refs"
+    compose "$SCR/new" "$SCR/new.refs" "$SCR/new.rec"
+    lib_or_die store_put "$PC/$PI" < "$SCR/new.rec" > /dev/null
+    printf '%s\n' "$PI"
+    exit 0
+    ;;
+  delete)
+    [ $# -eq 1 ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store delete <container>/<id>'
+    case "$1" in -*) die 1 ERR_INVALID_ARGUMENT 'usage: ctx store delete <container>/<id>' ;; esac
+    split_path "$1"
+    [ -n "$PI" ] || die 1 ERR_INVALID_ARGUMENT "delete removes one entity: <container>/<id>"
+    if [ "$PC" = containers ]; then
+      die 1 ERR_INVALID_ARGUMENT "delete containers/<name> is not served yet"
+    fi
+    lib_or_die lib_lock
+    live_for_write
+    id_shape
+    fetch "$PC/$PI" "$SCR/old" || record_missing
+    printf 'retired: "%s"\n' "$PI" > "$SCR/ret.new"
+    retire_into "$SCR/ret.new" "$SCR/d.new"
+    {
+      printf 'action=delete\nkey=%s\n' "$PC/$PI"
+      printf 'action=put\nkey=containers/%s\nvalue_b64=%s\n' "$PC" "$("$CORE/store-b64" "$SCR/d.new")"
+    } > "$SCR/batch"
+    lib_or_die store_batch < "$SCR/batch" > /dev/null
+    printf '%s\n' "$PI"
+    exit 0
     ;;
   *)
     die 1 ERR_INVALID_ARGUMENT "unknown verb '$(store_lib_escape "$verb")'"

@@ -1,0 +1,7 @@
+#!/bin/sh
+# summary: delete one record and retire its id for good
+# usage: ctx store delete <container>/<id>
+# help: removes the record and adds its id to the declaration's retired list in one write, so the id is never handed out again; a missing record rc 1 (ERR_ENTITY_NOT_FOUND), an undeclared or dropped container rc 1 (ERR_SCHEMA_VIOLATION)
+# help: example: ctx store delete ideas/rust-driver
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/store" delete "$@"

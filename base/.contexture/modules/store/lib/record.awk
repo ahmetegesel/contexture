@@ -4,6 +4,7 @@
 # carriage return), a list one such line per item, a block NAME :: with its body indented
 # two spaces. The record comes on stdin; the environment selects the work:
 #
+#   REC_MODE=unesc                       the one input line unescaped, with no newline added
 #   REC_MODE=values  REC_ARG=<field>     each value of the field unescaped, one per line
 #   REC_MODE=strip   REC_ARG=<names>     the record without the named fields (blank separated)
 #   REC_MODE=keep    REC_ARG=<names>     only the named fields
@@ -61,6 +62,7 @@ BEGIN {
 }
 
 {
+  if (MODE == "unesc") { printf "%s", unesc($0); next }
   line = $0
   if (cur != "" && substr(line, 1, 2) == "  ") { field = cur }
   else if (line ~ /^[a-z][a-z0-9_-]* ::$/) {
@@ -84,6 +86,7 @@ BEGIN {
 }
 
 END {
+  if (MODE == "unesc") exit 0
   if (MODE == "values") {
     f = NAMES
     if (KIND[f] == "block") { if (BN[f] > 0) print BODY[f] }

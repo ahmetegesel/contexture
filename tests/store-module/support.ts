@@ -1,4 +1,4 @@
-import { readdirSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Run } from '../support/exec';
 import { fresh, seed } from '../support/snapshot';
@@ -46,3 +46,16 @@ export const refused = (r: Run, verb: string, code: string, message: string): vo
     throw new Error(`expected rc 1 store ${verb}: ${message} (${code}); got rc ${r.code} stdout ${JSON.stringify(r.stdout)} stderr ${JSON.stringify(r.stderr)}`);
   }
 };
+
+export function storeState(sb: string): string {
+  const root = join(sb, '.contexture/store');
+  if (!existsSync(root)) return '';
+  return readdirSync(root, { recursive: true })
+    .map(String)
+    .sort()
+    .map((p) => {
+      const full = join(root, p);
+      return statSync(full).isDirectory() ? `${p}/` : `${p}=${readFileSync(full, 'utf8')}`;
+    })
+    .join('\n');
+}

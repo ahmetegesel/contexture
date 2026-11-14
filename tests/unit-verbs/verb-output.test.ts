@@ -118,6 +118,8 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
         R('a missing rhythm', ['rhythm', 'show', 'nosuch']),
         R('a missing unit for the rhythm', ['rhythm', 'current', 'nounit']),
         R('a missing container', ['store', 'get', 'containers/nope']),
+        R('a write to a missing container', ['store', 'put', 'nope/x', '--what=w']),
+        R('a missing record', ['store', 'set', 'nope/x', '--what=w']),
       ]);
       const shim = sleepShim();
       for (const [why, lock] of [['a held unit lock', unitLock('ru')], ['a held namespace lock', namespaceLock('unit')]] as const) {
@@ -172,6 +174,11 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await u('refs', 'cu', 'lg');
       await take(['store', 'put', 'containers/cn', '--description=the census container', '--minting=given', '--add-fields=what: required line']);
       await together([['store', 'get', 'containers/cn'], ['store', 'get', 'containers/cn', '--json'], ['store', 'list', 'containers'], ['store', 'list', 'containers', '--json']]);
+      await take(['store', 'put', 'cn/c1', '--what=one', '--add-ref=unit#cu/task/t1']);
+      await take(['store', 'set', 'cn/c1', '--what=two']);
+      await together([['store', 'get', 'cn/c1'], ['store', 'get', 'cn/c1', '--json']]);
+      await take(['store', 'put', 'cn/c2', '--what=gone']);
+      await take(['store', 'delete', 'cn/c2']);
 
       const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
       const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
