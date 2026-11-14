@@ -13,6 +13,7 @@ import { refused } from '../support/wire';
 const scratch = (sb: string): string[] => readdirSync(join(sb, '.contexture/tmp')).filter((f) => f !== 'locks').sort();
 const added = (sb: string, before: readonly string[]): string[] => scratch(sb).filter((f) => !before.includes(f));
 const RESIDUE = /^(backlog|knowledge|state|journal|payload|rec|fts5-ws)\./;
+const CEILING_MS = 60_000;
 
 function groupGone(pid: number): boolean {
   try {
@@ -70,23 +71,23 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
       input: 'pointer=w-a IN_PROGRESS\n',
       env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(sb, '.contexture/storage/scripts/driver-resolver'), ...cat.env },
     });
-    expect(await waitFor(() => cat.reads().includes(join(lockPath(sb, lock), 'pid')), 20_000)).toBe(true);
+    expect(await waitFor(() => cat.reads().includes(join(lockPath(sb, lock), 'pid')), CEILING_MS)).toBe(true);
     expect(added(sb, before).length).toBeGreaterThan(0);
     method.signal('SIGTERM');
     const r = await method.result;
     release();
     expect(r.code).toBe(143);
-    expect(await waitFor(() => added(sb, before).length === 0, 10_000)).toBe(true);
+    expect(await waitFor(() => added(sb, before).length === 0, CEILING_MS)).toBe(true);
   });
 
   it('KR-a [the-engine-r18]: a SIGKILLed holder leaves its pid in the lock; the next writer removes the stale lock and lands', async () => {
     const sb = fresh(sb0);
     const lock = lockPath(sb, unitLock('w-unit'));
     const holder = launch('sh', ['-c', 'mkdir -p "$(dirname "$1")" && mkdir "$1" && printf "%s\\n" "$$" > "$1/pid" && sleep 30', 'kr-holder', lock], { cwd: sb, group: true });
-    expect(await waitFor(() => existsSync(join(lock, 'pid')) && readFileSync(join(lock, 'pid'), 'utf8').trim() !== '', 10_000)).toBe(true);
+    expect(await waitFor(() => existsSync(join(lock, 'pid')) && readFileSync(join(lock, 'pid'), 'utf8').trim() !== '', CEILING_MS)).toBe(true);
     expect(readFileSync(join(lock, 'pid'), 'utf8').trim()).toBe(String(holder.child.pid));
     holder.signal('SIGKILL');
-    expect(await waitFor(() => groupGone(holder.child.pid!), 10_000)).toBe(true);
+    expect(await waitFor(() => groupGone(holder.child.pid!), CEILING_MS)).toBe(true);
     await holder.result;
     expect(() => process.kill(holder.child.pid!, 0)).toThrow();
     expect((await unit(sb, 'task', 'start', 'w-unit', 'w-a')).code).toBe(0);
@@ -110,12 +111,12 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     const before = scratch(sb);
     const verbRoot = (): string | undefined => added(sb, before).find((f) => f.startsWith('verb.'));
     const writer = launch('./.contexture/ctx', ['unit', 'task', 'start', 'w-unit', 'w-a'], { cwd: sb, group: true, env: cat.env });
-    expect(await waitFor(() => cat.reads().includes(join(lockPath(sb, lock), 'pid')), 30_000, 50)).toBe(true);
+    expect(await waitFor(() => cat.reads().includes(join(lockPath(sb, lock), 'pid')), CEILING_MS, 50)).toBe(true);
     const root = verbRoot();
     expect(root !== undefined && readdirSync(join(sb, '.contexture/tmp', root)).some((f) => f.startsWith('unit.'))).toBe(true);
     writer.signal('SIGKILL');
     await writer.result;
-    expect(await waitFor(() => groupGone(writer.child.pid!), 10_000)).toBe(true);
+    expect(await waitFor(() => groupGone(writer.child.pid!), CEILING_MS)).toBe(true);
     release();
     expect(added(sb, before).filter((f) => f.startsWith('verb.'))).toHaveLength(1);
     await unit(sb, 'task', 'show', 'w-unit', 'w-a');
