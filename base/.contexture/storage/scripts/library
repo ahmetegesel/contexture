@@ -20,6 +20,7 @@
 #   store.roots
 #   data.get <ref>
 #   data.emit <ref> <data>
+#   lib.utf8_ok <string>, lib.utf8_file_ok <file>                   (the shared checks)
 #
 # The store functions and the two probes reach the configured driver through the storage
 # core's resolver; the caller uses the shell function names store_list, store_get,
@@ -53,6 +54,11 @@
 # A refusal is one stderr line with a fixed code (ERR_INVALID_ARGUMENT,
 # ERR_ENTITY_NOT_FOUND, or the target's own code re-framed with the ref). The resolver's
 # own driver-resolver: line is passed through unchanged, the one shape exception.
+#
+# The shared checks validate a value a module asks about and print nothing: lib_utf8_ok
+# and lib_utf8_file_ok answer rc 0 for valid UTF-8, 1 for anything else, 2 when the check
+# cannot run; LIB_UTF8_AWK is the awk text of the same check for a caller that folds it
+# into its own awk program.
 
 # store_lib_root: the workspace root the store calls run in
 store_lib_root() {
@@ -231,6 +237,62 @@ store_lib_escape() {
     }
     printf "%s", out
   }'
+}
+
+# LIB_UTF8_AWK: the awk function utf8_ok(s), true when s is valid UTF-8 (RFC 3629: no
+# overlong form, no surrogate, nothing above U+10FFFF); byte values come from a table built
+# with sprintf("%c"), so it runs alike on BWK awk, mawk, gawk, and busybox awk under
+# LC_ALL=C (every caller sets it: bytes, never the locale's characters); an ASCII value
+# takes the fast path, one match against a class of the bytes 1 to 127
+LIB_UTF8_AWK='
+function utf8_ok(s,   n, i, j, c, need, lo, hi) {
+  if (s ~ /^[\001-\177]*$/) return 1
+  if (!U8_T) { for (i = 1; i < 256; i++) U8_ORD[sprintf("%c", i)] = i; U8_T = 1 }
+  n = length(s); i = 1
+  while (i <= n) {
+    c = U8_ORD[substr(s, i, 1)]
+    if (c < 128) { i++; continue }
+    if (c >= 194 && c <= 223) { need = 1; lo = 128; hi = 191 }
+    else if (c == 224) { need = 2; lo = 160; hi = 191 }
+    else if (c >= 225 && c <= 236) { need = 2; lo = 128; hi = 191 }
+    else if (c == 237) { need = 2; lo = 128; hi = 159 }
+    else if (c == 238 || c == 239) { need = 2; lo = 128; hi = 191 }
+    else if (c == 240) { need = 3; lo = 144; hi = 191 }
+    else if (c >= 241 && c <= 243) { need = 3; lo = 128; hi = 191 }
+    else if (c == 244) { need = 3; lo = 128; hi = 143 }
+    else return 0
+    if (i + need > n) return 0
+    c = U8_ORD[substr(s, i + 1, 1)]
+    if (c < lo || c > hi) return 0
+    for (j = 2; j <= need; j++) { c = U8_ORD[substr(s, i + j, 1)]; if (c < 128 || c > 191) return 0 }
+    i += need + 1
+  }
+  return 1
+}
+'
+
+# lib_utf8_ok <string>: rc 0 when the string is valid UTF-8, 1 when not, 2 when the check
+# cannot run; silent (an argv string never holds a NUL)
+lib_utf8_ok() {
+  LIB_V=$1 LC_ALL=C awk "$LIB_UTF8_AWK"'BEGIN { if (utf8_ok(ENVIRON["LIB_V"])) exit 0; exit 3 }' < /dev/null
+  case $? in
+    0) return 0 ;;
+    3) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+# lib_utf8_file_ok <file>: rc 0 when every line of the file is valid UTF-8, 1 when one is
+# not, 2 when the file cannot be read; silent. A NUL byte is the caller's own check, since
+# not every awk reads one.
+lib_utf8_file_ok() {
+  [ -f "$1" ] && [ -r "$1" ] || return 2
+  LC_ALL=C awk "$LIB_UTF8_AWK"'{ if (!utf8_ok($0)) exit 3 }' "$1"
+  case $? in
+    0) return 0 ;;
+    3) return 1 ;;
+    *) return 2 ;;
+  esac
 }
 
 # store_search <namespace> <query> <mode> [<limit>]: the library's search entry; the query

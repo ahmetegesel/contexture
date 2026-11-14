@@ -103,10 +103,10 @@ while [ "$i" -lt "$nval" ]; do
   eval "f=\$VALF_$i; v=\$VAL_$i"
   vb_has_cr "$v" && fail "--$f holds a carriage return; the dialect is LF"
   vb_has_nl "$v" && fail "--$f holds a newline; each value is one line"
-  VB_V="$v" LC_ALL=C awk "$VB_UTF8_AWK"'BEGIN { if (!utf8_ok(ENVIRON["VB_V"])) exit 3 }'
+  lib_utf8_ok "$v"
   case $? in
     0) ;;
-    3) fail "$f is not valid UTF-8" ;;
+    1) fail "$f is not valid UTF-8" ;;
     *) printf 'lane create: error: cannot check the value of --%s\n' "$f" >&2; exit 2 ;;
   esac
 done

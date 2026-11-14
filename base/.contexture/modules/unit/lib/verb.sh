@@ -49,6 +49,16 @@ for vb_js in "$VB_JSON" \
              "${CTX_ROOT:-$PWD}/base/.contexture/storage/scripts/json.awk"; do
   if [ -f "$vb_js" ]; then VB_JSON=$vb_js; break; fi
 done
+# the storage core's module library carries the shared checks (the UTF-8 check); the core
+# beside the module wins, then the workspace drawer, then the base mirror; sourcing it only
+# defines functions, so nothing resolves at source time
+VB_LIBRARY=""
+for vb_lb in "$VB_LIB/../../../storage/scripts/library" \
+             "${CTX_ROOT:-$PWD}/.contexture/storage/scripts/library" \
+             "${CTX_ROOT:-$PWD}/base/.contexture/storage/scripts/library"; do
+  if [ -f "$vb_lb" ]; then VB_LIBRARY=$vb_lb; break; fi
+done
+[ -z "$VB_LIBRARY" ] || . "$VB_LIBRARY"
 VB_RENDER="$VB_LIB/render.awk"
 VB_DIR=""
 VB_PAY=""
@@ -92,37 +102,9 @@ vb_tmp() {
   fi
 }
 
-# VB_UTF8_AWK: the awk function utf8_ok(s), true when s is valid UTF-8 (RFC 3629: no
-# overlong form, no surrogate, nothing above U+10FFFF); byte values come from a table built
-# with sprintf("%c"), so it runs alike on BWK awk, mawk, gawk, and busybox awk under
-# LC_ALL=C (every caller sets it: bytes, never the locale's characters); an ASCII value
-# takes the fast path, one match against a class of the bytes 1 to 127
-VB_UTF8_AWK='
-function utf8_ok(s,   n, i, j, c, need, lo, hi) {
-  if (s ~ /^[\001-\177]*$/) return 1
-  if (!U8_T) { for (i = 1; i < 256; i++) U8_ORD[sprintf("%c", i)] = i; U8_T = 1 }
-  n = length(s); i = 1
-  while (i <= n) {
-    c = U8_ORD[substr(s, i, 1)]
-    if (c < 128) { i++; continue }
-    if (c >= 194 && c <= 223) { need = 1; lo = 128; hi = 191 }
-    else if (c == 224) { need = 2; lo = 160; hi = 191 }
-    else if (c >= 225 && c <= 236) { need = 2; lo = 128; hi = 191 }
-    else if (c == 237) { need = 2; lo = 128; hi = 159 }
-    else if (c == 238 || c == 239) { need = 2; lo = 128; hi = 191 }
-    else if (c == 240) { need = 3; lo = 144; hi = 191 }
-    else if (c >= 241 && c <= 243) { need = 3; lo = 128; hi = 191 }
-    else if (c == 244) { need = 3; lo = 128; hi = 143 }
-    else return 0
-    if (i + need > n) return 0
-    c = U8_ORD[substr(s, i + 1, 1)]
-    if (c < lo || c > hi) return 0
-    for (j = 2; j <= need; j++) { c = U8_ORD[substr(s, i + j, 1)]; if (c < 128 || c > 191) return 0 }
-    i += need + 1
-  }
-  return 1
-}
-'
+# VB_UTF8_AWK: the awk function utf8_ok(s), the storage library's UTF-8 check (RFC 3629)
+# as awk text, which vb_kv folds into its one staging program
+VB_UTF8_AWK=${LIB_UTF8_AWK:-}
 
 # vb_label: the verb's name in its refusals (the lane verbs as "lane <verb>"), read from the
 # running script's drawer path, since a lane verb points VB_SELF at this library to find it
@@ -171,10 +153,10 @@ vb_doc_ok() {
     printf '%s: error: %s holds a NUL byte (ERR_INVALID_ARGUMENT)\n' "$(vb_label)" "$1" >&2
     exit 1
   fi
-  LC_ALL=C awk "$VB_UTF8_AWK"'{ if (!utf8_ok($0)) exit 3 }' "$2"
+  lib_utf8_file_ok "$2"
   case $? in
     0) ;;
-    3) printf '%s: error: %s is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n' "$(vb_label)" "$1" >&2; exit 1 ;;
+    1) printf '%s: error: %s is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n' "$(vb_label)" "$1" >&2; exit 1 ;;
     *) printf '%s: error: cannot read %s\n' "$(vb_label)" "$1" >&2; exit 2 ;;
   esac
 }

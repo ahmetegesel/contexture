@@ -252,7 +252,12 @@ through it; the module never names the driver. The library exports:
   driver: one `<namespace><TAB><root>` line per declared root, a fallback root on its own
   line after its root; rc 2 with one `store.roots: error:` line when no data reader
   answers;
-- `data_get <ref>` and `data_emit <ref> <data>`.
+- `data_get <ref>` and `data_emit <ref> <data>`;
+- the shared checks, each silent with rc 0 for a pass, 1 for a fail, and 2 when the check
+  cannot run: `lib_utf8_ok <string>` and `lib_utf8_file_ok <file>`, the UTF-8 check (RFC
+  3629: no overlong form, no surrogate, nothing above U+10FFFF), with its awk text in
+  `LIB_UTF8_AWK` for a caller that folds it into its own awk program; the unit verb
+  library and `ctx lane create` call it, keeping their own refusal lines.
 
 `data_get` resolves a module reference `<module>#<symbol>`: it finds the target module's
 data script in the workspace modules, the workspace extensions, or the base mirror of
