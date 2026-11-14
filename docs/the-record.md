@@ -169,26 +169,23 @@ The fields stand in the canonical order every read prints and the finding verbs 
 
 Findings land through the harvest of `KNOWLEDGE: true` entries: the agent forms a compact candidate, lands it when it meets the bar, and the entry closes by reference; a candidate that does not drops.
 
-## Abstract entity references and resolution
+## Full addresses and the shared get
 
-A REF names its target exactly in one of the two pointer shapes of the laws' references rule (@record references; the REF line above). The resolve verb reads an entity reference in domain notation:
+A REF names its target exactly by its full address (@record references; the REF line above), `<owner>#<path>`, and the owner's `get` reads it, the path everything after the first hash:
 
-- Tasks: `task#<slug>`
-- Journal entries: `entry#<slug>`
-- Findings: `finding#<NAME>`
-- Subagent lane artifacts and claims: `lane#<lane-slug>/<recipe|journal|report>[#<claim>]` (a journal claim names a lane journal entry slug and prints that entry as `ctx lane show` prints it; a recipe or report claim names a section: an `@<claim>` head runs to the next column-0 `@` line, a column-0 `<claim> ::` head, its text on that line or its body below, to the next non-blank column-0 line, blank lines inside either span kept, and the last head naming the claim, in either form, wins)
-- Canonical module refs: `unit#<unit>/task/<slug>`, `unit#<unit>/entry/<slug>`, `unit#<unit>/finding/<NAME>`, `unit#<unit>/lane/<lane>/<recipe|journal|report>` (the ref carries its target unit)
-
-The resolution verb resolves references directly, and the shared read verb prints one entity by its path, everything after `unit#` in its address:
+- Tasks: `unit#<unit>/task/<slug>`
+- Journal entries: `unit#<unit>/entry/<slug>`
+- Findings: `unit#<unit>/finding/<NAME>`
+- Subagent lane artifacts: `unit#<unit>/lane/<lane>/<recipe|journal|report>`, a recipe or report section `unit#<unit>/lane/<lane>/<recipe|report>/<SECTION>` (an `@<SECTION>` or `@claim <SECTION>` head runs to the line before the next column-0 `@` line, a column-0 `<SECTION> ::` head to the line before the next non-blank column-0 line, the last head naming the section winning), and a lane journal entry `unit#<unit>/lane/<lane>/journal/<slug>`
+- Another owner's entities: `store#<container>/<id>` (`ctx store get`), `docs#<repo>/<slug>/<id>` (`ctx docs get`), and a workspace file `file#<path>[#<symbol>]`
 
 ```bash
-.contexture/ctx unit resolve <unit> <ref>
 .contexture/ctx unit get <unit>/<kind>/<id>
 ```
 
 `ctx unit get` takes `<unit>/task/<slug>`, `<unit>/entry/<slug>`, `<unit>/finding/<NAME>`, `<unit>/lane/<lane>/<recipe|report>` (whole, or one section with `/<SECTION>`), `<unit>/lane/<lane>/journal` (the whole lane journal), and `<unit>/lane/<lane>/journal/<slug>`; it prints exactly one entity whole in its canonical layout (a task with its `REFS`), never a container listing or the unit state, takes no lock, and refuses a missing entity rc 1 with a named not found, so a dangling reference reads gone.
 
-When given the legacy forms an older record holds (the file-based paths such as `knowledge.md#NAME`, `journal.md#slug`, `backlog.md#slug`, and the legacy lane form `lanes/<lane>/<recipe|journal|report>[#<claim>]`), the CLI normalizes them transparently to entity lookups. Agents author the entity syntax natively, `lane#` for a lane; a canonical ref minted by a write resolves directly.
+`ctx unit resolve`, the earlier resolution verb over the short and legacy forms, is retired into `get`: a call refuses rc 1 naming its replacement. A record written before the full addresses keeps its old forms (`journal#slug`, `knowledge#NAME`, `lane#<lane>/report#<claim>`, `lanes/<lane>/...`, `journal.md#slug`) until `ctx unit migrate` rewrites them; the load warns while a unit still holds one.
 
 ## Search and snippet consumption
 
@@ -207,7 +204,7 @@ On an indexed backend, a ranked mode returns high-density contextual snippets or
 Agents follow a snippet-first consumption protocol:
 1. Run `ctx unit search "<query>"` (with `--unit=<unit>`, `--all`, or `--mode=<mode>` as the question needs) to locate candidates.
 2. Review the compact snippets and their addresses.
-3. Fetch an entity whole with its row's read, `ctx unit get <path>` (or `task show`, `entry show`, `finding show`, or `resolve`).
+3. Fetch an entity whole with its row's read, `ctx unit get <path>` (or `task show`, `entry show`, or `finding show`).
 
 When human users prompt in non-English languages (such as Turkish), agents translate conceptual terms into English search keywords before querying the record, synthesize findings from the English record, and respond to the user in their language.
 

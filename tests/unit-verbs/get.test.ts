@@ -26,18 +26,21 @@ describe.concurrent('ctx unit get', () => {
   });
 
   it.for([
-    ['g-unit/task/g-task', 'unit#g-unit/task/g-task'],
-    [`g-unit/entry/${D}-g-e1`, `unit#g-unit/entry/${D}-g-e1`],
-    ['g-unit/finding/G_FINDING', 'unit#g-unit/finding/G_FINDING'],
-    ['g-unit/lane/g-lane/report/COMMITS', 'lane#g-lane/report#COMMITS'],
-    [`g-unit/lane/g-lane/journal/${D}-g-l1`, `lane#g-lane/journal#${D}-g-l1`],
-  ] as const)('[the-record-r-l81i1] get %s prints the one entity byte for byte as ctx unit resolve prints its reference, rc 0, empty stderr', async ([path, ref]) => {
-    const sb = fresh(sb0);
-    const r = await unit(sb, 'get', path);
-    const resolved = await unit(sb, 'resolve', 'g-unit', ref);
+    ['g-unit/task/g-task', '@task g-task\n'],
+    [`g-unit/entry/${D}-g-e1`, `@entry ${D}-g-e1\n`],
+    ['g-unit/finding/G_FINDING', '@finding G_FINDING\n'],
+    ['g-unit/lane/g-lane/report/COMMITS', 'COMMITS ::\n  one commit\n\n'],
+    [`g-unit/lane/g-lane/journal/${D}-g-l1`, `@entry ${D}-g-l1\n  WHAT: "the lane event get prints"\n`],
+  ] as const)('[the-record-r-l81i1] get %s prints the one entity in its canonical lines, rc 0, empty stderr', async ([path, head]) => {
+    const r = await unit(fresh(sb0), 'get', path);
     expect([r.code, r.stderr]).toEqual([0, '']);
-    expect(r.stdout.length).toBeGreaterThan(1);
-    expect(r.stdout).toBe(resolved.stdout);
+    expect(r.stdout.startsWith(head)).toBe(true);
+  });
+
+  it('[the-record-r-l81i1] ctx unit resolve is retired into get: a call refuses rc 1 naming its replacement', async () => {
+    const r = await unit(fresh(sb0), 'resolve', 'g-unit', 'unit#g-unit/task/g-task');
+    expect([r.code, r.stdout]).toEqual([1, '']);
+    expect(r.stderr).toBe('ctx unit resolve retired: use get <unit>/<kind>/<id>, the path everything after unit# in an address\n');
   });
 
   it('[the-record-r-l81i1] a task prints whole with its REFS, which the task show text view leaves out', async () => {

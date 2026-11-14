@@ -81,7 +81,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     await inSqliteStore(sb, 'unit', [`${U}/knowledge`]);
   });
 
-  it('SF5 [the-record-r2, the-record-r10] the lane family: create from its brief flags, record, report; lane show and resolve read them', async () => {
+  it('SF5 [the-record-r2, the-record-r10] the lane family: create from its brief flags, record, report; lane show and get read them', async () => {
     const sb = fresh(seeded);
     await must(createLane(sb, U, 'sq-lane', ['--goal=the sqlite recipe']));
     await must(lane(sb, 'record', U, 'sq-lane', '--what=the sqlite lane event'));
@@ -89,11 +89,11 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     expect((await must(lane(sb, 'show', U, 'sq-lane', 'recipe'))).stdout).toContain('the sqlite recipe');
     expect((await must(lane(sb, 'show', U, 'sq-lane', 'journal'))).stdout).toContain('the sqlite lane event');
     expect((await must(lane(sb, 'show', U, 'sq-lane', 'report'))).stdout).toContain('the sqlite report');
-    expect(await show(sb, 'resolve', U, 'lane#sq-lane/report#sq-claim')).toMatch(/^@claim sq-claim/m);
+    expect(await show(sb, 'get', `${U}/lane/sq-lane/report/sq-claim`)).toMatch(/^@claim sq-claim/m);
     await inSqliteStore(sb, 'unit', ['recipe', 'journal', 'report'].map((a) => `${U}/lanes/sq-lane/${a}`));
   });
 
-  it('SF6 [the-record-r2, the-record-r10] the read views: load to its complete page, audit, refresh, resolve, refs and refs-to', async () => {
+  it('SF6 [the-record-r2, the-record-r10] the read views: load to its complete page, audit, refresh, get, refs and refs-to', async () => {
     const sb = fresh(seeded);
     await must(unit(sb, 'task', 'add', U, 'sq-t6', '--objective=the sqlite view task'));
     await must(unit(sb, 'record', U, `--slug=${DATE}-sq-view`, '--what=the sqlite view entry'));
@@ -106,8 +106,8 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     expect(pages).toContain('the sqlite view task');
     await must(unit(sb, 'audit', U));
     await must(unit(sb, 'refresh', U));
-    for (const [ref, text] of [['task#sq-t6', 'the sqlite view task'], [`entry#${DATE}-sq-view`, 'the sqlite view entry'], ['finding#SQ_VIEW', 'the sqlite view finding']]) {
-      expect(await show(sb, 'resolve', U, ref)).toContain(text);
+    for (const [ref, text] of [[`${U}/task/sq-t6`, 'the sqlite view task'], [`${U}/entry/${DATE}-sq-view`, 'the sqlite view entry'], [`${U}/finding/SQ_VIEW`, 'the sqlite view finding']]) {
+      expect(await show(sb, 'get', ref)).toContain(text);
     }
     expect(await show(sb, 'refs-to', U)).toContain('sq-ref');
     await inSqliteStore(sb, 'unit', [`${U}/state`, 'sq-ref/state']);

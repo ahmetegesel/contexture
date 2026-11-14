@@ -167,8 +167,8 @@ describe('the check verb reads a path git quotes in a plain git delta', { concur
 });
 
 describe('the nudge through its unit', { concurrent: true }, () => {
-  it('RS5b [docs-module-r26] the task entered through the unit verbs resolves to the sample block byte for byte', async () => {
-    const r = await unit(fresh(corpus), 'resolve', 'nudge-demo', 'task#install-and-run-local');
+  it('RS5b [docs-module-r26] the task entered through the unit verbs reads through get as the sample block byte for byte', async () => {
+    const r = await unit(fresh(corpus), 'get', 'nudge-demo/task/install-and-run-local');
     expect(r.code).toBe(0);
     expect(r.stdout).toBe(readFileSync(join(SAMPLE, 'backlog.md'), 'utf8'));
   });
@@ -275,7 +275,7 @@ describe('the nudge tasks through its unit', { concurrent: true }, () => {
   it('RS5c [docs-module-r26] a named task the unit lacks refuses rc 1, and a missing or empty value refuses rc 1', async () => {
     const missing = await docs(fresh(multi), ['nudge', 'nudge-multi', '--task=nosuch-task']);
     expect([missing.code, missing.stdout]).toEqual([1, '']);
-    expect(missing.stderr).toContain('task#nosuch-task');
+    expect(missing.stderr).toContain('nudge-multi/task/nosuch-task');
     const empty = await docs(fresh(multi), ['nudge', 'nudge-multi', '--task=']);
     expect([empty.code, empty.stdout]).toEqual([1, '']);
     expect(empty.stderr).toContain('--task=<slug> needs a task slug');

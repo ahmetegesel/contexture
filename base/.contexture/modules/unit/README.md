@@ -14,7 +14,7 @@ top README.
 
 The engine discovers `.contexture/modules/unit/`, reads the summary for `ctx help`, and
 builds the verb table from `scripts/*`: an extension-less file with a `# summary:` header
-is a verb. `scripts/data` carries no summary and is private; the 21 verbs are the record's
+is a verb. `scripts/data` carries no summary and is private; the 20 verbs are the record's
 public surface, and `ctx session` is retired (a line naming `ctx unit`).
 
 ## Layout
@@ -26,7 +26,7 @@ laws              the record clauses: @record, @journal, @backlog, @query, @refr
 data              the storage declaration (the namespace is the folder name, unit):
                   root .contexture/units, fallback_root .contexture/sessions, suffix .md,
                   key <unit>/<path...>, changes false, the document rules
-scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
+scripts/<verb>    the 20 record verbs (sh), each sourcing lib/verb.sh
 scripts/data      the 35 record operations over the storage layer (sh, private), and
                   unit.migrate, the record's migrations behind migrate, outside them
 lib/migrate.awk   the pointer rewrite: the tokenizer, the class table, the census, NOTE

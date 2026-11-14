@@ -77,7 +77,7 @@ describe.concurrent('every item reads in the one canonical layout, every value k
       const json = (await unit(sb, 'entry', 'show', 'cl-unit', '2026-09-20-cl-one', '--json')).stdout;
       expect(json).not.toContain('"verbatim"');
       expect(json).toContain('"legacy_status":"DONE","refs":[],"closers":[{"kind":"CLOSES","targets":["2026-09-20-cl-zero"],"verdict":"done","reason":"a (nested) reason, kept","extra_text":null}],"extra_fields":[{"key":"NOTE","value":"an unknown field"}]');
-      expect((await unit(sb, 'resolve', 'cl-unit', 'entry#2026-09-20-cl-zero')).stdout).toBe('@entry 2026-09-20-cl-zero\n  ANCHOR: A1\n  WHAT: "the closed target"\n  THREAD: none\n\n');
+      expect((await unit(sb, 'get', 'cl-unit/entry/2026-09-20-cl-zero')).stdout).toBe('@entry 2026-09-20-cl-zero\n  ANCHOR: A1\n  WHAT: "the closed target"\n  THREAD: none\n\n');
       expect(files(sb)).toBe(Object.values(LEGACY).join('\0'));
     });
 

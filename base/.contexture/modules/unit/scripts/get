@@ -2,7 +2,7 @@
 # summary: print one record entity whole, by its path: <unit>/<kind>/<id>
 # usage: ctx unit get <unit>/<kind>/<id> [--json]
 # help: the path is everything after unit# in an entity's address (a search row's read names it): <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/recipe and <unit>/lane/<lane>/report (whole, or one section with /<SECTION>), <unit>/lane/<lane>/journal (the whole lane journal), and <unit>/lane/<lane>/journal/<slug> (one lane journal entry)
-# help: prints exactly one entity in its canonical layout, its REFS included; never a container listing and never the unit state; read only, it takes no lock; a section is the span ctx unit resolve cuts for a claim (from an @<SECTION> head to the next column-0 @ line, or from a column-0 <SECTION> :: head to the next non-blank column-0 line)
+# help: prints exactly one entity in its canonical layout, its REFS included; never a container listing and never the unit state; read only, it takes no lock; a section is the span of its last head (from an @<SECTION> or @claim <SECTION> head to the next column-0 @ line, or from a column-0 <SECTION> :: head to the next non-blank column-0 line)
 # help: a missing entity refuses rc 1 with get: error: '<path>' not found (ERR_ENTITY_NOT_FOUND), so a dangling reference reads gone
 # help:   --json      the one entity as JSON: the storage function's answer for a task, an entry, a finding, or a whole recipe, report, or lane journal (task.get, entry.get, finding.get, lane.get); a section answers {unit, lane, artifact, section, content}, its content the lines the text form prints, and a lane journal entry {unit, lane, artifact, entry}, that entry's object alone
 

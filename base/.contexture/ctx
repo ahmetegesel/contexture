@@ -36,7 +36,7 @@
 # directory without a module file warns and skips; a directory with neither
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
 # Reserved names are the unit verb set plus refresh, run, hooks, compose, package, search, and the
-# retired record verbs (append, amend, query, flip, drop, next, which print
+# retired record verbs (append, amend, query, flip, drop, next, resolve, which print
 # their replacement); the builtin unit, run, lane, rhythm, and store are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
 # ctx help --all, ctx <module> help, ctx <module> help <verb>, and bare
@@ -484,7 +484,7 @@ package_reader() {
 # ---------------------------------------------------------------------------
 # reserved names: the unit verb set (its scripts own the list) plus
 # refresh, run, hooks, compose, and package, and the retired record verbs (append, amend, query,
-# flip, drop, next: a static list, so no module can claim a retired name and a
+# flip, drop, next, resolve: a static list, so no module can claim a retired name and a
 # retired call prints its replacement); the builtin unit, run, lane, rhythm, and store are allowed
 # (read through is_builtin, never a literal set at the sites)
 
@@ -493,10 +493,11 @@ retired_replacement() {
   case "$1" in
     append) printf 'use record, task add, finding add' ;;
     amend) printf 'use task update' ;;
-    query) printf 'use entry show, entry list, entry closure, finding show, resolve, search, list, refs-to, lane show' ;;
+    query) printf 'use entry show, entry list, entry closure, finding show, get, search, list, refs-to, lane show' ;;
     flip) printf 'use task start, complete, reopen' ;;
     drop) printf 'use task drop' ;;
     next) printf 'use list (the next task is derived from the backlog)' ;;
+    resolve) printf 'use get <unit>/<kind>/<id>, the path everything after unit# in an address' ;;
     *) return 1 ;;
   esac
 }
@@ -559,7 +560,7 @@ EOF
 
 is_reserved() {
   case "$1" in
-    refresh|run|hooks|compose|package|search|append|amend|query|flip|drop|next)
+    refresh|run|hooks|compose|package|search|append|amend|query|flip|drop|next|resolve)
       return 0
       ;;
   esac

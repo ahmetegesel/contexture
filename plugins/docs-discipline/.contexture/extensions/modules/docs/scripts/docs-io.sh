@@ -422,7 +422,7 @@ EOF
   return "$rf_hit"
 }
 
-# docs_task_files <unit> [<slug>...]: the named tasks' blocks through ctx unit resolve,
+# docs_task_files <unit> [<slug>...]: the named tasks' blocks through ctx unit get,
 # or with none the unit's IN_PROGRESS tasks (backlog order) through ctx unit task list;
 # each block verbatim (task show's text view drops REFS) in its own scratch file:
 # DOCS_TASKS lists the files one path per line, empty when no task is active, so a
@@ -461,7 +461,7 @@ docs_task_files() {
   while IFS= read -r tf_slug; do
     [ -n "$tf_slug" ] || continue
     tf_n=$((tf_n + 1))
-    if (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$tf_ctx" unit resolve "$tf_unit" "task#$tf_slug" < /dev/null) > "$DOCS_SCRATCH/task-$tf_n"; then
+    if (unset CTX_DIR; cd "$DOCS_ROOT" && exec "$tf_ctx" unit get "$tf_unit/task/$tf_slug" < /dev/null) > "$DOCS_SCRATCH/task-$tf_n"; then
       DOCS_TASKS="$DOCS_TASKS$DOCS_SCRATCH/task-$tf_n
 "
     else

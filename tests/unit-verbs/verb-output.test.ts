@@ -109,7 +109,7 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
         R('a missing task', U('task', 'show', 'ru', 'nope')),
         R('a missing finding', U('finding', 'show', 'ru', 'NOPE')),
         R('a missing entry', U('entry', 'show', 'ru', 'nope')),
-        R('a missing reference', U('resolve', 'ru', 'task#nope')),
+        R('a missing reference', U('get', 'ru/task/nope')),
         R('a missing entity', U('get', 'ru/task/nope')),
         R('a missing plan', U('fold', 'ru', '--check')),
         R('a missing unit to move', U('migrate', 'nounit')),
@@ -148,8 +148,8 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await u('audit', 'lg');
       await u('list');
       await u('list', '--all');
-      await u('resolve', 'lg', 'task#lg-task');
-      await u('resolve', 'lg', `entry#${D}-lg-e1`);
+      await u('get', 'lg/task/lg-task');
+      await u('get', `lg/entry/${D}-lg-e1`);
       await u('record', 'lg', '--what=the first landing write moves the unit', `--slug=${D}-lg-e2`);
 
       await u('record', 'cu', '--what=the first census entry', `--slug=${D}-cu-e1`, '--thread=the census reader');
@@ -187,24 +187,6 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
       const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
       const names = listing!.stdout.split('\n').filter((l) => / \| /.test(l)).map((l) => l.split(' | ')[0] ?? '');
-      const refs = [
-        'task#t1',
-        'backlog#t1',
-        'finding#F_TWO',
-        'knowledge#F_TWO',
-        `entry#${D}-cu-e2`,
-        `journal#${D}-cu-e2`,
-        'lane#cl/recipe',
-        'lane#cl/journal',
-        'lane#cl/report',
-        'lane#cl/report#FINDINGS',
-        'lanes/cl/report',
-        'lanes/cl/report#FINDINGS',
-        'unit#cu/task/t1',
-        `unit#cu/entry/${D}-cu-e2`,
-        'unit#cu/finding/F_TWO',
-        'unit#cu/lane/cl/report',
-      ];
       await together([
         U('task', 'list', 'cu', '--status=all'),
         U('task', 'show', 'cu', 't1'),
@@ -220,7 +202,6 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
         ...[[], ['--active'], ['--all'], [`--repo=${REPO}`], ['--active', `--repo=${REPO}`], ['--all', `--repo=${REPO}`]].map((flags) => U('list', ...flags)),
         U('audit', 'cu'),
         U('refresh', 'cu'),
-        ...refs.flatMap((ref) => [U('resolve', 'cu', ref), U('resolve', 'cu', ref, '--json')]),
         U('refs-to', 'lg'),
         ...['cu/task/t1', `cu/entry/${D}-cu-e2`, 'cu/finding/F_TWO', 'cu/lane/cl/recipe', 'cu/lane/cl/report', 'cu/lane/cl/report/FINDINGS', `cu/lane/cl/journal/${D}-cl-l1`].flatMap((p) => [U('get', p), U('get', p, '--json')]),
         U('search', 'census', '--unit=cu'),

@@ -50,9 +50,9 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     expect(search.stdout).not.toContain('objective: "bare unit');
     expect(search.stdout).not.toContain('next_action');
     pathFree(search.stdout + search.stderr);
-    for (const ref of ['backlog.md#some-task', 'lanes/no-lane/report.md#orientation']) {
-      const err = (await unit(sb, 'resolve', 'up-bare', ref)).stderr;
-      expect(err).toMatch(new RegExp(`^resolve: error: reference '${ref.replace(/[.#/]/g, '\\$&')}' not found in unit 'up-bare' \\(ERR_ENTITY_NOT_FOUND\\)$`, 'm'));
+    for (const ref of ['up-bare/task/some-task', 'up-bare/lane/no-lane/report/orientation']) {
+      const err = (await unit(sb, 'get', ref)).stderr;
+      expect(err).toMatch(new RegExp(`^get: error: '${ref.replace(/[.#/]/g, '\\$&')}' not found \\(ERR_ENTITY_NOT_FOUND\\)$`, 'm'));
       pathFree(err.replace(ref, ''));
     }
   });

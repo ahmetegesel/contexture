@@ -54,16 +54,16 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     expect(active).not.toContain('BASE_OLD');
   });
 
-  it('[the-record-r15] lane: show reads the journal and the report, and resolve reads the claim', async () => {
+  it('[the-record-r15] lane: show reads the journal and the report, and get reads the section', async () => {
     const sb = fresh(await snap('written'));
     expect((await lane(sb, 'show', U, 'base-lane', 'journal')).stdout).toContain('a lane event');
     expect((await lane(sb, 'show', U, 'base-lane', 'report')).stdout).toContain('@claim probe-claim');
-    const claim = await unit(sb, 'resolve', U, 'lane#base-lane/report#probe-claim');
+    const claim = await unit(sb, 'get', `${U}/lane/base-lane/report/probe-claim`);
     expect(claim.code).toBe(0);
     expect(claim.stdout).toMatch(/^@claim probe-claim/m);
   });
 
-  it('[the-record-r13] the reads: board, load to its complete page, audit, the exact search by default, the state never a row, get, resolve, and the fold plan', async () => {
+  it('[the-record-r13] the reads: board, load to its complete page, audit, the exact search by default, the state never a row, get, and the fold plan', async () => {
     const sb = fresh(await snap('written'));
     expect((await unit(sb, 'board', U)).code).toBe(0);
     let pages = '';
@@ -76,8 +76,8 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     const rows = JSON.parse((await unit(sb, 'search', 'the base-only probe unit', `--unit=${U}`, '--json')).stdout).rows as { container: string }[];
     expect(rows.every((r) => !r.container.endsWith('/state'))).toBe(true);
     expect((await unit(sb, 'get', `${U}/task/base-t1`)).stdout).toMatch(/^@task base-t1/m);
-    for (const [ref, head] of [['task#base-t1', /^@task base-t1/m], [`entry#${S1}`, /the first probe entry/], ['finding#BASE_NEW', /^@finding BASE_NEW/m]] as const) {
-      const r = await unit(sb, 'resolve', U, ref);
+    for (const [ref, head] of [[`${U}/task/base-t1`, /^@task base-t1/m], [`${U}/entry/${S1}`, /the first probe entry/], [`${U}/finding/BASE_NEW`, /^@finding BASE_NEW/m]] as const) {
+      const r = await unit(sb, 'get', ref);
       expect(r.code, ref).toBe(0);
       expect(r.stdout).toMatch(head);
     }

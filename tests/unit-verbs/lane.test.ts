@@ -157,8 +157,8 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     const heads = recipe.split('\n').filter((l) => /^ {2}[A-Z]+ :: /.test(l)).map((l) => l.slice(2, l.indexOf(' :: ')));
     expect(heads).toEqual(['VERDICT', 'CALLERS']);
     await must(report(sb, 'sem-unit', 'tpl-lane', ['@report tpl-lane', 'VERDICT :: done, every caller mapped', 'CALLERS :: c1 in a.ts#f', '  c2 in b.ts#g', ''].join('\n')));
-    expect(await unit(sb, 'resolve', 'sem-unit', 'lane#tpl-lane/report#VERDICT').then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'VERDICT :: done, every caller mapped\n', '']);
-    expect(await unit(sb, 'resolve', 'sem-unit', 'lane#tpl-lane/report#CALLERS').then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'CALLERS :: c1 in a.ts#f\n  c2 in b.ts#g\n', '']);
+    expect(await unit(sb, 'get', 'sem-unit/lane/tpl-lane/report/VERDICT').then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'VERDICT :: done, every caller mapped\n', '']);
+    expect(await unit(sb, 'get', 'sem-unit/lane/tpl-lane/report/CALLERS').then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'CALLERS :: c1 in a.ts#f\n  c2 in b.ts#g\n', '']);
   });
 
   it('[the-record-r15]: the recipe carries the boundary sentence, null checked, and the background process rule in its runner item, and for flags naming none no storage location, a planted --fact read by the same assertion', async () => {

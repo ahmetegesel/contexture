@@ -99,8 +99,8 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   line on stderr; a plain line passes byte for byte.
 - The nudge's unit form nudges the named tasks (`--task=<slug>`, repeatable), or
   with none every IN_PROGRESS task in backlog order: each slug's block is read
-  through `ctx unit task list <unit> --status=progress` and `ctx unit resolve
-  <unit> task#<slug>` (the text view of task show drops REFS, which the engine
+  through `ctx unit task list <unit> --status=progress` and `ctx unit get
+  <unit>/task/<slug>` (the text view of task show drops REFS, which the engine
   scores) into its own scratch file, and the engine runs once per task, so a
   unit with two in-progress tasks prints two blocks; a named task is nudged
   whatever its status (the force). The backlog-file form keeps its one-backlog
