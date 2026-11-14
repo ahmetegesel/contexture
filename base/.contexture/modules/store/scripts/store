@@ -543,7 +543,19 @@ case "$verb" in
     split_path "$sp"
     [ -n "$PI" ] || die 1 ERR_INVALID_ARGUMENT "set changes one entity: <container>/<id>"
     if [ "$PC" = containers ]; then
-      die 1 ERR_INVALID_ARGUMENT "set containers/<name> is not served yet"
+      lib_or_die lib_lock
+      decl_load "$PI"
+      [ "$DSTATE" != absent ] || die 1 ERR_ENTITY_NOT_FOUND "container '$PI' is not declared"
+      [ "$DSTATE" != dropped ] || die 1 ERR_ENTITY_NOT_FOUND "container '$PI' is dropped (put containers/$PI declares it again)"
+      system_names_refused retired state
+      rec strip 'retired state' < "$SCR/d.rec" > "$SCR/old.core"
+      lib_or_die fields_apply "$SCR/containers.decl" "$SCR/old.core" "$SCR/acts" "$SCR/new"
+      decl_fields_check "$SCR/new"
+      rec keep 'retired state' < "$SCR/d.rec" > "$SCR/sys"
+      REC_FILE=$SCR/sys REC_MODE=insert REC_ARG='description minting fields' awk -f "$REC_AWK" < "$SCR/new" > "$SCR/new.rec"
+      lib_or_die store_put "containers/$PI" < "$SCR/new.rec" > /dev/null
+      printf '%s\n' "$PI"
+      exit 0
     fi
     lib_or_die lib_lock
     live_for_write
@@ -565,7 +577,22 @@ case "$verb" in
     split_path "$1"
     [ -n "$PI" ] || die 1 ERR_INVALID_ARGUMENT "delete removes one entity: <container>/<id>"
     if [ "$PC" = containers ]; then
-      die 1 ERR_INVALID_ARGUMENT "delete containers/<name> is not served yet"
+      lib_or_die lib_lock
+      PC=$PI
+      decl_load "$PC"
+      [ "$DSTATE" != absent ] || die 1 ERR_ENTITY_NOT_FOUND "container '$PC' is not declared"
+      [ "$DSTATE" != dropped ] || die 1 ERR_ENTITY_NOT_FOUND "container '$PC' is already dropped"
+      keys "$PC/" > "$SCR/drop.keys"
+      sed "s|^$PC/\\(.*\\)\$|retired: \"\\1\"|" "$SCR/drop.keys" > "$SCR/ret.new"
+      retire_into "$SCR/ret.new" "$SCR/d.new"
+      printf 'state: "dropped"\n' >> "$SCR/d.new"
+      {
+        while IFS= read -r dk; do printf 'action=delete\nkey=%s\n' "$dk"; done < "$SCR/drop.keys"
+        printf 'action=put\nkey=containers/%s\nvalue_b64=%s\n' "$PC" "$("$CORE/store-b64" "$SCR/d.new")"
+      } > "$SCR/batch"
+      lib_or_die store_batch < "$SCR/batch" > /dev/null
+      printf '%s\n' "$PC"
+      exit 0
     fi
     lib_or_die lib_lock
     live_for_write

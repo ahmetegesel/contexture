@@ -3,6 +3,7 @@
 # usage: ctx store set <container>/<id> [--<field>=<value>]... [--add-<field>=<item>]... [--remove-<field>=<item>]... [--unset=<field>]... [--stdin=<field>]
 # help: --<field>=<one line> sets a single field, --add-<field>= and --remove-<field>= change a list item by item, --unset=<field> clears a field (a leftover the declaration no longer names included), and --stdin=<field> reads one block from stdin; ref is every container's list of full addresses <owner>#<path>
 # help: prints the id; a refusal writes nothing: a missing or retired record rc 1 (ERR_ENTITY_NOT_FOUND); a field the declaration lacks, a value outside its one-of set, a required field left absent, or an undeclared or dropped container rc 1 (ERR_SCHEMA_VIOLATION); malformed input rc 1 (ERR_INVALID_ARGUMENT)
+# help: set containers/<name> changes a declaration forward only: --description=, --minting= (either way; ids already used stay valid, retired ids stay refused), --add-fields=<field line> and --remove-fields=<field line>; a new field binds new writes and a record when next written, and ctx store check <container> names the records it leaves behind
 # help: example: ctx store set ideas/rust-driver --status=PICKED
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/store" set "$@"

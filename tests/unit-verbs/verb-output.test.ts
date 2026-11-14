@@ -179,6 +179,10 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await together([['store', 'get', 'cn/c1'], ['store', 'get', 'cn/c1', '--json'], ['store', 'list', 'cn'], ['store', 'list', 'cn', '--what=two', '--json'], ['store', 'check', 'cn']]);
       await take(['store', 'put', 'cn/c2', '--what=gone']);
       await take(['store', 'delete', 'cn/c2']);
+      await take(['store', 'set', 'containers/cn', '--add-fields=note: optional line']);
+      await take(['store', 'put', 'containers/cd', '--description=the dropped census container', '--minting=generated']);
+      await take(['store', 'delete', 'containers/cd']);
+      await take(['store', 'list', 'containers', '--dropped']);
 
       const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
       const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
