@@ -38,7 +38,7 @@ describe.concurrent('discovery over both module roots', () => {
     expect(help.stderr.match(/reserved name refused \(shadow\): load/g)).toHaveLength(2);
   });
 
-  it.each(['compose', 'package'])('CT-XR1 [the-engine-r2, modules-r6]: a valid module named %s warns in each root and never lists, since the engine builtin holds the name', async (name) => {
+  it.each(['compose', 'package', 'search'])('CT-XR1 [the-engine-r2, modules-r6]: a valid module named %s warns in each root and never lists, since the engine builtin holds the name', async (name) => {
     const sb = engineSandbox(`discovery-${name}`);
     for (const root of ['modules', 'extensions'] as const) {
       writeModule(sb, root, name, { manifest: `# summary: a ${name} fixture module\n`, files: { 'scripts/hi': shVerb('say hi', 'echo hi') } });

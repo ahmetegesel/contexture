@@ -3,7 +3,8 @@
 # Zero-install: POSIX /bin/sh, awk, and core OS utilities only.
 #
 # Usage: ctx [help [--all]] | ctx run <cmd> [args...] | ctx compose [--check] |
-#        ctx package install|uninstall <package> | ctx <module> [args...]
+#        ctx package install|uninstall <package> | ctx search "<query>" [flags] |
+#        ctx <module> [args...]
 # The help output is the contract surface; this header never prints.
 #
 # Maintainer note (off-path, never taught by help or top docs):
@@ -34,7 +35,7 @@
 # ignored. A module file without a summary warns and skips; a scripts/
 # directory without a module file warns and skips; a directory with neither
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
-# Reserved names are the unit verb set plus refresh, run, hooks, compose, package, and the
+# Reserved names are the unit verb set plus refresh, run, hooks, compose, package, search, and the
 # retired record verbs (append, amend, query, flip, drop, next, which print
 # their replacement); the builtin unit, run, lane, and rhythm are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
@@ -51,8 +52,9 @@
 # a shadow unless its header carries "# ctx-filter-priority: over". The
 # built-in run owns the compaction selection body; runner notices read
 # [ctx: ...]. The built-in compose execs the core's private composer
-# (.contexture/laws/compose) before discovery, and the built-in package group
-# execs the private .contexture/package-install or package-uninstall.
+# (.contexture/laws/compose) before discovery, the built-in package group
+# execs the private .contexture/package-install or package-uninstall, and the built-in
+# search runs every module's search verb as a bounded child and groups the answers.
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 root=$(CDPATH= cd -- "$dir/.." && pwd)
@@ -557,7 +559,7 @@ EOF
 
 is_reserved() {
   case "$1" in
-    refresh|run|hooks|compose|package|append|amend|query|flip|drop|next)
+    refresh|run|hooks|compose|package|search|append|amend|query|flip|drop|next)
       return 0
       ;;
   esac
@@ -816,7 +818,7 @@ usage:
   cmd | ctx run                    pipe form: compact a stream
   ctx compose [--check]            compose the generated law layer, or verify it current; --check writes nothing
 EOF
-  printf '%s\n%s\n' "$package_install_line" "$package_uninstall_line"
+  printf '%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$search_line"
   cat <<'EOF'
   ctx <module> [args...]           dispatch to a module: arguments, streams, and exit code pass through
   ctx <module> help [<verb>]       the module's verb table; one verb's detail with <verb>
@@ -1693,6 +1695,325 @@ package_builtin() {
 }
 
 # ---------------------------------------------------------------------------
+# search: the builtin fan-out over every module that carries a verb named search, answered
+# before discovery prints a warning (the discovery runs quiet, as every builtin's does);
+# each module's search runs as a child with the shared flags only, bounded in time, and
+# its answer is checked before it is trusted; one group per module, no ranking across them
+
+search_line="  ctx search \"<query>\" [flags]     search every module that carries a search verb, one group per module; ctx search --modes lists the search modes"
+
+search_help() {
+  cat <<'EOF'
+usage: ctx search "<query>" [--type=<type>] [--mode=<mode>] [--limit=N] [--json] [--module=<name>]
+       ctx search --modes [--json]
+runs every module that carries a verb named search, in discovery order, with the shared flags only (a module's own scope flags are never forwarded), and prints one group per module: its rows (type, address, snippet, read, label), failed with its reason, or not searched; no ranking crosses modules, and zero hits is an answer; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
+--limit= is a positive whole number per module (default 20); --mode= defaults to exact and takes a registered mode (ctx search --modes lists them), a module that cannot answer it falling back to exact, which its group says; --type= passes to every module; --module=<name> searches one module; only the --flag=value form is taken
+each module runs bounded by search.timeout in the workspace configuration (a positive whole number of seconds, default 10); a module past it is stopped with every descendant one process snapshot finds, and reads failed (a process forked after the snapshot, or reparented before it by a double fork, may escape, a stated limit)
+exit codes: 0 every searched module answered (zero hits included, or no module carries a search verb); 1 a bad argument; 2 a module failed, the other groups still printed
+EOF
+}
+
+search_refuse() {
+  printf 'ctx search: %s\n' "$1" >&2
+  exit 1
+}
+
+# search_timeout: the bound in seconds from the search.timeout line of the workspace
+# configuration, in its grammar (the key, then = or :, the value after the first separator,
+# a trailing # comment dropped, blanks and quotes removed, an empty value passed over, the
+# first value winning); 10 when no line holds one
+search_timeout() {
+  st_v=""
+  if [ -f "$dir/config" ]; then
+    while IFS= read -r st_line || [ -n "$st_line" ]; do
+      case "$st_line" in
+        search.timeout*=*|search.timeout*:*)
+          st_kraw=${st_line%%[=:]*}
+          st_k=$(printf '%s' "$st_kraw" | tr -d ' \t')
+          [ "$st_k" = search.timeout ] || continue
+          st_val=${st_line#"$st_kraw"}
+          st_val=${st_val#?}
+          st_val=${st_val%%#*}
+          st_val=$(printf '%s' "$st_val" | tr -d " \t\r\"'")
+          if [ -n "$st_val" ]; then st_v=$st_val; break; fi
+          ;;
+      esac
+    done < "$dir/config"
+  fi
+  [ -n "$st_v" ] || st_v=10
+  case "$st_v" in
+    *[!0-9]*|0*) search_refuse "search.timeout takes a positive whole number of seconds: '$st_v'" ;;
+  esac
+  printf '%s\n' "$st_v"
+}
+
+# search_modes_list: the mode registry, one name TAB description line per mode, through the
+# storage core's resolver; rc 2 with its one line when it cannot answer
+search_modes_list() {
+  sm_r="$dir/storage/scripts/driver-resolver"
+  if [ ! -x "$sm_r" ]; then
+    printf 'ctx search: the storage core resolver is missing, so the mode registry cannot answer\n' >&2
+    return 2
+  fi
+  ( cd "$root" && CTX_ROOT=$root && export CTX_ROOT && exec "$sm_r" modes < /dev/null )
+}
+
+# search_tree <pid>: the pid and every descendant, from one ps snapshot
+search_tree() {
+  ps -A -o pid= -o ppid= 2>/dev/null | awk -v r="$1" '
+    { P[$1] = $2 }
+    END {
+      S[r] = 1
+      do { c = 0; for (p in P) if (!(p in S) && (P[p] in S)) { S[p] = 1; c = 1 } } while (c)
+      for (p in S) printf "%s ", p
+    }'
+}
+
+# search_stop <pid>: the pid and every descendant from one snapshot, TERM then KILL 0.2 s
+# later, then reaped; the caller discards stderr, where a shell reports a signalled job
+search_stop() {
+  ss_set=$(search_tree "$1")
+  # shellcheck disable=SC2086
+  kill -TERM $ss_set 2>/dev/null
+  sleep 0.2 2>/dev/null || sleep 1
+  # shellcheck disable=SC2086
+  kill -KILL $ss_set 2>/dev/null
+  wait "$1"
+}
+
+# search_abort <rc>: a hangup, interrupt, or termination of the run stops the running child
+# with every descendant (a background child ignores an interrupt) and removes the run's
+# scratch before the engine exits
+search_abort() {
+  trap - HUP INT TERM
+  [ -z "$sc_pid" ] || { search_stop "$sc_pid"; } 2>/dev/null
+  rm -rf "$root/.contexture/tmp/verb.$$.search-"* "$CTX_SCRATCH_ROOT" 2>/dev/null
+  exit "$1"
+}
+
+# search_child <module> <module dir> <args>...: one module's search run as a child with
+# the dispatch exports, its own scratch root, no stdin, and the fan-out marker; its stdout
+# and stderr land in files, never a pipe a survivor could hold; past the
+# bound the child and every descendant are stopped (TERM, then KILL); SC_ROOT, SC_RC (empty
+# when it was stopped)
+search_child() {
+  sc_m=$1; sc_md=$2
+  shift 2
+  search_n=$((search_n + 1))
+  # the child owns its scratch root (a verb may remove it on return), so its streams and
+  # its exit code land in a sibling folder; both names carry this engine's pid, so the
+  # dead pid sweep removes what a SIGKILL leaves
+  SC_ROOT="$root/.contexture/tmp/verb.$$.search-$search_n.io"
+  sc_scratch="$root/.contexture/tmp/verb.$$.search-$search_n"
+  rm -rf "$SC_ROOT" "$sc_scratch" 2>/dev/null
+  mkdir -p "$SC_ROOT" "$sc_scratch" || { SC_RC=""; return 1; }
+  (
+    cd "$root" || exit 2
+    CTX_ROOT=$root CTX_MODULE_DIR=$sc_md CTX_BIN=$ctx_bin CTX_SCRATCH_ROOT=$sc_scratch CTX_SEARCH_FANOUT=1 LC_ALL=C
+    export CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_SCRATCH_ROOT CTX_SEARCH_FANOUT LC_ALL
+    if [ -x "$sc_md/scripts/search" ]; then "$sc_md/scripts/search" "$@"; else sh "$sc_md/scripts/search" "$@"; fi
+    printf '%s\n' "$?" > "$SC_ROOT/rc"
+  ) < /dev/null > "$SC_ROOT/out" 2> "$SC_ROOT/err" &
+  sc_pid=$!
+  sc_t=0
+  while [ ! -f "$SC_ROOT/rc" ] && kill -0 "$sc_pid" 2>/dev/null && [ "$sc_t" -lt "$search_ticks" ]; do
+    sleep "$search_tick" 2>/dev/null || sleep 1
+    sc_t=$((sc_t + 1))
+  done
+  if [ ! -f "$SC_ROOT/rc" ] && kill -0 "$sc_pid" 2>/dev/null; then
+    { search_stop "$sc_pid"; } 2>/dev/null
+  else
+    wait "$sc_pid" 2>/dev/null
+  fi
+  sc_pid=""
+  SC_RC=""
+  [ -f "$SC_ROOT/rc" ] && SC_RC=$(cat "$SC_ROOT/rc")
+  return 0
+}
+
+# the group program: the flat lines (json.awk) of one module's answer on stdin; with
+# SG_CHECK it prints the first defect of the answer (a missing total or rows, a row missing a
+# shared field, a row of another module) or nothing; else it prints the group, as JSON
+# (SG_JSON=1) or as text. A string value is re-encoded from the flattener's payload escape.
+search_group_awk='
+function jq(s,   n, p, o, i, c, r) {
+  n = split(s, p, /"/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\"" p[i]
+  if (o ~ /[[:cntrl:]]/) {
+    r = ""
+    for (i = 1; i <= length(o); i++) { c = substr(o, i, 1); if (c ~ /[[:cntrl:]]/ && (c in ORD)) r = r sprintf("\\u%04x", ORD[c]); else r = r c }
+    o = r
+  }
+  return "\"" o "\""
+}
+function txt(s,   n, p, i, o) { n = split(s, p, /\\\\/); o = ""; for (i = 1; i <= n; i++) { gsub(/\\[ntr]/, " ", p[i]); o = o (i > 1 ? "\\" : "") p[i] }; return o }
+BEGIN { for (i = 1; i < 32; i++) ORD[sprintf("%c", i)] = i; ORD[sprintf("%c", 127)] = 127; split("module container type id address snippet read label", K, " "); NK = 8 }
+{
+  if ($0 ~ /^rows#[0-9]+$/) { NR_ = substr($0, 6) + 0; HAS_ROWS = 1; next }
+  if ($0 ~ /^total:[0-9]+$/) { TOTAL = substr($0, 7) + 0; HAS_TOTAL = 1; next }
+  if (index($0, "mode=") == 1) { MODE = substr($0, 6); next }
+  eq = index($0, "=")
+  if (eq == 0) next
+  path = substr($0, 1, eq - 1)
+  if (path !~ /^rows\.[0-9]+\.[a-z_]+$/) next
+  split(path, P, ".")
+  V[P[2] + 0, P[3]] = substr($0, eq + 1)
+  HAS[P[2] + 0, P[3]] = 1
+}
+END {
+  m = ENVIRON["SG_MODULE"]
+  if (ENVIRON["SG_CHECK"] == "1") {
+    if (!HAS_TOTAL) { print "the answer carries no total"; exit }
+    if (!HAS_ROWS) { print "the answer carries no rows"; exit }
+    for (i = 1; i <= NR_; i++) {
+      for (k = 1; k <= 7; k++) if (!HAS[i, K[k]]) { print "row " i " carries no " K[k]; exit }
+      if (V[i, "module"] != m) { print "row " i " names module " V[i, "module"]; exit }
+    }
+    exit
+  }
+  if (MODE == "") MODE = ENVIRON["SG_ASKED"]
+  if (ENVIRON["SG_JSON"] == "1") {
+    printf "{\"module\":%s,\"status\":\"ok\",\"mode\":%s,\"total\":%d,\"rows\":[", jq(m), jq(MODE), TOTAL
+    for (i = 1; i <= NR_; i++) {
+      printf "%s{", (i > 1 ? "," : "")
+      f = 0
+      for (k = 1; k <= NK; k++) if (HAS[i, K[k]]) { printf "%s\"%s\":%s", (f ? "," : ""), K[k], jq(V[i, K[k]]); f = 1 }
+      printf "}"
+    }
+    printf "]}"
+    exit
+  }
+  printf "%s: %d of %d", m, NR_, TOTAL
+  if (MODE != ENVIRON["SG_ASKED"]) printf ", mode %s (asked %s)", MODE, ENVIRON["SG_ASKED"]
+  printf "\n"
+  for (i = 1; i <= NR_; i++) {
+    printf "  %s %s%s: %s\n", txt(V[i, "type"]), txt(V[i, "address"]), (HAS[i, "label"] ? " [" txt(V[i, "label"]) "]" : ""), txt(V[i, "snippet"])
+    printf "    read: %s\n", txt(V[i, "read"])
+  }
+}'
+
+search_builtin() {
+  if [ $# -eq 1 ]; then
+    case "$1" in --help|-h) search_help; exit 0 ;; esac
+  fi
+  sb_q=""; sb_qset=0; sb_type=""; sb_mode=exact; sb_limit=20; sb_json=0; sb_module=""; sb_modset=0; sb_modes=0; sb_flags=0
+  for sb_a in "$@"; do
+    case "$sb_a" in
+      --type=*) sb_type=${sb_a#--type=}; sb_flags=1 ;;
+      --mode=*) sb_mode=${sb_a#--mode=}; sb_flags=1 ;;
+      --limit=*) sb_limit=${sb_a#--limit=}; sb_flags=1 ;;
+      --module=*) sb_module=${sb_a#--module=}; sb_modset=1; sb_flags=1 ;;
+      --json) sb_json=1 ;;
+      --modes) sb_modes=1 ;;
+      -*) search_refuse "unknown option '$sb_a' (the --flag=value forms: --type=, --mode=, --limit=, --module=, and --json; or --modes)" ;;
+      *)
+        [ "$sb_qset" -eq 0 ] || search_refuse "unexpected argument '$sb_a' (one query)"
+        sb_q=$sb_a; sb_qset=1
+        ;;
+    esac
+  done
+  if [ "$sb_modes" -eq 1 ]; then
+    [ "$sb_qset" -eq 0 ] && [ "$sb_flags" -eq 0 ] || search_refuse "--modes takes no query and no flag but --json"
+    sb_reg=$(search_modes_list) || exit 2
+    if [ "$sb_json" -eq 1 ]; then
+      printf '%s\n' "$sb_reg" | awk -F '\t' '
+        function jq(s, n, p, o, i) { n = split(s, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; n = split(o, p, /"/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\"" p[i]; return "\"" o "\"" }
+        $1 != "" { o = o (o == "" ? "" : ",") "{\"name\":" jq($1) ",\"description\":" jq($2) "}" }
+        END { print "[" o "]" }'
+    else
+      printf '%s\n' "$sb_reg" | awk -F '\t' '$1 != "" { printf "%-10s %s\n", $1, $2 }'
+    fi
+    exit 0
+  fi
+  [ "$sb_qset" -eq 1 ] || search_refuse "a query is required: ctx search \"<query>\" (or ctx search --modes)"
+  sb_cr=$(printf '\r')
+  case "$sb_q" in *"$sb_cr"*) search_refuse "a carriage return in the query" ;; esac
+  case "$sb_q" in *"
+"*) search_refuse "a newline in the query (one line)" ;; esac
+  case "$sb_q" in *[![:space:]]*) ;; *) search_refuse "empty query" ;; esac
+  case "$sb_limit" in ""|*[!0-9]*|0*) search_refuse "--limit takes a positive whole number: '$sb_limit'" ;; esac
+  case "$sb_mode" in ""|[!a-z]*|*[!a-z0-9_-]*) search_refuse "malformed mode '$sb_mode'" ;; esac
+  case "$sb_type" in *[!A-Za-z0-9_.-]*) search_refuse "malformed type '$sb_type'" ;; esac
+  if [ "$sb_mode" != exact ]; then
+    sb_reg=$(search_modes_list) || exit 2
+    printf '%s\n' "$sb_reg" | awk -F '\t' -v m="$sb_mode" '$1 == m { f = 1 } END { exit !f }' ||
+      search_refuse "mode '$sb_mode' is not registered; registered modes: $(printf '%s\n' "$sb_reg" | awk -F '\t' '$1 != "" { o = o (o == "" ? "" : ", ") $1 } END { print o }')"
+  fi
+  sb_timeout=$(search_timeout) || exit 1
+  if sleep 0.1 2>/dev/null; then search_tick=0.1; search_ticks=$((sb_timeout * 10)); else search_tick=1; search_ticks=$sb_timeout; fi
+  sb_json_awk="$dir/storage/scripts/json.awk"
+  [ -f "$sb_json_awk" ] || { printf 'ctx search: the storage core flattener is missing\n' >&2; exit 2; }
+
+  # discovery, quiet: every listed module in discovery order, then whether it carries search
+  sb_mods=$(module_names 2>/dev/null)
+  if [ "$sb_modset" -eq 1 ]; then
+    [ -n "$sb_module" ] || search_refuse "--module= names no module"
+    printf '%s\n' "$sb_mods" | grep -qxF -- "$sb_module" || search_refuse "unknown module $sb_module"
+    verb_exists "$(module_dir "$sb_module")" search 2>/dev/null || search_refuse "module $sb_module carries no search verb"
+    sb_mods=$sb_module
+  fi
+  if ! cd "$root"; then
+    printf 'ctx search: cannot enter workspace root: %s\n' "$root" >&2
+    exit 2
+  fi
+  verb_scratch
+  search_n=0
+  sc_pid=""
+  trap 'search_abort 129' HUP
+  trap 'search_abort 130' INT
+  trap 'search_abort 143' TERM
+  set -- "$sb_q"
+  [ -z "$sb_type" ] || set -- "$@" "--type=$sb_type"
+  set -- "$@" "--mode=$sb_mode" "--limit=$sb_limit" --json
+  sb_groups=""; sb_text=""; sb_searched=0; sb_failed=0; sb_fnames=""; sb_none=0; sb_nnames=""; sb_errs=""
+  sb_nl='
+'
+  for sb_m in $sb_mods; do
+    sb_md=$(module_dir "$sb_m") || continue
+    if ! verb_exists "$sb_md" search 2>/dev/null; then
+      sb_none=$((sb_none + 1)); sb_nnames="$sb_nnames${sb_nnames:+, }$sb_m"
+      sb_groups="$sb_groups${sb_groups:+,}{\"module\":\"$sb_m\",\"status\":\"not searched\"}"
+      continue
+    fi
+    sb_searched=$((sb_searched + 1))
+    search_child "$sb_m" "$sb_md" "$@"
+    sb_reason=""
+    if [ -z "$SC_RC" ]; then
+      sb_reason="no answer within the bound of $sb_timeout s (search.timeout)"
+    elif [ "$SC_RC" != 0 ]; then
+      sb_reason=$(head -n 1 "$SC_ROOT/err" 2>/dev/null)
+      [ -n "$sb_reason" ] || sb_reason="the search exited $SC_RC"
+    elif ! awk -f "$sb_json_awk" < "$SC_ROOT/out" > "$SC_ROOT/flat" 2> "$SC_ROOT/flat.err"; then
+      sb_reason="malformed answer: $(head -n 1 "$SC_ROOT/flat.err" 2>/dev/null)"
+    else
+      sb_reason=$(SG_CHECK=1 SG_MODULE=$sb_m awk "$search_group_awk" < "$SC_ROOT/flat")
+    fi
+    if [ -n "$sb_reason" ]; then
+      sb_failed=$((sb_failed + 1)); sb_fnames="$sb_fnames${sb_fnames:+, }$sb_m"
+      sb_g=$(printf '%s' "$sb_reason" | SG_MODULE=$sb_m awk '{ r = r $0 } END { n = split(r, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; n = split(o, p, /"/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\"" p[i]; gsub(/[[:cntrl:]]/, " ", o); printf "{\"module\":\"%s\",\"status\":\"failed\",\"error\":\"%s\"}", ENVIRON["SG_MODULE"], o }')
+      sb_groups="$sb_groups${sb_groups:+,}$sb_g"
+      sb_text="$sb_text$sb_m: failed: $sb_reason$sb_nl"
+    else
+      sb_groups="$sb_groups${sb_groups:+,}$(SG_JSON=1 SG_MODULE=$sb_m SG_ASKED=$sb_mode awk "$search_group_awk" < "$SC_ROOT/flat")"
+      sb_text="$sb_text$(SG_MODULE=$sb_m SG_ASKED=$sb_mode awk "$search_group_awk" < "$SC_ROOT/flat")$sb_nl"
+      [ -s "$SC_ROOT/err" ] && sb_errs="$sb_errs$(awk -v m="$sb_m" '{ print m ": " $0 }' "$SC_ROOT/err")$sb_nl"
+    fi
+    rm -rf "$SC_ROOT" "$root/.contexture/tmp/verb.$$.search-$search_n" 2>/dev/null
+  done
+  rm -rf "$CTX_SCRATCH_ROOT" 2>/dev/null
+  if [ "$sb_json" -eq 1 ]; then
+    printf '{"query":%s,"groups":[%s]}\n' "$(printf '%s' "$sb_q" | awk 'BEGIN { for (i = 1; i < 32; i++) ORD[sprintf("%c", i)] = i; ORD[sprintf("%c", 127)] = 127 } { r = r $0 } END { n = split(r, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; n = split(o, p, /"/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\"" p[i]; r = ""; for (i = 1; i <= length(o); i++) { c = substr(o, i, 1); r = r ((c in ORD) ? sprintf("\\u%04x", ORD[c]) : c) }; printf "\"%s\"", r }')" "$sb_groups"
+  else
+    printf '%s' "$sb_text"
+    printf 'searched %s, failed %s%s, not searched %s%s' "$sb_searched" "$sb_failed" "${sb_fnames:+ ($sb_fnames)}" "$sb_none" "${sb_nnames:+ ($sb_nnames)}"
+    [ "$sb_searched" -gt 0 ] || printf ': no module carries a search verb'
+    printf '\n'
+  fi
+  [ -z "$sb_errs" ] || printf '%s' "$sb_errs" >&2
+  [ "$sb_failed" -eq 0 ] || exit 2
+  exit 0
+}
+
+# ---------------------------------------------------------------------------
 # top-level dispatch
 
 if [ $# -eq 0 ]; then
@@ -1736,6 +2057,10 @@ case "$1" in
   package)
     shift
     package_builtin "$@"
+    ;;
+  search)
+    shift
+    search_builtin "$@"
     ;;
   _hooks)
     shift
