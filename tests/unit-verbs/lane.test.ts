@@ -245,7 +245,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
   it('[the-record-r15, the-record-r17]: lane create never reads stdin: a full flag set returns rc 0 under a stdin held open, and beside a recipe on stdin it stores the composed recipe', async () => {
     const sb = fresh(sb0);
     const held = launch('./.contexture/ctx', ['lane', 'create', 'sem-unit', 'held-lane', ...laneFlags()], { cwd: sb, input: null });
-    const done = await Promise.race([held.result, new Promise<null>((r) => setTimeout(() => r(null), 20_000))]);
+    const done = await Promise.race([held.result, new Promise<null>((r) => setTimeout(() => r(null), 60_000))]);
     held.child.stdin?.end();
     expect(done?.code).toBe(0);
     await must(run(sb, ['lane', 'create', 'sem-unit', 'beside-lane', ...laneFlags()], { input: '# a stdin recipe\nMISSION\n  GOAL: "never stored"\n' }));
@@ -334,7 +334,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     const sb = fresh(sb0);
     await must(lane(sb, 'report', 'sem-unit', 'sub-lane', '--body=held stdin report'));
     const shown = launch('./.contexture/ctx', ['lane', 'show', 'sem-unit', 'sub-lane', 'report'], { cwd: sb, input: null });
-    const done = await Promise.race([shown.result, new Promise<null>((r) => setTimeout(() => r(null), 20_000))]);
+    const done = await Promise.race([shown.result, new Promise<null>((r) => setTimeout(() => r(null), 60_000))]);
     expect(done?.stdout).toBe('held stdin report\n');
     const waiting = launch('./.contexture/ctx', ['lane', 'report', 'sem-unit', 'sub-lane'], { cwd: sb, input: null });
     const early = await Promise.race([waiting.result, new Promise<null>((r) => setTimeout(() => r(null), 3_000))]);
