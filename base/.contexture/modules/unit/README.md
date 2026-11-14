@@ -76,6 +76,14 @@ every state, then each ACTIVE unit's backlog only, never a journal, so the deriv
 comes from one data-script pass; a non-ACTIVE unit answers its state fields alone, its
 derived fields null. The scan is not the record's read path.
 
+Every read that needs several keys asks them in one batched `store.get` through the
+library's `store_get_into`: one unit's state and parts, a unit's listed artifacts, every
+unit's state, the ACTIVE units' backlogs, the listing's journals; a lone key keeps the one
+key read. A refused or short batch replays its keys one key read at a time in the order
+the one key reads took (a unit's state first, so a unit the store does not hold refuses
+before any part is read), so a refusal is the very line the one key reads printed, and a
+key absent from the batch reads absent exactly as its one key read did.
+
 A write fetches under the unit lock (`.contexture/tmp/locks/unit/<unit>.lock`), stages the
 changed artifacts with the record engine, and lands them through one `store.batch`, all or
 none. The multi-key writes are the batch's: `session.create`

@@ -172,8 +172,10 @@ docs_key_valid() {
   return 0
 }
 
-# docs_materialize: every key of DOCS_KEYS read through store.get into the module's scratch
-# at DOCS_MOUNT/docs/<repo>/<slug>.md; the engines parse those bytes, never a driver
+# docs_materialize: every key of DOCS_KEYS read through one batched store.get into the
+# module's scratch at DOCS_MOUNT/docs/<repo>/<slug>.md; the engines parse those bytes, never
+# a driver. A refused batch or a key gone since the list replays the reads one key at a
+# time, so the verb fails with the very line a one key read prints
 docs_materialize() {
   docs_scratch || return 2
   DOCS_MOUNT="$DOCS_SCRATCH/corpus"
@@ -183,6 +185,27 @@ docs_materialize() {
     return 2
   }
   printf '%s\n' "$DOCS_KEYS" > "$DOCS_SCRATCH/materialize.keys"
+  : > "$DOCS_SCRATCH/materialize.t"
+  dm_made=" "
+  while IFS= read -r dm_k; do
+    [ -n "$dm_k" ] || continue
+    case "$dm_made" in
+      *" ${dm_k%/*} "*) ;;
+      *)
+        mkdir -p "$DOCS_MOUNT/docs/${dm_k%/*}" || {
+          printf '%s: cannot stage the corpus (ERR_STORAGE_WRITE)\n' "$DOCS_VERB" >&2
+          return 2
+        }
+        dm_made="$dm_made${dm_k%/*} "
+        ;;
+    esac
+    printf '%s\t%s\n' "$dm_k" "$DOCS_MOUNT/docs/$dm_k.md" >> "$DOCS_SCRATCH/materialize.t"
+  done < "$DOCS_SCRATCH/materialize.keys"
+  [ -s "$DOCS_SCRATCH/materialize.t" ] || return 0
+  if store_get_into docs "$DOCS_SCRATCH/materialize.t" < /dev/null > "$DOCS_SCRATCH/materialize.s" 2> "$DOCS_SCRATCH/get.err" \
+    && ! grep -q '^0' "$DOCS_SCRATCH/materialize.s"; then
+    return 0
+  fi
   while IFS= read -r dm_k; do
     [ -n "$dm_k" ] || continue
     mkdir -p "$DOCS_MOUNT/docs/${dm_k%/*}" || {

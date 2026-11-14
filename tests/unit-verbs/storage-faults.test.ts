@@ -1,4 +1,4 @@
-import { chmodSync, copyFileSync, existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, copyFileSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
@@ -160,6 +160,16 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stderr}]`).toBe(before);
     expect([r.code, r.stdout]).toEqual([2, '']);
     expect(r.stderr).toMatch(/^task\.add: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
+  });
+
+  it.skipIf(ROOT_USER)('[the-record-r9, the-engine-r21] a unit whose state is gone keeps the one key reads\' refusal order through a refused batch: unit not found before an unreadable part, a lane read\'s unreadable artifact before unit not found', async ({ onTestFinished }) => {
+    const sb = fresh(sb0);
+    const dir = join(sb, RECORD_ROOT, 'w-unit');
+    rmSync(join(dir, 'state.md'));
+    chmodPlant(join(dir, 'backlog.md'), 0o000, 0o644, onTestFinished);
+    refused(await unit(sb, 'task', 'show', 'w-unit', 'w-a'), 'task.get', 1, 'ERR_ENTITY_NOT_FOUND', "unit 'w-unit' not found");
+    chmodPlant(join(dir, 'lanes/w-lane/recipe.md'), 0o000, 0o644, onTestFinished);
+    refused(await lane(sb, 'show', 'w-unit', 'w-lane', 'recipe'), 'lane.get', 2, 'ERR_STORAGE_READ', "cannot read key 'w-unit/lanes/w-lane/recipe' in namespace 'unit'");
   });
 
   it.skipIf(ROOT_USER)('[the-record-r9, the-engine-r18, the-engine-r21] a write whose batch payload loses a line after its first action refuses rc 2 and lands none of it', async () => {

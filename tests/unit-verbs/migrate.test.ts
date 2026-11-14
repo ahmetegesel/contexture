@@ -77,7 +77,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     expect(await unit(legacy, 'migrate', 'leg-u')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
   });
 
-  it('[the-record-r-4gj4k] a landing write makes one store call, as before the root move: a record on a unit in the root and on a unit in the fallback each reach the resolver for its two reads and its one batch alone', async () => {
+  it('[the-record-r-4gj4k] a landing write makes one store call, as before the root move: a record on a unit in the root and on a unit in the fallback each reach the resolver for its one batched read of the state and the journal and its one batch alone', async () => {
     const sb = fresh(snap);
     toFallback(sb, 'leg-u');
     const log = join(sb, 'resolver-calls');
@@ -89,8 +89,8 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
       await must(run(sb, ['unit', 'record', slug, '--what=a counted write'], { env }));
       return readFileSync(log, 'utf8').split('\n').filter(Boolean);
     };
-    expect(await calls('new-u')).toEqual(['store.get', 'store.get', 'store.batch']);
-    expect(await calls('leg-u')).toEqual(['store.get', 'store.get', 'store.batch']);
+    expect(await calls('new-u')).toEqual(['store.get', 'store.batch']);
+    expect(await calls('leg-u')).toEqual(['store.get', 'store.batch']);
     expect(held(sb, 'leg-u')).toEqual([true, false]);
   });
 

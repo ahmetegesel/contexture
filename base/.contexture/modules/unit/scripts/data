@@ -67,6 +67,8 @@ U_UNIT=""
 U_PARTS=""
 U_WRITE=0
 U_OUT=""
+U_QN=0
+U_MISS=" "
 
 u_cleanup() {
   [ -n "$U_LOCK" ] && rm -rf "$U_LOCK" 2>/dev/null
@@ -257,21 +259,87 @@ u_add_key() {
 u_manifest_reset() {
   u_new "$U_SCR/man" "$U_SCR/files"
   U_NART=0
+  U_QN=0
 }
 
-# u_fetch_parts <unit> <parts>: the named block artifacts into the manifest, no list: a
-# part the store does not hold is simply absent, exactly as the list would have said
+# u_queue <manifest key> <store key>: one key for the next u_flush
+u_queue() {
+  [ "$U_QN" -gt 0 ] || u_new "$U_SCR/q"
+  u_put "$U_SCR/q" '%s\t%s\n' "$1" "$2"
+  U_QN=$((U_QN + 1))
+}
+
+# u_flush_batch: two or more queued keys fetched by one batched store.get, each present one
+# added to the manifest in the queued order; U_MISS names the manifest keys the store does
+# not hold, each between blanks. A lone key, or a refused or short batch, answers rc 1 with
+# nothing added and the queue left for the caller's one key replay
+u_flush_batch() {
+  U_MISS=" "
+  uq_n=$U_QN
+  U_QN=0
+  if [ "$uq_n" -gt 1 ]; then
+    u_new "$U_SCR/q.t" "$U_SCR/q.s" "$U_SCR/q.err" "$U_SCR/q.miss"
+    UQ_BASE=$U_NART UQ_DIR=$U_SCR LC_ALL=C awk -F '\t' '{ print substr($0, length($1) + 2) "\t" ENVIRON["UQ_DIR"] "/art." (ENVIRON["UQ_BASE"] + NR) }' "$U_SCR/q" > "$U_SCR/q.t" \
+      || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+    if store_get_into "$U_NS" "$U_SCR/q.t" > "$U_SCR/q.s" 2> "$U_SCR/q.err" \
+      && UQ_BASE=$U_NART UQ_DIR=$U_SCR LC_ALL=C awk -F '\t' '
+        FILENAME == ARGV[1] { M[FNR] = $1; K[FNR] = substr($0, length($1) + 2); n = FNR; next }
+        {
+          if (FNR > n || substr($0, 3) != K[FNR] || ($1 != "1" && $1 != "0")) { bad = 1; exit 3 }
+          seen = FNR; S[FNR] = $1
+        }
+        END {
+          if (bad || seen != n) exit 3
+          man = ENVIRON["UQ_DIR"] "/man"; files = ENVIRON["UQ_DIR"] "/files"
+          for (i = 1; i <= n; i++) {
+            if (S[i] != "1") { print M[i]; continue }
+            p = ENVIRON["UQ_DIR"] "/art." (ENVIRON["UQ_BASE"] + i)
+            printf "F\t%s\t%s\n", M[i], p >> man
+            printf "%s\n", p >> files
+          }
+        }' "$U_SCR/q" "$U_SCR/q.s" > "$U_SCR/q.miss"; then
+      U_NART=$((U_NART + uq_n))
+      u_note "$U_SCR/q.err"
+      while IFS= read -r uq_m; do U_MISS="$U_MISS$uq_m "; done < "$U_SCR/q.miss"
+      return 0
+    fi
+  fi
+  return 1
+}
+
+# u_flush: the queued keys fetched through u_flush_batch; a lone key, or a refused or short
+# batch, replays the queue through u_add_key in its order, so a refusal is the very line the
+# one key reads print
+u_flush() {
+  U_MISS=" "
+  [ "$U_QN" -gt 0 ] || return 0
+  u_flush_batch && return 0
+  while IFS='	' read -r uq_m uq_k; do
+    u_add_key "$uq_m" "$uq_k"
+    [ "$U_ADD_RC" -eq 0 ] || U_MISS="$U_MISS$uq_m "
+  done < "$U_SCR/q"
+}
+
+# u_queue_parts <unit> <parts>: the named block artifacts queued, no list: a part the store
+# does not hold is simply absent, exactly as the list would have said
+u_queue_parts() {
+  case " $2 " in *" backlog "*) u_queue "$1|backlog" "$1/backlog" ;; esac
+  case " $2 " in *" journal "*) u_queue "$1|journal" "$1/journal" ;; esac
+  case " $2 " in *" knowledge "*) u_queue "$1|knowledge" "$1/knowledge" ;; esac
+}
+
+# u_fetch_parts <unit> <parts>: the named block artifacts into the manifest, one fetch
 u_fetch_parts() {
-  case " $2 " in *" backlog "*) u_add_key "$1|backlog" "$1/backlog" ;; esac
-  case " $2 " in *" journal "*) u_add_key "$1|journal" "$1/journal" ;; esac
-  case " $2 " in *" knowledge "*) u_add_key "$1|knowledge" "$1/knowledge" ;; esac
+  u_queue_parts "$1" "$2"
+  u_flush
 }
 
 # u_fetch_unit <unit> <parts> [required]: the unit's artifacts into the manifest; state
 # always, the other parts on request ("all" takes every artifact, "lane:<l>" the lane,
 # "__lanes__" discovers the lanes alone). A parts set with no lane and no "all" fetches the
 # exact keys, no list at all; required refuses a unit the store does not hold with the
-# same line the held probe answered.
+# same line the held probe answered, after the listed keys are read. A refused batch
+# replays the one key reads in their own order, the state first, so its refusal is theirs.
 u_fetch_unit() {
   uf_u=$1
   uf_parts=" $2 "
@@ -288,11 +356,11 @@ u_fetch_unit() {
         case "$uf_r" in
           state)
             uf_state=1
-            u_add_key "$uf_u|state" "$uf_k"
+            u_queue "$uf_u|state" "$uf_k"
             ;;
           backlog|knowledge|journal)
             case "$uf_parts" in
-              *" all "*|*" $uf_r "*) u_add_key "$uf_u|$uf_r" "$uf_k" ;;
+              *" all "*|*" $uf_r "*) u_queue "$uf_u|$uf_r" "$uf_k" ;;
             esac
             ;;
           lanes/*/*)
@@ -306,28 +374,37 @@ u_fetch_unit() {
               *) uf_lanes="$uf_lanes $uf_lane" ;;
             esac
             case "$uf_parts" in
-              *" all "*|*" lanes "*|*" lane:$uf_lane "*) u_add_key "$uf_u|lane/$uf_lane/$uf_art" "$uf_k" ;;
+              *" all "*|*" lanes "*|*" lane:$uf_lane "*) u_queue "$uf_u|lane/$uf_lane/$uf_art" "$uf_k" ;;
             esac
             ;;
         esac
       done < "$U_SCR/keys"
-      if [ "$uf_state" -eq 1 ]; then
-        u_put "$U_SCR/man" 'U\t%s\n' "$uf_u"
-      elif [ "$uf_req" -eq 1 ]; then
+      u_flush
+      if [ "$uf_state" -eq 0 ] && [ "$uf_req" -eq 1 ]; then
         u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
       fi
+      [ "$uf_state" -eq 0 ] || u_put "$U_SCR/man" 'U\t%s\n' "$uf_u"
       for uf_l in $uf_lanes; do
         u_put "$U_SCR/man" 'L\t%s\t%s\n' "$uf_u" "$uf_l"
       done
       ;;
     *)
-      u_add_key "$uf_u|state" "$uf_u/state"
-      if [ "$U_ADD_RC" -eq 0 ]; then
-        u_put "$U_SCR/man" 'U\t%s\n' "$uf_u"
-      elif [ "$uf_req" -eq 1 ]; then
-        u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
+      u_queue "$uf_u|state" "$uf_u/state"
+      u_queue_parts "$uf_u" "$2"
+      if u_flush_batch; then
+        case "$U_MISS" in
+          *" $uf_u|state "*) [ "$uf_req" -eq 0 ] || u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found" ;;
+          *) u_put "$U_SCR/man" 'U\t%s\n' "$uf_u" ;;
+        esac
+      else
+        u_add_key "$uf_u|state" "$uf_u/state"
+        if [ "$U_ADD_RC" -eq 0 ]; then
+          u_put "$U_SCR/man" 'U\t%s\n' "$uf_u"
+        elif [ "$uf_req" -ne 0 ]; then
+          u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
+        fi
+        u_fetch_parts "$uf_u" "$2"
       fi
-      u_fetch_parts "$uf_u" "$2"
       ;;
   esac
 }
@@ -347,9 +424,12 @@ u_fetch_all() {
     case "$fa_u" in */*) continue ;; esac
     u_ident_valid "$fa_u" || continue
     u_put "$U_SCR/units" '%s\n' "$fa_u"
-    u_add_key "$fa_u|state" "$fa_k"
-    u_put "$U_SCR/man" 'U\t%s\n' "$fa_u"
+    u_queue "$fa_u|state" "$fa_k"
   done < "$U_SCR/keys"
+  u_flush
+  while IFS= read -r fa_u; do
+    u_put "$U_SCR/man" 'U\t%s\n' "$fa_u"
+  done < "$U_SCR/units"
   if [ "$fa_j" -eq 1 ]; then
     u_new "$U_SCR/junits"
     LC_ALL=C awk '
@@ -362,8 +442,9 @@ u_fetch_all() {
       }' "$U_SCR/units" "$U_SCR/keys" > "$U_SCR/junits" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
     while IFS= read -r fa_u; do
       [ -n "$fa_u" ] || continue
-      u_add_key "$fa_u|journal" "$fa_u/journal"
+      u_queue "$fa_u|journal" "$fa_u/journal"
     done < "$U_SCR/junits"
+    u_flush
   fi
 }
 
@@ -396,8 +477,9 @@ u_active() {
     }' "$U_SCR/man" > "$U_SCR/active" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   while IFS= read -r ua_u; do
     [ -n "$ua_u" ] || continue
-    u_add_key "$ua_u|backlog" "$ua_u/backlog"
+    u_queue "$ua_u|backlog" "$ua_u/backlog"
   done < "$U_SCR/active"
+  u_flush
   u_awk
   cat "$U_SCR/answer"
 }
