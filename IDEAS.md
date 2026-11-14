@@ -388,3 +388,12 @@
     Found by the search-fanout build lane's measurement; accepted for the one release since the direct ctx docs search has no bound and a timed out group reads failed, never silent, but larger corpora (adopter workspaces) will hit it.
   REF: "lane#build-search-fanout/report"
   STATUS: PICKED knowledge-promotion
+
+@idea split-separator-census
+  DUMPED: 2026-11-14
+  WHAT ::
+    modules-r8 says an awk split separator is a regex, never a one character string, yet over twenty shipped sites use one (the posix driver, store-data, store-search.awk, package-uninstall, the engine's search group awk, the unit verb library's ref check blank list). Add a governance census rule that holds modules-r8 and sweep the existing sites to the regex form.
+  WHY ::
+    Found by the library-foundation review: no census holds the rule, so new code copies the old form; BWK awk reads a one character separator literally, which hides the difference on macOS while other awks may treat it otherwise.
+  REF: "lane#review-library-foundation/report"
+  STATUS: OPEN
