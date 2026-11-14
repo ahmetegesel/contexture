@@ -50,6 +50,21 @@ find_ctx_dir() {
   return 1
 }
 
+# conf_strip <value>: CS_OUT, the value without its blanks, tabs, carriage returns, and quotes
+CS_CR=$(printf '\r')
+conf_strip() {
+  cs_in=$1
+  CS_OUT=""
+  while [ -n "$cs_in" ]; do
+    cs_c=${cs_in%"${cs_in#?}"}
+    cs_in=${cs_in#?}
+    case "$cs_c" in
+      ' '|'	'|'"'|"'"|"$CS_CR") ;;
+      *) CS_OUT=$CS_OUT$cs_c ;;
+    esac
+  done
+}
+
 # Read storage.driver from .contexture/storage.conf
 read_conf_driver() {
   ctx_dir="$1"
@@ -62,8 +77,8 @@ read_conf_driver() {
           val=${line#*=}
           [ "$val" = "$line" ] && val=${line#*:}
           val=${val%%#*}
-          val=$(printf '%s' "$val" | tr -d ' \t\r\n"')
-          val=$(printf '%s' "$val" | tr -d "'")
+          conf_strip "$val"
+          val=$CS_OUT
           if [ -n "$val" ]; then
             printf '%s\n' "$val"
             return 0
@@ -81,8 +96,8 @@ read_conf_driver() {
           val=${line#*=}
           [ "$val" = "$line" ] && val=${line#*:}
           val=${val%%#*}
-          val=$(printf '%s' "$val" | tr -d ' \t\r\n"')
-          val=$(printf '%s' "$val" | tr -d "'")
+          conf_strip "$val"
+          val=$CS_OUT
           if [ -n "$val" ]; then
             printf '%s\n' "$val"
             return 0

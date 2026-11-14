@@ -27,7 +27,8 @@
 
 set -u
 
-SCRIPT_DIR=$(CDPATH="" cd "$(dirname "$0")" && pwd)
+case "$0" in */*) SCRIPT_DIR=${0%/*} ;; *) SCRIPT_DIR=. ;; esac
+SCRIPT_DIR=$(CDPATH="" cd "$SCRIPT_DIR" && pwd)
 LC_ALL=C
 export LC_ALL
 
@@ -38,7 +39,7 @@ find_workspace_root() {
       printf '%s\n' "$curr"
       return 0
     fi
-    curr=$(dirname "$curr")
+    curr=${curr%/*}
   done
   printf '%s\n' "$PWD"
 }
@@ -65,7 +66,7 @@ get_lock_dir() {
 # scratch_dir: the per-verb root ctx exported (created on first use), else the drawer;
 # every transient file stages here so a killed verb's root holds its residue
 scratch_dir() {
-  if [ -n "${CTX_SCRATCH_ROOT:-}" ] && mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null \
+  if [ -n "${CTX_SCRATCH_ROOT:-}" ] && { [ -d "$CTX_SCRATCH_ROOT" ] || mkdir -p "$CTX_SCRATCH_ROOT" 2>/dev/null; } \
     && [ -d "$CTX_SCRATCH_ROOT" ] && [ -w "$CTX_SCRATCH_ROOT" ]; then
     printf '%s\n' "$CTX_SCRATCH_ROOT"
   else
@@ -263,6 +264,9 @@ store_lock_held() {
   kill -0 "$lh_pid" 2>/dev/null
 }
 
+SD_NL='
+'
+
 # store_data <function> <namespace>: the validated fields of the namespace's data file in
 # SD_NS, SD_ROOT, SD_FALLBACK (empty when none is declared), SD_SUFFIX, SD_KEYPAT,
 # SD_CHANGES; the caller's function name frames the refusal. The storage core's store-data script owns the grammar (the core is
@@ -304,19 +308,16 @@ store_data() {
     2) refuse 2 ERR_STORAGE_READ "$sd_msg" ;;
     *) refuse 1 ERR_INVALID_ARGUMENT "$sd_msg" ;;
   esac
-  SD_NS=$(printf '%s\n' "$sd_out" | sed -n '1p')
-  SD_ROOT=$(printf '%s\n' "$sd_out" | sed -n '2p')
-  SD_SUFFIX=$(printf '%s\n' "$sd_out" | sed -n '3p')
-  SD_KEYPAT=$(printf '%s\n' "$sd_out" | sed -n '4p')
-  SD_CHANGES=$(printf '%s\n' "$sd_out" | sed -n '5p')
-  SD_FILE=$(printf '%s\n' "$sd_out" | sed -n '6p')
-  SD_FORM=$(printf '%s\n' "$sd_out" | sed -n '7p')
-  SD_FORMAT=$(printf '%s\n' "$sd_out" | sed -n '8p')
-  SD_FIELDS=$(printf '%s\n' "$sd_out" | sed -n '9p')
-  SD_TITLE=$(printf '%s\n' "$sd_out" | sed -n '10p')
-  SD_SNIPPET=$(printf '%s\n' "$sd_out" | sed -n '11p')
-  SD_FALLBACK=$(printf '%s\n' "$sd_out" | sed -n '12p')
-  SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '13,$p')
+  sd_rest="$sd_out
+"
+  for sd_f in SD_NS SD_ROOT SD_SUFFIX SD_KEYPAT SD_CHANGES SD_FILE SD_FORM SD_FORMAT SD_FIELDS SD_TITLE SD_SNIPPET SD_FALLBACK; do
+    case "$sd_rest" in
+      *"$SD_NL"*) sd_v=${sd_rest%%"$SD_NL"*}; sd_rest=${sd_rest#*"$SD_NL"} ;;
+      *) sd_v=$sd_rest; sd_rest="" ;;
+    esac
+    eval "$sd_f=\$sd_v"
+  done
+  SD_DOCS=${sd_rest%"$SD_NL"}
   STORE_WS=$sd_ws
 }
 
@@ -379,8 +380,22 @@ store_prefix_ok() {
 store_key_for() {
   FN=$1
   sk_key=$3
-  store_key_ok "$sk_key" || refuse 1 ERR_INVALID_ARGUMENT "malformed key '$sk_key'"
-  store_key_shape "$SD_KEYPAT" "$sk_key" || refuse 1 ERR_INVALID_ARGUMENT "key '$sk_key' does not match the namespace pattern '$SD_KEYPAT'"
+  sk_bad=$(SK_KEY="$sk_key" SSP_P="$SD_KEYPAT" LC_ALL=C awk 'BEGIN {
+    s = ENVIRON["SK_KEY"]
+    if (s == "" || substr(s, 1, 1) == "/" || substr(s, length(s), 1) == "/" || s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) { print "malformed"; exit }
+    n = split(s, k, "/")
+    for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") { print "malformed"; exit }
+    m = split(ENVIRON["SSP_P"], p, "/")
+    if (m < 1) { print "pattern"; exit }
+    multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    if (multi) { if (n < m) { print "pattern"; exit } } else if (n != m) { print "pattern"; exit }
+    for (i = 1; i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) { print "pattern"; exit }
+    if (!multi && p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) print "pattern"
+  }')
+  case "$sk_bad" in
+    malformed) refuse 1 ERR_INVALID_ARGUMENT "malformed key '$sk_key'" ;;
+    pattern) refuse 1 ERR_INVALID_ARGUMENT "key '$sk_key' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
 }
 
 # store_path <key>: the posix mapping of a validated key
@@ -582,13 +597,15 @@ store_key_exists_in() {
   while :; do
     case "$ske_rest" in
       */*) ske_seg=${ske_rest%%/*}; ske_rest=${ske_rest#*/} ;;
-      *) ske_seg=$ske_rest; ske_rest= ;;
+      *) ske_seg=$ske_rest$SD_SUFFIX; ske_rest= ;;
     esac
-    if [ -z "$ske_rest" ]; then
-      ls -A "$ske_dir" 2>/dev/null | grep -F -x -q -e "$ske_seg$SD_SUFFIX" || return 1
-      return 0
-    fi
-    ls -A "$ske_dir" 2>/dev/null | grep -F -x -q -e "$ske_seg" || return 1
+    [ -e "$ske_dir/$ske_seg" ] || return 1
+    ske_hit=0
+    for ske_e in "$ske_dir"/* "$ske_dir"/.[!.]* "$ske_dir"/..?*; do
+      if [ "${ske_e##*/}" = "$ske_seg" ]; then ske_hit=1; break; fi
+    done
+    [ "$ske_hit" -eq 1 ] || return 1
+    [ -n "$ske_rest" ] || return 0
     ske_dir="$ske_dir/$ske_seg"
     [ -d "$ske_dir" ] || return 1
   done

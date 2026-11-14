@@ -90,11 +90,18 @@ store_lib_resolver() {
 store_lib_call() {
   slc_fn=$1
   shift
-  slc_root=$(store_lib_root)
-  slc_resolver=$(store_lib_resolver) || {
-    printf '%s: error: the storage core resolver is not installed (ERR_DRIVER_NOT_FOUND)\n' "$slc_fn" >&2
-    return 2
-  }
+  slc_root=${CTX_STORE_ROOT:-${CTX_ROOT:-$PWD}}
+  slc_resolver=${CTX_STORE_RESOLVER:-}
+  if [ -z "$slc_resolver" ]; then
+    if [ -x "$slc_root/.contexture/storage/scripts/driver-resolver" ]; then
+      slc_resolver="$slc_root/.contexture/storage/scripts/driver-resolver"
+    elif [ -x "$slc_root/base/.contexture/storage/scripts/driver-resolver" ]; then
+      slc_resolver="$slc_root/base/.contexture/storage/scripts/driver-resolver"
+    else
+      printf '%s: error: the storage core resolver is not installed (ERR_DRIVER_NOT_FOUND)\n' "$slc_fn" >&2
+      return 2
+    fi
+  fi
   if [ ! -d "$slc_root/.contexture" ]; then
     printf '%s: error: the workspace root is not a folder (ERR_INVALID_ARGUMENT)\n' "$slc_fn" >&2
     return 2
