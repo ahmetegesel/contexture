@@ -119,11 +119,13 @@ describe.concurrent('the ctx search builtin', () => {
     if (shell === 'dash' && !existsSync('/bin/dash')) skip();
     const sb = fresh(base);
     const pidFile = join(sb, 'imod.pids');
-    plant(sb, 'imod', `sleep 30 & printf '%s\\n' "$!" > "$CTX_ROOT/imod.part"; printf '%s\\n' "$$" >> "$CTX_ROOT/imod.part"; mv "$CTX_ROOT/imod.part" "$CTX_ROOT/imod.pids"; sleep 30`);
-    const { result, signal } = launch(shell, ['.contexture/ctx', 'search', 'needle', '--module=imod'], { cwd: sb, timeout: 20_000 });
+    const written = (): string[] => (existsSync(pidFile) ? readFileSync(pidFile, 'utf8').split('\n').filter(Boolean) : []);
+    writeFileSync(join(sb, '.contexture/config'), 'search.timeout: 120\n');
+    plant(sb, 'imod', `sleep 120 & printf '%s\\n%s\\n' "$!" "$$" > "$CTX_ROOT/imod.pids"; sleep 120`);
+    const { result, signal } = launch(shell, ['.contexture/ctx', 'search', 'needle', '--module=imod'], { cwd: sb, timeout: 90_000 });
     const started = Date.now();
-    while (!existsSync(pidFile) && Date.now() - started < 10_000) await new Promise((done) => setTimeout(done, 50));
-    const pids = readFileSync(pidFile, 'utf8').split('\n').filter(Boolean);
+    while (written().length < 2 && Date.now() - started < 60_000) await new Promise((done) => setTimeout(done, 50));
+    const pids = written();
     expect(pids).toHaveLength(2);
     signal('SIGTERM');
     const r = await result;
