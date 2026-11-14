@@ -1630,6 +1630,7 @@ show_package_verb_help() {
 usage: ctx package install <package>
 installs or updates the package into this workspace's extension root through the core package installer, records it, runs its part hooks, and recomposes the law layer
 <package>: a catalog name (letters, digits, dot, underscore, hyphen; not starting with a dot) names plugins/<name> at the workspace root; a value holding a slash is a package root path, read from the working folder; either way the package lands in the workspace this engine serves
+--as=<module>=<alias> (repeatable, one per module): installs that module of the package under the alias, its folder, laws, hooks, namespace, and storage root taking the alias (a root its data file declares applies only under its own name), recorded so a re-install without the flag keeps it; a module name, or a storage root another installed module resolves to, that collides refuses naming --as, and the installer never picks a name itself
 an install runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
 exit codes: 0 installed or updated; 1 a refusal (a usage error, a malformed name, no such package, a collision); 2 an environment or I/O failure (a missing installer, a read-only extension root, a failed part hook or recompose)
 EOF
@@ -1672,6 +1673,48 @@ package_builtin() {
         ;;
     esac
   fi
+  # the install aliases: every --as=<module>=<alias> before the one argument rule, each
+  # module and alias a module name, no module and no alias twice; they reach the private
+  # installer as CTX_PACKAGE_AS, space separated <module>=<alias> pairs
+  pk_as=""
+  pk_as_seen=" "
+  pk_n=$#
+  while [ "$pk_n" -gt 0 ]; do
+    pk_a=$1
+    shift
+    pk_n=$((pk_n - 1))
+    case "$pk_a" in
+      --as=*)
+        if [ "$pk_verb" != install ]; then
+          ctx_err "package $pk_verb: --as names an install alias; an uninstall takes the installed package alone"
+          exit 1
+        fi
+        pk_pair=${pk_a#--as=}
+        case "$pk_pair" in
+          ?*=?*) ;;
+          *) ctx_err "package install: malformed --as '$pk_a' (--as=<module>=<alias>)"; exit 1 ;;
+        esac
+        pk_m=${pk_pair%%=*}
+        pk_al=${pk_pair#*=}
+        for pk_nm in "$pk_m" "$pk_al"; do
+          case "$pk_nm" in
+            .*) pk_nm="" ;;
+          esac
+          if [ -z "$pk_nm" ] || ! module_name_ok "$pk_nm"; then
+            ctx_err "package install: malformed --as '$pk_a': $module_name_rule"
+            exit 1
+          fi
+        done
+        case "$pk_as_seen" in
+          *" m:$pk_m "*) ctx_err "package install: --as names the module '$pk_m' twice"; exit 1 ;;
+          *" a:$pk_al "*) ctx_err "package install: --as names the alias '$pk_al' twice"; exit 1 ;;
+        esac
+        pk_as_seen="$pk_as_seen m:$pk_m a:$pk_al "
+        pk_as="${pk_as:+$pk_as }$pk_m=$pk_al"
+        ;;
+      *) set -- "$@" "$pk_a" ;;
+    esac
+  done
   if [ $# -ne 1 ]; then
     ctx_err "package $pk_verb: usage: ctx package $pk_verb <package>"
     exit 1
@@ -1707,12 +1750,20 @@ package_builtin() {
     ctx_err "package $pk_verb: missing package ${pk_verb}er: .contexture/package-$pk_verb"
     exit 2
   fi
+  for pk_pair in $pk_as; do
+    pk_m=${pk_pair%%=*}
+    if [ ! -d "$pk_arg/.contexture/extensions/modules/$pk_m" ]; then
+      ctx_err "package install: --as names no module of the package: '$pk_m'"
+      exit 1
+    fi
+  done
   if ! cd "$root"; then
     ctx_err "package $pk_verb: cannot enter workspace root: $root"
     exit 2
   fi
   CTX_ROOT=$root
-  export CTX_ROOT
+  CTX_PACKAGE_AS=$pk_as
+  export CTX_ROOT CTX_PACKAGE_AS
   exec sh "$pk_script" "$pk_arg"
 }
 

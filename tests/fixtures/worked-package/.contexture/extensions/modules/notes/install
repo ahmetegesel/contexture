@@ -2,7 +2,9 @@
 # notes module install part hook (optional; private: no summary line). The package
 # installer runs it after the overlay and the installed-path record, with CTX_ROOT,
 # CTX_PACKAGE_ROOT, and CTX_BIN exported and cwd at the workspace root. It seeds one
-# welcome note through the module's own verb; a present note is never overwritten.
+# welcome note through the module's own verb; a present note is never overwritten. The
+# verb is reached by the module's installed name, its folder's, so an install under an
+# alias runs the same hook unchanged.
 set -u
 
 if [ -z "${CTX_ROOT:-}" ]; then
@@ -14,13 +16,15 @@ if [ -z "${CTX_PACKAGE_ROOT:-}" ]; then
   exit 2
 fi
 ctx=${CTX_BIN:-$CTX_ROOT/.contexture/ctx}
+module=${0%/*}
+module=${module##*/}
 
-if "$ctx" notes show welcome/readme >/dev/null 2>&1; then
+if "$ctx" "$module" show welcome/readme >/dev/null 2>&1; then
   echo 'notes install: the welcome note is already present; left unchanged'
   exit 0
 fi
 if printf 'A note reaches the module store through the notes verbs, on every driver.\n' \
-  | "$ctx" notes put welcome/readme >/dev/null; then
+  | "$ctx" "$module" put welcome/readme >/dev/null; then
   echo 'notes install: seeded the welcome note'
 else
   echo 'notes install: seeding the welcome note failed' >&2

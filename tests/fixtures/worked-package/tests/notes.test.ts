@@ -46,6 +46,16 @@ describe.concurrent('the worked example package: notes, from manifest to uninsta
     expect((await ctx(sb, 'notes', 'show', 'welcome/readme')).stdout).toContain('A note reaches the module store through the notes verbs');
   });
 
+  it('[modules-r18, modules-r15] an install under an alias runs the module unchanged: the hook seeds the welcome note through the alias, and the verbs store under the alias\'s namespace', async () => {
+    const sb = stage('posix', 'worked-alias');
+    const r = await ctx(sb, 'package', 'install', '--as=notes=memo', catalog(sb));
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toMatch(/error|unknown|fail/);
+    expect(r.stdout).toContain('seeded the welcome note');
+    expect((await ctx(sb, 'memo', 'show', 'welcome/readme')).stdout).toContain('A note reaches the module store through the notes verbs');
+    expect(JSON.parse((await ctx(sb, 'memo', 'keys')).stdout)).toEqual({ namespace: 'memo', keys: ['welcome/readme'] });
+  });
+
   it('[modules-r18] the verbs put, show, and list notes over the posix store and refuse a malformed key', async () => {
     const sb = fresh(installed);
     const put = await ctxIn(sb, 'the first test note\n', 'notes', 'put', 'demo/first');
