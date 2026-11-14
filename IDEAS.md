@@ -379,3 +379,12 @@
     The review-phase1 guard run surfaced the pre-existing coverage gap while checking the synaptiq install commit; it is out of scope for the synaptiq migration but the corpus guard reads it on any contexture delta.
   REF: "lane#review-phase1/report"
   STATUS: OPEN
+
+@idea docs-corpus-one-read
+  DUMPED: 2026-11-14
+  WHAT ::
+    The docs module materializes the corpus one doc at a time (one store get each, about 75 ms per doc on posix), so ctx docs search, ctx docs query --index, and every corpus wide read cost about 23 s over 301 docs, and a ctx search docs group times out past about 130 docs at the default 10 s bound. Read the corpus in one call (a store scan with a decode) so the cost stops growing per doc.
+  WHY ::
+    Found by the search-fanout build lane's measurement; accepted for the one release since the direct ctx docs search has no bound and a timed out group reads failed, never silent, but larger corpora (adopter workspaces) will hit it.
+  REF: "lane#build-search-fanout/report"
+  STATUS: OPEN
