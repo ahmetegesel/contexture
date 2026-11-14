@@ -72,7 +72,7 @@ describe.concurrent('ctx package: the group and its help', () => {
 
 describe.concurrent('ctx package: the refusals before the exec', () => {
   it.each([
-    ['install', [], 1, 'ctx: package install: usage: ctx package install <package>'],
+    ['install', ['--as=m=n'], 1, 'ctx: package install: usage: ctx package install <package>'],
     ['install', ['a', 'b'], 1, 'ctx: package install: usage: ctx package install <package>'],
     ['uninstall', [], 1, 'ctx: package uninstall: usage: ctx package uninstall <package>'],
     ['install', ['.hidden'], 1, "ctx: package install: malformed package name '.hidden' (letters, digits, dot, underscore, hyphen; not starting with a dot)"],
@@ -104,9 +104,9 @@ describe.concurrent('ctx package: the refusals before the exec', () => {
   });
 
   it.each([
-    ['install', 'missing package installer: .contexture/package-install'],
-    ['uninstall', 'missing package uninstaller: .contexture/package-uninstall'],
-  ] as const)('[the-engine-r22] ctx package %s refuses rc 2 naming its missing private script, writing nothing', async (sub, missing) => {
+    ['install', 'missing package installer'],
+    ['uninstall', 'missing package uninstaller'],
+  ] as const)('[the-engine-r22] ctx package %s refuses rc 2 naming its missing package installer alone, never its private path, writing nothing', async (sub, missing) => {
     const sb = sandbox('noscript');
     const p = fixture(sb, 'pkgnoscript');
     rmSync(join(sb, `.contexture/package-${sub}`));
