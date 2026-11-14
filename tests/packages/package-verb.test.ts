@@ -23,32 +23,36 @@ const lines = (r: Run) => ({ code: r.code, stdout: r.stdout, stderr: r.stderr })
 const GO = /on the human's explicit go at the act$/;
 
 describe.concurrent('ctx package: the group and its help', () => {
-  it('[the-engine-r22] ctx package bare, help, --help, and -h each list both sub-verbs with the go clause rc 0', async () => {
+  it('[the-engine-r22] ctx package bare, help, --help, and -h each list the three sub-verbs, install and uninstall with the go clause, list read only, rc 0', async () => {
     const sb = sandbox('group');
     for (const args of [[], ['help'], ['--help'], ['-h']]) {
       const r = await verb(sb, args);
       expect(r.code, args.join(' ')).toBe(0);
       expect(r.stderr).toBe('');
-      expect(r.stdout).toMatch(/^ {2}ctx package install <package> +\S.*on the human's explicit go at the act$/m);
+      expect(r.stdout).toMatch(/^ {2}ctx package install \[<package>\] +\S.*on the human's explicit go at the act$/m);
       expect(r.stdout).toMatch(/^ {2}ctx package uninstall <package> +\S.*on the human's explicit go at the act$/m);
+      expect(r.stdout).toMatch(/^ {2}ctx package list +\S.*read only$/m);
     }
   });
 
-  it('[the-engine-r22] an unknown sub-verb refuses rc 1 with one line naming the two', async () => {
-    const r = await verb(sandbox('unknown'), ['list']);
+  it('[the-engine-r22] an unknown sub-verb refuses rc 1 with one line naming the three', async () => {
+    const r = await verb(sandbox('unknown'), ['nosuch']);
     expect(r.code).toBe(1);
     expect(r.stdout).toBe('');
-    expect(r.stderr).toBe('ctx: package: unknown sub-verb: list (ctx package install or ctx package uninstall)\n');
+    expect(r.stderr).toBe('ctx: package: unknown sub-verb: nosuch (ctx package install, ctx package uninstall, or ctx package list)\n');
   });
 
-  it('[the-engine-r22] ctx help prints one usage line per sub-verb, each carrying the go clause', async () => {
+  it('[the-engine-r22] ctx help prints one usage line per sub-verb, install and uninstall carrying the go clause, list read only', async () => {
     const r = await exec('./.contexture/ctx', ['help'], { cwd: sandbox('tophelp') });
     expect(r.code).toBe(0);
-    for (const sub of ['install', 'uninstall']) {
-      const hits = r.stdout.split('\n').filter((l) => l.startsWith(`  ctx package ${sub} <package> `));
+    for (const prefix of ['  ctx package install [<package>] ', '  ctx package uninstall <package> ']) {
+      const hits = r.stdout.split('\n').filter((l) => l.startsWith(prefix));
       expect(hits).toHaveLength(1);
       expect(hits[0]).toMatch(GO);
     }
+    const list = r.stdout.split('\n').filter((l) => l.startsWith('  ctx package list '));
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatch(/read only$/);
   });
 
   it.each([
@@ -62,11 +66,29 @@ describe.concurrent('ctx package: the group and its help', () => {
     const r = await verb(sb, [sub, flag]);
     expect(r.code).toBe(0);
     expect(r.stderr).toBe('');
-    expect(r.stdout.split('\n')[0]).toBe(`usage: ctx package ${sub} <package>`);
+    expect(r.stdout.split('\n')[0]).toBe(sub === 'install' ? 'usage: ctx package install [<package>] [--as=<module>=<alias>]...' : `usage: ctx package ${sub} <package>`);
     expect(r.stdout).toContain('a value holding a slash is a package root path');
     expect(r.stdout).toMatch(sub === 'install' ? /a catalog name .* names plugins\/<name> at the workspace root/ : /the installed package's name/);
     expect(r.stdout).toMatch(/^an (un)?install runs only on the human's explicit go at the act; this verb checks no go/m);
     expect(r.stdout).toMatch(/^exit codes: 0 /m);
+  });
+});
+
+describe.concurrent('ctx package list: its help and its argument refusal', () => {
+  it.each(['--help', '-h'])('[the-engine-r22] ctx package list %s prints its usage, the drift classes, and the read only line rc 0 on stdout', async (flag) => {
+    const r = await verb(sandbox('listhelp'), ['list', flag]);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout.split('\n')[0]).toBe('usage: ctx package list');
+    expect(r.stdout).toMatch(/^drift: a package declared but not installed, installed but not declared, or installed at a version other than its declared source's/m);
+    expect(r.stdout).toMatch(/^read only: it writes nothing and installs nothing/m);
+  });
+
+  it('[the-engine-r22] ctx package list with an argument refuses rc 1 with one line, writing nothing', async () => {
+    const sb = sandbox('listarg');
+    const before = treeState(sb);
+    const r = await verb(sb, ['list', 'extra']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'ctx: package list: takes no argument (ctx package list --help prints its detail)\n']);
+    expect(treeState(sb)).toBe(before);
   });
 });
 

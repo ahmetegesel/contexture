@@ -4,9 +4,10 @@
 #   awk -f docs-entity.awk part=1 doc.grammar part=2 <doc>...
 # with DE_MODE get (DE_KEY: print that entity's raw lines, exit 3 when the doc holds none) or
 # search (DE_QUERY, DE_TYPE, DE_LIMIT, DE_JSON: the rows of every entity holding a line that
-# carries the query).
+# carries the query; DE_MODULE: the module's installed name the rows, addresses, and reads
+# carry, docs unless installed under an alias).
 #
-# An entity is an entry with a stable key, addressed docs#<repo>/<slug>/<key>: an id keyed
+# An entity is an entry with a stable key, addressed <module>#<repo>/<slug>/<key>: an id keyed
 # entry (a responsibility, a contract rule, a pitfall, a caveat) by its id; a @rule block by
 # rule/<category>/<rule-slug>; any other keyed entry by <block>/<key>, the key the block's
 # grammar names (a first field's value, <from>><to> for data_flow, <direction>:<key> for
@@ -54,6 +55,7 @@ BEGIN {
   LIMIT = ENVIRON["DE_LIMIT"] + 0
   JSON = ENVIRON["DE_JSON"]
   QRAW = ENVIRON["DE_QUERY"]
+  MOD = ENVIRON["DE_MODULE"]
   NR_ROWS = 0
 }
 
@@ -231,17 +233,17 @@ function emit(    i, shown, path) {
     printf "{\"query\":%s,\"mode\":\"exact\",\"total\":%d,\"rows\":[", jstr(QRAW), NR_ROWS
     for (i = 1; i <= shown; i++) {
       path = RREPO[i] "/" RSLUG[i] "/" RKEY[i]
-      printf "%s{\"module\":\"docs\",\"container\":%s,\"type\":%s,\"id\":%s,\"address\":%s,\"snippet\":%s,\"read\":%s}", (i > 1 ? "," : ""), jstr(RREPO[i] "/" RSLUG[i]), jstr(RTYPE[i]), jstr(RKEY[i]), jstr("docs#" path), jstr(RSNIP[i]), jstr("ctx docs get " path)
+      printf "%s{\"module\":%s,\"container\":%s,\"type\":%s,\"id\":%s,\"address\":%s,\"snippet\":%s,\"read\":%s}", (i > 1 ? "," : ""), jstr(MOD), jstr(RREPO[i] "/" RSLUG[i]), jstr(RTYPE[i]), jstr(RKEY[i]), jstr(MOD "#" path), jstr(RSNIP[i]), jstr("ctx " MOD " get " path)
     }
     printf "]}\n"
     return
   }
-  printf "docs search \"%s\": %d match%s", QRAW, NR_ROWS, (NR_ROWS == 1 ? "" : "es")
+  printf "%s search \"%s\": %d match%s", MOD, QRAW, NR_ROWS, (NR_ROWS == 1 ? "" : "es")
   if (NR_ROWS > 0) printf ", %d shown", shown
   printf "\n"
   for (i = 1; i <= shown; i++) {
     path = RREPO[i] "/" RSLUG[i] "/" RKEY[i]
-    printf "  %s docs#%s: %s\n", RTYPE[i], path, RSNIP[i]
+    printf "  %s %s#%s: %s\n", RTYPE[i], MOD, path, RSNIP[i]
   }
-  if (shown > 0) printf "read one: ctx docs get <repo>/<slug>/<key> (the address after docs#)\n"
+  if (shown > 0) printf "read one: ctx %s get <repo>/<slug>/<key> (the address after %s#)\n", MOD, MOD
 }

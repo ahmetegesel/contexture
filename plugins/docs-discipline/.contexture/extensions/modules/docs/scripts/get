@@ -1,7 +1,7 @@
 #!/bin/sh
 # summary: print one corpus entity whole, by its path: <repo>/<slug>/<key>
 # usage: ctx docs get <repo>/<slug>/<key>
-# help: the path is everything after docs# in an entity's address (ctx docs search prints it as the row's read); the key is an id keyed entry's id (a responsibility, a contract rule, a pitfall, a caveat), rule/<category>/<rule-slug> for a conventions rule, <block>/<key> for another keyed entry (the key ctx docs entry takes, when it is one token), or header for the doc's header block
+# help: the path is everything after the first hash in an entity's address, docs# or the alias the module is installed under (ctx docs search prints it as the row's read); the key is an id keyed entry's id (a responsibility, a contract rule, a pitfall, a caveat), rule/<category>/<rule-slug> for a conventions rule, <block>/<key> for another keyed entry (the key ctx docs entry takes, when it is one token), or header for the doc's header block
 # help: prints the entity's stored lines whole, quotes kept; read only, never a doc listing; an entry keyed by more than one token, or known only by its place, belongs to the header entity
 # help: exit codes: 0 printed; 1 a malformed path, no such doc, or no such entity (ERR_ENTITY_NOT_FOUND); 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs get workspace/the-engine/the-engine-r8

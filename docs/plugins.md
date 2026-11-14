@@ -50,7 +50,7 @@ The ctx interface is the only user/agent-facing surface: a package's verbs, its 
 5. Declare the plugin's needs: install nothing the README does not name; a plugin's dependencies are its own, never the core's.
 6. Run the README's verification walk before any real work depends on the plugin.
 
-The plugin's `tests/` folder never lands in a workspace: tests live with the plugin, at the plugin root. Uninstall with `.contexture/ctx package uninstall <name>`, on the same go: it runs the module `uninstall` part hooks, removes the unchanged recorded files, preserves and reports a file changed after install, removes the record, and recomposes the generated law layer.
+The plugin's `tests/` folder never lands in a workspace: tests live with the plugin, at the plugin root. The install writes the package's `package.<name>: <source>` line into the workspace configuration (every alias `--as=<module>=<alias>` gave rides on it), a bare `.contexture/ctx package install` installs every declared package not yet installed, and `.contexture/ctx package list` shows the declared against the installed, read only. Uninstall with `.contexture/ctx package uninstall <name>`, on the same go: it runs the module `uninstall` part hooks, removes the unchanged recorded files, preserves and reports a file changed after install, removes the record, and recomposes the generated law layer.
 
 A plugin installs into an existing setup the same way: the extension-root overlay installs into any adopted workspace, whenever it wants it.
 

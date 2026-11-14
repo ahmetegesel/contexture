@@ -19,6 +19,7 @@
 # the drawer cannot be written), and is removed on exit.
 
 DOCS_VERB=""
+DOCS_MODULE=""
 DOCS_ROOT=""
 DOCS_ROOT_P=""
 DOCS_RESOLVER=""
@@ -33,13 +34,16 @@ DOCS_PATHS=""
 DOCS_ERR=""
 DOCS_SINCE_REV=""
 
-# docs_io_init <scripts dir> <verb>: the workspace root as the verbs resolve it
+# docs_io_init <scripts dir> <verb>: the module's installed name (its folder's, so an
+# install under an alias names itself), the workspace root as the verbs resolve it
 # (DOCS_WORKSPACE_ROOT, then CTX_ROOT, then the walk up to the .contexture drawer's
 # parent) and the storage core's resolver, library, and JSON decoder, all absolute from
 # CTX_ROOT (the core drawer, then the base mirror), never a relative climb from the
 # module folder
 docs_io_init() {
-  DOCS_VERB="ctx docs $2"
+  DOCS_MODULE=${1%/*}
+  DOCS_MODULE=${DOCS_MODULE##*/}
+  DOCS_VERB="ctx $DOCS_MODULE $2"
   DOCS_DIR=$1
   di_root=""
   di_p=$1
@@ -1319,8 +1323,8 @@ docs_search() {
       set -- "$@" "$ds_p"
     done < "$DOCS_PATHS"
   fi
-  DE_MODE=search DE_QUERY=$ds_q DE_TYPE=$ds_type DE_LIMIT=$ds_limit DE_JSON=$ds_json
-  export DE_MODE DE_QUERY DE_TYPE DE_LIMIT DE_JSON
+  DE_MODE=search DE_QUERY=$ds_q DE_TYPE=$ds_type DE_LIMIT=$ds_limit DE_JSON=$ds_json DE_MODULE=$DOCS_MODULE
+  export DE_MODE DE_QUERY DE_TYPE DE_LIMIT DE_JSON DE_MODULE
   if [ "$#" -eq 0 ]; then
     awk -f "$DOCS_DIR/docs-entity.awk" part=1 "$DOCS_TEMPLATE" part=2 /dev/null
   else

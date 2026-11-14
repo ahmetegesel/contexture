@@ -54,7 +54,7 @@ export interface Entities {
 }
 
 export function entities(dir: string, e: Entities, files: readonly string[] = docFiles(dir)): Promise<Run> {
-  const env = { DE_MODE: e.mode, DE_KEY: e.key ?? '', DE_QUERY: e.query ?? '', DE_TYPE: e.type ?? '', DE_LIMIT: String(e.limit ?? 20), DE_JSON: e.json ? '1' : '', ...ceiling(dir) };
+  const env = { DE_MODE: e.mode, DE_KEY: e.key ?? '', DE_QUERY: e.query ?? '', DE_TYPE: e.type ?? '', DE_LIMIT: String(e.limit ?? 20), DE_JSON: e.json ? '1' : '', DE_MODULE: 'docs', ...ceiling(dir) };
   return awk(dir, engine('docs-entity.awk'), { args: ['part=1', join(SCRIPTS, 'doc.grammar'), 'part=2', ...files], env });
 }
 

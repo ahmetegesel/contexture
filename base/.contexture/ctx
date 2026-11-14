@@ -829,6 +829,31 @@ verb_exists() {
 # ---------------------------------------------------------------------------
 # assembly: help is engine-owned
 
+# module_alias_of <name>: "<original> <package>" when the module of that installed name was
+# installed under an alias (an install record's module line), nothing otherwise; silent on an
+# absent or unreadable record area, as the compose treats one; discovery never reads it
+module_alias_of() {
+  [ -d "$dir/extensions/.state" ] || return 0
+  for mao_f in "$dir"/extensions/.state/*.files; do
+    [ -f "$mao_f" ] && [ -r "$mao_f" ] || continue
+    mao_o=$(awk -v n="$1" '$1 == "module" && NF == 3 && $2 == n && $3 != n { print $3; exit }' "$mao_f" 2>/dev/null)
+    [ -n "$mao_o" ] || continue
+    mao_p=$(awk '$1 == "package" { print $2; exit }' "$mao_f" 2>/dev/null)
+    if [ -z "$mao_p" ]; then mao_p=${mao_f##*/}; mao_p=${mao_p%.files}; fi
+    printf '%s %s\n' "$mao_o" "$mao_p"
+    return 0
+  done
+  return 0
+}
+
+# module_alias_note <name>: " (alias of <original> from package <package>)" for an aliased
+# module, nothing otherwise
+module_alias_note() {
+  set -- $(module_alias_of "$1")
+  [ $# -eq 2 ] && printf ' (alias of %s from package %s)' "$1" "$2"
+  return 0
+}
+
 show_top_help() {
   cat <<'EOF'
 ctx: the workspace command binder
@@ -840,7 +865,7 @@ usage:
   cmd | ctx run                    pipe form: compact a stream
   ctx compose [--check]            compose the generated law layer, or verify it current; --check writes nothing
 EOF
-  printf '%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$search_line"
+  printf '%s\n%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$package_list_line" "$search_line"
   cat <<'EOF'
   ctx <module> [args...]           dispatch to a module: arguments, streams, and exit code pass through
   ctx <module> help [<verb>]       the module's verb table; one verb's detail with <verb>
@@ -853,7 +878,7 @@ EOF
   fi
   while IFS= read -r n; do
     [ -n "$n" ] || continue
-    printf '  %-10s %s\n' "$n" "$(module_summary "$(module_dir "$n")")"
+    printf '  %-10s %s%s\n' "$n" "$(module_summary "$(module_dir "$n")")" "$(module_alias_note "$n")"
   done <<EOF
 $mods
 EOF
@@ -862,7 +887,7 @@ EOF
 
 show_module_help() {
   m=$(module_dir "$1") || m="$modules_root/$1"
-  printf 'ctx %s: %s\n\n' "$1" "$(module_summary "$m")"
+  printf 'ctx %s: %s%s\n\n' "$1" "$(module_summary "$m")" "$(module_alias_note "$1")"
   printf 'usage:\n'
   printf '  ctx %s <verb> [args...]\n' "$1"
   printf '  ctx %s help [<verb>]\n' "$1"
@@ -1616,12 +1641,13 @@ EOF
 # on success it writes (install) or removes (uninstall) the package's line in the
 # workspace configuration, and the bare install installs every declared package
 
-package_install_line="  ctx package install <package>    install or update a package (a plugins/ name or a package root path), on the human's explicit go at the act"
+package_install_line="  ctx package install [<package>]  install or update a package (a plugins/ name or a package root path; --as=<module>=<alias> renames a module), or bare every declared one, on the human's explicit go at the act"
 package_uninstall_line="  ctx package uninstall <package>  remove an installed package (its name or its package root path), on the human's explicit go at the act"
+package_list_line="  ctx package list                 the declared packages against the installed ones: versions, modules, aliases, and drift; read only"
 
 show_package_help() {
-  printf "ctx package: install or remove a package through the core package installer, each only on the human's explicit go at the act, which the verb never checks\n\n"
-  printf 'usage:\n%s\n%s\n' "$package_install_line" "$package_uninstall_line"
+  printf "ctx package: install or remove a package through the core package installer, each only on the human's explicit go at the act, which the verb never checks, or list the declared and installed packages\n\n"
+  printf 'usage:\n%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$package_list_line"
   printf "  ctx package <sub-verb> --help    one sub-verb's detail\n"
 }
 
@@ -1629,7 +1655,7 @@ show_package_verb_help() {
   case "$1" in
     install)
       cat <<'EOF'
-usage: ctx package install <package>
+usage: ctx package install [<package>] [--as=<module>=<alias>]...
 installs or updates the package into this workspace's extension root through the core package installer, records it, runs its part hooks, and recomposes the law layer
 <package>: a catalog name (letters, digits, dot, underscore, hyphen; not starting with a dot) names plugins/<name> at the workspace root; a value holding a slash is a package root path, read from the working folder; either way the package lands in the workspace this engine serves
 bare: ctx package install with no package installs every package the workspace configuration declares (one package.<name>: <source> [--as=<module>=<alias>]... line each) and the install record lacks, each with its declared flags; nothing pending prints one line rc 0; a configuration line is never a go, the bare install is itself the act
@@ -1646,6 +1672,15 @@ removes an installed package from this workspace's extension root through the co
 <package>: the installed package's name (its plugins/<name> folder, when present, passes as the package root); a value holding a slash is a package root path, read from the working folder; either way the package leaves the workspace this engine serves
 an uninstall runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
 exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed part hook or recompose)
+EOF
+      ;;
+    list)
+      cat <<'EOF'
+usage: ctx package list
+prints one line per package the workspace configuration declares or the install records hold, in name order: installed with its version and modules (an alias read as <alias> (alias of <module>)), or declared and not installed; then one closing line counting the declared, the installed, and the drift
+drift: a package declared but not installed, installed but not declared, or installed at a version other than its declared source's; a record without module lines reads as plainly installed, never an error
+read only: it writes nothing and installs nothing, and needs no go
+exit codes: 0 the listing; 1 an argument; 2 an install record area or record that exists but cannot be read
 EOF
       ;;
   esac
@@ -1809,6 +1844,85 @@ EOF
   exit 0
 }
 
+# package_list: the declared packages against the installed ones, read only: one line per
+# package in name order, then the closing count; a version differing from the declared
+# source's manifest, a declared package not installed, and an installed one not declared
+# read as drift; an install record area or record that exists but cannot be read refuses rc 2
+# with one line, never answering that nothing is installed
+package_list() {
+  pl_state=$dir/extensions/.state
+  if [ -e "$pl_state" ] && { [ ! -d "$pl_state" ] || [ ! -r "$pl_state" ] || [ ! -x "$pl_state" ]; }; then
+    ctx_err "package list: the install record area cannot be read"
+    exit 2
+  fi
+  for pl_f in "$pl_state"/*.files; do
+    [ -e "$pl_f" ] || continue
+    if [ ! -f "$pl_f" ] || [ ! -r "$pl_f" ]; then
+      pl_b=${pl_f##*/}
+      ctx_err "package list: the install record of '${pl_b%.files}' cannot be read"
+      exit 2
+    fi
+  done
+  pl_decl=$(pkg_decl_lines 2>/dev/null)
+  pl_names=$(
+    { printf '%s\n' "$pl_decl" | awk 'NF { print $1 }'
+      for pl_f in "$dir"/extensions/.state/*.files; do
+        [ -f "$pl_f" ] || continue
+        pl_b=${pl_f##*/}
+        printf '%s\n' "${pl_b%.files}"
+      done
+    } | LC_ALL=C sort -u)
+  if [ -z "$pl_names" ]; then
+    printf 'package list: no package is declared or installed\n'
+    exit 0
+  fi
+  pl_nd=0; pl_ni=0; pl_nx=0
+  while IFS= read -r pl_n; do
+    [ -n "$pl_n" ] || continue
+    pl_src=$(printf '%s\n' "$pl_decl" | awk -v n="$pl_n" '$1 == n { print ($2 == "" ? "-" : $2); exit }')
+    pl_rec=$dir/extensions/.state/$pl_n.files
+    [ -z "$pl_src" ] || pl_nd=$((pl_nd + 1))
+    if [ ! -f "$pl_rec" ]; then
+      pl_nx=$((pl_nx + 1))
+      printf '%s: declared, not installed (drift)\n' "$pl_n"
+      continue
+    fi
+    pl_ni=$((pl_ni + 1))
+    pl_ver=$(awk '$1 == "version" { print $2; exit }' "$pl_rec" 2>/dev/null)
+    pl_mods=$(awk '
+      $1 == "module" && NF == 3 { m[++n] = ($2 == $3) ? $2 : $2 " (alias of " $3 ")"; any = 1; next }
+      $1 == "file" { k = split($4, a, "/"); if (k >= 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && !(a[4] in seen)) { seen[a[4]] = 1; f[++nf] = a[4] } }
+      END {
+        if (any) { for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") m[i] }
+        else { for (i = 1; i <= nf; i++) o = o (i > 1 ? ", " : "") f[i] }
+        print o
+      }' "$pl_rec" 2>/dev/null)
+    pl_line="$pl_n: installed${pl_ver:+ $pl_ver}"
+    if [ -z "$pl_src" ]; then
+      pl_line="$pl_line, not declared (drift)"
+      pl_nx=$((pl_nx + 1))
+    else
+      pl_line="$pl_line, declared"
+      case "$pl_src" in
+        /*) pl_root=$pl_src ;;
+        */*) pl_root=$root/$pl_src ;;
+        *) pl_root=$root/plugins/$pl_src ;;
+      esac
+      pl_sv=""
+      [ -f "$pl_root/manifest" ] && pl_sv=$("$ctx_bin" _package "$pl_root/manifest" version 2>/dev/null)
+      if [ -n "$pl_sv" ] && [ -n "$pl_ver" ] && [ "$pl_sv" != "$pl_ver" ]; then
+        pl_line="$pl_line, the declared source holds $pl_sv (drift)"
+        pl_nx=$((pl_nx + 1))
+      fi
+    fi
+    printf '%s%s\n' "$pl_line" "${pl_mods:+; modules: $pl_mods}"
+  done <<EOF
+$pl_names
+EOF
+  printf 'package list: %s declared, %s installed, %s drift\n' "$pl_nd" "$pl_ni" "$pl_nx"
+  exit 0
+}
+
 package_builtin() {
   case "${1:-}" in
     ""|help|--help|-h)
@@ -1819,9 +1933,9 @@ package_builtin() {
       show_package_help
       exit 0
       ;;
-    install|uninstall) ;;
+    install|uninstall|list) ;;
     *)
-      ctx_err "package: unknown sub-verb: $1 (ctx package install or ctx package uninstall)"
+      ctx_err "package: unknown sub-verb: $1 (ctx package install, ctx package uninstall, or ctx package list)"
       exit 1
       ;;
   esac
@@ -1834,6 +1948,13 @@ package_builtin() {
         exit 0
         ;;
     esac
+  fi
+  if [ "$pk_verb" = list ]; then
+    if [ $# -ne 0 ]; then
+      ctx_err "package list: takes no argument (ctx package list --help prints its detail)"
+      exit 1
+    fi
+    package_list
   fi
   # the install aliases: every --as=<module>=<alias> before the one argument rule, each
   # module and alias a module name, no module and no alias twice; they reach the private
@@ -2120,7 +2241,7 @@ END {
   }
   if (MODE == "") MODE = ENVIRON["SG_ASKED"]
   if (ENVIRON["SG_JSON"] == "1") {
-    printf "{\"module\":%s,\"status\":\"ok\",\"mode\":%s,\"total\":%d,\"rows\":[", jq(m), jq(MODE), TOTAL
+    printf "{\"module\":%s,%s\"status\":\"ok\",\"mode\":%s,\"total\":%d,\"rows\":[", jq(m), (ENVIRON["SG_ALIAS"] != "" ? "\"alias\":" jq(ENVIRON["SG_ALIAS"]) "," : ""), jq(MODE), TOTAL
     for (i = 1; i <= NR_; i++) {
       printf "%s{", (i > 1 ? "," : "")
       f = 0
@@ -2130,7 +2251,7 @@ END {
     printf "]}"
     exit
   }
-  printf "%s: %d of %d", m, NR_, TOTAL
+  printf "%s%s: %d of %d", m, (ENVIRON["SG_ALIAS"] != "" ? " (alias of " ENVIRON["SG_ALIAS"] ")" : ""), NR_, TOTAL
   if (MODE != ENVIRON["SG_ASKED"]) printf ", mode %s (asked %s)", MODE, ENVIRON["SG_ASKED"]
   printf "\n"
   for (i = 1; i <= NR_; i++) {
@@ -2195,7 +2316,19 @@ search_builtin() {
   sb_mods=$(module_names 2>/dev/null)
   if [ "$sb_modset" -eq 1 ]; then
     [ -n "$sb_module" ] || search_refuse "--module= names no module"
-    printf '%s\n' "$sb_mods" | grep -qxF -- "$sb_module" || search_refuse "unknown module $sb_module"
+    if ! printf '%s\n' "$sb_mods" | grep -qxF -- "$sb_module"; then
+      # an origin name: the one module installed under an alias of it answers for it
+      sb_by=""
+      for sb_c in $sb_mods; do
+        sb_o=$(module_alias_of "$sb_c")
+        [ "${sb_o%% *}" = "$sb_module" ] && sb_by="$sb_by${sb_by:+ }$sb_c"
+      done
+      case "$sb_by" in
+        "") search_refuse "unknown module $sb_module" ;;
+        *" "*) search_refuse "module $sb_module is installed under several aliases ($sb_by); name one" ;;
+      esac
+      sb_module=$sb_by
+    fi
     verb_exists "$(module_dir "$sb_module")" search 2>/dev/null || search_refuse "module $sb_module carries no search verb"
     sb_mods=$sb_module
   fi
@@ -2217,9 +2350,13 @@ search_builtin() {
 '
   for sb_m in $sb_mods; do
     sb_md=$(module_dir "$sb_m") || continue
+    sb_alias=$(module_alias_of "$sb_m")
+    sb_alias=${sb_alias%% *}
+    sb_akey=""
+    [ -z "$sb_alias" ] || sb_akey="\"alias\":\"$sb_alias\","
     if ! verb_exists "$sb_md" search 2>/dev/null; then
       sb_none=$((sb_none + 1)); sb_nnames="$sb_nnames${sb_nnames:+, }$sb_m"
-      sb_groups="$sb_groups${sb_groups:+,}{\"module\":\"$sb_m\",\"status\":\"not searched\"}"
+      sb_groups="$sb_groups${sb_groups:+,}{\"module\":\"$sb_m\",$sb_akey\"status\":\"not searched\"}"
       continue
     fi
     sb_searched=$((sb_searched + 1))
@@ -2237,12 +2374,12 @@ search_builtin() {
     fi
     if [ -n "$sb_reason" ]; then
       sb_failed=$((sb_failed + 1)); sb_fnames="$sb_fnames${sb_fnames:+, }$sb_m"
-      sb_g=$(printf '%s' "$sb_reason" | SG_MODULE=$sb_m awk '{ r = r $0 } END { n = split(r, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; n = split(o, p, /"/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\"" p[i]; gsub(/[[:cntrl:]]/, " ", o); printf "{\"module\":\"%s\",\"status\":\"failed\",\"error\":\"%s\"}", ENVIRON["SG_MODULE"], o }')
+      sb_g=$(printf '%s' "$sb_reason" | SG_MODULE=$sb_m SG_AKEY=$sb_akey awk '{ r = r $0 } END { n = split(r, p, /\\/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\\" p[i]; n = split(o, p, /"/); o = (n ? p[1] : ""); for (i = 2; i <= n; i++) o = o "\\" "\"" p[i]; gsub(/[[:cntrl:]]/, " ", o); printf "{\"module\":\"%s\",%s\"status\":\"failed\",\"error\":\"%s\"}", ENVIRON["SG_MODULE"], ENVIRON["SG_AKEY"], o }')
       sb_groups="$sb_groups${sb_groups:+,}$sb_g"
-      sb_text="$sb_text$sb_m: failed: $sb_reason$sb_nl"
+      sb_text="$sb_text$sb_m${sb_alias:+ (alias of $sb_alias)}: failed: $sb_reason$sb_nl"
     else
-      sb_groups="$sb_groups${sb_groups:+,}$(SG_JSON=1 SG_MODULE=$sb_m SG_ASKED=$sb_mode awk "$search_group_awk" < "$SC_ROOT/flat")"
-      sb_text="$sb_text$(SG_MODULE=$sb_m SG_ASKED=$sb_mode awk "$search_group_awk" < "$SC_ROOT/flat")$sb_nl"
+      sb_groups="$sb_groups${sb_groups:+,}$(SG_JSON=1 SG_MODULE=$sb_m SG_ALIAS=$sb_alias SG_ASKED=$sb_mode awk "$search_group_awk" < "$SC_ROOT/flat")"
+      sb_text="$sb_text$(SG_MODULE=$sb_m SG_ALIAS=$sb_alias SG_ASKED=$sb_mode awk "$search_group_awk" < "$SC_ROOT/flat")$sb_nl"
       [ -s "$SC_ROOT/err" ] && sb_errs="$sb_errs$(awk -v m="$sb_m" '{ print m ": " $0 }' "$SC_ROOT/err")$sb_nl"
     fi
     rm -rf "$SC_ROOT" "$root/.contexture/tmp/verb.$$.search-$search_n" 2>/dev/null

@@ -83,7 +83,7 @@
     copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
     set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
     compose the law layer: `.contexture/ctx compose`; it builds `AGENTS.generated.md` at the root from the core source and the installed modules, and the loader verifies or recomposes it at every boot
-    install the chosen packages on the human's go: `.contexture/ctx package install git` lands the git package's `@git` section and boot ground clause; any other chosen package installs the same way
+    install the chosen packages on the human's go: `.contexture/ctx package install git` lands the git package's `@git` section and boot ground clause; any other chosen package installs the same way; each install writes its `package.<name>:` line into .contexture/config, the declaration a fresh clone installs from with one bare `.contexture/ctx package install` on the human's go (boot never installs from it), and `.contexture/ctx package list` shows the declared against the installed
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
@@ -91,6 +91,7 @@
       per confirmed plan: ignore or track .contexture/units/ (and the deprecated .contexture/sessions/ while units remain in it) and .contexture/rhythms/ based on team choice
       always ignore the composed law layer with the root-anchored line /AGENTS.generated.md (built at install and boot, never tracked, never edited); a repository that ignored it at its old place replaces its .contexture/laws/AGENTS.generated.md ignore line with /AGENTS.generated.md once the update compose has removed the legacy file (update step 9, before the step 10 review)
       always ignore the scratch drawer with the line .contexture/tmp/, where the engine stages its own scratch at every call (update step 9)
+      track the workspace configuration .contexture/config: its package lines declare the installs a clone reproduces
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
       whitelist shared files explicitly:

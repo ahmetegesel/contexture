@@ -1,6 +1,10 @@
 #!/bin/sh
 # ctx-hook: load-end
-# the unit module's load-end point: nudge the unit's in-progress tasks
+# the unit module's load-end point: nudge the unit's in-progress tasks, through the module's
+# installed name (its folder's), so an install under an alias nudges too
 [ -n "${CTX_UNIT:-}" ] || exit 0
 [ -x "${CTX_BIN:-}" ] || exit 0
-exec "$CTX_BIN" docs nudge "$CTX_UNIT"
+m=${0%/*}
+m=${m%/*}
+m=${m##*/}
+exec "$CTX_BIN" "$m" nudge "$CTX_UNIT"

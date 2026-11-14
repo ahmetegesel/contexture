@@ -3,7 +3,9 @@
 # package installer runs it after the package overlay and the installed-state
 # record, with CTX_ROOT and CTX_PACKAGE_ROOT exported and cwd at the workspace
 # root. It seeds the corpus conventions doc once; an existing doc is never
-# overwritten. A failed seed fails the install, never a silent skip.
+# overwritten. A failed seed fails the install, never a silent skip. The verbs are
+# reached by the module's installed name, its folder's, so an install under an alias
+# seeds through the alias.
 set -u
 
 if [ -z "${CTX_ROOT:-}" ]; then
@@ -15,13 +17,15 @@ if [ -z "${CTX_PACKAGE_ROOT:-}" ]; then
   exit 2
 fi
 ctx=${CTX_BIN:-$CTX_ROOT/.contexture/ctx}
+module=${0%/*}
+module=${module##*/}
 seed=$CTX_PACKAGE_ROOT/docs/workspace/conventions.md
 if [ ! -f "$seed" ]; then
   echo "docs install: seed not found: $seed" >&2
   exit 2
 fi
 
-"$ctx" docs query workspace conventions >/dev/null 2>&1
+"$ctx" "$module" query workspace conventions >/dev/null 2>&1
 qrc=$?
 case "$qrc" in
   0)
@@ -36,7 +40,7 @@ case "$qrc" in
     ;;
 esac
 
-if "$ctx" docs write workspace conventions < "$seed"; then
+if "$ctx" "$module" write workspace conventions < "$seed"; then
   echo 'docs install: seeded workspace conventions'
 else
   rc=$?

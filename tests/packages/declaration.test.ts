@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { exec, type Run } from '../support/exec';
@@ -146,5 +146,65 @@ describe.concurrent('the package declaration in the workspace configuration', ()
     writeFileSync(conf(sb), 'package.pkg-z: ./catalog/pkg-z --as=z=y\nstorage.driver: posix\n');
     const ok = await exec('.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb });
     expect([ok.code, ok.stdout.trim()]).toEqual([0, expect.stringMatching(/\/drivers\/posix\/driver$/)]);
+  });
+});
+
+describe.concurrent('ctx package list: the declared packages against the installed ones', () => {
+  it('[the-engine-r22] names nothing declared or installed in one line rc 0', async () => {
+    const r = await ctx(sandbox(), ['package', 'list']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'package list: no package is declared or installed\n', '']);
+  });
+
+  it('[the-engine-r22] lists versions, modules, and aliases in name order and flags the three drifts, read only, its text naming no storage or implementation path', async () => {
+    const sb = sandbox();
+    pkg(sb, 'pkg-ok', 'okmod');
+    pkg(sb, 'pkg-alias', 'memo');
+    pkg(sb, 'pkg-stray', 'stray');
+    pkg(sb, 'pkg-bumped', 'bumped');
+    pkg(sb, 'pkg-old', 'old');
+    for (const args of [['catalog/pkg-ok'], ['--as=memo=memo2', 'catalog/pkg-alias'], ['catalog/pkg-stray'], ['catalog/pkg-bumped'], ['catalog/pkg-old']]) {
+      expect((await ctx(sb, ['package', 'install', ...args])).code).toBe(0);
+    }
+    writeManifest(join(sb, 'catalog/pkg-bumped'), '1.1.0');
+    const rec = recordPath(sb, 'pkg-old');
+    writeFileSync(rec, readFileSync(rec, 'utf8').split('\n').filter((l) => !l.startsWith('module ')).join('\n'));
+    writeFileSync(conf(sb), confText(sb).split('\n').filter((l) => !l.startsWith('package.pkg-stray:')).join('\n') + 'package.pkg-ghost: ./catalog/pkg-ghost\n');
+    const before = treeState(sb);
+    const r = await ctx(sb, ['package', 'list']);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toBe([
+      'pkg-alias: installed 1.0.0, declared; modules: memo2 (alias of memo)',
+      'pkg-bumped: installed 1.0.0, declared, the declared source holds 1.1.0 (drift); modules: bumped',
+      'pkg-ghost: declared, not installed (drift)',
+      'pkg-ok: installed 1.0.0, declared; modules: okmod',
+      'pkg-old: installed 1.0.0, declared; modules: old',
+      'pkg-stray: installed 1.0.0, not declared (drift); modules: stray',
+      'package list: 5 declared, 5 installed, 3 drift',
+      '',
+    ].join('\n'));
+    expect(r.stdout).not.toMatch(/\.contexture|\.state|\.files/);
+    expect(treeState(sb)).toBe(before);
+  });
+
+  it('[the-engine-r22] an install record area or record that exists but cannot be read refuses rc 2 with one line naming no path, never answering that nothing is installed', async () => {
+    const sb = sandbox();
+    pkg(sb, 'pkg-ok', 'okmod');
+    expect((await ctx(sb, ['package', 'install', 'catalog/pkg-ok'])).code).toBe(0);
+    const state = join(sb, '.contexture/extensions/.state');
+    chmodSync(state, 0o000);
+    try {
+      const r = await ctx(sb, ['package', 'list']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([2, '', 'ctx: package list: the install record area cannot be read\n']);
+    } finally {
+      chmodSync(state, 0o755);
+    }
+    chmodSync(recordPath(sb, 'pkg-ok'), 0o000);
+    try {
+      const r = await ctx(sb, ['package', 'list']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([2, '', "ctx: package list: the install record of 'pkg-ok' cannot be read\n"]);
+    } finally {
+      chmodSync(recordPath(sb, 'pkg-ok'), 0o644);
+    }
+    expect((await ctx(sb, ['package', 'list'])).code).toBe(0);
   });
 });
