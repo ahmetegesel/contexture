@@ -54,7 +54,7 @@ case "$verb" in
     [ $# -eq 1 ] || notes_refuse 'usage: ctx notes put <owner>/<slug> < text'
     notes_key "$1"
     notes_require
-    store_put notes "$1" >/dev/null
+    store_put "$1" >/dev/null
     rc=$?
     [ "$rc" -eq 0 ] || exit "$rc"
     printf 'saved %s\n' "$1"
@@ -63,12 +63,12 @@ case "$verb" in
     [ $# -eq 1 ] || notes_refuse 'usage: ctx notes show <owner>/<slug>'
     notes_key "$1"
     notes_require
-    store_get notes "$1"
+    store_get "$1"
     ;;
   keys)
     [ $# -eq 0 ] || notes_refuse 'usage: ctx notes keys'
     notes_require
-    store_list notes
+    store_list
     ;;
   *)
     printf 'notes: unknown verb '\''%s'\'' (ERR_INVALID_ARGUMENT)\n' "$verb" >&2

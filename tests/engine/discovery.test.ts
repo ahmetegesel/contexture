@@ -1,7 +1,9 @@
-import { rmSync } from 'node:fs';
+import { readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { shVerb, writeModule } from '../support/modules';
 import type { Run } from '../support/exec';
+import { stage } from '../support/stage';
 import { run } from '../support/unit';
 import { engineSandbox, listed, verbs, writeManifests } from './fixture';
 
@@ -36,6 +38,39 @@ describe.concurrent('discovery over both module roots', () => {
     expect(help.stderr).toContain('skipping extension module good: collides with a workspace module');
     for (const builtin of ['unit', 'lane', 'rhythm']) expect(help.stderr).toContain(`skipping extension module ${builtin}: collides with a builtin`);
     expect(help.stderr.match(/reserved name refused \(shadow\): load/g)).toHaveLength(2);
+  });
+
+  it('CT-D1 [the-engine-r1, modules-r1, modules-r19]: a module name holding an uppercase letter warns in each root with the lowercase rule and never lists, and the compose leaves its laws out', async () => {
+    const sb = stage('posix', 'discovery-upper');
+    writeModule(sb, 'modules', 'Upper', { manifest: '# summary: an uppercase fixture module\n', files: { 'scripts/hi': shVerb('say hi', 'echo hi'), laws: '@append @laws\n  upper-law: an uppercase module law\n' } });
+    writeModule(sb, 'extensions', 'ExtUpper', { manifest: '# summary: an uppercase extension module\n', files: { 'scripts/hi': shVerb('say hi', 'echo hi') } });
+    const r = await run(sb, ['help']);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain('skipping module Upper: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit\n');
+    expect(r.stderr).toContain('skipping module ExtUpper: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit\n');
+    expect(listed(r.stdout)).not.toContain('Upper');
+    expect(r.stdout).not.toContain('an uppercase');
+    expect((await run(sb, ['Upper', 'hi'])).code).toBe(1);
+    const compose = await run(sb, ['compose']);
+    expect(compose.code).toBe(0);
+    expect(readFileSync(join(sb, 'AGENTS.generated.md'), 'utf8')).not.toContain('upper-law');
+  });
+
+  it('CT-D1 [the-engine-r1, modules-r1, modules-r19]: a module name starting with an underscore or a dash warns in each root with the module name rule and never lists, and the compose leaves its laws out', async () => {
+    const sb = stage('posix', 'discovery-lead');
+    writeModule(sb, 'modules', '_lead', { manifest: '# summary: a leading underscore fixture module\n', files: { 'scripts/hi': shVerb('say hi', 'echo hi'), laws: '@append @laws\n  lead-law: a leading underscore module law\n' } });
+    writeModule(sb, 'extensions', '-dash', { manifest: '# summary: a leading dash extension module\n', files: { 'scripts/hi': shVerb('say hi', 'echo hi'), laws: '@append @laws\n  dash-law: a leading dash module law\n' } });
+    const r = await run(sb, ['help']);
+    expect(r.code).toBe(0);
+    expect(r.stderr).toContain('skipping module _lead: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit\n');
+    expect(r.stderr).toContain('skipping module -dash: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit\n');
+    expect(r.stdout).not.toContain('a leading');
+    expect((await run(sb, ['_lead', 'hi'])).code).toBe(1);
+    const compose = await run(sb, ['compose']);
+    expect(compose.code).toBe(0);
+    const generated = readFileSync(join(sb, 'AGENTS.generated.md'), 'utf8');
+    expect(generated).not.toContain('lead-law');
+    expect(generated).not.toContain('dash-law');
   });
 
   it.each(['compose', 'package', 'search'])('CT-XR1 [the-engine-r2, modules-r6]: a valid module named %s warns in each root and never lists, since the engine builtin holds the name', async (name) => {

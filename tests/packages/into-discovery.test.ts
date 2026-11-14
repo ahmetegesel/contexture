@@ -20,7 +20,7 @@ describe.concurrent('package-install into discovery: the engine, the resolver, a
   it('[the-engine-r1, modules-r14] the installed module lists beside the base lane module and its verb dispatches', async () => {
     const sb = sandbox();
     const pa = newPkg(sb, 'pkga');
-    addModule(pa, 'alpha', 'docs');
+    addModule(pa, 'alpha', true);
     expect((await installPkg(sb, pa)).code).toBe(0);
     const help = (await ctx(sb, 'help')).stdout;
     expect(help).toContain('the alpha fixture module');

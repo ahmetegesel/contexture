@@ -7,7 +7,7 @@ import { exec, type Run } from '../support/exec';
 import { stage } from '../support/stage';
 import { answerLine } from '../support/wire';
 
-const PROBE = 'namespace: probe\nroot: probe-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n';
+const PROBE = 'root: probe-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n';
 
 function probeStage(): string {
   const sb = stage('posix', 'store-smoke');
@@ -23,21 +23,18 @@ const op = (sb: string, name: string, args: readonly string[], input = ''): Prom
 describe.concurrent('the bare base: the store-data owner scan over both module roots', () => {
   it("[modules-r10] an extension module's data file answers its five validated fields", async () => {
     const sb = probeStage();
-    dataFile(sb, 'extensions', 'extprobe', 'namespace: extprobe\nroot: ext-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+    dataFile(sb, 'extensions', 'extprobe', 'root: ext-data\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
     const r = await storeData(sb, 'extprobe');
     expect({ code: r.code, stderr: r.stderr }).toEqual({ code: 0, stderr: '' });
     expect(r.stdout.split('\n').slice(0, 5)).toEqual(['extprobe', 'ext-data', '.txt', '<a>/<b>', 'false']);
   });
 
-  it('[modules-r10, the-engine-p4] a namespace declared in both module roots refuses rc1 naming both owners', async () => {
+  it('[modules-r10, modules-r14] a name both module roots hold answers the workspace module\'s data file, as discovery resolves it', async () => {
     const sb = probeStage();
-    dataFile(sb, 'extensions', 'probe2', 'namespace: probe\nroot: ext-probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: true\n');
+    dataFile(sb, 'extensions', 'probe', 'root: ext-probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: true\n');
     const r = await storeData(sb, 'probe');
-    expect({ code: r.code, stdout: r.stdout, stderr: r.stderr }).toEqual({
-      code: 1,
-      stdout: '',
-      stderr: "store-data: namespace 'probe' is declared by more than one module: probe probe2\n",
-    });
+    expect({ code: r.code, stderr: r.stderr }).toEqual({ code: 0, stderr: '' });
+    expect(r.stdout.split('\n').slice(0, 5)).toEqual(['probe', 'probe-data', '.txt', '<a>/<b>', 'false']);
   });
 
   it('[modules-r10] the stage carries no extension root, so the owner scan reads silent', async () => {

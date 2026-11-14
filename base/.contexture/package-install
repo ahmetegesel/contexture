@@ -28,7 +28,7 @@
 # a path another package recorded; a module name against a builtin (unit,
 # run, lane, rhythm), a workspace module, or a reserved name; a driver name against the
 # core posix driver or a driver that already resolves ahead of the extension
-# root; a duplicate namespace; a malformed module manifest; a driver part
+# root; a malformed module manifest; a driver part
 # without an executable.
 # A re-install of this package's recorded files is an update: changed files
 # update, files the new source drops are removed when unchanged and preserved
@@ -88,22 +88,6 @@ other_has_prefix() {
     fi
   done
   return 1
-}
-
-data_namespace() {
-  awk '
-    /^[[:space:]]*#/ { next }
-    {
-      k = $0
-      sub(/:.*/, "", k)
-      gsub(/[[:space:]]/, "", k)
-      if (k != "namespace") next
-      v = $0
-      sub(/^[^:]*:[[:space:]]*/, "", v)
-      sub(/[[:space:]]*$/, "", v)
-      print v
-      exit
-    }' "$1"
 }
 
 [ $# -eq 1 ] || { err "usage: package-install <package-root>"; exit 1; }
@@ -237,13 +221,8 @@ fi
 
 while IFS= read -r mname; do
   case "$mname" in
-    ""|.*) die 1 "malformed module name '$mname'" ;;
-  esac
-  case "$mname" in
-    *[!A-Za-z0-9._-]*) die 1 "malformed module name '$mname' (letters, digits, dot, underscore, hyphen)" ;;
-  esac
-  case "$mname" in
-    _hooks|_module|_package|_reserved|_builtin) die 1 "malformed module name '$mname' (an engine-private name)" ;;
+    ""|[!abcdefghijklmnopqrstuvwxyz0123456789]*|*[!abcdefghijklmnopqrstuvwxyz0123456789._-]*)
+      die 1 "malformed module name '$mname': a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit" ;;
   esac
   if "$ctx_bin" _builtin "$mname" >/dev/null 2>&1; then
     die 1 "module name '$mname' collides with a builtin"
@@ -309,29 +288,6 @@ while IFS= read -r dname; do
     [ -x "$payload_root/storage/drivers/$dname/driver" ] || die 1 "driver '$dname' has no executable at storage/drivers/$dname/driver"
   fi
 done < "$scratch/drivers"
-
-: > "$scratch/ns_seen"
-while IFS= read -r mname; do
-  df=$payload_root/modules/$mname/data
-  [ -f "$df" ] || continue
-  ns=$(data_namespace "$df")
-  [ -n "$ns" ] || die 1 "module '$mname' declares no namespace in its data file"
-  if grep -Fqx "$ns" "$scratch/ns_seen" 2>/dev/null; then
-    die 1 "namespace '$ns' is declared by more than one module in this package"
-  fi
-  printf '%s\n' "$ns" >> "$scratch/ns_seen"
-  for _df in "$ws_root"/.contexture/modules/*/data "$ext_root"/modules/*/data; do
-    [ -f "$_df" ] || continue
-    _rel_ws=${_df#"$ws_root"/}
-    record_has "$_rel_ws" && continue
-    _ns=$(data_namespace "$_df")
-    [ -n "$_ns" ] || continue
-    [ "$_ns" = "$ns" ] || continue
-    _owner=${_df%/*}
-    _owner=${_owner##*/}
-    die 1 "namespace '$ns' is already declared by module '$_owner' ($_rel_ws)"
-  done
-done < "$scratch/modules"
 
 : > "$scratch/newpaths"
 while IFS= read -r rel; do

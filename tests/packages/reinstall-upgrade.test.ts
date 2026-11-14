@@ -9,7 +9,7 @@ import { put } from '../support/tree';
 async function installed(): Promise<{ sb: string; pa: string }> {
   const sb = stage('posix', 'pkg-upgrade');
   const pa = newPkg(sb, 'pkga');
-  addModule(pa, 'alpha', 'docs');
+  addModule(pa, 'alpha', true);
   addFile(pa, 'rhythms/alpha.md', 'the alpha rhythm');
   expect((await installPkg(sb, pa)).code).toBe(0);
   return { sb, pa };

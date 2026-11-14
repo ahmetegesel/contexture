@@ -10,7 +10,7 @@ import type { Run } from '../support/exec';
 import { batchPayload, listAnswer, store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
-const LEGACY = 'namespace: legacy\nroot: new-root\nfallback_root: old-root\nsuffix: .md\nkey: <u>/<path...>\n';
+const LEGACY = 'root: new-root\nfallback_root: old-root\nsuffix: .md\nkey: <u>/<path...>\n';
 const notice = (fn: string) => `${fn}: notice: namespace 'legacy' was read from its deprecated fallback root\n`;
 
 function plant(sb: string, rel: string, text: string): void {
@@ -188,7 +188,7 @@ describe('the posix fallback root: reads after the root, writes to the root afte
   it('[the-engine-r-b3r6t] store.promote answers none when the fallback holds nothing for the prefix or the namespace declares no fallback', async () => {
     const sb = fresh(snap);
     plant(sb, 'new-root/a/state.md', 'new a\n');
-    dataFile(sb, 'modules', 'plain', 'namespace: plain\nkey: <u>/<path...>\n');
+    dataFile(sb, 'modules', 'plain', 'key: <u>/<path...>\n');
     const s = store(sb, 'posix');
     expect(answer(await s.op('store.promote', ['legacy', 'a/']), 'store.promote')).toEqual({ namespace: 'legacy', prefix: 'a/', state: 'none' });
     expect(answer(await s.op('store.promote', ['plain', 'a/']), 'store.promote')).toEqual({ namespace: 'plain', prefix: 'a/', state: 'none' });

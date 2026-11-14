@@ -20,12 +20,12 @@ export function newPkg(sb: string, name: string): string {
   return p;
 }
 
-export function addModule(pkg: string, name: string, namespace?: string): void {
+export function addModule(pkg: string, name: string, withData = false): void {
   const dir = join(pkg, '.contexture/extensions/modules', name);
   put(join(dir, 'module'), `# summary: the ${name} fixture module\n# version: 1.0.0\n# description:\n# A fixture module for the package overlay suite.\n`);
   put(join(dir, 'scripts/hello'), `#!/bin/sh\n# summary: say hello from ${name}\necho "hello from ${name}"\n`, 0o755);
   put(join(dir, 'laws'), `@append @laws\n  ${name}-law: a fixture law\n`);
-  if (namespace) put(join(dir, 'data'), `namespace: ${namespace}\nkey: <a>/<b>\n`);
+  if (withData) put(join(dir, 'data'), 'key: <a>/<b>\n');
 }
 
 export function addFile(pkg: string, rel: string, text: string, mode = 0o644): void {

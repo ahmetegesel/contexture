@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { dataFile } from '../support/data-file';
+import { DOCS_SHAPED, dataFile } from '../support/data-file';
 import { RECORD_ROOT, namespaceLock } from '../support/drawer';
 import { holdLock, sleepShim } from '../support/locks';
 import { ROOT_USER, chmodPlant, pathPlant } from '../support/plants';
@@ -185,21 +185,36 @@ for (const driver of DRIVERS) {
     describe('module data files through the driver', () => {
       it('[modules-r10, the-engine-r19] serves a second module\'s data file and filters the list by its pattern', async () => {
         const sb = fresh(empty);
-        dataFile(sb, 'modules', 'probe', 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+        dataFile(sb, 'modules', 'probe', 'root: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
         const s = store(sb, driver);
         expect((await s.put('probe', 'x/y', 'x\n')).stdout).toBe('{"namespace":"probe","key":"x/y","op":"write"}\n');
         expect((await s.list('probe')).stdout).toBe(listAnswer('probe', ['x/y']));
       });
 
+      it('[modules-r10, modules-r15, the-engine-r-cj0ey] an aliased docs beside a plain docs keeps two stores apart: the alias stores under its installed name, never under the root its data file declares', async () => {
+        const sb = fresh(empty);
+        dataFile(sb, 'extensions', 'docs2', DOCS_SHAPED);
+        mkdirSync(join(sb, '.contexture/extensions/.state'), { recursive: true });
+        writeFileSync(join(sb, '.contexture/extensions/.state/docs-pro.files'), 'package docs-pro\nversion 1.0.0\nkind feature\nmodule docs2 docs\n');
+        const s = store(sb, driver);
+        answer(await s.put('docs', 'workspace/a', 'plain\n'), 'store.put');
+        answer(await s.put('docs2', 'workspace/a', 'aliased\n'), 'store.put');
+        expect((await s.get('docs', 'workspace/a')).stdout).toBe('plain\n');
+        expect((await s.get('docs2', 'workspace/a')).stdout).toBe('aliased\n');
+        answer(await s.del('docs2', 'workspace/a'), 'store.delete');
+        expect((await s.list('docs2')).stdout).toBe(listAnswer('docs2', []));
+        expect((await s.list('docs')).stdout).toBe(listAnswer('docs', ['workspace/a']));
+      });
+
       it('[modules-r10] maps the reader\'s refusals: a malformed declaration rc 1, an undeclared namespace not found', async () => {
         const sb = fresh(empty);
-        dataFile(sb, 'modules', 'probe', 'namespace: probe\nkey: <a>/<b>\nmode: fast\n');
+        dataFile(sb, 'modules', 'probe', 'key: <a>/<b>\nmode: fast\n');
         refused(await store(sb, driver).list('probe'), 'store.list', 1, 'ERR_INVALID_ARGUMENT', "unknown field 'mode' in the data file");
       });
 
       it('[modules-r10, the-engine-r19] serves the minimum declaration with its defaults and refuses its change log', async () => {
         const sb = fresh(empty);
-        dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
+        dataFile(sb, 'modules', 'minimal', 'key: <a>/<b>\n');
         const s = store(sb, driver);
         expect((await s.put('minimal', 'a/b', 'x\n')).stdout).toBe('{"namespace":"minimal","key":"a/b","op":"write"}\n');
         expect((await s.get('minimal', 'a/b')).stdout).toBe('x\n');

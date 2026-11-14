@@ -335,8 +335,8 @@ it walk below runs every one of these.
   foot of the module's private grammar asset `scripts/doc.grammar` (the engine
   resolves it beside the module), the result audited over its whole repo, then
   the store.
-  The whole pipeline holds the storage core library's lock of the docs namespace
-  (`lib_lock docs`), from before its first read (the existence check or the doc
+  The whole pipeline holds the storage core library's lock of the module's own
+  namespace (`lib_lock`, the namespace found from the calling script), from before its first read (the existence check or the doc
   read) to after its last store call, the multi-doc verbs and `remove` included:
   two writers of one doc both land and two creators of one slug never both pass
   the existence check, where before the later put silently dropped the earlier

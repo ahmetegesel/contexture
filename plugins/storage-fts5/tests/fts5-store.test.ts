@@ -27,7 +27,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       }, 'fts5', 'fts5-docs'),
       seed(async (sb) => {
         dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
-        dataFile(sb, 'modules', 'exactonly', 'namespace: exactonly\nroot: exact-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+        dataFile(sb, 'modules', 'exactonly', 'root: exact-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
         const s = store(sb, 'fts5');
         for (const ns of Object.keys(SEARCH_DATA)) {
           dataFile(sb, 'modules', ns, SEARCH_DATA[ns]);
@@ -137,7 +137,7 @@ describe.skipIf(!fts5Available())('the fts5 store', { concurrent: true }, () => 
       const { sb, s } = await logged();
       refused(await s.op('store.changes', ['docs'], 'head=zz\n'), 'store.changes', 1, 'ERR_INVALID_ARGUMENT', "a head is a commit id or none: 'zz'");
       refused(await s.op('store.changes', ['docs'], 'what=1\n'), 'store.changes', 1, 'ERR_INVALID_ARGUMENT', "unknown payload line 'what=1' (head=<sha> lines only)");
-      dataFile(sb, 'modules', 'probe', 'namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+      dataFile(sb, 'modules', 'probe', 'root: probe-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
       refused(await s.changes('probe'), 'store.changes', 1, 'ERR_CAPABILITY_UNSUPPORTED', "the namespace 'probe' declares no change log (changes: false)");
     });
 

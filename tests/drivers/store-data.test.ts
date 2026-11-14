@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs';
+import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile, moduleDir } from '../support/data-file';
@@ -33,7 +33,7 @@ async function refusal(sb: string, ns: string, rc: number, reason: string): Prom
   expect(r.code).toBe(rc);
 }
 
-const probe = (fields: string) => `namespace: probe\nroot: probe-root\nsuffix: .txt\nkey: <a>/<b>\n${fields}`;
+const probe = (fields: string) => `root: probe-root\nsuffix: .txt\nkey: <a>/<b>\n${fields}`;
 
 describe.concurrent('store-data, the data file reader', () => {
   it('[modules-r10] answers a docs-shaped declaration from the extension root on eleven lines, the data file path among them', async () => {
@@ -43,23 +43,83 @@ describe.concurrent('store-data, the data file reader', () => {
     ]);
   });
 
-  it('[modules-r10] a declaration of namespace and key alone takes the defaults: root the namespace, an empty suffix, changes false', async () => {
+  it('[modules-r10] a declaration of a key pattern alone takes the defaults: the namespace the folder\'s name, the root the namespace, an empty suffix, changes false', async () => {
     const sb = workspace();
-    const file = dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
+    const file = dataFile(sb, 'modules', 'minimal', 'key: <a>/<b>\n');
     expect(await answerLines(sb, 'minimal')).toEqual(['minimal', 'minimal', '', '<a>/<b>', 'false', file, '', '', '', 'key', 'line']);
   });
 
-  it('[modules-r10, the-engine-p4] a second module declaring the namespace refuses, naming both owners', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] the namespace is the module folder\'s name: a folder\'s data file serves its own name and never another', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'probe', probe('changes: false\n'));
-    dataFile(sb, 'modules', 'probe2', probe('changes: true\n'));
-    await refusal(sb, 'probe', 1, "namespace 'probe' is declared by more than one module: probe probe2");
+    const file = dataFile(sb, 'modules', 'probe2', probe('changes: true\n'));
+    expect(await answerLines(sb, 'probe2')).toEqual(['probe2', 'probe-root', '.txt', '<a>/<b>', 'true', file, '', '', '', 'key', 'line']);
+    await refusal(sb, 'probe', 3, "namespace 'probe' is declared by no module data file");
   });
 
-  it('[modules-r10, the-engine-p4] a declaration duplicated across the workspace and the extension roots refuses', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] a namespace line refuses as an unknown field naming the fix', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'docs-copy', DOCS_SHAPED);
-    await refusal(sb, 'docs', 1, "namespace 'docs' is declared by more than one module: docs-copy docs");
+    dataFile(sb, 'modules', 'probe', `namespace: probe\n${probe('')}`);
+    await refusal(sb, 'probe', 1, "unknown field 'namespace' in the data file: the namespace is the module folder's name, so remove the namespace line");
+  });
+
+  it('[modules-r10, modules-r14] a workspace module shadows an extension module of its name, as discovery resolves the name', async () => {
+    const sb = workspace();
+    const file = dataFile(sb, 'modules', 'docs', 'root: ws-docs\nkey: <repo>/<slug>\n');
+    expect(await answerLines(sb, 'docs')).toEqual(['docs', 'ws-docs', '', '<repo>/<slug>', 'false', file, '', '', '', 'key', 'line']);
+  });
+
+  const record = (sb: string, pkg: string, lines: string) => {
+    mkdirSync(join(sb, '.contexture/extensions/.state'), { recursive: true });
+    writeFileSync(join(sb, '.contexture/extensions/.state', `${pkg}.files`), `package ${pkg}\nversion 1.0.0\nkind feature\n${lines}`);
+  };
+  const ROOTED = 'root: docs\nfallback_root: old-docs\nsuffix: .md\nkey: <repo>/<slug>\nchanges: true\n';
+
+  it('[modules-r10, modules-r15, the-engine-r-cj0ey] an extension module installed under an alias answers its namespace as the root and no fallback root: a declared root applies only under the module\'s own name', async () => {
+    const sb = workspace();
+    const file = dataFile(sb, 'extensions', 'docs2', ROOTED);
+    record(sb, 'docs-pro', 'module docs2 docs\nfile rw-r--r-- 1:1 .contexture/extensions/modules/docs2/data\n');
+    const aliased = await withFallback(sb, 'docs2');
+    expect([aliased.code, aliased.stderr]).toEqual([0, '']);
+    expect(aliased.stdout.split('\n').slice(0, 12)).toEqual(['docs2', 'docs2', '.md', '<repo>/<slug>', 'true', file, '', '', '', 'key', 'line', '']);
+    expect((await answerLines(sb, 'docs')).slice(0, 2)).toEqual(['docs', 'docs']);
+    expect((await listing(sb)).stdout).toBe('docs\tdocs\ndocs2\tdocs2\n');
+    const own = workspace();
+    dataFile(own, 'extensions', 'docs2', ROOTED);
+    record(own, 'docs-pro', 'module docs2 docs2\nmodule other docs\n');
+    const plain = await withFallback(own, 'docs2');
+    expect(plain.stdout.split('\n').slice(0, 2)).toEqual(['docs2', 'docs']);
+    expect(plain.stdout.split('\n')[11]).toBe('old-docs');
+    expect((await listing(own)).stdout).toBe('docs\tdocs\ndocs2\tdocs\told-docs\n');
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] a workspace module is never installed under an alias, so a record line never moves its declared root', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'shared', 'root: common\nkey: <a>\n');
+    record(sb, 'pkg', 'module shared other\n');
+    expect((await answerLines(sb, 'shared')).slice(0, 2)).toEqual(['shared', 'common']);
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] an install record area or record that exists but cannot be read refuses an extension module rc 2 naming no path, the listing leaving it out with one line, while a workspace module still answers', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'wsmod', 'key: <a>\n');
+    record(sb, 'docs-pro', 'module docs docs\n');
+    const state = join(sb, '.contexture/extensions/.state');
+    const line = "store-data: the install record area cannot be read, so the storage root of namespace 'docs' is unknown\n";
+    chmodSync(state, 0o000);
+    try {
+      expect(await storeData(sb, 'docs')).toMatchObject({ code: 2, stdout: '', stderr: line });
+      expect((await answerLines(sb, 'wsmod')).slice(0, 2)).toEqual(['wsmod', 'wsmod']);
+      const list = await listing(sb);
+      expect([list.code, list.stdout, list.stderr]).toEqual([0, 'wsmod\twsmod\n', `store-data: namespace 'docs': ${line.slice('store-data: '.length)}`]);
+    } finally {
+      chmodSync(state, 0o755);
+    }
+    chmodSync(join(state, 'docs-pro.files'), 0o000);
+    try {
+      expect(await storeData(sb, 'docs')).toMatchObject({ code: 2, stdout: '', stderr: line });
+    } finally {
+      chmodSync(join(state, 'docs-pro.files'), 0o644);
+    }
   });
 
   it('an undeclared namespace answers rc 3 and an absent module drawer rc 2', async () => {
@@ -74,22 +134,26 @@ describe.concurrent('store-data, the data file reader', () => {
   it.each([
     ['Bad!', "malformed namespace 'Bad!'"],
     ['', "malformed namespace ''"],
-  ])('a malformed namespace token %j refuses', async (ns, reason) => {
+    ['.hidden', "malformed namespace '.hidden'"],
+    ['..', "malformed namespace '..'"],
+    ['_lead', "malformed namespace '_lead'"],
+    ['-dash', "malformed namespace '-dash'"],
+  ])('[modules-r1, the-engine-r-cj0ey] a malformed namespace token %j refuses, the module name rule starting with a letter or digit', async (ns, reason) => {
     await refusal(workspace(), ns, 1, reason);
   });
 
   it.each([
     ['an unknown field', probe('mode: fast\nchanges: true\n'), "unknown field 'mode' in the data file"],
-    ['a root escaping the workspace', 'namespace: probe\nroot: ../outside\nsuffix: .txt\nkey: <a>/<b>\n', "malformed root '../outside' (a workspace-relative folder inside the workspace)"],
-    ['an absolute root', 'namespace: probe\nroot: /abs\nsuffix: .txt\nkey: <a>/<b>\n', "malformed root '/abs' (a workspace-relative folder inside the workspace)"],
-    ['a key without placeholders', 'namespace: probe\nkey: a/b\n', "malformed key pattern 'a/b' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"],
-    ['a non-final multi-segment placeholder', 'namespace: probe\nkey: <a>/<b...>/<c>\n', "malformed key pattern '<a>/<b...>/<c>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"],
+    ['a root escaping the workspace', 'root: ../outside\nsuffix: .txt\nkey: <a>/<b>\n', "malformed root '../outside' (a workspace-relative folder inside the workspace)"],
+    ['an absolute root', 'root: /abs\nsuffix: .txt\nkey: <a>/<b>\n', "malformed root '/abs' (a workspace-relative folder inside the workspace)"],
+    ['a key without placeholders', 'key: a/b\n', "malformed key pattern 'a/b' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"],
+    ['a non-final multi-segment placeholder', 'key: <a>/<b...>/<c>\n', "malformed key pattern '<a>/<b...>/<c>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)"],
     ['a bad changes flag', probe('changes: maybe\n'), "malformed changes flag 'maybe' (true or false)"],
     ['a duplicate search key', probe('format: text\nformat: json\n'), "duplicate field 'format' in the data file"],
     ['a document form without a rule', probe('search: documents\n'), 'the document-set search form takes at least one document rule'],
     ['a document form with a format', probe('search: documents\nformat: text\ndocument: <a>/<b> body document -\n'), 'the document-set search form takes no format or fields'],
     ['a document rule on the flat form', probe('search: flat\ndocument: <a>/<b> body document -\n'), 'a document rule needs the document-set search form'],
-    ['a three-token document rule', probe('changes: false\nsearch: documents\ndocument: <a>/<b> body document\n'), 'line 7: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)'],
+    ['a three-token document rule', probe('changes: false\nsearch: documents\ndocument: <a>/<b> body document\n'), 'line 6: a document rule takes the key pattern, the section, the entity type, and the head marker (or -)'],
     ['a modes line, the driver registering the modes', probe('search: flat\nmodes: exact\n'), "unknown field 'modes' in the data file: the search modes are the configured driver's registry, so remove the modes line"],
   ])('[modules-r10] %s refuses rc 1 naming the rule', async (_, text, reason) => {
     const sb = workspace();
@@ -97,27 +161,27 @@ describe.concurrent('store-data, the data file reader', () => {
     await refusal(sb, 'probe', 1, reason);
   });
 
-  it('[modules-r10] refuses a declaration with no key pattern, and finds none for a file with no namespace', async () => {
+  it('[modules-r10] refuses a declaration with no key pattern, and serves a key pattern alone under the folder\'s name', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'nokey', 'namespace: nokey\nroot: r\nsuffix: .txt\n');
-    dataFile(sb, 'modules', 'nonamespace', 'key: <a>/<b>\n');
+    dataFile(sb, 'modules', 'nokey', 'root: r\nsuffix: .txt\n');
+    const file = dataFile(sb, 'modules', 'keyonly', 'key: <a>/<b>\n');
     await refusal(sb, 'nokey', 1, 'the data file declares no key pattern');
-    await refusal(sb, 'nonamespace', 3, "namespace 'nonamespace' is declared by no module data file");
+    expect(await answerLines(sb, 'keyonly')).toEqual(['keyonly', 'keyonly', '', '<a>/<b>', 'false', file, '', '', '', 'key', 'line']);
   });
 
   it('[modules-r10] answers a variable-depth <unit>/<path...> declaration and refuses a non-final <unit...>', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'variable', `namespace: variable\nroot: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n`);
+    dataFile(sb, 'modules', 'variable', `root: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n`);
     expect((await answerLines(sb, 'variable')).slice(0, 5)).toEqual(['variable', RECORD_ROOT, '.md', '<unit>/<path...>', 'false']);
-    dataFile(sb, 'modules', 'variable', `namespace: variable\nroot: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit...>/<path>\nchanges: false\n`);
+    dataFile(sb, 'modules', 'variable', `root: ${RECORD_ROOT}\nsuffix: .md\nkey: <unit...>/<path>\nchanges: false\n`);
     await refusal(sb, 'variable', 1, "malformed key pattern '<unit...>/<path>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)");
   });
 
   it('[modules-r10] the optional flat search keys are accepted and answered on the schema lines', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'searchy', probe('changes: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\n'));
-    const lines = await answerLines(sb, 'probe');
-    expect(lines.slice(0, 5)).toEqual(['probe', 'probe-root', '.txt', '<a>/<b>', 'false']);
+    const lines = await answerLines(sb, 'searchy');
+    expect(lines.slice(0, 5)).toEqual(['searchy', 'probe-root', '.txt', '<a>/<b>', 'false']);
     expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line']);
   });
 
@@ -132,7 +196,7 @@ describe.concurrent('store-data, the data file reader', () => {
     expect([list.code, list.stdout, list.stderr]).toEqual([1, '', "store-data: unexpected argument 'extra' (store-data --list takes no argument)\n"]);
   });
 
-  const legacy = (fallback: string, root = 'new-root') => `namespace: legacy\nroot: ${root}\nfallback_root: ${fallback}\nsuffix: .md\nkey: <u>/<path...>\nsearch: documents\ndocument: <u>/state state session -\n`;
+  const legacy = (fallback: string, root = 'new-root') => `root: ${root}\nfallback_root: ${fallback}\nsuffix: .md\nkey: <u>/<path...>\nsearch: documents\ndocument: <u>/state state session -\n`;
   const withFallback = (sb: string, ns: string) => exec(STORE_DATA, [ns, '--with-fallback'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
 
   it('[modules-r10, the-engine-r-cj0ey] accepts a fallback root and keeps the plain answer byte identical: eleven lines, then the rules', async () => {
@@ -162,8 +226,8 @@ describe.concurrent('store-data, the data file reader', () => {
     ['a fallback root equal to the root', legacy('new-root'), "the fallback root 'new-root' equals the root"],
     ['a fallback root inside the root', legacy('new-root/old'), "the fallback root 'new-root/old' and the root 'new-root' are nested"],
     ['a root inside the fallback root', legacy('old', 'old/new'), "the fallback root 'old' and the root 'old/new' are nested"],
-    ['a fallback equal to the default root', 'namespace: legacy\nfallback_root: legacy\nkey: <u>\n', "the fallback root 'legacy' equals the root"],
-    ['a duplicate fallback root', 'namespace: legacy\nfallback_root: a\nfallback_root: b\nkey: <u>\n', "duplicate field 'fallback_root' in the data file"],
+    ['a fallback equal to the default root', 'fallback_root: legacy\nkey: <u>\n', "the fallback root 'legacy' equals the root"],
+    ['a duplicate fallback root', 'fallback_root: a\nfallback_root: b\nkey: <u>\n', "duplicate field 'fallback_root' in the data file"],
   ])('[modules-r10, the-engine-r-cj0ey] %s refuses rc 1 naming the rule', async (_, text, reason) => {
     const sb = workspace();
     dataFile(sb, 'modules', 'legacy', text);
@@ -180,29 +244,30 @@ describe.concurrent('store-data, the data file reader', () => {
 
   it('[modules-r10] the listing mode answers every valid declaration of both roots, namespace TAB root, sorted by namespace, the default root the namespace', async () => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
+    dataFile(sb, 'modules', 'minimal', 'key: <a>/<b>\n');
     dataFile(sb, 'modules', 'probe', probe('changes: false\n'));
-    dataFile(sb, 'extensions', 'alpha', 'namespace: alpha\nroot: .contexture/alpha-root\nkey: <a>\n');
+    dataFile(sb, 'extensions', 'alpha', 'root: .contexture/alpha-root\nkey: <a>\n');
     const r = await listing(sb);
     expect([r.code, r.stderr]).toEqual([0, '']);
     expect(r.stdout).toBe('alpha\t.contexture/alpha-root\ndocs\tdocs\nminimal\tminimal\nprobe\tprobe-root\n');
   });
 
-  it('[modules-r10, the-engine-p4] the listing leaves out a malformed declaration, a namespace token it cannot serve, a file with no namespace, and a doubly declared namespace, one stderr line each, rc 0', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] the listing leaves out a malformed declaration and a folder name that is no namespace, one stderr line each, and answers a name both roots hold once, the workspace module\'s, rc 0', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'probe', probe('mode: fast\n'));
-    dataFile(sb, 'modules', 'nonamespace', 'key: <a>/<b>\n');
-    dataFile(sb, 'modules', 'badtoken', 'namespace: Bad!\nkey: <a>\n');
-    dataFile(sb, 'modules', 'twice', 'namespace: twice\nkey: <a>\n');
-    dataFile(sb, 'extensions', 'twice2', 'namespace: twice\nkey: <a>\n');
+    dataFile(sb, 'modules', 'oldline', 'namespace: oldline\nkey: <a>\n');
+    dataFile(sb, 'modules', 'Bad!', 'key: <a>\n');
+    dataFile(sb, 'extensions', '_lead', 'key: <a>\n');
+    dataFile(sb, 'modules', 'twice', 'root: twice-ws\nkey: <a>\n');
+    dataFile(sb, 'extensions', 'twice', 'root: twice-ext\nkey: <a>\n');
     const r = await listing(sb);
     expect(r.code).toBe(0);
-    expect(r.stdout).toBe('docs\tdocs\n');
+    expect(r.stdout).toBe('docs\tdocs\ntwice\ttwice-ws\n');
     expect(r.stderr).toBe([
-      "store-data: the data file of module 'badtoken' declares a malformed namespace 'Bad!'",
-      "store-data: the data file of module 'nonamespace' declares no namespace",
+      "store-data: the module folder 'Bad!' names no namespace: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit",
+      "store-data: the module folder '_lead' names no namespace: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit",
+      "store-data: namespace 'oldline': unknown field 'namespace' in the data file: the namespace is the module folder's name, so remove the namespace line",
       "store-data: namespace 'probe': unknown field 'mode' in the data file",
-      "store-data: namespace 'twice' is declared by more than one module: twice twice2",
       '',
     ].join('\n'));
   });
@@ -219,7 +284,7 @@ describe.concurrent('store-data, the data file reader', () => {
   it('[modules-r10] the document-set form answers its rules after the eleven lines, one tab-separated rule per line', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'unitlike', [
-      'namespace: unitlike', 'key: <unit>/<path...>', 'search: documents',
+      'key: <unit>/<path...>', 'search: documents',
       'document: <unit>/state state session -', 'document: <unit>/journal journal entry @entry', '',
     ].join('\n'));
     const lines = await answerLines(sb, 'unitlike');

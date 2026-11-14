@@ -17,18 +17,18 @@
 # default-document identity (the artifact key) mapped to the record id (the unit or the
 # lane, a lane entry keeping its lane prefix).
 #
-# The ref interface: data_get resolves a canonical unit ref
+# The ref check: a new write validates its canonical unit refs
 #   unit#<unit>/task/<slug> | unit#<unit>/entry/<slug> | unit#<unit>/finding/<NAME> |
 #   unit#<unit>/lane/<lane>/<recipe|journal|report>
-# and data_emit prints the envelope the storage core's library reads. A new write
-# validates its canonical unit refs through data_get before anything lands; a legacy
-# record target (journal#<slug>, task#<slug>, knowledge#<NAME>, lanes/<lane>/report#<claim>)
-# and a file pointer stay as stored, the forward-only rule of the two ref shapes.
+# through the module's own entity reads before anything lands; a legacy record target
+# (journal#<slug>, task#<slug>, knowledge#<NAME>, lanes/<lane>/report#<claim>) and a file
+# pointer stay as stored, the forward-only rule of the two ref shapes. The namespace is the
+# module's folder name, found by the storage core's library from this script's path.
 #
 # The store root moves gradually: the data file declares a fallback root the store reads
 # after its root, and the posix store's own write moves a unit's folder from the fallback
 # to the root, so a unit moves whole at its first landing write with no call of its own;
-# unit.promote, outside the record's 35 operations as data_get is, moves the named units
+# unit.promote, outside the record's 35 operations, moves the named units
 # or every unit for ctx unit migrate through the store's optional store.promote. A run
 # whose reads came from the fallback and that ends rc 0 prints one warning line after its
 # answer.
@@ -42,7 +42,6 @@ export LC_ALL
 
 UDIR=$(CDPATH="" cd -- "$(dirname -- "$0")/.." && pwd)
 ULIB="$UDIR/lib"
-U_NS=unit
 
 U_LIB=""
 for ul_c in "${CTX_STORE_ROOT:-${CTX_ROOT:-$PWD}}/.contexture/storage/scripts/library" \
@@ -221,7 +220,7 @@ u_note() {
 
 u_keys_all() {
   u_new "$U_SCR/list.ans" "$U_SCR/list.err"
-  store_list "$U_NS" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
+  store_list > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
   case $? in
     0) u_note "$U_SCR/list.err"; u_keys_parse < "$U_SCR/list.ans" ;;
     *) u_store_refuse 2 store.list "$U_SCR/list.err" "the store list failed (ERR_STORAGE_READ)" ;;
@@ -230,7 +229,7 @@ u_keys_all() {
 
 u_keys_prefix() {
   u_new "$U_SCR/list.ans" "$U_SCR/list.err"
-  store_list "$U_NS" "$1" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
+  store_list "$1" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
   case $? in
     0) u_note "$U_SCR/list.err"; u_keys_parse < "$U_SCR/list.ans" ;;
     *) u_store_refuse 2 store.list "$U_SCR/list.err" "the store list failed (ERR_STORAGE_READ)" ;;
@@ -245,7 +244,7 @@ u_add_key() {
   U_NART=$((U_NART + 1))
   U_ART="$U_SCR/art.$U_NART"
   u_new "$U_ART" "$U_SCR/get.err"
-  store_get "$U_NS" "$2" > "$U_ART" 2> "$U_SCR/get.err" < /dev/null
+  store_get "$2" > "$U_ART" 2> "$U_SCR/get.err" < /dev/null
   U_GRC=$?
   case "$U_GRC" in
     0) U_ADD_RC=0; u_note "$U_SCR/get.err" ;;
@@ -281,7 +280,7 @@ u_flush_batch() {
     u_new "$U_SCR/q.t" "$U_SCR/q.s" "$U_SCR/q.err" "$U_SCR/q.miss"
     UQ_BASE=$U_NART UQ_DIR=$U_SCR LC_ALL=C awk -F '\t' '{ print substr($0, length($1) + 2) "\t" ENVIRON["UQ_DIR"] "/art." (ENVIRON["UQ_BASE"] + NR) }' "$U_SCR/q" > "$U_SCR/q.t" \
       || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
-    if store_get_into "$U_NS" "$U_SCR/q.t" > "$U_SCR/q.s" 2> "$U_SCR/q.err" \
+    if store_get_into "$U_SCR/q.t" > "$U_SCR/q.s" 2> "$U_SCR/q.err" \
       && UQ_BASE=$U_NART UQ_DIR=$U_SCR LC_ALL=C awk -F '\t' '
         FILENAME == ARGV[1] { M[FNR] = $1; K[FNR] = substr($0, length($1) + 2); n = FNR; next }
         {
@@ -574,7 +573,7 @@ u_awk() {
   return 0
 }
 
-# u_unit_promote <unit>...|--all: outside the record's 35 operations, as data_get is: the
+# u_unit_promote <unit>...|--all: outside the record's 35 operations: the
 # named units (each one the store holds), or every unit the store lists by its state key,
 # promoted one by one (store.promote), each under its unit lock; the first refusal stops
 # the run with the store's message, naming the unit. The answer is
@@ -610,7 +609,7 @@ u_unit_promote() {
     [ -n "$up_u" ] || continue
     u_lock "$up_u"
     u_new "$U_SCR/promote.out" "$U_SCR/promote.err"
-    store_promote "$U_NS" "$up_u/" > "$U_SCR/promote.out" 2> "$U_SCR/promote.err" < /dev/null
+    store_promote "$up_u/" > "$U_SCR/promote.out" 2> "$U_SCR/promote.err" < /dev/null
     up_rc=$?
     if [ "$up_rc" -ne 0 ]; then
       up_msg=$(head -n 1 "$U_SCR/promote.err" 2>/dev/null)
@@ -658,14 +657,56 @@ u_commit() {
       printf 'value_b64=%s\n' "$uc_b64"
     } >> "$U_SCR/batch"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
   done < "$U_STAGE/manifest"
-  store_batch "$U_NS" < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
+  store_batch < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
   uc_rc=$?
   [ "$uc_rc" -eq 0 ] || u_store_refuse "$uc_rc" store.batch "$U_SCR/batch.err" "the store batch failed (ERR_STORAGE_WRITE)"
   cat "$U_SCR/answer"
 }
 
-# u_refs_validate: a new write's canonical unit refs resolve through data_get before
-# anything lands; a legacy record target and a file pointer stay as stored
+# u_ref_resolve <ref>: a canonical unit ref answered by the module's own entity read
+# (task.get, entry.get, finding.get, or lane.get, the answer discarded): rc 0 when the
+# entity exists, else its rc and one stderr line, the target's message after its label
+u_ref_resolve() {
+  ud_ref=$1
+  case "$ud_ref" in
+    *'#'*'#'*) printf 'a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)\n' >&2; return 1 ;;
+  esac
+  ud_sym=${ud_ref#unit#}
+  case "$ud_sym" in
+    */*) ;;
+    *) printf "malformed unit ref '%s' (ERR_INVALID_ARGUMENT)\n" "$ud_ref" >&2; return 1 ;;
+  esac
+  ud_u=${ud_sym%%/*}
+  ud_rest=${ud_sym#*/}
+  case "$ud_rest" in
+    task/*) set -- task.get "$ud_u" "${ud_rest#task/}" ;;
+    entry/*) set -- entry.get "$ud_u" "${ud_rest#entry/}" ;;
+    finding/*) set -- finding.get "$ud_u" "${ud_rest#finding/}" ;;
+    lane/*/*)
+      ud_l=${ud_rest#lane/}
+      case "${ud_l#*/}" in
+        recipe|journal|report) ;;
+        *) printf "lane ref takes recipe, journal, or report: '%s' (ERR_INVALID_ARGUMENT)\n" "$ud_ref" >&2; return 1 ;;
+      esac
+      set -- lane.get "$ud_u" "${ud_l%%/*}" "${ud_l#*/}"
+      ;;
+    *) printf "the ref names no record entity: '%s' (ERR_INVALID_ARGUMENT)\n" "$ud_ref" >&2; return 1 ;;
+  esac
+  u_new "$U_SCR/dg.err"
+  "$0" "$@" < /dev/null > /dev/null 2> "$U_SCR/dg.err"
+  ud_rc=$?
+  [ "$ud_rc" -eq 0 ] && return 0
+  ud_msg=$(head -n 1 "$U_SCR/dg.err" 2>/dev/null)
+  case "$ud_msg" in
+    *": error: "*) ud_msg=${ud_msg#*": error: "} ;;
+  esac
+  [ -n "$ud_msg" ] || ud_msg="the target refused the reference"
+  printf '%s\n' "$ud_msg" >&2
+  return "$ud_rc"
+}
+
+# u_refs_validate: a new write's canonical unit refs resolve through the module's own entity
+# reads before anything lands; a legacy record target and a file pointer stay as stored
 u_refs_validate() {
   [ -n "$U_PAY" ] && [ -f "$U_PAY" ] || return 0
   u_new "$U_SCR/refs" "$U_SCR/refs.err"
@@ -682,12 +723,9 @@ u_refs_validate() {
       unit#?*) ;;
       *) continue ;;
     esac
-    ur_err=$(data_get "$ur_ref" 2>&1 >/dev/null)
+    ur_err=$(u_ref_resolve "$ur_ref" 2>&1 >/dev/null)
     ur_rc=$?
     [ "$ur_rc" -eq 0 ] && continue
-    case "$ur_err" in
-      "data_get: error: ref '$ur_ref': "*) ur_err=${ur_err#"data_get: error: ref '$ur_ref': "} ;;
-    esac
     printf '%s: error: ref '\''%s'\'': %s\n' "$FN" "$ur_ref" "$ur_err" >&2
     exit "$ur_rc"
   done < "$U_SCR/refs"
@@ -808,7 +846,7 @@ u_refs() {
 # u_held <unit>: the unit's state key exists
 u_held() {
   u_new "$U_SCR/held.err"
-  store_get "$U_NS" "$1/state" > /dev/null 2> "$U_SCR/held.err" < /dev/null
+  store_get "$1/state" > /dev/null 2> "$U_SCR/held.err" < /dev/null
   uh_rc=$?
   case "$uh_rc" in
     0) u_note "$U_SCR/held.err"; return 0 ;;
@@ -874,7 +912,7 @@ u_search() {
   # the modes this namespace can answer: the driver's registry filtered by the unit's
   # declared search schema, read through the storage core's library
   u_sq_modes=""
-  [ "$sq_mode" = exact ] || u_sq_modes=$(store_modes "$U_NS" 2>/dev/null | cut -f 1 | LC_ALL=C awk '{ o = o (NR > 1 ? ", " : "") $0 } END { print o }')
+  [ "$sq_mode" = exact ] || u_sq_modes=$(store_modes --own 2>/dev/null | cut -f 1 | LC_ALL=C awk '{ o = o (NR > 1 ? ", " : "") $0 } END { print o }')
   if [ -n "$u_sq_modes" ]; then
     u_sq_ok=0
     for u_sq_m in $(printf '%s' "$u_sq_modes" | tr ',' ' '); do
@@ -906,7 +944,7 @@ u_search() {
   fi
   sq_q=$(u_pay_field query)
   u_new "$U_SCR/store.ans" "$U_SCR/store.err" "$U_SCR/flat" "$U_SCR/flat.err" "$U_SCR/answer"
-  if ! store_search "$U_NS" "$sq_q" "$sq_mode" 0 > "$U_SCR/store.ans" 2> "$U_SCR/store.err"; then
+  if ! store_search "$sq_q" "$sq_mode" 0 > "$U_SCR/store.ans" 2> "$U_SCR/store.err"; then
     sq_rc=$?
     sq_msg=$(head -n 1 "$U_SCR/store.err" 2>/dev/null)
     case "$sq_msg" in
@@ -929,62 +967,11 @@ u_search() {
   cat "$U_SCR/answer"
 }
 
-# u_data_get <ref>: the canonical unit ref's entity, emitted through data_emit
-u_data_get() {
-  ud_ref=${1:-}
-  case "$ud_ref" in
-    unit#?*) ;;
-    *) u_refuse 1 ERR_INVALID_ARGUMENT "a reference is <module>#<symbol>" ;;
-  esac
-  ud_sym=${ud_ref#unit#}
-  case "$ud_sym" in
-    */*) ;;
-    *) u_refuse 1 ERR_INVALID_ARGUMENT "malformed unit ref '$ud_ref'" ;;
-  esac
-  ud_u=${ud_sym%%/*}
-  ud_rest=${ud_sym#*/}
-  case "$ud_rest" in
-    task/*) ud_fn=task.get; ud_a1=${ud_rest#task/}; ud_a2="" ;;
-    entry/*) ud_fn=entry.get; ud_a1=${ud_rest#entry/}; ud_a2="" ;;
-    finding/*) ud_fn=finding.get; ud_a1=${ud_rest#finding/}; ud_a2="" ;;
-    lane/*/*)
-      ud_l=${ud_rest#lane/}
-      ud_a1=${ud_l%%/*}
-      ud_a2=${ud_l#*/}
-      case "$ud_a2" in recipe|journal|report) ;; *) u_refuse 1 ERR_INVALID_ARGUMENT "lane ref takes recipe, journal, or report: '$ud_ref'" ;; esac
-      ud_fn=lane.get
-      ;;
-    *) u_refuse 1 ERR_INVALID_ARGUMENT "the ref names no record entity: '$ud_ref'" ;;
-  esac
-  u_scratch
-  u_new "$U_SCR/dg.err"
-  if [ -n "$ud_a2" ]; then
-    ud_ans=$("$0" "$ud_fn" "$ud_u" "$ud_a1" "$ud_a2" < /dev/null 2> "$U_SCR/dg.err")
-  else
-    ud_ans=$("$0" "$ud_fn" "$ud_u" "$ud_a1" < /dev/null 2> "$U_SCR/dg.err")
-  fi
-  ud_rc=$?
-  if [ "$ud_rc" -ne 0 ]; then
-    ud_msg=$(head -n 1 "$U_SCR/dg.err" 2>/dev/null)
-    case "$ud_msg" in
-      *": error: "*) ud_msg=${ud_msg#*": error: "} ;;
-    esac
-    [ -n "$ud_msg" ] || ud_msg="the target refused the reference"
-    printf 'data_get: error: %s\n' "$ud_msg" >&2
-    exit "$ud_rc"
-  fi
-  data_emit "$ud_ref" "$ud_ans"
-}
-
 cmd=${1:-}
 [ $# -gt 0 ] && shift
 FN=$cmd
 
 case "$cmd" in
-  data_get)
-    u_data_get "${1:-}"
-    exit 0
-    ;;
   capability|storage.health)
     printf '%s: error: unknown function '\''%s'\'' (ERR_CAPABILITY_UNSUPPORTED)\n' "$cmd" "$cmd" >&2
     exit 2

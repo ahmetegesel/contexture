@@ -48,7 +48,7 @@ const DOCS_PAYLOADS: Record<string, Buffer> = {
 
 export const KEY_VALUE: Profile = {
   ns: 'fuzz',
-  data: 'namespace: fuzz\nroot: fuzz-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\n',
+  data: 'root: fuzz-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\n',
   key: (k) => k,
   payload: (p) => DOCS_PAYLOADS[p],
   needle: 'needle',
@@ -64,7 +64,7 @@ function recordValue(i: number): Buffer {
 
 export const UNIT_SHAPED: Profile = {
   ns: 'fuzzu',
-  data: 'namespace: fuzzu\nroot: fuzzu-root\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n',
+  data: 'root: fuzzu-root\nsuffix: .md\nkey: <unit>/<path...>\nchanges: false\n',
   key: (k) => UNIT_KEYS[Number(k.slice(3)) - 1],
   payload: (p) => recordValue(Number(p.slice(1))),
   prefix: 'u1/',

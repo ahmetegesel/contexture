@@ -1,5 +1,4 @@
 # the unit module's store declaration: the record as one value per artifact file
-namespace: unit
 root: .contexture/units
 fallback_root: .contexture/sessions
 suffix: .md

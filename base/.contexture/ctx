@@ -584,6 +584,18 @@ is_builtin() {
   return 1
 }
 
+# module_name_ok <name>: rc 0 for a module name of lowercase letters, digits, dot,
+# underscore, and dash, starting with a letter or digit, the namespace token rule (a
+# module's namespace is its name); every letter is spelled, since a range follows the
+# caller's locale
+module_name_rule="a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit"
+module_name_ok() {
+  case "$1" in
+    ""|[!abcdefghijklmnopqrstuvwxyz0123456789]*|*[!abcdefghijklmnopqrstuvwxyz0123456789._-]*) return 1 ;;
+  esac
+  return 0
+}
+
 # ---------------------------------------------------------------------------
 # discovery
 
@@ -606,6 +618,7 @@ scan_module_dirs() {
           continue
           ;;
       esac
+      module_name_ok "$bn" || continue
       if is_reserved "$bn" && ! is_builtin "$bn"; then
         continue
       fi
@@ -623,6 +636,7 @@ scan_module_dirs() {
           continue
           ;;
       esac
+      module_name_ok "$bn" || continue
       case " $ws " in
         *" $bn "*) continue ;;
       esac
@@ -655,6 +669,10 @@ module_names() {
           continue
           ;;
       esac
+      if ! module_name_ok "$n"; then
+        ctx_err "skipping module $n: $module_name_rule"
+        continue
+      fi
       if is_reserved "$n" && ! is_builtin "$n"; then
         ctx_err "reserved name refused (shadow): $n"
         continue
@@ -691,6 +709,10 @@ module_names() {
           continue
           ;;
       esac
+      if ! module_name_ok "$n"; then
+        ctx_err "skipping module $n: $module_name_rule"
+        continue
+      fi
       if is_builtin "$n"; then
         ctx_err "skipping extension module $n: collides with a builtin"
         continue

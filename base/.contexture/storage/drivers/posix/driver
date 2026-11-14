@@ -149,8 +149,9 @@ SCRATCH_FAILED="cannot write the driver's scratch file"
 # Seven data functions over a module's declared data file: store.list, store.get,
 # store.put, store.delete, store.changes, store.batch, and store.scan. The data file
 # (modules/<module>/data) is read and validated by the storage core's private store-data
-# script; the posix mapping is <root>/<key><suffix> under the workspace root, the module's
-# declared root.
+# script; the posix mapping is <root>/<key><suffix> under the workspace root, the root
+# store-data answers (the declared one, or the namespace when none is declared or the
+# module is installed under an alias).
 # Keys are exact, ASCII-case-fold twins never coexist, list is bytewise
 # and filtered by the module pattern, put is a same-directory temp moved over the key
 # under one namespace scope lock, and the change log belongs to a store driver (posix

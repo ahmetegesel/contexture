@@ -1,3 +1,2 @@
-# the notes module's store declaration: the minimum is the namespace and the key pattern
-namespace: notes
+# the notes module's store declaration: the minimum is the key pattern (the namespace is the folder name)
 key: <owner>/<slug>

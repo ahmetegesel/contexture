@@ -9,7 +9,7 @@
 # docs/<repo>/<slug>.md and the engines parse those files. No driver parses a doc. Every
 # driver call runs with the workspace root as its cwd and CTX_ROOT, an inherited CTX_DIR
 # unset, and stdin from /dev/null (the check's delta on stdin stays the verb's). Every write
-# pipeline holds the library's lock of the docs namespace across its read, edit, and put, so
+# pipeline holds the library's lock of the module's namespace across its read, edit, and put, so
 # two writers of one doc both land and two creators of one slug never both pass the check.
 #
 # The display rule: every doc path a verb prints is the logical address
@@ -105,7 +105,7 @@ docs_lock() {
     printf '%s: the storage core library has no lock (need: the storage core of this release) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
     return 2
   fi
-  if lib_lock docs 2> "$DOCS_SCRATCH/lock.err"; then
+  if lib_lock 2> "$DOCS_SCRATCH/lock.err"; then
     return 0
   else
     dl_rc=$?
@@ -154,7 +154,7 @@ docs_scratch() {
 # verb names it), rc 2 when the store fails (its message kept)
 docs_keys() {
   docs_scratch || return 2
-  if ! store_list docs < /dev/null > "$DOCS_SCRATCH/list.json" 2> "$DOCS_SCRATCH/list.err"; then
+  if ! store_list < /dev/null > "$DOCS_SCRATCH/list.json" 2> "$DOCS_SCRATCH/list.err"; then
     dk_rc=$?
     DOCS_KEYS=""
     cat "$DOCS_SCRATCH/list.err" >&2
@@ -225,7 +225,7 @@ docs_materialize() {
     printf '%s\t%s\n' "$dm_k" "$DOCS_MOUNT/docs/$dm_k.md" >> "$DOCS_SCRATCH/materialize.t"
   done < "$DOCS_SCRATCH/materialize.keys"
   [ -s "$DOCS_SCRATCH/materialize.t" ] || return 0
-  if store_get_into docs "$DOCS_SCRATCH/materialize.t" < /dev/null > "$DOCS_SCRATCH/materialize.s" 2> "$DOCS_SCRATCH/get.err" \
+  if store_get_into "$DOCS_SCRATCH/materialize.t" < /dev/null > "$DOCS_SCRATCH/materialize.s" 2> "$DOCS_SCRATCH/get.err" \
     && ! grep -q '^0' "$DOCS_SCRATCH/materialize.s"; then
     return 0
   fi
@@ -235,7 +235,7 @@ docs_materialize() {
       printf '%s: cannot stage the corpus (ERR_STORAGE_WRITE)\n' "$DOCS_VERB" >&2
       return 2
     }
-    if ! store_get docs "$dm_k" < /dev/null > "$DOCS_MOUNT/docs/$dm_k.md" 2> "$DOCS_SCRATCH/get.err"; then
+    if ! store_get "$dm_k" < /dev/null > "$DOCS_MOUNT/docs/$dm_k.md" 2> "$DOCS_SCRATCH/get.err"; then
       dm_rc=$?
       cat "$DOCS_SCRATCH/get.err" >&2
       return "$dm_rc"
@@ -390,19 +390,21 @@ docs_no_display() {
 
 # docs_record_file <path>: rc 0 when the path lies inside the store root of a namespace
 # another module declares (every root the storage library's store_roots lists but this
-# module's own namespace, docs): by its workspace relative spelling, physically under the
-# workspace, or, for a root inside the drawer alone, by an unanchored spelling; rc 1 when it
+# module's own namespace, which the library finds from the calling script): by its
+# workspace relative spelling, physically under the workspace, or, for a root inside the
+# drawer alone, by an unanchored spelling; rc 1 when it
 # lies in none; rc 2 when the storage core cannot list the roots. A value another module
 # stores is read through that module, never as a file (the single store)
 docs_record_file() {
   command -v store_roots >/dev/null 2>&1 || return 2
   rf_roots=$(store_roots < /dev/null 2>/dev/null) || return 2
+  rf_own=$(store_namespace 2>/dev/null) || rf_own=""
   case "$1" in */*) rf_d=${1%/*} ;; *) rf_d=. ;; esac
   rf_p=$(CDPATH= cd -- "${rf_d:-/}" 2>/dev/null && pwd -P) || rf_p=""
   rf_tab=$(printf '\t')
   rf_hit=1
   while IFS="$rf_tab" read -r rf_ns rf_root; do
-    [ -n "$rf_root" ] && [ "$rf_ns" != docs ] || continue
+    [ -n "$rf_root" ] && [ "$rf_ns" != "$rf_own" ] || continue
     case "$1" in "$rf_root"/*) rf_hit=0; break ;; esac
     case "$rf_root" in
       .contexture/*) case "$1" in */"$rf_root"/*) rf_hit=0; break ;; esac ;;
@@ -710,7 +712,7 @@ docs_changes() {
     printf 'head=%s\n' "$DOCS_SINCE_REV" >> "$DOCS_SCRATCH/heads"
     git -C "$DOCS_ROOT" rev-list --boundary "$DOCS_SINCE_REV..HEAD" 2>/dev/null | sed -e 's/^-//' -e 's/^/head=/' >> "$DOCS_SCRATCH/heads"
   fi
-  if ! store_changes docs < "$DOCS_SCRATCH/heads" > "$DOCS_SCRATCH/rows.json"; then
+  if ! store_changes < "$DOCS_SCRATCH/heads" > "$DOCS_SCRATCH/rows.json"; then
     return 2
   fi
   docs_store_changes_rows "$DOCS_SCRATCH/rows.json" "$DOCS_SCRATCH/rows" || return $?
@@ -989,7 +991,7 @@ docs_noeol() {
 # docs_read_doc <repo> <slug> <file>: the stored doc into <file> through store.get; rc 1
 # names an absent doc
 docs_read_doc() {
-  if store_get docs "$1/$2" < /dev/null > "$3" 2> "$DOCS_SCRATCH/read.err"; then
+  if store_get "$1/$2" < /dev/null > "$3" 2> "$DOCS_SCRATCH/read.err"; then
     return 0
   else
     dr_rc=$?
@@ -1004,7 +1006,7 @@ docs_read_doc() {
 
 # docs_exists <repo> <slug>: rc 0 when the corpus holds the doc, 1 when not, 2 on a failure
 docs_exists() {
-  if store_get docs "$1/$2" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/exists.err"; then
+  if store_get "$1/$2" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/exists.err"; then
     return 0
   else
     de_rc=$?
@@ -1101,7 +1103,7 @@ docs_grammar_check() {
 # HEAD; the driver's message passes on a failure
 docs_store() {
   ds_head=$(docs_head)
-  if store_put docs "$1/$2" "--op=$3" "--head=$ds_head" < "$4" > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+  if store_put "$1/$2" "--op=$3" "--head=$ds_head" < "$4" > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     return 0
   else
     dst_rc=$?
@@ -1354,7 +1356,7 @@ docs_remove_locked() {
     return 0
   fi
   dx_head=$(docs_head)
-  if store_delete docs "$1/$2" --op=remove "--head=$dx_head" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
+  if store_delete "$1/$2" --op=remove "--head=$dx_head" < /dev/null > /dev/null 2> "$DOCS_SCRATCH/store.err"; then
     printf 'docs remove: %s/%s removed\n' "$1" "$2"
     return 0
   else

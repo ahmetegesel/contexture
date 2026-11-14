@@ -46,7 +46,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it('[modules-r10] maps the minimum declaration to <namespace>/<key> with an empty suffix', async () => {
     const sb = fresh(empty);
-    dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
+    dataFile(sb, 'modules', 'minimal', 'key: <a>/<b>\n');
     answer(await store(sb, 'posix').put('minimal', 'a/b', 'x\n'), 'store.put');
     expect(readFileSync(join(sb, 'minimal/a/b'), 'utf8')).toBe('x\n');
   });
@@ -76,7 +76,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it('[the-engine-r19, modules-r10] scans planted files bytewise, admitting only the pattern\'s keys, a binary value in base64', async () => {
     const sb = fresh(empty);
-    dataFile(sb, 'modules', 'scanprobe', 'namespace: scanprobe\nroot: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+    dataFile(sb, 'modules', 'scanprobe', 'root: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
     const values: [string, Buffer][] = [['x/B', Buffer.from('B\n')], ['x/a', Buffer.from('a\n')], ['x/aa', Buffer.from('aa\n')], ['x/bin', Buffer.from([0x61, 0, 0x62, 0xff])]];
     for (const [key, value] of values) plant(sb, `scan-root/${key}.txt`, value);
     plant(sb, 'scan-root/x/y/z.txt', 'three segments\n');
@@ -87,7 +87,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it.skipIf(ROOT_USER)('[the-engine-r21] refuses a scan meeting an unreadable file, naming its key, with no partial answer', async ({ onTestFinished }) => {
     const sb = fresh(empty);
-    dataFile(sb, 'modules', 'scanprobe', 'namespace: scanprobe\nroot: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
+    dataFile(sb, 'modules', 'scanprobe', 'root: scan-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n');
     plant(sb, 'scan-root/x/a.txt', 'a\n');
     plant(sb, 'scan-root/x/ro.txt', 'unreadable\n');
     chmodPlant(join(sb, 'scan-root/x/ro.txt'), 0o000, 0o600, onTestFinished);
@@ -144,7 +144,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it('[the-engine-r24] follows a declared root other than the namespace, and reads no other namespace\'s root', async () => {
     const sb = stage('posix');
-    dataFile(sb, 'modules', 'deeproot', 'namespace: deeproot\nroot: nested/deep-root\nsuffix: .txt\nkey: <a>/<b>\n');
+    dataFile(sb, 'modules', 'deeproot', 'root: nested/deep-root\nsuffix: .txt\nkey: <a>/<b>\n');
     const health = () => healthOf(sb, 'deeproot');
     expect((await health()).health).toBe('degraded');
     mkdirSync(join(sb, 'deeproot'));
@@ -160,7 +160,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it.skipIf(ROOT_USER)('a writer with USER unset and the drawer\'s scratch folder unwritable lands its put through the per-user lock folder', async ({ onTestFinished }) => {
     const sb = stage('posix');
-    dataFile(sb, 'modules', 'minimal', 'namespace: minimal\nkey: <a>/<b>\n');
+    dataFile(sb, 'modules', 'minimal', 'key: <a>/<b>\n');
     const temp = sandbox('no-user-temp');
     chmodPlant(join(sb, '.contexture/tmp'), 0o555, 0o755, onTestFinished);
     const r = await exec('env', ['-u', 'USER', driverPath(sb, 'posix'), 'store.put', 'minimal', 'a/b'], { cwd: sb, input: 'x\n', env: { TMPDIR: temp } });

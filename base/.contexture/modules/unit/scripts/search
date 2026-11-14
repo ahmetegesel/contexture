@@ -122,7 +122,7 @@ fi
 rules=""
 sd="${VB_RESOLVER%/*}/store-data"
 if [ -x "$sd" ]; then
-  rules=$(CTX_STORE_WORKSPACE="${CTX_ROOT:-$PWD}" "$sd" unit 2>/dev/null | sed -n '12,$p')
+  rules=$(CTX_STORE_WORKSPACE="${CTX_ROOT:-$PWD}" "$sd" "$(store_namespace 2>/dev/null)" 2>/dev/null | sed -n '12,$p')
 fi
 
 : > "$VB_DIR/merged"

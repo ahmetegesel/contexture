@@ -1,14 +1,14 @@
 export const SEARCH_DATA: Record<string, string> = {
   searchdoc: [
-    'namespace: searchdoc', 'root: sd-root', 'suffix: .txt', 'key: <unit>/<path...>', 'changes: false', 'search: documents',
+    'root: sd-root', 'suffix: .txt', 'key: <unit>/<path...>', 'changes: false', 'search: documents',
     'document: <unit>/state state session -', 'document: <unit>/backlog backlog session -', 'document: <unit>/backlog backlog task @task',
     'document: <unit>/journal journal session -', 'document: <unit>/journal journal entry @entry', 'document: <unit>/journal journal session @anchor',
     'document: <unit>/lanes/<lane>/recipe lane_recipe lane -', 'document: <unit>/lanes/<lane>/journal lane_journal lane -',
     'document: <unit>/lanes/<lane>/journal lane_journal lane_entry @entry', 'document: <unit>/lanes/<lane>/report lane_report lane -', '',
   ].join('\n'),
-  flatdoc: 'namespace: flatdoc\nroot: flat-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\n',
-  genericdoc: 'namespace: genericdoc\nroot: generic-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n',
-  jsondoc: 'namespace: jsondoc\nroot: json-root\nsuffix: .json\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: json\nfields: title, body\ntitle: title\n',
+  flatdoc: 'root: flat-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: text\n',
+  genericdoc: 'root: generic-root\nsuffix: .txt\nkey: <a>/<b>\nchanges: false\n',
+  jsondoc: 'root: json-root\nsuffix: .json\nkey: <a>/<b>\nchanges: false\nsearch: flat\nformat: json\nfields: title, body\ntitle: title\n',
 };
 
 export const SEARCH_VALUES: Record<string, [string, string][]> = {

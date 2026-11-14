@@ -31,7 +31,7 @@ describe.concurrent('package-install: the overlay, the record, and the modes', (
   it('[the-engine-r22, modules-r15, plugins-r1] installs only the extension tree, records paths, modes, and law fragments, and keeps the modes', async () => {
     const sb = sandbox();
     const pa = newPkg(sb, 'pkga');
-    addModule(pa, 'alpha', 'docs');
+    addModule(pa, 'alpha', true);
     addFile(pa, 'rhythms/alpha.md', 'the alpha rhythm');
     const r = await installPkg(sb, pa);
     expect(r.code).toBe(0);

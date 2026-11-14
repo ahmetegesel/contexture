@@ -5,6 +5,7 @@ import { DOCS_SHAPED, dataFile } from '@support/data-file';
 import { FALLBACK_ROOT, RECORD_ROOT } from '@support/drawer';
 import { exec, type Run } from '@support/exec';
 import { sandbox } from '@support/sandbox';
+import { moduleScript } from '@support/sh';
 import { stage } from '@support/stage';
 import { SCRIPTS } from '../support/corpus';
 
@@ -90,12 +91,12 @@ describe('docs_record_file: a path inside another module\'s store root, read thr
   beforeAll(() => {
     drawer = stage('posix', 'record-file');
     dataFile(drawer, 'extensions', 'docs', DOCS_SHAPED);
-    dataFile(drawer, 'modules', 'notes', 'namespace: notes\nkey: <a>/<b>\n');
+    dataFile(drawer, 'modules', 'notes', 'key: <a>/<b>\n');
     mkdirSync(join(drawer, 'notes'));
   });
 
   const guard = (sb: string, path: string): Promise<Run> =>
-    exec('sh', ['-c', '. "$1/docs-io.sh"; docs_io_init "$1" nudge; docs_record_file "$2"', 'sh', SCRIPTS, path], { cwd: sb, env: { CTX_ROOT: sb } });
+    exec('sh', [moduleScript(sb, 'docs', 'guard-probe', '. "$1/docs-io.sh"; docs_io_init "$1" nudge; docs_record_file "$2"\n', 'extensions'), SCRIPTS, path], { cwd: sb, env: { CTX_ROOT: sb } });
 
   it.each([
     [`${RECORD_ROOT}/u/backlog.md`, 0],

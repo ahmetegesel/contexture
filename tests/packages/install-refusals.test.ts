@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { exec } from '../support/exec';
 import { addFile, addModule, extPath, install, installPkg, newPkg, writeManifest } from '../support/packages';
 import { stage } from '../support/stage';
 import { put, treeState } from '../support/tree';
@@ -166,25 +167,28 @@ describe.concurrent('package-install: the collision classes', () => {
     expect(r.stderr).toContain('core posix driver');
   });
 
-  it('[modules-r15, modules-r10] a namespace declared twice in one package refuses rc1', async () => {
+  it('[modules-r15, modules-r10] the installer reads no namespace: two package modules with data files install, each module\'s namespace its own name', async () => {
     const sb = sandbox();
-    const p = newPkg(sb, 'pkgdupns');
-    addModule(p, 'one', 'dupns');
-    addModule(p, 'two', 'dupns');
+    const p = newPkg(sb, 'pkgtwodata');
+    addModule(p, 'one', true);
+    addModule(p, 'two', true);
     const r = await installPkg(sb, p);
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain('more than one module');
+    expect(r.code).toBe(0);
+    expect(r.stderr).not.toMatch(/namespace/);
+    expect(existsSync(join(sb, '.contexture/extensions/modules/one/data'))).toBe(true);
+    expect(existsSync(join(sb, '.contexture/extensions/modules/two/data'))).toBe(true);
+    const listing = await exec('.contexture/storage/scripts/store-data', ['--list'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+    expect([listing.code, listing.stderr]).toEqual([0, '']);
+    expect(listing.stdout).toContain('one\tone\ntwo\ttwo\n');
   });
 
-  it('[modules-r15, modules-r10] a namespace a workspace module declares refuses rc1 naming the owner', async () => {
+  it.each(['Upper', 'camelCase', '_lead', '-dash', '_hooks'])('[modules-r15, modules-r1] a module named %s refuses rc1 with the module name rule, nothing written', async (name) => {
     const sb = sandbox();
-    put(join(sb, '.contexture/modules/wsns/module'), '# summary: a workspace namespace fixture\n');
-    put(join(sb, '.contexture/modules/wsns/data'), 'namespace: taken\nkey: <a>/<b>\n');
-    const p = newPkg(sb, 'pkgtaken');
-    addModule(p, 'takenmod', 'taken');
+    const p = newPkg(sb, 'pkgupper');
+    addModule(p, name);
     const r = await installPkg(sb, p);
-    expect(r.code).toBe(1);
-    expect(r.stderr).toContain("declared by module 'wsns'");
+    expect([r.code, r.stderr]).toEqual([1, `package-install: malformed module name '${name}': a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit\n`]);
+    expect(existsSync(join(sb, '.contexture/extensions/.state/pkgupper.files'))).toBe(false);
   });
 
   it('[modules-r15] a malformed module manifest refuses rc1 naming the module', async () => {

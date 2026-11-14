@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
 import { ROOT_USER, chmodPlant } from '../support/plants';
-import { shFunction } from '../support/sh';
+import { moduleCall } from '../support/sh';
 import { fresh } from '../support/snapshot';
 import { DRIVERS, fts5Available } from '../support/stage';
 import { docsStore, store } from '../support/store';
@@ -15,7 +15,7 @@ const RICH_JSON = 'say \\"hi\\" \\\\ back\\\\n\\ttab\\rcr\\u0001one\\u001fus\u00
 const ASKED = ['workspace/türkçe', 'workspace/a', 'workspace/missing', 'workspace/binary', 'workspace/q"uote', 'workspace/a'];
 const ASKED_ANSWER = '{"namespace":"docs","items":[{"key":"workspace/türkçe","value":"turkce\\n"},{"key":"workspace/a","value":"a\\n"},{"key":"workspace/missing","missing":true},{"key":"workspace/binary","value_b64":"YQBi/w=="},{"key":"workspace/q\\"uote","value":"quote\\n"},{"key":"workspace/a","value":"a\\n"}]}\n';
 
-const lib = (sb: string, fn: string, args: string[] = []) => shFunction(sb, join(sb, LIBRARY), fn, args, { input: '', env: { CTX_STORE_ROOT: sb } });
+const lib = (sb: string, fn: string, args: string[] = []) => moduleCall(sb, 'docs', join(sb, LIBRARY), fn, args, { input: '', env: { CTX_STORE_ROOT: sb }, root: 'extensions' });
 
 function targets(sb: string, name: string, keys: readonly string[]): { file: string; paths: string[] } {
   const dir = join(sb, 'into', name);
@@ -90,18 +90,18 @@ for (const driver of DRIVERS) {
       answer(await s.put('docs', 'workspace/rich', RICH), 'store.put');
       const keys = ['workspace/rich', 'workspace/gone', 'workspace/binary', 'workspace/q"uote'];
       const t = targets(sb, 'many', keys);
-      const r = await lib(sb, 'store_get_into', ['docs', t.file]);
+      const r = await lib(sb, 'store_get_into', [t.file]);
       expect([r.code, r.stdout, r.stderr]).toEqual([0, '1\tworkspace/rich\n0\tworkspace/gone\n1\tworkspace/binary\n1\tworkspace/q"uote\n', '']);
       expect(readFileSync(t.paths[0]!).equals(RICH)).toBe(true);
       expect(readFileSync(t.paths[2]!).equals(Buffer.from([0x61, 0x00, 0x62, 0xff]))).toBe(true);
       expect(readFileSync(t.paths[3]!, 'utf8')).toBe('quote\n');
       const one = targets(sb, 'one', ['workspace/a']);
-      expect((await lib(sb, 'store_get_into', ['docs', one.file])).stdout).toBe('1\tworkspace/a\n');
+      expect((await lib(sb, 'store_get_into', [one.file])).stdout).toBe('1\tworkspace/a\n');
       expect(readFileSync(one.paths[0]!, 'utf8')).toBe('a\n');
       const gone = targets(sb, 'gone', ['workspace/gone']);
-      expect(await lib(sb, 'store_get_into', ['docs', gone.file])).toMatchObject({ code: 0, stdout: '0\tworkspace/gone\n', stderr: '' });
+      expect(await lib(sb, 'store_get_into', [gone.file])).toMatchObject({ code: 0, stdout: '0\tworkspace/gone\n', stderr: '' });
       const bad = targets(sb, 'bad', ['workspace/a', 'workspace']);
-      refused(await lib(sb, 'store_get_into', ['docs', bad.file]), 'store.get', 1, 'ERR_INVALID_ARGUMENT', "key 'workspace' does not match the namespace pattern '<repo>/<slug>'");
+      refused(await lib(sb, 'store_get_into', [bad.file]), 'store.get', 1, 'ERR_INVALID_ARGUMENT', "key 'workspace' does not match the namespace pattern '<repo>/<slug>'");
     });
   });
 }
@@ -124,7 +124,7 @@ describe('the batched store.get on posix alone', { concurrent: true }, () => {
 
   it('[the-engine-r-b3r6t] a key served from the declared fallback root answers with the one notice line, the root\'s copy shadowing', async () => {
     const sb = fresh(keyed);
-    dataFile(sb, 'modules', 'legacy', 'namespace: legacy\nroot: new-root\nfallback_root: old-root\nkey: <u>/<a>\n');
+    dataFile(sb, 'modules', 'legacy', 'root: new-root\nfallback_root: old-root\nkey: <u>/<a>\n');
     mkdirSync(join(sb, 'old-root/a'), { recursive: true });
     mkdirSync(join(sb, 'old-root/b'), { recursive: true });
     mkdirSync(join(sb, 'new-root/a'), { recursive: true });

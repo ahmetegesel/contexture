@@ -1,66 +1,65 @@
 #!/bin/sh
 # library: the storage core's module-facing interface, sourced by a module's scripts and
 # data script (no summary line, so the engine never lists it). It is the one door from a
-# module to the configured storage driver, and the one door from a source module to a
-# target module's data script:
+# module to the configured storage driver, and it serves the calling module's own namespace
+# alone: no store function takes a namespace, since the library finds its caller.
 #
-#   store.list <namespace> [<prefix>]
-#   store.get <namespace> <key> [<key>...]                          (two or more: one JSON line)
-#   store.get.into <namespace> <targets>                            (the batched read into files)
-#   store.put <namespace> <key> [--op=<op>] [--head=<sha|none>]     (payload on stdin)
-#   store.delete <namespace> <key> [--op=<op>] [--head=<sha|none>]
-#   store.changes <namespace>                                        (heads on stdin)
-#   store.batch <namespace>                                          (actions on stdin)
-#   store.scan <namespace>
-#   store.search <namespace> <query> <mode> [<limit>]                (query on stdin; 0 = all)
-#   store.modes [<namespace>]
-#   store.promote <namespace> <prefix>                              (optional capability)
+#   store.namespace                                                 (the caller's namespace)
+#   store.list [<prefix>]
+#   store.get <key> [<key>...]                                      (two or more: one JSON line)
+#   store.get.into <targets>                                        (the batched read into files)
+#   store.put <key> [--op=<op>] [--head=<sha|none>]                 (payload on stdin)
+#   store.delete <key> [--op=<op>] [--head=<sha|none>]
+#   store.changes                                                   (heads on stdin)
+#   store.batch                                                     (actions on stdin)
+#   store.scan
+#   store.search <query> <mode> [<limit>]                           (query on stdin; 0 = all)
+#   store.modes [--own]
+#   store.promote <prefix>                                          (optional capability)
 #   store.require <capability>...
 #   store.has <capability>
 #   store.roots
-#   data.get <ref>
-#   data.emit <ref> <data>
 #   lib.utf8_ok <string>, lib.utf8_file_ok <file>                   (the shared checks)
 #   lib.ref_ok <label> <ref>
-#   lib.lock <namespace>, lib.unlock                                (the library lock)
+#   lib.lock, lib.unlock                                            (the library lock)
 #   fields.decl_check <declaration>                                 (the field validator)
 #   fields.apply <declaration> <old record> <actions> <new record>
 #   fields.effective <declaration> <record>
 #   fields.conforms <declaration> <record>
 #   fields.reserved_ok <name>
 #
+# The caller lookup: a module's namespace is its installed module name. At the first storage
+# call (never when the library is sourced, since a lane verb sources the unit helpers) the
+# library takes the calling script's path ($0, which a sourced file shares with the script
+# that sourced it), folds its dot and dot-dot segments lexically (no symlink is resolved, so
+# a linked module folder answers by the link's name, as discovery names modules), and walks
+# up to the nearest folder holding a module manifest (a file named module); that folder's
+# name is the namespace, kept for the rest of the shell. A relative script path (a later cd
+# would misattribute it) or no module folder above the script refuses rc 1 with one line
+# naming the need (ERR_INVALID_ARGUMENT). store_namespace prints the answer; another
+# module's data is reached only through that module's ctx verbs.
+#
 # The store functions and the two probes reach the configured driver through the storage
-# core's resolver; the caller uses the shell function names store_list, store_get,
-# store_put, store_delete, store_changes, store_batch, store_scan, store_search,
-# store_promote, store_require, and store_has. store_promote moves a whole key prefix from
-# the namespace's fallback root to its root on a driver that declares store.promote (ask
-# store_has store.promote first). store_get with one key answers the raw value; with two
-# or more it answers the driver's one batched line, which store_get_into decodes into files.
-# The
-# caller sets CTX_STORE_ROOT to the workspace root (the engine exports CTX_ROOT, which
-# serves when CTX_STORE_ROOT is absent) and may set CTX_STORE_RESOLVER to an exact
-# resolver path; the core resolver is found under the drawer, then the base mirror.
+# core's resolver, passing it the caller's namespace; the caller uses the shell function
+# names store_list, store_get, store_put, store_delete, store_changes, store_batch,
+# store_scan, store_search, store_promote, store_require, and store_has. store_promote moves
+# a whole key prefix from the namespace's fallback root to its root on a driver that
+# declares store.promote (ask store_has store.promote first). store_get with one key answers
+# the raw value; with two or more it answers the driver's one batched line, which
+# store_get_into decodes into files. The caller sets CTX_STORE_ROOT to the workspace root
+# (the engine exports CTX_ROOT, which serves when CTX_STORE_ROOT is absent) and may set
+# CTX_STORE_RESOLVER to an exact resolver path; the core resolver is found under the
+# drawer, then the base mirror.
 #
 # store_roots reads the module declarations, never the driver: one line per declared store
 # root, the namespace and the root separated by a tab, sorted by namespace, a namespace
 # that declares a fallback root answering it on a second line after its root, through the
 # storage core's data reader in its listing mode (store-data --list, whose third column
-# carries the fallback). A malformed or doubly declared namespace is left out with its line
-# on stderr; with no data reader or no module drawer it refuses rc 2 with one line.
+# carries the fallback). A malformed declaration is left out with its line on stderr; with
+# no data reader or no module drawer it refuses rc 2 with one line.
 #
-# data_get <ref> resolves a module reference <module>#<symbol>: it finds the target
-# module's data script in the workspace modules, the workspace extensions, or the base
-# mirror of either (modules/<module>/scripts/data and
-# extensions/modules/<module>/scripts/data), runs it with data_get, and prints the
-# envelope the script emits through data_emit. A ref chain is bounded at 8 hops and a
-# repeated ref in the chain refuses as a cycle. data_emit <ref> <data> is the target data
-# script's helper: it prints one compact JSON envelope {"ref":"<ref>","data":<data>} and
-# the data must already be compact JSON. The source write's validation of a new ref is
-# the unit module's later; this library is the mechanism it calls.
-#
-# A refusal is one stderr line with a fixed code (ERR_INVALID_ARGUMENT,
-# ERR_ENTITY_NOT_FOUND, or the target's own code re-framed with the ref). The resolver's
-# own driver-resolver: line is passed through unchanged, the one shape exception.
+# A refusal is one stderr line with a fixed code. The resolver's own driver-resolver: line
+# is passed through unchanged, the one shape exception.
 #
 # The shared checks validate a value a module asks about and print nothing: lib_utf8_ok
 # and lib_utf8_file_ok answer rc 0 for valid UTF-8, 1 for anything else, 2 when the check
@@ -68,10 +67,10 @@
 # into its own awk program. lib_ref_ok checks the shape of a full address <owner>#<path>
 # alone and refuses with its one line naming the ref.
 #
-# The library lock serializes a module's writers of one namespace across a check and a
-# write: lib_lock <namespace> takes it, lib_unlock releases it, and the caller releases it
-# in its exit trap too. It lives in its own lock family, never at a driver's namespace lock,
-# so a holder calls every store function freely; one process holds one library lock.
+# The library lock serializes a module's writers of its namespace across a check and a
+# write: lib_lock takes it, lib_unlock releases it, and the caller releases it in its exit
+# trap too. It lives in its own lock family, never at a driver's namespace lock, so a holder
+# calls every store function freely; one process holds one library lock.
 #
 # The field validator is opt in: a module that declares fields for a container hands the
 # declaration (one field line per line) and the record files to the fields functions, which
@@ -82,6 +81,54 @@
 # for a write breaking the declaration (an unknown field, a value outside its one-of set, a
 # required field left absent). ERR_SCHEMA_VIOLATION is a library owned tier 1 code, which the
 # docs module uses too.
+
+# STORE_LIB_NS: the caller's namespace once the first storage call found it; emptied when the
+# library is sourced, so a value a parent shell left never stands for this script
+STORE_LIB_NS=""
+
+# store_lib_ns <function label>: the caller lookup, setting STORE_LIB_NS (never in a
+# subshell, so the answer stays for the shell's later calls); rc 0, or rc 1 with one line
+store_lib_ns() {
+  [ -z "$STORE_LIB_NS" ] || return 0
+  sln_p=$0
+  case "$sln_p" in
+    /*) ;;
+    *)
+      printf "%s: error: the calling script runs by a relative path, so its module cannot be found (run it by its absolute path, as ctx dispatch does) (ERR_INVALID_ARGUMENT)\n" "$1" >&2
+      return 1
+      ;;
+  esac
+  sln_out=""
+  sln_rest=${sln_p#/}
+  while [ -n "$sln_rest" ]; do
+    case "$sln_rest" in
+      */*) sln_seg=${sln_rest%%/*}; sln_rest=${sln_rest#*/} ;;
+      *) sln_seg=$sln_rest; sln_rest="" ;;
+    esac
+    case "$sln_seg" in
+      ""|.) ;;
+      ..) sln_out=${sln_out%/*} ;;
+      *) sln_out="$sln_out/$sln_seg" ;;
+    esac
+  done
+  sln_d=${sln_out%/*}
+  while [ -n "$sln_d" ]; do
+    if [ -f "$sln_d/module" ]; then
+      STORE_LIB_NS=${sln_d##*/}
+      return 0
+    fi
+    sln_d=${sln_d%/*}
+  done
+  printf "%s: error: the calling script sits in no module folder (no folder above it holds a module manifest), so it has no namespace (ERR_INVALID_ARGUMENT)\n" "$1" >&2
+  return 1
+}
+
+# store_namespace: the caller's namespace on stdout, the installed folder name of the calling
+# script's module; rc 1 with the lookup's one line when there is none
+store_namespace() {
+  store_lib_ns store.namespace || return $?
+  printf '%s\n' "$STORE_LIB_NS"
+}
 
 # store_lib_root: the workspace root the store calls run in
 store_lib_root() {
@@ -144,14 +191,23 @@ store_lib_call() {
   )
 }
 
-store_list() { store_lib_call store.list store.list "$@"; }
-store_get() { store_lib_call store.get store.get "$@"; }
-store_put() { store_lib_call store.put store.put "$@"; }
-store_delete() { store_lib_call store.delete store.delete "$@"; }
-store_changes() { store_lib_call store.changes store.changes "$@"; }
+# store_lib_own <function>: one store function over the caller's own namespace, the namespace
+# found by the caller lookup and passed to the driver ahead of the caller's arguments
+store_lib_own() {
+  slo_fn=$1
+  shift
+  store_lib_ns "$slo_fn" || return $?
+  store_lib_call "$slo_fn" "$slo_fn" "$STORE_LIB_NS" "$@"
+}
+
+store_list() { store_lib_own store.list "$@"; }
+store_get() { store_lib_own store.get "$@"; }
+store_put() { store_lib_own store.put "$@"; }
+store_delete() { store_lib_own store.delete "$@"; }
+store_changes() { store_lib_own store.changes "$@"; }
 store_require() { store_lib_call store.require require "$@"; }
 store_has() { store_lib_call store.has has "$@"; }
-store_promote() { store_lib_call store.promote store.promote "$@"; }
+store_promote() { store_lib_own store.promote "$@"; }
 
 # store_lib_data: the storage core's data reader, found beside the resolver this library
 # calls (the core scripts folder holds both), then under the drawer, then in the base mirror
@@ -166,16 +222,17 @@ store_lib_data() {
   return 1
 }
 
-# store_get_into <namespace> <targets>: the batched read into files. <targets> holds one
-# <key> TAB <path> line per key in the asked order; one store.get call answers every key
-# (the one key form for a single key), each present value lands in its path byte for byte,
-# and one line per key prints on stdout in the asked order: 1 TAB <key> for a present key,
-# 0 TAB <key> for an absent one. A refused call passes its rc and its one stderr line
-# through with nothing on stdout, and a read served from a deprecated root keeps its notice
-# on stderr. The scratch is <targets>.ans and <targets>.err, beside the caller's file.
+# store_get_into <targets>: the batched read into files. <targets> holds one <key> TAB
+# <path> line per key in the asked order; one store.get call answers every key (the one key
+# form for a single key), each present value lands in its path byte for byte, and one line
+# per key prints on stdout in the asked order: 1 TAB <key> for a present key, 0 TAB <key>
+# for an absent one. A refused call passes its rc and its one stderr line through with
+# nothing on stdout, and a read served from a deprecated root keeps its notice on stderr.
+# The scratch is <targets>.ans and <targets>.err, beside the caller's file.
 store_get_into() {
-  sgi_ns=$1
-  sgi_t=$2
+  sgi_t=$1
+  store_lib_ns store.get || return $?
+  sgi_ns=$STORE_LIB_NS
   set --
   while IFS='	' read -r sgi_k sgi_p; do
     [ -n "$sgi_k" ] && set -- "$@" "$sgi_k"
@@ -183,7 +240,7 @@ store_get_into() {
   [ $# -gt 0 ] || return 0
   if [ $# -eq 1 ]; then
     sgi_p=$(LC_ALL=C awk -F '\t' 'NF { print substr($0, length($1) + 2); exit }' "$sgi_t")
-    store_get "$sgi_ns" "$1" > "$sgi_p" 2> "$sgi_t.err" < /dev/null
+    store_get "$1" > "$sgi_p" 2> "$sgi_t.err" < /dev/null
     sgi_rc=$?
     if [ "$sgi_rc" -eq 0 ]; then
       cat "$sgi_t.err" >&2
@@ -198,7 +255,7 @@ store_get_into() {
     cat "$sgi_t.err" >&2
     return "$sgi_rc"
   fi
-  store_get "$sgi_ns" "$@" > "$sgi_t.ans" 2> "$sgi_t.err" < /dev/null
+  store_get "$@" > "$sgi_t.ans" 2> "$sgi_t.err" < /dev/null
   sgi_rc=$?
   if [ "$sgi_rc" -ne 0 ]; then
     cat "$sgi_t.err" >&2
@@ -235,16 +292,16 @@ store_roots() {
   printf '%s\n' "$sr_out" | LC_ALL=C awk -F '\t' '{ print $1 "\t" $2; if ($3 != "") print $1 "\t" $3 }'
 }
 
-# store_batch <namespace>: the transactional batch; the action list travels on stdin as
-# the driver's escaped payload lines (action=<put|delete>, key=<escaped key>,
+# store_batch: the transactional batch over the caller's namespace; the action list travels
+# on stdin as the driver's escaped payload lines (action=<put|delete>, key=<escaped key>,
 # head=<sha|none>, value_b64=<base64> for a put), and the driver answers one compact JSON
 # line {"namespace","actions":N} or the first failure's one line with the action and key.
-store_batch() { store_lib_call store.batch store.batch "$@"; }
+store_batch() { store_lib_own store.batch "$@"; }
 
-# store_scan <namespace>: every key the module pattern admits with its raw value, bytewise,
-# as one compact JSON line {"namespace","items":[{"key","value_b64"}]}; the caller decodes
-# the base64 value.
-store_scan() { store_lib_call store.scan store.scan "$@"; }
+# store_scan: every key the caller's module pattern admits with its raw value, bytewise, as
+# one compact JSON line {"namespace","items":[{"key","value_b64"}]}; the caller decodes the
+# base64 value.
+store_scan() { store_lib_own store.scan "$@"; }
 
 # store_lib_escape <value>: the payload escape (backslash, newline, tab, carriage return)
 store_lib_escape() {
@@ -346,24 +403,31 @@ lib_ref_ok() {
   esac
 }
 
-# lib_lock <namespace>: the library lock of a namespace, a lock folder under the drawer's
-# scratch in the library's own family, holding the holder's pid (the calling shell's $$);
-# LIB_LOCK names it while held. A waiter removes a lock whose holder pid is gone (kill -0),
-# gives a pid-less lock ten polls of grace, and refuses a live holder rc 2 ERR_STORAGE_LOCKED
-# after 600 polls 0.1 s apart (where sleep refuses a fraction a poll sleeps 1 s and counts as
-# ten), the wait the unit lock and the drivers' namespace locks share. A malformed namespace
-# or a second lock in a process that holds one refuses rc 1 ERR_INVALID_ARGUMENT, and a lock
-# folder or pid that cannot be written rc 2 ERR_STORAGE_WRITE, each with one line. The
-# namespace classes spell every letter, since a range follows the caller's locale.
+# lib_lock: the library lock of the caller's namespace (the caller lookup's answer), a lock
+# folder under the drawer's scratch in the library's own family, holding the holder's pid
+# (the calling shell's $$); LIB_LOCK names it while held. A waiter removes a lock whose
+# holder pid is gone (kill -0), gives a pid-less lock ten polls of grace, and refuses a live
+# holder rc 2 ERR_STORAGE_LOCKED after 600 polls 0.1 s apart (where sleep refuses a fraction
+# a poll sleeps 1 s and counts as ten), the wait the unit lock and the drivers' namespace
+# locks share. An argument (the lock takes no namespace), a caller with no namespace, a
+# malformed namespace, or a second lock in a process that holds one refuses rc 1
+# ERR_INVALID_ARGUMENT, and a lock folder or pid that cannot be written rc 2
+# ERR_STORAGE_WRITE, each with one line. The namespace classes spell every letter, since a
+# range follows the caller's locale.
 lib_lock() {
-  ll_ns=${1:-}
+  if [ $# -ne 0 ]; then
+    printf "lib.lock: error: lib_lock takes no argument: it locks the calling module's own namespace (ERR_INVALID_ARGUMENT)\n" >&2
+    return 1
+  fi
+  store_lib_ns lib.lock || return $?
+  ll_ns=$STORE_LIB_NS
   case "$ll_ns" in
     [abcdefghijklmnopqrstuvwxyz0123456789]*)
       case "$ll_ns" in *[!abcdefghijklmnopqrstuvwxyz0123456789._-]*) ll_ns="" ;; esac ;;
     *) ll_ns="" ;;
   esac
   if [ -z "$ll_ns" ]; then
-    printf "lib.lock: error: malformed namespace '%s' (ERR_INVALID_ARGUMENT)\n" "$(store_lib_escape "${1:-}")" >&2
+    printf "lib.lock: error: malformed namespace '%s' (ERR_INVALID_ARGUMENT)\n" "$(store_lib_escape "$STORE_LIB_NS")" >&2
     return 1
   fi
   if [ -n "${LIB_LOCK:-}" ]; then
@@ -550,26 +614,28 @@ fields_conforms() {
   fields_run conforms fields.conforms "$1" "$2" /dev/null
 }
 
-# store_search <namespace> <query> <mode> [<limit>]: the library's search entry; the query
-# travels on stdin as the escaped query= payload line and the driver answers the store's
-# one result shape
+# store_search <query> <mode> [<limit>]: the library's search entry over the caller's
+# namespace; the query travels on stdin as the escaped query= payload line and the driver
+# answers the store's one result shape
 store_search() {
-  ss_ns=${1:-}; ss_q=${2:-}; ss_mode=${3:-}; ss_lim=${4:-20}
-  printf 'query=%s\n' "$(store_lib_escape "$ss_q")" | store_lib_call store.search store.search "$ss_ns" "$ss_mode" "$ss_lim"
+  ss_q=${1:-}; ss_mode=${2:-}; ss_lim=${3:-20}
+  store_lib_ns store.search || return $?
+  printf 'query=%s\n' "$(store_lib_escape "$ss_q")" | store_lib_call store.search store.search "$STORE_LIB_NS" "$ss_mode" "$ss_lim"
 }
 
-# store_modes [<namespace>]: the search mode registry, one name TAB description line per
-# mode in the configured driver's order, the modes being registered by the driver's
-# descriptor and never declared by a module (exact is always among them). With a namespace it
-# answers the modes that namespace can answer: exact always, a ranked mode only when the
-# namespace's data file declares a search schema, since a ranked mode reads the documents a
-# schema derives. A namespace no data file declares refuses rc 1 ERR_ENTITY_NOT_FOUND, a
-# malformed one rc 1 ERR_INVALID_ARGUMENT, a missing reader or resolver rc 2.
+# store_modes [--own]: the search mode registry, one name TAB description line per mode in
+# the configured driver's order, the modes being registered by the driver's descriptor and
+# never declared by a module (exact is always among them). With --own it answers the modes
+# the caller's own namespace can answer: exact always, a ranked mode only when its data file
+# declares a search schema, since a ranked mode reads the documents a schema derives. Any
+# other argument refuses rc 1 ERR_INVALID_ARGUMENT, a namespace no data file declares rc 1
+# ERR_ENTITY_NOT_FOUND, a missing reader or resolver rc 2.
 store_modes() {
-  if [ $# -gt 1 ]; then
-    printf 'store.modes: error: store.modes takes at most a namespace (ERR_INVALID_ARGUMENT)\n' >&2
+  if [ $# -gt 1 ] || { [ $# -eq 1 ] && [ "$1" != --own ]; }; then
+    printf 'store.modes: error: store.modes takes no argument but --own (ERR_INVALID_ARGUMENT)\n' >&2
     return 1
   fi
+  if [ $# -eq 1 ]; then store_lib_ns store.modes || return $?; fi
   sm_reg=$(store_lib_call store.modes modes < /dev/null) || return $?
   if [ $# -eq 0 ]; then
     [ -z "$sm_reg" ] || printf '%s\n' "$sm_reg"
@@ -579,7 +645,7 @@ store_modes() {
     printf 'store.modes: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
     return 2
   }
-  sm_out=$(CTX_STORE_WORKSPACE=$(store_lib_root) "$sm_script" "$1" 2>&1)
+  sm_out=$(CTX_STORE_WORKSPACE=$(store_lib_root) "$sm_script" "$STORE_LIB_NS" 2>&1)
   sm_rc=$?
   if [ "$sm_rc" -ne 0 ]; then
     sm_msg=$(printf '%s\n' "$sm_out" | head -n 1)
@@ -592,98 +658,4 @@ store_modes() {
   fi
   sm_form=$(printf '%s\n' "$sm_out" | sed -n '7p')
   printf '%s\n' "$sm_reg" | SM_FORM="$sm_form" LC_ALL=C awk -F '\t' '$1 != "" && ($1 == "exact" || ENVIRON["SM_FORM"] != "")'
-}
-
-# data_lib_ref_ok <ref>: one <module>#<symbol> token, both sides non-empty, no blank or
-# control character
-data_lib_ref_ok() {
-  case "$1" in
-    ''|*'#'*'#'*) return 1 ;;
-    '#'*|*'#') return 1 ;;
-    *'#'*) ;;
-    *) return 1 ;;
-  esac
-  case "$1" in
-    *' '*) return 1 ;;
-    *[[:cntrl:]]*) return 1 ;;
-  esac
-  return 0
-}
-
-# data_lib_module <ref>: the target module name, the text before the #
-data_lib_module() {
-  dlr_mod=${1%%#*}
-  printf '%s\n' "$dlr_mod"
-}
-
-# data_get <ref>: resolve a module reference through the target module's data script
-data_get() {
-  dg_ref=$1
-  if ! data_lib_ref_ok "$dg_ref"; then
-    printf 'data_get: error: ref '\''%s'\'': a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)\n' "$dg_ref" >&2
-    return 1
-  fi
-  dg_depth=$((${CTX_DATA_DEPTH:-0} + 1))
-  if [ "$dg_depth" -gt 8 ]; then
-    printf 'data_get: error: ref '\''%s'\'': ref depth over the limit 8 (ERR_INVALID_ARGUMENT)\n' "$dg_ref" >&2
-    return 1
-  fi
-  case " ${CTX_DATA_CHAIN:-} " in
-    *" $dg_ref "*)
-      printf 'data_get: error: ref '\''%s'\'': ref cycle (ERR_INVALID_ARGUMENT)\n' "$dg_ref" >&2
-      return 1
-      ;;
-  esac
-  dg_mod=$(data_lib_module "$dg_ref")
-  dg_root=$(store_lib_root)
-  dg_script=""
-  for dg_c in "$dg_root/.contexture/modules/$dg_mod/scripts/data" \
-              "$dg_root/.contexture/extensions/modules/$dg_mod/scripts/data" \
-              "$dg_root/base/.contexture/modules/$dg_mod/scripts/data" \
-              "$dg_root/base/.contexture/extensions/modules/$dg_mod/scripts/data"; do
-    if [ -x "$dg_c" ]; then dg_script=$dg_c; break; fi
-  done
-  if [ -z "$dg_script" ]; then
-    printf 'data_get: error: ref '\''%s'\'': module '\''%s'\'' not found (ERR_ENTITY_NOT_FOUND)\n' "$dg_ref" "$dg_mod" >&2
-    return 1
-  fi
-  dg_tmp="${TMPDIR:-/tmp}"
-  if [ -d "$dg_root/.contexture" ] && mkdir -p "$dg_root/.contexture/tmp" 2>/dev/null && [ -w "$dg_root/.contexture/tmp" ]; then
-    dg_tmp="$dg_root/.contexture/tmp"
-  fi
-  dg_err=$(mktemp "$dg_tmp/data-get.XXXXXX" 2>/dev/null) || dg_err=""
-  dg_out=$(CTX_STORE_ROOT="$dg_root" CTX_DATA_DEPTH=$dg_depth CTX_DATA_CHAIN="${CTX_DATA_CHAIN:-}$dg_ref " "$dg_script" data_get "$dg_ref" 2>"${dg_err:-/dev/null}")
-  dg_rc=$?
-  if [ "$dg_rc" -ne 0 ]; then
-    dg_msg=""
-    [ -n "$dg_err" ] && dg_msg=$(head -n 1 "$dg_err" 2>/dev/null)
-    [ -n "$dg_err" ] && rm -f "$dg_err"
-    case "$dg_msg" in
-      data_get:\ error:\ *) dg_msg=${dg_msg#data_get: error: } ;;
-    esac
-    [ -n "$dg_msg" ] || dg_msg="the target module refused the reference"
-    printf 'data_get: error: ref '\''%s'\'': %s\n' "$dg_ref" "$dg_msg" >&2
-    return "$dg_rc"
-  fi
-  [ -n "$dg_err" ] && rm -f "$dg_err"
-  printf '%s\n' "$dg_out"
-  return 0
-}
-
-# data_emit <ref> <data>: the target data script's one-line envelope, data compact JSON
-data_emit() {
-  de_ref=$1
-  de_data=${2:-}
-  if ! data_lib_ref_ok "$de_ref"; then
-    printf 'data_emit: error: ref '\''%s'\'': a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)\n' "$de_ref" >&2
-    return 1
-  fi
-  case "$de_data" in
-    ''|*[[:cntrl:]]*)
-      printf 'data_emit: error: the data for ref '\''%s'\'' must be one compact JSON value (ERR_INVALID_ARGUMENT)\n' "$de_ref" >&2
-      return 1
-      ;;
-  esac
-  printf '{"ref":"%s","data":%s}\n' "$de_ref" "$de_data"
-  return 0
 }

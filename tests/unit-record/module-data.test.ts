@@ -1,9 +1,6 @@
-import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
-import type { Run } from '../support/exec';
 import { ok } from '../support/record';
-import { shFunction } from '../support/sh';
 import { fresh, seedSteps } from '../support/snapshot';
 import { answer, payload } from '../support/wire';
 
@@ -24,12 +21,6 @@ const seeded = seedSteps('module-data', [
 
 const at = async () => fresh(await seeded('UD1'));
 
-function dataGet(sb: string, ref: string): Promise<Run> {
-  return shFunction(sb, join(sb, '.contexture/storage/scripts/library'), 'data_get', [ref], {
-    env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(sb, '.contexture/storage/scripts/driver-resolver') },
-  });
-}
-
 const slugs = async (sb: string): Promise<string[]> => (await ok(sb, 'task.list', ['u1', 'all'])).tasks.map((t: { slug: string }) => t.slug);
 
 describe.concurrent('the unit module\'s own data cases', () => {
@@ -43,14 +34,12 @@ describe.concurrent('the unit module\'s own data cases', () => {
     expect(await slugs(sb)).toEqual(['t1']);
   });
 
-  it('UD-2 [the-engine-r21]: data_get answers the canonical task ref and refuses a missing target naming it', async () => {
+  it('UD-2 [the-engine-r21]: the write time check answers a canonical task ref through the unit\'s own read: a held one lands, a missing one refuses naming the target', async () => {
     const sb = await at();
-    const got = await dataGet(sb, 'unit#u1/task/t1');
-    expect(got.code).toBe(0);
-    expect(got.stdout).toContain('"ref":"unit#u1/task/t1"');
-    expect(got.stdout).toContain('"data":{"unit":"u1","task":{"slug":"t1"');
-    const missing = await dataGet(sb, 'unit#u1/task/missing');
-    expect([missing.code, missing.stdout, missing.stderr]).toEqual([1, '', "data_get: error: ref 'unit#u1/task/missing': task 'missing' not found in unit 'u1' (ERR_ENTITY_NOT_FOUND)\n"]);
+    expect((await ok(sb, 'task.add', ['u1', 't-held'], task('a held task ref', 'unit#u1/task/t1'))).task.refs).toEqual(['unit#u1/task/t1']);
+    const missing = await data(sb, 'task.add', ['u1', 't-missing'], task('a missing task ref', 'unit#u1/task/missing'));
+    expect([missing.code, missing.stdout, missing.stderr]).toEqual([1, '', "task.add: error: ref 'unit#u1/task/missing': task 'missing' not found in unit 'u1' (ERR_ENTITY_NOT_FOUND)\n"]);
+    expect(await slugs(sb)).not.toContain('t-missing');
   });
 
   it('UD-3 [the-engine-r21]: a write with a missing canonical ref refuses re-framed and lands nothing; a held ref lands; a file pointer and a legacy ref are exempt', async () => {
@@ -63,13 +52,16 @@ describe.concurrent('the unit module\'s own data cases', () => {
     expect((await ok(sb, 'task.add', ['u1', 't-legacy'], task('a legacy ref task', 'journal#2026-01-01-absent'))).task.refs).toEqual(['journal#2026-01-01-absent']);
   });
 
-  it('UD-7: data_get answers the canonical finding and lane recipe refs', async () => {
+  it('UD-7: the write time check answers the canonical finding and lane recipe refs: held ones land, missing ones refuse and land nothing', async () => {
     const sb = await at();
     await ok(sb, 'finding.add', ['u1', 'F1'], payload().kv('summary', 'a finding summary').kl('refs'));
-    expect((await dataGet(sb, 'unit#u1/finding/F1')).stdout).toContain('"data":{"unit":"u1","finding":{"name":"F1"');
     await ok(sb, 'lane.create', ['u1', 'l1'], '# a needle lane recipe\n');
-    const recipe = await dataGet(sb, 'unit#u1/lane/l1/recipe');
-    expect([recipe.code, recipe.stdout.includes('"artifact":"recipe"')]).toEqual([0, true]);
+    expect((await ok(sb, 'task.add', ['u1', 't-f'], task('a finding ref task', 'unit#u1/finding/F1', 'unit#u1/lane/l1/recipe'))).task.refs).toEqual(['unit#u1/finding/F1', 'unit#u1/lane/l1/recipe']);
+    for (const ref of ['unit#u1/finding/F9', 'unit#u1/lane/l9/recipe']) {
+      const r = await data(sb, 'task.add', ['u1', 't-gone'], task('a missing ref task', ref));
+      expect([r.code, r.stdout, r.stderr.startsWith(`task.add: error: ref '${ref}': `), r.stderr.endsWith('(ERR_ENTITY_NOT_FOUND)\n')]).toEqual([1, '', true, true]);
+    }
+    expect(await slugs(sb)).not.toContain('t-gone');
   });
 
   it('UD-8 [the-engine-r21]: a held canonical lane ref lands; a claim-shaped unit ref refuses naming the ref and lands nothing', async () => {
@@ -83,11 +75,13 @@ describe.concurrent('the unit module\'s own data cases', () => {
     expect(await slugs(sb)).not.toContain('t-claim');
   });
 
-  it('UD-9: data_get answers the canonical entry ref', async () => {
+  it('UD-9: the write time check answers the canonical entry ref: a held entry lands, a missing one refuses', async () => {
     const sb = await at();
     const { entry } = await ok(sb, 'entry.record', ['u1'], payload().kv('what', 'an entry').kv('thread', 'none').kv('date', '2026-11-03').kv('epoch', '1793687300').kl('refs'));
-    const got = await dataGet(sb, `unit#u1/entry/${entry.slug}`);
-    expect([got.code, got.stdout.includes('"data":{"unit":"u1","entry":{"kind":"entry"')]).toEqual([0, true]);
+    expect((await ok(sb, 'task.add', ['u1', 't-e'], task('an entry ref task', `unit#u1/entry/${entry.slug}`))).task.refs).toEqual([`unit#u1/entry/${entry.slug}`]);
+    const r = await data(sb, 'task.add', ['u1', 't-e9'], task('a missing entry ref task', 'unit#u1/entry/2026-01-01-absent'));
+    expect([r.code, r.stderr.startsWith("task.add: error: ref 'unit#u1/entry/2026-01-01-absent': "), r.stderr.endsWith('(ERR_ENTITY_NOT_FOUND)\n')]).toEqual([1, true, true]);
+    expect(await slugs(sb)).not.toContain('t-e9');
   });
 
   it('UD-10 [the-record-r1]: session.refs sets the read-only unit, session.load reads it, and the per-unit read stays inside its unit', async () => {

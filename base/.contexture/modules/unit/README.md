@@ -23,9 +23,9 @@ public surface, and `ctx session` is retired (a line naming `ctx unit`).
 module            the summary, the version, the description (the law compose preamble)
 laws              the record clauses: @record, @journal, @backlog, @query, @refresh,
                   @close, @handoff (the law compose fragment)
-data              the store declaration: namespace unit, root .contexture/units,
-                  fallback_root .contexture/sessions, suffix .md, key <unit>/<path...>,
-                  changes false, the document rules
+data              the store declaration (the namespace is the folder name, unit):
+                  root .contexture/units, fallback_root .contexture/sessions, suffix .md,
+                  key <unit>/<path...>, changes false, the document rules
 scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
 scripts/data      the 35 record operations over the store (sh, private), and
                   unit.promote, the sweep behind migrate, outside them
@@ -159,7 +159,7 @@ relay, so a child ending rc 0 hands its held warning to that hold instead of pri
 and refresh's exit prints the merged relay once, deduplicated, after its answer, only when
 refresh ends rc 0.
 
-`unit.promote <unit>...|--all` stands outside the 35 operations, as `data_get` does: it
+`unit.promote <unit>...|--all` stands outside the 35 operations: it
 checks every named unit is held (or lists every unit by its state key under `--all`),
 promotes each under its unit lock through `store.promote unit <unit>/` (asking
 `store_has store.promote` once first), stops at the first refusal, re-framed as
@@ -171,9 +171,9 @@ a fully moved store prints `migrated: 0` and leaves no empty deprecated root (a 
 listing no unit reaches no promotion, and its fallback root stays). `ctx unit migrate` is
 its verb.
 
-## The ref interface
+## The ref check
 
-`data_get` resolves a canonical unit ref and `data_emit` prints the envelope:
+A new write checks the canonical unit refs it carries:
 
 ```text
 unit#<unit>/task/<slug>
@@ -182,9 +182,10 @@ unit#<unit>/finding/<NAME>
 unit#<unit>/lane/<lane>/<recipe|journal|report>
 ```
 
-A new write validates its canonical `unit#...` refs through the storage core's `data_get`
-before anything lands and refuses a missing target, re-framed with the write's function
-and the ref. `ctx unit get <unit>/<kind>/<id>` prints the one entity a canonical ref's
+The data script answers each through its own entity read (`task.get`, `entry.get`,
+`finding.get`, or `lane.get`) before anything lands and refuses a missing target, re-framed
+with the write's function and the ref:
+`<function>: error: ref '<ref>': <the target's message> (<CODE>)`. `ctx unit get <unit>/<kind>/<id>` prints the one entity a canonical ref's
 path names (the lane section and lane journal entry forms beside them), read only and lock
 free. The public `ctx unit resolve <unit> <ref>` accepts the same canonical forms
 (the ref carries its target unit) beside the abstract and legacy forms, so a canonical ref

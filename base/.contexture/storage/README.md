@@ -141,8 +141,8 @@ document per entity at write time and ranks those documents in the fts5 store in
 module with no schema falls back to the generic raw value for exact. Search modes are
 registered by the driver, never declared by a module: the descriptor's `search_modes` is a
 list of `{name, description}` objects, `driver-resolver modes` prints the registry one
-`name<TAB>description` line per mode, and the library's `store_modes [<namespace>]`
-answers it, or with a namespace the modes that namespace can answer. A ranked mode answers
+`name<TAB>description` line per mode, and the library's `store_modes [--own]`
+answers it, or with `--own` the modes the caller's own namespace can answer. A ranked mode answers
 only where the configured driver registers it (fts5: `hybrid` and `trigram`) and only over
 a namespace whose data file declares a search schema; posix registers exact alone and
 refuses any other mode naming its registry. The driver declares the optional
@@ -160,10 +160,10 @@ existing core codes. The batch names its 1-based failing action:
 prints, and nothing is written. The scan uses the store's codes (a malformed namespace or
 data declaration is `ERR_INVALID_ARGUMENT`, an undeclared namespace
 `ERR_ENTITY_NOT_FOUND`, an unreadable key or store `ERR_STORAGE_READ`) and stages its
-answer, so a read failure midway prints no partial line. The library's ref interface
-re-frames a target refusal as `data_get: error: ref '<ref>': <message> (<CODE>)`; a chain
-over 8 hops or a cycle refuses `ERR_INVALID_ARGUMENT`; the source write's re-frame and its
-refusal before writing are the unit module's. `ERR_SCHEMA_VIOLATION` is a tier 1 code the
+answer, so a read failure midway prints no partial line. The library's caller lookup
+refuses a caller it cannot place (a script run by a relative path, or one in no module
+folder) with its one line under the store function's name, `ERR_INVALID_ARGUMENT`.
+`ERR_SCHEMA_VIOLATION` is a tier 1 code the
 library owns, outside the core code table: its field validator answers it for a write that
 breaks a container's declaration, and the docs module for a write its grammar refuses (a
 field its edit engine checks, or a result that fails its grammar audit), rc 1 and nothing
@@ -175,11 +175,12 @@ The interrupt rule: rc 0 means the write landed; after an interrupt any other ex
 check with a read before writing again.
 
 A module declares its data in a `data` file beside its `module` file, one `field: value`
-line per field and a line starting with `#` a comment. Only `namespace` and `key` are
-required; `root`, `fallback_root`, `suffix`, `changes`, and the search keys are optional:
+line per field and a line starting with `#` a comment. Only `key` is required; `root`,
+`fallback_root`, `suffix`, `changes`, and the search keys are optional. The namespace is
+never declared: it is the module's folder name, its installed module name, so a
+`namespace:` line refuses as an unknown field naming the fix (remove the line):
 
 ```text
-namespace: <name>
 key: <segment>/<segment>            # or a final <segment...> for a variable-depth key
 root: <workspace-relative folder>   # optional; default: the namespace
 fallback_root: <folder>             # optional; a deprecated root read after the root
@@ -193,31 +194,40 @@ snippet: line                       # optional; default line
 document: <key-pattern> <section> <entity-type> <head-marker|->   # repeatable
 ```
 
-The namespace is a lowercase token of letters, digits, dot, underscore, and hyphen; the
+The namespace is the module folder's name, a token of lowercase letters, digits, dot,
+underscore, and dash, starting with a letter or digit (the module name rule); the
 key pattern carries one `<name>` placeholder per slash-separated segment, and its final
 segment may instead be `<name...>`, which admits one or more key segments (a module's main
 and deeper keys share one pattern: `key: <unit>/<path...>` admits `unit/state` and
 `unit/lanes/x/report`). The root is a workspace-relative folder inside the workspace and
 defaults to the namespace; the fallback root, when declared, is such a folder too, neither
 equal to the root nor nested with it (one inside the other), and a file store reads it
-after the root and never writes it; the suffix defaults to empty; `changes` is `true` or `false`
+after the root and never writes it. A declared root and fallback root apply only under the
+module's own name: an extension module an install record names as installed under an
+alias (its `module <installed name> <original name>` line holding two names) answers its
+namespace as the root and no fallback root, so two installs of one module never share a
+store, and an install record area that exists but cannot be read refuses such a module
+rc 2. The suffix defaults to empty; `changes` is `true` or `false`
 and defaults to `false`. The search form is `flat` (one document per key, section `body`;
 `format`, `fields`, and `title` shape the ranked document) or `documents` (the repeated
 `document` rule names the key pattern, the section, the entity type, and the optional
 column-0 head marker that starts an entity; a key no rule covers stays searchable as one
-generic document). The reader refuses an unknown field. The module directory beside the
-data file is the owner, and a second data file declaring the same namespace refuses.
-`store-data <namespace>` answers one namespace on eleven fixed lines, then the document
+generic document). The reader refuses an unknown field. The namespace `<ns>` is served by
+the data file of the module folder named `<ns>`, the workspace modules root first, then
+the extension root, as discovery resolves a module name (a workspace module shadows an
+extension module of its name). `store-data <namespace>` answers one namespace on eleven fixed lines, then the document
 rules, and never the fallback root, so a parser reading by position ignores the field;
 `store-data <namespace> --with-fallback` answers the fallback root as line 12 (an empty
-line when none is declared) and the rules from line 13, the form the posix driver reads;
+line when none applies) and the rules from line 13, the form the posix driver reads;
 a data file names no search modes, and a `modes` line refuses as an unknown field naming
 the fix;
 any other second argument refuses rc 1. `store-data --list` answers every valid
 declaration of both module roots, one `<namespace><TAB><root>` line each (the root the
-namespace when none is declared, then `<TAB><fallback root>` when one is declared), sorted
-by namespace, and leaves out a malformed declaration, a data file with no namespace, and a
-doubly declared namespace, one stderr line each, rc 0 (rc 2 with no module drawer).
+namespace when none is declared or the module is installed under an alias, then
+`<TAB><fallback root>` when one applies), sorted
+by namespace, a name both roots hold answered once (the workspace module's), and leaves
+out a malformed declaration and a module folder whose name is no namespace token, one
+stderr line each, rc 0 (rc 2 with no module drawer).
 
 ## Discovery and selection
 
@@ -240,16 +250,32 @@ The adoption retires the transitional tiers.
 ## The library
 
 A module's script sources `.contexture/storage/scripts/library` and calls the store
-through it; the module never names the driver. The library exports:
+through it; the module never names the driver, and never names a namespace: the library
+serves the calling module's own namespace alone, its installed module name. At the first
+storage call (never when the library is sourced, since a lane verb sources the unit verb
+library by path) it takes the calling script's path (`$0`, which a sourced file shares
+with the script that sourced it), folds its `.` and `..` segments lexically (no symlink
+resolved, so a linked module folder answers by the link's name, as discovery names
+modules), and walks up to the nearest folder holding a `module` manifest: that folder's
+name is the namespace, kept for the rest of the shell and passed to the driver, whose
+contract keeps its namespace argument. A relative script path (a later `cd` would
+misattribute it) or no module folder above the script refuses rc 1 with one line under
+the store function's name, `ERR_INVALID_ARGUMENT`. The engine runs every verb, hook, and
+part hook by its absolute path, so a module's scripts always place. Another module's data
+is reached only through that module's `ctx` verbs (`get`, `search`). The library exports:
 
-- `store_list`, `store_get`, `store_put`, `store_delete`, `store_changes`, `store_batch`,
-  `store_scan`, `store_search`;
-- `store_get_into <namespace> <targets>`, the batched read into files: the targets file
+- `store_namespace`, the caller lookup's answer on stdout;
+- `store_list [<prefix>]`, `store_get <key>...`, `store_put <key>`, `store_delete <key>`,
+  `store_changes`, `store_batch`, `store_scan`, `store_search <query> <mode> [<limit>]`,
+  each over the caller's namespace;
+- `store_modes [--own]`, the mode registry, or with `--own` the modes the caller's
+  namespace can answer;
+- `store_get_into <targets>`, the batched read into files: the targets file
   holds one `<key><TAB><path>` line per key in the asked order; one `store.get` call answers
   every key (the one key form for a single key), each present value lands in its path byte
   for byte through `store-pack unpack`, and one `1<TAB><key>` or `0<TAB><key>` line per key
   prints on stdout; a refused call passes its rc and its one line through;
-- `store_promote <namespace> <prefix>`, the optional promotion (ask `store_has
+- `store_promote <prefix>`, the optional promotion (ask `store_has
   store.promote` first);
 - `store_require <capability>...` and `store_has <capability>`;
 - `store_roots`, the declared roots read through `store-data --list` (found beside the
@@ -257,7 +283,6 @@ through it; the module never names the driver. The library exports:
   driver: one `<namespace><TAB><root>` line per declared root, a fallback root on its own
   line after its root; rc 2 with one `store.roots: error:` line when no data reader
   answers;
-- `data_get <ref>` and `data_emit <ref> <data>`;
 - the shared checks, each silent with rc 0 for a pass, 1 for a fail, and 2 when the check
   cannot run: `lib_utf8_ok <string>` and `lib_utf8_file_ok <file>`, the UTF-8 check (RFC
   3629: no overlong form, no surrogate, nothing above U+10FFFF), with its awk text in
@@ -272,7 +297,8 @@ through it; the module never names the driver. The library exports:
   It checks the shape alone (an old short unit ref such as `journal#<slug>` passes): the
   owner's presence and the target's existence are the caller's, and the unit and lane
   verbs keep their own two shape check;
-- `lib_lock <namespace>` and `lib_unlock`, the library lock: one lock folder per namespace
+- `lib_lock` and `lib_unlock`, the library lock of the caller's namespace (`lib_lock`
+  takes no argument and refuses one): one lock folder per namespace
   at `.contexture/tmp/locks/lib/<namespace>.lock`, its own family beside the unit locks
   (`locks/unit/`) and the drivers' namespace locks (`locks/store-<namespace>.lock`), so a
   holder calls every store function freely while a module's writers of the namespace wait
@@ -314,23 +340,14 @@ through it; the module never names the driver. The library exports:
   default at read and never stores it; `fields_conforms` prints one `<field>: <reason>`
   line per field breaking the declaration and exits 1 when any prints.
 
-`data_get` resolves a module reference `<module>#<symbol>`: it finds the target module's
-data script in the workspace modules, the workspace extensions, or the base mirror of
-either (`modules/<module>/scripts/data` and `extensions/modules/<module>/scripts/data`),
-runs it with `data_get <ref>`, and prints the envelope the script emits through
-`data_emit`. A ref chain is bounded at 8 hops; a
-repeated ref in the chain refuses as a cycle. The target data script calls
-`data_emit <ref> <data>` to print one compact JSON envelope
-`{"ref":"<ref>","data":<data>}`. The source write's validation of a new ref is the unit
-module's; the library is the mechanism it calls.
-
 ## Errors
 
 A store call passes the driver's answer and refusal through unchanged; the resolver's own
-`driver-resolver: ERROR: ...` line is the one shape exception. The library's ref calls
-use the one-line shape `data_get: error: ref '<ref>': <message> (<CODE>)` and
-`data_emit: error: ...`; the public write that calls them re-frames with its own function
-name and the ref, and writes nothing.
+`driver-resolver: ERROR: ...` line is the one shape exception. The caller lookup's refusal
+and the library's own checks use the one-line shape `<function>: error: <message> (<CODE>)`.
+
+The module-addressed ref interface (`data_get` and `data_emit`) retired with the caller
+lookup: a module reads another module's entity through that module's `ctx` verbs.
 
 ## The retirements
 

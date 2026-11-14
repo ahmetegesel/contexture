@@ -14,9 +14,9 @@ describe('sh function', () => {
     expect(r.stdout).toBe(esc(value));
   });
 
-  it('a sourced function answers by its return code: data_lib_ref_ok takes unit#x and refuses a blank', async () => {
+  it('a sourced function answers by its return code: lib_ref_ok takes unit#x and refuses a blank', async () => {
     const sb = stage();
-    expect((await shFunction(sb, LIBRARY, 'data_lib_ref_ok', ['unit#x'])).code).toBe(0);
-    expect((await shFunction(sb, LIBRARY, 'data_lib_ref_ok', ['unit# x'])).code).toBe(1);
+    expect((await shFunction(sb, LIBRARY, 'lib_ref_ok', ['probe', 'unit#x'])).code).toBe(0);
+    expect((await shFunction(sb, LIBRARY, 'lib_ref_ok', ['probe', 'unit# x'])).code).toBe(1);
   });
 });

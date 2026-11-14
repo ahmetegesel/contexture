@@ -3,7 +3,7 @@ import { join } from 'node:path';
 
 export type ModuleRoot = 'modules' | 'extensions';
 
-export const DOCS_SHAPED = 'namespace: docs\nroot: docs\nsuffix: .md\nkey: <repo>/<slug>\nchanges: true\n';
+export const DOCS_SHAPED = 'root: docs\nsuffix: .md\nkey: <repo>/<slug>\nchanges: true\n';
 
 export function moduleDir(sb: string, root: ModuleRoot, module: string): string {
   return join(sb, '.contexture', root === 'modules' ? 'modules' : 'extensions/modules', module);

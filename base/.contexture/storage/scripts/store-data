@@ -7,11 +7,11 @@
 # tab-separated values: the key pattern, the section, the entity type, and the head marker
 # (or - for none).
 #
-# A module declares its store in `<root>/<module>/data`, where <root> is the workspace
-# modules root (`.contexture/modules`) or the extension root
-# (`.contexture/extensions/modules`); one `field: value` line per
-# field and a line starting with # a comment:
-#   namespace: <lowercase token: letters, digits, dot, underscore, hyphen>   (required)
+# A module's namespace is its installed module name: the module folder's name, never a
+# declared value. A module declares its store in `<root>/<module>/data`, where <root> is the
+# workspace modules root (`.contexture/modules`) or the extension root
+# (`.contexture/extensions/modules`); one `field: value` line per field and a line starting
+# with # a comment:
 #   key: <pattern, a <name> placeholder per slash-separated segment; the final
 #         segment may be a multi-segment <name...> placeholder>              (required)
 #   root: <workspace-relative folder, inside the workspace>                  (optional;
@@ -34,10 +34,21 @@
 #         default line)
 #   document: <key-pattern> <section> <entity-type> <head-marker|->          (optional;
 #         repeatable; the document-set search schema)
-# The module directory beside the data file is the owner; a second data file declaring the
-# same namespace, in either root, refuses. The script validates the fields before any
-# store function maps a key to a path. A data file names no search modes: the modes are the
-# configured driver's registry, so a modes line refuses as an unknown field naming the fix.
+# The namespace <ns> is served by the data file of the module folder named <ns>: the
+# workspace modules root first, then the extension root, as discovery resolves a module
+# name (a workspace module shadows an extension module of its name). The script validates
+# the fields before any store function maps a key to a path. A data file names no
+# namespace and no search modes: a namespace line refuses as an unknown field naming the fix
+# (the namespace is the folder's name), and so does a modes line (the modes are the
+# configured driver's registry).
+#
+# A root the data file declares applies only under the module's own name: an extension
+# module that an install record names as installed under an alias (its module line
+# <installed name> <original name> holding two names) answers its namespace as the root
+# and no fallback root, the declared ones still validated as written, so an aliased
+# module never reads or writes the store of the module it copies; a workspace module is
+# never installed by a package, so never aliased. An install record area that exists but
+# cannot be read leaves an extension module's root unknown and refuses rc 2.
 #
 # The plain answer never carries the fallback root, so a parser that reads the eleven lines
 # by position ignores the field by construction. store-data <namespace> --with-fallback
@@ -45,16 +56,19 @@
 # document rules from line 13; a file store asks for it, a store with no root never does.
 #
 # The listing mode, store-data --list, answers every valid declaration in both roots, one
-# line each, the namespace and its root (the namespace when none is declared) separated by
-# a tab, then the fallback root as a third column when one is declared, sorted by
-# namespace. A malformed declaration, a data file declaring no namespace, and a namespace
-# two data files declare are left out, each with one line on stderr, since such a
-# namespace serves no store value; the listing still answers rc 0.
+# line each, the namespace (the folder's name) and its root (the namespace when none is
+# declared, or when the module is installed under an alias) separated by a tab, then the
+# fallback root as a third column when one applies, sorted by namespace; a name both roots
+# hold answers the workspace module's. A
+# module folder whose name is no namespace token and a malformed declaration are left out,
+# each with one line on stderr, since such a namespace serves no store value; the listing
+# still answers rc 0.
 #
-# Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, two
-# declarations of the namespace, or an argument beyond the namespace and --with-fallback or
-# beyond the listing flag; 2 the module drawer is absent or unreadable; 3 the namespace is
-# declared nowhere. The one-line reason goes to stderr.
+# Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, or an argument
+# beyond the namespace and --with-fallback or beyond the listing flag; 2 the module drawer is
+# absent or unreadable, or the install record area an extension module's root needs cannot
+# be read; 3 no module folder of that name holds a data file. The one-line
+# reason goes to stderr.
 
 set -u
 LC_ALL=C
@@ -84,9 +98,10 @@ case "$SD_NAMESPACE" in
       shift
     fi
     [ $# -le 1 ] || sd_fail "unexpected argument '$2' (store-data <namespace> [--with-fallback], or store-data --list)"
-    # the namespace token: lowercase letters, digits, dot, underscore, hyphen
+    # the namespace token, the module name rule: lowercase letters, digits, dot, underscore,
+    # and dash, starting with a letter or digit
     case "$SD_NAMESPACE" in
-      ''|[!a-z0-9._-]*|*[!a-z0-9._-]*) sd_fail "malformed namespace '$SD_NAMESPACE'" ;;
+      ""|[!a-z0-9]*|*[!a-z0-9._-]*) sd_fail "malformed namespace '$SD_NAMESPACE'" ;;
     esac
     ;;
 esac
@@ -105,26 +120,36 @@ fi
 
 sd_modules="$SD_WS/.contexture/modules"
 sd_extension_modules="$SD_WS/.contexture/extensions/modules"
-
-# the candidate data files of both roots: the workspace modules first, then the extension
-# modules
-set --
-for sd_file in "$sd_modules"/*/data; do
-  [ -f "$sd_file" ] || continue
-  set -- "$@" "$sd_file"
-done
-if [ -d "$sd_extension_modules" ]; then
-  for sd_file in "$sd_extension_modules"/*/data; do
-    [ -f "$sd_file" ] || continue
-    set -- "$@" "$sd_file"
-  done
-fi
+sd_state="$SD_WS/.contexture/extensions/.state"
 
 # sd_parse <namespace> <data file>: the parse and the rule checks, one awk pass over the
-# owner file; the answer is the eleven lines plus the document rules, a refusal is the one
-# prefixed line and exit 1
+# owner file and, for an extension module, every install record after it, whose module
+# line naming the namespace under an alias drops the declared roots; the answer is the
+# eleven lines plus the document rules, a refusal is the one prefixed line and exit 1, an
+# install record area that cannot be read exit 2
 sd_parse() {
-SD_WANT_NS="$1" SD_PATH="$2" SD_FNAME="${2##*/}" SD_WITH_FB="$SD_WITH_FB" LC_ALL=C awk '
+sd_pns=$1
+sd_ppath=$2
+set --
+case "$sd_ppath" in
+  "$sd_extension_modules"/*)
+    if [ -e "$sd_state" ]; then
+      if [ ! -d "$sd_state" ] || [ ! -r "$sd_state" ] || [ ! -x "$sd_state" ]; then
+        printf 'store-data: the install record area cannot be read, so the storage root of namespace '\''%s'\'' is unknown\n' "$sd_pns" >&2
+        return 2
+      fi
+      for sd_rec in "$sd_state"/*.files; do
+        [ -f "$sd_rec" ] || continue
+        if [ ! -r "$sd_rec" ]; then
+          printf 'store-data: the install record area cannot be read, so the storage root of namespace '\''%s'\'' is unknown\n' "$sd_pns" >&2
+          return 2
+        fi
+        set -- "$@" "$sd_rec"
+      done
+    fi
+    ;;
+esac
+SD_WANT_NS="$sd_pns" SD_PATH="$sd_ppath" SD_FNAME="${sd_ppath##*/}" SD_WITH_FB="$SD_WITH_FB" LC_ALL=C awk '
 function fail(msg) {
   printf "store-data: %s\n", msg > "/dev/stderr"
   bad = 1
@@ -135,7 +160,7 @@ function trim(s) {
   gsub(/[[:space:]]+$/, "", s)
   return s
 }
-function ns_ok(s) { return s != "" && s ~ /^[a-z0-9._-]+$/ }
+function ns_ok(s) { return s ~ /^[a-z0-9][a-z0-9._-]*$/ }
 function root_ok(r,   n, p, i) {
   if (r == "" || r == ".") return 0
   if (substr(r, 1, 1) == "/" || substr(r, length(r), 1) == "/") return 0
@@ -179,12 +204,17 @@ BEGIN {
   want = ENVIRON["SD_WANT_NS"]
   path = ENVIRON["SD_PATH"]
   fname = ENVIRON["SD_FNAME"]
-  seen_ns = seen_root = seen_suffix = seen_key = seen_changes = seen_fb = 0
+  seen_root = seen_suffix = seen_key = seen_changes = seen_fb = 0
   seen_search = seen_format = seen_fields = seen_title = seen_snippet = 0
   ns = root = suffix = key = changes = search = format = fields = title = snippet = fb = ""
   docs = ""
   doc_count = 0
   lineno = 0
+  aliased = 0
+}
+FILENAME != path {
+  if ($1 == "module" && NF == 3 && $2 == want && $3 != want) aliased = 1
+  next
 }
 {
   line = $0
@@ -197,8 +227,7 @@ BEGIN {
   field = trim(substr(line, 1, c - 1))
   value = trim(substr(line, c + 1))
   if (field == "namespace") {
-    if (seen_ns) fail("duplicate field '\''namespace'\'' in the data file")
-    seen_ns = 1; ns = value
+    fail("unknown field '\''namespace'\'' in the data file: the namespace is the module folder'\''s name, so remove the namespace line")
   } else if (field == "root") {
     if (seen_root) fail("duplicate field '\''root'\'' in the data file")
     seen_root = 1; root = value
@@ -247,20 +276,20 @@ BEGIN {
 }
 END {
   if (bad) exit 1
-  if (!seen_ns) fail("the data file declares no namespace")
+  ns = want
   if (!seen_key) fail("the data file declares no key pattern")
   if (!seen_root) root = ns
   if (!seen_suffix) suffix = ""
   if (!seen_changes) changes = "false"
 
   if (!ns_ok(ns)) fail("malformed namespace '\''" ns "'\''")
-  if (ns != want) fail("the data file declares namespace '\''" ns "'\'', not '\''" want "'\''")
   if (!root_ok(root)) fail("malformed root '\''" root "'\'' (a workspace-relative folder inside the workspace)")
   if (seen_fb) {
     if (!root_ok(fb)) fail("malformed fallback root '\''" fb "'\'' (a workspace-relative folder inside the workspace)")
     if (fb == root) fail("the fallback root '\''" fb "'\'' equals the root")
     if (index(fb, root "/") == 1 || index(root, fb "/") == 1) fail("the fallback root '\''" fb "'\'' and the root '\''" root "'\'' are nested")
   }
+  if (aliased) { root = ns; fb = "" }
   if (!suffix_ok(suffix)) fail("malformed suffix '\''" suffix "'\''")
   if (!key_pattern_ok(key)) fail("malformed key pattern '\''" key "'\'' (a <name> placeholder per slash-separated segment, the last optionally <name...>)")
   if (changes != "true" && changes != "false") fail("malformed changes flag '\''" changes "'\'' (true or false)")
@@ -319,66 +348,36 @@ END {
   if (ENVIRON["SD_WITH_FB"] == "1") print fb
   printf "%s", docs
 }
-' "$2"
+' "$sd_ppath" "$@"
 }
 
-# sd_first_ns <data file>: the file's first namespace value, empty when it declares none
-sd_first_ns() {
-  LC_ALL=C awk '
-    {
-      line = $0
-      sub(/\r$/, "", line)
-      if (line ~ /^#/) next
-      if (line !~ /[^[:space:]]/) next
-      c = index(line, ":")
-      if (c == 0) next
-      key = substr(line, 1, c - 1)
-      gsub(/^[[:space:]]+/, "", key)
-      gsub(/[[:space:]]+$/, "", key)
-      if (key != "namespace") next
-      val = substr(line, c + 1)
-      gsub(/^[[:space:]]+/, "", val)
-      gsub(/[[:space:]]+$/, "", val)
-      print val
-      exit
-    }
-  ' "$1"
-}
-
-# the listing mode: each data file's first namespace, grouped by namespace in the scan
-# order (so a doubly declared namespace names its owners as the one namespace form does),
-# then each namespace declared once parsed whole, its root and any fallback root answered,
-# in namespace order
+# the listing mode: every module folder holding a data file, its name the namespace, the
+# workspace modules first so an extension module of a name the workspace holds is left out
+# as discovery shadows it, each declaration parsed whole and its root and any fallback root
+# answered, in namespace order
 if [ "$SD_LIST" -eq 1 ]; then
   SD_WITH_FB=1
   sd_tab=$(printf '\t')
+  sd_seen=" "
   sd_rows=""
-  for sd_file in "$@"; do
-    sd_mod=${sd_file%/*}
-    sd_mod=${sd_mod##*/}
-    sd_v=$(sd_first_ns "$sd_file")
-    case "$sd_v" in
-      '')
-        printf 'store-data: the data file of module '\''%s'\'' declares no namespace\n' "$sd_mod" >&2
-        continue
-        ;;
-      [!a-z0-9._-]*|*[!a-z0-9._-]*)
-        printf 'store-data: the data file of module '\''%s'\'' declares a malformed namespace '\''%s'\''\n' "$sd_mod" "$sd_v" >&2
+  for sd_file in "$sd_modules"/*/data "$sd_extension_modules"/*/data; do
+    [ -f "$sd_file" ] || continue
+    sd_ns=${sd_file%/*}
+    sd_ns=${sd_ns##*/}
+    case "$sd_seen" in
+      *" $sd_ns "*) continue ;;
+    esac
+    sd_seen="$sd_seen$sd_ns "
+    case "$sd_ns" in
+      [!a-z0-9]*|*[!a-z0-9._-]*)
+        printf 'store-data: the module folder '\''%s'\'' names no namespace: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit\n' "$sd_ns" >&2
         continue
         ;;
     esac
-    sd_rows="$sd_rows$sd_v$sd_tab$sd_mod$sd_tab$sd_file
+    sd_rows="$sd_rows$sd_ns$sd_tab$sd_file
 "
   done
-  printf '%s' "$sd_rows" | LC_ALL=C awk -F '\t' '
-    !($1 in n) { order[++k] = $1 }
-    { n[$1]++; owners[$1] = owners[$1] " " $2; file[$1] = $3 }
-    END { for (i = 1; i <= k; i++) { s = order[i]; printf "%s\t%d\t%s\t%s\n", s, n[s], owners[s], file[s] } }
-  ' | LC_ALL=C sort | while IFS="$sd_tab" read -r sd_ns sd_n sd_owners sd_file; do
-    if [ "$sd_n" -gt 1 ]; then
-      printf 'store-data: namespace '\''%s'\'' is declared by more than one module:%s\n' "$sd_ns" "$sd_owners" >&2
-      continue
-    fi
+  printf '%s' "$sd_rows" | LC_ALL=C sort | while IFS="$sd_tab" read -r sd_ns sd_file; do
     if sd_out=$(sd_parse "$sd_ns" "$sd_file" 2>&1); then
       sd_fb=$(printf '%s\n' "$sd_out" | sed -n '12p')
       printf '%s\t%s%s\n' "$sd_ns" "$(printf '%s\n' "$sd_out" | sed -n '2p')" "${sd_fb:+$sd_tab$sd_fb}"
@@ -389,57 +388,19 @@ if [ "$SD_LIST" -eq 1 ]; then
   exit 0
 fi
 
-# the owner scan: the first namespace value of each candidate data file, one awk pass over
-# every file in both roots, in the scan order
-sd_owner_files=""
-if [ $# -gt 0 ]; then
-  sd_owner_files=$(SD_WANT_NS="$SD_NAMESPACE" LC_ALL=C awk '
-    BEGIN { want = ENVIRON["SD_WANT_NS"] }
-    FNR == 1 { found = 0 }
-    found { next }
-    {
-      line = $0
-      sub(/\r$/, "", line)
-      if (line ~ /^#/) next
-      if (line !~ /[^[:space:]]/) next
-      c = index(line, ":")
-      if (c == 0) next
-      key = substr(line, 1, c - 1)
-      val = substr(line, c + 1)
-      gsub(/^[[:space:]]+/, "", key)
-      gsub(/[[:space:]]+$/, "", key)
-      if (key != "namespace") next
-      gsub(/^[[:space:]]+/, "", val)
-      gsub(/[[:space:]]+$/, "", val)
-      found = 1
-      if (val == want) print FILENAME
-    }
-  ' "$@")
-fi
-
+# the owner lookup: the data file of the module folder named after the namespace, the
+# workspace modules root first, then the extension root
 sd_found=""
-sd_count=0
-sd_owners=""
-if [ -n "$sd_owner_files" ]; then
-  sd_ifs=$IFS
-  IFS='
-'
-  for sd_file in $sd_owner_files; do
-    sd_count=$((sd_count + 1))
+for sd_file in "$sd_modules/$SD_NAMESPACE/data" "$sd_extension_modules/$SD_NAMESPACE/data"; do
+  if [ -f "$sd_file" ]; then
     sd_found=$sd_file
-    sd_mod=${sd_file%/*}
-    sd_mod=${sd_mod##*/}
-    sd_owners="$sd_owners $sd_mod"
-  done
-  IFS=$sd_ifs
-fi
+    break
+  fi
+done
 
-if [ "$sd_count" -eq 0 ]; then
+if [ -z "$sd_found" ]; then
   printf 'store-data: namespace '\''%s'\'' is declared by no module data file\n' "$SD_NAMESPACE" >&2
   exit 3
-fi
-if [ "$sd_count" -gt 1 ]; then
-  sd_fail "namespace '$SD_NAMESPACE' is declared by more than one module:$sd_owners"
 fi
 
 sd_parse "$SD_NAMESPACE" "$sd_found"

@@ -50,7 +50,7 @@ describe.concurrent('package-uninstall: the removal and the changed-file preserv
   it('[the-engine-r22, modules-r15] a preserved stale file of an upgrade survives the package uninstall while the record and the module folder go', async () => {
     const sb = sandbox();
     const pa = newPkg(sb, 'pkga');
-    addModule(pa, 'alpha', 'docs');
+    addModule(pa, 'alpha', true);
     addFile(pa, 'rhythms/keep.md', 'the kept rhythm');
     expect((await installPkg(sb, pa)).code).toBe(0);
     writeFileSync(extPath(sb, 'rhythms/keep.md'), 'locally edited\n');
