@@ -387,4 +387,4 @@
   WHY ::
     Found by the search-fanout build lane's measurement; accepted for the one release since the direct ctx docs search has no bound and a timed out group reads failed, never silent, but larger corpora (adopter workspaces) will hit it.
   REF: "lane#build-search-fanout/report"
-  STATUS: OPEN
+  STATUS: PICKED knowledge-promotion
