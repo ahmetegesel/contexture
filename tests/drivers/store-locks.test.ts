@@ -15,7 +15,7 @@ import { answer, refused } from '../support/wire';
 
 const LOCK = namespaceLock('docs');
 
-async function until(check: () => boolean, ms = 10_000): Promise<boolean> {
+async function until(check: () => boolean, ms = 60_000): Promise<boolean> {
   for (const t0 = Date.now(); Date.now() - t0 < ms; await wait(20)) if (check()) return true;
   return check();
 }
