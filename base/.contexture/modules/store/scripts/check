@@ -1,0 +1,8 @@
+#!/bin/sh
+# summary: name every record that breaks its container's current declaration
+# usage: ctx store check <container>
+# help: prints one line per record and field, <container>/<id>: <field>: <reason>, for a required field absent, a value outside its one-of set, a shape other than the declared one, or a leftover field the declaration no longer names; declarations change forward only, so a record breaking a later declaration is fixed by its next write (set, or --unset=<field> for a leftover)
+# help: exit codes: 0 every record conforms (nothing printed); 1 a record does not, or a usage error; an undeclared or dropped container rc 1 (ERR_ENTITY_NOT_FOUND)
+# help: example: ctx store check ideas
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/store" check "$@"

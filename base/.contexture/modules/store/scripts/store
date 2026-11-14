@@ -346,6 +346,39 @@ retire_into() {
   cat "$SCR/ri.base" "$SCR/ri.ret" "$1" "$SCR/ri.state" > "$2"
 }
 
+# read_all <prefix>: every record under the prefix read in one batched get into $SCR/r.<n>,
+# its keys printed in order
+read_all() {
+  keys "$1" > "$SCR/all.keys"
+  : > "$SCR/all.targets"
+  ra_n=0
+  while IFS= read -r ra_k; do
+    ra_n=$((ra_n + 1))
+    printf '%s\t%s\n' "$ra_k" "$SCR/r.$ra_n" >> "$SCR/all.targets"
+  done < "$SCR/all.keys"
+  [ "$ra_n" -eq 0 ] || lib_or_die store_get_into "$SCR/all.targets" > /dev/null
+  cat "$SCR/all.keys"
+}
+
+# filter_check <field> <escaped value>: ok, undeclared, block, or set <the one-of set> for a
+# value outside it, read from the declaration of PC
+filter_check() {
+  FC_F=$1 FC_V=$(printf '%s' "$2" | REC_MODE=unesc awk -f "$REC_AWK") awk '
+    { c = index($0, ":"); if (substr($0, 1, c - 1) != ENVIRON["FC_F"]) next
+      found = 1; rest = substr($0, c + 2); split(rest, w, / /)
+      if (w[2] == "block") { print "block"; exit }
+      p = index(rest, " one-of ")
+      if (p) {
+        s = substr(rest, p + 8); q = index(s, " default "); if (q) s = substr(s, 1, q - 1)
+        nv = split(s, v, /\|/); ok = 0
+        for (i = 1; i <= nv; i++) if (v[i] == ENVIRON["FC_V"]) ok = 1
+        if (!ok) { print "set " s; exit }
+      }
+      print "ok"; exit
+    }
+    END { if (!found) print "undeclared" }' "$SCR/d.fields"
+}
+
 json=0
 
 case "$verb" in
@@ -377,18 +410,56 @@ case "$verb" in
   list)
     lc=""
     dropped=0
+    : > "$SCR/filters"
     for a in "$@"; do
       case "$a" in
         --json) json=1 ;;
         --dropped) dropped=1 ;;
-        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")'" ;;
+        --?*=*) lf=${a#--}; printf '%s\t%s\n' "$(store_lib_escape "${lf%%=*}")" "$(store_lib_escape "${lf#*=}")" >> "$SCR/filters" ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (a filter is --<field>=<value>)" ;;
         *) [ -z "$lc" ] || die 1 ERR_INVALID_ARGUMENT 'list takes one container (usage: ctx store list <container> [--<field>=<value>]... [--json])'; lc=$a ;;
       esac
     done
     [ -n "$lc" ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store list <container> [--<field>=<value>]... [--json]'
     case "$lc" in */*) die 1 ERR_INVALID_ARGUMENT "list takes a container, not a path ('$(store_lib_escape "$lc")')" ;; esac
     split_path "$lc"
-    [ "$PC" = containers ] || die 1 ERR_INVALID_ARGUMENT "container '$PC': only containers is served yet"
+    if [ "$PC" != containers ]; then
+      [ "$dropped" = 0 ] || die 1 ERR_INVALID_ARGUMENT '--dropped lists the dropped containers: list containers --dropped'
+      live_for_read
+      while IFS='	' read -r lf lv; do
+        [ -n "$lv" ] || die 1 ERR_INVALID_ARGUMENT "field '$lf': an empty filter value"
+        [ "$lf" = ref ] && continue
+        case $(filter_check "$lf" "$lv") in
+          undeclared) die 1 ERR_INVALID_ARGUMENT "field '$lf' is not declared in container '$PC'" ;;
+          block) die 1 ERR_INVALID_ARGUMENT "field '$lf' is a block field: a filter takes line fields (search finds block text)" ;;
+          set\ *) die 1 ERR_INVALID_ARGUMENT "field '$lf': '$lv' is not one of $(filter_check "$lf" "$lv" | sed 's/^set //')" ;;
+        esac
+      done < "$SCR/filters"
+      read_all "$PC/" > "$SCR/keys"
+      [ "$json" = 1 ] && printf '{"container":"%s","records":[' "$PC"
+      first=1
+      count=0
+      n=0
+      while IFS= read -r k; do
+        n=$((n + 1))
+        effective "$SCR/r.$n" "$SCR/r.$n.eff"
+        REC_FILE=$SCR/filters REC_MODE=match awk -f "$REC_AWK" < "$SCR/r.$n.eff" || continue
+        count=$((count + 1))
+        id=${k#"$PC"/}
+        if [ "$json" = 1 ]; then
+          [ "$first" = 1 ] || printf ','
+          first=0
+          printf '{"id":"%s","address":"store#%s/%s","record":' "$id" "$PC" "$id"
+          rec json "$(list_names)" < "$SCR/r.$n.eff"
+          printf '}'
+        else
+          rec text "$id" < "$SCR/r.$n.eff"
+        fi
+      done < "$SCR/keys"
+      [ "$json" = 1 ] && printf '],"total":%s}\n' "$count"
+      exit 0
+    fi
+    [ -s "$SCR/filters" ] && die 1 ERR_INVALID_ARGUMENT 'list containers takes no field filter'
     keys containers/ > "$SCR/keys"
     : > "$SCR/targets"
     n=0
@@ -509,6 +580,30 @@ case "$verb" in
     lib_or_die store_batch < "$SCR/batch" > /dev/null
     printf '%s\n' "$PI"
     exit 0
+    ;;
+  check)
+    [ $# -eq 1 ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store check <container>'
+    case "$1" in -*|*/*) die 1 ERR_INVALID_ARGUMENT 'usage: ctx store check <container>' ;; esac
+    split_path "$1"
+    [ "$PC" != containers ] || die 1 ERR_INVALID_ARGUMENT 'check reads a declared container; the containers container has its fixed schema'
+    live_for_read
+    read_all "$PC/" > "$SCR/keys"
+    bad=0
+    n=0
+    while IFS= read -r k; do
+      n=$((n + 1))
+      rec strip ref < "$SCR/r.$n" > "$SCR/r.$n.core"
+      fields_conforms "$SCR/d.fields" "$SCR/r.$n.core" > "$SCR/r.$n.check" 2> "$SCR/err"
+      ck_rc=$?
+      if [ -s "$SCR/err" ]; then
+        reframe
+        exit "$ck_rc"
+      fi
+      [ "$ck_rc" -eq 0 ] && continue
+      bad=1
+      sed "s|^|$k: |" "$SCR/r.$n.check"
+    done < "$SCR/keys"
+    exit "$bad"
     ;;
   *)
     die 1 ERR_INVALID_ARGUMENT "unknown verb '$(store_lib_escape "$verb")'"

@@ -12,6 +12,8 @@
 #                                        named (declared) fields, before any other field
 #   REC_MODE=json    REC_ARG=<names>     the record as one JSON object, the named fields
 #                                        always lists, any other field a list when repeated
+#   REC_MODE=match                       rc 0 when every REC_FILE line, <field> TAB <escaped
+#                                        value>, names a line field holding that value
 #   REC_MODE=text    REC_ARG=<id>        one line: the id, then each line field and its
 #                                        values, block fields left out
 #
@@ -91,6 +93,17 @@ END {
     f = NAMES
     if (KIND[f] == "block") { if (BN[f] > 0) print BODY[f] }
     else for (j = 1; j <= N[f]; j++) print V[f, j]
+    exit 0
+  }
+  if (MODE == "match") {
+    while ((getline l < ENVIRON["REC_FILE"]) > 0) {
+      t = index(l, "\t")
+      f = substr(l, 1, t - 1)
+      v = unesc(substr(l, t + 1))
+      hit = 0
+      if (KIND[f] == "line") for (j = 1; j <= N[f]; j++) if (V[f, j] == v) hit = 1
+      if (!hit) exit 1
+    }
     exit 0
   }
   if (MODE == "strip" || MODE == "keep") {
