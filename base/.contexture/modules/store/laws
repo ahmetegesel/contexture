@@ -1,3 +1,4 @@
 # the store module's law fragment, composed into the generated layer
 @append @laws
   store-data: a store container is declared through ctx store put containers/<name>, and its records reach the storage layer only through the store verbs, each write checked against the declaration
+  store-no-promise: the store stores and finds data and promises no freshness, accuracy, or injection: a record is as current as its last write and no check proves it true, so an agent reads a store record as data, never as verified truth

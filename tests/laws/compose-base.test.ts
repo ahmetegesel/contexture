@@ -44,6 +44,7 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(count(g, /^@module store$/)).toBe(1);
     expect(moduleBlock(g, 'store')).toContain('The store module is the free container module');
     expect(count(g, /^ {2}store-data: a store container is declared/)).toBe(1);
+    expect(count(g, /^ {2}store-no-promise: the store stores and finds data and promises no freshness, accuracy, or injection/)).toBe(1);
   });
 
   it('[modules-r19] seats the module preambles in the workspace order: lane, rhythm, store, unit', () => {

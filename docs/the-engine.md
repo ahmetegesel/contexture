@@ -567,6 +567,28 @@ The rhythm module ships with the base in the workspace modules root, beside the 
 
 The module's one rule lives in its private `scripts/resolve`, which carries no summary line, so ctx never lists or dispatches it: the verbs run it by path, the unit verb library runs it by path (found as it finds the storage resolver) for the stamp check of `ctx unit record` and `ctx lane create` and for the board's closing line, and the governance grammar census reaches it through `ctx rhythm list`. It reads the two rhythm roots of the drawer it sits in and answers tab separated lines: the origin, whether the copy shadows the other root, the declared `@rhythm` name, the use when and activation values, one line per step (number, gate, outcome), and one line per grammar defect. The grammar: a step line is any line opening with a number, a dot, and a blank, its gate the text before the first colon in `[A-Z][A-Z_+]*`, the steps numbered 1 to N; the defects are a missing use when line, an activation neither propose nor auto, an `@rhythm` name that is not the file name, a break in the numbering, a gate outside the stamp grammar (counted once, never also as a gap), and no step line. Each verb answers a sole `--help` or `-h` with the table `ctx rhythm help <verb>` prints. The module holds no laws file (the `@rhythms` law stays in the core) and no data file (it reads no store).
 
+### ctx store: the store module
+
+The store module ships with the base in the workspace modules root, beside the lane and rhythm modules, on the builtin list (never the reserved list), so every workspace has it and no extension takes the name. It is the free container module: a workspace keeps generic data in a container it declares, with no module of its own. Its grammar is verb first, the operand being the path after `store#` in an address:
+
+```bash
+.contexture/ctx store put containers/<name> --description="..." --minting=given|generated [--add-fields="<field line>"]...
+.contexture/ctx store get <container>/<id> [--json]
+.contexture/ctx store list <container> [--<field>=<value>]... [--json]
+.contexture/ctx store list containers [--dropped] [--json]
+.contexture/ctx store put <container>/<id> | <container> [--<field>=<value>]... [--add-<field>=<item>]... [--unset=<field>]... [--stdin=<field>]
+.contexture/ctx store set <container>/<id> [the same write forms, --remove-<field>=<item> too]
+.contexture/ctx store delete <container>/<id>
+.contexture/ctx store check <container>
+.contexture/ctx store search "<query>" [--container=<c>] [--type=<t>] [--mode=<m>] [--limit=<n>] [--json]
+```
+
+- Declarations: `containers` is the one reserved container name; each of its records is a declaration: a one-line `description` (printed by `list containers`), a `minting` (`given` or `generated`), and `fields`, one field line per field in the storage layer's grammar (`<name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]`), plus the store kept `retired` ids and `dropped` state, which no write may name. `set containers/<name>` changes a declaration forward only; `delete containers/<name>` drops it, its records removed and every id they used retired, and a later `put containers/<name>` starts fresh with the retired ids inherited.
+- Records: every write is checked against the declaration by the field validator under the library lock of the `store` namespace, and every refusal is one line `store <verb>: error: <message> (<CODE>)` with nothing written (`ERR_INVALID_ARGUMENT` for malformed input, `ERR_SCHEMA_VIOLATION` for a write breaking the declaration or naming an undeclared or dropped container, `ERR_ENTITY_EXISTS` for a used or retired id, `ERR_ENTITY_NOT_FOUND` for a missing record). A record prints in the unit record dialect; `ref` is every container's built in list of full addresses. Ids are unique whatever their case and never handed out again; a generated id is the date and five random characters (`2026-11-13-k3x9m`).
+- Reads: `get` prints one record whole with its absent defaults read in, `list` filters by exact field values (complete and uncapped), `check` names every record breaking the current declaration (rc 1 when any does), and `search` answers the shared search shape, one group under `ctx search` whose rows read through `ctx store get <container>/<id>`, the container's name as each row's type.
+
+The module keeps one value per record under the key `<container>/<id>` (declarations at `containers/<name>`) in its own root, `.contexture/store`, through the storage core's library alone: its verbs are thin wrappers over a private engine (`scripts/store`) and a private record reader (`lib/record.awk`), and it never names a driver. Its law fragment carries the `store-data` and `store-no-promise` clauses: the store stores and finds data and promises no freshness, accuracy, or injection.
+
 ### ctx unit fold: the consolidation fold
 
 `ctx unit fold` is one stateless verb over the record; the command keeps no cursor, file, config, or table. The record is the state: a fold start entry (the plan JSON, the carried threads, and the batch rule), the lanes' ordinary consolidated entries, and the finish receipt. The consolidated entry is a normal journal entry: the `WHAT` is the batch's synthesis, the `REF` lines name every constituent (the carried open threads included) plus any external report, and the `CLOSES` lines fold the same constituents except the open threads. A fold compacts history, never obligations: open threads stay live and are carried.
