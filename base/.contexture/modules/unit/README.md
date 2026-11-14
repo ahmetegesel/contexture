@@ -28,7 +28,8 @@ data              the storage declaration (the namespace is the folder name, uni
                   key <unit>/<path...>, changes false, the document rules
 scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
 scripts/data      the 35 record operations over the storage layer (sh, private), and
-                  unit.promote, the sweep behind migrate, outside them
+                  unit.migrate, the record's migrations behind migrate, outside them
+lib/migrate.awk   the pointer rewrite: the tokenizer, the class table, the census, NOTE
 lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
 lib/render.awk    the one renderer of every text view
 lib/canon.awk     the canonical renderer and the JSON string form
@@ -159,13 +160,20 @@ relay, so a child ending rc 0 hands its held warning to that hold instead of pri
 and refresh's exit prints the merged relay once, deduplicated, after its answer, only when
 refresh ends rc 0.
 
-`unit.promote <unit>...|--all` stands outside the 35 operations: it
+`unit.migrate [--dry-run] <unit>...|--all` stands outside the 35 operations: it
 checks every named unit is held (or lists every unit by its state key under `--all`),
-promotes each under its unit lock through `store.promote unit <unit>/` (asking
-`store_has store.promote` once first), stops at the first refusal, re-framed as
-`unit.promote: error: unit '<unit>': <message>`, and answers
-`{"promote":true,"migrated":N}`, or `{"promote":false,"migrated":0}` under a driver
-without the token; the sweep prints no warning. The posix promotion removes the fallback
+then per unit under its unit lock promotes it through `store.promote unit <unit>/` (asking
+`store_has store.promote` once first; never under `--dry-run`) and rewrites its pointers
+(`lib/migrate.awk` over every artifact value as stored, the census rows into the verb's
+census folder, the changed values through one `store.batch`, no record operation, so a
+CLOSED unit is reached), runs the residual scan `u_mig_residual` over what each unit is left
+holding (its own awk, apart from the tokenizer: every token still holding an old pointer
+form outside NOTE, CLOSES, and SUPERSEDES lines and `ref_sessions`, one row each into
+`residual.tsv`, which the verb tallies by the census after's class for the same token on the
+same line), stops at the first refusal, re-framed as
+`unit.migrate: error: unit '<unit>': <message>`, and answers
+`{"promote":<bool>,"moved":N,"rewritten":N,"migrated":N}`, migrated counting the units
+either migration changed; the sweep prints no warning. The posix promotion removes the fallback
 root its move empties, and an empty fallback root when it answers `none`, so `--all` over
 a fully moved store prints `migrated: 0` and leaves no empty deprecated root (a store
 listing no unit reaches no promotion, and its fallback root stays). `ctx unit migrate` is

@@ -256,7 +256,7 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
   it('[the-record-r14, the-record-r-4gj4k] every row answers rc 0, the legacy unit read before its first landing write, the store swept after', () => {
     expect(rows.filter((r) => r.code !== 0).map((r) => `${r.key}: rc ${r.code}: ${r.out.split('\n')[0]}`)).toEqual([]);
     expect(rows.filter((r) => r.out.includes('WARNING: the record was read from its deprecated root')).length).toBeGreaterThanOrEqual(5);
-    expect(rows.find((r) => r.key === 'unit migrate')?.out).toBe('migrated: 1\n');
+    expect(rows.find((r) => r.key === 'unit migrate')?.out.split('\n').slice(-3)).toEqual([expect.stringMatching(/^token list: /), 'migrated: 2', '']);
     expect(rows.length).toBeGreaterThan(90);
   });
 

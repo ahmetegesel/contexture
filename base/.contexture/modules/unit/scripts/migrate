@@ -1,19 +1,21 @@
 #!/bin/sh
-# summary: the sweep: move units from the store's deprecated root to its current root
-# usage: ctx unit migrate <unit> [<unit>...]
-# usage: ctx unit migrate --all
-# help: moves each named unit, or with --all every unit the store holds, whole from the store's deprecated root to its current root, each under its unit lock (unit.promote over the store's optional promotion); a unit already in the current root moves nothing
-# help: every landing write already moves the unit it writes, so the sweep is for the units nobody writes: a CLOSED unit never moves by a write, and while any unit stays behind every read of it warns naming this verb
-# help: prints one line, migrated: <n>, the units moved, so a second run prints migrated: 0; a store that keeps no deprecated root prints that nothing moves
-# help: the deprecated root is removed once it is empty: by the move that empties it, and by a sweep that finds it empty, which still prints migrated: 0; a root still holding anything stays, and a store holding no unit keeps its empty root
-# help: the first refusal stops the run, its one line naming the unit; the units moved before it stay moved
-# help: exit codes: 0 swept, or nothing to move; 1 a bare call, a bad argument, an unknown unit, or a unit the store holds in both roots; 2 a storage failure
-# help: example: ctx unit migrate --all
+# summary: the record's migrations: move units to the store's current root, then rewrite every pointer into its full address
+# usage: ctx unit migrate [--dry-run] <unit> [<unit>...]
+# usage: ctx unit migrate [--dry-run] --all
+# help: applies every pending migration to each named unit, or with --all to every unit the store holds, closed units included, each under its unit lock: first the root move (a unit still in the store's deprecated root moves whole to its current root), then the pointer rewrite (every pointer in every field becomes its full address, unit#, store#, docs#, or file#)
+# help: the rewrite changes how a pointer is written, never what it points to: short unit refs (journal#, knowledge#, backlog#, lane#) and their legacy spellings become unit# addresses, a dangling one too, the legacy file spelling of a journal entry, task, or finding even when written under file# or after a leading dot slash; a pointer into the record's former storage paths, to an artifact or lane artifact of a unit the store holds (in either root, active or closed), becomes that unit# address in a REF value and in free text alike, while one naming a unit the store does not hold (counted as such) and a path into a backup, another repository, or an absolute path keep their bytes, under file# in a REF value; an idea slug pointer becomes its address in the store's ideas container and a bare IDEAS.md mention the address of that container's declaration record; corpus doc paths of a repo the docs module lists become docs# addresses; a file path in a REF or REFS value takes the file# owner (a path:line spelling the path alone, the token in NOTE; a path followed by a colon the path alone, the whole value in NOTE), while a file path in free text stays prose; a token gluing pointers together is split at a comma, a semicolon, or punctuation before the next pointer, and one that still yields no clean address is kept and counted as a pointer glued to text
+# help: a REF or REFS value keeps only a full address: the text beside its pointer, and a whole value no rule rewrites (prose, a placeholder, a law pointer, a URL, a completion receipt), moves word for word to a NOTE line on the same item; a lane recipe's REFS block line is a comma separated list, split outside double quotes and parentheses, each item's first token rewritten as a ref and the rest of the item free text, every separator and annotation kept in place; a lane section anchor followed by more words leaves the artifact's address and the whole value in NOTE; CLOSES and SUPERSEDES lines, NOTE lines, markdown headings, column 0 @ head lines, and the reference units stay as written, their pointer shaped tokens counted
+# help: prints the census before (every pointer shaped token of every field, and every REF and REFS value, counted by class as rewritten, kept with its reason, or moved to NOTE, the three summing to the total), the census after (what is left to rewrite, any REF value that is no full address included, 0 after a run), the residual scan (a check apart from the rewrite's tokenizer: every token still holding an old form outside NOTE and CLOSES, tallied by the class the census after gives it, or not in the census), one line per unit, where the full token lists lie in the workspace scratch, then migrated: <n>, the units either migration changed; a second run changes nothing and prints migrated: 0
+# help: --dry-run computes the same rewrite and prints the same census, takes no lock, and writes nothing: the proof before a run
+# help: every landing write already moves the unit it writes, so the root move is for the units nobody writes; while any unit stays behind every read of it warns naming this verb; the deprecated root is removed once it is empty, while a root still holding anything stays, and a store holding no unit keeps its empty root; a store that keeps no deprecated root moves nothing
+# help: the first refusal stops the run, its one line naming the unit; the units migrated before it stay migrated
+# help: exit codes: 0 migrated, or nothing to migrate; 1 a bare call, a bad argument, an unknown unit, or a unit the store holds in both roots; 2 a storage failure
+# help: example: ctx unit migrate --dry-run --all
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
-  printf 'Usage: ctx unit migrate <unit> [<unit>...] | ctx unit migrate --all\n' >&2
+  printf 'Usage: ctx unit migrate [--dry-run] <unit> [<unit>...] | ctx unit migrate [--dry-run] --all\n' >&2
   printf 'help: ctx unit help migrate\n' >&2
   exit 1
 }
@@ -21,6 +23,8 @@ usage() {
 case "${1:-}" in
   --help|-h|help) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
 esac
+dry=""
+if [ "${1:-}" = --dry-run ]; then dry=--dry-run; shift; fi
 [ $# -ge 1 ] || usage
 if [ "$1" = --all ]; then
   [ $# -eq 1 ] || vb_unknown migrate "$2"
@@ -31,10 +35,56 @@ else
   done
 fi
 
-vb_call unit.promote "$@"
+mg_root=${CTX_ROOT:-$PWD}
+mg_dir="$mg_root/.contexture/tmp/migrate/$(date +%Y%m%d-%H%M%S)-$$"
+mkdir -p "$mg_dir" 2>/dev/null || { printf 'migrate: error: cannot create the census folder in the workspace scratch (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
+MG_REPOS=""
+if [ -n "${CTX_BIN:-}" ]; then
+  MG_REPOS=$("$CTX_BIN" docs query --index < /dev/null 2>/dev/null | awk '$1 != "index" && NF > 1 && !s[$1]++ { printf "%s ", $1 }')
+fi
+MG_DIR=$mg_dir
+export MG_DIR MG_REPOS
+
+vb_call unit.migrate $dry "$@"
 vb_ok
-if [ "$(vb_field promote)" = false ]; then
-  printf 'nothing moves: the store keeps no fallback\n'
+if [ "$(vb_field promote)" = false ] && [ -z "$dry" ]; then
+  printf 'root move: nothing moves, the store keeps no fallback\n'
+fi
+LC_ALL=C awk -F '\t' -v dry="$dry" -v dir="${mg_dir#"$mg_root"/}" '
+  FILENAME ~ /units\.txt$/ { if ($1 != "") U[++nu] = $1; next }
+  FILENAME ~ /before\.tsv$/ {
+    nb++; B[$4 "\t" $5]++; if (!(($4 "\t" $5) in seenb)) { seenb[$4 "\t" $5] = 1; KB[++nkb] = $4 "\t" $5 }
+    D[$5]++; UT[$1]++; if ($5 == "rewritten") UR[$1]++; if ($5 == "note") UN[$1]++
+    next
+  }
+  FILENAME ~ /after\.tsv$/ {
+    na++; A[$4 "\t" $5]++; if (!(($4 "\t" $5) in seena)) { seena[$4 "\t" $5] = 1; KA[++nka] = $4 "\t" $5 }
+    if ($5 != "kept") left++
+    AC[$1 SUBSEP $2 SUBSEP $8 SUBSEP $6] = $4
+    next
+  }
+  FILENAME ~ /residual\.tsv$/ {
+    nr++; k = $1 SUBSEP $2 SUBSEP $3 SUBSEP $4; c = (k in AC) ? AC[k] : "not in the census"
+    if (!(c in RC)) RK[++nrk] = c
+    RC[c]++
+    next
+  }
+  function table(n, K, C,   i, p) {
+    for (i = 1; i <= n; i++) { split(K[i], p, "\t"); printf "  %7d  %-9s  %s\n", C[K[i]], p[2], p[1] }
+  }
+  END {
+    printf "census before: %d pointer tokens in %d units\n", nb, nu
+    table(nkb, KB, B)
+    printf "census before: %d rewritten, %d kept, %d moved to NOTE (%d + %d + %d = %d)\n", D["rewritten"], D["kept"], D["note"], D["rewritten"], D["kept"], D["note"], D["rewritten"] + D["kept"] + D["note"]
+    printf "census after: %d pointer tokens, %d left to rewrite\n", na, left + 0
+    table(nka, KA, A)
+    printf "residual scan: %d tokens holding an old form outside NOTE and CLOSES\n", nr
+    for (i = 1; i <= nrk; i++) printf "  %7d  %s\n", RC[RK[i]], RK[i]
+    for (i = 1; i <= nu; i++) printf "unit %s: %d tokens, %d rewritten, %d moved to NOTE\n", U[i], UT[U[i]], UR[U[i]], UN[U[i]]
+    printf "token list: %s/before.tsv, %s/after.tsv, and %s/residual.tsv\n", dir, dir, dir
+  }' "$mg_dir/units.txt" "$mg_dir/before.tsv" "$mg_dir/after.tsv" "$mg_dir/residual.tsv"
+if [ -n "$dry" ]; then
+  printf 'dry run: %s would migrate, nothing written\n' "$(vb_field migrated)"
 else
   printf 'migrated: %s\n' "$(vb_field migrated)"
 fi

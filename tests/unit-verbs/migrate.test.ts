@@ -5,6 +5,7 @@ import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
 import { fresh, seed } from '../support/snapshot';
 import { fts5Available, stage } from '../support/stage';
 import { must, run, seedUnit, unit } from '../support/unit';
+const last = (r: { code: number; stdout: string; stderr: string }): { code: number; last: string; stderr: string } => ({ code: r.code, last: r.stdout.trimEnd().split('\n').pop() ?? '', stderr: r.stderr });
 
 const WARNING = 'WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses\n';
 
@@ -74,7 +75,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     const after = await views(legacy, 'leg-u');
     expect(after.stderr).toEqual(['', '', '']);
     expect(after.stdout).toEqual((await views(twin, 'leg-u')).stdout);
-    expect(await unit(legacy, 'migrate', 'leg-u')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
+    expect(last(await unit(legacy, 'migrate', 'leg-u'))).toEqual({ code: 0, last: 'migrated: 0', stderr: '' });
   });
 
   it('[the-record-r-4gj4k] a landing write makes one store call, as before the root move: a record on a unit in the root and on a unit in the fallback each reach the resolver for its one batched read of the state and the journal and its one batch alone', async () => {
@@ -99,7 +100,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     toFallback(sb, 'leg-u');
     const before = await views(sb, 'leg-u');
     expect(before.stderr).toEqual([WARNING, WARNING, WARNING]);
-    expect(await unit(sb, 'migrate', 'leg-u')).toMatchObject({ code: 0, stdout: 'migrated: 1\n', stderr: '' });
+    expect(last(await unit(sb, 'migrate', 'leg-u'))).toEqual({ code: 0, last: 'migrated: 1', stderr: '' });
     expect(held(sb, 'leg-u')).toEqual([true, false]);
     const after = await views(sb, 'leg-u');
     expect(after.stdout).toEqual(before.stdout);
@@ -119,9 +120,9 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     const sb = fresh(snap);
     toFallback(sb, 'leg-u');
     toFallback(sb, 'shut-u');
-    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 2\n', stderr: '' });
+    expect(last(await unit(sb, 'migrate', '--all'))).toEqual({ code: 0, last: 'migrated: 2', stderr: '' });
     expect([held(sb, 'leg-u'), held(sb, 'shut-u'), held(sb, 'new-u')]).toEqual([[true, false], [true, false], [true, false]]);
-    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
+    expect(last(await unit(sb, 'migrate', '--all'))).toEqual({ code: 0, last: 'migrated: 0', stderr: '' });
     expect((await unit(sb, 'list')).stderr).toBe('');
   });
 
@@ -129,7 +130,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     const sb = fresh(snap);
     toFallback(sb, 'leg-u');
     toFallback(sb, 'shut-u');
-    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 2\n', stderr: '' });
+    expect(last(await unit(sb, 'migrate', '--all'))).toEqual({ code: 0, last: 'migrated: 2', stderr: '' });
     expect(existsSync(join(sb, FALLBACK_ROOT))).toBe(false);
   });
 
@@ -137,21 +138,21 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     const unitLeft = fresh(snap);
     toFallback(unitLeft, 'leg-u');
     toFallback(unitLeft, 'shut-u');
-    expect(await unit(unitLeft, 'migrate', 'leg-u')).toMatchObject({ code: 0, stdout: 'migrated: 1\n', stderr: '' });
+    expect(last(await unit(unitLeft, 'migrate', 'leg-u'))).toEqual({ code: 0, last: 'migrated: 1', stderr: '' });
     expect(held(unitLeft, 'shut-u')).toEqual([false, true]);
     const entryLeft = fresh(snap);
     toFallback(entryLeft, 'leg-u');
     writeFileSync(join(entryLeft, FALLBACK_ROOT, 'notes.txt'), 'not a unit\n');
-    expect(await unit(entryLeft, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 1\n', stderr: '' });
+    expect(last(await unit(entryLeft, 'migrate', '--all'))).toEqual({ code: 0, last: 'migrated: 1', stderr: '' });
     expect(readFileSync(join(entryLeft, FALLBACK_ROOT, 'notes.txt'), 'utf8')).toBe('not a unit\n');
   });
 
   it('[the-record-r-4gj4k] ctx unit migrate --all removes an already emptied deprecated root, migrated: 0; with no deprecated root it answers as before', async () => {
     const sb = fresh(snap);
-    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
+    expect(last(await unit(sb, 'migrate', '--all'))).toEqual({ code: 0, last: 'migrated: 0', stderr: '' });
     expect(existsSync(join(sb, FALLBACK_ROOT))).toBe(false);
     mkdirSync(join(sb, FALLBACK_ROOT));
-    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'migrated: 0\n', stderr: '' });
+    expect(last(await unit(sb, 'migrate', '--all'))).toEqual({ code: 0, last: 'migrated: 0', stderr: '' });
     expect(existsSync(join(sb, FALLBACK_ROOT))).toBe(false);
     expect([held(sb, 'leg-u'), held(sb, 'new-u'), held(sb, 'shut-u')]).toEqual([[true, false], [true, false], [true, false]]);
   });
@@ -163,7 +164,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     cpSync(join(sb, FALLBACK_ROOT, 'shut-u'), join(sb, RECORD_ROOT, 'shut-u'), { recursive: true });
     const r = await unit(sb, 'migrate', '--all');
     expect([r.code, r.stdout]).toEqual([1, '']);
-    expect(r.stderr).toBe("unit.promote: error: unit 'shut-u': key prefix 'shut-u/' is held in both roots of namespace 'unit' (ERR_ENTITY_EXISTS)\n");
+    expect(r.stderr).toBe("unit.migrate: error: unit 'shut-u': key prefix 'shut-u/' is held in both roots of namespace 'unit' (ERR_ENTITY_EXISTS)\n");
     expect(held(sb, 'leg-u')).toEqual([true, false]);
     expect(held(sb, 'shut-u')).toEqual([true, true]);
   });
@@ -179,10 +180,10 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
   });
 
   it.each([
-    ['a bare call', [], 'Usage: ctx unit migrate <unit> [<unit>...] | ctx unit migrate --all\nhelp: ctx unit help migrate\n'],
+    ['a bare call', [], 'Usage: ctx unit migrate [--dry-run] <unit> [<unit>...] | ctx unit migrate [--dry-run] --all\nhelp: ctx unit help migrate\n'],
     ['--all beside a unit', ['--all', 'leg-u'], "migrate: error: unexpected argument 'leg-u' (ERR_INVALID_ARGUMENT)\n"],
     ['a malformed unit', ['Bad!'], "migrate: error: malformed unit 'Bad!' (ERR_INVALID_ARGUMENT)\n"],
-    ['an unknown unit', ['no-such-u'], "unit.promote: error: unit 'no-such-u' not found (ERR_ENTITY_NOT_FOUND)\n"],
+    ['an unknown unit', ['no-such-u'], "unit.migrate: error: unit 'no-such-u' not found (ERR_ENTITY_NOT_FOUND)\n"],
   ])('[the-record-r-4gj4k] ctx unit migrate refuses %s rc 1 and moves nothing', async (_, args, stderr) => {
     const sb = fresh(snap);
     toFallback(sb, 'leg-u');
@@ -194,7 +195,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     const r = await unit(fresh(snap), 'migrate', '--help');
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/^ctx unit migrate: /);
-    expect(r.stdout).toContain('ctx unit migrate --all');
+    expect(r.stdout).toContain('ctx unit migrate [--dry-run] --all');
     expect(r.stdout).toContain('a root still holding anything stays, and a store holding no unit keeps its empty root');
     expect(r.stdout).not.toMatch(/\.contexture|\//);
   });
@@ -204,6 +205,8 @@ describe.skipIf(!fts5Available())('ctx unit migrate under a store that keeps no 
   it('[the-record-r-4gj4k] prints that nothing moves, rc 0', async () => {
     const sb = stage('fts5', 'migrate-fts5');
     await seedUnit(sb, 'f-u');
-    expect(await unit(sb, 'migrate', '--all')).toMatchObject({ code: 0, stdout: 'nothing moves: the store keeps no fallback\n', stderr: '' });
+    const r = await unit(sb, 'migrate', '--all');
+    expect([r.code, r.stderr, r.stdout.split('\n')[0]]).toEqual([0, '', 'root move: nothing moves, the store keeps no fallback']);
+    expect(r.stdout.endsWith('migrated: 0\n')).toBe(true);
   });
 });

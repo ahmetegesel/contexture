@@ -28,8 +28,8 @@
 # The store root moves gradually: the data file declares a fallback root the store reads
 # after its root, and the posix store's own write moves a unit's folder from the fallback
 # to the root, so a unit moves whole at its first landing write with no call of its own;
-# unit.promote, outside the record's 35 operations, moves the named units
-# or every unit for ctx unit migrate through the store's optional store.promote. A run
+# unit.migrate, outside the record's 35 operations, moves the named units or every unit for
+# ctx unit migrate through the store's optional store.promote, then rewrites their pointers. A run
 # whose reads came from the fallback and that ends rc 0 prints one warning line after its
 # answer.
 #
@@ -573,65 +573,214 @@ u_awk() {
   return 0
 }
 
-# u_unit_promote <unit>...|--all: outside the record's 35 operations: the
-# named units (each one the store holds), or every unit the store lists by its state key,
-# promoted one by one (store.promote), each under its unit lock; the first refusal stops
-# the run with the store's message, naming the unit. The answer is
-# {"promote":true,"migrated":N}, or {"promote":false,"migrated":0} under a driver that
-# keeps no fallback root
-u_unit_promote() {
-  FN=unit.promote
-  [ $# -ge 1 ] || u_refuse 1 ERR_INVALID_ARGUMENT "unit.promote takes the units or --all"
-  if ! store_has store.promote < /dev/null 2>/dev/null; then
-    printf '{"promote":false,"migrated":0}\n'
-    return 0
-  fi
-  u_new "$U_SCR/promote.units"
+# u_unit_migrate [--dry-run] <unit>...|--all: outside the record's 35 operations, the
+# record's migrations, applied per unit under its unit lock: the root move first (store.promote,
+# where the store keeps a fallback root), then the pointer rewrite (lib/migrate.awk) over every
+# artifact value as stored, the changed values written back through one store.batch, never
+# through the record operations, so a CLOSED unit is reached as the root move reaches it (the
+# one named exception to the CLOSED freeze: a form change, never a meaning change). The units
+# the store lists by their state key, in either root, are the held set the rewrite reads (a
+# record storage path naming any other unit keeps its bytes). The named
+# units (each one the store holds), or every unit the store lists by its state key; the first
+# refusal stops the run naming the unit, the units migrated before it staying migrated. The
+# census rows go to MG_DIR (the verb's census folder): before.tsv as each unit was found,
+# after.tsv as it is left, residual.tsv the residual scan's rows (u_mig_residual). --dry-run
+# computes the same rewrite and census, takes no lock, and
+# writes nothing. The answer is {"promote":<bool>,"moved":N,"rewritten":N,"migrated":N}, the
+# migrated count the units either migration changed (the units it would change, dry)
+u_unit_migrate() {
+  FN=unit.migrate
+  um_dry=0
+  if [ "${1:-}" = --dry-run ]; then um_dry=1; shift; fi
+  [ $# -ge 1 ] || u_refuse 1 ERR_INVALID_ARGUMENT "unit.migrate takes the units or --all"
+  um_dir=${MG_DIR:-$U_SCR}
+  [ -d "$um_dir" ] && [ -w "$um_dir" ] || u_refuse 2 ERR_STORAGE_WRITE "cannot write the census folder"
+  u_new "$um_dir/before.tsv" "$um_dir/after.tsv" "$um_dir/residual.tsv" "$um_dir/units.txt"
+  um_promote=1
+  store_has store.promote < /dev/null 2>/dev/null || um_promote=0
+  u_new "$U_SCR/promote.units" "$U_SCR/mg.held" "$U_SCR/keys"
   if [ "$1" = --all ]; then
     u_extra 1 "$@"
-    u_new "$U_SCR/keys"
-    u_keys_all > "$U_SCR/keys" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
-    while IFS= read -r up_k; do
-      case "$up_k" in */state) ;; *) continue ;; esac
-      up_u=${up_k%/state}
-      case "$up_u" in */*) continue ;; esac
-      u_ident_valid "$up_u" || continue
-      u_put "$U_SCR/promote.units" '%s\n' "$up_u"
-    done < "$U_SCR/keys"
   else
     for up_u in "$@"; do
       u_want_held "$up_u"
       u_put "$U_SCR/promote.units" '%s\n' "$up_u"
     done
   fi
-  up_n=0
+  u_keys_all > "$U_SCR/keys" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  while IFS= read -r up_k; do
+    case "$up_k" in */state) ;; *) continue ;; esac
+    up_u=${up_k%/state}
+    case "$up_u" in */*) continue ;; esac
+    u_ident_valid "$up_u" || continue
+    u_put "$U_SCR/mg.held" '%s\n' "$up_u"
+  done < "$U_SCR/keys"
+  if [ "$1" = --all ]; then
+    cp "$U_SCR/mg.held" "$U_SCR/promote.units" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  fi
+  um_moved=0
+  um_rew=0
+  um_mig=0
   while IFS= read -r up_u; do
     [ -n "$up_u" ] || continue
-    u_lock "$up_u"
-    u_new "$U_SCR/promote.out" "$U_SCR/promote.err"
-    store_promote "$up_u/" > "$U_SCR/promote.out" 2> "$U_SCR/promote.err" < /dev/null
-    up_rc=$?
-    if [ "$up_rc" -ne 0 ]; then
-      up_msg=$(head -n 1 "$U_SCR/promote.err" 2>/dev/null)
-      case "$up_msg" in
-        store.promote:\ error:\ *) up_msg=${up_msg#store.promote: error: } ;;
-      esac
-      [ -n "$up_msg" ] || up_msg="the store promotion failed (ERR_STORAGE_WRITE)"
-      printf '%s: error: unit '\''%s'\'': %s\n' "$FN" "$up_u" "$up_msg" >&2
-      exit "$up_rc"
+    um_hit=0
+    u_put "$um_dir/units.txt" '%s\n' "$up_u"
+    [ "$um_dry" -eq 1 ] || u_lock "$up_u"
+    if [ "$um_promote" -eq 1 ] && [ "$um_dry" -eq 0 ]; then
+      u_new "$U_SCR/promote.out" "$U_SCR/promote.err"
+      store_promote "$up_u/" > "$U_SCR/promote.out" 2> "$U_SCR/promote.err" < /dev/null
+      up_rc=$?
+      if [ "$up_rc" -ne 0 ]; then
+        up_msg=$(head -n 1 "$U_SCR/promote.err" 2>/dev/null)
+        case "$up_msg" in
+          store.promote:\ error:\ *) up_msg=${up_msg#store.promote: error: } ;;
+        esac
+        [ -n "$up_msg" ] || up_msg="the store promotion failed (ERR_STORAGE_WRITE)"
+        printf '%s: error: unit '\''%s'\'': %s\n' "$FN" "$up_u" "$up_msg" >&2
+        exit "$up_rc"
+      fi
+      if grep -q '"state":"moved"' "$U_SCR/promote.out" 2>/dev/null; then
+        um_moved=$((um_moved + 1))
+        um_hit=1
+      fi
     fi
+    u_mig_rewrite "$up_u" "$um_dir" "$um_dry"
+    if [ "$UM_CHANGED" -eq 1 ]; then
+      um_rew=$((um_rew + 1))
+      um_hit=1
+    fi
+    [ "$um_hit" -eq 0 ] || um_mig=$((um_mig + 1))
     rm -rf "$U_LOCK" 2>/dev/null
     U_LOCK=""
-    grep -q '"state":"moved"' "$U_SCR/promote.out" 2>/dev/null && up_n=$((up_n + 1))
   done < "$U_SCR/promote.units"
-  printf '{"promote":true,"migrated":%s}\n' "$up_n"
+  if [ "$um_promote" -eq 1 ]; then um_p=true; else um_p=false; fi
+  printf '{"promote":%s,"moved":%s,"rewritten":%s,"migrated":%s}\n' "$um_p" "$um_moved" "$um_rew" "$um_mig"
+}
+
+# u_mig_rewrite <unit> <census folder> <dry 0|1>: the pointer rewrite of one unit: every
+# artifact value read as stored, lib/migrate.awk run over all of them (the before rows), the
+# after rows counted over what the unit is left holding, and the changed values written back
+# through one store.batch (none under --dry-run); UM_CHANGED says whether any value changed
+u_mig_rewrite() {
+  UM_CHANGED=0
+  um_u=$1
+  u_manifest_reset
+  u_fetch_unit "$um_u" all 1
+  u_new "$U_SCR/mg.map" "$U_SCR/mg.post" "$U_SCR/mg.files" "$U_SCR/mg.changed" "$U_SCR/mg.keys"
+  rm -rf "$U_SCR/mg" 2>/dev/null
+  mkdir "$U_SCR/mg" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  um_n=0
+  while IFS='	' read -r um_t um_k um_f; do
+    [ "$um_t" = F ] || continue
+    um_part=${um_k#*|}
+    case "$um_part" in
+      state|backlog|journal|knowledge) um_kind=$um_part; um_lane=""; um_key="$um_u/$um_part" ;;
+      lane/*/*)
+        um_r=${um_part#lane/}
+        um_lane=${um_r%%/*}
+        case "${um_r#*/}" in
+          recipe) um_kind=recipe ;;
+          report) um_kind=report ;;
+          *) um_kind=ljournal ;;
+        esac
+        um_key="$um_u/lanes/$um_r"
+        ;;
+      *) continue ;;
+    esac
+    um_n=$((um_n + 1))
+    um_nl=1
+    [ -s "$um_f" ] && [ -n "$(tail -c 1 "$um_f")" ] && um_nl=0
+    u_put "$U_SCR/mg.map" '%s\t%s\t%s\t%s\t%s\t%s\n' "$um_f" "$um_kind" "$um_lane" "$U_SCR/mg/$um_n" "$um_part" "$um_nl"
+    u_put "$U_SCR/mg.files" '%s\n' "$um_f"
+    u_put "$U_SCR/mg.keys" '%s\t%s\t%s\t%s\t%s\t%s\n' "$um_part" "$um_key" "$U_SCR/mg/$um_n" "$um_f" "$um_kind" "$um_lane"
+  done < "$U_SCR/man"
+  [ "$um_n" -gt 0 ] || return 0
+  # shellcheck disable=SC2046
+  MG_MODE=rewrite MG_UNIT=$um_u MG_REPOS="${MG_REPOS:-}" MG_HELD="$U_SCR/mg.held" MG_MAP="$U_SCR/mg.map" MG_CENSUS="$2/before.tsv" MG_CHANGED="$U_SCR/mg.changed" \
+    awk -f "$ULIB/migrate.awk" $(cat "$U_SCR/mg.files") || u_refuse 2 ERR_STORAGE_READ "the pointer rewrite failed for unit '$um_u'"
+  u_new "$U_SCR/mg.map2" "$U_SCR/mg.files2"
+  while IFS='	' read -r um_part um_key um_o um_f um_kind um_lane; do
+    um_src=$um_f
+    grep -qxF "$um_part" "$U_SCR/mg.changed" 2>/dev/null && um_src=$um_o
+    u_put "$U_SCR/mg.map2" '%s\t%s\t%s\t%s\t%s\t1\n' "$um_src" "$um_kind" "$um_lane" "$um_src.after" "$um_part"
+    u_put "$U_SCR/mg.files2" '%s\n' "$um_src"
+  done < "$U_SCR/mg.keys"
+  # shellcheck disable=SC2046
+  MG_MODE=census MG_UNIT=$um_u MG_REPOS="${MG_REPOS:-}" MG_HELD="$U_SCR/mg.held" MG_MAP="$U_SCR/mg.map2" MG_CENSUS="$2/after.tsv" MG_CHANGED="" \
+    awk -f "$ULIB/migrate.awk" $(cat "$U_SCR/mg.files2") || u_refuse 2 ERR_STORAGE_READ "the census after failed for unit '$um_u'"
+  u_mig_residual "$um_u" "$2/residual.tsv"
+  [ -s "$U_SCR/mg.changed" ] || return 0
+  UM_CHANGED=1
+  [ "$3" -eq 0 ] || return 0
+  u_new "$U_SCR/batch" "$U_SCR/batch.out" "$U_SCR/batch.err"
+  while IFS='	' read -r um_part um_key um_o um_f um_kind um_lane; do
+    grep -qxF "$um_part" "$U_SCR/mg.changed" 2>/dev/null || continue
+    um_b64=$("$ULIB/b64" "$um_o") || u_refuse 2 ERR_STORAGE_WRITE "cannot encode $um_part"
+    { {
+      printf 'action=put\n' &&
+      printf 'key=%s\n' "$(store_lib_escape "$um_key")" &&
+      printf 'head=none\n' &&
+      printf 'value_b64=%s\n' "$um_b64"
+    } >> "$U_SCR/batch"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  done < "$U_SCR/mg.keys"
+  store_batch < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
+  um_rc=$?
+  [ "$um_rc" -eq 0 ] || u_store_refuse "$um_rc" store.batch "$U_SCR/batch.err" "the store batch failed (ERR_STORAGE_WRITE)"
+}
+
+# u_mig_residual <unit> <rows file>: the residual scan, independent of lib/migrate.awk's
+# tokenizer, over what the unit is left holding (the sources of the census after): every
+# blank separated token still holding an old pointer form (a retired short owner, its .md
+# spelling, a lanes/ artifact, a record storage path to a lane artifact, a ../<unit>/lanes/
+# path, IDEAS.md) at its start or after a character no slug holds (a lanes/ artifact only
+# after one no path holds), outside NOTE, CLOSES, and SUPERSEDES lines and ref_sessions, one
+# row each: <unit> <label> <line> <token> (the token's surrounding punctuation cut)
+u_mig_residual() {
+  # shellcheck disable=SC2046
+  RS_UNIT=$1 RS_MAP="$U_SCR/mg.map2" RS_OUT=$2 LC_ALL=C awk '
+    function hit(t, re, bad,   s, p, c) {
+      s = t
+      p = 0
+      while (match(s, re)) {
+        c = (p + RSTART > 1) ? substr(t, p + RSTART - 1, 1) : ""
+        if (c == "" || c !~ bad) return 1
+        p += RSTART
+        s = substr(t, p + 1)
+      }
+      return 0
+    }
+    function cut(t) {
+      while (t != "" && index("([{\"'\''`*\\", substr(t, 1, 1))) t = substr(t, 2)
+      while (t != "" && index(")]}\"'\''`,;:.!?*\\", substr(t, length(t), 1))) t = substr(t, 1, length(t) - 1)
+      return t
+    }
+    BEGIN {
+      while ((getline m < ENVIRON["RS_MAP"]) > 0) { split(m, P, "\t"); K[P[1]] = P[2]; L[P[1]] = P[5] }
+      u = ENVIRON["RS_UNIT"]
+      out = ENVIRON["RS_OUT"]
+    }
+    FNR == 1 { kind = K[FILENAME]; label = L[FILENAME]; blk = (kind ~ /^(backlog|journal|knowledge|ljournal)$/) }
+    blk && /^  (NOTE|CLOSES|SUPERSEDES):/ { next }
+    kind == "state" && /^ref_sessions[ \t]*:/ { next }
+    {
+      rest = $0
+      while (match(rest, /[^ \t]+/)) {
+        tok = substr(rest, RSTART, RLENGTH)
+        rest = substr(rest, RSTART + RLENGTH)
+        if (index(tok, "IDEAS.md") || hit(tok, "(journal|knowledge|backlog|lane|task|finding|entry)(\\.md)?#[^ \t]", "[A-Za-z0-9_.-]") \
+          || hit(tok, "lanes/[^/ \t]+/(recipe|journal|report)", "[A-Za-z0-9_./#-]") \
+          || hit(tok, "(sessions|units)/[A-Za-z0-9_-]+/lanes/[^/ \t]+/(recipe|journal|report)", "[A-Za-z0-9_.-]") \
+          || cut(tok) ~ /^\.\.\/[A-Za-z0-9_-]+\/lanes\//) \
+          printf "%s\t%s\t%d\t%s\n", u, label, FNR, cut(tok) >> out
+      }
+    }' $(cat "$U_SCR/mg.files2") < /dev/null || u_refuse 2 ERR_STORAGE_WRITE "the residual scan failed for unit '$1'"
 }
 
 # u_warn: after a rc 0 run's answer, once, the reminder of the root move when a read of the
 # run was served from the store's deprecated fallback root: each unit moves at its next
 # write, and the sweep is the human's choice; the sweep itself prints none
 u_warn() {
-  [ "$cmd" = unit.promote ] && return 0
+  [ "$cmd" = unit.migrate ] && return 0
   [ -n "$U_SCR" ] && [ -s "$U_SCR/notice" ] || return 0
   grep -q 'was read from its deprecated fallback root' "$U_SCR/notice" 2>/dev/null || return 0
   printf 'WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses\n' >&2
@@ -1173,8 +1322,8 @@ case "$cmd" in
   search.query)
     u_search "$@"
     ;;
-  unit.promote)
-    u_unit_promote "$@"
+  unit.migrate)
+    u_unit_migrate "$@"
     ;;
   *)
     printf '%s: error: unknown function '\''%s'\'' (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$cmd" >&2

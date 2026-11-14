@@ -60,6 +60,12 @@ describe.concurrent('ctx unit fold: the surface, the handoff, and the input rule
     expect((await unit(sb, 'record', 'fc-empty', `--closes=${D}-fc-long-1 (folded: \rbad)`)).code).toBe(1);
   });
 
+  it('FC19: the plan joins adjacent chunks naming one task, its full address unit#<unit>/task/<slug> and its retired backlog#<slug> read as the same task', async () => {
+    const sb = stage('posix', 'fold-hint');
+    const plan = await foldUnit(sb, 'fc-hint', ['work on unit#fc-hint/task/alpha begins', 'DECIDE: alpha settled', 'more on backlog#alpha', 'HUMAN: go on'], { lanes: [] });
+    expect(plan).toContain(`chunk 1 [A1] DECIDE/HUMAN: ${D}-fc-hint-1 to ${D}-fc-hint-4 (4 entries)`);
+  });
+
   it('FC18: on a fresh plan with no batch the progress view answers rc 0 and the check rc 1, each with an empty stderr', async () => {
     const sb = stage('posix', 'fold-fresh');
     await foldUnit(sb, 'fc-fresh', ['e1', 'e2', 'e3', 'e4'], { lanes: [] });

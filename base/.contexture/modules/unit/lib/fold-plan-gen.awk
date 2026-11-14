@@ -86,7 +86,13 @@ function clause(w,   x) {
   x = w
   if (match(x, /part [0-9]+/)) return "part " substr(x, RSTART + 5, RLENGTH - 5)
   if (match(x, /si-[A-Za-z0-9_]+/)) return substr(x, RSTART, RLENGTH)
-  if (match(x, /backlog#[A-Za-z0-9_-]+/)) return substr(x, RSTART, RLENGTH)
+  if (match(x, /(backlog#|unit#[A-Za-z0-9_-]+\/task\/)[A-Za-z0-9_-]+/)) {
+    x = substr(x, RSTART, RLENGTH)
+    if (x ~ /^backlog#/) return "task " unit "/" substr(x, 9)
+    sub(/^unit#/, "", x)
+    sub(/\/task\//, "/", x)
+    return "task " x
+  }
   return ""
 }
 function split_at(f, l,   i, best) {
