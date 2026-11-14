@@ -186,7 +186,7 @@ The resolution verb resolves references directly, and the shared read verb print
 .contexture/ctx unit get <unit>/<kind>/<id>
 ```
 
-`ctx unit get` takes `<unit>/task/<slug>`, `<unit>/entry/<slug>`, `<unit>/finding/<NAME>`, `<unit>/lane/<lane>/<recipe|report>` (whole, or one section with `/<SECTION>`), and `<unit>/lane/<lane>/journal/<slug>`; it prints exactly one entity whole in its canonical layout (a task with its `REFS`), never a container listing or the unit state, takes no lock, and refuses a missing entity rc 1 with a named not found, so a dangling reference reads gone.
+`ctx unit get` takes `<unit>/task/<slug>`, `<unit>/entry/<slug>`, `<unit>/finding/<NAME>`, `<unit>/lane/<lane>/<recipe|report>` (whole, or one section with `/<SECTION>`), `<unit>/lane/<lane>/journal` (the whole lane journal), and `<unit>/lane/<lane>/journal/<slug>`; it prints exactly one entity whole in its canonical layout (a task with its `REFS`), never a container listing or the unit state, takes no lock, and refuses a missing entity rc 1 with a named not found, so a dangling reference reads gone.
 
 When given the legacy forms an older record holds (the file-based paths such as `knowledge.md#NAME`, `journal.md#slug`, `backlog.md#slug`, and the legacy lane form `lanes/<lane>/<recipe|journal|report>[#<claim>]`), the CLI normalizes them transparently to entity lookups. Agents author the entity syntax natively, `lane#` for a lane; a canonical ref minted by a write resolves directly.
 

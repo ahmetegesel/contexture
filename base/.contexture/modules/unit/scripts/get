@@ -1,16 +1,16 @@
 #!/bin/sh
 # summary: print one record entity whole, by its path: <unit>/<kind>/<id>
 # usage: ctx unit get <unit>/<kind>/<id> [--json]
-# help: the path is everything after unit# in an entity's address (a search row's read names it): <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/recipe and <unit>/lane/<lane>/report (whole, or one section with /<SECTION>), and <unit>/lane/<lane>/journal/<slug> (one lane journal entry)
+# help: the path is everything after unit# in an entity's address (a search row's read names it): <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/recipe and <unit>/lane/<lane>/report (whole, or one section with /<SECTION>), <unit>/lane/<lane>/journal (the whole lane journal), and <unit>/lane/<lane>/journal/<slug> (one lane journal entry)
 # help: prints exactly one entity in its canonical layout, its REFS included; never a container listing and never the unit state; read only, it takes no lock; a section is the span ctx unit resolve cuts for a claim (from an @<SECTION> head to the next column-0 @ line, or from a column-0 <SECTION> :: head to the next non-blank column-0 line)
 # help: a missing entity refuses rc 1 with get: error: '<path>' not found (ERR_ENTITY_NOT_FOUND), so a dangling reference reads gone
-# help:   --json      the one entity as JSON: the storage function's answer for a task, an entry, a finding, or a whole recipe or report (task.get, entry.get, finding.get, lane.get); a section answers {unit, lane, artifact, section, content}, its content the lines the text form prints, and a lane journal entry {unit, lane, artifact, entry}, that entry's object alone
+# help:   --json      the one entity as JSON: the storage function's answer for a task, an entry, a finding, or a whole recipe, report, or lane journal (task.get, entry.get, finding.get, lane.get); a section answers {unit, lane, artifact, section, content}, its content the lines the text form prints, and a lane journal entry {unit, lane, artifact, entry}, that entry's object alone
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
   printf 'usage: ctx unit get <unit>/<kind>/<id> [--json]\n'
-  printf 'prints one record entity whole: <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/<recipe|report>[/<SECTION>], <unit>/lane/<lane>/journal/<slug>\n'
+  printf 'prints one record entity whole: <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/<recipe|report>[/<SECTION>], <unit>/lane/<lane>/journal[/<slug>]\n'
   printf 'options:\n'
   printf '  --json      output JSON format\n'
 }
@@ -37,7 +37,7 @@ for a in "$@"; do
 done
 
 malformed() {
-  printf "get: error: malformed path '%s': <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/<recipe|report>[/<SECTION>], or <unit>/lane/<lane>/journal/<slug> (ERR_INVALID_ARGUMENT)\n" "$path" >&2
+  printf "get: error: malformed path '%s': <unit>/task/<slug>, <unit>/entry/<slug>, <unit>/finding/<NAME>, <unit>/lane/<lane>/<recipe|report>[/<SECTION>], or <unit>/lane/<lane>/journal[/<slug>] (ERR_INVALID_ARGUMENT)\n" "$path" >&2
   exit 1
 }
 
@@ -69,7 +69,7 @@ case "$rest" in
     rest="${rest#*/}"
     art="${rest%%/*}"
     if [ "$art" = "$rest" ]; then
-      case "$art" in recipe|report) kind=lane ;; *) malformed ;; esac
+      case "$art" in recipe|report|journal) kind=lane ;; *) malformed ;; esac
     else
       id="${rest#*/}"
       vb_slug_ok "$id" || malformed
@@ -90,10 +90,10 @@ case "$kind" in
   lane|claim) vb_call lane.get "$unit" "$lane" "$art" ;;
   lentry) vb_call lane.get "$unit" "$lane" journal ;;
 esac
-if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_ENTITY_NOT_FOUND" && ! vb_err_has "unit '$unit' not found"; then
+if [ "$VB_RC" -eq 1 ] && vb_err_has "ERR_ENTITY_NOT_FOUND"; then
   absent
 fi
-if [ "$VB_RC" -eq 0 ] && { [ "$kind" = lane ] || [ "$kind" = claim ]; }; then
+if [ "$VB_RC" -eq 0 ] && [ "$art" != journal ] && { [ "$kind" = lane ] || [ "$kind" = claim ]; }; then
   awk -f "$VB_JSON" < "$VB_DIR/ans" | grep -qx 'content:null' && absent
 fi
 vb_ok
@@ -157,6 +157,6 @@ if [ "$json_out" -eq 1 ]; then
   exit 0
 fi
 case "$kind" in
-  lane) vb_render lane_doc ;;
+  lane) if [ "$art" = journal ]; then vb_render lane_journal; else vb_render lane_doc; fi ;;
   *) vb_render resolve RV_KIND="$kind" RV_CLAIM="$id" RV_MISS="$miss" ;;
 esac
