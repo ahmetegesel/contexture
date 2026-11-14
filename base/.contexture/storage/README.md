@@ -295,8 +295,9 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
   control character, or double quote; rc 1 prints one line
   `<label>: error: malformed ref '<ref>': a reference is <owner>#<path>, one token without blanks, control characters, or double quotes (ERR_INVALID_ARGUMENT)`.
   It checks the shape alone (an old short unit ref such as `journal#<slug>` passes): the
-  owner's presence and the target's existence are the caller's, and the unit and lane
-  verbs keep their own two shape check;
+  owner's presence and the target's existence are the caller's: the unit and lane verbs
+  refuse the retired short owners first, then call it, then check each target through
+  its owner's get before any lock;
 - `lib_lock` and `lib_unlock`, the library lock of the caller's namespace (`lib_lock`
   takes no argument and refuses one): one lock folder per namespace
   at `.contexture/tmp/locks/lib/<namespace>.lock`, its own family beside the unit locks

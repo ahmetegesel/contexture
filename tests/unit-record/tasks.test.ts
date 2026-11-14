@@ -80,8 +80,8 @@ describe.concurrent('the tasks through the unit data script', () => {
 
   it('TC35 [the-record-r14]: task refs are a JSON array; task.update adds sections and clears refs', async () => {
     const sb = await at('T0');
-    const added = (await ok(sb, 'task.add', [TUNIT, 'task-refs'], payload().kv('objective', 'Refs task').kl('refs', 'backlog#one', 'knowledge#TWO'))).task;
-    expect([added.refs, added.description]).toEqual([['backlog#one', 'knowledge#TWO'], null]);
+    const added = (await ok(sb, 'task.add', [TUNIT, 'task-refs'], payload().kv('objective', 'Refs task').kl('refs', 'unit#u1/task/one', 'unit#u1/finding/TWO'))).task;
+    expect([added.refs, added.description]).toEqual([['unit#u1/task/one', 'unit#u1/finding/TWO'], null]);
     const sections = payload().kv('desc', 'Added description').kv('criteria', 'Added criteria').kv('details', 'Added details');
     const updated = (await ok(sb, 'task.update', [TUNIT, 'task-refs'], sections)).task;
     expect([updated.description, updated.criteria, updated.details, updated.refs.length]).toEqual(['Added description', 'Added criteria', 'Added details', 2]);

@@ -152,11 +152,11 @@ describe.concurrent('the journal entries through the unit data script', () => {
     const sb = await at('empty');
     const u = 'upf-u';
     answer(await mk(sb, u), 'session.create');
-    const withRef = payload().kv('knowledge', 'false').kl('refs', 'knowledge#UP_REF').kv('closers.count', '0').kv('slug', `${DATE}-up-er-ref`);
+    const withRef = payload().kv('knowledge', 'false').kl('refs', 'unit#u1/finding/UP_REF').kv('closers.count', '0').kv('slug', `${DATE}-up-er-ref`);
     const r = await rec(sb, u, 1, 'a driver entry with a ref', { with: withRef });
-    expect(answerLine(r, 'entry.record')).toContain('"thread":"none","legacy_status":null,"refs":["knowledge#UP_REF"]');
-    expect(readArtifact(sb, u, 'journal').toString()).toContain(`@entry ${DATE}-up-er-ref\n  ANCHOR: A1\n  WHAT: "a driver entry with a ref"\n  THREAD: none\n  REF: "knowledge#UP_REF"\n`);
-    expect((await ok(sb, 'entry.get', [u, `${DATE}-up-er-ref`])).entry.refs).toEqual(['knowledge#UP_REF']);
+    expect(answerLine(r, 'entry.record')).toContain('"thread":"none","legacy_status":null,"refs":["unit#u1/finding/UP_REF"]');
+    expect(readArtifact(sb, u, 'journal').toString()).toContain(`@entry ${DATE}-up-er-ref\n  ANCHOR: A1\n  WHAT: "a driver entry with a ref"\n  THREAD: none\n  REF: "unit#u1/finding/UP_REF"\n`);
+    expect((await ok(sb, 'entry.get', [u, `${DATE}-up-er-ref`])).entry.refs).toEqual(['unit#u1/finding/UP_REF']);
     const noRef = payload().kv('knowledge', 'false').kl('refs').kv('closers.count', '0').kv('slug', `${DATE}-up-er-noref`);
     expect(answerLine(await rec(sb, u, 1, 'a driver entry without a ref', { with: noRef }), 'entry.record')).toContain('"thread":"none","legacy_status":null,"refs":[]');
     expect(readArtifact(sb, u, 'journal').toString().split(`@entry ${DATE}-up-er-noref`)[1]).not.toContain('REF:');

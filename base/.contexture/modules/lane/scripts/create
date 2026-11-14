@@ -1,6 +1,6 @@
 #!/bin/sh
 # summary: create a subagent lane from its brief parameters
-# usage: ctx lane create <unit> <lane-slug> --goal="..." --branch="..." --writes="..." --scope="..."... --report="..."... [--ref=...]... [--task=backlog#<slug>]... [--decision=journal#<slug>]... [--rhythm="<name> <N> <GATE>"] [--fact="..."]... [--substrate="..."]
+# usage: ctx lane create <unit> <lane-slug> --goal="..." --branch="..." --writes="..." --scope="..."... --report="..."... [--ref=...]... [--task=unit#<unit>/task/<slug>]... [--decision=unit#<unit>/entry/<slug>]... [--rhythm="<name> <N> <GATE>"] [--fact="..."]... [--substrate="..."]
 # help: the dispatcher's act: the verb composes the lane's recipe from the brief parameters, stores it with an empty lane journal (lane.create), and prints the dispatch prompt; each flag takes --name=value or --name value
 # help: options:
 # help:   --goal="..."         required: the deliverable or decision the lane feeds, and where it stops; the one aim every step serves
@@ -8,15 +8,15 @@
 # help:   --writes="..."       required: read only, or the roots it edits and how it commits; the write scope, so an edit outside it is drift
 # help:   --scope="..."        required, repeatable: a step or question with its exit condition, in order; the verb numbers the steps, so a value carries no number
 # help:   --report="..."       required, repeatable: a section the report owes, its name and what it carries; the dispatcher reads only the report
-# help:   --ref=...            repeatable: a pointer the subagent reads at boot, <target>#<symbol> or a whole target path holding a / and ending in a name; the brief slices context, never dumps it
-# help:   --task=backlog#<slug>   repeatable: a backlog task the lane works; its specification stands in the task
-# help:   --decision=journal#<slug>   repeatable: a journal entry holding a decision the lane honors
+# help:   --ref=...            repeatable: a pointer the subagent reads at boot, a full address <owner>#<path> its owner's get answers (a short or legacy form refuses naming its full address); the brief slices context, never dumps it
+# help:   --task=unit#<unit>/task/<slug>   repeatable: a backlog task the lane works, checked to exist; its specification stands in the task
+# help:   --decision=unit#<unit>/entry/<slug>   repeatable: a journal entry holding a decision the lane honors, checked to exist
 # help:   --rhythm="<name> <N> <GATE>"   the process in force, checked by the rule ctx unit record checks a rhythm by
 # help:   --fact="..."         repeatable: one isolated constraint from the dispatcher's context, kept one per line
 # help:   --substrate="..."    where code, tests, and commits land, and what stays untouched (a worktree lane)
 # help: stdin is never read: the brief comes only as flags, and the verb writes the fixed blocks itself (the boundary, the boot, the journal, and the report), so no dispatcher forgets them
 # help: every value is one line of valid UTF-8 (a newline, a carriage return, or another byte refuses naming the flag); an empty value counts as missing, while an empty --ref, --task, or --decision refuses as malformed, as every REF write does; a flag that is not repeatable given twice refuses; a missing required flag refuses naming each with its purpose; a refusal writes nothing
-# help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1; no task, entry, or ref is looked up
+# help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1; every ref, task, and decision is looked up through its owner's get before the write, a missing one refusing rc 1 (ERR_ENTITY_NOT_FOUND)
 # help: example: ctx lane create my-unit gather-cache --goal="map the cache callers for the cache task; stop at the report" --branch="the workspace checkout on main at abc1234" --writes="read only" --scope="list every caller of the cache; done when each names its file and symbol" --report="CALLERS :: each caller with its file and symbol"
 # help: the dispatch prompt it prints, its three lines quoted (a re-dispatch fills <unit> and <lane>): "You are a dispatched subagent working lane <lane> of unit <unit>. Your full brief is the lane recipe: read it first and follow it exactly: .contexture/ctx lane show <unit> <lane> recipe" "Hard rules: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp/<lane>/; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach. Every shell command runs through .contexture/ctx run; never leave a background process running when you finish; a command that hangs is stopped, never abandoned. The record only through ctx: your record writes are your lane journal and your report, plus only what the recipe's write scope adds." "Return a short summary only; the report carries the substance."
 
@@ -111,29 +111,34 @@ while [ "$i" -lt "$nval" ]; do
   esac
 done
 
+set --
 i=0
 while [ "$i" -lt "$n_ref" ]; do
   i=$((i + 1))
   eval "v=\$v_ref_$i"
-  vb_ref_ok "lane create" "$v"
+  vb_ref_ok "lane create" "$v" "$unit"
+  set -- "$@" "$v"
 done
 i=0
 while [ "$i" -lt "$n_task" ]; do
   i=$((i + 1))
   eval "v=\$v_task_$i"
-  case "$v" in backlog#*) vb_slug_ok "${v#backlog#}" && continue ;; esac
-  fail "malformed task '$v': a task is backlog#<slug>"
+  case "$v" in unit#*/task/*) vt_u=${v#unit#}; vb_slug_ok "${vt_u%%/*}" && vb_slug_ok "${v##*/task/}" && { set -- "$@" "$v"; continue; } ;; esac
+  case "$v" in backlog#*) vb_slug_ok "${v#backlog#}" && fail "malformed task '$v': a task is unit#<unit>/task/<slug>; write unit#$unit/task/${v#backlog#}" ;; esac
+  fail "malformed task '$v': a task is unit#<unit>/task/<slug>"
 done
 i=0
 while [ "$i" -lt "$n_decision" ]; do
   i=$((i + 1))
   eval "v=\$v_decision_$i"
-  case "$v" in journal#*) vb_slug_ok "${v#journal#}" && continue ;; esac
-  fail "malformed decision '$v': a decision is journal#<slug>"
+  case "$v" in unit#*/entry/*) vt_u=${v#unit#}; vb_slug_ok "${vt_u%%/*}" && vb_slug_ok "${v##*/entry/}" && { set -- "$@" "$v"; continue; } ;; esac
+  case "$v" in journal#*) vb_slug_ok "${v#journal#}" && fail "malformed decision '$v': a decision is unit#<unit>/entry/<slug>; write unit#$unit/entry/${v#journal#}" ;; esac
+  fail "malformed decision '$v': a decision is unit#<unit>/entry/<slug>"
 done
 if [ -n "$v_rhythm" ]; then
   vb_rhythm_ok "$v_rhythm"
 fi
+[ $# -eq 0 ] || vb_refs_exist "lane create" "$@"
 
 fill() {
   sed -e "s|@UNIT@|$unit|g" -e "s|@LANE@|$lane|g"
@@ -183,7 +188,7 @@ EOF
   5. a decision within this recipe is yours: decide it and journal it; a wall or a decision beyond it is drift: stop and report, never improvise past it
 
 BOOT (read only, before any work) ::
-  the loader's law layer and both overlays (AGENTS.md, AGENTS.workspace.md, AGENTS.local.md); ctx unit load @UNIT@ until a page reads complete; this recipe (ctx lane show @UNIT@ @LANE@ recipe); every REF it names, and each TASKS and DECISIONS item whole (ctx unit task show @UNIT@ <slug>, ctx unit entry show @UNIT@ <slug>), since the load carries only the live journal and the open tasks whole. Your first lane journal entry is the load receipt: the refs loaded ride as --ref lines on that entry, never one per line inside the WHAT; an unresolved REF is a brief defect: stop and report it.
+  the loader's law layer and both overlays (AGENTS.md, AGENTS.workspace.md, AGENTS.local.md); ctx unit load @UNIT@ until a page reads complete; this recipe (ctx lane show @UNIT@ @LANE@ recipe); every REF it names, and each TASKS and DECISIONS item whole (ctx unit get <path>, the path everything after unit# in the address), since the load carries only the live journal and the open tasks whole. Your first lane journal entry is the load receipt: the refs loaded ride as --ref lines on that entry, never one per line inside the WHAT; an unresolved REF is a brief defect: stop and report it.
 
 JOURNAL ::
   ctx lane record @UNIT@ @LANE@ at action granularity as things happen: every command whose result is not obvious, every claim, decision point, and drift notice; each WHAT carries the action, its result, and why the next step follows; an entry awaiting an act outside the lane carries --thread.
@@ -191,7 +196,7 @@ JOURNAL ::
 REPORT (ctx lane report @UNIT@ @LANE@, the body on stdin; self-sufficient: the dispatcher reads only the report) ::
   @report @LANE@
   VERDICT :: done, partial, or drifted, with one line why
-  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so lane#@LANE@/report#<NAME> resolves it
+  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so unit#@UNIT@/lane/@LANE@/report/<NAME> resolves it (ctx unit get @UNIT@/lane/@LANE@/report/<NAME>)
 EOF
   lines report
   printf '  The report and the journal land no matter the outcome; return a short summary only.\n'

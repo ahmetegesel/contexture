@@ -12,7 +12,7 @@ const snap = seedSteps('base-smoke', [
     name: 'tasks',
     build: async (sb) => {
       await must(unit(sb, 'bootstrap', U, 'the base-only probe unit'));
-      await must(unit(sb, 'task', 'add', U, 'base-t1', '--objective=the base-only task', '--desc=one line', '--criteria=the gate is green', '--details=staged base alone', '--refs=./AGENTS.md'));
+      await must(unit(sb, 'task', 'add', U, 'base-t1', '--objective=the base-only task', '--desc=one line', '--criteria=the gate is green', '--details=staged base alone', '--refs=file#./AGENTS.md'));
       await must(unit(sb, 'task', 'add', U, 'base-t2', '--objective=a task to drop'));
     },
   },
@@ -21,10 +21,10 @@ const snap = seedSteps('base-smoke', [
     build: async (sb) => {
       await must(unit(sb, 'record', U, `--slug=${S1}`, '--what=the first probe entry', '--group=base-only'));
       await must(unit(sb, 'record', U, '--what=the second probe entry', '--group=base-only', `--closes=${S1} (done: closed by the smoke)`));
-      await must(unit(sb, 'finding', 'add', U, 'BASE_OLD', '--summary=the old finding', `--ref=journal#${S1}`));
+      await must(unit(sb, 'finding', 'add', U, 'BASE_OLD', '--summary=the old finding', `--ref=unit#${U}/entry/${S1}`));
       await must(unit(sb, 'finding', 'supersede', U, 'BASE_OLD', 'BASE_NEW', '--summary=the new finding'));
       await must(createLane(sb, U, 'base-lane'));
-      await must(lane(sb, 'record', U, 'base-lane', '--what=a lane event', `--ref=journal#${S1}`));
+      await must(lane(sb, 'record', U, 'base-lane', '--what=a lane event', `--ref=unit#${U}/entry/${S1}`));
       await must(run(sb, ['lane', 'report', U, 'base-lane'], { input: REPORT }));
     },
   },

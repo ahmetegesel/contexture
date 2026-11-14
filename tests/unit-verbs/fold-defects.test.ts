@@ -26,14 +26,14 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
   it('FC9: UNREFERENCED_CLOSER, a folded closer whose target the batch never refs', async () => {
     const sb = fresh('unref');
     await foldUnit(sb, 'fc-unref', SHAPES.two);
-    await must(unit(sb, 'record', 'fc-unref', '--what=batch', `--ref=journal#${D}-fc-unref-1`, ...slugs('fc-unref', 1, 2).map((s) => `--closes=${s} (folded: consolidated)`)));
+    await must(unit(sb, 'record', 'fc-unref', '--what=batch', `--ref=unit#fc-unref/entry/${D}-fc-unref-1`, ...slugs('fc-unref', 1, 2).map((s) => `--closes=${s} (folded: consolidated)`)));
     await red(sb, 'fc-unref', 'UNREFERENCED_CLOSER');
   });
 
   it('FC9: CLOSER_NOT_FOLDED, a batch closer without the folded verdict', async () => {
     const sb = fresh('notfolded');
     await foldUnit(sb, 'fc-notfolded', SHAPES.one);
-    await must(unit(sb, 'record', 'fc-notfolded', '--what=batch', `--ref=journal#${D}-fc-notfolded-1`, `--closes=${D}-fc-notfolded-1 (done: not folded)`));
+    await must(unit(sb, 'record', 'fc-notfolded', '--what=batch', `--ref=unit#fc-notfolded/entry/${D}-fc-notfolded-1`, `--closes=${D}-fc-notfolded-1 (done: not folded)`));
     await red(sb, 'fc-notfolded', 'CLOSER_NOT_FOLDED');
   });
 
@@ -129,7 +129,7 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
   it('FC10: the supersession repair closes the prior batch superseded and the new one checks clean', async () => {
     const sb = fresh('repair');
     await foldUnit(sb, 'fc-repair', SHAPES.one);
-    const bad = await must(unit(sb, 'record', 'fc-repair', '--what=bad batch', `--ref=journal#${D}-fc-repair-1`, `--closes=${D}-fc-repair-1 (done: not folded)`));
+    const bad = await must(unit(sb, 'record', 'fc-repair', '--what=bad batch', `--ref=unit#fc-repair/entry/${D}-fc-repair-1`, `--closes=${D}-fc-repair-1 (done: not folded)`));
     const badSlug = /^recorded entry: (\S+)/m.exec(bad.stdout + bad.stderr)?.[1] ?? '';
     await batch(sb, 'fc-repair', 'good batch', [1], `--supersedes=${badSlug} (superseded: revised)`);
     await clean(sb, 'fc-repair');
@@ -151,13 +151,13 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
     const lane = laneOf(plan, 1) ?? '';
     await must(createLane(sb, 'fc-thread', lane));
     const fetch = (await must(unit(sb, 'fold', 'fc-thread', `--lane=${lane}`))).stdout;
-    for (const line of ["THREAD: the human's verdict", `ref="journal#${D}-fc-thread-2"`, 'NOTE: carried open threads stay live']) expect(fetch).toContain(line);
+    for (const line of ["THREAD: the human's verdict", `ref="unit#fc-thread/entry/${D}-fc-thread-2"`, 'NOTE: carried open threads stay live']) expect(fetch).toContain(line);
     expect(fetch).not.toContain(`closes="${D}-fc-thread-2`);
     const closes = [1, 3].map((n) => `--closes=${D}-fc-thread-${n} (folded: consolidated)`);
-    const bad = await must(unit(sb, 'record', 'fc-thread', '--what=Batch one: the notes without the carried ref', '--group=fc', '--thread=none', `--ref=journal#${D}-fc-thread-1`, `--ref=journal#${D}-fc-thread-3`, ...closes));
+    const bad = await must(unit(sb, 'record', 'fc-thread', '--what=Batch one: the notes without the carried ref', '--group=fc', '--thread=none', `--ref=unit#fc-thread/entry/${D}-fc-thread-1`, `--ref=unit#fc-thread/entry/${D}-fc-thread-3`, ...closes));
     const badSlug = /^recorded entry: (\S+)/m.exec(bad.stdout + bad.stderr)?.[1] ?? '';
     await red(sb, 'fc-thread', 'CARRIED_UNREFERENCED');
-    await must(unit(sb, 'record', 'fc-thread', '--what=Batch one: the notes and the carried thread', '--group=fc', '--thread=none', ...[1, 2, 3].map((n) => `--ref=journal#${D}-fc-thread-${n}`), ...closes, `--supersedes=${badSlug} (superseded: revised)`));
+    await must(unit(sb, 'record', 'fc-thread', '--what=Batch one: the notes and the carried thread', '--group=fc', '--thread=none', ...[1, 2, 3].map((n) => `--ref=unit#fc-thread/entry/${D}-fc-thread-${n}`), ...closes, `--supersedes=${badSlug} (superseded: revised)`));
     const ok = await clean(sb, 'fc-thread');
     for (const line of ['covered: 2 closed receipts', 'carried open threads: 1', 'coverage: 0 uncovered', 'OPEN THREADS (awaiting resolution):']) expect(ok).toContain(line);
     expect((await unit(sb, 'board', 'fc-thread')).stdout).toContain(`@entry ${D}-fc-thread-2`);

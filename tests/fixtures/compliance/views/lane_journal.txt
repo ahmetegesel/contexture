@@ -1,4 +1,4 @@
 @entry 2026-09-27-verb-lane-one
   WHAT: "a lane step"
   THREAD: none
-  REF: "task#canon-task"
+  REF: "unit#verb-u/task/canon-task"

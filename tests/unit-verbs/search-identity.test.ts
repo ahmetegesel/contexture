@@ -41,7 +41,7 @@ async function searchUnits(sb: string): Promise<void> {
   await ok(sb, 'session.refs', ['search-verbs']);
   const canon = payload()
     .kv('objective', 'the canon task of the verb unit')
-    .kl('refs', 'journal#2026-09-27-search-one', 'knowledge#SEARCH_V1')
+    .kl('refs', 'unit#search-verbs/entry/2026-09-27-search-one', 'unit#search-verbs/finding/SEARCH_V1')
     .kv('desc', 'first description line\n\nthird line after an empty one')
     .kv('criteria', 'one criterion, STATUS named in prose')
     .kv('details', 'detail one\ndetail two');
@@ -50,9 +50,9 @@ async function searchUnits(sb: string): Promise<void> {
   await ok(sb, 'task.complete', ['search-verbs', 'done-task'], payload().kv('evidence', 'the walk verified it').kv('date', DATE));
   await ok(sb, 'task.add', ['search-verbs', 'active-task'], payload().kv('objective', 'started in the walk'));
   await ok(sb, 'task.start', ['search-verbs', 'active-task']);
-  await ok(sb, 'finding.add', ['search-verbs', 'SEARCH_V1'], payload().kv('summary', 'the first reading\nover two lines').kl('refs', 'journal#2026-09-27-search-one'));
+  await ok(sb, 'finding.add', ['search-verbs', 'SEARCH_V1'], payload().kv('summary', 'the first reading\nover two lines').kl('refs', 'unit#search-verbs/entry/2026-09-27-search-one'));
   await ok(sb, 'finding.supersede', ['search-verbs', 'SEARCH_V1', 'SEARCH_V2'], payload().kv('summary', 'the newer reading').kv('reason', 'replaced by the walk'));
-  const first = payload().kv('slug', '2026-09-27-search-one').kv('group', 'search-group').kv('knowledge', 'true').kl('refs', 'task#canon-task', 'lanes/search-lane/report');
+  const first = payload().kv('slug', '2026-09-27-search-one').kv('group', 'search-group').kv('knowledge', 'true').kl('refs', 'unit#search-verbs/task/canon-task', 'unit#search-verbs/lane/search-lane/report');
   answer(await rec(sb, 'search-verbs', 1790000861, 'the first entry names the canon-task', { thread: 'the human', with: first }), 'entry.record');
   answer(await rec(sb, 'search-verbs', 1790000862, 'the second entry, a backslash \\ kept', { with: payload().kv('slug', '2026-09-27-search-two') }), 'entry.record');
   await ok(sb, 'session.stamp', ['search-verbs'], payload().kv('date', DATE));

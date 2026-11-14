@@ -1,7 +1,7 @@
 @task install-and-run-local
   STATUS: IN_PROGRESS
   OBJECTIVE: "Install the local toolchain and run the demo-orders service before the pricing change lands"
-  REFS: [docs/demo-orders/operational.md]
+  REFS: [docs#demo-orders/operational/header]
   DESCRIPTION ::
     Set up the environment, run the build, and test the checkout path on demo-orders.
   ACCEPTANCE CRITERIA ::

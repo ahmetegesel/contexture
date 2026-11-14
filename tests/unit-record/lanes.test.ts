@@ -7,7 +7,7 @@ import { artifactPath, DATE, mk, ok, reads } from '../support/record';
 import { answer, answerLine, payload, refused } from '../support/wire';
 import { ALPHA, at, RECIPE, REPORT, SUNIT, TUNIT } from './chain';
 
-const LE = `{"kind":"entry","lane":"lane-worker","slug":"2026-09-27-event-1790000020","occurrence":1,"seq":1,"anchor":null,"what":"Subagent action trace WHAT","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":["journal#${ALPHA}"],"closers":[],"extra_fields":[],"head_text":null,"extra_lines":[],"next":null}`;
+const LE = `{"kind":"entry","lane":"lane-worker","slug":"2026-09-27-event-1790000020","occurrence":1,"seq":1,"anchor":null,"what":"Subagent action trace WHAT","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":["unit#u1/entry/${ALPHA}"],"closers":[],"extra_fields":[],"head_text":null,"extra_lines":[],"next":null}`;
 const RECIPE_JSON = '"# recipe grammar\\nMISSION\\n  GOAL: \\"Subagent goal description\\"\\n"';
 const laneEntry = (what: string, epoch: string) => payload().kv('what', what).kv('thread', 'none').kv('date', DATE).kv('epoch', epoch);
 
@@ -24,7 +24,7 @@ describe.concurrent('the lanes through the unit data script', () => {
 
   it('TC17 [the-record-r15]: lane.record and lane.write_report land; lane.get reads the journal and the report back', async () => {
     const sb = await at('T16');
-    const record = payload().kl('refs', `journal#${ALPHA}`).kv('what', 'Subagent action trace WHAT').kv('thread', 'none').kv('date', DATE).kv('epoch', '1790000020').toString();
+    const record = payload().kl('refs', `unit#u1/entry/${ALPHA}`).kv('what', 'Subagent action trace WHAT').kv('thread', 'none').kv('date', DATE).kv('epoch', '1790000020').toString();
     expect(answerLine(await data(sb, 'lane.record', [TUNIT, 'lane-worker'], record), 'lane.record')).toBe(`{"unit":"compliance-tasks","lane":"lane-worker","entry":${LE}}`);
     expect(answerLine(await data(sb, 'lane.write_report', [TUNIT, 'lane-worker'], REPORT), 'lane.write_report')).toBe('{"unit":"compliance-tasks","lane":"lane-worker","bytes":25}');
     expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'lane-worker', 'journal']), 'lane.get')).toBe(`{"unit":"compliance-tasks","lane":"lane-worker","artifact":"journal","preamble":"","items":[${LE}]}`);

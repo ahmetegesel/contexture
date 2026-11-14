@@ -112,9 +112,9 @@ describe.concurrent('ctx unit task', () => {
 
   it('X-b [the-record-r14]: task add --refs lands in the JSON refs array with no error', async () => {
     const sb = fresh(x);
-    const added = await unit(sb, 'task', 'add', 'x-unit', 'x-refs', '--objective=Refs task', '--refs=backlog#one knowledge#TWO');
+    const added = await unit(sb, 'task', 'add', 'x-unit', 'x-refs', '--objective=Refs task', '--refs=file#.contexture/ctx file#.contexture/modules');
     expect(added.stderr).toBe('');
-    expect((await unit(sb, 'task', 'show', 'x-unit', 'x-refs', '--json')).stdout).toContain('"refs":["backlog#one","knowledge#TWO"]');
+    expect((await unit(sb, 'task', 'show', 'x-unit', 'x-refs', '--json')).stdout).toContain('"refs":["file#.contexture/ctx","file#.contexture/modules"]');
   });
 
   it('X-g: task update adds the description, criteria, and details the block lacked', async () => {

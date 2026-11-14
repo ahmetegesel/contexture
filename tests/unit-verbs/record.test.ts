@@ -146,13 +146,13 @@ describe.concurrent('ctx unit record and the entry reads', () => {
 
   it('RF2 [the-record-r14]: entry show --json carries the refs list after thread (empty when none); the text view prints the REF line', async () => {
     const sb = fresh(sb0);
-    await must(unit(sb, 'record', 'x-unit', '--what=entry with a ref', `--slug=${D}-f-e1`, '--ref=knowledge#F_NOREF'));
+    await must(unit(sb, 'record', 'x-unit', '--what=entry with a ref', `--slug=${D}-f-e1`, '--ref=file#.contexture/ctx'));
     const withRef = (await unit(sb, 'entry', 'show', 'x-unit', `${D}-f-e1`, '--json')).stdout;
-    expect(withRef).toContain('"thread":"none","legacy_status":null,"refs":["knowledge#F_NOREF"]');
+    expect(withRef).toContain('"thread":"none","legacy_status":null,"refs":["file#.contexture/ctx"]');
     expect((await unit(sb, 'entry', 'show', 'x-unit', `${D}-x-e1`, '--json')).stdout).toContain('"refs":[]');
     const text = (await unit(sb, 'entry', 'show', 'x-unit', `${D}-f-e1`)).stdout.split('\n');
     expect([text[0], text[2], text[3]]).toEqual([`@entry ${D}-f-e1`, '  WHAT: "entry with a ref"', '  THREAD: none']);
-    expect(text).toContain('  REF: "knowledge#F_NOREF"');
+    expect(text).toContain('  REF: "file#.contexture/ctx"');
   });
 
   it('N-a [the-record-r4]: entry closure prints the verdict and the closer, for a closed, an open, and an absent entry, and as --json', async () => {

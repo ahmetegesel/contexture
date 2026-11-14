@@ -17,12 +17,10 @@
 # default-document identity (the artifact key) mapped to the record id (the unit or the
 # lane, a lane entry keeping its lane prefix).
 #
-# The ref check: a new write validates its canonical unit refs
-#   unit#<unit>/task/<slug> | unit#<unit>/entry/<slug> | unit#<unit>/finding/<NAME> |
-#   unit#<unit>/lane/<lane>/<recipe|journal|report>
-# through the module's own entity reads before anything lands; a legacy record target
-# (journal#<slug>, task#<slug>, knowledge#<NAME>, lanes/<lane>/report#<claim>) and a file
-# pointer stay as stored, the forward-only rule of the two ref shapes. The namespace is the
+# The ref check: a new write's refs are full addresses, <owner>#<path>, checked for their
+# shape before the unit lock (a retired short owner refuses); the verbs check each target
+# through its owner's get before the call, so no lock is held during the checks; a value
+# already stored reads as it stands until ctx unit migrate rewrites it. The namespace is the
 # module's folder name, found by the storage core's library from this script's path.
 #
 # The store root moves gradually: the data file declares a fallback root the store reads
@@ -812,51 +810,24 @@ u_commit() {
   cat "$U_SCR/answer"
 }
 
-# u_ref_resolve <ref>: a canonical unit ref answered by the module's own entity read
-# (task.get, entry.get, finding.get, or lane.get, the answer discarded): rc 0 when the
-# entity exists, else its rc and one stderr line, the target's message after its label
-u_ref_resolve() {
-  ud_ref=$1
-  case "$ud_ref" in
-    *'#'*'#'*) printf 'a reference is <module>#<symbol> (ERR_INVALID_ARGUMENT)\n' >&2; return 1 ;;
-  esac
-  ud_sym=${ud_ref#unit#}
-  case "$ud_sym" in
-    */*) ;;
-    *) printf "malformed unit ref '%s' (ERR_INVALID_ARGUMENT)\n" "$ud_ref" >&2; return 1 ;;
-  esac
-  ud_u=${ud_sym%%/*}
-  ud_rest=${ud_sym#*/}
-  case "$ud_rest" in
-    task/*) set -- task.get "$ud_u" "${ud_rest#task/}" ;;
-    entry/*) set -- entry.get "$ud_u" "${ud_rest#entry/}" ;;
-    finding/*) set -- finding.get "$ud_u" "${ud_rest#finding/}" ;;
-    lane/*/*)
-      ud_l=${ud_rest#lane/}
-      case "${ud_l#*/}" in
-        recipe|journal|report) ;;
-        *) printf "lane ref takes recipe, journal, or report: '%s' (ERR_INVALID_ARGUMENT)\n" "$ud_ref" >&2; return 1 ;;
-      esac
-      set -- lane.get "$ud_u" "${ud_l%%/*}" "${ud_l#*/}"
-      ;;
-    *) printf "the ref names no record entity: '%s' (ERR_INVALID_ARGUMENT)\n" "$ud_ref" >&2; return 1 ;;
-  esac
-  u_new "$U_SCR/dg.err"
-  "$0" "$@" < /dev/null > /dev/null 2> "$U_SCR/dg.err"
-  ud_rc=$?
-  [ "$ud_rc" -eq 0 ] && return 0
-  ud_msg=$(head -n 1 "$U_SCR/dg.err" 2>/dev/null)
-  case "$ud_msg" in
-    *": error: "*) ud_msg=${ud_msg#*": error: "} ;;
-  esac
-  [ -n "$ud_msg" ] || ud_msg="the target refused the reference"
-  printf '%s\n' "$ud_msg" >&2
-  return "$ud_rc"
+# u_refs_check <file>: each line one ref, a full address (<owner>#<path>): a retired short
+# owner (journal, knowledge, backlog, lane, task, finding, entry, and their .md spellings)
+# refuses, and every other value passes the storage library's one full address shape check
+# (lib_ref_ok)
+u_refs_check() {
+  while IFS= read -r ur_ref; do
+    case "$ur_ref" in
+      journal#*|knowledge#*|backlog#*|lane#*|task#*|finding#*|entry#*|journal.md#*|knowledge.md#*|backlog.md#*)
+        printf "%s: error: malformed ref '%s': a reference is a full address <owner>#<path> (ERR_INVALID_ARGUMENT)\n" "$FN" "$(store_lib_escape "$ur_ref")" >&2
+        exit 1 ;;
+    esac
+    lib_ref_ok "$FN" "$ur_ref" || exit 1
+  done < "$1"
 }
 
-# u_refs_validate: a new write's canonical unit refs resolve through the module's own entity
-# reads before anything lands; a legacy record target and a file pointer stay as stored
-u_refs_validate() {
+# u_refs_shape: a write's refs, each a full address, checked by u_refs_check before the unit
+# lock; the target's existence is the verb's check, through each owner's get, before the call
+u_refs_shape() {
   [ -n "$U_PAY" ] && [ -f "$U_PAY" ] || return 0
   u_new "$U_SCR/refs" "$U_SCR/refs.err"
   PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/refs.awk" \
@@ -866,18 +837,7 @@ u_refs_validate() {
     *) [ -s "$U_SCR/refs.err" ] && cat "$U_SCR/refs.err" >&2
        u_refuse 2 ERR_STORAGE_READ "cannot read the write's references" ;;
   esac
-  while IFS= read -r ur_ref; do
-    [ -n "$ur_ref" ] || continue
-    case "$ur_ref" in
-      unit#?*) ;;
-      *) continue ;;
-    esac
-    ur_err=$(u_ref_resolve "$ur_ref" 2>&1 >/dev/null)
-    ur_rc=$?
-    [ "$ur_rc" -eq 0 ] && continue
-    printf '%s: error: ref '\''%s'\'': %s\n' "$FN" "$ur_ref" "$ur_err" >&2
-    exit "$ur_rc"
-  done < "$U_SCR/refs"
+  u_refs_check "$U_SCR/refs"
 }
 
 # u_unit_call <function> <unit> <parts> <write> [<args>...]
@@ -891,6 +851,7 @@ u_unit_call() {
   u_manifest_reset
   u_payload
   if [ "$U_WRITE" -eq 1 ]; then
+    u_refs_shape
     u_lock "$U_UNIT"
     u_stage_start
   fi
@@ -898,14 +859,25 @@ u_unit_call() {
   u_args "$@"
   u_awk
   if [ "$U_WRITE" -eq 1 ]; then
-    u_refs_validate
     u_commit
   else
     cat "$U_SCR/answer"
   fi
 }
 
-# u_lane_doc <function> <unit> <lane>: lane.create or lane.write_report, the document raw
+# u_recipe_refs <document>: a lane recipe's REFS block items, the first token of each indented
+# line under a column 0 REFS :: head (the items refs-to reads), through u_refs_check
+u_recipe_refs() {
+  u_new "$U_SCR/refs"
+  LC_ALL=C awk '
+    /^[^ \t]/ { inrefs = ($0 ~ /^REFS[ \t]*::/); next }
+    inrefs && /^[ \t]+[^ \t]/ { w = $0; sub(/^[ \t]+/, "", w); sub(/[ \t].*$/, "", w); print w }
+  ' "$1" > "$U_SCR/refs" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the recipe's references"
+  u_refs_check "$U_SCR/refs"
+}
+
+# u_lane_doc <function> <unit> <lane>: lane.create or lane.write_report, the document raw, read
+# before the unit lock; a recipe's REFS block items pass the shape backstop there
 u_lane_doc() {
   FN=$1
   U_UNIT=$2
@@ -913,15 +885,17 @@ u_lane_doc() {
   u_scratch
   u_manifest_reset
   U_PAY=""
-  u_lock "$U_UNIT"
   u_stage_start
   u_new "$U_STAGE/doc"
   { cat > "$U_STAGE/doc"; } 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "cannot read the document"
+  if [ "$FN" = lane.create ]; then
+    u_recipe_refs "$U_STAGE/doc"
+  fi
+  u_lock "$U_UNIT"
   PX_DOCSIZE=$(wc -c < "$U_STAGE/doc" | tr -d ' ')
   u_fetch_unit "$U_UNIT" "__lanes__" 1
   u_args "$U_LANE"
   u_awk
-  u_refs_validate
   u_commit
 }
 
@@ -1135,6 +1109,7 @@ case "$cmd" in
     u_want_unit "${1:-}"
     u_manifest_reset
     u_payload
+    u_refs_shape
     u_lock "${1:-}"
     u_new "$U_SCR/keys"
     u_keys_prefix "${1:-}/" > "$U_SCR/keys" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
@@ -1144,7 +1119,6 @@ case "$cmd" in
     u_stage_start
     U_UNIT=$1
     u_awk
-    u_refs_validate
     u_commit
     ;;
   session.list)

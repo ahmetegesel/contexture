@@ -6,7 +6,7 @@
 # help:   --what="..."         event description (required)
 # help:   --slug=...           override entry slug (default auto-generated with date)
 # help:   --thread=...         what the lane awaits (default: none); empty, true, or false refuses rc 1
-# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes; repeatable, one REF line each
+# help:   --ref="..."          grounding reference: a full address <owner>#<path> (unit#<unit>/entry/<slug>, unit#<unit>/task/<slug>, unit#<unit>/finding/<NAME>, unit#<unit>/lane/<lane>/<artifact>[/<SECTION or slug>], file#<path>[#<symbol>], store#<container>/<id>, docs#<repo>/<slug>/<id>), one token without blanks, control characters, or double quotes, its target checked through its owner's get before any write (a short or legacy form refuses naming its full address); repeatable, one REF line each
 # help: a CLOSED unit refuses rc 1; a slug the lane journal already carries refuses rc 1 (ERR_ENTITY_EXISTS); an absent lane refuses rc 1 (create it with ctx lane create)
 
 unit_lib="${CTX_ROOT:-.}/.contexture/modules/unit/lib/verb.sh"
@@ -82,9 +82,10 @@ while [ "$i" -lt "$nref" ]; do
   eval "r=\$REF_$i"
   vb_refuse_cr "$r"
   vb_refuse_nl --ref "$r"
-  vb_ref_ok "lane record" "$r"
+  vb_ref_ok "lane record" "$r" "$unit"
   set -- "$@" "$r"
 done
+[ $# -eq 0 ] || vb_refs_exist "lane record" "$@"
 if [ -n "$slug" ] && ! vb_slug_ok "$slug"; then
   printf "lane record: error: malformed entry slug '%s' (ERR_INVALID_ARGUMENT)\n" "$slug" >&2
   exit 1

@@ -6,8 +6,10 @@
 # and every REF and REFS value is counted in the census, one row each: rewritten, kept (with
 # its reason), or moved to NOTE.
 #
-# The environment: MG_MODE rewrite (each artifact written to its output path) or census (the
-# rows alone); MG_UNIT the owning unit; MG_REPOS the corpus repos the docs module lists,
+# The environment: MG_MODE rewrite (each artifact written to its output path), census (the
+# rows alone), suggest (one REF value, MG_TOKEN, answered as its disposition and new form, the
+# full form a write refusal names), or check (the REF values of the file MG_VALUES, one per
+# line, answered as the count a migration would change, the load's old forms warning); MG_UNIT the owning unit; MG_REPOS the corpus repos the docs module lists,
 # blank separated; MG_MAP the run's map file, one line per artifact
 # "<input><TAB><kind><TAB><lane><TAB><output><TAB><label><TAB><final newline 1|0>", the kind
 # one of state, backlog, journal, knowledge, recipe, ljournal, report; MG_CHANGED the file
@@ -705,6 +707,23 @@ BEGIN {
   }
   CENSUS = ENVIRON["MG_CENSUS"]
   CHANGEDF = ENVIRON["MG_CHANGED"]
+  if (MODE == "suggest") {
+    CENSUS = "/dev/null"
+    if (ENVIRON["MG_TOKEN"] ~ /[ \t]/ || ENVIRON["MG_TOKEN"] == "") { print "kept\t"; exit 0 }
+    c = cls(ENVIRON["MG_TOKEN"], 1)
+    printf "%s\t%s\n", DISP, NEWV
+    exit 0
+  }
+  if (MODE == "check") {
+    CENSUS = "/dev/null"
+    LANE = ""
+    while ((getline ml < ENVIRON["MG_VALUES"]) > 0) {
+      refval(ml, "REF", 0)
+      if (RV_CHG) nold++
+    }
+    print nold + 0
+    exit 0
+  }
   while ((getline ml < ENVIRON["MG_MAP"]) > 0) {
     split(ml, MP, /\t/)
     MAP[MP[1]] = MP[2] "\t" MP[3] "\t" MP[4] "\t" MP[5] "\t" MP[6]

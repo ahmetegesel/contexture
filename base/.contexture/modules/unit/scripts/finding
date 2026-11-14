@@ -8,7 +8,7 @@
 # help:   supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]...
 # help:   drop <unit> <NAME>
 # help:   list <unit> [--active-only] [--json]
-# help: --ref repeats (one REF line each), each <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes; an update with --ref replaces the list
+# help: --ref repeats (one REF line each), each a full address <owner>#<path> (unit#<unit>/entry/<slug>, unit#<unit>/task/<slug>, unit#<unit>/finding/<NAME>, unit#<unit>/lane/<lane>/<artifact>[/<SECTION or slug>], file#<path>[#<symbol>], store#<container>/<id>, docs#<repo>/<slug>/<id>), one token without blanks, control characters, or double quotes, its target checked through its owner's get before any write (a short or legacy form refuses naming its full address); an update with --ref replaces the list
 # help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --summary carrying no field
 # help: the unit module holds the record rules: a CLOSED unit refuses every write; a NAME the knowledge already carries is refused (rc 1, ERR_ENTITY_EXISTS), a missing predecessor too (ERR_ENTITY_NOT_FOUND); a new NAME is upper case letters, digits, and underscores
 
@@ -93,8 +93,15 @@ check_refs() {
     eval "rv=\$REF_$i"
     vb_refuse_cr "$rv"
     vb_refuse_nl --ref "$rv"
-    vb_ref_ok finding "$rv"
+    vb_ref_ok finding "$rv" "$unit"
   done
+  set --
+  i=0
+  while [ "$i" -lt "$nref" ]; do
+    i=$((i + 1))
+    eval "set -- \"\$@\" \"\$REF_$i\""
+  done
+  [ $# -eq 0 ] || vb_refs_exist finding "$@"
 }
 
 # parse_flags <label> <args...>: --summary, --ref (repeatable), --supersedes (add), --json

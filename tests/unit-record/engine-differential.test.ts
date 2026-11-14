@@ -27,7 +27,7 @@ const OPS: Op[] = [
   ['session.refs', [TUNIT, UNIT]],
   ['session.units', ['alpha']],
   ['session.refs_to', [UNIT]],
-  ['task.add', [TUNIT, 'diff-task'], p().kv('objective', 'a differential task').kl('refs', 'backlog#one').toString()],
+  ['task.add', [TUNIT, 'diff-task'], p().kv('objective', 'a differential task').kl('refs', 'unit#u1/task/one').toString()],
   ['task.update', [TUNIT, 'task-sample'], p().kv('objective', 'updated by both').kv('details', 'a detail').toString()],
   ['task.start', [TUNIT, 'task-sample']],
   ['task.complete', [TUNIT, 'task-sample'], p().kv('evidence', 'both landed').kv('date', DATE).toString()],
@@ -39,7 +39,7 @@ const OPS: Op[] = [
   ['entry.get', [TUNIT, GAMMA]],
   ['entry.closure', [TUNIT, GAMMA]],
   ['entry.list', [TUNIT, '--group=topic-group']],
-  ['finding.add', [TUNIT, 'DIFF_F'], p().kv('summary', 'a differential finding').kl('refs', `journal#${GAMMA}`).toString()],
+  ['finding.add', [TUNIT, 'DIFF_F'], p().kv('summary', 'a differential finding').kl('refs', `unit#u1/entry/${GAMMA}`).toString()],
   ['finding.update', [TUNIT, 'FINDING_BETA'], p().kv('summary', 'updated by both').toString()],
   ['finding.drop', [TUNIT, 'FINDING_BETA']],
   ['finding.get', [TUNIT, 'FINDING_ALPHA']],
@@ -94,7 +94,7 @@ describe.concurrent('the engine against the data script on the same fresh snapsh
 
   it('null check: a planted payload difference reads unequal in the answer and the landed artifacts', async () => {
     const op = OPS.find(([fn]) => fn === 'task.add') as Op;
-    const { engine, script, engineStore, scriptStore } = await both(op, p().kv('objective', 'a planted difference').kl('refs', 'backlog#one').toString());
+    const { engine, script, engineStore, scriptStore } = await both(op, p().kv('objective', 'a planted difference').kl('refs', 'unit#u1/task/one').toString());
     expect([engine.code, script.code]).toEqual([0, 0]);
     expect(engine.stdout).not.toBe(script.stdout);
     expect(engineStore).not.toEqual(scriptStore);

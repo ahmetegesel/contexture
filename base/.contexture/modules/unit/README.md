@@ -181,27 +181,30 @@ its verb.
 
 ## The ref check
 
-A new write checks the canonical unit refs it carries:
-
-```text
-unit#<unit>/task/<slug>
-unit#<unit>/entry/<slug>
-unit#<unit>/finding/<NAME>
-unit#<unit>/lane/<lane>/<recipe|journal|report>
-```
-
-The data script answers each through its own entity read (`task.get`, `entry.get`,
-`finding.get`, or `lane.get`) before anything lands and refuses a missing target, re-framed
-with the write's function and the ref:
-`<function>: error: ref '<ref>': <the target's message> (<CODE>)`. `ctx unit get <unit>/<kind>/<id>` prints the one entity a canonical ref's
-path names (the lane section and lane journal entry forms beside them), read only and lock
-free. The public `ctx unit resolve <unit> <ref>` accepts the same canonical forms
-(the ref carries its target unit) beside the abstract and legacy forms, so a canonical ref
-stored in a source item resolves to its entity. A legacy record target (`journal#<slug>`,
-`task#<slug>`, `knowledge#<NAME>`, `lanes/<lane>/report#<claim>`) and a file pointer stay
-as stored: the check is forward only, the two pointer shapes of @record references. The
-existing refs keep reading; the migration to the canonical form is an agent rewrite, not a
-verb.
+A write's refs are full addresses, `<owner>#<path>` (`unit#<unit>/entry/<slug>`,
+`unit#<unit>/task/<slug>`, `unit#<unit>/finding/<NAME>`,
+`unit#<unit>/lane/<lane>/<recipe|journal|report>[/<SECTION or slug>]`,
+`store#<container>/<id>`, `docs#<repo>/<slug>/<id>`, `file#<path>[#<symbol>]`). The verbs
+check each in two steps before their storage call: `vb_ref_ok` refuses a retired short or
+legacy form naming its full address (`lib/migrate.awk` in its suggest mode computes it for
+the writing unit) and passes everything else through the storage library's `lib_ref_ok`;
+then `vb_refs_exist` checks each target, a `file#` path by the core (inside the workspace
+it must exist, outside it the shape alone counts, the symbol never) and every other owner
+through `ctx <owner> get <path>`, refusing
+`<verb>: error: ref '<ref>': target not found (ERR_ENTITY_NOT_FOUND)`,
+`... owner '<owner>' is not installed (ERR_ENTITY_NOT_FOUND)`, or
+`... owner '<owner>' has no get verb (ERR_ENTITY_NOT_FOUND)`. `vb_owner` probes each owner
+once: a name the engine reserves is classed through `ctx _reserved` and `ctx _builtin` and
+never dispatched (`ctx run help get` would run a command), any other through
+`ctx <owner> help get`, then `ctx <owner> help`; a path starting with a dash reads target not
+found before any get, since get would take it for an option; a ref given twice in one write
+is checked once. No lock is held during the checks: the unit lock is taken only inside the
+data script, whose `u_refs_shape` re-checks the shape of a payload's refs before that lock as
+a backstop for a direct call, and whose `lane.create` reads the recipe before the lock and
+puts its REFS block items through the same check (`u_refs_check`). A value
+already stored reads as it stands until `ctx unit migrate` rewrites it; `ctx unit load`
+counts the unit's REF and REFS values a migration would still rewrite (`lib/migrate.awk`
+in its check mode) and warns once after its answer while any remain.
 
 ## The search
 

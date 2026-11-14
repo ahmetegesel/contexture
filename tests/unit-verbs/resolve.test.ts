@@ -44,7 +44,7 @@ describe.concurrent('ctx unit resolve', () => {
       await must(run(sb, ['lane', 'report', 'x-unit', 'x-lane'], { input: '# x report\n\n@claim x1\n  VERDICT: "from stdin"\n' }));
       await must(createLane(sb, 'x-unit', 'k-lane'));
       await must(run(sb, ['lane', 'record', 'x-unit', 'k-lane', '--what=A lane event', `--slug=${D}-k-l1`]));
-      await must(run(sb, ['lane', 'record', 'x-unit', 'k-lane', '--what=A later lane event', `--slug=${D}-k-l2`, '--ref=lane#k-lane/recipe#GOAL']));
+      await must(run(sb, ['lane', 'record', 'x-unit', 'k-lane', '--what=A later lane event', `--slug=${D}-k-l2`, '--ref=unit#x-unit/lane/k-lane/recipe/GOAL']));
       await must(run(sb, ['lane', 'report', 'x-unit', 'k-lane'], { input: K_REPORT }));
       await must(createLane(sb, 'x-unit', 'e-lane'));
       plantArtifact(sb, 'x-unit', 'lanes/r-lane/report', '@report r-lane\nVERDICT: planted\n');

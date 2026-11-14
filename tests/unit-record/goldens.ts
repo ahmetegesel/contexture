@@ -56,7 +56,7 @@ async function verbUnit(sb: string): Promise<void> {
   await ok(sb, 'session.refs', [VU, 'verb-ref']);
   const canon = payload()
     .kv('objective', 'Every section filled')
-    .kl('refs', 'journal#2026-09-27-verb-one', 'knowledge#VERB_CANON')
+    .kl('refs', 'unit#verb-u/entry/2026-09-27-verb-one', 'unit#verb-u/finding/VERB_CANON')
     .kv('desc', 'first description line\n\nthird line after an empty one')
     .kv('criteria', 'one criterion')
     .kv('details', 'detail one\ndetail two');
@@ -66,10 +66,10 @@ async function verbUnit(sb: string): Promise<void> {
   await ok(sb, 'task.complete', [VU, 'done-task'], payload().kv('evidence', 'the walk verified it').kv('date', DATE));
   await ok(sb, 'task.add', [VU, 'active-task'], payload().kv('objective', 'Started in the walk'));
   await ok(sb, 'task.start', [VU, 'active-task']);
-  await ok(sb, 'finding.add', [VU, 'VERB_CANON'], payload().kv('summary', 'a canonical finding\nover two lines').kl('refs', 'journal#2026-09-27-verb-one'));
+  await ok(sb, 'finding.add', [VU, 'VERB_CANON'], payload().kv('summary', 'a canonical finding\nover two lines').kl('refs', 'unit#verb-u/entry/2026-09-27-verb-one'));
   await ok(sb, 'finding.add', [VU, 'VERB_OLD'], payload().kv('summary', 'the older reading'));
   await ok(sb, 'finding.supersede', [VU, 'VERB_OLD', 'VERB_NEW'], payload().kv('summary', 'the newer reading').kv('reason', 'replaced by the walk'));
-  const first = payload().kv('slug', '2026-09-27-verb-one').kv('group', 'verb-group').kv('rhythm', 'probe').kv('knowledge', 'true').kl('refs', 'task#canon-task', 'lanes/verb-lane/report');
+  const first = payload().kv('slug', '2026-09-27-verb-one').kv('group', 'verb-group').kv('rhythm', 'probe').kv('knowledge', 'true').kl('refs', 'unit#verb-u/task/canon-task', 'unit#verb-u/lane/verb-lane/report');
   answer(await rec(sb, VU, 1790000761, 'the first verb entry', { thread: 'the human', with: first }), 'entry.record');
   answer(await rec(sb, VU, 1790000762, 'the second verb entry', { with: payload().kv('slug', '2026-09-27-verb-two').kv('group', 'verb-group') }), 'entry.record');
   answer(await rec(sb, VU, 1790000763, 'the third verb entry', { with: payload().kv('slug', '2026-09-27-verb-three') }), 'entry.record');
@@ -77,7 +77,7 @@ async function verbUnit(sb: string): Promise<void> {
   const folds = payload().kv('slug', '2026-09-27-verb-four').kv('closers.count', '1').kcl(1, 'CLOSES', 'folded', 'read together', '2026-09-27-verb-two', '2026-09-27-verb-three');
   answer(await rec(sb, VU, 1790000764, 'folds the second and the third', { with: folds }), 'entry.record');
   await ok(sb, 'lane.create', [VU, 'verb-lane'], '# recipe grammar\nMISSION\n  GOAL: "walk the verbs"\n');
-  const step = payload().kv('what', 'a lane step').kv('thread', 'none').kl('refs', 'task#canon-task').kv('slug', '2026-09-27-verb-lane-one').kv('date', DATE).kv('epoch', '1790000765');
+  const step = payload().kv('what', 'a lane step').kv('thread', 'none').kl('refs', 'unit#verb-u/task/canon-task').kv('slug', '2026-09-27-verb-lane-one').kv('date', DATE).kv('epoch', '1790000765');
   await ok(sb, 'lane.record', [VU, 'verb-lane'], step);
   await ok(sb, 'lane.write_report', [VU, 'verb-lane'], '@claim one\n  the walk landed, a \\ backslash and a "quote"\n');
   await ok(sb, 'lane.create', [VU, 'quiet-lane'], '# a quiet lane\n');

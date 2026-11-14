@@ -34,54 +34,47 @@ describe.concurrent('the unit module\'s own data cases', () => {
     expect(await slugs(sb)).toEqual(['t1']);
   });
 
-  it('UD-2 [the-engine-r21]: the write time check answers a canonical task ref through the unit\'s own read: a held one lands, a missing one refuses naming the target', async () => {
+  it.for([
+    'journal#2026-01-01-absent',
+    'knowledge#F1',
+    'backlog#t1',
+    'lane#l1/report',
+    'task#t1',
+    'journal.md#2026-01-01-absent',
+    'docs/the-engine.md#the-unit-module',
+    'lanes/l1/report',
+    'a b#c',
+  ])('UD-2 [the-record-r18, the-record-r9]: the data level refuses %j, no full address, before the unit lock, and lands nothing', async (ref) => {
     const sb = await at();
-    expect((await ok(sb, 'task.add', ['u1', 't-held'], task('a held task ref', 'unit#u1/task/t1'))).task.refs).toEqual(['unit#u1/task/t1']);
-    const missing = await data(sb, 'task.add', ['u1', 't-missing'], task('a missing task ref', 'unit#u1/task/missing'));
-    expect([missing.code, missing.stdout, missing.stderr]).toEqual([1, '', "task.add: error: ref 'unit#u1/task/missing': task 'missing' not found in unit 'u1' (ERR_ENTITY_NOT_FOUND)\n"]);
-    expect(await slugs(sb)).not.toContain('t-missing');
-  });
-
-  it('UD-3 [the-engine-r21]: a write with a missing canonical ref refuses re-framed and lands nothing; a held ref lands; a file pointer and a legacy ref are exempt', async () => {
-    const sb = await at();
-    const bad = await data(sb, 'task.add', ['u1', 't-bad'], task('bad ref task', 'unit#u1/task/missing'));
-    expect([bad.code, bad.stderr]).toEqual([1, "task.add: error: ref 'unit#u1/task/missing': task 'missing' not found in unit 'u1' (ERR_ENTITY_NOT_FOUND)\n"]);
+    const r = await data(sb, 'task.add', ['u1', 't-bad'], task('a retired ref task', ref));
+    expect([r.code, r.stdout]).toEqual([1, '']);
+    expect(r.stderr).toMatch(new RegExp(`^task\\.add: error: malformed ref '.*': a reference is .*\\(ERR_INVALID_ARGUMENT\\)\\n$`));
     expect(await slugs(sb)).not.toContain('t-bad');
-    expect((await ok(sb, 'task.add', ['u1', 't-ok'], task('a canonical ref task', 'unit#u1/task/t1'))).task.refs).toEqual(['unit#u1/task/t1']);
-    expect((await ok(sb, 'task.add', ['u1', 't-file'], task('a file pointer task', 'docs/the-engine.md#the-unit-module'))).task.refs).toEqual(['docs/the-engine.md#the-unit-module']);
-    expect((await ok(sb, 'task.add', ['u1', 't-legacy'], task('a legacy ref task', 'journal#2026-01-01-absent'))).task.refs).toEqual(['journal#2026-01-01-absent']);
   });
 
-  it('UD-7: the write time check answers the canonical finding and lane recipe refs: held ones land, missing ones refuse and land nothing', async () => {
+  // the review's input: REFS lines a direct lane.create call stored, under the recipe's REFS :: head
+  const recipe = (...items: string[]): string => `@recipe l2\n  UNIT: u1\n  LANE: l2\n\nGOAL ::\n  x\n\nREFS ::\n${items.map((i) => `  ${i}\n`).join('')}\nSCOPE ::\n  1. y\n`;
+
+  it.for(['journal#short', 'lanes/x/report', 'freetext', 'knowledge.md#F1 (annotated)'])('UD-2b [the-record-r18, the-record-r15]: lane.create refuses the REFS block item %j, no full address, before the unit lock, and lands nothing', async (item) => {
     const sb = await at();
-    await ok(sb, 'finding.add', ['u1', 'F1'], payload().kv('summary', 'a finding summary').kl('refs'));
-    await ok(sb, 'lane.create', ['u1', 'l1'], '# a needle lane recipe\n');
-    expect((await ok(sb, 'task.add', ['u1', 't-f'], task('a finding ref task', 'unit#u1/finding/F1', 'unit#u1/lane/l1/recipe'))).task.refs).toEqual(['unit#u1/finding/F1', 'unit#u1/lane/l1/recipe']);
-    for (const ref of ['unit#u1/finding/F9', 'unit#u1/lane/l9/recipe']) {
-      const r = await data(sb, 'task.add', ['u1', 't-gone'], task('a missing ref task', ref));
-      expect([r.code, r.stdout, r.stderr.startsWith(`task.add: error: ref '${ref}': `), r.stderr.endsWith('(ERR_ENTITY_NOT_FOUND)\n')]).toEqual([1, '', true, true]);
-    }
-    expect(await slugs(sb)).not.toContain('t-gone');
+    const r = await data(sb, 'lane.create', ['u1', 'l2'], recipe('unit#u1/task/t1', item));
+    expect([r.code, r.stdout]).toEqual([1, '']);
+    expect(r.stderr).toMatch(new RegExp(`^lane\\.create: error: malformed ref '${item.split(' ')[0]?.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}': a reference is .*\\(ERR_INVALID_ARGUMENT\\)\\n$`));
+    expect((await ok(sb, 'lane.create', ['u1', 'l2'], recipe('unit#u1/task/t1'))).lane).toBe('l2');
   });
 
-  it('UD-8 [the-engine-r21]: a held canonical lane ref lands; a claim-shaped unit ref refuses naming the ref and lands nothing', async () => {
+  it('UD-2b [the-record-r18, the-record-r15]: lane.create takes REFS block items that are full addresses, an annotation beside one kept, and a report carries no REFS grammar', async () => {
     const sb = await at();
-    await ok(sb, 'lane.create', ['u1', 'l1'], '# a needle lane recipe\n');
-    await ok(sb, 'lane.record', ['u1', 'l1'], payload().kv('what', 'a needle lane entry').kv('thread', 'none').kv('slug', 'lane-needle').kl('refs'));
-    await ok(sb, 'lane.write_report', ['u1', 'l1'], 'a needle lane report\n');
-    expect((await ok(sb, 'task.add', ['u1', 't-lane'], task('a lane ref task', 'unit#u1/lane/l1/report'))).task.refs).toEqual(['unit#u1/lane/l1/report']);
-    const claim = await data(sb, 'task.add', ['u1', 't-claim'], task('a claim ref task', 'unit#u1/lane/l1/report#claim'));
-    expect([claim.code, claim.stdout, claim.stderr.startsWith("task.add: error: ref 'unit#u1/lane/l1/report#claim':")]).toEqual([1, '', true]);
-    expect(await slugs(sb)).not.toContain('t-claim');
+    const doc = recipe('unit#u1/task/t1 (the task)', 'file#docs/the-engine.md#the-unit-module', 'store#ideas/x');
+    expect((await ok(sb, 'lane.create', ['u1', 'l2'], doc)).lane).toBe('l2');
+    expect((await ok(sb, 'lane.get', ['u1', 'l2', 'recipe'])).content).toBe(doc);
+    expect((await data(sb, 'lane.write_report', ['u1', 'l2'], '@report l2\nREFS ::\n  journal#short stays report prose\n')).code).toBe(0);
   });
 
-  it('UD-9: the write time check answers the canonical entry ref: a held entry lands, a missing one refuses', async () => {
+  it('UD-3 [the-record-r18]: the data level takes every full address shape as written; the target check is the verbs\', through each owner\'s get, before the call', async () => {
     const sb = await at();
-    const { entry } = await ok(sb, 'entry.record', ['u1'], payload().kv('what', 'an entry').kv('thread', 'none').kv('date', '2026-11-03').kv('epoch', '1793687300').kl('refs'));
-    expect((await ok(sb, 'task.add', ['u1', 't-e'], task('an entry ref task', `unit#u1/entry/${entry.slug}`))).task.refs).toEqual([`unit#u1/entry/${entry.slug}`]);
-    const r = await data(sb, 'task.add', ['u1', 't-e9'], task('a missing entry ref task', 'unit#u1/entry/2026-01-01-absent'));
-    expect([r.code, r.stderr.startsWith("task.add: error: ref 'unit#u1/entry/2026-01-01-absent': "), r.stderr.endsWith('(ERR_ENTITY_NOT_FOUND)\n')]).toEqual([1, true, true]);
-    expect(await slugs(sb)).not.toContain('t-e9');
+    const refs = ['unit#u1/task/t1', 'unit#u1/task/missing', 'unit#u1/lane/l1/report/claim', 'file#docs/the-engine.md#the-unit-module', 'store#ideas/x', 'docs#workspace/the-record/header'];
+    expect((await ok(sb, 'task.add', ['u1', 't-ok'], task('full address refs', ...refs))).task.refs).toEqual(refs);
   });
 
   it('UD-10 [the-record-r1]: session.refs sets the read-only unit, session.load reads it, and the per-unit read stays inside its unit', async () => {

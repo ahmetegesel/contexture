@@ -1,7 +1,7 @@
 function defect(code, detail) { printf "%s\t%s\n", code, detail >> (dir "/defects") }
 function is_ref(p, s,   k, r) {
   k = (T[p ".refs"] == "a") ? V[p ".refs"] + 0 : 0
-  for (r = 1; r <= k; r++) if (sv(p ".refs." r) == "journal#" s) return 1
+  for (r = 1; r <= k; r++) if (sv(p ".refs." r) == "journal#" s || sv(p ".refs." r) == "unit#" unit "/entry/" s) return 1
   return 0
 }
 function is_live_thread(s) { return LIVE[s] && TH_OF[s] != "" && TH_OF[s] != "none" }
@@ -67,7 +67,7 @@ BEGIN {
           defect("CLOSER_NOT_FOLDED", L[i] " closes " t " with " ((verdict == "") ? "(no verdict)" : verdict))
           bad = 1
         }
-        if (!is_ref(p, t)) { defect("UNREFERENCED_CLOSER", L[i] " closes " t " without a journal#" t " REF"); bad = 1 }
+        if (!is_ref(p, t)) { defect("UNREFERENCED_CLOSER", L[i] " closes " t " without a unit#" unit "/entry/" t " REF"); bad = 1 }
       }
     }
     if (nsct == 0) continue
@@ -121,6 +121,7 @@ BEGIN {
     for (r = 1; r <= nrf; r++) {
       rf = sv(p ".refs." r)
       if (rf ~ /^journal#/ && (substr(rf, 9) in ETS) && ETS[substr(rf, 9)] == i) continue
+      if (index(rf, "unit#" unit "/entry/") == 1 && (substr(rf, length(unit) + 13) in ETS) && ETS[substr(rf, length(unit) + 13)] == i) continue
       print L[i] "\t" rf > (dir "/external.tsv")
     }
     for (s in ETS) {

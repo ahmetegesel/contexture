@@ -1,6 +1,5 @@
 # refs.awk: the refs of a write payload, one per line, run after canon.awk and model.awk.
-# The data script validates a new canonical unit ref before writing; a legacy target and a
-# file pointer stay as stored (the forward-only rule).
+# The data script checks each one's full address shape before the unit lock.
 # The environment: PX_PAY the payload file, PX_ERR the refusal file.
 
 BEGIN {

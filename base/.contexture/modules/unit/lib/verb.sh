@@ -413,34 +413,117 @@ vb_lane() {
   exit 1
 }
 
-# vb_ref_ok <label> <ref>: a REF or REFS element names its target in one of the two
-# pointer shapes of @record references (end review item 6, Q6 by the human): <target>#<symbol>
-# (a # with text on both sides, so ### passes) or a whole target path (holding a / and
-# ending in a name, so a root-level file reads ./<file> or <file>#<section>: the human's A17
-# decision; a lone /, //, a trailing / as in lanes/, and ./ name no target and refuse: R-REF
-# of the second review); one token: no blank, no double quote, and no control character (an
-# ASCII control byte counts as a blank, R-REF, and so does a Unicode blank). The control
-# check goes through tr, since bash as sh reserves \001 and \177 inside its patterns; the
-# Unicode blanks through awk index under LC_ALL=C (bytes, never the locale). New writes
-# only: a legacy value already stored reads as it stands.
+# vb_ref_ok <label> <ref> [<unit>]: a REF or REFS element is a full address, <owner>#<path>
+# (@record references): a retired short or legacy form (journal#, knowledge#, backlog#,
+# lane#, task#, finding#, entry#, a lanes/ path, a bare whole path, IDEAS.md) refuses naming
+# its full form, the form ctx unit migrate writes for the unit, and every other value passes
+# the storage library's one full address shape check (lib_ref_ok). Whether the owner is
+# installed and the target exists is vb_refs_exist's, before any lock.
 vb_ref_ok() {
-  vr_ok=1
-  # the Unicode blanks beyond ASCII (the White_Space set: NEL, NBSP, U+1680, U+2000 to
-  # U+200A, U+2028, U+2029, U+202F, U+205F, U+3000) as UTF-8 byte strings, each followed by
-  # a |, built by printf so no such byte sits in this file
-  vr_ub=$(printf '\302\205|\302\240|\341\232\200|\342\200\200|\342\200\201|\342\200\202|\342\200\203|\342\200\204|\342\200\205|\342\200\206|\342\200\207|\342\200\210|\342\200\211|\342\200\212|\342\200\250|\342\200\251|\342\200\257|\342\201\237|\343\200\200|')
-  [ "$(printf '%s' "$2" | LC_ALL=C tr -d '\001-\037\177')" = "$2" ] || vr_ok=0
-  [ "$vr_ok" -eq 1 ] && VB_V="$2" VB_B="$vr_ub" LC_ALL=C awk 'BEGIN {
-    n = split(ENVIRON["VB_B"], B, "|")
-    for (i = 1; i < n; i++) if (index(ENVIRON["VB_V"], B[i])) exit 0
+  vr_full=$(vb_ref_full "$2" "${3:-<unit>}")
+  if [ -n "$vr_full" ]; then
+    printf "%s: error: malformed ref '%s': a reference is a full address <owner>#<path>; write %s (ERR_INVALID_ARGUMENT)\n" "$1" "$(store_lib_escape "$2")" "$vr_full" >&2
     exit 1
-  }' && vr_ok=0
-  [ "$vr_ok" -eq 1 ] && case "$2" in
-    ""|*[' 	"']*) ;;
-    */|.|./) ;;
-    ?*'#'?*) return 0 ;;
-    */?*) return 0 ;;
+  fi
+  lib_ref_ok "$1" "$2" || exit 1
+}
+
+# vb_ref_full <ref> <unit>: the full address ctx unit migrate writes for a retired form
+# (lib/migrate.awk's class rules, the unit the writing one), printed; nothing for a value no
+# class rewrites. The owners journal, knowledge, backlog, lane, task, finding, and entry are
+# the retired short owners: a value under one that no rule rewrites (a placeholder) names
+# the unit# form in general
+vb_ref_full() {
+  vf_repos=""
+  case "$1" in
+    docs/*|./docs/*) [ -n "${CTX_BIN:-}" ] && vf_repos=$("$CTX_BIN" docs query --index < /dev/null 2>/dev/null | awk '$1 != "index" && NF > 1 && !s[$1]++ { printf "%s ", $1 }') ;;
   esac
-  printf "%s: error: malformed ref '%s': a reference is <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes (ERR_INVALID_ARGUMENT)\n" "$1" "$2" >&2
-  exit 1
+  vf_out=$(MG_MODE=suggest MG_UNIT=$2 MG_TOKEN=$1 MG_REPOS=$vf_repos LC_ALL=C awk -f "$VB_LIB/migrate.awk" < /dev/null 2>/dev/null)
+  case "$vf_out" in
+    rewritten*) printf '%s\n' "${vf_out#rewritten	}"; return 0 ;;
+  esac
+  case "$1" in
+    journal#*|knowledge#*|backlog#*|lane#*|task#*|finding#*|entry#*) printf 'unit#%s/<entry|task|finding|lane>/<id>\n' "$2" ;;
+  esac
+}
+
+# vb_owner <ctx> <root> <owner>: prints has (the owner answers get), noget (an installed
+# module with no get verb), or none (no module of that name). A name the engine reserves never
+# reaches a module's dispatch (ctx run help get would run a command), so it is classed by the
+# engine's readers alone: a reserved builtin as noget, any other reserved name as none
+vb_owner() {
+  if (cd "$2" && "$1" _reserved "$3" < /dev/null > /dev/null 2>&1); then
+    if (cd "$2" && "$1" _builtin "$3" < /dev/null > /dev/null 2>&1); then printf 'noget'; else printf 'none'; fi
+  elif (cd "$2" && "$1" "$3" help get < /dev/null > /dev/null 2>&1); then
+    printf 'has'
+  elif (cd "$2" && "$1" "$3" help < /dev/null > /dev/null 2>&1); then
+    printf 'noget'
+  else
+    printf 'none'
+  fi
+}
+
+# vb_refs_exist <label> <ref>...: each full address names something that exists, checked
+# before any lock: a file# path by the core (inside the workspace it must exist, relative to
+# the workspace root or absolute; outside it the shape alone is checked; the symbol after a
+# further hash never), every other owner through its own ctx <owner> get <path>, the path
+# everything after the first hash, an owner probed once (vb_owner: not installed, or no get
+# verb) and a ref given twice checked once; a path starting with a dash names no target, since
+# get would read it as an option, so it refuses before any get. A miss refuses rc 1 naming the
+# ref (ERR_ENTITY_NOT_FOUND), nothing written
+vb_refs_exist() {
+  ve_label=$1
+  shift
+  ve_root=${CTX_ROOT:-$PWD}
+  ve_ctx=${CTX_BIN:-$VB_LIB/../../../ctx}
+  ve_have=" "
+  ve_noget=" "
+  ve_none=" "
+  ve_seen=" "
+  for ve_r in "$@"; do
+    case "$ve_seen" in *" $ve_r "*) continue ;; esac
+    ve_seen="$ve_seen$ve_r "
+    ve_o=${ve_r%%#*}
+    ve_p=${ve_r#*#}
+    if [ "$ve_o" = file ]; then
+      ve_f=${ve_p%%#*}
+      ve_in=$(VE_P=$ve_f VE_R=$ve_root awk 'BEGIN {
+        p = ENVIRON["VE_P"]; r = ENVIRON["VE_R"]
+        if (substr(p, 1, 1) == "/") { if (index(p "/", r "/") != 1) { print "out"; exit } p = substr(p, length(r) + 2) }
+        n = split(p, S, /\//); d = 0
+        for (i = 1; i <= n; i++) { if (S[i] == "..") { d--; if (d < 0) { print "out"; exit } } else if (S[i] != "." && S[i] != "") d++ }
+        print "in"
+      }' < /dev/null)
+      [ "$ve_in" = out ] && continue
+      case "$ve_f" in /*) ve_t=$ve_f ;; *) ve_t="$ve_root/$ve_f" ;; esac
+      [ -e "$ve_t" ] && continue
+      printf "%s: error: ref '%s': target not found (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" >&2
+      exit 1
+    fi
+    case "$ve_have$ve_noget$ve_none" in
+      *" $ve_o "*) ;;
+      *)
+        case $(vb_owner "$ve_ctx" "$ve_root" "$ve_o") in
+          has) ve_have="$ve_have$ve_o " ;;
+          noget) ve_noget="$ve_noget$ve_o " ;;
+          *) ve_none="$ve_none$ve_o " ;;
+        esac
+        ;;
+    esac
+    case "$ve_none" in *" $ve_o "*)
+      printf "%s: error: ref '%s': owner '%s' is not installed (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" "$ve_o" >&2
+      exit 1 ;;
+    esac
+    case "$ve_noget" in *" $ve_o "*)
+      printf "%s: error: ref '%s': owner '%s' has no get verb (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" "$ve_o" >&2
+      exit 1 ;;
+    esac
+    case "$ve_p" in
+      -*) ;;
+      *) (cd "$ve_root" && "$ve_ctx" "$ve_o" get "$ve_p" < /dev/null > /dev/null 2>&1) && continue ;;
+    esac
+    printf "%s: error: ref '%s': target not found (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" >&2
+    exit 1
+  done
+  return 0
 }

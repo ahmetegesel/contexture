@@ -11,20 +11,20 @@ describe.concurrent('ctx unit finding', () => {
     sb0 = await seed(async (sb) => {
       await seedUnit(sb, 'sem-unit', 'semantic interface test');
       await seedUnit(sb, 'arch-unit', 'finding lifecycle unit');
-      await must(unit(sb, 'finding', 'add', 'arch-unit', 'ARCH_DECISION', '--summary=Architecture decision 1', '--ref=journal.md#event'));
+      await must(unit(sb, 'finding', 'add', 'arch-unit', 'ARCH_DECISION', '--summary=Architecture decision 1', '--ref=file#.contexture/ctx'));
       await seedUnit(sb, 'f-unit', 'shared ref fixes');
       await must(unit(sb, 'finding', 'add', 'f-unit', 'F_NOREF', '--summary=first summary'));
-      await must(unit(sb, 'finding', 'add', 'f-unit', 'F_REF', '--summary=ref summary', '--ref=journal#f-old'));
+      await must(unit(sb, 'finding', 'add', 'f-unit', 'F_REF', '--summary=ref summary', '--ref=file#.contexture/laws'));
       await must(unit(sb, 'finding', 'add', 'f-unit', 'F_LAST', '--summary=last summary'));
     }, 'posix', 'finding');
   });
 
   it('E-11a [the-record-r12]: finding add, show, and list; a summary carrying quotes and a backslash reads back verbatim', async () => {
     const sb = fresh(sb0);
-    expect((await unit(sb, 'finding', 'add', 'sem-unit', 'ARCH_DECISION', '--summary=Architecture decision 1', '--ref=journal.md#event')).code).toBe(0);
+    expect((await unit(sb, 'finding', 'add', 'sem-unit', 'ARCH_DECISION', '--summary=Architecture decision 1', '--ref=file#.contexture/ctx')).code).toBe(0);
     expect(await show(sb, 'sem-unit', 'ARCH_DECISION')).toContain('SUMMARY ::');
     expect(await show(sb, 'sem-unit', 'ARCH_DECISION', '--json')).toContain('"name":"ARCH_DECISION"');
-    expect((await unit(sb, 'finding', 'add', 'sem-unit', 'QUOTED_SUMMARY', '--summary=the index ends with "index complete: N entries" and a path like C:\\tmp', '--ref=journal.md#event')).code).toBe(0);
+    expect((await unit(sb, 'finding', 'add', 'sem-unit', 'QUOTED_SUMMARY', '--summary=the index ends with "index complete: N entries" and a path like C:\\tmp', '--ref=file#.contexture/ctx')).code).toBe(0);
     const list = (await unit(sb, 'finding', 'list', 'sem-unit')).stdout;
     expect(list).toMatch(/^ {2}ARCH_DECISION: /m);
     expect(list).toMatch(/^ {2}QUOTED_SUMMARY: /m);
@@ -63,10 +63,10 @@ describe.concurrent('ctx unit finding', () => {
 
   it('X-j [the-engine-r16]: a raw @finding block on stdin is retired, never evaluated by the shell; the typed flags land it', async () => {
     const sb = fresh(sb0);
-    const raw = await run(sb, ['unit', 'finding', 'add', 'f-unit'], { input: '@finding X_RAW\n  REF: "journal#2026-09-27-x-e1"\n  SUMMARY ::\n    Raw block finding.\n' });
+    const raw = await run(sb, ['unit', 'finding', 'add', 'f-unit'], { input: '@finding X_RAW\n  REF: "file#.contexture/ctx"\n  SUMMARY ::\n    Raw block finding.\n' });
     expect(raw.code).toBe(1);
     expect(raw.stdout + raw.stderr).not.toContain('command not found');
-    expect((await unit(sb, 'finding', 'add', 'f-unit', 'X_RAW', '--summary=Raw block finding.', '--ref=journal#2026-09-27-x-e1')).code).toBe(0);
+    expect((await unit(sb, 'finding', 'add', 'f-unit', 'X_RAW', '--summary=Raw block finding.', '--ref=file#.contexture/ctx')).code).toBe(0);
     expect(await show(sb, 'f-unit', 'X_RAW', '--json')).toContain('"summary":"Raw block finding."');
   });
 
@@ -78,20 +78,20 @@ describe.concurrent('ctx unit finding', () => {
 
   it('RF1 [the-record-r14, the-record-r20]: finding update --ref adds the first REF canonical (before SUMMARY), replaces an existing one, and keeps every finding', async () => {
     const sb = fresh(sb0);
-    expect((await unit(sb, 'finding', 'update', 'f-unit', 'F_NOREF', '--summary=updated summary', '--ref=journal#f-target')).code).toBe(0);
+    expect((await unit(sb, 'finding', 'update', 'f-unit', 'F_NOREF', '--summary=updated summary', '--ref=file#.contexture/ctx')).code).toBe(0);
     const json = await show(sb, 'f-unit', 'F_NOREF', '--json');
-    expect(json).toContain('"refs":["journal#f-target"]');
+    expect(json).toContain('"refs":["file#.contexture/ctx"]');
     expect(json).toContain('"summary":"updated summary"');
     expect(json).toMatch(/"next":"finding"\}\}\n?$/);
     const block = (await show(sb, 'f-unit', 'F_NOREF')).split('\n');
-    expect(block.filter((l) => l.startsWith('  REF: '))).toEqual(['  REF: "journal#f-target"']);
-    expect(block[1]).toBe('  REF: "journal#f-target"');
-    expect((await unit(sb, 'finding', 'update', 'f-unit', 'F_LAST', '--ref=journal#f-last')).code).toBe(0);
+    expect(block.filter((l) => l.startsWith('  REF: '))).toEqual(['  REF: "file#.contexture/ctx"']);
+    expect(block[1]).toBe('  REF: "file#.contexture/ctx"');
+    expect((await unit(sb, 'finding', 'update', 'f-unit', 'F_LAST', '--ref=file#.contexture/modules')).code).toBe(0);
     const last = await show(sb, 'f-unit', 'F_LAST', '--json');
-    expect(last).toContain('"refs":["journal#f-last"]');
+    expect(last).toContain('"refs":["file#.contexture/modules"]');
     expect(last).toContain('"summary":"last summary"');
-    await must(unit(sb, 'finding', 'update', 'f-unit', 'F_REF', '--ref=journal#f-new'));
-    expect(await show(sb, 'f-unit', 'F_REF', '--json')).toContain('"refs":["journal#f-new"]');
+    await must(unit(sb, 'finding', 'update', 'f-unit', 'F_REF', '--ref=file#.contexture/storage'));
+    expect(await show(sb, 'f-unit', 'F_REF', '--json')).toContain('"refs":["file#.contexture/storage"]');
     let refLines = 0;
     for (const n of ['F_NOREF', 'F_REF', 'F_LAST']) refLines += (await show(sb, 'f-unit', n)).split('\n').filter((l) => l.startsWith('  REF: ')).length;
     expect(refLines).toBe(3);

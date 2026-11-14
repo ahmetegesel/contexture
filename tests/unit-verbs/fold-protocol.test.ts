@@ -60,7 +60,7 @@ describe.concurrent('ctx unit fold: the consolidation protocol, one step per tes
     const r = await fold(sb, `--lane=${l1}`);
     expect(r.code).toBe(0);
     const f = r.stdout + r.stderr;
-    for (const line of [`position: chunk 1 of 6; lane ${l1}`, 'NEXT BATCH: chunk 1 of the plan', 'CHUNK 1/6 [A1] ANCHOR', 'Initial kickoff event', 'Open thread', 'Just a note', `YOUR CHUNKS IN THIS PLAN (lane ${l1})`, 'The fetch hands one chunk at a time', 'ctx run .contexture/ctx unit record fc-unit', `ref="journal#${D}-fc-01"`, `closes="${D}-fc-01 (folded: consolidated)"`]) expect(f).toContain(line);
+    for (const line of [`position: chunk 1 of 6; lane ${l1}`, 'NEXT BATCH: chunk 1 of the plan', 'CHUNK 1/6 [A1] ANCHOR', 'Initial kickoff event', 'Open thread', 'Just a note', `YOUR CHUNKS IN THIS PLAN (lane ${l1})`, 'The fetch hands one chunk at a time', 'ctx run .contexture/ctx unit record fc-unit', `ref="unit#fc-unit/entry/${D}-fc-01"`, `closes="${D}-fc-01 (folded: consolidated)"`]) expect(f).toContain(line);
     expect(f).toMatch(/chunk 1 \[A1\] ANCHOR: .* \[next\]/);
     expect(f).not.toContain('REMAINING ENTRIES');
     expect((await unit(sb, 'board', 'fc-unit')).stdout).toBe(before);
@@ -131,7 +131,7 @@ describe.concurrent('ctx unit fold: the consolidation protocol, one step per tes
     const sb = fresh(await at('batch6'));
     const c = await fold(sb, '--check');
     expect(c.code).toBe(0);
-    for (const line of ['batches: 5 (5 valid)', 'chunks 1-1', 'chunks 2-2', 'chunks 3-3', 'chunks 4-5 (2 entries)', 'chunks 6-6', 'external refs:', 'lanes/fc-unit/report', 'covered: 7 closed receipts', 'carried open threads: 1', `${D}-fc-02: the human's answer`, 'OPEN THREADS (awaiting resolution):', `${D}-fc-02 (the human's answer)`, 'coverage: 0 uncovered', 'audit: clean', 'fold check: clean']) expect(c.stdout).toContain(line);
+    for (const line of ['batches: 5 (5 valid)', 'chunks 1-1', 'chunks 2-2', 'chunks 3-3', 'chunks 4-5 (2 entries)', 'chunks 6-6', 'external refs:', 'file#.contexture/ctx', 'covered: 7 closed receipts', 'carried open threads: 1', `${D}-fc-02: the human's answer`, 'OPEN THREADS (awaiting resolution):', `${D}-fc-02 (the human's answer)`, 'coverage: 0 uncovered', 'audit: clean', 'fold check: clean']) expect(c.stdout).toContain(line);
     const p = await fold(sb);
     expect(p.code).toBe(0);
     for (const line of ['position: all 6 chunks are consolidated', 'batches: 5', 'carried: 1 open threads']) expect(p.stdout).toContain(line);

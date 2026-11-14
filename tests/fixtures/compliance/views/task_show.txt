@@ -1,7 +1,7 @@
 @task canon-task
   STATUS: TODO
   OBJECTIVE: "Every section filled"
-  REFS: [journal#2026-09-27-verb-one, knowledge#VERB_CANON]
+  REFS: [unit#verb-u/entry/2026-09-27-verb-one, unit#verb-u/finding/VERB_CANON]
   DESCRIPTION ::
     first description line
 

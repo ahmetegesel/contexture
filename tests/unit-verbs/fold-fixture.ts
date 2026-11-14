@@ -64,15 +64,15 @@ export async function foldUnit(sb: string, u: string, whats: readonly string[], 
 }
 
 export async function batch(sb: string, u: string, what: string, folds: readonly number[], ...extra: string[]): Promise<string> {
-  const args = [`--what=${what}`, ...folds.map((n) => `--ref=journal#${D}-${u}-${n}`), ...folds.map((n) => `--closes=${D}-${u}-${n} (folded: consolidated)`), ...extra];
+  const args = [`--what=${what}`, ...folds.map((n) => `--ref=unit#${u}/entry/${D}-${u}-${n}`), ...folds.map((n) => `--closes=${D}-${u}-${n} (folded: consolidated)`), ...extra];
   const r = await must(unit(sb, 'record', u, ...args));
   return /^recorded entry: (\S+)/m.exec(r.stdout + r.stderr)?.[1] ?? '';
 }
 
-const ref = (n: string): string => `--ref=journal#${D}-fc-${n}`;
+const ref = (n: string): string => `--ref=unit#fc-unit/entry/${D}-fc-${n}`;
 const folded = (n: string): string => `--closes=${D}-fc-${n} (folded: consolidated)`;
 const BATCHES: Record<string, string[]> = {
-  batch1: ['--what=Batch one: the kickoff, the carried thread, and the note', '--group=fc', ref('01'), ref('02'), ref('03'), '--ref=lanes/fc-unit/report', folded('01'), folded('03')],
+  batch1: ['--what=Batch one: the kickoff, the carried thread, and the note', '--group=fc', ref('01'), ref('02'), ref('03'), '--ref=file#.contexture/ctx', folded('01'), folded('03')],
   batch2: ['--what=Batch two: the task receipt', ref('04'), folded('04')],
   batch3: ['--what=Batch three: the tail after the milestone', ref('05'), folded('05')],
   batch45: ['--what=Batch four: the release and the decision, merged (merged: same topic)', ref('06'), ref('07'), folded('06'), folded('07')],

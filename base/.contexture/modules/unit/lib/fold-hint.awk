@@ -10,7 +10,7 @@ BEGIN {
   while ((getline s < (dir "/carried_plan.txt")) > 0) PC[s] = 1
   n = 0
   while ((getline s < (dir "/scope.txt")) > 0) { n++; SL[n] = s }
-  for (i = first; i <= last; i++) printf "    --ref=\"journal#%s\" \\\n", SL[i] >> (dir "/hint_refs")
+  for (i = first; i <= last; i++) printf "    --ref=\"unit#%s/entry/%s\" \\\n", unit, SL[i] >> (dir "/hint_refs")
   for (i = first; i <= last; i++) {
     s = SL[i]
     if (s in TH || s in PC) print s >> (dir "/hint_carried")

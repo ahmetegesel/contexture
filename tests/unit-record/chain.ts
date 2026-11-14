@@ -52,16 +52,16 @@ const steps: Step[] = [
     name: 'T12',
     build: (sb) => write(sb, 'entry.record', [TUNIT], entry(1790000011, 'Closer event', payload().kv('group', 'topic-group').kv('closers.count', '1').kcl(1, 'CLOSES', 'done', 'Closer event', ALPHA))),
   },
-  { name: 'T13', build: (sb) => write(sb, 'finding.add', [TUNIT, 'FINDING_ALPHA'], payload().kv('summary', 'Alpha architectural decision summary').kl('refs', `journal#${ALPHA}`)) },
+  { name: 'T13', build: (sb) => write(sb, 'finding.add', [TUNIT, 'FINDING_ALPHA'], payload().kv('summary', 'Alpha architectural decision summary').kl('refs', `unit#u1/entry/${ALPHA}`)) },
   {
     name: 'T15',
-    build: (sb) => write(sb, 'finding.add', [TUNIT, 'FINDING_BETA'], payload().kv('summary', 'Beta superseding finding').kl('refs', `journal#${BETA}`).kv('supersedes', 'FINDING_ALPHA')),
+    build: (sb) => write(sb, 'finding.add', [TUNIT, 'FINDING_BETA'], payload().kv('summary', 'Beta superseding finding').kl('refs', `unit#u1/entry/${BETA}`).kv('supersedes', 'FINDING_ALPHA')),
   },
   { name: 'T16', build: (sb) => write(sb, 'lane.create', [TUNIT, 'lane-worker'], RECIPE) },
   {
     name: 'T17',
     build: async (sb) => {
-      await write(sb, 'lane.record', [TUNIT, 'lane-worker'], payload().kl('refs', `journal#${ALPHA}`).kv('what', 'Subagent action trace WHAT').kv('thread', 'none').kv('date', DATE).kv('epoch', '1790000020'));
+      await write(sb, 'lane.record', [TUNIT, 'lane-worker'], payload().kl('refs', `unit#u1/entry/${ALPHA}`).kv('what', 'Subagent action trace WHAT').kv('thread', 'none').kv('date', DATE).kv('epoch', '1790000020'));
       await write(sb, 'lane.write_report', [TUNIT, 'lane-worker'], REPORT);
     },
   },
@@ -83,7 +83,7 @@ const steps: Step[] = [
   {
     name: 'T35',
     build: async (sb) => {
-      await write(sb, 'task.add', [TUNIT, 'task-refs'], payload().kv('objective', 'Refs task').kl('refs', 'backlog#one', 'knowledge#TWO'));
+      await write(sb, 'task.add', [TUNIT, 'task-refs'], payload().kv('objective', 'Refs task').kl('refs', 'unit#u1/task/one', 'unit#u1/finding/TWO'));
       await write(sb, 'task.update', [TUNIT, 'task-refs'], payload().kv('desc', 'Added description').kv('criteria', 'Added criteria').kv('details', 'Added details'));
       await write(sb, 'task.update', [TUNIT, 'task-refs'], payload().kl('refs'));
     },

@@ -12,13 +12,13 @@ describe.concurrent('the verb library lib/verb.sh, one function at a time', () =
   });
   const call = (script: string, ...args: (string | Buffer)[]) => execBytes(sb, ['sh', '-c', `. .contexture/modules/unit/lib/verb.sh; ${script}`, 'sh', ...args], { env: { VB_SELF: '.contexture/modules/unit/scripts/record' } });
 
-  it.for(BAD_REFS)('[the-record-r18] vb_ref_ok refuses %j naming both pointer shapes', async (ref) => {
+  it.for(BAD_REFS)('[the-record-r18] vb_ref_ok refuses %j by the full address shape check', async (ref) => {
     const r = await call('vb_ref_ok record "$1"', ref);
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toBe(`record: error: malformed ref '${ref}': ${SHAPES}\n`);
   });
 
-  it.for(GOOD_REFS)('[the-record-r18] vb_ref_ok takes %j', async (ref) => {
+  it.for(GOOD_REFS)('[the-record-r18] vb_ref_ok takes the full address %j', async (ref) => {
     const r = await call('vb_ref_ok record "$1"', ref);
     expect([r.code, r.stderr]).toEqual([0, '']);
   });

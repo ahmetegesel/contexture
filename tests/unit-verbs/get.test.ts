@@ -15,9 +15,9 @@ describe.concurrent('ctx unit get', () => {
   beforeAll(async () => {
     sb0 = await seed(async (sb) => {
       await seedUnit(sb, 'g-unit', 'the get unit');
-      await must(unit(sb, 'task', 'add', 'g-unit', 'g-task', '--objective=the task get prints', `--refs=journal#${D}-g-e1, ./README.md`));
       await must(unit(sb, 'record', 'g-unit', '--what=the entry get prints', `--slug=${D}-g-e1`));
-      await must(unit(sb, 'finding', 'add', 'g-unit', 'G_FINDING', '--summary=the finding get prints', `--ref=journal#${D}-g-e1`));
+      await must(unit(sb, 'task', 'add', 'g-unit', 'g-task', '--objective=the task get prints', `--refs=unit#g-unit/entry/${D}-g-e1, file#.contexture/ctx`));
+      await must(unit(sb, 'finding', 'add', 'g-unit', 'G_FINDING', '--summary=the finding get prints', `--ref=unit#g-unit/entry/${D}-g-e1`));
       await must(createLane(sb, 'g-unit', 'g-lane'));
       await must(run(sb, ['lane', 'record', 'g-unit', 'g-lane', '--what=the lane event get prints', `--slug=${D}-g-l1`]));
       await must(run(sb, ['lane', 'report', 'g-unit', 'g-lane'], { input: REPORT }));
@@ -42,7 +42,7 @@ describe.concurrent('ctx unit get', () => {
 
   it('[the-record-r-l81i1] a task prints whole with its REFS, which the task show text view leaves out', async () => {
     const r = await unit(fresh(sb0), 'get', 'g-unit/task/g-task');
-    expect(r.stdout).toBe(`@task g-task\n  STATUS: TODO\n  OBJECTIVE: "the task get prints"\n  REFS: [journal#${D}-g-e1, ./README.md]\n`);
+    expect(r.stdout).toBe(`@task g-task\n  STATUS: TODO\n  OBJECTIVE: "the task get prints"\n  REFS: [unit#g-unit/entry/${D}-g-e1, file#.contexture/ctx]\n`);
   });
 
   it.for(['recipe', 'report', 'journal'] as const)('[the-record-r-l81i1] get of a lane %s prints what ctx lane show prints, and --json the storage answer', async (artifact) => {

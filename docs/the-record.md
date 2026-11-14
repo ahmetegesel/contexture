@@ -106,7 +106,7 @@ The journal is the unit's chronological event trace and recording surface: event
   GROUP: auth
   RHYTHM: work 6 EXECUTE
   THREAD: none
-  REF: "lane#auth-refresh/report#claim"
+  REF: "unit#auth-sessions/lane/auth-refresh/report/claim"
   CLOSES: 2026-09-05-token-cache-introduced (done: replaced by cookie sessions)
   KNOWLEDGE: true
 ```
@@ -119,7 +119,7 @@ Fields on journal entries, in the canonical order every read prints and the reco
 - `GROUP:` topic thread identifier, stable within the unit.
 - `RHYTHM: <name> <N> <GATE>` records process milestones: the stamp of a step and gate of the named rhythm, checked through the rhythm module (`ctx rhythm show <name>` prints the rhythm; `ctx rhythm current <unit>` reads the unit's last stamp back as the rhythm in force).
 - `THREAD: <what it awaits>` names external acts awaiting completion, or `none` for receipts.
-- `REF: "target#symbol"` grounds the event in an artifact; an entry may carry several. A reference takes one of two shapes, `<target>#<symbol>` (a lane artifact as `lane#<lane>/<recipe|journal|report>[#<claim>]`) or a whole target path holding a `/` and ending in a name (a repository file path; a root-level file as `./README.md`, or `README.md#<section>`; a lone `/`, a trailing `/` as in `lanes/`, and `./` name no target), one token without blanks, control characters, or double quotes (an ASCII control byte such as a form feed or a vertical tab counts as a blank, and so does a Unicode blank such as a no-break space or U+2028); the verbs refuse any other value on a new write, naming both shapes, and a legacy value reads as stored, the legacy lane form `lanes/<lane>/<recipe|journal|report>[#<claim>]` among them, which the verbs still accept and resolve.
+- `REF: "<owner>#<path>"` grounds the event in an artifact; an entry may carry several. A reference is a full address, the owner the text before the first hash: `unit#<unit>/entry/<slug>`, `unit#<unit>/task/<slug>`, `unit#<unit>/finding/<NAME>`, a lane artifact as `unit#<unit>/lane/<lane>/<recipe|journal|report>`, a report or recipe section as `unit#<unit>/lane/<lane>/<recipe|report>/<SECTION>`, a lane journal entry as `unit#<unit>/lane/<lane>/journal/<slug>`, a store record `store#<container>/<id>`, a corpus entity `docs#<repo>/<slug>/<id>`, a workspace file `file#<path>[#<symbol>]` (`file#./README.md`, `file#base/x.sh#fn`); one token without blanks, control characters, or double quotes (an ASCII control byte such as a form feed or a vertical tab counts as a blank, and so does a Unicode blank such as a no-break space or U+2028), held by the storage library's one shape check. The verbs refuse a retired short or legacy form (`journal#`, `knowledge#`, `backlog#`, `lane#`, `lanes/`, a bare path) naming the full address `ctx unit migrate` would write for it, and before any lock they check each target through its owner's `get` (a `file#` path by the core: inside the workspace it must exist, outside it the shape alone counts, the symbol never), refusing with `ERR_ENTITY_NOT_FOUND`, nothing written, in one of three lines naming the ref: a missing target (`target not found`), no module of that name installed (`owner '<owner>' is not installed`), or an installed module that answers no `get` (`owner '<owner>' has no get verb`). A value already stored reads as it stands until `ctx unit migrate` rewrites it, and `ctx unit load` warns once after its answer while a unit still holds such a form.
 - `CLOSES:` or `SUPERSEDES:` closes an earlier entry by reference with a verdict word and reason. One line may name several targets (`CLOSES: <slug> <slug> (folded: reason)`) and an entry may carry several closer lines; every date-slug before the first spaced paren or spaced hyphen is a target.
 - `KNOWLEDGE: true` flags entries for durable knowledge harvesting.
 
@@ -164,7 +164,7 @@ Unlike immutable journal events, findings support full lifecycle CRUD:
 - `SUPERSEDES: <NAME> (reason)` records forward-only supersession.
 
 The fields stand in the canonical order every read prints and the finding verbs write (`SUPERSEDES`, `REF`, `SUMMARY`); an older finding stored with `SUMMARY` first reads in this order.
-- `REF: "target#symbol"` grounds the finding in append-only artifacts (`entry#slug` or `lane#slug/report#claim`).
+- `REF: "<owner>#<path>"` grounds the finding in append-only artifacts (`unit#<unit>/entry/<slug>` or `unit#<unit>/lane/<lane>/report/<SECTION>`).
 - `SUMMARY ::` carries the settled claim.
 
 Findings land through the harvest of `KNOWLEDGE: true` entries: the agent forms a compact candidate, lands it when it meets the bar, and the entry closes by reference; a candidate that does not drops.

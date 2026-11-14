@@ -91,6 +91,11 @@ else
   awk -f "$VB_JSON" < "$VB_DIR/ans" > "$VB_DIR/flat" || exit 2
   RV_VIEW=load awk -f "$VB_RENDER" < "$VB_DIR/flat" > "$VB_DIR/lines" || exit 1
   refstr=""
+  # the old forms reminder: the unit's REF and REFS values a migration would still rewrite
+  LC_ALL=C awk '/^(backlog\.tasks|knowledge\.findings|board\.live)\.[0-9]+\.refs\.[0-9]+=/ { sub(/^[^=]*=/, ""); print }' "$VB_DIR/flat" > "$VB_DIR/refvals" 2>/dev/null
+  if [ -s "$VB_DIR/refvals" ]; then
+    old_refs=$(MG_MODE=check MG_UNIT=$slug MG_VALUES="$VB_DIR/refvals" LC_ALL=C awk -f "$VB_LIB/migrate.awk" < /dev/null 2>/dev/null)
+  fi
 fi
 
 # the pages (the v0.54.0 algorithm unchanged): a page never spans sections; within a
@@ -252,3 +257,9 @@ BEGIN {
   }
   exit 0
 }' < "$VB_DIR/lines"
+ld_rc=$?
+case "${old_refs:-0}" in
+  0|*[!0-9]*) ;;
+  *) [ "$ld_rc" -eq 0 ] && printf 'WARNING: unit %s holds %s refs in an old form; ctx unit migrate %s rewrites them\n' "$slug" "$old_refs" "$slug" >&2 ;;
+esac
+exit "$ld_rc"

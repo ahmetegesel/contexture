@@ -44,12 +44,12 @@ const FULL = [
   '--scope', 'mark the callers the task touches',
   '--report=CALLERS :: each caller with its file and symbol',
   '--report=OPEN :: anything the lane could not settle',
-  `--ref=journal#${D}-x-e1`,
-  '--ref=lane#x-lane/report',
-  '--ref', 'lanes/x-lane/report',
-  '--task=backlog#probe-task',
-  `--decision=journal#${D}-x-d1`,
-  `--decision=journal#${D}-x-d2`,
+  `--ref=unit#x-unit/entry/${D}-x-e1`,
+  '--ref=unit#x-unit/lane/x-lane/recipe',
+  '--ref', 'unit#x-unit/lane/x-lane/journal',
+  '--task=unit#x-unit/task/probe-task',
+  `--decision=unit#x-unit/entry/${D}-x-d1`,
+  `--decision=unit#x-unit/entry/${D}-x-d2`,
   '--rhythm=probe 1 OPEN',
   '--fact=the probe module is base',
   '--fact=no install of any kind',
@@ -61,16 +61,16 @@ const FULL_RECIPE = [
   '  LANE: full-lane',
   '  BRANCH: the sandbox checkout on its current branch, at its seed',
   '  RHYTHM: probe 1 OPEN',
-  '  TASKS: backlog#probe-task',
-  `  DECISIONS: journal#${D}-x-d1, journal#${D}-x-d2`,
+  '  TASKS: unit#x-unit/task/probe-task',
+  `  DECISIONS: unit#x-unit/entry/${D}-x-d1, unit#x-unit/entry/${D}-x-d2`,
   '',
   'GOAL ::',
   '  map the probe callers for the probe task; stop at the report',
   '',
   'REFS ::',
-  `  journal#${D}-x-e1`,
-  '  lane#x-lane/report',
-  '  lanes/x-lane/report',
+  `  unit#x-unit/entry/${D}-x-e1`,
+  '  unit#x-unit/lane/x-lane/recipe',
+  '  unit#x-unit/lane/x-lane/journal',
   '',
   'SCOPE ::',
   '  1. list every probe caller; done when each names its file and symbol',
@@ -91,7 +91,7 @@ const FULL_RECIPE = [
   '  5. a decision within this recipe is yours: decide it and journal it; a wall or a decision beyond it is drift: stop and report, never improvise past it',
   '',
   'BOOT (read only, before any work) ::',
-  "  the loader's law layer and both overlays (AGENTS.md, AGENTS.workspace.md, AGENTS.local.md); ctx unit load sem-unit until a page reads complete; this recipe (ctx lane show sem-unit full-lane recipe); every REF it names, and each TASKS and DECISIONS item whole (ctx unit task show sem-unit <slug>, ctx unit entry show sem-unit <slug>), since the load carries only the live journal and the open tasks whole. Your first lane journal entry is the load receipt: the refs loaded ride as --ref lines on that entry, never one per line inside the WHAT; an unresolved REF is a brief defect: stop and report it.",
+  "  the loader's law layer and both overlays (AGENTS.md, AGENTS.workspace.md, AGENTS.local.md); ctx unit load sem-unit until a page reads complete; this recipe (ctx lane show sem-unit full-lane recipe); every REF it names, and each TASKS and DECISIONS item whole (ctx unit get <path>, the path everything after unit# in the address), since the load carries only the live journal and the open tasks whole. Your first lane journal entry is the load receipt: the refs loaded ride as --ref lines on that entry, never one per line inside the WHAT; an unresolved REF is a brief defect: stop and report it.",
   '',
   'JOURNAL ::',
   '  ctx lane record sem-unit full-lane at action granularity as things happen: every command whose result is not obvious, every claim, decision point, and drift notice; each WHAT carries the action, its result, and why the next step follows; an entry awaiting an act outside the lane carries --thread.',
@@ -99,7 +99,7 @@ const FULL_RECIPE = [
   'REPORT (ctx lane report sem-unit full-lane, the body on stdin; self-sufficient: the dispatcher reads only the report) ::',
   '  @report full-lane',
   '  VERDICT :: done, partial, or drifted, with one line why',
-  '  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so lane#full-lane/report#<NAME> resolves it',
+  '  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so unit#sem-unit/lane/full-lane/report/<NAME> resolves it (ctx unit get sem-unit/lane/full-lane/report/<NAME>)',
   '  CALLERS :: each caller with its file and symbol',
   '  OPEN :: anything the lane could not settle',
   '  The report and the journal land no matter the outcome; return a short summary only.',
@@ -116,6 +116,8 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
       await seedUnit(sb, 'x-unit', 'defect regression unit');
       await must(createLane(sb, 'x-unit', 'x-lane'));
       await must(lane(sb, 'record', 'x-unit', 'x-lane', '--what=First lane event', `--slug=${D}-x-l1`));
+      for (const e of ['x-e1', 'x-d1', 'x-d2']) await must(unit(sb, 'record', 'x-unit', `--what=the ${e} entry`, `--slug=${D}-${e}`));
+      await must(unit(sb, 'task', 'add', 'x-unit', 'probe-task', '--objective=the probe task'));
     }, 'posix', 'lane');
   });
 
@@ -144,8 +146,8 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(recipe.split('\n').slice(0, 5)).toEqual(['@recipe min-lane', '  UNIT: sem-unit', '  LANE: min-lane', `  BRANCH: ${LANE_BRIEF.branch}`, '']);
     expect(recipe).toContain(`\nSCOPE ::\n  1. ${LANE_BRIEF.scope}\n\nBOUNDARY`);
     expect(recipe).toContain(`  4. write scope: ${LANE_BRIEF.writes}\n`);
-    expect(recipe.split('\n').filter((l) => l.includes('every REF it names'))).toEqual([expect.stringContaining('every REF it names, and each TASKS and DECISIONS item whole (ctx unit task show sem-unit <slug>, ctx unit entry show sem-unit <slug>)')]);
-    expect(recipe).toContain(`  VERDICT :: done, partial, or drifted, with one line why\n  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so lane#min-lane/report#<NAME> resolves it\n  ${LANE_BRIEF.report}\n  The report and the journal land`);
+    expect(recipe.split('\n').filter((l) => l.includes('every REF it names'))).toEqual([expect.stringContaining('every REF it names, and each TASKS and DECISIONS item whole (ctx unit get <path>, the path everything after unit# in the address)')]);
+    expect(recipe).toContain(`  VERDICT :: done, partial, or drifted, with one line why\n  each section opens at column 0 as <NAME> ::, its text on that line or its body indented two spaces below, so unit#sem-unit/lane/min-lane/report/<NAME> resolves it (ctx unit get sem-unit/lane/min-lane/report/<NAME>)\n  ${LANE_BRIEF.report}\n  The report and the journal land`);
   });
 
   it('[the-record-r15, the-record-r-7jaw4]: a report written to the REPORT block, its VERDICT :: head and the --report sections dedented to column 0 with their text inline or indented below, resolves every section by its name', async () => {
@@ -161,7 +163,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
 
   it('[the-record-r15]: the recipe carries the boundary sentence, null checked, and the background process rule in its runner item, and for flags naming none no storage location, a planted --fact read by the same assertion', async () => {
     const sb = fresh(sb0);
-    const created = await must(createLane(sb, 'sem-unit', 'clean-lane', ['--ref=lane#x-lane/report', '--fact=a plain fact']));
+    const created = await must(createLane(sb, 'sem-unit', 'clean-lane', ['--ref=unit#x-unit/lane/x-lane/recipe', '--fact=a plain fact']));
     const recipe = await recipeOf(sb, 'clean-lane');
     expect(bounded(recipe)).toBe(true);
     expect(bounded(recipe.split('\n').filter((l) => !l.includes(S_TMP)).join('\n'))).toBe(false);
@@ -179,7 +181,7 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     const recipe = await recipeOf(sb, 'odd-lane');
     expect(recipe).toContain(`\nGOAL ::\n  ${odd}\n`);
     expect(recipe).toContain(`\nFACTS ::\n  ${odd}\n`);
-    expect(recipe).toContain(`resolves it\n  ${odd}\n`);
+    expect(recipe).toContain(`report/<NAME>)\n  ${odd}\n`);
   });
 
   it('[the-record-r15]: a create prints the lane line and the dispatch prompt alone, rc 0 with an empty stderr, the prompt carrying the background process rule; the stored recipe holds no prompt line', async () => {
@@ -203,13 +205,14 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     ['with an extra argument', ['sem-unit', 'r-lane', 'extra', ...laneFlags()], refusal("unexpected argument 'extra'")],
     ['with a malformed unit', ['bad.unit', 'r-lane', ...laneFlags()], refusal("malformed unit 'bad.unit'")],
     ['with a malformed lane', ['sem-unit', 'bad.lane', ...laneFlags()], refusal("malformed lane 'bad.lane'")],
-    ['with a malformed ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref=lanes/'])], `lane create: error: malformed ref 'lanes/': ${SHAPES}\n`],
+    ['with a malformed ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref=bare word'])], `lane create: error: malformed ref 'bare word': ${SHAPES}\n`],
+    ['with a retired ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref=lanes/x-lane/report'])], "lane create: error: malformed ref 'lanes/x-lane/report': a reference is a full address <owner>#<path>; write unit#sem-unit/lane/x-lane/report (ERR_INVALID_ARGUMENT)\n"],
     ['with an empty ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref='])], `lane create: error: malformed ref '': ${SHAPES}\n`],
     ['with an empty ref in the spaced form', ['sem-unit', 'r-lane', ...laneFlags(['--ref', ''])], `lane create: error: malformed ref '': ${SHAPES}\n`],
-    ['with a malformed task', ['sem-unit', 'r-lane', ...laneFlags(['--task=probe-task'])], refusal("malformed task 'probe-task': a task is backlog#<slug>")],
-    ['with an empty task', ['sem-unit', 'r-lane', ...laneFlags(['--task='])], refusal("malformed task '': a task is backlog#<slug>")],
-    ['with a malformed decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision=journal#bad slug'])], refusal("malformed decision 'journal#bad slug': a decision is journal#<slug>")],
-    ['with an empty decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision='])], refusal("malformed decision '': a decision is journal#<slug>")],
+    ['with a malformed task', ['sem-unit', 'r-lane', ...laneFlags(['--task=probe-task'])], refusal("malformed task 'probe-task': a task is unit#<unit>/task/<slug>")],
+    ['with an empty task', ['sem-unit', 'r-lane', ...laneFlags(['--task='])], refusal("malformed task '': a task is unit#<unit>/task/<slug>")],
+    ['with a malformed decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision=unit#x-unit/entry/bad slug'])], refusal("malformed decision 'unit#x-unit/entry/bad slug': a decision is unit#<unit>/entry/<slug>")],
+    ['with an empty decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision='])], refusal("malformed decision '': a decision is unit#<unit>/entry/<slug>")],
     ['with a malformed rhythm', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe one OPEN'])], 'ERROR: RHYTHM step malformed: one\n'],
     ['with a rhythm gate its step does not read, as ctx unit record refuses it', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe 1 WRONG'])], 'ERROR: RHYTHM step 1 of probe reads OPEN, not WRONG\n'],
   ] as const)('[the-record-r9, the-record-r-xbt3g]: lane create %s refuses rc 1 with its one stderr line, nothing written', async ([, argv, line]) => {

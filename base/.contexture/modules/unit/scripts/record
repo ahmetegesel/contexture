@@ -7,7 +7,7 @@
 # help:   --group=...          topic group token
 # help:   --thread=...         what the unit awaits (default: none)
 # help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of the named rhythm (ctx rhythm list names them, ctx rhythm show <name> prints one); a stamped write prints the next gate
-# help:   --ref="..."          grounding reference: <target>#<symbol> or a whole target path holding a / and ending in a name (a root-level file as ./<file>), one token without blanks, control characters, or double quotes; repeatable, one REF line each
+# help:   --ref="..."          grounding reference: a full address <owner>#<path> (unit#<unit>/entry/<slug>, unit#<unit>/task/<slug>, unit#<unit>/finding/<NAME>, unit#<unit>/lane/<lane>/<artifact>[/<SECTION or slug>], file#<path>[#<symbol>], store#<container>/<id>, docs#<repo>/<slug>/<id>), one token without blanks, control characters, or double quotes, its target checked through its owner's get before any write (a short or legacy form refuses naming its full address); repeatable, one REF line each
 # help:   --closes="<slug> (<verdict>: <reason>)"   closes journal entry targets (one or more slugs before the parenthesis); the verdict done, superseded, dropped, or folded; repeatable, one CLOSES line each
 # help:   --supersedes="<slug> (<verdict>: <reason>)"   supersedes journal entry targets, the same form; repeatable, one SUPERSEDES line each
 # help:   --knowledge          flag for harvest
@@ -111,13 +111,12 @@ if [ -n "$rhythm" ]; then
   vb_rhythm_ok "$rhythm"
 fi
 
-# a REF names its target in one of the two pointer shapes: <target>#<symbol> or a whole
-# target path ending in a name (lanes/<lane>/recipe), one token (end review item 6, R-REF)
+# a REF is a full address, <owner>#<path>, one token, its target checked before any lock
 i=0
 while [ "$i" -lt "$nref" ]; do
   i=$((i + 1))
   eval "r=\$REF_$i"
-  vb_ref_ok record "$r"
+  vb_ref_ok record "$r" "$unit"
 done
 
 today=$(vb_today)
@@ -185,6 +184,7 @@ vb_kv knowledge "$knowledge"
 set --
 i=0
 while [ "$i" -lt "$nref" ]; do i=$((i + 1)); eval "set -- \"\$@\" \"\$REF_$i\""; done
+[ $# -eq 0 ] || vb_refs_exist record "$@"
 vb_list refs "$@"
 vb_kv closers.count "$ncl"
 i=0

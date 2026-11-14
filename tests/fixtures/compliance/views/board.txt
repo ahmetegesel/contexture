@@ -11,8 +11,8 @@ board verb-u: 3 live entries, 3 open tasks
   GROUP: verb-group
   RHYTHM: probe
   THREAD: the human
-  REF: "task#canon-task"
-  REF: "lanes/verb-lane/report"
+  REF: "unit#verb-u/task/canon-task"
+  REF: "unit#verb-u/lane/verb-lane/report"
   KNOWLEDGE: true
 
 @entry 2026-09-27-verb-four

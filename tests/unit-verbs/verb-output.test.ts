@@ -153,23 +153,23 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await u('record', 'lg', '--what=the first landing write moves the unit', `--slug=${D}-lg-e2`);
 
       await u('record', 'cu', '--what=the first census entry', `--slug=${D}-cu-e1`, '--thread=the census reader');
-      await u('record', 'cu', '--what=a stamped census entry', `--slug=${D}-cu-e2`, '--rhythm=debug 1 REPRODUCE', `--ref=journal#${D}-cu-e1`);
+      await u('record', 'cu', '--what=a stamped census entry', `--slug=${D}-cu-e2`, '--rhythm=debug 1 REPRODUCE', `--ref=unit#cu/entry/${D}-cu-e1`);
       await u('record', 'cu', '--what=the census reader answered', `--slug=${D}-cu-e3`, `--closes=${D}-cu-e1 (done: answered)`);
       await u('stamp', 'cu');
-      for (const t of ['t1', 't2', 't3']) await u('task', 'add', 'cu', t, `--objective=the census task ${t}`, '--refs=lane#cl/report#FINDINGS');
+      for (const t of ['t1', 't2', 't3']) await u('task', 'add', 'cu', t, `--objective=the census task ${t}`, `--refs=unit#cu/entry/${D}-cu-e1`);
       await u('task', 'update', 'cu', 't1', '--desc=the census description', '--criteria=the census criterion');
       await u('task', 'start', 'cu', 't1');
       await u('task', 'complete', 'cu', 't1', '--evidence=the census evidence');
       await u('task', 'reopen', 'cu', 't1');
       await u('task', 'start', 'cu', 't2');
       await u('task', 'drop', 'cu', 't3', '--reason=the census drop');
-      await u('finding', 'add', 'cu', 'F_ONE', '--summary=the census finding', `--ref=journal#${D}-cu-e1`);
+      await u('finding', 'add', 'cu', 'F_ONE', '--summary=the census finding', `--ref=unit#cu/entry/${D}-cu-e1`);
       await u('finding', 'update', 'cu', 'F_ONE', '--summary=the census finding, updated');
-      await u('finding', 'supersede', 'cu', 'F_ONE', 'F_TWO', '--summary=the census successor', '--ref=lane#cl/report#FINDINGS');
+      await u('finding', 'supersede', 'cu', 'F_ONE', 'F_TWO', '--summary=the census successor', `--ref=unit#cu/entry/${D}-cu-e1`);
       await u('finding', 'add', 'cu', 'F_DROP', '--summary=the finding to drop');
       await u('finding', 'drop', 'cu', 'F_DROP');
-      await take(['lane', 'create', 'cu', 'cl', ...laneFlags(['--ref=lane#cl/report#FINDINGS', '--task=backlog#t1', '--rhythm=debug 2 TRACE'])]);
-      await take(['lane', 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=backlog#t1']);
+      await take(['lane', 'create', 'cu', 'cl', ...laneFlags(['--ref=unit#cu/task/t1', '--task=unit#cu/task/t1', '--rhythm=debug 2 TRACE'])]);
+      await take(['lane', 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=unit#cu/task/t1']);
       await take(['lane', 'report', 'cu', 'cl'], REPORT);
       await u('refs', 'cu', 'lg');
       await take(['store', 'put', 'containers/cn', '--description=the census container', '--minting=given', '--add-fields=what: required line']);
@@ -256,7 +256,7 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
   it('[the-record-r14, the-record-r-4gj4k] every row answers rc 0, the legacy unit read before its first landing write, the store swept after', () => {
     expect(rows.filter((r) => r.code !== 0).map((r) => `${r.key}: rc ${r.code}: ${r.out.split('\n')[0]}`)).toEqual([]);
     expect(rows.filter((r) => r.out.includes('WARNING: the record was read from its deprecated root')).length).toBeGreaterThanOrEqual(5);
-    expect(rows.find((r) => r.key === 'unit migrate')?.out.split('\n').slice(-3)).toEqual([expect.stringMatching(/^token list: /), 'migrated: 2', '']);
+    expect(rows.find((r) => r.key === 'unit migrate')?.out.split('\n').slice(-3)).toEqual([expect.stringMatching(/^token list: /), 'migrated: 1', '']);
     expect(rows.length).toBeGreaterThan(90);
   });
 

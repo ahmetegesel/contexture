@@ -2,7 +2,7 @@ import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
-import { readArtifact } from '../support/record';
+import { appendArtifact, readArtifact } from '../support/record';
 import { ROOT } from '../support/root';
 import { fresh, seed } from '../support/snapshot';
 import { treeState } from '../support/tree';
@@ -198,7 +198,7 @@ describe.concurrent('ctx unit migrate: the pointer rewrite', () => {
       await seedUnit(sb, U, 'the migrate unit names IDEAS.md#rust-driver');
       plantAll(sb);
       await seedUnit(sb, 'shut-u', 'the closed unit');
-      await must(unit(sb, 'record', 'shut-u', '--what=a closed entry naming journal#2026-11-14-x', '--ref=backlog#t9'));
+      appendArtifact(sb, 'shut-u', 'journal', '\n@entry 2026-11-14-shut\n  ANCHOR: A1\n  WHAT: "a closed entry naming journal#2026-11-14-x"\n  THREAD: none\n  REF: "backlog#t9"\n');
       await must(unit(sb, 'close', 'shut-u'));
     }, 'posix', 'migrate-refs');
     migrated = fresh(sb0);
@@ -370,6 +370,13 @@ describe.concurrent('ctx unit migrate: the pointer rewrite', () => {
     expect(dry.stdout.endsWith('dry run: 2 would migrate, nothing written\n')).toBe(true);
     const strip = (s: string): string => s.replace(/^token list: .*\n/m, '').replace(/\n(migrated|dry run): .*\n$/, '\n');
     expect(strip(dry.stdout)).toBe(strip(out));
+  });
+
+  it('[the-record-r14] a load of a unit still holding old REF forms warns once after its answer, naming the verb; after the migration it warns no more', async () => {
+    const before = await must(unit(fresh(sb0), 'load', U));
+    expect(before.stderr).toMatch(new RegExp(`^WARNING: unit ${U} holds \\d+ refs in an old form; ctx unit migrate ${U} rewrites them\\n$`));
+    const after = await must(unit(migrated, 'load', U));
+    expect(after.stderr).toBe('');
   });
 
   it('[the-record-r-4gj4k] NOTE is migrate\'s alone: a write verb given --note refuses it as an unknown option', async () => {

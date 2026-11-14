@@ -24,7 +24,7 @@ beforeAll(async () => {
     await putDocs(sb, 'posix', fixtureDocs());
     for (const args of [
       ['bootstrap', 'nudge-demo', 'the sample nudge task'],
-      ['task', 'add', 'nudge-demo', 'install-and-run-local', '--objective=Install the local toolchain and run the demo-orders service before the pricing change lands', '--refs=docs/demo-orders/operational.md', '--desc=Set up the environment, run the build, and test the checkout path on demo-orders.', '--criteria=- the suite is green'],
+      ['task', 'add', 'nudge-demo', 'install-and-run-local', '--objective=Install the local toolchain and run the demo-orders service before the pricing change lands', '--refs=docs#demo-orders/operational/header', '--desc=Set up the environment, run the build, and test the checkout path on demo-orders.', '--criteria=- the suite is green'],
       ['task', 'start', 'nudge-demo', 'install-and-run-local'],
     ]) {
       const r = await unit(sb, ...args);
