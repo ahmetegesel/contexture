@@ -124,9 +124,10 @@ describe.concurrent('the listings and references through the unit data script', 
     expect([gamma.units.map((u: Listed) => u.unit), gamma.units[0].ref_sessions]).toEqual([['tc67-c'], null]);
     const nowhere = await ok(sb, 'session.units', ['tc67-nowhere']);
     expect([nowhere.units, nowhere.known_repos]).toEqual([[], known]);
-    expect(answerLine(await data(sb, 'session.refs_to', ['tc67-c']), 'session.refs_to')).toBe('{"unit":"tc67-c","referrers":["tc67-a","tc67-b"]}');
-    expect(answerLine(await data(sb, 'session.refs_to', ['tc67-a']), 'session.refs_to')).toBe('{"unit":"tc67-a","referrers":["tc67-b"]}');
-    expect(answerLine(await data(sb, 'session.refs_to', ['tc67-b']), 'session.refs_to')).toBe('{"unit":"tc67-b","referrers":[]}');
+    expect(answerLine(await data(sb, 'session.refs_to', ['tc67-c', 'all']), 'session.refs_to')).toBe('{"unit":"tc67-c","referrers":["tc67-a","tc67-b"],"rows":[]}');
+    expect(answerLine(await data(sb, 'session.refs_to', ['tc67-c']), 'session.refs_to')).toBe('{"unit":"tc67-c","referrers":["tc67-a"],"rows":[]}');
+    expect(answerLine(await data(sb, 'session.refs_to', ['tc67-a', 'all']), 'session.refs_to')).toBe('{"unit":"tc67-a","referrers":["tc67-b"],"rows":[]}');
+    expect(answerLine(await data(sb, 'session.refs_to', ['tc67-b', 'all']), 'session.refs_to')).toBe('{"unit":"tc67-b","referrers":[],"rows":[]}');
   });
 
   it('TC80: session.list answers UnitListing with last_event last (anchor and entry dates, null; lane journals excluded), bytewise; session.units stays UnitSummary', async () => {

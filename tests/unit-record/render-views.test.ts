@@ -34,7 +34,7 @@ const VIEWS: View[] = [
   { name: 'list_all-repo', view: 'list_all', env: { RV_HAS_REPO: '1', RV_REPO: 'alpha' }, input: fromEngine('session.active') },
   { name: 'active-repo', view: 'active', env: { RV_HAS_REPO: '1', RV_REPO: 'alpha' }, input: fromEngine('session.active') },
   { name: 'active', view: 'active', input: fromEngine('session.active') },
-  { name: 'refs_to', view: 'refs_to', input: literal('{"unit":"tc67-c","referrers":["tc67-a","tc67-b"]}') },
+  { name: 'refs_to', view: 'refs_to', input: literal('{"unit":"tc67-c","referrers":["tc67-a","tc67-b"],"rows":[{"unit":"tc67-d","kind":"entry","id":"2026-11-14-d1","ref":"unit#tc67-c/task/t1"}]}') },
   {
     name: 'audit-clean',
     view: 'audit',

@@ -54,7 +54,7 @@
   knowledge: loads fully (small; every line a decision); supersession via SUPERSEDES (successor).
   queries: named looks: ctx unit entry closure, ctx unit list --repo=<repo>, ctx unit refs-to (the forms in .contexture/ctx unit help; --help and -h are the same table); a miss is rc=1 with a named error, never an empty success.
   cross-repo: .contexture/ctx unit list --all --repo=<repo>: units touching a repo; objective is human-facing only.
-  cross-unit: .contexture/ctx unit refs-to <unit>: units referencing a unit.
+  cross-unit: .contexture/ctx unit refs-to <unit>|<full address> [--all]: every REF and REFS value naming it and the units whose ref_sessions name a unit, one row each, over the active units by default, --all reading every unit (the whole record, so lane work when unbounded).
   group: .contexture/ctx unit entry list <unit> --group=<token> = the agent's topic thread across anchors, open or closed; resume runs through the backlog's derived move, never through the group alone.
   artifact-grounding: the record is the ground: a report or recipe claimed to ground work needs a REF in the loaded record.
 

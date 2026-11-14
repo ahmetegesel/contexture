@@ -432,15 +432,22 @@ vb_ref_ok() {
 # (lib/migrate.awk's class rules, the unit the writing one), printed; nothing for a value no
 # class rewrites. The owners journal, knowledge, backlog, lane, task, finding, and entry are
 # the retired short owners: a value under one that no rule rewrites (a placeholder) names
-# the unit# form in general
+# the unit# form in general. A unit given as <unit> (a caller with no unit, refs-to) is
+# rewritten under a stand in no unit slug can be, then named <unit> in the answer
 vb_ref_full() {
   vf_repos=""
   case "$1" in
     docs/*|./docs/*) [ -n "${CTX_BIN:-}" ] && vf_repos=$("$CTX_BIN" docs query --index < /dev/null 2>/dev/null | awk '$1 != "index" && NF > 1 && !s[$1]++ { printf "%s ", $1 }') ;;
   esac
-  vf_out=$(MG_MODE=suggest MG_UNIT=$2 MG_TOKEN=$1 MG_REPOS=$vf_repos LC_ALL=C awk -f "$VB_LIB/migrate.awk" < /dev/null 2>/dev/null)
+  vf_u=$2
+  [ "$vf_u" = '<unit>' ] && vf_u=.unit.
+  vf_out=$(MG_MODE=suggest MG_UNIT=$vf_u MG_TOKEN=$1 MG_REPOS=$vf_repos LC_ALL=C awk -f "$VB_LIB/migrate.awk" < /dev/null 2>/dev/null)
   case "$vf_out" in
-    rewritten*) printf '%s\n' "${vf_out#rewritten	}"; return 0 ;;
+    rewritten*)
+      vf_out=${vf_out#rewritten	}
+      case "$vf_out" in "unit#.unit./"*) vf_out="unit#<unit>/${vf_out#unit#.unit./}" ;; esac
+      printf '%s\n' "$vf_out"
+      return 0 ;;
   esac
   case "$1" in
     journal#*|knowledge#*|backlog#*|lane#*|task#*|finding#*|entry#*) printf 'unit#%s/<entry|task|finding|lane>/<id>\n' "$2" ;;

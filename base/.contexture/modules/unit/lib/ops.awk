@@ -424,15 +424,6 @@ function f_session_units(   repo, i, j, u, first, K, nk, t, m) {
   answer("],\"known_repos\":" jlist(K, nk) "}")
 }
 
-function f_session_refs_to(   i, j, u, first) {
-  O("{\"unit\":" jstr(U) ",\"referrers\":[")
-  first = 1
-  for (i = 1; i <= NUNITS; i++) {
-    u = UL[i]; parse_state(u)
-    for (j = 1; j <= ST[u, "s#"]; j++) if (ST[u, "s", j] == U) { O((first ? "" : ",") jstr(u)); first = 0; break }
-  }
-  answer("]}")
-}
 
 # ---- tasks ----
 function f_task_add(   kb, s, ob, desc, crit, det, R, nr) {
@@ -850,7 +841,6 @@ BEGIN {
   else if (FN == "session.close") f_session_close()
   else if (FN == "session.reopen") f_session_reopen()
   else if (FN == "session.units") f_session_units()
-  else if (FN == "session.refs_to") f_session_refs_to()
   else if (FN == "task.add") f_task_add()
   else if (FN == "task.update") f_task_update()
   else if (FN == "task.start") f_task_start()

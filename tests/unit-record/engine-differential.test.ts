@@ -26,7 +26,6 @@ const OPS: Op[] = [
   ['session.reopen', [UNIT]],
   ['session.refs', [TUNIT, UNIT]],
   ['session.units', ['alpha']],
-  ['session.refs_to', [UNIT]],
   ['task.add', [TUNIT, 'diff-task'], p().kv('objective', 'a differential task').kl('refs', 'unit#u1/task/one').toString()],
   ['task.update', [TUNIT, 'task-sample'], p().kv('objective', 'updated by both').kv('details', 'a detail').toString()],
   ['task.start', [TUNIT, 'task-sample']],
@@ -78,8 +77,8 @@ async function both(op: Op, engineInput = op[2]): Promise<{ engine: Run; script:
 
 describe.concurrent('the engine against the data script on the same fresh snapshot', () => {
   it('covers every function of the data script dispatch once', () => {
-    expect(new Set(OPS.map(([fn]) => fn)).size).toBe(36);
-    expect(OPS.length).toBe(36);
+    expect(new Set(OPS.map(([fn]) => fn)).size).toBe(35);
+    expect(OPS.length).toBe(35);
   });
 
   for (const op of OPS) {

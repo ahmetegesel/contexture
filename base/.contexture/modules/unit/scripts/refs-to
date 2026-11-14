@@ -1,15 +1,18 @@
 #!/bin/sh
-# summary: the units referencing a unit (the cross-unit look)
-# usage: ctx unit refs-to <unit> [--json]
-# help: every unit whose ref_sessions name the unit (session.refs_to); none refuses rc 1
-# help: exit codes: 0 referrers listed; 1 no unit references the unit, or a bad argument
-# help: example: ctx unit refs-to my-unit
+# summary: the referrers of a unit or a full address: the ref_sessions that name a unit and every REF and REFS value that names it
+# usage: ctx unit refs-to <unit>|<full address> [--all] [--json]
+# help: lists one row per referrer item, unit, kind, id, and the ref value: a REF or REFS value naming the target (an entry REF, a task REFS, a finding REF, a lane journal REF as kind lane_entry with id <lane>/<slug>, a lane recipe REFS, TASKS, or DECISIONS value as kind lane_recipe with id <lane>), and for a unit target every unit whose ref_sessions name it (kind session)
+# help: a unit name matches every ref into that unit (unit#<unit>/...); a full address matches the ref itself and every address below it (unit#<unit>/lane/<lane>/report matches its sections, file#<path> its symbols file#<path>#<symbol>)
+# help: reads the active units by default; --all widens to every unit, closed ones included; the read is every artifact of every unit it covers, about 0.2 s per unit, so the active units cost seconds and --all a read of the whole record (minutes for a large record)
+# help: a target no unit references refuses rc 1 with ERROR: no unit references <target>, never an empty success; a retired short or legacy form (journal#, knowledge#, backlog#, lane#, task#, finding#, entry#) refuses rc 1 naming its full address, as every write does
+# help: exit codes: 0 referrers listed; 1 no referrer, or a bad argument; 2 a storage failure
+# help: example: ctx unit refs-to my-unit --all
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
-  printf 'Usage: ctx unit refs-to <unit> [--json]\n' >&2
-  printf 'help: ctx unit help\n' >&2
+  printf 'Usage: ctx unit refs-to <unit>|<full address> [--all] [--json]\n' >&2
+  printf 'help: ctx unit help refs-to\n' >&2
   exit 1
 }
 
@@ -17,16 +20,22 @@ case "${1:-}" in
   --help|-h|help) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
 esac
 [ $# -ge 1 ] || usage
-unit=$1
+target=$1
 shift
 json_out=0
+scope=""
 for a in "$@"; do
   case "$a" in
     --json) json_out=1 ;;
+    --all) scope=all ;;
     *) vb_unknown refs-to "$a" ;;
   esac
 done
-vb_slug_ok "$unit" || usage
-vb_call session.refs_to "$unit"
+case "$target" in
+  -*) vb_unknown refs-to "$target" ;;
+  *'#'*) vb_ref_ok refs-to "$target" ;;
+  *) vb_slug_ok "$target" || usage ;;
+esac
+vb_call session.refs_to "$target" $scope
 vb_ok
 if [ "$json_out" -eq 1 ]; then vb_json; else vb_render refs_to; fi

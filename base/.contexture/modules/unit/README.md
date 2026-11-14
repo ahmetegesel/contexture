@@ -68,9 +68,11 @@ The reads of one unit fetch the exact keys with `store.get` (state, then the nam
 backlog, journal, and knowledge), no list: a part the storage layer does not hold is absent, and
 the unit's absence is the same `ERR_ENTITY_NOT_FOUND` line the held probe answered. Only
 the lane reads and `search.query` take `store.list <namespace> "<unit>/"` to discover the
-lane artifacts, and the all-unit reads (`session.list`, `session.active`, `session.units`,
-`session.refs_to`) read every unit's state (the listing also its journal, resolved in one
-pass); the cross-unit reads (`session.load`, `session.refload`) read the named units'
+lane artifacts, and the all-unit reads (`session.list`, `session.active`, `session.units`)
+read every unit's state (the listing also its journal, resolved in one pass), while
+`session.refs_to`, answered by the data script beside the engine, reads every state, then
+every artifact of each unit in its scope (the active units, or every unit under `all`) for
+`lib/refs-to.awk` to list the REF and REFS values naming its target; the cross-unit reads (`session.load`, `session.refload`) read the named units'
 state, backlog, knowledge, and journal. `session.load` reads the state once, captures its
 ref_sessions, then adds the parts without a second state read. `session.active` reads
 every state, then each ACTIVE unit's backlog only, never a journal, so the derived move

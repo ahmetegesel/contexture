@@ -840,6 +840,66 @@ u_refs_shape() {
   u_refs_check "$U_SCR/refs"
 }
 
+# u_refs_to <target> [all]: the referrers of a target, a unit name or a full address: every
+# unit whose ref_sessions name a target unit (the referrers list), and every REF and REFS
+# value naming the target (lib/refs-to.awk over each unit's artifacts, the rows), over the
+# active units, or with all over every unit; reads only, no lock. The answer is
+# {"unit":<target>,"referrers":[<unit>...],"rows":[{"unit","kind","id","ref"}...]}
+u_refs_to() {
+  FN=session.refs_to
+  [ $# -ge 1 ] && [ $# -le 2 ] || u_refuse 1 ERR_INVALID_ARGUMENT "session.refs_to takes the target and an optional all"
+  ur_t=$1
+  ur_all=${2:-}
+  case "$ur_all" in ""|all) ;; *) u_refuse 1 ERR_INVALID_ARGUMENT "session.refs_to takes all or nothing after the target: '$ur_all'" ;; esac
+  case "$ur_t" in
+    *'#'*) ;;
+    *) u_ident_valid "$ur_t" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed target '$ur_t'" ;;
+  esac
+  u_scratch
+  U_UNIT=$ur_t
+  U_PAY=""
+  u_manifest_reset
+  u_fetch_all 0
+  u_new "$U_SCR/scope" "$U_SCR/rows" "$U_SCR/sessions"
+  if [ "$ur_all" = all ]; then
+    cp "$U_SCR/units" "$U_SCR/scope" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  else
+    u_active_units
+    cp "$U_SCR/active" "$U_SCR/scope" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  fi
+  case "$ur_t" in
+    *'#'*) ;;
+    *)
+      LC_ALL=C awk -F '\t' -v t="$ur_t" '
+        FILENAME == ARGV[1] { s[$0] = 1; next }
+        $1 == "F" && $2 ~ /\|state$/ {
+          u = $2; sub(/\|state$/, "", u)
+          if (!(u in s)) next
+          while ((getline line < $3) > 0) {
+            if (line !~ /^ref_sessions:/) continue
+            v = line; sub(/^ref_sessions:[ \t]*/, "", v); gsub(/[][ \t\r]/, "", v)
+            n = split(v, R, /,/)
+            for (i = 1; i <= n; i++) if (R[i] == t) { print u; break }
+          }
+          close($3)
+        }' "$U_SCR/scope" "$U_SCR/man" > "$U_SCR/sessions" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+      ;;
+  esac
+  while IFS= read -r ur_u; do
+    [ -n "$ur_u" ] || continue
+    u_manifest_reset
+    u_fetch_unit "$ur_u" all 0
+    u_new "$U_SCR/rt.map" "$U_SCR/rt.files"
+    LC_ALL=C awk -F '\t' '$1 == "F" { p = $2; sub(/^[^|]*\|/, "", p); print $3 "\t" p }' "$U_SCR/man" > "$U_SCR/rt.map" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+    cut -f 1 "$U_SCR/rt.map" > "$U_SCR/rt.files"
+    [ -s "$U_SCR/rt.files" ] || continue
+    # shellcheck disable=SC2046
+    RT_UNIT=$ur_u RT_TARGET=$ur_t RT_MAP="$U_SCR/rt.map" LC_ALL=C awk -f "$ULIB/refs-to.awk" $(cat "$U_SCR/rt.files") >> "$U_SCR/rows" \
+      || u_refuse 2 ERR_STORAGE_READ "cannot read the refs of unit '$ur_u'"
+  done < "$U_SCR/scope"
+  RA_TARGET=$ur_t LC_ALL=C awk -f "$ULIB/refs-to-answer.awk" "$U_SCR/sessions" "$U_SCR/rows"
+}
+
 # u_unit_call <function> <unit> <parts> <write> [<args>...]
 u_unit_call() {
   FN=$1
@@ -1183,13 +1243,7 @@ case "$cmd" in
     cat "$U_SCR/answer"
     ;;
   session.refs_to)
-    u_extra 1 "$@"
-    u_want_unit "${1:-}"
-    U_UNIT=$1
-    u_manifest_reset
-    u_fetch_all 0
-    u_awk
-    cat "$U_SCR/answer"
+    u_refs_to "$@"
     ;;
   task.add|task.update|task.start|task.complete|task.reopen|task.drop|task.get)
     u_extra 2 "$@"

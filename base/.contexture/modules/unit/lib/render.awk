@@ -580,12 +580,16 @@ function v_list_all(   n, i, p, a) {
   }
 }
 
-function v_refs_to(   n, i) {
+# v_refs_to: one row per referrer item, unit, kind, id, and the ref value: a unit whose
+# ref_sessions name the target reads kind session with ref_sessions as its value
+function v_refs_to(   n, m, i) {
   n = nn("referrers")
-  if (n == 0) fail("ERROR: no unit references " sv("unit"))
-  line(sprintf("refs-to %s: %d units", sv("unit"), n))
+  m = nn("rows")
+  if (n + m == 0) fail("ERROR: no unit references " sv("unit"))
+  line(sprintf("refs-to %s: %d %s", sv("unit"), n + m, (n + m == 1) ? "referrer" : "referrers"))
   line("")
-  for (i = 1; i <= n; i++) line("  " sv("referrers." i))
+  for (i = 1; i <= n; i++) line("  " sv("referrers." i) " session " sv("referrers." i) " ref_sessions")
+  for (i = 1; i <= m; i++) line("  " sv("rows." i ".unit") " " sv("rows." i ".kind") " " sv("rows." i ".id") " " sv("rows." i ".ref"))
 }
 
 # closure (new): open or closed with the first closer's verdict, then every later closer

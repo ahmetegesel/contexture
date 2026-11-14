@@ -175,7 +175,7 @@ Universal stream reduction runner and filter (`ctx run`). All shell commands exe
 | ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json] | The record entities in the shared search syntax: the active units by default, --all every unit, --unit any one; rows in one shape on every driver (module, container, type, id, address, snippet, read, label closed on a closed unit), the limit applied once over the merged rows; --mode defaults to exact; the unit state is never searched; zero hits is rc 0 |
 | ctx unit get <unit>/<kind>/<id> [--json] | One record entity whole by its path (task, entry, finding, a lane recipe or report or one section of it, the whole lane journal or one entry of it), a task with its REFS; never a listing or the state; a missing entity is rc 1 named not found; `ctx unit resolve` is retired into it |
 | ctx unit list --all --repo=<repo> | Each unit touching the repo: slug, status, anchor |
-| ctx unit refs-to <unit> | Each unit referencing the unit |
+| ctx unit refs-to <unit>\|<address> [--all] | Every REF and REFS value naming a unit or an address, one row each (unit, kind, id, ref), and the units whose ref_sessions name it; the active units by default, --all every unit |
 | ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from the unit's main journal: create (the dispatcher's act: the brief as flags, from which it composes the recipe and prints the dispatch prompt), record, report, show |
 | ctx unit refs <unit> [<unit> ...] | Set the read-only reference units; zero units clears them |
 | ctx unit close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |

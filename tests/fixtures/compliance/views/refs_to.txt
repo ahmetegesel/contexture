@@ -1,4 +1,5 @@
-refs-to tc67-c: 2 units
+refs-to tc67-c: 3 referrers
 
-  tc67-a
-  tc67-b
+  tc67-a session tc67-a ref_sessions
+  tc67-b session tc67-b ref_sessions
+  tc67-d entry 2026-11-14-d1 unit#tc67-c/task/t1

@@ -126,7 +126,6 @@ function plan(fn: string, argv: readonly string[]): Plan {
     case 'session.refs':
       return { unit: u, args: rest, write: true, doc: false, build: (m) => (m.held(u) ? void m.all(false) : `unit '${u}' not found`) };
     case 'session.units':
-    case 'session.refs_to':
       return { unit: u, args: [], write: false, doc: false, build: (m) => void m.all(false) };
     case 'session.board':
     case 'session.audit':
