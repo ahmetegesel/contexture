@@ -104,7 +104,7 @@ Parent workspace (multiple repositories, the workspace tracks convention configu
 !GEMINI.md
 ```
 
-The generated law layer, `AGENTS.generated.md`, sits at the root under the deny-by-default `*`, so the block keeps it ignored with no line of its own: whitelist the AGENTS files by name, never with an `AGENTS*.md` glob, which would track the generated layer. The scratch drawer is the other way round: the `!.contexture/**` whitelist re-includes it, so its line `.contexture/tmp/` follows the whitelist, the later line winning. A workspace that re-ignored the layer at its old place drops its `.contexture/laws/AGENTS.generated.md` re-ignore line once the update's compose has removed the legacy file (Updating, step 9, before the step 10 review). The last two stand for the harness entry points you wire; keep only the ones in use. This repository keeps a stricter shape: its live root (the same `AGENTS.md` and `.contexture/`) is untracked working state, its agent-facing corpus is never committed (untracked working state at `docs/workspace/` under the files driver, the store alone under a store driver), and the shippable core is tracked mirrored under `base/` (see Payload classes and syncing).
+The generated law layer, `AGENTS.generated.md`, sits at the root under the deny-by-default `*`, so the block keeps it ignored with no line of its own: whitelist the AGENTS files by name, never with an `AGENTS*.md` glob, which would track the generated layer. The scratch drawer is the other way round: the `!.contexture/**` whitelist re-includes it, so its line `.contexture/tmp/` follows the whitelist, the later line winning. A workspace that re-ignored the layer at its old place drops its `.contexture/laws/AGENTS.generated.md` re-ignore line once the update's compose has removed the legacy file (Updating, step 9, before the step 10 review). The last two stand for the harness entry points you wire; keep only the ones in use. This repository keeps a stricter shape: its live root (the same `AGENTS.md` and `.contexture/`) is untracked working state, its agent-facing corpus is never committed (untracked working state at `docs/workspace/` under the files driver, the storage layer alone under a store driver), and the shippable core is tracked mirrored under `base/` (see Payload classes and syncing).
 
 ## The module catalog
 
@@ -112,7 +112,7 @@ The builtins ship with the base and need no install. The packages install throug
 
 | module | what it gives | when to install |
 |---|---|---|
-| `unit` (builtin) | the record's 35 operations over the store, one value per artifact: the state, backlog, journal, knowledge, and lane artifacts | ships with the base; no install |
+| `unit` (builtin) | the record's 35 operations over the storage layer, one value per artifact: the state, backlog, journal, knowledge, and lane artifacts | ships with the base; no install |
 | `run` (builtin) | the base filter pack: diff, directory listing, and log filters selected by command identity or stream signature for `ctx run`; filter-only and silent in `ctx help` | ships with the base; no install |
 | `lane` (builtin) | the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's artifacts within the unit's record | ships with the base; no install |
 | `rhythm` (builtin) | the process surface: list the rhythms with their triggers and activations, show one whole, and name the rhythm in force with its next gate | ships with the base; no install |
@@ -167,7 +167,7 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 The synced set is derived, never declared: `base/` is the payload; `git archive <tag> base/` copies it, `git ls-tree` enumerates it, and a `cmp` per file verifies it. No manifest exists to drift; the tag's index is the declaration. Overlays are never in `base/`, and they survive every sync untouched. `.contexture/ONBOARDING.md` rides the payload as adoption material: used once, deleted at close, redelivered by a later apply and deleted again.
 
-In this repository the live root (`AGENTS.md` and `.contexture/`) is untracked working state, and so is the agent-facing corpus (`docs/workspace/`) under the files driver (under a store driver it lives in the store alone); the dev loop edits `base/` directly, ships a tag, and applies the payload onto the live drawer class-aware:
+In this repository the live root (`AGENTS.md` and `.contexture/`) is untracked working state, and so is the agent-facing corpus (`docs/workspace/`) under the files driver (under a store driver it lives in the storage layer alone); the dev loop edits `base/` directly, ships a tag, and applies the payload onto the live drawer class-aware:
 
 1. Edit `base/` directly: it is the shipping copy.
 2. Ship: docs sync, commit, push, and the annotated tag in one breath.

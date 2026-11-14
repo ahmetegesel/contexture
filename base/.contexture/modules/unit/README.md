@@ -9,7 +9,7 @@ top README.
 `module` carries the discovery line and the package description:
 
 ```text
-# summary: the unit module: the record's 35 operations over the store, one value per artifact
+# summary: the unit module: the record's 35 operations over the storage layer, one value per artifact
 ```
 
 The engine discovers `.contexture/modules/unit/`, reads the summary for `ctx help`, and
@@ -23,11 +23,11 @@ public surface, and `ctx session` is retired (a line naming `ctx unit`).
 module            the summary, the version, the description (the law compose preamble)
 laws              the record clauses: @record, @journal, @backlog, @query, @refresh,
                   @close, @handoff (the law compose fragment)
-data              the store declaration (the namespace is the folder name, unit):
+data              the storage declaration (the namespace is the folder name, unit):
                   root .contexture/units, fallback_root .contexture/sessions, suffix .md,
                   key <unit>/<path...>, changes false, the document rules
 scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
-scripts/data      the 35 record operations over the store (sh, private), and
+scripts/data      the 35 record operations over the storage layer (sh, private), and
                   unit.promote, the sweep behind migrate, outside them
 lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
 lib/render.awk    the one renderer of every text view
@@ -35,7 +35,7 @@ lib/canon.awk     the canonical renderer and the JSON string form
 lib/model.awk     the legacy parse, the typed items, the derived fields, the schema JSON
 lib/ops.awk       the record rules: the writes, the reads, the audit, the liveness
 lib/search.awk    the exact search over the canonical render
-lib/ranked.awk    the store ranked answer mapped into the record's search shape
+lib/ranked.awk    the storage layer's ranked answer mapped into the record's search shape
 lib/refs.awk      the refs of a write payload
 lib/payfield.awk  one decoded payload value
 lib/b64           the store.batch value encoder
@@ -53,7 +53,7 @@ One store value per artifact file, the keys `<unit>/state`, `<unit>/backlog`,
 mapped by the data file to `.contexture/units/<unit>/<artifact>.md` (a unit not yet moved read
 from the fallback root, `.contexture/sessions/<unit>/<artifact>.md`). The values are the
 current file shapes, so the record order, the preambles, the anchors, the opaque items,
-the legacy shapes, and the positional liveness survive unchanged. The store is the
+the legacy shapes, and the positional liveness survive unchanged. The storage layer is the
 configured driver; the module never names it.
 
 The data script answers the 35 record operations: 13 session (`create`, `list`, `active`, `load`,
@@ -64,7 +64,7 @@ The data script answers the 35 record operations: 13 session (`create`, `list`, 
 `get`), plus `search.query`. `capability` and `storage.health` stay the driver's.
 
 The reads of one unit fetch the exact keys with `store.get` (state, then the named
-backlog, journal, and knowledge), no list: a part the store does not hold is absent, and
+backlog, journal, and knowledge), no list: a part the storage layer does not hold is absent, and
 the unit's absence is the same `ERR_ENTITY_NOT_FOUND` line the held probe answered. Only
 the lane reads and `search.query` take `store.list <namespace> "<unit>/"` to discover the
 lane artifacts, and the all-unit reads (`session.list`, `session.active`, `session.units`,
@@ -80,7 +80,7 @@ Every read that needs several keys asks them in one batched `store.get` through 
 library's `store_get_into`: one unit's state and parts, a unit's listed artifacts, every
 unit's state, the ACTIVE units' backlogs, the listing's journals; a lone key keeps the one
 key read. A refused or short batch replays its keys one key read at a time in the order
-the one key reads took (a unit's state first, so a unit the store does not hold refuses
+the one key reads took (a unit's state first, so a unit the storage layer does not hold refuses
 before any part is read), so a refusal is the very line the one key reads printed, and a
 key absent from the batch reads absent exactly as its one key read did.
 
@@ -117,19 +117,19 @@ any bound, since the polling lock keeps no queue.
 The data file declares the root `.contexture/units` and the fallback root
 `.contexture/sessions`, the root releases before the move wrote. The posix store reads a
 unit from the root first, then from the fallback; nothing else in the module knows the
-folders. The move is the store's own: `u_commit` makes its one `store.batch`, as before
+folders. The move is the storage layer's own: `u_commit` makes its one `store.batch`, as before
 the move, and the posix driver, inside that call and under the namespace lock it already
 holds, moves the unit's folder from the fallback to the root by one rename before it
 writes, so a unit moves whole at its first landing write and a write stays one store call.
 The move that empties the fallback root removes that folder in the same call, while a
 fallback root still holding any entry stays, with nothing printed either way.
-A unit both roots hold refuses the write with the store's batch line, re-framed as
+A unit both roots hold refuses the write with the storage layer's batch line, re-framed as
 `<function>: error: action 1 (put '<key>'): key prefix '<unit>/' is held in both roots of
 namespace 'unit' (ERR_ENTITY_EXISTS)`, and nothing written. So only a landing write moves
 a unit: a refused write, and every write to a CLOSED unit, refused before any store call,
 moves nothing.
 
-The store prints one notice line on a rc 0 answer it served from the fallback; the data
+The storage layer prints one notice line on a rc 0 answer it served from the fallback; the data
 script collects the rc 0 store stderr of `u_keys_all`, `u_keys_prefix`, `u_add_key`, and
 `u_held` into the run's notice file and, only when the run ends rc 0 and after its
 answer, prints its own line once:
@@ -137,13 +137,13 @@ answer, prints its own line once:
 The line is the reminder, never an instruction to the agent: the sweep is the human's
 choice. A refusal's stderr stays its one line, so every `head -n 1` reader of a refusal still reads
 the refusal. A store call those four make, and `u_commit`'s `store.batch`, refuses through
-one helper, `u_store_refuse`: the store's refusal line (its first line opening
+one helper, `u_store_refuse`: the storage layer's refusal line (its first line opening
 `<store function>: error: `, else a first line that is the resolver's own
 `driver-resolver: ` line, whole) is re-framed with the record function's own name and
 printed once, so an unreadable state reads `session.board: error: cannot read key
-'<unit>/state' in namespace 'unit' (ERR_STORAGE_READ)` alone, the store's code kept, the
-rc as before (2 for a list, the store's for a read or the batch), and the store's own line
-never reaches the verb; when the store printed neither (nothing, or only a foreign line),
+'<unit>/state' in namespace 'unit' (ERR_STORAGE_READ)` alone, the storage layer's code kept, the
+rc as before (2 for a list, the storage layer's for a read or the batch), and the storage layer's own line
+never reaches the verb; when the storage layer printed neither (nothing, or only a foreign line),
 the record function prints the fixed line of its call instead, `the store read failed
 (ERR_STORAGE_READ)`, `the store list failed (ERR_STORAGE_READ)`, or `the store batch
 failed (ERR_STORAGE_WRITE)`, so the one line always carries a code. The verb library relays the line in one place: `vb_relay` holds a succeeded
@@ -199,10 +199,10 @@ verb.
 
 `search.query --mode=exact` is the record rule over the canonical render (the preambles,
 every item's canonical span, each lane; never the state) in record order, so a legacy value
-answers the canonical text. A ranked mode is the store's search over the document-set
+answers the canonical text. A ranked mode is the storage layer's search over the document-set
 schema (the data file's rules derive the entities at write time; the fts5 store indexes
 them), filtered to the unit's keys, with `--entity` applied and `--limit` capped after the
-complete walk (0 for every result); the store's rank order is kept. The store answers a default document's
+complete walk (0 for every result); the storage layer's rank order is kept. The storage layer answers a default document's
 identity as its artifact key, so the data script maps it to the record id: the unit for a
 session document (backlog, knowledge, journal; the state is never a result), the lane for a lane document, and a
 lane entry keeps its `<lane>/` prefix; a result outside the record's artifact shape or the

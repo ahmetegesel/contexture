@@ -2,7 +2,7 @@
 
 The storage core sits beside the engine at `.contexture/storage/`. It is not a module:
 the engine does not discover it, `ctx help` does not list it, and a package never writes
-it. It owns the driver resolver, the generic module store contract, the module-facing
+it. It owns the driver resolver, the generic storage layer contract, the module-facing
 library, and the posix driver.
 
 ```text
@@ -134,7 +134,7 @@ every match before printing, so `total_matches` counts every pair and the limit 
 after the walk, in bytewise key then line order; a limit of 0 answers every result, the
 unlimited read a module uses to sort into its own text order and cap there. The searched
 text is the stored value: the canonical source is the module's canonical render, which the
-module writes through the store, and the core never re-renders a module's grammar (a
+module writes through the storage layer, and the core never re-renders a module's grammar (a
 legacy value is searched as stored). The document set comes from the search schema: the
 flat form indexes one document per key (section `body`), the document-set form derives one
 document per entity at write time and ranks those documents in the fts5 store index; a
@@ -157,7 +157,7 @@ caller's input or the module's rules) or rc 2 (storage or driver failure), nothi
 stdout, and exactly one stderr line `<function>: error: <message> (<CODE>)` over the
 existing core codes. The batch names its 1-based failing action:
 `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`; only the first failure
-prints, and nothing is written. The scan uses the store's codes (a malformed namespace or
+prints, and nothing is written. The scan uses the storage layer's codes (a malformed namespace or
 data declaration is `ERR_INVALID_ARGUMENT`, an undeclared namespace
 `ERR_ENTITY_NOT_FOUND`, an unreadable key or store `ERR_STORAGE_READ`) and stages its
 answer, so a read failure midway prints no partial line. The library's caller lookup
@@ -249,7 +249,7 @@ The adoption retires the transitional tiers.
 
 ## The library
 
-A module's script sources `.contexture/storage/scripts/library` and calls the store
+A module's script sources `.contexture/storage/scripts/library` and calls the storage layer
 through it; the module never names the driver, and never names a namespace: the library
 serves the calling module's own namespace alone, its installed module name. At the first
 storage call (never when the library is sourced, since a lane verb sources the unit verb

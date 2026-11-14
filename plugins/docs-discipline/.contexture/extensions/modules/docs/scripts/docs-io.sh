@@ -3,7 +3,7 @@
 # ignores it). It is the only file of the module that calls a store function or composes a
 # doc's path: the verbs and their engines receive the paths it hands them.
 #
-# The corpus is served by the configured storage driver through the generic module store
+# The corpus is served by the configured storage driver through the generic storage layer
 # (the capability store, asked through the storage core library). A verb reads it through
 # the library's store_list and store_get: the docs module materializes the returned bytes into its own scratch at
 # docs/<repo>/<slug>.md and the engines parse those files. No driver parses a doc. Every
@@ -81,7 +81,7 @@ docs_io_init() {
   return 0
 }
 
-# docs_require: the configured driver serves the module store (store), else rc 2 with the
+# docs_require: the configured driver serves the store contract (store), else rc 2 with the
 # resolver's message and the verb's own line
 docs_require() {
   if [ -z "$DOCS_LIB" ] || [ -z "$DOCS_RESOLVER" ]; then
@@ -95,7 +95,7 @@ docs_require() {
   if store_require store < /dev/null; then
     return 0
   fi
-  printf '%s: the configured storage driver serves no module store (store)\n' "$DOCS_VERB" >&2
+  printf '%s: the configured storage driver does not serve the store contract (store)\n' "$DOCS_VERB" >&2
   return 2
 }
 

@@ -382,10 +382,10 @@ it walk below runs every one of these.
   A wrong invocation never returns a plausible-but-empty result.
 - The glob forms (`docs/*/*.md`, `docs/<repo>/*.md`) are address patterns: sh
   and bash hand the verb a pattern no file matches, which it expands through
-  the store's list, while zsh refuses an unmatched glob before the verb runs;
+  the storage layer's list, while zsh refuses an unmatched glob before the verb runs;
   name repos there or quote the pattern. Every doc path a verb prints is the
   logical address `docs/<repo>/<slug>.md`, whatever the caller's spelling.
-- A driver that serves no module store (without the capability `store`)
+- A driver that does not serve the store contract (without the capability `store`)
   makes every read verb refuse rc 2 naming the capability.
 - Under a store driver that keeps a generic change log (`store.changelog`,
   the storage-fts5 plugin among them) the corpus leaves git: each doc write
@@ -533,8 +533,8 @@ it walk below runs every one of these.
 POSIX awk/sh, the base `ctx` runtime and its unit module (the plugin ships
 the module, not the engine; the verbs reach the corpus through the storage
 core's resolver, and the configured storage driver must serve the
-module store: the capability `store`, which the base posix driver declares
-from the release that carries the generic store; an older base makes every
+store contract: the capability `store`, which the base posix driver declares
+from the release that carries the generic storage layer; an older base makes every
 read verb refuse rc 2), and git for the close gate's delta, the check's claimant trackedness
 probe, and the matrix's planted fixture repository (a non-repository run of
 the check reads claimants untracked and reports the process-owned verdict;

@@ -212,7 +212,7 @@ describe('the nudge through its unit', { concurrent: true }, () => {
     writeFileSync(lib, `. "${lib}.real"\nunset -f store_roots\n`);
     const r = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
     expect([r.code, r.stdout]).toEqual([2, '']);
-    expect(r.stderr).toBe('ctx docs nudge: the storage core cannot list the module store roots, so the file is not read (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n');
+    expect(r.stderr).toBe("ctx docs nudge: the storage core cannot list the storage layer's roots, so the file is not read (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n");
     renameSync(`${lib}.real`, lib);
     const served = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
     expect(served.code, served.stderr).toBe(0);

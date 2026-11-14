@@ -1,4 +1,4 @@
-# contexture v0.78.0: generated law layer; core cksum 3907812168-15949; sources 1591615225-33802; never edit
+# contexture v0.78.0: generated law layer; core cksum 1866125315-15958; sources 2023563241-33819; never edit
 @laws
   source-of-truth: the record is the work's durable memory, what a fresh context resumes from: the events that happened, the decisions made, and the state they left, across compaction, tool change, and break; because the work's continuity depends on it, it holds whatever else that continuity needs, the reasons, the open threads, and the evidence behind them; the workspace and the commands' results show what is, and the loaded layer and its sequences say what to do.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -23,7 +23,7 @@
   .contexture/config = workspace configuration: module-scoped key: value declarations, loaded alongside overlays at boot
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall <package> (only on the human's explicit go at the act; the verb checks no go), ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
-  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store (contract 3), and the record's 35 operations are the unit module's (ctx unit help)
+  .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store contract (contract 3), and the record's 35 operations are the unit module's (ctx unit help)
 
 @module lane
   summary: subagent lane management: create, record, report, show
@@ -50,10 +50,10 @@
   help: ctx store help
 
 @module unit
-  summary: the unit module: the record's 35 operations over the store, one value per artifact
+  summary: the unit module: the record's 35 operations over the storage layer, one value per artifact
   The unit module owns the record: the state, the backlog, the journal, the knowledge,
   and the lane artifacts, one record value per artifact. It answers the 35 record
-  operations over the store, and its verbs are the record's public surface, dispatched
+  operations over the storage layer, and its verbs are the record's public surface, dispatched
   as ctx unit.
   help: ctx unit help
 

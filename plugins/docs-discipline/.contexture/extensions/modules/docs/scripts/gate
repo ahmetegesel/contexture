@@ -267,8 +267,8 @@ check_drift_warnings() {
     fi
 }
 
-# The corpus the audit and the check read: the whole corpus read once through the
-# configured driver's module store into the module's scratch before any pipeline (so the
+# The corpus the audit and the check read: the whole corpus read once from the storage
+# layer through the configured driver into the module's scratch before any pipeline (so the
 # scratch and its cleanup stay with this shell); an empty corpus or a driver without the
 # store refuses
 prepare_corpus() {
