@@ -16,6 +16,9 @@
 #                                        value>, names a line field holding that value
 #   REC_MODE=text    REC_ARG=<id>        one line: the id, then each line field and its
 #                                        values, block fields left out
+#   REC_MODE=rows                        the flattened store search answer mapped to the shared
+#                                        search rows of the containers in ROWS_ALLOW, ROWS_LIMIT
+#                                        shown, ROWS_QUERY echoed, ROWS_FORMAT json or text
 #
 # BWK awk, mawk, gawk, and busybox awk: every escape is written by concatenation, never by a
 # sub or gsub replacement.
@@ -65,6 +68,7 @@ BEGIN {
 
 {
   if (MODE == "unesc") { printf "%s", unesc($0); next }
+  if (MODE == "rows") { rows_line($0); next }
   line = $0
   if (cur != "" && substr(line, 1, 2) == "  ") { field = cur }
   else if (line ~ /^[a-z][a-z0-9_-]* ::$/) {
@@ -89,6 +93,7 @@ BEGIN {
 
 END {
   if (MODE == "unesc") exit 0
+  if (MODE == "rows") { rows_end(); exit 0 }
   if (MODE == "values") {
     f = NAMES
     if (KIND[f] == "block") { if (BN[f] > 0) print BODY[f] }
@@ -153,4 +158,36 @@ END {
 function insert_file(    l) {
   while ((getline l < ENVIRON["REC_FILE"]) > 0) print l
   close(ENVIRON["REC_FILE"])
+}
+
+function rows_line(l,    m, p, k, v) {
+  if (l !~ /^results\.[0-9]+\.(key|snippet)=/) return
+  p = index(l, "=")
+  k = substr(l, 1, p - 1)
+  v = unesc(substr(l, p + 1))
+  split(k, m, /\./)
+  if (m[2] + 0 > NROWS) NROWS = m[2] + 0
+  if (m[3] == "key") RKEY[m[2] + 0] = v
+  else { sub(/^ +/, "", v); RSNIP[m[2] + 0] = v }
+}
+
+function rows_end(    i, s, c, id, total, shown, out, lim, json) {
+  lim = ENVIRON["ROWS_LIMIT"] + 0
+  json = (ENVIRON["ROWS_FORMAT"] == "json")
+  total = 0; shown = 0; out = ""
+  for (i = 1; i <= NROWS; i++) {
+    s = index(RKEY[i], "/")
+    if (!s) continue
+    c = substr(RKEY[i], 1, s - 1)
+    id = substr(RKEY[i], s + 1)
+    if (index(" " ENVIRON["ROWS_ALLOW"] " ", " " c " ") == 0) continue
+    total++
+    if (total > lim) continue
+    shown++
+    if (json) out = out (shown > 1 ? "," : "") "{\"module\":\"store\",\"container\":" jesc(c) ",\"type\":" jesc(c) ",\"id\":" jesc(id) ",\"address\":" jesc("store#" c "/" id) ",\"snippet\":" jesc(RSNIP[i]) ",\"read\":" jesc("ctx store get " c "/" id) "}"
+    else out = out "  " c " store#" c "/" id ": " RSNIP[i] "\n"
+  }
+  if (json) { printf "{\"query\":%s,\"mode\":\"exact\",\"total\":%d,\"rows\":[%s]}\n", jesc(ENVIRON["ROWS_QUERY"]), total, out; return }
+  printf "search \"%s\": %d %s, %d shown\n%s", ENVIRON["ROWS_QUERY"], total, (total == 1 ? "match" : "matches"), shown, out
+  print "read one: ctx store get <container>/<id> (the address after store#)"
 }

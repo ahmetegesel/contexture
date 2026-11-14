@@ -1,0 +1,9 @@
+#!/bin/sh
+# summary: search the records of the live containers, one row per matching record
+# usage: ctx store search "<query>" [--container=<c>] [--type=<t>] [--mode=<m>] [--limit=<n>] [--json]
+# help: the shared search syntax: a case-insensitive substring of one line of a record, every live container searched whether or not it declares a search schema, declarations never; a row's type is its container's name, so --type=<container> narrows ctx search to one container, and --container=<c> is the store's own scope flag
+# help: --limit is a positive whole number, default 20, and the total counts every match before it; --mode defaults to exact, the one mode the store answers; --json answers {query, mode, total, rows}, each row {module, container, type, id, address, snippet, read}, read being ctx store get <container>/<id>
+# help: zero hits is an answer, rc 0 total 0; a container or type naming no live container, an unknown flag, or a mode the store cannot answer refuses rc 1 (ERR_INVALID_ARGUMENT)
+# help: example: ctx store search "rust" --container=ideas
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/store" search "$@"

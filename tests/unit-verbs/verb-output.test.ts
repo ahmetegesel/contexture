@@ -176,7 +176,7 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await together([['store', 'get', 'containers/cn'], ['store', 'get', 'containers/cn', '--json'], ['store', 'list', 'containers'], ['store', 'list', 'containers', '--json']]);
       await take(['store', 'put', 'cn/c1', '--what=one', '--add-ref=unit#cu/task/t1']);
       await take(['store', 'set', 'cn/c1', '--what=two']);
-      await together([['store', 'get', 'cn/c1'], ['store', 'get', 'cn/c1', '--json'], ['store', 'list', 'cn'], ['store', 'list', 'cn', '--what=two', '--json'], ['store', 'check', 'cn']]);
+      await together([['store', 'get', 'cn/c1'], ['store', 'get', 'cn/c1', '--json'], ['store', 'list', 'cn'], ['store', 'list', 'cn', '--what=two', '--json'], ['store', 'check', 'cn'], ['store', 'search', 'two'], ['store', 'search', 'two', '--json']]);
       await take(['store', 'put', 'cn/c2', '--what=gone']);
       await take(['store', 'delete', 'cn/c2']);
       await take(['store', 'set', 'containers/cn', '--add-fields=note: optional line']);

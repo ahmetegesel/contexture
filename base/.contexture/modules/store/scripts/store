@@ -360,6 +360,11 @@ read_all() {
   cat "$SCR/all.keys"
 }
 
+# lvl: the live container names, comma separated, or none
+lvl() {
+  if [ -n "$live" ]; then printf "%s" "$live" | sed "s/ /, /g"; else printf none; fi
+}
+
 # filter_check <field> <escaped value>: ok, undeclared, block, or set <the one-of set> for a
 # value outside it, read from the declaration of PC
 filter_check() {
@@ -606,6 +611,61 @@ case "$verb" in
     } > "$SCR/batch"
     lib_or_die store_batch < "$SCR/batch" > /dev/null
     printf '%s\n' "$PI"
+    exit 0
+    ;;
+  search)
+    sq=""
+    sq_set=0
+    s_cont=""
+    s_type=""
+    s_mode=exact
+    s_limit=20
+    for a in "$@"; do
+      case "$a" in
+        --container=*) s_cont=${a#--container=} ;;
+        --type=*) s_type=${a#--type=} ;;
+        --mode=*) s_mode=${a#--mode=} ;;
+        --limit=*) s_limit=${a#--limit=} ;;
+        --json) json=1 ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (usage: ctx store search \"<query>\" [--container=<c>] [--type=<t>] [--mode=<m>] [--limit=<n>] [--json])" ;;
+        *) [ "$sq_set" = 0 ] || die 1 ERR_INVALID_ARGUMENT 'search takes one query'; sq=$a; sq_set=1 ;;
+      esac
+    done
+    [ -n "$sq" ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store search "<query>" [--container=<c>] [--type=<t>] [--mode=<m>] [--limit=<n>] [--json]'
+    case "$sq" in *"
+"*|*"$(printf '\r')"*) die 1 ERR_INVALID_ARGUMENT 'a query holds no newline or carriage return' ;; esac
+    case "$s_limit" in ''|*[!0123456789]*|0*) die 1 ERR_INVALID_ARGUMENT "--limit takes a positive whole number, not '$(store_lib_escape "$s_limit")'" ;; esac
+    lib_or_die store_modes --own > "$SCR/modes"
+    if ! cut -f 1 "$SCR/modes" | grep -Fqx -- "$s_mode"; then
+      [ -n "${CTX_SEARCH_FANOUT:-}" ] || die 1 ERR_INVALID_ARGUMENT "mode '$(store_lib_escape "$s_mode")' cannot answer the store (it answers: $(cut -f 1 "$SCR/modes" | tr '\n' ' ' | sed 's/ $//; s/ /, /g'))"
+    fi
+    read_all containers/ > "$SCR/ckeys"
+    live=""
+    n=0
+    while IFS= read -r k; do
+      n=$((n + 1))
+      [ "$(rec values state < "$SCR/r.$n")" = dropped ] || live="$live ${k#containers/}"
+    done < "$SCR/ckeys"
+    live=${live# }
+    allow=$live
+    for s_narrow in "$s_cont" "$s_type"; do
+      [ -n "$s_narrow" ] || continue
+      if ! printf '%s\n' $live | grep -Fqx -- "$s_narrow"; then
+        if [ -n "${CTX_SEARCH_FANOUT:-}" ]; then allow=""; continue; fi
+        [ "$s_narrow" = "$s_cont" ] && die 1 ERR_INVALID_ARGUMENT "container '$(store_lib_escape "$s_narrow")' is not a live container (live: $(lvl))"
+        die 1 ERR_INVALID_ARGUMENT "type '$(store_lib_escape "$s_narrow")' names no live container (the store's types are its containers: $(lvl))"
+      fi
+      printf '%s\n' $allow | grep -Fqx -- "$s_narrow" && allow=$s_narrow || allow=""
+    done
+    if [ -n "$allow" ]; then
+      lib_or_die store_search "$sq" exact 0 > "$SCR/search.json"
+      awk -f "$CORE/json.awk" < "$SCR/search.json" > "$SCR/search.flat" || die 2 ERR_STORAGE_READ 'the storage layer answered a malformed search'
+    else
+      : > "$SCR/search.flat"
+    fi
+    fmt=text
+    [ "$json" = 1 ] && fmt=json
+    ROWS_ALLOW=$allow ROWS_LIMIT=$s_limit ROWS_QUERY=$sq ROWS_FORMAT=$fmt REC_MODE=rows awk -f "$REC_AWK" < "$SCR/search.flat"
     exit 0
     ;;
   check)
