@@ -106,7 +106,8 @@ nothing is written. The namespace lock (`.contexture/tmp/locks/store-<namespace>
 while the drawer's scratch folder is writable, else under the per-user
 `contexture-<user>` folder in the system temp, one rule for a writer and the health probe
 on both drivers; the unit module's unit locks keep their own folder,
-`locks/unit/`, so no unit name meets a namespace lock) carries its holder's pid: a waiter polls every 0.1 s, removes
+`locks/unit/`, so no unit name meets a namespace lock, and the library lock its own,
+`locks/lib/`) carries its holder's pid: a waiter polls every 0.1 s, removes
 a lock whose pid is gone at once, gives a pid-less lock ten polls of grace, and refuses a
 live holder rc 2 `ERR_STORAGE_LOCKED` after 600 polls (60 s of sleep), the unit lock's
 wait (the unit module's README names why and how it was sized); where `sleep` refuses a
@@ -266,7 +267,19 @@ through it; the module never names the driver. The library exports:
   `<label>: error: malformed ref '<ref>': a reference is <owner>#<path>, one token without blanks, control characters, or double quotes (ERR_INVALID_ARGUMENT)`.
   It checks the shape alone (an old short unit ref such as `journal#<slug>` passes): the
   owner's presence and the target's existence are the caller's, and the unit and lane
-  verbs keep their own two shape check.
+  verbs keep their own two shape check;
+- `lib_lock <namespace>` and `lib_unlock`, the library lock: one lock folder per namespace
+  at `.contexture/tmp/locks/lib/<namespace>.lock`, its own family beside the unit locks
+  (`locks/unit/`) and the drivers' namespace locks (`locks/store-<namespace>.lock`), so a
+  holder calls every store function freely while a module's writers of the namespace wait
+  their turn across a check and a write. The folder holds the holder's pid (the calling
+  shell's `$$`) and `LIB_LOCK` names it while held; the wait is the namespace lock's (a dead
+  holder's lock removed at once, a pid-less one after ten polls, a live holder refused rc 2
+  `lib.lock: error: the library lock of '<namespace>' is held (60 s timeout) (ERR_STORAGE_LOCKED)`
+  after 600 polls 0.1 s apart). A malformed namespace or a second lock in one process
+  refuses rc 1 `ERR_INVALID_ARGUMENT`, an unwritable folder or pid rc 2
+  `ERR_STORAGE_WRITE`. `lib_unlock` removes the lock the process holds (a no-op when none);
+  the caller also calls it from its exit trap, so a signal frees the lock.
 
 `data_get` resolves a module reference `<module>#<symbol>`: it finds the target module's
 data script in the workspace modules, the workspace extensions, or the base mirror of

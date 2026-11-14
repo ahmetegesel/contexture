@@ -22,6 +22,7 @@
 #   data.emit <ref> <data>
 #   lib.utf8_ok <string>, lib.utf8_file_ok <file>                   (the shared checks)
 #   lib.ref_ok <label> <ref>
+#   lib.lock <namespace>, lib.unlock                                (the library lock)
 #
 # The store functions and the two probes reach the configured driver through the storage
 # core's resolver; the caller uses the shell function names store_list, store_get,
@@ -61,6 +62,11 @@
 # cannot run; LIB_UTF8_AWK is the awk text of the same check for a caller that folds it
 # into its own awk program. lib_ref_ok checks the shape of a full address <owner>#<path>
 # alone and refuses with its one line naming the ref.
+#
+# The library lock serializes a module's writers of one namespace across a check and a
+# write: lib_lock <namespace> takes it, lib_unlock releases it, and the caller releases it
+# in its exit trap too. It lives in its own lock family, never at a driver's namespace lock,
+# so a holder calls every store function freely; one process holds one library lock.
 
 # store_lib_root: the workspace root the store calls run in
 store_lib_root() {
@@ -323,6 +329,76 @@ lib_ref_ok() {
     3) printf "%s: error: malformed ref '%s': a reference is <owner>#<path>, one token without blanks, control characters, or double quotes (ERR_INVALID_ARGUMENT)\n" "$1" "$(store_lib_escape "$2")" >&2; return 1 ;;
     *) return 2 ;;
   esac
+}
+
+# lib_lock <namespace>: the library lock of a namespace, a lock folder under the drawer's
+# scratch in the library's own family, holding the holder's pid (the calling shell's $$);
+# LIB_LOCK names it while held. A waiter removes a lock whose holder pid is gone (kill -0),
+# gives a pid-less lock ten polls of grace, and refuses a live holder rc 2 ERR_STORAGE_LOCKED
+# after 600 polls 0.1 s apart (where sleep refuses a fraction a poll sleeps 1 s and counts as
+# ten), the wait the unit lock and the drivers' namespace locks share. A malformed namespace
+# or a second lock in a process that holds one refuses rc 1 ERR_INVALID_ARGUMENT, and a lock
+# folder or pid that cannot be written rc 2 ERR_STORAGE_WRITE, each with one line. The
+# namespace classes spell every letter, since a range follows the caller's locale.
+lib_lock() {
+  ll_ns=${1:-}
+  case "$ll_ns" in
+    [abcdefghijklmnopqrstuvwxyz0123456789]*)
+      case "$ll_ns" in *[!abcdefghijklmnopqrstuvwxyz0123456789._-]*) ll_ns="" ;; esac ;;
+    *) ll_ns="" ;;
+  esac
+  if [ -z "$ll_ns" ]; then
+    printf "lib.lock: error: malformed namespace '%s' (ERR_INVALID_ARGUMENT)\n" "$(store_lib_escape "${1:-}")" >&2
+    return 1
+  fi
+  if [ -n "${LIB_LOCK:-}" ]; then
+    printf "lib.lock: error: this process already holds a library lock; release it before taking the lock of '%s' (ERR_INVALID_ARGUMENT)\n" "$ll_ns" >&2
+    return 1
+  fi
+  ll_dir="$(store_lib_root)/.contexture/tmp/locks/lib"
+  mkdir -p "$ll_dir" 2>/dev/null || {
+    printf "lib.lock: error: cannot create the library lock folder of '%s' (ERR_STORAGE_WRITE)\n" "$ll_ns" >&2
+    return 2
+  }
+  ll_lock="$ll_dir/$ll_ns.lock"
+  ll_n=0
+  ll_m=0
+  while [ "$ll_n" -lt 600 ]; do
+    if mkdir "$ll_lock" 2>/dev/null; then
+      { printf '%s\n' "$$" > "$ll_lock/pid"; } 2>/dev/null || {
+        rm -rf "$ll_lock" 2>/dev/null
+        printf "lib.lock: error: cannot write the library lock holder pid of '%s' (ERR_STORAGE_WRITE)\n" "$ll_ns" >&2
+        return 2
+      }
+      LIB_LOCK=$ll_lock
+      return 0
+    fi
+    ll_p=$(cat "$ll_lock/pid" 2>/dev/null)
+    case "$ll_p" in
+      ""|*[!0-9]*)
+        ll_m=$((ll_m + 1))
+        if [ "$ll_m" -ge 10 ]; then rm -rf "$ll_lock" 2>/dev/null; ll_m=0; continue; fi
+        ;;
+      *)
+        if kill -0 "$ll_p" 2>/dev/null; then ll_m=0
+        else rm -rf "$ll_lock" 2>/dev/null; continue
+        fi
+        ;;
+    esac
+    ll_n=$((ll_n + 1))
+    sleep 0.1 2>/dev/null || { sleep 1; ll_n=$((ll_n + 9)); }
+  done
+  printf "lib.lock: error: the library lock of '%s' is held (60 s timeout) (ERR_STORAGE_LOCKED)\n" "$ll_ns" >&2
+  return 2
+}
+
+# lib_unlock: removes the library lock this process holds; a no-op when it holds none
+lib_unlock() {
+  if [ -n "${LIB_LOCK:-}" ]; then
+    rm -rf "$LIB_LOCK" 2>/dev/null
+    LIB_LOCK=""
+  fi
+  return 0
 }
 
 # store_search <namespace> <query> <mode> [<limit>]: the library's search entry; the query

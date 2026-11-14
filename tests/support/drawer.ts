@@ -43,6 +43,8 @@ export const unitLock = (unit: string): string => join('unit', `${unit}.lock`);
 
 export const namespaceLock = (namespace: string): string => `store-${namespace}.lock`;
 
+export const libraryLock = (namespace: string): string => join('lib', `${namespace}.lock`);
+
 export function lockPath(sb: string, lock: string): string {
   return join(sb, '.contexture', 'tmp', 'locks', lock);
 }
