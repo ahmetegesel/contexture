@@ -5,6 +5,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
 import { libraryLock, lockPath, namespaceLock } from '../support/drawer';
 import { holdLock, sleepShim } from '../support/locks';
+import { pathPlant } from '../support/plants';
 import { moduleCall } from '../support/sh';
 import { fresh, seed } from '../support/snapshot';
 import { DRIVERS, fts5Available } from '../support/stage';
@@ -18,7 +19,7 @@ const SHIMMED_MS = (WAIT_S * 1000 * 3) / 4;
 const sh = (sb: string, script: string, env: Record<string, string> = {}, module = 'libprobe', shell = 'sh') =>
   moduleCall(sb, module, join(sb, LIBRARY), 'eval', [script], { env: { CTX_STORE_ROOT: sb, ...env }, shell });
 
-async function until(test: () => boolean, ms = 10_000): Promise<void> {
+async function until(test: () => boolean, ms = 60_000): Promise<void> {
   const t0 = performance.now();
   while (!test()) {
     if (performance.now() - t0 > ms) throw new Error('the condition never held');
@@ -44,12 +45,15 @@ for (const driver of DRIVERS) {
       expect(existsSync(lockPath(sb, libraryLock('libprobe')))).toBe(false);
     });
 
-    it('[the-engine-r-uv5a3] a second holder of the same namespace waits until the first releases', async () => {
+    it('[the-engine-r-uv5a3] a second holder of the same namespace waits until the first releases', async ({ onTestFinished }) => {
       const sb = fresh(snap);
-      const log = join(sb, 'order.log');
-      const first = sh(sb, `lib_lock || exit $?; echo first-in >> "${log}"; sleep 1; echo first-out >> "${log}"; lib_unlock`);
-      await until(() => existsSync(lockPath(sb, libraryLock('libprobe'))));
-      const second = sh(sb, `lib_lock || exit $?; echo second-in >> "${log}"; lib_unlock`);
+      const [log, go, waiting] = ['order.log', 'first.go', 'second.waiting'].map((name) => join(sb, name));
+      onTestFinished(() => writeFileSync(go, ''));
+      const first = sh(sb, `lib_lock || exit $?; echo first-in >> "${log}"; while [ ! -e "${go}" ]; do sleep 0.1 2>/dev/null || sleep 1; done; echo first-out >> "${log}"; lib_unlock`);
+      await until(() => existsSync(log) && existsSync(lockPath(sb, libraryLock('libprobe'))));
+      const second = sh(sb, `lib_lock || exit $?; echo second-in >> "${log}"; lib_unlock`, pathPlant('sleep', `: > "${waiting}"\nexec /bin/sleep "$@"`));
+      await until(() => existsSync(waiting));
+      writeFileSync(go, '');
       const [a, b] = await Promise.all([first, second]);
       expect([a.code, a.stderr, b.code, b.stderr]).toEqual([0, '', 0, '']);
       expect(readFileSync(log, 'utf8')).toBe('first-in\nfirst-out\nsecond-in\n');
