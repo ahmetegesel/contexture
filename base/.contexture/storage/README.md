@@ -257,7 +257,16 @@ through it; the module never names the driver. The library exports:
   cannot run: `lib_utf8_ok <string>` and `lib_utf8_file_ok <file>`, the UTF-8 check (RFC
   3629: no overlong form, no surrogate, nothing above U+10FFFF), with its awk text in
   `LIB_UTF8_AWK` for a caller that folds it into its own awk program; the unit verb
-  library and `ctx lane create` call it, keeping their own refusal lines.
+  library and `ctx lane create` call it, keeping their own refusal lines;
+- `lib_ref_ok <label> <ref>`, the full address shape check: one token `<owner>#<path>`,
+  the owner the text before the first hash (lowercase letters, digits, dot, underscore,
+  and dash, starting with a letter or digit), the path every byte after it, non-empty (a
+  further hash belongs to the path: `file#<path>#<symbol>`), no blank (ASCII or Unicode),
+  control character, or double quote; rc 1 prints one line
+  `<label>: error: malformed ref '<ref>': a reference is <owner>#<path>, one token without blanks, control characters, or double quotes (ERR_INVALID_ARGUMENT)`.
+  It checks the shape alone (an old short unit ref such as `journal#<slug>` passes): the
+  owner's presence and the target's existence are the caller's, and the unit and lane
+  verbs keep their own two shape check.
 
 `data_get` resolves a module reference `<module>#<symbol>`: it finds the target module's
 data script in the workspace modules, the workspace extensions, or the base mirror of

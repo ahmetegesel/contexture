@@ -21,6 +21,7 @@
 #   data.get <ref>
 #   data.emit <ref> <data>
 #   lib.utf8_ok <string>, lib.utf8_file_ok <file>                   (the shared checks)
+#   lib.ref_ok <label> <ref>
 #
 # The store functions and the two probes reach the configured driver through the storage
 # core's resolver; the caller uses the shell function names store_list, store_get,
@@ -58,7 +59,8 @@
 # The shared checks validate a value a module asks about and print nothing: lib_utf8_ok
 # and lib_utf8_file_ok answer rc 0 for valid UTF-8, 1 for anything else, 2 when the check
 # cannot run; LIB_UTF8_AWK is the awk text of the same check for a caller that folds it
-# into its own awk program.
+# into its own awk program. lib_ref_ok checks the shape of a full address <owner>#<path>
+# alone and refuses with its one line naming the ref.
 
 # store_lib_root: the workspace root the store calls run in
 store_lib_root() {
@@ -291,6 +293,34 @@ lib_utf8_file_ok() {
   case $? in
     0) return 0 ;;
     3) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+# lib_ref_ok <label> <ref>: the shape of a full address, <owner>#<path>: the owner is the
+# text before the first hash (lowercase letters, digits, dot, underscore, and dash, starting
+# with a letter or digit), the path every byte after it (non-empty; a further hash belongs
+# to it, as in file#<path>#<symbol>), and the whole value one token: no ASCII blank, no
+# control character, no double quote, and no Unicode blank of the White_Space set (NEL,
+# NBSP, U+1680, U+2000 to U+200A, U+2028, U+2029, U+202F, U+205F, U+3000, as UTF-8 byte
+# strings built by printf so no such byte sits in this file). Shape only: whether the owner
+# is installed or the target exists is the caller's. rc 0, or rc 1 with one stderr line
+# naming the ref (its newline, tab, carriage return, and backslash written by the payload
+# escape, so the line stays one), or rc 2 when the check cannot run.
+lib_ref_ok() {
+  LIB_R=$2 LIB_B=$(printf '\302\205|\302\240|\341\232\200|\342\200\200|\342\200\201|\342\200\202|\342\200\203|\342\200\204|\342\200\205|\342\200\206|\342\200\207|\342\200\210|\342\200\211|\342\200\212|\342\200\250|\342\200\251|\342\200\257|\342\201\237|\343\200\200|') LC_ALL=C awk 'BEGIN {
+    r = ENVIRON["LIB_R"]
+    if (r ~ /[\001-\040"\177]/) exit 3
+    n = split(ENVIRON["LIB_B"], B, /\|/)
+    for (i = 1; i < n; i++) if (index(r, B[i])) exit 3
+    h = index(r, "#")
+    if (h < 2 || h == length(r)) exit 3
+    if (substr(r, 1, h - 1) !~ /^[a-z0-9][a-z0-9._-]*$/) exit 3
+    exit 0
+  }' < /dev/null
+  case $? in
+    0) return 0 ;;
+    3) printf "%s: error: malformed ref '%s': a reference is <owner>#<path>, one token without blanks, control characters, or double quotes (ERR_INVALID_ARGUMENT)\n" "$1" "$(store_lib_escape "$2")" >&2; return 1 ;;
     *) return 2 ;;
   esac
 }
