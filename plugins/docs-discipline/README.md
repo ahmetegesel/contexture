@@ -335,6 +335,15 @@ it walk below runs every one of these.
   foot of the module's private grammar asset `scripts/doc.grammar` (the engine
   resolves it beside the module), the result audited over its whole repo, then
   the store.
+  The whole pipeline holds the storage core library's lock of the docs namespace
+  (`lib_lock docs`), from before its first read (the existence check or the doc
+  read) to after its last store call, the multi-doc verbs and `remove` included:
+  two writers of one doc both land and two creators of one slug never both pass
+  the existence check, where before the later put silently dropped the earlier
+  edit or the second create overwrote the first. A concurrent writer waits up to
+  60 s for the lock, then refuses rc 2 `ERR_STORAGE_LOCKED` under its verb's name;
+  the exit cleanup releases the lock, so a signal frees it; a storage core whose
+  library has no lock refuses rc 2 before any read.
   A refusal writes nothing: an unknown field, an enum value outside its set, a
   missing required field on a new entry, a duplicate key or id, a missing
   address, a stale replace count, an audit failure, a newline in a one-line

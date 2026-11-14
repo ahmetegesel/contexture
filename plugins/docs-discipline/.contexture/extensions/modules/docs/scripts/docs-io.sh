@@ -8,7 +8,9 @@
 # the library's store_list and store_get: the docs module materializes the returned bytes into its own scratch at
 # docs/<repo>/<slug>.md and the engines parse those files. No driver parses a doc. Every
 # driver call runs with the workspace root as its cwd and CTX_ROOT, an inherited CTX_DIR
-# unset, and stdin from /dev/null (the check's delta on stdin stays the verb's).
+# unset, and stdin from /dev/null (the check's delta on stdin stays the verb's). Every write
+# pipeline holds the library's lock of the docs namespace across its read, edit, and put, so
+# two writers of one doc both land and two creators of one slug never both pass the check.
 #
 # The display rule: every doc path a verb prints is the logical address
 # docs/<repo>/<slug>.md, whatever the caller's spelling and whatever the driver. Scratch
@@ -93,7 +95,28 @@ docs_require() {
   return 2
 }
 
+# docs_lock: the storage library's lock of the docs namespace, taken by every write pipeline
+# before its first read and released after its last store call (and by the exit cleanup, so
+# a signal frees it): a concurrent writer waits up to 60 s, then refuses with the library's
+# line under the verb's name (ERR_STORAGE_LOCKED); a base whose library has no lock refuses
+# rc 2 naming the need
+docs_lock() {
+  if ! command -v lib_lock > /dev/null 2>&1; then
+    printf '%s: the storage core library has no lock (need: the storage core of this release) (ERR_DRIVER_NOT_FOUND)\n' "$DOCS_VERB" >&2
+    return 2
+  fi
+  if lib_lock docs 2> "$DOCS_SCRATCH/lock.err"; then
+    return 0
+  else
+    dl_rc=$?
+  fi
+  dl_msg=$(head -n 1 "$DOCS_SCRATCH/lock.err")
+  printf '%s: %s\n' "$DOCS_VERB" "${dl_msg#lib.lock: error: }" >&2
+  return "$dl_rc"
+}
+
 docs_io_cleanup() {
+  [ -z "${LIB_LOCK:-}" ] || lib_unlock
   if [ -n "$DOCS_SCRATCH" ]; then
     rm -rf "$DOCS_SCRATCH"
     DOCS_SCRATCH=""
@@ -1100,14 +1123,23 @@ docs_keys_ok() {
 }
 
 # docs_edit <op> <repo> <slug>: the one-doc write pipeline (new, write, header, rule, entry,
-# section); EDIT_BLOCK and EDIT_KEY name the address, the field actions are in place
+# section); EDIT_BLOCK and EDIT_KEY name the address, the field actions are in place; the
+# docs lock is held from before the existence check or the read to after the put
 docs_edit() {
+  docs_keys_ok "$2" "$3" || return 1
+  docs_require || return 2
+  docs_scratch || return 2
+  docs_lock || return $?
+  docs_edit_locked "$@"
+  dd_rc=$?
+  lib_unlock
+  return "$dd_rc"
+}
+
+docs_edit_locked() {
   dd_op=$1
   dd_repo=$2
   dd_slug=$3
-  docs_keys_ok "$dd_repo" "$dd_slug" || return 1
-  docs_require || return 2
-  docs_scratch || return 2
   docs_template || return 2
   dd_old="$DOCS_SCRATCH/old"
   dd_new="$DOCS_SCRATCH/new"
@@ -1295,11 +1327,20 @@ docs_search() {
 }
 
 # docs_remove_doc <repo> <slug>: store.delete with op remove, stamped with the HEAD; a dry
-# run prints the verb's line and the stored doc whole, then writes nothing
+# run prints the verb's line and the stored doc whole, then writes nothing; the docs lock is
+# held from the existence check to the delete
 docs_remove_doc() {
   docs_keys_ok "$1" "$2" || return 1
   docs_require || return 2
   docs_scratch || return 2
+  docs_lock || return $?
+  docs_remove_locked "$@"
+  dx_rc=$?
+  lib_unlock
+  return "$dx_rc"
+}
+
+docs_remove_locked() {
   docs_exists "$1" "$2" || {
     dx_rc=$?
     [ "$dx_rc" -eq 1 ] && printf '%s: no such doc: %s/%s (ERR_ENTITY_NOT_FOUND)\n' "$DOCS_VERB" "$1" "$2" >&2
@@ -1344,12 +1385,21 @@ docs_scope() {
 # docs_multi <op> [<repo> [<slug>]]: the multi-doc pipeline (replace, ids): every doc of the
 # scope edited into scratch first, the counts checked (replace: the total must equal
 # --count, else each doc's count is printed and nothing written), every touched repo
-# audited, then the writes one doc after another (a failure names the docs that landed)
+# audited, then the writes one doc after another (a failure names the docs that landed); the
+# docs lock is held from the first read to the last put
 docs_multi() {
-  dm_op=$1
-  shift
   docs_require || return 2
   docs_scratch || return 2
+  docs_lock || return $?
+  docs_multi_locked "$@"
+  dm_rc=$?
+  lib_unlock
+  return "$dm_rc"
+}
+
+docs_multi_locked() {
+  dm_op=$1
+  shift
   docs_template || return 2
   docs_scope "$@" || return $?
   dm_i=0
