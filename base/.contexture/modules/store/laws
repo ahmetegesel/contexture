@@ -1,0 +1,3 @@
+# the store module's law fragment, composed into the generated layer
+@append @laws
+  store-data: a store container is declared through ctx store put containers/<name>, and its records reach the storage layer only through the store verbs, each write checked against the declaration

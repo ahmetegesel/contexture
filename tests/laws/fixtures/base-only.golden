@@ -1,4 +1,4 @@
-# contexture v0.78.0: generated law layer; core cksum 3907812168-15949; sources 2039818287-32883; never edit
+# contexture v0.78.0: generated law layer; core cksum 3907812168-15949; sources 2008422871-33563; never edit
 @laws
   source-of-truth: the record is the work's durable memory, what a fresh context resumes from: the events that happened, the decisions made, and the state they left, across compaction, tool change, and break; because the work's continuity depends on it, it holds whatever else that continuity needs, the reasons, the open threads, and the evidence behind them; the workspace and the commands' results show what is, and the loaded layer and its sequences say what to do.
   load-only-needed: load only what you need: the active unit's live surfaces; closed units untouched unless the task needs them.
@@ -11,6 +11,7 @@
   workspace-confinement: the current workspace (the repo/worktree the agent was started in) is the boundary; never read, write, search, or otherwise reach outside it unless the human specifically asks for that act; an apparent outside need stops and asks: the agent never roams; the harness's saved copy of a command's own truncated output is the agent's own output, sanctioned to read, read-only, the named file alone; the temp-file routing stays unsanctioned.
   cli-doorway: the CLI (.contexture/ctx) is the single doorway to the runtime and the record; discover contracts through ctx help; interact with the record strictly through its ctx verbs (ctx unit, ctx lane, ctx rhythm current); stderr is the diagnostic, augmented by --diagnose on engine subcommands to inspect runtime and storage state; the record's storage is the driver's: an agent never lists, reads, or writes it by path, whatever it learns of it, and a need ctx does not serve is a gap to report.
   dont-fool-yourself: every failure here returns something indistinguishable from a correct result; none of them error; care does not catch them, only a mechanical check does; null-check the instrument: would it give the same answer if the thing sought did not exist? then it cannot discriminate, and it is not evidence; grep LOCATES, read ANSWERS: matched lines are not the file's answer, a later block may reverse them, grep -m1 returns whichever sorts first; absence claims are the highest-evidence claim available, never the easiest, they license deletion; split a whole into parts, assert the parts SUM to the whole and NAME the remainder; report an exit code you actually read: in a pipeline it belongs to the last command, not the one you care about; TEST: primary record, or a view derived from it? derived -> read the primary
+  store-data: a store container is declared through ctx store put containers/<name>, and its records reach the storage layer only through the store verbs, each write checked against the declaration
 
 @layout
   AGENTS.md       = the loader: the harness's every-turn file; its first instruction composes or verifies the generated layer, then loads it whole
@@ -37,6 +38,15 @@
   whole, and names the rhythm in force in a unit with its next gate, so an
   agent selects, reads, and resumes a rhythm through ctx, never by a path.
   help: ctx rhythm help
+
+@module store
+  summary: the store: containers declared as records, their schema-checked records, get, list, put, set, delete, check, and search
+  The store module is the free container module: every workspace has it. A container
+  is declared as one record of the builtin containers container (a one-line
+  description, a minting, and field lines), and its records are written through the
+  store's own verbs, each write checked against the declaration, so a workspace keeps
+  generic data with no module of its own.
+  help: ctx store help
 
 @module unit
   summary: the unit module: the record's 35 operations over the store, one value per artifact

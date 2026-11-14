@@ -136,6 +136,7 @@ describe.concurrent('package-install: the collision classes', () => {
     ['the unit builtin', 'pkgbuiltin', 'unit', 'collides with a builtin'],
     ['the lane builtin', 'pkgbuiltinlane', 'lane', 'collides with a builtin'],
     ['the rhythm builtin', 'pkgbuiltinrhythm', 'rhythm', 'collides with a builtin'],
+    ['the store builtin', 'pkgbuiltinstore', 'store', 'collides with a builtin'],
     ['a reserved name', 'pkgreserved', 'refresh', 'reserved name'],
     ['the compose builtin', 'pkgcompose', 'compose', 'reserved name'],
     ['the package builtin', 'pkgpackage', 'package', 'reserved name'],
@@ -179,7 +180,8 @@ describe.concurrent('package-install: the collision classes', () => {
     expect(existsSync(join(sb, '.contexture/extensions/modules/two/data'))).toBe(true);
     const listing = await exec('.contexture/storage/scripts/store-data', ['--list'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
     expect([listing.code, listing.stderr]).toEqual([0, '']);
-    expect(listing.stdout).toContain('one\tone\ntwo\ttwo\n');
+    expect(listing.stdout).toMatch(/^one\tone$/m);
+    expect(listing.stdout).toMatch(/^two\ttwo$/m);
   });
 
   it.each(['Upper', 'camelCase', '_lead', '-dash', '_hooks'])('[modules-r15, modules-r1] a module named %s refuses rc1 with the module name rule, nothing written', async (name) => {

@@ -18,6 +18,7 @@
     "test:laws": "vitest run --project laws",
     "test:packages": "vitest run --project packages",
     "test:base": "vitest run --project base",
+    "test:store-module": "vitest run --project store-module",
     "test:integration": "vitest run --project integration",
     "test:sqlite-smoke": "vitest run --project sqlite-smoke",
     "test:unit-record": "vitest run --project unit-record",

@@ -34,6 +34,7 @@ const projects = [
   area('laws'),
   area('packages', ['packages/**/*.test.ts', 'fixtures/worked-package/tests/**/*.test.ts']),
   area('base'),
+  area('store-module'),
   area('integration'),
   area('sqlite-smoke'),
   ...pluginProjects,

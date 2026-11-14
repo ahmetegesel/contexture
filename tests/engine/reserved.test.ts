@@ -31,7 +31,7 @@ describe.concurrent('the ctx _builtin reader', () => {
     sb = stage('posix', 'builtin');
   });
 
-  it.for(['unit', 'run', 'lane', 'rhythm'])('MD-BI [the-engine-r1, modules-r14]: %s is a builtin rc 0', async (name) => {
+  it.for(['unit', 'run', 'lane', 'rhythm', 'store'])('MD-BI [the-engine-r1, modules-r14]: %s is a builtin rc 0', async (name) => {
     const r = await run(sb, ['_builtin', name]);
     expect(r.code).toBe(0);
     expect(r.stdout + r.stderr).toBe('');

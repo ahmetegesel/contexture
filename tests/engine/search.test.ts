@@ -42,7 +42,7 @@ describe.concurrent('the ctx search builtin', () => {
     const a = JSON.parse(r.stdout);
     expect(a.query).toBe('needle');
     const groups = a.groups.map((g: { module: string; status: string }) => `${g.module} ${g.status}`);
-    expect(groups).toEqual(['hmod ok', 'lane not searched', 'rhythm not searched', 'unit ok', 'zmod ok']);
+    expect(groups).toEqual(['hmod ok', 'lane not searched', 'rhythm not searched', 'store not searched', 'unit ok', 'zmod ok']);
     expect(a.groups[0]).toEqual({ module: 'hmod', status: 'ok', mode: 'exact', total: 3, rows: JSON.parse(`[${row('hmod', 'a')},${row('hmod', 'b')}]`) });
   });
 
@@ -58,7 +58,7 @@ describe.concurrent('the ctx search builtin', () => {
         '    read: ctx hmod get c/b',
         'unit: 0 of 0',
         'zmod: 0 of 0',
-        'searched 3, failed 0, not searched 2 (lane, rhythm)',
+        'searched 3, failed 0, not searched 3 (lane, rhythm, store)',
         '',
       ].join('\n'),
     );
@@ -88,7 +88,7 @@ describe.concurrent('the ctx search builtin', () => {
     const text = await run(sb, ['search', 'needle']);
     expect(text.code).toBe(2);
     expect(text.stdout).toContain('fmod: failed: fmod: the search broke\n');
-    expect(text.stdout).toMatch(/^searched 6, failed 3 \(fmod, mmod, rmod\), not searched 2 \(lane, rhythm\)$/m);
+    expect(text.stdout).toMatch(/^searched 6, failed 3 \(fmod, mmod, rmod\), not searched 3 \(lane, rhythm, store\)$/m);
   });
 
   it('[the-engine-r-ha7uc] a child\'s stderr on success prints after the results, prefixed with its module name', async () => {
@@ -172,7 +172,7 @@ describe.concurrent('the ctx search builtin', () => {
     const sb = fresh(base);
     const r = await run(sb, ['search', 'help', '--json']);
     expect([r.code, r.stderr]).toEqual([0, '']);
-    expect(JSON.parse(r.stdout).groups.map((g: { module: string; status: string }) => `${g.module} ${g.status}`)).toEqual(['hmod ok', 'lane not searched', 'rhythm not searched', 'unit ok', 'zmod ok']);
+    expect(JSON.parse(r.stdout).groups.map((g: { module: string; status: string }) => `${g.module} ${g.status}`)).toEqual(['hmod ok', 'lane not searched', 'rhythm not searched', 'store not searched', 'unit ok', 'zmod ok']);
     const q = 'nee\u001bdle\tx';
     const c = await run(sb, ['search', q, '--json', '--module=unit']);
     expect([c.code, c.stderr]).toEqual([0, '']);

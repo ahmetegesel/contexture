@@ -548,7 +548,8 @@ fields_run() {
 # (lowercase letters, digits, underscore, and dash, starting with a letter, never reserved,
 # never twice), the clauses in their fixed order, a block taking no list, one-of, or default,
 # a list no default, a required field no default, a default inside its one-of set (the
-# dynamic today with none); rc 0 silent, or rc 1 with one line naming the field and clause
+# dynamic today with none), one blank between clauses with none trailing, and no clause but a
+# default after the one-of set; rc 0 silent, or rc 1 with one line naming the field and clause
 fields_decl_check() {
   if [ $# -ne 1 ]; then
     printf 'fields.decl_check: error: takes one declaration file (ERR_INVALID_ARGUMENT)\n' >&2

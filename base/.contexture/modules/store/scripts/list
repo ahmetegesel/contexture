@@ -1,0 +1,8 @@
+#!/bin/sh
+# summary: list a container's records, filtered by exact field values, or the declared containers
+# usage: ctx store list <container> [--<field>=<value>]... [--json] | ctx store list containers [--dropped] [--json]
+# help: list containers prints one line per declared container (its name, description, and minting); --dropped lists the dropped ones only
+# help: --json answers {container, records, total}, every record whole
+# help: example: ctx store list containers
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/store" list "$@"

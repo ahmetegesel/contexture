@@ -116,6 +116,7 @@ The builtins ship with the base and need no install. The packages install throug
 | `run` (builtin) | the base filter pack: diff, directory listing, and log filters selected by command identity or stream signature for `ctx run`; filter-only and silent in `ctx help` | ships with the base; no install |
 | `lane` (builtin) | the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's artifacts within the unit's record | ships with the base; no install |
 | `rhythm` (builtin) | the process surface: list the rhythms with their triggers and activations, show one whole, and name the rhythm in force with its next gate | ships with the base; no install |
+| `store` (builtin) | the free container module: declare a container as one record of the `containers` container, then get, list, put, set, delete, check, and search its schema-checked records | ships with the base; no install |
 | `docs-discipline` (package) | the corpus-first documentation discipline: the docs module's read and schema-checked write verbs, and its close gate over a typed-block corpus | install when agents should consult a corpus before code; its change-aware checks need git |
 | `ast-doc-graph` (package) | the AST and documentation graph: index the workspace's TypeScript code and documentation corpus into one queryable graph, then query symbols, call graphs, rules, and pitfalls | install when the workspace holds TypeScript sources or a corpus to link |
 | `toolchain-filters` (package) | the toolchain filter pack: pytest, vitest and jest, cargo test, go test, and compiler error filters for `ctx run` | install when the workspace runs those toolchains; adopt only the filters its streams match |
@@ -160,7 +161,7 @@ Not everything in the drawer syncs from upstream. Three classes, and placement f
 
 | class | paths | fate |
 |---|---|---|
-| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/unit,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
+| update payload | `base/`: the mirrored core (`base/AGENTS.md`, `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/store,modules/unit,ONBOARDING.md}`) | applied onto the live root from tags, byte for byte |
 | catalog | `plugins/` | installed into the extension root when wanted; shipped with every tag, never deleted at adoption close |
 | workspace-owned | `.contexture/units/` (and the deprecated `.contexture/sessions/` while units remain in it), `.contexture/rhythms/`, `.contexture/tmp/`, workspace-added modules under `.contexture/modules/`, and the drawer's top files: the configuration `.contexture/config` (and the legacy `.contexture/storage.conf`), an fts5 store's database `.contexture/sessions.db` with its `-wal` and `-shm` files, and a macOS Finder `.DS_Store` | never touched |
 

@@ -1,0 +1,301 @@
+#!/bin/sh
+# store: the private engine behind the store verbs. It carries no summary line, so discovery
+# ignores it and the engine never lists it as a verb; each verb is a thin wrapper that execs
+# it with its act name. The one door to the data is the storage layer's module library: the
+# engine sources it and calls its functions only (the store functions, the field validator,
+# the library lock, and the shared checks), so the module never names the configured driver,
+# and the library serves the module's own namespace alone.
+#
+# Keys: <container>/<id> for a record, containers/<name> for a declaration. A declaration is
+# one record of the builtin containers container, its schema fixed here: description (a
+# required line), minting (a required line, given or generated), fields (an optional list of
+# field lines in the library's grammar), and the store kept retired (every id the container
+# ever used and gave up) and state (dropped once dropped), which no write may name.
+#
+# Every refusal is rc 1 or 2 with one stderr line, store <verb>: error: <message> (<CODE>),
+# a library refusal re-framed under the verb's name; a write refusal writes nothing.
+set -u
+
+verb=${1:-}
+[ -n "$verb" ] && shift
+FN="store $verb"
+
+die() {
+  printf '%s: error: %s (%s)\n' "$FN" "$3" "$2" >&2
+  exit "$1"
+}
+
+if [ -z "${CTX_ROOT:-}" ]; then
+  printf '%s: error: run this module through ctx (CTX_ROOT is not set) (ERR_INVALID_ARGUMENT)\n' "$FN" >&2
+  exit 2
+fi
+case "${1:-}" in
+  --help|-h) [ $# -eq 1 ] && exec "${CTX_BIN:-$CTX_ROOT/.contexture/ctx}" store help "$verb" ;;
+esac
+
+MOD=${0%/scripts/*}
+REC_AWK=$MOD/lib/record.awk
+LIB=$CTX_ROOT/.contexture/storage/scripts/library
+[ -f "$LIB" ] || die 2 ERR_DRIVER_NOT_FOUND 'the storage layer library is not installed'
+CTX_STORE_ROOT=$CTX_ROOT
+export CTX_STORE_ROOT
+. "$LIB"
+CORE=${LIB%/library}
+
+scratch=${CTX_SCRATCH_ROOT:-$CTX_ROOT/.contexture/tmp}
+mkdir -p "$scratch" 2>/dev/null
+SCR=$(mktemp -d "$scratch/store.XXXXXX" 2>/dev/null) || die 2 ERR_STORAGE_WRITE 'cannot make the verb scratch'
+cleanup() {
+  lib_unlock
+  rm -rf "$SCR"
+}
+trap 'cleanup' EXIT
+trap 'cleanup; trap - EXIT; exit 129' HUP
+trap 'cleanup; trap - EXIT; exit 130' INT
+trap 'cleanup; trap - EXIT; exit 143' TERM
+
+CONTAINERS_DECL='description: required line
+minting: required line one-of given|generated
+fields: optional line list'
+printf '%s\n' "$CONTAINERS_DECL" > "$SCR/containers.decl"
+
+# reframe: the library's one refusal line in $SCR/err printed under the verb's name
+reframe() {
+  rf_line=$(sed -n 1p "$SCR/err")
+  rf_msg=${rf_line#*: error: }
+  printf '%s: error: %s\n' "$FN" "$rf_msg" >&2
+}
+
+# lib_or_die <function> [args...]: one library call; a refusal re-framed, its rc the exit
+lib_or_die() {
+  "$@" 2> "$SCR/err"
+  lod_rc=$?
+  [ "$lod_rc" -eq 0 ] && return 0
+  reframe
+  exit "$lod_rc"
+}
+
+# rec <mode> [<arg>]: the record reader over stdin
+rec() {
+  REC_MODE=$1 REC_ARG=${2:-} awk -f "$REC_AWK"
+}
+
+# word_ok <word>: the slug rule of ids and container names: letters, digits, underscore, and
+# dash, starting with a letter or digit
+word_ok() {
+  case "$1" in
+    [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]*) ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]*) return 1 ;;
+  esac
+  return 0
+}
+
+lower() {
+  printf '%s\n' "$1" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz'
+}
+
+# fetch <key> <file>: rc 0 with the value in the file, rc 1 when the key is absent
+fetch() {
+  printf '%s\t%s\n' "$1" "$2" > "$SCR/fetch"
+  lib_or_die store_get_into "$SCR/fetch" > "$SCR/fetch.out"
+  case $(cat "$SCR/fetch.out") in
+    1*) return 0 ;;
+  esac
+  return 1
+}
+
+# keys <prefix>: every stored key under the prefix, one per line, bytewise
+keys() {
+  lib_or_die store_list "$1" > "$SCR/list.json"
+  awk -f "$CORE/json.awk" < "$SCR/list.json" | sed -n 's/^keys\.[0-9][0-9]*=//p'
+}
+
+# decl_load <name>: DSTATE absent, live, or dropped; the declaration record in $SCR/d.rec,
+# its field lines in $SCR/d.fields, its minting in DMINT
+decl_load() {
+  : > "$SCR/d.fields"
+  DMINT=""
+  if ! fetch "containers/$1" "$SCR/d.rec"; then
+    DSTATE=absent
+    : > "$SCR/d.rec"
+    return 0
+  fi
+  rec values fields < "$SCR/d.rec" > "$SCR/d.fields"
+  DMINT=$(rec values minting < "$SCR/d.rec")
+  if [ "$(rec values state < "$SCR/d.rec")" = dropped ]; then DSTATE=dropped; else DSTATE=live; fi
+}
+
+# parse_writes [flags...]: the write forms into the actions file $SCR/acts (the field
+# validator's tab separated lines) and the ref actions into $SCR/refacts; a malformed flag
+# refuses
+parse_writes() {
+  : > "$SCR/acts"
+  : > "$SCR/refacts"
+  pw_stdin=""
+  for pw_a in "$@"; do
+    case "$pw_a" in
+      --unset=*) pw_op=unset; pw_f=${pw_a#--unset=}; pw_v="" ;;
+      --stdin=*) pw_op=block; pw_f=${pw_a#--stdin=}; pw_v="" ;;
+      --add-*=*) pw_op=add; pw_f=${pw_a#--add-}; pw_v=${pw_f#*=}; pw_f=${pw_f%%=*} ;;
+      --remove-*=*) pw_op=remove; pw_f=${pw_a#--remove-}; pw_v=${pw_f#*=}; pw_f=${pw_f%%=*} ;;
+      --?*=*) pw_op=set; pw_f=${pw_a#--}; pw_v=${pw_f#*=}; pw_f=${pw_f%%=*} ;;
+      *) die 1 ERR_INVALID_ARGUMENT "unknown argument '$(store_lib_escape "$pw_a")' (a write takes --<field>=<value>, --add-<field>=<item>, --remove-<field>=<item>, --unset=<field>, or --stdin=<field>)" ;;
+    esac
+    [ -n "$pw_f" ] || die 1 ERR_INVALID_ARGUMENT "argument '$(store_lib_escape "$pw_a")' names no field"
+    if [ "$pw_op" = block ]; then
+      [ -z "$pw_stdin" ] || die 1 ERR_INVALID_ARGUMENT "one block per call: --stdin names '$pw_stdin' already"
+      pw_stdin=$pw_f
+      cat > "$SCR/block"
+      pw_v=$("$CORE/store-b64" "$SCR/block") || die 2 ERR_STORAGE_READ 'cannot read the block on stdin'
+      [ -s "$SCR/block" ] || pw_v=""
+    fi
+    case "$pw_op" in
+      unset) printf 'unset\t%s\n' "$pw_f" ;;
+      block) printf 'block\t%s\t%s\n' "$pw_f" "$pw_v" ;;
+      *) printf '%s\t%s\t%s\n' "$pw_op" "$pw_f" "$(store_lib_escape "$pw_v")" ;;
+    esac >> "$SCR/acts"
+  done
+}
+
+# system_names_refused <names...>: a write naming a store kept field refuses as undeclared
+system_names_refused() {
+  for snr_n in "$@"; do
+    if awk -F '\t' -v n="$snr_n" '$2 == n { found = 1 } END { exit !found }' "$SCR/acts"; then
+      die 1 ERR_SCHEMA_VIOLATION "field '$snr_n' is not declared (the store keeps it)"
+    fi
+  done
+}
+
+# decl_fields_check <declaration record>: the field lines it carries checked by the library
+decl_fields_check() {
+  rec values fields < "$1" > "$SCR/new.fields"
+  lib_or_die fields_decl_check "$SCR/new.fields"
+}
+
+# print_record <container> <id> <record file>
+print_record() {
+  if [ "$json" = 1 ]; then
+    pr_lists=""
+    [ "$1" = containers ] && pr_lists='fields retired'
+    printf '{"container":"%s","id":"%s","address":"store#%s/%s","record":' "$1" "$2" "$1" "$2"
+    rec json "$pr_lists" < "$3"
+    printf '}\n'
+  else
+    cat "$3"
+  fi
+}
+
+# split_path <path>: PC and PI from <container>/<id>, PI empty for a bare container
+split_path() {
+  case "$1" in
+    */*/*|/*|*/) die 1 ERR_INVALID_ARGUMENT "malformed path '$(store_lib_escape "$1")' (a path is <container>/<id>)" ;;
+    */*) PC=${1%%/*}; PI=${1#*/} ;;
+    *) PC=$1; PI="" ;;
+  esac
+  word_ok "$PC" || die 1 ERR_INVALID_ARGUMENT "malformed container name '$(store_lib_escape "$PC")' (letters, digits, underscore, and dash, starting with a letter or digit)"
+  if [ -n "$PI" ] && ! word_ok "$PI"; then
+    die 1 ERR_INVALID_ARGUMENT "malformed id '$(store_lib_escape "$PI")' (letters, digits, underscore, and dash, starting with a letter or digit)"
+  fi
+}
+
+json=0
+
+case "$verb" in
+  get)
+    gp=""
+    for a in "$@"; do
+      case "$a" in
+        --json) json=1 ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (usage: ctx store get <container>/<id> [--json])" ;;
+        *) [ -z "$gp" ] || die 1 ERR_INVALID_ARGUMENT 'get takes one path (usage: ctx store get <container>/<id> [--json])'; gp=$a ;;
+      esac
+    done
+    [ -n "$gp" ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store get <container>/<id> [--json]'
+    split_path "$gp"
+    [ -n "$PI" ] || die 1 ERR_INVALID_ARGUMENT "get reads one entity: <container>/<id> (list $PC lists the container)"
+    if [ "$PC" = containers ]; then
+      decl_load "$PI"
+      [ "$DSTATE" != absent ] || die 1 ERR_ENTITY_NOT_FOUND "container '$PI' is not declared"
+      print_record containers "$PI" "$SCR/d.rec"
+      exit 0
+    fi
+    die 1 ERR_INVALID_ARGUMENT "container '$PC': only containers/<name> is served yet"
+    ;;
+  list)
+    lc=""
+    dropped=0
+    for a in "$@"; do
+      case "$a" in
+        --json) json=1 ;;
+        --dropped) dropped=1 ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")'" ;;
+        *) [ -z "$lc" ] || die 1 ERR_INVALID_ARGUMENT 'list takes one container (usage: ctx store list <container> [--<field>=<value>]... [--json])'; lc=$a ;;
+      esac
+    done
+    [ -n "$lc" ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store list <container> [--<field>=<value>]... [--json]'
+    case "$lc" in */*) die 1 ERR_INVALID_ARGUMENT "list takes a container, not a path ('$(store_lib_escape "$lc")')" ;; esac
+    split_path "$lc"
+    [ "$PC" = containers ] || die 1 ERR_INVALID_ARGUMENT "container '$PC': only containers is served yet"
+    keys containers/ > "$SCR/keys"
+    : > "$SCR/targets"
+    n=0
+    while IFS= read -r k; do
+      n=$((n + 1))
+      printf '%s\t%s\n' "$k" "$SCR/r.$n" >> "$SCR/targets"
+    done < "$SCR/keys"
+    [ "$n" -eq 0 ] || lib_or_die store_get_into "$SCR/targets" > /dev/null
+    first=1
+    [ "$json" = 1 ] && printf '{"container":"containers","records":['
+    count=0
+    n=0
+    while IFS= read -r k; do
+      n=$((n + 1))
+      name=${k#containers/}
+      st=$(rec values state < "$SCR/r.$n")
+      if [ "$dropped" = 1 ]; then [ "$st" = dropped ] || continue; else [ "$st" != dropped ] || continue; fi
+      count=$((count + 1))
+      if [ "$json" = 1 ]; then
+        [ "$first" = 1 ] || printf ','
+        first=0
+        printf '{"id":"%s","address":"store#containers/%s","record":' "$name" "$name"
+        rec json 'fields retired' < "$SCR/r.$n"
+        printf '}'
+      else
+        rec keep 'description minting' < "$SCR/r.$n" | rec text "$name"
+      fi
+    done < "$SCR/keys"
+    [ "$json" = 1 ] && printf '],"total":%s}\n' "$count"
+    exit 0
+    ;;
+  put)
+    [ $# -ge 1 ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store put <container>/<id> | <container> [--<field>=<value>]... [--add-<field>=<item>]... [--unset=<field>]... [--stdin=<field>]'
+    pp=$1
+    shift
+    case "$pp" in -*) die 1 ERR_INVALID_ARGUMENT 'put takes the path first (usage: ctx store put <container>/<id> | <container> [flags])' ;; esac
+    parse_writes "$@"
+    split_path "$pp"
+    if [ "$PC" = containers ]; then
+      [ -n "$PI" ] || die 1 ERR_INVALID_ARGUMENT 'put containers/<name> declares a container'
+      [ "$PI" != containers ] || die 1 ERR_INVALID_ARGUMENT "'containers' is the store's reserved container name"
+      lib_or_die lib_lock
+      decl_load "$PI"
+      [ "$DSTATE" != live ] || die 1 ERR_ENTITY_EXISTS "container '$PI' is already declared (set containers/$PI changes it)"
+      system_names_refused retired state
+      : > "$SCR/empty"
+      lib_or_die fields_apply "$SCR/containers.decl" "$SCR/empty" "$SCR/acts" "$SCR/new"
+      decl_fields_check "$SCR/new"
+      rec keep retired < "$SCR/d.rec" > "$SCR/sys"
+      REC_FILE=$SCR/sys REC_MODE=insert REC_ARG='description minting fields' awk -f "$REC_AWK" < "$SCR/new" > "$SCR/new.rec"
+      lib_or_die store_put "containers/$PI" < "$SCR/new.rec" > /dev/null
+      printf '%s\n' "$PI"
+      exit 0
+    fi
+    die 1 ERR_INVALID_ARGUMENT "container '$PC': only containers/<name> is served yet"
+    ;;
+  *)
+    die 1 ERR_INVALID_ARGUMENT "unknown verb '$(store_lib_escape "$verb")'"
+    ;;
+esac

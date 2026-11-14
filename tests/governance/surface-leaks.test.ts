@@ -171,7 +171,7 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(help.empty).toEqual([]);
     expect(help.errors).toEqual([]);
     const keys = help.forms.map((f) => f.join(' '));
-    for (const must of ['help --all', 'unit help list', 'unit help resolve', 'lane help create', 'rhythm help show', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'search --help', 'package --help', 'package install --help', 'package uninstall --help', 'package list --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
+    for (const must of ['help --all', 'unit help list', 'unit help resolve', 'lane help create', 'rhythm help show', 'store help put', 'store get --help', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'search --help', 'package --help', 'package install --help', 'package uninstall --help', 'package list --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
     expect(keys).not.toContain('lane show recipe --help');
   });
 

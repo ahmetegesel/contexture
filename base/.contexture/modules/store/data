@@ -1,0 +1,3 @@
+# the store module's store declaration: one value per record (the namespace is the folder name)
+root: .contexture/store
+key: <container>/<id>

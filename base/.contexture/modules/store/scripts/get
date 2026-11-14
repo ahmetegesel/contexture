@@ -1,0 +1,8 @@
+#!/bin/sh
+# summary: print one record or one container declaration whole
+# usage: ctx store get <container>/<id> [--json]
+# help: prints the record in its canonical layout, an absent field that has a static default read as that default; get containers/<name> prints a declaration whole (description, minting, fields, the retired ids, and dropped when dropped); --json answers {container, id, address, record}
+# help: read only and lock free; a missing record, a retired id, or an undeclared or dropped container refuses rc 1 (ERR_ENTITY_NOT_FOUND) naming it; a malformed path rc 1 (ERR_INVALID_ARGUMENT)
+# help: example: ctx store get containers/ideas
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/store" get "$@"

@@ -76,6 +76,7 @@ The builtins ship with the base and need no install. The packages in `plugins/` 
 - **`run` (builtin)**: the base filter pack for `ctx run`: diff, directory listing, and log filters selected by command identity or stream signature; filter-only, so it stays silent in `ctx help`. No install.
 - **`lane` (builtin)**: the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's recipe, journal, and report kept as lane artifacts within the unit's record. No install.
 - **`rhythm` (builtin)**: the process surface: `ctx rhythm` lists the rhythms with their triggers and activations, shows one whole, and names the rhythm in force with its next gate. No install.
+- **`store` (builtin)**: the free container module: `ctx store` declares a container as one record of its `containers` container (a one-line description, a minting, and field lines), and its get, list, put, set, delete, check, and search verbs keep the container's records, each write checked against the declaration. No install.
 - **`docs-discipline`**: the corpus-first documentation discipline: the docs module's read verbs (query, get, search, audit, check, gate, nudge, changes), schema-checked write verbs, and close gate over a typed-block corpus. Install it when agents should consult a corpus before code; its change-aware checks need git.
 - **`ast-doc-graph`**: the AST and documentation graph: index the workspace's TypeScript code and documentation corpus into one queryable graph, then query symbols, call graphs, rules, and pitfalls. Install it when the workspace holds TypeScript sources or a corpus to link.
 - **`toolchain-filters`**: the toolchain filter pack: pytest, vitest and jest, cargo test, go test, and compiler error filters for `ctx run`. Install it when the workspace runs those toolchains, and adopt only the filters its streams match.
@@ -98,7 +99,7 @@ The workspace couples root governance with a dedicated convention drawer:
     ├── config            Optional workspace configuration (storage.driver: posix)
     ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
     ├── laws/             The law sources: core.md the core source, and the composer, private behind ctx compose
-    ├── modules/          The standard module folders: unit (the record engine), run (stream filters), lane (the subagent lanes), rhythm (the process surface), and workspace additions
+    ├── modules/          The standard module folders: unit (the record engine), run (stream filters), lane (the subagent lanes), rhythm (the process surface), store (the free containers), and workspace additions
     ├── extensions/       The package overlay root: modules/ for package feature modules, storage/drivers/ for package drivers, rhythms/ for package rhythms
     ├── rhythms/          Reusable workflow patterns governing task progression
     └── units/<unit>/     Isolated unit of work bounding context and lifecycle history
@@ -189,7 +190,7 @@ The interaction toolbox is the typed semantic verbs (`task`, `record`, `entry`, 
 
 ## Maintaining contexture
 
-This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/unit,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the store alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
+This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/store,modules/unit,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the store alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
 
 The dev loop:
 

@@ -1,6 +1,6 @@
 export const EVERY = '*';
 
-const CORE = ['harness', 'drivers', 'unit-record', 'unit-verbs', 'governance', 'filters', 'engine', 'hooks', 'laws', 'packages', 'base', 'integration', 'sqlite-smoke'];
+const CORE = ['harness', 'drivers', 'unit-record', 'unit-verbs', 'governance', 'filters', 'engine', 'hooks', 'laws', 'packages', 'base', 'store-module', 'integration', 'sqlite-smoke'];
 
 export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['tests/support/**', [EVERY]],
@@ -22,8 +22,9 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['base/.contexture/modules/run/**', ['filters', 'engine', 'toolchain-filters', 'governance']],
   ['base/.contexture/modules/unit/**', ['unit-record', 'unit-verbs', 'hooks', 'base', 'integration', 'sqlite-smoke', 'governance']],
   ['base/.contexture/modules/lane/**', ['unit-verbs', 'base', 'integration', 'governance']],
+  ['base/.contexture/modules/store/**', ['store-module', 'base', 'engine', 'laws', 'governance']],
   ['base/.contexture/modules/rhythm/**', ['unit-verbs', 'base', 'packages', 'laws', 'engine', 'integration', 'governance']],
-  ['base/.contexture/storage/**', ['drivers', 'storage-fts5', 'unit-record', 'base', 'integration', 'sqlite-smoke', 'docs-discipline', 'governance']],
+  ['base/.contexture/storage/**', ['drivers', 'storage-fts5', 'unit-record', 'base', 'store-module', 'integration', 'sqlite-smoke', 'docs-discipline', 'governance']],
   ['plugins/*/manifest', ['packages', 'governance']],
   ['plugins/*/.contexture/**', ['governance']],
   ['plugins/*/README.md', ['governance']],

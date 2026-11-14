@@ -12,7 +12,7 @@ import { lane, laneFlags, must, run } from '../support/unit';
 const D = '2026-09-27';
 const REPO = 'census-repo';
 const REPORT = ['@report cl', 'VERDICT: done', '', 'FINDINGS ::', '  F1 the census finding', '', 'OPEN ::', '  none', ''].join('\n');
-const MODULES = ['unit', 'lane', 'rhythm'];
+const MODULES = ['unit', 'lane', 'rhythm', 'store'];
 const REQUIRED_FLOOR = 43;
 
 interface Row {
@@ -69,7 +69,7 @@ function keyOf(tables: Tables, argv: readonly string[]): string {
   return [module, verb, ...(sub ? [sub] : [])].join(' ');
 }
 
-describe('the verb output census: no unit, lane, or rhythm verb prints the record storage', () => {
+describe('the verb output census: no unit, lane, rhythm, or store verb prints the record storage', () => {
   let rows: Row[];
   let refusals: Row[];
   let sb: string;
@@ -117,6 +117,7 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
         R('a write to a missing lane', ['lane', 'record', 'ru', 'nolane', '--what=the missing lane write']),
         R('a missing rhythm', ['rhythm', 'show', 'nosuch']),
         R('a missing unit for the rhythm', ['rhythm', 'current', 'nounit']),
+        R('a missing container', ['store', 'get', 'containers/nope']),
       ]);
       const shim = sleepShim();
       for (const [why, lock] of [['a held unit lock', unitLock('ru')], ['a held namespace lock', namespaceLock('unit')]] as const) {
@@ -169,6 +170,8 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
       await take(['lane', 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=backlog#t1']);
       await take(['lane', 'report', 'cu', 'cl'], REPORT);
       await u('refs', 'cu', 'lg');
+      await take(['store', 'put', 'containers/cn', '--description=the census container', '--minting=given', '--add-fields=what: required line']);
+      await together([['store', 'get', 'containers/cn'], ['store', 'get', 'containers/cn', '--json'], ['store', 'list', 'containers'], ['store', 'list', 'containers', '--json']]);
 
       const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
       const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
@@ -228,7 +231,7 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
     await Promise.all([census(), refuse()]);
   }, 300_000);
 
-  it('[the-record-r14] every verb and sub-verb the unit, lane, and rhythm help tables list has a row keyed from the argv it ran, above the table floor, so a new verb without one reads red', () => {
+  it('[the-record-r14] every verb and sub-verb the unit, lane, rhythm, and store help tables list has a row keyed from the argv it ran, above the table floor, so a new verb without one reads red', () => {
     const want = required(tables);
     expect(want.length).toBeGreaterThanOrEqual(REQUIRED_FLOOR);
     for (const module of MODULES) expect(want.some((k) => k.startsWith(`${module} `))).toBe(true);

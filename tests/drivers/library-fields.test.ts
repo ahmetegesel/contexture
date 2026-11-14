@@ -61,6 +61,7 @@ describe.concurrent('the field validator: fields_decl_check', () => {
     ['a name of digits, underscore, and dash', 'x-y_z1: required line\n'],
     ['one-of values holding blanks', 'size: optional line one-of very small|large default very small\n'],
     ['a default holding blanks and the word default', 'title: optional line default a default title\n'],
+    ['one-of values holding the words line and block', 'pos: optional line one-of front line|back block\n'],
   ])('[the-engine-r-mrwga] accepts %s, silent', async (_name, decl) => {
     const r = await call(workspace({ decl }), 'fields_decl_check', 'decl');
     expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
@@ -91,6 +92,11 @@ describe.concurrent('the field validator: fields_decl_check', () => {
     ['an unknown clause', 'x: optional line wide', `field 'x': unknown clause 'wide' (${GRAMMAR})`],
     ['an empty line', 'x: optional line\n\ny: optional line', 'declaration line 2 is empty'],
     ['a carriage return', 'x: optional line\r', 'declaration line 1 holds a carriage return'],
+    ['a trailing blank', 'x: optional line one-of A|B ', "field 'x': the line ends with a blank"],
+    ['a doubled blank between clauses', 'x: optional  line', "field 'x': the line holds a doubled blank"],
+    ['a doubled blank inside a one-of value', 'x: optional line one-of very  small|large', "field 'x': the line holds a doubled blank"],
+    ['a list clause after one-of', 'x: optional line one-of A|B list', "field 'x': a clause after one-of ('list'): only a default may follow the one-of set"],
+    ['a second one-of clause', 'x: optional line one-of A one-of B', "field 'x': a clause after one-of ('one-of'): only a default may follow the one-of set"],
   ])('[the-engine-r-mrwga] refuses %s rc 1 naming the field and the clause', async (_name, decl, message) => {
     const r = await call(workspace({ decl: `${decl}\n` }), 'fields_decl_check', 'decl');
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `fields.decl_check: error: ${message} (${INV})\n`]);

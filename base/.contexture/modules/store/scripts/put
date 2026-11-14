@@ -1,0 +1,8 @@
+#!/bin/sh
+# summary: declare a container, or create one record under a given or a generated id
+# usage: ctx store put <container>/<id> | <container> [--<field>=<value>]... [--add-<field>=<item>]... [--unset=<field>]... [--stdin=<field>]
+# help: put containers/<name> declares a container: --description=<one line> and --minting=given|generated are required, each --add-fields=<field line> adds one field line, <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]
+# help: prints the id it wrote; a refusal writes nothing: a malformed field line or a reserved field name rc 1 (ERR_INVALID_ARGUMENT), a declared name rc 1 (ERR_ENTITY_EXISTS), a field the declaration lacks or a missing required field rc 1 (ERR_SCHEMA_VIOLATION)
+# help: example: ctx store put containers/ideas --description="ideas to pick up" --minting=given --add-fields="what: required block"
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/store" put "$@"

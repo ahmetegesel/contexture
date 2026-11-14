@@ -29,16 +29,17 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
     expect(runnable(join(sb, '.contexture/storage/drivers/posix/driver'))).toBe(true);
   });
 
-  it('[the-engine-r1, modules-r14] help lists lane, rhythm, and unit from the workspace modules root, and never the storage core', async () => {
+  it('[the-engine-r1, modules-r14] help lists lane, rhythm, store, and unit from the workspace modules root, and never the storage core', async () => {
     const sb = bare();
     const help = await ctx(sb, 'help');
     expect(help.code).toBe(0);
-    expect(modules(help.stdout)).toEqual(['lane', 'rhythm', 'unit']);
+    expect(modules(help.stdout)).toEqual(['lane', 'rhythm', 'store', 'unit']);
     const all = await ctx(sb, 'help', '--all');
     expect(all.code).toBe(0);
     expect(all.stdout).toContain('module unit:');
     expect(all.stdout).toContain('module lane:');
     expect(all.stdout).toContain('module rhythm:');
+    expect(all.stdout).toContain('module store:');
     expect(all.stdout).not.toContain('module storage:');
   });
 
@@ -54,7 +55,7 @@ describe.concurrent('the bare base: the no-plugin boot and help surface', () => 
     const r = await ctx(sb, 'help');
     expect(r.code).toBe(0);
     expect(r.stderr).toBe('');
-    expect(modules(r.stdout)).toEqual(['lane', 'rhythm', 'unit']);
+    expect(modules(r.stdout)).toEqual(['lane', 'rhythm', 'store', 'unit']);
   });
 
   it('[the-engine-r5] ctx run answers its help, and docs and storage-fts5 are unknown without their plugins', async () => {

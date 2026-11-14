@@ -162,7 +162,7 @@ describe('the library\'s caller lookup', { concurrent: true }, () => {
     const sb = fresh(snap);
     const r = await shFunction(sb, join(sb, LIBRARY), 'store_roots', [], { env: { CTX_STORE_ROOT: sb } });
     expect([r.code, r.stderr]).toEqual([0, '']);
-    expect(r.stdout).toBe(`libprobe\tlibprobe-root\nother\tother-root\nunit\t${RECORD_ROOT}\nunit\t${FALLBACK_ROOT}\n`);
+    expect(r.stdout).toBe(`libprobe\tlibprobe-root\nother\tother-root\nstore\t.contexture/store\nunit\t${RECORD_ROOT}\nunit\t${FALLBACK_ROOT}\n`);
   });
 
   it('[the-engine-r26] store_roots finds the data reader beside the resolver the library calls, reading the workspace root\'s declarations', async () => {

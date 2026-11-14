@@ -70,7 +70,7 @@ function reserved_list(    i, s) {
   return s
 }
 
-function decl_parse(    i, l, c, name, rest, w, s, p, nv, k, vals) {
+function decl_parse(    i, l, c, name, rest, w, s, p, nv, k, vals, nw, words, wi) {
   nf = 0
   for (i = 1; i <= nd; i++) {
     l = D[i]
@@ -83,6 +83,8 @@ function decl_parse(    i, l, c, name, rest, w, s, p, nv, k, vals) {
     if (name !~ /^[a-z][a-z0-9_-]*$/) fail(INV, "field '" name "': a field name is lowercase letters, digits, underscore, and dash, starting with a letter")
     if (reserved(name)) fail(INV, "field '" name "': the name is reserved (" reserved_list() ")")
     if (name in DECL) fail(INV, "field '" name "': declared twice")
+    if (substr(l, length(l)) == " ") fail(INV, "field '" name "': the line ends with a blank")
+    if (index(l, "  ")) fail(INV, "field '" name "': the line holds a doubled blank")
     rest = substr(l, c + 1)
     if (substr(rest, 1, 1) != " ") fail(INV, "field '" name "': " GRAMMAR)
     rest = ltrim(rest)
@@ -115,6 +117,8 @@ function decl_parse(    i, l, c, name, rest, w, s, p, nv, k, vals) {
       nv = split(SET[name], vals, /\|/)
       for (k = 1; k <= nv; k++) {
         if (vals[k] == "") fail(INV, "field '" name "': the one-of set '" SET[name] "' holds an empty value")
+        nw = split(vals[k], words, / /)
+        for (wi = 2; wi <= nw; wi++) if (words[wi] == "list" || words[wi] == "one-of") fail(INV, "field '" name "': a clause after one-of ('" words[wi] "'): only a default may follow the one-of set")
         ONEOF[name, vals[k]] = 1
       }
       HASSET[name] = 1

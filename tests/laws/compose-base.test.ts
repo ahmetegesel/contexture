@@ -29,11 +29,11 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(versionOf(readFileSync(GOLDEN, 'utf8'))).toBe(versionOf(readFileSync(CORE_SRC, 'utf8')));
   });
 
-  it('[modules-r19] composes the unit, lane, and rhythm preambles alone, with no docs law', () => {
+  it('[modules-r19] composes the unit, lane, rhythm, and store preambles alone, with no docs law', () => {
     const g = layer(base);
     expect(g).not.toContain('docs-first');
     expect(count(g, /^@module docs$/)).toBe(0);
-    expect(count(g, /^@module /)).toBe(3);
+    expect(count(g, /^@module /)).toBe(4);
     expect(count(g, /^@module unit$/)).toBe(1);
     expect(count(g, /^ {2}help: ctx unit help$/)).toBe(1);
     expect(count(g, /^@module lane$/)).toBe(1);
@@ -41,12 +41,16 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(count(g, /^@module rhythm$/)).toBe(1);
     expect(moduleBlock(g, 'rhythm')).toContain('The rhythm module is the process surface');
     expect(moduleBlock(g, 'rhythm')).toContain('help: ctx rhythm help');
+    expect(count(g, /^@module store$/)).toBe(1);
+    expect(moduleBlock(g, 'store')).toContain('The store module is the free container module');
+    expect(count(g, /^ {2}store-data: a store container is declared/)).toBe(1);
   });
 
-  it('[modules-r19] seats the module preambles in the workspace order: lane, rhythm, unit', () => {
+  it('[modules-r19] seats the module preambles in the workspace order: lane, rhythm, store, unit', () => {
     const g = layer(base);
     expect(lineOf(g, /^@module lane$/)).toBeLessThan(lineOf(g, /^@module rhythm$/));
-    expect(lineOf(g, /^@module rhythm$/)).toBeLessThan(lineOf(g, /^@module unit$/));
+    expect(lineOf(g, /^@module rhythm$/)).toBeLessThan(lineOf(g, /^@module store$/));
+    expect(lineOf(g, /^@module store$/)).toBeLessThan(lineOf(g, /^@module unit$/));
   });
 
   it('[modules-r12, modules-r19] composes the unit record clause and the lane subagent and boundary-warning clauses, and no git section', () => {

@@ -37,7 +37,7 @@
 # matching the manifest; a path that escapes or carries blanks; a payload file
 # outside the extension root; a core path; an existing file no package recorded;
 # a path another package recorded; a module name against a builtin (unit,
-# run, lane, rhythm), a workspace module, or a reserved name; a storage root another
+# run, lane, rhythm, store), a workspace module, or a reserved name; a storage root another
 # installed module resolves to, or two modules of the package share; a driver name against the
 # core posix driver or a driver that already resolves ahead of the extension
 # root; a malformed module manifest; a driver part

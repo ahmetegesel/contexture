@@ -1,0 +1,8 @@
+# summary: the store: containers declared as records, their schema-checked records, get, list, put, set, delete, check, and search
+# version: 1.0.0
+# description:
+# The store module is the free container module: every workspace has it. A container
+# is declared as one record of the builtin containers container (a one-line
+# description, a minting, and field lines), and its records are written through the
+# store's own verbs, each write checked against the declaration, so a workspace keeps
+# generic data with no module of its own.
