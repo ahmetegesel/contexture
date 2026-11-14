@@ -21,6 +21,7 @@ interface View {
 
 const VIEWS: View[] = [
   { name: 'board', view: 'board', input: async () => golden('session.board') },
+  { name: 'board_compressed', view: 'board', input: async () => golden('session.board'), env: { RV_COMPRESS: '1' } },
   { name: 'task_show', view: 'task_show', input: async () => golden('task.get.canon-task') },
   { name: 'task_list', view: 'task_list', input: async () => golden('task.list.all') },
   { name: 'entry_show', view: 'entry_show', input: async () => golden('entry.get.2026-09-27-verb-one') },

@@ -418,9 +418,17 @@ vb_lane() {
 # lane#, task#, finding#, entry#, a lanes/ path, a bare whole path, IDEAS.md) refuses naming
 # its full form, the form ctx unit migrate writes for the unit, and every other value passes
 # the storage library's one full address shape check (lib_ref_ok). Whether the owner is
-# installed and the target exists is vb_refs_exist's, before any lock.
+# installed and the target exists is vb_refs_exist's, before any lock. A value copied with its
+# quotes from a view's REF line is named as given, its suggestion computed without them.
 vb_ref_ok() {
-  vr_full=$(vb_ref_full "$2" "${3:-<unit>}")
+  vr_v=$2
+  case "$vr_v" in '"'?*'"') vr_v=${vr_v#\"}; vr_v=${vr_v%\"} ;; esac
+  case "$vr_v" in
+    '~/'*)
+      printf "%s: error: malformed ref '%s': a compressed view form; a reference is a full address <owner>#<path>; write unit#%s/%s (ERR_INVALID_ARGUMENT)\n" "$1" "$(store_lib_escape "$2")" "${3:-<unit>}" "${vr_v#\~/}" >&2
+      exit 1 ;;
+  esac
+  vr_full=$(vb_ref_full "$vr_v" "${3:-<unit>}")
   if [ -n "$vr_full" ]; then
     printf "%s: error: malformed ref '%s': a reference is a full address <owner>#<path>; write %s (ERR_INVALID_ARGUMENT)\n" "$1" "$(store_lib_escape "$2")" "$vr_full" >&2
     exit 1

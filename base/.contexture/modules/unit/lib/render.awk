@@ -67,8 +67,23 @@ function unesc(v,   n, A, i, o) {
 function sv(p) { return nul(p) ? "" : unesc(V[p]) }
 
 # ------------------------------------------------------------------------------
+# zp(text): the load and board views' compression (RV_COMPRESS=1 from their callers): every
+# unit#<unit>/ of the viewed unit printed as ~/, the legend naming it once; stored data and
+# the item reads (show, get) stay full
+function zp(text,   o, k, n) {
+  if (ZP == "") return text
+  o = ""
+  n = length(ZP)
+  while ((k = index(text, ZP)) > 0) {
+    o = o substr(text, 1, k - 1) "~/"
+    text = substr(text, k + n)
+  }
+  return o text
+}
+
 # output: plain prints text as it is; tagged prints each line as "<section> TAB <line>"
 function put(text,   n, L, i) {
+  text = zp(text)
   if (!TAGGED) { printf "%s", text; return }
   if (text == "") return
   n = split(text, L, "\n")
@@ -296,6 +311,7 @@ function v_board(p,   u, L, T2, H, i, bp) {
   if (!bp) warn("WARNING: missing backlog: unit " u)
   if (bp) line(sprintf("board %s: %d live %s, %d open %s", u, L, (L == 1) ? "entry" : "entries", T2, (T2 == 1) ? "task" : "tasks"))
   else line(sprintf("board %s: %d live %s, no backlog", u, L, (L == 1) ? "entry" : "entries"))
+  if (ZP != "" && view == "board") { ZP0 = ZP; ZP = ""; line("legend: ~/ stands for " ZP0 " (ctx unit get prints the full address)"); ZP = ZP0 }
   if (L > 0) {
     line("")
     for (i = 1; i <= L; i++) putl(span(D(p) "live." i, "entry"))
@@ -796,6 +812,8 @@ BEGIN {
   TAGGED = 0
   SEC = ""
   view = ENVIRON["RV_VIEW"]
+  ZP = ""
+  if (ENVIRON["RV_COMPRESS"] == "1" && (view == "board" || view == "load") && sv("unit") != "") ZP = "unit#" sv("unit") "/"
   if (view == "board") v_board("")
   else if (view == "load") v_load()
   else if (view == "refload") v_refload()

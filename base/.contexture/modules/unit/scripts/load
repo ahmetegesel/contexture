@@ -4,6 +4,7 @@
 # usage: ctx unit load refs <ref_1> ... <ref_N> [<page>]
 # help: sections in BIOS order: state, backlog, knowledge, the live journal (the board view), declared ref_sessions read-only, then the write-scope trailer; a page ends before the block that would pass the line target (about 500) or the byte budget (about 40KB), never mid-body; a single over-budget block renders whole on its own page; the state page carries no stored next action: the move is the backlog page's first IN_PROGRESS task, else its first open task (the board's rule, every status but DONE; the same derivation as ctx unit list), so a TODO before an IN_PROGRESS is not the move and a unit with no open task has none; the backlog section renders DONE task blocks compactly (the @task line, STATUS, OBJECTIVE, DESCRIPTION; REFS, ACCEPTANCE CRITERIA, and IMPLEMENTATION DETAILS drop; the record is never edited); a unit the store lacks is fatal rc=1 with zero stdout; missing backlog, knowledge, or journal warns on stderr (the artifact and its unit named, never a storage location) and prints a placeholder; the refs form streams the named units alone, read-only, and fires no load hooks
 # help: the unit module answers the unit whole (session.load, or session.refload for the refs form) and base renders and pages it
+# help: the view compresses: every unit#<unit>/ of the loaded unit prints as ~/, named once per page by the legend line that ends the map block, legend: ~/ stands for unit#<unit>/ (ctx unit get prints the full address); the ref units keep their addresses full; the item reads (task show, entry show, finding show, get, lane show) and stored data stay full, and a ~/ token copied into a write refuses naming its full address; a literal ~/ in stored prose (a home path) prints the same, never escaped
 # help: exit codes: 0 page loaded; 1 missing unit or invalid argument
 # help: example: ctx unit load my-unit
 # help: example: ctx unit load my-unit 2
@@ -89,7 +90,7 @@ else
   fi
   vb_ok
   awk -f "$VB_JSON" < "$VB_DIR/ans" > "$VB_DIR/flat" || exit 2
-  RV_VIEW=load awk -f "$VB_RENDER" < "$VB_DIR/flat" > "$VB_DIR/lines" || exit 1
+  RV_VIEW=load RV_COMPRESS=1 awk -f "$VB_RENDER" < "$VB_DIR/flat" > "$VB_DIR/lines" || exit 1
   refstr=""
   # the old forms reminder: the unit's REF and REFS values a migration would still rewrite
   LC_ALL=C awk '/^(backlog\.tasks|knowledge\.findings|board\.live)\.[0-9]+\.refs\.[0-9]+=/ { sub(/^[^=]*=/, ""); print }' "$VB_DIR/flat" > "$VB_DIR/refvals" 2>/dev/null
@@ -244,6 +245,7 @@ BEGIN {
   printf "unit-load %s: %d lines, %d pages\n", slug, total, npages
   print_map()
   printf "WRITE SCOPE: unit %s + repos: [%s]; ref units READ-ONLY\n", slug, repos
+  if (form == "main") printf "legend: ~/ stands for unit#%s/ (ctx unit get prints the full address)\n", slug
   print ""
   page_header(slug, page)
   page_body(page)
