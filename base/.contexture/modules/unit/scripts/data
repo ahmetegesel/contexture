@@ -337,9 +337,10 @@ u_fetch_parts() {
 # u_fetch_unit <unit> <parts> [required]: the unit's artifacts into the manifest; state
 # always, the other parts on request ("all" takes every artifact, "lane:<l>" the lane,
 # "__lanes__" discovers the lanes alone). A parts set with no lane and no "all" fetches the
-# exact keys, no list at all; required refuses a unit the store does not hold with the
-# same line the held probe answered, after the listed keys are read. A refused batch
-# replays the one key reads in their own order, the state first, so its refusal is theirs.
+# exact keys, no list at all; required (1) refuses a unit the store does not hold with the
+# same line the held probe answered, after the listed keys are read, and 2 refuses it before
+# any read, where the held probe stood. A refused batch replays the one key reads in their
+# own order, the state first, so its refusal is theirs.
 u_fetch_unit() {
   uf_u=$1
   uf_parts=" $2 "
@@ -379,6 +380,9 @@ u_fetch_unit() {
             ;;
         esac
       done < "$U_SCR/keys"
+      if [ "$uf_state" -eq 0 ] && [ "$uf_req" -eq 2 ]; then
+        u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
+      fi
       u_flush
       if [ "$uf_state" -eq 0 ] && [ "$uf_req" -eq 1 ]; then
         u_refuse 1 ERR_ENTITY_NOT_FOUND "unit '$uf_u' not found"
@@ -448,15 +452,52 @@ u_fetch_all() {
   fi
 }
 
-# u_active: the active listing's one fetch: every unit's state, then each ACTIVE unit's
-# backlog, never a journal; the state's first column-0 status line decides, the same typed
-# key the record parser reads, so no per-unit verb call enters the view; the derived move
-# the functions read from it follows the board's open-task rule (any status but DONE)
+# u_active [<unit>]: the active listing's one fetch: every unit's state, then each ACTIVE
+# unit's backlog, never a journal; the state's first column-0 status line decides, the same
+# typed key the record parser reads, so no per-unit verb call enters the view; the derived
+# move the functions read from it follows the board's open-task rule (any status but DONE).
+# A named unit narrows the listing to that unit alone, its state and backlog in one fetch (a
+# non-ACTIVE unit's backlog never enters its fields); a unit the store does not hold lists
+# no unit. A refused fetch replays the full listing's own reads, the state, then the backlog
+# of an ACTIVE unit alone, so its refusal is theirs
 u_active() {
   FN=session.active
   U_UNIT=""
   u_manifest_reset
+  if [ -n "${1:-}" ]; then
+    u_queue "$1|state" "$1/state"
+    u_queue "$1|backlog" "$1/backlog"
+    if u_flush_batch; then
+      case "$U_MISS" in
+        *" $1|state "*) ;;
+        *) u_put "$U_SCR/man" 'U\t%s\n' "$1" ;;
+      esac
+    else
+      u_add_key "$1|state" "$1/state"
+      if [ "$U_ADD_RC" -eq 0 ]; then
+        u_put "$U_SCR/man" 'U\t%s\n' "$1"
+        u_active_units
+        [ ! -s "$U_SCR/active" ] || u_add_key "$1|backlog" "$1/backlog"
+      fi
+    fi
+    u_awk
+    cat "$U_SCR/answer"
+    return 0
+  fi
   u_fetch_all 0
+  u_active_units
+  while IFS= read -r ua_u; do
+    [ -n "$ua_u" ] || continue
+    u_queue "$ua_u|backlog" "$ua_u/backlog"
+  done < "$U_SCR/active"
+  u_flush
+  u_awk
+  cat "$U_SCR/answer"
+}
+
+# u_active_units: the ACTIVE units among the fetched states into the active file, the
+# state's first status line deciding
+u_active_units() {
   u_new "$U_SCR/active"
   LC_ALL=C awk -F '	' '
     $1 == "F" {
@@ -475,13 +516,6 @@ u_active() {
       close($3)
       if (st == "ACTIVE") print u
     }' "$U_SCR/man" > "$U_SCR/active" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
-  while IFS= read -r ua_u; do
-    [ -n "$ua_u" ] || continue
-    u_queue "$ua_u|backlog" "$ua_u/backlog"
-  done < "$U_SCR/active"
-  u_flush
-  u_awk
-  cat "$U_SCR/answer"
 }
 
 # u_payload: stdin into the scratch. The target is made first, so a scratch that cannot hold
@@ -828,11 +862,19 @@ u_search() {
     ""|[!a-z]*|*[!a-z0-9_-]*) u_refuse 1 ERR_INVALID_ARGUMENT "malformed mode '$sq_mode'" ;;
   esac
   u_scratch
-  u_want_held "$U_UNIT"
-  u_payload
+  if [ "$sq_mode" = exact ]; then
+    # exact is answerable everywhere, and the listed artifacts prove the unit held, so the
+    # exact read asks neither the held probe nor the mode registry
+    u_want_unit "$U_UNIT"
+    u_payload
+  else
+    u_want_held "$U_UNIT"
+    u_payload
+  fi
   # the modes this namespace can answer: the driver's registry filtered by the unit's
   # declared search schema, read through the storage core's library
-  u_sq_modes=$(store_modes "$U_NS" 2>/dev/null | cut -f 1 | LC_ALL=C awk '{ o = o (NR > 1 ? ", " : "") $0 } END { print o }')
+  u_sq_modes=""
+  [ "$sq_mode" = exact ] || u_sq_modes=$(store_modes "$U_NS" 2>/dev/null | cut -f 1 | LC_ALL=C awk '{ o = o (NR > 1 ? ", " : "") $0 } END { print o }')
   if [ -n "$u_sq_modes" ]; then
     u_sq_ok=0
     for u_sq_m in $(printf '%s' "$u_sq_modes" | tr ',' ' '); do
@@ -845,7 +887,7 @@ u_search() {
   fi
   if [ "$sq_mode" = "exact" ]; then
     u_manifest_reset
-    u_fetch_unit "$U_UNIT" "all"
+    u_fetch_unit "$U_UNIT" "all" 2
     u_sizes
     u_new "$U_SCR/answer"
     PX_MAN="$U_SCR/man" PX_SIZES="$U_SCR/sizes" PX_PAY="$U_PAY" PX_ERR="$U_SCR/err" \
@@ -977,8 +1019,9 @@ case "$cmd" in
     cat "$U_SCR/answer"
     ;;
   session.active)
-    u_extra 0 "$@"
-    u_active
+    u_extra 1 "$@"
+    [ $# -eq 0 ] || u_want_unit "$1"
+    u_active "$@"
     ;;
   session.load)
     u_extra 1 "$@"

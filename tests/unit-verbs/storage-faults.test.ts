@@ -172,6 +172,16 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     refused(await lane(sb, 'show', 'w-unit', 'w-lane', 'recipe'), 'lane.get', 2, 'ERR_STORAGE_READ', "cannot read key 'w-unit/lanes/w-lane/recipe' in namespace 'unit'");
   });
 
+  it.skipIf(ROOT_USER)('[the-record-r13, the-engine-r21] ctx unit search --unit keeps the refusals of the reads it narrowed: a CLOSED unit\'s unreadable backlog refuses with the search.query line, and a unit whose state is gone refuses unit not found before an unreadable part', async ({ onTestFinished }) => {
+    const sb = fresh(sb0);
+    const dir = join(sb, RECORD_ROOT, 'w-unit');
+    await must(unit(sb, 'close', 'w-unit'));
+    chmodPlant(join(dir, 'backlog.md'), 0o000, 0o644, onTestFinished);
+    refused(await unit(sb, 'search', 'Task', '--unit=w-unit'), 'search.query', 2, 'ERR_STORAGE_READ', "cannot read key 'w-unit/backlog' in namespace 'unit'");
+    rmSync(join(dir, 'state.md'));
+    refused(await unit(sb, 'search', 'Task', '--unit=w-unit'), 'search.query', 1, 'ERR_ENTITY_NOT_FOUND', "unit 'w-unit' not found");
+  });
+
   it.skipIf(ROOT_USER)('[the-record-r9, the-engine-r18, the-engine-r21] a write whose batch payload loses a line after its first action refuses rc 2 and lands none of it', async () => {
     const sb = fresh(sb0);
     const before = await unitChecksum(sb, 'w-unit', ['w-lane']);

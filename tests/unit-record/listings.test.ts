@@ -65,6 +65,24 @@ describe.concurrent('the listings and references through the unit data script', 
     for (const absent of ['"open_threads"', '"last_event"', '"next_action"']) expect(r.stdout).not.toContain(absent);
   });
 
+  it('UD-6 [the-record-r1, the-record-r13]: session.active <unit> narrows the listing to that unit, its entry byte identical to the full listing\'s, a unit the store lacks listing none', async () => {
+    const sb = await at('empty');
+    answer(await mk(sb, 'ud6-open'), 'session.create');
+    await ok(sb, 'task.add', ['ud6-open', 't1'], payload().kv('objective', 'the open task'));
+    answer(await mk(sb, 'ud6-shut'), 'session.create');
+    await ok(sb, 'task.add', ['ud6-shut', 't1'], payload().kv('objective', 'a task of a closed unit'));
+    await ok(sb, 'session.close', ['ud6-shut']);
+    const full = answer(await data(sb, 'session.active'), 'session.active');
+    for (const u of ['ud6-open', 'ud6-shut']) {
+      const one = answer(await data(sb, 'session.active', [u]), 'session.active');
+      expect(one.units).toEqual([byUnit(full.units, u)]);
+      expect(JSON.stringify(one.units[0])).toBe(JSON.stringify(byUnit(full.units, u)));
+    }
+    expect(answer(await data(sb, 'session.active', ['ud6-none']), 'session.active').units).toEqual([]);
+    refused(await data(sb, 'session.active', ['bad unit']), 'session.active', 1, 'ERR_INVALID_ARGUMENT', "malformed unit 'bad unit'");
+    refused(await data(sb, 'session.active', ['ud6-open', 'extra']), 'session.active', 1, 'ERR_INVALID_ARGUMENT', "unexpected argument 'extra'");
+  });
+
   it('TC65 [the-record-r1]: session.refs checks every named unit; load and refload answer the references', async () => {
     const sb = await at('T37');
     answer(await mk(sb, 'tc65-u'), 'session.create');

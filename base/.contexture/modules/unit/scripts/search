@@ -97,8 +97,9 @@ if [ "$mode" != exact ] && [ "${CTX_SEARCH_FANOUT:-}" = 1 ]; then
   awk -F '\t' -v m="$mode" '$1 == m { f = 1 } END { exit !f }' "$VB_DIR/modes" || mode=exact
 fi
 
-# the units in the board's order, each with its status: the active listing's one call
-vb_call session.active
+# the units in the board's order, each with its status: the active listing's one call,
+# narrowed to the one unit --unit names, so a one unit search reads no other unit's state
+if [ -n "$only" ]; then vb_call session.active "$only"; else vb_call session.active; fi
 vb_ok
 awk -f "$VB_JSON" < "$VB_DIR/ans" | awk '
   /^units\.[0-9]+\.unit=/ { i = $0; sub(/^units\./, "", i); sub(/\..*$/, "", i); v = $0; sub(/^[^=]*=/, "", v); U[i + 0] = v; if (i + 0 > n) n = i + 0 }

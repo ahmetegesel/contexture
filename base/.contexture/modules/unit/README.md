@@ -208,10 +208,14 @@ lane entry keeps its `<lane>/` prefix; a result outside the record's artifact sh
 sections the record searches is dropped. A mode the unit's records cannot answer (the
 configured driver's registry through the library's `store_modes`, a ranked mode only where
 the unit's data file declares its search schema) refuses before any store search, rc 1
-`ERR_CAPABILITY_UNSUPPORTED` naming the answerable modes.
+`ERR_CAPABILITY_UNSUPPORTED` naming the answerable modes. The exact mode asks neither the
+held probe nor the registry: exact answers everywhere, and the unit's listed artifacts
+prove it held, a unit without its state refusing with the held probe's own line before any
+artifact is read.
 
 The search verb (`scripts/search`) lists the units through `session.active` (the default
-scope its ACTIVE units, `--all` every unit, `--unit` one), calls `search.query` once per
+scope its ACTIVE units, `--all` every unit, `--unit` one, the listing narrowed to that one
+unit by `session.active <unit>`, so a one unit search reads no other unit's state), calls `search.query` once per
 unit uncapped, and maps the merged rows onto the shared row shape with `lib/search-rows.awk`
 (the container from the data declaration's document rules, read through the storage core's
 data reader; the address, the read, and the closed label), applying the limit once.

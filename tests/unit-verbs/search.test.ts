@@ -120,6 +120,7 @@ describe.concurrent('ctx unit search on posix', () => {
     ['an empty query', [''], 'search.query: error: empty query (ERR_INVALID_ARGUMENT)\n'],
     ['a ranked mode on posix', ['task', '--mode=hybrid'], "search.query: error: mode 'hybrid' is not supported; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n"],
     ['a unit no store holds', ['task', '--unit=no-unit'], "search.query: error: unit 'no-unit' not found (ERR_ENTITY_NOT_FOUND)\n"],
+    ['a case twin of a held unit, which no store holds either', ['task', '--unit=X-Unit'], "search.query: error: unit 'X-Unit' not found (ERR_ENTITY_NOT_FOUND)\n"],
   ])('X-m [the-record-r13]: %s refuses rc 1 with one stderr line, nothing on stdout', async (_, args, line) => {
     const r = await search(fresh(sb0), ...args);
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', line]);
