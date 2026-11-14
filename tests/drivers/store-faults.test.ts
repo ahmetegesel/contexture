@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { setTimeout as wait } from 'node:timers/promises';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -16,6 +16,11 @@ import { answer, refused, refusedLike } from '../support/wire';
 
 function walk(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? [join(dir, e.name), ...walk(join(dir, e.name))] : [join(dir, e.name)]));
+}
+
+async function until(check: () => boolean, ms = 60_000): Promise<boolean> {
+  for (const t0 = Date.now(); Date.now() - t0 < ms; await wait(20)) if (check()) return true;
+  return check();
 }
 
 const stages = (sb: string) => walk(sb).filter((p) => /\/\.stage/.test(p));
@@ -92,14 +97,16 @@ describe.skipIf(ROOT_USER)('posix write faults', { concurrent: true }, () => {
     refusedLike(await store(sb, 'posix', mktempPlant('case "$p" in */store-keys.*) chmod 400 "$p" ;; esac')).list('docs'), 'store.list', 2, 'ERR_STORAGE_WRITE');
   });
 
-  it('[the-engine-r18] a TERM between the batch renames leaves both keys whole, no stage, and the lock released', async () => {
+  it('[the-engine-r18] a TERM between the batch renames leaves both keys whole, no stage, and the lock released', async ({ onTestFinished }) => {
     const sb = await seeded(empty, 'posix', OLD);
-    const mark = join(sandbox('wa-mark'), 'mark');
-    const mv = pathPlant('mv', `for a in "$@"; do last=$a; done\ncase "$last" in */y.md) : > "${mark}"; sleep 2 ;; esac\nexec /bin/mv "$@"`);
+    const dir = sandbox('wa-mark');
+    const [mark, go] = [join(dir, 'mark'), join(dir, 'go')];
+    onTestFinished(() => writeFileSync(go, ''));
+    const mv = pathPlant('mv', `for a in "$@"; do last=$a; done\ncase "$last" in */y.md) : > "${mark}"; while [ ! -e "${go}" ]; do sleep 0.1 2>/dev/null || sleep 1; done ;; esac\nexec /bin/mv "$@"`);
     const { child, result } = launch(driverPath(sb, 'posix'), ['store.batch', 'docs'], { cwd: sb, input: batchPayload(NEW), env: mv });
-    for (let i = 0; i < 100 && !existsSync(mark); i++) await wait(50);
-    expect(existsSync(mark)).toBe(true);
+    expect(await until(() => existsSync(mark))).toBe(true);
     child.kill('SIGTERM');
+    writeFileSync(go, '');
     expect((await result).code).not.toBe(0);
     await wait(2500);
     const after = await bytesOf(sb, 'posix', Object.keys(OLD));
@@ -152,8 +159,7 @@ for (const driver of DRIVERS) {
       plantScript(sb, 'store-data', `: > "${mark}"\nexec sleep 30`);
       const before = scratch(sb);
       const { result, signal } = launch(driverPath(sb, driver), [fn, 'docs', 'workspace/x'], { cwd: sb, input: fn === 'store.put' ? 'never lands\n' : '', group: true });
-      for (let i = 0; i < 200 && !existsSync(mark); i++) await wait(50);
-      expect(existsSync(mark)).toBe(true);
+      expect(await until(() => existsSync(mark))).toBe(true);
       expect(scratch(sb).filter((n) => !before.includes(n))).toEqual([expect.stringMatching(/^store-data\./)]);
       signal(sig);
       expect((await result).code).not.toBe(0);
@@ -191,8 +197,7 @@ for (const driver of DRIVERS) {
         const mark = join(sandbox('read-mark'), 'mark');
         const before = scratch(sb);
         const { result, signal } = launch(driverPath(sb, driver), [fn, 'docs', ...args], { cwd: sb, input: fn === 'store.search' ? 'query=a\n' : '', group: true, env: readBlock(cmd, temps, mark) });
-        for (let i = 0; i < 200 && !existsSync(mark); i++) await wait(50);
-        expect(existsSync(mark)).toBe(true);
+        expect(await until(() => existsSync(mark))).toBe(true);
         expect(scratch(sb).filter((n) => !before.includes(n)).map((n) => n.replace(/\.[^.]+$/, '')).sort()).toEqual([...temps].sort());
         signal(sig);
         expect((await result).code).not.toBe(0);
