@@ -241,13 +241,13 @@ The pattern for a set of similar verbs: one private implementation file, one thi
 
 ```sh
 #!/bin/sh
-# summary: list ideas by status (default: open)
-# usage: ctx ideas list [open|picked|dropped|all]
+# summary: list a container's records, filtered by exact field values, or the declared containers
+# usage: ctx store list <container> [--<field>=<value>]... [--json] | ctx store list containers [--dropped] [--json]
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-exec "$dir/ideas" list "$@"
+exec "$dir/store" list "$@"
 ```
 
-One home for the logic and its validation; a clean verb table. The ideas module is built this way (see Worked examples); the unit module shares its logic through a sourced library instead, since each of its verbs is one storage call and one render.
+One home for the logic and its validation; a clean verb table. The store module is built this way (see Worked examples); the unit module shares its logic through a sourced library instead, since each of its verbs is one storage call and one render.
 
 ## Filters
 
@@ -378,10 +378,6 @@ The record's core feature module, `.contexture/modules/unit/`. Its `data` file d
 ### unit: thin verbs over a shared library and a storage driver
 
 The builtin record engine, `.contexture/modules/unit/`. Its `module` carries one summary line; its twenty-one extension-less verbs are sh scripts that source `lib/verb.sh`, check the input shape, make one call to the configured storage driver through the storage core's resolver (the unit data script is private and carries no summary), and render the answer through the storage core's flattener (`.contexture/storage/scripts/json.awk`) and `lib/render.awk`; no verb is an awk script, and the rhythms are the rhythm module's (`ctx rhythm list`, `show`, `current`). `fold` is the one composite maintenance verb: it reads the live board, records the fold start and the finish receipt as journal entries, carries the live open threads (REF'd, never closed), and checks the lanes' ordinary consolidated entries, which the lanes write with the record verb; the plan divides the live scope at the mechanical seams and coalesces the series, splitting an over-12 chunk only as the last resort, the fetch hands one chunk at a time, an optional `--merge` adds only the next chunk for a recorded same-topic merge, and the check refuses a whole-anchor batch. `refresh` is the one composite verb: it runs the board and the audit and then fires the refresh point. The posix driver in the storage core (`base/.contexture/storage/drivers/posix/`) is the only code that touches the record's files. Off-path detail (the verb to function map, the helpers, the hook call sites) is in `.contexture/modules/unit/README.md`.
-
-### ideas: a private engine with an environment override
-
-The workspace-owned ideas module, `.contexture/modules/ideas/`. The private `scripts/ideas` is a full POSIX sh program reading `IDEAS_FILE`, which defaults to `IDEAS.md` at the workspace root; the wrappers `list`, `show`, `add`, `pick`, and `drop` exec it with the verb name. It shows the pattern where the private implementation owns validation, file selection, and write safety while the engine contract stays untouched.
 
 ### run: a filter-only module
 
