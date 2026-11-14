@@ -74,12 +74,12 @@ describe.concurrent('the unit lifecycle verbs: bootstrap, stamp, close, reopen, 
     const stamped = await unit(sb, 'stamp', 'e3-unit');
     expect(stamped.code).toBe(0);
     expect(stamped.stdout + stamped.stderr).toBe('transition: A1 -> A2\n');
-    expect((await unit(sb, 'search', 'e3-unit', '@anchor A2', '--mode=exact', '--json')).stdout).toMatch(/"snippet":"@anchor A2 \d{4}-\d{2}-\d{2}"/);
-    expect((await unit(sb, 'search', 'e3-unit', 'attention', '--mode=exact', '--entity=session')).stdout).not.toContain('@anchor A2');
+    expect((await unit(sb, 'search', '@anchor A2', '--unit=e3-unit', '--json')).stdout).toMatch(/"snippet":"@anchor A2 \d{4}-\d{2}-\d{2}"/);
+    expect((await unit(sb, 'search', 'attention', '--unit=e3-unit', '--type=session')).stdout).not.toContain('@anchor A2');
     const journal = artifactPath(sb, 'e3-unit', 'journal');
     expect(readFileSync(journal, 'utf8').split('\n').filter((l) => /^@anchor A2 \d{4}-\d{2}-\d{2}$/.test(l))).toHaveLength(1);
     appendFileSync(journal, '@anchor A3 ("continues A2", attention: a legacy receipt kept)\n');
-    expect((await unit(sb, 'search', 'e3-unit', 'a legacy receipt kept', '--mode=exact', '--json')).stdout).toContain('"snippet":"@anchor A3 (\\"continues A2\\", attention: a legacy receipt kept)"');
+    expect((await unit(sb, 'search', 'a legacy receipt kept', '--unit=e3-unit', '--json')).stdout).toContain('"snippet":"@anchor A3 (\\"continues A2\\", attention: a legacy receipt kept)"');
   });
 
   it('X-o [the-record-r11]: a CLOSED unit refuses typed writes through the verbs and nothing lands', async () => {

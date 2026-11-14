@@ -51,9 +51,9 @@ const VIEWS: View[] = [
   {
     name: 'search',
     view: 'search',
-    env: { RV_UNIT: 'compliance-tasks', RV_QUERY: 'architectural' },
+    env: { RV_QUERY: 'architectural' },
     input: literal(
-      '{"unit":"compliance-tasks","query":"architectural","mode":"exact","total_matches":1,"results":[{"entity_type":"finding","entity_id":"FINDING_ALPHA","section":"knowledge","snippet":"Alpha architectural decision summary","score":0}]}',
+      '{"query":"architectural","mode":"exact","total":3,"rows":[{"module":"unit","container":"compliance-tasks/knowledge","type":"finding","id":"FINDING_ALPHA","address":"unit#compliance-tasks/finding/FINDING_ALPHA","snippet":"Alpha architectural decision summary","read":"ctx unit get compliance-tasks/finding/FINDING_ALPHA"},{"module":"unit","container":"compliance-old/journal","type":"session","id":"compliance-old","snippet":"@anchor A1 (architectural)","read":"ctx unit load compliance-old","label":"closed"}]}',
     ),
   },
 ];

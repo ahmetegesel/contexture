@@ -718,7 +718,8 @@ u_pay_field() {
     awk -f "$ULIB/canon.awk" -f "$ULIB/model.awk" -f "$ULIB/payfield.awk"
 }
 
-# u_search <unit> [flags]
+# u_search <unit> [flags]: one unit's search; --limit=0 answers every result (the search verb
+# asks each unit uncapped, merges, and applies its limit once)
 u_search() {
   FN=search.query
   U_UNIT=$1
@@ -735,7 +736,7 @@ u_search() {
     esac
   done
   case "$sq_limit" in
-    ""|*[!0-9]*|0) u_refuse 1 ERR_INVALID_ARGUMENT "--limit takes a positive number: '$sq_limit'" ;;
+    ""|*[!0-9]*) u_refuse 1 ERR_INVALID_ARGUMENT "--limit takes a number, 0 for every result: '$sq_limit'" ;;
   esac
   case "$sq_entity" in
     all|session|task|entry|finding|lane|lane_entry) ;;

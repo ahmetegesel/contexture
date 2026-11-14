@@ -63,22 +63,19 @@ describe.concurrent('the bare base: the record and lane smoke over the shipped u
     expect(claim.stdout).toMatch(/^@claim probe-claim/m);
   });
 
-  it('[the-record-r13] the reads: board, load to its complete page, audit, the exact search, the snippet quote pair, resolve, and the fold plan', async () => {
+  it('[the-record-r13] the reads: board, load to its complete page, audit, the exact search by default, the state never a row, get, resolve, and the fold plan', async () => {
     const sb = fresh(await snap('written'));
     expect((await unit(sb, 'board', U)).code).toBe(0);
     let pages = '';
     for (let p = 1; p <= 40 && !/load complete/i.test(pages); p++) pages += (await unit(sb, 'load', U, String(p))).stdout;
     expect(pages).toMatch(/load complete/i);
     expect((await unit(sb, 'audit', U)).code).toBe(0);
-    const modeless = await unit(sb, 'search', U, 'probe');
-    expect(modeless.code).toBe(1);
-    expect(modeless.stderr).toContain('exact');
-    const found = await unit(sb, 'search', U, 'base-only task', '--mode=exact');
+    const found = await unit(sb, 'search', 'base-only task', `--unit=${U}`);
     expect(found.code).toBe(0);
-    expect(found.stdout).toContain('base-t1');
-    const snippet = (await unit(sb, 'search', U, 'the base-only probe unit', '--mode=exact', '--json')).stdout;
-    expect(snippet).toContain('"snippet":"objective: \\"the base-only probe unit\\""');
-    expect(snippet).not.toContain('the base-only probe unit","score"');
+    expect(found.stdout).toContain(`task unit#${U}/task/base-t1`);
+    const rows = JSON.parse((await unit(sb, 'search', 'the base-only probe unit', `--unit=${U}`, '--json')).stdout).rows as { container: string }[];
+    expect(rows.every((r) => !r.container.endsWith('/state'))).toBe(true);
+    expect((await unit(sb, 'get', `${U}/task/base-t1`)).stdout).toMatch(/^@task base-t1/m);
     for (const [ref, head] of [['task#base-t1', /^@task base-t1/m], [`entry#${S1}`, /the first probe entry/], ['finding#BASE_NEW', /^@finding BASE_NEW/m]] as const) {
       const r = await unit(sb, 'resolve', U, ref);
       expect(r.code, ref).toBe(0);

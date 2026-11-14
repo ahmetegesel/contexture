@@ -29,7 +29,7 @@ const ROWS: readonly [string[], string | RegExp][] = [
   [['unit', 'refs', 'lg', 'nosuch'], 'ERROR: no such unit: nosuch\n'],
   [['unit', 'list', '--repo=nosuch'], 'ERROR: no unit touches repo: nosuch (known: r1)\n'],
   [['unit', 'list', '--all', '--repo=nosuch'], 'ERROR: no unit touches repo: nosuch (known: r1)\n'],
-  [['unit', 'search', 'lg', 'zzz', '--mode=nosuch'], "search.query: error: mode 'nosuch' is not supported; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n"],
+  [['unit', 'search', 'zzz', '--unit=lg', '--mode=nosuch'], "search.query: error: mode 'nosuch' is not supported; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n"],
   [['unit', 'fold', 'lg', '--check'], "fold: error: no active fold for unit 'lg'; run 'ctx unit fold lg' without --lane to plan (ERR_INVALID_ARGUMENT)\n"],
   [['unit', 'reopen', 'lg'], "session.reopen: error: unit 'lg' is ACTIVE; session.reopen moves only from CLOSED (ERR_INVALID_TRANSITION)\n"],
   [['unit', 'record', 'lg', '--what=x', `--closes=${D}-nosuch (done: x)`], `entry.record: error: entry '${D}-nosuch' not found in unit 'lg' (ERR_ENTITY_NOT_FOUND)\n`],

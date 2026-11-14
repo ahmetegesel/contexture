@@ -4,16 +4,17 @@
 # first matching line, every exact result scoring 0. Run after canon.awk (the canonical
 # renderer, the JSON string form) and model.awk (the loader, the parse, the payload reader,
 # the refusal), in the C locale.
-# The searched text is the text a read renders, never the stored bytes: the state text, the
-# backlog (its preamble, then every item's canonical span), the knowledge, the journal, then
+# The searched text is the text a read renders, never the stored bytes: the backlog (its
+# preamble, then every item's canonical span), the knowledge, the journal, then
 # each lane in bytewise order: the recipe, the lane journal (its preamble and item spans),
-# the report (a document as stored); an absent artifact contributes nothing.
+# the report (a document as stored); an absent artifact contributes nothing. The unit state
+# is no entity and is never searched.
 # Inputs: the environment: PX_MAN and PX_SIZES (the manifest of the unit with every part),
 # PX_PAY (the payload, its query key), PX_ERR, SQ_UNIT, SQ_LIMIT, SQ_ENTITY, SQ_MODE (checked
 # shapes).
 # Result keys: unit, query, mode, total_matches, results [{entity_type, entity_id, section,
 # snippet, score}]; total_matches counts the matching entity and section pairs, results
-# stop at the limit.
+# stop at the limit (0 for every result).
 
 function trim(s,    r) {
   r = s
@@ -53,7 +54,7 @@ function s_line(t,   header, parts, ty, id, key, snippet) {
   if (key in seen) return
   seen[key] = 1
   match_count++
-  if (shown >= limit) return
+  if (limit > 0 && shown >= limit) return
   snippet = trim(t)
   # a field line reads as its value
   sub(/^[A-Z_]+:[ ]*/, "", snippet)
@@ -99,7 +100,7 @@ BEGIN {
   load_payload(ENVIRON["PX_PAY"])
   query = has("query") ? pv("query") : ""
   if (query !~ /[^ \t\r\n]/) die(1, "ERR_INVALID_ARGUMENT", "the search query is empty")
-  if (ENVIRON["SQ_MODE"] != "exact") die(1, "ERR_CAPABILITY_UNSUPPORTED", "mode '" ENVIRON["SQ_MODE"] "' is not supported; declared modes: exact")
+  if (ENVIRON["SQ_MODE"] != "exact") die(1, "ERR_CAPABILITY_UNSUPPORTED", "mode '" ENVIRON["SQ_MODE"] "' is not supported; answerable modes: exact")
   unit = ENVIRON["SQ_UNIT"]
   limit = ENVIRON["SQ_LIMIT"] + 0
   entity = ENVIRON["SQ_ENTITY"]
@@ -108,8 +109,6 @@ BEGIN {
   query_lower = tolower(query)
   load_manifest(ENVIRON["PX_MAN"], ENVIRON["PX_SIZES"])
   parse_unit(unit, "backlog knowledge journal lanes")
-  s_start("state", "")
-  s_text(ST[unit, "text"])
   s_start("backlog", ""); s_art(unit "|backlog")
   s_start("knowledge", ""); s_art(unit "|knowledge")
   s_start("journal", ""); s_art(unit "|journal")

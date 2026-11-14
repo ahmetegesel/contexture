@@ -27,13 +27,16 @@ describe.concurrent('the exact search through the unit data script', () => {
     );
   });
 
-  it('TC38 [the-record-r13]: search.query answers one shape, honors --limit and --entity, refuses an empty query', async () => {
+  it('TC38 [the-record-r13]: search.query answers one shape, honors --limit (0 for every result) and --entity, never searches the unit state, and refuses an empty query', async () => {
     const sb = await at('T37');
     const one = answer(await data(sb, 'search.query', [TUNIT, '--mode=exact', '--limit=1'], query('objective')), 'search.query');
     expect(Object.keys(one)).toEqual(['unit', 'query', 'mode', 'total_matches', 'results']);
-    expect([one.mode, one.total_matches, one.results.length]).toEqual(['exact', 4, 1]);
+    expect([one.mode, one.total_matches, one.results.length]).toEqual(['exact', 3, 1]);
     expect(Object.keys(one.results[0])).toEqual(['entity_type', 'entity_id', 'section', 'snippet', 'score']);
-    expect([one.results[0].entity_type, one.results[0].snippet, one.results[0].score]).toEqual(['session', 'objective: "Task verification session"', 0]);
+    expect([one.results[0].entity_type, one.results[0].snippet, one.results[0].score]).toEqual(['task', 'Keeper objective', 0]);
+    const every = answer(await data(sb, 'search.query', [TUNIT, '--mode=exact', '--limit=0'], query('objective')), 'search.query');
+    expect([every.total_matches, every.results.length]).toEqual([3, 3]);
+    expect(every.results.some((r: { section: string }) => r.section === 'state')).toBe(false);
     const tasks = answer(await data(sb, 'search.query', [TUNIT, '--mode=exact', '--entity=task', '--limit=50'], query('objective')), 'search.query');
     expect(tasks.total_matches).toBe(3);
     expect(tasks.results.map((r: { entity_id: string; snippet: string }) => [r.entity_id, r.snippet])).toEqual([

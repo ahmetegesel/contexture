@@ -1,7 +1,8 @@
 # ranked.awk: the record's ranked search answer from the store.search answer, run after
 # canon.awk and model.awk over the flat lines of json.awk. The store's results keep their
 # rank order; the unit's keys are selected, the entity filter applied, and the limit caps
-# after the complete walk. The exact mode never comes here: it is the canonical render's
+# after the complete walk (0 for every result); the unit state is never a result. The
+# exact mode never comes here: it is the canonical render's
 # own rule (search.awk), the TC69 legacy rule.
 # The environment: RQ_UNIT, RQ_QUERY, RQ_MODE, RQ_LIMIT, RQ_ENTITY.
 
@@ -37,8 +38,8 @@ function admit(i,   unit, key, rel, np, P, lane, art, sec, ty) {
   key = KEY[i]
   if (substr(key, 1, length(unit) + 1) != unit "/") return 0
   rel = substr(key, length(unit) + 2)
-  if (rel == "state") sec = "state"
-  else if (rel == "backlog") sec = "backlog"
+  if (rel == "state") return 0
+  if (rel == "backlog") sec = "backlog"
   else if (rel == "knowledge") sec = "knowledge"
   else if (rel == "journal") sec = "journal"
   else {
@@ -52,7 +53,7 @@ function admit(i,   unit, key, rel, np, P, lane, art, sec, ty) {
   }
   if (SEC[i] != sec) return 0
   ty = TY[i]
-  if (sec == "state" || sec == "backlog" || sec == "knowledge" || sec == "journal") {
+  if (sec == "backlog" || sec == "knowledge" || sec == "journal") {
     if (ty == "" || ty == "session") EID[i] = unit
     else if (ty != "task" && ty != "entry" && ty != "finding") return 0
   } else if (ty == "" || ty == "lane") {
@@ -69,7 +70,7 @@ END {
   for (i = 1; i <= N; i++) {
     if (!admit(i)) continue
     total++
-    if (shown >= (ENVIRON["RQ_LIMIT"] + 0)) continue
+    if (ENVIRON["RQ_LIMIT"] + 0 > 0 && shown >= (ENVIRON["RQ_LIMIT"] + 0)) continue
     shown++
     OUT[shown] = i
   }

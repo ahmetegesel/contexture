@@ -37,16 +37,17 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     pathFree(err);
   });
 
-  it('UP-b [the-record-r14]: a unit without backlog or knowledge warns on the board, searches its canonical state, and resolves misses path-free (posix plant)', async () => {
+  it('UP-b [the-record-r14]: a unit without backlog or knowledge warns on the board, searches path-free with its state never a row, and resolves misses path-free (posix plant)', async () => {
     const sb = stage('posix', 'messages-bare');
     plantArtifact(sb, 'up-bare', 'state', state('bare unit'));
     plantArtifact(sb, 'up-bare', 'journal', '@anchor A1 ("continues A0", attention: bare)\n');
     const board = (await unit(sb, 'board', 'up-bare')).stderr;
     expect(board).toMatch(/^WARNING: missing backlog: unit up-bare$/m);
     pathFree(board);
-    const search = await unit(sb, 'search', 'up-bare', 'bare unit', '--mode=exact');
+    const search = await unit(sb, 'search', 'bare', '--unit=up-bare');
     expect(search.code).toBe(0);
-    expect(search.stdout).toContain('session up-bare (state): objective: "bare unit');
+    expect(search.stdout).toContain('  session up-bare/journal: @anchor A1 ("continues A0", attention: bare)');
+    expect(search.stdout).not.toContain('objective: "bare unit');
     expect(search.stdout).not.toContain('next_action');
     pathFree(search.stdout + search.stderr);
     for (const ref of ['backlog.md#some-task', 'lanes/no-lane/report.md#orientation']) {
@@ -110,7 +111,7 @@ describe.concurrent('the verb messages name the artifact and its unit, never a s
     expect(shown.stdout).toContain('"what":"legacy crlf","group"');
     expect((await unit(sb, 'entry', 'list', 'up-odd')).stdout).not.toContain('\r');
     expect((await unit(sb, 'audit', 'up-odd')).code).toBe(0);
-    expect((await unit(sb, 'search', 'up-odd', 'legacy crlf', '--mode=exact', '--json')).stdout).toContain('"entity_type":"entry","entity_id":"2026-09-20-up-crlf","section"');
+    expect((await unit(sb, 'search', 'legacy crlf', '--unit=up-odd', '--json')).stdout).toContain('"type":"entry","id":"2026-09-20-up-crlf","address":"unit#up-odd/entry/2026-09-20-up-crlf"');
     await unit(sb, 'record', 'up-odd', '--what=after crlf');
     expect(crCount(sb, 'up-odd')).toBe(5);
   });

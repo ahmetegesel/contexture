@@ -180,7 +180,7 @@ const READ_ROWS: readonly [string, string[], string][] = [
   ['state', ['unit', 'list'], 'session.active'],
   ['state', ['unit', 'load', 'r-unit'], 'session.load'],
   ['state', ['unit', 'board', 'r-unit'], 'session.board'],
-  ['state', ['unit', 'search', 'r-unit', 'probe', '--mode=exact'], 'search.query'],
+  ['state', ['unit', 'search', 'probe', '--unit=r-unit'], 'session.active'],
   ['journal', ['unit', 'load', 'r-unit'], 'session.load'],
   ['journal', ['unit', 'board', 'r-unit'], 'session.board'],
 ];

@@ -209,7 +209,8 @@ describe('the verb output census: no unit, lane, or rhythm verb prints the recor
         ...refs.flatMap((ref) => [U('resolve', 'cu', ref), U('resolve', 'cu', ref, '--json')]),
         U('refs-to', 'lg'),
         ...['cu/task/t1', `cu/entry/${D}-cu-e2`, 'cu/finding/F_TWO', 'cu/lane/cl/recipe', 'cu/lane/cl/report', 'cu/lane/cl/report/FINDINGS', `cu/lane/cl/journal/${D}-cl-l1`].flatMap((p) => [U('get', p), U('get', p, '--json')]),
-        U('search', 'cu', 'census', '--mode=exact'),
+        U('search', 'census', '--unit=cu'),
+        U('search', 'census', '--all', '--json'),
         ...names.map((n) => ['rhythm', 'show', n]),
         ['rhythm', 'current', 'cu'],
       ]);

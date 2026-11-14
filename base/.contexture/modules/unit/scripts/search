@@ -1,109 +1,144 @@
 #!/bin/sh
-# summary: universal search across unit records and artifacts
-# usage: ctx unit search <unit> "<query>" --mode=MODE [options]
-# help: searches unit records (tasks, entries, findings, lanes) for query terms
-# help: options:
-# help:   --json              output JSON format
-# help:   --limit=N           maximum number of results returned (default 20)
-# help:   --mode=MODE         the search mode, required (no default): exact, the one mode every driver implements (a case-insensitive ASCII substring of one line, one row per matching entity and section, total_matches counting those rows), or a ranked mode the configured driver registers (ctx unit diagnose lists the registered modes); a search without --mode refuses rc 1 naming the registered modes, and a mode the unit's records cannot answer refuses rc 1 naming the answerable ones
-# help:   --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)
-# help: every driver returns the same keys per result: entity_type, entity_id, section, snippet, score (0 for exact); an empty query refuses rc 1 (ERR_INVALID_ARGUMENT)
+# summary: search the record entities of the active units, one unit, or every unit, in the shared search syntax
+# usage: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]
+# help: the query comes first; the active units by default, --all every unit, --unit=<unit> any one unit, closed ones included; the rows of a CLOSED unit carry the label closed
+# help: a sole --help, -h, or help prints the usage; the word help with arguments after it is the query; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
+# help: --type= keeps one entity type (task, entry, finding, lane, lane_entry, session, all); --mode= defaults to exact (a case-insensitive ASCII substring of one line, a column-0 comment never matching, one row per matching entity and section, the first matching line as the snippet), or a ranked mode the configured driver registers (ctx search --modes lists them); --limit= is a positive whole number, default 20, applied once to the rows merged in the board's unit order; only the --flag=value form is taken
+# help: each row carries module, container, type, id, address (unit#<unit>/<kind>/<id>), snippet, read (ctx unit get <path>), and label when the unit is closed; an artifact preamble or an anchor line carries no address, its read the unit's load; --json answers {query, mode, total, rows}, total counting every merged row before the limit; zero hits is rc 0
+# help: the unit state is never searched; an empty query, an unknown flag, a bare value form, --all beside --unit, the retired positional unit, --entity, and -l refuse rc 1 (ERR_INVALID_ARGUMENT), a mode the unit's records cannot answer rc 1 naming the answerable modes, a --unit no store holds rc 1 (ERR_ENTITY_NOT_FOUND)
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
+usage() {
+  printf 'usage: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]\n'
+  printf 'searches the record entities (tasks, entries, findings, lanes) of the active units, one unit, or every unit\n'
+  printf 'options:\n'
+  printf '  --unit=<unit>       one unit, closed ones included\n'
+  printf '  --all               every unit, closed ones included\n'
+  printf '  --type=<type>       one entity type (task, entry, finding, lane, lane_entry, session, all)\n'
+  printf '  --mode=<mode>       exact (the default) or a ranked mode the configured driver registers\n'
+  printf '  --limit=N           the rows shown, a positive whole number (default 20)\n'
+  printf '  --json              the answer {query, mode, total, rows}\n'
+}
+
+refuse() {
+  printf 'search: error: %s (ERR_INVALID_ARGUMENT)\n' "$1" >&2
+  exit 1
+}
+
 if [ $# -eq 0 ]; then
-  printf 'usage: ctx unit search <unit> "<query>" --mode=MODE [options]\n' >&2
-  printf 'options: --mode=MODE (required), --json, --limit=N, --entity=TYPE\n' >&2
+  usage >&2
   exit 1
 fi
-
 case "$1" in
-  --help|-h|help)
-    printf 'usage: ctx unit search <unit> "<query>" --mode=MODE [options]\n'
-    printf 'searches unit records (tasks, entries, findings, lanes) for query terms\n'
-    printf 'options:\n'
-    printf '  --json              output JSON format\n'
-    printf '  --limit=N           maximum number of results returned (default 20)\n'
-    printf '  --mode=MODE         the search mode, required: exact or a mode the configured driver registers (ctx unit diagnose lists them)\n'
-    printf '  --entity=TYPE       filter by entity type (session, task, entry, finding, lane, lane_entry, all)\n'
-    exit 0
-    ;;
+  --help|-h|help) [ $# -eq 1 ] && { usage; exit 0; } ;;
 esac
 
-unit="$1"
-vb_unit search "$unit"
-shift
-
-if [ $# -eq 0 ]; then
-  printf 'search: error: query string required\n' >&2
-  exit 1
-fi
-
-query="$1"
-shift
-
+query=""
+qset=0
+only=""
+all=0
+type=""
+mode=exact
+limit=20
+json_out=0
+for a in "$@"; do
+  case "$a" in
+    --unit=*) only="${a#--unit=}" ;;
+    --all) all=1 ;;
+    --type=*) type="${a#--type=}" ;;
+    --mode=*) mode="${a#--mode=}" ;;
+    --limit=*) limit="${a#--limit=}" ;;
+    --json) json_out=1 ;;
+    --entity=*|--entity) refuse "--entity is retired: use --type=<type> (ctx unit search \"<query>\" --type=<type>)" ;;
+    -l) refuse "-l is retired: use --limit=N" ;;
+    -*) refuse "unknown option '$a' (the --flag=value forms: --unit=, --all, --type=, --mode=, --limit=, and --json)" ;;
+    *)
+      if [ "$qset" -eq 1 ]; then
+        refuse "the unit is a flag now: ctx unit search \"<query>\" --unit=<unit>"
+      fi
+      query=$a
+      qset=1
+      ;;
+  esac
+done
+[ "$qset" -eq 1 ] || refuse "a query is required: ctx unit search \"<query>\""
 vb_refuse_cr "$query"
+vb_refuse_nl query "$query"
 if [ -z "$(printf '%s' "$query" | tr -d ' \t')" ]; then
   printf 'search.query: error: empty query (ERR_INVALID_ARGUMENT)\n' >&2
   exit 1
 fi
+[ "$all" -eq 0 ] || [ -z "$only" ] || refuse "--all and --unit=<unit> contradict each other"
+[ -z "$only" ] || vb_unit search "$only"
+case "$limit" in
+  ""|*[!0-9]*|0*) refuse "--limit takes a positive whole number: '$limit'" ;;
+esac
+none=0
+case "$type" in
+  ""|all|session|task|entry|finding|lane|lane_entry) ;;
+  *)
+    [ "${CTX_SEARCH_FANOUT:-}" = 1 ] || refuse "unknown type '$type' (task, entry, finding, lane, lane_entry, session, all)"
+    none=1
+    ;;
+esac
+case "$mode" in
+  ""|[!a-z]*|*[!a-z0-9_-]*) refuse "malformed mode '$mode'" ;;
+esac
 
-json_out=0
-limit=""
-entity=""
-mode=""
-
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --json) json_out=1 ;;
-    --limit=*) limit="${1#--limit=}" ;;
-    -l) shift; [ $# -gt 0 ] && limit="$1" ;;
-    --mode=*) mode="${1#--mode=}" ;;
-    --entity=*) entity="${1#--entity=}" ;;
-    *) printf "search: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$1" >&2; exit 1 ;;
-  esac
-  shift
-done
-
-if [ -n "$limit" ]; then
-  case "$limit" in
-    *[!0-9]*|0*) printf "search: error: --limit takes a positive number: '%s' (ERR_INVALID_ARGUMENT)\n" "$limit" >&2; exit 1 ;;
-  esac
-fi
-if [ -n "$entity" ]; then
-  case "$entity" in
-    all|session|task|entry|finding|lane|lane_entry) ;;
-    *) printf "search: error: unknown entity type '%s' (session, task, entry, finding, lane, lane_entry, all) (ERR_INVALID_ARGUMENT)\n" "$entity" >&2; exit 1 ;;
-  esac
-fi
-if [ -n "$mode" ]; then
-  case "$mode" in
-    [!a-z]*|*[!a-z0-9_-]*) printf "search: error: malformed mode '%s' (ERR_INVALID_ARGUMENT)\n" "$mode" >&2; exit 1 ;;
-  esac
-else
-  # no default mode (end review item 2): the refusal names the configured driver's mode
-  # registry, read through the resolver's registry reader (never a record read)
-  vb_tmp
-  if "$VB_RESOLVER" modes < /dev/null > "$VB_DIR/modes" 2> "$VB_DIR/modeserr"; then
-    modes=$(awk -F '\t' '$1 != "" { o = o (o == "" ? "" : ", ") $1 } END { print (o == "" ? "none" : o) }' "$VB_DIR/modes")
-  else
-    modes="unknown (the driver's descriptor did not answer)"
-  fi
-  printf "search: error: --mode is required: exact or a mode the configured driver registers; registered modes: %s (ERR_INVALID_ARGUMENT)\n" "$modes" >&2
-  exit 1
-fi
-
-set --
-[ -n "$limit" ] && set -- "$@" "--limit=$limit"
-[ -n "$entity" ] && set -- "$@" "--entity=$entity"
-set -- "$@" "--mode=$mode"
+vb_tmp
+# the query's bytes are checked before any call (the payload is staged per unit below)
 vb_kv query "$query"
-vb_call search.query "$unit" "$@"
-vb_ok
+VB_PAY=""
+# under the fan-out a mode the configured driver does not register falls back to exact,
+# which the answer's mode says; a direct call lets the record's search refuse it
+if [ "$mode" != exact ] && [ "${CTX_SEARCH_FANOUT:-}" = 1 ]; then
+  "$VB_RESOLVER" modes < /dev/null > "$VB_DIR/modes" 2>/dev/null || : > "$VB_DIR/modes"
+  awk -F '\t' -v m="$mode" '$1 == m { f = 1 } END { exit !f }' "$VB_DIR/modes" || mode=exact
+fi
 
+# the units in the board's order, each with its status: the active listing's one call
+vb_call session.active
+vb_ok
+awk -f "$VB_JSON" < "$VB_DIR/ans" | awk '
+  /^units\.[0-9]+\.unit=/ { i = $0; sub(/^units\./, "", i); sub(/\..*$/, "", i); v = $0; sub(/^[^=]*=/, "", v); U[i + 0] = v; if (i + 0 > n) n = i + 0 }
+  /^units\.[0-9]+\.status=/ { i = $0; sub(/^units\./, "", i); sub(/\..*$/, "", i); v = $0; sub(/^[^=]*=/, "", v); S[i + 0] = v }
+  END { for (k = 1; k <= n; k++) printf "%s\t%s\n", U[k], S[k] }' | LC_ALL=C sort > "$VB_DIR/units"
+tab=$(printf '\t')
+if [ -n "$only" ]; then
+  awk -F '\t' -v u="$only" '$1 == u' "$VB_DIR/units" > "$VB_DIR/scope"
+  [ -s "$VB_DIR/scope" ] || printf '%s\t%s\n' "$only" "" > "$VB_DIR/scope"
+elif [ "$all" -eq 1 ]; then
+  cp "$VB_DIR/units" "$VB_DIR/scope"
+else
+  awk -F '\t' '$2 == "ACTIVE"' "$VB_DIR/units" > "$VB_DIR/scope"
+fi
+[ "$none" -eq 0 ] || : > "$VB_DIR/scope"
+
+# the document rules of the unit's declaration: each pairs a container key pattern with
+# its entity type, read through the storage core's data reader (the rules follow its
+# eleven fixed lines)
+rules=""
+sd="${VB_RESOLVER%/*}/store-data"
+if [ -x "$sd" ]; then
+  rules=$(CTX_STORE_WORKSPACE="${CTX_ROOT:-$PWD}" "$sd" unit 2>/dev/null | sed -n '12,$p')
+fi
+
+: > "$VB_DIR/merged"
+while IFS="$tab" read -r su ss; do
+  [ -n "$su" ] || continue
+  vb_kv query "$query"
+  vb_call search.query "$su" --limit=0 --mode="$mode"
+  vb_ok
+  printf '@unit\t%s\t%s\n' "$su" "$ss" >> "$VB_DIR/merged"
+  awk -f "$VB_JSON" < "$VB_DIR/ans" >> "$VB_DIR/merged" || exit 2
+done < "$VB_DIR/scope"
+
+SR_QUERY=$query SR_MODE=$mode SR_LIMIT=$limit SR_TYPE=$type SR_FANOUT=${CTX_SEARCH_FANOUT:-} SR_RULES=$rules \
+  awk -f "$VB_LIB/canon.awk" -f "$VB_LIB/model.awk" -f "$VB_LIB/search-rows.awk" < "$VB_DIR/merged" > "$VB_DIR/ans" || exit 2
 if [ "$json_out" -eq 1 ]; then
   vb_json
 else
-  vb_render search RV_UNIT="$unit" RV_QUERY="$query"
+  vb_render search RV_QUERY="$query"
 fi
 exit 0

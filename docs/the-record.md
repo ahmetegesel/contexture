@@ -190,24 +190,24 @@ The resolution verb resolves references directly, and the shared read verb print
 
 When given the legacy forms an older record holds (the file-based paths such as `knowledge.md#NAME`, `journal.md#slug`, `backlog.md#slug`, and the legacy lane form `lanes/<lane>/<recipe|journal|report>[#<claim>]`), the CLI normalizes them transparently to entity lookups. Agents author the entity syntax natively, `lane#` for a lane; a canonical ref minted by a write resolves directly.
 
-## Universal search and snippet consumption
+## Search and snippet consumption
 
-Universal search operates across all entity domains; every search names its mode (`--mode` is required, with no default: `exact` on every driver, or a mode the configured driver declares, which `ctx unit diagnose` lists):
+The record's search speaks the shared search syntax: the query first (a query cannot begin with a dash, which reads as a flag, a stated limit), the active units by default, `--all` every unit, `--unit=<unit>` any one (closed ones included, their rows labelled `closed`), and `--mode` defaulting to `exact`:
 
 ```bash
-.contexture/ctx unit search <unit> "<query>" --mode=MODE [--limit=N] [--entity=TYPE] [--json]
+.contexture/ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]
 ```
 
-Every driver returns the same keys per result (`entity_type`, `entity_id`, `section`, `snippet`, `score`), so a caller never branches on the backend; `--limit` caps the results, `--entity` keeps one entity type, and a mode the unit's records cannot answer refuses rc 1 naming the answerable ones (posix registers `exact` alone; fts5 adds the ranked `hybrid` and `trigram` modes, asked for by name). An empty query refuses rc 1, and so does a search without `--mode`, naming the modes the configured driver registers. `exact`, the one mode every driver implements, means one thing on every driver: a line matches when it carries the query as a substring, ASCII letters compared without case and a column-0 comment never matching; the answer is one row per matching entity and section, in record order, its snippet the first matching line, its score 0, and `total_matches` counts those rows, so every driver returns the same rows and totals for the same record.
+Every row carries the same keys on every driver (`module`, `container`, `type`, `id`, `address`, `snippet`, `read`, and `label` on a closed unit's rows), so a caller never branches on the backend; `--type` keeps one entity type, `--limit` caps the rows merged across the units once (default 20), `--json` answers `{query, mode, total, rows}` with `total` counting every merged row, and zero hits is an answer, rc 0. A row's `read` is always `ctx unit get <path>`, the path being the address after `unit#`. `exact`, the one mode every driver implements, means one thing on every driver: a line matches when it carries the query as a substring, ASCII letters compared without case and a column-0 comment never matching; the answer is one row per matching entity and section, in record order, its snippet the first matching line. A mode the unit's records cannot answer refuses rc 1 naming the answerable ones (posix registers `exact` alone; fts5 adds the ranked `hybrid` and `trigram` modes, asked for by name). The unit state is never searched.
 
 A backend may register ranked modes of its own beside `exact`; the storage-fts5 plugin registers `hybrid` and `trigram`, and its [driver README](plugins/storage-fts5/.contexture/extensions/storage/drivers/fts5/README.md) describes the indexing and the relevance ranking behind them.
 
-On an indexed backend, a ranked mode returns high-density contextual snippets ordered by their score. This cuts token consumption by more than 90 percent compared to dumping entire entity bodies.
+On an indexed backend, a ranked mode returns high-density contextual snippets ordered by their rank. This cuts token consumption by more than 90 percent compared to dumping entire entity bodies.
 
 Agents follow a snippet-first consumption protocol:
-1. Run `ctx unit search <unit> "<query>" --mode=<mode>` to locate candidates.
-2. Review the compact snippets (and, on a ranked backend, the scores).
-3. Fetch full entity blocks on demand using targeted commands (`ctx unit get <path>`, `task show`, `entry show`, `finding show`, or `resolve`).
+1. Run `ctx unit search "<query>"` (with `--unit=<unit>`, `--all`, or `--mode=<mode>` as the question needs) to locate candidates.
+2. Review the compact snippets and their addresses.
+3. Fetch an entity whole with its row's read, `ctx unit get <path>` (or `task show`, `entry show`, `finding show`, or `resolve`).
 
 When human users prompt in non-English languages (such as Turkish), agents translate conceptual terms into English search keywords before querying the record, synthesize findings from the English record, and respond to the user in their language.
 

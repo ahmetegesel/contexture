@@ -1,2 +1,4 @@
-search compliance-tasks "architectural": 1 matches, 1 shown
-  finding FINDING_ALPHA (knowledge): Alpha architectural decision summary
+search "architectural": 3 matches, 2 shown
+  finding unit#compliance-tasks/finding/FINDING_ALPHA: Alpha architectural decision summary
+  session compliance-old/journal [closed]: @anchor A1 (architectural)
+read one: ctx unit get <path> (the address after unit#)

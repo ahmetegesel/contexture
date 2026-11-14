@@ -117,7 +117,7 @@ describe.concurrent('the SQLite smoke set: every command family lands in the fts
     const sb = fresh(seeded);
     await must(unit(sb, 'task', 'add', U, 'sq-t7', '--objective=the sqlite search task'));
     for (const [mode, query] of [['exact', 'sqlite search task'], ['hybrid', 'sqlite search task'], ['trigram', 'sqlite']]) {
-      expect(await show(sb, 'search', U, query, `--mode=${mode}`), mode).toContain('task sq-t7');
+      expect(await show(sb, 'search', query, `--unit=${U}`, `--mode=${mode}`), mode).toContain(`task unit#${U}/task/sq-t7`);
     }
     await inSqliteStore(sb, 'unit', [`${U}/backlog`]);
   });

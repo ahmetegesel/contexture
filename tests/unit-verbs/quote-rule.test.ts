@@ -42,7 +42,7 @@ describe.concurrent('one quote rule for every one-line quoted field', () => {
     expect((await unit(sb, 'entry', 'show', 'q-unit', `${D}-q-appended-quote`)).stdout).toContain('WHAT: "an appended "quoted" what"');
     expect(await loadAll(sb, 'q-unit')).toContain('WHAT: "an appended "quoted" what"');
     expect((await unit(sb, 'audit', 'q-unit')).code).toBe(0);
-    expect((await unit(sb, 'search', 'q-unit', 'appended "quoted" what', '--mode=exact', '--json')).stdout).toContain(`"entity_id":"${D}-q-appended-quote"`);
+    expect((await unit(sb, 'search', 'appended "quoted" what', '--unit=q-unit', '--json')).stdout).toContain(`"id":"${D}-q-appended-quote"`);
   });
 
   it('Q-d [the-record-r12]: a legacy two-line WHAT still audits rc 0 and loads on the board (posix plant)', async () => {
@@ -72,8 +72,8 @@ describe.concurrent('one quote rule for every one-line quoted field', () => {
     expect(load).toContain('OBJECTIVE: "an "amended" objective"');
     expect((await unit(sb, 'board', 'u-unit')).stdout).toContain('u-b');
     expect((await unit(sb, 'audit', 'u-unit')).code).toBe(0);
-    const found = (await unit(sb, 'search', 'u-unit', 'amended', '--mode=exact', '--json')).stdout;
-    expect(found).toContain('"entity_id":"u-c"');
+    const found = (await unit(sb, 'search', 'amended', '--unit=u-unit', '--json')).stdout;
+    expect(found).toContain('"id":"u-c"');
     expect(found).toContain('an \\"amended\\" objective');
   });
 });

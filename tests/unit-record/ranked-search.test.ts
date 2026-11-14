@@ -45,11 +45,12 @@ describe.concurrent('the ranked search mapping (ranked.awk) over a canned fts5 s
     writeFileSync(CANNED, r.bytes);
   });
 
-  it('UD-11 [the-record-r13]: maps the store identities to the record ids of one unit in rank order, keeping the mode', async () => {
+  it('UD-11 [the-record-r13]: maps the store identities to the record ids of one unit in rank order, keeping the mode, never the unit state', async () => {
     const a = await ranked({});
     expect(a.mode).toBe('hybrid');
     const ids = identities(a.results);
-    for (const want of ['session u1 state', 'task t1 backlog', 'lane l1 lane_recipe', 'lane l1 lane_report', 'lane_entry l1/lane-needle lane_journal']) expect(ids).toContain(want);
+    for (const want of ['task t1 backlog', 'lane l1 lane_recipe', 'lane l1 lane_report', 'lane_entry l1/lane-needle lane_journal']) expect(ids).toContain(want);
+    expect(ids.some((id) => id.endsWith(' state')), 'the unit state is never a result, though the canned store answer holds one').toBe(false);
     expect(ids.some((id) => id.includes('u2'))).toBe(false);
     expect(a.results.length).toBe(a.total_matches);
   });

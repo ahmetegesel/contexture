@@ -188,19 +188,25 @@ verb.
 
 ## The search
 
-`search.query --mode=exact` is the record rule over the canonical render (the states, the
-preambles, every item's canonical span, each lane) in record order, so a legacy value
+`search.query --mode=exact` is the record rule over the canonical render (the preambles,
+every item's canonical span, each lane; never the state) in record order, so a legacy value
 answers the canonical text. A ranked mode is the store's search over the document-set
 schema (the data file's rules derive the entities at write time; the fts5 store indexes
 them), filtered to the unit's keys, with `--entity` applied and `--limit` capped after the
-complete walk; the store's rank order is kept. The store answers a default document's
+complete walk (0 for every result); the store's rank order is kept. The store answers a default document's
 identity as its artifact key, so the data script maps it to the record id: the unit for a
-session document (state, backlog, knowledge, journal), the lane for a lane document, and a
+session document (backlog, knowledge, journal; the state is never a result), the lane for a lane document, and a
 lane entry keeps its `<lane>/` prefix; a result outside the record's artifact shape or the
 sections the record searches is dropped. A mode the unit's records cannot answer (the
 configured driver's registry through the library's `store_modes`, a ranked mode only where
 the unit's data file declares its search schema) refuses before any store search, rc 1
 `ERR_CAPABILITY_UNSUPPORTED` naming the answerable modes.
+
+The search verb (`scripts/search`) lists the units through `session.active` (the default
+scope its ACTIVE units, `--all` every unit, `--unit` one), calls `search.query` once per
+unit uncapped, and maps the merged rows onto the shared row shape with `lib/search-rows.awk`
+(the container from the data declaration's document rules, read through the storage core's
+data reader; the address, the read, and the closed label), applying the limit once.
 
 ## The tests
 

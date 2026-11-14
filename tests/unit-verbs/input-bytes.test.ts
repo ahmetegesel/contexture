@@ -38,7 +38,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['lane record --what', 'what', ['lane', 'record', 'in-unit', 'in-lane', flag('what', BAD)]],
     ['lane create --goal', 'goal', ['lane', 'create', 'in-unit', 'in-u8-lane', flag('goal', BAD), ...laneFlags(['--goal=']).slice(0, -1)]],
     ['bootstrap objective', 'objective', ['unit', 'bootstrap', 'in-u8-unit', BAD]],
-    ['search query', 'query', ['unit', 'search', 'in-unit', BAD, '--mode=exact']],
+    ['search query', 'query', ['unit', 'search', BAD, '--unit=in-unit']],
     ['lane report --body', 'the report', ['lane', 'report', 'in-unit', 'in-lane', flag('body', BAD)]],
   ] as const)('E3-d [the-record-r9, the-record-r12]: %s refuses bytes that are not UTF-8 naming the field %s, nothing landed', async ([, field, argv]) => {
     const sb = fresh(sb0);
@@ -114,7 +114,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect(bs).toContain('  OBJECTIVE: "path C:\\new\\table"');
     expect(bs).toContain('    literal \\n and \\t stay');
     expect((await unit(sb, 'task', 'show', 'in-unit', 'y-bs', '--json')).stdout).toContain('"objective":"path C:\\\\new\\\\table"');
-    expect((await unit(sb, 'search', 'in-unit', 'C:\\new', '--mode=exact', '--json')).stdout).not.toContain('"total_matches":0');
+    expect((await unit(sb, 'search', 'C:\\new', '--unit=in-unit', '--json')).stdout).not.toContain('"total":0');
   });
 
   it('Y-a R1 [the-record-r12]: task update and finding add and update with a two-line block keep every item', async () => {
@@ -198,7 +198,7 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     expect((await unit(sb, 'entry', 'show', 'in-unit', `${D}-b-bs`)).stdout.split('\n')).toContain(`  WHAT: "${what}"`);
     expect((await unit(sb, 'board', 'in-unit')).stdout.split('\n')).toContain(`  WHAT: "${what}"`);
     expect((await unit(sb, 'entry', 'show', 'in-unit', `${D}-b-bs`, '--json')).stdout).toContain('W a\\\\b c\\\\\\\\d \\\\n e\\\\');
-    expect((await unit(sb, 'search', 'in-unit', 'c\\\\d', '--mode=exact', '--json')).stdout).not.toContain('"total_matches":0');
+    expect((await unit(sb, 'search', 'c\\\\d', '--unit=in-unit', '--json')).stdout).not.toContain('"total":0');
   });
 
   it('B [the-record-r12, the-record-r16]: backslash payloads travel through lane record and a lane report, the write echo one line with its size', async () => {

@@ -651,13 +651,22 @@ function v_finding_show(   t, nl) {
 }
 
 # search (kept for exact): the count line, then one line per result
-function v_search(   n, i, p) {
-  n = nn("results")
-  printf "search %s \"%s\": %d matches, %d shown\n", ENVIRON["RV_UNIT"], ENVIRON["RV_QUERY"], V["total_matches"] + 0, n
+# search: the merged answer {query, mode, total, rows}: one line per row, its type, its
+# address (or, for a row with no addressable entity, its container), a closed label, then
+# the snippet; a read hint closes a view that shows rows
+function v_search(   n, i, p, w, t) {
+  n = nn("rows")
+  t = V["total"] + 0
+  printf "search \"%s\": %d match%s", ENVIRON["RV_QUERY"], t, (t == 1 ? "" : "es")
+  if (t > 0) printf ", %d shown", n
+  if (sv("mode") != "exact") printf " (mode %s)", sv("mode")
+  printf "\n"
   for (i = 1; i <= n; i++) {
-    p = "results." i
-    printf "  %s %s (%s): %s\n", sv(D(p) "entity_type"), sv(D(p) "entity_id"), sv(D(p) "section"), oneline_nl(sv(D(p) "snippet"))
+    p = "rows." i
+    w = nul(D(p) "address") ? sv(D(p) "container") : sv(D(p) "address")
+    printf "  %s %s%s: %s\n", sv(D(p) "type"), w, (nul(D(p) "label") ? "" : " [" sv(D(p) "label") "]"), oneline_nl(sv(D(p) "snippet"))
   }
+  if (n > 0) printf "read one: ctx unit get <path> (the address after unit#)\n"
 }
 
 function oneline_nl(s) {
