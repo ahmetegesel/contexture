@@ -18,7 +18,7 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 | `search` | `scripts/docs-entity.awk` over the materialized corpus (or one repo's docs), behind the grammar asset; the arguments parse in `docs-io.sh` (`docs_search`) |
 | `nudge` | `scripts/docs-nudge.awk` |
 | `gate` | self-contained; uses `scripts/docs-audit.awk`, and `scripts/docs-check.awk` behind `scripts/docs-glob.awk` |
-| `changes` | none: the corpus half of a delta from the store's change log, computed in `docs-io.sh` |
+| `changes` | none: the corpus half of a delta from the storage layer's change log, computed in `docs-io.sh` |
 | `new`, `write`, `header`, `rule`, `pitfall`, `entry`, `section`, `replace`, `ids` | `scripts/docs-edit.awk` (the edit), then `scripts/docs-audit.awk` (the grammar check) |
 | `remove` | none: `store.delete` through `docs-io.sh` (`--dry-run` prints the stored doc whole and writes nothing) |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
@@ -105,7 +105,7 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   unit with two in-progress tasks prints two blocks; a named task is nudged
   whatever its status (the force). The backlog-file form keeps its one-backlog
   first-IN_PROGRESS read, names repos alone, and refuses `--task`; it refuses a
-  path inside another module's store root (`docs_record_file`
+  path inside another module's storage root (`docs_record_file`
   reads every declared root through the storage library's `store_roots`, this module's
   own `docs` namespace aside: a path spelled under a root, one physically under it, and,
   for a root inside the drawer alone, one holding `/<root>/` anywhere), and with no
@@ -170,7 +170,7 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   checkout, a reset) leaves the old rows outside the window, recovered by
   `ctx docs changes --since=<the previous HEAD>` piped with the git delta into
   the check (or by `ctx docs gate --since=<the previous HEAD>`); `--drift`
-  prints a deferral notice (drift over a shared store is undesigned) and
+  prints a deferral notice (drift over a shared storage layer is undesigned) and
   checks the incoming code delta alone.
 - The gate's delta: the default form reads the working tree (the workspace
   root's `git diff`, `git diff --cached`, and untracked files, plus each child

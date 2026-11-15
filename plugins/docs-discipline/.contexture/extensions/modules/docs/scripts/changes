@@ -1,5 +1,5 @@
 #!/bin/sh
-# summary: the corpus half of a change delta from the store's change log
+# summary: the corpus half of a change delta from the storage layer's change log
 # usage: ctx docs changes
 # usage: ctx docs changes --since=<rev>
 # help: prints one status-prefixed line per doc written or removed through the docs verbs since the current git HEAD (A added, M modified, D deleted; a doc created and removed again prints nothing), docs/<repo>/<slug>.md by path, the corpus half a store driver adds to the code delta from git

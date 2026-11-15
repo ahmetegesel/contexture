@@ -4,6 +4,6 @@
 # help: prints one line per record and field, <container>/<id>: <field>: <reason>, for a required field absent, a value outside its one-of set, a shape other than the declared one, or a leftover field the declaration no longer names; declarations change forward only, so a record breaking a later declaration is fixed by its next write (set, or --unset=<field> for a leftover)
 # help: --leftovers reads the store's own storage instead, a whole read only walk through the storage layer's probe: one line per kind found beyond the records' keys, root: <kind>: <count> (<bytes> bytes), the kinds stray files, folders outside the key shape, empty folders (a dropped container leaves one), symbolic links, special files, unreadable folders, lock or write remnants; it names no path and removes nothing; a driver that keeps no file tree refuses rc 2 (ERR_CAPABILITY_UNSUPPORTED)
 # help: exit codes: 0 every record conforms, or nothing lies beyond the keys (nothing printed); 1 a record does not, something lies beyond the keys, or a usage error; an undeclared or dropped container rc 1 (ERR_ENTITY_NOT_FOUND); 2 a storage failure
-# help: example: ctx store check ideas
+# help: example: ctx store check notes
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/store" check "$@"

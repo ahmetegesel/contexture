@@ -214,9 +214,9 @@ const LIST_ROWS: readonly [string[], string][] = [
 const LOCKED = "the store namespace 'unit' is locked (60 s timeout)";
 
 const STORE_ROWS: readonly [string, string[], string, string, string][] = [
-  ['store.get', ['unit', 'board', 'r-unit'], 'session.board', 'ERR_STORAGE_READ', 'the store read failed'],
-  ['store.list', ['unit', 'list'], 'session.active', 'ERR_STORAGE_READ', 'the store list failed'],
-  ['store.batch', ['unit', 'record', 'r-unit', '--what=never lands'], 'entry.record', 'ERR_STORAGE_WRITE', 'the store batch failed'],
+  ['store.get', ['unit', 'board', 'r-unit'], 'session.board', 'ERR_STORAGE_READ', 'the storage layer read failed'],
+  ['store.list', ['unit', 'list'], 'session.active', 'ERR_STORAGE_READ', 'the storage layer list failed'],
+  ['store.batch', ['unit', 'record', 'r-unit', '--what=never lands'], 'entry.record', 'ERR_STORAGE_WRITE', 'the storage layer batch failed'],
 ];
 
 type WrapMode = 'silent' | 'foreign' | 'before';
@@ -266,7 +266,7 @@ describe.concurrent('a record function whose store call refuses: its own one lin
     const planted = fresh(snap);
     const script = join(planted, '.contexture/modules/unit/scripts/data');
     const text = readFileSync(script, 'utf8');
-    const reframe = 'u_store_refuse "$uc_rc" store.batch "$U_SCR/batch.err" "the store batch failed (ERR_STORAGE_WRITE)"';
+    const reframe = 'u_store_refuse "$uc_rc" store.batch "$U_SCR/batch.err" "the storage layer batch failed (ERR_STORAGE_WRITE)"';
     const relay = text.replace(reframe, `{ cat "$U_SCR/batch.err" >&2; ${reframe}; }`);
     expect(relay, 'the plant finds the batch re-frame').not.toBe(text);
     writeFileSync(script, relay);

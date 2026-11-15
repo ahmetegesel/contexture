@@ -86,7 +86,7 @@ describe('the pure helpers', { concurrent: true }, () => {
 
 });
 
-describe('docs_record_file: a path inside another module\'s store root, read through store_roots', { concurrent: true }, () => {
+describe('docs_record_file: a path inside another module\'s storage root, read through store_roots', { concurrent: true }, () => {
   let drawer: string;
   beforeAll(() => {
     drawer = stage('posix', 'record-file');

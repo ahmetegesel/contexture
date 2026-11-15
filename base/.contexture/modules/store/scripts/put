@@ -5,6 +5,6 @@
 # help: put <container>/<id> creates a record under a given id (letters, digits, underscore, and dash, starting with a letter or digit, unique whatever its case); put <container> mints one under generated minting, the date and five random characters
 # help: values take the write forms (--<field>=<one line>, --add-<field>=<item>, --stdin=<field> for one block); an absent optional field with a default is filled; ref is every container's list of full addresses <owner>#<path> (--add-ref=)
 # help: prints the id it wrote; a refusal writes nothing: malformed input, a bad id, or a ref outside the full address shape rc 1 (ERR_INVALID_ARGUMENT); a field the declaration lacks, a value outside its one-of set, a missing required field, or an undeclared or dropped container rc 1 (ERR_SCHEMA_VIOLATION); a used or retired id rc 1 (ERR_ENTITY_EXISTS)
-# help: example: ctx store put ideas/rust-driver --stdin=what < idea.txt
+# help: example: ctx store put notes/first-run --stdin=body < note.txt
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/store" put "$@"

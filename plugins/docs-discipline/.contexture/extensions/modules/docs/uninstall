@@ -10,4 +10,4 @@ if [ -z "${CTX_ROOT:-}" ]; then
   echo 'docs uninstall: CTX_ROOT is not set (the package installer exports it)' >&2
   exit 2
 fi
-echo 'docs uninstall: the corpus data stays in the configured store; remove docs with ctx docs remove'
+echo 'docs uninstall: the corpus data stays in the storage layer; remove docs with ctx docs remove'

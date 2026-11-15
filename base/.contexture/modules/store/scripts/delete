@@ -3,6 +3,6 @@
 # usage: ctx store delete <container>/<id>
 # help: removes the record and adds its id to the declaration's retired list in one write, so the id is never handed out again; a missing record rc 1 (ERR_ENTITY_NOT_FOUND), an undeclared or dropped container rc 1 (ERR_SCHEMA_VIOLATION)
 # help: delete containers/<name> drops a container, holding records or not: every record removed and the declaration kept marked dropped with every id it used retired, in one write; list containers --dropped lists it, get containers/<name> reads it, and put containers/<name> declares the name again fresh, inheriting the retired ids
-# help: example: ctx store delete ideas/rust-driver
+# help: example: ctx store delete notes/first-run
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 exec "$dir/store" delete "$@"

@@ -221,7 +221,7 @@ u_keys_all() {
   store_list > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
   case $? in
     0) u_note "$U_SCR/list.err"; u_keys_parse < "$U_SCR/list.ans" ;;
-    *) u_store_refuse 2 store.list "$U_SCR/list.err" "the store list failed (ERR_STORAGE_READ)" ;;
+    *) u_store_refuse 2 store.list "$U_SCR/list.err" "the storage layer list failed (ERR_STORAGE_READ)" ;;
   esac
 }
 
@@ -230,7 +230,7 @@ u_keys_prefix() {
   store_list "$1" > "$U_SCR/list.ans" 2> "$U_SCR/list.err" < /dev/null
   case $? in
     0) u_note "$U_SCR/list.err"; u_keys_parse < "$U_SCR/list.ans" ;;
-    *) u_store_refuse 2 store.list "$U_SCR/list.err" "the store list failed (ERR_STORAGE_READ)" ;;
+    *) u_store_refuse 2 store.list "$U_SCR/list.err" "the storage layer list failed (ERR_STORAGE_READ)" ;;
   esac
 }
 
@@ -247,7 +247,7 @@ u_add_key() {
   case "$U_GRC" in
     0) U_ADD_RC=0; u_note "$U_SCR/get.err" ;;
     1) rm -f "$U_ART"; U_NART=$((U_NART - 1)); return 0 ;;
-    *) u_store_refuse "$U_GRC" store.get "$U_SCR/get.err" "the store read failed (ERR_STORAGE_READ)" ;;
+    *) u_store_refuse "$U_GRC" store.get "$U_SCR/get.err" "the storage layer read failed (ERR_STORAGE_READ)" ;;
   esac
   u_put "$U_SCR/man" 'F\t%s\t%s\n' "$1" "$U_ART"
   u_put "$U_SCR/files" '%s\n' "$U_ART"
@@ -655,7 +655,7 @@ u_unit_migrate() {
         case "$up_msg" in
           store.promote:\ error:\ *) up_msg=${up_msg#store.promote: error: } ;;
         esac
-        [ -n "$up_msg" ] || up_msg="the store promotion failed (ERR_STORAGE_WRITE)"
+        [ -n "$up_msg" ] || up_msg="the storage layer promotion failed (ERR_STORAGE_WRITE)"
         printf '%s: error: unit '\''%s'\'': %s\n' "$FN" "$up_u" "$up_msg" >&2
         exit "$up_rc"
       fi
@@ -766,7 +766,7 @@ u_mig_rewrite() {
   done < "$U_SCR/mg.keys"
   store_batch < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
   um_rc=$?
-  [ "$um_rc" -eq 0 ] || u_store_refuse "$um_rc" store.batch "$U_SCR/batch.err" "the store batch failed (ERR_STORAGE_WRITE)"
+  [ "$um_rc" -eq 0 ] || u_store_refuse "$um_rc" store.batch "$U_SCR/batch.err" "the storage layer batch failed (ERR_STORAGE_WRITE)"
 }
 
 # u_mig_residual <unit> <rows file>: the residual scan, independent of lib/migrate.awk's
@@ -863,7 +863,7 @@ u_commit() {
   done < "$U_STAGE/manifest"
   store_batch < "$U_SCR/batch" > "$U_SCR/batch.out" 2> "$U_SCR/batch.err"
   uc_rc=$?
-  [ "$uc_rc" -eq 0 ] || u_store_refuse "$uc_rc" store.batch "$U_SCR/batch.err" "the store batch failed (ERR_STORAGE_WRITE)"
+  [ "$uc_rc" -eq 0 ] || u_store_refuse "$uc_rc" store.batch "$U_SCR/batch.err" "the storage layer batch failed (ERR_STORAGE_WRITE)"
   cat "$U_SCR/answer"
 }
 
@@ -1091,7 +1091,7 @@ u_held() {
   case "$uh_rc" in
     0) u_note "$U_SCR/held.err"; return 0 ;;
     1) return 1 ;;
-    *) u_store_refuse "$uh_rc" store.get "$U_SCR/held.err" "the store read failed (ERR_STORAGE_READ)" ;;
+    *) u_store_refuse "$uh_rc" store.get "$U_SCR/held.err" "the storage layer read failed (ERR_STORAGE_READ)" ;;
   esac
 }
 
@@ -1190,14 +1190,14 @@ u_search() {
     case "$sq_msg" in
       store.search:\ error:\ *) sq_msg=${sq_msg#store.search: error: } ;;
     esac
-    [ -n "$sq_msg" ] || sq_msg="the store search failed (ERR_STORAGE_READ)"
+    [ -n "$sq_msg" ] || sq_msg="the storage layer search failed (ERR_STORAGE_READ)"
     printf '%s: error: %s\n' "$FN" "$sq_msg" >&2
     exit "$sq_rc"
   fi
   awk -f "${U_LIB%/library}/json.awk" < "$U_SCR/store.ans" > "$U_SCR/flat" 2> "$U_SCR/flat.err" || {
     sq_rc=$?
     [ -s "$U_SCR/flat.err" ] && cat "$U_SCR/flat.err" >&2
-    printf '%s: error: the store search answer is malformed (ERR_STORAGE_READ)\n' "$FN" >&2
+    printf '%s: error: the storage layer search answer is malformed (ERR_STORAGE_READ)\n' "$FN" >&2
     exit 2
   }
   RQ_UNIT="$U_UNIT" RQ_QUERY="$sq_q" RQ_MODE="$sq_mode" RQ_LIMIT="$sq_limit" RQ_ENTITY="$sq_entity" \

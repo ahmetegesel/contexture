@@ -149,8 +149,8 @@ printed once, so an unreadable state reads `session.board: error: cannot read ke
 '<unit>/state' in namespace 'unit' (ERR_STORAGE_READ)` alone, the storage layer's code kept, the
 rc as before (2 for a list, the storage layer's for a read or the batch), and the storage layer's own line
 never reaches the verb; when the storage layer printed neither (nothing, or only a foreign line),
-the record function prints the fixed line of its call instead, `the store read failed
-(ERR_STORAGE_READ)`, `the store list failed (ERR_STORAGE_READ)`, or `the store batch
+the record function prints the fixed line of its call instead, `the storage layer read failed
+(ERR_STORAGE_READ)`, `the storage layer list failed (ERR_STORAGE_READ)`, or `the storage layer batch
 failed (ERR_STORAGE_WRITE)`, so the one line always carries a code. The verb library relays the line in one place: `vb_relay` holds a succeeded
 call's stderr in the verb's scratch, and the verb's exit prints it once, after the answer,
 only when the verb ends rc 0; `vb_ok` relays through it in every verb that calls it (list

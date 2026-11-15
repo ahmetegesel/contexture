@@ -43,7 +43,7 @@ describe('the docs module part hooks, in order on one workspace', { concurrent: 
   it('RS3d [plugins-r2, modules-r13] uninstall leaves the corpus readable', async () => {
     const r = await hook('uninstall', context());
     expect(r.code).toBe(0);
-    expect(r.stdout + r.stderr).toContain('stays in the configured store');
+    expect(r.stdout + r.stderr).toContain('the corpus data stays in the storage layer');
     expect((await docs(ws, ['query', 'workspace', 'conventions'])).stdout).toContain('A locally kept description');
   });
 

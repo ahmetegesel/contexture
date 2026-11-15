@@ -3,7 +3,7 @@
 # usage: ctx docs new <repo> <slug> --kind=<kind> --description="..." [--sources=<glob>[,<glob>...]] [--keywords=<word>[,...]] [--role=<role>] [--upstream="..."] [--parent=<slug>] [--children=<slug>[,...]] [--dry-run]
 # help: writes the @doc line and the header fields in the grammar's order; its blocks then land through ctx docs rule, pitfall, entry, and section
 # help: required: --kind (capability, structural, cross-cutting, catalog, conventions, architecture, operational, overview) and --description; --sources on capability, structural, cross-cutting, catalog, and conventions docs; --keywords on capability, structural, cross-cutting, catalog, and operational docs
-# help: the result is grammar-checked by the audit over its repo before the store; an existing doc refuses (ctx docs write --replace rewrites one whole)
+# help: the result is grammar-checked by the audit over its repo before it reaches the storage layer; an existing doc refuses (ctx docs write --replace rewrites one whole)
 # help: exit codes: 0 created (or the dry run printed); 1 a refusal (a missing or bad field, an existing doc, a grammar defect), nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs new workspace billing --kind=capability --description="Billing runs" --sources=src/billing/** --keywords=billing,invoices
 

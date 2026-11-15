@@ -3,7 +3,7 @@
 # usage: ctx docs section <repo> <slug> <block> [--after=<block> | --first] [--dry-run] < block
 # usage: ctx docs section <repo> <slug> <block> --remove
 # help: the block on stdin opens with its own header line (@<block>; a rule is addressed rule/<category>/<rule-slug> and opens with @rule <category>/<rule-slug>) and carries no other block; it replaces the doc's block of that name, or lands after the named block (--after=<block> or rule/<category>/<rule-slug>), first after the header, or at its grammar position
-# help: rare by design: an entry, a rule, a pitfall, or a header field has its own verb (ctx docs entry, rule, pitfall, header); the result is grammar-checked by the audit over its repo before the store
+# help: rare by design: an entry, a rule, a pitfall, or a header field has its own verb (ctx docs entry, rule, pitfall, header); the result is grammar-checked by the audit over its repo before it reaches the storage layer
 # help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (a header mismatch, a second block, a missing address, a block the doc kind does not carry, a grammar defect, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs section demo-web cart-ui see_also < see-also.block
 
