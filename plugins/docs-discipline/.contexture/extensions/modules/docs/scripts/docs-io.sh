@@ -397,12 +397,15 @@ docs_no_display() {
 # module's own namespace, which the library finds from the calling script): by its
 # workspace relative spelling, physically under the workspace, or, for a root inside the
 # drawer alone, by an unanchored spelling; rc 1 when it
-# lies in none; rc 2 when the storage core cannot list the roots. A value another module
+# lies in none; rc 2 when the storage core cannot list the roots, or cannot name this
+# module's own namespace (an empty own namespace would turn this module's own root into a
+# foreign one, so the guard refuses rather than answer). A value another module
 # stores is read through that module, never as a file (the single store)
 docs_record_file() {
   command -v store_roots >/dev/null 2>&1 || return 2
   rf_roots=$(store_roots < /dev/null 2>/dev/null) || return 2
-  rf_own=$(store_namespace 2>/dev/null) || rf_own=""
+  rf_own=$(store_namespace 2>/dev/null) || return 2
+  [ -n "$rf_own" ] || return 2
   case "$1" in */*) rf_d=${1%/*} ;; *) rf_d=. ;; esac
   rf_p=$(CDPATH= cd -- "${rf_d:-/}" 2>/dev/null && pwd -P) || rf_p=""
   rf_tab=$(printf '\t')

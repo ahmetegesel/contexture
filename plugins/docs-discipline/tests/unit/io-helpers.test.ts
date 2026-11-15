@@ -95,8 +95,12 @@ describe('docs_record_file: a path inside another module\'s storage root, read t
     mkdirSync(join(drawer, 'notes'));
   });
 
+  // one probe script per call, written once and never rewritten: the rows run concurrently,
+  // and a shared script rewritten (truncated, then written) while a sibling row's sh reads it
+  // runs empty, rc 0
+  let probes = 0;
   const guard = (sb: string, path: string): Promise<Run> =>
-    exec('sh', [moduleScript(sb, 'docs', 'guard-probe', '. "$1/docs-io.sh"; docs_io_init "$1" nudge; docs_record_file "$2"\n', 'extensions'), SCRIPTS, path], { cwd: sb, env: { CTX_ROOT: sb } });
+    exec('sh', [moduleScript(sb, 'docs', `guard-probe-${++probes}`, '. "$1/docs-io.sh"; docs_io_init "$1" nudge; docs_record_file "$2"\n', 'extensions'), SCRIPTS, path], { cwd: sb, env: { CTX_ROOT: sb } });
 
   it.each([
     [`${RECORD_ROOT}/u/backlog.md`, 0],
@@ -121,6 +125,17 @@ describe('docs_record_file: a path inside another module\'s storage root, read t
     mkdirSync(join(broken, 'notes'));
     for (const path of [`${RECORD_ROOT}/u/backlog.md`, 'notes/x.md', 'backlog.md', 'docs/demo/x.md']) {
       const r = await guard(broken, path);
+      expect([path, r.code, r.stderr]).toEqual([path, 2, '']);
+    }
+  });
+
+  it.each([
+    ['fails', 'rc', 'store_namespace() { return 2; }'],
+    ['answers nothing', 'empty', 'store_namespace() { :; }'],
+  ])('[docs-module-r26] refuses rc 2 for every path when its own namespace lookup %s, never counting its own root as foreign', async (_, name, plant) => {
+    const probe = moduleScript(drawer, 'docs', `guard-probe-ns-${name}`, `. "$1/docs-io.sh"; docs_io_init "$1" nudge; ${plant}; docs_record_file "$2"\n`, 'extensions');
+    for (const path of ['docs/demo/x.md', 'backlog.md', `${RECORD_ROOT}/u/backlog.md`, 'notes/x.md']) {
+      const r = await exec('sh', [probe, SCRIPTS, path], { cwd: drawer, env: { CTX_ROOT: drawer } });
       expect([path, r.code, r.stderr]).toEqual([path, 2, '']);
     }
   });
