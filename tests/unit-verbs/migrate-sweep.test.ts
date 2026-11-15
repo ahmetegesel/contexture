@@ -3,8 +3,8 @@ import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, read
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, LEFTOVERS_STAMP, RECORD_ROOT, leaks } from '../support/drawer';
-import { launch } from '../support/exec';
-import { ROOT_USER } from '../support/plants';
+import { exec, launch } from '../support/exec';
+import { ROOT_USER, sweepGate } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { createLane, lane, must, run, seedUnit, unit, waitFor } from '../support/unit';
 
@@ -347,13 +347,18 @@ describe.concurrent('ctx unit migrate --sweep: the guards', () => {
     expect(existsSync(join(nl, BACKUPS))).toBe(false);
   });
 
-  it('[the-record-r-swp02] a termination, an interrupt, or a hangup stops the sweep: the verb sends its children a termination, waits for them, names the stop with the backup stamp, and exits 143, 130, or 129; no child survives, the locks are free, and a second run sweeps the rest', { timeout: 120_000 }, async () => {
+  it('[the-record-r-swp02] a termination, an interrupt, or a hangup stops the sweep: the verb sends its children a termination, waits for them, names the stop with the backup stamp, and exits 143, 130, or 129; no child survives, the locks are free, and a second run sweeps the rest', { timeout: 480_000 }, async () => {
     for (const [sig, rc] of [['SIGTERM', 143], ['SIGINT', 130], ['SIGHUP', 129]] as const) {
       const sb = fresh(snap);
-      const total = 6000;
+      const total = 2500;
       for (let i = 0; i < total; i++) writeFileSync(join(sb, RECORD_ROOT, 'g-a', `k${i}.md`), '');
       const left = () => readdirSync(join(sb, RECORD_ROOT, 'g-a')).filter((n) => /^k[0-9]+\.md$/.test(n)).length;
-      const sweep = launch('./.contexture/ctx', ['unit', 'migrate', '--sweep', 'g-a'], { cwd: sb, input: null });
+      // the gate holds the sweep at its gap before its second batch, so the signal finds it
+      // running with work left however long the test takes to send it; the gate's plant lies in
+      // the sandbox, so the survivor check covers it too
+      const gate = sweepGate(sb);
+      const sweep = launch('./.contexture/ctx', ['unit', 'migrate', '--sweep', 'g-a'], { cwd: sb, input: null, env: gate.env, timeout: 180_000 });
+      expect(await waitFor(gate.reached, 120_000, 50), `${sig}: the sweep stands between two batches`).toBe(true);
       expect(await waitFor(() => left() < total, 60_000, 50), `${sig}: the first batch moved`).toBe(true);
       sweep.signal(sig);
       const r = await sweep.result;
@@ -365,7 +370,7 @@ describe.concurrent('ctx unit migrate --sweep: the guards', () => {
       expect(readdirSync(join(sb, BACKUPS, `sweep-${stamp}`, 'unit/root/g-a')).length, `${sig}: the stamp names what was moved`).toBe(total - remaining);
       const w = await unit(sb, 'record', 'g-a', '--what=after the stop');
       expect(w.code, `${sig}: the unit and namespace locks are free: ${w.stderr}`).toBe(0);
-      const again = await unit(sb, 'migrate', '--sweep', 'g-a');
+      const again = await exec('./.contexture/ctx', ['unit', 'migrate', '--sweep', 'g-a'], { cwd: sb, timeout: 180_000 });
       expect(again.code).toBe(0);
       expect(left(), `${sig}: a second run sweeps the rest`).toBe(0);
     }
