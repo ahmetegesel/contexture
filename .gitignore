@@ -22,8 +22,15 @@
 # the plugins (tracked catalog: overlays installable into an existing setup)
 !plugins/
 !plugins/**
-# the live workspace state stays untracked in the source: the root drawer and AGENTS.md
-/.contexture/
+# the live workspace state stays untracked in the source: the root drawer and AGENTS.md,
+# save the workspace's own ideas module, tracked so its code is never lost (its data stays
+# untracked in the drawer)
+!/.contexture/
+/.contexture/*
+!/.contexture/modules/
+/.contexture/modules/*
+!/.contexture/modules/ideas/
+!/.contexture/modules/ideas/**
 /AGENTS.md
 # the base tree: the tracked payload (edit base/, ship, apply to the live drawer)
 !base/

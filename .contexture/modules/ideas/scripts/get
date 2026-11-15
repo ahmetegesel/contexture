@@ -1,0 +1,9 @@
+#!/bin/sh
+# summary: print one idea whole
+# usage: ctx ideas get <id> [--json]
+# help: the shared get verb: the address ideas#<id> reads through ctx ideas get <id>; prints the idea in its canonical layout (what, why, status, dumped, picked_by, reason, note, then each ref), an absent status read as OPEN
+# help: --json answers {container, id, address, record}, ref a list
+# help: read only and lock free; a missing idea refuses rc 1 (ERR_ENTITY_NOT_FOUND) naming it, a malformed id rc 1 (ERR_INVALID_ARGUMENT)
+# help: example: ctx ideas get rust-driver
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/ideas" get "$@"

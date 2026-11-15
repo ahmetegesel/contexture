@@ -1,0 +1,9 @@
+#!/bin/sh
+# summary: add one idea, OPEN, under a new id
+# usage: ctx ideas add <id> --what=<line>|--stdin=what [--why=<line>|--stdin=why] [--ref=<full address>]... [--dumped=<YYYY-MM-DD>]
+# help: creates only: the id follows the slug rule (letters, digits, underscore, and dash, starting with a letter or digit) and is unique whatever its case; the idea lands with status OPEN and dumped today unless --dumped names its date
+# help: what is required and why optional, each one line by flag or one block on stdin (one --stdin per call); --ref repeats, each a full address <owner>#<path> whose target is checked through its owner's get before the write (a file# path inside the workspace must exist)
+# help: prints the id; a refusal writes nothing: a malformed id, an empty or blank only what or why, a newline in a one line value, invalid UTF-8, a dumped that is no calendar date (the month 01 to 12, the day within its month), a ref outside the full address shape, or an unknown flag rc 1 (ERR_INVALID_ARGUMENT); a ref whose target or owner is missing rc 1 (ERR_ENTITY_NOT_FOUND); an existing id rc 1 (ERR_ENTITY_EXISTS); a missing what rc 1 (ERR_SCHEMA_VIOLATION)
+# help: example: ctx ideas add rust-driver --stdin=what < idea.txt
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/ideas" add "$@"

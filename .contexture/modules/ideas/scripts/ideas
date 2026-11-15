@@ -1,0 +1,450 @@
+#!/bin/sh
+# ideas: the private worker behind the ideas verbs. It carries no summary line, so the engine
+# never lists it as a verb; each verb is a thin wrapper that execs it with its act name. Its
+# one door to the data is the storage layer's module library, which serves this module's own
+# namespace alone and checks every write against the field lines of the module's data file.
+# The module keeps what the library does not: the ref field (the reserved built in list of
+# full addresses, each checked here), the pairings of picked_by with PICKED and reason with
+# DROPPED, the OPEN only moves, and no delete.
+#
+# Every refusal is rc 1 or 2 with one stderr line, ideas <verb>: error: <message> (<CODE>),
+# a library refusal re-framed under the verb's name; a write refusal writes nothing.
+set -u
+
+verb=${1:-}
+[ -n "$verb" ] && shift
+FN="ideas $verb"
+
+die() {
+  printf '%s: error: %s (%s)\n' "$FN" "$3" "$2" >&2
+  exit "$1"
+}
+
+if [ -z "${CTX_ROOT:-}" ]; then
+  printf '%s: error: run this module through ctx (CTX_ROOT is not set) (ERR_INVALID_ARGUMENT)\n' "$FN" >&2
+  exit 2
+fi
+
+MOD=${0%/scripts/*}
+ME=${MOD##*/}
+FN="$ME $verb"
+CTXB=${CTX_BIN:-$CTX_ROOT/.contexture/ctx}
+case "${1:-}" in
+  --help|-h) [ $# -eq 1 ] && exec "$CTXB" "$ME" help "$verb" ;;
+esac
+
+REC_AWK=$MOD/lib/idea.awk
+LIB=$CTX_ROOT/.contexture/storage/scripts/library
+[ -f "$LIB" ] || die 2 ERR_DRIVER_NOT_FOUND 'the storage layer library is not installed'
+CTX_STORE_ROOT=$CTX_ROOT
+export CTX_STORE_ROOT
+. "$LIB"
+CORE=${LIB%/library}
+
+scratch=${CTX_SCRATCH_ROOT:-$CTX_ROOT/.contexture/tmp}
+mkdir -p "$scratch" 2>/dev/null
+SCR=$(mktemp -d "$scratch/ideas.XXXXXX" 2>/dev/null) || die 2 ERR_STORAGE_WRITE 'cannot make the verb scratch'
+cleanup() {
+  lib_unlock
+  rm -rf "$SCR"
+}
+trap 'cleanup' EXIT
+trap 'cleanup; trap - EXIT; exit 129' HUP
+trap 'cleanup; trap - EXIT; exit 130' INT
+trap 'cleanup; trap - EXIT; exit 143' TERM
+
+NL='
+'
+CR=$(printf '\r')
+CONTAINER=ideas
+TYPE=idea
+STATUSES='OPEN|PICKED|DROPPED'
+
+reframe() {
+  rf_line=$(sed -n 1p "$SCR/err")
+  printf '%s: error: %s\n' "$FN" "${rf_line#*: error: }" >&2
+}
+
+# lib_or_die <function> [args...]: one library call; a refusal re-framed, its rc the exit
+lib_or_die() {
+  "$@" 2> "$SCR/err"
+  lod_rc=$?
+  [ "$lod_rc" -eq 0 ] && return 0
+  reframe
+  exit "$lod_rc"
+}
+
+rec() {
+  REC_MODE=$1 REC_ARG=${2:-} awk -f "$REC_AWK"
+}
+
+# word_ok <word>: the slug rule of ids and units: letters, digits, underscore, and dash,
+# starting with a letter or digit
+word_ok() {
+  case "$1" in
+    [ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]*) ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-]*) return 1 ;;
+  esac
+  return 0
+}
+
+id_arg() {
+  word_ok "$1" || die 1 ERR_INVALID_ARGUMENT "malformed id '$(store_lib_escape "$1")' (letters, digits, underscore, and dash, starting with a letter or digit)"
+}
+
+# one_line <flag> <value>: a flag value holds no newline or carriage return
+one_line() {
+  case "$2" in *"$NL"*|*"$CR"*) die 1 ERR_INVALID_ARGUMENT "$1 takes one line$3" ;; esac
+}
+
+# blank <value>: the value holds nothing but blanks (spaces and tabs), or nothing at all, so
+# it refuses as the empty value does
+blank() {
+  case "$1" in *[![:blank:]]*) return 1 ;; esac
+  return 0
+}
+
+# status_ok <value>: the value is one status of $STATUSES, matched as a whole, so a pipe
+# joined run of statuses (the form the usage prints) is none
+status_ok() {
+  so_rest="$STATUSES|"
+  while [ -n "$so_rest" ]; do
+    [ "$1" = "${so_rest%%|*}" ] && return 0
+    so_rest=${so_rest#*|}
+  done
+  return 1
+}
+
+# date_ok <value>: a real calendar date YYYY-MM-DD: the month 01 to 12 and the day within its
+# month, February 29 only in a leap year (every fourth year, a century only every fourth)
+date_ok() {
+  case "$1" in
+    [0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;;
+    *) return 1 ;;
+  esac
+  DT=$1 awk 'BEGIN {
+    split(ENVIRON["DT"], P, "-"); y = P[1] + 0; m = P[2] + 0; d = P[3] + 0
+    split("31 28 31 30 31 30 31 31 30 31 30 31", L, " ")
+    if (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) L[2] = 29
+    exit !(m >= 1 && m <= 12 && d >= 1 && d <= L[m])
+  }' < /dev/null
+}
+
+# keys: every stored id, one per line, bytewise
+keys() {
+  lib_or_die store_list > "$SCR/list.json"
+  awk -f "$CORE/json.awk" < "$SCR/list.json" | sed -n 's/^keys\.[0-9][0-9]*=//p'
+}
+
+# id_free <id>: refuses an id an idea holds, in any case
+id_free() {
+  keys > "$SCR/keys"
+  if if_twin=$(IF_ID=$(printf '%s\n' "$1" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz') awk 'tolower($0) == ENVIRON["IF_ID"] { print; found = 1; exit } END { exit !found }' "$SCR/keys"); then
+    [ "$if_twin" = "$1" ] && die 1 ERR_ENTITY_EXISTS "idea '$1' already exists"
+    die 1 ERR_ENTITY_EXISTS "idea '$1' already exists as '$if_twin' (ids are unique whatever their case)"
+  fi
+}
+
+# load <id> <record file>: the idea with its read defaults filled; a missing one refused
+load() {
+  fields_get "$1" "$2" 2> "$SCR/err"
+  ld_rc=$?
+  [ "$ld_rc" -eq 0 ] && return 0
+  if [ "$ld_rc" -eq 1 ] && grep -q '(ERR_ENTITY_NOT_FOUND)$' "$SCR/err" && grep -q "^fields.get: error: key '" "$SCR/err"; then
+    die 1 ERR_ENTITY_NOT_FOUND "idea '$1' not found"
+  fi
+  reframe
+  exit "$ld_rc"
+}
+
+# print_record <id> <record file>
+print_record() {
+  if [ "$json" = 1 ]; then
+    printf '{"container":"%s","id":"%s","address":"%s#%s","record":' "$CONTAINER" "$1" "$ME" "$1"
+    rec json ref < "$2"
+    printf '}\n'
+  else
+    cat "$2"
+  fi
+}
+
+# block_act <field> <file>: one block action for the file's bytes
+block_act() {
+  ba_v=$("$CORE/store-b64" "$2") || die 2 ERR_STORAGE_READ "cannot encode field '$1'"
+  printf 'block\t%s\t%s\n' "$1" "$ba_v" >> "$SCR/acts"
+}
+
+# ref_add <ref>: one ref checked for its shape and kept once, in order
+ref_add() {
+  lib_utf8_ok "$1" || die 1 ERR_INVALID_ARGUMENT "field 'ref': the value is not valid UTF-8"
+  lib_ref_ok "$FN" "$1" || exit $?
+  grep -Fqx -- "$1" "$SCR/refs" && die 1 ERR_INVALID_ARGUMENT "field 'ref' already holds '$1'"
+  printf '%s\n' "$1" >> "$SCR/refs"
+}
+
+# owner_kind <owner>: has (the owner answers get), noget (installed, no get verb), or none;
+# a name the engine reserves is classed by the engine's readers alone, since it never reaches
+# a module's dispatch
+owner_kind() {
+  if (cd "$CTX_ROOT" && "$CTXB" _reserved "$1" < /dev/null > /dev/null 2>&1); then
+    if (cd "$CTX_ROOT" && "$CTXB" _builtin "$1" < /dev/null > /dev/null 2>&1); then printf noget; else printf none; fi
+  elif (cd "$CTX_ROOT" && "$CTXB" "$1" help get < /dev/null > /dev/null 2>&1); then
+    printf has
+  elif (cd "$CTX_ROOT" && "$CTXB" "$1" help < /dev/null > /dev/null 2>&1); then
+    printf noget
+  else
+    printf none
+  fi
+}
+
+# refs_exist: each kept ref names something that exists, checked before any lock: a file#
+# path by the module (inside the workspace it must exist, outside it the shape alone, the
+# symbol never), every other owner through its own ctx <owner> get <path>
+refs_exist() {
+  re_kinds=" "
+  while IFS= read -r re_r; do
+    re_o=${re_r%%#*}
+    re_p=${re_r#*#}
+    if [ "$re_o" = file ]; then
+      re_f=${re_p%%#*}
+      re_in=$(RE_P=$re_f RE_R=$CTX_ROOT awk 'BEGIN {
+        p = ENVIRON["RE_P"]; r = ENVIRON["RE_R"]
+        if (substr(p, 1, 1) == "/") { if (index(p "/", r "/") != 1) { print "out"; exit } p = substr(p, length(r) + 2) }
+        n = split(p, S, /\//); d = 0
+        for (i = 1; i <= n; i++) { if (S[i] == "..") { d--; if (d < 0) { print "out"; exit } } else if (S[i] != "." && S[i] != "") d++ }
+        print "in"
+      }' < /dev/null)
+      [ "$re_in" = out ] && continue
+      case "$re_f" in /*) re_t=$re_f ;; *) re_t="$CTX_ROOT/$re_f" ;; esac
+      [ -e "$re_t" ] && continue
+      die 1 ERR_ENTITY_NOT_FOUND "ref '$re_r': target not found"
+    fi
+    case "$re_kinds" in
+      *" $re_o="*) ;;
+      *) re_kinds="$re_kinds$re_o=$(owner_kind "$re_o") " ;;
+    esac
+    case "$re_kinds" in
+      *" $re_o=none "*) die 1 ERR_ENTITY_NOT_FOUND "ref '$re_r': owner '$re_o' is not installed" ;;
+      *" $re_o=noget "*) die 1 ERR_ENTITY_NOT_FOUND "ref '$re_r': owner '$re_o' has no get verb" ;;
+    esac
+    case "$re_p" in
+      -*) ;;
+      *) (cd "$CTX_ROOT" && "$CTXB" "$re_o" get "$re_p" < /dev/null > /dev/null 2>&1) && continue ;;
+    esac
+    die 1 ERR_ENTITY_NOT_FOUND "ref '$re_r': target not found"
+  done < "$SCR/refs"
+}
+
+# move <id> <to> <field> <value>: one OPEN idea moved to the status with its paired field, in
+# one checked write; the other paired field, stored, would stay beside the wrong status, so it
+# refuses
+move() {
+  mv_other=picked_by
+  mv_pair=PICKED
+  [ "$3" = picked_by ] && { mv_other=reason; mv_pair=DROPPED; }
+  lib_or_die lib_lock
+  load "$1" "$SCR/rec"
+  mv_st=$(rec values status < "$SCR/rec")
+  [ "$mv_st" = OPEN ] || die 1 ERR_INVALID_TRANSITION "idea '$1' is $mv_st; $verb moves only from OPEN"
+  if [ -n "$(rec values "$mv_other" < "$SCR/rec")" ]; then
+    die 1 ERR_SCHEMA_VIOLATION "idea '$1' holds field '$mv_other', which pairs only with status $mv_pair, so $verb would leave it beside $2"
+  fi
+  printf 'set\tstatus\t%s\nset\t%s\t%s\n' "$2" "$3" "$(store_lib_escape "$4")" > "$SCR/acts"
+  lib_or_die fields_set "$1" "$SCR/acts" "$SCR/new"
+  printf '%s\n' "$1"
+}
+
+json=0
+
+case "$verb" in
+  get)
+    gid=""
+    for a in "$@"; do
+      case "$a" in
+        --json) json=1 ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (usage: ctx $ME get <id> [--json])" ;;
+        *) [ -z "$gid" ] || die 1 ERR_INVALID_ARGUMENT "get takes one id (usage: ctx $ME get <id> [--json])"; gid=$a ;;
+      esac
+    done
+    [ -n "$gid" ] || die 1 ERR_INVALID_ARGUMENT "usage: ctx $ME get <id> [--json]"
+    id_arg "$gid"
+    load "$gid" "$SCR/rec"
+    print_record "$gid" "$SCR/rec"
+    exit 0
+    ;;
+  list)
+    want=OPEN
+    for a in "$@"; do
+      case "$a" in
+        --json) json=1 ;;
+        --status=*) want=${a#--status=}
+          [ -n "$want" ] || die 1 ERR_INVALID_ARGUMENT "field 'status': an empty filter value"
+          status_ok "$want" || die 1 ERR_INVALID_ARGUMENT "field 'status': '$(store_lib_escape "$want")' is not one of $STATUSES" ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (usage: ctx $ME list [--status=$STATUSES] [--json])" ;;
+        *) die 1 ERR_INVALID_ARGUMENT "list takes no operand (usage: ctx $ME list [--status=$STATUSES] [--json])" ;;
+      esac
+    done
+    lib_or_die fields_own "$SCR/decl"
+    keys > "$SCR/keys"
+    : > "$SCR/targets"
+    n=0
+    while IFS= read -r k; do
+      n=$((n + 1))
+      printf '%s\t%s\n' "$k" "$SCR/r.$n" >> "$SCR/targets"
+    done < "$SCR/keys"
+    [ "$n" -eq 0 ] || lib_or_die store_get_into "$SCR/targets" > /dev/null
+    [ "$json" = 1 ] && printf '{"container":"%s","records":[' "$CONTAINER"
+    first=1
+    count=0
+    n=0
+    while IFS= read -r k; do
+      n=$((n + 1))
+      lib_or_die fields_effective "$SCR/decl" "$SCR/r.$n" > "$SCR/r.$n.eff"
+      [ "$(rec values status < "$SCR/r.$n.eff")" = "$want" ] || continue
+      count=$((count + 1))
+      if [ "$json" = 1 ]; then
+        [ "$first" = 1 ] || printf ','
+        first=0
+        printf '{"id":"%s","address":"%s#%s","record":' "$k" "$ME" "$k"
+        rec json ref < "$SCR/r.$n.eff"
+        printf '}'
+      else
+        rec text "$k" < "$SCR/r.$n.eff"
+      fi
+    done < "$SCR/keys"
+    [ "$json" = 1 ] && printf '],"total":%s}\n' "$count"
+    exit 0
+    ;;
+  add)
+    [ $# -ge 1 ] || die 1 ERR_INVALID_ARGUMENT "usage: ctx $ME add <id> --what=<line>|--stdin=what [--why=<line>|--stdin=why] [--ref=<full address>]... [--dumped=<YYYY-MM-DD>]"
+    aid=$1
+    shift
+    case "$aid" in -*) die 1 ERR_INVALID_ARGUMENT "add takes the id first (usage: ctx $ME add <id> [flags])" ;; esac
+    : > "$SCR/acts"
+    : > "$SCR/refs"
+    given=" "
+    for a in "$@"; do
+      case "$a" in
+        --what=*|--why=*|--stdin=what|--stdin=why|--dumped=*)
+          af=${a#--}
+          af=${af#stdin=}
+          af=${af%%=*}
+          case "$given" in *" $af "*) die 1 ERR_INVALID_ARGUMENT "field '$af' is given twice" ;; esac
+          given="$given$af "
+          ;;
+      esac
+      case "$a" in
+        --what=*|--why=*)
+          af=${a#--}
+          av=${af#*=}
+          af=${af%%=*}
+          one_line "--$af" "$av" " (a block comes on stdin: --stdin=$af)"
+          blank "$av" && die 1 ERR_INVALID_ARGUMENT "field '$af': an empty value"
+          printf '%s' "$av" > "$SCR/val"
+          block_act "$af" "$SCR/val"
+          ;;
+        --stdin=what|--stdin=why)
+          af=${a#--stdin=}
+          [ ! -s "$SCR/stdin.used" ] || die 1 ERR_INVALID_ARGUMENT "one block per call: --stdin names '$(cat "$SCR/stdin.used")' already"
+          printf '%s' "$af" > "$SCR/stdin.used"
+          cat > "$SCR/block"
+          # a block of only blanks and newlines goes to the write empty, refused as the empty one is
+          [ "$(tr -d ' \t\n' < "$SCR/block" | wc -c)" -eq 0 ] && : > "$SCR/block"
+          block_act "$af" "$SCR/block"
+          ;;
+        --stdin=*) die 1 ERR_INVALID_ARGUMENT "add reads one block of what or why on stdin, not '$(store_lib_escape "${a#--stdin=}")'" ;;
+        --dumped=*)
+          ad=${a#--dumped=}
+          date_ok "$ad" || die 1 ERR_INVALID_ARGUMENT "field 'dumped': '$(store_lib_escape "$ad")' is no calendar date YYYY-MM-DD (the month 01 to 12, the day within its month)"
+          printf 'set\tdumped\t%s\n' "$ad" >> "$SCR/acts"
+          ;;
+        --ref=*) ref_add "${a#--ref=}" ;;
+        *) die 1 ERR_INVALID_ARGUMENT "unknown argument '$(store_lib_escape "$a")' (add takes --what, --why, --stdin=what or --stdin=why, --ref, and --dumped)" ;;
+      esac
+    done
+    id_arg "$aid"
+    refs_exist
+    lib_or_die lib_lock
+    id_free "$aid"
+    if [ -s "$SCR/refs" ]; then
+      lib_or_die fields_own "$SCR/decl"
+      : > "$SCR/empty"
+      lib_or_die fields_apply "$SCR/decl" "$SCR/empty" "$SCR/acts" "$SCR/new"
+      while IFS= read -r r; do printf 'ref: "%s"\n' "$(store_lib_escape "$r")"; done < "$SCR/refs" >> "$SCR/new"
+      lib_or_die store_put "$aid" < "$SCR/new" > /dev/null
+    else
+      lib_or_die fields_put "$aid" "$SCR/acts" "$SCR/new"
+    fi
+    printf '%s\n' "$aid"
+    exit 0
+    ;;
+  pick|drop)
+    if [ "$verb" = pick ]; then mf=picked_by; mflag=--by; mto=PICKED; mwhat='<unit>'; else mf=reason; mflag=--reason; mto=DROPPED; mwhat='<text>'; fi
+    mid=""
+    mval=""
+    mset=0
+    for a in "$@"; do
+      case "$a" in
+        "$mflag"=*) [ "$mset" = 0 ] || die 1 ERR_INVALID_ARGUMENT "field '$mf' is given twice"; mval=${a#"$mflag"=}; mset=1 ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (usage: ctx $ME $verb <id> $mflag=$mwhat)" ;;
+        *) [ -z "$mid" ] || die 1 ERR_INVALID_ARGUMENT "$verb takes one id (usage: ctx $ME $verb <id> $mflag=$mwhat)"; mid=$a ;;
+      esac
+    done
+    [ -n "$mid" ] || die 1 ERR_INVALID_ARGUMENT "usage: ctx $ME $verb <id> $mflag=$mwhat"
+    id_arg "$mid"
+    [ "$mset" = 1 ] || die 1 ERR_INVALID_ARGUMENT "$verb needs $mflag=$mwhat: field '$mf' pairs with status $mto"
+    [ -n "$mval" ] || die 1 ERR_INVALID_ARGUMENT "field '$mf': an empty value"
+    if [ "$verb" = pick ]; then
+      word_ok "$mval" || die 1 ERR_INVALID_ARGUMENT "field 'picked_by': '$(store_lib_escape "$mval")' is no unit slug (letters, digits, underscore, and dash, starting with a letter or digit)"
+    else
+      blank "$mval" && die 1 ERR_INVALID_ARGUMENT "field '$mf': an empty value"
+    fi
+    move "$mid" "$mto" "$mf" "$mval"
+    exit 0
+    ;;
+  search)
+    sq=""
+    sq_set=0
+    s_type=""
+    s_mode=exact
+    s_limit=20
+    for a in "$@"; do
+      case "$a" in
+        --type=*) s_type=${a#--type=} ;;
+        --mode=*) s_mode=${a#--mode=} ;;
+        --limit=*) s_limit=${a#--limit=} ;;
+        --json) json=1 ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (usage: ctx $ME search \"<query>\" [--type=$TYPE] [--mode=<m>] [--limit=<n>] [--json])" ;;
+        *) [ "$sq_set" = 0 ] || die 1 ERR_INVALID_ARGUMENT 'search takes one query'; sq=$a; sq_set=1 ;;
+      esac
+    done
+    [ -n "$sq" ] || die 1 ERR_INVALID_ARGUMENT "usage: ctx $ME search \"<query>\" [--type=$TYPE] [--mode=<m>] [--limit=<n>] [--json]"
+    case "$sq" in *"$NL"*|*"$CR"*) die 1 ERR_INVALID_ARGUMENT 'a query holds no newline or carriage return' ;; esac
+    case "$s_limit" in ''|*[!0123456789]*|0*) die 1 ERR_INVALID_ARGUMENT "--limit takes a positive whole number, not '$(store_lib_escape "$s_limit")'" ;; esac
+    lib_or_die store_modes --own > "$SCR/modes"
+    if ! cut -f 1 "$SCR/modes" | grep -Fqx -- "$s_mode"; then
+      [ -n "${CTX_SEARCH_FANOUT:-}" ] || die 1 ERR_INVALID_ARGUMENT "mode '$(store_lib_escape "$s_mode")' cannot answer the $ME module (it answers: $(cut -f 1 "$SCR/modes" | tr '\n' ' ' | sed 's/ $//; s/ /, /g'))"
+    fi
+    hit=1
+    if [ -n "$s_type" ] && [ "$s_type" != "$TYPE" ]; then
+      [ -n "${CTX_SEARCH_FANOUT:-}" ] || die 1 ERR_INVALID_ARGUMENT "type '$(store_lib_escape "$s_type")' is no $ME type (the $ME module answers type $TYPE)"
+      hit=0
+    fi
+    if [ "$hit" = 1 ]; then
+      lib_or_die store_search "$sq" exact 0 > "$SCR/search.json"
+      awk -f "$CORE/json.awk" < "$SCR/search.json" > "$SCR/search.flat" || die 2 ERR_STORAGE_READ 'the storage layer answered a malformed search'
+    else
+      : > "$SCR/search.flat"
+    fi
+    fmt=text
+    [ "$json" = 1 ] && fmt=json
+    ROWS_OWNER=$ME ROWS_CONTAINER=$CONTAINER ROWS_TYPE=$TYPE ROWS_LIMIT=$s_limit ROWS_QUERY=$sq ROWS_FORMAT=$fmt REC_MODE=rows awk -f "$REC_AWK" < "$SCR/search.flat"
+    exit 0
+    ;;
+  *)
+    die 1 ERR_INVALID_ARGUMENT "unknown verb '$(store_lib_escape "$verb")'"
+    ;;
+esac

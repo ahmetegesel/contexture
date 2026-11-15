@@ -1,0 +1,10 @@
+# the ideas module's store declaration: one value per idea (the namespace is the folder name)
+root: .contexture/ideas
+key: <id>
+field: what: required block
+field: why: optional block
+field: status: optional line one-of OPEN|PICKED|DROPPED default OPEN
+field: dumped: optional line default today
+field: picked_by: optional line
+field: reason: optional line
+field: note: optional block

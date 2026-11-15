@@ -1,0 +1,8 @@
+#!/bin/sh
+# summary: pick one OPEN idea up for a unit: status PICKED with picked_by, in one write
+# usage: ctx ideas pick <id> --by=<unit>
+# help: picking an idea up is bootstrapping its unit; --by names that unit (letters, digits, underscore, and dash, starting with a letter or digit) and is required, since picked_by pairs with PICKED alone
+# help: prints the id; a refusal writes nothing: no --by, an empty or malformed unit, or a malformed id rc 1 (ERR_INVALID_ARGUMENT); a missing idea rc 1 (ERR_ENTITY_NOT_FOUND); an idea that is not OPEN rc 1 (ERR_INVALID_TRANSITION); an idea holding reason, which would stay beside PICKED, rc 1 (ERR_SCHEMA_VIOLATION)
+# help: example: ctx ideas pick rust-driver --by=storage-rust
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/ideas" pick "$@"

@@ -1,0 +1,9 @@
+#!/bin/sh
+# summary: list the ideas of one status, OPEN by default, complete and uncapped
+# usage: ctx ideas list [--status=OPEN|PICKED|DROPPED] [--json]
+# help: one line per idea in id order: the id, then each line field and its values (status, dumped, picked_by, reason, ref), block fields left out; an idea with no status reads OPEN
+# help: --status takes one status, matched whole by exact equality, default OPEN; any other value, a run of statuses joined by a pipe among them, refuses rc 1 (ERR_INVALID_ARGUMENT) naming it, never an empty answer
+# help: --json answers {container, records, total}, every record whole; search finds block text
+# help: example: ctx ideas list --status=PICKED
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/ideas" list "$@"

@@ -1,0 +1,8 @@
+#!/bin/sh
+# summary: drop one OPEN idea with a reason: status DROPPED with reason, in one write
+# usage: ctx ideas drop <id> --reason=<text>
+# help: --reason is one line and required, since reason pairs with DROPPED alone; a dropped idea stays, never deleted
+# help: prints the id; a refusal writes nothing: no --reason, an empty or blank only reason or one holding a newline, or a malformed id rc 1 (ERR_INVALID_ARGUMENT); a missing idea rc 1 (ERR_ENTITY_NOT_FOUND); an idea that is not OPEN rc 1 (ERR_INVALID_TRANSITION); an idea holding picked_by, which would stay beside DROPPED, rc 1 (ERR_SCHEMA_VIOLATION)
+# help: example: ctx ideas drop rust-driver --reason="met by the storage rework"
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/ideas" drop "$@"
