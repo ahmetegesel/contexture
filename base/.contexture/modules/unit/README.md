@@ -62,7 +62,9 @@ The data script answers the 35 record operations: 13 session (`create`, `list`, 
 `refs_to`), 8 task (`add`, `update`, `start`, `complete`, `reopen`, `drop`, `list`,
 `get`), 4 entry (`record`, `get`, `list`, `closure`), 6 finding (`add`, `update`,
 `supersede`, `drop`, `get`, `list`), and 4 lane (`create`, `record`, `write_report`,
-`get`), plus `search.query`. `capability` and `storage.health` stay the driver's.
+`get`), plus `search.query`. `capability` and `storage.health` stay the driver's, and so
+does the posix driver's `storage.leftovers`, which `diagnose --leftovers` reads through the
+storage layer's library (`store_leftovers`) for the unit namespace.
 
 The reads of one unit fetch the exact keys with `store.get` (state, then the named
 backlog, journal, and knowledge), no list: a part the storage layer does not hold is absent, and

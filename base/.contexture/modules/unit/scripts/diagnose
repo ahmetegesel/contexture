@@ -1,11 +1,18 @@
 #!/bin/sh
 # summary: storage diagnostics: configuration, storage driver, and storage health
-# usage: ctx unit diagnose [--json]
+# usage: ctx unit diagnose [--leftovers] [--json]
 # help: inspect the workspace configuration, the resolved storage driver and its
 # help: capability descriptor (the contract, the functions, the search modes, the
 # help: optional capabilities), and the storage backend health (storage.health), then the
 # help: ACTIVE unit count from the record's own listing; a listing that refuses prints
 # help: active units: unknown (<its refusal's message>), null in --json, never a count.
+# help: --leftovers adds what the record's storage holds beyond its keys (the storage
+# help: layer's read only probe over the unit namespace, a whole walk of its root and its
+# help: deprecated root): one line per root, its keys and entries and each kind found with
+# help: its count and bytes (stray files, folders outside the key shape, empty folders,
+# help: symbolic links, special files, unreadable folders, lock or write remnants, keys the
+# help: root shadows), never a path; --json adds storage.leftovers, the probe's answer, null
+# help: when it refused; a probe that refuses prints leftovers: unknown (<its message>).
 # help: exit codes: 0 the diagnosis printed, a part it could not read named in its own line
 # help: (a driver error, a health error, an unknown count); 1 an unrecognized option; 2 the
 # help: storage resolver missing or no scratch folder.
@@ -13,13 +20,17 @@
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 format="text"
+leftovers=0
 for arg in "$@"; do
   case "$arg" in
     --json)
       format="json"
       ;;
+    --leftovers)
+      leftovers=1
+      ;;
     --help|-h)
-      printf 'usage: ctx unit diagnose [--json]\n'
+      printf 'usage: ctx unit diagnose [--leftovers] [--json]\n'
       printf 'inspect the workspace configuration, resolved storage driver, capabilities, and health\n'
       exit 0
       ;;
@@ -108,6 +119,23 @@ else
   [ -n "$active_err" ] || active_err="the record's listing did not answer"
 fi
 
+# 5. With --leftovers, what the unit namespace's storage holds beyond its keys: the storage
+# layer's read only probe for the module's own namespace (the library's caller lookup names
+# it), its answer rendered by the library's one text form; a probe that refuses leaves it
+# unknown with its message, null in --json
+lo_ans=""
+lo_err=""
+if [ "$leftovers" -eq 1 ]; then
+  if [ -z "$VB_LIBRARY" ]; then
+    lo_err="the storage layer library is not installed"
+  elif store_leftovers < /dev/null > "$VB_DIR/lo" 2> "$VB_DIR/loerr" && store_leftovers_text "$VB_DIR/lo" summary > "$VB_DIR/lotext" 2>> "$VB_DIR/loerr"; then
+    lo_ans=$(cat "$VB_DIR/lo")
+  else
+    lo_err=$(awk 'NR == 1 { sub(/^[^ ]*: error: /, ""); print; exit }' "$VB_DIR/loerr" 2>/dev/null)
+    [ -n "$lo_err" ] || lo_err="the storage layer did not answer the leftovers probe"
+  fi
+fi
+
 # jstr <text>: one JSON string in the contract form
 jstr() {
   JS_V="$1" awk 'BEGIN {
@@ -123,10 +151,12 @@ jstr() {
 
 if [ "$format" = "json" ]; then
   if [ "$driver_status" = ok ]; then desc=$(cat "$VB_DIR/cap"); else desc=null; fi
-  printf '{"workspace_root":%s,"config":{"status":%s,"driver":%s},"driver":{"name":%s,"source":%s,"status":%s,"descriptor":%s},"storage":{"health":%s,"detail":%s,"store":%s,"active_units":%s}}\n' \
+  lo_json=""
+  [ "$leftovers" -eq 0 ] || lo_json=",\"leftovers\":${lo_ans:-null}"
+  printf '{"workspace_root":%s,"config":{"status":%s,"driver":%s},"driver":{"name":%s,"source":%s,"status":%s,"descriptor":%s},"storage":{"health":%s,"detail":%s,"store":%s,"active_units":%s%s}}\n' \
     "$(jstr "$root")" "$(jstr "$config_status")" "$(jstr "${config_driver:-none}")" \
     "$(jstr "$driver_name")" "$(jstr "$driver_source")" "$(jstr "$driver_status")" "$desc" \
-    "$(jstr "$health_status")" "$(jstr "$health_detail")" "$(jstr "$health_store")" "${active_count:-null}"
+    "$(jstr "$health_status")" "$(jstr "$health_detail")" "$(jstr "$health_store")" "${active_count:-null}" "$lo_json"
 else
   printf 'ctx unit: storage and configuration diagnostics\n'
   printf '  workspace root:  %s\n' "$root"
@@ -149,5 +179,13 @@ else
     printf '  active units:    %d\n' "$active_count"
   else
     printf '  active units:    unknown (%s)\n' "$active_err"
+  fi
+  if [ "$leftovers" -eq 1 ]; then
+    if [ -n "$lo_ans" ]; then
+      printf '  leftovers:\n'
+      sed 's/^/    /' "$VB_DIR/lotext"
+    else
+      printf '  leftovers:       unknown (%s)\n' "$lo_err"
+    fi
   fi
 fi

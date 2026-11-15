@@ -40,6 +40,45 @@ root) reads `error` with that presence, as do the fts5 checks (another schema re
 present, a failed integrity check, an sqlite3 older than 3.44 with the store by the
 file's existence); `locked` replaces `ok` whatever the presence; the detail names no
 folder, and the probe prints no fallback notice.
+
+The posix driver answers a third method of its own, `storage.leftovers <namespace>`: what
+the named namespace's declared root and fallback root hold beyond the keys its pattern
+admits, a read only walk of each that writes nothing, takes no lock, and names no folder
+in its answer (the same argument refusals as the health). Each root is walked once: one
+`find` from inside the root lists every entry by type through batched `printf` calls and
+sizes every regular file through `wc -c` (which stats a regular file), a symbolic link
+never followed. The listing is one entry per line, so a name holding a newline could forge
+a line for another path: the `find` prunes every such name and prints only its parent
+folder, never the name, and when it found one a second `find` sums the regular files at
+or below such names through `wc -c` reading each file on its standard input, so no name
+is printed. One awk pass then classifies the listing; a line it cannot parse stops the
+probe rc 2 `ERR_STORAGE_READ`, a name never continued across lines. A regular file the
+pattern admits is a key (the store's own list rule: the suffix, the key rule, the
+pattern), each
+folder above a key is a key folder, and every other entry belongs to the topmost folder
+above it that holds no key, or stands loose in a key folder or the root. A loose folder is
+a lock remnant (named `.lock` or `*.lock`, as an older release's lock folder inside the
+deprecated root), an unreadable folder (one with no listed entry that cannot be read or
+entered), a folder outside the key shape (it holds a file, a link, a special file, or an
+unreadable folder), or an empty folder (as `ctx store delete containers/<name>` leaves a
+dropped container's folder); a loose file is a lock or write remnant (a lock name, or a
+key file's name with a six character `mktemp` tail, a killed put's temp), else a stray
+file (a wrong suffix, outside the pattern, or a name the key rule refuses); a link and a
+fifo, socket, or device count apart; a name holding a newline counts as its own kind, its
+bytes the regular files at or below it; in the fallback root a key the root also holds is
+a shadowed key, never a key. The answer is one compact object `{"driver","namespace",
+"root","fallback"}`, each root `{"state"}` for `absent` (not made), `link` (a symbolic
+link, which the store never walks), `unreadable`, or `none` (the namespace declares no
+fallback root), else `{"state":"walked","entries","keys","kinds"}`, the kinds
+`stray_files`, `nonkey_folders`, `empty_folders`, `links`, `special_files`,
+`unreadable_folders`, `remnants`, `shadowed_keys`, and `newline_names` in that order, each
+`{"count","bytes"}` (`entries` counts each name holding a newline once) (a leftover folder
+counts once, its regular files' bytes rolled in; a file `wc` cannot read counts 0 bytes). The fts5 driver keeps one database and no key file tree, so
+it answers its unknown function line rc 2 `ERR_CAPABILITY_UNSUPPORTED`. A walk costs what
+the roots hold, every entry once: it is the whole walk the leftovers explain, so it runs
+only where a caller asks for it (`ctx unit diagnose --leftovers`, `ctx store check
+--leftovers`), never inside another function.
+
 Seven data functions and the optional promotion, called through the resolver:
 
 | function | argv | stdin | answer |
@@ -317,6 +356,17 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
   `ERR_DRIVER_NOT_FOUND` when no data reader is found and `ERR_STORAGE_READ` quoting the
   reader's first reason when the listing left a module out (a data file it cannot read)
   or failed (no module drawer), never a partial list;
+- `store_leftovers`, the driver's `storage.leftovers` over the caller's own namespace, its
+  one JSON line on stdout (a driver without the method passes its unknown function line
+  through, rc 2), and `store_leftovers_text <answer> <summary|kinds>`, the one text form
+  of that answer, naming no folder, through the storage core's flattener: `summary` prints
+  one line per root (`root:`, `fallback root:`), its state (`absent (not made yet)`, `none
+  declared`, unreadable, a symbolic link) or `<keys> keys in <entries> entries` with
+  `nothing beyond them` or `beyond them:` and each kind found with its count and bytes;
+  `kinds` prints one `<root label>: <kind>: <count> (<bytes> bytes)` line per root and
+  kind found (a root it cannot walk on one line too) and nothing when nothing lies beyond
+  the keys; the flattened answer stages at `<answer>.flat` beside the caller's file, and a
+  malformed answer refuses rc 2 with one `store.leftovers: error:` line;
 - the shared checks, each silent with rc 0 for a pass, 1 for a fail, and 2 when the check
   cannot run: `lib_utf8_ok <string>` and `lib_utf8_file_ok <file>`, the UTF-8 check (RFC
   3629: no overlong form, no surrogate, nothing above U+10FFFF), with its awk text in

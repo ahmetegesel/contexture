@@ -669,8 +669,18 @@ case "$verb" in
     exit 0
     ;;
   check)
-    [ $# -eq 1 ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store check <container>'
-    case "$1" in -*|*/*) die 1 ERR_INVALID_ARGUMENT 'usage: ctx store check <container>' ;; esac
+    [ $# -eq 1 ] || die 1 ERR_INVALID_ARGUMENT 'usage: ctx store check <container> | --leftovers'
+    if [ "$1" = --leftovers ]; then
+      # what the store's own storage holds beyond its records' keys, through the storage
+      # layer's read only probe and its one text form: one line per root and kind, rc 1
+      # when any prints, nothing and rc 0 when nothing lies beyond the keys
+      lib_or_die store_leftovers < /dev/null > "$SCR/leftovers"
+      lib_or_die store_leftovers_text "$SCR/leftovers" kinds > "$SCR/leftovers.text"
+      cat "$SCR/leftovers.text"
+      [ -s "$SCR/leftovers.text" ] && exit 1
+      exit 0
+    fi
+    case "$1" in -*|*/*) die 1 ERR_INVALID_ARGUMENT 'usage: ctx store check <container> | --leftovers' ;; esac
     split_path "$1"
     [ "$PC" != containers ] || die 1 ERR_INVALID_ARGUMENT 'check reads a declared container; the containers container has its fixed schema'
     live_for_read

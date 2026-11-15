@@ -1,7 +1,7 @@
 #!/bin/sh
 # driver: the zero-dependency POSIX storage driver (contract 3, docs/the-engine.md, The
-# descriptor and the handshake). The driver is store-only: it answers capability and
-# storage.health as its own methods and the seven generic module store functions
+# descriptor and the handshake). The driver is store-only: it answers capability,
+# storage.health, and storage.leftovers as its own methods and the seven generic module store functions
 # (store.list, store.get, store.put, store.delete, store.changes, store.batch, store.scan)
 # over a module's declared data file and root, plus the store.search entry. The record's
 # 35 operations live in the unit module's data script over this store; the driver keeps no
@@ -279,7 +279,7 @@ store_data() {
   FN=$1
   sd_ns=$2
   case "$FN" in
-    storage.health) sd_scratch_code=ERR_STORAGE_READ ;;
+    storage.health|storage.leftovers) sd_scratch_code=ERR_STORAGE_READ ;;
     *) sd_scratch_code=ERR_STORAGE_WRITE ;;
   esac
   sd_ws=$(find_workspace_root)
@@ -1398,6 +1398,218 @@ storage_health() {
   printf '{"driver":"posix","health":"%s","detail":"%s","store":"%s"}\n' "$sh_health" "$sh_detail" "$sh_store"
 }
 
+# LO_NLPAT: the walk's pattern for a name holding a newline (find -name and -path take it with
+# a literal newline): such a name is pruned from every listing and never parsed, since the
+# listing is one entry per line
+LO_NLPAT="*$SD_NL*"
+
+# LO_AWK: the leftovers walk's one awk program over a root's typed listing (d, f, l, or o, a
+# tab, and ./<path> per entry, from find's batched printf; n, a tab, and the parent folder of
+# each name holding a newline, which the walk pruned and never lists) and its sizes (wc -c
+# lines, keyed by the same ./<path>; a summary total line skipped). Any other line stops the
+# program rc 3, nothing answered: a name is never continued across lines. LO_PASS=empty
+# prints the folders with no entry (the readability candidates), after an empty line when a
+# name holding a newline was found; LO_PASS=walk classifies: a regular file the
+# pattern admits is a key (written to LO_KEYS when set; in the fallback a key LO_SHADOW names
+# is a shadowed key), each folder above a key is a key folder, and every other entry belongs
+# to the topmost folder above it that holds no key, or stands loose in a key folder or the
+# root. A loose folder: a lock remnant (.lock or *.lock), unreadable (named in LO_UNREAD), a
+# non-key folder (it holds a file, link, special file, or unreadable folder), else empty;
+# its bytes the regular files below it. A loose file: a lock or write remnant (a lock name,
+# or <key file name>.XXXXXX, a killed writer's temp), else a stray file; a link and a
+# special file count apart; the names holding a newline count as their own kind, their bytes
+# LO_NLBYTES. It prints one JSON object, never a path.
+LO_AWK='
+function parent(p) { return match(p, /\/[^\/]*$/) ? substr(p, 1, RSTART - 1) : "" }
+function base(p) { return match(p, /[^\/]*$/) ? substr(p, RSTART) : p }
+function admit(p,   key, n, k, i) {
+  key = p
+  if (sfx != "") {
+    if (length(key) < length(sfx) || substr(key, length(key) - length(sfx) + 1) != sfx) return 0
+    key = substr(key, 1, length(key) - length(sfx))
+  }
+  if (key == "" || substr(key, 1, 1) == "/" || substr(key, length(key), 1) == "/") return 0
+  if (key ~ /[[:cntrl:]]/ || index(key, " ") || index(key, "\\")) return 0
+  n = split(key, k, "/")
+  for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") return 0
+  if (m < 1) return 0
+  if (multi) { if (n < m) return 0 } else if (n != m) return 0
+  for (i = 1; i < m; i++) if (pp[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) return 0
+  if (!multi && pp[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) return 0
+  KEY_OF = key
+  return 1
+}
+function lockname(nm) { return nm == ".lock" || nm ~ /\.lock$/ }
+function tempname(nm,   L, ls) {
+  L = length(nm); ls = length(sfx)
+  if (L < ls + 8) return 0
+  if (substr(nm, L - 5) !~ /^[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]$/) return 0
+  if (substr(nm, L - 6, 1) != ".") return 0
+  return substr(nm, L - 6 - ls, ls) == sfx
+}
+function add(kind, b) { C[kind]++; B[kind] += b }
+function kind(name, last) { printf "\"%s\":{\"count\":%.0f,\"bytes\":%.0f}%s", name, C[name] + 0, B[name] + 0, last ? "" : "," }
+BEGIN {
+  sfx = ENVIRON["LO_SFX"]
+  m = split(ENVIRON["LO_KEYPAT"], pp, "/")
+  multi = (m >= 1 && pp[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+}
+{
+  line = $0
+  if (line == "d\t.") next
+  c = substr(line, 1, 1)
+  if (substr(line, 2, 3) == "\t./" && (c == "d" || c == "f" || c == "l" || c == "o")) {
+    nt++; TT[nt] = c; TP[nt] = substr(line, 5); next
+  }
+  if (substr(line, 1, 2) == "n\t") {
+    s = substr(line, 3)
+    if (s == ".") s = ""
+    else if (substr(s, 1, 2) == "./") s = substr(s, 3)
+    else { bad++; next }
+    nn++; NP[nn] = s; next
+  }
+  if (line ~ /^ *[0-9][0-9]* \.\//) {
+    s = line
+    while (substr(s, 1, 1) == " ") s = substr(s, 2)
+    sp = index(s, " ")
+    ns++; SN[ns] = substr(s, 1, sp - 1) + 0; SP[ns] = substr(s, sp + 3); next
+  }
+  if (line ~ /^ *[0-9][0-9]* total$/) next
+  bad++
+}
+END {
+  if (bad) exit 3
+  for (i = 1; i <= nt; i++) KIDS[parent(TP[i])]++
+  for (i = 1; i <= nn; i++) KIDS[NP[i]]++
+  if (ENVIRON["LO_PASS"] == "empty") {
+    if (nn) print ""
+    for (i = 1; i <= nt; i++) if (TT[i] == "d" && !((TP[i]) in KIDS)) print TP[i]
+    exit 0
+  }
+  for (i = 1; i <= ns; i++) SZ[SP[i]] = SN[i]
+  f = ENVIRON["LO_UNREAD"]
+  if (f != "") while ((getline l < f) > 0) { UNR[l] = 1; for (q = parent(l); q != ""; q = parent(q)) UB[q] = 1 }
+  for (i = 1; i <= nn; i++) for (q = NP[i]; q != ""; q = parent(q)) HOLD[q] = 1
+  f = ENVIRON["LO_SHADOW"]
+  if (f != "") while ((getline l < f) > 0) SHADOW[l] = 1
+  keys_out = ENVIRON["LO_KEYS"]
+  for (i = 1; i <= nt; i++) {
+    p = TP[i]; t = TT[i]
+    if (t == "d") continue
+    pa = parent(p)
+    for (q = pa; q != ""; q = parent(q)) HOLD[q] = 1
+    if (t != "f") continue
+    for (q = pa; q != ""; q = parent(q)) BY[q] += SZ[p]
+    if (!admit(p)) continue
+    for (q = pa; q != ""; q = parent(q)) HK[q] = 1
+    if (KEY_OF in SHADOW) { SH[p] = 1; continue }
+    KEY[p] = 1; nk++
+    if (keys_out != "") print KEY_OF > keys_out
+  }
+  for (i = 1; i <= nt; i++) {
+    p = TP[i]; t = TT[i]; pa = parent(p)
+    if (pa != "" && !(pa in HK)) continue
+    nm = base(p)
+    if (t == "d") {
+      if (p in HK) continue
+      if (lockname(nm)) add("remnants", BY[p])
+      else if (p in UNR) add("unreadable_folders", 0)
+      else if ((p in HOLD) || (p in UB)) add("nonkey_folders", BY[p])
+      else add("empty_folders", 0)
+    } else if (t == "l") add("links", 0)
+    else if (t == "o") add("special_files", 0)
+    else if (p in KEY) continue
+    else if (p in SH) add("shadowed_keys", SZ[p])
+    else if (lockname(nm) || tempname(nm)) add("remnants", SZ[p])
+    else add("stray_files", SZ[p])
+  }
+  if (keys_out != "") close(keys_out)
+  C["newline_names"] = nn; B["newline_names"] = ENVIRON["LO_NLBYTES"] + 0
+  printf "{\"state\":\"walked\",\"entries\":%.0f,\"keys\":%.0f,\"kinds\":{", nt + nn, nk + 0
+  kind("stray_files"); kind("nonkey_folders"); kind("empty_folders"); kind("links")
+  kind("special_files"); kind("unreadable_folders"); kind("remnants"); kind("shadowed_keys")
+  kind("newline_names", 1)
+  printf "}}"
+}'
+
+# lo_root <folder> <walk file> <keys file or empty> <shadow file or empty>: one root of the
+# leftovers walk as its JSON object: absent (not made), link (a symbolic link, which the
+# store never walks), unreadable (the folder cannot be read or entered), or walked. One find
+# from inside the folder lists every entry by type and sizes every regular file (wc -c,
+# which stats a regular file), symbolic links never followed, and prunes every name holding
+# a newline, printing only its parent folder; when it found one, a second find sums the
+# regular files at or below such names (wc -c reading each on stdin, so no name is printed);
+# rc 1 when a scratch file cannot be written, rc 3 when the listing holds a line the walk
+# cannot parse, for the caller to refuse (lo_fail)
+lo_root() {
+  lr_dir=$1; lr_walk=$2; lr_keys=$3; lr_shadow=$4
+  if [ -h "$lr_dir" ]; then printf '{"state":"link"}'; return 0; fi
+  [ -d "$lr_dir" ] || { printf '{"state":"absent"}'; return 0; }
+  { [ -r "$lr_dir" ] && [ -x "$lr_dir" ]; } || { printf '{"state":"unreadable"}'; return 0; }
+  scratch_new "$lr_walk" "$lr_walk.e" "$lr_walk.u" || return 1
+  if [ -n "$lr_keys" ]; then scratch_new "$lr_keys" || return 1; fi
+  (
+    CDPATH="" cd "$lr_dir" 2>/dev/null || exit 0
+    find . \( -name "$LO_NLPAT" -prune -exec sh -c 'for f in "$@"; do printf "n\t%s\n" "${f%/*}"; done' sh {} + \) \
+      -o \( -type d -exec printf 'd\t%s\n' {} + \) \
+      -o \( -type f -exec printf 'f\t%s\n' {} + -exec wc -c {} + \) \
+      -o \( -type l -exec printf 'l\t%s\n' {} + \) \
+      -o -exec printf 'o\t%s\n' {} +
+    exit 0
+  ) > "$lr_walk" 2>/dev/null || return 1
+  LO_PASS=empty LC_ALL=C awk "$LO_AWK" "$lr_walk" > "$lr_walk.e" 2>/dev/null
+  case $? in 0) ;; 3) return 3 ;; *) return 1 ;; esac
+  lr_nl=0
+  while IFS= read -r lr_e; do
+    if [ -z "$lr_e" ]; then lr_nl=1; continue; fi
+    { [ -r "$lr_dir/$lr_e" ] && [ -x "$lr_dir/$lr_e" ]; } && continue
+    scratch_add "$lr_walk.u" '%s\n' "$lr_e" || return 1
+  done < "$lr_walk.e"
+  lr_nlb=0
+  if [ "$lr_nl" -eq 1 ]; then
+    lr_nlb=$( (
+      CDPATH="" cd "$lr_dir" 2>/dev/null || exit 0
+      find . -path "*$SD_NL*" -type f -exec sh -c 'for f in "$@"; do wc -c < "$f"; done' sh {} +
+      exit 0
+    ) 2>/dev/null | LC_ALL=C awk '{ s += $1 } END { printf "%.0f", s + 0 }')
+  fi
+  LO_PASS=walk LO_SFX="$SD_SUFFIX" LO_KEYPAT="$SD_KEYPAT" LO_UNREAD="$lr_walk.u" LO_KEYS="$lr_keys" LO_SHADOW="$lr_shadow" \
+    LO_NLBYTES="$lr_nlb" LC_ALL=C awk "$LO_AWK" "$lr_walk" 2>/dev/null
+  case $? in 0) return 0 ;; 3) return 3 ;; *) return 1 ;; esac
+}
+
+# lo_fail <rc> <code>: a walk that lo_root could not answer refuses rc 2: rc 3 a listing line
+# it cannot parse, else a scratch file it cannot write
+lo_fail() {
+  case "$1" in
+    3) refuse 2 "$2" "the walk's listing holds a line it cannot parse, so nothing is answered" ;;
+    *) refuse 2 "$2" "$SCRATCH_FAILED" ;;
+  esac
+}
+
+# storage.leftovers <namespace>: what the named namespace's declared root and fallback root
+# hold beyond the keys its pattern admits, a read only walk of each, never a write, never a
+# lock, and no folder named in the answer: one compact object {driver, namespace, root,
+# fallback}, each root {state} for absent, link, unreadable, or none (the namespace declares
+# no fallback root), else {state: walked, entries, keys, kinds}, the kinds stray_files,
+# nonkey_folders, empty_folders, links, special_files, unreadable_folders, remnants,
+# shadowed_keys, and newline_names, each {count, bytes}, in that order; a fallback key the
+# root also holds is a shadowed key, never a key. It prints no fallback notice, since it
+# serves no key.
+storage_leftovers() {
+  store_data storage.leftovers "$1"
+  lo_keys=$(mktemp "$(scratch_dir)/store-leftovers.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_READ "cannot create the driver's scratch file"
+  store_temp "$lo_keys"
+  for lo_x in walk walk.e walk.u fwalk fwalk.e fwalk.u; do store_temp "$lo_keys.$lo_x"; done
+  lo_r=$(lo_root "$STORE_WS/$SD_ROOT" "$lo_keys.walk" "$lo_keys" "") || lo_fail $? ERR_STORAGE_READ
+  lo_f='{"state":"none"}'
+  if [ -n "$SD_FALLBACK" ]; then
+    lo_f=$(lo_root "$STORE_WS/$SD_FALLBACK" "$lo_keys.fwalk" "" "$lo_keys") || lo_fail $? ERR_STORAGE_READ
+  fi
+  rm -f "$lo_keys" "$lo_keys.walk" "$lo_keys.walk.e" "$lo_keys.walk.u" "$lo_keys.fwalk" "$lo_keys.fwalk.e" "$lo_keys.fwalk.u"
+  printf '{"driver":"posix","namespace":"%s","root":%s,"fallback":%s}\n' "$(escape_json "$SD_NS")" "$lo_r" "$lo_f"
+}
+
 # px_extra <n> <argv...>: no argument beyond the n the function takes
 px_extra() {
   pe_n=$1
@@ -1424,6 +1636,12 @@ case "$cmd" in
     [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "storage.health takes the namespace"
     px_extra 1 "$@"
     storage_health "$1"
+    exit 0
+    ;;
+  storage.leftovers)
+    [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "storage.leftovers takes the namespace"
+    px_extra 1 "$@"
+    storage_leftovers "$1"
     exit 0
     ;;
   *) refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$cmd'" ;;

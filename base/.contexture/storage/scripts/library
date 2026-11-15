@@ -19,6 +19,8 @@
 #   store.require <capability>...
 #   store.has <capability>
 #   store.roots
+#   store.leftovers                                                 (the read only leftovers probe)
+#   store.leftovers.text <answer> <summary|kinds>                   (its one text form)
 #   lib.utf8_ok <string>, lib.utf8_file_ok <file>                   (the shared checks)
 #   lib.ref_ok <label> <ref>
 #   lib.lock, lib.unlock                                            (the library lock)
@@ -312,6 +314,83 @@ store_roots() {
   fi
   [ -n "$sr_out" ] || return 0
   printf '%s\n' "$sr_out" | LC_ALL=C awk -F '\t' '{ print $1 "\t" $2; if ($3 != "") print $1 "\t" $3 }'
+}
+
+# store_leftovers: what the caller's own namespace's storage holds beyond its keys, the
+# configured driver's read only probe storage.leftovers, its one JSON line on stdout (a driver
+# that keeps no file tree answers its unknown function line rc 2, passed through)
+store_leftovers() { store_lib_own storage.leftovers "$@"; }
+
+# store_leftovers_text <answer> <summary|kinds>: the probe's answer file as text naming no
+# folder, through the storage core's flattener found beside the resolver (then under the
+# drawer, then in the base mirror). summary prints one line per root, root: and fallback
+# root:, its state (absent, a symbolic link, unreadable, none declared) or its keys, its
+# entries, and every kind it found with its count and bytes; kinds prints one line per root
+# and kind found, <root label>: <kind>: <count> (<bytes> bytes), a root it cannot walk on
+# one line too, and nothing when nothing lies beyond the keys. The flattened answer stages
+# at <answer>.flat, beside the caller's file; a malformed answer refuses rc 2 with one line
+store_leftovers_text() {
+  slt_json=""
+  if slt_r=$(store_lib_resolver); then slt_json="${slt_r%/*}/json.awk"; fi
+  slt_root=$(store_lib_root)
+  for slt_c in "$slt_json" "$slt_root/.contexture/storage/scripts/json.awk" "$slt_root/base/.contexture/storage/scripts/json.awk"; do
+    if [ -n "$slt_c" ] && [ -f "$slt_c" ]; then slt_json=$slt_c; break; fi
+    slt_json=""
+  done
+  if [ -z "$slt_json" ]; then
+    printf 'store.leftovers: error: the storage core flattener is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+    return 2
+  fi
+  case "${2:-}" in
+    summary|kinds) ;;
+    *) printf "store.leftovers: error: the text form is summary or kinds: '%s' (ERR_INVALID_ARGUMENT)\n" "${2:-}" >&2; return 1 ;;
+  esac
+  if ! LC_ALL=C awk -f "$slt_json" < "$1" > "$1.flat" 2>/dev/null; then
+    rm -f "$1.flat"
+    printf 'store.leftovers: error: the leftovers answer is malformed (ERR_STORAGE_READ)\n' >&2
+    return 2
+  fi
+  SLT_MODE=$2 LC_ALL=C awk '
+    function ld(line,   p) {
+      if (!match(line, /[=:#]/)) return
+      p = substr(line, 1, RSTART - 1)
+      V[p] = substr(line, RSTART + 1)
+    }
+    function root(r, label,   st, i, k, o, n) {
+      st = V[r ".state"]
+      if (st == "walked") {
+        o = ""; n = 0
+        for (i = 1; i <= NK; i++) {
+          k = KIND[i]
+          if (V[r ".kinds." k ".count"] + 0 == 0) continue
+          n++
+          if (mode == "kinds") printf "%s: %s: %.0f (%.0f bytes)\n", label, NAME[k], V[r ".kinds." k ".count"], V[r ".kinds." k ".bytes"]
+          else o = o (o == "" ? "" : ", ") sprintf("%s %.0f (%.0f bytes)", NAME[k], V[r ".kinds." k ".count"], V[r ".kinds." k ".bytes"])
+        }
+        if (mode == "summary") {
+          printf "%s: %.0f keys in %.0f entries", label, V[r ".keys"], V[r ".entries"]
+          if (n == 0) printf ", nothing beyond them\n"
+          else printf "; beyond them: %s\n", o
+        }
+      } else if (st == "unreadable") printf "%s: unreadable, so its content cannot be walked\n", label
+      else if (st == "link") printf "%s: a symbolic link, which the store does not walk\n", label
+      else if (mode == "summary" && st == "absent") printf "%s: absent (not made yet)\n", label
+      else if (mode == "summary" && st == "none") printf "%s: none declared\n", label
+    }
+    BEGIN {
+      mode = ENVIRON["SLT_MODE"]
+      NK = split("stray_files nonkey_folders empty_folders links special_files unreadable_folders remnants shadowed_keys newline_names", KIND, " ")
+      NAME["stray_files"] = "stray files"; NAME["nonkey_folders"] = "folders outside the key shape"
+      NAME["empty_folders"] = "empty folders"; NAME["links"] = "symbolic links"
+      NAME["special_files"] = "special files"; NAME["unreadable_folders"] = "unreadable folders"
+      NAME["remnants"] = "lock or write remnants"; NAME["shadowed_keys"] = "keys the root shadows"
+      NAME["newline_names"] = "names holding a newline"
+    }
+    { ld($0) }
+    END { root("root", "root"); root("fallback", "fallback root") }' "$1.flat"
+  slt_rc=$?
+  rm -f "$1.flat"
+  return "$slt_rc"
 }
 
 # store_batch: the transactional batch over the caller's namespace; the action list travels
