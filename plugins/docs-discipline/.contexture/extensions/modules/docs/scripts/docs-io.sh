@@ -33,6 +33,7 @@ DOCS_CD=0
 DOCS_PATHS=""
 DOCS_ERR=""
 DOCS_SINCE_REV=""
+DOCS_RF_WHY=""
 
 # docs_io_init <scripts dir> <verb>: the module's installed name (its folder's, so an
 # install under an alias names itself), the workspace root as the verbs resolve it
@@ -399,13 +400,27 @@ docs_no_display() {
 # drawer alone, by an unanchored spelling; rc 1 when it
 # lies in none; rc 2 when the storage core cannot list the roots, or cannot name this
 # module's own namespace (an empty own namespace would turn this module's own root into a
-# foreign one, so the guard refuses rather than answer). A value another module
-# stores is read through that module, never as a file (the single store)
+# foreign one, so the guard refuses rather than answer). DOCS_RF_WHY names the rc 2 cause:
+# core when no storage core lists the roots (the library has no store_roots, or its line
+# ends ERR_DRIVER_NOT_FOUND: the storage core's data reader is not installed), refused when
+# the storage core refuses the list (a module data file it cannot read refuses the whole
+# list, never a partial one) or the own namespace. One capture holds the rows or, on a
+# refusal, the library's one line, which no row ends with. A value another module stores is
+# read through that module, never as a file (the single store)
 docs_record_file() {
+  DOCS_RF_WHY=core
   command -v store_roots >/dev/null 2>&1 || return 2
-  rf_roots=$(store_roots < /dev/null 2>/dev/null) || return 2
+  if ! rf_roots=$(store_roots < /dev/null 2>&1); then
+    DOCS_RF_WHY=refused
+    case $(printf '%s\n' "$rf_roots" | head -n 1) in
+      *'(ERR_DRIVER_NOT_FOUND)') DOCS_RF_WHY=core ;;
+    esac
+    return 2
+  fi
+  DOCS_RF_WHY=refused
   rf_own=$(store_namespace 2>/dev/null) || return 2
   [ -n "$rf_own" ] || return 2
+  DOCS_RF_WHY=""
   case "$1" in */*) rf_d=${1%/*} ;; *) rf_d=. ;; esac
   rf_p=$(CDPATH= cd -- "${rf_d:-/}" 2>/dev/null && pwd -P) || rf_p=""
   rf_tab=$(printf '\t')

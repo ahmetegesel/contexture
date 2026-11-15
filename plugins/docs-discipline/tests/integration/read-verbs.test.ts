@@ -1,6 +1,7 @@
-import { mkdirSync, readFileSync, readdirSync, renameSync, symlinkSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, renameSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { dataFile } from '@support/data-file';
 import { FALLBACK_ROOT, RECORD_ROOT } from '@support/drawer';
 import { exec } from '@support/exec';
 import { sandbox } from '@support/sandbox';
@@ -196,6 +197,7 @@ describe('the nudge through its unit', { concurrent: true }, () => {
     const help = await docs(fresh(corpus), ['help', 'nudge']);
     expect(help.code).toBe(0);
     expect(help.stdout).toContain("a path inside another module's storage root (every root the storage library lists from the module declarations) refuses");
+    expect(help.stdout).toContain('when the storage core refuses the list (a module data file it cannot read refuses the whole list, never a partial one)');
     expect(help.stdout).not.toContain('store_roots');
   });
 
@@ -212,8 +214,33 @@ describe('the nudge through its unit', { concurrent: true }, () => {
     writeFileSync(lib, `. "${lib}.real"\nunset -f store_roots\n`);
     const r = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
     expect([r.code, r.stdout]).toEqual([2, '']);
-    expect(r.stderr).toBe("ctx docs nudge: the storage core cannot list the storage layer's roots, so the file is not read (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n");
+    expect(r.stderr).toBe("ctx docs nudge: no storage core lists the storage layer's roots, so the file is not read (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n");
     renameSync(`${lib}.real`, lib);
+    const served = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
+    expect(served.code, served.stderr).toBe(0);
+    expect(served.stdout).not.toBe('');
+  });
+
+  it('RS5b [docs-module-r26] on a storage core whose data reader is not installed the backlog-file form refuses rc 2 naming the storage core, never the storage core\'s refusal, and reads no file', async () => {
+    const sb = fresh(corpus);
+    const reader = join(sb, '.contexture/storage/scripts/store-data');
+    renameSync(reader, `${reader}.aside`);
+    const r = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
+    expect([r.code, r.stdout]).toEqual([2, '']);
+    expect(r.stderr).toBe("ctx docs nudge: no storage core lists the storage layer's roots, so the file is not read (need: the storage core) (ERR_DRIVER_NOT_FOUND)\n");
+    renameSync(`${reader}.aside`, reader);
+    const served = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
+    expect(served.code, served.stderr).toBe(0);
+    expect(served.stdout).not.toBe('');
+  });
+
+  it('RS5b [docs-module-r26] a module data file the storage core cannot read refuses the whole root list, so the backlog-file form refuses rc 2 naming that refusal, never the missing storage core, and reads no file', async () => {
+    const sb = fresh(corpus);
+    const broken = dataFile(sb, 'modules', 'broken', 'key: <a>\nbogus: x\n');
+    const r = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
+    expect([r.code, r.stdout]).toEqual([2, '']);
+    expect(r.stderr).toBe("ctx docs nudge: the storage core cannot list every module's storage roots (a module data file it cannot read refuses the whole list, never a partial one) or cannot name this module's own namespace, so the file is not read (ERR_STORAGE_READ)\n");
+    rmSync(dirname(broken), { recursive: true });
     const served = await docs(sb, ['nudge', 'backlog.md', 'demo-orders']);
     expect(served.code, served.stderr).toBe(0);
     expect(served.stdout).not.toBe('');

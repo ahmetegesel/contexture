@@ -108,10 +108,14 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   path inside another module's storage root (`docs_record_file`
   reads every declared root through the storage library's `store_roots`, this module's
   own `docs` namespace aside: a path spelled under a root, one physically under it, and,
-  for a root inside the drawer alone, one holding `/<root>/` anywhere), and with no
-  storage core to list the roots it refuses rc 2 and reads no file; so does a failed or
-  empty `store_namespace`, since an empty own namespace would count this module's own
-  root as another module's.
+  for a root inside the drawer alone, one holding `/<root>/` anywhere). It refuses rc 2
+  and reads no file in two cases, each with its own line: with no storage core to list
+  the roots (no `store_roots`, or its data reader not installed: `ERR_DRIVER_NOT_FOUND`),
+  and when the storage core refuses: `store_roots`
+  answers the whole list or refuses, so a module data file it cannot read refuses the
+  list rather than leave that module's root out, and a failed or empty `store_namespace`
+  refuses too, since an empty own namespace would count this module's own root as
+  another module's (`ERR_STORAGE_READ`).
 - The write verbs run one pipeline in `docs-io.sh`: the arguments parsed
   (`docs_parse`: the verb's control flags, every other `--<field>=` as a field
   action, a control another verb takes included, so `ctx docs entry` sets a
