@@ -20,9 +20,12 @@ describe.concurrent('the store check --leftovers: what the store\'s storage hold
     expect(await store(empty(), ['check', '--leftovers'])).toMatchObject({ code: 0, stdout: '', stderr: '' });
   });
 
-  it('[store-r6, store-r8, the-engine-r-lf7vr] a dropped container leaves its empty folder, named by kind with no path, rc 1, and nothing removed', async () => {
+  it('[store-r6, store-r8, the-engine-r-lf7vr, the-engine-r-ov2vq] a dropped container leaves no folder, so the check prints nothing, while an empty folder an older release left is named by kind with no path, rc 1, and nothing removed', async () => {
     const sb = sandbox();
     expect((await store(sb, ['delete', 'containers/items'])).code).toBe(0);
+    expect(storeState(sb).split('\n').filter((l) => l.startsWith('items'))).toEqual([]);
+    expect(await store(sb, ['check', '--leftovers'])).toMatchObject({ code: 0, stdout: '', stderr: '' });
+    mkdirSync(join(sb, '.contexture/store/older'));
     const before = storeState(sb);
     const r = await store(sb, ['check', '--leftovers']);
     expect([r.code, r.stdout, r.stderr]).toEqual([1, 'root: empty folders: 1 (0 bytes)\n', '']);

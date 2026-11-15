@@ -107,17 +107,18 @@ describe('the posix fallback root: reads after the root, writes to the root afte
     expect(readFileSync(join(sb, 'new-root/b/journal.md'), 'utf8')).toBe('j\n');
   });
 
-  it('[the-engine-r-b3r6t] a put, a delete, or a batch whose move empties the fallback root removes that root, with nothing extra printed', async () => {
-    const writes: [string, (s: ReturnType<typeof store>) => Promise<Run>][] = [
-      ['store.put', (s) => s.put('legacy', 'b/journal', 'j\n')],
-      ['store.delete', (s) => s.del('legacy', 'b/state')],
-      ['store.batch', (s) => s.batch('legacy', [{ action: 'put', key: 'b/journal', value: 'j\n' }])],
+  it('[the-engine-r-b3r6t, the-engine-r-ov2vq] a put, a delete, or a batch whose move empties the fallback root removes that root, with nothing extra printed, and a delete of the moved folder\'s last key removes that folder too', async () => {
+    // the delete removes b/state, the moved folder's one key, so it prunes the folder it emptied
+    const writes: [string, (s: ReturnType<typeof store>) => Promise<Run>, boolean][] = [
+      ['store.put', (s) => s.put('legacy', 'b/journal', 'j\n'), true],
+      ['store.delete', (s) => s.del('legacy', 'b/state'), false],
+      ['store.batch', (s) => s.batch('legacy', [{ action: 'put', key: 'b/journal', value: 'j\n' }]), true],
     ];
-    for (const [fn, write] of writes) {
+    for (const [fn, write, kept] of writes) {
       const sb = fresh(snap);
       plant(sb, 'old-root/b/state.md', 'old b\n');
       answer(await write(store(sb, 'posix')), fn);
-      expect([existsSync(join(sb, 'old-root')), existsSync(join(sb, 'new-root/b'))], fn).toEqual([false, true]);
+      expect([existsSync(join(sb, 'old-root')), existsSync(join(sb, 'new-root/b'))], fn).toEqual([false, kept]);
     }
   });
 

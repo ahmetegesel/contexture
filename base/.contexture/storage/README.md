@@ -60,8 +60,8 @@ above it that holds no key, or stands loose in a key folder or the root. A loose
 a lock remnant (named `.lock` or `*.lock`, as an older release's lock folder inside the
 deprecated root), an unreadable folder (one with no listed entry that cannot be read or
 entered), a folder outside the key shape (it holds a file, a link, a special file, or an
-unreadable folder), or an empty folder (as `ctx store delete containers/<name>` leaves a
-dropped container's folder); a loose file is a lock or write remnant (a lock name, or a
+unreadable folder), or an empty folder (as `ctx store delete containers/<name>` left a
+dropped container's folder before the delete pruned the folders it empties); a loose file is a lock or write remnant (a lock name, or a
 key file's name with a six character `mktemp` tail, a killed put's temp), else a stray
 file (a wrong suffix, outside the pattern, or a name the key rule refuses); a link and a
 fifo, socket, or device count apart; a name holding a newline counts as its own kind, its
@@ -86,7 +86,7 @@ Seven data functions and the optional promotion, called through the resolver:
 | `store.list` | `<namespace> [<prefix>]` | none | `{"namespace","keys"}`: every key the module pattern admits, bytewise; the optional literal key prefix narrows it |
 | `store.get` | `<namespace> <key> [<key>...]` | none | one key: the raw bytes of the key, no JSON; absent rc 1 `ERR_ENTITY_NOT_FOUND`. Two or more: `{"namespace","items":[...]}`, one item per asked key in the asked order: `{"key","value"}`, `{"key","value_b64"}` for a value holding a NUL byte, or `{"key","missing":true}` |
 | `store.put` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | the raw bytes | `{"namespace","key","op"}`; atomic per key |
-| `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | none | `{"namespace","key","op"}` |
+| `store.delete` | `<namespace> <key> [--op=<op>] [--head=<sha\|none>]` | none | `{"namespace","key","op"}`; posix removes the folders it empties, never the root |
 | `store.changes` | `<namespace>` | `head=<sha\|none>` lines | `{"namespace","changes":[...]}` oldest first |
 | `store.batch` | `<namespace>` | the action lines (`action=put\|delete`, `key=<escaped>`, `head=<sha\|none>`, `value_b64=<base64>` for a put) | `{"namespace","actions":N}`; all or none |
 | `store.scan` | `<namespace>` | none | `{"namespace","items":[{"key","value_b64"}]}`: every admitted key, bytewise, its raw value in base64 |
@@ -121,7 +121,12 @@ namespace that declares a `fallback_root` is read from its root first, then from
 fallback: `store.get`, `store.list` (the union, each key once, the root's copy
 shadowing), `store.scan`, `store.search`, and the key probe; `store.put` and
 `store.batch` write the root alone, and a delete (alone or as a batch action) removes the
-key from both roots, so an old value never resurfaces. Before it writes, a put, a delete,
+key from both roots, so an old value never resurfaces, then each folder it emptied above
+the key in either root (`store_prune`): from the key's own folder upward, one `rmdir`
+each, stopping at the first folder that still holds an entry and never removing the root
+itself, under the namespace lock it already holds; a batch prunes only after its whole
+commit landed, so a rolled back batch restores every key into its folder, and a dropped
+store container or a deleted unit's last artifact leaves no empty folder. Before it writes, a put, a delete,
 or a batch (after its validation) moves each written key's top segment folder from the
 fallback to the root under the namespace lock it already holds, when the fallback alone
 holds it: one `mv`, the root made first when absent, so a module's write moves its folder

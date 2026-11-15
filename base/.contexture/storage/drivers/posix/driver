@@ -12,7 +12,8 @@
 # A namespace may declare a fallback root, a deprecated root the store reads after its
 # root and never writes: get, list, scan, search, and the key probe read the root first,
 # then the fallback, the root's copy shadowing; put and batch write the root alone, and a
-# delete removes the key from both. Under the namespace lock a put, a delete, and a batch
+# delete (alone or as a batch action) removes the key from both, then each folder it
+# emptied up to the root, never the root itself. Under the namespace lock a put, a delete, and a batch
 # first move each written key's top segment folder from the fallback to the root when the
 # fallback alone holds it (one rename; both roots holding it refuses). A call that served
 # a key from the fallback and answers rc 0 prints one notice line on stderr naming the
@@ -812,6 +813,23 @@ store_lift_for() {
   esac
 }
 
+# store_prune <root folder> <relative key file>: each folder above the key file removed while
+# it is empty, from the file's own folder upward, stopping at the first folder that still
+# holds an entry and never removing the root folder itself; rmdir refuses a folder holding
+# anything, so a folder still holding a key, a leftover, or a folder stays, silently. The
+# delete runs it under the namespace lock it already holds
+store_prune() {
+  spr_base=$1
+  spr_rel=$2
+  while :; do
+    case "$spr_rel" in
+      */*) spr_rel=${spr_rel%/*} ;;
+      *) return 0 ;;
+    esac
+    rmdir "$spr_base/$spr_rel" 2>/dev/null || return 0
+  done
+}
+
 store_put() {
   FN=store.put
   [ $# -ge 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.put takes the namespace, the key, and optional flags"
@@ -889,6 +907,8 @@ store_delete() {
       refuse 2 ERR_STORAGE_WRITE "the storage remove of key '$sx_key' failed"
     fi
   done
+  store_prune "$STORE_WS/$SD_ROOT" "$sx_key$SD_SUFFIX"
+  [ -z "$SD_FALLBACK" ] || store_prune "$STORE_WS/$SD_FALLBACK" "$sx_key$SD_SUFFIX"
   store_unlock
   printf '{"namespace":"%s","key":"%s","op":"%s"}\n' "$(escape_json "$sx_ns")" "$(escape_json "$sx_key")" "$(escape_json "$SF_OP")"
 }
@@ -1155,6 +1175,19 @@ batch_commit() {
   SB_ON=0
 }
 
+# batch_prune: after the whole commit landed (never inside it, since the undo log restores a
+# removed file into its folder), each delete action's emptied folders removed in both roots
+# by store_prune, under the namespace lock the batch still holds; a folder a later put of
+# the batch filled, or one holding anything else, stays
+batch_prune() {
+  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
+    [ "$sb_op" = delete ] || continue
+    store_prune "$STORE_WS/$SD_ROOT" "$sb_key$SD_SUFFIX"
+    [ -z "$SD_FALLBACK" ] || store_prune "$STORE_WS/$SD_FALLBACK" "$sb_key$SD_SUFFIX"
+  done < "$STORE_BATCH_STAGE/man"
+  return 0
+}
+
 store_batch() {
   FN=store.batch
   [ $# -eq 1 ] || refuse 1 ERR_INVALID_ARGUMENT "store.batch takes one argument, the namespace"
@@ -1169,6 +1202,7 @@ store_batch() {
   batch_validate
   batch_lift
   batch_commit
+  batch_prune
   store_cleanup
   printf '{"namespace":"%s","actions":%s}\n' "$(escape_json "$SB_NS")" "$SB_N"
 }
