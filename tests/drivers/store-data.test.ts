@@ -185,13 +185,19 @@ describe.concurrent('store-data, the data file reader', () => {
     expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line']);
   });
 
-  it('[modules-r10, the-engine-r-cj0ey] refuses an argument beyond the namespace and --with-fallback, and beyond the listing flag, rc 1', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] refuses an argument beyond the namespace, --with-fallback, and --with-fields, a repeated flag, and an argument beyond the listing flag, rc 1', async () => {
     const sb = workspace();
-    const usage = (arg: string) => `store-data: unexpected argument '${arg}' (store-data <namespace> [--with-fallback], or store-data --list)\n`;
+    const usage = (arg: string) => `store-data: unexpected argument '${arg}' (store-data <namespace> [--with-fallback] [--with-fields], or store-data --list)\n`;
     const one = await exec(STORE_DATA, ['docs', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
     expect([one.code, one.stdout, one.stderr]).toEqual([1, '', usage('extra')]);
     const two = await exec(STORE_DATA, ['docs', '--with-fallback', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
     expect([two.code, two.stdout, two.stderr]).toEqual([1, '', usage('extra')]);
+    const three = await exec(STORE_DATA, ['docs', '--with-fields', '--with-fallback', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+    expect([three.code, three.stdout, three.stderr]).toEqual([1, '', usage('extra')]);
+    for (const flag of ['--with-fallback', '--with-fields']) {
+      const twice = await exec(STORE_DATA, ['docs', flag, flag], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+      expect([twice.code, twice.stdout, twice.stderr, flag]).toEqual([1, '', usage(flag), flag]);
+    }
     const list = await listing(sb, 'extra');
     expect([list.code, list.stdout, list.stderr]).toEqual([1, '', "store-data: unexpected argument 'extra' (store-data --list takes no argument)\n"]);
   });
@@ -290,5 +296,91 @@ describe.concurrent('store-data, the data file reader', () => {
     const lines = await answerLines(sb, 'unitlike');
     expect(lines.slice(6, 11)).toEqual(['documents', '', '', 'head', 'line']);
     expect(lines.slice(11)).toEqual(['<unit>/state\tstate\tsession\t-', '<unit>/journal\tjournal\tentry\t@entry']);
+  });
+
+  const STATUS = 'status: optional line one-of OPEN|PICKED|DROPPED default OPEN';
+  const FIELDED = [
+    'root: idea-root', 'key: <id>', 'search: documents', 'document: <id> body idea -',
+    `field: ${STATUS}`, 'field:   what: required block', '# a comment between field lines', 'field: dumped: optional line default today', '',
+  ].join('\n');
+  const UNFIELDED = FIELDED.split('\n').filter((l) => !l.startsWith('field:')).join('\n');
+  const asked = (sb: string, ns: string, ...flags: string[]) => exec(STORE_DATA, [ns, ...flags], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
+  const okLines = async (sb: string, ns: string, ...flags: string[]) => {
+    const r = await asked(sb, ns, ...flags);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    return r.stdout;
+  };
+
+  it('[modules-r10, the-engine-r-cj0ey] a field line is accepted and answered under --with-fields alone: after the document rules, one @field line per field in declaration order, the blanks after field: dropped', async () => {
+    const sb = workspace();
+    const file = dataFile(sb, 'modules', 'ideas', FIELDED);
+    const fixed = ['ideas', 'idea-root', '', '<id>', 'false', file, 'documents', '', '', 'head', 'line'];
+    const rule = '<id>\tbody\tidea\t-';
+    const fieldLines = [`@field\t${STATUS}`, '@field\twhat: required block', '@field\tdumped: optional line default today'];
+    expect((await okLines(sb, 'ideas', '--with-fields')).split('\n')).toEqual([...fixed, rule, ...fieldLines, '']);
+    const both = [...fixed, '', rule, ...fieldLines, ''];
+    expect((await okLines(sb, 'ideas', '--with-fallback', '--with-fields')).split('\n')).toEqual(both);
+    expect((await okLines(sb, 'ideas', '--with-fields', '--with-fallback')).split('\n')).toEqual(both);
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] the plain, --with-fallback, and --list answers of a data file holding field lines are byte identical to the same file without them', async () => {
+    const withFields = workspace();
+    dataFile(withFields, 'modules', 'ideas', FIELDED);
+    const without = workspace();
+    dataFile(without, 'modules', 'ideas', UNFIELDED);
+    const strip = (out: string, sb: string) => out.replace(sb, '<sb>');
+    for (const flags of [[], ['--with-fallback']]) {
+      expect([strip(await okLines(withFields, 'ideas', ...flags), withFields), flags]).toEqual([strip(await okLines(without, 'ideas', ...flags), without), flags]);
+    }
+    expect(await listing(withFields)).toMatchObject({ code: 0, stdout: 'docs\tdocs\nideas\tidea-root\n', stderr: '' });
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] a data file with no field line answers --with-fields exactly as without it, docs-shaped and unit-shaped alike', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'legacy', legacy('old-root'));
+    for (const ns of ['docs', 'legacy']) {
+      expect([await okLines(sb, ns, '--with-fields'), ns]).toEqual([await okLines(sb, ns), ns]);
+      expect([await okLines(sb, ns, '--with-fallback', '--with-fields'), ns]).toEqual([await okLines(sb, ns, '--with-fallback'), ns]);
+    }
+  });
+
+  const RESERVED = 'json, limit, type, mode, container, id, ref, unset, stdin, any name starting with add-, any name starting with remove-';
+  it.each([
+    ['a malformed presence clause', 'field: status: mandatory line\n', "line 2: field 'status': the presence clause is required or optional, not 'mandatory'"],
+    ['an unknown clause', 'field: status: optional line wide\n', "line 2: field 'status': unknown clause 'wide' (a field line is <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>])"],
+    ['a name declared twice, named on its second line', 'field: status: optional line\n# between\nfield: status: required line\n', "line 4: field 'status': declared twice"],
+    ['a reserved name', 'field: json: optional line\n', `line 2: field 'json': the name is reserved (${RESERVED})`],
+    ['a reserved prefix after a good line', 'field: what: required block\nfield: add-tag: optional line\n', `line 3: field 'add-tag': the name is reserved (${RESERVED})`],
+    ['a trailing blank, the tightened grammar', 'field: status: optional line one-of A|B \n', "line 2: field 'status': the line ends with a blank"],
+    ['a doubled blank', 'field: status: optional  line\n', "line 2: field 'status': the line holds a doubled blank"],
+    ['a clause after one-of', 'field: status: optional line one-of A|B list\n', "line 2: field 'status': a clause after one-of ('list'): only a default may follow the one-of set"],
+    ['an uppercase field name', 'field: Status: optional line\n', "line 2: field 'Status': a field name is lowercase letters, digits, underscore, and dash, starting with a letter"],
+    ['a declaration without a colon', 'field: status optional line\n', 'line 2: a field line is <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]'],
+    ['an empty field line', 'field:   \n', 'line 2: the field line is empty'],
+    ['a carriage return inside the line', 'field: status: optional\rline\n', 'line 2: the field line holds a carriage return'],
+  ])('[modules-r10, the-engine-r-cj0ey] %s refuses rc 1 naming the data file line', async (_, fieldText, reason) => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'probe', `key: <a>\n${fieldText}`);
+    await refusal(sb, 'probe', 1, reason);
+    const fields = await asked(sb, 'probe', '--with-fields');
+    expect([fields.code, fields.stdout, fields.stderr]).toEqual([1, '', `store-data: ${reason}\n`]);
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] a field line that is not UTF-8 refuses rc 1 naming its line', async () => {
+    const sb = workspace();
+    const dir = moduleDir(sb, 'modules', 'probe');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'data'), Buffer.concat([Buffer.from('key: <a>\nfield: what: required block\nfield: tag: optional line default '), Buffer.from([0xff]), Buffer.from('\n')]));
+    await refusal(sb, 'probe', 1, 'line 3: the field line is not valid UTF-8');
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] another refusal of the file comes first, and the listing leaves out a malformed field declaration with its one line', async () => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'probe', 'key: <a>\nmode: fast\nfield: status: bogus line\n');
+    await refusal(sb, 'probe', 1, "unknown field 'mode' in the data file");
+    dataFile(sb, 'modules', 'probe', 'key: <a>\nfield: status: bogus line\n');
+    dataFile(sb, 'modules', 'good', `key: <a>\nfield: ${STATUS}\n`);
+    const r = await listing(sb);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'docs\tdocs\ngood\tgood\n', "store-data: namespace 'probe': line 2: field 'status': the presence clause is required or optional, not 'bogus'\n"]);
   });
 });

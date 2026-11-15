@@ -34,6 +34,9 @@
 #         default line)
 #   document: <key-pattern> <section> <entity-type> <head-marker|->          (optional;
 #         repeatable; the document-set search schema)
+#   field: <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]
+#         (optional; repeatable; one declared field of the module's container, the
+#         module library's field grammar)
 # The namespace <ns> is served by the data file of the module folder named <ns>: the
 # workspace modules root first, then the extension root, as discovery resolves a module
 # name (a workspace module shadows an extension module of its name). The script validates
@@ -55,6 +58,20 @@
 # answers the fallback root as line 12 (an empty line when none is declared) and the
 # document rules from line 13; a file store asks for it, a store with no root never does.
 #
+# A field line declares one field of the module's container in the module library's field
+# grammar, the clauses in their fixed order, one blank apart with none trailing: the
+# blanks after field: are the file's separator, while the declaration keeps its own, so a
+# trailing blank refuses. The reader checks every field line through the library's field
+# validator (its fields_decl_check over a scratch copy of the field lines), the engine and
+# the reserved names beside this reader, and refuses a malformed
+# line, a reserved name, or a name declared twice rc 1 naming the data file line (line <N>:
+# <the validator's reason>); a data file without a field line never runs the validator.
+# The answer carries the fields only when asked: store-data <namespace> --with-fields
+# (alone or beside --with-fallback) answers, after the document rules, one tagged line per
+# field, @field TAB <name>: <spec>, in declaration order; a document rule never starts
+# with @, and a reader that does not ask (a driver never validates fields) never sees the
+# family, so every other answer stays byte for byte as before.
+#
 # The listing mode, store-data --list, answers every valid declaration in both roots, one
 # line each, the namespace (the folder's name) and its root (the namespace when none is
 # declared, or when the module is installed under an alias) separated by a tab, then the
@@ -65,10 +82,11 @@
 # still answers rc 0.
 #
 # Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, or an argument
-# beyond the namespace and --with-fallback or beyond the listing flag; 2 the module drawer is
-# absent or unreadable, or the install record area an extension module's root needs cannot
-# be read; 3 no module folder of that name holds a data file. The one-line
-# reason goes to stderr.
+# beyond the namespace, --with-fallback, and --with-fields or beyond the listing flag; 2 the
+# module drawer is absent or unreadable, the install record area an extension module's
+# root needs cannot be read, or the field validator a field line needs is missing or its
+# scratch copy of the field lines cannot be written; 3 no module folder of that name holds a
+# data file. The one-line reason goes to stderr.
 
 set -u
 LC_ALL=C
@@ -86,6 +104,7 @@ sd_env() {
 
 SD_LIST=0
 SD_WITH_FB=0
+SD_WITH_FIELDS=0
 SD_NAMESPACE="${1:-}"
 case "$SD_NAMESPACE" in
   --list)
@@ -93,11 +112,16 @@ case "$SD_NAMESPACE" in
     SD_LIST=1
     ;;
   *)
-    if [ $# -ge 2 ] && [ "$2" = --with-fallback ]; then
-      SD_WITH_FB=1
+    while [ $# -ge 2 ]; do
+      if [ "$2" = --with-fallback ] && [ "$SD_WITH_FB" -eq 0 ]; then
+        SD_WITH_FB=1
+      elif [ "$2" = --with-fields ] && [ "$SD_WITH_FIELDS" -eq 0 ]; then
+        SD_WITH_FIELDS=1
+      else
+        sd_fail "unexpected argument '$2' (store-data <namespace> [--with-fallback] [--with-fields], or store-data --list)"
+      fi
       shift
-    fi
-    [ $# -le 1 ] || sd_fail "unexpected argument '$2' (store-data <namespace> [--with-fallback], or store-data --list)"
+    done
     # the namespace token, the module name rule: lowercase letters, digits, dot, underscore,
     # and dash, starting with a letter or digit
     case "$SD_NAMESPACE" in
@@ -121,12 +145,17 @@ fi
 sd_modules="$SD_WS/.contexture/modules"
 sd_extension_modules="$SD_WS/.contexture/extensions/modules"
 sd_state="$SD_WS/.contexture/extensions/.state"
+# the storage core's scripts folder this reader sits in, beside the module library and its
+# field validator engine
+case "$0" in */*) sd_dir=${0%/*} ;; *) sd_dir=. ;; esac
 
 # sd_parse <namespace> <data file>: the parse and the rule checks, one awk pass over the
 # owner file and, for an extension module, every install record after it, whose module
 # line naming the namespace under an alias drops the declared roots; the answer is the
 # eleven lines plus the document rules, a refusal is the one prefixed line and exit 1, an
-# install record area that cannot be read exit 2
+# install record area that cannot be read exit 2. A data file holding a field line takes
+# two passes more: the pass that finds one exits 4 with nothing printed, the field lines
+# are read and checked, and a last pass prints the answer.
 sd_parse() {
 sd_pns=$1
 sd_ppath=$2
@@ -149,7 +178,90 @@ case "$sd_ppath" in
     fi
     ;;
 esac
-SD_WANT_NS="$sd_pns" SD_PATH="$sd_ppath" SD_FNAME="${sd_ppath##*/}" SD_WITH_FB="$SD_WITH_FB" LC_ALL=C awk '
+sd_awk_run answer 0 "$sd_ppath" "$@"
+sd_prc=$?
+[ "$sd_prc" -eq 4 ] || return "$sd_prc"
+sd_specs=$(sd_awk_run fields 0 "$sd_ppath" "$@") || return $?
+sd_fields_check "$sd_specs" || return $?
+sd_awk_run answer 1 "$sd_ppath" "$@"
+}
+
+# sd_awk_run <mode> <checked> <data file> [<install record>...]: one pass of the parse over
+# the owner file of sd_pns at sd_ppath. The mode answer prints the answer, or exits 4 with
+# nothing printed when the file holds a field line and checked is 0; fields prints the
+# field lines, numbers their data file line numbers, one per line, each after the checks
+sd_awk_run() {
+sd_rmode=$1
+sd_rchecked=$2
+shift 2
+SD_WANT_NS="$sd_pns" SD_PATH="$sd_ppath" SD_FNAME="${sd_ppath##*/}" SD_WITH_FB="$SD_WITH_FB" \
+  SD_WITH_FIELDS="$SD_WITH_FIELDS" SD_MODE="$sd_rmode" SD_CHECKED="$sd_rchecked" LC_ALL=C awk "$SD_AWK" "$@"
+}
+
+# sd_fields_check <field lines>: the field lines, one per line in file order, checked by the
+# module library's fields_decl_check, its engine and its reserved names beside this reader,
+# over a scratch copy in the verb's scratch root, else the drawer's scratch folder; rc 0, or
+# rc 1 with one line naming the data file line, rc 2 when the validator is missing or the
+# scratch copy cannot be written. The validator stops at the first bad line, so the failing
+# line is the shortest failing prefix, sought only once the whole set failed.
+sd_fields_check() {
+sd_fc_specs=$1
+if [ ! -f "$sd_dir/library" ] || [ ! -f "$sd_dir/store-fields.awk" ]; then
+  printf 'store-data: the field validator is not installed beside the data reader, so the field lines of namespace '\''%s'\'' cannot be checked\n' "$sd_pns" >&2
+  return 2
+fi
+sd_fc_tmp=${CTX_SCRATCH_ROOT:-}
+if [ -z "$sd_fc_tmp" ] || ! { [ -d "$sd_fc_tmp" ] || mkdir -p "$sd_fc_tmp" 2>/dev/null; } || [ ! -w "$sd_fc_tmp" ]; then
+  sd_fc_tmp=$SD_WS/.contexture/tmp
+  mkdir -p "$sd_fc_tmp" 2>/dev/null
+fi
+sd_fc_decl=$(mktemp "$sd_fc_tmp/store-data-fields.XXXXXX" 2>/dev/null) || {
+  printf 'store-data: the scratch file to check the field lines of namespace '\''%s'\'' cannot be created\n' "$sd_pns" >&2
+  return 2
+}
+(
+  . "$sd_dir/library" || exit 2
+  CTX_STORE_RESOLVER=$sd_dir/driver-resolver
+  sd_fc_unread() {
+    printf 'store-data: the field validator could not check the field lines of namespace '\''%s'\''\n' "$sd_pns" >&2
+    exit 2
+  }
+  printf '%s\n' "$sd_fc_specs" > "$sd_fc_decl" || sd_fc_unread
+  fields_decl_check "$sd_fc_decl" 2>/dev/null
+  sd_fc_rc=$?
+  [ "$sd_fc_rc" -eq 0 ] && exit 0
+  [ "$sd_fc_rc" -eq 1 ] || sd_fc_unread
+  sd_fc_k=0
+  for sd_fc_num in $(sd_awk_run numbers 1 "$sd_ppath"); do
+    sd_fc_k=$((sd_fc_k + 1))
+    printf '%s\n' "$sd_fc_specs" | sed -n "1,${sd_fc_k}p" > "$sd_fc_decl" || sd_fc_unread
+    sd_fc_msg=$(fields_decl_check "$sd_fc_decl" 2>&1)
+    sd_fc_rc=$?
+    [ "$sd_fc_rc" -eq 0 ] && continue
+    [ "$sd_fc_rc" -eq 1 ] || sd_fc_unread
+    sd_fc_msg=${sd_fc_msg#*: error: }
+    sd_fc_msg=${sd_fc_msg% (*)}
+    case "$sd_fc_msg" in
+      "declaration line "*)
+        sd_fc_rest=${sd_fc_msg#declaration line }
+        sd_fc_rest=${sd_fc_rest#"${sd_fc_rest%%[!0-9]*}"}
+        case "$sd_fc_rest" in
+          ": "*) sd_fc_msg=${sd_fc_rest#": "} ;;
+          *) sd_fc_msg="the field line$sd_fc_rest" ;;
+        esac
+        ;;
+    esac
+    printf 'store-data: line %s: %s\n' "$sd_fc_num" "$sd_fc_msg" >&2
+    exit 1
+  done
+  sd_fc_unread
+)
+sd_fc_rc=$?
+rm -f "$sd_fc_decl"
+return "$sd_fc_rc"
+}
+
+SD_AWK='
 function fail(msg) {
   printf "store-data: %s\n", msg > "/dev/stderr"
   bad = 1
@@ -209,6 +321,7 @@ BEGIN {
   ns = root = suffix = key = changes = search = format = fields = title = snippet = fb = ""
   docs = ""
   doc_count = 0
+  nfl = 0
   lineno = 0
   aliased = 0
 }
@@ -270,6 +383,13 @@ FILENAME != path {
     if (!entity_ok(dent)) fail("line " lineno ": malformed document entity type '\''" dent "'\''")
     if (!marker_ok(dmark)) fail("line " lineno ": malformed document head marker '\''" dmark "'\''")
     docs = docs dpat "\t" dsec "\t" dent "\t" dmark "\n"
+  } else if (field == "field") {
+    v = substr(line, c + 1)
+    sub(/^[[:space:]]+/, "", v)
+    if (v == "") fail("line " lineno ": the field line is empty")
+    nfl++
+    fl[nfl] = v
+    fln[nfl] = lineno
   } else {
     fail("unknown field '\''" field "'\'' in the data file")
   }
@@ -334,6 +454,11 @@ END {
   if (seen_snippet && snippet != "line") fail("malformed snippet '\''" snippet "'\'' (line)")
   if (!seen_snippet) snippet = "line"
 
+  mode = ENVIRON["SD_MODE"]
+  if (mode == "fields") { for (i = 1; i <= nfl; i++) print fl[i]; exit 0 }
+  if (mode == "numbers") { for (i = 1; i <= nfl; i++) print fln[i]; exit 0 }
+  if (nfl > 0 && ENVIRON["SD_CHECKED"] != "1") exit 4
+
   print ns
   print root
   print suffix
@@ -347,9 +472,9 @@ END {
   print snippet
   if (ENVIRON["SD_WITH_FB"] == "1") print fb
   printf "%s", docs
+  if (ENVIRON["SD_WITH_FIELDS"] == "1") for (i = 1; i <= nfl; i++) print "@field\t" fl[i]
 }
-' "$sd_ppath" "$@"
-}
+'
 
 # the listing mode: every module folder holding a data file, its name the namespace, the
 # workspace modules first so an extension module of a name the workspace holds is left out

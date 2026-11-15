@@ -27,6 +27,9 @@
 #   fields.effective <declaration> <record>
 #   fields.conforms <declaration> <record>
 #   fields.reserved_ok <name>
+#   fields.own <declaration>                                        (the caller's declared fields)
+#   fields.put <key> <actions> <record>, fields.set <key> <actions> <record>
+#   fields.get <key> <record>                                       (the checked record entry)
 #
 # The caller lookup: a module's namespace is its installed module name. At the first storage
 # call (never when the library is sourced, since a lane verb sources the unit helpers) the
@@ -81,6 +84,12 @@
 # for a write breaking the declaration (an unknown field, a value outside its one-of set, a
 # required field left absent). ERR_SCHEMA_VIOLATION is a library owned tier 1 code, which the
 # docs module uses too.
+#
+# The checked record entry serves a module that declares its container's fields as field
+# lines in its data file: fields_own reads them through the storage core's data reader, and
+# fields_put, fields_set, and fields_get run the validator on the module's own records, so a
+# put fills the defaults at write and a get fills the read defaults. A module declaring no
+# field line never calls them.
 
 # STORE_LIB_NS: the caller's namespace once the first storage call found it; emptied when the
 # library is sourced, so a value a parent shell left never stands for this script
@@ -613,6 +622,202 @@ fields_conforms() {
     return 1
   fi
   fields_run conforms fields.conforms "$1" "$2" /dev/null
+}
+
+# fields_own <declaration>: the caller's declared fields written to the declaration file, one
+# <name>: <spec> field line each in declaration order, read from its data file's field lines
+# through the storage core's data reader (store-data <namespace> --with-fields), an empty
+# file when the data file declares none. The reader's refusal is re-framed under the
+# function's label: a namespace no data file declares rc 1 ERR_ENTITY_NOT_FOUND, a malformed
+# declaration (a field line among them) rc 1 ERR_INVALID_ARGUMENT, an unreadable one rc 2
+# ERR_STORAGE_READ. The scratch is <declaration>.ans and <declaration>.err, removed on return.
+fields_own() {
+  if [ $# -ne 1 ]; then
+    printf 'fields.own: error: takes one declaration file (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  fields_own_into fields.own "$1"
+}
+
+# fields_own_into <label> <declaration>: fields_own under the calling function's label
+fields_own_into() {
+  foi_l=$1
+  foi_d=$2
+  store_lib_ns "$foi_l" || return $?
+  foi_script=$(store_lib_data) || {
+    printf '%s: error: the storage core data reader is not installed (ERR_DRIVER_NOT_FOUND)\n' "$foi_l" >&2
+    return 2
+  }
+  { : > "$foi_d.ans" && : > "$foi_d.err"; } 2>/dev/null || {
+    rm -f "$foi_d.ans" "$foi_d.err"
+    printf '%s: error: cannot write the declaration file (ERR_STORAGE_WRITE)\n' "$foi_l" >&2
+    return 2
+  }
+  CTX_STORE_WORKSPACE=$(store_lib_root) "$foi_script" "$STORE_LIB_NS" --with-fields > "$foi_d.ans" 2> "$foi_d.err"
+  foi_rc=$?
+  if [ "$foi_rc" -ne 0 ]; then
+    foi_msg=$(sed -n 1p "$foi_d.err")
+    rm -f "$foi_d.ans" "$foi_d.err"
+    foi_msg=${foi_msg#store-data: }
+    [ -n "$foi_msg" ] || foi_msg="the data file of namespace '$STORE_LIB_NS' cannot be read"
+    case "$foi_rc" in
+      3) printf '%s: error: %s (ERR_ENTITY_NOT_FOUND)\n' "$foi_l" "$foi_msg" >&2; return 1 ;;
+      2) printf '%s: error: %s (ERR_STORAGE_READ)\n' "$foi_l" "$foi_msg" >&2; return 2 ;;
+      *) printf '%s: error: %s (ERR_INVALID_ARGUMENT)\n' "$foi_l" "$foi_msg" >&2; return 1 ;;
+    esac
+  fi
+  LC_ALL=C awk -F '\t' '$1 == "@field" { print substr($0, 8) }' "$foi_d.ans" > "$foi_d" 2>/dev/null || {
+    rm -f "$foi_d.ans" "$foi_d.err"
+    printf '%s: error: cannot write the declaration file (ERR_STORAGE_WRITE)\n' "$foi_l" >&2
+    return 2
+  }
+  rm -f "$foi_d.ans" "$foi_d.err"
+  return 0
+}
+
+# fields_clean <record>: the checked record entry's scratch beside the record file removed
+fields_clean() {
+  rm -f "$1.decl" "$1.old" "$1.new" "$1.t" "$1.t.out" "$1.t.ans" "$1.t.err"
+}
+
+# fields_read <label> <key> <record>: the caller's declared fields in <record>.decl (a
+# namespace declaring none refused rc 1) and the key's stored record in <record>.old,
+# frd_have 1 when the key is present and 0 when it is absent; a refusal leaves no scratch
+fields_read() {
+  frd_l=$1
+  frd_k=$2
+  frd_r=$3
+  fields_own_into "$frd_l" "$frd_r.decl" || return $?
+  if [ ! -s "$frd_r.decl" ]; then
+    fields_clean "$frd_r"
+    printf "%s: error: namespace '%s' declares no fields (its data file carries no field line) (ERR_INVALID_ARGUMENT)\n" "$frd_l" "$STORE_LIB_NS" >&2
+    return 1
+  fi
+  printf '%s\t%s\n' "$frd_k" "$frd_r.old" > "$frd_r.t" 2>/dev/null || {
+    fields_clean "$frd_r"
+    printf '%s: error: cannot write the record file (ERR_STORAGE_WRITE)\n' "$frd_l" >&2
+    return 2
+  }
+  store_get_into "$frd_r.t" > "$frd_r.t.out"
+  frd_rc=$?
+  if [ "$frd_rc" -ne 0 ]; then
+    fields_clean "$frd_r"
+    return "$frd_rc"
+  fi
+  case $(cat "$frd_r.t.out") in
+    1*) frd_have=1 ;;
+    *) frd_have=0 ;;
+  esac
+  return 0
+}
+
+# fields_put <key> <actions> <record>: a checked create of one record of the caller's own
+# namespace. Under the library lock (the one the caller holds, else its own for the call),
+# the declared fields are read by fields_own, an existing key refuses rc 1 ERR_ENTITY_EXISTS,
+# the actions (fields_apply's actions file) apply to an empty record with the defaults filled
+# at write (today the write's date), and the canonical record is put at the key and written
+# to the record file. fields_set <key> <actions> <record> is the checked change: a missing
+# key refuses rc 1 ERR_ENTITY_NOT_FOUND and the actions apply to the stored record, an absent
+# field staying absent. A namespace whose data file declares no field line refuses rc 1
+# ERR_INVALID_ARGUMENT; the validator's refusal carries the function's label, a store
+# function's or the lock's refusal passes through as its own line, and a refusal writes
+# nothing. The scratch sits beside the record file (<record>.decl, .old, .new, and .t with
+# its answers), removed on return.
+fields_put() {
+  if [ $# -ne 3 ]; then
+    printf 'fields.put: error: takes a key, an actions file, and a record file (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  fields_write fields.put 1 "$@"
+}
+
+fields_set() {
+  if [ $# -ne 3 ]; then
+    printf 'fields.set: error: takes a key, an actions file, and a record file (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  fields_write fields.set 0 "$@"
+}
+
+# fields_write <label> <create> <key> <actions> <record>: the checked write under the lock
+fields_write() {
+  if [ -n "${LIB_LOCK:-}" ]; then
+    fields_write_held "$@"
+    return $?
+  fi
+  lib_lock || return $?
+  fields_write_held "$@"
+  fw_rc=$?
+  lib_unlock
+  return "$fw_rc"
+}
+
+# fields_write_held <label> <create> <key> <actions> <record>: the checked write, the lock held
+fields_write_held() {
+  fwh_l=$1
+  fwh_c=$2
+  fwh_k=$3
+  fwh_a=$4
+  fwh_r=$5
+  if [ ! -f "$fwh_a" ] || [ ! -r "$fwh_a" ]; then
+    printf '%s: error: cannot read the actions file (ERR_STORAGE_READ)\n' "$fwh_l" >&2
+    return 2
+  fi
+  fields_read "$fwh_l" "$fwh_k" "$fwh_r" || return $?
+  if [ "$fwh_c" -eq 1 ] && [ "$frd_have" -eq 1 ]; then
+    fields_clean "$fwh_r"
+    printf "%s: error: key '%s' already exists in namespace '%s' (ERR_ENTITY_EXISTS)\n" "$fwh_l" "$fwh_k" "$STORE_LIB_NS" >&2
+    return 1
+  fi
+  if [ "$fwh_c" -eq 0 ] && [ "$frd_have" -eq 0 ]; then
+    fields_clean "$fwh_r"
+    printf "%s: error: key '%s' not found in namespace '%s' (ERR_ENTITY_NOT_FOUND)\n" "$fwh_l" "$fwh_k" "$STORE_LIB_NS" >&2
+    return 1
+  fi
+  [ "$fwh_c" -eq 0 ] || : > "$fwh_r.old"
+  fields_run apply "$fwh_l" "$fwh_r.decl" "$fwh_r.old" "$fwh_a" > "$fwh_r.new"
+  fwh_rc=$?
+  if [ "$fwh_rc" -eq 0 ]; then
+    store_put "$fwh_k" < "$fwh_r.new" > /dev/null
+    fwh_rc=$?
+  fi
+  if [ "$fwh_rc" -eq 0 ]; then
+    mv -f "$fwh_r.new" "$fwh_r" 2>/dev/null || {
+      printf '%s: error: the record landed, but the record file cannot be written (ERR_STORAGE_WRITE)\n' "$fwh_l" >&2
+      fwh_rc=2
+    }
+  fi
+  fields_clean "$fwh_r"
+  return "$fwh_rc"
+}
+
+# fields_get <key> <record>: one record of the caller's own namespace written to the record
+# file with each absent static default filled at read and never stored (fields_effective's
+# rule, a today default never filled at read), read only and lock free; a missing key refuses
+# rc 1 ERR_ENTITY_NOT_FOUND, a namespace declaring no field line rc 1 ERR_INVALID_ARGUMENT
+fields_get() {
+  if [ $# -ne 2 ]; then
+    printf 'fields.get: error: takes a key and a record file (ERR_INVALID_ARGUMENT)\n' >&2
+    return 1
+  fi
+  fg_k=$1
+  fg_r=$2
+  fields_read fields.get "$fg_k" "$fg_r" || return $?
+  if [ "$frd_have" -eq 0 ]; then
+    fields_clean "$fg_r"
+    printf "fields.get: error: key '%s' not found in namespace '%s' (ERR_ENTITY_NOT_FOUND)\n" "$fg_k" "$STORE_LIB_NS" >&2
+    return 1
+  fi
+  fields_run effective fields.get "$fg_r.decl" "$fg_r.old" /dev/null > "$fg_r.new"
+  fg_rc=$?
+  if [ "$fg_rc" -eq 0 ]; then
+    mv -f "$fg_r.new" "$fg_r" 2>/dev/null || {
+      printf 'fields.get: error: cannot write the record file (ERR_STORAGE_WRITE)\n' >&2
+      fg_rc=2
+    }
+  fi
+  fields_clean "$fg_r"
+  return "$fg_rc"
 }
 
 # store_search <query> <mode> [<limit>]: the library's search entry over the caller's

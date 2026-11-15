@@ -1,9 +1,14 @@
 import { spawnSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { shFunction } from '../support/sh';
+import { dataFile } from '../support/data-file';
+import { libraryLock, lockPath } from '../support/drawer';
+import { exec } from '../support/exec';
+import { holdLock, sleepShim } from '../support/locks';
+import { moduleCall, moduleScript, shFunction } from '../support/sh';
 import { fresh, seed } from '../support/snapshot';
+import { DRIVERS, fts5Available } from '../support/stage';
 import { latin1 } from '../unit-verbs/inputs';
 
 const LIBRARY = '.contexture/storage/scripts/library';
@@ -257,3 +262,144 @@ describe.concurrent('the field validator: fields_effective and fields_conforms',
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `fields.conforms: error: field 'x': the shape clause is line or block, not 'text' (${INV})\n`]);
   });
 });
+
+const FIELD_DATA = ['root: fieldprobe-root', 'key: <id>', ...IDEAS.map((l) => `field: ${l}`), ''].join('\n');
+const NF = 'ERR_ENTITY_NOT_FOUND';
+
+for (const driver of DRIVERS) {
+  describe.skipIf(driver === 'fts5' && !fts5Available())(`the checked record entry: a module declaring its fields in its data file, on ${driver}`, { concurrent: true }, () => {
+    let entrySnap: string;
+    beforeAll(async () => {
+      entrySnap = await seed(async (sb) => {
+        dataFile(sb, 'modules', 'fieldprobe', FIELD_DATA);
+        dataFile(sb, 'modules', 'plainprobe', 'root: plainprobe-root\nkey: <id>\n');
+      }, driver, 'library-fields-entry');
+    });
+
+    const own = (sb: string, fn: string, args: string[] = [], module = 'fieldprobe', input = '') =>
+      moduleCall(sb, module, join(sb, LIBRARY), fn, args, { input, env: { CTX_STORE_ROOT: sb } });
+    const stored = async (sb: string, id: string, module = 'fieldprobe') => {
+      const r = await own(sb, 'store_get', [id], module);
+      return r.code === 0 ? r.stdout : null;
+    };
+    const scratchLeft = (sb: string) => readdirSync(sb).filter((n) => /^rec\.|^decl\./.test(n));
+    const entry = (files: Record<string, string>) => {
+      const sb = fresh(entrySnap);
+      for (const [name, body] of Object.entries(files)) writeFileSync(join(sb, name), body);
+      return sb;
+    };
+
+    it('[the-engine-r-mrwga, the-engine-r-cj0ey] fields_own writes the caller\'s declared field lines in declaration order, an empty file for a data file declaring none', async () => {
+      const sb = entry({});
+      const r = await own(sb, 'fields_own', ['decl']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
+      expect(readFileSync(join(sb, 'decl'), 'utf8')).toBe(DECL);
+      const none = await own(sb, 'fields_own', ['plain'], 'plainprobe');
+      expect([none.code, none.stdout, none.stderr, readFileSync(join(sb, 'plain'), 'utf8')]).toEqual([0, '', '', '']);
+      expect(scratchLeft(sb)).toEqual([]);
+    });
+
+    it('[the-engine-r-mrwga, the-engine-r-cj0ey] fields_own re-frames the data reader\'s refusal: no data file rc 1 ERR_ENTITY_NOT_FOUND, a malformed field line rc 1 naming its line, a wrong argument count rc 1', async () => {
+      const sb = entry({});
+      expect(await own(sb, 'fields_own', ['decl'], 'nodata')).toMatchObject({ code: 1, stdout: '', stderr: `fields.own: error: namespace 'nodata' is declared by no module data file (${NF})\n` });
+      dataFile(sb, 'modules', 'badprobe', 'key: <id>\nfield: what: required block\nfield: status: optional line one-of A|B default C\n');
+      expect(await own(sb, 'fields_own', ['decl'], 'badprobe')).toMatchObject({ code: 1, stdout: '', stderr: `fields.own: error: line 3: field 'status': the default 'C' is not one of A|B (${INV})\n` });
+      expect(await own(sb, 'fields_own', [])).toMatchObject({ code: 1, stderr: `fields.own: error: takes one declaration file (${INV})\n` });
+      expect(scratchLeft(sb)).toEqual([]);
+    });
+
+    it('[the-engine-r-mrwga] fields_put fills the defaults at write and puts the canonical record, the record file and the stored value alike', async () => {
+      const sb = entry({ acts: actions(['block', 'what', 'an idea\n'], ['add', 'tags', 'b']) });
+      const before = today();
+      const r = await own(sb, 'fields_put', ['idea-1', 'acts', 'rec']);
+      const after = today();
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
+      const dated = (d: string) => `what ::\n  an idea\nstatus: "OPEN"\ndumped: "${d}"\ntags: "b"\n`;
+      const rec = readFileSync(join(sb, 'rec'), 'utf8');
+      expect([dated(before), dated(after)]).toContain(rec);
+      expect(await stored(sb, 'idea-1')).toBe(rec);
+      expect(scratchLeft(sb)).toEqual([]);
+    });
+
+    it.each([
+      ['a value outside the one-of set', actions(['block', 'what', 'an idea\n'], ['set', 'status', 'BOGUS']), SV, "field 'status': 'BOGUS' is not one of OPEN|PICKED|DROPPED"],
+      ['a missing required field', actions(['set', 'reason', 'r']), SV, "field 'what' is required and absent"],
+      ['an undeclared field', actions(['block', 'what', 'an idea\n'], ['set', 'colour', 'red']), SV, "field 'colour' is not declared"],
+      ['a newline in a line value', actions(['block', 'what', 'an idea\n'], ['set', 'reason', 'two\nlines']), INV, "field 'reason': a line value holds a newline or a carriage return"],
+    ])('[the-engine-r-mrwga, the-engine-r21] fields_put refuses %s rc 1 under its own label, nothing stored and no record file written', async (_name, acts, code, message) => {
+      const sb = entry({ acts });
+      const r = await own(sb, 'fields_put', ['idea-1', 'acts', 'rec']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `fields.put: error: ${message} (${code})\n`]);
+      expect(await stored(sb, 'idea-1')).toBeNull();
+      expect(existsSync(join(sb, 'rec'))).toBe(false);
+      expect(scratchLeft(sb)).toEqual([]);
+    });
+
+    it('[the-engine-r-mrwga] fields_put refuses an existing key rc 1 ERR_ENTITY_EXISTS, the stored record untouched', async () => {
+      const sb = entry({ acts: actions(['block', 'what', 'first\n']), again: actions(['block', 'what', 'second\n']) });
+      expect((await own(sb, 'fields_put', ['idea-1', 'acts', 'rec'])).code).toBe(0);
+      const first = await stored(sb, 'idea-1');
+      const r = await own(sb, 'fields_put', ['idea-1', 'again', 'rec2']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([1, '', "fields.put: error: key 'idea-1' already exists in namespace 'fieldprobe' (ERR_ENTITY_EXISTS)\n"]);
+      expect(await stored(sb, 'idea-1')).toBe(first);
+      expect(existsSync(join(sb, 'rec2'))).toBe(false);
+    });
+
+    it('[the-engine-r-mrwga] fields_set changes the stored record with an absent field staying absent, and refuses a missing key and a one-of breach, nothing stored', async () => {
+      const sb = entry({ pick: actions(['set', 'status', 'PICKED'], ['set', 'picked_by', 'unit-x']), bogus: actions(['set', 'status', 'BOGUS']) });
+      expect((await own(sb, 'store_put', ['idea-1'], 'fieldprobe', 'what ::\n  an idea\n')).code).toBe(0);
+      const r = await own(sb, 'fields_set', ['idea-1', 'pick', 'rec']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
+      const changed = 'what ::\n  an idea\nstatus: "PICKED"\npicked_by: "unit-x"\n';
+      expect([readFileSync(join(sb, 'rec'), 'utf8'), await stored(sb, 'idea-1')]).toEqual([changed, changed]);
+      const breach = await own(sb, 'fields_set', ['idea-1', 'bogus', 'rec2']);
+      expect([breach.code, breach.stdout, breach.stderr]).toEqual([1, '', `fields.set: error: field 'status': 'BOGUS' is not one of OPEN|PICKED|DROPPED (${SV})\n`]);
+      expect(await stored(sb, 'idea-1')).toBe(changed);
+      const missing = await own(sb, 'fields_set', ['idea-2', 'pick', 'rec3']);
+      expect([missing.code, missing.stdout, missing.stderr]).toEqual([1, '', `fields.set: error: key 'idea-2' not found in namespace 'fieldprobe' (${NF})\n`]);
+      expect(await stored(sb, 'idea-2')).toBeNull();
+      expect([existsSync(join(sb, 'rec2')), existsSync(join(sb, 'rec3'))]).toEqual([false, false]);
+      expect(scratchLeft(sb)).toEqual([]);
+    });
+
+    it('[the-engine-r-mrwga] fields_get fills the read default of a record stored without it, never storing it, a today default left absent', async () => {
+      const sb = entry({});
+      expect((await own(sb, 'store_put', ['idea-1'], 'fieldprobe', 'what ::\n  stored before\n')).code).toBe(0);
+      const r = await own(sb, 'fields_get', ['idea-1', 'rec']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, '', '']);
+      expect(readFileSync(join(sb, 'rec'), 'utf8')).toBe('what ::\n  stored before\nstatus: "OPEN"\n');
+      expect(await stored(sb, 'idea-1')).toBe('what ::\n  stored before\n');
+      const missing = await own(sb, 'fields_get', ['idea-2', 'rec2']);
+      expect([missing.code, missing.stdout, missing.stderr]).toEqual([1, '', `fields.get: error: key 'idea-2' not found in namespace 'fieldprobe' (${NF})\n`]);
+      expect(scratchLeft(sb)).toEqual([]);
+    });
+
+    it('[the-engine-r-mrwga] a namespace whose data file carries no field line refuses every checked call rc 1, nothing stored', async () => {
+      const sb = entry({ acts: actions(['set', 'what', 'x']) });
+      for (const [fn, args] of [['fields_put', ['a', 'acts', 'rec']], ['fields_set', ['a', 'acts', 'rec']], ['fields_get', ['a', 'rec']]] as const) {
+        const r = await own(sb, fn, [...args], 'plainprobe');
+        const label = fn.replace('_', '.');
+        expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `${label}: error: namespace 'plainprobe' declares no fields (its data file carries no field line) (${INV})\n`]);
+      }
+      expect(await stored(sb, 'a', 'plainprobe')).toBeNull();
+      expect(scratchLeft(sb)).toEqual([]);
+    });
+
+    it('[the-engine-r-mrwga, the-engine-r-uv5a3] a checked write takes the library lock for the call and releases it, and inside a lock the caller holds it writes under that lock', async () => {
+      const sb = entry({ acts: actions(['block', 'what', 'an idea\n']), more: actions(['block', 'what', 'another\n']) });
+      const lock = lockPath(sb, libraryLock('fieldprobe'));
+      const release = holdLock(sb, libraryLock('fieldprobe'), 'live');
+      const waited = await moduleCall(sb, 'fieldprobe', join(sb, LIBRARY), 'fields_put', ['idea-1', 'acts', 'rec'], { env: { CTX_STORE_ROOT: sb, ...sleepShim() } });
+      expect([waited.code, waited.stdout, waited.stderr]).toEqual([2, '', "lib.lock: error: the library lock of 'fieldprobe' is held (60 s timeout) (ERR_STORAGE_LOCKED)\n"]);
+      expect([await stored(sb, 'idea-1'), existsSync(join(sb, 'rec')), existsSync(lock)]).toEqual([null, false, true]);
+      release();
+      expect((await own(sb, 'fields_put', ['idea-1', 'acts', 'rec'])).code).toBe(0);
+      expect(existsSync(lock)).toBe(false);
+      const script = moduleScript(sb, 'fieldprobe', 'held', `. "${join(sb, LIBRARY)}"\nlib_lock || exit 9\n[ -d "$LIB_LOCK" ] || exit 8\nfields_put idea-2 more rec2 || exit $?\n[ -d "$LIB_LOCK" ] || exit 7\nlib_unlock\n`);
+      const held = await exec('sh', [script], { cwd: sb, env: { CTX_STORE_ROOT: sb } });
+      expect([held.code, held.stdout, held.stderr]).toEqual([0, '', '']);
+      expect(await stored(sb, 'idea-2')).toContain('another');
+      expect(existsSync(lock)).toBe(false);
+    });
+  });
+}

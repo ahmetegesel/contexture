@@ -13,7 +13,8 @@ storage/
   scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
   scripts/store-b64         the private base64 encoder of a stored value
   scripts/store-pack        the private codec of a batched store.get answer: pack, unpack
-  scripts/store-fields.awk  the private field validator engine the library's fields functions run
+  scripts/store-fields.awk  the private field validator engine the library's fields functions
+                            and the data reader's field lines check run
   scripts/json.awk          the one JSON flattener: a storage answer to path=value lines, read
                             by the unit, rhythm, and docs modules
   scripts/library           the module-facing interface, sourced by a module's scripts
@@ -176,9 +177,10 @@ check with a read before writing again.
 
 A module declares its data in a `data` file beside its `module` file, one `field: value`
 line per field and a line starting with `#` a comment. Only `key` is required; `root`,
-`fallback_root`, `suffix`, `changes`, and the search keys are optional. The namespace is
-never declared: it is the module's folder name, its installed module name, so a
-`namespace:` line refuses as an unknown field naming the fix (remove the line):
+`fallback_root`, `suffix`, `changes`, the search keys, and the repeated `field` lines are
+optional. The namespace is never declared: it is the module's folder name, its installed
+module name, so a `namespace:` line refuses as an unknown field naming the fix (remove the
+line):
 
 ```text
 key: <segment>/<segment>            # or a final <segment...> for a variable-depth key
@@ -192,7 +194,25 @@ fields: <field>, <field>            # optional; flat only; the JSON fields to ra
 title: <field>|key|head             # optional; flat default key, documents default head
 snippet: line                       # optional; default line
 document: <key-pattern> <section> <entity-type> <head-marker|->   # repeatable
+field: <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]   # repeatable
 ```
+
+A `field` line declares one field of the module's container in the library's field
+grammar (The library, below), exactly as a store declaration writes it: the blanks after
+`field:` are the file's separator, while the declaration keeps its own, one blank between
+clauses and none trailing, so a trailing blank refuses. For example:
+
+```text
+field: what: required block
+field: status: optional line one-of OPEN|PICKED|DROPPED default OPEN
+field: dumped: optional line default today
+```
+
+The reader checks every field line through the library's field validator (its engine and
+its reserved names, found beside the reader) at every read of the data file, and refuses a
+malformed line, a reserved name, or a name declared twice rc 1 naming the data file line,
+`store-data: line <N>: <the validator's reason>`; a data file without a field line never
+runs the validator. The `fields` key above is the flat search schema's, a different key.
 
 The namespace is the module folder's name, a token of lowercase letters, digits, dot,
 underscore, and dash, starting with a letter or digit (the module name rule); the
@@ -219,10 +239,20 @@ extension module of its name). `store-data <namespace>` answers one namespace on
 rules, and never the fallback root, so a parser reading by position ignores the field;
 `store-data <namespace> --with-fallback` answers the fallback root as line 12 (an empty
 line when none applies) and the rules from line 13, the form the posix driver reads;
+`store-data <namespace> --with-fields` (alone or beside `--with-fallback`, in either
+order) answers, after the rules, one tagged line per declared field,
+`@field<TAB><name>: <spec>`, in declaration order, the form the library's `fields_own`
+reads; no document rule starts with `@`, and a reader that does not ask never sees the
+family, so the plain and fallback answers stay byte for byte as before (the fts5 driver
+hashes every line past the fixed ones into its search schema signature, so a field line
+never reaches it);
 a data file names no search modes, and a `modes` line refuses as an unknown field naming
 the fix;
-any other second argument refuses rc 1. `store-data --list` answers every valid
-declaration of both module roots, one `<namespace><TAB><root>` line each (the root the
+any other argument after the namespace, or a repeated flag, refuses rc 1; the field lines
+run through the library's `fields_decl_check` over a scratch copy (the verb's scratch root,
+else the drawer's scratch folder), and a missing field validator or a scratch copy that
+cannot be written, when a field line needs them, refuses rc 2. `store-data --list` answers
+every valid declaration of both module roots, one `<namespace><TAB><root>` line each (the root the
 namespace when none is declared or the module is installed under an alias, then
 `<TAB><fallback root>` when one applies), sorted
 by namespace, a name both roots hold answered once (the workspace module's), and leaves
@@ -339,7 +369,30 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
   a required field left absent), fills the defaults at create only, and writes the
   canonical result, nothing on a refusal; `fields_effective` fills an absent static
   default at read and never stores it; `fields_conforms` prints one `<field>: <reason>`
-  line per field breaking the declaration and exits 1 when any prints.
+  line per field breaking the declaration and exits 1 when any prints;
+- the checked record entry, for a module that declares its container's fields as `field`
+  lines in its data file (the store reads its declarations from its own records instead,
+  and both feed the one validator): `fields_own <declaration>` writes the caller's
+  declared field lines to the file, one `<name>: <spec>` line each in declaration order
+  (read through `store-data <namespace> --with-fields`; an empty file when none is
+  declared; the reader's refusal re-framed under `fields.own`, rc 1
+  `ERR_ENTITY_NOT_FOUND` for no data file, rc 1 `ERR_INVALID_ARGUMENT` for a malformed
+  declaration); `fields_put <key> <actions> <record>` is a checked create and
+  `fields_set <key> <actions> <record>` a checked change of one record of the caller's own
+  namespace, each under the library lock (the one the caller holds, else its own for the
+  call): the declared fields read, an existing key refusing a put rc 1
+  `ERR_ENTITY_EXISTS` and a missing key refusing a set rc 1 `ERR_ENTITY_NOT_FOUND`, the
+  actions applied by `fields_apply`'s rules (the defaults filled at create, today the
+  write's date; an absent field staying absent on a change), the canonical record put at
+  the key and written to the record file for the module to print back; `fields_get <key>
+  <record>` writes one record with each absent static default filled at read, never
+  stored, read only and lock free. A namespace whose data file carries no field line
+  refuses each rc 1 `ERR_INVALID_ARGUMENT`; the validator's refusal carries the entry's
+  label (`fields.put: error: field 'status': 'BOGUS' is not one of OPEN|PICKED|DROPPED (ERR_SCHEMA_VIOLATION)`),
+  a store function's or the lock's refusal passes through as its own line, and a refusal
+  writes nothing. The scratch sits beside the record file (`<record>.decl`, `.old`,
+  `.new`, and `.t` with its answers) and is removed on return. A `ref` stays the module's
+  own (a reserved name, so never a declared field), as the store keeps it.
 
 ## Errors
 
