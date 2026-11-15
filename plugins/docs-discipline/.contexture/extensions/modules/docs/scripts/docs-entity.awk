@@ -11,12 +11,19 @@
 # entry (a responsibility, a contract rule, a pitfall, a caveat) by its id; a @rule block by
 # rule/<category>/<rule-slug>; any other keyed entry by <block>/<key>, the key the block's
 # grammar names (a first field's value, <from>><to> for data_flow, <direction>:<key> for
-# edges), the same text ctx docs entry takes, when that key is one token (no blank, double
-# quote, or control character), so every address is a valid reference. The doc's header is
-# the entity header: the header block itself, and for search every line no keyed entity
-# holds (an entry known only by its place or keyed by more than one token, a map block, a
-# line between entries). The grammar's #% block lines say each
-# block's shape and key, so the keys follow the one grammar.
+# edges), the same text ctx docs entry takes (the value read as the edit engine reads it, a
+# backslash kept as a byte). The address carries the key encoded (key_enc):
+# every ASCII byte outside letters, digits, and - _ . / : , + @ written %XX in uppercase hex
+# (the percent sign, a blank, a double quote, a control byte, and every byte a shell reads
+# specially among them), every other byte kept, so every address is one token, a valid
+# reference, and its read safe to paste into a shell unquoted, and the encoding is the
+# identity on a key holding none of those bytes. get also answers a key's own spelling when
+# that spelling is one token holding no percent sign (an address written before the
+# encoding), which no other key's encoding can equal. The doc's header is the entity header:
+# every line no keyed entity holds (the header block, an entry known only by its place, a
+# map block, a block marker, a line between entries), which get prints in file order and
+# search matches. The grammar's #% block lines say each block's shape and key, so the keys
+# follow the one grammar.
 #
 # The exact rule is the shared one: a case-insensitive (ASCII) substring of one line, a
 # column-0 # line never matching, the first matching line as the snippet; a bare block
@@ -65,30 +72,52 @@ function trim(s) {
   return s
 }
 
-function unquote(v,    o, i, c) {
-  v = trim(v)
-  if (length(v) >= 2 && substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") {
-    v = substr(v, 2, length(v) - 2)
-    o = ""
-    for (i = 1; i <= length(v); i++) {
-      c = substr(v, i, 1)
-      if (c == "\\" && i < length(v)) { i++; c = substr(v, i, 1) }
-      o = o c
-    }
-    return o
-  }
+# unquote(v): v without its outer double quotes, every byte inside kept (the writer escapes
+# nothing, so a backslash is a byte of the value)
+function unquote(v) {
+  if (length(v) >= 2 && substr(v, 1, 1) == "\"" && substr(v, length(v), 1) == "\"") return substr(v, 2, length(v) - 2)
   return v
 }
 
 # field(s, e, f): the value of field f in the entry spanning lines s to e, at its head
-# ("  - f: v") or on its own line ("    f: v"); empty when absent
-function field(s, e, f,    i, p) {
+# ("  - f: v") or on its own line ("    f: v"); empty when absent. Read as the edit engine
+# reads a key (docs-edit.awk unit_value): the leading blanks (spaces) dropped, then the outer
+# quotes, every other byte kept, so an address carries the key ctx docs entry takes
+function field(s, e, f,    i, p, v) {
   for (i = s; i <= e; i++) {
     if (i == s) p = "  - " f ":"
     else p = "    " f ":"
-    if (index(L[i], p) == 1) return unquote(substr(L[i], length(p) + 1))
+    if (index(L[i], p) == 1) {
+      v = substr(L[i], length(p) + 1)
+      sub(/^ +/, "", v)
+      return unquote(v)
+    }
   }
   return ""
+}
+
+# key_enc(k): the key's address form: every ASCII byte outside letters, digits, and
+# - _ . / : , + @ written %XX in uppercase hex, every other byte kept (the table built once
+# from sprintf %c, so every supported awk agrees; a byte above ASCII never enters it)
+function key_enc(k,    o, i, c) {
+  if (!KE_READY) key_enc_table()
+  o = ""
+  for (i = 1; i <= length(k); i++) {
+    c = substr(k, i, 1)
+    o = o ((c in KE_PCT) ? KE_PCT[c] : c)
+  }
+  return o
+}
+
+function key_enc_table(    i, c, hex, keep) {
+  hex = "0123456789ABCDEF"
+  keep = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_./:,+@"
+  for (i = 1; i < 128; i++) {
+    c = sprintf("%c", i)
+    if (index(keep, c)) continue
+    KE_PCT[c] = "%" substr(hex, int(i / 16) + 1, 1) substr(hex, i % 16 + 1, 1)
+  }
+  KE_READY = 1
 }
 
 function etype(b) {
@@ -100,7 +129,7 @@ function etype(b) {
 }
 
 # entry_done(): the entry ES..EE of block EB keyed by the grammar, its lines owned by the
-# entity, or by the header when it holds no key
+# entity under its encoded key, or by the header when it holds no key
 function entry_done(    kf, k, p, f1, f2, v1, v2, i, t) {
   if (!ES) return
   kf = KEYF[EB]
@@ -123,11 +152,26 @@ function entry_done(    kf, k, p, f1, f2, v1, v2, i, t) {
     }
     t = "entry"
   }
-  if (k != "" && k !~ /[ \t"]/ && k !~ /[[:cntrl:]]/) {
-    for (i = ES; i <= EE; i++) { OWN[i] = k; OTY[i] = t }
-    span(k, ES, EE)
-  }
+  if (k != "") own(k, t, ES, EE)
   ES = 0
+}
+
+# own(k, t, s, e): lines s to e owned by the entity of natural key k and type t, under its
+# encoded key; a key whose encoding still is no one token (a control character above ASCII
+# under a multibyte locale) stays on the header, so every address is a valid reference
+function own(k, t, s, e,    ek, i) {
+  ek = key_enc(k)
+  if (ek ~ /[ \t"]/ || ek ~ /[[:cntrl:]]/) return
+  for (i = s; i <= e; i++) { OWN[i] = ek; OTY[i] = t }
+  span(ek, s, e)
+  old_spelling(k, ek)
+}
+
+# old_spelling(k, ek): get's second answer for key k, its own spelling when that is one token
+# holding no percent sign and differs from its encoding ek (an address written before the
+# encoding); the first entity of a spelling wins
+function old_spelling(k, ek) {
+  if (ek != k && k !~ /[ \t"%]/ && k !~ /[[:cntrl:]]/ && !(k in OLD)) OLD[k] = ek
 }
 
 # span(k, s, e): the entity's printable span, its trailing blank lines left out; the first
@@ -137,8 +181,8 @@ function span(k, s, e) {
   if (!(k in SS)) { SS[k] = s; SE[k] = e }
 }
 
-function doc_done(    i, line, blk, repo, slug, hs, he, n2, a) {
-  split("", OWN); split("", OTY); split("", SS); split("", SE); split("", NOM)
+function doc_done(    i, line, blk, repo, slug, n2, a, w, last) {
+  split("", OWN); split("", OTY); split("", SS); split("", SE); split("", NOM); split("", OLD)
   repo = ""; slug = ""; blk = ""; ES = 0
   for (i = 1; i <= DN; i++) {
     line = L[i]
@@ -155,7 +199,8 @@ function doc_done(    i, line, blk, repo, slug, hs, he, n2, a) {
       if (blk == "rule") span(RK, RST, i - 1)
       blk = "rule"
       n2 = split(line, a, /[ \t]+/)
-      RK = "rule/" a[2]
+      RK = key_enc("rule/" a[2])
+      old_spelling("rule/" a[2], RK)
       OWN[i] = RK; OTY[i] = "rule"
       RST = i
       continue
@@ -184,16 +229,31 @@ function doc_done(    i, line, blk, repo, slug, hs, he, n2, a) {
   }
   entry_done()
   if (blk == "rule") span(RK, RST, DN)
-  hs = 0
-  for (i = 1; i <= DN; i++) if (L[i] ~ /^@doc[ \t]/) { hs = i; break }
-  if (hs) {
-    he = hs
-    while (he < DN && L[he + 1] ~ /[^ \t]/ && L[he + 1] !~ /^@/) he++
-    SS["header"] = hs; SE["header"] = he
-  }
   if (MODE == "get") {
-    if (!GOT && (WANT in SS)) {
-      for (i = SS[WANT]; i <= SE[WANT]; i++) print L[i]
+    if (GOT) return
+    # the header: every line it owns in file order, the trailing blank lines left out; a bare
+    # block marker only when its block holds a header line too, since a marker alone would
+    # read as an empty block
+    if (WANT == "header") {
+      split("", HP)
+      last = 0
+      for (i = 1; i <= DN; i++) {
+        if (OWN[i] != "header") continue
+        HP[i] = 1
+        if (NOM[i]) {
+          HP[i] = 0
+          for (w = i + 1; w <= DN && L[w] !~ /^@/; w++) if (OWN[w] == "header" && L[w] ~ /[^ \t]/) { HP[i] = 1; break }
+        }
+        if (HP[i] && L[i] ~ /[^ \t]/) last = i
+      }
+      for (i = 1; i <= last; i++) if (i in HP && HP[i]) print L[i]
+      GOT = (last > 0)
+      return
+    }
+    w = WANT
+    if (!(w in SS) && (w in OLD)) w = OLD[w]
+    if (w in SS) {
+      for (i = SS[w]; i <= SE[w]; i++) print L[i]
       GOT = 1
     }
     return

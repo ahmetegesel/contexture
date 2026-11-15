@@ -578,9 +578,34 @@ function entry_key(b, k) {
     return rekey_value()
 }
 
-# the entry of block b a key addresses: #N by ordinal, else by its key; refuses when none
-# or several match
-function find_entry(b, key,    k, hits, at) {
+# key_enc(k): the key's address form, the entity engine's twin (docs-entity.awk key_enc): every
+# ASCII byte outside letters, digits, and - _ . / : , + @ written %XX in uppercase hex, every
+# other byte kept
+function key_enc(k,    o, i, c) {
+    if (!KE_READY) key_enc_table()
+    o = ""
+    for (i = 1; i <= length(k); i++) {
+        c = substr(k, i, 1)
+        o = o ((c in KE_PCT) ? KE_PCT[c] : c)
+    }
+    return o
+}
+
+function key_enc_table(    i, c, hex, keep) {
+    hex = "0123456789ABCDEF"
+    keep = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_./:,+@"
+    for (i = 1; i < 128; i++) {
+        c = sprintf("%c", i)
+        if (index(keep, c)) continue
+        KE_PCT[c] = "%" substr(hex, int(i / 16) + 1, 1) substr(hex, i % 16 + 1, 1)
+    }
+    KE_READY = 1
+}
+
+# the entry of block b a key addresses: #N by ordinal, else by its key, given as written or
+# in its address form (key_enc, the form a ctx docs search row prints); refuses when none or
+# several match
+function find_entry(b, key,    k, hits, at, ek) {
     if (key ~ /^#[0-9]+$/) {
         k = substr(key, 2) + 0
         if (k < 1 || k > NE) refuse("@" BNM[b] " has no entry " key " (" NE " entries) (ERR_ENTITY_NOT_FOUND)")
@@ -588,7 +613,10 @@ function find_entry(b, key,    k, hits, at) {
     }
     hits = 0
     at = 0
-    for (k = 1; k <= NE; k++) if (entry_key(BNM[b], k) == key) { hits++; if (!at) at = k }
+    for (k = 1; k <= NE; k++) {
+        ek = entry_key(BNM[b], k)
+        if (ek == key || (ek != "" && key_enc(ek) == key)) { hits++; if (!at) at = k }
+    }
     if (hits == 0) refuse("@" BNM[b] " has no entry '" key "' (ERR_ENTITY_NOT_FOUND)")
     if (hits > 1) refuse("@" BNM[b] " has " hits " entries keyed '" key "'; address one by #N (ERR_INVALID_ARGUMENT)")
     return at

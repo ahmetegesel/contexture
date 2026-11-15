@@ -1,5 +1,5 @@
 docs search "checkout": 10 matches, 10 shown
-  doc docs#demo-orders/operational/header: - step: "Run the checkout integration test"
+  entry docs#demo-orders/operational/test/Run%20the%20checkout%20integration%20test: - step: "Run the checkout integration test"
   doc docs#demo-orders/order-flow/header: keywords: [orders, checkout, pricing, validation]
   pitfall docs#demo-orders/order-flow/order-flow-p1: summary: "A retried checkout can persist the same cart twice"
   pitfall docs#demo-orders/order-flow/order-flow-p2: trigger: "The price table changes while a checkout request is in flight"
@@ -8,5 +8,5 @@ docs search "checkout": 10 matches, 10 shown
   entry docs#demo-web/cart-ui/see_also/order-flow: why: "The order API side of the checkout handoff"
   entry docs#workspace/system-map/components/demo-web: responsibilities: "Storefront cart interaction and checkout handoff"
   entry docs#workspace/system-map/stages/Checkout: - stage: "Checkout"
-  entry docs#workspace/system-map/data_flow/demo-web>demo-orders: evidence: "postCheckout"
+  entry docs#workspace/system-map/data_flow/demo-web%3Edemo-orders: evidence: "postCheckout"
 read one: ctx docs get <repo>/<slug>/<key> (the address after docs#)

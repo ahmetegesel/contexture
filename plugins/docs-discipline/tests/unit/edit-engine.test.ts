@@ -104,6 +104,9 @@ describe('the edit engine: every success is the golden byte for byte', { concurr
   it('W17 [docs-module-r21] entry by a composite key', async () => {
     written(await edit(sb, { op: 'entry', slug: 'unit', doc: unitDoc(), block: 'edges', key: 'exposes:GET /unit', acts: [['set', 'detail', 'Serves the unit twice.']] }), golden('exp-entry-edges.md'));
   });
+  it('W17b [docs-module-r21] entry by a composite key in its encoded form, the key a search row prints', async () => {
+    written(await edit(sb, { op: 'entry', slug: 'unit', doc: unitDoc(), block: 'edges', key: 'exposes:GET%20/unit', acts: [['set', 'detail', 'Serves the unit twice.']] }), golden('exp-entry-edges.md'));
+  });
   it('W18 [docs-module-r21] entry remove', async () => {
     written(await edit(sb, { op: 'entry', slug: 'unit', doc: unitDoc(), block: 'see_also', key: 'other', remove: true }), golden('exp-entry-seealso-remove.md'));
   });
@@ -132,6 +135,11 @@ describe('the edit engine: every success is the golden byte for byte', { concurr
   it('W29 [docs-module-r5] show prints one entry raw (query --entry)', async () => {
     written(await edit(sb, { op: 'show', slug: 'unit', doc: unitDoc(), block: 'pitfalls', key: 'unit-p1' }), golden('exp-entry-show.txt'));
   });
+  it('W29b [docs-module-r5] show answers an entry by its encoded key as by its natural key', async () => {
+    const natural = await edit(sb, { op: 'show', slug: 'unit', doc: unitDoc(), block: 'edges', key: 'exposes:GET /unit' });
+    expect([natural.code, natural.stdout.split('\n')[0]]).toEqual([0, '  - direction: exposes']);
+    written(await edit(sb, { op: 'show', slug: 'unit', doc: unitDoc(), block: 'edges', key: 'exposes:GET%20/unit' }), natural.stdout);
+  });
 });
 
 describe('the edit engine: every refusal is rc 1, no output, one line', { concurrent: true }, () => {
@@ -156,6 +164,11 @@ describe('the edit engine: every refusal is rc 1, no output, one line', { concur
   });
   it('W37 [docs-module-r18] a duplicate id', async () => {
     refused(await edit(sb, { op: 'entry', verb: 'pitfall', slug: 'unit', doc: unitDoc(), block: 'pitfalls', id: 'unit-p1', acts: pitfallFields() }), 'the id unit-p1 already exists');
+  });
+  it('W38b [docs-module-r21] a key one entry carries as written and another in its encoded form refuses as several, naming #N', async () => {
+    const twin = scratch('twin.md', '@doc structural twin\n  repo: wtest\n  description: "Two keys, one spelled as the other\'s address"\n  sources: [t/**]\n  keywords: [t]\n\n@see_also\n  - ref: "x y"\n    why: "the blank one"\n  - ref: "x%20y"\n    why: "the percent one"\n');
+    refused(await edit(sb, { op: 'show', slug: 'twin', doc: twin, block: 'see_also', key: 'x%20y' }), "@see_also has 2 entries keyed 'x%20y'; address one by #N (ERR_INVALID_ARGUMENT)");
+    written(await edit(sb, { op: 'show', slug: 'twin', doc: twin, block: 'see_also', key: 'x%2520y' }), '  - ref: "x%20y"\n    why: "the percent one"\n');
   });
   it('W38 [docs-module-r18] a missing entry', async () => {
     refused(await edit(sb, { op: 'entry', slug: 'unit', doc: unitDoc(), block: 'contract', key: 'unit-r9', acts: [['set', 'evidence', 'x']] }), "has no entry 'unit-r9' (ERR_ENTITY_NOT_FOUND)");

@@ -1,8 +1,9 @@
 #!/bin/sh
 # summary: print one corpus entity whole, by its path: <repo>/<slug>/<key>
 # usage: ctx docs get <repo>/<slug>/<key>
-# help: the path is everything after the first hash in an entity's address, docs# or the alias the module is installed under (ctx docs search prints it as the row's read); the key is an id keyed entry's id (a responsibility, a contract rule, a pitfall, a caveat), rule/<category>/<rule-slug> for a conventions rule, <block>/<key> for another keyed entry (the key ctx docs entry takes, when it is one token), or header for the doc's header block
-# help: prints the entity's stored lines whole, quotes kept; read only, never a doc listing; an entry keyed by more than one token, or known only by its place, belongs to the header entity
+# help: the path is everything after the first hash in an entity's address, docs# or the alias the module is installed under (ctx docs search prints it as the row's read); the key is an id keyed entry's id (a responsibility, a contract rule, a pitfall, a caveat), rule/<category>/<rule-slug> for a conventions rule, <block>/<key> for another keyed entry (the key ctx docs entry takes), or header for the doc's header entity
+# help: the key rides encoded: every ASCII byte outside letters, digits, and - _ . / : , + @ is written %XX in uppercase hex (a blank %20, an apostrophe %27, the percent sign %25), every other byte kept, so an address is one token and its read runs pasted into a shell unquoted (workspace/system-map/components/store%20module); a key spelled as one token with no percent sign also answers that spelling, the address written before the encoding (data_flow/a>b beside data_flow/a%3Eb)
+# help: prints the entity's stored lines whole, quotes kept; header prints every line the header entity owns in file order: the header block, then an entry known only by its place, a map block, and a line between entries, a block marker only above a line of its own block; read only, never a doc listing
 # help: exit codes: 0 printed; 1 a malformed path, no such doc, or no such entity (ERR_ENTITY_NOT_FOUND); 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs get workspace/the-engine/the-engine-r8
 

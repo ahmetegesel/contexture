@@ -21,6 +21,20 @@ describe('ctx docs search', { concurrent: true }, () => {
     expect([got.code, got.stdout.split('\n')[0]]).toEqual([0, '  - id: order-flow-p1']);
   });
 
+  it('[docs-module-r-yyfxd] an entry keyed by more than one token is its own row of type entry under its encoded key, its read printing the entry whole; a keyless entry stays on the header row, whose read prints its line', async () => {
+    const sb = fresh(staged);
+    const r = await docs(sb, ['search', 'Cart assembly', '--json']);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    const a = JSON.parse(r.stdout);
+    expect(a.rows).toEqual([{ module: 'docs', container: 'workspace/system-map', type: 'entry', id: 'stages/Cart%20assembly', address: 'docs#workspace/system-map/stages/Cart%20assembly', snippet: '- stage: "Cart assembly"', read: 'ctx docs get workspace/system-map/stages/Cart%20assembly' }]);
+    const got = await docs(sb, a.rows[0].read.split(' ').slice(2));
+    expect([got.code, got.stdout]).toEqual([0, '  - stage: "Cart assembly"\n    order: 1\n    description: "The customer edits a cart in the storefront"\n    evidence: "cartStore"\n']);
+    const rule = JSON.parse((await docs(sb, ['search', 'never writes order state', '--json'])).stdout);
+    expect(rule.rows.map((x: { type: string; id: string }) => [x.type, x.id])).toEqual([['doc', 'header']]);
+    const header = await docs(sb, rule.rows[0].read.split(' ').slice(2));
+    expect(header.stdout).toContain(`\n${rule.rows[0].snippet.replace(/^/, '  ')}\n`);
+  });
+
   it('[docs-module-r-yyfxd] zero hits is an answer, rc 0, in the text and --json forms', async () => {
     const sb = fresh(staged);
     const text = await docs(sb, ['search', 'zz_no_such_term']);

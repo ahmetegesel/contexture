@@ -177,7 +177,7 @@ A REF names its target exactly by its full address (@record references; the REF 
 - Journal entries: `unit#<unit>/entry/<slug>`
 - Findings: `unit#<unit>/finding/<NAME>`
 - Subagent lane artifacts: `unit#<unit>/lane/<lane>/<recipe|journal|report>`, a recipe or report section `unit#<unit>/lane/<lane>/<recipe|report>/<SECTION>` (an `@<SECTION>` or `@claim <SECTION>` head runs to the line before the next column-0 `@` line, a column-0 `<SECTION> ::` head to the line before the next non-blank column-0 line, the last head naming the section winning), and a lane journal entry `unit#<unit>/lane/<lane>/journal/<slug>`
-- Another owner's entities: `store#<container>/<id>` (`ctx store get`), `docs#<repo>/<slug>/<id>` (`ctx docs get`), and a workspace file `file#<path>[#<symbol>]`
+- Another owner's entities: `store#<container>/<id>` (`ctx store get`), `docs#<repo>/<slug>/<id>` (`ctx docs get`, the key percent encoded so an entry keyed by several words is one token too, `docs#workspace/system-map/components/store%20module`), and a workspace file `file#<path>[#<symbol>]`
 
 ```bash
 .contexture/ctx unit get <unit>/<kind>/<id>
