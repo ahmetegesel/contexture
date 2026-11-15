@@ -26,6 +26,9 @@ function groupGone(pid: number): boolean {
 
 describe.concurrent('the unit verbs under storage faults: a read-only store, an interrupt, a killed writer, a held lock', () => {
   let sb0: string;
+  // the picture of an untouched copy, taken once: every copy is a byte copy of the seed, so a
+  // refusing case compares its own copy's picture after the refusal against this one
+  let untouched: string;
   beforeAll(async () => {
     sb0 = await seed(async (sb) => {
       await seedUnit(sb, 'w-unit', 'storage failure unit');
@@ -34,6 +37,14 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
       await must(unit(sb, 'finding', 'add', 'w-unit', 'W_ONE', '--summary=One'));
       await must(createLane(sb, 'w-unit', 'w-lane'));
     }, 'posix', 'faults');
+    untouched = await unitChecksum(fresh(sb0), 'w-unit', ['w-lane']);
+  });
+
+  it('the picture taken once is the picture of every untouched copy, and a write that lands changes it', async () => {
+    const sb = fresh(sb0);
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).toBe(untouched);
+    await must(lane(sb, 'record', 'w-unit', 'w-lane', '--what=a write that lands'));
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).not.toBe(untouched);
   });
 
   it.skipIf(ROOT_USER)('W-a [the-record-r9, the-record-r12, the-engine-r18]: every typed write on a read-only store exits 2, changes nothing, leaves no temp, and releases the lock', async () => {
@@ -41,7 +52,6 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
     const unitDir = join(sb, RECORD_ROOT, 'w-unit');
     const laneDir = join(unitDir, 'lanes/w-lane');
     const files = [unitDir, laneDir].flatMap((d) => readdirSync(d).filter((f) => f.endsWith('.md')).map((f) => join(d, f)));
-    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const residue = scratch(sb).filter((f) => RESIDUE.test(f)).length;
     for (const f of files) chmodSync(f, 0o444);
     for (const d of [unitDir, laneDir]) chmodSync(d, 0o555);
@@ -55,7 +65,7 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
       for (const d of [unitDir, laneDir]) chmodSync(d, 0o755);
       for (const f of files) chmodSync(f, 0o644);
     }
-    expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).toBe(before);
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).toBe(untouched);
     expect(scratch(sb).filter((f) => RESIDUE.test(f)).length).toBe(residue);
     expect((await unit(sb, 'task', 'start', 'w-unit', 'w-a')).code).toBe(0);
   });
@@ -139,26 +149,23 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it('[the-record-r9, the-engine-r21] a lane document the data script cannot stage refuses rc 2 ERR_STORAGE_WRITE and leaves the report as it was', async () => {
     const sb = fresh(sb0);
-    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const r = await data(sb, 'lane.write_report', ['w-unit', 'w-lane'], 'never lands\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir -p "$p/stage/doc" ;; esac'));
     refused(r, 'lane.write_report', 2, 'ERR_STORAGE_WRITE', "cannot write the data script's scratch");
-    expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).toBe(before);
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane'])).toBe(untouched);
   });
 
   it('[the-record-r9, the-engine-r21] a session.create whose existence probe cannot be written refuses rc 2 and leaves the unit it names whole', async () => {
     const sb = fresh(sb0);
-    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const r = await data(sb, 'session.create', ['w-unit'], 'objective=a second unit\nattention=fresh unit\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir "$p/keys" ;; esac'));
-    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stderr}]`).toBe(before);
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stderr}]`).toBe(untouched);
     expect([r.code, r.stdout]).toEqual([2, '']);
     expect(r.stderr).toMatch(/^session\.create: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
   });
 
   it('[the-record-r9, the-engine-r21] a task.add whose fetched backlog cannot be written refuses rc 2 and never reads the backlog as absent', async () => {
     const sb = fresh(sb0);
-    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const r = await data(sb, 'task.add', ['w-unit', 'w-c'], 'objective=Task C\n', mktempPlant('case "$p" in */unit.*) /bin/mkdir "$p/art.2" ;; esac'));
-    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stderr}]`).toBe(before);
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stderr}]`).toBe(untouched);
     expect([r.code, r.stdout]).toEqual([2, '']);
     expect(r.stderr).toMatch(/^task\.add: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
   });
@@ -185,13 +192,12 @@ describe.concurrent('the unit verbs under storage faults: a read-only store, an 
 
   it.skipIf(ROOT_USER)('[the-record-r9, the-engine-r18, the-engine-r21] a write whose batch payload loses a line after its first action refuses rc 2 and lands none of it', async () => {
     const sb = fresh(sb0);
-    const before = await unitChecksum(sb, 'w-unit', ['w-lane']);
     const b64 = join(sb, '.contexture/modules/unit/lib/b64');
     copyFileSync(b64, `${b64}.real`);
     writeFileSync(b64, `#!/bin/sh\nfor b in "\${CTX_SCRATCH_ROOT:-.contexture/tmp}"/unit.*/batch; do\n  [ -s "$b" ] && chmod 400 "$b"\ndone\nexec "${b64}.real" "$@"\n`, { mode: 0o755 });
     const r = await unit(sb, 'task', 'complete', 'w-unit', 'w-b', '--evidence=never lands');
     copyFileSync(`${b64}.real`, b64);
-    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stdout}] [${r.stderr}]`).toBe(before);
+    expect(await unitChecksum(sb, 'w-unit', ['w-lane']), `rc ${r.code} [${r.stdout}] [${r.stderr}]`).toBe(untouched);
     expect([r.code, r.stdout], r.stderr).toEqual([2, '']);
     expect(r.stderr).toMatch(/^task\.complete: error: [^\n]+ \(ERR_STORAGE_WRITE\)\n$/);
   });
@@ -240,11 +246,21 @@ function wrapResolver(sb: string, call: string, mode: WrapMode): Record<string, 
 
 describe.concurrent('a record function whose store call refuses: its own one line, carrying the store\'s message and code', () => {
   let snap: string;
+  // the picture of an untouched copy, taken once, as above
+  let untouched: string;
   beforeAll(async () => {
     snap = await seed(async (sb) => {
       await seedUnit(sb, 'r-unit', 'store refusal unit');
       await must(unit(sb, 'record', 'r-unit', '--what=a seeded entry'));
     }, 'posix', 'store-refusal');
+    untouched = await unitChecksum(fresh(snap), 'r-unit');
+  });
+
+  it('the picture taken once is the picture of every untouched copy, and a write that lands changes it', async () => {
+    const sb = fresh(snap);
+    expect(await unitChecksum(sb, 'r-unit')).toBe(untouched);
+    await must(unit(sb, 'record', 'r-unit', '--what=a write that lands'));
+    expect(await unitChecksum(sb, 'r-unit')).not.toBe(untouched);
   });
 
   for (const [artifact, argv, fn] of READ_ROWS) {
@@ -270,11 +286,10 @@ describe.concurrent('a record function whose store call refuses: its own one lin
     const relay = text.replace(reframe, `{ cat "$U_SCR/batch.err" >&2; ${reframe}; }`);
     expect(relay, 'the plant finds the batch re-frame').not.toBe(text);
     writeFileSync(script, relay);
-    const before = await unitChecksum(sb, 'r-unit');
     for (const s of [sb, planted]) holdLock(s, namespaceLock('unit'), 'live');
     const [real, plant] = await Promise.all([sb, planted].map((s) => run(s, ['unit', 'record', 'r-unit', '--what=never lands'], { env: sleepShim() })));
     refused(real, 'entry.record', 2, 'ERR_STORAGE_LOCKED', LOCKED);
-    expect(await unitChecksum(sb, 'r-unit')).toBe(before);
+    expect(await unitChecksum(sb, 'r-unit')).toBe(untouched);
     expect([plant.code, plant.stdout, plant.stderr]).toEqual([2, '', `store.batch: error: ${LOCKED} (ERR_STORAGE_LOCKED)\nentry.record: error: ${LOCKED} (ERR_STORAGE_LOCKED)\n`]);
   });
 
@@ -283,9 +298,8 @@ describe.concurrent('a record function whose store call refuses: its own one lin
       const said = mode === 'silent' ? 'prints nothing' : 'prints only a foreign line naming a folder';
       it(`[the-engine-r21] a ${call} that ${said} refuses ctx ${argv.join(' ')} with the ${fn} line carrying the call's fixed message and code, the unit unchanged`, async () => {
         const sb = fresh(snap);
-        const before = await unitChecksum(sb, 'r-unit');
         refused(await run(sb, argv, { env: wrapResolver(sb, call, mode) }), fn, 2, code, fallback);
-        expect(await unitChecksum(sb, 'r-unit')).toBe(before);
+        expect(await unitChecksum(sb, 'r-unit')).toBe(untouched);
       });
     }
   }

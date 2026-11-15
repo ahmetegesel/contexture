@@ -18,6 +18,9 @@ const bodyLines = (out: string): number => out.split('\n').filter((l) => l === '
 
 describe.concurrent('the byte rules on every write path through the verbs', () => {
   let sb0: string;
+  // the picture of an untouched copy, taken once: every copy is a byte copy of the seed, so a
+  // refusing case compares its own copy's picture after the refusal against this one
+  let untouched: string;
   beforeAll(async () => {
     sb0 = await seed(async (sb) => {
       await seedUnit(sb, 'in-unit', 'input bytes unit');
@@ -25,6 +28,14 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
       await must(unit(sb, 'finding', 'add', 'in-unit', 'IN_ONE', '--summary=One'));
       await must(createLane(sb, 'in-unit', 'in-lane'));
     }, 'posix', 'input-bytes');
+    untouched = await picture(fresh(sb0));
+  });
+
+  it('the picture taken once is the picture of every untouched copy, and a write that lands changes it', async () => {
+    const sb = fresh(sb0);
+    expect(await picture(sb)).toBe(untouched);
+    await must(lane(sb, 'record', 'in-unit', 'in-lane', '--what=a write that lands'));
+    expect(await picture(sb)).not.toBe(untouched);
   });
 
   it.for([
@@ -42,11 +53,10 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['lane report --body', 'the report', ['lane', 'report', 'in-unit', 'in-lane', flag('body', BAD)]],
   ] as const)('E3-d [the-record-r9, the-record-r12]: %s refuses bytes that are not UTF-8 naming the field %s, nothing landed', async ([, field, argv]) => {
     const sb = fresh(sb0);
-    const before = await picture(sb);
     const r = await execBytes(sb, ctxArgs(...argv));
     expect([r.code, r.stdout]).toEqual([1, '']);
     expect(r.stderr).toMatch(new RegExp(`error: ${field} is not valid UTF-8 \\(ERR_INVALID_ARGUMENT\\)\\n$`));
-    expect(await picture(sb)).toBe(before);
+    expect(await picture(sb)).toBe(untouched);
     if (argv[1] === 'bootstrap') expect((await unit(sb, 'load', 'in-u8-unit')).code).toBe(1);
   });
 
@@ -137,9 +147,8 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['lane record --what', ['lane', 'record', 'in-unit', 'in-lane', `--what=${CR}`]],
   ] as const)('Y-c R2 [the-record-r9, the-record-r12]: %s with a carriage return refuses rc 1 and changes nothing', async ([, argv]) => {
     const sb = fresh(sb0);
-    const before = await picture(sb);
     expect((await run(sb, argv)).code).toBe(1);
-    expect(await picture(sb)).toBe(before);
+    expect(await picture(sb)).toBe(untouched);
     expect((await unit(sb, 'task', 'start', 'in-unit', 'in-task')).code).toBe(0);
   });
 
@@ -160,11 +169,10 @@ describe.concurrent('the byte rules on every write path through the verbs', () =
     ['lane record --thread', ['lane', 'record', 'in-unit', 'in-lane', '--what=one line', `--thread=${NL}`]],
   ] as const)('Q-a R3 [the-record-r9, the-record-r12]: %s with an embedded newline refuses naming it and changes nothing', async ([, argv]) => {
     const sb = fresh(sb0);
-    const before = await picture(sb);
     const r = await run(sb, argv);
     expect(r.code).toBe(1);
     expect(r.stdout + r.stderr).toContain('newline');
-    expect(await picture(sb)).toBe(before);
+    expect(await picture(sb)).toBe(untouched);
   });
 
   it('Q-a R3 [the-record-r12]: a block scalar keeps its newline', async () => {

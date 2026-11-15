@@ -57,6 +57,9 @@ const RETIRED: readonly (readonly [string, string])[] = [
 
 describe.concurrent('the full address refs on every write path through the verbs', () => {
   let sb0: string;
+  // the picture of an untouched copy, taken once: every copy is a byte copy of the seed, so a
+  // refusing case compares its own copy's picture after the refusal against this one
+  let untouched: string;
   beforeAll(async () => {
     sb0 = await seed(async (sb) => {
       cpSync(join(ROOT, 'plugins/docs-discipline/.contexture'), join(sb, '.contexture'), { recursive: true });
@@ -69,17 +72,24 @@ describe.concurrent('the full address refs on every write path through the verbs
       await must(unit(sb, 'task', 'add', U, 'e3-task', '--objective=a task'));
       await must(createLane(sb, U, 'e3-lane'));
     }, 'posix', 'input-refs');
+    untouched = await unitChecksum(fresh(sb0), U, ['e3-lane']);
+  });
+
+  it('the picture taken once is the picture of every untouched copy, and a write that lands changes it', async () => {
+    const sb = fresh(sb0);
+    expect(await unitChecksum(sb, U, ['e3-lane'])).toBe(untouched);
+    await must(lane(sb, 'record', U, 'e3-lane', '--what=a write that lands'));
+    expect(await unitChecksum(sb, U, ['e3-lane'])).not.toBe(untouched);
   });
 
   it.for(PATHS)('E3-a [the-record-r9, the-record-r18]: %s refuses a retired short form naming its full address, and a malformed value by the library check; nothing lands', async ([, label, argv]) => {
     const sb = fresh(sb0);
-    const before = await unitChecksum(sb, U, ['e3-lane']);
     const short = await run(sb, argv('journal#x'));
     expect([short.code, short.stdout, short.stderr]).toEqual([1, '', full(label, 'journal#x', `unit#${U}/entry/x`)]);
     const bare = await run(sb, argv('bareword'));
     expect([bare.code, bare.stdout]).toEqual([1, '']);
     expect(bare.stderr).toContain(`malformed ref 'bareword': `);
-    expect(await unitChecksum(sb, U, ['e3-lane'])).toBe(before);
+    expect(await unitChecksum(sb, U, ['e3-lane'])).toBe(untouched);
   });
 
   it.for(RETIRED)('E3-a [the-record-r18]: the retired form %s refuses, naming %s', async ([ref, to]) => {
@@ -101,11 +111,10 @@ describe.concurrent('the full address refs on every write path through the verbs
 
   it('E3-b [the-record-r18]: a control byte in a ref refuses through the verb too, nothing landed', async () => {
     const sb = fresh(sb0);
-    const before = await unitChecksum(sb, U, ['e3-lane']);
     const r = await unit(sb, 'record', U, '--what=e7 probe', `--ref=unit#${U}/entry/x\fy`);
     expect(r.code).toBe(1);
     expect(r.stderr).toContain(SHAPE);
-    expect(await unitChecksum(sb, U, ['e3-lane'])).toBe(before);
+    expect(await unitChecksum(sb, U, ['e3-lane'])).toBe(untouched);
   });
 
   it('E3-b [the-record-r14, the-record-r18]: record lands every full address shape, each its own REF line, as written', async () => {
@@ -153,13 +162,12 @@ describe.concurrent('the full address refs on every write path through the verbs
     ['compose#x', "ref 'compose#x': owner 'compose' is not installed"],
   ] as const)('E3-d [the-record-r9]: %s refuses rc 1 ERR_ENTITY_NOT_FOUND naming the ref, nothing written', async ([ref, msg]) => {
     const sb = fresh(sb0);
-    const before = await unitChecksum(sb, U, ['e3-lane']);
     for (const argv of PATHS.map(([, , a]) => a(ref))) {
       const r = await run(sb, argv);
       expect([r.code, r.stdout]).toEqual([1, '']);
       expect(r.stderr).toMatch(new RegExp(`^[a-z ]+: error: ${msg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} \\(ERR_ENTITY_NOT_FOUND\\)\\n$`));
     }
-    expect(await unitChecksum(sb, U, ['e3-lane'])).toBe(before);
+    expect(await unitChecksum(sb, U, ['e3-lane'])).toBe(untouched);
   });
 
   it('E3-d [the-record-r9]: the checks run before the unit lock: a write of eight refs, one dangling, refuses while a live writer holds the lock, and a write of eight good refs lands once it is released', async () => {
