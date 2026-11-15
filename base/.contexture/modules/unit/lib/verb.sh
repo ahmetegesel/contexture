@@ -478,66 +478,75 @@ vb_owner() {
   fi
 }
 
+# vb_ref_state <ref>: whether a full address names something that exists, answered in
+# VB_STATE: ok, missing (the target is not found), none (the owner is not installed), or
+# noget (an installed owner with no get verb). A file# path is the core's (inside the
+# workspace it must exist, relative to the workspace root or absolute; outside it the shape
+# alone is checked; the symbol after a further hash never), every other owner answers
+# through its own ctx <owner> get <path>, the path everything after the first hash, each
+# owner probed once per verb run (vb_owner); a path starting with a dash names no target,
+# since get would read it as an option, so it reads missing before any get. The write check
+# (vb_refs_exist) and the address forward of ctx unit migrate both ask it
+VB_OWN_HAVE=" "
+VB_OWN_NOGET=" "
+VB_OWN_NONE=" "
+vb_ref_state() {
+  vs_root=${CTX_ROOT:-$PWD}
+  vs_ctx=${CTX_BIN:-$VB_LIB/../../../ctx}
+  vs_o=${1%%#*}
+  vs_p=${1#*#}
+  VB_STATE=missing
+  if [ "$vs_o" = file ]; then
+    vs_f=${vs_p%%#*}
+    vs_in=$(VE_P=$vs_f VE_R=$vs_root awk 'BEGIN {
+      p = ENVIRON["VE_P"]; r = ENVIRON["VE_R"]
+      if (substr(p, 1, 1) == "/") { if (index(p "/", r "/") != 1) { print "out"; exit } p = substr(p, length(r) + 2) }
+      n = split(p, S, /\//); d = 0
+      for (i = 1; i <= n; i++) { if (S[i] == "..") { d--; if (d < 0) { print "out"; exit } } else if (S[i] != "." && S[i] != "") d++ }
+      print "in"
+    }' < /dev/null)
+    [ "$vs_in" = out ] && { VB_STATE=ok; return 0; }
+    case "$vs_f" in /*) vs_t=$vs_f ;; *) vs_t="$vs_root/$vs_f" ;; esac
+    [ -e "$vs_t" ] && VB_STATE=ok
+    return 0
+  fi
+  case "$VB_OWN_HAVE$VB_OWN_NOGET$VB_OWN_NONE" in
+    *" $vs_o "*) ;;
+    *)
+      case $(vb_owner "$vs_ctx" "$vs_root" "$vs_o") in
+        has) VB_OWN_HAVE="$VB_OWN_HAVE$vs_o " ;;
+        noget) VB_OWN_NOGET="$VB_OWN_NOGET$vs_o " ;;
+        *) VB_OWN_NONE="$VB_OWN_NONE$vs_o " ;;
+      esac
+      ;;
+  esac
+  case "$VB_OWN_NONE" in *" $vs_o "*) VB_STATE=none; return 0 ;; esac
+  case "$VB_OWN_NOGET" in *" $vs_o "*) VB_STATE=noget; return 0 ;; esac
+  case "$vs_p" in
+    -*) ;;
+    *) (cd "$vs_root" && "$vs_ctx" "$vs_o" get "$vs_p" < /dev/null > /dev/null 2>&1) && VB_STATE=ok ;;
+  esac
+  return 0
+}
+
 # vb_refs_exist <label> <ref>...: each full address names something that exists, checked
-# before any lock: a file# path by the core (inside the workspace it must exist, relative to
-# the workspace root or absolute; outside it the shape alone is checked; the symbol after a
-# further hash never), every other owner through its own ctx <owner> get <path>, the path
-# everything after the first hash, an owner probed once (vb_owner: not installed, or no get
-# verb) and a ref given twice checked once; a path starting with a dash names no target, since
-# get would read it as an option, so it refuses before any get. A miss refuses rc 1 naming the
-# ref (ERR_ENTITY_NOT_FOUND), nothing written
+# before any lock through vb_ref_state, a ref given twice checked once. A miss refuses rc 1
+# naming the ref (ERR_ENTITY_NOT_FOUND: target not found, owner not installed, or owner has
+# no get verb), nothing written
 vb_refs_exist() {
   ve_label=$1
   shift
-  ve_root=${CTX_ROOT:-$PWD}
-  ve_ctx=${CTX_BIN:-$VB_LIB/../../../ctx}
-  ve_have=" "
-  ve_noget=" "
-  ve_none=" "
   ve_seen=" "
   for ve_r in "$@"; do
     case "$ve_seen" in *" $ve_r "*) continue ;; esac
     ve_seen="$ve_seen$ve_r "
-    ve_o=${ve_r%%#*}
-    ve_p=${ve_r#*#}
-    if [ "$ve_o" = file ]; then
-      ve_f=${ve_p%%#*}
-      ve_in=$(VE_P=$ve_f VE_R=$ve_root awk 'BEGIN {
-        p = ENVIRON["VE_P"]; r = ENVIRON["VE_R"]
-        if (substr(p, 1, 1) == "/") { if (index(p "/", r "/") != 1) { print "out"; exit } p = substr(p, length(r) + 2) }
-        n = split(p, S, /\//); d = 0
-        for (i = 1; i <= n; i++) { if (S[i] == "..") { d--; if (d < 0) { print "out"; exit } } else if (S[i] != "." && S[i] != "") d++ }
-        print "in"
-      }' < /dev/null)
-      [ "$ve_in" = out ] && continue
-      case "$ve_f" in /*) ve_t=$ve_f ;; *) ve_t="$ve_root/$ve_f" ;; esac
-      [ -e "$ve_t" ] && continue
-      printf "%s: error: ref '%s': target not found (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" >&2
-      exit 1
-    fi
-    case "$ve_have$ve_noget$ve_none" in
-      *" $ve_o "*) ;;
-      *)
-        case $(vb_owner "$ve_ctx" "$ve_root" "$ve_o") in
-          has) ve_have="$ve_have$ve_o " ;;
-          noget) ve_noget="$ve_noget$ve_o " ;;
-          *) ve_none="$ve_none$ve_o " ;;
-        esac
-        ;;
+    vb_ref_state "$ve_r"
+    case "$VB_STATE" in
+      ok) continue ;;
+      none) printf "%s: error: ref '%s': owner '%s' is not installed (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" "${ve_r%%#*}" >&2 ;;
+      noget) printf "%s: error: ref '%s': owner '%s' has no get verb (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" "${ve_r%%#*}" >&2 ;;
+      *) printf "%s: error: ref '%s': target not found (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" >&2 ;;
     esac
-    case "$ve_none" in *" $ve_o "*)
-      printf "%s: error: ref '%s': owner '%s' is not installed (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" "$ve_o" >&2
-      exit 1 ;;
-    esac
-    case "$ve_noget" in *" $ve_o "*)
-      printf "%s: error: ref '%s': owner '%s' has no get verb (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" "$ve_o" >&2
-      exit 1 ;;
-    esac
-    case "$ve_p" in
-      -*) ;;
-      *) (cd "$ve_root" && "$ve_ctx" "$ve_o" get "$ve_p" < /dev/null > /dev/null 2>&1) && continue ;;
-    esac
-    printf "%s: error: ref '%s': target not found (ERR_ENTITY_NOT_FOUND)\n" "$ve_label" "$ve_r" >&2
     exit 1
   done
   return 0

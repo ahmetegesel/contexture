@@ -585,15 +585,29 @@ u_awk() {
 # after.tsv as it is left, residual.tsv the residual scan's rows (u_mig_residual). --dry-run
 # computes the same rewrite and census, takes no lock, and
 # writes nothing. The answer is {"promote":<bool>,"moved":N,"rewritten":N,"migrated":N}, the
-# migrated count the units either migration changed (the units it would change, dry)
+# migrated count the units either migration changed (the units it would change, dry).
+# The address forward (MG_FWD_OLD and MG_FWD_NEW, the verb's --forward): --collect reads the
+# same units as --dry-run does, no lock and no write, and appends the forwarded address of
+# every candidate token to forward.cand in the census folder, the list the verb checks once
+# through each owner's get before the run; the run's two engine passes then read the answers
+# from MG_FWD_CHECK. The collect answer is {"collected":N}, N the candidate tokens
 u_unit_migrate() {
   FN=unit.migrate
   um_dry=0
-  if [ "${1:-}" = --dry-run ]; then um_dry=1; shift; fi
+  um_col=0
+  case "${1:-}" in
+    --dry-run) um_dry=1; shift ;;
+    --collect) um_dry=1; um_col=1; shift ;;
+  esac
   [ $# -ge 1 ] || u_refuse 1 ERR_INVALID_ARGUMENT "unit.migrate takes the units or --all"
   um_dir=${MG_DIR:-$U_SCR}
   [ -d "$um_dir" ] && [ -w "$um_dir" ] || u_refuse 2 ERR_STORAGE_WRITE "cannot write the census folder"
-  u_new "$um_dir/before.tsv" "$um_dir/after.tsv" "$um_dir/residual.tsv" "$um_dir/units.txt"
+  if [ "$um_col" -eq 1 ]; then
+    [ -n "${MG_FWD_OLD:-}" ] && [ -n "${MG_FWD_NEW:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "unit.migrate --collect takes a forward"
+    u_new "$um_dir/forward.cand"
+  else
+    u_new "$um_dir/before.tsv" "$um_dir/after.tsv" "$um_dir/residual.tsv" "$um_dir/units.txt"
+  fi
   um_promote=1
   store_has store.promote < /dev/null 2>/dev/null || um_promote=0
   u_new "$U_SCR/promote.units" "$U_SCR/mg.held" "$U_SCR/keys"
@@ -615,6 +629,14 @@ u_unit_migrate() {
   done < "$U_SCR/keys"
   if [ "$1" = --all ]; then
     cp "$U_SCR/mg.held" "$U_SCR/promote.units" 2>/dev/null || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  fi
+  if [ "$um_col" -eq 1 ]; then
+    while IFS= read -r up_u; do
+      [ -n "$up_u" ] || continue
+      u_mig_collect "$up_u" "$um_dir/forward.cand"
+    done < "$U_SCR/promote.units"
+    printf '{"collected":%s}\n' "$(wc -l < "$um_dir/forward.cand" | tr -d ' ')"
+    return 0
   fi
   um_moved=0
   um_rew=0
@@ -655,12 +677,10 @@ u_unit_migrate() {
   printf '{"promote":%s,"moved":%s,"rewritten":%s,"migrated":%s}\n' "$um_p" "$um_moved" "$um_rew" "$um_mig"
 }
 
-# u_mig_rewrite <unit> <census folder> <dry 0|1>: the pointer rewrite of one unit: every
-# artifact value read as stored, lib/migrate.awk run over all of them (the before rows), the
-# after rows counted over what the unit is left holding, and the changed values written back
-# through one store.batch (none under --dry-run); UM_CHANGED says whether any value changed
-u_mig_rewrite() {
-  UM_CHANGED=0
+# u_mig_map <unit>: every artifact value of one unit read as stored, the engine's map
+# (mg.map), its input list (mg.files), and the write back keys (mg.keys) staged; um_n the
+# artifact count
+u_mig_map() {
   um_u=$1
   u_manifest_reset
   u_fetch_unit "$um_u" all 1
@@ -692,6 +712,29 @@ u_mig_rewrite() {
     u_put "$U_SCR/mg.files" '%s\n' "$um_f"
     u_put "$U_SCR/mg.keys" '%s\t%s\t%s\t%s\t%s\t%s\n' "$um_part" "$um_key" "$U_SCR/mg/$um_n" "$um_f" "$um_kind" "$um_lane"
   done < "$U_SCR/man"
+  return 0
+}
+
+# u_mig_collect <unit> <candidates file>: the address forward's candidates of one unit,
+# lib/migrate.awk run in its collect mode over every artifact value as stored, each
+# candidate token's forwarded address appended to the file; nothing written to the record
+u_mig_collect() {
+  u_mig_map "$1"
+  [ "$um_n" -gt 0 ] || return 0
+  # shellcheck disable=SC2046
+  MG_MODE=collect MG_UNIT=$1 MG_REPOS="${MG_REPOS:-}" MG_HELD="$U_SCR/mg.held" MG_MAP="$U_SCR/mg.map" MG_CENSUS=/dev/null MG_CHANGED="" MG_FWD_OUT="$2" \
+    awk -f "$ULIB/migrate.awk" $(cat "$U_SCR/mg.files") || u_refuse 2 ERR_STORAGE_READ "the forward listing failed for unit '$1'"
+}
+
+# u_mig_rewrite <unit> <census folder> <dry 0|1>: the pointer rewrite of one unit: every
+# artifact value read as stored, lib/migrate.awk run over all of them (the before rows), the
+# after rows counted over what the unit is left holding, and the changed values written back
+# through one store.batch (none under --dry-run); UM_CHANGED says whether any value changed;
+# under a forward both passes read the verb's answers from MG_FWD_CHECK
+u_mig_rewrite() {
+  UM_CHANGED=0
+  um_u=$1
+  u_mig_map "$um_u"
   [ "$um_n" -gt 0 ] || return 0
   # shellcheck disable=SC2046
   MG_MODE=rewrite MG_UNIT=$um_u MG_REPOS="${MG_REPOS:-}" MG_HELD="$U_SCR/mg.held" MG_MAP="$U_SCR/mg.map" MG_CENSUS="$2/before.tsv" MG_CHANGED="$U_SCR/mg.changed" \
@@ -730,12 +773,13 @@ u_mig_rewrite() {
 # tokenizer, over what the unit is left holding (the sources of the census after): every
 # blank separated token still holding an old pointer form (a retired short owner, its .md
 # spelling, a lanes/ artifact, a record storage path to a lane artifact, a ../<unit>/lanes/
-# path, IDEAS.md) at its start or after a character no slug holds (a lanes/ artifact only
-# after one no path holds), outside NOTE, CLOSES, and SUPERSEDES lines and ref_sessions, one
-# row each: <unit> <label> <line> <token> (the token's surrounding punctuation cut)
+# path, IDEAS.md, and under a forward the old prefix with more after it) at its start or
+# after a character no slug holds (a lanes/ artifact only after one no path holds), outside
+# NOTE, CLOSES, and SUPERSEDES lines and ref_sessions, one row each: <unit> <label> <line>
+# <token> (the token's surrounding punctuation cut)
 u_mig_residual() {
   # shellcheck disable=SC2046
-  RS_UNIT=$1 RS_MAP="$U_SCR/mg.map2" RS_OUT=$2 LC_ALL=C awk '
+  RS_UNIT=$1 RS_MAP="$U_SCR/mg.map2" RS_OUT=$2 RS_FWD="${MG_FWD_OLD:-}" LC_ALL=C awk '
     function hit(t, re, bad,   s, p, c) {
       s = t
       p = 0
@@ -744,6 +788,18 @@ u_mig_residual() {
         if (c == "" || c !~ bad) return 1
         p += RSTART
         s = substr(t, p + 1)
+      }
+      return 0
+    }
+    # fhit(t, p): the literal prefix p at the start of t or after a character no slug holds,
+    # more text following it
+    function fhit(t, p,   s, i, c) {
+      if (p == "") return 0
+      s = 0
+      while ((i = index(substr(t, s + 1), p)) > 0) {
+        c = (s + i > 1) ? substr(t, s + i - 1, 1) : ""
+        if ((c == "" || c !~ /[A-Za-z0-9_.-]/) && s + i - 1 + length(p) < length(t)) return 1
+        s += i
       }
       return 0
     }
@@ -756,6 +812,7 @@ u_mig_residual() {
       while ((getline m < ENVIRON["RS_MAP"]) > 0) { split(m, P, "\t"); K[P[1]] = P[2]; L[P[1]] = P[5] }
       u = ENVIRON["RS_UNIT"]
       out = ENVIRON["RS_OUT"]
+      fp = ENVIRON["RS_FWD"]
     }
     FNR == 1 { kind = K[FILENAME]; label = L[FILENAME]; blk = (kind ~ /^(backlog|journal|knowledge|ljournal)$/) }
     blk && /^  (NOTE|CLOSES|SUPERSEDES):/ { next }
@@ -768,7 +825,7 @@ u_mig_residual() {
         if (index(tok, "IDEAS.md") || hit(tok, "(journal|knowledge|backlog|lane|task|finding|entry)(\\.md)?#[^ \t]", "[A-Za-z0-9_.-]") \
           || hit(tok, "lanes/[^/ \t]+/(recipe|journal|report)", "[A-Za-z0-9_./#-]") \
           || hit(tok, "(sessions|units)/[A-Za-z0-9_-]+/lanes/[^/ \t]+/(recipe|journal|report)", "[A-Za-z0-9_.-]") \
-          || cut(tok) ~ /^\.\.\/[A-Za-z0-9_-]+\/lanes\//) \
+          || cut(tok) ~ /^\.\.\/[A-Za-z0-9_-]+\/lanes\// || fhit(cut(tok), fp)) \
           printf "%s\t%s\t%d\t%s\n", u, label, FNR, cut(tok) >> out
       }
     }' $(cat "$U_SCR/mg.files2") < /dev/null || u_refuse 2 ERR_STORAGE_WRITE "the residual scan failed for unit '$1'"

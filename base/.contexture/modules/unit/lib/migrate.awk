@@ -18,6 +18,18 @@
 # MG_HELD the file naming every unit the store holds, one per line, the only units a record
 # storage path rewrites to (with no file, as for suggest and check, every unit counts as held).
 #
+# The address forward (ctx unit migrate --forward): MG_FWD_OLD and MG_FWD_NEW the two full
+# address prefixes; a token starting with the old prefix and holding more after it becomes
+# the new prefix plus the same rest, ahead of the full address class, and so does an address
+# another class rewrites a token into; a REF value's first token ending in a colon is tested
+# without its colon, and when it forwards the colon goes to NOTE as the path rule sends it
+# (the class path with a trailing colon, address forward, which REF values and recipe items
+# treat as that rule's own). MG_MODE collect lists each such forwarded address in
+# MG_FWD_OUT, one per line, as kept (so every later rule a kept token meets runs and lists
+# its own), for the verb to check once through the owner's get; rewrite and census read the
+# answers from MG_FWD_CHECK, "<address><TAB><ok|missing|none|noget>" per line, and rewrite
+# only an address that answered ok, keeping every other under a class naming why.
+#
 # The class table: the exclusions and the law pointers stand in the table below, each pinned
 # by a test, so a new exclusion is a test change.
 
@@ -89,6 +101,36 @@ function in_unit(u, r,   kind, l, art, c) {
 
 function held(u) { return !HELDCHK || (u in HELD) }
 
+# fwd_on(t): t starts with the forward's old prefix and holds more after it
+function fwd_on(t) { return FWDO != "" && index(t, FWDO) == 1 && length(t) > length(FWDO) }
+
+# fwd(t): the address forward of a token fwd_on accepts: rewritten to its forwarded address
+# when that address answered its owner's get, else kept with the class naming why; listed
+# and kept in the collect mode
+function fwd(t,   a, s) {
+  FWD = 1
+  a = FWDN substr(t, length(FWDO) + 1)
+  NOTEV = ""
+  if (MODE == "collect") {
+    print a >> FWDOUT
+    NEWV = t
+    DISP = "kept"
+    return "address forward"
+  }
+  s = (a in FWDS) ? FWDS[a] : ""
+  if (s == "ok") {
+    NEWV = a
+    DISP = "rewritten"
+    return "address forward"
+  }
+  NEWV = t
+  DISP = "kept"
+  if (s == "none") return "address forward, owner not installed"
+  if (s == "noget") return "address forward, owner has no get verb"
+  if (s == "missing") return "address forward, target not found"
+  return "address forward, target not checked"
+}
+
 # addr_ok(a): every segment of an address a rewrite produced is a slug (letters, digits, dot,
 # underscore, dash) and the segments make its owner's form, so a pointer glued to text never
 # yields a corrupt address
@@ -105,17 +147,32 @@ function addr_ok(a,   o, S, n, i) {
 # cls(t, inref): the class of one token; NEWV the token's new form (equal to t when kept),
 # DISP rewritten, kept, or note, NOTEV the text a REF value moves to NOTE. inref is 1 for a
 # REF or REFS value's first token, where file shaped tokens take the file# owner. A rewrite
-# whose address fails addr_ok is kept as a pointer glued to text.
-function cls(t, inref,   c) {
+# whose address fails addr_ok is kept as a pointer glued to text. A forwarded token is
+# checked by its owner's get instead; a rewrite another class makes whose address the
+# forward takes is forwarded when it answers (its class gaining ", address forward"), and
+# stays the class's rewrite otherwise; a lane section split (SECT) is never forwarded.
+function cls(t, inref,   c, a, n) {
   SECT = ""
   ARTV = ""
+  FWD = 0
   c = cls1(t, inref)
+  if (FWD) return c
   if (DISP == "rewritten" && NEWV ~ /^(unit|store|docs)#/ && !addr_ok(NEWV)) {
     DISP = "kept"
     NEWV = t
     NOTEV = ""
     SECT = ""
     return "pointer glued to text"
+  }
+  if (DISP == "rewritten" && SECT == "" && fwd_on(NEWV)) {
+    a = NEWV
+    n = NOTEV
+    fwd(a)
+    FWD = 0
+    NOTEV = n
+    if (DISP == "rewritten") return c ", address forward"
+    DISP = "rewritten"
+    NEWV = a
   }
   return c
 }
@@ -137,6 +194,13 @@ function cls1(t, inref,   r, a, n, P, l, art, c, rp, u, kind, slug, id, hu) {
     in_unit(UNIT, r)
     return "the .md short forms"
   }
+  if (inref && t ~ /[^:]:$/ && fwd_on(substr(t, 1, length(t) - 1))) {
+    c = fwd(substr(t, 1, length(t) - 1))
+    if (DISP == "rewritten") { NOTEV = t; return TCOLON ", " c }
+    NEWV = t
+    return c
+  }
+  if (fwd_on(t)) return fwd(t)
   if (t ~ /^(unit|store|docs|file)#./) return "full address"
   if (inref && t ~ /[^:]:$/) {
     c = cls1(substr(t, 1, length(t) - 1), 1)
@@ -297,7 +361,7 @@ function row(field, class, disp, tok, nv) {
   printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%d\n", UNIT, LABEL, field, class, disp, tok, nv, FNR >> CENSUS
 }
 
-function isfull(c) { return c == "full address" || c == "address of another owner" }
+function isfull(c) { return c == "full address" || c == "address of another owner" || c ~ /^address forward/ }
 
 # refval(v, field): one REF or REFS value; RV_NEW its new value ("" when the value leaves
 # the field), RV_NOTE the text a NOTE line takes ("" for none), RV_CHG 1 when it changed.
@@ -330,7 +394,7 @@ function refval(v, field, strip,   s, first, rest, c, i) {
       RV_NEW = ARTV; RV_NOTE = s; RV_CHG = 1
       return
     }
-    if (c == TCOLON) {
+    if (index(c, TCOLON) == 1) {
       row(field, c ", the whole value to NOTE", "rewritten", v, NEWV)
       RV_NEW = NEWV; RV_NOTE = s; RV_CHG = 1
       return
@@ -625,7 +689,7 @@ function recipe_item(v, field, i,   first, rest, c) {
   if (DISP == "rewritten") {
     row(field, c, "rewritten", first, NEWV)
     CHANGED = 1
-    return NEWV (c == TCOLON ? ":" : "") text(rest, field)
+    return NEWV (index(c, TCOLON) == 1 ? ":" : "") text(rest, field)
   }
   if (DISP == "note" && i > 1) return text(v, field)
   row(field, (DISP == "note" ? "recipe text, no pointer" : c), "kept", first, first)
@@ -707,6 +771,24 @@ BEGIN {
   }
   CENSUS = ENVIRON["MG_CENSUS"]
   CHANGEDF = ENVIRON["MG_CHANGED"]
+  FWDO = ""
+  FWDN = ""
+  split("", FWDS)
+  if (MODE == "rewrite" || MODE == "census" || MODE == "collect") {
+    FWDO = ENVIRON["MG_FWD_OLD"]
+    FWDN = ENVIRON["MG_FWD_NEW"]
+    if (FWDN == "") FWDO = ""
+    FWDOUT = ENVIRON["MG_FWD_OUT"]
+    if (MODE == "collect" && FWDOUT == "") FWDO = ""
+    if (MODE == "collect") CENSUS = "/dev/null"
+    if (FWDO != "" && ENVIRON["MG_FWD_CHECK"] != "") {
+      while ((getline ml < ENVIRON["MG_FWD_CHECK"]) > 0) {
+        fk = index(ml, "\t")
+        if (fk > 1) FWDS[substr(ml, 1, fk - 1)] = substr(ml, fk + 1)
+      }
+      close(ENVIRON["MG_FWD_CHECK"])
+    }
+  }
   if (MODE == "suggest") {
     CENSUS = "/dev/null"
     if (ENVIRON["MG_TOKEN"] ~ /[ \t]/ || ENVIRON["MG_TOKEN"] == "") { print "kept\t"; exit 0 }

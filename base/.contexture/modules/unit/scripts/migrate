@@ -1,30 +1,110 @@
 #!/bin/sh
 # summary: the record's migrations: move units to the store's current root, then rewrite every pointer into its full address
-# usage: ctx unit migrate [--dry-run] <unit> [<unit>...]
-# usage: ctx unit migrate [--dry-run] --all
+# usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...]
+# usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all
 # help: applies every pending migration to each named unit, or with --all to every unit the store holds, closed units included, each under its unit lock: first the root move (a unit still in the store's deprecated root moves whole to its current root), then the pointer rewrite (every pointer in every field becomes its full address, unit#, store#, docs#, or file#)
 # help: the rewrite changes how a pointer is written, never what it points to: short unit refs (journal#, knowledge#, backlog#, lane#) and their legacy spellings become unit# addresses, a dangling one too, the legacy file spelling of a journal entry, task, or finding even when written under file# or after a leading dot slash; a pointer into the record's former storage paths, to an artifact or lane artifact of a unit the store holds (in either root, active or closed), becomes that unit# address in a REF value and in free text alike, while one naming a unit the store does not hold (counted as such) and a path into a backup, another repository, or an absolute path keep their bytes, under file# in a REF value; an idea slug pointer becomes its address in the store's ideas container and a bare IDEAS.md mention the address of that container's declaration record; corpus doc paths of a repo the docs module lists become docs# addresses; a file path in a REF or REFS value takes the file# owner (a path:line spelling the path alone, the token in NOTE; a path followed by a colon the path alone, the whole value in NOTE), while a file path in free text stays prose; a token gluing pointers together is split at a comma, a semicolon, or punctuation before the next pointer, and one that still yields no clean address is kept and counted as a pointer glued to text
 # help: a REF or REFS value keeps only a full address: the text beside its pointer, and a whole value no rule rewrites (prose, a placeholder, a law pointer, a URL, a completion receipt), moves word for word to a NOTE line on the same item; a lane recipe's REFS block line is a comma separated list, split outside double quotes and parentheses, each item's first token rewritten as a ref and the rest of the item free text, every separator and annotation kept in place; a lane section anchor followed by more words leaves the artifact's address and the whole value in NOTE; CLOSES and SUPERSEDES lines, NOTE lines, markdown headings, column 0 @ head lines, and the reference units stay as written, their pointer shaped tokens counted
 # help: prints the census before (every pointer shaped token of every field, and every REF and REFS value, counted by class as rewritten, kept with its reason, or moved to NOTE, the three summing to the total), the census after (what is left to rewrite, any REF value that is no full address included, 0 after a run), the residual scan (a check apart from the rewrite's tokenizer: every token still holding an old form outside NOTE and CLOSES, tallied by the class the census after gives it, or not in the census), one line per unit, where the full token lists lie in the workspace scratch, then migrated: <n>, the units either migration changed; a second run changes nothing and prints migrated: 0
 # help: --dry-run computes the same rewrite and prints the same census, takes no lock, and writes nothing: the proof before a run
+# help: --forward=<old prefix>=<new prefix>, once per run, forwards the addresses of entities that moved to a new owner: each prefix is a full address prefix, an owner, a hash, and an optional path prefix, ending in a slash or a hash, the value split at its first equals sign; every pointer token starting with the old prefix and holding more after it, in a REF or REFS value and in free text alike, becomes the new prefix plus the same rest, ahead of the rule that keeps a full address as written, and so does a pointer an earlier rule rewrites into such an address (a path followed by a colon keeping its NOTE word for word); a REF value whose first token ends in a colon is forwarded without its colon, the colon going to NOTE as for a path followed by a colon; placeholders stay as written; before any rewrite and before any lock, the verb lists the forwarded addresses of the units it runs on and checks each distinct one once through its new owner's get, each owner probed once, as a write checks its refs; a token whose forwarded address does not answer keeps its bytes, counted under a class naming why: target not found, owner not installed, owner has no get verb, or target not checked (a token written after the check, which the next run checks); the residual scan lists every token still holding the old prefix; a forward whose prefix is no full address prefix or a retired short form, holds a placeholder character (an angle bracket, a star, or three dots, which the rewrite never forwards), or ends in neither a slash nor a hash (it would cut inside a name), one whose file# new prefix names a path outside the workspace (where no forwarded target is checked), one whose prefixes are equal or one starts with the other (a second run would forward again), and a second --forward refuse rc 1 before anything is read or written, each naming its reason
 # help: every landing write already moves the unit it writes, so the root move is for the units nobody writes; while any unit stays behind every read of it warns naming this verb; the deprecated root is removed once it is empty, while a root still holding anything stays, and a store holding no unit keeps its empty root; a store that keeps no deprecated root moves nothing
 # help: the first refusal stops the run, its one line naming the unit; the units migrated before it stay migrated
-# help: exit codes: 0 migrated, or nothing to migrate; 1 a bare call, a bad argument, an unknown unit, or a unit the store holds in both roots; 2 a storage failure
+# help: exit codes: 0 migrated, or nothing to migrate; 1 a bare call, a bad argument (a malformed forward among them), an unknown unit, or a unit the store holds in both roots; 2 a storage failure
 # help: example: ctx unit migrate --dry-run --all
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
-  printf 'Usage: ctx unit migrate [--dry-run] <unit> [<unit>...] | ctx unit migrate [--dry-run] --all\n' >&2
+  printf 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all\n' >&2
   printf 'help: ctx unit help migrate\n' >&2
   exit 1
+}
+
+# mg_bad_forward <value> <why>: the one refusal line of a forward that cannot run, rc 1
+mg_bad_forward() {
+  printf "migrate: error: malformed forward '%s': %s (ERR_INVALID_ARGUMENT)\n" "$(store_lib_escape "$1")" "$2" >&2
+  exit 1
+}
+
+# mg_prefix_ok <value> <prefix>: a side of a forward is a full address prefix, an owner, a
+# hash, and an optional path prefix: the side plus one character passes the storage
+# library's full address shape check and names no retired short form; it holds no placeholder
+# character (an angle bracket, a star, or three dots), since the rewrite excludes every such
+# token before the forward and would forward nothing; and it ends in a slash or a hash, where
+# a family of addresses begins, so it never cuts inside a name (an old prefix store#memos
+# would take store#memosx/n1 too)
+mg_prefix_ok() {
+  lib_ref_ok migrate "${2}x" 2>/dev/null
+  case $? in
+    0) ;;
+    1) mg_bad_forward "$1" 'the form is --forward=<old prefix>=<new prefix>, each prefix an owner, a hash, and an optional path prefix, one token without blanks, control characters, or double quotes' ;;
+    *) printf 'migrate: error: the full address check cannot run (ERR_STORAGE_READ)\n' >&2; exit 2 ;;
+  esac
+  [ -z "$(vb_ref_full "${2}x" '<unit>')" ] || mg_bad_forward "$1" "the prefix '$(store_lib_escape "$2")' is a retired short form, never a full address"
+  case "$2" in
+    *[\<\>\*]*|*...*) mg_bad_forward "$1" "the prefix '$(store_lib_escape "$2")' holds a placeholder character (an angle bracket, a star, or three dots), which the rewrite never forwards" ;;
+  esac
+  case "$2" in
+    */|*'#') ;;
+    *) mg_bad_forward "$1" "the prefix '$(store_lib_escape "$2")' ends in neither a slash nor a hash, so it cuts inside a name" ;;
+  esac
+}
+
+# mg_new_inside <value> <prefix>: a file# new prefix names a path inside the workspace, by the
+# write check's own rule (an absolute path under the workspace root, or a relative one never
+# climbing above it), since a file# address outside the workspace answers by its shape alone
+# and the forward promises a checked target; any other owner passes
+mg_new_inside() {
+  case "$2" in file#*) ;; *) return 0 ;; esac
+  mi_p=${2#file#}
+  mi_p=${mi_p%%#*}
+  mi_in=$(MI_P=$mi_p MI_R=${CTX_ROOT:-$PWD} awk 'BEGIN {
+    p = ENVIRON["MI_P"]; r = ENVIRON["MI_R"]
+    if (substr(p, 1, 1) == "/") { if (index(p "/", r "/") != 1) { print "out"; exit } p = substr(p, length(r) + 2) }
+    n = split(p, S, /\//); d = 0
+    for (i = 1; i <= n; i++) { if (S[i] == "..") { d--; if (d < 0) { print "out"; exit } } else if (S[i] != "." && S[i] != "") d++ }
+    print "in"
+  }' < /dev/null)
+  [ "$mi_in" = in ] || mg_bad_forward "$1" "the new prefix '$(store_lib_escape "$2")' names a path outside the workspace, where no forwarded target is checked"
 }
 
 case "${1:-}" in
   --help|-h|help) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
 esac
 dry=""
-if [ "${1:-}" = --dry-run ]; then dry=--dry-run; shift; fi
+fwd=""
+fwd_old=""
+fwd_new=""
+while [ $# -ge 1 ]; do
+  case "$1" in
+    --dry-run)
+      [ -z "$dry" ] || vb_unknown migrate "$1"
+      dry=--dry-run
+      ;;
+    --forward|--forward=*)
+      if [ -n "$fwd" ]; then
+        printf 'migrate: error: --forward is given once per run (ERR_INVALID_ARGUMENT)\n' >&2
+        exit 1
+      fi
+      fwd=1
+      fwd_v=${1#--forward}
+      fwd_v=${fwd_v#=}
+      case "$fwd_v" in
+        *=*) fwd_old=${fwd_v%%=*}; fwd_new=${fwd_v#*=} ;;
+        *) fwd_old=""; fwd_new="" ;;
+      esac
+      [ -n "$fwd_old" ] && [ -n "$fwd_new" ] || mg_bad_forward "$fwd_v" 'the form is --forward=<old prefix>=<new prefix>, each prefix an owner, a hash, and an optional path prefix, one token without blanks, control characters, or double quotes'
+      mg_prefix_ok "$fwd_v" "$fwd_old"
+      mg_prefix_ok "$fwd_v" "$fwd_new"
+      mg_new_inside "$fwd_v" "$fwd_new"
+      case "$fwd_new" in "$fwd_old"*) mg_bad_forward "$fwd_v" 'one prefix starts with the other, so a second run would forward again' ;; esac
+      case "$fwd_old" in "$fwd_new"*) mg_bad_forward "$fwd_v" 'one prefix starts with the other, so a second run would forward again' ;; esac
+      ;;
+    *) break ;;
+  esac
+  shift
+done
 [ $# -ge 1 ] || usage
 if [ "$1" = --all ]; then
   [ $# -eq 1 ] || vb_unknown migrate "$2"
@@ -45,10 +125,40 @@ fi
 MG_DIR=$mg_dir
 export MG_DIR MG_REPOS
 
+# the address forward: the data function lists the forwarded address of every candidate token
+# of the run's units (no lock, nothing written), then each distinct address is checked once,
+# here, before any lock, through the write check's own vb_ref_state; the answers, one
+# "<address><TAB><ok|missing|none|noget>" line each, go to both engine passes
+fwd_n=0
+fwd_ok=0
+if [ -n "$fwd" ]; then
+  MG_FWD_OLD=$fwd_old
+  MG_FWD_NEW=$fwd_new
+  export MG_FWD_OLD MG_FWD_NEW
+  vb_call unit.migrate --collect "$@"
+  vb_ok
+  : > "$mg_dir/forward.tsv" 2>/dev/null || { printf 'migrate: error: cannot write the census folder in the workspace scratch (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
+  if [ -s "$mg_dir/forward.cand" ]; then
+    LC_ALL=C sort -u "$mg_dir/forward.cand" > "$mg_dir/forward.list" || { printf 'migrate: error: cannot write the census folder in the workspace scratch (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
+    while IFS= read -r fwd_a; do
+      [ -n "$fwd_a" ] || continue
+      vb_ref_state "$fwd_a"
+      printf '%s\t%s\n' "$fwd_a" "$VB_STATE" >> "$mg_dir/forward.tsv"
+      fwd_n=$((fwd_n + 1))
+      [ "$VB_STATE" = ok ] && fwd_ok=$((fwd_ok + 1))
+    done < "$mg_dir/forward.list"
+  fi
+  MG_FWD_CHECK="$mg_dir/forward.tsv"
+  export MG_FWD_CHECK
+fi
+
 vb_call unit.migrate $dry "$@"
 vb_ok
 if [ "$(vb_field promote)" = false ] && [ -z "$dry" ]; then
   printf 'root move: nothing moves, the store keeps no fallback\n'
+fi
+if [ -n "$fwd" ]; then
+  printf 'forward: %s to %s, %d distinct addresses checked through their owner'\''s get, %d answer, %d do not; the answers in %s/forward.tsv\n' "$fwd_old" "$fwd_new" "$fwd_n" "$fwd_ok" "$((fwd_n - fwd_ok))" "${mg_dir#"$mg_root"/}"
 fi
 LC_ALL=C awk -F '\t' -v dry="$dry" -v dir="${mg_dir#"$mg_root"/}" '
   FILENAME ~ /units\.txt$/ { if ($1 != "") U[++nu] = $1; next }

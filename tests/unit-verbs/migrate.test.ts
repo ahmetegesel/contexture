@@ -180,7 +180,8 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
   });
 
   it.each([
-    ['a bare call', [], 'Usage: ctx unit migrate [--dry-run] <unit> [<unit>...] | ctx unit migrate [--dry-run] --all\nhelp: ctx unit help migrate\n'],
+    ['a bare call', [], 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all\nhelp: ctx unit help migrate\n'],
+    ['a forward with no unit', ['--forward=store#a/=store#b/'], 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all\nhelp: ctx unit help migrate\n'],
     ['--all beside a unit', ['--all', 'leg-u'], "migrate: error: unexpected argument 'leg-u' (ERR_INVALID_ARGUMENT)\n"],
     ['a malformed unit', ['Bad!'], "migrate: error: malformed unit 'Bad!' (ERR_INVALID_ARGUMENT)\n"],
     ['an unknown unit', ['no-such-u'], "unit.migrate: error: unit 'no-such-u' not found (ERR_ENTITY_NOT_FOUND)\n"],
@@ -195,8 +196,10 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     const r = await unit(fresh(snap), 'migrate', '--help');
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/^ctx unit migrate: /);
-    expect(r.stdout).toContain('ctx unit migrate [--dry-run] --all');
+    expect(r.stdout).toContain('ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all');
     expect(r.stdout).toContain('a root still holding anything stays, and a store holding no unit keeps its empty root');
+    expect(r.stdout).toContain('--forward=<old prefix>=<new prefix>, once per run, forwards the addresses of entities that moved to a new owner');
+    expect(r.stdout).toContain('target not found, owner not installed, owner has no get verb, or target not checked');
     expect(r.stdout).not.toMatch(/\.contexture|\//);
   });
 });

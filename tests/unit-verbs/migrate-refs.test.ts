@@ -1,7 +1,9 @@
 import { cpSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
+import { data } from '../support/data';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
+import { shVerb, writeModule } from '../support/modules';
 import { appendArtifact, readArtifact } from '../support/record';
 import { ROOT } from '../support/root';
 import { fresh, seed } from '../support/snapshot';
@@ -718,5 +720,350 @@ describe.concurrent('ctx unit migrate: column 0 head lines', () => {
     expect(anchor()).toBe(head);
     expect(readArtifact(sb, A, 'state').toString()).toContain(`the anchor unit names unit#${A}/entry/2026-11-14-a1 and store#ideas/rust-driver`);
     expect(r.stdout).toMatch(/^residual scan: 2 tokens holding an old form outside NOTE and CLOSES\n {8}2 {2}excluded: head line\n/m);
+  });
+});
+
+// the address forward (--forward=<old prefix>=<new prefix>), between owners the sandbox holds:
+// the ids of a store container forwarded to another container's, each forwarded address
+// checked once per run through its new owner's get, one that does not answer kept with its
+// bytes under a class naming why, a placeholder never forwarded
+const F = 'fwd-u';
+const SHUT = 'fwd-shut';
+const OLD = 'store#memos/';
+const FWD = `--forward=${OLD}=store#notes/`;
+const NOTFOUND = 'address forward, target not found';
+const FWD_REFS: readonly (readonly [string, string, string | null, string])[] = [
+  ['store#memos/n1', 'store#notes/n1', null, 'address forward'],
+  ['store#memos/x', 'store#memos/x', null, NOTFOUND],
+  ['store#memos/n2 (the second note)', 'store#notes/n2', '(the second note)', 'address forward, annotation to NOTE'],
+  ['store#memos/slug', 'store#memos/slug', null, NOTFOUND],
+  ['store#memosx/n1', 'store#memosx/n1', null, 'full address'],
+  ['store#notes/n1', 'store#notes/n1', null, 'full address'],
+];
+const fwdSlug = (i: number): string => `2026-11-15-f${i}`;
+const FWD_TEXT = "the text names store#memos/n1, (store#memos/n2) and store#memos/n1's twin; store#memos/slug, store#memos/x, and store#memos/y stay; store#memos/<id> and store#memos/ stay; store#memosx/n1, xstore#memos/n1, and store#notes/n2 stay";
+const FWD_TEXT_AFTER = "the text names store#notes/n1, (store#notes/n2) and store#notes/n1's twin; store#memos/slug, store#memos/x, and store#memos/y stay; store#memos/<id> and store#memos/ stay; store#memosx/n1, xstore#memos/n1, and store#notes/n2 stay";
+const FWD_JOURNAL = [
+  ...FWD_REFS.map(([ref], i) => `@entry ${fwdSlug(i)}\n  ANCHOR: A1\n  WHAT: "forward ${i}"\n  THREAD: none\n  REF: "${ref}"\n`),
+  `@entry 2026-11-15-ftext\n  ANCHOR: A1\n  WHAT: "${FWD_TEXT}"\n  THREAD: none\n`,
+].join('\n');
+const FWD_BACKLOG = [
+  '@task t1',
+  '  STATUS: TODO',
+  '  OBJECTIVE: "the task names store#memos/n2"',
+  `  REFS: [store#memos/n1, "store#memos/n2", store#memos/y, unit#${F}/task/t1]`,
+  '  DESCRIPTION ::',
+  '    Context. store#memos/n1 and store#memos/x.',
+  '',
+].join('\n');
+const FWD_KNOWLEDGE = ['@finding F1', '  REF: "store#memos/n2"', '  SUMMARY ::', '    a finding naming store#memos/n2 and store#memos/y.', ''].join('\n');
+const FWD_RECIPE = [
+  '@recipe l1',
+  `  UNIT: ${F}`,
+  '  LANE: l1',
+  `  TASKS: unit#${F}/task/t1`,
+  `  DECISIONS: unit#${F}/entry/${fwdSlug(0)}`,
+  '',
+  'GOAL ::',
+  '  the goal names store#memos/n1',
+  '',
+  'REFS ::',
+  '  store#memos/n1 (the first note), store#memos/x (gone)',
+  `  unit#${F}/entry/${fwdSlug(0)}`,
+  '',
+].join('\n');
+const FWD_RECIPE_AFTER = FWD_RECIPE.replace('the goal names store#memos/n1', 'the goal names store#notes/n1').replace('  store#memos/n1 (the first note)', '  store#notes/n1 (the first note)');
+const FWD_REPORT = '@report l1\nFINDINGS ::\n  see store#memos/n2 and **store#memos/n1**.\n';
+const FWD_REPORT_AFTER = '@report l1\nFINDINGS ::\n  see store#notes/n2 and **store#notes/n1**.\n';
+const FORM = 'the form is --forward=<old prefix>=<new prefix>, each prefix an owner, a hash, and an optional path prefix, one token without blanks, control characters, or double quotes';
+const OVERLAP = 'one prefix starts with the other, so a second run would forward again';
+const PLACE = (p: string): string => `the prefix '${p}' holds a placeholder character (an angle bracket, a star, or three dots), which the rewrite never forwards`;
+const CUT = (p: string): string => `the prefix '${p}' ends in neither a slash nor a hash, so it cuts inside a name`;
+const OUTSIDE = (p: string): string => `the new prefix '${p}' names a path outside the workspace, where no forwarded target is checked`;
+// a REF whose first token ends in a colon, under the forward: [the REF value as stored, the
+// REF it becomes, the NOTE it leaves, the census class]; the colon goes to NOTE as the path
+// rule sends it (the whole value for an annotated one, the token for a bare one), and one
+// whose forwarded address does not answer keeps its bytes
+const C = 'fwd-colon';
+const COLON_REFS: readonly (readonly [string, string, string, string])[] = [
+  ['store#memos/n1: the colon note', 'store#notes/n1', 'store#memos/n1: the colon note', 'path with a trailing colon, address forward, the whole value to NOTE'],
+  ['store#memos/n2:', 'store#notes/n2', 'store#memos/n2:', 'path with a trailing colon, address forward'],
+  ['store#memos/x: gone', 'store#memos/x:', 'gone', `${NOTFOUND}, annotation to NOTE`],
+];
+const colonSlug = (i: number): string => `2026-11-15-c${i}`;
+const colonJournal = (refs: readonly string[]): string => refs.map((ref, i) => `@entry ${colonSlug(i)}\n  ANCHOR: A1\n  WHAT: "colon ${i}"\n  THREAD: none\n  REF: "${ref}"\n`).join('\n');
+const colonRecipe = (item: string): string => ['@recipe l1', `  UNIT: ${C}`, '  LANE: l1', '', 'REFS ::', `  ${item}`, ''].join('\n');
+const lines = (sb: string, key: string): string[] =>
+  readArtifact(sb, C, 'journal')
+    .toString()
+    .split('\n')
+    .filter((l) => l.startsWith(`  ${key}:`));
+const bad = (v: string, why: string): string => `migrate: error: malformed forward '${v}': ${why} (ERR_INVALID_ARGUMENT)\n`;
+const strip = (s: string): string => s.replace(/^token list: .*\n/m, '').replace(/; the answers in \S+$/m, '').replace(/\n(migrated|dry run): .*\n$/, '\n');
+// the rows of every token the forward takes (a quoted REFS item counted by its value)
+const forwardRows = (rs: Row[]): Row[] =>
+  rs.filter((r) => {
+    const t = r.token.replace(/^"(.*)"$/, '$1');
+    return t.startsWith(OLD) && t !== OLD && !t.includes('<');
+  });
+
+describe.concurrent('ctx unit migrate: the address forward', () => {
+  let sb0: string;
+  // the one forward run the census tests share, made by the first test that asks for it, so
+  // each test fails on its own where the forward cannot run
+  let ran: Promise<{ migrated: string; out: string }> | undefined;
+  const forwarded = (): Promise<{ migrated: string; out: string }> => {
+    ran ??= (async () => {
+      const migrated = fresh(sb0);
+      return { migrated, out: (await must(unit(migrated, 'migrate', FWD, '--all'))).stdout };
+    })();
+    return ran;
+  };
+  beforeAll(async () => {
+    sb0 = await seed(async (sb) => {
+      await must(run(sb, ['store', 'put', 'containers/notes', '--description=the notes', '--minting=given', '--add-fields=text: optional line']));
+      await must(run(sb, ['store', 'put', 'notes/n1', '--text=one']));
+      await must(run(sb, ['store', 'put', 'notes/n2', '--text=two']));
+      await seedUnit(sb, F, 'the forward unit');
+      plantArtifact(sb, F, 'journal', FWD_JOURNAL);
+      plantArtifact(sb, F, 'backlog', FWD_BACKLOG);
+      plantArtifact(sb, F, 'knowledge', FWD_KNOWLEDGE);
+      plantArtifact(sb, F, 'lanes/l1/recipe', FWD_RECIPE);
+      plantArtifact(sb, F, 'lanes/l1/report', FWD_REPORT);
+      await seedUnit(sb, SHUT, 'the closed unit');
+      appendArtifact(sb, SHUT, 'journal', '\n@entry 2026-11-15-shut\n  ANCHOR: A1\n  WHAT: "a closed entry naming store#memos/n1"\n  THREAD: none\n  REF: "store#memos/n2"\n');
+      await must(unit(sb, 'close', SHUT));
+    }, 'posix', 'migrate-forward');
+  });
+
+  it.for(FWD_REFS.map((c, i) => [i, ...c] as const))('[the-record-r-4gj4k] forward REF %i: %s becomes %s', async ([i, ref, next, note, cls]) => {
+    const { migrated, out } = await forwarded();
+    const e = JSON.parse((await must(unit(migrated, 'entry', 'show', F, fwdSlug(i), '--json'))).stdout).entry;
+    expect(e.refs).toEqual([next]);
+    expect(e.extra_fields).toEqual(note === null ? [] : [{ key: 'NOTE', value: note }]);
+    const r = rows(migrated, out, 'before').find((x) => x.label === 'journal' && x.field === 'REF' && x.token === ref);
+    expect([r?.cls, r?.disp]).toEqual([cls, next === ref ? 'kept' : 'rewritten']);
+  });
+
+  it('[the-record-r-4gj4k] a REFS list item is forwarded, its quotes dropped, a target that does not answer kept in the list; the task text forwarded in place', async () => {
+    const { migrated, out } = await forwarded();
+    const t = (await must(unit(migrated, 'get', `${F}/task/t1`))).stdout;
+    expect(t).toContain(`  REFS: [store#notes/n1, store#notes/n2, store#memos/y, unit#${F}/task/t1]\n`);
+    expect(t).toContain('  OBJECTIVE: "the task names store#notes/n2"\n');
+    expect(t).toContain('    Context. store#notes/n1 and store#memos/x.\n');
+    expect(t).not.toContain('NOTE:');
+    const y = rows(migrated, out, 'before').find((r) => r.label === 'backlog' && r.field === 'REFS' && r.token === 'store#memos/y');
+    expect([y?.cls, y?.disp, y?.next]).toEqual([NOTFOUND, 'kept', 'store#memos/y']);
+  });
+
+  it('[the-record-r-4gj4k] a lane recipe REFS block item is forwarded in place, its annotation and separator kept, a target that does not answer kept', async () => {
+    const { migrated, out } = await forwarded();
+    expect(readArtifact(migrated, F, 'lane/l1/recipe').toString()).toBe(FWD_RECIPE_AFTER);
+    const x = rows(migrated, out, 'before').find((r) => r.label === 'lane/l1/recipe' && r.field === 'REFS' && r.token === 'store#memos/x');
+    expect([x?.cls, x?.disp]).toEqual([NOTFOUND, 'kept']);
+  });
+
+  it('[the-record-r-4gj4k] free text is forwarded in place, every other byte kept: a possessive trimmed, placeholders and a target that does not answer kept, a token not starting with the prefix untouched', async () => {
+    const { migrated, out } = await forwarded();
+    expect((await must(unit(migrated, 'entry', 'show', F, '2026-11-15-ftext', '--json'))).stdout).toContain(JSON.stringify(FWD_TEXT_AFTER));
+    expect(readArtifact(migrated, F, 'lane/l1/report').toString()).toBe(FWD_REPORT_AFTER);
+    expect((await must(unit(migrated, 'get', `${F}/finding/F1`))).stdout).toContain('  REF: "store#notes/n2"\n  SUMMARY ::\n    a finding naming store#notes/n2 and store#memos/y.\n');
+    const text = rows(migrated, out, 'before').filter((r) => r.unit === F && r.label === 'journal' && r.field === 'WHAT');
+    const by = (tok: string): [string, string, string][] => text.filter((r) => r.token === tok).map((r) => [r.cls, r.disp, r.next]);
+    expect(by('store#memos/n1')).toEqual([['address forward', 'rewritten', 'store#notes/n1'], ['address forward', 'rewritten', 'store#notes/n1']]);
+    for (const tok of ['store#memos/slug', 'store#memos/x', 'store#memos/y']) expect(by(tok), tok).toEqual([[NOTFOUND, 'kept', tok]]);
+    expect(by('store#memos/<id>')).toEqual([['excluded: placeholder pattern', 'kept', 'store#memos/<id>']]);
+    expect(by('store#memos/')).toEqual([['full address', 'kept', 'store#memos/']]);
+    expect(by('store#memosx/n1')).toEqual([['full address', 'kept', 'store#memosx/n1']]);
+    expect(by('xstore#memos/n1')).toEqual([['address of another owner', 'kept', 'xstore#memos/n1']]);
+  });
+
+  it('[the-record-r-4gj4k] each distinct forwarded address is checked once through its owner\'s get, a placeholder never: the answers name every target that does not answer', async () => {
+    const { migrated, out } = await forwarded();
+    expect(out).toMatch(/^forward: store#memos\/ to store#notes\/, 6 distinct addresses checked through their owner's get, 2 answer, 4 do not; the answers in \S+\/forward\.tsv$/m);
+    const dir = /^token list: (\S+)\/before\.tsv/m.exec(out)?.[1] ?? '';
+    expect(readFileSync(join(migrated, dir, 'forward.tsv'), 'utf8')).toBe("store#notes/n1\tok\nstore#notes/n1's\tmissing\nstore#notes/n2\tok\nstore#notes/slug\tmissing\nstore#notes/x\tmissing\nstore#notes/y\tmissing\n");
+  });
+
+  it('[the-record-r-4gj4k] the census counts each forwarded occurrence with its class: before 17 forwarded and 9 kept as not answering, after the same 9 kept and nothing left to rewrite', async () => {
+    const { migrated, out } = await forwarded();
+    const before = forwardRows(rows(migrated, out, 'before'));
+    const tally = (rs: Row[]): Record<string, number> => rs.reduce<Record<string, number>>((a, r) => ({ ...a, [`${r.cls}|${r.disp}`]: (a[`${r.cls}|${r.disp}`] ?? 0) + 1 }), {});
+    expect(tally(before)).toEqual({ 'address forward|rewritten': 16, 'address forward, annotation to NOTE|rewritten': 1, [`${NOTFOUND}|kept`]: 9 });
+    expect(before.filter((r) => r.disp === 'kept').every((r) => r.next === r.token)).toBe(true);
+    expect(tally(forwardRows(rows(migrated, out, 'after')))).toEqual({ [`${NOTFOUND}|kept`]: 9 });
+    expect(out).toMatch(/^census after: \d+ pointer tokens, 0 left to rewrite$/m);
+    const m = out.match(/^census before: (\d+) rewritten, (\d+) kept, (\d+) moved to NOTE \(\d+ \+ \d+ \+ \d+ = (\d+)\)$/m);
+    expect(Number(m?.[1]) + Number(m?.[2]) + Number(m?.[3])).toBe(Number(m?.[4]));
+    expect(rows(migrated, out, 'before')).toHaveLength(Number(m?.[4]));
+  });
+
+  it('[the-record-r-4gj4k] the residual scan lists every token still holding the old prefix, tallied by its census class', async () => {
+    const { out } = await forwarded();
+    const m = out.match(/^residual scan: (\d+) tokens holding an old form outside NOTE and CLOSES$/m);
+    const tally = out.slice(out.indexOf(m?.[0] ?? '')).split('\n').slice(1).filter((l) => /^ +\d+ {2}\S/.test(l));
+    expect(Object.fromEntries(tally.map((l) => [l.replace(/^ +\d+ {2}/, ''), Number(l.trim().split(' ')[0])]))).toEqual({ [NOTFOUND]: 9, 'excluded: placeholder pattern': 1 });
+    expect(Number(m?.[1])).toBe(10);
+  });
+
+  it('[the-record-r-4gj4k, the-record-r11] --all reaches a CLOSED unit: its pointers forwarded while every ops write still refuses', async () => {
+    const { migrated, out } = await forwarded();
+    const e = JSON.parse((await must(unit(migrated, 'entry', 'show', SHUT, '2026-11-15-shut', '--json'))).stdout).entry;
+    expect([e.what, e.refs]).toEqual(['a closed entry naming store#notes/n1', ['store#notes/n2']]);
+    const w = await unit(migrated, 'record', SHUT, '--what=a write after the forward');
+    expect([w.code, w.stderr]).toEqual([1, `entry.record: error: unit '${SHUT}' is CLOSED; a closed unit takes no writes (ERR_UNIT_CLOSED)\n`]);
+    expect(out.endsWith('migrated: 2\n')).toBe(true);
+  });
+
+  it('[the-record-r-4gj4k] a second run forwards nothing: migrated: 0, only the targets that do not answer checked again, the storage byte equal', async () => {
+    const sb = fresh(sb0);
+    await must(unit(sb, 'migrate', FWD, '--all'));
+    const before = treeState(join(sb, RECORD_ROOT));
+    const again = await must(unit(sb, 'migrate', FWD, '--all'));
+    expect(again.stdout).toMatch(/^forward: store#memos\/ to store#notes\/, 3 distinct addresses checked through their owner's get, 0 answer, 3 do not; /m);
+    expect(again.stdout).toMatch(/^census before: 0 rewritten, \d+ kept, 0 moved to NOTE/m);
+    expect(again.stdout.endsWith('migrated: 0\n')).toBe(true);
+    expect(treeState(join(sb, RECORD_ROOT))).toBe(before);
+  });
+
+  it('[the-record-r-4gj4k] --dry-run with a forward prints the same census and writes nothing: the storage byte equal', async () => {
+    const { out } = await forwarded();
+    const sb = fresh(sb0);
+    const before = treeState(join(sb, RECORD_ROOT));
+    const dry = await must(unit(sb, 'migrate', '--dry-run', FWD, '--all'));
+    expect(treeState(join(sb, RECORD_ROOT))).toBe(before);
+    expect(dry.stdout.endsWith('dry run: 2 would migrate, nothing written\n')).toBe(true);
+    expect(strip(dry.stdout)).toBe(strip(out));
+    const flipped = await must(unit(sb, 'migrate', FWD, '--dry-run', '--all'));
+    expect(strip(flipped.stdout)).toBe(strip(out));
+  });
+
+  it('[the-record-r-4gj4k] a pointer an earlier rule rewrites into an address the forward takes is forwarded in the same run, and a second run changes nothing', async () => {
+    const sb = fresh(sb0);
+    plantArtifact(sb, F, 'lanes/l1/report', '@report l1\nFINDINGS ::\n  IDEAS.md#n1 forwards in the same run\n');
+    const r = await must(unit(sb, 'migrate', '--forward=store#ideas/=store#notes/', F));
+    expect(readArtifact(sb, F, 'lane/l1/report').toString()).toBe('@report l1\nFINDINGS ::\n  store#notes/n1 forwards in the same run\n');
+    const row = rows(sb, r.stdout, 'before').find((x) => x.label === 'lane/l1/report' && x.token === 'IDEAS.md#n1');
+    expect([row?.cls, row?.disp, row?.next]).toEqual(['IDEAS.md slug, address forward', 'rewritten', 'store#notes/n1']);
+    const before = treeState(join(sb, RECORD_ROOT));
+    expect((await must(unit(sb, 'migrate', '--forward=store#ideas/=store#notes/', F))).stdout.endsWith('migrated: 0\n')).toBe(true);
+    expect(treeState(join(sb, RECORD_ROOT))).toBe(before);
+  });
+
+  it.for([
+    ['--forward=nosuch#', 'address forward, owner not installed'],
+    ['--forward=rhythm#', 'address forward, owner has no get verb'],
+  ] as const)('[the-record-r-4gj4k] a forward whose new owner %s cannot answer keeps every token under %s, the address bytes as written', async ([flag, cls]) => {
+    const sb = fresh(sb0);
+    const r = await must(unit(sb, 'migrate', '--dry-run', flag.replace('--forward=', `--forward=${OLD}=`), F));
+    const fw = forwardRows(rows(sb, r.stdout, 'before'));
+    expect(fw.length).toBeGreaterThan(0);
+    // a quoted REFS item still drops its quotes and an annotated REF still moves its words to NOTE, the address kept
+    expect([...new Set(fw.map((x) => x.cls))].sort()).toEqual([cls, `${cls}, annotation to NOTE`, `${cls}, quotes dropped`]);
+    expect(fw.filter((x) => x.cls === cls).every((x) => x.disp === 'kept' && x.next === x.token)).toBe(true);
+    expect(fw.every((x) => x.next.startsWith(OLD))).toBe(true);
+    expect(r.stdout).toMatch(/^census after: \d+ pointer tokens, 0 left to rewrite$/m);
+  });
+
+  it('[the-record-r-hxgfj] the forward checks through the write check\'s own probe: each owner probed once and each distinct address read once per run, across every unit', async () => {
+    const sb = fresh(sb0);
+    writeModule(sb, 'modules', 'probe', { manifest: '# summary: a probe owner\n', files: { 'scripts/get': shVerb('read one probe', 'printf \'%s\\n\' "$1" >> "$CTX_ROOT/probe-gets"') } });
+    const r = await must(unit(sb, 'migrate', '--dry-run', `--forward=${OLD}=probe#`, '--all'));
+    expect(readFileSync(join(sb, 'probe-gets'), 'utf8')).toBe("n1\nn1's\nn2\nslug\nx\ny\n");
+    expect(r.stdout).toMatch(/^forward: store#memos\/ to probe#, 6 distinct addresses checked through their owner's get, 6 answer, 0 do not; /m);
+  });
+
+  it('[the-record-r-4gj4k] a token the check never answered (written after it) is kept as target not checked, and --collect takes a forward', async () => {
+    const sb = fresh(sb0);
+    const dir = join(sb, '.contexture/tmp/fwd-direct');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'answers.tsv'), 'store#notes/n1\tok\n');
+    const env = { MG_DIR: dir, MG_FWD_OLD: OLD, MG_FWD_NEW: 'store#notes/', MG_FWD_CHECK: join(dir, 'answers.tsv') };
+    expect((await data(sb, 'unit.migrate', ['--dry-run', F], '', env)).code).toBe(0);
+    const before = readFileSync(join(dir, 'before.tsv'), 'utf8').split('\n').map((l) => l.split('\t'));
+    const cls = (tok: string): string[] => [...new Set(before.filter((p) => p[5] === tok).map((p) => `${p[3]}|${p[4]}`))];
+    expect(cls('store#memos/n1')).toEqual(['address forward|rewritten']);
+    expect(cls('store#memos/n2')).toEqual(['address forward, target not checked|kept']);
+    const col = await data(sb, 'unit.migrate', ['--collect', F], '', { MG_DIR: dir });
+    expect([col.code, col.stderr]).toEqual([1, 'unit.migrate: error: unit.migrate --collect takes a forward (ERR_INVALID_ARGUMENT)\n']);
+  });
+
+  it('[the-record-r-4gj4k] a REF whose first token ends in a colon is forwarded without its colon, the colon going to NOTE as the path rule sends it; a recipe REFS item keeps its colon beside the forwarded address; a second run changes nothing', async () => {
+    const sb = fresh(sb0);
+    await seedUnit(sb, C, 'the colon unit');
+    plantArtifact(sb, C, 'journal', colonJournal(COLON_REFS.map(([ref]) => ref)));
+    plantArtifact(sb, C, 'lanes/l1/recipe', colonRecipe('store#memos/n1: the first note'));
+    const r = await must(unit(sb, 'migrate', FWD, C));
+    for (const [i, [ref, next, note, cls]] of COLON_REFS.entries()) {
+      const e = JSON.parse((await must(unit(sb, 'entry', 'show', C, colonSlug(i), '--json'))).stdout).entry;
+      expect([e.refs, e.extra_fields], ref).toEqual([[next], [{ key: 'NOTE', value: note }]]);
+      const row = rows(sb, r.stdout, 'before').find((x) => x.label === 'journal' && x.field === 'REF' && x.token === ref);
+      expect(row?.cls, ref).toBe(cls);
+    }
+    const dir = /^token list: (\S+)\/before\.tsv/m.exec(r.stdout)?.[1] ?? '';
+    expect(readFileSync(join(sb, dir, 'forward.tsv'), 'utf8')).toBe('store#notes/n1\tok\nstore#notes/n2\tok\nstore#notes/x\tmissing\n');
+    expect(readArtifact(sb, C, 'lane/l1/recipe').toString()).toBe(colonRecipe('store#notes/n1: the first note'));
+    const before = treeState(join(sb, RECORD_ROOT));
+    expect((await must(unit(sb, 'migrate', FWD, C))).stdout.endsWith('migrated: 0\n')).toBe(true);
+    expect(treeState(join(sb, RECORD_ROOT))).toBe(before);
+  });
+
+  it('[the-record-r-4gj4k] a trailing colon path chained into a forward keeps its NOTE word for word, byte equal to the run without the forward, and a recipe REFS item keeps its colon and its blanks', async () => {
+    const plant = async (sb: string): Promise<void> => {
+      await seedUnit(sb, C, 'the colon unit');
+      plantArtifact(sb, C, 'journal', colonJournal(['src/a.ts:  the parser', 'src/b.ts:']));
+      plantArtifact(sb, C, 'lanes/l1/recipe', colonRecipe('src/a.ts:  the parser'));
+      mkdirSync(join(sb, 'lib'), { recursive: true });
+      for (const f of ['a.ts', 'b.ts']) writeFileSync(join(sb, 'lib', f), '');
+    };
+    const plain = fresh(sb0);
+    await plant(plain);
+    await must(unit(plain, 'migrate', C));
+    const fwd = fresh(sb0);
+    await plant(fwd);
+    const r = await must(unit(fwd, 'migrate', '--forward=file#src/=file#lib/', C));
+    expect(lines(plain, 'NOTE')).toEqual(['  NOTE: src/a.ts:  the parser', '  NOTE: src/b.ts:']);
+    expect(lines(fwd, 'NOTE')).toEqual(lines(plain, 'NOTE'));
+    expect(lines(plain, 'REF')).toEqual(['  REF: "file#src/a.ts"', '  REF: "file#src/b.ts"']);
+    expect(lines(fwd, 'REF')).toEqual(['  REF: "file#lib/a.ts"', '  REF: "file#lib/b.ts"']);
+    const cls = (tok: string): string | undefined => rows(fwd, r.stdout, 'before').find((x) => x.label === 'journal' && x.token === tok)?.cls;
+    expect([cls('src/a.ts:  the parser'), cls('src/b.ts:')]).toEqual(['path with a trailing colon, address forward, the whole value to NOTE', 'path with a trailing colon, address forward']);
+    expect(readArtifact(plain, C, 'lane/l1/recipe').toString()).toBe(colonRecipe('file#src/a.ts:  the parser'));
+    expect(readArtifact(fwd, C, 'lane/l1/recipe').toString()).toBe(colonRecipe('file#lib/a.ts:  the parser'));
+  });
+
+  it('[the-record-r-4gj4k] a file# side refuses only as a new prefix outside the workspace: an absolute new prefix inside it and an old prefix outside it run', async () => {
+    const sb = fresh(sb0);
+    for (const flag of [`--forward=${OLD}=file#${sb}/lib/`, '--forward=file#/elsewhere/old/=file#lib/']) {
+      const r = await unit(sb, 'migrate', '--dry-run', flag, F);
+      expect([r.code, r.stderr], flag).toEqual([0, '']);
+    }
+  });
+
+  it.for([
+    ['no equals sign', [`--forward=${OLD}`, '--all'], bad(OLD, FORM)],
+    ['an empty new prefix', [`--forward=${OLD}=`, F], bad(`${OLD}=`, FORM)],
+    ['a bare flag', ['--forward', F], bad('', FORM)],
+    ['an old prefix with no owner', ['--forward=memos=store#notes/', '--all'], bad('memos=store#notes/', FORM)],
+    ['an uppercase owner', [`--forward=${OLD}=Notes#`, '--all'], bad(`${OLD}=Notes#`, FORM)],
+    ['a blank in a prefix', ['--forward=store#a b/=store#c/', '--all'], bad('store#a b/=store#c/', FORM)],
+    ['a retired short owner', [`--forward=journal#=unit#${F}/entry/`, '--all'], bad(`journal#=unit#${F}/entry/`, "the prefix 'journal#' is a retired short form, never a full address")],
+    ['equal prefixes', [`--forward=${OLD}=${OLD}`, '--all'], bad(`${OLD}=${OLD}`, OVERLAP)],
+    ['a new prefix extending the old', [`--forward=${OLD}=${OLD}old/`, '--all'], bad(`${OLD}=${OLD}old/`, OVERLAP)],
+    ['an old prefix extending the new', [`--forward=${OLD}n/=${OLD}`, '--all'], bad(`${OLD}n/=${OLD}`, OVERLAP)],
+    ['a second forward', [FWD, '--forward=store#a/=store#b/', '--all'], 'migrate: error: --forward is given once per run (ERR_INVALID_ARGUMENT)\n'],
+    ['a star in the old prefix', ['--forward=store#me*=store#notes/', '--all'], bad('store#me*=store#notes/', PLACE('store#me*'))],
+    ['an angle bracket in the old prefix', ['--forward=store#<container>/=store#notes/', '--all'], bad('store#<container>/=store#notes/', PLACE('store#<container>/'))],
+    ['three dots in the new prefix', [`--forward=${OLD}=store#notes.../`, '--all'], bad(`${OLD}=store#notes.../`, PLACE('store#notes.../'))],
+    ['an old prefix cut inside a name', ['--forward=store#memos=store#notes/', '--all'], bad('store#memos=store#notes/', CUT('store#memos'))],
+    ['a new prefix cut inside a name', [`--forward=${OLD}=store#notes`, '--all'], bad(`${OLD}=store#notes`, CUT('store#notes'))],
+    ['a file# new prefix outside the workspace by an absolute path', [`--forward=${OLD}=file#/etc/`, '--all'], bad(`${OLD}=file#/etc/`, OUTSIDE('file#/etc/'))],
+    ['a file# new prefix climbing out of the workspace', [`--forward=${OLD}=file#../elsewhere/`, '--all'], bad(`${OLD}=file#../elsewhere/`, OUTSIDE('file#../elsewhere/'))],
+    ['a file# new prefix climbing out after a folder', [`--forward=${OLD}=file#lib/../../x/`, '--all'], bad(`${OLD}=file#lib/../../x/`, OUTSIDE('file#lib/../../x/'))],
+  ] as const)('[the-record-r-4gj4k] a malformed forward, %s, refuses rc 1 naming the form, writing nothing', async ([, args, stderr]) => {
+    const sb = fresh(sb0);
+    const before = treeState(join(sb, RECORD_ROOT));
+    expect(await unit(sb, 'migrate', ...args)).toMatchObject({ code: 1, stdout: '', stderr });
+    expect(treeState(join(sb, RECORD_ROOT))).toBe(before);
   });
 });

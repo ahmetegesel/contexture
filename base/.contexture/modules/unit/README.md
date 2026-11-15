@@ -162,7 +162,7 @@ relay, so a child ending rc 0 hands its held warning to that hold instead of pri
 and refresh's exit prints the merged relay once, deduplicated, after its answer, only when
 refresh ends rc 0.
 
-`unit.migrate [--dry-run] <unit>...|--all` stands outside the 35 operations: it
+`unit.migrate [--dry-run|--collect] <unit>...|--all` stands outside the 35 operations: it
 checks every named unit is held (or lists every unit by its state key under `--all`),
 then per unit under its unit lock promotes it through `store.promote unit <unit>/` (asking
 `store_has store.promote` once first; never under `--dry-run`) and rewrites its pointers
@@ -175,7 +175,20 @@ form outside NOTE, CLOSES, and SUPERSEDES lines and `ref_sessions`, one row each
 same line), stops at the first refusal, re-framed as
 `unit.migrate: error: unit '<unit>': <message>`, and answers
 `{"promote":<bool>,"moved":N,"rewritten":N,"migrated":N}`, migrated counting the units
-either migration changed; the sweep prints no warning. The posix promotion removes the fallback
+either migration changed; the sweep prints no warning. Under an address forward (the verb's
+`--forward=<old prefix>=<new prefix>`, exported as `MG_FWD_OLD` and `MG_FWD_NEW`; the verb
+refuses a malformed one before any read: `mg_prefix_ok` checks each side's full address
+shape, a retired short form, a placeholder character (`<`, `>`, `*`, or `...`), and the
+slash or hash it must end in, `mg_new_inside` a `file#` new prefix outside the workspace by
+the write check's own rule, then the overlap of the two prefixes), the verb first calls `unit.migrate --collect <unit>...|--all`, which reads the same units with no lock
+and no write and appends each candidate token's forwarded address to `forward.cand` in the
+census folder (`lib/migrate.awk` in its collect mode), answering `{"collected":N}`; the verb
+checks each distinct address once through `vb_ref_state` and writes the answers to
+`forward.tsv`, which the run's two engine passes read through `MG_FWD_CHECK`, and the
+residual scan also lists a token still holding the old prefix. The engine tests a REF
+value's first token ending in a colon for the forward without its colon, the colon going to
+NOTE as the path rule sends it, and the path rule keeps its NOTE word for word when its
+address is forwarded. The posix promotion removes the fallback
 root its move empties, and an empty fallback root when it answers `none`, so `--all` over
 a fully moved store prints `migrated: 0` and leaves no empty deprecated root (a store
 listing no unit reaches no promotion, and its fallback root stays). `ctx unit migrate` is
@@ -190,13 +203,14 @@ A write's refs are full addresses, `<owner>#<path>` (`unit#<unit>/entry/<slug>`,
 check each in two steps before their storage call: `vb_ref_ok` refuses a retired short or
 legacy form naming its full address (`lib/migrate.awk` in its suggest mode computes it for
 the writing unit) and passes everything else through the storage library's `lib_ref_ok`;
-then `vb_refs_exist` checks each target, a `file#` path by the core (inside the workspace
-it must exist, outside it the shape alone counts, the symbol never) and every other owner
-through `ctx <owner> get <path>`, refusing
+then `vb_refs_exist` checks each target through `vb_ref_state` (which answers ok, missing,
+none, or noget, and which `ctx unit migrate --forward` asks too), a `file#` path by the core
+(inside the workspace it must exist, outside it the shape alone counts, the symbol never)
+and every other owner through `ctx <owner> get <path>`, refusing
 `<verb>: error: ref '<ref>': target not found (ERR_ENTITY_NOT_FOUND)`,
 `... owner '<owner>' is not installed (ERR_ENTITY_NOT_FOUND)`, or
 `... owner '<owner>' has no get verb (ERR_ENTITY_NOT_FOUND)`. `vb_owner` probes each owner
-once: a name the engine reserves is classed through `ctx _reserved` and `ctx _builtin` and
+once per verb run: a name the engine reserves is classed through `ctx _reserved` and `ctx _builtin` and
 never dispatched (`ctx run help get` would run a command), any other through
 `ctx <owner> help get`, then `ctx <owner> help`; a path starting with a dash reads target not
 found before any get, since get would take it for an option; a ref given twice in one write
