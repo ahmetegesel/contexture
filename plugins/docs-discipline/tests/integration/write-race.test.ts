@@ -15,15 +15,21 @@ import { fixture } from '../support/edit';
 
 const GIT = spawnSync('sh', ['-c', 'command -v git'], { encoding: 'utf8' }).stdout.trim();
 
-const barrier = (): Record<string, string> => {
-  const dir = sandbox('write-race-barrier');
+// the barrier plant: the git rev-parse HEAD stub, which a write runs as it stores the doc
+// (docs_store reads the head after docs_lock returned, LIB_LOCK set), marks the barrier folder
+// with its pid and waits there until a second writer marks it too (up to 4 s), or, given a
+// release file, until the test writes that file (up to 60 s)
+const barrier = (dir = sandbox('write-race-barrier'), release = ''): Record<string, string> => {
+  const wait = release
+    ? `    while [ ! -e "${release}" ] && [ "$n" -lt 600 ]; do sleep 0.1; n=$((n + 1)); done`
+    : `    while [ "$(ls "${dir}" | wc -l)" -lt 2 ] && [ "$n" -lt 40 ]; do sleep 0.1; n=$((n + 1)); done`;
   return {
     ...pathPlant('git', [
       'case " $* " in',
       '  *" rev-parse "*" HEAD "*)',
       `    : > "${dir}/$$"`,
       '    n=0',
-      `    while [ "$(ls "${dir}" | wc -l)" -lt 2 ] && [ "$n" -lt 40 ]; do sleep 0.1; n=$((n + 1)); done`,
+      wait,
       '    ;;',
       'esac',
       `exec "${GIT}" "$@"`,
@@ -67,16 +73,25 @@ describe('the docs write pipeline holds the library lock across its read, edit, 
     expect(winner).toMatch(/description: "written by (one|two)"/);
   });
 
-  it('[modules-r9, docs-module-r18] a writer stopped by a signal while it holds the lock releases it, and the next write lands at once', async () => {
+  it('[modules-r9, docs-module-r18] a writer stopped by a signal while it holds the lock releases it, and the next write lands at once', async ({ onTestFinished }) => {
     const sb = fresh(wtest);
-    const env = { ...barrier(), GIT_CEILING_DIRECTORIES: dirname(sb) };
+    const marks = sandbox('write-race-barrier');
+    const release = join(sandbox('write-race-release'), 'go');
+    onTestFinished(() => writeFileSync(release, ''));
+    const env = { ...barrier(marks, release), GIT_CEILING_DIRECTORIES: dirname(sb) };
     const held = launch('./.contexture/ctx', ['docs', 'header', 'wtest', 'unit', '--add-keyword=race-stopped'], { cwd: sb, env });
+    // the signal waits for the barrier's mark, never the lock folder: lib_lock makes the folder
+    // before it writes the pid and sets LIB_LOCK, and a stop in that window leaves the folder
+    // behind; the mark lands only once the writer holds the lock with LIB_LOCK set, and the
+    // writer waits at the barrier until the release, so the signal finds it holding the lock
     const t0 = performance.now();
-    while (!existsSync(lockPath(sb, libraryLock('docs')))) {
-      if (performance.now() - t0 > 20_000) throw new Error('the writer never took the lock');
+    while (readdirSync(marks).length === 0) {
+      if (performance.now() - t0 > 60_000) throw new Error('the writer never took the lock');
       await new Promise((r) => setTimeout(r, 20));
     }
+    expect(existsSync(lockPath(sb, libraryLock('docs'))), 'the writer at the barrier holds the lock').toBe(true);
     held.signal('SIGTERM');
+    writeFileSync(release, '');
     const stopped = await held.result;
     expect(stopped.code).toBe(143);
     expect(existsSync(lockPath(sb, libraryLock('docs')))).toBe(false);
