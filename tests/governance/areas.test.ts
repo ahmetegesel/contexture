@@ -36,6 +36,12 @@ describe.concurrent('the changed-files map selects a project for every tracked p
     expect(projectsOf('base/.contexture/ctx')).toEqual(expect.arrayContaining(['engine', 'laws', 'packages']));
   });
 
+  it('a change to the workspace\'s own ideas module, tracked in the live drawer, selects the engine project, which holds its suite', () => {
+    expect(projectsOf('.contexture/modules/ideas/scripts/ideas')).toEqual(['engine']);
+    expect(projectsOf('.contexture/modules/ideas/data')).toEqual(['engine']);
+    expect(projectsOf('.contexture/modules/unit/scripts/data')).toEqual([]);
+  });
+
   it('a composer change selects the engine project, whose builtin cases pin the composer usage and pass through', () => {
     expect(projectsOf('base/.contexture/laws/compose')).toEqual(expect.arrayContaining(['engine', 'laws', 'governance']));
   });
