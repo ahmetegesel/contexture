@@ -31,10 +31,12 @@ function addDocs(sb: string): void {
 export interface DocsOptions {
   input?: string | Buffer;
   env?: Record<string, string>;
+  // the call's kill ceiling, the exec default unless given
+  timeout?: number;
 }
 
-export function docs(sb: string, args: readonly string[], { input = '', env = {} }: DocsOptions = {}): Promise<Run> {
-  return exec('./.contexture/ctx', ['docs', ...args], { cwd: sb, input, env: { GIT_CEILING_DIRECTORIES: dirname(sb), ...env } });
+export function docs(sb: string, args: readonly string[], { input = '', env = {}, timeout }: DocsOptions = {}): Promise<Run> {
+  return exec('./.contexture/ctx', ['docs', ...args], { cwd: sb, input, env: { GIT_CEILING_DIRECTORIES: dirname(sb), ...env }, timeout });
 }
 
 const SEED_HEAD = '0000000';

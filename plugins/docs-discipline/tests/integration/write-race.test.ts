@@ -112,12 +112,17 @@ const WRITES: readonly [verb: string, args: string[]][] = [
   ['ids', ['ids', 'wtest']],
 ];
 
+// the wait under a live holder is 600 polls, each still spawning a cat and a sleep (the shim's
+// true), so host load stretches it past the default exec ceiling: the call takes a raised
+// ceiling, and the case a timeout above it, so a hang still fails naming the ceiling
+const HELD_CEILING = 300_000;
+
 describe('every docs write pipeline takes the library lock before its first read', { concurrent: true }, () => {
-  it.for(WRITES)('[modules-r9, docs-module-r18] ctx docs %s under a live holder refuses rc 2 ERR_STORAGE_LOCKED under its own name after the wait, nothing written', async ([verb, args]) => {
+  it.for(WRITES)('[modules-r9, docs-module-r18] ctx docs %s under a live holder refuses rc 2 ERR_STORAGE_LOCKED under its own name after the wait, nothing written', { timeout: HELD_CEILING + 60_000 }, async ([verb, args]) => {
     const sb = fresh(wtest);
     const before = await stored(sb, 'unit');
     const release = holdLock(sb, libraryLock('docs'), 'live');
-    const r = await docs(sb, args, { env: sleepShim() });
+    const r = await docs(sb, args, { env: sleepShim(), timeout: HELD_CEILING });
     release();
     expect([r.code, r.stdout, r.stderr]).toEqual([2, '', LOCKED(verb)]);
     expect(await stored(sb, 'unit')).toBe(before);
