@@ -380,10 +380,10 @@ describe.concurrent('ctx unit migrate --sweep: the guards', () => {
       'a name holding a newline, which the diagnostic counts, refuses the run rc 2, the dry run too',
       'a first key segment holding no unit state labelled outside the units, key segment <segment>: ...',
       'the sweep refuses rc 1 before any walk when the installed unit declaration does not declare the state unsearched',
-      'a unit or key prefix whose keys the store holds in both roots',
+      'a unit or key prefix whose keys the storage layer holds in both roots',
       'stopped: swept <n> items before the stop, moved into the backup stamped <stamp>',
       'a hangup, an interrupt, or a termination stops the sweep',
-      'for the migration a unit the store holds in both roots, and for the sweep a unit or key prefix whose keys the store holds in both roots',
+      'for the migration a unit the storage layer holds in both roots, and for the sweep a unit or key prefix whose keys the storage layer holds in both roots',
     ]) expect(r.stdout).toContain(part);
     expect(r.stdout).not.toContain('and the folders it empties removed');
     expect(r.stdout).not.toMatch(/special files, unreadable folders, lock/);

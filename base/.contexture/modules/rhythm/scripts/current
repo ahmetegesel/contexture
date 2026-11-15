@@ -4,7 +4,7 @@
 # help: prints one line, read from the unit's last stamped entry in record order, open or closed: rhythm in force: <name> at <N> <GATE> (entry <slug>); next gate: <N+1> <GATE>: <outcome>
 # help: the other lines: rhythm completed: <name> at its last gate <N> <GATE> (entry <slug>); rhythm stale: <stamp> (entry <slug>) matches no step of the effective rhythm; read it: ctx rhythm show <name>; rhythm none in force in <unit>: the design loop runs until the human confirms a rhythm (ctx rhythm list)
 # help: the board ends with the same line; a stamped ctx unit record prints the next gate when it writes
-# help: a malformed unit refuses rc 1 before any read; a unit the store does not hold refuses rc 1 with the entry listing's own line; a unit served from the deprecated root prints its line, then the listing's one warning after it
+# help: a malformed unit refuses rc 1 before any read; a unit the storage layer does not hold refuses rc 1 with the entry listing's own line; a unit served from the deprecated root prints its line, then the listing's one warning after it
 # help: exit codes: 0 the line printed; 1 a malformed or missing unit
 # help: example: ctx rhythm current my-unit
 

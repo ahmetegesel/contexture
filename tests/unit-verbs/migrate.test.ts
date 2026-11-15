@@ -197,7 +197,7 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/^ctx unit migrate: /);
     expect(r.stdout).toContain('ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all');
-    expect(r.stdout).toContain('a root still holding anything stays, and a store holding no unit keeps its empty root');
+    expect(r.stdout).toContain('a root still holding anything stays, and the storage layer keeps its empty root when it holds no unit; when the storage layer keeps no deprecated root, nothing moves');
     expect(r.stdout).toContain('--forward=<old prefix>=<new prefix>, once per run, forwards the addresses of entities that moved to a new owner');
     expect(r.stdout).toContain('target not found, owner not installed, owner has no get verb, or target not checked');
     expect(r.stdout).not.toMatch(/\.contexture|\//);
@@ -209,7 +209,7 @@ describe.skipIf(!fts5Available())('ctx unit migrate under a store that keeps no 
     const sb = stage('fts5', 'migrate-fts5');
     await seedUnit(sb, 'f-u');
     const r = await unit(sb, 'migrate', '--all');
-    expect([r.code, r.stderr, r.stdout.split('\n')[0]]).toEqual([0, '', 'root move: nothing moves, the store keeps no fallback']);
+    expect([r.code, r.stderr, r.stdout.split('\n')[0]]).toEqual([0, '', 'root move: nothing moves, the storage layer keeps no fallback']);
     expect(r.stdout.endsWith('migrated: 0\n')).toBe(true);
   });
 });

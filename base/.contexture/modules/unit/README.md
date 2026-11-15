@@ -212,13 +212,13 @@ unit declaration through the storage core's data reader (`store-data unit
 `ERR_INVALID_ARGUMENT` unless it declares the state unsearched (`unsearched:
 <unit>/state`), since without that line every unit's state is a key outside the document
 rules, which the sweep would take (a partial payload sync, say); a declaration the reader
-cannot answer refuses rc 2. Each named unit (one the store holds), or with `--all` every
+cannot answer refuses rc 2. Each named unit (one the storage layer holds), or with `--all` every
 first key segment `store.list` answers in either root (a unit when it holds a
 `<segment>/state` key, else a key segment outside the units), is swept under its unit lock
 through `store_sweep --prefix=<unit>/` (that folder of both roots), then with `--all` the
 top of each root through `store_sweep --loose`, so the two cover both roots whole; one
 stamp (`--stamp=<YYYYMMDD-HHMMSS>-<pid>`, none for a dry run or a delete) names the run's
-backup for every call. A segment whose keys the store holds in both roots (a key of the
+backup for every call. A segment whose keys the storage layer holds in both roots (a key of the
 deprecated root that the root holds too, the answer's `shadowed_keys` of the fallback root)
 refuses rc 1 `ERR_ENTITY_EXISTS` before anything of it is swept, the dry run alike, as the
 migration's root move refuses such a unit (`u_sweep_twice`): a dry run reads the count from
