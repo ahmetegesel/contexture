@@ -2,7 +2,7 @@ import { appendFileSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Run } from '../support/exec';
-import { compose, CORE_SRC, count, GOLDEN, layer, layerBytes, layerPath, lineOf, moduleBlock, synth, SYNTH, versionOf } from '../support/laws';
+import { blockClauses, compose, CORE_SRC, count, GOLDEN, layer, layerBytes, layerPath, lineOf, moduleBlock, synth, SYNTH, versionOf } from '../support/laws';
 import { fresh, seed } from '../support/snapshot';
 import { firstByteDifference } from '../support/tree';
 
@@ -45,6 +45,15 @@ describe.concurrent('the base-only composition (unit, lane, and rhythm, no docs)
     expect(moduleBlock(g, 'store')).toContain('The store module is the free container module');
     expect(count(g, /^ {2}store-data: a store container is declared/)).toBe(1);
     expect(count(g, /^ {2}store-no-promise: the store stores and finds data and promises no freshness, accuracy, or injection/)).toBe(1);
+  });
+
+  it('[modules-r12, modules-r19] composes the unit module\'s sweep consent law once into @laws, after the store\'s laws, ahead of every unit record clause', () => {
+    const g = layer(base);
+    expect(count(g, /^ {2}sweep-consent: the agent never runs a sweep /)).toBe(1);
+    const laws = blockClauses(g, 'laws');
+    expect(laws.at(-1)).toBe('sweep-consent');
+    expect(laws.indexOf('sweep-consent')).toBeGreaterThan(laws.indexOf('store-no-promise'));
+    expect(lineOf(g, /^ {2}sweep-consent: /)).toBeLessThan(lineOf(g, /^@record$/));
   });
 
   it('[modules-r19] seats the module preambles in the workspace order: lane, rhythm, store, unit', () => {

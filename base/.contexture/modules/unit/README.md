@@ -21,8 +21,10 @@ public surface, and `ctx session` is retired (a line naming `ctx unit`).
 
 ```text
 module            the summary, the version, the description (the law compose preamble)
-laws              the record clauses: @record, @journal, @backlog, @query, @refresh,
-                  @close, @handoff (the law compose fragment)
+laws              the sweep-consent law under @laws (no sweep that writes without the
+                  human's word in the session, the dry run the one form run without it),
+                  then the record clauses: @record, @journal, @backlog, @query,
+                  @refresh, @close, @handoff (the law compose fragment)
 data              the storage declaration (the namespace is the folder name, unit):
                   root .contexture/units, fallback_root .contexture/sessions, suffix .md,
                   key <unit>/<path...>, changes false, the document rules

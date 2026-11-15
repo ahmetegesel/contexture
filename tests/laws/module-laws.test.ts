@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { leaks } from '../support/drawer';
 import { ROOT } from '../support/root';
 import { count, DOCS_MOD } from '../support/laws';
 
@@ -42,6 +43,21 @@ describe.concurrent('the module law fragments', () => {
     expect(text).toMatch(/^@append @subagents$/m);
     for (const clause of ['branch/worktree', 'landing', 'boundary-warning', 'drift']) expect(text).toMatch(new RegExp(`^ {2}${clause}: `, 'm'));
     expect(text).not.toMatch(/^@append @git$/m);
+  });
+
+  it('[modules-r12, the-record-r-nudge] keeps the sweep consent law in the unit module: its one @laws slug binding every sweep that writes, both forms with or without --delete, to the human\'s word in the session, naming the dry run as the one form run without it, and on the leftovers nudge the dry run shown and the move or the delete asked, naming no storage path and no dash as punctuation', () => {
+    const text = readFileSync(UNIT_LAWS, 'utf8');
+    expect(lawSlugs(text)).toEqual(['sweep-consent']);
+    const law = text.split('\n').filter((l) => l.startsWith('  sweep-consent: '));
+    expect(law).toHaveLength(1);
+    for (const part of [
+      'the agent never runs a sweep that writes (ctx unit migrate --sweep or ctx store check --leftovers --sweep, with or without --delete) without the human\'s word in the session',
+      'the dry run (--dry-run), which writes nothing, is the one form it runs without that word',
+      'on the leftovers nudge of ctx unit list it tells the human what was found, runs the dry run (ctx unit migrate --sweep --dry-run --all), shows it, and asks whether to move the leftovers into a backup or delete them',
+      'the nudge, a plan, or a word from an earlier session is never that word',
+    ]) expect(law[0]).toContain(part);
+    expect(leaks(law[0]!), 'the law names no record storage path').toBe(false);
+    expect(law[0]).not.toMatch(/ - |—|–|\.contexture\//);
   });
 
   it('[the-record-r-lst33] names the unit listing among the unit laws\' named looks by a form the verb runs, ctx unit list --repo=<repo>', () => {
