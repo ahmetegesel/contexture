@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FTS5_DB } from '../support/drawer';
 import { ROOT } from '../support/root';
@@ -48,12 +48,23 @@ const deleteListings = (body: string): string[] => body.match(/git diff [^`\n]*-
 
 const guides = (): string[] => [...kids(join(ROOT, 'docs')).filter((p) => p.endsWith('.md')), join(ROOT, 'README.md')];
 
-const COMPARE = 'diff -rq base/.contexture .contexture';
+const COMPARE = 'diff -rq -x tmp base/.contexture .contexture';
 
-const compareFilter = (): string => {
-  const line = guide().split('\n').find((l) => l.startsWith(COMPARE)) ?? '';
-  return line.slice(COMPARE.length).replace(/^\s*\|\s*/, '');
+const OWNED_FOLDERS = ['units', 'sessions', 'store', 'backups', 'rhythms', 'tmp'];
+
+const compareLine = (): string => guide().split('\n').find((l) => l.startsWith(COMPARE)) ?? '';
+
+const compareFilter = (): string => compareLine().slice(COMPARE.length).replace(/^\s*\|\s*/, '');
+
+const plant = (root: string, files: Record<string, string>): void => {
+  for (const [rel, body] of Object.entries(files)) {
+    mkdirSync(dirname(join(root, rel)), { recursive: true });
+    writeFileSync(join(root, rel), body);
+  }
 };
+
+const compared = (cwd: string, command: string): string[] =>
+  spawnSync('sh', ['-c', command], { cwd, encoding: 'utf8' }).stdout.split('\n').filter(Boolean).sort();
 
 const compareReading = (): string => guide().split('\n').find((l) => l.startsWith('Each `Only in .contexture...` line')) ?? '';
 
@@ -126,11 +137,54 @@ describe.concurrent('the Updating path', () => {
 
   it('the payload compare prints a leftover module folder and the retired templates folder, and drops only the workspace-owned top folders and files', () => {
     const leftovers = ['Only in .contexture/modules: session', 'Only in .contexture/modules: lane', 'Only in .contexture: templates'];
-    const owned = ['Only in .contexture: units', 'Only in .contexture: sessions', 'Only in .contexture: rhythms', 'Only in .contexture: tmp'];
+    const owned = OWNED_FOLDERS.map((f) => `Only in .contexture: ${f}`);
     const db = basename(FTS5_DB);
     const files = ['config', 'storage.conf', db, `${db}-wal`, `${db}-shm`, '.DS_Store'].map((f) => `Only in .contexture: ${f}`);
     expect(compareFilter()).not.toBe('');
     expect(throughFilter(compareFilter(), [...leftovers, ...owned, ...files])).toEqual(leftovers);
+  });
+
+  it("the compare stays out of every scratch drawer on both sides and drops the store and backups folders, on the checkout operand and on a tag tree extracted under the scratch drawer, while every left only line and the workspace's own still print", () => {
+    const line = compareLine();
+    expect(line).toContain(`${COMPARE} | `);
+    const payload = { ctx: 'same', 'modules/unit/verb': 'same' };
+    const drawer = { 'modules/session/append': 'leftover', 'store/containers/x': 'record', 'backups/sweep-1/y': 'backup', 'ideas/rust-driver': 'idea' };
+
+    const checkout = sandbox('compare-checkout');
+    plant(join(checkout, 'base/.contexture'), { ...payload, 'modules/unit/planted': 'payload', 'tmp/base-only': 'x', 'tmp/shared': 'base', 'modules/unit/tmp/deep': 'base' });
+    plant(join(checkout, '.contexture'), { ...payload, ...drawer, 'tmp/live-only': 'x', 'tmp/shared': 'live', 'modules/unit/tmp/deep': 'live' });
+    expect(compared(checkout, 'diff -rq base/.contexture .contexture')).toContain('Only in base/.contexture/tmp: base-only');
+    expect(compared(checkout, line)).toEqual(['Only in .contexture/modules: session', 'Only in .contexture: ideas', 'Only in base/.contexture/modules/unit: planted'].sort());
+
+    const live = sandbox('compare-tag-tree');
+    const tag = '.contexture/tmp/tag/base/.contexture';
+    plant(join(live, tag), { ...payload, 'modules/unit/planted': 'payload', 'templates/recipe.md': 'retired', 'modules/unit/tmp/deep': 'tag' });
+    plant(join(live, '.contexture'), { ...payload, ...drawer, 'tmp/other': 'x', 'modules/unit/tmp/deep': 'live' });
+    const run = line.replace(' base/.contexture .contexture |', ` ${tag} .contexture |`);
+    expect(run).not.toBe(line);
+    expect(compared(live, `diff -rq ${tag} .contexture`)).toContain(`Files ${tag}/modules/unit/tmp/deep and .contexture/modules/unit/tmp/deep differ`);
+    expect(compared(live, run)).toEqual(
+      ['Only in .contexture/modules: session', `Only in ${tag}/modules/unit: planted`, `Only in ${tag}: templates`, 'Only in .contexture: ideas'].sort(),
+    );
+  });
+
+  it("the compare's reading names the module data folder class: a module's data folder at the drawer's top prints and reads as the workspace's own by the tags", () => {
+    expect(compareReading()).toContain("A module's data folder at the drawer's top, named by the module's installed name (`Only in .contexture: ideas` for the ideas module), prints and reads as the workspace's own by the tags");
+  });
+
+  it("the compare's reading names the -x requirement: a diff refusing the option prints nothing through the pipe, which reads like a clean compare", () => {
+    const reading = compareReading();
+    expect(reading).toContain('The `-x` option is outside POSIX `diff`: GNU diff and the BSD and macOS diff take it, while busybox diff has no `-x` and refuses it');
+    expect(reading).toContain('read an empty compare as clean only when the diff printed no error line');
+    const tree = sandbox('compare-refused');
+    const payload = { ctx: 'same', 'modules/unit/verb': 'same' };
+    plant(join(tree, 'base/.contexture'), payload);
+    plant(join(tree, '.contexture'), { ...payload, 'modules/session/append': 'leftover' });
+    const line = compareLine();
+    expect(compared(tree, line)).toEqual(['Only in .contexture/modules: session']);
+    const refused = line.replace(' -x tmp ', ' --no-such-option ');
+    expect(refused).not.toBe(line);
+    expect(compared(tree, refused)).toEqual([]);
   });
 
   it('the compare seeds the tag tree with extensions/modules when the drawer holds the extension root, so an installed package reads workspace owned and a leftover lane still reads a missed delete', () => {
@@ -227,6 +281,13 @@ describe('the payload path tables', () => {
 
   it('the declaration reads the shipped set', () => {
     expect(declaration('docs/adoption.md')).toBe(SHIPPED);
+  });
+
+  it("the workspace's own paths are one string in adoption.md and the-engine.md: the live workspace row names the root file, then every path of the workspace-owned row, each folder the compare drops among them", () => {
+    const cell = (rel: string, cls: string): string => text(join(ROOT, rel)).split('\n').find((l) => l.startsWith(`| ${cls} | `))?.split(' | ')[1] ?? '';
+    const owned = cell('docs/adoption.md', 'workspace-owned');
+    for (const f of OWNED_FOLDERS) expect(owned).toContain(`\`.contexture/${f}/\``);
+    expect(cell('docs/the-engine.md', 'live workspace')).toBe(`the untracked root: \`AGENTS.md\`, ${owned}`);
   });
 
   describe.skipIf(!rooted)('against git ls-files base/ (needs git and the repository top at the root)', () => {
