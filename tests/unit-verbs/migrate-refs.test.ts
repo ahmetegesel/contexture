@@ -1008,6 +1008,22 @@ describe.concurrent('ctx unit migrate: the address forward', () => {
     expect(treeState(join(sb, RECORD_ROOT))).toBe(before);
   });
 
+  it('[the-record-r-4gj4k] the residual scan tallies a kept colon REF (a forward whose target does not answer) by the class the census after gives the same token, its trailing colon aside, never as not in the census', async () => {
+    const sb = fresh(sb0);
+    await seedUnit(sb, C, 'the colon unit');
+    plantArtifact(sb, C, 'journal', colonJournal(['store#memos/x: the colon note']));
+    const r = await must(unit(sb, 'migrate', FWD, C));
+    expect(lines(sb, 'REF')).toEqual(['  REF: "store#memos/x:"']);
+    // the census after keeps the colon on its token, the residual scan cuts it
+    const after = rows(sb, r.stdout, 'after').filter((x) => x.label === 'journal' && x.field === 'REF');
+    expect(after.map((x) => [x.token, x.cls])).toEqual([['store#memos/x:', NOTFOUND]]);
+    expect(residual(sb, r.stdout).filter((x) => x.label === 'journal').map((x) => x.token)).toEqual(['store#memos/x']);
+    const m = r.stdout.match(/^residual scan: (\d+) tokens holding an old form outside NOTE and CLOSES$/m);
+    expect(m?.[1]).toBe('1');
+    const tally = r.stdout.slice(r.stdout.indexOf(m?.[0] ?? '')).split('\n').slice(1).filter((l) => /^ +\d+ {2}\S/.test(l));
+    expect(tally.map((l) => l.trim())).toEqual([`1  ${NOTFOUND}`]);
+  });
+
   it('[the-record-r-4gj4k] a trailing colon path chained into a forward keeps its NOTE word for word, byte equal to the run without the forward, and a recipe REFS item keeps its colon and its blanks', async () => {
     const plant = async (sb: string): Promise<void> => {
       await seedUnit(sb, C, 'the colon unit');

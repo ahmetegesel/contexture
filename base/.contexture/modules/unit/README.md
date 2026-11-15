@@ -183,7 +183,8 @@ CLOSED unit is reached), runs the residual scan `u_mig_residual` over what each 
 holding (its own awk, apart from the tokenizer: every token still holding an old pointer
 form outside NOTE, CLOSES, and SUPERSEDES lines and `ref_sessions`, one row each into
 `residual.tsv`, which the verb tallies by the census after's class for the same token on the
-same line), stops at the first refusal, re-framed as
+same line, trailing colons stripped on both sides, since the scan cuts a colon a census row
+keeps), stops at the first refusal, re-framed as
 `unit.migrate: error: unit '<unit>': <message>`, and answers
 `{"promote":<bool>,"moved":N,"rewritten":N,"migrated":N}`, migrated counting the units
 either migration changed; the sweep prints no warning. Under an address forward (the verb's

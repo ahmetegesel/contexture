@@ -328,14 +328,20 @@ LC_ALL=C awk -F '\t' -v dry="$dry" -v dir="${mg_dir#"$mg_root"/}" '
   FILENAME ~ /after\.tsv$/ {
     na++; A[$4 "\t" $5]++; if (!(($4 "\t" $5) in seena)) { seena[$4 "\t" $5] = 1; KA[++nka] = $4 "\t" $5 }
     if ($5 != "kept") left++
-    AC[$1 SUBSEP $2 SUBSEP $8 SUBSEP $6] = $4
+    AC[$1 SUBSEP $2 SUBSEP $8 SUBSEP bare($6)] = $4
     next
   }
   FILENAME ~ /residual\.tsv$/ {
-    nr++; k = $1 SUBSEP $2 SUBSEP $3 SUBSEP $4; c = (k in AC) ? AC[k] : "not in the census"
+    nr++; k = $1 SUBSEP $2 SUBSEP $3 SUBSEP bare($4); c = (k in AC) ? AC[k] : "not in the census"
     if (!(c in RC)) RK[++nrk] = c
     RC[c]++
     next
+  }
+  # bare(t): the token without its trailing colons, the key on both sides, since a census row
+  # keeps a colon its token ends in (a kept REF store#memos/x:) while the residual scan cuts it
+  function bare(t) {
+    while (t != "" && substr(t, length(t), 1) == ":") t = substr(t, 1, length(t) - 1)
+    return t
   }
   function table(n, K, C,   i, p) {
     for (i = 1; i <= n; i++) { split(K[i], p, "\t"); printf "  %7d  %-9s  %s\n", C[K[i]], p[2], p[1] }
