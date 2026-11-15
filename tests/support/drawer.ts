@@ -39,6 +39,9 @@ export const FALLBACK_ROOT = parseFallbackRoot();
 
 export const FTS5_DB = '.contexture/sessions.db';
 
+// the leftovers nudge's day mark in the drawer's scratch (the unit verb library's stamp)
+export const LEFTOVERS_STAMP = '.contexture/tmp/unit-leftovers.stamp';
+
 export const unitLock = (unit: string): string => join('unit', `${unit}.lock`);
 
 export const namespaceLock = (namespace: string): string => `store-${namespace}.lock`;

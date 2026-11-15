@@ -384,6 +384,117 @@ vb_hook() {
 vb_today() { date +%Y-%m-%d; }
 vb_epoch() { date +%s 2>/dev/null || printf '%s\n' "$$"; }
 
+# The leftovers nudge (ctx unit list): what the record's storage holds beyond its documents,
+# measured by the storage layer's read only probe (store_leftovers, the unit namespace) at
+# most once per period, the local calendar day, through one stamp in the drawer's scratch:
+# <date> <items> <bytes> after a probe, <date> unknown when the probe refused or answered
+# nothing countable, <date> probing <pid> while a listing probes, <date> sweeping <pid> while
+# ctx unit migrate --sweep runs (it writes the mark with its own pid before its sweep and
+# removes the stamp after it, a stop by a signal included, so no probe runs during a sweep
+# and the next listing measures again). A sweeping mark holds the probe back only while its
+# pid lives, whatever its date, so a mark a killed sweep left reads as no mark; any other
+# stamp naming today holds it back. The stamp is claimed before the probe, and a drawer that
+# cannot hold it probes nothing, so the throttle always holds; the count is written, and the
+# nudge printed, only while the stamp still reads the listing's own probing marker, so a
+# sweep's mark or clear, or another listing's claim, made during the probe stands. The nudge
+# is one line naming no path, held in the relay, so it prints once after the answer and only
+# when the verb ends rc 0.
+vb_leftovers_stamp() { printf '%s/.contexture/tmp/unit-leftovers.stamp\n' "$(store_lib_root)"; }
+
+# vb_stamp_put <stamp> <line>: the stamp written whole through a temp file beside it; rc 1,
+# silent, when the drawer cannot hold it (an entry at the stamp's place that is no regular
+# file among them, which a rename would only move the temp file into)
+vb_stamp_put() {
+  if [ -e "$1" ] || [ -h "$1" ]; then
+    [ -f "$1" ] && [ ! -h "$1" ] || return 1
+  fi
+  vsp_d=${1%/*}
+  mkdir -p "$vsp_d" 2>/dev/null
+  vsp_t="$1.$$"
+  if { printf '%s\n' "$2" > "$vsp_t"; } 2>/dev/null && mv -f "$vsp_t" "$1" 2>/dev/null; then
+    return 0
+  fi
+  rm -f "$vsp_t" 2>/dev/null
+  return 1
+}
+
+# vb_leftovers_mark: the sweep's mark (today sweeping, then the verb's pid), best effort and
+# silent
+vb_leftovers_mark() {
+  [ -n "$VB_LIBRARY" ] || return 0
+  vb_stamp_put "$(vb_leftovers_stamp)" "$(vb_today) sweeping $$" || :
+  return 0
+}
+
+# vb_leftovers_clear: the stamp removed after a sweep, so the next listing measures again
+vb_leftovers_clear() {
+  [ -n "$VB_LIBRARY" ] || return 0
+  rm -f "$(vb_leftovers_stamp)" 2>/dev/null
+  return 0
+}
+
+# vb_leftovers_nudge: the throttled measure; when the probe of this period finds content
+# beyond the documents (every kind of both roots, the keys outside the document rules among
+# them, summed with their bytes), the nudge line joins the relay
+vb_leftovers_nudge() {
+  [ -n "$VB_LIBRARY" ] || return 0
+  vln_s=$(vb_leftovers_stamp)
+  vln_today=$(vb_today)
+  vln_last=""
+  vln_rest=""
+  if [ -f "$vln_s" ]; then
+    { IFS=' ' read -r vln_last vln_rest < "$vln_s"; } 2>/dev/null || :
+  fi
+  case "$vln_rest" in
+    sweeping|sweeping\ *)
+      # a sweep holds the probe back while its verb lives; a dead or missing pid is no mark
+      vln_pid=${vln_rest#sweeping}
+      vln_pid=${vln_pid# }
+      case "$vln_pid" in
+        ""|*[!0-9]*) ;;
+        *) kill -0 "$vln_pid" 2>/dev/null && return 0 ;;
+      esac
+      ;;
+    *) [ "$vln_last" = "$vln_today" ] && return 0 ;;
+  esac
+  vln_claim="$vln_today probing $$"
+  vb_stamp_put "$vln_s" "$vln_claim" || return 0
+  vb_tmp
+  vln_n=""
+  if store_leftovers < /dev/null > "$VB_DIR/leftovers.json" 2> /dev/null \
+    && LC_ALL=C awk -f "$VB_JSON" < "$VB_DIR/leftovers.json" > "$VB_DIR/leftovers.flat" 2> /dev/null; then
+    vln_n=$(LC_ALL=C awk "$STORE_KINDS_AWK"'
+      BEGIN { kinds_init() }
+      { ld($0) }
+      END {
+        split("root fallback", R, " ")
+        for (j = 1; j <= 2; j++) {
+          if (V[R[j] ".state"] != "walked") continue
+          w++
+          for (i = 1; i <= NK; i++) { n += V[R[j] ".kinds." KIND[i] ".count"] + 0; b += V[R[j] ".kinds." KIND[i] ".bytes"] + 0 }
+        }
+        if (w) printf "%.0f %.0f\n", n, b
+      }' "$VB_DIR/leftovers.flat" 2> /dev/null)
+  fi
+  rm -f "$VB_DIR/leftovers.json" "$VB_DIR/leftovers.flat" 2> /dev/null
+  # the measure lands only over the listing's own claim: a sweep's mark or clear, or another
+  # listing's claim, made during the probe stands, and this listing prints nothing
+  vln_now=""
+  [ -f "$vln_s" ] && vln_now=$(sed -n '1p' "$vln_s" 2> /dev/null)
+  [ "$vln_now" = "$vln_claim" ] || return 0
+  case "$vln_n" in
+    [0-9]*" "[0-9]*) ;;
+    *) vb_stamp_put "$vln_s" "$vln_today unknown" || :; return 0 ;;
+  esac
+  vb_stamp_put "$vln_s" "$vln_today $vln_n" || :
+  vln_items=${vln_n% *}
+  vln_bytes=${vln_n#* }
+  [ "$vln_items" -gt 0 ] 2> /dev/null || return 0
+  if [ "$vln_items" -eq 1 ]; then vln_w=item; else vln_w=items; fi
+  printf "NUDGE: the record's storage holds %s %s (%s bytes) beyond its documents; the human's word comes first: tell them, show them the dry run ctx unit migrate --sweep --dry-run --all, and sweep only on their word, moving the leftovers into a backup or deleting them (--delete)\n" \
+    "$vln_items" "$vln_w" "$vln_bytes" >> "$VB_DIR/relay"
+}
+
 # vb_verb_help <module label> <script path>: the verb's help table, as ctx <module> help
 # <verb> prints it (the header's summary, usage, and help lines)
 vb_verb_help() {

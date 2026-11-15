@@ -16,6 +16,7 @@
 # help: --sweep sweeps each named unit (one the store holds), or with --all every first key segment of the store's root and deprecated root, each under its unit lock, CLOSED units included, then with --all what lies at the top of the roots outside every unit folder; it prints one line per unit, unit <unit>: ..., a first key segment holding no unit state labelled outside the units, key segment <segment>: ..., and one line for the top of the roots, outside the units: ..., each with every kind swept, its count and bytes, and the folders emptied, then one closing line: the items and bytes moved and the backup's stamp, or deleted with no backup kept; a second run moves nothing
 # help: --sweep --dry-run computes the same sweep, takes no lock, writes nothing, and prints the same lines, its closing line saying what the run would do; the human's word comes before a sweep, the dry run first
 # help: the sweep refuses rc 1 before any walk when the installed unit declaration does not declare the state unsearched (every unit's state would read as a key outside the document rules), and rc 1 before anything of it is swept, the dry run alike, a unit or key prefix whose keys the store holds in both roots (a key of the deprecated root that the root holds too), as the migration refuses such a unit; a refusal midway first prints the line of every unit swept before it and one line with the run total swept before the stop and the backup's stamp when one was made (stopped: swept <n> items before the stop, moved into the backup stamped <stamp>, stopped: swept <n> items before the stop, deleted with no backup kept, stopped: nothing swept before the stop, or dry run: would stop after sweeping <n> items; nothing written), then the refusal, the units swept before it staying swept; a hangup, an interrupt, or a termination stops the sweep: the verb sends its children a termination, waits for them, names the stop on one line, and exits 129, 130, or 143
+# help: a sweep run (never a dry run) holds back the leftovers nudge of ctx unit list while it sweeps, so no listing measures during the sweep, its mark carrying the verb's pid so a mark whose verb is gone holds nothing back, and lets the next listing measure again once it ends or is stopped by a signal
 # help: exit codes: 0 migrated, swept, or nothing to do; 1 a bare call, a bad argument (a malformed forward, --delete without --sweep, or --sweep beside --forward among them), an unknown unit, for the migration a unit the store holds in both roots, and for the sweep a unit or key prefix whose keys the store holds in both roots or a unit declaration that does not declare the state unsearched; 2 a storage failure (a name holding a newline in the sweep's reach, or an item the sweep cannot move or remove, which stops it, its line naming the kind and the items swept before it, which stay swept; a storage layer without the sweep refuses); 129, 130, or 143 a sweep stopped by a signal
 # help: example: ctx unit migrate --dry-run --all
 # help: example: ctx unit migrate --sweep --dry-run --all
@@ -200,10 +201,12 @@ mg_sweep_partial() {
 
 # mg_sweep_stop <rc>: a hangup, an interrupt, or a termination during the sweep: the data
 # script and every descendant are sent a termination and waited for, so the sweep stops at
-# its next step, then one line names the stop and the verb exits 129, 130, or 143
+# its next step; a run removes the leftovers mark, so the next listing measures again; then
+# one line names the stop and the verb exits 129, 130, or 143
 mg_sweep_stop() {
   trap '' HUP INT TERM
   vb_stop_child
+  [ -n "$dry" ] || vb_leftovers_clear
   mss_stamp=""
   [ -f "$SW_DIR/run" ] && mss_stamp=$(sed -n '1p' "$SW_DIR/run" 2>/dev/null)
   if [ -n "$dry" ]; then printf 'migrate: stopped by a signal; nothing written\n' >&2
@@ -230,11 +233,16 @@ if [ -n "$sweep" ]; then
   trap 'mg_sweep_stop 129' HUP
   trap 'mg_sweep_stop 130' INT
   trap 'mg_sweep_stop 143' TERM
+  # a run (never a dry run) marks the leftovers nudge's stamp while it sweeps, with this
+  # verb's pid, so no listing probes during the sweep, and removes it after, a stop by a
+  # signal included (mg_sweep_stop), so the next listing measures again
+  [ -n "$dry" ] || vb_leftovers_mark
   # shellcheck disable=SC2086
   vb_call_held unit.sweep $dry $del "$@"
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
+  [ -n "$dry" ] || vb_leftovers_clear
   if [ "$VB_RC" -ne 0 ]; then
     mg_sweep_partial
     vb_through

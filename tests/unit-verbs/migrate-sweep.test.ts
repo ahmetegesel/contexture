@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import { chmodSync, cpSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, readlinkSync, symlinkSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { FALLBACK_ROOT, RECORD_ROOT, leaks } from '../support/drawer';
+import { FALLBACK_ROOT, LEFTOVERS_STAMP, RECORD_ROOT, leaks } from '../support/drawer';
 import { launch } from '../support/exec';
 import { ROOT_USER } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
@@ -60,8 +60,14 @@ const MOVED_ROOT = [
 ];
 const MOVED_FALLBACK = ['.lock/', 'old-unit/', 'old-unit/x.txt=xy'];
 
+// the leftovers nudge of ctx unit list reports the leftovers, so it changes with them by
+// design: the views compare without it, and the nudges they printed land in the given list
+const NUDGE = /^NUDGE: .*\n/gm;
+const NUDGE_10 = "NUDGE: the record's storage holds 10 items (23 bytes) beyond its documents; the human's word comes first: tell them, show them the dry run ctx unit migrate --sweep --dry-run --all, and sweep only on their word, moving the leftovers into a backup or deleting them (--delete)\n";
+const dayMark = (sb: string): string => readFileSync(join(sb, LEFTOVERS_STAMP), 'utf8');
+
 // every view a unit verb answers over the record, the reads the sweep must leave byte equal
-async function views(sb: string): Promise<string[]> {
+async function views(sb: string, nudges: string[] = []): Promise<string[]> {
   const out: string[] = [];
   for (const args of [
     ['load', 'sw-a'], ['load', 'sw-c'], ['board', 'sw-a'], ['list', '--all'], ['list'], ['audit', 'sw-a'], ['audit', 'sw-c'],
@@ -69,7 +75,8 @@ async function views(sb: string): Promise<string[]> {
   ]) {
     const r = await unit(sb, ...args);
     expect(r.code, `${args.join(' ')}: ${r.stderr}`).toBe(0);
-    out.push(`${args.join(' ')}\n${r.stdout}${r.stderr}`);
+    nudges.push(...(r.stderr.match(NUDGE) ?? []));
+    out.push(`${args.join(' ')}\n${r.stdout}${r.stderr.replace(NUDGE, '')}`);
   }
   return out;
 }
@@ -94,12 +101,16 @@ describe.concurrent('ctx unit migrate --sweep', () => {
     plantLeftovers(sb);
     const roots = () => [tree(join(sb, RECORD_ROOT)), tree(join(sb, FALLBACK_ROOT))];
     const before = roots();
-    const seen = await views(sb);
+    const nudged: string[] = [];
+    const seen = await views(sb, nudged);
+    expect(nudged, 'the first listing of the day nudges once, with the counts the dry run closes on').toEqual([NUDGE_10]);
+    const measured = dayMark(sb);
     const dry = await unit(sb, 'migrate', '--sweep', '--dry-run', '--all');
     expect([dry.code, dry.stderr]).toEqual([0, '']);
     expect(dry.stdout).toBe([...UNIT_LINES, 'dry run: would move 10 items (23 bytes) and empty 1 folder; nothing written', ''].join('\n'));
     expect(roots(), 'the dry run writes nothing').toEqual(before);
     expect(existsSync(join(sb, BACKUPS))).toBe(false);
+    expect(dayMark(sb), 'a dry run leaves the day\'s measure as it was').toBe(measured);
     const swept = await unit(sb, 'migrate', '--sweep', '--all');
     expect([swept.code, swept.stderr]).toEqual([0, '']);
     const lines = swept.stdout.split('\n');
@@ -112,7 +123,11 @@ describe.concurrent('ctx unit migrate --sweep', () => {
     expect(tree(join(backup, 'root'))).toEqual(MOVED_ROOT);
     expect(tree(join(backup, 'fallback'))).toEqual(MOVED_FALLBACK);
     expect(existsSync(join(sb, FALLBACK_ROOT)), 'the emptied deprecated root is dropped').toBe(false);
-    expect(await views(sb)).toEqual(seen);
+    expect(existsSync(join(sb, LEFTOVERS_STAMP)), 'the sweep run lets the next listing measure again').toBe(false);
+    const after: string[] = [];
+    expect(await views(sb, after)).toEqual(seen);
+    expect(after, 'the listing after the sweep measures nothing beyond the documents').toEqual([]);
+    expect(dayMark(sb)).toMatch(/^\d{4}-\d{2}-\d{2} 0 0\n$/);
     const again = await unit(sb, 'migrate', '--sweep', '--all');
     expect([again.code, again.stdout, again.stderr]).toEqual([0, [...CLEAN_LINES, 'swept: nothing beyond the documents; nothing moved', ''].join('\n'), '']);
     const probe = await unit(sb, 'diagnose', '--leftovers');
@@ -122,7 +137,9 @@ describe.concurrent('ctx unit migrate --sweep', () => {
   it('[the-record-r-swp02] --delete removes the same content with no backup kept, every view byte equal', async () => {
     const sb = fresh(snap);
     plantLeftovers(sb);
-    const seen = await views(sb);
+    const nudged: string[] = [];
+    const seen = await views(sb, nudged);
+    expect(nudged).toEqual([NUDGE_10]);
     const dry = await unit(sb, 'migrate', '--sweep', '--delete', '--dry-run', '--all');
     expect(dry.stdout).toBe([...UNIT_LINES, 'dry run: would delete 10 items (23 bytes) and empty 1 folder; nothing written', ''].join('\n'));
     const r = await unit(sb, 'migrate', '--sweep', '--delete', '--all');

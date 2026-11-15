@@ -247,6 +247,42 @@ its next step with its locks released, and kill any still running after 10 s, th
 `migrate: stopped by a signal; ...` naming the run's stamp in the move form and exits 129,
 130, or 143. Like the migrations, it prints no deprecated root warning.
 
+The leftovers nudge tells the agent the sweep is due, at the boot read where it speaks to
+the human: `ctx unit list` (every form, after a rendered answer; a refusing render exits
+first) calls the verb library's `vb_leftovers_nudge`, which measures what the record's
+storage holds beyond its documents at most once per period, the local calendar day. The
+day's mark is one stamp in the drawer's scratch, `.contexture/tmp/unit-leftovers.stamp`
+(the engine sweeps only its `verb.*` roots there), holding one line: `<YYYY-MM-DD> <items>
+<bytes>` after a probe, `<YYYY-MM-DD> unknown` when the probe refused or walked no root,
+`<YYYY-MM-DD> probing <pid>` while a listing probes, or `<YYYY-MM-DD> sweeping <pid>` while
+a sweep runs. A sweeping mark holds the probe back only while its pid lives, whatever its
+date (a sweep across midnight still holds it), so a mark whose verb is gone, or that names
+no pid, reads as no mark; any other mark naming today holds it back, so a day costs one
+probe whatever the listings. Otherwise the listing claims the day first (`<date> probing
+<its pid>`, through `vb_stamp_put`: a temp file beside the stamp and one `mv`, refusing an
+entry at the stamp's place that is no regular file), and a drawer that cannot keep the mark
+probes nothing at all, so the throttle always holds; a claim a killed listing left still
+holds the day. The probe is the library's `store_leftovers` over the unit namespace (the
+caller lookup names it), flattened by the storage core's `json.awk` and summed through the
+library's kinds table (`STORE_KINDS_AWK`): every kind of both walked roots, the keys
+outside the document rules among them, with their bytes, so the counts are the sweep dry
+run's closing counts. The count, or `unknown`, is written only while the stamp still reads
+the listing's own claim, so a sweep's mark or clear, or another listing's claim, made while
+it probed stands, and that listing prints nothing (the probe takes no lock, so a sweep may
+run beside it). When the items are more than zero, one line joins the relay, so it prints
+once after the answer and only on rc 0: `NUDGE: the record's storage holds <n> items
+(<bytes> bytes) beyond its documents; the human's word comes first: tell them, show them
+the dry run ctx unit migrate --sweep --dry-run --all, and sweep only on their word, moving
+the leftovers into a backup or deleting them (--delete)` (`1 item` in the singular). It
+names no path and writes nothing to the record. `ctx unit migrate --sweep`, a run and never
+a dry run, writes `<date> sweeping <its pid>` through `vb_leftovers_mark` before its
+`unit.sweep` call and removes the stamp through `vb_leftovers_clear` after it, and in its
+stop trap when a hangup, an interrupt, or a termination stops it, so no listing probes
+while the sweep runs and the next listing measures again, nudging a remainder or nothing; a
+sweep killed outright leaves its mark, which reads as no mark once its pid is gone. The
+load and every other verb carry no nudge: lanes boot by loading their unit, so a load
+nudge would often be spent on a subagent.
+
 ## The ref check
 
 A write's refs are full addresses, `<owner>#<path>` (`unit#<unit>/entry/<slug>`,
