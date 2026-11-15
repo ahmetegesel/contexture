@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, LEFTOVERS_STAMP, RECORD_ROOT, leaks } from '../support/drawer';
 import { launch } from '../support/exec';
+import { sweepGate } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
 import { must, run, seedUnit, unit, waitFor } from '../support/unit';
 
@@ -188,12 +189,16 @@ describe.concurrent('ctx unit list: the leftovers nudge', () => {
     }
   });
 
-  it('[the-record-r-nudge] a sweep stopped by a signal removes its mark, so the next listing measures the remainder again', { timeout: 120_000 }, async () => {
+  it('[the-record-r-nudge] a sweep stopped by a signal removes its mark, so the next listing measures the remainder again', { timeout: 300_000 }, async () => {
     const sb = fresh(snap);
-    const total = 6000;
+    const total = 2500;
     for (let i = 0; i < total; i++) writeFileSync(join(sb, RECORD_ROOT, 'ln-a', `k${i}.md`), '');
     const left = () => readdirSync(join(sb, RECORD_ROOT, 'ln-a')).filter((n) => /^k[0-9]+\.md$/.test(n)).length;
-    const sweep = launch('./.contexture/ctx', ['unit', 'migrate', '--sweep', 'ln-a'], { cwd: sb, input: null });
+    // the gate holds the sweep at its gap before its second batch, so the signal finds it
+    // running with work left however long the test takes to send it
+    const gate = sweepGate(sb);
+    const sweep = launch('./.contexture/ctx', ['unit', 'migrate', '--sweep', 'ln-a'], { cwd: sb, input: null, env: gate.env, timeout: 180_000 });
+    expect(await waitFor(gate.reached, 120_000, 50), 'the sweep stands between two batches').toBe(true);
     expect(await waitFor(() => left() < total, 60_000, 50), 'the first batch moved').toBe(true);
     expect(mark(sb), 'the running sweep marks the day with its own pid').toBe(`${today()} sweeping ${sweep.child.pid}\n`);
     sweep.signal('SIGTERM');
