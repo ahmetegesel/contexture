@@ -214,7 +214,7 @@ describe('the posix fallback root: reads after the root, writes to the root afte
     const sb = fresh(snap);
     expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toMatchObject({ health: 'degraded', store: 'absent' });
     plant(sb, 'old-root/b/state.md', 'old b\n');
-    expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toEqual({ driver: 'posix', health: 'ok', detail: 'the store is writable and unlocked', store: 'present' });
+    expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toEqual({ driver: 'posix', health: 'ok', detail: 'the storage layer is writable and unlocked for the namespace', store: 'present' });
   });
 
   it.skipIf(ROOT_USER)('[the-engine-r24] an unwritable fallback root reads error with its presence, an unreadable one error with the store absent', async ({ onTestFinished }) => {
@@ -222,9 +222,9 @@ describe('the posix fallback root: reads after the root, writes to the root afte
     plant(sb, 'new-root/a/state.md', 'new a\n');
     plant(sb, 'old-root/b/state.md', 'old b\n');
     chmodPlant(join(sb, 'old-root'), 0o555, 0o755, onTestFinished);
-    expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not writable', store: 'present' });
+    expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toEqual({ driver: 'posix', health: 'error', detail: 'the storage layer is not writable for the namespace', store: 'present' });
     chmodPlant(join(sb, 'old-root'), 0o311, 0o755, onTestFinished);
-    expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not readable', store: 'absent' });
+    expect(answer(await store(sb, 'posix').op('storage.health', ['legacy']), 'storage.health')).toEqual({ driver: 'posix', health: 'error', detail: 'the storage layer is not readable for the namespace', store: 'absent' });
   });
 });
 

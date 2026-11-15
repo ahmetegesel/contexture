@@ -30,7 +30,7 @@ const tables = (db: string) => sqlite(db, "SELECT name FROM sqlite_master WHERE 
 const backups = (dir: string, db: string) => readdirSync(dir).filter((n) => ![basename(db), `${basename(db)}-wal`, `${basename(db)}-shm`, `${basename(db)}-journal`].includes(n));
 const digest = (db: string) => createHash('sha256').update(Buffer.concat([db, `${db}-wal`].filter(existsSync).map((p) => readFileSync(p)))).digest('hex');
 
-const schemaRefusal = (v: number) => `the store is at schema ${v}; this driver reads 5 and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs`;
+const schemaRefusal = (v: number) => `the storage layer's database is at schema ${v}; this driver reads 5 and has no upgrade path: move the database aside and re-enter the record into a fresh one through the ctx verbs`;
 async function health(s: ReturnType<typeof store>, namespace = 'docs'): Promise<{ driver: string; health: string; detail: string; store: string }> {
   const a = answer(await s.op('storage.health', [namespace]), 'storage.health');
   expect(a.detail, 'a health detail names no folder').not.toContain('/');
@@ -90,7 +90,7 @@ describe.skipIf(!fts5Available() || ROOT_USER)('the fts5 open refusals name no s
     chmodPlant(db, 0o000, 0o644, onTestFinished);
     for (const [r, fn] of [[await s.get('docs', 'workspace/kept'), 'store.get'], [await s.list('docs'), 'store.list']] as const) {
       expect(r.stderr).not.toContain(dir);
-      refused(r, fn, 2, 'ERR_STORAGE_READ', 'cannot read the store');
+      refused(r, fn, 2, 'ERR_STORAGE_READ', 'cannot read the storage layer\'s database');
     }
   });
 
@@ -100,7 +100,7 @@ describe.skipIf(!fts5Available() || ROOT_USER)('the fts5 open refusals name no s
     chmodPlant(db, 0o444, 0o644, onTestFinished);
     const r = await s.put('docs', 'workspace/new', 'never lands\n');
     expect(r.stderr).not.toContain(dir);
-    refused(r, 'store.put', 2, 'ERR_STORAGE_WRITE', 'cannot create the store');
+    refused(r, 'store.put', 2, 'ERR_STORAGE_WRITE', 'cannot create the storage layer\'s database');
     expect(readFileSync(db).length).toBe(0);
   });
 });
@@ -131,7 +131,7 @@ describe.skipIf(!fts5Available())('the fts5 storage.health over the database sta
     const { sb, s } = at('scoped.db');
     answer(await s.put('docs', 'workspace/kept', 'x\n'), 'store.put');
     holdLock(sb, namespaceLock('unit'), 'live');
-    expect(await health(s, 'unit')).toEqual({ driver: 'fts5', health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'absent' });
+    expect(await health(s, 'unit')).toEqual({ driver: 'fts5', health: 'locked', detail: "the storage layer's namespace 'unit' is locked by a writer", store: 'absent' });
     expect(await health(s)).toMatchObject({ health: 'ok', store: 'present' });
   });
 

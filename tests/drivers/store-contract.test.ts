@@ -20,7 +20,7 @@ const CARDS = {
 };
 
 const HEALTH_ABSENT = {
-  posix: { driver: 'posix', health: 'degraded', detail: 'the store is not made yet (the first write makes it)', store: 'absent' },
+  posix: { driver: 'posix', health: 'degraded', detail: 'the storage layer is not made yet for the namespace (the first write makes it)', store: 'absent' },
   fts5: { driver: 'fts5', health: 'degraded', detail: 'database not created yet (will be initialized on the first write)', store: 'absent' },
 };
 
@@ -360,7 +360,7 @@ for (const driver of DRIVERS) {
         answer(await s.put('unit', 'probe/state', 'x\n'), 'store.put');
         const health = () => healthOf(s, 'unit');
         const release = holdLock(sb, namespaceLock('unit'), 'live');
-        expect(await health()).toEqual({ driver, health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'present' });
+        expect(await health()).toEqual({ driver, health: 'locked', detail: "the storage layer's namespace 'unit' is locked by a writer", store: 'present' });
         release();
         expect((await health()).health).toBe('ok');
         holdLock(sb, namespaceLock('unit'), 'pidless');
@@ -394,7 +394,7 @@ for (const driver of DRIVERS) {
         expect(await healthOf(s, 'docs')).toMatchObject({ health: 'ok', store: 'present' });
         const release = holdLock(sb, namespaceLock('docs'), 'live');
         expect(await healthOf(s, 'unit')).toMatchObject({ health: 'ok', store: 'absent' });
-        expect(await healthOf(s, 'docs')).toEqual({ driver, health: 'locked', detail: "the store namespace 'docs' is locked by a writer", store: 'present' });
+        expect(await healthOf(s, 'docs')).toEqual({ driver, health: 'locked', detail: "the storage layer's namespace 'docs' is locked by a writer", store: 'present' });
         release();
         holdLock(sb, namespaceLock('unit'), 'live');
         expect(await healthOf(s, 'unit')).toMatchObject({ health: 'locked', store: 'absent' });

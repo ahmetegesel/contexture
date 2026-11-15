@@ -64,7 +64,7 @@ describe('the posix store on disk', { concurrent: true }, () => {
 
   it('[the-engine-r19] keeps no change log, even for a namespace that declares one', async () => {
     refused(await store(fresh(empty), 'posix').changes('docs'), 'store.changes', 1, 'ERR_CAPABILITY_UNSUPPORTED',
-      "the posix store keeps no change log; namespace 'docs' reports its delta through its module (changes: true)");
+      "the storage layer keeps no change log under the posix driver; namespace 'docs' reports its delta through its module (changes: true)");
   });
 
   it('[the-engine-r8] refuses a ranked mode by its registry, exact alone, even on a namespace declaring a search schema', async () => {
@@ -106,20 +106,20 @@ describe('the posix store on disk', { concurrent: true }, () => {
   it('[the-engine-r24] reports its health over the declared root: degraded before it is made, ok and absent while it holds no key or only residue, ok and present once written, locked whatever the presence', async () => {
     const sb = stage('posix');
     const health = () => healthOf(sb, 'unit');
-    expect(await health()).toEqual({ driver: 'posix', health: 'degraded', detail: 'the store is not made yet (the first write makes it)', store: 'absent' });
+    expect(await health()).toEqual({ driver: 'posix', health: 'degraded', detail: 'the storage layer is not made yet for the namespace (the first write makes it)', store: 'absent' });
     mkdirSync(join(sb, RECORD_ROOT));
-    const empty = { driver: 'posix', health: 'ok', detail: 'the store is writable and holds no key of the namespace yet', store: 'absent' };
+    const empty = { driver: 'posix', health: 'ok', detail: 'the storage layer is writable and holds no key of the namespace yet', store: 'absent' };
     expect(await health()).toEqual(empty);
     plant(sb, join(RECORD_ROOT, 'stray.md'), 'one segment, never a key\n');
     plant(sb, join(RECORD_ROOT, 'u/.tmp.plant'), 'a killed writer residue\n');
     expect(await health()).toEqual(empty);
     const release = holdLock(sb, namespaceLock('unit'), 'live');
-    expect(await health()).toEqual({ driver: 'posix', health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'absent' });
+    expect(await health()).toEqual({ driver: 'posix', health: 'locked', detail: "the storage layer's namespace 'unit' is locked by a writer", store: 'absent' });
     release();
     answer(await store(sb, 'posix').put('unit', 'u/state', 'x\n'), 'store.put');
-    expect(await health()).toEqual({ driver: 'posix', health: 'ok', detail: 'the store is writable and unlocked', store: 'present' });
+    expect(await health()).toEqual({ driver: 'posix', health: 'ok', detail: 'the storage layer is writable and unlocked for the namespace', store: 'present' });
     holdLock(sb, namespaceLock('unit'), 'live');
-    expect(await health()).toEqual({ driver: 'posix', health: 'locked', detail: "the store namespace 'unit' is locked by a writer", store: 'present' });
+    expect(await health()).toEqual({ driver: 'posix', health: 'locked', detail: "the storage layer's namespace 'unit' is locked by a writer", store: 'present' });
   });
 
   it.skipIf(ROOT_USER)('[the-engine-r24] reports an unwritable root as error with its true presence, ahead of a held lock', async ({ onTestFinished }) => {
@@ -127,19 +127,19 @@ describe('the posix store on disk', { concurrent: true }, () => {
     const root = join(sb, RECORD_ROOT);
     mkdirSync(root);
     chmodPlant(root, 0o555, 0o755, onTestFinished);
-    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not writable', store: 'absent' });
+    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the storage layer is not writable for the namespace', store: 'absent' });
     chmodSync(root, 0o755);
     answer(await store(sb, 'posix').put('unit', 'u/state', 'x\n'), 'store.put');
     chmodSync(root, 0o555);
     holdLock(sb, namespaceLock('unit'), 'live');
-    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not writable', store: 'present' });
+    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the storage layer is not writable for the namespace', store: 'present' });
   });
 
   it.skipIf(ROOT_USER)('[the-engine-r24] reports an unreadable root as error with the store absent', async ({ onTestFinished }) => {
     const sb = stage('posix');
     answer(await store(sb, 'posix').put('unit', 'u/state', 'x\n'), 'store.put');
     chmodPlant(join(sb, RECORD_ROOT), 0o311, 0o755, onTestFinished);
-    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the store is not readable', store: 'absent' });
+    expect(await healthOf(sb, 'unit')).toEqual({ driver: 'posix', health: 'error', detail: 'the storage layer is not readable for the namespace', store: 'absent' });
   });
 
   it('[the-engine-r24] follows a declared root other than the namespace, and reads no other namespace\'s root', async () => {

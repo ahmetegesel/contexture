@@ -113,7 +113,7 @@ A refusal is rc 1 (the caller's input or the record's rules) or rc 2 (storage or
 | `ERR_CAPABILITY_UNSUPPORTED` | 1 | `mode '<m>' is not supported; answerable modes: <modes joined by , >` |
 | `ERR_CAPABILITY_UNSUPPORTED` | 2 | `unknown function '<f>'` (the function name at dispatch) |
 | `ERR_STORAGE_READ`, `ERR_STORAGE_WRITE`, `ERR_STORAGE_LOCKED`, `ERR_STORAGE_CORRUPT` | 2 | the backend's detail |
-| `ERR_STORAGE_SCHEMA` | 2 | `the store is at schema <v>; this driver reads <w> and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs` (fts5) |
+| `ERR_STORAGE_SCHEMA` | 2 | `the storage layer's database is at schema <v>; this driver reads <w> and has no upgrade path: move the database aside and re-enter the record into a fresh one through the ctx verbs` (fts5) |
 | `ERR_DRIVER_NOT_FOUND`, `ERR_DRIVER_PROTOCOL` | 2 | the resolver's |
 
 The order of refusals: the argv shape first (`ERR_INVALID_ARGUMENT`), then the unit (`ERR_ENTITY_NOT_FOUND`), then a write to a `CLOSED` unit (`ERR_UNIT_CLOSED`, before any other record rule), then the function's own rules. A write refused at any point writes nothing.

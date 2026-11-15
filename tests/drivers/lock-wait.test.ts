@@ -61,7 +61,7 @@ describe.concurrent('the namespace lock wait', () => {
         const sb = stage(driver);
         const release = holdLock(sb, namespaceLock('unit'), 'live');
         const [r, ms] = await timed(() => driverOp(sb, driver, 'store.put', ['unit', 'lw-unit/note'], 'never lands\n', sleepShim()));
-        refused(r, 'store.put', 2, 'ERR_STORAGE_LOCKED', `the store namespace 'unit' is locked (${WAIT_S} s timeout)`);
+        refused(r, 'store.put', 2, 'ERR_STORAGE_LOCKED', `the storage layer's namespace 'unit' is locked (${WAIT_S} s timeout)`);
         expect(ms).toBeLessThan(SHIMMED_MS);
         release();
         refused(await driverOp(sb, driver, 'store.get', ['unit', 'lw-unit/note']), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'lw-unit/note' not found in namespace 'unit'");

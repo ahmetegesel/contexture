@@ -224,7 +224,7 @@ store_unlock() {
 # the folder only once mkdir holds it, so a waiter's interrupt trap removes nothing.
 store_lock() {
   sl_lock="$LOCK_BASE/locks/store-$1.lock"
-  mkdir -p "$(dirname "$sl_lock")" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot make the store lock folder"
+  mkdir -p "$(dirname "$sl_lock")" 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "cannot make the storage layer's lock folder"
   sl_n=0
   sl_miss=0
   while [ "$sl_n" -lt 600 ]; do
@@ -233,7 +233,7 @@ store_lock() {
       { printf '%s\n' "$$" > "$STORE_LOCK/pid"; } 2>/dev/null || {
         rm -rf "$STORE_LOCK" 2>/dev/null
         STORE_LOCK=""
-        refuse 2 ERR_STORAGE_WRITE "cannot write the store lock holder pid"
+        refuse 2 ERR_STORAGE_WRITE "cannot write the storage layer's lock holder pid"
       }
       return 0
     fi
@@ -252,7 +252,7 @@ store_lock() {
     sl_n=$((sl_n + 1))
     sleep 0.1 2>/dev/null || { sleep 1; sl_n=$((sl_n + 9)); }
   done
-  refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (60 s timeout)"
+  refuse 2 ERR_STORAGE_LOCKED "the storage layer's namespace '$1' is locked (60 s timeout)"
 }
 
 # store_lock_held <namespace>: rc 0 while a writer holds the namespace lock. Held follows
@@ -589,7 +589,7 @@ store_put() {
   }
   if ! { "$sp_core" docs "$SD_FILE" "$sp_ns" "$sp_key" "$SCRATCH/value" "$SD_SIG" > "$SCRATCH/docs.sql"; } 2>/dev/null; then
     store_cleanup
-    refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
+    refuse 2 ERR_STORAGE_WRITE "cannot derive the storage layer's search documents"
   fi
   sp_now=$(now_utc)
   if ! { {
@@ -884,7 +884,7 @@ batch_sql() {
           && scratch_add "$SCRATCH/store.sql" "DELETE FROM store_docs WHERE namespace = '%s' AND key = '%s';\n" "$(sql_escape "$sb_ns")" "$(sql_escape "$sbs_key")" \
           || batch_refuse 2 "$sbs_i" put "$sbs_key" ERR_STORAGE_WRITE "cannot stage the action"
         if ! { "$sbs_core" docs "$SD_FILE" "$sb_ns" "$sbs_key" "$sbs_val" "$SD_SIG" >> "$SCRATCH/store.sql"; } 2>/dev/null; then
-          batch_refuse 2 "$sbs_i" put "$sbs_key" ERR_STORAGE_WRITE "cannot derive the store search documents"
+          batch_refuse 2 "$sbs_i" put "$sbs_key" ERR_STORAGE_WRITE "cannot derive the storage layer's search documents"
         fi
         ;;
       delete)
@@ -1043,16 +1043,16 @@ store_docs_ensure() {
     sde_n=$((sde_n + 1))
     sde_val="$SCRATCH/values/$sde_n"
     if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$sde_val"), value) FROM store WHERE namespace = $(store_sqlq "$sde_ns") AND key = $(store_sqlq "$sde_key");" > /dev/null 2>&1; then
-      refuse 2 ERR_STORAGE_READ "cannot read the store values"
+      refuse 2 ERR_STORAGE_READ "cannot read the storage layer's values"
     fi
     if ! { "$sde_core" docs "$SD_FILE" "$sde_ns" "$sde_key" "$sde_val" "$sde_sig" >> "$sde_sql"; } 2>/dev/null; then
-      refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
+      refuse 2 ERR_STORAGE_WRITE "cannot derive the storage layer's search documents"
     fi
   done < "$SCRATCH/keys"
   scratch_add "$sde_sql" "INSERT INTO store_docs_schema (namespace, sig) VALUES (%s, %s) ON CONFLICT(namespace) DO UPDATE SET sig = excluded.sig;\nCOMMIT;\n" \
     "$(store_sqlq "$sde_ns")" "$(store_sqlq "$sde_sig")" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if ! sq -bail "$DB_PATH" < "$sde_sql" > /dev/null 2>&1; then
-    refuse 2 ERR_STORAGE_WRITE "cannot derive the store search documents"
+    refuse 2 ERR_STORAGE_WRITE "cannot derive the storage layer's search documents"
   fi
 }
 
@@ -1137,7 +1137,7 @@ store_search() {
         ss_n=$((ss_n + 1))
         ss_v="$SCRATCH/values/$ss_n"
         if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$ss_v"), value) FROM store WHERE namespace = $(store_sqlq "$ss_ns") AND key = $(store_sqlq "$ss_k");" > /dev/null 2>&1; then
-          refuse 2 ERR_STORAGE_READ "cannot read the store values"
+          refuse 2 ERR_STORAGE_READ "cannot read the storage layer's values"
         fi
         scratch_add "$SCRATCH/man" '%s\t%s\n' "$ss_k" "$ss_v" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
       done < "$SCRATCH/keys"
@@ -1147,7 +1147,7 @@ store_search() {
     if [ "$ss_rc" -ne 0 ]; then
       ss_msg=$(head -n 1 "$ss_err" 2>/dev/null)
       case "$ss_msg" in store-search:\ error:\ *) ss_msg=${ss_msg#store-search: error: } ;; esac
-      [ -n "$ss_msg" ] || ss_msg="the store search failed"
+      [ -n "$ss_msg" ] || ss_msg="the storage layer search failed"
       ss_code=""
       case "$ss_msg" in
         *' ('*')')
@@ -1243,7 +1243,7 @@ storage_health() {
   elif ! sq "$DB_PATH" "PRAGMA quick_check;" 2>/dev/null | grep -q '^ok$'; then
     printf '{"driver":"fts5","health":"error","detail":"database integrity check failed","store":"%s"}\n' "$sh_st"
   elif store_lock_held "$SD_NS"; then
-    printf '{"driver":"fts5","health":"locked","detail":"%s","store":"%s"}\n' "the store namespace '$SD_NS' is locked by a writer" "$sh_st"
+    printf '{"driver":"fts5","health":"locked","detail":"%s","store":"%s"}\n' "the storage layer's namespace '$SD_NS' is locked by a writer" "$sh_st"
   elif [ "$sh_st" = present ]; then
     printf '{"driver":"fts5","health":"ok","detail":"database present and writable","store":"present"}\n'
   else

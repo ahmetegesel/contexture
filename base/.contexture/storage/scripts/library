@@ -406,7 +406,7 @@ store_leftovers_text() {
           else printf "; beyond them: %s\n", o
         }
       } else if (st == "unreadable") printf "%s: unreadable, so its content cannot be walked\n", label
-      else if (st == "link") printf "%s: a symbolic link, which the store does not walk\n", label
+      else if (st == "link") printf "%s: a symbolic link, which the storage layer does not walk\n", label
       else if (mode == "summary" && st == "absent") printf "%s: absent (not made yet)\n", label
       else if (mode == "summary" && st == "none") printf "%s: none declared\n", label
     }
@@ -464,7 +464,7 @@ store_sweep_text() {
       for (j = 1; j <= 2; j++) {
         r = R[j]; label = (r == "root" ? "root" : "fallback root")
         if (V[r ".state"] == "unreadable") { skip = skip "; " label ": unreadable, so its content cannot be swept"; if (mode == "kinds") printf "%s: unreadable, so its content cannot be swept\n", label; continue }
-        if (V[r ".state"] == "link") { skip = skip "; " label ": a symbolic link, which the store does not walk"; if (mode == "kinds") printf "%s: a symbolic link, which the store does not walk\n", label; continue }
+        if (V[r ".state"] == "link") { skip = skip "; " label ": a symbolic link, which the storage layer does not walk"; if (mode == "kinds") printf "%s: a symbolic link, which the storage layer does not walk\n", label; continue }
         if (!walked(r)) continue
         for (i = 1; i <= NK; i++) {
           k = KIND[i]; c = V[r ".kinds." k ".count"] + 0; b = V[r ".kinds." k ".bytes"] + 0

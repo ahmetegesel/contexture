@@ -215,7 +215,7 @@ for (const driver of DRIVERS) {
 
     it('[the-engine-r18, the-engine-r21] a put whose lock holder pid cannot be written refuses with nothing else on stderr and leaves no lock', async () => {
       const sb = await seeded(empty, driver, OLD);
-      refused(await store(sb, driver, readOnlyLockShim()).put('docs', 'workspace/x', 'never lands\n'), 'store.put', 2, 'ERR_STORAGE_WRITE', 'cannot write the store lock holder pid');
+      refused(await store(sb, driver, readOnlyLockShim()).put('docs', 'workspace/x', 'never lands\n'), 'store.put', 2, 'ERR_STORAGE_WRITE', 'cannot write the storage layer\'s lock holder pid');
       expect(existsSync(lockPath(sb, namespaceLock('docs')))).toBe(false);
       expect(await bytesOf(sb, driver, Object.keys(OLD))).toEqual(Object.values(OLD));
     });

@@ -211,7 +211,7 @@ const LIST_ROWS: readonly [string[], string][] = [
   [['lane', 'show', 'r-unit', 'nolane', 'report'], 'lane.get'],
 ];
 
-const LOCKED = "the store namespace 'unit' is locked (60 s timeout)";
+const LOCKED = "the storage layer's namespace 'unit' is locked (60 s timeout)";
 
 const STORE_ROWS: readonly [string, string[], string, string, string][] = [
   ['store.get', ['unit', 'board', 'r-unit'], 'session.board', 'ERR_STORAGE_READ', 'the storage layer read failed'],

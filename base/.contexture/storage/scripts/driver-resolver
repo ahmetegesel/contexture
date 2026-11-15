@@ -315,7 +315,7 @@ verify_capabilities() {
   esac
   cap_store=$(printf '%s\n' "$cap_json" | desc_field store | tr '\n' ' ')
   if [ -z "$cap_store" ]; then
-    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares no store family; contract 3 serves the store alone (ERR_DRIVER_PROTOCOL)\n' "$driver_name" >&2
+    printf 'driver-resolver: ERROR: driver '\''%s'\'' declares no store family; contract 3 serves the store family alone (ERR_DRIVER_PROTOCOL)\n' "$driver_name" >&2
     return 2
   fi
   if [ "$cap_store" != "$STORE_FUNCTIONS " ]; then

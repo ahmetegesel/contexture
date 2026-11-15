@@ -264,7 +264,7 @@ for (const driver of DRIVERS) {
     });
 
     it.each([
-      ['a record-only card', { store: [] }, ['no store family', 'contract 3 serves the store alone']],
+      ['a record-only card', { store: [] }, ['no store family', 'contract 3 serves the store family alone']],
       ['contract 2', { contract: '2' }, ['contract', 'not 3']],
       ['a functions field', { extra: ',"functions":["session.list"]' }, ['record function family']],
       ['the store token without the family', { optional: ['store'], store: [] }, ['no store family']],

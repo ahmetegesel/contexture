@@ -53,7 +53,7 @@ folder, never the name, and when it found one a second `find` sums the regular f
 or below such names through `wc -c` reading each file on its standard input, so no name
 is printed. One awk pass then classifies the listing; a line it cannot parse stops the
 probe rc 2 `ERR_STORAGE_READ`, a name never continued across lines. A regular file the
-pattern admits is a key (the store's own list rule: the suffix, the key rule, the
+pattern admits is a key (the storage layer's own list rule: the suffix, the key rule, the
 pattern), a document when a document rule or an `unsearched` line of the declaration
 names it (every key a document when the namespace declares neither), else a key outside
 the document rules, which is a leftover; each folder above a key is a key folder, each
@@ -71,7 +71,7 @@ or device count apart; a name holding a newline counts as its own kind, its byte
 regular files at or below it; in the fallback root a key the root also holds is a shadowed
 key, never a key. The answer is one compact object `{"driver","namespace",
 "root","fallback"}`, each root `{"state"}` for `absent` (not made), `link` (a symbolic
-link, which the store never walks), `unreadable`, or `none` (the namespace declares no
+link, which the storage layer never walks), `unreadable`, or `none` (the namespace declares no
 fallback root), else `{"state":"walked","entries","keys","documents","kinds"}`, the
 kinds `stray_files`, `nonkey_folders`, `empty_folders`, `links`, `special_files`,
 `unreadable_folders`, `remnants`, `shadowed_keys`, `outside_keys`, and `newline_names` in

@@ -24,7 +24,7 @@ db_init() {
   # one read answers the fast path: the schema version, whether any table exists, the
   # SQLite version number
   db_probe=$(sq "$DB_PATH" "SELECT (SELECT user_version FROM pragma_user_version) || '|' || (SELECT count(*) FROM sqlite_master WHERE type = 'table') || '|' || sqlite_version();" 2>/dev/null) || {
-    printf '%s: error: cannot read the store (ERR_STORAGE_READ)\n' "${CMD:-storage-fts5}" >&2
+    printf '%s: error: cannot read the storage layer'\''s database (ERR_STORAGE_READ)\n' "${CMD:-storage-fts5}" >&2
     exit 2
   }
   db_version=${db_probe%%|*}
@@ -46,11 +46,11 @@ db_init() {
       | sq -bail "$DB_PATH" >/dev/null 2>&1 || {
       # a second opener may have made it first
       [ "$(sq "$DB_PATH" "PRAGMA user_version;" 2>/dev/null)" = "$DB_SCHEMA_VERSION" ] && return 0
-      printf '%s: error: cannot create the store (ERR_STORAGE_WRITE)\n' "${CMD:-storage-fts5}" >&2
+      printf '%s: error: cannot create the storage layer'\''s database (ERR_STORAGE_WRITE)\n' "${CMD:-storage-fts5}" >&2
       exit 2
     }
     return 0
   fi
-  printf '%s: error: the store is at schema %s; this driver reads %s and has no upgrade path: move the store aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)\n' "${CMD:-storage-fts5}" "$db_version" "$DB_SCHEMA_VERSION" >&2
+  printf '%s: error: the storage layer'\''s database is at schema %s; this driver reads %s and has no upgrade path: move the database aside and re-enter the record into a fresh one through the ctx verbs (ERR_STORAGE_SCHEMA)\n' "${CMD:-storage-fts5}" "$db_version" "$DB_SCHEMA_VERSION" >&2
   exit 2
 }
