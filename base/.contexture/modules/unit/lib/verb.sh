@@ -198,6 +198,63 @@ vb_call() {
   return "$VB_RC"
 }
 
+# vb_call_held <function> [<argv>...]: vb_call of a long data function with no payload, the
+# data script run in the background and waited for, so a hangup, an interrupt, or a
+# termination reaching the verb runs the verb's trap at once (a shell runs a trap only after
+# its foreground child ends); VB_CHILD names the child while it runs, for vb_stop_child
+VB_CHILD=""
+vb_call_held() {
+  vb_tmp
+  if [ -z "$VB_UNIT_DATA" ]; then
+    printf '%s: error: the unit module data script is not installed (ERR_DRIVER_NOT_FOUND)\n' "$(vb_label)" >&2
+    exit 2
+  fi
+  "$VB_UNIT_DATA" "$@" < /dev/null > "$VB_DIR/ans" 2> "$VB_DIR/err" &
+  VB_CHILD=$!
+  wait "$VB_CHILD"
+  VB_RC=$?
+  VB_CHILD=""
+  VB_PAY=""
+  return "$VB_RC"
+}
+
+# vb_tree <pid>: the pid and every descendant, from one ps snapshot
+vb_tree() {
+  ps -A -o pid= -o ppid= 2>/dev/null | awk -v r="$1" '
+    { P[$1] = $2 }
+    END {
+      S[r] = 1
+      do { c = 0; for (p in P) if (!(p in S) && (P[p] in S)) { S[p] = 1; c = 1 } } while (c)
+      for (p in S) printf "%s ", p
+    }'
+}
+
+# vb_stop_child: the held child and every descendant, from one ps snapshot, sent a termination
+# (a background child of a shell ignores an interrupt, so a termination is what stops it at
+# any signal), then waited for: each one's own trap ends it at its next step, releasing its
+# locks; a child still running after 10 s is killed with every descendant then. Silent
+vb_stop_child() {
+  vsc_c=${VB_CHILD:-${!:-}}
+  [ -n "$vsc_c" ] || return 0
+  vsc_set=$(vb_tree "$vsc_c")
+  # shellcheck disable=SC2086
+  [ -z "$vsc_set" ] || kill -TERM $vsc_set 2>/dev/null
+  (
+    sleep 10
+    vsc_late=$(vb_tree "$vsc_c")
+    # shellcheck disable=SC2086
+    [ -z "$vsc_late" ] || kill -KILL $vsc_late
+  ) > /dev/null 2>&1 &
+  vsc_t=$!
+  wait "$vsc_c" 2>/dev/null
+  vsc_set=$(vb_tree "$vsc_t")
+  # shellcheck disable=SC2086
+  [ -z "$vsc_set" ] || kill -KILL $vsc_set 2>/dev/null
+  wait "$vsc_t" 2>/dev/null
+  VB_CHILD=""
+  return 0
+}
+
 # vb_call_doc <file> <function> [<argv>...]: a record function taking a raw document on
 # stdin (a recipe, a report), through the unit module data script
 vb_call_doc() {

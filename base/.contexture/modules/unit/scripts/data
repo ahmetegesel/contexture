@@ -27,7 +27,9 @@
 # after its root, and the posix store's own write moves a unit's folder from the fallback
 # to the root, so a unit moves whole at its first landing write with no call of its own;
 # unit.migrate, outside the record's 35 operations, moves the named units or every unit for
-# ctx unit migrate through the store's optional store.promote, then rewrites their pointers. A run
+# ctx unit migrate through the store's optional store.promote, then rewrites their pointers;
+# unit.sweep, outside them too, sweeps what the record's storage holds beyond its documents
+# for ctx unit migrate --sweep through the storage layer's sweep. A run
 # whose reads came from the fallback and that ends rc 0 prints one warning line after its
 # answer.
 #
@@ -677,6 +679,158 @@ u_unit_migrate() {
   printf '{"promote":%s,"moved":%s,"rewritten":%s,"migrated":%s}\n' "$um_p" "$um_moved" "$um_rew" "$um_mig"
 }
 
+# u_unit_sweep [--dry-run] [--delete] <unit>...|--all: outside the record's 35 operations, the
+# sweep of what the record's storage holds beyond its documents (the keys the unit verbs
+# read: the state, the backlog, the knowledge, the journal, and each lane's recipe, journal,
+# and report). Before any walk or write it refuses rc 1 unless the installed unit declaration,
+# as the storage core reads it, declares the state unsearched (u_sweep_state), since without
+# that line every unit's state is a key outside the document rules. Each named unit (one the
+# store holds), or with --all every first key segment the store lists in either root (a unit
+# when it holds a state key, else a key prefix outside the units), is swept under its unit
+# lock through the storage layer's sweep scoped to its folder (store_sweep --prefix=<unit>/,
+# both roots); --all then sweeps the entries at the top of each root that hold no key
+# (--loose), so both roots are covered whole. A segment whose keys the store holds in both
+# roots (a key of the deprecated root that the root holds too, which the sweep would take as
+# a key the root shadows) refuses rc 1 ERR_ENTITY_EXISTS before anything of it is swept, the
+# dry run alike, as the migration's root move refuses such a unit: a run first asks the
+# storage layer's dry run of the segment (u_sweep_twice), a dry run reads its own answer. No
+# document moves, no ref is rewritten, and no other migration runs, so a CLOSED unit is
+# reached as the root move reaches it. One stamp names the run's backup for every call. Each
+# driver answer lands in SW_DIR (the verb's folder) as <n>.json, one sweep.tsv line naming
+# the segment's kind (unit, prefix, or top for the top of the roots), its name, and the file;
+# SW_DIR/run holds the run's stamp (an empty line for a dry run or a delete) once the sweep
+# starts, and a refusal of a storage layer sweep writes SW_DIR/stop, the items that call swept
+# before it, so the verb prints the lines of the units already swept and the run total before
+# the refusal; the first refusal stops the run naming the unit, the units swept before it
+# staying swept. --dry-run takes no lock and writes nothing. The answer is
+# {"mode":"move|delete","dry_run":<bool>,"calls":N}
+u_unit_sweep() {
+  FN=unit.sweep
+  us_dry=""
+  us_del=""
+  while [ $# -ge 1 ]; do
+    case "$1" in
+      --dry-run) [ -z "$us_dry" ] || u_refuse 1 ERR_INVALID_ARGUMENT "--dry-run is given twice"; us_dry=--dry-run; shift ;;
+      --delete) [ -z "$us_del" ] || u_refuse 1 ERR_INVALID_ARGUMENT "--delete is given twice"; us_del=--delete; shift ;;
+      *) break ;;
+    esac
+  done
+  [ $# -ge 1 ] || u_refuse 1 ERR_INVALID_ARGUMENT "unit.sweep takes the units or --all"
+  u_sweep_state
+  us_dir=${SW_DIR:-$U_SCR}
+  [ -d "$us_dir" ] && [ -w "$us_dir" ] || u_refuse 2 ERR_STORAGE_WRITE "cannot write the sweep folder"
+  rm -f "$us_dir/run" "$us_dir/stop" 2>/dev/null
+  u_new "$us_dir/sweep.tsv" "$U_SCR/sweep.units" "$U_SCR/keys"
+  if [ "$1" = --all ]; then
+    u_extra 1 "$@"
+    u_keys_all > "$U_SCR/keys" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+    LC_ALL=C awk -F / '
+      NF > 1 && !($1 in s) { s[$1] = 1; o[++n] = $1 }
+      NF == 2 && $2 == "state" { u[$1] = 1 }
+      END { for (i = 1; i <= n; i++) printf "%s\t%s\n", (o[i] in u) ? "unit" : "prefix", o[i] }' "$U_SCR/keys" > "$U_SCR/sweep.units" \
+      || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  else
+    for us_u in "$@"; do
+      u_want_held "$us_u"
+      u_put "$U_SCR/sweep.units" 'unit\t%s\n' "$us_u"
+    done
+  fi
+  us_stamp=""
+  [ -n "$us_dry" ] || [ -n "$us_del" ] || us_stamp="--stamp=$(date +%Y%m%d-%H%M%S)-$$"
+  u_new "$us_dir/run"
+  u_put "$us_dir/run" '%s\n' "${us_stamp#--stamp=}"
+  us_n=0
+  us_fb=1
+  while IFS='	' read -r us_k us_u; do
+    [ -n "$us_u" ] || continue
+    us_n=$((us_n + 1))
+    if [ "$us_k" = unit ]; then us_w="unit '$us_u'"; else us_w="key segment '$us_u' outside the units"; fi
+    [ -n "$us_dry" ] || u_lock "$us_u"
+    if [ -n "$us_dry" ]; then
+      u_sweep_call "$us_dir/$us_n.json" "$us_w" "--prefix=$us_u/"
+      u_sweep_twice "$us_dir/$us_n.json" "$us_w" "$us_u"
+    else
+      [ "$us_fb" -eq 0 ] || u_sweep_twice "" "$us_w" "$us_u"
+      u_sweep_call "$us_dir/$us_n.json" "$us_w" "--prefix=$us_u/"
+    fi
+    rm -rf "$U_LOCK" 2>/dev/null
+    U_LOCK=""
+    u_put "$us_dir/sweep.tsv" '%s\t%s\t%s\n' "$us_k" "$us_u" "$us_n.json"
+  done < "$U_SCR/sweep.units"
+  if [ "$1" = --all ]; then
+    us_n=$((us_n + 1))
+    u_sweep_call "$us_dir/$us_n.json" "the top of the roots" --loose
+    u_put "$us_dir/sweep.tsv" 'top\t-\t%s\n' "$us_n.json"
+  fi
+  if [ -n "$us_del" ]; then us_m=delete; else us_m=move; fi
+  if [ -n "$us_dry" ]; then us_d=true; else us_d=false; fi
+  printf '{"mode":"%s","dry_run":%s,"calls":%s}\n' "$us_m" "$us_d" "$us_n"
+}
+
+# u_sweep_state: the guard before any walk or write: the installed unit declaration, as the
+# storage core's data reader answers it (the reader the driver reads the document rules with),
+# declares the state unsearched, an unsearched line naming <unit>/state; without it every
+# unit's state is a key outside the document rules, which the sweep would take, so it refuses
+# rc 1; a declaration the reader cannot answer refuses rc 2
+u_sweep_state() {
+  uss_sd=$(store_lib_data) || u_refuse 2 ERR_DRIVER_NOT_FOUND "the storage core data reader is not installed, so the sweep cannot read the unit declaration"
+  store_lib_ns unit.sweep 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "the unit module's namespace cannot be found, so the sweep cannot read the unit declaration"
+  u_new "$U_SCR/sweep.decl"
+  CTX_STORE_WORKSPACE=$(store_lib_root) "$uss_sd" "$STORE_LIB_NS" --with-unsearched > "$U_SCR/sweep.decl" 2>/dev/null < /dev/null \
+    || u_refuse 2 ERR_STORAGE_READ "the installed unit declaration cannot be read, so the sweep cannot rule out taking the states; it swept nothing"
+  LC_ALL=C awk -F '\t' '$1 == "@unsearched" && $2 ~ /^<[A-Za-z][A-Za-z0-9_]*>\/state$/ { f = 1 } END { exit !f }' "$U_SCR/sweep.decl" \
+    || u_refuse 1 ERR_INVALID_ARGUMENT "the installed unit declaration does not declare the state unsearched, so the sweep would take every unit's state for a key outside the document rules; it swept nothing (install the whole unit module first)"
+}
+
+# u_sweep_twice <answer file or empty> <what> <segment>: the both roots guard of one segment:
+# the keys of the deprecated root that the root holds too (the fallback's keys the root
+# shadows) read from a dry run answer, the segment's own (a dry run) or, empty, one asked here
+# (a run, before it acts); any refuses rc 1 ERR_ENTITY_EXISTS naming the segment. A fallback
+# root that is absent, not declared, or not walked holds no such key, so a run asks no more
+# dry runs after one answer shows it (us_fb 0)
+u_sweep_twice() {
+  ust_f=$1
+  if [ -z "$ust_f" ]; then
+    ust_f="$U_SCR/sweep.twice.json"
+    u_sweep_call "$ust_f" "$2" "--prefix=$3/" --dry-run
+  fi
+  store_lib_flat store.sweep "$ust_f" 2>/dev/null || u_refuse 2 ERR_STORAGE_READ "$2: the storage layer sweep answer cannot be read"
+  ust_v=$(LC_ALL=C awk '
+    index($0, "fallback.state=") == 1 { st = substr($0, length("fallback.state=") + 1) }
+    index($0, "fallback.kinds.shadowed_keys.count:") == 1 { n = substr($0, length("fallback.kinds.shadowed_keys.count:") + 1) + 0 }
+    END { printf "%s %.0f\n", (st == "" ? "none" : st), n + 0 }' "$ust_f.flat")
+  rm -f "$ust_f.flat"
+  [ "${ust_v% *}" = walked ] || us_fb=0
+  ust_n=${ust_v#* }
+  [ "$ust_n" -eq 0 ] && return 0
+  if [ "$ust_n" -eq 1 ]; then ust_w="1 key"; else ust_w="$ust_n keys"; fi
+  u_refuse 1 ERR_ENTITY_EXISTS "$2: key prefix '$3/' is held in both roots of namespace '$STORE_LIB_NS', so the sweep would take the deprecated root's copy of $ust_w the root holds too; it swept nothing of it (ctx unit migrate refuses it too)"
+}
+
+# u_sweep_call <answer file> <what> <scope flag> [--dry-run]: one storage layer sweep of the
+# run (its dry run, delete, and stamp flags; a trailing --dry-run asks a dry run of a run's
+# segment, no stamp), the answer in the file; a refusal writes the items it swept before it
+# into SW_DIR/stop and is the function's one line naming what it swept, carrying the storage
+# layer's message and code, with its rc
+u_sweep_call() {
+  u_new "$1" "$U_SCR/sweep.err"
+  if [ "${4:-}" = --dry-run ]; then
+    # shellcheck disable=SC2086
+    store_sweep --dry-run $us_del "$3" > "$1" 2> "$U_SCR/sweep.err" < /dev/null
+  else
+    # shellcheck disable=SC2086
+    store_sweep $us_dry $us_del $us_stamp "$3" > "$1" 2> "$U_SCR/sweep.err" < /dev/null
+  fi
+  usc_rc=$?
+  [ "$usc_rc" -eq 0 ] && return 0
+  usc_msg=$(USR_P="storage.sweep: error: " LC_ALL=C awk 'NR == 1 { f = $0 } m == "" && index($0, ENVIRON["USR_P"]) == 1 { m = substr($0, length(ENVIRON["USR_P"]) + 1) } END { if (m == "") m = f; print m }' "$U_SCR/sweep.err" 2>/dev/null)
+  [ -n "$usc_msg" ] || usc_msg="the storage layer sweep failed (ERR_STORAGE_WRITE)"
+  usc_done=$(printf '%s\n' "$usc_msg" | LC_ALL=C sed -n 's/.*(\([0-9][0-9]*\) items swept before it).*/\1/p')
+  { printf '%s\n' "${usc_done:-0}" > "$us_dir/stop"; } 2>/dev/null
+  printf '%s: error: %s: %s\n' "$FN" "$2" "$usc_msg" >&2
+  exit "$usc_rc"
+}
+
 # u_mig_map <unit>: every artifact value of one unit read as stored, the engine's map
 # (mg.map), its input list (mg.files), and the write back keys (mg.keys) staged; um_n the
 # artifact count
@@ -836,6 +990,7 @@ u_mig_residual() {
 # write, and the sweep is the human's choice; the sweep itself prints none
 u_warn() {
   [ "$cmd" = unit.migrate ] && return 0
+  [ "$cmd" = unit.sweep ] && return 0
   [ -n "$U_SCR" ] && [ -s "$U_SCR/notice" ] || return 0
   grep -q 'was read from its deprecated fallback root' "$U_SCR/notice" 2>/dev/null || return 0
   printf 'WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses\n' >&2
@@ -1409,6 +1564,9 @@ case "$cmd" in
     ;;
   unit.migrate)
     u_unit_migrate "$@"
+    ;;
+  unit.sweep)
+    u_unit_sweep "$@"
     ;;
   *)
     printf '%s: error: unknown function '\''%s'\'' (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$cmd" >&2

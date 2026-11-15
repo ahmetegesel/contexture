@@ -21,6 +21,8 @@
 #   store.roots
 #   store.leftovers                                                 (the read only leftovers probe)
 #   store.leftovers.text <answer> <summary|kinds>                   (its one text form)
+#   store.sweep [--dry-run] [--delete] [--stamp=<s>] [--prefix=<p>|--loose]   (the sweep)
+#   store.sweep.text <answer> <summary|kinds|close> [<answer>...]   (its one text form)
 #   lib.utf8_ok <string>, lib.utf8_file_ok <file>                   (the shared checks)
 #   lib.ref_ok <label> <ref>
 #   lib.lock, lib.unlock                                            (the library lock)
@@ -316,46 +318,77 @@ store_roots() {
   printf '%s\n' "$sr_out" | LC_ALL=C awk -F '\t' '{ print $1 "\t" $2; if ($3 != "") print $1 "\t" $3 }'
 }
 
-# store_leftovers: what the caller's own namespace's storage holds beyond its keys, the
+# store_leftovers: what the caller's own namespace's storage holds beyond its documents, the
 # configured driver's read only probe storage.leftovers, its one JSON line on stdout (a driver
 # that keeps no file tree answers its unknown function line rc 2, passed through)
 store_leftovers() { store_lib_own storage.leftovers "$@"; }
 
-# store_leftovers_text <answer> <summary|kinds>: the probe's answer file as text naming no
-# folder, through the storage core's flattener found beside the resolver (then under the
-# drawer, then in the base mirror). summary prints one line per root, root: and fallback
-# root:, its state (absent, a symbolic link, unreadable, none declared) or its keys, its
-# entries, and every kind it found with its count and bytes; kinds prints one line per root
-# and kind found, <root label>: <kind>: <count> (<bytes> bytes), a root it cannot walk on
-# one line too, and nothing when nothing lies beyond the keys. The flattened answer stages
-# at <answer>.flat, beside the caller's file; a malformed answer refuses rc 2 with one line
-store_leftovers_text() {
-  slt_json=""
-  if slt_r=$(store_lib_resolver); then slt_json="${slt_r%/*}/json.awk"; fi
-  slt_root=$(store_lib_root)
-  for slt_c in "$slt_json" "$slt_root/.contexture/storage/scripts/json.awk" "$slt_root/base/.contexture/storage/scripts/json.awk"; do
-    if [ -n "$slt_c" ] && [ -f "$slt_c" ]; then slt_json=$slt_c; break; fi
-    slt_json=""
+# store_sweep [--dry-run] [--delete] [--stamp=<stamp>] [--prefix=<prefix> | --loose]: the
+# configured driver's storage.sweep over the caller's own namespace, its one JSON line on
+# stdout: every leftover of the namespace's roots, the keys outside its document rules among
+# them, moved into a stamped sweep folder under the drawer's backups folder, or removed with
+# --delete, a key folder holding no document going as one item; a folder it cannot read or
+# enter is left untouched and counted as left, a name holding a newline refuses the run, and
+# a dry run writes nothing (a driver that keeps no file tree answers its unknown function line
+# rc 2, passed through)
+store_sweep() { store_lib_own storage.sweep "$@"; }
+
+# STORE_KINDS_AWK: the leftover kinds and their text names, in the answers' fixed order, the
+# one table the probe's and the sweep's text forms read (kinds_init fills KIND, NK, and NAME)
+STORE_KINDS_AWK='
+function kinds_init() {
+  NK = split("stray_files nonkey_folders empty_folders links special_files unreadable_folders remnants shadowed_keys outside_keys newline_names", KIND, " ")
+  NAME["stray_files"] = "stray files"; NAME["nonkey_folders"] = "folders outside the key shape"
+  NAME["empty_folders"] = "empty folders"; NAME["links"] = "symbolic links"
+  NAME["special_files"] = "special files"; NAME["unreadable_folders"] = "unreadable folders"
+  NAME["remnants"] = "lock or write remnants"; NAME["shadowed_keys"] = "keys the root shadows"
+  NAME["outside_keys"] = "keys outside the document rules"; NAME["newline_names"] = "names holding a newline"
+}
+function ld(line,   p) {
+  if (!match(line, /[=:#]/)) return
+  p = substr(line, 1, RSTART - 1)
+  V[p] = substr(line, RSTART + 1)
+}
+'
+
+# store_lib_flat <label> <answer>: the answer flattened to <answer>.flat through the storage
+# core's flattener found beside the resolver (then under the drawer, then in the base
+# mirror); rc 2 with one <label> line when the flattener is missing or the answer is malformed
+store_lib_flat() {
+  slf_json=""
+  if slf_r=$(store_lib_resolver); then slf_json="${slf_r%/*}/json.awk"; fi
+  slf_root=$(store_lib_root)
+  for slf_c in "$slf_json" "$slf_root/.contexture/storage/scripts/json.awk" "$slf_root/base/.contexture/storage/scripts/json.awk"; do
+    if [ -n "$slf_c" ] && [ -f "$slf_c" ]; then slf_json=$slf_c; break; fi
+    slf_json=""
   done
-  if [ -z "$slt_json" ]; then
-    printf 'store.leftovers: error: the storage core flattener is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+  if [ -z "$slf_json" ]; then
+    printf '%s: error: the storage core flattener is not installed (ERR_DRIVER_NOT_FOUND)\n' "$1" >&2
     return 2
   fi
+  if ! LC_ALL=C awk -f "$slf_json" < "$2" > "$2.flat" 2>/dev/null; then
+    rm -f "$2.flat"
+    printf '%s: error: the %s answer is malformed (ERR_STORAGE_READ)\n' "$1" "${1#store.}" >&2
+    return 2
+  fi
+}
+
+# store_leftovers_text <answer> <summary|kinds>: the probe's answer file as text naming no
+# folder, through the storage core's flattener. summary prints one line per root, root: and
+# fallback root:, its state (absent, a symbolic link, unreadable, none declared) or its
+# documents, its entries, and every kind it found beyond the documents with its count and
+# bytes (the keys outside the document rules among them); kinds prints one line per root
+# and kind found, <root label>: <kind>: <count> (<bytes> bytes), a root it cannot walk on
+# one line too, and nothing when nothing lies beyond the documents. The flattened answer
+# stages at <answer>.flat, beside the caller's file; a malformed answer refuses rc 2 with
+# one line
+store_leftovers_text() {
   case "${2:-}" in
     summary|kinds) ;;
     *) printf "store.leftovers: error: the text form is summary or kinds: '%s' (ERR_INVALID_ARGUMENT)\n" "${2:-}" >&2; return 1 ;;
   esac
-  if ! LC_ALL=C awk -f "$slt_json" < "$1" > "$1.flat" 2>/dev/null; then
-    rm -f "$1.flat"
-    printf 'store.leftovers: error: the leftovers answer is malformed (ERR_STORAGE_READ)\n' >&2
-    return 2
-  fi
-  SLT_MODE=$2 LC_ALL=C awk '
-    function ld(line,   p) {
-      if (!match(line, /[=:#]/)) return
-      p = substr(line, 1, RSTART - 1)
-      V[p] = substr(line, RSTART + 1)
-    }
+  store_lib_flat store.leftovers "$1" || return $?
+  SLT_MODE=$2 LC_ALL=C awk "$STORE_KINDS_AWK"'
     function root(r, label,   st, i, k, o, n) {
       st = V[r ".state"]
       if (st == "walked") {
@@ -368,7 +401,7 @@ store_leftovers_text() {
           else o = o (o == "" ? "" : ", ") sprintf("%s %.0f (%.0f bytes)", NAME[k], V[r ".kinds." k ".count"], V[r ".kinds." k ".bytes"])
         }
         if (mode == "summary") {
-          printf "%s: %.0f keys in %.0f entries", label, V[r ".keys"], V[r ".entries"]
+          printf "%s: %.0f documents in %.0f entries", label, V[r ".documents"], V[r ".entries"]
           if (n == 0) printf ", nothing beyond them\n"
           else printf "; beyond them: %s\n", o
         }
@@ -377,20 +410,103 @@ store_leftovers_text() {
       else if (mode == "summary" && st == "absent") printf "%s: absent (not made yet)\n", label
       else if (mode == "summary" && st == "none") printf "%s: none declared\n", label
     }
-    BEGIN {
-      mode = ENVIRON["SLT_MODE"]
-      NK = split("stray_files nonkey_folders empty_folders links special_files unreadable_folders remnants shadowed_keys newline_names", KIND, " ")
-      NAME["stray_files"] = "stray files"; NAME["nonkey_folders"] = "folders outside the key shape"
-      NAME["empty_folders"] = "empty folders"; NAME["links"] = "symbolic links"
-      NAME["special_files"] = "special files"; NAME["unreadable_folders"] = "unreadable folders"
-      NAME["remnants"] = "lock or write remnants"; NAME["shadowed_keys"] = "keys the root shadows"
-      NAME["newline_names"] = "names holding a newline"
-    }
+    BEGIN { mode = ENVIRON["SLT_MODE"]; kinds_init() }
     { ld($0) }
     END { root("root", "root"); root("fallback", "fallback root") }' "$1.flat"
   slt_rc=$?
   rm -f "$1.flat"
   return "$slt_rc"
+}
+
+# store_sweep_text <answer> <summary|kinds|close> [<answer>...]: a sweep answer as text naming
+# no folder, through the storage core's flattener. summary prints one line for the first
+# answer, every kind it swept over both roots with its count and bytes and the folders it
+# emptied, or nothing beyond the documents, then the unreadable folders it left untouched when
+# any, and a root it could not walk named; kinds prints one line per root and kind swept,
+# <root label>: <kind>: <count> (<bytes> bytes), then <root label>: folders emptied: <n> and
+# <root label>: unreadable folders left: <n> when any, a root it cannot walk on one line, and
+# nothing when nothing was swept or left; close prints the one closing line over every answer
+# given, the items, bytes, emptied folders, and folders left summed: swept: moved ... into the
+# backup stamped <stamp>, swept: deleted ... with no backup kept, a dry run's would, or nothing
+# beyond the documents, each naming the unreadable folders left untouched when any. The
+# flattened answers stage beside the caller's files; a malformed answer refuses rc 2
+store_sweep_text() {
+  sst_first=$1
+  sst_mode=${2:-}
+  case "$sst_mode" in
+    summary|kinds|close) ;;
+    *) printf "store.sweep: error: the text form is summary, kinds, or close: '%s' (ERR_INVALID_ARGUMENT)\n" "$sst_mode" >&2; return 1 ;;
+  esac
+  shift 2
+  set -- "$sst_first" "$@"
+  [ "$sst_mode" = close ] || set -- "$sst_first"
+  sst_n=$#
+  sst_i=0
+  while [ "$sst_i" -lt "$sst_n" ]; do
+    store_lib_flat store.sweep "$1" || return $?
+    set -- "$@" "$1.flat"
+    shift
+    sst_i=$((sst_i + 1))
+  done
+  SST_MODE=$sst_mode LC_ALL=C awk "$STORE_KINDS_AWK"'
+    function plural(n, one, many) { return sprintf("%.0f %s", n, n == 1 ? one : many) }
+    function walked(r) { return V[r ".state"] == "walked" }
+    function leaving(n) { return sprintf("leaving %s untouched (%s rights need fixing)", plural(n, "unreadable folder", "unreadable folders"), n == 1 ? "its" : "their") }
+    function answer_end(   r, i, k, c, b, o, n, label) {
+      if (V["mode"] == "") return
+      nans++
+      if (mode0 == "") mode0 = V["mode"]
+      if (V["dry_run"] == "true") dry = 1
+      if (stamp == "" && V["stamp"] != "" && V["stamp"] != "null") stamp = V["stamp"]
+      for (i = 1; i <= NK; i++) { k = KIND[i]; S[k] = 0; SB[k] = 0 }
+      e = 0; l = 0; o = ""; n = 0; skip = ""
+      split("root fallback", R, " ")
+      for (j = 1; j <= 2; j++) {
+        r = R[j]; label = (r == "root" ? "root" : "fallback root")
+        if (V[r ".state"] == "unreadable") { skip = skip "; " label ": unreadable, so its content cannot be swept"; if (mode == "kinds") printf "%s: unreadable, so its content cannot be swept\n", label; continue }
+        if (V[r ".state"] == "link") { skip = skip "; " label ": a symbolic link, which the store does not walk"; if (mode == "kinds") printf "%s: a symbolic link, which the store does not walk\n", label; continue }
+        if (!walked(r)) continue
+        for (i = 1; i <= NK; i++) {
+          k = KIND[i]; c = V[r ".kinds." k ".count"] + 0; b = V[r ".kinds." k ".bytes"] + 0
+          if (c == 0) continue
+          S[k] += c; SB[k] += b; TI += c; TB += b
+          if (mode == "kinds") printf "%s: %s: %.0f (%.0f bytes)\n", label, NAME[k], c, b
+        }
+        e += V[r ".emptied"] + 0
+        l += V[r ".left"] + 0
+        if (mode == "kinds" && V[r ".emptied"] + 0 > 0) printf "%s: folders emptied: %.0f\n", label, V[r ".emptied"]
+        if (mode == "kinds" && V[r ".left"] + 0 > 0) printf "%s: unreadable folders left: %.0f\n", label, V[r ".left"]
+      }
+      TE += e; TL += l
+      if (mode == "summary") {
+        for (i = 1; i <= NK; i++) { k = KIND[i]; if (S[k] == 0) continue; n++; o = o (o == "" ? "" : ", ") sprintf("%s %.0f (%.0f bytes)", NAME[k], S[k], SB[k]) }
+        if (n == 0 && l == 0) printf "nothing beyond the documents%s\n", skip
+        else if (n == 0) printf "nothing swept, %s%s\n", leaving(l), skip
+        else printf "%s; %s emptied%s%s\n", o, plural(e, "folder", "folders"), (l ? ", " leaving(l) : ""), skip
+      }
+      split("", V)
+    }
+    BEGIN { mode = ENVIRON["SST_MODE"]; kinds_init() }
+    FNR == 1 && NR > 1 { answer_end() }
+    { ld($0) }
+    END {
+      answer_end()
+      if (mode != "close") exit 0
+      verb = (mode0 == "delete" ? "delete" : "move")
+      lt = (TL ? ", " leaving(TL) : "")
+      if (TI == 0 && TL == 0) {
+        if (dry) print "dry run: nothing beyond the documents; nothing to sweep"
+        else print "swept: nothing beyond the documents; nothing moved"
+      } else if (TI == 0) {
+        if (dry) printf "dry run: nothing to sweep, %s; nothing written\n", leaving(TL)
+        else printf "swept: nothing moved, %s\n", leaving(TL)
+      } else if (dry) printf "dry run: would %s %s (%.0f bytes) and empty %s%s; nothing written\n", verb, plural(TI, "item", "items"), TB, plural(TE, "folder", "folders"), lt
+      else if (verb == "delete") printf "swept: deleted %s (%.0f bytes) with no backup kept and emptied %s%s\n", plural(TI, "item", "items"), TB, plural(TE, "folder", "folders"), lt
+      else printf "swept: moved %s (%.0f bytes) into the backup stamped %s and emptied %s%s\n", plural(TI, "item", "items"), TB, stamp, plural(TE, "folder", "folders"), lt
+    }' "$@"
+  sst_rc=$?
+  rm -f "$@"
+  return "$sst_rc"
 }
 
 # store_batch: the transactional batch over the caller's namespace; the action list travels

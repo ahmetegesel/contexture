@@ -9,9 +9,9 @@ import { DRIVERS, fts5Available, stage } from '../support/stage';
 import { store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
-const KINDS = ['stray_files', 'nonkey_folders', 'empty_folders', 'links', 'special_files', 'unreadable_folders', 'remnants', 'shadowed_keys', 'newline_names'] as const;
+const KINDS = ['stray_files', 'nonkey_folders', 'empty_folders', 'links', 'special_files', 'unreadable_folders', 'remnants', 'shadowed_keys', 'outside_keys', 'newline_names'] as const;
 type Kind = (typeof KINDS)[number];
-type Root = { state: string; entries?: number; keys?: number; kinds?: Record<Kind, { count: number; bytes: number }> };
+type Root = { state: string; entries?: number; keys?: number; documents?: number; kinds?: Record<Kind, { count: number; bytes: number }> };
 
 function plant(sb: string, rel: string, bytes: string): void {
   mkdirSync(dirname(join(sb, rel)), { recursive: true });
@@ -43,7 +43,7 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
     expect(await leftovers(sb, 'unit')).toEqual({
       driver: 'posix',
       namespace: 'unit',
-      root: { state: 'walked', entries: 6, keys: 3, kinds: kinds() },
+      root: { state: 'walked', entries: 6, keys: 3, documents: 3, kinds: kinds() },
       fallback: { state: 'absent' },
     });
   });
@@ -67,9 +67,26 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
       state: 'walked',
       entries: 22,
       keys: 4,
-      kinds: kinds({ stray_files: [3, 11], nonkey_folders: [1, 2], empty_folders: [2, 0], links: [1, 0], special_files: [1, 0], remnants: [2, 6] }),
+      documents: 3,
+      kinds: kinds({ stray_files: [3, 11], nonkey_folders: [1, 2], empty_folders: [2, 0], links: [1, 0], special_files: [1, 0], remnants: [2, 6], outside_keys: [1, 55] }),
     });
     expect(a.fallback).toEqual({ state: 'absent' });
+  });
+
+  it('[the-engine-r-lf7vr] splits the keys into documents and keys outside the document rules: the state (an unsearched document) and the lane artifacts are documents, lane scratch and a stray note under a unit folder are keys outside them', async () => {
+    const sb = await keyed('leftovers-split');
+    plant(sb, join(RECORD_ROOT, 'u1/lanes/l1/scratch/notes.md'), 'four');
+    plant(sb, join(RECORD_ROOT, 'u1/notes.md'), 'ab');
+    plant(sb, join(RECORD_ROOT, 'u1/lanes/l1/extra.md'), 'xyz');
+    expect((await leftovers(sb, 'unit')).root).toEqual({ state: 'walked', entries: 10, keys: 6, documents: 3, kinds: kinds({ outside_keys: [3, 9] }) });
+  });
+
+  it('[the-engine-r-lf7vr] a namespace declaring no document rule and no unsearched line counts every key a document', async () => {
+    const sb = stage('posix', 'leftovers-nodocs');
+    dataFile(sb, 'modules', 'probe', 'root: probe-root\nkey: <c>/<id>\n');
+    const s = store(sb, 'posix');
+    for (const key of ['c/a', 'c/b', 'd/x']) answer(await s.put('probe', key, 'v\n'), 'store.put');
+    expect((await leftovers(sb, 'probe')).root).toEqual({ state: 'walked', entries: 5, keys: 3, documents: 3, kinds: kinds() });
   });
 
   it('[the-engine-r-lf7vr] a folder holding no key counts once with everything below it rolled in, a lock folder as a remnant', async () => {
@@ -83,12 +100,12 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
     expect(a.root.keys).toBe(3);
   });
 
-  it('[the-engine-r-lf7vr] a name holding a newline is never parsed: it counts as its own kind with the bytes at or below it, and a folder named to forge a listing line for a key forges nothing', async () => {
+  it('[the-engine-r-lf7vr] a name holding a newline is never parsed: it counts as its own kind with the bytes at or below it, and a folder named to forge a listing line for a document forges nothing', async () => {
     const sb = await keyed('leftovers-newline');
     plant(sb, join(RECORD_ROOT, 'q\nd\t.', 'u1/state.md'), 'xyz');
     plant(sb, join(RECORD_ROOT, 'u1/a\nb'), 'ab');
     plant(sb, join(RECORD_ROOT, 'u1/notes.txt'), 'stray');
-    expect((await leftovers(sb, 'unit')).root).toEqual({ state: 'walked', entries: 9, keys: 3, kinds: kinds({ stray_files: [1, 5], newline_names: [2, 5] }) });
+    expect((await leftovers(sb, 'unit')).root).toEqual({ state: 'walked', entries: 9, keys: 3, documents: 3, kinds: kinds({ stray_files: [1, 5], newline_names: [2, 5] }) });
   });
 
   it.skipIf(ROOT_USER)('[the-engine-r-lf7vr] a folder the walk cannot read counts as unreadable, and a root it cannot read answers unreadable', async ({ onTestFinished }) => {
@@ -101,6 +118,14 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
     expect((await leftovers(other, 'unit')).root).toEqual({ state: 'unreadable' });
   });
 
+  it.skipIf(ROOT_USER)('[the-engine-r-lf7vr] a folder holding an unreadable folder is opened: the unreadable folder counts as itself and each entry beside it apart, never rolled into one folder', async ({ onTestFinished }) => {
+    const sb = await keyed('leftovers-unreadable-inside');
+    plant(sb, join(RECORD_ROOT, 'u1/holder/inner/g.txt'), 'deep');
+    plant(sb, join(RECORD_ROOT, 'u1/holder/x.txt'), 'beside');
+    chmodPlant(join(sb, RECORD_ROOT, 'u1/holder/inner'), 0o000, 0o755, onTestFinished);
+    expect((await leftovers(sb, 'unit')).root.kinds).toEqual(kinds({ stray_files: [1, 6], unreadable_folders: [1, 0] }));
+  });
+
   it('[the-engine-r-lf7vr] walks the fallback root apart: its leftovers, and a key the root shadows counted as shadowed, never as a key', async () => {
     const sb = await keyed('leftovers-fallback');
     plant(sb, join(FALLBACK_ROOT, 'u1/state.md'), 'shadow\n');
@@ -109,7 +134,7 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
     mkdirSync(join(sb, FALLBACK_ROOT, '.lock'));
     const a = await leftovers(sb, 'unit');
     expect(a.root.kinds).toEqual(kinds());
-    expect(a.fallback).toEqual({ state: 'walked', entries: 8, keys: 1, kinds: kinds({ nonkey_folders: [1, 4], remnants: [1, 0], shadowed_keys: [1, 7] }) });
+    expect(a.fallback).toEqual({ state: 'walked', entries: 8, keys: 1, documents: 1, kinds: kinds({ nonkey_folders: [1, 4], remnants: [1, 0], shadowed_keys: [1, 7] }) });
   });
 
   it('[the-engine-r-lf7vr] a namespace with no fallback reads none, a root not made reads absent, a linked root reads link, and the store namespace takes its own pattern', async () => {
@@ -120,7 +145,7 @@ describe('the leftovers probe on posix', { concurrent: true }, () => {
     mkdirSync(join(sb, 'probe-root/dropped'));
     plant(sb, 'probe-root/c/x/deep', 'three segments');
     plant(sb, 'probe-root/top', 'one');
-    expect((await leftovers(sb, 'probe')).root).toEqual({ state: 'walked', entries: 6, keys: 1, kinds: kinds({ stray_files: [1, 3], nonkey_folders: [1, 14], empty_folders: [1, 0] }) });
+    expect((await leftovers(sb, 'probe')).root).toEqual({ state: 'walked', entries: 6, keys: 1, documents: 1, kinds: kinds({ stray_files: [1, 3], nonkey_folders: [1, 14], empty_folders: [1, 0] }) });
     const linked = stage('posix', 'leftovers-link');
     dataFile(linked, 'modules', 'probe', 'root: probe-root\nkey: <c>/<id>\n');
     mkdirSync(join(linked, 'elsewhere'));

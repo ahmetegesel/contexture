@@ -34,6 +34,10 @@
 #         default line)
 #   document: <key-pattern> <section> <entity-type> <head-marker|->          (optional;
 #         repeatable; the document-set search schema)
+#   unsearched: <key-pattern>                                                (optional;
+#         repeatable; a document the module reads that its search schema
+#         leaves out, such as the unit state; the leftovers probe and the
+#         sweep count its keys as documents)
 #   field: <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]
 #         (optional; repeatable; one declared field of the module's container, the
 #         module library's field grammar)
@@ -72,6 +76,14 @@
 # with @, and a reader that does not ask (a driver never validates fields) never sees the
 # family, so every other answer stays byte for byte as before.
 #
+# An unsearched line names the key pattern of a document the module reads that its search
+# schema leaves out (placeholders and literal segments, as a document rule's pattern), so a
+# key it names is a document without being searched. The answer carries the lines only when
+# asked: store-data <namespace> --with-unsearched (beside the other flags, in any order)
+# answers, after the document rules and before any field line, one tagged line per
+# unsearched line, @unsearched TAB <pattern>, in declaration order; the leftovers probe and
+# the sweep ask for it, every other reader never sees the family.
+#
 # The listing mode, store-data --list, answers every valid declaration in both roots, one
 # line each, the namespace (the folder's name) and its root (the namespace when none is
 # declared, or when the module is installed under an alias) separated by a tab, then the
@@ -82,7 +94,7 @@
 # answered, so a reader never takes a partial listing for the whole.
 #
 # Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, an argument
-# beyond the namespace, --with-fallback, and --with-fields or beyond the listing flag, or a
+# beyond the namespace, --with-fallback, --with-fields, and --with-unsearched or beyond the listing flag, or a
 # listing that left a module out; 2 the
 # module drawer is absent or unreadable, the install record area an extension module's
 # root needs cannot be read, or the field validator a field line needs is missing or its
@@ -106,6 +118,7 @@ sd_env() {
 SD_LIST=0
 SD_WITH_FB=0
 SD_WITH_FIELDS=0
+SD_WITH_UNSEARCHED=0
 SD_NAMESPACE="${1:-}"
 case "$SD_NAMESPACE" in
   --list)
@@ -118,8 +131,10 @@ case "$SD_NAMESPACE" in
         SD_WITH_FB=1
       elif [ "$2" = --with-fields ] && [ "$SD_WITH_FIELDS" -eq 0 ]; then
         SD_WITH_FIELDS=1
+      elif [ "$2" = --with-unsearched ] && [ "$SD_WITH_UNSEARCHED" -eq 0 ]; then
+        SD_WITH_UNSEARCHED=1
       else
-        sd_fail "unexpected argument '$2' (store-data <namespace> [--with-fallback] [--with-fields], or store-data --list)"
+        sd_fail "unexpected argument '$2' (store-data <namespace> [--with-fallback] [--with-fields] [--with-unsearched], or store-data --list)"
       fi
       shift
     done
@@ -196,7 +211,7 @@ sd_rmode=$1
 sd_rchecked=$2
 shift 2
 SD_WANT_NS="$sd_pns" SD_PATH="$sd_ppath" SD_FNAME="${sd_ppath##*/}" SD_WITH_FB="$SD_WITH_FB" \
-  SD_WITH_FIELDS="$SD_WITH_FIELDS" SD_MODE="$sd_rmode" SD_CHECKED="$sd_rchecked" LC_ALL=C awk "$SD_AWK" "$@"
+  SD_WITH_FIELDS="$SD_WITH_FIELDS" SD_WITH_UNSEARCHED="$SD_WITH_UNSEARCHED" SD_MODE="$sd_rmode" SD_CHECKED="$sd_rchecked" LC_ALL=C awk "$SD_AWK" "$@"
 }
 
 # sd_fields_check <field lines>: the field lines, one per line in file order, checked by the
@@ -321,6 +336,7 @@ BEGIN {
   seen_search = seen_format = seen_fields = seen_title = seen_snippet = 0
   ns = root = suffix = key = changes = search = format = fields = title = snippet = fb = ""
   docs = ""
+  uns = ""
   doc_count = 0
   nfl = 0
   lineno = 0
@@ -384,6 +400,11 @@ FILENAME != path {
     if (!entity_ok(dent)) fail("line " lineno ": malformed document entity type '\''" dent "'\''")
     if (!marker_ok(dmark)) fail("line " lineno ": malformed document head marker '\''" dmark "'\''")
     docs = docs dpat "\t" dsec "\t" dent "\t" dmark "\n"
+  } else if (field == "unsearched") {
+    n = split(value, p, /[[:space:]]+/)
+    if (n != 1) fail("line " lineno ": an unsearched line takes one key pattern")
+    if (!doc_pattern_ok(p[1])) fail("line " lineno ": malformed unsearched key pattern '\''" p[1] "'\''")
+    uns = uns "@unsearched\t" p[1] "\n"
   } else if (field == "field") {
     v = substr(line, c + 1)
     sub(/^[[:space:]]+/, "", v)
@@ -473,6 +494,7 @@ END {
   print snippet
   if (ENVIRON["SD_WITH_FB"] == "1") print fb
   printf "%s", docs
+  if (ENVIRON["SD_WITH_UNSEARCHED"] == "1") printf "%s", uns
   if (ENVIRON["SD_WITH_FIELDS"] == "1") for (i = 1; i <= nfl; i++) print "@field\t" fl[i]
 }
 '

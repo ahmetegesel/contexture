@@ -6,13 +6,16 @@
 # help: optional capabilities), and the storage backend health (storage.health), then the
 # help: ACTIVE unit count from the record's own listing; a listing that refuses prints
 # help: active units: unknown (<its refusal's message>), null in --json, never a count.
-# help: --leftovers adds what the record's storage holds beyond its keys (the storage
-# help: layer's read only probe over the unit namespace, a whole walk of its root and its
-# help: deprecated root): one line per root, its keys and entries and each kind found with
-# help: its count and bytes (stray files, folders outside the key shape, empty folders,
-# help: symbolic links, special files, unreadable folders, lock or write remnants, keys the
-# help: root shadows), never a path; --json adds storage.leftovers, the probe's answer, null
-# help: when it refused; a probe that refuses prints leftovers: unknown (<its message>).
+# help: --leftovers adds what the record's storage holds beyond its documents (the keys the
+# help: unit verbs read: each unit's state, backlog, knowledge, journal, and its lanes'
+# help: recipes, journals, and reports), through the storage layer's read only probe over the
+# help: unit namespace, a whole walk of its root and its deprecated root: one line per root,
+# help: its documents and entries and each kind found with its count and bytes (stray files,
+# help: folders outside the key shape, empty folders, symbolic links, special files,
+# help: unreadable folders, lock or write remnants, keys the root shadows, keys outside the
+# help: document rules such as old lane scratch), never a path; --json adds
+# help: storage.leftovers, the probe's answer, null when it refused; a probe that refuses
+# help: prints leftovers: unknown (<its message>); ctx unit migrate --sweep clears what it names.
 # help: exit codes: 0 the diagnosis printed, a part it could not read named in its own line
 # help: (a driver error, a health error, an unknown count); 1 an unrecognized option; 2 the
 # help: storage resolver missing or no scratch folder.
@@ -119,7 +122,7 @@ else
   [ -n "$active_err" ] || active_err="the record's listing did not answer"
 fi
 
-# 5. With --leftovers, what the unit namespace's storage holds beyond its keys: the storage
+# 5. With --leftovers, what the unit namespace's storage holds beyond its documents: the storage
 # layer's read only probe for the module's own namespace (the library's caller lookup names
 # it), its answer rendered by the library's one text form; a probe that refuses leaves it
 # unknown with its message, null in --json

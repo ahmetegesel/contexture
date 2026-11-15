@@ -72,29 +72,29 @@ describe.concurrent('ctx unit diagnose', () => {
     expect(JSON.parse(r.stdout).storage).toMatchObject({ health: 'error', store: 'absent' });
   });
 
-  it('[the-engine-r-lf7vr] diagnose --leftovers names what the record roots hold beyond their keys, one line per root with no path, and --json carries the probe answer', async () => {
+  it('[the-engine-r-lf7vr] diagnose --leftovers names what the record roots hold beyond their documents, one line per root with no path, and --json carries the probe answer', async () => {
     const sb = fresh(sb0);
     writeFileSync(join(sb, RECORD_ROOT, 'notes.txt'), 'five!');
     mkdirSync(join(sb, FALLBACK_ROOT, 'old'), { recursive: true });
     writeFileSync(join(sb, FALLBACK_ROOT, 'old', 'x.txt'), 'abc');
     const text = await unit(sb, 'diagnose', '--leftovers');
     expect([text.code, text.stderr]).toEqual([0, '']);
-    expect(text.stdout).toMatch(/^ {2}active units: {4}2\n {2}leftovers:\n {4}root: \d+ keys in \d+ entries; beyond them: stray files 1 \(5 bytes\)\n {4}fallback root: 0 keys in 2 entries; beyond them: folders outside the key shape 1 \(3 bytes\)\n$/m);
+    expect(text.stdout).toMatch(/^ {2}active units: {4}2\n {2}leftovers:\n {4}root: \d+ documents in \d+ entries; beyond them: stray files 1 \(5 bytes\)\n {4}fallback root: 0 documents in 2 entries; beyond them: folders outside the key shape 1 \(3 bytes\)\n$/m);
     expect(text.stdout.split('\n').filter(leaks)).toEqual([]);
     const json = await unit(sb, 'diagnose', '--leftovers', '--json');
     expect([json.code, json.stderr]).toEqual([0, '']);
     const lo = JSON.parse(json.stdout).storage.leftovers;
-    expect(lo).toMatchObject({ driver: 'posix', namespace: 'unit', root: { state: 'walked' }, fallback: { state: 'walked', entries: 2, keys: 0 } });
+    expect(lo).toMatchObject({ driver: 'posix', namespace: 'unit', root: { state: 'walked' }, fallback: { state: 'walked', entries: 2, keys: 0, documents: 0 } });
     expect(lo.root.kinds.stray_files).toEqual({ count: 1, bytes: 5 });
     expect(lo.fallback.kinds.nonkey_folders).toEqual({ count: 1, bytes: 3 });
     expect(JSON.parse(json.stdout).storage.active_units).toBe(2);
   });
 
-  it('[the-engine-r-lf7vr] diagnose without --leftovers prints no leftovers line and its --json carries no leftovers key; a clean record reads nothing beyond its keys', async () => {
+  it('[the-engine-r-lf7vr] diagnose without --leftovers prints no leftovers line and its --json carries no leftovers key; a clean record reads nothing beyond its documents', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'diagnose')).stdout).not.toContain('leftovers');
     expect(JSON.parse((await unit(sb, 'diagnose', '--json')).stdout).storage).not.toHaveProperty('leftovers');
-    expect((await unit(sb, 'diagnose', '--leftovers')).stdout).toMatch(/^ {4}root: \d+ keys in \d+ entries, nothing beyond them\n {4}fallback root: absent \(not made yet\)\n$/m);
+    expect((await unit(sb, 'diagnose', '--leftovers')).stdout).toMatch(/^ {4}root: \d+ documents in \d+ entries, nothing beyond them\n {4}fallback root: absent \(not made yet\)\n$/m);
   });
 
   it('[the-engine-r-lf7vr] diagnose --leftovers reads a probe that refuses as unknown with its message, null in --json, every other line printed, rc 0', async () => {

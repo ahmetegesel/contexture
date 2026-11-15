@@ -63,8 +63,15 @@ The data script answers the 35 record operations: 13 session (`create`, `list`, 
 `get`), 4 entry (`record`, `get`, `list`, `closure`), 6 finding (`add`, `update`,
 `supersede`, `drop`, `get`, `list`), and 4 lane (`create`, `record`, `write_report`,
 `get`), plus `search.query`. `capability` and `storage.health` stay the driver's, and so
-does the posix driver's `storage.leftovers`, which `diagnose --leftovers` reads through the
-storage layer's library (`store_leftovers`) for the unit namespace.
+do the posix driver's `storage.leftovers`, which `diagnose --leftovers` reads through the
+storage layer's library (`store_leftovers`) for the unit namespace, and `storage.sweep`,
+which `migrate --sweep` runs through `store_sweep`. The data file declares the record's
+documents: the document rules name the backlog, the knowledge, the journal, and each
+lane's recipe, journal, and report, and `unsearched: <unit>/state` names the state, a
+document every verb reads that no search returns; so the probe and the sweep count
+exactly the keys the verbs read as documents, and every other key the pattern admits
+(old lane scratch written as `.md` files under a unit, say) as a key outside the document
+rules.
 
 The reads of one unit fetch the exact keys with `store.get` (state, then the named
 backlog, journal, and knowledge), no list: a part the storage layer does not hold is absent, and
@@ -195,6 +202,50 @@ root its move empties, and an empty fallback root when it answers `none`, so `--
 a fully moved store prints `migrated: 0` and leaves no empty deprecated root (a store
 listing no unit reaches no promotion, and its fallback root stays). `ctx unit migrate` is
 its verb.
+
+`unit.sweep [--dry-run] [--delete] <unit>...|--all`, outside the 35 operations too, is the
+sweep behind `ctx unit migrate --sweep`. Before any walk or write it reads the installed
+unit declaration through the storage core's data reader (`store-data unit
+--with-unsearched`, the reader the driver takes the document rules from) and refuses rc 1
+`ERR_INVALID_ARGUMENT` unless it declares the state unsearched (`unsearched:
+<unit>/state`), since without that line every unit's state is a key outside the document
+rules, which the sweep would take (a partial payload sync, say); a declaration the reader
+cannot answer refuses rc 2. Each named unit (one the store holds), or with `--all` every
+first key segment `store.list` answers in either root (a unit when it holds a
+`<segment>/state` key, else a key segment outside the units), is swept under its unit lock
+through `store_sweep --prefix=<unit>/` (that folder of both roots), then with `--all` the
+top of each root through `store_sweep --loose`, so the two cover both roots whole; one
+stamp (`--stamp=<YYYYMMDD-HHMMSS>-<pid>`, none for a dry run or a delete) names the run's
+backup for every call. A segment whose keys the store holds in both roots (a key of the
+deprecated root that the root holds too, the answer's `shadowed_keys` of the fallback root)
+refuses rc 1 `ERR_ENTITY_EXISTS` before anything of it is swept, the dry run alike, as the
+migration's root move refuses such a unit (`u_sweep_twice`): a dry run reads the count from
+its own answer, and a run asks a dry run of the segment first while the deprecated root is
+walked (one answer showing it absent, undeclared, or not walked ends the asking). It
+rewrites no ref and runs no other migration, so a CLOSED unit is reached. Each storage
+layer answer lands in the folder the verb names (`SW_DIR`, the verb's scratch) as
+`<n>.json`, one `sweep.tsv` line naming the segment's kind (`unit`, `prefix`, or `top` for
+the top of the roots), its name, and the file; `SW_DIR/run` holds the run's stamp once the
+sweep starts, a refused storage layer call writes `SW_DIR/stop` (the items it swept before
+it), and the answer is `{"mode":"move|delete","dry_run":<bool>,"calls":N}`. The verb
+renders each answer through the library's `store_sweep_text` (`summary` per line, labelled
+`unit <unit>:`, `outside the units, key segment <segment>:`, or `outside the units:`, and
+`close` once over them all). The first refusal stops the run naming the unit
+(`unit.sweep: error: unit '<unit>': <the storage layer's message>`), the units swept before
+it staying swept; the verb first prints, through `mg_sweep_partial`, the line of every
+segment swept before it and one line with the run total swept before the stop (those
+answers' items plus the refused call's own count) and the stamp: `stopped: swept <n> items
+before the stop, moved into the backup stamped <stamp>`, `..., deleted with no backup
+kept`, `stopped: nothing swept before the stop`, or `dry run: would stop after sweeping <n>
+items; nothing written`; a refusal before the sweep starts (a bad argument, an unknown
+unit, the state guard) prints its line alone. `--dry-run` takes no lock and writes
+nothing. The verb runs the data script as a held child (`vb_call_held`: in the background
+and waited for, so its trap runs at once): on a hangup, an interrupt, or a termination
+`mg_sweep_stop` has `vb_stop_child` send the child and every descendant from one `ps`
+snapshot a termination (a background child ignores an interrupt), wait for each to end at
+its next step with its locks released, and kill any still running after 10 s, then prints
+`migrate: stopped by a signal; ...` naming the run's stamp in the move form and exits 129,
+130, or 143. Like the migrations, it prints no deprecated root warning.
 
 ## The ref check
 

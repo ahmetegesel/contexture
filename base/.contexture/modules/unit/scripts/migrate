@@ -1,7 +1,9 @@
 #!/bin/sh
-# summary: the record's migrations: move units to the store's current root, then rewrite every pointer into its full address
+# summary: the record's migrations: move units to the store's current root, then rewrite every pointer into its full address; with --sweep, sweep what the record's storage holds beyond its documents
 # usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...]
 # usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all
+# usage: ctx unit migrate --sweep [--dry-run] [--delete] <unit> [<unit>...]
+# usage: ctx unit migrate --sweep [--dry-run] [--delete] --all
 # help: applies every pending migration to each named unit, or with --all to every unit the store holds, closed units included, each under its unit lock: first the root move (a unit still in the store's deprecated root moves whole to its current root), then the pointer rewrite (every pointer in every field becomes its full address, unit#, store#, docs#, or file#)
 # help: the rewrite changes how a pointer is written, never what it points to: short unit refs (journal#, knowledge#, backlog#, lane#) and their legacy spellings become unit# addresses, a dangling one too, the legacy file spelling of a journal entry, task, or finding even when written under file# or after a leading dot slash; a pointer into the record's former storage paths, to an artifact or lane artifact of a unit the store holds (in either root, active or closed), becomes that unit# address in a REF value and in free text alike, while one naming a unit the store does not hold (counted as such) and a path into a backup, another repository, or an absolute path keep their bytes, under file# in a REF value; an idea slug pointer becomes its address in the store's ideas container and a bare IDEAS.md mention the address of that container's declaration record; corpus doc paths of a repo the docs module lists become docs# addresses; a file path in a REF or REFS value takes the file# owner (a path:line spelling the path alone, the token in NOTE; a path followed by a colon the path alone, the whole value in NOTE), while a file path in free text stays prose; a token gluing pointers together is split at a comma, a semicolon, or punctuation before the next pointer, and one that still yields no clean address is kept and counted as a pointer glued to text
 # help: a REF or REFS value keeps only a full address: the text beside its pointer, and a whole value no rule rewrites (prose, a placeholder, a law pointer, a URL, a completion receipt), moves word for word to a NOTE line on the same item; a lane recipe's REFS block line is a comma separated list, split outside double quotes and parentheses, each item's first token rewritten as a ref and the rest of the item free text, every separator and annotation kept in place; a lane section anchor followed by more words leaves the artifact's address and the whole value in NOTE; CLOSES and SUPERSEDES lines, NOTE lines, markdown headings, column 0 @ head lines, and the reference units stay as written, their pointer shaped tokens counted
@@ -10,13 +12,18 @@
 # help: --forward=<old prefix>=<new prefix>, once per run, forwards the addresses of entities that moved to a new owner: each prefix is a full address prefix, an owner, a hash, and an optional path prefix, ending in a slash or a hash, the value split at its first equals sign; every pointer token starting with the old prefix and holding more after it, in a REF or REFS value and in free text alike, becomes the new prefix plus the same rest, ahead of the rule that keeps a full address as written, and so does a pointer an earlier rule rewrites into such an address (a path followed by a colon keeping its NOTE word for word); a REF value whose first token ends in a colon is forwarded without its colon, the colon going to NOTE as for a path followed by a colon; placeholders stay as written; before any rewrite and before any lock, the verb lists the forwarded addresses of the units it runs on and checks each distinct one once through its new owner's get, each owner probed once, as a write checks its refs; a token whose forwarded address does not answer keeps its bytes, counted under a class naming why: target not found, owner not installed, owner has no get verb, or target not checked (a token written after the check, which the next run checks); the residual scan lists every token still holding the old prefix; a forward whose prefix is no full address prefix or a retired short form, holds a placeholder character (an angle bracket, a star, or three dots, which the rewrite never forwards), or ends in neither a slash nor a hash (it would cut inside a name), one whose file# new prefix names a path outside the workspace (where no forwarded target is checked), one whose prefixes are equal or one starts with the other (a second run would forward again), and a second --forward refuse rc 1 before anything is read or written, each naming its reason
 # help: every landing write already moves the unit it writes, so the root move is for the units nobody writes; while any unit stays behind every read of it warns naming this verb; the deprecated root is removed once it is empty, while a root still holding anything stays, and a store holding no unit keeps its empty root; a store that keeps no deprecated root moves nothing
 # help: the first refusal stops the run, its one line naming the unit; the units migrated before it stay migrated
-# help: exit codes: 0 migrated, or nothing to migrate; 1 a bare call, a bad argument (a malformed forward among them), an unknown unit, or a unit the store holds in both roots; 2 a storage failure
+# help: --sweep runs the sweep alone, no other migration and no ref rewritten: what the record's storage holds beyond its documents (the keys the unit verbs read: each unit's state, backlog, knowledge, journal, and its lanes' recipes, journals, and reports) is moved into a backup stamped for the run, or with --delete removed outright with no backup kept; it takes every kind the storage diagnostic names (ctx unit diagnose --leftovers): stray files, folders outside the key shape, empty folders, symbolic links (moved as links, never followed), special files, lock or write remnants, keys the root shadows, and keys outside the document rules, such as old lane scratch under a unit, a key folder holding no document below it moved or removed whole as one item and counted as emptied; a folder it cannot read or enter is never moved or removed, in either form, nor any folder above it: the sweep leaves it untouched and names it, its lines ending leaving <n> unreadable folders untouched (their rights need fixing); a name holding a newline, which the diagnostic counts, refuses the run rc 2, the dry run too, since the sweep never parses such a name
+# help: --sweep sweeps each named unit (one the store holds), or with --all every first key segment of the store's root and deprecated root, each under its unit lock, CLOSED units included, then with --all what lies at the top of the roots outside every unit folder; it prints one line per unit, unit <unit>: ..., a first key segment holding no unit state labelled outside the units, key segment <segment>: ..., and one line for the top of the roots, outside the units: ..., each with every kind swept, its count and bytes, and the folders emptied, then one closing line: the items and bytes moved and the backup's stamp, or deleted with no backup kept; a second run moves nothing
+# help: --sweep --dry-run computes the same sweep, takes no lock, writes nothing, and prints the same lines, its closing line saying what the run would do; the human's word comes before a sweep, the dry run first
+# help: the sweep refuses rc 1 before any walk when the installed unit declaration does not declare the state unsearched (every unit's state would read as a key outside the document rules), and rc 1 before anything of it is swept, the dry run alike, a unit or key prefix whose keys the store holds in both roots (a key of the deprecated root that the root holds too), as the migration refuses such a unit; a refusal midway first prints the line of every unit swept before it and one line with the run total swept before the stop and the backup's stamp when one was made (stopped: swept <n> items before the stop, moved into the backup stamped <stamp>, stopped: swept <n> items before the stop, deleted with no backup kept, stopped: nothing swept before the stop, or dry run: would stop after sweeping <n> items; nothing written), then the refusal, the units swept before it staying swept; a hangup, an interrupt, or a termination stops the sweep: the verb sends its children a termination, waits for them, names the stop on one line, and exits 129, 130, or 143
+# help: exit codes: 0 migrated, swept, or nothing to do; 1 a bare call, a bad argument (a malformed forward, --delete without --sweep, or --sweep beside --forward among them), an unknown unit, for the migration a unit the store holds in both roots, and for the sweep a unit or key prefix whose keys the store holds in both roots or a unit declaration that does not declare the state unsearched; 2 a storage failure (a name holding a newline in the sweep's reach, or an item the sweep cannot move or remove, which stops it, its line naming the kind and the items swept before it, which stay swept; a storage layer without the sweep refuses); 129, 130, or 143 a sweep stopped by a signal
 # help: example: ctx unit migrate --dry-run --all
+# help: example: ctx unit migrate --sweep --dry-run --all
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
 usage() {
-  printf 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all\n' >&2
+  printf 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all | ctx unit migrate --sweep [--dry-run] [--delete] (<unit> [<unit>...] | --all)\n' >&2
   printf 'help: ctx unit help migrate\n' >&2
   exit 1
 }
@@ -76,11 +83,21 @@ dry=""
 fwd=""
 fwd_old=""
 fwd_new=""
+sweep=""
+del=""
 while [ $# -ge 1 ]; do
   case "$1" in
     --dry-run)
       [ -z "$dry" ] || vb_unknown migrate "$1"
       dry=--dry-run
+      ;;
+    --sweep)
+      [ -z "$sweep" ] || vb_unknown migrate "$1"
+      sweep=1
+      ;;
+    --delete)
+      [ -z "$del" ] || vb_unknown migrate "$1"
+      del=--delete
       ;;
     --forward|--forward=*)
       if [ -n "$fwd" ]; then
@@ -105,6 +122,14 @@ while [ $# -ge 1 ]; do
   esac
   shift
 done
+if [ -n "$del" ] && [ -z "$sweep" ]; then
+  printf 'migrate: error: --delete removes what the sweep finds, so it takes --sweep (ERR_INVALID_ARGUMENT)\n' >&2
+  exit 1
+fi
+if [ -n "$sweep" ] && [ -n "$fwd" ]; then
+  printf 'migrate: error: --sweep runs no other migration, so it takes no --forward (ERR_INVALID_ARGUMENT)\n' >&2
+  exit 1
+fi
 [ $# -ge 1 ] || usage
 if [ "$1" = --all ]; then
   [ $# -eq 1 ] || vb_unknown migrate "$2"
@@ -113,6 +138,131 @@ else
     case "$u" in -*) vb_unknown migrate "$u" ;; esac
     vb_unit migrate "$u"
   done
+fi
+
+# mg_sweep_label <kind> <name> <line>: one sweep line under its label: unit <unit>: for a
+# unit, outside the units, key segment <segment>: for a first key segment holding no unit
+# state, outside the units: for the top of the roots
+mg_sweep_label() {
+  case "$1" in
+    unit) printf 'unit %s: %s\n' "$2" "$3" ;;
+    prefix) printf 'outside the units, key segment %s: %s\n' "$2" "$3" ;;
+    *) printf 'outside the units: %s\n' "$3" ;;
+  esac
+}
+
+# mg_sweep_items <answer>: the items one storage layer sweep answer swept (or, dry, would
+# sweep) over its walked roots, every kind summed; 0 for an answer it cannot read
+mg_sweep_items() {
+  store_lib_flat store.sweep "$1" 2>/dev/null || { printf '0\n'; return 0; }
+  LC_ALL=C awk "$STORE_KINDS_AWK"'
+    BEGIN { kinds_init() }
+    { ld($0) }
+    END {
+      split("root fallback", R, " ")
+      for (j = 1; j <= 2; j++) {
+        if (V[R[j] ".state"] != "walked") continue
+        for (i = 1; i <= NK; i++) n += V[R[j] ".kinds." KIND[i] ".count"] + 0
+      }
+      printf "%.0f\n", n + 0
+    }' "$1.flat" 2>/dev/null || printf '0\n'
+  rm -f "$1.flat"
+}
+
+# mg_sweep_partial: a sweep refused midway, before its refusal line: the line of every unit
+# (and key prefix) it swept before the stop, then one line with the run total swept before the
+# stop (those units' items and the items the refused call swept before it) and the backup's
+# stamp when the run moved any; a run refused before its sweep started prints nothing here
+mg_sweep_partial() {
+  [ -f "$SW_DIR/run" ] || return 0
+  msp_stamp=$(sed -n '1p' "$SW_DIR/run" 2>/dev/null)
+  msp_n=0
+  while IFS='	' read -r msp_k msp_u msp_f; do
+    [ -n "$msp_f" ] || continue
+    msp_line=$(store_sweep_text "$SW_DIR/$msp_f" summary 2>/dev/null) || continue
+    mg_sweep_label "$msp_k" "$msp_u" "$msp_line"
+    msp_n=$((msp_n + $(mg_sweep_items "$SW_DIR/$msp_f")))
+  done < "$SW_DIR/sweep.tsv"
+  msp_s=0
+  [ -f "$SW_DIR/stop" ] && msp_s=$(sed -n '1p' "$SW_DIR/stop" 2>/dev/null)
+  case "$msp_s" in ""|*[!0-9]*) msp_s=0 ;; esac
+  msp_n=$((msp_n + msp_s))
+  if [ "$msp_n" -eq 1 ]; then msp_w="1 item"; else msp_w="$msp_n items"; fi
+  if [ -n "$dry" ]; then
+    if [ "$msp_n" -eq 0 ]; then printf 'dry run: would stop before sweeping anything; nothing written\n'
+    else printf 'dry run: would stop after sweeping %s; nothing written\n' "$msp_w"
+    fi
+  elif [ "$msp_n" -eq 0 ]; then printf 'stopped: nothing swept before the stop\n'
+  elif [ -n "$del" ]; then printf 'stopped: swept %s before the stop, deleted with no backup kept\n' "$msp_w"
+  else printf 'stopped: swept %s before the stop, moved into the backup stamped %s\n' "$msp_w" "$msp_stamp"
+  fi
+}
+
+# mg_sweep_stop <rc>: a hangup, an interrupt, or a termination during the sweep: the data
+# script and every descendant are sent a termination and waited for, so the sweep stops at
+# its next step, then one line names the stop and the verb exits 129, 130, or 143
+mg_sweep_stop() {
+  trap '' HUP INT TERM
+  vb_stop_child
+  mss_stamp=""
+  [ -f "$SW_DIR/run" ] && mss_stamp=$(sed -n '1p' "$SW_DIR/run" 2>/dev/null)
+  if [ -n "$dry" ]; then printf 'migrate: stopped by a signal; nothing written\n' >&2
+  elif [ -n "$del" ]; then printf 'migrate: stopped by a signal; what the sweep deleted before the stop stays deleted\n' >&2
+  elif [ -n "$mss_stamp" ]; then printf 'migrate: stopped by a signal; what the sweep moved before the stop lies in the backup stamped %s\n' "$mss_stamp" >&2
+  else printf 'migrate: stopped by a signal before the sweep moved anything\n' >&2
+  fi
+  exit "$1"
+}
+
+# the sweep: no other migration runs and no ref is rewritten; the data function sweeps each
+# unit's folder under its unit lock (then the top of the roots under --all) and leaves one
+# storage layer answer per call in the sweep folder, which the library's one text form
+# renders: one line per unit (or key prefix outside the units), one for the top of the roots,
+# then the closing line; a refusal midway prints the lines of what it swept before it and the
+# run total first. The data script runs as a held child, so a hangup, an interrupt, or a
+# termination stops it at once (mg_sweep_stop)
+if [ -n "$sweep" ]; then
+  [ -n "$VB_LIBRARY" ] || { printf 'migrate: error: the storage layer library is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2; exit 2; }
+  vb_tmp
+  SW_DIR="$VB_DIR/sweep"
+  mkdir -p "$SW_DIR" 2>/dev/null || { printf 'migrate: error: cannot create the sweep folder in the verb scratch (ERR_STORAGE_WRITE)\n' >&2; exit 2; }
+  export SW_DIR
+  trap 'mg_sweep_stop 129' HUP
+  trap 'mg_sweep_stop 130' INT
+  trap 'mg_sweep_stop 143' TERM
+  # shellcheck disable=SC2086
+  vb_call_held unit.sweep $dry $del "$@"
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  if [ "$VB_RC" -ne 0 ]; then
+    mg_sweep_partial
+    vb_through
+  fi
+  vb_relay
+  set --
+  while IFS='	' read -r sw_kind sw_unit sw_file; do
+    [ -n "$sw_file" ] || continue
+    sw_line=$(store_sweep_text "$SW_DIR/$sw_file" summary 2> "$VB_DIR/sweep.err") || {
+      sw_rc=$?
+      printf 'migrate: error: %s\n' "$(sed -n '1s/^[^ ]*: error: //p' "$VB_DIR/sweep.err")" >&2
+      exit "$sw_rc"
+    }
+    mg_sweep_label "$sw_kind" "$sw_unit" "$sw_line"
+    set -- "$@" "$SW_DIR/$sw_file"
+  done < "$SW_DIR/sweep.tsv"
+  if [ $# -eq 0 ]; then
+    printf 'swept: no unit to sweep\n'
+    exit 0
+  fi
+  sw_first=$1
+  shift
+  store_sweep_text "$sw_first" close "$@" 2> "$VB_DIR/sweep.err" || {
+    sw_rc=$?
+    printf 'migrate: error: %s\n' "$(sed -n '1s/^[^ ]*: error: //p' "$VB_DIR/sweep.err")" >&2
+    exit "$sw_rc"
+  }
+  exit 0
 fi
 
 mg_root=${CTX_ROOT:-$PWD}

@@ -42,8 +42,8 @@ file's existence); `locked` replaces `ok` whatever the presence; the detail name
 folder, and the probe prints no fallback notice.
 
 The posix driver answers a third method of its own, `storage.leftovers <namespace>`: what
-the named namespace's declared root and fallback root hold beyond the keys its pattern
-admits, a read only walk of each that writes nothing, takes no lock, and names no folder
+the named namespace's declared root and fallback root hold beyond the documents its
+declaration names, a read only walk of each that writes nothing, takes no lock, and names no folder
 in its answer (the same argument refusals as the health). Each root is walked once: one
 `find` from inside the root lists every entry by type through batched `printf` calls and
 sizes every regular file through `wc -c` (which stats a regular file), a symbolic link
@@ -54,30 +54,95 @@ or below such names through `wc -c` reading each file on its standard input, so 
 is printed. One awk pass then classifies the listing; a line it cannot parse stops the
 probe rc 2 `ERR_STORAGE_READ`, a name never continued across lines. A regular file the
 pattern admits is a key (the store's own list rule: the suffix, the key rule, the
-pattern), each
-folder above a key is a key folder, and every other entry belongs to the topmost folder
-above it that holds no key, or stands loose in a key folder or the root. A loose folder is
-a lock remnant (named `.lock` or `*.lock`, as an older release's lock folder inside the
-deprecated root), an unreadable folder (one with no listed entry that cannot be read or
-entered), a folder outside the key shape (it holds a file, a link, a special file, or an
-unreadable folder), or an empty folder (as `ctx store delete containers/<name>` left a
-dropped container's folder before the delete pruned the folders it empties); a loose file is a lock or write remnant (a lock name, or a
-key file's name with a six character `mktemp` tail, a killed put's temp), else a stray
-file (a wrong suffix, outside the pattern, or a name the key rule refuses); a link and a
-fifo, socket, or device count apart; a name holding a newline counts as its own kind, its
-bytes the regular files at or below it; in the fallback root a key the root also holds is
-a shadowed key, never a key. The answer is one compact object `{"driver","namespace",
+pattern), a document when a document rule or an `unsearched` line of the declaration
+names it (every key a document when the namespace declares neither), else a key outside
+the document rules, which is a leftover; each folder above a key is a key folder, each
+folder above an unreadable folder or a name holding a newline is opened, and every other
+entry belongs to the topmost folder above it that holds no key, or stands loose in a key
+folder, an opened folder, or the root. A loose folder is an unreadable folder (one with no
+listed entry that cannot be read or entered), a lock remnant (named `.lock` or `*.lock`,
+as an older release's lock folder inside the deprecated root), a folder outside the key
+shape (it holds a file, a link, or a special file), or an empty folder (as `ctx store
+delete containers/<name>` left a dropped container's folder before the delete pruned the
+folders it empties); a loose file is a lock or write remnant (a lock name, or a key file's
+name with a six character `mktemp` tail, a killed put's temp), else a stray file (a wrong
+suffix, outside the pattern, or a name the key rule refuses); a link and a fifo, socket,
+or device count apart; a name holding a newline counts as its own kind, its bytes the
+regular files at or below it; in the fallback root a key the root also holds is a shadowed
+key, never a key. The answer is one compact object `{"driver","namespace",
 "root","fallback"}`, each root `{"state"}` for `absent` (not made), `link` (a symbolic
 link, which the store never walks), `unreadable`, or `none` (the namespace declares no
-fallback root), else `{"state":"walked","entries","keys","kinds"}`, the kinds
-`stray_files`, `nonkey_folders`, `empty_folders`, `links`, `special_files`,
-`unreadable_folders`, `remnants`, `shadowed_keys`, and `newline_names` in that order, each
-`{"count","bytes"}` (`entries` counts each name holding a newline once) (a leftover folder
-counts once, its regular files' bytes rolled in; a file `wc` cannot read counts 0 bytes). The fts5 driver keeps one database and no key file tree, so
+fallback root), else `{"state":"walked","entries","keys","documents","kinds"}`, the
+kinds `stray_files`, `nonkey_folders`, `empty_folders`, `links`, `special_files`,
+`unreadable_folders`, `remnants`, `shadowed_keys`, `outside_keys`, and `newline_names` in
+that order, each `{"count","bytes"}` (`keys` is `documents` plus the `outside_keys`
+count; `entries` counts each name holding a newline once) (a leftover folder counts once,
+its regular files' bytes rolled in; a file `wc` cannot read and an unreadable folder count
+0 bytes). The fts5 driver keeps one database and no key file tree, so
 it answers its unknown function line rc 2 `ERR_CAPABILITY_UNSUPPORTED`. A walk costs what
 the roots hold, every entry once: it is the whole walk the leftovers explain, so it runs
 only where a caller asks for it (`ctx unit diagnose --leftovers`, `ctx store check
 --leftovers`), never inside another function.
+
+The posix driver answers a fourth method of its own, `storage.sweep <namespace>
+[--dry-run] [--delete] [--stamp=<stamp>] [--prefix=<prefix> | --loose]`: every leftover
+the probe's walk finds, the keys outside the document rules among them, moved into
+`.contexture/backups/sweep-<stamp>/<namespace>/<root|fallback>/<relative path>` (the
+layout and the root label kept; the folder made only when an item moves; the stamp
+`<YYYYMMDD-HHMMSS>-<pid>` unless the caller passes one, so the unit module names one
+backup for a whole run), or with `--delete` removed outright with no backup kept. A
+document never moves. The walk is the probe's, so its items are the probe's entries: a
+keyless folder moves whole with everything below it, a loose file or a link (moved or
+removed as itself, never followed) alone, and a key folder holding no document below it
+(and no opened folder) moves or goes as one item too, by one rename or one removal, its
+entries still counted by kind and each key folder in it counted as emptied. A folder the
+walk cannot read or enter is never moved or removed, in either form, nor any folder above
+it: the sweep leaves it untouched, grants itself no rights (it runs no `chmod`), and
+counts it as left, its rights the human's to fix. An item that is, or holds, a symbolic
+link at a document's key path refuses the whole run rc 2 `ERR_STORAGE_WRITE` (a read
+follows the link, so the store may read it as the document), and a name holding a
+newline anywhere in the walk's reach refuses it rc 2 `ERR_STORAGE_READ` naming the
+count, since the sweep never parses such a name; the dry run refuses both alike.
+
+A run plans under the namespace lock (both walks under one hold, so no live write's temp
+is planned), then releases it and acts in batches. One awk pass decodes the plan (each
+path escaped in it: a backslash, a tab, a newline, and every other control character as a
+three digit octal code) and splits it into batches of at most 1000 items and 4000 walk
+entries at and below them. Each batch takes the lock again, re-checks every item (still
+there, of its planned type, its backup place free), runs the document guard (one `find`
+over the batch's items, symbolic links never followed: a regular file or a link at a
+document's key path, the item's own or one below it, a name holding a newline, or a folder
+it can no longer read or enter stops the run, except in the fallback root a key the root
+still holds), acts (one `rm -rf`, or one `mkdir -p` and one `mv` per run of siblings),
+checks that each item left its place, and releases the lock. The sweep waits 0.2 s before
+each later batch, longer than a waiting writer's 0.1 s poll, so a writer takes the lock
+between two batches instead of waiting out the run: measured on the macOS host, a batch
+of 1000 items holds the lock about 0.25 s, and 12000 keys outside the document rules
+beside a document sweep in about 6 s, a writer waiting during it landing in about 0.15 s
+(one lock hold over the whole run took about 108 s, and that writer refused after 60 s).
+A fallback root left empty is dropped as the write path drops one. `--prefix` (whole key
+segments ending in a slash) sweeps that folder of each root alone, the walk starting
+there (every ancestor below the root must be a folder, never a link); `--loose` sweeps
+the entries at the top of each root that hold no key; neither sweeps both roots whole.
+`--dry-run` takes no lock, writes nothing, and answers exactly what the run would do,
+refusals included. The answer is one compact object `{"driver","namespace","mode",
+"dry_run","stamp","root","fallback"}`, `mode` `move` or `delete`, `stamp` the backup's
+(`null` for `--delete`, a dry run, and a run that moved nothing), each root `{"state"}`
+as the probe's or `{"state":"walked","kinds","emptied","left"}`, the ten kinds of what it
+swept, the key folders holding no document it cleared, and the unreadable folders it left
+untouched; it names no folder. The first item it cannot move or remove, a backup place
+already taken, an item gone or changed since the plan, or the guard stops it rc 2
+`ERR_STORAGE_WRITE`, the line naming why and how many items it swept before, which stay
+swept (a lock timeout between batches names that count too); a root that is, holds, or
+lies in the drawer's backups or scratch folder refuses rc 1 `ERR_INVALID_ARGUMENT` (the
+sweep would move the folder it moves into, or the lock it holds); a root that is or holds
+another namespace's root or fallback root (as `store-data --list` names them) refuses rc 1
+`ERR_INVALID_ARGUMENT` naming both namespaces, a listing that cannot be read whole rc 2
+`ERR_STORAGE_READ`; a missing, unknown, or repeated argument, a malformed stamp or
+prefix, and both scopes refuse rc 1. The fts5 driver answers its unknown function line rc
+2. Its callers are `ctx unit migrate --sweep`
+(per unit under its unit lock, `--prefix=<unit>/`, then `--loose` under `--all`) and
+`ctx store check --leftovers --sweep` (the store namespace whole).
 
 Seven data functions and the optional promotion, called through the resolver:
 
@@ -238,6 +303,7 @@ fields: <field>, <field>            # optional; flat only; the JSON fields to ra
 title: <field>|key|head             # optional; flat default key, documents default head
 snippet: line                       # optional; default line
 document: <key-pattern> <section> <entity-type> <head-marker|->   # repeatable
+unsearched: <key-pattern>           # repeatable; a document the search schema leaves out
 field: <name>: <required|optional> <line|block> [list] [one-of <A|B|...>] [default <value>]   # repeatable
 ```
 
@@ -257,6 +323,14 @@ its reserved names, found beside the reader) at every read of the data file, and
 malformed line, a reserved name, or a name declared twice rc 1 naming the data file line,
 `store-data: line <N>: <the validator's reason>`; a data file without a field line never
 runs the validator. The `fields` key above is the flat search schema's, a different key.
+
+An `unsearched` line names the key pattern of a document the module reads that its search
+schema leaves out (placeholders and literal segments, as a document rule's pattern): the
+unit module declares `unsearched: <unit>/state`, since every unit verb reads the state
+while no search returns it. The leftovers probe and the sweep count a key a document rule
+or an `unsearched` line names as a document; every other key the pattern admits is a key
+outside the document rules, which the sweep moves. A namespace declaring neither counts
+every key a document.
 
 The namespace is the module folder's name, a token of lowercase letters, digits, dot,
 underscore, and dash, starting with a letter or digit (the module name rule); the
@@ -289,7 +363,10 @@ order) answers, after the rules, one tagged line per declared field,
 reads; no document rule starts with `@`, and a reader that does not ask never sees the
 family, so the plain and fallback answers stay byte for byte as before (the fts5 driver
 hashes every line past the fixed ones into its search schema signature, so a field line
-never reaches it);
+never reaches it); `store-data <namespace> --with-unsearched`, beside the other flags in
+any order, answers after the rules and before any field line one tagged line per
+`unsearched` line, `<TAB><pattern>`, in declaration order, the form the posix
+driver's leftovers probe and sweep read, every other answer byte for byte as without it;
 a data file names no search modes, and a `modes` line refuses as an unknown field naming
 the fix;
 any other argument after the namespace, or a repeated flag, refuses rc 1; the field lines
@@ -366,12 +443,31 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
   through, rc 2), and `store_leftovers_text <answer> <summary|kinds>`, the one text form
   of that answer, naming no folder, through the storage core's flattener: `summary` prints
   one line per root (`root:`, `fallback root:`), its state (`absent (not made yet)`, `none
-  declared`, unreadable, a symbolic link) or `<keys> keys in <entries> entries` with
-  `nothing beyond them` or `beyond them:` and each kind found with its count and bytes;
-  `kinds` prints one `<root label>: <kind>: <count> (<bytes> bytes)` line per root and
-  kind found (a root it cannot walk on one line too) and nothing when nothing lies beyond
-  the keys; the flattened answer stages at `<answer>.flat` beside the caller's file, and a
-  malformed answer refuses rc 2 with one `store.leftovers: error:` line;
+  declared`, unreadable, a symbolic link) or `<documents> documents in <entries> entries`
+  with `nothing beyond them` or `beyond them:` and each kind found with its count and
+  bytes; `kinds` prints one `<root label>: <kind>: <count> (<bytes> bytes)` line per root
+  and kind found (a root it cannot walk on one line too) and nothing when nothing lies
+  beyond the documents; the flattened answer stages at `<answer>.flat` beside the
+  caller's file, and a malformed answer refuses rc 2 with one `store.leftovers: error:`
+  line;
+- `store_sweep [--dry-run] [--delete] [--stamp=<stamp>] [--prefix=<prefix> | --loose]`,
+  the driver's `storage.sweep` over the caller's own namespace, its one JSON line on stdout
+  (a driver without the method passes its unknown function line through, rc 2), and
+  `store_sweep_text <answer> <summary|kinds|close> [<answer>...]`, its one text form,
+  naming no folder, on the same kinds table: `summary` prints one line for the answer,
+  `<kind> <n> (<bytes> bytes), ...; <e> folders emptied` over both roots or `nothing beyond
+  the documents`, followed by `, leaving <n> unreadable folders untouched (their rights
+  need fixing)` when the sweep left any (`nothing swept, leaving ...` when it swept
+  nothing); `kinds` prints one `<root label>: <kind>: <count> (<bytes> bytes)` line per
+  root and kind swept, `<root label>: folders emptied: <n>` and `<root label>: unreadable
+  folders left: <n>` when any; `close` prints the one closing line over every answer
+  given, the items, bytes, emptied folders, and folders left summed: `swept: moved <n>
+  items (<bytes> bytes) into the backup stamped <stamp> and emptied <e> folders`,
+  `swept: deleted ... with no backup kept ...`, `swept: nothing beyond the documents;
+  nothing moved`, or for a dry run `dry run: would move|delete ...; nothing written`, each
+  naming the unreadable folders left in the same words (`swept: nothing moved, leaving
+  ...` when only those remain); a malformed answer refuses rc 2 with one `store.sweep:
+  error:` line;
 - the shared checks, each silent with rc 0 for a pass, 1 for a fail, and 2 when the check
   cannot run: `lib_utf8_ok <string>` and `lib_utf8_file_ok <file>`, the UTF-8 check (RFC
   3629: no overlong form, no surrogate, nothing above U+10FFFF), with its awk text in

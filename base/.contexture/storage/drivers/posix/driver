@@ -1,7 +1,7 @@
 #!/bin/sh
 # driver: the zero-dependency POSIX storage driver (contract 3, docs/the-engine.md, The
 # descriptor and the handshake). The driver is store-only: it answers capability,
-# storage.health, and storage.leftovers as its own methods and the seven generic module store functions
+# storage.health, storage.leftovers, and storage.sweep as its own methods and the seven generic module store functions
 # (store.list, store.get, store.put, store.delete, store.changes, store.batch, store.scan)
 # over a module's declared data file and root, plus the store.search entry. The record's
 # 35 operations live in the unit module's data script over this store; the driver keeps no
@@ -192,6 +192,8 @@ store_cleanup() {
   STORE_TMP=""
   [ -n "${STORE_BATCH_STAGE:-}" ] && rm -rf "$STORE_BATCH_STAGE" 2>/dev/null
   STORE_BATCH_STAGE=""
+  [ -n "${SW_STAGE:-}" ] && rm -rf "$SW_STAGE" 2>/dev/null
+  SW_STAGE=""
   store_unlock
   return 0
 }
@@ -247,7 +249,7 @@ store_lock() {
     sl_n=$((sl_n + 1))
     sleep 0.1 2>/dev/null || { sleep 1; sl_n=$((sl_n + 9)); }
   done
-  refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (60 s timeout)"
+  refuse 2 ERR_STORAGE_LOCKED "the store namespace '$1' is locked (60 s timeout)${SL_TAIL:-}"
 }
 
 # store_lock_held <namespace>: rc 0 while a writer holds the namespace lock, found without a
@@ -283,6 +285,12 @@ store_data() {
     storage.health|storage.leftovers) sd_scratch_code=ERR_STORAGE_READ ;;
     *) sd_scratch_code=ERR_STORAGE_WRITE ;;
   esac
+  # the leftovers probe and the sweep read the unsearched documents too, as tagged lines after
+  # the rules; every other function asks the plain fallback form, byte for byte as before
+  case "$FN" in
+    storage.leftovers|storage.sweep) sd_flags="--with-fallback --with-unsearched" ;;
+    *) sd_flags=--with-fallback ;;
+  esac
   sd_ws=$(find_workspace_root)
   sd_script=""
   for sd_c in "$SCRIPT_DIR/../../scripts/store-data" \
@@ -291,13 +299,15 @@ store_data() {
     if [ -x "$sd_c" ]; then sd_script=$sd_c; break; fi
   done
   [ -n "$sd_script" ] || refuse 2 ERR_STORAGE_READ "the storage core data reader is not installed"
+  SD_SCRIPT=$sd_script
   trap 'store_cleanup' EXIT
   trap 'store_cleanup; exit 129' HUP
   trap 'store_cleanup; exit 130' INT
   trap 'store_cleanup; exit 143' TERM
   STORE_SDERR=$(mktemp "$(scratch_dir)/store-data.XXXXXX" 2>/dev/null) || refuse 2 "$sd_scratch_code" "cannot create the driver's scratch file"
   scratch_new "$STORE_SDERR" || refuse 2 "$sd_scratch_code" "$SCRATCH_FAILED"
-  sd_out=$(CTX_STORE_WORKSPACE="$sd_ws" "$sd_script" "$sd_ns" --with-fallback 2>"$STORE_SDERR")
+  # shellcheck disable=SC2086
+  sd_out=$(CTX_STORE_WORKSPACE="$sd_ws" "$sd_script" "$sd_ns" $sd_flags 2>"$STORE_SDERR")
   sd_rc=$?
   sd_msg=$(head -n 1 "$STORE_SDERR" 2>/dev/null)
   rm -f "$STORE_SDERR"
@@ -1437,23 +1447,12 @@ storage_health() {
 # listing is one entry per line
 LO_NLPAT="*$SD_NL*"
 
-# LO_AWK: the leftovers walk's one awk program over a root's typed listing (d, f, l, or o, a
-# tab, and ./<path> per entry, from find's batched printf; n, a tab, and the parent folder of
-# each name holding a newline, which the walk pruned and never lists) and its sizes (wc -c
-# lines, keyed by the same ./<path>; a summary total line skipped). Any other line stops the
-# program rc 3, nothing answered: a name is never continued across lines. LO_PASS=empty
-# prints the folders with no entry (the readability candidates), after an empty line when a
-# name holding a newline was found; LO_PASS=walk classifies: a regular file the
-# pattern admits is a key (written to LO_KEYS when set; in the fallback a key LO_SHADOW names
-# is a shadowed key), each folder above a key is a key folder, and every other entry belongs
-# to the topmost folder above it that holds no key, or stands loose in a key folder or the
-# root. A loose folder: a lock remnant (.lock or *.lock), unreadable (named in LO_UNREAD), a
-# non-key folder (it holds a file, link, special file, or unreadable folder), else empty;
-# its bytes the regular files below it. A loose file: a lock or write remnant (a lock name,
-# or <key file name>.XXXXXX, a killed writer's temp), else a stray file; a link and a
-# special file count apart; the names holding a newline count as their own kind, their bytes
-# LO_NLBYTES. It prints one JSON object, never a path.
-LO_AWK='
+# LO_FUNCS: the awk functions the walk and the sweep's guard share: a path's parent and base;
+# admit, whether the namespace's pattern admits a path as a key (its key in KEY_OF); isdoc,
+# whether a key is a document (a pattern of LO_DOCS names it: the document rules and the
+# unsearched lines, one per line; a namespace declaring none counts every key a document);
+# lo_init reads the suffix, the key pattern, and the document patterns from the environment
+LO_FUNCS='
 function parent(p) { return match(p, /\/[^\/]*$/) ? substr(p, 1, RSTART - 1) : "" }
 function base(p) { return match(p, /[^\/]*$/) ? substr(p, RSTART) : p }
 function admit(p,   key, n, k, i) {
@@ -1473,6 +1472,79 @@ function admit(p,   key, n, k, i) {
   KEY_OF = key
   return 1
 }
+function isdoc(key,   n, ks, j, i, ok) {
+  if (ndp == 0) return 1
+  n = split(key, ks, "/")
+  for (j = 1; j <= ndp; j++) {
+    if (DM[j]) { if (n < DN[j]) continue } else if (n != DN[j]) continue
+    ok = 1
+    for (i = 1; i <= DN[j]; i++) {
+      if (i == DN[j] && DM[j]) break
+      if (DS[j, i] ~ /^<[A-Za-z][A-Za-z0-9_]*>$/) { if (ks[i] == "") { ok = 0; break } }
+      else if (DS[j, i] != ks[i]) { ok = 0; break }
+    }
+    if (ok) return 1
+  }
+  return 0
+}
+function lo_init(   j, i, nd0, D0, T) {
+  sfx = ENVIRON["LO_SFX"]
+  m = split(ENVIRON["LO_KEYPAT"], pp, "/")
+  multi = (m >= 1 && pp[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+  nd0 = split(ENVIRON["LO_DOCS"], D0, "\n")
+  ndp = 0
+  for (j = 1; j <= nd0; j++) {
+    if (D0[j] == "") continue
+    ndp++
+    DN[ndp] = split(D0[j], T, "/")
+    for (i = 1; i <= DN[ndp]; i++) DS[ndp, i] = T[i]
+    DM[ndp] = (T[DN[ndp]] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+  }
+}
+'
+
+# LO_AWK: the leftovers walk's one awk program over a root's typed listing (d, f, l, or o, a
+# tab, and ./<path> per entry, from find's batched printf; n, a tab, and the parent folder of
+# each name holding a newline, which the walk pruned and never lists) and its sizes (wc -c
+# lines, keyed by the same ./<path>; a summary total line skipped). Any other line stops the
+# program rc 3, nothing answered: a name is never continued across lines. LO_PASS=empty prints
+# the folders with no entry (the readability candidates), after an empty line when a name
+# holding a newline was found; LO_PASS=walk (the probe) and LO_PASS=sweep (the sweep's plan)
+# classify: a regular file the pattern admits is a key (written to LO_KEYS when set; in the
+# fallback a key LO_SHADOW names is a shadowed key), a document or a key outside the document
+# rules (LO_FUNCS); each folder above a key is a key folder (and every folder LO_CTX names, the
+# ancestors of a sweep's prefix folder, which the walk does not list), and each folder above a
+# folder the walk cannot read or enter (named in LO_UNREAD) or above a name holding a newline
+# is an open folder; the entries of the root, of a key folder, and of an open folder are
+# classified one by one, every other entry belongs to the folder above it that holds no key.
+# Such a folder: unreadable, a lock remnant (.lock or *.lock), a non-key folder (it holds a
+# file, link, or special file), else empty; its bytes the regular files below it. A file: a
+# key outside the document rules, a shadowed key, a lock or write remnant (a lock name, or
+# <key file name>.XXXXXX, a killed writer's temp), else a stray file; a link and a special file
+# count apart; the names holding a newline count as their own kind, their bytes LO_NLBYTES.
+# The probe prints one JSON object {state, entries, keys, documents, kinds}, never a path.
+# The sweep never plans an unreadable folder (it counts them as left) and moves a key folder
+# holding no document below it (and no open folder) as one item, its entries still counted
+# by kind; LO_LOOSE=1 keeps only the entries at the top of the root that hold no key. It writes
+# one item per line to LO_ITEMS, grouped by parent folder: its kind, the entries it counts,
+# their bytes, the folders it clears, the walk entries it covers, its type, and its path with
+# a backslash, a tab, a newline, and every other control character escaped; and prints
+# {state, kinds, emptied, left}, emptied the key folders holding no document it clears (each
+# moved inside its item) and left the unreadable folders it leaves untouched.
+LO_AWK="$LO_FUNCS"'
+function enc(s,   o, i, n, c) {
+  if (s !~ /[[:cntrl:]]/ && !index(s, "\\")) return s
+  o = ""; n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c == "\\") o = o "\\" "\\"
+    else if (c == "\t") o = o "\\" "t"
+    else if (c == "\n") o = o "\\" "n"
+    else if (c in ORD) o = o "\\" sprintf("%03o", ORD[c])
+    else o = o c
+  }
+  return o
+}
 function lockname(nm) { return nm == ".lock" || nm ~ /\.lock$/ }
 function tempname(nm,   L, ls) {
   L = length(nm); ls = length(sfx)
@@ -1481,12 +1553,26 @@ function tempname(nm,   L, ls) {
   if (substr(nm, L - 6, 1) != ".") return 0
   return substr(nm, L - 6 - ls, ls) == sfx
 }
-function add(kind, b) { C[kind]++; B[kind] += b }
+function topc(p,   q) {
+  if (p in TOPC) return TOPC[p]
+  q = parent(p)
+  TOPC[p] = (q in COLL) ? topc(q) : p
+  return TOPC[p]
+}
+function tally(kind, b) { C[kind]++; B[kind] += b }
+function item(kind, n, b, e, w, t, p,   pa) {
+  ni++
+  if ((p in DP) || (p in HDP)) blocked++
+  IL[ni] = sprintf("%s\t%.0f\t%.0f\t%.0f\t%.0f\t%s\t%s", kind, n, b, e, w, t, enc(p))
+  pa = parent(p)
+  if (!(pa in GHEAD)) { ng++; GORD[ng] = pa; GHEAD[pa] = ni } else NEXT[GTAIL[pa]] = ni
+  GTAIL[pa] = ni
+}
 function kind(name, last) { printf "\"%s\":{\"count\":%.0f,\"bytes\":%.0f}%s", name, C[name] + 0, B[name] + 0, last ? "" : "," }
 BEGIN {
-  sfx = ENVIRON["LO_SFX"]
-  m = split(ENVIRON["LO_KEYPAT"], pp, "/")
-  multi = (m >= 1 && pp[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+  lo_init()
+  for (i = 1; i < 32; i++) ORD[sprintf("%c", i)] = i
+  ORD[sprintf("%c", 127)] = 127
 }
 {
   line = $0
@@ -1520,17 +1606,24 @@ END {
     for (i = 1; i <= nt; i++) if (TT[i] == "d" && !((TP[i]) in KIDS)) print TP[i]
     exit 0
   }
+  sweep = (ENVIRON["LO_PASS"] == "sweep")
+  loose = (ENVIRON["LO_LOOSE"] == "1")
+  items_out = sweep ? ENVIRON["LO_ITEMS"] : ""
   for (i = 1; i <= ns; i++) SZ[SP[i]] = SN[i]
   f = ENVIRON["LO_UNREAD"]
-  if (f != "") while ((getline l < f) > 0) { UNR[l] = 1; for (q = parent(l); q != ""; q = parent(q)) UB[q] = 1 }
-  for (i = 1; i <= nn; i++) for (q = NP[i]; q != ""; q = parent(q)) HOLD[q] = 1
+  if (f != "") while ((getline l < f) > 0) { UNR[l] = 1; for (q = parent(l); q != ""; q = parent(q)) UC[q] = 1 }
+  for (i = 1; i <= nn; i++) for (q = NP[i]; q != ""; q = parent(q)) UC[q] = 1
   f = ENVIRON["LO_SHADOW"]
   if (f != "") while ((getline l < f) > 0) SHADOW[l] = 1
+  nc = split(ENVIRON["LO_CTX"], CX, "\n")
+  for (j = 1; j <= nc; j++) if (CX[j] != "") HK[CX[j]] = 1
   keys_out = ENVIRON["LO_KEYS"]
   for (i = 1; i <= nt; i++) {
     p = TP[i]; t = TT[i]
-    if (t == "d") continue
     pa = parent(p)
+    for (q = pa; q != ""; q = parent(q)) DESC[q]++
+    if (sweep && t == "l" && admit(p) && isdoc(KEY_OF) && !(KEY_OF in SHADOW)) { DP[p] = 1; for (q = pa; q != ""; q = parent(q)) HDP[q] = 1 }
+    if (t == "d") continue
     for (q = pa; q != ""; q = parent(q)) HOLD[q] = 1
     if (t != "f") continue
     for (q = pa; q != ""; q = parent(q)) BY[q] += SZ[p]
@@ -1539,58 +1632,106 @@ END {
     if (KEY_OF in SHADOW) { SH[p] = 1; continue }
     KEY[p] = 1; nk++
     if (keys_out != "") print KEY_OF > keys_out
+    if (isdoc(KEY_OF)) { nd++; for (q = pa; q != ""; q = parent(q)) HD[q] = 1 }
+    else OUT[p] = 1
   }
+  if (sweep && !loose) for (i = 1; i <= nt; i++) { p = TP[i]; if (TT[i] == "d" && (p in HK) && !(p in HD) && !(p in UC)) COLL[p] = 1 }
   for (i = 1; i <= nt; i++) {
     p = TP[i]; t = TT[i]; pa = parent(p)
-    if (pa != "" && !(pa in HK)) continue
+    if (pa != "" && !(pa in HK) && !(pa in UC)) continue
+    if (loose && pa != "") { tp = p; sub(/\/.*/, "", tp); if (tp in HK) continue }
     nm = base(p)
     if (t == "d") {
-      if (p in HK) continue
-      if (lockname(nm)) add("remnants", BY[p])
-      else if (p in UNR) add("unreadable_folders", 0)
-      else if ((p in HOLD) || (p in UB)) add("nonkey_folders", BY[p])
-      else add("empty_folders", 0)
-    } else if (t == "l") add("links", 0)
-    else if (t == "o") add("special_files", 0)
+      if (p in HK) {
+        if (p in COLL) { ne++; EMP[topc(p)]++; if (!(pa in COLL)) { nct++; CT[nct] = p } }
+        continue
+      }
+      if (p in UC) continue
+      if (p in UNR) { k = "unreadable_folders"; b = 0 }
+      else if (lockname(nm)) { k = "remnants"; b = BY[p] }
+      else if (p in HOLD) { k = "nonkey_folders"; b = BY[p] }
+      else { k = "empty_folders"; b = 0 }
+    } else if (t == "l") { k = "links"; b = 0 }
+    else if (t == "o") { k = "special_files"; b = 0 }
+    else if (p in OUT) { k = "outside_keys"; b = SZ[p] }
     else if (p in KEY) continue
-    else if (p in SH) add("shadowed_keys", SZ[p])
-    else if (lockname(nm) || tempname(nm)) add("remnants", SZ[p])
-    else add("stray_files", SZ[p])
+    else if (p in SH) { k = "shadowed_keys"; b = SZ[p] }
+    else if (lockname(nm) || tempname(nm)) { k = "remnants"; b = SZ[p] }
+    else { k = "stray_files"; b = SZ[p] }
+    if (sweep && k == "unreadable_folders") { left++; continue }
+    tally(k, b)
+    if (!sweep) continue
+    if (pa in COLL) { tc = topc(pa); CN[tc]++; CB[tc] += b }
+    else item(k, 1, b, 0, (t == "d" ? 1 + DESC[p] : 1), t, p)
   }
+  for (j = 1; j <= nct; j++) { p = CT[j]; item("folders_holding_no_document", CN[p], CB[p], EMP[p], 1 + DESC[p], "d", p) }
+  if (blocked) exit 4
   if (keys_out != "") close(keys_out)
+  if (items_out != "" && ni) {
+    for (g = 1; g <= ng; g++) for (i = GHEAD[GORD[g]]; i; i = NEXT[i]) print IL[i] > items_out
+    close(items_out)
+  }
   C["newline_names"] = nn; B["newline_names"] = ENVIRON["LO_NLBYTES"] + 0
-  printf "{\"state\":\"walked\",\"entries\":%.0f,\"keys\":%.0f,\"kinds\":{", nt + nn, nk + 0
+  if (sweep) printf "{\"state\":\"walked\",\"kinds\":{"
+  else printf "{\"state\":\"walked\",\"entries\":%.0f,\"keys\":%.0f,\"documents\":%.0f,\"kinds\":{", nt + nn, nk + 0, nd + 0
   kind("stray_files"); kind("nonkey_folders"); kind("empty_folders"); kind("links")
   kind("special_files"); kind("unreadable_folders"); kind("remnants"); kind("shadowed_keys")
-  kind("newline_names", 1)
-  printf "}}"
+  kind("outside_keys"); kind("newline_names", 1)
+  if (sweep) printf "},\"emptied\":%.0f,\"left\":%.0f}", ne + 0, left + 0
+  else printf "}}"
 }'
 
-# lo_root <folder> <walk file> <keys file or empty> <shadow file or empty>: one root of the
-# leftovers walk as its JSON object: absent (not made), link (a symbolic link, which the
-# store never walks), unreadable (the folder cannot be read or entered), or walked. One find
-# from inside the folder lists every entry by type and sizes every regular file (wc -c,
-# which stats a regular file), symbolic links never followed, and prunes every name holding
-# a newline, printing only its parent folder; when it found one, a second find sums the
-# regular files at or below such names (wc -c reading each on stdin, so no name is printed);
-# rc 1 when a scratch file cannot be written, rc 3 when the listing holds a line the walk
-# cannot parse, for the caller to refuse (lo_fail)
+# lo_docs: the namespace's document key patterns, one per line, from the declaration's
+# document rules and its unsearched lines (store_data reads both for the probe and the
+# sweep); empty when the namespace declares neither, so every key counts a document
+lo_docs() {
+  printf '%s\n' "$SD_DOCS" | LC_ALL=C awk -F '\t' '$1 == "@unsearched" { print $2; next } $1 != "" && substr($1, 1, 1) != "@" { print $1 }'
+}
+
+# lo_root <folder> <walk file> <keys file or empty> <shadow file or empty> [<items file>
+# <start> <context> <loose>]: one root of the leftovers walk as its JSON object: absent (not
+# made), link (a symbolic link, which the store never walks), unreadable (the folder cannot
+# be read or entered), or walked. One find from inside the folder lists every entry by type
+# and sizes every regular file (wc -c, which stats a regular file), symbolic links never
+# followed, and prunes every name holding a newline, printing only its parent folder; when it
+# found one, a second find sums the regular files at or below such names (wc -c reading each
+# on stdin, so no name is printed). With an items file the walk is the sweep's plan: it starts
+# at <start> (./ and a prefix folder, whose every ancestor below the root must be a folder,
+# never a link, else nothing lies in reach), <context> names the prefix folder's ancestors
+# (key folders the walk does not list), and <loose> keeps the items at the top of the root
+# alone; rc 1 when a scratch file cannot be written, rc 3 when the listing holds a line the
+# walk cannot parse, for the caller to refuse (lo_fail)
 lo_root() {
   lr_dir=$1; lr_walk=$2; lr_keys=$3; lr_shadow=$4
+  lr_items=${5:-}; lr_start=${6:-.}; lr_ctx=${7:-}; lr_loose=${8:-}
   if [ -h "$lr_dir" ]; then printf '{"state":"link"}'; return 0; fi
   [ -d "$lr_dir" ] || { printf '{"state":"absent"}'; return 0; }
   { [ -r "$lr_dir" ] && [ -x "$lr_dir" ]; } || { printf '{"state":"unreadable"}'; return 0; }
   scratch_new "$lr_walk" "$lr_walk.e" "$lr_walk.u" || return 1
   if [ -n "$lr_keys" ]; then scratch_new "$lr_keys" || return 1; fi
-  (
-    CDPATH="" cd "$lr_dir" 2>/dev/null || exit 0
-    find . \( -name "$LO_NLPAT" -prune -exec sh -c 'for f in "$@"; do printf "n\t%s\n" "${f%/*}"; done' sh {} + \) \
-      -o \( -type d -exec printf 'd\t%s\n' {} + \) \
-      -o \( -type f -exec printf 'f\t%s\n' {} + -exec wc -c {} + \) \
-      -o \( -type l -exec printf 'l\t%s\n' {} + \) \
-      -o -exec printf 'o\t%s\n' {} +
-    exit 0
-  ) > "$lr_walk" 2>/dev/null || return 1
+  if [ -n "$lr_items" ]; then scratch_new "$lr_items" || return 1; fi
+  lr_reach=1
+  if [ "$lr_start" != . ]; then
+    lr_a=""
+    lr_rest=${lr_start#./}
+    while :; do
+      case "$lr_rest" in */*) ;; *) break ;; esac
+      lr_a="$lr_a${lr_a:+/}${lr_rest%%/*}"
+      lr_rest=${lr_rest#*/}
+      if [ -h "$lr_dir/$lr_a" ] || [ ! -d "$lr_dir/$lr_a" ]; then lr_reach=0; break; fi
+    done
+  fi
+  if [ "$lr_reach" -eq 1 ]; then
+    (
+      CDPATH="" cd "$lr_dir" 2>/dev/null || exit 0
+      find "$lr_start" \( -name "$LO_NLPAT" -prune -exec sh -c 'for f in "$@"; do printf "n\t%s\n" "${f%/*}"; done' sh {} + \) \
+        -o \( -type d -exec printf 'd\t%s\n' {} + \) \
+        -o \( -type f -exec printf 'f\t%s\n' {} + -exec wc -c {} + \) \
+        -o \( -type l -exec printf 'l\t%s\n' {} + \) \
+        -o -exec printf 'o\t%s\n' {} +
+      exit 0
+    ) > "$lr_walk" 2>/dev/null || return 1
+  fi
   LO_PASS=empty LC_ALL=C awk "$LO_AWK" "$lr_walk" > "$lr_walk.e" 2>/dev/null
   case $? in 0) ;; 3) return 3 ;; *) return 1 ;; esac
   lr_nl=0
@@ -1603,35 +1744,43 @@ lo_root() {
   if [ "$lr_nl" -eq 1 ]; then
     lr_nlb=$( (
       CDPATH="" cd "$lr_dir" 2>/dev/null || exit 0
-      find . -path "*$SD_NL*" -type f -exec sh -c 'for f in "$@"; do wc -c < "$f"; done' sh {} +
+      find "$lr_start" -path "*$SD_NL*" -type f -exec sh -c 'for f in "$@"; do wc -c < "$f"; done' sh {} +
       exit 0
     ) 2>/dev/null | LC_ALL=C awk '{ s += $1 } END { printf "%.0f", s + 0 }')
   fi
-  LO_PASS=walk LO_SFX="$SD_SUFFIX" LO_KEYPAT="$SD_KEYPAT" LO_UNREAD="$lr_walk.u" LO_KEYS="$lr_keys" LO_SHADOW="$lr_shadow" \
-    LO_NLBYTES="$lr_nlb" LC_ALL=C awk "$LO_AWK" "$lr_walk" 2>/dev/null
-  case $? in 0) return 0 ;; 3) return 3 ;; *) return 1 ;; esac
+  lr_pass=walk
+  [ -z "$lr_items" ] || lr_pass=sweep
+  LO_PASS=$lr_pass LO_SFX="$SD_SUFFIX" LO_KEYPAT="$SD_KEYPAT" LO_DOCS="$LO_DOCS" LO_UNREAD="$lr_walk.u" LO_KEYS="$lr_keys" \
+    LO_SHADOW="$lr_shadow" LO_ITEMS="$lr_items" LO_CTX="$lr_ctx" LO_LOOSE="$lr_loose" LO_NLBYTES="$lr_nlb" \
+    LC_ALL=C awk "$LO_AWK" "$lr_walk" 2>/dev/null
+  case $? in 0) return 0 ;; 3) return 3 ;; 4) return 4 ;; *) return 1 ;; esac
 }
 
 # lo_fail <rc> <code>: a walk that lo_root could not answer refuses rc 2: rc 3 a listing line
-# it cannot parse, else a scratch file it cannot write
+# it cannot parse, rc 4 (the sweep's plan alone) an item that is, or holds, a symbolic link at
+# a document's key path (a read follows it, so the store may read it as the document), else a
+# scratch file it cannot write
 lo_fail() {
   case "$1" in
     3) refuse 2 "$2" "the walk's listing holds a line it cannot parse, so nothing is answered" ;;
+    4) refuse 2 "$2" "an entry the sweep would take is, or holds, a symbolic link at a document's key path, which a read follows as the document, so it swept nothing (put the document in place of the link or remove the link first)" ;;
     *) refuse 2 "$2" "$SCRATCH_FAILED" ;;
   esac
 }
 
 # storage.leftovers <namespace>: what the named namespace's declared root and fallback root
-# hold beyond the keys its pattern admits, a read only walk of each, never a write, never a
-# lock, and no folder named in the answer: one compact object {driver, namespace, root,
-# fallback}, each root {state} for absent, link, unreadable, or none (the namespace declares
-# no fallback root), else {state: walked, entries, keys, kinds}, the kinds stray_files,
-# nonkey_folders, empty_folders, links, special_files, unreadable_folders, remnants,
-# shadowed_keys, and newline_names, each {count, bytes}, in that order; a fallback key the
-# root also holds is a shadowed key, never a key. It prints no fallback notice, since it
-# serves no key.
+# hold beyond the documents its declaration names, a read only walk of each, never a write,
+# never a lock, and no folder named in the answer: one compact object {driver, namespace,
+# root, fallback}, each root {state} for absent, link, unreadable, or none (the namespace
+# declares no fallback root), else {state: walked, entries, keys, documents, kinds}, the
+# kinds stray_files, nonkey_folders, empty_folders, links, special_files, unreadable_folders,
+# remnants, shadowed_keys, outside_keys, and newline_names, each {count, bytes}, in that
+# order; a fallback key the root also holds is a shadowed key, never a key, and keys splits
+# into documents and the outside_keys count. It prints no fallback notice, since it serves no
+# key.
 storage_leftovers() {
   store_data storage.leftovers "$1"
+  LO_DOCS=$(lo_docs)
   lo_keys=$(mktemp "$(scratch_dir)/store-leftovers.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_READ "cannot create the driver's scratch file"
   store_temp "$lo_keys"
   for lo_x in walk walk.e walk.u fwalk fwalk.e fwalk.u; do store_temp "$lo_keys.$lo_x"; done
@@ -1642,6 +1791,393 @@ storage_leftovers() {
   fi
   rm -f "$lo_keys" "$lo_keys.walk" "$lo_keys.walk.e" "$lo_keys.walk.u" "$lo_keys.fwalk" "$lo_keys.fwalk.e" "$lo_keys.fwalk.u"
   printf '{"driver":"posix","namespace":"%s","root":%s,"fallback":%s}\n' "$(escape_json "$SD_NS")" "$lo_r" "$lo_f"
+}
+
+# SW_BATCH, SW_WEIGHT, SW_GAP: the bounds of the sweep's acts. A batch holds at most SW_BATCH
+# items and SW_WEIGHT walk entries at and below them under one hold of the namespace lock, and
+# the sweep waits SW_GAP seconds with the lock released before each later batch, longer than
+# a waiting writer's 0.1 s poll, so a writer takes the lock between two batches and never
+# waits for the whole run. Measured on the macOS host (README, the sweep): a batch of 500
+# items holds the lock about 0.1 to 0.2 s.
+SW_BATCH=1000
+SW_WEIGHT=4000
+SW_GAP=0.2
+SW_STAGE=""
+
+# SW_PLAN_AWK: the one decode pass over a root's items file: each item's path decoded from the
+# walk's escapes (a backslash, a tab, a newline, or a three digit octal code), a path that
+# would hold a newline stopping the pass rc 3; the items split into batches, one closed at SW_B
+# items or when the next item would carry it past SW_W walk entries; batch <n> writes three
+# files: <SW_PRE>.<n>, one tab separated line per item (its type, its kind's text name, the
+# entries it counts, the folders it clears, and its path last); <SW_PRE>.<n>.a, one line of
+# every item's ./<path> quoted for the shell's eval; <SW_PRE>.<n>.m, one line per run of
+# siblings, their parent folder then their ./<path>, quoted alike. It prints the batch count.
+SW_PLAN_AWK='
+function dec(s,   o, i, n, c, d) {
+  if (!index(s, "\\")) return s
+  o = ""; n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c != "\\") { o = o c; continue }
+    d = substr(s, ++i, 1)
+    if (d == "\\") o = o "\\"
+    else if (d == "t") o = o "\t"
+    else if (d == "n") o = o "\n"
+    else { o = o sprintf("%c", d * 64 + substr(s, i + 1, 1) * 8 + substr(s, i + 2, 1)); i += 2 }
+  }
+  return o
+}
+function q(s,   n, P, o, i) { n = split(s, P, SQ); o = P[1]; for (i = 2; i <= n; i++) o = o SQ "\\" SQ SQ P[i]; return SQ o SQ }
+function flush() {
+  if (!nb) return
+  if (G != "") M = M G "\n"
+  printf "%s\n", A > (f ".a"); close(f ".a")
+  printf "%s", M > (f ".m"); close(f ".m")
+  close(f)
+}
+BEGIN { FS = "\t"; SQ = "\047"; pre = ENVIRON["SW_PRE"]; mb = ENVIRON["SW_B"] + 0; mw = ENVIRON["SW_W"] + 0 }
+{
+  p = dec($7)
+  if (index(p, "\n")) exit 3
+  if (nb == 0 || inb >= mb || (inb > 0 && wb + $5 > mw)) { flush(); nb++; f = pre "." nb; inb = 0; wb = 0; A = ""; M = ""; G = ""; cp = "" }
+  nm = $1; gsub(/_/, " ", nm)
+  printf "%s\t%s\t%s\t%s\t%s\n", $6, nm, $2, $4, p > f
+  a = q("./" p)
+  A = A (A == "" ? "" : " ") a
+  par = p
+  if (!sub(/\/[^\/]*$/, "", par)) par = ""
+  if (G == "" || par != cp) { if (G != "") M = M G "\n"; G = q(par) " " a; cp = par } else G = G " " a
+  inb++; wb += $5
+}
+END { flush(); print nb + 0 }'
+
+# SW_GUARD_AWK: the guard's reading of one batch's listing (d, f, l, or o, a tab, and ./<path>;
+# n for each name holding a newline): it prints X for a line it cannot parse, N for a name
+# holding a newline, else E and a tab before each listed folder showing no entry (for the
+# shell to test it can be read and entered) and D and a tab before the key of every regular
+# file or symbolic link (a read follows one) at a document's key path
+SW_GUARD_AWK='
+BEGIN { lo_init() }
+{
+  line = $0
+  if (line == "n") { nl = 1; next }
+  c = substr(line, 1, 1)
+  if (substr(line, 2, 3) == "\t./" && (c == "d" || c == "f" || c == "l" || c == "o")) { n++; GT[n] = c; GP[n] = substr(line, 5); next }
+  bad = 1
+}
+END {
+  if (bad) { print "X"; exit 0 }
+  if (nl) { print "N"; exit 0 }
+  for (i = 1; i <= n; i++) KIDS[parent(GP[i])]++
+  for (i = 1; i <= n; i++) {
+    if (GT[i] == "d" && !((GP[i]) in KIDS)) print "E\t" GP[i]
+    if ((GT[i] == "f" || GT[i] == "l") && admit(GP[i]) && isdoc(KEY_OF)) print "D\t" KEY_OF
+  }
+}'
+
+# sw_refuse <message>: a sweep that cannot go on stops there, rc 2, its line naming why and how
+# many items the run swept before it, never a path; the items swept before it stay swept
+# (moved into the backup, or removed)
+sw_refuse() {
+  store_unlock
+  refuse 2 ERR_STORAGE_WRITE "$1 ($SW_DONE items swept before it)"
+}
+
+# sw_fields <line>: one batch line split into SF_T (the planned type), SF_NAME (the kind's text
+# name), SF_N (the entries it counts), SF_E (the folders it clears), and SF_P (the path, the
+# rest of the line, tabs and all)
+sw_fields() {
+  sf_r=$1
+  SF_T=${sf_r%%"$SW_TAB"*}; sf_r=${sf_r#*"$SW_TAB"}
+  SF_NAME=${sf_r%%"$SW_TAB"*}; sf_r=${sf_r#*"$SW_TAB"}
+  SF_N=${sf_r%%"$SW_TAB"*}; sf_r=${sf_r#*"$SW_TAB"}
+  SF_E=${sf_r%%"$SW_TAB"*}; SF_P=${sf_r#*"$SW_TAB"}
+}
+
+# sw_there <path> <type>: rc 0 when the path still holds an entry of the planned type (d a
+# folder, f a regular file, l a symbolic link, o anything else), a link never followed
+sw_there() {
+  case "$2" in
+    d) [ -d "$1" ] && [ ! -h "$1" ] ;;
+    f) [ -f "$1" ] && [ ! -h "$1" ] ;;
+    l) [ -h "$1" ] ;;
+    *) [ -e "$1" ] && [ ! -h "$1" ] && [ ! -d "$1" ] && [ ! -f "$1" ] ;;
+  esac
+}
+
+# sw_guard <label> <folder> <batch file> <path>...: the document guard before a batch acts: one
+# find from inside the root over the batch's paths, symbolic links never followed, read by
+# SW_GUARD_AWK. A path at a document's key path, an item's own or one below it, stops the run,
+# except in the fallback root a key the root still holds (the root's copy shadows it); so does
+# a name holding a newline, a folder the guard can no longer read or enter, and a line it
+# cannot parse
+sw_guard() {
+  sg_label=$1; sg_dir=$2; sg_f=$3
+  shift 3
+  (
+    CDPATH="" cd "$sg_dir" 2>/dev/null || exit 1
+    find "$@" \( -name "$LO_NLPAT" -prune -exec printf 'n%.0s\n' {} + \) \
+      -o \( -type d -exec printf 'd\t%s\n' {} + \) \
+      -o \( -type f -exec printf 'f\t%s\n' {} + \) \
+      -o \( -type l -exec printf 'l\t%s\n' {} + \) \
+      -o -exec printf 'o\t%s\n' {} +
+    exit 0
+  ) < /dev/null > "$sg_f.g" 2>/dev/null || sw_refuse "$SCRATCH_FAILED"
+  LO_SFX="$SD_SUFFIX" LO_KEYPAT="$SD_KEYPAT" LO_DOCS="$LO_DOCS" LC_ALL=C awk "$LO_FUNCS$SW_GUARD_AWK" "$sg_f.g" > "$sg_f.o" 2>/dev/null \
+    || sw_refuse "$SCRATCH_FAILED"
+  while IFS= read -r sg_l; do
+    case "$sg_l" in
+      X) sw_refuse "the guard's listing of one batch holds a line it cannot parse, so the sweep stopped" ;;
+      N) sw_refuse "a name holding a newline appeared in one of the items the sweep planned, so it stopped" ;;
+      E?*)
+        sg_p=${sg_l#??}
+        { [ -r "$sg_dir/$sg_p" ] && [ -x "$sg_dir/$sg_p" ]; } \
+          || sw_refuse "one of the items the sweep planned holds a folder it can no longer read or enter, so it stopped" ;;
+      D?*)
+        sg_k=${sg_l#??}
+        if [ "$sg_label" = fallback ] && [ -f "$STORE_WS/$SD_ROOT/$sg_k$SD_SUFFIX" ]; then continue; fi
+        sw_refuse "one of the items the sweep planned is or holds a document, so it stopped" ;;
+    esac
+  done < "$sg_f.o"
+  return 0
+}
+
+# sw_move <folder> <label> <parent> <path>...: sibling paths under one parent folder moved by
+# one mv into their place in the backup (<label>/<parent>/), its folder made first; a failure
+# shows in the batch's check that follows
+sw_move() {
+  sm_dir=$1
+  sm_to="$SW_BACKUP/$2${3:+/$3}"
+  shift 3
+  mkdir -p "$sm_to" 2>/dev/null || return 0
+  ( CDPATH="" cd "$sm_dir" && mv -- "$@" "$sm_to/" ) < /dev/null > /dev/null 2>&1
+  return 0
+}
+
+# sw_batch <label> <folder> <batch file>: one batch of a root's plan under the namespace lock
+# the caller holds: each item re-checked (still there, of its planned type, and in a move its
+# backup place free), the guard over every item, the acts (one rm, or one mkdir and one mv per
+# run of siblings), then the check that each item left its place; SW_DONE and SW_EMPTIED add
+# the entries and the folders the batch swept
+sw_batch() {
+  sb_label=$1; sb_dir=$2; sb_file=$3
+  while IFS= read -r sb_l; do
+    sw_fields "$sb_l"
+    sw_there "$sb_dir/$SF_P" "$SF_T" || sw_refuse "one of the $SF_NAME the sweep planned is gone or changed, so it stopped"
+    if [ "$SW_DELETE" -eq 0 ] && { [ -e "$SW_BACKUP/$sb_label/$SF_P" ] || [ -h "$SW_BACKUP/$sb_label/$SF_P" ]; }; then
+      sw_refuse "the sweep's backup already holds the place of one of the $SF_NAME"
+    fi
+  done < "$sb_file"
+  sb_a=""
+  IFS= read -r sb_a < "$sb_file.a"
+  [ -n "$sb_a" ] || sw_refuse "$SCRATCH_FAILED"
+  eval "set -- $sb_a"
+  sw_guard "$sb_label" "$sb_dir" "$sb_file" "$@"
+  if [ "$SW_DELETE" -eq 1 ]; then
+    ( CDPATH="" cd "$sb_dir" && rm -rf -- "$@" ) < /dev/null > /dev/null 2>&1
+  else
+    while IFS= read -r sb_g; do
+      eval "set -- $sb_g"
+      sw_move "$sb_dir" "$sb_label" "$@"
+    done < "$sb_file.m"
+  fi
+  sb_fail=""
+  while IFS= read -r sb_l; do
+    sw_fields "$sb_l"
+    if [ -e "$sb_dir/$SF_P" ] || [ -h "$sb_dir/$SF_P" ]; then
+      if [ -z "$sb_fail" ]; then
+        if [ "$SW_DELETE" -eq 1 ]; then
+          sb_fail="the sweep could not remove one of the $SF_NAME"
+        else
+          case "$SF_P" in */*) sb_par=${SF_P%/*} ;; *) sb_par="" ;; esac
+          if [ -d "$SW_BACKUP/$sb_label${sb_par:+/$sb_par}" ]; then sb_fail="the sweep could not move one of the $SF_NAME"
+          else sb_fail="the sweep could not make its backup folder for one of the $SF_NAME"
+          fi
+        fi
+      fi
+      continue
+    fi
+    SW_DONE=$((SW_DONE + SF_N))
+    SW_EMPTIED=$((SW_EMPTIED + SF_E))
+  done < "$sb_file"
+  [ -z "$sb_fail" ] || sw_refuse "$sb_fail"
+  return 0
+}
+
+# sw_root <label> <folder> <items file>: the acts over one root's plan: one awk pass decodes it
+# into batches, and each batch takes the namespace lock, runs sw_batch, and releases it, the
+# sweep waiting SW_GAP seconds before every batch after the run's first
+sw_root() {
+  sr_label=$1; sr_dir=$2; sr_items=$3
+  [ -s "$sr_items" ] || return 0
+  sr_n=$(SW_PRE="$SW_STAGE/$sr_label" SW_B="$SW_BATCH" SW_W="$SW_WEIGHT" LC_ALL=C awk "$SW_PLAN_AWK" "$sr_items" 2>/dev/null) \
+    || sw_refuse "$SCRATCH_FAILED"
+  sr_i=0
+  while [ "$sr_i" -lt "$sr_n" ]; do
+    sr_i=$((sr_i + 1))
+    if [ "$SW_HELD" -eq 1 ]; then sleep "$SW_GAP" 2>/dev/null || sleep 1; fi
+    SL_TAIL=" ($SW_DONE items swept before it)"
+    store_lock "$SD_NS"
+    sw_batch "$sr_label" "$sr_dir" "$SW_STAGE/$sr_label.$sr_i"
+    store_unlock
+    SW_HELD=1
+  done
+  return 0
+}
+
+# sw_newlines <root answer>: SW_NL set to the names holding a newline its walk found, 0 for a
+# root it did not walk
+sw_newlines() {
+  case "$1" in
+    *'"newline_names":{"count":'*) SW_NL=${1#*'"newline_names":{"count":'}; SW_NL=${SW_NL%%,*} ;;
+    *) SW_NL=0 ;;
+  esac
+}
+
+# sw_nested: a root of the namespace that is, or holds, another namespace's root or fallback
+# root refuses rc 1 naming both namespaces, since its walk would take that storage for
+# leftovers; a declaration listing that cannot be read whole refuses rc 2, the nesting unknown
+sw_nested() {
+  sn_list=$(CTX_STORE_WORKSPACE="$STORE_WS" "$SD_SCRIPT" --list 2>/dev/null) \
+    || refuse 2 ERR_STORAGE_READ "the module declarations cannot be listed whole, so the sweep cannot rule out another namespace's root inside a root of namespace '$SD_NS'"
+  sn_hit=$(printf '%s\n' "$sn_list" | SN_NS="$SD_NS" SN_R="$SD_ROOT" SN_F="$SD_FALLBACK" LC_ALL=C awk -F '\t' '
+    function inside(o, r) { return r != "" && o != "" && (o == r || index(o, r "/") == 1) }
+    $1 == ENVIRON["SN_NS"] { next }
+    { for (i = 2; i <= NF; i++) if (inside($i, ENVIRON["SN_R"]) || inside($i, ENVIRON["SN_F"])) { print $1; exit } }')
+  [ -z "$sn_hit" ] || refuse 1 ERR_INVALID_ARGUMENT "a root of namespace '$SD_NS' holds the storage of namespace '$sn_hit', so it cannot be swept"
+}
+
+# storage.sweep <namespace> [--dry-run] [--delete] [--stamp=<stamp>] [--prefix=<prefix> |
+# --loose]: every leftover of the namespace's root and fallback root, the probe's kinds and
+# the keys outside the document rules, moved into a stamped sweep folder under the drawer's
+# backups folder with its root label and relative layout kept (<namespace>/<root|fallback>/
+# <path>), or with --delete removed outright, no backup kept; a key folder holding no document
+# below it goes as one item, and a fallback root the sweep left empty is dropped as the write
+# path drops one. A document never moves: the plan never holds one, and before each batch acts
+# a guard re-walks its items and stops the run at a document's key path. A folder the walk
+# cannot read or enter is never moved or removed, in either form: the sweep leaves it and
+# counts it as left; a name holding a newline anywhere in the walk's reach refuses the run rc
+# 2 naming the count, the dry run too, since the sweep never parses such a name; a root that
+# is or holds another namespace's root refuses rc 1. --prefix=<prefix> (whole key segments
+# ending in a slash) sweeps that folder of each root alone; --loose sweeps the entries at the
+# top of each root that hold no key; neither sweeps both roots whole. A run plans under the
+# namespace lock, then acts in batches (SW_BATCH), each under its own hold of the lock with
+# every item re-checked first; --dry-run takes no lock, writes nothing, and answers exactly
+# what the run would do. The answer is one compact object {driver, namespace, mode, dry_run,
+# stamp, root, fallback}, mode move or delete, stamp the backup's (null for --delete, a dry
+# run, and a run that moved nothing), each root {state} for absent, link, unreadable, or
+# none, else {state: walked, kinds, emptied, left}, the probe's ten kinds each {count, bytes}
+# of what the run swept, emptied the key folders holding no document it cleared, and left the
+# unreadable folders it left untouched; it names no folder.
+storage_sweep() {
+  FN=storage.sweep
+  [ $# -ge 1 ] || refuse 1 ERR_INVALID_ARGUMENT "storage.sweep takes the namespace"
+  sw_ns=$1
+  shift
+  SW_DRY=0; SW_DELETE=0; sw_stamp=""; sw_prefix=""; sw_loose=""; sw_seen=" "
+  for sw_a in "$@"; do
+    sw_flag=${sw_a%%=*}
+    case "$sw_seen" in *" $sw_flag "*) refuse 1 ERR_INVALID_ARGUMENT "the flag '$sw_flag' is given twice" ;; esac
+    sw_seen="$sw_seen$sw_flag "
+    case "$sw_a" in
+      --dry-run) SW_DRY=1 ;;
+      --delete) SW_DELETE=1 ;;
+      --loose) sw_loose=1 ;;
+      --stamp=*)
+        sw_stamp=${sw_a#--stamp=}
+        case "$sw_stamp" in
+          ""|*[!A-Za-z0-9_-]*|-*) refuse 1 ERR_INVALID_ARGUMENT "malformed stamp '$sw_stamp' (letters, digits, underscore, and dash, not starting with a dash)" ;;
+        esac
+        ;;
+      --prefix=*)
+        sw_prefix=${sw_a#--prefix=}
+        case "$sw_prefix" in
+          */) store_key_ok "${sw_prefix%/}" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sw_prefix' (whole key segments ending in a slash)" ;;
+          *) refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sw_prefix' (whole key segments ending in a slash)" ;;
+        esac
+        ;;
+      *) refuse 1 ERR_INVALID_ARGUMENT "unknown argument '$sw_a'" ;;
+    esac
+  done
+  [ -z "$sw_prefix" ] || [ -z "$sw_loose" ] || refuse 1 ERR_INVALID_ARGUMENT "--prefix and --loose name two scopes; give one or neither"
+  store_data storage.sweep "$sw_ns"
+  # the drawer's backups and scratch folders never lie in a root, nor a root in the backups
+  # folder: a sweep would move the folder it moves into, or the lock it holds
+  for sw_r in "$SD_ROOT" ${SD_FALLBACK:+"$SD_FALLBACK"}; do
+    for sw_k in .contexture/backups .contexture/tmp; do
+      case "$sw_k/" in "$sw_r"/*) refuse 1 ERR_INVALID_ARGUMENT "a root of namespace '$SD_NS' holds the drawer's backups or scratch folder, so it cannot be swept" ;; esac
+    done
+    case "$sw_r/" in .contexture/backups/*) refuse 1 ERR_INVALID_ARGUMENT "a root of namespace '$SD_NS' lies in the drawer's backups folder, so it cannot be swept" ;; esac
+  done
+  sw_nested
+  LO_DOCS=$(lo_docs)
+  SW_TAB='	'
+  sw_mode=move
+  [ "$SW_DELETE" -eq 0 ] || sw_mode=delete
+  if [ "$SW_DRY" -eq 1 ] || [ "$SW_DELETE" -eq 1 ]; then
+    sw_stamp=""
+  elif [ -z "$sw_stamp" ]; then
+    sw_stamp="$(date +%Y%m%d-%H%M%S)-$$"
+  fi
+  SW_BACKUP="$STORE_WS/.contexture/backups/sweep-$sw_stamp/$SD_NS"
+  sw_start=.
+  sw_ctx=""
+  if [ -n "$sw_prefix" ]; then
+    sw_top=${sw_prefix%/}
+    sw_start="./$sw_top"
+    sw_ctx=$(printf '%s\n' "$sw_top" | LC_ALL=C awk -F / '{ a = ""; for (i = 1; i < NF; i++) { a = a (i > 1 ? "/" : "") $i; print a } }')
+  fi
+  sw_t=$(mktemp "$(scratch_dir)/store-sweep.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+  store_temp "$sw_t"
+  for sw_x in walk walk.e walk.u items fwalk fwalk.e fwalk.u fitems; do store_temp "$sw_t.$sw_x"; done
+  trap 'store_cleanup' EXIT
+  trap 'store_cleanup; exit 129' HUP
+  trap 'store_cleanup; exit 130' INT
+  trap 'store_cleanup; exit 143' TERM
+  # the plan: both walks under one hold of the namespace lock, so no live write's temp is
+  # planned; the acts take the lock again, batch by batch
+  [ "$SW_DRY" -eq 1 ] || store_lock "$SD_NS"
+  sw_r=$(lo_root "$STORE_WS/$SD_ROOT" "$sw_t.walk" "$sw_t" "" "$sw_t.items" "$sw_start" "$sw_ctx" "$sw_loose") \
+    || { sw_rc=$?; store_unlock; lo_fail "$sw_rc" ERR_STORAGE_WRITE; }
+  sw_f='{"state":"none"}'
+  if [ -n "$SD_FALLBACK" ]; then
+    sw_f=$(lo_root "$STORE_WS/$SD_FALLBACK" "$sw_t.fwalk" "" "$sw_t" "$sw_t.fitems" "$sw_start" "$sw_ctx" "$sw_loose") \
+      || { sw_rc=$?; store_unlock; lo_fail "$sw_rc" ERR_STORAGE_WRITE; }
+  fi
+  store_unlock
+  sw_newlines "$sw_r"; sw_nl=$SW_NL
+  sw_newlines "$sw_f"; sw_nl=$((sw_nl + SW_NL))
+  if [ "$sw_nl" -gt 0 ]; then
+    if [ "$sw_nl" -eq 1 ]; then sw_w="1 entry whose name holds a newline lies"; else sw_w="$sw_nl entries whose names hold a newline lie"; fi
+    refuse 2 ERR_STORAGE_READ "$sw_w in the sweep's reach, and the sweep never parses such a name, so it swept nothing (rename or remove each one first)"
+  fi
+  if [ "$SW_DRY" -eq 0 ]; then
+    SW_DONE=0; SW_EMPTIED=0; SW_HELD=0
+    SW_STAGE=$(mktemp -d "$(scratch_dir)/store-sweep-stage.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
+    case "$sw_r" in *'"walked"'*)
+      sw_e=$SW_EMPTIED
+      sw_root root "$STORE_WS/$SD_ROOT" "$sw_t.items"
+      sw_r="${sw_r%%,\"emptied\":*},\"emptied\":$((SW_EMPTIED - sw_e)),\"left\":${sw_r##*\"left\":}" ;;
+    esac
+    case "$sw_f" in *'"walked"'*)
+      sw_e=$SW_EMPTIED
+      sw_root fallback "$STORE_WS/$SD_FALLBACK" "$sw_t.fitems"
+      sw_f="${sw_f%%,\"emptied\":*},\"emptied\":$((SW_EMPTIED - sw_e)),\"left\":${sw_f##*\"left\":}"
+      SL_TAIL=" ($SW_DONE items swept before it)"
+      store_lock "$SD_NS"
+      store_fallback_drop
+      store_unlock ;;
+    esac
+    rm -rf "$SW_STAGE" 2>/dev/null
+    SW_STAGE=""
+    # no item moved, so no backup folder was made: the answer names no stamp
+    [ "$SW_DONE" -gt 0 ] || sw_stamp=""
+  fi
+  rm -f "$sw_t" "$sw_t.walk" "$sw_t.walk.e" "$sw_t.walk.u" "$sw_t.items" "$sw_t.fwalk" "$sw_t.fwalk.e" "$sw_t.fwalk.u" "$sw_t.fitems"
+  if [ "$SW_DRY" -eq 1 ]; then sw_dj=true; else sw_dj=false; fi
+  if [ -n "$sw_stamp" ]; then sw_sj="\"$sw_stamp\""; else sw_sj=null; fi
+  printf '{"driver":"posix","namespace":"%s","mode":"%s","dry_run":%s,"stamp":%s,"root":%s,"fallback":%s}\n' \
+    "$(escape_json "$SD_NS")" "$sw_mode" "$sw_dj" "$sw_sj" "$sw_r" "$sw_f"
 }
 
 # px_extra <n> <argv...>: no argument beyond the n the function takes
@@ -1678,6 +2214,7 @@ case "$cmd" in
     storage_leftovers "$1"
     exit 0
     ;;
+  storage.sweep) storage_sweep "$@"; exit $? ;;
   *) refuse 2 ERR_CAPABILITY_UNSUPPORTED "unknown function '$cmd'" ;;
 esac
 exit 0

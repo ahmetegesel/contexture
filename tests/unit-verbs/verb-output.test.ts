@@ -214,6 +214,10 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await u('diagnose', '--leftovers');
       await u('diagnose', '--leftovers', '--json');
       await u('migrate', '--all');
+      await u('migrate', '--sweep', '--dry-run', '--all');
+      await u('migrate', '--sweep', '--all');
+      await take(['store', 'check', '--leftovers', '--sweep', '--dry-run']);
+      await take(['store', 'check', '--leftovers', '--sweep']);
       const plan = await u('fold', 'cu');
       await u('fold', 'cu');
       const foldLane = /--lane=([A-Za-z0-9_-]+)/.exec(plan.stdout)?.[1] ?? '';

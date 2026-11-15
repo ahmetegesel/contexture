@@ -185,16 +185,16 @@ describe.concurrent('store-data, the data file reader', () => {
     expect(lines.slice(6)).toEqual(['flat', 'text', 'title,body', 'title', 'line']);
   });
 
-  it('[modules-r10, the-engine-r-cj0ey] refuses an argument beyond the namespace, --with-fallback, and --with-fields, a repeated flag, and an argument beyond the listing flag, rc 1', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] refuses an argument beyond the namespace, --with-fallback, --with-fields, and --with-unsearched, a repeated flag, and an argument beyond the listing flag, rc 1', async () => {
     const sb = workspace();
-    const usage = (arg: string) => `store-data: unexpected argument '${arg}' (store-data <namespace> [--with-fallback] [--with-fields], or store-data --list)\n`;
+    const usage = (arg: string) => `store-data: unexpected argument '${arg}' (store-data <namespace> [--with-fallback] [--with-fields] [--with-unsearched], or store-data --list)\n`;
     const one = await exec(STORE_DATA, ['docs', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
     expect([one.code, one.stdout, one.stderr]).toEqual([1, '', usage('extra')]);
     const two = await exec(STORE_DATA, ['docs', '--with-fallback', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
     expect([two.code, two.stdout, two.stderr]).toEqual([1, '', usage('extra')]);
     const three = await exec(STORE_DATA, ['docs', '--with-fields', '--with-fallback', 'extra'], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
     expect([three.code, three.stdout, three.stderr]).toEqual([1, '', usage('extra')]);
-    for (const flag of ['--with-fallback', '--with-fields']) {
+    for (const flag of ['--with-fallback', '--with-fields', '--with-unsearched']) {
       const twice = await exec(STORE_DATA, ['docs', flag, flag], { cwd: sb, env: { CTX_STORE_WORKSPACE: sb } });
       expect([twice.code, twice.stdout, twice.stderr, flag]).toEqual([1, '', usage(flag), flag]);
     }
@@ -333,6 +333,50 @@ describe.concurrent('store-data, the data file reader', () => {
       expect([strip(await okLines(withFields, 'ideas', ...flags), withFields), flags]).toEqual([strip(await okLines(without, 'ideas', ...flags), without), flags]);
     }
     expect(await listing(withFields)).toMatchObject({ code: 0, stdout: 'docs\tdocs\nideas\tidea-root\n', stderr: '' });
+  });
+
+  const UNSEARCHED = ['key: <unit>/<path...>', 'search: documents', 'document: <unit>/journal journal entry @entry', 'unsearched: <unit>/state', 'unsearched:   <unit>/lanes/<lane>/notes', 'field: what: optional line', ''].join('\n');
+  const UNLISTED = UNSEARCHED.split('\n').filter((l) => !l.startsWith('unsearched:')).join('\n');
+
+  it('[modules-r10, the-engine-r-cj0ey] an unsearched line is answered under --with-unsearched alone: after the document rules and before any field line, one @unsearched line per line in declaration order', async () => {
+    const sb = workspace();
+    const file = dataFile(sb, 'modules', 'unitlike', UNSEARCHED);
+    const fixed = ['unitlike', 'unitlike', '', '<unit>/<path...>', 'false', file, 'documents', '', '', 'head', 'line'];
+    const rule = '<unit>/journal\tjournal\tentry\t@entry';
+    const uns = ['@unsearched\t<unit>/state', '@unsearched\t<unit>/lanes/<lane>/notes'];
+    expect((await okLines(sb, 'unitlike', '--with-unsearched')).split('\n')).toEqual([...fixed, rule, ...uns, '']);
+    const all = [...fixed, '', rule, ...uns, '@field\twhat: optional line', ''];
+    expect((await okLines(sb, 'unitlike', '--with-fields', '--with-unsearched', '--with-fallback')).split('\n')).toEqual(all);
+    expect((await okLines(sb, 'unitlike', '--with-unsearched', '--with-fallback', '--with-fields')).split('\n')).toEqual(all);
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] the plain, --with-fallback, --with-fields, and --list answers of a data file holding unsearched lines are byte identical to the same file without them', async () => {
+    const withLines = workspace();
+    dataFile(withLines, 'modules', 'unitlike', UNSEARCHED);
+    const without = workspace();
+    dataFile(without, 'modules', 'unitlike', UNLISTED);
+    const strip = (out: string, sb: string) => out.replace(sb, '<sb>');
+    for (const flags of [[], ['--with-fallback'], ['--with-fields']]) {
+      expect([strip(await okLines(withLines, 'unitlike', ...flags), withLines), flags]).toEqual([strip(await okLines(without, 'unitlike', ...flags), without), flags]);
+    }
+    expect((await listing(withLines)).stdout).toBe((await listing(without)).stdout);
+  });
+
+  it.each([
+    ['a pattern with a blank inside', 'unsearched: <unit>/a b', 'an unsearched line takes one key pattern'],
+    ['an empty pattern', 'unsearched:', 'an unsearched line takes one key pattern'],
+    ['a malformed segment', 'unsearched: <unit>/st*te', "malformed unsearched key pattern '<unit>/st*te'"],
+    ['a non-final multi-segment placeholder', 'unsearched: <unit...>/state', "malformed unsearched key pattern '<unit...>/state'"],
+  ])('[modules-r10, the-engine-r-cj0ey] an unsearched line holding %s refuses rc 1 naming its line', async (_, line, reason) => {
+    const sb = workspace();
+    dataFile(sb, 'modules', 'unitlike', `key: <unit>/<path...>\n${line}\n`);
+    await refusal(sb, 'unitlike', 1, `line 2: ${reason}`);
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] the unit module declares its state an unsearched document, so the state stays out of its document rules', async () => {
+    const lines = (await exec(STORE_DATA, ['unit', '--with-unsearched'], { cwd: join(ROOT, 'base'), env: { CTX_STORE_WORKSPACE: join(ROOT, 'base') } })).stdout.split('\n');
+    expect(lines.filter((l) => l.startsWith('@unsearched\t'))).toEqual(['@unsearched\t<unit>/state']);
+    expect(lines.filter((l) => l.startsWith('<unit>/state\t'))).toEqual([]);
   });
 
   it('[modules-r10, the-engine-r-cj0ey] a data file with no field line answers --with-fields exactly as without it, docs-shaped and unit-shaped alike', async () => {

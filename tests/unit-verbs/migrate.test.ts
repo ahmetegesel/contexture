@@ -180,8 +180,8 @@ describe.concurrent('the gradual record root move: the fallback read, the warnin
   });
 
   it.each([
-    ['a bare call', [], 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all\nhelp: ctx unit help migrate\n'],
-    ['a forward with no unit', ['--forward=store#a/=store#b/'], 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all\nhelp: ctx unit help migrate\n'],
+    ['a bare call', [], 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all | ctx unit migrate --sweep [--dry-run] [--delete] (<unit> [<unit>...] | --all)\nhelp: ctx unit help migrate\n'],
+    ['a forward with no unit', ['--forward=store#a/=store#b/'], 'Usage: ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit> [<unit>...] | ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] --all | ctx unit migrate --sweep [--dry-run] [--delete] (<unit> [<unit>...] | --all)\nhelp: ctx unit help migrate\n'],
     ['--all beside a unit', ['--all', 'leg-u'], "migrate: error: unexpected argument 'leg-u' (ERR_INVALID_ARGUMENT)\n"],
     ['a malformed unit', ['Bad!'], "migrate: error: malformed unit 'Bad!' (ERR_INVALID_ARGUMENT)\n"],
     ['an unknown unit', ['no-such-u'], "unit.migrate: error: unit 'no-such-u' not found (ERR_ENTITY_NOT_FOUND)\n"],

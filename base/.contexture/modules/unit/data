@@ -16,3 +16,5 @@ document: <unit>/lanes/<lane>/recipe lane_recipe lane -
 document: <unit>/lanes/<lane>/journal lane_journal lane -
 document: <unit>/lanes/<lane>/journal lane_journal lane_entry @entry
 document: <unit>/lanes/<lane>/report lane_report lane -
+# the state: a document every verb reads, left out of the search schema so no search returns it
+unsearched: <unit>/state
