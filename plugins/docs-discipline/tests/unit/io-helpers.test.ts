@@ -113,6 +113,18 @@ describe('docs_record_file: a path inside another module\'s store root, read thr
     expect([r.code, r.stderr]).toEqual([rc, '']);
   });
 
+  it('[docs-module-r26] answers rc 2 for every path, never a partial root list, when a module\'s data file cannot be read beside a good one', async () => {
+    const broken = stage('posix', 'record-file-broken');
+    dataFile(broken, 'extensions', 'docs', DOCS_SHAPED);
+    dataFile(broken, 'modules', 'notes', 'key: <a>/<b>\n');
+    dataFile(broken, 'modules', 'broken', 'key: <a>\nbogus: x\n');
+    mkdirSync(join(broken, 'notes'));
+    for (const path of [`${RECORD_ROOT}/u/backlog.md`, 'notes/x.md', 'backlog.md', 'docs/demo/x.md']) {
+      const r = await guard(broken, path);
+      expect([path, r.code, r.stderr]).toEqual([path, 2, '']);
+    }
+  });
+
   it('[docs-module-r26] refuses rc 2 when no storage core lists the roots', async () => {
     const bare = sandbox('record-file-bare');
     mkdirSync(join(bare, '.contexture/modules'), { recursive: true });

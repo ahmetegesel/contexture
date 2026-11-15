@@ -256,8 +256,10 @@ every valid declaration of both module roots, one `<namespace><TAB><root>` line 
 namespace when none is declared or the module is installed under an alias, then
 `<TAB><fallback root>` when one applies), sorted
 by namespace, a name both roots hold answered once (the workspace module's), and leaves
-out a malformed declaration and a module folder whose name is no namespace token, one
-stderr line each, rc 0 (rc 2 with no module drawer).
+out a declaration it cannot read (a malformed one, or an extension module's whose install
+record area cannot be read) and a module folder whose name is no namespace token, one
+stderr line each, then exits 1 with the rows it read, so a reader never takes a partial
+listing for the whole (rc 0 when nothing is left out, rc 2 with no module drawer).
 
 ## Discovery and selection
 
@@ -311,8 +313,10 @@ is reached only through that module's `ctx` verbs (`get`, `search`). The library
 - `store_roots`, the declared roots read through `store-data --list` (found beside the
   resolver the library calls, then under the drawer, then in the base mirror), never the
   driver: one `<namespace><TAB><root>` line per declared root, a fallback root on its own
-  line after its root; rc 2 with one `store.roots: error:` line when no data reader
-  answers;
+  line after its root; the whole list or none: rc 2 with one `store.roots: error:` line,
+  `ERR_DRIVER_NOT_FOUND` when no data reader is found and `ERR_STORAGE_READ` quoting the
+  reader's first reason when the listing left a module out (a data file it cannot read)
+  or failed (no module drawer), never a partial list;
 - the shared checks, each silent with rc 0 for a pass, 1 for a fail, and 2 when the check
   cannot run: `lib_utf8_ok <string>` and `lib_utf8_file_ok <file>`, the UTF-8 check (RFC
   3629: no overlong form, no surrogate, nothing above U+10FFFF), with its awk text in

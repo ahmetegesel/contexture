@@ -302,8 +302,12 @@ done < "$scratch/inames"
 # an alias; the storage core's data reader answers both, over a scratch copy of the payload's
 # data files under their installed names beside their module lines, and over the workspace;
 # a root or fallback root another installed module resolves to (this package's own modules
-# aside), or two modules of the package share, refuses naming --as, since an alias moves it
+# aside), or two modules of the package share, refuses naming --as, since an alias moves it.
+# Either listing leaving a module out refuses, since an unread root cannot be checked: the
+# payload's rc 1 (a malformed data file of the package), the workspace's rc 2, a module this
+# package itself installed aside (its replaced copy takes no part, so a re-install repairs it)
 sd_bin=$ws_root/.contexture/storage/scripts/store-data
+sd_why() { awk 'index($0, "store-data: ") == 1 { print substr($0, 13); exit }' "$1"; }
 if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
   sd_ws=$scratch/roots
   mkdir -p "$sd_ws/.contexture/modules" "$sd_ws/.contexture/extensions/.state" || die 2 "cannot stage the storage root check"
@@ -314,11 +318,35 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
       && printf 'module %s %s\n' "$mname" "$mname_o" >> "$sd_ws/.contexture/extensions/.state/$pkg_name.files" \
       || die 2 "cannot stage the storage root check"
   done < "$scratch/inames"
-  CTX_STORE_WORKSPACE=$sd_ws "$sd_bin" --list > "$scratch/roots.new" 2>/dev/null
-  CTX_STORE_WORKSPACE=$ws_root "$sd_bin" --list > "$scratch/roots.old" 2>/dev/null
+  CTX_STORE_WORKSPACE=$sd_ws "$sd_bin" --list > "$scratch/roots.new" 2> "$scratch/roots.new.err"
+  sd_rc=$?
+  if [ "$sd_rc" -ne 0 ]; then
+    [ "$sd_rc" -eq 1 ] || sd_rc=2
+    die "$sd_rc" "a module data file of the package cannot be read, so its storage roots cannot be checked ($(sd_why "$scratch/roots.new.err"))"
+  fi
   : > "$scratch/own"
   if [ "$have_record" -eq 1 ]; then
     awk '$1 == "file" { n = split($4, a, "/"); if (n >= 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules") print a[4] }' "$state_file" > "$scratch/own"
+  fi
+  CTX_STORE_WORKSPACE=$ws_root "$sd_bin" --list > "$scratch/roots.old" 2> "$scratch/roots.old.err"
+  sd_rc=$?
+  if [ "$sd_rc" -ne 0 ]; then
+    _left=$(awk '
+      FILENAME == ARGV[1] { own[$0] = 1; next }
+      index($0, "store-data: ") != 1 { next }
+      {
+        m = substr($0, 13)
+        if (index(m, "namespace \047") == 1) {
+          ns = substr(m, 12)
+          ns = substr(ns, 1, index(ns, "\047") - 1)
+          if (ns in own) next
+        }
+        print m
+        exit
+      }' "$scratch/own" "$scratch/roots.old.err")
+    if [ "$sd_rc" -ne 1 ] || [ -n "$_left" ]; then
+      die 2 "a module data file of the workspace cannot be read, so the storage roots cannot be checked (${_left:-$(sd_why "$scratch/roots.old.err")}); fix that module's data file first"
+    fi
   fi
   _clash=$(awk '
     FILENAME == ARGV[1] { own[$0] = 1; next }

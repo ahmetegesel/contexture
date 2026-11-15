@@ -76,13 +76,14 @@
 # line each, the namespace (the folder's name) and its root (the namespace when none is
 # declared, or when the module is installed under an alias) separated by a tab, then the
 # fallback root as a third column when one applies, sorted by namespace; a name both roots
-# hold answers the workspace module's. A
-# module folder whose name is no namespace token and a malformed declaration are left out,
-# each with one line on stderr, since such a namespace serves no store value; the listing
-# still answers rc 0.
+# hold answers the workspace module's. A module folder whose name is no namespace token and
+# a declaration that cannot be read (a malformed one, or one whose root is unknown) are left
+# out, each with one line on stderr, and the listing then exits 1, the rows it read still
+# answered, so a reader never takes a partial listing for the whole.
 #
-# Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, or an argument
-# beyond the namespace, --with-fallback, and --with-fields or beyond the listing flag; 2 the
+# Exit codes: 0 the answer; 1 a malformed declaration, a malformed namespace, an argument
+# beyond the namespace, --with-fallback, and --with-fields or beyond the listing flag, or a
+# listing that left a module out; 2 the
 # module drawer is absent or unreadable, the install record area an extension module's
 # root needs cannot be read, or the field validator a field line needs is missing or its
 # scratch copy of the field lines cannot be written; 3 no module folder of that name holds a
@@ -479,12 +480,13 @@ END {
 # the listing mode: every module folder holding a data file, its name the namespace, the
 # workspace modules first so an extension module of a name the workspace holds is left out
 # as discovery shadows it, each declaration parsed whole and its root and any fallback root
-# answered, in namespace order
+# answered, in namespace order; any module left out makes the exit 1
 if [ "$SD_LIST" -eq 1 ]; then
   SD_WITH_FB=1
   sd_tab=$(printf '\t')
   sd_seen=" "
   sd_rows=""
+  sd_left=0
   for sd_file in "$sd_modules"/*/data "$sd_extension_modules"/*/data; do
     [ -f "$sd_file" ] || continue
     sd_ns=${sd_file%/*}
@@ -496,21 +498,27 @@ if [ "$SD_LIST" -eq 1 ]; then
     case "$sd_ns" in
       [!a-z0-9]*|*[!a-z0-9._-]*)
         printf 'store-data: the module folder '\''%s'\'' names no namespace: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit\n' "$sd_ns" >&2
+        sd_left=1
         continue
         ;;
     esac
     sd_rows="$sd_rows$sd_ns$sd_tab$sd_file
 "
   done
-  printf '%s' "$sd_rows" | LC_ALL=C sort | while IFS="$sd_tab" read -r sd_ns sd_file; do
+  sd_sorted=$(printf '%s' "$sd_rows" | LC_ALL=C sort) || sd_env "the module listing cannot be sorted"
+  while IFS="$sd_tab" read -r sd_ns sd_file; do
+    [ -n "$sd_ns" ] || continue
     if sd_out=$(sd_parse "$sd_ns" "$sd_file" 2>&1); then
       sd_fb=$(printf '%s\n' "$sd_out" | sed -n '12p')
       printf '%s\t%s%s\n' "$sd_ns" "$(printf '%s\n' "$sd_out" | sed -n '2p')" "${sd_fb:+$sd_tab$sd_fb}"
     else
       printf 'store-data: namespace '\''%s'\'': %s\n' "$sd_ns" "${sd_out#store-data: }" >&2
+      sd_left=1
     fi
-  done
-  exit 0
+  done <<EOF
+$sd_sorted
+EOF
+  exit "$sd_left"
 fi
 
 # the owner lookup: the data file of the module folder named after the namespace, the

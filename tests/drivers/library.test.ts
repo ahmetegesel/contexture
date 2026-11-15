@@ -186,6 +186,26 @@ describe('the library\'s caller lookup', { concurrent: true }, () => {
     expect([r.code, r.stderr, r.stdout]).toEqual([0, '', 'legacy\tnew-root\nlegacy\told-root\nlibprobe\tlibprobe-root\n']);
   });
 
+  it('[the-engine-r26, the-engine-r-cj0ey] store_roots answers no partial list: a data file that cannot be read beside a good one refuses rc 2 with one line naming that module, nothing on stdout', async () => {
+    const staged = fresh(snap);
+    const sb = sandbox('roots-partial');
+    dataFile(sb, 'modules', 'libprobe', LIBPROBE);
+    dataFile(sb, 'modules', 'broken', 'root: broken-root\nkey: <a>\nbogus: x\n');
+    const r = await shFunction(sb, join(staged, LIBRARY), 'store_roots', [], {
+      env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(staged, '.contexture/storage/scripts/driver-resolver') },
+    });
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', "store.roots: error: a module's data file cannot be read, so no root list is answered (namespace 'broken': unknown field 'bogus' in the data file) (ERR_STORAGE_READ)\n"]);
+  });
+
+  it('[the-engine-r21, the-engine-r26] store_roots refuses rc 2 with one store.roots line quoting the data reader when no module drawer is found', async () => {
+    const staged = fresh(snap);
+    const sb = sandbox('roots-no-drawer');
+    const r = await shFunction(sb, join(staged, LIBRARY), 'store_roots', [], {
+      env: { CTX_STORE_ROOT: sb, CTX_STORE_RESOLVER: join(staged, '.contexture/storage/scripts/driver-resolver') },
+    });
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', 'store.roots: error: the module declarations cannot be listed (no module drawer at the workspace root) (ERR_STORAGE_READ)\n']);
+  });
+
   it('[the-engine-r21, the-engine-r26] store_roots refuses rc 2 with one line when no data reader is found', async () => {
     const sb = sandbox('no-reader');
     mkdirSync(join(sb, '.contexture/modules'), { recursive: true });

@@ -171,6 +171,44 @@ describe.concurrent('package-install: install aliases', () => {
     expect((await install(sb, two, '--as=beta=beta2')).code).toBe(0);
   });
 
+  it('[modules-r15, the-engine-r22] a workspace data file that cannot be read beside the good ones refuses an install rc 2 naming that module, writing nothing, since its root cannot be checked; read again, its root collides', async () => {
+    const sb = sandbox();
+    const broken = join(sb, '.contexture/modules/broken/data');
+    put(broken, 'root: shared\nkey: <a>\nbogus: x\n');
+    const jots = rootedPkg(sb, 'pkg-c', 'jots');
+    const before = treeState(sb);
+    const r = await install(sb, jots);
+    expect([r.code, r.stdout, r.stderr]).toEqual([2, '', "package-install: a module data file of the workspace cannot be read, so the storage roots cannot be checked (namespace 'broken': unknown field 'bogus' in the data file); fix that module's data file first\n"]);
+    expect(treeState(sb)).toBe(before);
+    put(broken, 'root: shared\nkey: <a>\n');
+    const clash = await install(sb, jots);
+    expect([clash.code, clash.stderr]).toEqual([1, "package-install: module 'jots' would store under the root 'shared', which the installed module 'broken' stores under (install it under another name: --as=jots=<name>)\n"]);
+  });
+
+  it('[modules-r15, the-engine-r22] a package whose module data file cannot be read beside a good one refuses rc 1 naming it, writing nothing', async () => {
+    const sb = sandbox();
+    const two = newPkg(sb, 'pkg-half');
+    addModule(two, 'alpha', true);
+    addModule(two, 'beta');
+    put(join(two, '.contexture/extensions/modules/beta/data'), 'key: <a>\nbogus: x\n');
+    writeManifest(two);
+    const before = treeState(sb);
+    const r = await install(sb, two);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', "package-install: a module data file of the package cannot be read, so its storage roots cannot be checked (namespace 'beta': unknown field 'bogus' in the data file)\n"]);
+    expect(treeState(sb)).toBe(before);
+  });
+
+  it('[modules-r15, the-engine-r22] a re-install repairs its own installed data file that cannot be read: the replaced copy takes no part in the root check', async () => {
+    const sb = sandbox();
+    expect((await install(sb, rootedPkg(sb, 'pkg-a', 'memos'))).code).toBe(0);
+    const installed = extPath(sb, 'modules/memos/data');
+    put(installed, 'root: shared\nkey: <a>/<b>\nbogus: x\n');
+    const again = await install(sb, rootedPkg(sb, 'pkg-a', 'memos'));
+    expect(again.stderr).not.toMatch(/error|refus|cannot/);
+    expect(again.code).toBe(0);
+    expect(readFileSync(installed, 'utf8')).toBe('root: shared\nkey: <a>/<b>\n');
+  });
+
   it('[the-engine-r22] an uninstall given --as refuses rc 1 with one line, writing nothing', async () => {
     const sb = sandbox();
     const before = treeState(sb);

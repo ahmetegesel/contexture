@@ -99,7 +99,7 @@ describe.concurrent('store-data, the data file reader', () => {
     expect((await answerLines(sb, 'shared')).slice(0, 2)).toEqual(['shared', 'common']);
   });
 
-  it('[modules-r10, the-engine-r-cj0ey] an install record area or record that exists but cannot be read refuses an extension module rc 2 naming no path, the listing leaving it out with one line, while a workspace module still answers', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] an install record area or record that exists but cannot be read refuses an extension module rc 2 naming no path, the listing leaving it out with one line and exiting 1, while a workspace module still answers', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'wsmod', 'key: <a>\n');
     record(sb, 'docs-pro', 'module docs docs\n');
@@ -110,7 +110,7 @@ describe.concurrent('store-data, the data file reader', () => {
       expect(await storeData(sb, 'docs')).toMatchObject({ code: 2, stdout: '', stderr: line });
       expect((await answerLines(sb, 'wsmod')).slice(0, 2)).toEqual(['wsmod', 'wsmod']);
       const list = await listing(sb);
-      expect([list.code, list.stdout, list.stderr]).toEqual([0, 'wsmod\twsmod\n', `store-data: namespace 'docs': ${line.slice('store-data: '.length)}`]);
+      expect([list.code, list.stdout, list.stderr]).toEqual([1, 'wsmod\twsmod\n', `store-data: namespace 'docs': ${line.slice('store-data: '.length)}`]);
     } finally {
       chmodSync(state, 0o755);
     }
@@ -258,7 +258,7 @@ describe.concurrent('store-data, the data file reader', () => {
     expect(r.stdout).toBe('alpha\t.contexture/alpha-root\ndocs\tdocs\nminimal\tminimal\nprobe\tprobe-root\n');
   });
 
-  it('[modules-r10, the-engine-r-cj0ey] the listing leaves out a malformed declaration and a folder name that is no namespace, one stderr line each, and answers a name both roots hold once, the workspace module\'s, rc 0', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] the listing leaves out a malformed declaration and a folder name that is no namespace, one stderr line each, answers a name both roots hold once, the workspace module\'s, and exits 1 with the rows it read', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'probe', probe('mode: fast\n'));
     dataFile(sb, 'modules', 'oldline', 'namespace: oldline\nkey: <a>\n');
@@ -267,7 +267,7 @@ describe.concurrent('store-data, the data file reader', () => {
     dataFile(sb, 'modules', 'twice', 'root: twice-ws\nkey: <a>\n');
     dataFile(sb, 'extensions', 'twice', 'root: twice-ext\nkey: <a>\n');
     const r = await listing(sb);
-    expect(r.code).toBe(0);
+    expect(r.code).toBe(1);
     expect(r.stdout).toBe('docs\tdocs\ntwice\ttwice-ws\n');
     expect(r.stderr).toBe([
       "store-data: the module folder 'Bad!' names no namespace: a module name is lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit",
@@ -374,13 +374,13 @@ describe.concurrent('store-data, the data file reader', () => {
     await refusal(sb, 'probe', 1, 'line 3: the field line is not valid UTF-8');
   });
 
-  it('[modules-r10, the-engine-r-cj0ey] another refusal of the file comes first, and the listing leaves out a malformed field declaration with its one line', async () => {
+  it('[modules-r10, the-engine-r-cj0ey] another refusal of the file comes first, and the listing leaves out a malformed field declaration with its one line, exiting 1', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'probe', 'key: <a>\nmode: fast\nfield: status: bogus line\n');
     await refusal(sb, 'probe', 1, "unknown field 'mode' in the data file");
     dataFile(sb, 'modules', 'probe', 'key: <a>\nfield: status: bogus line\n');
     dataFile(sb, 'modules', 'good', `key: <a>\nfield: ${STATUS}\n`);
     const r = await listing(sb);
-    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'docs\tdocs\ngood\tgood\n', "store-data: namespace 'probe': line 2: field 'status': the presence clause is required or optional, not 'bogus'\n"]);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, 'docs\tdocs\ngood\tgood\n', "store-data: namespace 'probe': line 2: field 'status': the presence clause is required or optional, not 'bogus'\n"]);
   });
 });
