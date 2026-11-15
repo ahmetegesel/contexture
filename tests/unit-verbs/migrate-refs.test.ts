@@ -1056,6 +1056,26 @@ describe.concurrent('ctx unit migrate: the address forward', () => {
     }
   });
 
+  // [the case, the path (SB/ standing for the sandbox root), whether it lies outside the workspace]
+  it.for([
+    ['an absolute path outside the root', '/no/such/outside/dir/', true],
+    ['a relative path climbing above the root', '../no/such/dir/', true],
+    ['a relative path climbing above the root after a folder', 'lib/../../x/', true],
+    ['an absolute path inside the root', 'SB/no/such/dir/', false],
+    ['a relative path stepping up inside the root', 'no/such/../dir/', false],
+  ] as const)('[the-record-r-hxgfj] the write check and the forward place a file# path by one rule: %s', async ([, path, outside]) => {
+    const sb = fresh(sb0);
+    const p = path.replace(/^SB\//, `${sb}/`);
+    const ref = `file#${p}n1`;
+    const v = `${OLD}=file#${p}`;
+    const write = await unit(sb, 'record', F, '--what=the place probe', `--ref=${ref}`);
+    const fwd = await unit(sb, 'migrate', '--dry-run', `--forward=${v}`, F);
+    // outside, the write check takes the absent path by its shape alone and the forward refuses
+    // it as a new prefix; inside, the write check needs the path to exist and the forward runs
+    expect([write.code, write.stderr], 'the write check').toEqual(outside ? [0, ''] : [1, `record: error: ref '${ref}': target not found (ERR_ENTITY_NOT_FOUND)\n`]);
+    expect([fwd.code, fwd.stderr], 'the forward').toEqual(outside ? [1, bad(v, OUTSIDE(`file#${p}`))] : [0, '']);
+  });
+
   it.for([
     ['no equals sign', [`--forward=${OLD}`, '--all'], bad(OLD, FORM)],
     ['an empty new prefix', [`--forward=${OLD}=`, F], bad(`${OLD}=`, FORM)],

@@ -192,7 +192,7 @@ either migration changed; the sweep prints no warning. Under an address forward 
 refuses a malformed one before any read: `mg_prefix_ok` checks each side's full address
 shape, a retired short form, a placeholder character (`<`, `>`, `*`, or `...`), and the
 slash or hash it must end in, `mg_new_inside` a `file#` new prefix outside the workspace by
-the write check's own rule, then the overlap of the two prefixes), the verb first calls `unit.migrate --collect <unit>...|--all`, which reads the same units with no lock
+the write check's own rule, the verb library's `vb_path_inside`, then the overlap of the two prefixes), the verb first calls `unit.migrate --collect <unit>...|--all`, which reads the same units with no lock
 and no write and appends each candidate token's forwarded address to `forward.cand` in the
 census folder (`lib/migrate.awk` in its collect mode), answering `{"collected":N}`; the verb
 checks each distinct address once through `vb_ref_state` and writes the answers to
@@ -297,7 +297,9 @@ legacy form naming its full address (`lib/migrate.awk` in its suggest mode compu
 the writing unit) and passes everything else through the storage library's `lib_ref_ok`;
 then `vb_refs_exist` checks each target through `vb_ref_state` (which answers ok, missing,
 none, or noget, and which `ctx unit migrate --forward` asks too), a `file#` path by the core
-(inside the workspace it must exist, outside it the shape alone counts, the symbol never)
+(inside the workspace it must exist, outside it the shape alone counts, the symbol never;
+`vb_path_inside` places the path, an absolute one under the workspace root or a relative one
+never climbing above it, the one rule the forward's `mg_new_inside` asks too)
 and every other owner through `ctx <owner> get <path>`, refusing
 `<verb>: error: ref '<ref>': target not found (ERR_ENTITY_NOT_FOUND)`,
 `... owner '<owner>' is not installed (ERR_ENTITY_NOT_FOUND)`, or

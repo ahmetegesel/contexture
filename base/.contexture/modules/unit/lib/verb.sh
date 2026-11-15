@@ -646,15 +646,31 @@ vb_owner() {
   fi
 }
 
+# vb_path_inside <path>: whether a file path lies inside the workspace, printing in or out: an
+# absolute path inside it starts with the workspace root (CTX_ROOT, else the working folder)
+# plus a slash, a relative one never climbs above the root (each .. a step up, each other
+# segment but . and an empty one a step down). The one rule of a file# address's place: the
+# write check (vb_ref_state: inside, the path must exist; outside, the shape alone counts) and
+# ctx unit migrate's forward (mg_new_inside: a file# new prefix outside is refused) both ask it
+vb_path_inside() {
+  VE_P=$1 VE_R=${CTX_ROOT:-$PWD} awk 'BEGIN {
+    p = ENVIRON["VE_P"]; r = ENVIRON["VE_R"]
+    if (substr(p, 1, 1) == "/") { if (index(p "/", r "/") != 1) { print "out"; exit } p = substr(p, length(r) + 2) }
+    n = split(p, S, /\//); d = 0
+    for (i = 1; i <= n; i++) { if (S[i] == "..") { d--; if (d < 0) { print "out"; exit } } else if (S[i] != "." && S[i] != "") d++ }
+    print "in"
+  }' < /dev/null
+}
+
 # vb_ref_state <ref>: whether a full address names something that exists, answered in
 # VB_STATE: ok, missing (the target is not found), none (the owner is not installed), or
 # noget (an installed owner with no get verb). A file# path is the core's (inside the
-# workspace it must exist, relative to the workspace root or absolute; outside it the shape
-# alone is checked; the symbol after a further hash never), every other owner answers
-# through its own ctx <owner> get <path>, the path everything after the first hash, each
-# owner probed once per verb run (vb_owner); a path starting with a dash names no target,
-# since get would read it as an option, so it reads missing before any get. The write check
-# (vb_refs_exist) and the address forward of ctx unit migrate both ask it
+# workspace, by vb_path_inside, it must exist, relative to the workspace root or absolute;
+# outside it the shape alone is checked; the symbol after a further hash never), every other
+# owner answers through its own ctx <owner> get <path>, the path everything after the first
+# hash, each owner probed once per verb run (vb_owner); a path starting with a dash names no
+# target, since get would read it as an option, so it reads missing before any get. The write
+# check (vb_refs_exist) and the address forward of ctx unit migrate both ask it
 VB_OWN_HAVE=" "
 VB_OWN_NOGET=" "
 VB_OWN_NONE=" "
@@ -666,13 +682,7 @@ vb_ref_state() {
   VB_STATE=missing
   if [ "$vs_o" = file ]; then
     vs_f=${vs_p%%#*}
-    vs_in=$(VE_P=$vs_f VE_R=$vs_root awk 'BEGIN {
-      p = ENVIRON["VE_P"]; r = ENVIRON["VE_R"]
-      if (substr(p, 1, 1) == "/") { if (index(p "/", r "/") != 1) { print "out"; exit } p = substr(p, length(r) + 2) }
-      n = split(p, S, /\//); d = 0
-      for (i = 1; i <= n; i++) { if (S[i] == "..") { d--; if (d < 0) { print "out"; exit } } else if (S[i] != "." && S[i] != "") d++ }
-      print "in"
-    }' < /dev/null)
+    vs_in=$(vb_path_inside "$vs_f")
     [ "$vs_in" = out ] && { VB_STATE=ok; return 0; }
     case "$vs_f" in /*) vs_t=$vs_f ;; *) vs_t="$vs_root/$vs_f" ;; esac
     [ -e "$vs_t" ] && VB_STATE=ok
