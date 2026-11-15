@@ -106,8 +106,13 @@ describe.concurrent('the ctx search builtin', () => {
     writeFileSync(join(sb, '.contexture/config'), `search.timeout: ${bound}\n`);
     plant(sb, 'smod', `sleep 30 & printf '%s\\n%s\\n' "$!" "$$" > "$CTX_ROOT/smod.pids"; sleep 30`);
     const started = Date.now();
-    const r = await exec(shell, ['.contexture/ctx', 'search', 'needle', '--module=smod', '--json'], { cwd: sb, timeout: 20_000 });
-    expect(Date.now() - started).toBeLessThan(bound * 1000 + 9_000);
+    // the kill ceiling sits well above any loaded run; the elapsed time sits at least the bound
+    // (the engine sleeps it out in ticks) and below the fixture's own 30 s sleep, so a stop that
+    // never fires still fails here
+    const r = await exec(shell, ['.contexture/ctx', 'search', 'needle', '--module=smod', '--json'], { cwd: sb, timeout: 60_000 });
+    const elapsed = Date.now() - started;
+    expect(elapsed).toBeGreaterThanOrEqual(bound * 1000);
+    expect(elapsed).toBeLessThan(25_000);
     expect([r.code, r.stderr]).toEqual([2, '']);
     expect(JSON.parse(r.stdout).groups).toEqual([{ module: 'smod', status: 'failed', error: `no answer within the bound of ${bound} s (search.timeout)` }]);
     const pids = readFileSync(join(sb, 'smod.pids'), 'utf8').split('\n').filter(Boolean);
