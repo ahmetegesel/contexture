@@ -1,4 +1,5 @@
-import { describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { fresh as copy, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
 import { createLane, must, seedUnit, unit } from '../support/unit';
 import { batch, D, foldUnit, laneOf, SHAPES } from './fold-fixture';
@@ -22,34 +23,43 @@ async function clean(sb: string, u: string): Promise<string> {
 
 const fresh = (label: string): string => stage('posix', `fold-${label}`);
 
+// the planned fold unit of each shape several cases share is built once per file, each case
+// working on its own copy of it
+const SHARED = { one: 'fc-one', two: 'fc-two', twoChunks: 'fc-2c' } as const;
+type Shared = keyof typeof SHARED;
+const seeds = {} as Record<Shared, string>;
+const copyOf = (shape: Shared): [string, string] => [copy(seeds[shape]), SHARED[shape]];
+
 describe.concurrent('ctx unit fold --check: every defect class named and red, every repair clean', () => {
+  beforeAll(async () => {
+    await Promise.all((Object.keys(SHARED) as Shared[]).map(async (shape) => {
+      seeds[shape] = await seed(async (sb) => void (await foldUnit(sb, SHARED[shape], SHAPES[shape])), 'posix', `fold-${shape}`);
+    }));
+  });
+
   it('FC9: UNREFERENCED_CLOSER, a folded closer whose target the batch never refs', async () => {
-    const sb = fresh('unref');
-    await foldUnit(sb, 'fc-unref', SHAPES.two);
-    await must(unit(sb, 'record', 'fc-unref', '--what=batch', `--ref=unit#fc-unref/entry/${D}-fc-unref-1`, ...slugs('fc-unref', 1, 2).map((s) => `--closes=${s} (folded: consolidated)`)));
-    await red(sb, 'fc-unref', 'UNREFERENCED_CLOSER');
+    const [sb, u] = copyOf('two');
+    await must(unit(sb, 'record', u, '--what=batch', `--ref=unit#${u}/entry/${D}-${u}-1`, ...slugs(u, 1, 2).map((s) => `--closes=${s} (folded: consolidated)`)));
+    await red(sb, u, 'UNREFERENCED_CLOSER');
   });
 
   it('FC9: CLOSER_NOT_FOLDED, a batch closer without the folded verdict', async () => {
-    const sb = fresh('notfolded');
-    await foldUnit(sb, 'fc-notfolded', SHAPES.one);
-    await must(unit(sb, 'record', 'fc-notfolded', '--what=batch', `--ref=unit#fc-notfolded/entry/${D}-fc-notfolded-1`, `--closes=${D}-fc-notfolded-1 (done: not folded)`));
-    await red(sb, 'fc-notfolded', 'CLOSER_NOT_FOLDED');
+    const [sb, u] = copyOf('one');
+    await must(unit(sb, 'record', u, '--what=batch', `--ref=unit#${u}/entry/${D}-${u}-1`, `--closes=${D}-${u}-1 (done: not folded)`));
+    await red(sb, u, 'CLOSER_NOT_FOLDED');
   });
 
   it('FC9: TARGET_OUTSIDE_SCOPE, a batch folding an entry written after the plan', async () => {
-    const sb = fresh('outside');
-    await foldUnit(sb, 'fc-outside', SHAPES.one);
-    await must(unit(sb, 'record', 'fc-outside', '--what=outside', `--slug=${D}-fc-outside-2`));
-    await batch(sb, 'fc-outside', 'batch', [1, 2]);
-    await red(sb, 'fc-outside', 'TARGET_OUTSIDE_SCOPE');
+    const [sb, u] = copyOf('one');
+    await must(unit(sb, 'record', u, '--what=outside', `--slug=${D}-${u}-2`));
+    await batch(sb, u, 'batch', [1, 2]);
+    await red(sb, u, 'TARGET_OUTSIDE_SCOPE');
   });
 
   it('FC9: BATCH_PARTIAL_CHUNK, a batch folding part of a chunk, its other constituent SCOPED_LIVE', async () => {
-    const sb = fresh('partial');
-    await foldUnit(sb, 'fc-partial', SHAPES.two);
-    await batch(sb, 'fc-partial', 'batch', [1]);
-    expect(await red(sb, 'fc-partial', 'BATCH_PARTIAL_CHUNK')).toContain('SCOPED_LIVE');
+    const [sb, u] = copyOf('two');
+    await batch(sb, u, 'batch', [1]);
+    expect(await red(sb, u, 'BATCH_PARTIAL_CHUNK')).toContain('SCOPED_LIVE');
   });
 
   it('FC9: BATCH_NOT_CONSECUTIVE, a batch skipping the chunks between its own', async () => {
@@ -68,37 +78,33 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
   });
 
   it('FC9: DOUBLE_CONSOLIDATION, two live batches over the same chunk', async () => {
-    const sb = fresh('double');
-    await foldUnit(sb, 'fc-double', SHAPES.two);
-    await batch(sb, 'fc-double', 'batch A', [1, 2]);
-    await batch(sb, 'fc-double', 'batch B', [1, 2]);
-    await red(sb, 'fc-double', 'DOUBLE_CONSOLIDATION');
+    const [sb, u] = copyOf('two');
+    await batch(sb, u, 'batch A', [1, 2]);
+    await batch(sb, u, 'batch B', [1, 2]);
+    await red(sb, u, 'DOUBLE_CONSOLIDATION');
   });
 
   it('FC9: BATCH_OVERLAP, two batches sharing a chunk, which also stops the progress', async () => {
-    const sb = fresh('overlap');
-    await foldUnit(sb, 'fc-overlap', SHAPES.twoChunks);
-    await batch(sb, 'fc-overlap', 'batch A', [1, 2]);
-    await batch(sb, 'fc-overlap', 'batch B', [1, 2, 3]);
-    await red(sb, 'fc-overlap', 'BATCH_OVERLAP');
-    const progress = await unit(sb, 'fold', 'fc-overlap');
+    const [sb, u] = copyOf('twoChunks');
+    await batch(sb, u, 'batch A', [1, 2]);
+    await batch(sb, u, 'batch B', [1, 2, 3]);
+    await red(sb, u, 'BATCH_OVERLAP');
+    const progress = await unit(sb, 'fold', u);
     expect(progress.code).toBe(1);
     expect(progress.stdout + progress.stderr).toContain('BATCH_OVERLAP');
   });
 
   it('FC9: BATCH_GAP, a chunk no batch covers, its entry SCOPED_LIVE', async () => {
-    const sb = fresh('gap');
-    await foldUnit(sb, 'fc-gap', SHAPES.twoChunks);
-    await batch(sb, 'fc-gap', 'batch one', [1, 2]);
-    expect(await red(sb, 'fc-gap', 'BATCH_GAP')).toContain('SCOPED_LIVE');
+    const [sb, u] = copyOf('twoChunks');
+    await batch(sb, u, 'batch one', [1, 2]);
+    expect(await red(sb, u, 'BATCH_GAP')).toContain('SCOPED_LIVE');
   });
 
   it('FC9: CONSOLIDATION_NOT_LIVE, a batch superseded without a successor batch', async () => {
-    const sb = fresh('notlive');
-    await foldUnit(sb, 'fc-notlive', SHAPES.one);
-    const a = await batch(sb, 'fc-notlive', 'batch A', [1]);
-    await must(unit(sb, 'record', 'fc-notlive', '--what=batch A revised', `--supersedes=${a} (superseded: revised)`));
-    await red(sb, 'fc-notlive', 'CONSOLIDATION_NOT_LIVE');
+    const [sb, u] = copyOf('one');
+    const a = await batch(sb, u, 'batch A', [1]);
+    await must(unit(sb, 'record', u, '--what=batch A revised', `--supersedes=${a} (superseded: revised)`));
+    await red(sb, u, 'CONSOLIDATION_NOT_LIVE');
   });
 
   it('FC9: PLAN_DRIFT, a fold start whose scope no longer matches the live record', async () => {
@@ -119,21 +125,19 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
   });
 
   it('FC9: AUDIT_RED, a clean partition over a unit whose audit fails', async () => {
-    const sb = fresh('audit');
-    await foldUnit(sb, 'fc-audit', SHAPES.one);
-    await batch(sb, 'fc-audit', 'batch', [1]);
-    await must(unit(sb, 'record', 'fc-audit', '--what=knowledge flag', `--slug=${D}-fc-audit-2`, '--knowledge'));
-    await red(sb, 'fc-audit', 'AUDIT_RED');
+    const [sb, u] = copyOf('one');
+    await batch(sb, u, 'batch', [1]);
+    await must(unit(sb, 'record', u, '--what=knowledge flag', `--slug=${D}-${u}-2`, '--knowledge'));
+    await red(sb, u, 'AUDIT_RED');
   });
 
   it('FC10: the supersession repair closes the prior batch superseded and the new one checks clean', async () => {
-    const sb = fresh('repair');
-    await foldUnit(sb, 'fc-repair', SHAPES.one);
-    const bad = await must(unit(sb, 'record', 'fc-repair', '--what=bad batch', `--ref=unit#fc-repair/entry/${D}-fc-repair-1`, `--closes=${D}-fc-repair-1 (done: not folded)`));
+    const [sb, u] = copyOf('one');
+    const bad = await must(unit(sb, 'record', u, '--what=bad batch', `--ref=unit#${u}/entry/${D}-${u}-1`, `--closes=${D}-${u}-1 (done: not folded)`));
     const badSlug = /^recorded entry: (\S+)/m.exec(bad.stdout + bad.stderr)?.[1] ?? '';
-    await batch(sb, 'fc-repair', 'good batch', [1], `--supersedes=${badSlug} (superseded: revised)`);
-    await clean(sb, 'fc-repair');
-    expect((await unit(sb, 'entry', 'closure', 'fc-repair', badSlug)).stdout).toContain('closed (superseded)');
+    await batch(sb, u, 'good batch', [1], `--supersedes=${badSlug} (superseded: revised)`);
+    await clean(sb, u);
+    expect((await unit(sb, 'entry', 'closure', u, badSlug)).stdout).toContain('closed (superseded)');
   });
 
   it('FC13: a carried open thread stays in the scope, is refed as context, never closed, and survives the finish', async () => {
@@ -202,12 +206,11 @@ describe.concurrent('ctx unit fold --check: every defect class named and red, ev
   }, 240_000);
 
   it('FC17: one batch for every chunk of an anchor refuses WHOLE_ANCHOR_BATCH; split batches check clean', async () => {
-    const sb = fresh('anchor');
-    await foldUnit(sb, 'fc-anchor', SHAPES.twoChunks);
-    const whole = await batch(sb, 'fc-anchor', 'Batch one: the whole anchor', [1, 2, 3], '--thread=none');
-    await red(sb, 'fc-anchor', 'WHOLE_ANCHOR_BATCH');
-    await batch(sb, 'fc-anchor', 'Batch one: the first chunk', [1, 2], '--thread=none');
-    await batch(sb, 'fc-anchor', 'Batch two: the second chunk', [3], '--thread=none', `--supersedes=${whole} (superseded: split)`);
-    await clean(sb, 'fc-anchor');
+    const [sb, u] = copyOf('twoChunks');
+    const whole = await batch(sb, u, 'Batch one: the whole anchor', [1, 2, 3], '--thread=none');
+    await red(sb, u, 'WHOLE_ANCHOR_BATCH');
+    await batch(sb, u, 'Batch one: the first chunk', [1, 2], '--thread=none');
+    await batch(sb, u, 'Batch two: the second chunk', [3], '--thread=none', `--supersedes=${whole} (superseded: split)`);
+    await clean(sb, u);
   });
 });
