@@ -3,29 +3,34 @@
 @purpose
   instructions for an agent onboarding contexture into any workspace (greenfield or existing, with or without git).
 
+@modes
+  guided (default): active unless the human's prompt specifies familiar mode; never waste a turn asking which mode to use. Speaks in plain English about only what affects the human and their repository (files touched or preserved, real habit conflicts, and plain-word plugin recommendations with host readiness). Hides internal `ctx` CLI commands, `.contexture/tmp/` paths, `@append`/`@replace` mechanics, unit/journal/task slugs, and raw `@proposal` grammar from chat while driving `.contexture/ctx` record verbs internally. Uses ONE confirmation pause (`@propose`) before workspace writes, and closes (`@close`) with a 10 to 15 line plain-English orientation plus an optional Q&A or tour offer.
+  familiar: active when the human's prompt requests familiar or fast mode. Skips the introductory brief, conceptual explanations, closing orientation guide, and Q&A tour offer completely. Presents a crisp structured plan summary for a single confirmation go (`@propose`), and closes (`@close`) with a terse 3-line verification receipt.
+
 @phases
   the adoption unit bootstraps at phase 1 and every phase journals as it happens; the record carries the whole history: findings, proposals, verdicts, changes
-  1. ISOLATE: when the workspace is a git repository, create a dedicated branch; never onboard on main; verify starting state; bootstrap the adoption unit
+  1. ISOLATE: verify `.contexture/ctx`, create a dedicated branch when inside a git repository (never onboard on main), verify starting state, bootstrap `adopt-contexture`, and record the active mode (`guided` or `familiar`)
   2. ASSESS: inventory topology, instruction surfaces, harnesses, and live catalog packages; derive the installation plan
-  3. PROPOSE: present the derived plan; the human confirms, amends, or discusses; no workspace write before the verdict
+  3. PROPOSE: present the derived plan with a single confirmation pause per active mode (`guided` or `familiar`); the human confirms, amends, or discusses; no workspace configuration write before the verdict
   4. EXECUTE: configure, migrate, install confirmed packages, swap the staged loader if preserved, and symlink strictly per the confirmed plan, running the default rhythm; drift halts and re-confirms
-  5. VERIFY: run the queries against the live record, confirm clean boot, and remind the human to start a fresh session once closed
+  5. VERIFY: run verification queries against the live record (plus `ctx docs gate` when `docs-discipline` is installed in git), clean up ephemeral adoption files, close `adopt-contexture`, and deliver the mode closing (`guided` orientation plus optional Q&A offer, or `familiar` terse receipt) before starting a fresh session
 
 @isolate
-  1. check git availability (`git rev-parse --is-inside-work-tree 2>/dev/null`): when not inside a git repository, note non-git workspace, skip branch steps, and bootstrap directly
-  2. when inside a git repository: inspect `git status -s`, distinguishing pre-staged adoption files (`.contexture/`, `AGENTS.md`, `AGENTS.generated.md`, `plugins/`) from unrelated uncommitted project changes; halt only if unrelated dirty project files exist
-  3. branch (git workspaces): `git checkout -b adopt-contexture` (or team branch convention; carries untracked pre-staged adoption files onto the new branch cleanly); never execute onboarding directly on main/master/production branches
-  4. confirm `.contexture/ctx` exists and is executable, then bootstrap the adoption unit: `.contexture/ctx unit bootstrap adopt-contexture "onboard contexture into this workspace"`; the folded A1 receipt records the fresh unit, the objective, and the starting state
-  5. journal the phase (`.contexture/ctx unit record`): the branch or non-git posture, whether a pre-existing `AGENTS.md` was preserved with contexture's loader staged at `.contexture/tmp/AGENTS.loader.md`, and the starting state
+  1. confirm `.contexture/ctx` exists and is executable FIRST; once `.contexture/ctx` is verified (and `AGENTS.generated.md` is read), every shell command runs through `.contexture/ctx run` (`@laws#compact-streams`)
+  2. check git availability (`.contexture/ctx run git rev-parse --is-inside-work-tree 2>/dev/null`): when not inside a git repository, note non-git workspace, skip branch steps, and bootstrap directly
+  3. when inside a git repository: inspect `.contexture/ctx run git status -s`, distinguishing pre-staged adoption files (`.contexture/`, `AGENTS.md`, `AGENTS.generated.md`, `plugins/`) from unrelated uncommitted project changes; halt only if unrelated dirty project files exist
+  4. branch (git workspaces): `.contexture/ctx run git checkout -b adopt-contexture` (or team branch convention; carries untracked pre-staged adoption files onto the new branch cleanly); never execute onboarding directly on main/master/production branches
+  5. bootstrap the adoption unit: `.contexture/ctx unit bootstrap adopt-contexture "onboard contexture into this workspace"`; the folded A1 receipt records the fresh unit, the objective, and the starting state
+  6. journal the phase (`.contexture/ctx unit record`): the active mode (`guided` or `familiar`), the branch or non-git posture, whether a pre-existing `AGENTS.md` was preserved with contexture's loader staged at `.contexture/tmp/AGENTS.loader.md`, and the starting state
 
 @assess
   topology:
     standalone repo: contains application code (src/, package.json, Cargo.toml, pyproject.toml, etc.)
     parent workspace: contains multiple independent repositories as subdirectories
   git: the git package is a choice with no default, and the docs module's git dependency is a fact: its change-aware verbs, the check, the gate, and the drift read git's delta, the change log stamps the workspace git HEAD, and a workspace without git keeps the audit, the query, and the writes and loses the change-aware checks
-  instruction stack first: the existing `AGENTS.md` and its derivations (`CLAUDE.md`, `GEMINI.md`, harness files) are the workspace's self-description: read them first and whole (when `install.sh` preserved a pre-existing `AGENTS.md` and staged contexture's loader at `.contexture/tmp/AGENTS.loader.md`, read that untouched root `AGENTS.md` whole before mapping); they name the rules that matter and often where the rest live
-  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/ctx compose`, read the contexture loader (`AGENTS.md`, or `.contexture/tmp/AGENTS.loader.md` when root `AGENTS.md` was preserved), `AGENTS.generated.md` at the root whole, and read the upstream README from the URL in `@update` (via web/curl or git if present; if offline, map from `AGENTS.generated.md` and note that upstream README was unreachable)
-  discover live catalog packages: run read-only `.contexture/ctx package catalog` and `.contexture/ctx package list` (plus `.contexture/ctx package info <name>` for candidate packages) to inspect available plugins, what `install.sh` may already have installed, and live host readiness probe results
+  instruction stack first: check whether `.contexture/tmp/AGENTS.loader.md` exists (by listing `.contexture/tmp`) before reading it so no speculative read fails when no pre-existing `AGENTS.md` was preserved; read the existing `AGENTS.md` (the untouched root `AGENTS.md` when preserved) and its derivations (`CLAUDE.md`, `GEMINI.md`, harness files) first and whole, since they name the rules that matter and often where the rest live
+  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/ctx compose`, read the contexture loader (`AGENTS.md`, or `.contexture/tmp/AGENTS.loader.md` when root `AGENTS.md` was preserved), read `AGENTS.generated.md` at the root whole, and read the upstream README from the URL in `@update` (via web, `.contexture/ctx run curl`, or git if present; if offline, map from `AGENTS.generated.md` and note that upstream README was unreachable)
+  discover live catalog packages: run read-only `.contexture/ctx package catalog`, `.contexture/ctx package list`, and `.contexture/ctx package info <name>` for candidate packages to inspect available plugins, what `install.sh` may already have installed, and live host readiness probe results; in `guided` mode, translate findings into plain-English value and readiness lines instead of raw probe dumps
   map from the destination: walk the convention's sections one by one against the workspace's material: for each capability, what feeds it, what conflicts with it, what belongs there; migration follows the destination, never the file list
   governance: map every rule surface against the incoming convention; each contradicts, overlaps, or complements it, and the plan must resolve each one; the stack guides the sweep, the sweep covers what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions)
   reading budget: rule-bearing surfaces read whole, they are small and dense; structure is derived by listing, never by reading; application code is out of scope
@@ -46,17 +51,14 @@
   package git: the git management discipline: the gitignore strategy, the branch and worktree mechanics, and the boot ground check, as a module with its laws and no verbs; a choice with no default, install it when the workspace is a git repository and wants those mechanics; the docs-discipline change-aware checks need git the tool either way.
 
 @propose
-  the flow runs in two segments; each ends at a gate that hands control to the human and waits: ask in chat and end the turn; the gate is the loop's exit, never skipped, never merged; every gate and verdict journals into the adoption record
-
-  segment one, the ground:
-    1. fill the assessment and the brief in the proposal shape; the filled grammar is the working copy, tmp holds it
-    2. gate: present the brief and the assessment findings and ask the human to approve the plan preparation; on approve, run segment two; on discuss, answer and re-gate
-
-  segment two, the plan:
-    3. write the pre-plan into the proposal grammar: readable prose per the shape's plan fields, never the raw dialect
-    4. forward the open questions through the harness's question tool when it has one; each question carries the plan context it touches; free text when it does not
-    5. update the proposal per the answers: never an approval ask for an unseen or stale plan
-    6. gate: present the final plan and request the verdict on it only: no write before it; the human confirms, amends, or discusses; ambiguity surfaces here, never mid-execution
+  the flow collapses into ONE confirmation pause before any workspace configuration write or package install; every verdict journals into the adoption record
+  1. write the internal working `@proposal` draft to `.contexture/tmp/proposal.md` (never paste raw `@proposal` grammar to the human in `guided` mode)
+  2. ephemeral files guard: `.contexture/tmp/proposal.md` and `.contexture/ONBOARDING.md` are ephemeral adoption files deleted at close, so never bind permanent `--ref` targets on unit entries, tasks, or findings to them; record settled summaries directly in the journal and findings
+  3. legacy turn-end pause: legacy turn-end workspace file rules (status files, session notes, changelogs) pause until the confirmation verdict: before that verdict, onboarding progress lives only in `.contexture/tmp/proposal.md` and the adoption unit record
+  4. single confirmation pause (by active mode):
+     - in `guided` mode: present ONE plain-English message containing (a) a 2 to 3 sentence brief of what contexture brings to this workspace, (b) what files are added or changed vs preserved, (c) any real habit conflicts discovered, (d) plain-word plugin recommendations and host readiness (presenting independent candidate packages via multi-select when the harness question tool supports it, never grouping compatible plugins into a single radio choice), and (e) any open questions beside the choices they affect; keep internal `ctx` CLI commands, `.contexture/tmp/` paths, `@append`/`@replace` mechanics, and record slugs out of chat; end the turn and wait for confirmation
+     - in `familiar` mode: skip the brief and present a crisp plan summary (topology, files touched or preserved, candidate plugins via multi-select where supported, gitignore, symlinks, open questions) and pause once for go
+  5. once confirmed, update `.contexture/tmp/proposal.md` if answers refined any detail and journal the settled proposal summary and the human's verdict directly into `adopt-contexture` (no workspace write before confirmation; an approval ask for an unseen or stale plan is never valid)
 
 @proposal
   @brief
@@ -95,6 +97,7 @@
       always ignore the composed law layer with the root-anchored line /AGENTS.generated.md (built at install and boot, never tracked, never edited); a repository that ignored it at its old place replaces its .contexture/laws/AGENTS.generated.md ignore line with /AGENTS.generated.md once the update compose has removed the legacy file (update step 9, before the step 10 review)
       always ignore the scratch drawer with the line .contexture/tmp/, where the engine stages its own scratch at every call (update step 9)
       track .contexture/config (its package lines declare the installs a clone reproduces) and .contexture/plugins/ (the workspace catalog copy) unless the team explicitly chooses not to vendor the catalog
+      when docs-discipline is installed under the files driver, ignore docs/workspace/ (agent-facing corpus working state, never committed, while docs/*.md guides stay tracked)
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
       whitelist shared files explicitly:
@@ -108,6 +111,7 @@
       re-ignore the scratch drawer after the whitelist: the line .contexture/tmp/ follows !.contexture/**, which otherwise re-includes it, the later line winning (update step 9)
       the catalog at .contexture/plugins/ rides automatically under !.contexture/**
       the generated law layer AGENTS.generated.md sits at the root under the deny-by-default (*), so it stays ignored with no line of its own: whitelist the AGENTS files by name, never with an AGENTS*.md glob, which would track it; a workspace that re-ignored it at its old place drops its .contexture/laws/AGENTS.generated.md re-ignore line once the update compose has removed the legacy file (update step 9, before the step 10 review)
+      when docs-discipline is installed under the files driver, keep docs/workspace/ un-whitelisted (ignored working state) while whitelisting any docs/*.md guides
   migration:
     if existing AGENTS.md, CLAUDE.md, or other instruction files exist:
       extract project-specific guidelines (architecture, test/build commands, code style)
@@ -119,15 +123,20 @@
   strictly per the confirmed plan
   wire harness entry points to AGENTS.md (the loader):
     for each existing harness file identified during assessment, or active harnesses in use (e.g. CLAUDE.md, GEMINI.md):
-      replace or point entry file with symlink: `ln -s AGENTS.md <harness-file>`
+      replace or point entry file with symlink: `.contexture/ctx run ln -s AGENTS.md <harness-file>`
     propose symlinks to human for any detected agent environments
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. verify the law layer: `.contexture/ctx compose --check` and confirm root `AGENTS.md` is now the contexture loader with no leftover `.contexture/tmp/AGENTS.loader.md`
-  2. run boot load: `.contexture/ctx unit load adopt-contexture` (read every page the map reports)
-  3. run audit: `.contexture/ctx unit audit adopt-contexture` (must exit 0)
-  4. review with human: `git status`, `git diff`, and the adoption record when in a git repository (else summarize changed files); present for review and PR merge
+  1. complete execution tasks, land durable findings (`.contexture/ctx unit finding add`), and record the closing event on `adopt-contexture` FIRST (with settled prose, never `--ref` to ephemeral onboarding files)
+  2. verify the law layer: `.contexture/ctx compose --check` and confirm root `AGENTS.md` is now the contexture loader with no leftover `.contexture/tmp/AGENTS.loader.md`
+  3. run boot load and audit: `.contexture/ctx unit load adopt-contexture` (read every page the map reports) and `.contexture/ctx unit audit adopt-contexture` (must exit 0)
+  4. when `docs-discipline` is installed inside a git repository, run `.contexture/ctx docs gate`
+  5. review with human: `.contexture/ctx run git status`, `.contexture/ctx run git diff`, and the adoption record when in a git repository (else summarize changed files)
 
 @close
-  delete `.contexture/ONBOARDING.md` once the adoption closes (adoption material, not the convention; remove any ONBOARDING gitignore whitelist line with it) and remove `.contexture/tmp/AGENTS.loader.md` if still present; remind the human to start a fresh agent session so the harness boots cleanly on the new `AGENTS.md` loader from turn 1
+  1. once `@verify` passes on the final record, close `adopt-contexture` (`.contexture/ctx unit close adopt-contexture`)
+  2. delete `.contexture/ONBOARDING.md`, `.contexture/tmp/proposal.md`, and any leftover `.contexture/tmp/AGENTS.loader.md` (plus any `ONBOARDING.md` gitignore whitelist line), keeping `.contexture/plugins/`
+  3. deliver the mode closing:
+     - `guided`: a 10 to 15 line plain-English orientation covering what changes in the next chat, 3 tiny habits (start named work, confirm before edits, handoff or close before wrapping up), 1 plain line per installed add-on (or a core-only note), and 1 workspace-tailored starter prompt for the next chat, plus an optional Q&A or quick tour offer before starting a fresh agent session on the new `AGENTS.md` loader from turn 1
+     - `familiar`: a terse 3-line verification receipt (summary of applied changes and installed plugins, compose plus audit status, and reminder to start a fresh session on the new `AGENTS.md` loader from turn 1) with zero orientation or tour offer

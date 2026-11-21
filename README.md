@@ -15,13 +15,19 @@ contexture is an AI workspace convention that lives inside your repository so co
 
 ## Quickstart
 
-### With an AI agent (one prompt)
+### With an AI agent
 
-Paste this prompt into your coding agent at your repository root:
+Paste the prompt that fits your familiarity at your repository root:
 
-> "Install contexture in this workspace by running `curl -fsSL https://raw.githubusercontent.com/ahmetegesel/contexture/main/install.sh | sh -s -- --non-interactive`, then read `.contexture/ONBOARDING.md` and prepare the adoption proposal."
+**Guided (new to contexture)**: explains what changes in plain English without showing internal plumbing, pauses once before editing files, and ends with a short orientation, tailored starter prompt, and optional Q&A tour.
 
-`install.sh` requires no git and preserves any existing `AGENTS.md` untouched (staging contexture's loader at `.contexture/tmp/AGENTS.loader.md`). The onboarding agent inspects your workspace, pauses twice for your confirmation before editing files, and removes `.contexture/ONBOARDING.md` once adoption closes; start a fresh session afterwards so the loader boots on turn 1.
+> "Install contexture in this workspace by running `curl -fsSL https://raw.githubusercontent.com/ahmetegesel/contexture/main/install.sh | sh -s -- --non-interactive`, then read `.contexture/ONBOARDING.md` and onboard this workspace in guided mode."
+
+**Fast (already familiar with contexture)**: skips the brief and closing tour, presents a crisp plan for a single confirmation go, and ends with a brief verification receipt.
+
+> "Install contexture in this workspace by running `curl -fsSL https://raw.githubusercontent.com/ahmetegesel/contexture/main/install.sh | sh -s -- --non-interactive`, then read `.contexture/ONBOARDING.md` and onboard this workspace in familiar mode."
+
+`install.sh` requires no git and preserves any existing `AGENTS.md` untouched (staging contexture's loader at `.contexture/tmp/AGENTS.loader.md`). Both paths pause once for your confirmation before changing workspace configuration and remove `.contexture/ONBOARDING.md` once adoption closes; start a fresh session afterwards so the loader boots on turn 1.
 
 ### Manual terminal install (one line)
 
@@ -31,7 +37,7 @@ Run in your workspace root:
 curl -fsSL https://raw.githubusercontent.com/ahmetegesel/contexture/main/install.sh | sh
 ```
 
-The interactive installer displays catalog plugins with live host readiness checks via `ctx package catalog`, installs only what you select, and supports `--tag`, `--plugins`, `--dir`, `--dry-run`, and `--from` for pinned, targeted, or offline installs. For manual extraction, installer flag details, or multi-repo parent workspaces, see [docs/adoption.md](docs/adoption.md).
+The interactive installer previews what it will add and asks `Proceed? [Y/n]` before writing any file, frames core vs optional plugins before `ctx package catalog`, installs only what you select, prints next steps at completion, and supports `--tag`, `--plugins`, `--dir`, `--dry-run`, and `--from` for pinned, targeted, or offline installs. For manual extraction, installer flag details, or multi-repo parent workspaces, see [docs/adoption.md](docs/adoption.md).
 
 ### Start your first unit
 
