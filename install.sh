@@ -397,6 +397,52 @@ if [ "$dry_run" -eq 1 ]; then
   exit 0
 fi
 
+tty_open=0
+if [ "$non_interactive" -eq 0 ] && [ "$plugins_given" -eq 0 ]; then
+  isp_tty=${CTX_INSTALL_TTY:-/dev/tty}
+  if ( : < "$isp_tty" ) 2>/dev/null; then
+    tty_open=1
+    exec 3<"$isp_tty"
+    printf 'This will install contexture in %s (%s).\n' "$target_dir" "$source_desc"
+    case "$agents_disp" in
+      install)
+        printf 'Adds: AGENTS.md (loader), AGENTS.generated.md (composed laws), and .contexture/ (runtime, builtins, plugin catalog).\n'
+        ;;
+      replace)
+        printf 'Updates: AGENTS.md (existing loader), AGENTS.generated.md (composed laws), and adds .contexture/ (runtime, builtins, plugin catalog).\n'
+        ;;
+      preserve)
+        printf 'Preserves existing AGENTS.md untouched (stages loader at .contexture/tmp/AGENTS.loader.md); adds .contexture/ and AGENTS.generated.md.\n'
+        ;;
+    esac
+    printf 'No other project files are modified; optional plugins come next only if you select them.\n'
+    while :; do
+      printf 'Proceed? [Y/n]: '
+      if ! IFS= read -r proceed_ans <&3; then
+        exec 3<&-
+        tty_open=0
+        printf 'Installation cancelled.\n'
+        exit 0
+      fi
+      proceed_ans=$(printf '%s' "$proceed_ans" | awk '{ gsub(/^[ \t]+|[ \t]+$/, ""); print }')
+      case "$proceed_ans" in
+        ""|y|Y|yes|YES|Yes)
+          break
+          ;;
+        n|N|no|NO|No)
+          exec 3<&-
+          tty_open=0
+          printf 'Installation cancelled.\n'
+          exit 0
+          ;;
+        *)
+          printf 'Please enter y or n.\n'
+          ;;
+      esac
+    done
+  fi
+fi
+
 # Track pre-existing directories so failure cleanup only removes what we created
 had_dot_ctx=0
 [ -d "$target_dir/.contexture" ] && had_dot_ctx=1
@@ -406,6 +452,10 @@ stage_dir=""
 installed_committed=0
 
 cleanup() {
+  if [ "${tty_open:-0}" -eq 1 ]; then
+    exec 3<&- 2>/dev/null || :
+    tty_open=0
+  fi
   if [ -n "$stage_dir" ] && [ -d "$stage_dir" ]; then
     rm -rf "$stage_dir" 2>/dev/null || :
   fi
@@ -520,7 +570,7 @@ esac
 installed_committed=1
 
 run_ctx() {
-  (cd "$target_dir" && ./.contexture/ctx "$@")
+  (cd "$target_dir" && ./.contexture/ctx "$@" 3<&-)
 }
 
 # Compose generated law layer
@@ -564,24 +614,36 @@ resolve_menu_token() {
 
 interactive_select_plugins() {
   isp_tty=${CTX_INSTALL_TTY:-/dev/tty}
-  if ! ( : < "$isp_tty" ) 2>/dev/null; then
-    printf 'install.sh: no interactive terminal; installing core only (pass --non-interactive to silence or --plugins=<list> to install plugins)\n' >&2
-    selected_plugins=""
-    return 0
+  if [ "$tty_open" -eq 0 ]; then
+    if ! ( : < "$isp_tty" ) 2>/dev/null; then
+      printf 'install.sh: no interactive terminal; installing core only (pass --non-interactive to silence or --plugins=<list> to install plugins)\n' >&2
+      selected_plugins=""
+      return 0
+    fi
   fi
 
   if [ -z "$catalog_names" ]; then
+    if [ "$tty_open" -eq 1 ]; then
+      exec 3<&-
+      tty_open=0
+    fi
     selected_plugins=""
     return 0
   fi
 
+  printf '\n'
+  printf 'Core is ready now: unit memory, subagent lanes, workflow rhythms, key-value store, and command compaction need no install.\n'
+  printf 'Optional plugins add project capabilities (docs discipline, TypeScript graph, git rules, test filters, starter rhythms, SQLite search); pick below or press Enter for core only.\n'
   printf '\n'
   run_ctx package catalog || exit $?
   printf '\n'
   printf '%s\n' "$catalog_names" | awk '{ printf "  %d) %s\n", NR, $0 }'
   printf '\n'
 
-  exec 3<"$isp_tty"
+  if [ "$tty_open" -eq 0 ]; then
+    exec 3<"$isp_tty"
+    tty_open=1
+  fi
   while :; do
     printf "Select plugins to install (names or numbers separated by commas/spaces, 'info <name>' for details, or Enter for core only): "
     if ! IFS= read -r isp_line <&3; then
@@ -659,6 +721,7 @@ interactive_select_plugins() {
     esac
   done
   exec 3<&-
+  tty_open=0
 }
 
 if [ "$non_interactive" -eq 0 ] && [ "$plugins_given" -eq 0 ]; then
@@ -696,6 +759,12 @@ if [ "$agents_disp" = "preserve" ]; then
   printf '  start a fresh agent session once onboarding closes so the new loader boots on turn 1.\n'
 fi
 
-printf '\nNext step: prompt your AI agent:\n'
-printf '  "Read .contexture/ONBOARDING.md and prepare the adoption proposal."\n'
+printf '\nNext steps:\n'
+printf '  1. Prompt your AI agent to finish workspace setup:\n'
+printf '     Guided (new to contexture; plain-English walkthrough, one confirmation, closing orientation):\n'
+printf '       "Read .contexture/ONBOARDING.md and onboard this workspace in guided mode."\n'
+printf '     Fast (already familiar; crisp plan, single confirmation, brief receipt):\n'
+printf '       "Read .contexture/ONBOARDING.md and onboard this workspace in familiar mode."\n'
+printf '  2. Once onboarding closes, start a fresh chat so your agent boots from AGENTS.md on turn 1.\n'
+printf '  3. Inspect or add optional plugins anytime with: .contexture/ctx package catalog\n'
 exit 0

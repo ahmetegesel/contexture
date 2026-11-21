@@ -138,7 +138,10 @@ describe.concurrent('the root installer install.sh', () => {
     expect(readFileSync(join(sb, '.contexture/tmp/AGENTS.loader.md'), 'utf8')).toBe(readFileSync(join(ROOT, 'base/AGENTS.md'), 'utf8'));
     expect((await ctx(sb, 'compose', '--check')).code).toBe(0);
     expect(r.stdout).toContain('.contexture/tmp/AGENTS.loader.md');
-    expect(r.stdout).toContain('Read .contexture/ONBOARDING.md and prepare the adoption proposal.');
+    expect(r.stdout).toContain('onboard this workspace in guided mode');
+    expect(r.stdout).toContain('onboard this workspace in familiar mode');
+    expect(r.stdout).toContain('boots from AGENTS.md');
+    expect(r.stdout).toContain('.contexture/ctx package catalog');
   });
 
   it('replaces a pre-existing contexture loader AGENTS.md directly when .contexture/ctx is absent (including single-line without trailing newline)', async () => {
@@ -253,12 +256,18 @@ describe.concurrent('the root installer install.sh', () => {
     const sbPick = sandbox('install-tty-pick');
     const ttyPick = join(caller, 'tty-pick.txt');
     // catalog order: 1 ast-doc-graph, 2 docs-discipline, 3 git, 4 starter-rhythms, 5 storage-fts5, 6 toolchain-filters
-    writeFileSync(ttyPick, 'info git\n4\nn\nstarter-rhythms,3\ny\n');
+    writeFileSync(ttyPick, 'y\ninfo git\n4\nn\nstarter-rhythms,3\ny\n');
     const picked = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbPick], {
       cwd: caller,
       env: { CTX_INSTALL_TTY: ttyPick },
     });
     expect(picked.code, picked.stderr).toBe(0);
+    expect(picked.stdout).toContain('This will install contexture in');
+    expect(picked.stdout).toContain('Adds: AGENTS.md (loader), AGENTS.generated.md (composed laws), and .contexture/');
+    expect(picked.stdout).toContain('No other project files are modified; optional plugins come next only if you select them.');
+    expect(picked.stdout).toContain('Proceed? [Y/n]:');
+    expect(picked.stdout).toContain('Core is ready now:');
+    expect(picked.stdout).toContain('Optional plugins add project capabilities');
     expect(picked.stdout).toContain('git (');
     expect(picked.stdout).toContain('Selection cancelled.');
     expect(picked.stdout).toContain('plugins installed: starter-rhythms git');
@@ -267,7 +276,7 @@ describe.concurrent('the root installer install.sh', () => {
 
     const sbEnter = sandbox('install-tty-enter');
     const ttyEnter = join(caller, 'tty-enter.txt');
-    writeFileSync(ttyEnter, '\n');
+    writeFileSync(ttyEnter, '\n\n');
     const empty = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbEnter], {
       cwd: caller,
       env: { CTX_INSTALL_TTY: ttyEnter },
@@ -280,7 +289,7 @@ describe.concurrent('the root installer install.sh', () => {
     const globCaller = sandbox('install-tty-glob-caller');
     writeFileSync(join(globCaller, 'git'), 'decoy');
     const ttyGlob = join(globCaller, 'tty-glob.txt');
-    writeFileSync(ttyGlob, '*\n\n');
+    writeFileSync(ttyGlob, 'y\n*\n\n');
     const sbGlob = sandbox('install-tty-glob');
     const globRes = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbGlob], {
       cwd: globCaller,
@@ -289,5 +298,116 @@ describe.concurrent('the root installer install.sh', () => {
     expect(globRes.code, globRes.stderr).toBe(0);
     expect(globRes.stdout).toContain("Unknown plugin selection '*'");
     expect(existsSync(join(sbGlob, '.contexture/extensions'))).toBe(false);
+  });
+
+  it('declining or EOF on Proceed? [Y/n] (including replace disposition and after invalid input) exits 0 with zero files or directories written', async () => {
+    const caller = sandbox('install-decline-caller');
+
+    const sbFresh = sandbox('install-decline-fresh');
+    const ttyDecline = join(caller, 'tty-decline.txt');
+    writeFileSync(ttyDecline, 'n\n');
+    const freshRes = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbFresh], {
+      cwd: caller,
+      env: { CTX_INSTALL_TTY: ttyDecline },
+    });
+    expect(freshRes.code, freshRes.stderr).toBe(0);
+    expect(freshRes.stdout).toContain('Installation cancelled.');
+    expect(existsSync(join(sbFresh, '.contexture'))).toBe(false);
+    expect(existsSync(join(sbFresh, 'AGENTS.md'))).toBe(false);
+    expect(existsSync(join(sbFresh, 'AGENTS.generated.md'))).toBe(false);
+
+    const sbEof = sandbox('install-decline-eof');
+    const ttyEof = join(caller, 'tty-eof.txt');
+    writeFileSync(ttyEof, '');
+    const eofRes = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbEof], {
+      cwd: caller,
+      env: { CTX_INSTALL_TTY: ttyEof },
+    });
+    expect(eofRes.code, eofRes.stderr).toBe(0);
+    expect(eofRes.stdout).toContain('Installation cancelled.');
+    expect(existsSync(join(sbEof, '.contexture'))).toBe(false);
+    expect(existsSync(join(sbEof, 'AGENTS.md'))).toBe(false);
+    expect(existsSync(join(sbEof, 'AGENTS.generated.md'))).toBe(false);
+
+    const sbReplace = sandbox('install-decline-replace');
+    const oldLoader = '# contexture v0.1.0: old loader\n';
+    writeFileSync(join(sbReplace, 'AGENTS.md'), oldLoader);
+    const replaceRes = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbReplace], {
+      cwd: caller,
+      env: { CTX_INSTALL_TTY: ttyDecline },
+    });
+    expect(replaceRes.code, replaceRes.stderr).toBe(0);
+    expect(replaceRes.stdout).toContain('Updates: AGENTS.md (existing loader), AGENTS.generated.md (composed laws), and adds .contexture/');
+    expect(replaceRes.stdout).toContain('Installation cancelled.');
+    expect(existsSync(join(sbReplace, '.contexture'))).toBe(false);
+    expect(existsSync(join(sbReplace, 'AGENTS.generated.md'))).toBe(false);
+    expect(readFileSync(join(sbReplace, 'AGENTS.md'), 'utf8')).toBe(oldLoader);
+
+    const sbRetry = sandbox('install-decline-retry');
+    const existing = '# Existing Rules\n\nDo not modify on cancel.\n';
+    writeFileSync(join(sbRetry, 'AGENTS.md'), existing);
+    const ttyRetry = join(caller, 'tty-retry.txt');
+    writeFileSync(ttyRetry, 'maybe\nn\n');
+    const retryRes = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbRetry], {
+      cwd: caller,
+      env: { CTX_INSTALL_TTY: ttyRetry },
+    });
+    expect(retryRes.code, retryRes.stderr).toBe(0);
+    expect(retryRes.stdout).toContain('Preserves existing AGENTS.md untouched');
+    expect(retryRes.stdout).toContain('Please enter y or n.');
+    expect(retryRes.stdout).toContain('Installation cancelled.');
+    expect(existsSync(join(sbRetry, '.contexture'))).toBe(false);
+    expect(existsSync(join(sbRetry, 'AGENTS.generated.md'))).toBe(false);
+    expect(readFileSync(join(sbRetry, 'AGENTS.md'), 'utf8')).toBe(existing);
+  });
+
+  it('accepting Proceed? [Y/n] followed by EOF at the plugin menu installs core only rc 0', async () => {
+    const caller = sandbox('install-menu-eof-caller');
+    const sb = sandbox('install-menu-eof');
+    const ttyMenuEof = join(caller, 'tty-menu-eof.txt');
+    writeFileSync(ttyMenuEof, 'y\n');
+    const r = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sb], {
+      cwd: caller,
+      env: { CTX_INSTALL_TTY: ttyMenuEof },
+    });
+    expect(r.code, r.stderr).toBe(0);
+    expect(r.stdout).toContain('Proceed? [Y/n]:');
+    expect(r.stdout).toContain('plugins installed: none (core only');
+    expect(existsSync(join(sb, '.contexture/extensions'))).toBe(false);
+  });
+
+  it('--plugins, --non-interactive, and --dry-run skip Proceed? [Y/n] and the interactive menu even when CTX_INSTALL_TTY is readable', async () => {
+    const caller = sandbox('install-plugins-skip-tty-caller');
+    const ttyDecline = join(caller, 'tty-n.txt');
+    writeFileSync(ttyDecline, 'n\n');
+
+    const sbPlugins = sandbox('install-plugins-skip-tty');
+    const rPlugins = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbPlugins, '--plugins=git'], {
+      cwd: caller,
+      env: { CTX_INSTALL_TTY: ttyDecline },
+    });
+    expect(rPlugins.code, rPlugins.stderr).toBe(0);
+    expect(rPlugins.stdout).not.toContain('Proceed? [Y/n]:');
+    expect(rPlugins.stdout).toContain('plugins installed: git');
+    expect(readFileSync(join(sbPlugins, '.contexture/config'), 'utf8')).toContain('package.git:');
+
+    const sbNonInt = sandbox('install-nonint-skip-tty');
+    const rNonInt = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbNonInt, '--non-interactive'], {
+      cwd: caller,
+      env: { CTX_INSTALL_TTY: ttyDecline },
+    });
+    expect(rNonInt.code, rNonInt.stderr).toBe(0);
+    expect(rNonInt.stdout).not.toContain('Proceed? [Y/n]:');
+    expect(rNonInt.stdout).toContain('plugins installed: none (core only');
+
+    const sbDry = sandbox('install-dry-skip-tty');
+    const rDry = await exec('sh', [INSTALL_SH, '--from', ROOT, '--dir', sbDry, '--dry-run'], {
+      cwd: caller,
+      env: { CTX_INSTALL_TTY: ttyDecline },
+    });
+    expect(rDry.code, rDry.stderr).toBe(0);
+    expect(rDry.stdout).toContain('dry-run: fresh install plan');
+    expect(rDry.stdout).not.toContain('Proceed? [Y/n]:');
+    expect(existsSync(join(sbDry, '.contexture'))).toBe(false);
   });
 });
