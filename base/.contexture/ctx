@@ -2490,7 +2490,22 @@ package_info() {
       }'
     exit 0
   fi
+  pi_root_prefix=${root%/}
+  pi_dir_prefix=${dir%/}
+  case "$pi_pkg" in
+    "$root") pi_root_disp="." ;;
+    "$pi_dir_prefix"/*)
+      if [ -n "$pi_dir_prefix" ]; then
+        pi_root_disp=".contexture/${pi_pkg#"$pi_dir_prefix"/}"
+      else
+        pi_root_disp=${pi_pkg#/}
+      fi
+      ;;
+    "$pi_root_prefix"/*) pi_root_disp=${pi_pkg#"$pi_root_prefix"/} ;;
+    *) pi_root_disp=$pi_pkg ;;
+  esac
   printf 'package: %s\n' "$pi_name"
+  printf 'root: %s\n' "$pi_root_disp"
   printf 'version: %s\n' "$pf_version"
   printf 'kind: %s\n' "$pf_kind"
   [ -z "$pf_driver" ] || printf 'driver: %s\n' "$pf_driver"
@@ -2503,8 +2518,8 @@ package_info() {
     pi_tags_csv=$(printf '%s' "$pf_tags" | awk '{ for (i = 1; i <= NF; i++) o = o (i > 1 ? ", " : "") $i; print o }')
     printf 'tags: %s\n' "$pi_tags_csv"
   fi
-  pi_parts_csv=$(printf '%s' "$pf_parts" | awk 'NF { o = o (o == "" ? "" : ", ") $1 " " $2 } END { print o }')
-  printf 'parts: %s\n' "$pi_parts_csv"
+  pi_parts_csv=$(printf '%s' "$pf_parts" | awk 'NF { o = o (o == "" ? "" : ", ") $1 ": " $2 } END { print o }')
+  printf 'parts (under .contexture/extensions/): %s\n' "$pi_parts_csv"
   if [ "$pi_inst" -eq 1 ]; then
     pi_st="installed${pi_iver:+ $pi_iver}"
     [ "$pi_is_decl" -eq 1 ] && pi_st="$pi_st, declared"

@@ -27,9 +27,10 @@ The install lands `work.md` and `debug.md` under
 and edit a rhythm, copy it into the workspace's own `.contexture/rhythms/`:
 those copies are your team's, and the list labels such a copy as shadowing
 the installed one. Onboarding offers this plugin when a team brings
-no rhythm of its own, and removes the plugins folder with ONBOARDING at
-adoption close. The upstream copy stays the distributable one: workspace edits
-never travel back.
+no rhythm of its own, and keeps `.contexture/plugins/` as the workspace
+catalog copy while `.contexture/ONBOARDING.md` is removed at adoption close.
+The upstream copy stays the distributable one: workspace edits never travel
+back.
 
 ## The work rhythm
 

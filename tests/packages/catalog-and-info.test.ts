@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
@@ -202,10 +202,18 @@ describe.concurrent('ctx package info', () => {
     const txt = await ctx(sb, 'package', 'info', 'feat');
     expect([txt.code, txt.stderr]).toEqual([0, '']);
     expect(txt.stdout).toContain('package: feat');
+    expect(txt.stdout).toContain('root: .contexture/plugins/feat');
     expect(txt.stdout).toContain('version: 1.2.0');
+    expect(txt.stdout).toContain('parts (under .contexture/extensions/): module: modules/m-feat');
     expect(txt.stdout).toContain('status: installed 1.0.0, declared, catalog holds 1.2.0');
     expect(txt.stdout).toContain('probe: ready\n  shadow line 1\n  shadow line 2');
     for (const line of txt.stdout.split('\n')) expect(leaks(line)).toBe(false);
+
+    const pathTxt = await ctx(sb, 'package', 'info', './plugins/feat', '--no-probe');
+    expect([pathTxt.code, pathTxt.stderr]).toEqual([0, '']);
+    expect(pathTxt.stdout).toContain('root: plugins/feat');
+    expect(pathTxt.stdout).toContain('parts (under .contexture/extensions/): module: modules/m-feat');
+    for (const line of pathTxt.stdout.split('\n')) expect(leaks(line)).toBe(false);
 
     const byPath = await ctx(sb, 'package', 'info', '--json', '--no-probe', './plugins/feat');
     expect([byPath.code, byPath.stderr]).toEqual([0, '']);
@@ -239,9 +247,48 @@ describe.concurrent('ctx package info', () => {
     });
     const r = await ctx(sb, 'package', 'info', 'drvpkg');
     expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(r.stdout).toContain('root: plugins/drvpkg');
     expect(r.stdout).toContain('kind: driver');
     expect(r.stdout).toContain('driver: customdrv');
+    expect(r.stdout).toContain('parts (under .contexture/extensions/): driver: storage/drivers/customdrv');
     expect(r.stdout).toContain('probe: error (rc 7)\n  boom');
+    for (const line of r.stdout.split('\n')) expect(leaks(line)).toBe(false);
+
+    const multiDir = sandbox('info-multi-ext');
+    const multiPkg = makePkg(multiDir, 'multi', {
+      extraManifest: ['part: rhythms rhythms'],
+    });
+    addFile(multiPkg, 'rhythms/work.md', '# work\nuse when: always\nactivation: auto\n1. DO: work\n');
+    const multiR = await ctx(sb, 'package', 'info', multiPkg);
+    expect([multiR.code, multiR.stderr]).toEqual([0, '']);
+    expect(multiR.stdout).toContain(`root: ${multiPkg}`);
+    expect(multiR.stdout).toContain('parts (under .contexture/extensions/): module: modules/m-multi, rhythms: rhythms');
+    for (const line of multiR.stdout.split('\n')) expect(leaks(line)).toBe(false);
+
+    const multiJsonR = await ctx(sb, 'package', 'info', '--json', multiPkg);
+    expect([multiJsonR.code, multiJsonR.stderr]).toEqual([0, '']);
+    const multiJson = JSON.parse(multiJsonR.stdout);
+    expect(multiJson.parts).toEqual([
+      { type: 'module', path: 'modules/m-multi' },
+      { type: 'rhythms', path: 'rhythms' },
+    ]);
+    expect(Object.prototype.hasOwnProperty.call(multiJson, 'root')).toBe(false);
+
+    const prefixWrap = sandbox('info-prefix-wrap');
+    const wsFoo = join(prefixWrap, 'foo');
+    cpSync(sb, wsFoo, { recursive: true });
+    const sibPkg = makePkg(join(prefixWrap, 'foobar'), 'sibpkg');
+    const sibR = await ctx(wsFoo, 'package', 'info', sibPkg, '--no-probe');
+    expect([sibR.code, sibR.stderr]).toEqual([0, '']);
+    expect(sibR.stdout).toContain(`root: ${sibPkg}`);
+    expect(sibR.stdout).not.toContain('root: bar/');
+    for (const line of sibR.stdout.split('\n')) expect(leaks(line)).toBe(false);
+
+    makePkg(join(wsFoo, 'plugins'), 'slashpkg');
+    const slashR = await ctx(wsFoo, 'package', 'info', './plugins/slashpkg/', '--no-probe');
+    expect([slashR.code, slashR.stderr]).toEqual([0, '']);
+    expect(slashR.stdout).toContain('root: plugins/slashpkg');
+    for (const line of slashR.stdout.split('\n')) expect(leaks(line)).toBe(false);
 
     expect((await ctx(sb, 'package', 'info')).code).toBe(1);
     expect((await ctx(sb, 'package', 'info', '--bad')).code).toBe(1);

@@ -63,7 +63,7 @@ instead:
 
 ```sh
 mkdir -p .contexture/modules/toolchain-filters/filters
-cp plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters/vitest.awk .contexture/modules/toolchain-filters/filters/
+cp .contexture/plugins/toolchain-filters/.contexture/extensions/modules/toolchain-filters/filters/vitest.awk .contexture/modules/toolchain-filters/filters/
 chmod +x .contexture/modules/toolchain-filters/filters/*.awk
 ```
 
