@@ -13,6 +13,7 @@ let corpus: string;
 let eng: string;
 let tools: string;
 let dead: string;
+let drawer: string;
 beforeAll(async () => {
   dead = sandbox('check-dead');
   mkdirSync(join(dead, 'docs/workspace'), { recursive: true });
@@ -21,6 +22,10 @@ beforeAll(async () => {
   mkdirSync(join(tools, 'docs/demo'), { recursive: true });
   writeFileSync(join(tools, 'docs/demo/tools.md'), '@doc capability tools\n  repo: demo\n  description: "The demo tools."\n  sources: [bin/*, lib/gone, etc/conf]\n');
   await gitInit(tools, 'docs/demo/tools.md');
+  drawer = sandbox('check-drawer');
+  mkdirSync(join(drawer, 'docs/workspace'), { recursive: true });
+  writeFileSync(join(drawer, 'docs/workspace/drawer.md'), '@doc capability drawer\n  repo: workspace\n  description: "Custom workspace module."\n  sources: [.contexture/modules/custom/**, .contexture/modules/custom/exact.sh]\n');
+  await gitInit(drawer, 'docs/workspace/drawer.md');
   matrix = sandbox('check-matrix');
   mkdirSync(join(matrix, 'docs/demo'), { recursive: true });
   writeFileSync(join(matrix, 'docs/demo/widgets.md'), '@doc capability widgets\n  repo: demo\n  description: "Widget catalog and rendering."\n  sources: [src/widgets/*.cs]\n');
@@ -199,5 +204,49 @@ describe('the check engine: the governed set, the code extensions with awk plus 
     const r = await check(tools, `M\tprojects/demo/vendor/sub\nA\tprojects/demo/vendor/embedded/\n${rest}`);
     expect(r.code, r.stdout + r.stderr).toBe(rc);
     expect(uncovered(r.stdout)).toEqual(lines);
+  });
+  it('[docs-module-r10] unclaimed .contexture/ scripts (.awk, .sh, shebang) stay out of the governed set', async () => {
+    const r = await check(
+      drawer,
+      'A\t.contexture/ctx\nA\t.contexture/modules/unit/scripts/list\nA\t.contexture/extensions/modules/docs/scripts/docs-check.awk\nA\t.contexture/storage/drivers/posix/driver.sh\n',
+      { shebangs: shebangs('drawer-unclaimed', 'shebang\t.contexture/ctx\nshebang\t.contexture/modules/unit/scripts/list\n') },
+    );
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(uncovered(r.stdout)).toEqual([]);
+    expect(r.stdout).not.toContain('STALE DOC');
+  });
+  it('[docs-module-r10, docs-module-r11] claimed .contexture/ paths remain governed while unclaimed .contexture/ scripts pass', async () => {
+    const stale = await check(drawer, 'M\t.contexture/modules/custom/run.sh\nA\t.contexture/ctx\n', {
+      shebangs: shebangs('drawer-claimed-stale', 'shebang\t.contexture/ctx\n'),
+    });
+    expect(stale.code, stale.stdout + stale.stderr).toBe(1);
+    expect(stale.stdout).toContain('STALE DOC: workspace/drawer');
+    expect(uncovered(stale.stdout)).toEqual([]);
+    const freshRun = await check(drawer, 'M\t.contexture/modules/custom/run.sh\nA\t.contexture/ctx\nM\tdocs/workspace/drawer.md\n', {
+      shebangs: shebangs('drawer-claimed-fresh', 'shebang\t.contexture/ctx\n'),
+    });
+    expect(freshRun.code, freshRun.stdout + freshRun.stderr).toBe(0);
+    expect(freshRun.stdout).toContain('FRESH: workspace > drawer');
+    expect(uncovered(freshRun.stdout)).toEqual([]);
+  });
+  it('[docs-module-r10] nested non-root .contexture/ paths stay governed while deeply nested and deleted unclaimed drawer paths stay out', async () => {
+    const r = await check(
+      drawer,
+      'A\tbase/.contexture/ctx\nA\tplugins/demo/.contexture/hook.sh\nA\tprojects/app/.contexture/run.sh\nA\t.contexture/plugins/demo/nested/.contexture/sub.sh\nD\t.contexture/modules/unit/old.sh\nM\t.contexture/modules/custom/README.md\n',
+      { shebangs: shebangs('drawer-nested', 'shebang\tbase/.contexture/ctx\n') },
+    );
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(uncovered(r.stdout).sort()).toEqual([
+      'UNCOVERED: base/.contexture/ctx',
+      'UNCOVERED: plugins/demo/.contexture/hook.sh',
+      'UNCOVERED: projects/app/.contexture/run.sh',
+    ]);
+    expect(r.stdout).not.toContain('STALE DOC');
+  });
+  it('[docs-module-r9, docs-module-r10] deleted exact-listed .contexture/ source triggers DEAD SOURCE even when its claiming doc rides', async () => {
+    const r = await check(drawer, 'D\t.contexture/modules/custom/exact.sh\nM\tdocs/workspace/drawer.md\n');
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(r.stdout).toContain('FRESH: workspace > drawer');
+    expect(r.stdout).toContain("DEAD SOURCE: workspace/drawer still explicitly lists deleted file '.contexture/modules/custom/exact.sh'");
   });
 });

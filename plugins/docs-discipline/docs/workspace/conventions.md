@@ -1,7 +1,7 @@
 @doc conventions conventions
   repo: workspace
   description: "Universal workspace conventions: documentation discipline, git, and security invariants"
-  sources: [AGENTS.workspace.md, .contexture/extensions/**]
+  sources: [AGENTS.workspace.md]
   keywords: [conventions, git, secrets, evidence, laws, prompt-to-doc, stop-gate, authoring, drift]
 
 @rule git/conventional-commits

@@ -1,16 +1,39 @@
-import { mkdirSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sandbox } from '@support/sandbox';
-import { fresh } from '@support/snapshot';
-import { docs, gwWorkspace, stageSeed } from '../support/corpus';
-import { git, gitCommit } from '../support/git';
+import { fresh, seed } from '@support/snapshot';
+import { addModule, docs, gwWorkspace, PLUGIN, stageSeed } from '../support/corpus';
+import { git, gitCommit, gitInit } from '../support/git';
 
 let staged: string;
 let gw: string;
 let gwIgnored: string;
+let trackedDrawer: string;
 beforeAll(async () => {
-  [staged, gw, gwIgnored] = await Promise.all([stageSeed('posix', 'gate-staged'), gwWorkspace('posix', 'gw-posix'), gwWorkspace('posix', 'gw-ignored', { ignoreCorpus: true })]);
+  [staged, gw, gwIgnored, trackedDrawer] = await Promise.all([
+    stageSeed('posix', 'gate-staged'),
+    gwWorkspace('posix', 'gw-posix'),
+    gwWorkspace('posix', 'gw-ignored', { ignoreCorpus: true }),
+    seed(async (sb) => {
+      addModule(sb);
+      mkdirSync(join(sb, 'src'));
+      writeFileSync(join(sb, 'src/gw.sh'), 'echo gw\n');
+      mkdirSync(join(sb, '.contexture/modules/custom'), { recursive: true });
+      writeFileSync(join(sb, '.contexture/modules/custom/run.sh'), 'echo custom\n');
+      writeFileSync(join(sb, 'AGENTS.workspace.md'), '# overlay\n');
+      writeFileSync(join(sb, '.gitignore'), '.contexture/tmp/\n/docs/\n');
+      await gitInit(sb);
+      await git(sb, 'add', '-A');
+      await gitCommit(sb, 'h0');
+      const c = await docs(sb, ['write', 'workspace', 'conventions'], { input: readFileSync(join(PLUGIN, 'docs/workspace/conventions.md')) });
+      if (c.code !== 0) throw new Error(`trackedDrawer conventions: rc ${c.code}: ${c.stderr}`);
+      const w = await docs(sb, ['new', 'workspace', 'gw-unit', '--kind=capability', "--description=the suite's own unit", '--sources=src/gw.sh', '--keywords=gw']);
+      if (w.code !== 0) throw new Error(`trackedDrawer gw-unit: rc ${w.code}: ${w.stderr}`);
+      const d = await docs(sb, ['new', 'workspace', 'custom-mod', '--kind=capability', '--description=custom module', '--sources=.contexture/modules/custom/**', '--keywords=custom']);
+      if (d.code !== 0) throw new Error(`trackedDrawer custom-mod: rc ${d.code}: ${d.stderr}`);
+    }, 'posix', 'gate-tracked-drawer'),
+  ]);
 });
 
 const committed = async (from = gw): Promise<[string, string]> => {
@@ -268,5 +291,73 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
   it('[docs-module-r16] refuses --since outside a repository rc 1', async () => {
     const r = await docs(fresh(staged), ['gate', '--since=HEAD']);
     expect([r.code, r.stderr]).toEqual([1, 'ctx docs gate: --since needs the workspace to be a git repository with a commit\n']);
+  });
+});
+
+describe('the gate when .contexture/ is tracked (adopting repository layout)', { concurrent: true }, () => {
+  it('[docs-module-r10] untracked .contexture/ runtime, extensions, and seeded conventions pass clean', async () => {
+    const sb = fresh(gw);
+    writeFileSync(join(sb, '.gitignore'), '.contexture/tmp/\n');
+    writeFileSync(join(sb, 'AGENTS.workspace.md'), '# overlay\n');
+    mkdirSync(join(sb, '.contexture/plugins/demo'), { recursive: true });
+    writeFileSync(join(sb, '.contexture/plugins/demo/hook.sh'), 'echo hook\n');
+    expect((await docs(sb, ['write', 'workspace', 'conventions'], { input: readFileSync(join(PLUGIN, 'docs/workspace/conventions.md')) })).code).toBe(0);
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain('UNCOVERED:');
+    expect(r.stdout).not.toContain('UNTRACKED CLAIMANT:');
+  });
+
+  it('[docs-module-r10] added or modified unclaimed .contexture/ scripts pass clean', async () => {
+    const sb = fresh(trackedDrawer);
+    mkdirSync(join(sb, '.contexture/plugins/demo'), { recursive: true });
+    writeFileSync(join(sb, '.contexture/plugins/demo/hook.sh'), 'echo hook\n');
+    writeFileSync(join(sb, '.contexture/modules/unit/scripts/helper'), '#!/bin/sh\necho helper\n');
+    writeFileSync(join(sb, '.contexture/ctx'), `${readFileSync(join(sb, '.contexture/ctx'), 'utf8')}\n# note\n`);
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain('UNCOVERED:');
+  });
+
+  it('[docs-module-r10, docs-module-r16] claimed .contexture/ module scripts stay governed while unclaimed .contexture/ paths pass', async () => {
+    const sb = fresh(trackedDrawer);
+    writeFileSync(join(sb, '.gitignore'), '.contexture/tmp/\n');
+    await git(sb, 'add', '-A');
+    await gitCommit(sb, 'h1');
+    mkdirSync(join(sb, '.contexture/plugins/demo'), { recursive: true });
+    writeFileSync(join(sb, '.contexture/plugins/demo/hook.sh'), 'echo hook\n');
+    writeFileSync(join(sb, '.contexture/modules/custom/run.sh'), 'echo custom2\n');
+    const stale = await docs(sb, ['gate']);
+    expect(stale.code, stale.stdout + stale.stderr).toBe(1);
+    expect(stale.stdout).toContain('STALE DOC: workspace/custom-mod');
+    expect(stale.stdout).not.toContain('UNCOVERED:');
+    expect((await docs(sb, ['header', 'workspace', 'custom-mod', '--add-keyword=fresh'])).code).toBe(0);
+    const freshRun = await docs(sb, ['gate']);
+    expect(freshRun.code, freshRun.stdout + freshRun.stderr).toBe(0);
+    expect(freshRun.stdout).toContain('FRESH: workspace > custom-mod');
+  });
+
+  it('[docs-module-r8, docs-module-r10] spaced and git-quoted unclaimed .contexture/ scripts pass clean', async () => {
+    const sb = fresh(trackedDrawer);
+    mkdirSync(join(sb, '.contexture/plugins/my plugin'), { recursive: true });
+    writeFileSync(join(sb, '.contexture/plugins/my plugin/hook.sh'), 'echo spaced\n');
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain('UNCOVERED:');
+
+    const quoted = await docs(sb, ['gate', '--stdin'], { input: 'A\t".contexture/plugins/caf\\303\\251/hook.sh"\n' });
+    expect(quoted.code, quoted.stdout + quoted.stderr).toBe(0);
+    expect(quoted.stdout).not.toContain('UNCOVERED:');
+  });
+
+  it('[docs-module-r10, docs-module-r14] claimed .contexture/ scripts with an untracked claimant report UNTRACKED CLAIMANT (CLEAN PROCESS-OWNED)', async () => {
+    const sb = fresh(trackedDrawer);
+    writeFileSync(join(sb, '.contexture/modules/custom/run.sh'), 'echo custom2\n');
+    const r = await docs(sb, ['gate']);
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toContain('UNTRACKED CLAIMANT: workspace/custom-mod');
+    expect(r.stdout).toContain('docs-check: CLEAN (PROCESS-OWNED):');
+    expect(r.stdout).not.toContain('UNCOVERED:');
+    expect(r.stdout).not.toContain('STALE DOC:');
   });
 });

@@ -189,18 +189,22 @@ into an existing file; `seed` means it is starting content to adapt; and
    workspace already allows (the contexture base normally allows AGENTS.md and
    AGENTS.workspace.md).
 
-   The corpus lines apply under the files driver, whose corpus is the files
-   under `docs/`; a corpus kept in a store driver needs none (the storage-fts5
-   README names the git steps for moving a tracked corpus into its store).
+   The guide lines apply under the files driver when you track `docs/*.md`
+   guides under a deny-by-default `.gitignore`; the agent-facing corpus
+   (`docs/workspace/` and `docs/<repo>/`) stays gitignored working state, and
+   a corpus kept in a store driver needs none (the storage-fts5 README names
+   the git steps for moving a tracked corpus into its store).
 
    ```gitignore
-   # the plugin drawer: the module (its grammar rides inside it)
+   # the plugin drawer: the module (its grammar rides inside it) and scratch re-ignored
    !/.contexture/
    !/.contexture/**
+   .contexture/tmp/
 
-   # the corpus under the files driver: the conventions and the per-repo docs
+   # guides at docs/*.md stay tracked; the agent-facing corpus (docs/workspace/
+   # and docs/<repo>/ under the files driver) stays gitignored working state
    !/docs/
-   !/docs/**
+   !/docs/*.md
 
    # multi-repo layouts only: the projects/ directory itself ships (with a
    # keep file, since git cannot track an empty directory); its contents stay
@@ -212,7 +216,7 @@ into an existing file; `seed` means it is starting content to adapt; and
 4. Seed the corpus through the write verbs, which check each doc against the
    grammar and audit it before the configured driver stores it: the
    conventions first (`ctx docs write workspace conventions <
-   <plugin>/docs/workspace/conventions.md`), then a workspace map for the tree
+   .contexture/plugins/docs-discipline/docs/workspace/conventions.md`), then a workspace map for the tree
    (`ctx docs write` for a whole draft, or `ctx docs new` and the block verbs,
    per the module's grammar), then one unit doc per repository, then the
    operational doc for the repository whose setup targets the nudge should
@@ -519,7 +523,10 @@ it walk below runs every one of these.
 - The excluded set is path-shaped: the generated and test families
   (`.spec.`, `.Test`, `.min.`, `.generated.`) plus any path segment named
   `spec` (including a top-level `spec/`), so a repository or directory
-  literally named `spec` is invisible to coverage and freshness.
+  literally named `spec` is invisible to coverage and freshness. Unclaimed
+  paths under `.contexture/` are excluded too, so installed runtime and
+  catalog scripts pass clean while explicitly claimed `.contexture/` modules
+  stay governed.
 - The authoring and drift rhythms declare their work as `@task` entries in
   `backlog.md` (the base convention's task grammar) before drafting or
   reconciling; `tests/sample/backlog.md` shows the shape the demo uses. A
@@ -1096,7 +1103,7 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `.contexture/extensions/modules/docs/scripts/docs-edit.awk` | authored fresh: the structural edit engine of the write verbs and of `query --entry`, driven by the grammar's `#%` schema, the request through the environment |
 | `.contexture/extensions/modules/docs/scripts/docs-audit.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the duplicate-id check generalized to one namespace per repo over every id field (an entry head or an id line of its own) |
 | `.contexture/extensions/modules/docs/scripts/docs-query.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the free-text options read from the environment (never `awk -v`), the pitfalls view scoped to `@pitfalls`, and the owner lookup claiming by the check's glob rule (the substring and raw-prefix matches gone) and answering the most specific claimant once every doc is read |
-| `.contexture/extensions/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE`; the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`); the `delta_source` token (`log` turns the blanket and the trackedness probe off for a store's driver-fed delta); the doc touch anchored to the logical address at the start of a delta path; the governed set (`is_governed`) widened to `awk` and the shebang scripts the verb's list vouches for, a path the list cannot vouch for governed only when a header source lists it exactly |
+| `.contexture/extensions/modules/docs/scripts/docs-check.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms); the single-repo mapping documented, not scripted; the extension predicate one-homed in `CODE_EXT_RE` and widened to the broad code set, with the generated and test exclusions in `EXCLUDE_RE` plus unclaimed `.contexture/` paths excluded in `is_governed` (while claimed `.contexture/` modules remain governed); the spec-family exclusion anchored and the architecture/overview/workspace blanket reported (`FRESH (BLANKET)`, `ARCH-COVERED`) instead of folded into the clean verdict; the governed guide predicate (a depth-1 `docs/*.md` claimed by the corpus) with the trackedness probe and the untracked-claimant verdict for every governed file (`UNTRACKED CLAIMANT`, process-owned reconciliation, never a false `STALE`); the `delta_source` token (`log` turns the blanket and the trackedness probe off for a store's driver-fed delta); the doc touch anchored to the logical address at the start of a delta path; the governed set (`is_governed`) widened to `awk` and the shebang scripts the verb's list vouches for, a path the list cannot vouch for governed only when a header source lists it exactly |
 | `.contexture/extensions/modules/docs/scripts/docs-nudge.awk` | verbatim from the source instrument except the shebang, the line-2 comment, and the usage and help lines (now ctx forms) |
 | `.contexture/extensions/modules/docs/scripts/docs-glob.awk` | authored fresh: the header-source glob rule the check and the owner query share, `split_sources` and `glob_to_regex` moved out of the two engines (byte-identical copies before), plus the claim predicate and the specificity helpers; loaded ahead of either engine by a second `awk -f` |
 | `.contexture/extensions/modules/docs/README.md` | authored fresh: the off-path module map (layout, workspace root, tests) |
@@ -1104,7 +1111,7 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `docs/work.md` | authored as the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at EXECUTE and REVIEW; reference material, copied into the workspace's own `.contexture/rhythms/` to own it |
 | `.contexture/extensions/rhythms/docs-authoring.md` | authored from the source authoring procedure; the steps name outcomes, the method detail lives in the grammar's comments |
 | `.contexture/extensions/rhythms/docs-drift.md` | authored from the source drift procedure; the method lives in `@rule docs/drift` |
-| `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the drawer sources glob and evidence fields re-pointed at the module |
+| `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the sources header narrowed to `[AGENTS.workspace.md]` and evidence fields pointed at the module |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
 | `tests/` (the vitest project) | authored fresh: the engines alone over the sample, the write goldens, and committed expected output; the verbs end to end on posix; the read refusal on a planted driver; the store mode on fts5 |

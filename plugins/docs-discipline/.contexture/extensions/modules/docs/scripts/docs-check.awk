@@ -94,11 +94,13 @@ BEGIN {
     }
 }
 
-# EXCLUDE_RE first, then the code extensions; a path with another extension stays out; an
-# extensionless one (a non-empty basename with no dot after its first character, or a <dir>/
-# line) reads the verb's vouch, else counts only when a claiming doc lists it exactly
+# EXCLUDE_RE and unclaimed .contexture/ paths first, then the code extensions; a path with
+# another extension stays out; an extensionless one (a non-empty basename with no dot after
+# its first character, or a <dir>/ line) reads the verb's vouch, else counts only when a
+# claiming doc lists it exactly
 function is_governed(t_file,    base) {
     if (t_file ~ EXCLUDE_RE) return 0
+    if (t_file ~ /^\.contexture\// && !claimed[t_file]) return 0
     if (t_file ~ CODE_EXT_RE) return 1
     base = t_file
     sub(/.*\//, "", base)
