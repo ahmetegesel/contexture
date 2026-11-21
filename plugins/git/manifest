@@ -1,4 +1,11 @@
 # summary: the git management discipline: the gitignore strategy, the branch and worktree mechanics, and the boot ground check
-# version: 1.0.0
+# version: 1.1.0
 # kind: feature
 # part: module modules/git
+# category: vcs
+# pitch: git ground checks at boot, branch and worktree lifecycle, and gitignore posture
+# when: your workspace uses git and you want repository hygiene built into agent boot and workflows
+# needs: git
+# tags: git vcs worktree gitignore
+# description:
+# Law-only module contributing the @git section (gitignore posture, branch and worktree lifecycle) and the git-workspace boot ground check; independent of docs-discipline.

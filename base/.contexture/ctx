@@ -3,7 +3,7 @@
 # Zero-install: POSIX /bin/sh, awk, and core OS utilities only.
 #
 # Usage: ctx [help [--all]] | ctx run <cmd> [args...] | ctx compose [--check] |
-#        ctx package install|uninstall <package> | ctx search "<query>" [flags] |
+#        ctx package install|uninstall|list|catalog|info [<package>] | ctx search "<query>" [flags] |
 #        ctx <module> [args...]
 # The help output is the contract surface; this header never prints.
 #
@@ -21,9 +21,10 @@
 # "# version: <token>" (the installer's), and a "# description:" hash block
 # last (the compose's preamble); a "# requires:" line is reserved and refused.
 # The private reader ctx _module <file> validate|summary|version|description
-# is the one module-file parser; ctx _package <file> validate|summary|version|kind|parts|driver
+# is the one module-file parser; ctx _package <file> validate|summary|version|kind|parts|driver|category|pitch|when|needs|tags|description
 # is the one package-manifest parser (the package root's manifest: summary, version,
-# kind feature|driver, the repeated part lines, and a driver name for the driver kind;
+# kind feature|driver, the repeated part lines, a driver name for the driver kind,
+# and optional category, pitch, when, needs, tags, and trailing description block;
 # requires is reserved and refused); ctx _reserved <name> answers the engine's reserved set
 # (rc0 reserved, rc1 not) for the package installer and the composer; ctx _builtin <name>
 # answers the engine's builtin set (unit, run, lane, rhythm, store; rc0 builtin, rc1 not) for the
@@ -262,14 +263,20 @@ module_reader() {
 #   # kind: feature|driver             required; the two package kinds
 #   # part: <type> <path>              repeatable; at least one
 #   # driver: <name>                   required exactly when kind is driver
+#   # category: <token>                optional; lowercase slug [a-z][a-z0-9-]*
+#   # pitch: <one line>                optional; adopter-facing value pitch
+#   # when: <one line>                 optional; when to install
+#   # needs: <one line>                optional; host prerequisites summary
+#   # tags: <tok> [<tok>...]           optional; space-separated lowercase tags [a-z0-9][a-z0-9-]*
+#   # description:                     optional; multi-line # block, MUST stand last
 #   # requires: ...                    reserved; refused
 # The part types are module, driver, laws, rhythms, hooks, and filters; a part path
 # is relative to the package's .contexture/extensions tree (the install path). A
 # module part is one folder under modules/, a driver part is storage/drivers/<name>,
 # and a rhythms part is under rhythms/. A bare # line is a comment; any other
 # "# <key>:" line is an unknown field and refuses. ctx _package answers validate,
-# summary, version, kind, parts, and driver; the package installer is the only
-# caller.
+# summary, version, kind, parts, driver, category, pitch, when, needs, tags, and
+# description.
 
 package_file_parse() {
   pf_file=$1
@@ -278,10 +285,22 @@ package_file_parse() {
   pf_kind=""
   pf_driver=""
   pf_parts=""
+  pf_category=""
+  pf_pitch=""
+  pf_when=""
+  pf_needs=""
+  pf_tags=""
+  pf_desc=""
   pf_seen_summary=0
   pf_seen_version=0
   pf_seen_kind=0
   pf_seen_driver=0
+  pf_seen_category=0
+  pf_seen_pitch=0
+  pf_seen_when=0
+  pf_seen_needs=0
+  pf_seen_tags=0
+  pf_seen_desc=0
   pf_part_count=0
   PF_ERROR=""
   pf_lineno=0
@@ -293,6 +312,17 @@ package_file_parse() {
   while IFS= read -r pf_line || [ -n "$pf_line" ]; do
     pf_lineno=$((pf_lineno + 1))
     pf_line=${pf_line%"$pf_cr"}
+    if [ "$pf_seen_desc" -eq 1 ]; then
+      case "$pf_line" in
+        '#') pf_desc="$pf_desc
+" ;;
+        '# '*) pf_desc="$pf_desc${pf_line#'# '}
+" ;;
+        *) PF_ERROR="line $pf_lineno: the description block takes only # lines to the end of the file"
+           return 1 ;;
+      esac
+      continue
+    fi
     case "$pf_line" in
       ''|[[:space:]]*)
         continue
@@ -413,11 +443,102 @@ package_file_parse() {
         PF_ERROR="line $pf_lineno: the driver name is empty"
         return 1
         ;;
+      '# category: '*)
+        [ "$pf_seen_category" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # category:"; return 1; }
+        pf_category=${pf_line#'# category: '}
+        pf_category=$(printf '%s' "$pf_category" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        case "$pf_category" in
+          ''|[!a-z]*|*[!a-z0-9-]*)
+            PF_ERROR="line $pf_lineno: malformed category '$pf_category' (lowercase letters, digits, and hyphens, starting with a letter)"
+            return 1
+            ;;
+        esac
+        pf_seen_category=1
+        ;;
+      '# category:')
+        PF_ERROR="line $pf_lineno: the category is empty"
+        return 1
+        ;;
+      '# pitch: '*)
+        [ "$pf_seen_pitch" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # pitch:"; return 1; }
+        pf_pitch=${pf_line#'# pitch: '}
+        pf_pitch=$(printf '%s' "$pf_pitch" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [ -n "$pf_pitch" ] || { PF_ERROR="line $pf_lineno: the pitch is empty"; return 1; }
+        pf_seen_pitch=1
+        ;;
+      '# pitch:')
+        PF_ERROR="line $pf_lineno: the pitch is empty"
+        return 1
+        ;;
+      '# when: '*)
+        [ "$pf_seen_when" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # when:"; return 1; }
+        pf_when=${pf_line#'# when: '}
+        pf_when=$(printf '%s' "$pf_when" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [ -n "$pf_when" ] || { PF_ERROR="line $pf_lineno: the when field is empty"; return 1; }
+        pf_seen_when=1
+        ;;
+      '# when:')
+        PF_ERROR="line $pf_lineno: the when field is empty"
+        return 1
+        ;;
+      '# needs: '*)
+        [ "$pf_seen_needs" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # needs:"; return 1; }
+        pf_needs=${pf_line#'# needs: '}
+        pf_needs=$(printf '%s' "$pf_needs" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [ -n "$pf_needs" ] || { PF_ERROR="line $pf_lineno: the needs field is empty"; return 1; }
+        pf_seen_needs=1
+        ;;
+      '# needs:')
+        PF_ERROR="line $pf_lineno: the needs field is empty"
+        return 1
+        ;;
+      '# tags: '*)
+        [ "$pf_seen_tags" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # tags:"; return 1; }
+        pf_tags_raw=${pf_line#'# tags: '}
+        pf_tags_raw=$(printf '%s' "$pf_tags_raw" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+        [ -n "$pf_tags_raw" ] || { PF_ERROR="line $pf_lineno: the tags field is empty"; return 1; }
+        case "$pf_tags_raw" in
+          *[!a-z0-9\	\ -]*)
+            PF_ERROR="line $pf_lineno: malformed tags (lowercase letters, digits, and hyphens, space-separated)"
+            return 1
+            ;;
+        esac
+        pf_tags=""
+        for pf_t in $pf_tags_raw; do
+          case "$pf_t" in
+            ''|[!a-z0-9]*)
+              PF_ERROR="line $pf_lineno: malformed tag '$pf_t' (lowercase letters, digits, and hyphens, starting with a letter or digit)"
+              return 1
+              ;;
+          esac
+          case " $pf_tags " in
+            *" $pf_t "*)
+              PF_ERROR="line $pf_lineno: duplicate tag '$pf_t'"
+              return 1
+              ;;
+          esac
+          pf_tags="${pf_tags:+$pf_tags }$pf_t"
+        done
+        [ -n "$pf_tags" ] || { PF_ERROR="line $pf_lineno: the tags field is empty"; return 1; }
+        pf_seen_tags=1
+        ;;
+      '# tags:')
+        PF_ERROR="line $pf_lineno: the tags field is empty"
+        return 1
+        ;;
+      '# description:')
+        [ "$pf_seen_desc" -eq 0 ] || { PF_ERROR="line $pf_lineno: duplicate # description:"; return 1; }
+        pf_seen_desc=1
+        ;;
+      '# description: '*)
+        PF_ERROR="line $pf_lineno: the description marker carries no value"
+        return 1
+        ;;
       '# requires:'*)
         PF_ERROR="line $pf_lineno: requires is reserved and refused"
         return 1
         ;;
-      '# summary:'*|'# version:'*|'# kind:'*|'# part:'*|'# driver:'*|'# description:'*)
+      '# summary:'*|'# version:'*|'# kind:'*|'# part:'*|'# driver:'*|'# category:'*|'# pitch:'*|'# when:'*|'# needs:'*|'# tags:'*|'# description:'*)
         PF_ERROR="line $pf_lineno: malformed field line (expected '# <field>: <value>')"
         return 1
         ;;
@@ -462,7 +583,7 @@ package_file_parse() {
 
 package_reader() {
   if [ $# -ne 2 ]; then
-    ctx_err "_package: usage: ctx _package <file> validate|summary|version|kind|parts|driver"
+    ctx_err "_package: usage: ctx _package <file> validate|summary|version|kind|parts|driver|category|pitch|when|needs|tags|description"
     exit 1
   fi
   if ! package_file_parse "$1"; then
@@ -476,6 +597,12 @@ package_reader() {
     kind) printf '%s\n' "$pf_kind" ;;
     driver) printf '%s\n' "$pf_driver" ;;
     parts) printf '%s' "$pf_parts" ;;
+    category) printf '%s\n' "$pf_category" ;;
+    pitch) printf '%s\n' "$pf_pitch" ;;
+    when) printf '%s\n' "$pf_when" ;;
+    needs) printf '%s\n' "$pf_needs" ;;
+    tags) printf '%s\n' "$pf_tags" ;;
+    description) printf '%s' "$pf_desc" ;;
     *) ctx_err "_package: unknown field: $2"; exit 1 ;;
   esac
   exit 0
@@ -866,7 +993,7 @@ usage:
   cmd | ctx run                    pipe form: compact a stream
   ctx compose [--check]            compose the generated law layer, or verify it current; --check writes nothing
 EOF
-  printf '%s\n%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$package_list_line" "$search_line"
+  printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$package_list_line" "$package_catalog_line" "$package_info_line" "$search_line"
   cat <<'EOF'
   ctx <module> [args...]           dispatch to a module: arguments, streams, and exit code pass through
   ctx <module> help [<verb>]       the module's verb table; one verb's detail with <verb>
@@ -1642,13 +1769,15 @@ EOF
 # on success it writes (install) or removes (uninstall) the package's line in the
 # workspace configuration, and the bare install installs every declared package
 
-package_install_line="  ctx package install [<package>]  install or update a package (a plugins/ name or a package root path; --as=<module>=<alias> renames a module), or bare every declared one, on the human's explicit go at the act"
+package_install_line="  ctx package install [<package>]  install or update a package (a catalog name or a package root path; --as=<module>=<alias> renames a module), or bare every declared one, on the human's explicit go at the act"
 package_uninstall_line="  ctx package uninstall <package>  remove an installed package (its name or its package root path), on the human's explicit go at the act"
 package_list_line="  ctx package list                 the declared packages against the installed ones: versions, modules, aliases, and drift; read only"
+package_catalog_line="  ctx package catalog [--names] [--no-probe] [--json]  list available catalog packages with value, install status, and host readiness; read only"
+package_info_line="  ctx package info <package> [--no-probe] [--json]     show one package's metadata, parts, install status, and host readiness; read only"
 
 show_package_help() {
-  printf "ctx package: install or remove a package through the core package installer, each only on the human's explicit go at the act, which the verb never checks, or list the declared and installed packages\n\n"
-  printf 'usage:\n%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$package_list_line"
+  printf "ctx package: install or remove a package through the core package installer, each only on the human's explicit go at the act, which the verb never checks, or inspect the declared, installed, and catalog packages\n\n"
+  printf 'usage:\n%s\n%s\n%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$package_list_line" "$package_catalog_line" "$package_info_line"
   printf "  ctx package <sub-verb> --help    one sub-verb's detail\n"
 }
 
@@ -1657,22 +1786,22 @@ show_package_verb_help() {
     install)
       cat <<'EOF'
 usage: ctx package install [<package>] [--as=<module>=<alias>]...
-installs or updates the package into this workspace's extension root through the core package installer, records it, runs its part hooks, and recomposes the law layer
-<package>: a catalog name (letters, digits, dot, underscore, hyphen; not starting with a dot) names plugins/<name> at the workspace root; a value holding a slash is a package root path, read from the working folder; either way the package lands in the workspace this engine serves
+installs or updates the package into this workspace's extension root through the core package installer, records it, runs its lifecycle actions, and recomposes the law layer
+<package>: a catalog name (letters, digits, dot, underscore, hyphen; not starting with a dot) resolves .contexture/plugins/<name> (falling back to plugins/<name>) at the workspace root; a value holding a slash is a package root path, read from the working folder; either way the package lands in the workspace this engine serves
 bare: ctx package install with no package installs every package the workspace configuration declares (one package.<name>: <source> [--as=<module>=<alias>]... line each) and the install record lacks, each with its declared flags; nothing pending prints one line rc 0; a configuration line is never a go, the bare install is itself the act
 an install writes its package.<name> line (the source as given, a path inside the workspace relative to its root, and every alias the record holds), and an uninstall removes it
---as=<module>=<alias> (repeatable, one per module): installs that module of the package under the alias, its folder, laws, hooks, namespace, and storage root taking the alias (a root its data file declares applies only under its own name), recorded so a re-install without the flag keeps it; a module name, or a storage root another installed module resolves to, that collides refuses naming --as, and the installer never picks a name itself
+--as=<module>=<alias> (repeatable, one per module): installs that module of the package under the alias, its folder, laws, lifecycle scripts, namespace, and storage root taking the alias (a root its data file declares applies only under its own name), recorded so a re-install without the flag keeps it; a module name, or a storage root another installed module resolves to, that collides refuses naming --as, and the installer never picks a name itself
 an install runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
-exit codes: 0 installed or updated; 1 a refusal (a usage error, a malformed name, no such package, a collision); 2 an environment or I/O failure (a missing installer, a read-only extension root, a failed part hook or recompose)
+exit codes: 0 installed or updated; 1 a refusal (a usage error, a malformed name, no such package, a collision); 2 an environment or I/O failure (a missing installer, a read-only extension root, a failed lifecycle action or recompose)
 EOF
       ;;
     uninstall)
       cat <<'EOF'
 usage: ctx package uninstall <package>
-removes an installed package from this workspace's extension root through the core package uninstaller, running its part hooks first and preserving a file changed after install, then recomposes the law layer and removes the package's package.<name> line from the workspace configuration
-<package>: the installed package's name (its plugins/<name> folder, when present, passes as the package root); a value holding a slash is a package root path, read from the working folder; either way the package leaves the workspace this engine serves
+removes an installed package from this workspace's extension root through the core package uninstaller, running its uninstall actions first and preserving a file changed after install, then recomposes the law layer and removes the package's package.<name> line from the workspace configuration
+<package>: the installed package's name (its .contexture/plugins/<name> or plugins/<name> folder, when present, passes as the package root); a value holding a slash is a package root path, read from the working folder; either way the package leaves the workspace this engine serves
 an uninstall runs only on the human's explicit go at the act; this verb checks no go: the gate binds the act, never the doorway
-exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed part hook or recompose)
+exit codes: 0 removed; 1 a refusal (a usage error, a malformed name, a package not installed); 2 an environment or I/O failure (a missing uninstaller, a read-only root, a failed lifecycle action or recompose)
 EOF
       ;;
     list)
@@ -1682,6 +1811,28 @@ prints one line per package the workspace configuration declares or the install 
 drift: a package declared but not installed, installed but not declared, or installed at a version other than its declared source's; a record without module lines reads as plainly installed, never an error
 read only: it writes nothing and installs nothing, and needs no go
 exit codes: 0 the listing; 1 an argument; 2 an install record area or record that exists but cannot be read
+EOF
+      ;;
+    catalog)
+      cat <<'EOF'
+usage: ctx package catalog [--names] [--no-probe] [--json]
+lists available catalog packages from .contexture/plugins/ (falling back to plugins/) with metadata, install status, and host readiness, sorted by name; read only
+--names: print sorted catalog package names, one per line, without probing (cannot combine with --json)
+--no-probe: skip readiness probes and mark each package skipped
+--json: emit one compact JSON object on stdout
+read only: it writes nothing and installs nothing, and needs no go
+exit codes: 0 the catalog listing (even when empty or when probes report partial, unmet, or error); 1 a bad flag or unexpected argument; 2 an install record area or record that exists but cannot be read
+EOF
+      ;;
+    info)
+      cat <<'EOF'
+usage: ctx package info <package> [--no-probe] [--json]
+shows one package's manifest metadata, parts, install status, and host readiness; read only
+<package>: a catalog name (resolving .contexture/plugins/<name> then plugins/<name>) or a package root path holding a slash
+--no-probe: skip the readiness probe
+--json: emit one compact JSON object on stdout
+read only: it writes nothing and installs nothing, and needs no go
+exit codes: 0 info printed (even when probe is partial, unmet, or error); 1 a bad flag, missing package, or malformed manifest; 2 a path failure or an unreadable install record area or record
 EOF
       ;;
   esac
@@ -1771,6 +1922,98 @@ package_as_ok() {
   return 0
 }
 
+# package_catalog_dir <name>: resolve a bare catalog package name, checking
+# .contexture/plugins/<name> before ./plugins/<name>; prints the resolved path
+# rc 0, or returns 1 if absent in both.
+package_catalog_dir() {
+  if [ -d "$dir/plugins/$1" ]; then
+    printf '%s\n' "$dir/plugins/$1"
+    return 0
+  fi
+  if [ -d "$root/plugins/$1" ]; then
+    printf '%s\n' "$root/plugins/$1"
+    return 0
+  fi
+  return 1
+}
+
+# package_catalog_names: list catalog package names across .contexture/plugins and
+# ./plugins matching the package name rule and carrying a manifest file, sorted LC_ALL=C.
+package_catalog_names() {
+  for pcn_base in "$dir/plugins" "$root/plugins"; do
+    [ -d "$pcn_base" ] || continue
+    for pcn_d in "$pcn_base"/*; do
+      [ -d "$pcn_d" ] || continue
+      pcn_b=${pcn_d##*/}
+      case "$pcn_b" in
+        ""|.*|*[!A-Za-z0-9._-]*) continue ;;
+      esac
+      [ -f "$pcn_d/manifest" ] || continue
+      printf '%s\n' "$pcn_b"
+    done
+  done | LC_ALL=C sort -u
+}
+
+# package_run_probe <name> <pkg_root> <version> <no_probe>: sets PR_STATUS, PR_CODE,
+# PR_DETAIL, and PR_LINES. Runs <pkg_root>/hooks/probe non-interactively (< /dev/null)
+# from $root; absent probe defaults to ready (0).
+package_run_probe() {
+  pr_name=$1
+  pr_pkg=$2
+  pr_ver=$3
+  pr_skip=$4
+  PR_STATUS="ready"
+  PR_CODE="0"
+  PR_DETAIL=""
+  PR_LINES=""
+  if [ "$pr_skip" -eq 1 ]; then
+    PR_STATUS="skipped"
+    PR_CODE=""
+    return 0
+  fi
+  pr_hook=$pr_pkg/hooks/probe
+  [ -f "$pr_hook" ] || return 0
+  pr_out=""
+  pr_tmp_dir="$root/.contexture/tmp"
+  if mkdir -p "$pr_tmp_dir" 2>/dev/null && [ -d "$pr_tmp_dir" ] && [ -w "$pr_tmp_dir" ]; then
+    pr_out=$(mktemp "$pr_tmp_dir/pkg-probe.$$.XXXXXX" 2>/dev/null) || pr_out=""
+  fi
+  if [ -z "$pr_out" ]; then
+    pr_out=$(mktemp "${TMPDIR:-/tmp}/pkg-probe.$$.XXXXXX" 2>/dev/null) || pr_out=""
+  fi
+  if [ -z "$pr_out" ]; then
+    PR_STATUS="error"
+    PR_CODE="2"
+    PR_DETAIL="cannot create probe capture file"
+    PR_LINES=$PR_DETAIL
+    return 0
+  fi
+  ( cd "$root" || exit 2
+    CTX_ROOT=$root
+    CTX_BIN=$ctx_bin
+    CTX_PACKAGE_NAME=$pr_name
+    CTX_PACKAGE_ROOT=$pr_pkg
+    CTX_PACKAGE_VERSION=$pr_ver
+    LC_ALL=C
+    export CTX_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_ROOT CTX_PACKAGE_VERSION LC_ALL
+    if [ -x "$pr_hook" ]; then
+      exec "$pr_hook" < /dev/null
+    else
+      exec sh "$pr_hook" < /dev/null
+    fi ) > "$pr_out" 2>&1
+  PR_CODE=$?
+  case "$PR_CODE" in
+    0) PR_STATUS="ready" ;;
+    1) PR_STATUS="unmet" ;;
+    3) PR_STATUS="partial" ;;
+    *) PR_STATUS="error" ;;
+  esac
+  PR_LINES=$(awk '{ sub(/\r$/, ""); print }' "$pr_out" 2>/dev/null)
+  PR_DETAIL=$(awk '/[^[:space:]]/ { sub(/\r$/, ""); print; exit }' "$pr_out" 2>/dev/null)
+  rm -f "$pr_out" 2>/dev/null
+  return 0
+}
+
 # package_run <install|uninstall> <package root or name> <as pairs>: one private script run
 # as a child from the workspace root, its streams and exit code passed through
 package_run() {
@@ -1808,7 +2051,12 @@ package_declared_install() {
       /*) pdi_root=$pdi_src ;;
       */*) pdi_root=$root/$pdi_src ;;
       .*|*[!A-Za-z0-9._-]*) ctx_err "package install: package.$pdi_name: malformed source '$pdi_src'"; exit 1 ;;
-      *) pdi_root=$root/plugins/$pdi_src ;;
+      *)
+        if ! pdi_root=$(package_catalog_dir "$pdi_src"); then
+          ctx_err "package install: package.$pdi_name: no package at $pdi_src"
+          exit 1
+        fi
+        ;;
     esac
     [ -d "$pdi_root" ] || { ctx_err "package install: package.$pdi_name: no package at $pdi_src"; exit 1; }
     pdi_root=$(CDPATH= cd -- "$pdi_root" 2>/dev/null && pwd) || { ctx_err "package install: package.$pdi_name: cannot resolve $pdi_src"; exit 2; }
@@ -1907,10 +2155,10 @@ package_list() {
       case "$pl_src" in
         /*) pl_root=$pl_src ;;
         */*) pl_root=$root/$pl_src ;;
-        *) pl_root=$root/plugins/$pl_src ;;
+        *) pl_root=$(package_catalog_dir "$pl_src" 2>/dev/null) || pl_root="" ;;
       esac
       pl_sv=""
-      [ -f "$pl_root/manifest" ] && pl_sv=$("$ctx_bin" _package "$pl_root/manifest" version 2>/dev/null)
+      [ -n "$pl_root" ] && [ -f "$pl_root/manifest" ] && pl_sv=$("$ctx_bin" _package "$pl_root/manifest" version 2>/dev/null)
       if [ -n "$pl_sv" ] && [ -n "$pl_ver" ] && [ "$pl_sv" != "$pl_ver" ]; then
         pl_line="$pl_line, the declared source holds $pl_sv (drift)"
         pl_nx=$((pl_nx + 1))
@@ -1924,6 +2172,374 @@ EOF
   exit 0
 }
 
+# package_catalog: read-only catalog listing with optional --names, --no-probe, --json.
+package_catalog() {
+  pc_names_only=0
+  pc_noprobe=0
+  pc_json=0
+  for pc_a in "$@"; do
+    case "$pc_a" in
+      --names) pc_names_only=1 ;;
+      --no-probe) pc_noprobe=1 ;;
+      --json) pc_json=1 ;;
+      -*) ctx_err "package catalog: unknown option '$pc_a' (ctx package catalog [--names] [--no-probe] [--json])"; exit 1 ;;
+      *) ctx_err "package catalog: unexpected argument '$pc_a' (ctx package catalog [--names] [--no-probe] [--json])"; exit 1 ;;
+    esac
+  done
+  if [ "$pc_names_only" -eq 1 ] && [ "$pc_json" -eq 1 ]; then
+    ctx_err "package catalog: --names and --json cannot be used together"
+    exit 1
+  fi
+  if [ "$pc_names_only" -eq 0 ]; then
+    pc_state=$dir/extensions/.state
+    if [ -e "$pc_state" ] && { [ ! -d "$pc_state" ] || [ ! -r "$pc_state" ] || [ ! -x "$pc_state" ]; }; then
+      ctx_err "package catalog: the install record area cannot be read"
+      exit 2
+    fi
+    for pc_f in "$pc_state"/*.files; do
+      [ -e "$pc_f" ] || continue
+      if [ ! -f "$pc_f" ] || [ ! -r "$pc_f" ]; then
+        pc_b=${pc_f##*/}
+        ctx_err "package catalog: the install record of '${pc_b%.files}' cannot be read"
+        exit 2
+      fi
+    done
+    pc_decl=$(pkg_decl_lines 2>/dev/null)
+  fi
+  pc_cand=$(package_catalog_names)
+  if [ "$pc_names_only" -eq 1 ]; then
+    while IFS= read -r pc_n; do
+      [ -n "$pc_n" ] || continue
+      pc_pkg=$(package_catalog_dir "$pc_n") || continue
+      if ! package_file_parse "$pc_pkg/manifest"; then
+        ctx_err "package catalog: skipping '$pc_n': $PF_ERROR"
+        continue
+      fi
+      printf '%s\n' "$pc_n"
+    done <<EOF
+$pc_cand
+EOF
+    exit 0
+  fi
+  pc_count=0; pc_inst_count=0; pc_ready=0; pc_partial=0; pc_unmet=0; pc_err=0
+  pc_jrows=""
+  while IFS= read -r pc_n; do
+    [ -n "$pc_n" ] || continue
+    pc_pkg=$(package_catalog_dir "$pc_n") || continue
+    if ! package_file_parse "$pc_pkg/manifest"; then
+      ctx_err "package catalog: skipping '$pc_n': $PF_ERROR"
+      continue
+    fi
+    pc_count=$((pc_count + 1))
+    pc_rec=$dir/extensions/.state/$pc_n.files
+    pc_inst=0; pc_iver=""
+    if [ -f "$pc_rec" ]; then
+      pc_inst=1
+      pc_inst_count=$((pc_inst_count + 1))
+      pc_iver=$(awk '$1 == "version" { print $2; exit }' "$pc_rec" 2>/dev/null)
+    fi
+    pc_is_decl=0
+    if printf '%s\n' "$pc_decl" | awk -v n="$pc_n" '$1 == n { f = 1; exit } END { exit(f ? 0 : 1) }'; then
+      pc_is_decl=1
+    fi
+    package_run_probe "$pc_n" "$pc_pkg" "$pf_version" "$pc_noprobe"
+    case "$PR_STATUS" in
+      ready) pc_ready=$((pc_ready + 1)) ;;
+      partial) pc_partial=$((pc_partial + 1)) ;;
+      unmet) pc_unmet=$((pc_unmet + 1)) ;;
+      error) pc_err=$((pc_err + 1)) ;;
+    esac
+    pc_pitch=${pf_pitch:-$pf_summary}
+    if [ "$pc_json" -eq 1 ]; then
+      pc_jrow=$(PC_NAME="$pc_n" PC_VER="$pf_version" PC_KIND="$pf_kind" PC_DRV="$pf_driver" \
+        PC_CAT="$pf_category" PC_SUM="$pf_summary" PC_PITCH="$pc_pitch" PC_WHEN="$pf_when" \
+        PC_NEEDS="$pf_needs" PC_TAGS="$pf_tags" PC_INST="$pc_inst" PC_IVER="$pc_iver" \
+        PC_DECL="$pc_is_decl" PC_PSTATUS="$PR_STATUS" PC_PCODE="$PR_CODE" PC_PDETAIL="$PR_DETAIL" \
+        LC_ALL=C awk '
+        function jq(s,   n, p, o, i, c, r) {
+          n = split(s, p, /\\/)
+          o = (n ? p[1] : "")
+          for (i = 2; i <= n; i++) o = o "\\\\" p[i]
+          n = split(o, p, /"/)
+          o = (n ? p[1] : "")
+          for (i = 2; i <= n; i++) o = o "\\\"" p[i]
+          if (o ~ /[[:cntrl:]]/) {
+            r = ""
+            for (i = 1; i <= length(o); i++) {
+              c = substr(o, i, 1)
+              if (c ~ /[[:cntrl:]]/ && (c in ORD)) {
+                if (ORD[c] == 10) r = r "\\n"
+                else if (ORD[c] == 9) r = r "\\t"
+                else if (ORD[c] == 13) r = r "\\r"
+                else r = r sprintf("\\u%04x", ORD[c])
+              } else r = r c
+            }
+            o = r
+          }
+          return "\"" o "\""
+        }
+        function jopt(s) { return (s == "" ? "null" : jq(s)) }
+        BEGIN {
+          for (i = 1; i < 32; i++) ORD[sprintf("%c", i)] = i
+          ORD[sprintf("%c", 127)] = 127
+          nt = split(ENVIRON["PC_TAGS"], T, / /)
+          tarr = "["
+          for (i = 1; i <= nt; i++) if (T[i] != "") tarr = tarr (tarr == "[" ? "" : ",") jq(T[i])
+          tarr = tarr "]"
+          inst = (ENVIRON["PC_INST"] == "1" ? "true" : "false")
+          decl = (ENVIRON["PC_DECL"] == "1" ? "true" : "false")
+          pcode = (ENVIRON["PC_PCODE"] == "" ? "null" : ENVIRON["PC_PCODE"])
+          printf "{\"name\":%s,\"version\":%s,\"kind\":%s,\"driver\":%s,\"category\":%s,\"summary\":%s,\"pitch\":%s,\"when\":%s,\"needs\":%s,\"tags\":%s,\"installed\":%s,\"installed_version\":%s,\"declared\":%s,\"probe\":{\"status\":%s,\"code\":%s,\"detail\":%s}}", \
+            jq(ENVIRON["PC_NAME"]), jq(ENVIRON["PC_VER"]), jq(ENVIRON["PC_KIND"]), jopt(ENVIRON["PC_DRV"]), \
+            jopt(ENVIRON["PC_CAT"]), jq(ENVIRON["PC_SUM"]), jq(ENVIRON["PC_PITCH"]), jopt(ENVIRON["PC_WHEN"]), \
+            jopt(ENVIRON["PC_NEEDS"]), tarr, inst, jopt(ENVIRON["PC_IVER"]), decl, \
+            jq(ENVIRON["PC_PSTATUS"]), pcode, jq(ENVIRON["PC_PDETAIL"])
+        }')
+      pc_jrows="${pc_jrows:+$pc_jrows,}$pc_jrow"
+    else
+      if [ "$pc_inst" -eq 1 ]; then
+        pc_st="installed${pc_iver:+ $pc_iver}"
+      elif [ "$pc_is_decl" -eq 1 ]; then
+        pc_st="declared, not installed"
+      else
+        pc_st="not installed"
+      fi
+      printf '%s (%s, %s%s) [%s] [probe: %s]\n' "$pc_n" "$pf_version" "$pf_kind" "${pf_category:+, $pf_category}" "$pc_st" "$PR_STATUS"
+      printf '  %s\n' "$pc_pitch"
+      [ -z "$pf_needs" ] || printf '  needs: %s\n' "$pf_needs"
+      if [ "$PR_STATUS" = error ]; then
+        printf '  probe: rc %s%s\n' "$PR_CODE" "${PR_DETAIL:+: $PR_DETAIL}"
+      elif [ -n "$PR_DETAIL" ]; then
+        printf '  probe: %s\n' "$PR_DETAIL"
+      fi
+    fi
+  done <<EOF
+$pc_cand
+EOF
+  if [ "$pc_json" -eq 1 ]; then
+    printf '{"packages":[%s]}\n' "$pc_jrows"
+    exit 0
+  fi
+  if [ "$pc_count" -eq 0 ]; then
+    printf 'package catalog: no catalog packages found (.contexture/plugins/ and plugins/ hold none)\n'
+    exit 0
+  fi
+  if [ "$pc_noprobe" -eq 1 ]; then
+    printf 'package catalog: %s packages (%s installed, probes skipped)\n' "$pc_count" "$pc_inst_count"
+  else
+    pc_err_note=""
+    [ "$pc_err" -eq 0 ] || pc_err_note=", $pc_err error"
+    printf 'package catalog: %s packages (%s installed, %s ready, %s partial, %s unmet%s)\n' \
+      "$pc_count" "$pc_inst_count" "$pc_ready" "$pc_partial" "$pc_unmet" "$pc_err_note"
+  fi
+  exit 0
+}
+
+# package_info: read-only detailed inspection of one catalog or path package.
+package_info() {
+  pi_noprobe=0
+  pi_json=0
+  pi_target=""
+  pi_has_target=0
+  for pi_a in "$@"; do
+    case "$pi_a" in
+      --no-probe) pi_noprobe=1 ;;
+      --json) pi_json=1 ;;
+      -*) ctx_err "package info: unknown option '$pi_a' (ctx package info <package> [--no-probe] [--json])"; exit 1 ;;
+      *)
+        if [ "$pi_has_target" -eq 1 ]; then
+          ctx_err "package info: unexpected argument '$pi_a' (ctx package info <package> [--no-probe] [--json])"
+          exit 1
+        fi
+        pi_target=$pi_a
+        pi_has_target=1
+        ;;
+    esac
+  done
+  if [ "$pi_has_target" -eq 0 ]; then
+    ctx_err "package info: usage: ctx package info <package> [--no-probe] [--json]"
+    exit 1
+  fi
+  pi_state=$dir/extensions/.state
+  if [ -e "$pi_state" ] && { [ ! -d "$pi_state" ] || [ ! -r "$pi_state" ] || [ ! -x "$pi_state" ]; }; then
+    ctx_err "package info: the install record area cannot be read"
+    exit 2
+  fi
+  case "$pi_target" in
+    */*)
+      if [ ! -d "$pi_target" ]; then
+        ctx_err "package info: no package root at $pi_target"
+        exit 1
+      fi
+      pi_pkg=$(CDPATH= cd -- "$pi_target" 2>/dev/null && pwd) || {
+        ctx_err "package info: cannot resolve $pi_target"
+        exit 2
+      }
+      pi_name=${pi_pkg##*/}
+      case "$pi_name" in
+        ""|.*|*[!A-Za-z0-9._-]*)
+          ctx_err "package info: malformed package name '$pi_name' (letters, digits, dot, underscore, hyphen; not starting with a dot)"
+          exit 1
+          ;;
+      esac
+      ;;
+    ""|.*|*[!A-Za-z0-9._-]*)
+      ctx_err "package info: malformed package name '$pi_target' (letters, digits, dot, underscore, hyphen; not starting with a dot)"
+      exit 1
+      ;;
+    *)
+      pi_name=$pi_target
+      if ! pi_pkg=$(package_catalog_dir "$pi_name"); then
+        ctx_err "package info: no package at .contexture/plugins/$pi_name or plugins/$pi_name (name a package root path, a value holding a slash, instead)"
+        exit 1
+      fi
+      ;;
+  esac
+  pi_rec=$pi_state/$pi_name.files
+  if [ -e "$pi_rec" ] && { [ ! -f "$pi_rec" ] || [ ! -r "$pi_rec" ]; }; then
+    ctx_err "package info: the install record of '$pi_name' cannot be read"
+    exit 2
+  fi
+  if ! package_file_parse "$pi_pkg/manifest"; then
+    ctx_err "package info: malformed package manifest: $PF_ERROR"
+    exit 1
+  fi
+  pi_inst=0; pi_iver=""
+  if [ -f "$pi_rec" ]; then
+    pi_inst=1
+    pi_iver=$(awk '$1 == "version" { print $2; exit }' "$pi_rec" 2>/dev/null)
+  fi
+  pi_decl=$(pkg_decl_lines 2>/dev/null)
+  pi_is_decl=0
+  if printf '%s\n' "$pi_decl" | awk -v n="$pi_name" '$1 == n { f = 1; exit } END { exit(f ? 0 : 1) }'; then
+    pi_is_decl=1
+  fi
+  pi_hooks=""
+  for pi_hk in probe install uninstall; do
+    [ -f "$pi_pkg/hooks/$pi_hk" ] && pi_hooks="${pi_hooks:+$pi_hooks }$pi_hk"
+  done
+  package_run_probe "$pi_name" "$pi_pkg" "$pf_version" "$pi_noprobe"
+  if [ "$pi_json" -eq 1 ]; then
+    PI_NAME="$pi_name" PI_VER="$pf_version" PI_KIND="$pf_kind" PI_DRV="$pf_driver" \
+      PI_CAT="$pf_category" PI_SUM="$pf_summary" PI_PITCH="$pf_pitch" PI_WHEN="$pf_when" \
+      PI_NEEDS="$pf_needs" PI_TAGS="$pf_tags" PI_PARTS="$pf_parts" PI_DESC="$pf_desc" \
+      PI_HAS_DESC="$pf_seen_desc" PI_INST="$pi_inst" PI_IVER="$pi_iver" PI_DECL="$pi_is_decl" \
+      PI_HOOKS="$pi_hooks" PI_PSTATUS="$PR_STATUS" PI_PCODE="$PR_CODE" PI_PLINES="$PR_LINES" \
+      LC_ALL=C awk '
+      function jq(s,   n, p, o, i, c, r) {
+        n = split(s, p, /\\/)
+        o = (n ? p[1] : "")
+        for (i = 2; i <= n; i++) o = o "\\\\" p[i]
+        n = split(o, p, /"/)
+        o = (n ? p[1] : "")
+        for (i = 2; i <= n; i++) o = o "\\\"" p[i]
+        if (o ~ /[[:cntrl:]]/) {
+          r = ""
+          for (i = 1; i <= length(o); i++) {
+            c = substr(o, i, 1)
+            if (c ~ /[[:cntrl:]]/ && (c in ORD)) {
+              if (ORD[c] == 10) r = r "\\n"
+              else if (ORD[c] == 9) r = r "\\t"
+              else if (ORD[c] == 13) r = r "\\r"
+              else r = r sprintf("\\u%04x", ORD[c])
+            } else r = r c
+          }
+          o = r
+        }
+        return "\"" o "\""
+      }
+      function jopt(s) { return (s == "" ? "null" : jq(s)) }
+      BEGIN {
+        for (i = 1; i < 32; i++) ORD[sprintf("%c", i)] = i
+        ORD[sprintf("%c", 127)] = 127
+        nt = split(ENVIRON["PI_TAGS"], T, / /)
+        tarr = "["
+        for (i = 1; i <= nt; i++) if (T[i] != "") tarr = tarr (tarr == "[" ? "" : ",") jq(T[i])
+        tarr = tarr "]"
+        nh = split(ENVIRON["PI_HOOKS"], H, / /)
+        harr = "["
+        for (i = 1; i <= nh; i++) if (H[i] != "") harr = harr (harr == "[" ? "" : ",") jq(H[i])
+        harr = harr "]"
+        np = split(ENVIRON["PI_PARTS"], P, /\n/)
+        parr = "["
+        for (i = 1; i <= np; i++) {
+          if (P[i] == "") continue
+          split(P[i], Q, / /)
+          parr = parr (parr == "[" ? "" : ",") "{\"type\":" jq(Q[1]) ",\"path\":" jq(Q[2]) "}"
+        }
+        parr = parr "]"
+        desc = ENVIRON["PI_DESC"]
+        sub(/\n$/, "", desc)
+        jdesc = (ENVIRON["PI_HAS_DESC"] == "1" ? jq(desc) : "null")
+        pl = ENVIRON["PI_PLINES"]
+        sub(/\n$/, "", pl)
+        larr = "["
+        if (pl != "") {
+          nl = split(pl, L, /\n/)
+          for (i = 1; i <= nl; i++) larr = larr (i > 1 ? "," : "") jq(L[i])
+        }
+        larr = larr "]"
+        inst = (ENVIRON["PI_INST"] == "1" ? "true" : "false")
+        decl = (ENVIRON["PI_DECL"] == "1" ? "true" : "false")
+        pcode = (ENVIRON["PI_PCODE"] == "" ? "null" : ENVIRON["PI_PCODE"])
+        printf "{\"name\":%s,\"version\":%s,\"kind\":%s,\"driver\":%s,\"category\":%s,\"summary\":%s,\"pitch\":%s,\"when\":%s,\"needs\":%s,\"tags\":%s,\"parts\":%s,\"description\":%s,\"installed\":%s,\"installed_version\":%s,\"declared\":%s,\"lifecycle\":%s,\"probe\":{\"status\":%s,\"code\":%s,\"lines\":%s}}\n", \
+          jq(ENVIRON["PI_NAME"]), jq(ENVIRON["PI_VER"]), jq(ENVIRON["PI_KIND"]), jopt(ENVIRON["PI_DRV"]), \
+          jopt(ENVIRON["PI_CAT"]), jq(ENVIRON["PI_SUM"]), jopt(ENVIRON["PI_PITCH"]), jopt(ENVIRON["PI_WHEN"]), \
+          jopt(ENVIRON["PI_NEEDS"]), tarr, parr, jdesc, inst, jopt(ENVIRON["PI_IVER"]), decl, harr, \
+          jq(ENVIRON["PI_PSTATUS"]), pcode, larr
+      }'
+    exit 0
+  fi
+  printf 'package: %s\n' "$pi_name"
+  printf 'version: %s\n' "$pf_version"
+  printf 'kind: %s\n' "$pf_kind"
+  [ -z "$pf_driver" ] || printf 'driver: %s\n' "$pf_driver"
+  [ -z "$pf_category" ] || printf 'category: %s\n' "$pf_category"
+  printf 'summary: %s\n' "$pf_summary"
+  [ -z "$pf_pitch" ] || printf 'pitch: %s\n' "$pf_pitch"
+  [ -z "$pf_when" ] || printf 'when: %s\n' "$pf_when"
+  [ -z "$pf_needs" ] || printf 'needs: %s\n' "$pf_needs"
+  if [ -n "$pf_tags" ]; then
+    pi_tags_csv=$(printf '%s' "$pf_tags" | awk '{ for (i = 1; i <= NF; i++) o = o (i > 1 ? ", " : "") $i; print o }')
+    printf 'tags: %s\n' "$pi_tags_csv"
+  fi
+  pi_parts_csv=$(printf '%s' "$pf_parts" | awk 'NF { o = o (o == "" ? "" : ", ") $1 " " $2 } END { print o }')
+  printf 'parts: %s\n' "$pi_parts_csv"
+  if [ "$pi_inst" -eq 1 ]; then
+    pi_st="installed${pi_iver:+ $pi_iver}"
+    [ "$pi_is_decl" -eq 1 ] && pi_st="$pi_st, declared"
+    if [ -n "$pi_iver" ] && [ "$pi_iver" != "$pf_version" ]; then
+      pi_st="$pi_st, catalog holds $pf_version"
+    fi
+  elif [ "$pi_is_decl" -eq 1 ]; then
+    pi_st="declared, not installed"
+  else
+    pi_st="not installed"
+  fi
+  printf 'status: %s\n' "$pi_st"
+  if [ "$PR_STATUS" = error ]; then
+    printf 'probe: error (rc %s)\n' "$PR_CODE"
+  else
+    printf 'probe: %s\n' "$PR_STATUS"
+  fi
+  if [ -n "$PR_LINES" ]; then
+    while IFS= read -r pi_pl; do
+      printf '  %s\n' "$pi_pl"
+    done <<EOF
+$PR_LINES
+EOF
+  fi
+  if [ "$pf_seen_desc" -eq 1 ]; then
+    printf 'description:\n'
+    if [ -n "$pf_desc" ]; then
+      printf '%s' "$pf_desc" | while IFS= read -r pi_dl; do
+        printf '  %s\n' "$pi_dl"
+      done
+    fi
+  fi
+  exit 0
+}
+
 package_builtin() {
   case "${1:-}" in
     ""|help|--help|-h)
@@ -1934,9 +2550,9 @@ package_builtin() {
       show_package_help
       exit 0
       ;;
-    install|uninstall|list) ;;
+    install|uninstall|list|catalog|info) ;;
     *)
-      ctx_err "package: unknown sub-verb: $1 (ctx package install, ctx package uninstall, or ctx package list)"
+      ctx_err "package: unknown sub-verb: $1 (ctx package install, ctx package uninstall, ctx package list, ctx package catalog, or ctx package info)"
       exit 1
       ;;
   esac
@@ -1956,6 +2572,12 @@ package_builtin() {
       exit 1
     fi
     package_list
+  fi
+  if [ "$pk_verb" = catalog ]; then
+    package_catalog "$@"
+  fi
+  if [ "$pk_verb" = info ]; then
+    package_info "$@"
   fi
   # the install aliases: every --as=<module>=<alias> before the one argument rule, each
   # module and alias a module name, no module and no alias twice; they reach the private
@@ -2013,10 +2635,10 @@ package_builtin() {
       exit 1
       ;;
     *)
-      if [ -d "$root/plugins/$1" ]; then
-        pk_arg=$root/plugins/$1
+      if pk_arg=$(package_catalog_dir "$1"); then
+        :
       elif [ "$pk_verb" = install ]; then
-        ctx_err "package install: no package at plugins/$1 (name a package root path, a value holding a slash, instead)"
+        ctx_err "package install: no package at .contexture/plugins/$1 or plugins/$1 (name a package root path, a value holding a slash, instead)"
         exit 1
       else
         pk_arg=$1

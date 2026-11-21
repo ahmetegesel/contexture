@@ -1,37 +1,38 @@
 # contexture agentic onboarding guideline
 
 @purpose
-  instructions for an agent onboarding contexture into any repository (greenfield or existing).
+  instructions for an agent onboarding contexture into any workspace (greenfield or existing, with or without git).
 
 @phases
   the adoption unit bootstraps at phase 1 and every phase journals as it happens; the record carries the whole history: findings, proposals, verdicts, changes
-  1. ISOLATE: create a dedicated branch; never onboard on main; bootstrap the adoption unit
-  2. ASSESS: inventory topology, instruction surfaces, and harnesses; derive the installation plan
+  1. ISOLATE: when the workspace is a git repository, create a dedicated branch; never onboard on main; verify starting state; bootstrap the adoption unit
+  2. ASSESS: inventory topology, instruction surfaces, harnesses, and live catalog packages; derive the installation plan
   3. PROPOSE: present the derived plan; the human confirms, amends, or discusses; no workspace write before the verdict
-  4. EXECUTE: configure, migrate, and symlink strictly per the confirmed plan, running the default rhythm; drift halts and re-confirms
-  5. VERIFY: run the queries against the live record, confirm clean boot
+  4. EXECUTE: configure, migrate, install confirmed packages, swap the staged loader if preserved, and symlink strictly per the confirmed plan, running the default rhythm; drift halts and re-confirms
+  5. VERIFY: run the queries against the live record, confirm clean boot, and remind the human to start a fresh session once closed
 
 @isolate
-  1. inspect git: `git status -s`; halt if uncommitted changes exist
-  2. branch: `git checkout -b adopt-contexture` (or team branch convention)
-  3. never execute onboarding directly on main/master/production branches
-  4. bootstrap the adoption unit: `.contexture/ctx unit bootstrap adopt-contexture "onboard contexture into this repository"`; the folded A1 receipt records the fresh unit, the objective, and the git state
-  5. journal the phase (`.contexture/ctx unit record`): the branch and the starting git state
+  1. check git availability (`git rev-parse --is-inside-work-tree 2>/dev/null`): when not inside a git repository, note non-git workspace, skip branch steps, and bootstrap directly
+  2. when inside a git repository: inspect `git status -s`, distinguishing pre-staged adoption files (`.contexture/`, `AGENTS.md`, `AGENTS.generated.md`, `plugins/`) from unrelated uncommitted project changes; halt only if unrelated dirty project files exist
+  3. branch (git workspaces): `git checkout -b adopt-contexture` (or team branch convention; carries untracked pre-staged adoption files onto the new branch cleanly); never execute onboarding directly on main/master/production branches
+  4. confirm `.contexture/ctx` exists and is executable, then bootstrap the adoption unit: `.contexture/ctx unit bootstrap adopt-contexture "onboard contexture into this workspace"`; the folded A1 receipt records the fresh unit, the objective, and the starting state
+  5. journal the phase (`.contexture/ctx unit record`): the branch or non-git posture, whether a pre-existing `AGENTS.md` was preserved with contexture's loader staged at `.contexture/tmp/AGENTS.loader.md`, and the starting state
 
 @assess
   topology:
     standalone repo: contains application code (src/, package.json, Cargo.toml, pyproject.toml, etc.)
     parent workspace: contains multiple independent repositories as subdirectories
   git: the git package is a choice with no default, and the docs module's git dependency is a fact: its change-aware verbs, the check, the gate, and the drift read git's delta, the change log stamps the workspace git HEAD, and a workspace without git keeps the audit, the query, and the writes and loses the change-aware checks
-  instruction stack first: the existing AGENTS.md and its derivations (CLAUDE.md, GEMINI.md, harness files) are the workspace's self-description: read them first and whole; they name the rules that matter and often where the rest live
-  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/ctx compose`, then read the loader, the generated law layer `AGENTS.generated.md` at the root, and the upstream README completely before mapping; fetch upstream, the URL lives in the generated layer's @update section, and the README carries the philosophy behind every judgment the mapping makes
+  instruction stack first: the existing `AGENTS.md` and its derivations (`CLAUDE.md`, `GEMINI.md`, harness files) are the workspace's self-description: read them first and whole (when `install.sh` preserved a pre-existing `AGENTS.md` and staged contexture's loader at `.contexture/tmp/AGENTS.loader.md`, read that untouched root `AGENTS.md` whole before mapping); they name the rules that matter and often where the rest live
+  know the convention whole: ONBOARDING is the procedure, not the convention: run `.contexture/ctx compose`, read the contexture loader (`AGENTS.md`, or `.contexture/tmp/AGENTS.loader.md` when root `AGENTS.md` was preserved), `AGENTS.generated.md` at the root whole, and read the upstream README from the URL in `@update` (via web/curl or git if present; if offline, map from `AGENTS.generated.md` and note that upstream README was unreachable)
+  discover live catalog packages: run read-only `.contexture/ctx package catalog` and `.contexture/ctx package list` (plus `.contexture/ctx package info <name>` for candidate packages) to inspect available plugins, what `install.sh` may already have installed, and live host readiness probe results
   map from the destination: walk the convention's sections one by one against the workspace's material: for each capability, what feeds it, what conflicts with it, what belongs there; migration follows the destination, never the file list
   governance: map every rule surface against the incoming convention; each contradicts, overlaps, or complements it, and the plan must resolve each one; the stack guides the sweep, the sweep covers what the stack misses (contributing guides, style and lint configs, CI rules, documentation conventions)
   reading budget: rule-bearing surfaces read whole, they are small and dense; structure is derived by listing, never by reading; application code is out of scope
   ask freely: derive what evidence answers, and ask the human what only they know: resolutions, history, intent; a wrong assumption costs more than a question
 
 @modules
-  the module catalog: the builtins ship with the base and need no install; the packages install through `.contexture/ctx package install <name>` on the human's go at the act; the human chooses the packages, and the agent reads the installed surfaces through `ctx help --all`; the module files and the package manifests under `plugins/<name>/manifest` carry the summaries and versions, and the module preambles and package READMEs carry the descriptions the catalog restates.
+  the module catalog: the builtins ship with the base and need no install; the packages install through `.contexture/ctx package install <name>` on the human's go at the act; the human chooses the packages, and the agent reads the installed surfaces through `ctx help --all`; discover available packages and host readiness through `.contexture/ctx package catalog` and `.contexture/ctx package info <name>`, backed by the package manifests under `.contexture/plugins/<name>/manifest` (with `plugins/<name>/manifest` fallback), and the module preambles and package READMEs carry the descriptions the catalog restates.
   builtin unit: the record's 35 operations over the storage layer, one value per artifact: the state, the backlog, the journal, the knowledge, and the lane artifacts that keep the work across compaction and harness change; no install.
   builtin run: the base filter pack: diff, directory listing, and log filters selected by command identity or stream signature, so command output compacts through `ctx run`; filter-only, so it stays silent in `ctx help`; no install.
   builtin lane: the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's recipe, journal, and report kept as lane artifacts within the unit's record; no install.
@@ -65,7 +66,8 @@
     instruction stack: <the files read whole>
     rule surfaces: <every surface found, one per line; each contradicts, overlaps, or complements the convention>
   @plan
-    copy: <the adoption set, derived from the tag: git archive <tag> base/; never a hand-kept list>
+    staging: <already staged by install.sh (version, catalog at .contexture/plugins/, and whether existing AGENTS.md was preserved with loader at .contexture/tmp/AGENTS.loader.md), or manual staging source>
+    packages: <catalog plugins to install on human go, grounded in ctx package catalog probes and ctx package list; none states none>
     overlay: <AGENTS.workspace.md @append blocks, which existing rules migrate where; none states none>
     local: <AGENTS.local.md preferences; none states none>
     rhythms: <work patterns found in the stack: each becomes a rhythm file proposal; none states none>
@@ -81,10 +83,10 @@
 @configure
   strictly per the confirmed plan; drift halts and re-confirms; run the default rhythm: the confirmed tasks land in the backlog via `.contexture/ctx unit task add`; the move is the backlog's first IN_PROGRESS task, else its first open task (every status but DONE), and `.contexture/ctx unit list` derives it (a task start moves the task: `.contexture/ctx unit task start`); every task's completion journals its receipt (`.contexture/ctx unit task complete`) and the derived move advances with the backlog; drift updates the backlog in the same breath via `.contexture/ctx unit task update`
   base assets:
-    copy the adoption set: `git archive <tag> base/ | tar -x -C <scratch>`; copy the base content into the target root (`cp -R <scratch>/base/. <target>/`); base/ mirrors the target, so AGENTS.md lands at the root and the drawer alongside it
-    set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`
+    verify staged payload: confirm `.contexture/ctx` is present and executable (already staged with preserved executable modes by `install.sh`, or extracted manually)
     compose the law layer: `.contexture/ctx compose`; it builds `AGENTS.generated.md` at the root from the core source and the installed modules, and the loader verifies or recomposes it at every boot
-    install the chosen packages on the human's go: `.contexture/ctx package install git` lands the git package's `@git` section and boot ground clause; any other chosen package installs the same way; each install writes its `package.<name>:` line into .contexture/config, the declaration a fresh clone installs from with one bare `.contexture/ctx package install` on the human's go (boot never installs from it), and `.contexture/ctx package list` shows the declared against the installed
+    install newly confirmed packages on the human's go: check `.contexture/ctx package list` for any already installed during `install.sh`, then run `.contexture/ctx package install <name>` for each remaining confirmed package (`git` lands `@git` and its boot ground clause); each install writes its `package.<name>:` line into `.contexture/config`, the declaration a fresh clone installs from with one bare `.contexture/ctx package install` on the human's go (boot never installs from it)
+    loader swap: when `install.sh` preserved a pre-existing `AGENTS.md`, move `.contexture/tmp/AGENTS.loader.md` to `AGENTS.md` only after migrating the existing rules into `AGENTS.workspace.md`
   gitignore:
     standalone repo:
       never deny by default (*); do not alter project file tracking
@@ -92,7 +94,7 @@
       per confirmed plan: ignore or track .contexture/units/ (and the deprecated .contexture/sessions/ while units remain in it) and .contexture/rhythms/ based on team choice
       always ignore the composed law layer with the root-anchored line /AGENTS.generated.md (built at install and boot, never tracked, never edited); a repository that ignored it at its old place replaces its .contexture/laws/AGENTS.generated.md ignore line with /AGENTS.generated.md once the update compose has removed the legacy file (update step 9, before the step 10 review)
       always ignore the scratch drawer with the line .contexture/tmp/, where the engine stages its own scratch at every call (update step 9)
-      track the workspace configuration .contexture/config: its package lines declare the installs a clone reproduces
+      track .contexture/config (its package lines declare the installs a clone reproduces) and .contexture/plugins/ (the workspace catalog copy) unless the team explicitly chooses not to vendor the catalog
     parent workspace:
       deny-by-default (*) allowed only if repo tracks contexture configuration alone
       whitelist shared files explicitly:
@@ -104,6 +106,7 @@
         !.contexture/**
         (and active harness symlinks: !CLAUDE.md, !GEMINI.md)
       re-ignore the scratch drawer after the whitelist: the line .contexture/tmp/ follows !.contexture/**, which otherwise re-includes it, the later line winning (update step 9)
+      the catalog at .contexture/plugins/ rides automatically under !.contexture/**
       the generated law layer AGENTS.generated.md sits at the root under the deny-by-default (*), so it stays ignored with no line of its own: whitelist the AGENTS files by name, never with an AGENTS*.md glob, which would track it; a workspace that re-ignored it at its old place drops its .contexture/laws/AGENTS.generated.md re-ignore line once the update compose has removed the legacy file (update step 9, before the step 10 review)
   migration:
     if existing AGENTS.md, CLAUDE.md, or other instruction files exist:
@@ -121,10 +124,10 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. verify the law layer: `.contexture/ctx compose --check` (the loader composes or verifies it at boot; a refused compose is a broken payload, its error line naming the missing or refused path)
+  1. verify the law layer: `.contexture/ctx compose --check` and confirm root `AGENTS.md` is now the contexture loader with no leftover `.contexture/tmp/AGENTS.loader.md`
   2. run boot load: `.contexture/ctx unit load adopt-contexture` (read every page the map reports)
   3. run audit: `.contexture/ctx unit audit adopt-contexture` (must exit 0)
-  4. review with human: `git status`, `git diff`, and the adoption record; present for review and PR merge
+  4. review with human: `git status`, `git diff`, and the adoption record when in a git repository (else summarize changed files); present for review and PR merge
 
 @close
-  delete .contexture/ONBOARDING.md once the adoption closes: adoption material, not the convention; remove any ONBOARDING gitignore whitelist line with it
+  delete `.contexture/ONBOARDING.md` once the adoption closes (adoption material, not the convention; remove any ONBOARDING gitignore whitelist line with it) and remove `.contexture/tmp/AGENTS.loader.md` if still present; remind the human to start a fresh agent session so the harness boots cleanly on the new `AGENTS.md` loader from turn 1

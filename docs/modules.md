@@ -340,8 +340,8 @@ The steps below use the workspace modules root; a package installs its feature m
 | executable bits | `chmod +x <script> <hook> <install> <uninstall>` | the engine and the installer exec directly |
 | manifest grammar | `ctx _module <module> validate` | silent rc0; a `# requires:` line, a duplicate field, an unknown field, or a description not last refuses rc1 |
 | manifest fields | `ctx _module <module> summary` / `version` / `description` | the values the engine and the compose read |
-| package manifest grammar | `ctx _package <package>/manifest validate` | silent rc0; a missing summary, version, kind, or part, a bad kind, part, or driver, a duplicate field or part path, or a `# requires:` line refuses rc1 |
-| package manifest fields | `ctx _package <package>/manifest summary` / `version` / `kind` / `parts` / `driver` | the values the installer reads |
+| package manifest grammar | `ctx _package <package>/manifest validate` | silent rc0; a missing summary, version, kind, or part, a bad kind, part, driver, category, or tags, a duplicate or empty field, a malformed description block not last, or a `# requires:` line refuses rc1 |
+| package manifest fields | `ctx _package <package>/manifest summary` / `version` / `kind` / `parts` / `driver` / `category` / `pitch` / `when` / `needs` / `tags` / `description` | the values the installer and catalog readers read (optional fields print empty when absent) |
 | install hook | run it with `CTX_ROOT` and `CTX_PACKAGE_ROOT` in a scratch workspace | rc0 and its effect observed; a second run leaves it unchanged |
 | module listed | `ctx help` | the module name with its summary |
 | module help | `ctx <module>` and `ctx <module> help` | rc0; the verb table |

@@ -1,0 +1,71 @@
+#!/bin/sh
+# readiness probe for ast-doc-graph (read-only, POSIX sh; MUST NOT require bash to run)
+set -u
+
+ws=${CTX_ROOT:-.}
+missing=""
+
+if ! command -v bash >/dev/null 2>&1; then
+  missing="bash"
+fi
+
+if ! command -v sqlite3 >/dev/null 2>&1; then
+  missing="${missing:+$missing, }sqlite3"
+elif ! sqlite3 :memory: "CREATE VIRTUAL TABLE _p USING fts5(x, tokenize='trigram');" >/dev/null 2>&1; then
+  missing="${missing:+$missing, }sqlite3 FTS5 trigram"
+fi
+
+runner=""
+if [ -x "$ws/node_modules/.bin/tsx" ]; then
+  runner="tsx"
+elif command -v tsx >/dev/null 2>&1; then
+  runner="tsx"
+elif command -v node >/dev/null 2>&1; then
+  nv=$(node -v 2>/dev/null || true)
+  n_num=$(printf '%s\n' "${nv#v}" | awk -F. '{ printf "%d", ($1 * 1000) + $2 }')
+  if [ "${n_num:-0}" -ge 22006 ]; then
+    runner="node $nv"
+  fi
+fi
+if [ -z "$runner" ]; then
+  missing="${missing:+$missing, }tsx or Node 22.6+"
+fi
+
+if [ -n "$missing" ]; then
+  printf 'missing: %s\n' "$missing"
+  exit 1
+fi
+
+ts_ver_from_pkgjson() {
+  awk -F'"' '/"version"[ \t]*:/ { for (i = 1; i <= NF; i++) if ($i == "version") { print $(i + 2); exit } }' "$1" 2>/dev/null
+}
+
+ts_ver=""
+if [ -n "${AST_DOC_GRAPH_TYPESCRIPT:-}" ]; then
+  ov=$AST_DOC_GRAPH_TYPESCRIPT
+  for cand in "$ov/package.json" "$(dirname "$ov")/package.json" "$(dirname "$(dirname "$ov")")/package.json"; do
+    if [ -f "$cand" ]; then
+      ts_ver=$(ts_ver_from_pkgjson "$cand")
+      [ -n "$ts_ver" ] && break
+    fi
+  done
+else
+  d=$(CDPATH= cd -- "$ws" 2>/dev/null && pwd || true)
+  while [ -n "$d" ]; do
+    if [ -f "$d/node_modules/typescript/package.json" ]; then
+      ts_ver=$(ts_ver_from_pkgjson "$d/node_modules/typescript/package.json")
+      break
+    fi
+    [ "$d" = "/" ] && break
+    d=$(dirname "$d")
+  done
+fi
+
+ts_major=${ts_ver%%.*}
+if [ "$ts_major" = "5" ] || [ "$ts_major" = "6" ]; then
+  printf 'bash, sqlite3 FTS5, %s, TypeScript %s ready\n' "$runner" "$ts_ver"
+  exit 0
+fi
+
+printf 'bash, sqlite3 FTS5, %s ready; TypeScript 5 or 6 compiler API not detected (docs-only works; install typescript 5/6 or set AST_DOC_GRAPH_TYPESCRIPT for TS indexing)\n' "$runner"
+exit 3

@@ -47,7 +47,7 @@ function census(body: string): Mention[] {
 }
 
 function readers(root: string, plugin = '*'): string[] {
-  const r = git(root, 'grep', '--cached', '-l', '-F', 'CTX_PACKAGE_ROOT', '--', `:(glob)plugins/${plugin}/.contexture/**`, ':(exclude,glob)**/*.md');
+  const r = git(root, 'grep', '--cached', '-l', '-F', 'CTX_PACKAGE_ROOT', '--', `:(glob)plugins/${plugin}/.contexture/**`, `:(glob)plugins/${plugin}/hooks/**`, ':(exclude,glob)**/*.md');
   if (r.status === 1) return [];
   if (r.status !== 0) throw new Error(`git grep in ${root}: rc ${r.status}: ${r.stderr}`);
   return lines(r.stdout);
@@ -88,7 +88,7 @@ function verdict(root: string, tag: string, manifest: string): Verdict {
   const commit = lines(run(root, 'log', '--format=%H', '-G^# version:', tag, '--', manifest)).find((c) => version(probe(root, 'show', `${c}^:${manifest}`)) !== now);
   const first = commit ? lines(run(root, 'tag', '--list', 'v[0-9]*', '--contains', commit, '--merged', tag, '--sort=v:refname'))[0] : undefined;
   if (!first) return red(`${plugin} ${now}: no release tag holds the commit that set it`);
-  const paths = lines(run(root, 'diff', '--cached', '--name-only', first, '--', `plugins/${plugin}/.contexture`, ...extras(root, plugin)));
+  const paths = lines(run(root, 'diff', '--cached', '--name-only', first, '--', `plugins/${plugin}/.contexture`, `plugins/${plugin}/hooks`, ...extras(root, plugin)));
   if (!paths.length) return green(`${plugin} ${now}: payload unchanged since ${first}`);
   return red(`${plugin} ${now} first shipped in ${first}, and its payload changed since: ${shown(paths)}; bump plugins/${plugin}/manifest`);
 }
@@ -247,6 +247,10 @@ describe('the ship breath states in a sandbox repository', () => {
     stage();
     note('a change staged to a file a script the hook runs applies');
     sh('reset', '-q', '--hard');
+    write('plugins/demo/hooks/probe', '#!/bin/sh\nexit 0\n');
+    stage();
+    note('a package-level hook change staged with the version unchanged');
+    sh('reset', '-q', '--hard');
     write(MODULE, '# summary: demo, changed\n');
     note('a payload edit left unstaged');
     stage();
@@ -297,6 +301,7 @@ describe('the ship breath states in a sandbox repository', () => {
       ['a package-root README change staged', 'green'],
       ['a hook-applied seed change staged', 'demo 1.0.0 first shipped in v0.0.1, and its payload changed since: plugins/demo/docs/seed.md; bump plugins/demo/manifest'],
       ['a change staged to a file a script the hook runs applies', 'demo 1.0.0 first shipped in v0.0.1, and its payload changed since: plugins/demo/docs/extra.md; bump plugins/demo/manifest'],
+      ['a package-level hook change staged with the version unchanged', 'demo 1.0.0 first shipped in v0.0.1, and its payload changed since: plugins/demo/hooks/probe; bump plugins/demo/manifest'],
       ['a payload edit left unstaged', 'green'],
       ['a payload change staged with the version unchanged', `demo 1.0.0 first shipped in v0.0.1, and its payload changed since: ${MODULE}; bump plugins/demo/manifest`],
       ['the bump staged', 'green'],

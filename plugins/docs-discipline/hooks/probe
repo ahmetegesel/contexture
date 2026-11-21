@@ -1,0 +1,17 @@
+#!/bin/sh
+# readiness probe for docs-discipline (read-only; POSIX sh)
+set -u
+
+if ! command -v git >/dev/null 2>&1; then
+  printf 'git not found on PATH; audit, query, and writes work, while change-aware check and gate require git\n'
+  exit 3
+fi
+
+ws=${CTX_ROOT:-.}
+if git -C "$ws" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  printf 'git available in repository; full docs audit, check, and gate ready\n'
+  exit 0
+fi
+
+printf 'git installed, workspace is not a git repository; audit, query, and writes work, while change-aware check and gate require git\n'
+exit 3

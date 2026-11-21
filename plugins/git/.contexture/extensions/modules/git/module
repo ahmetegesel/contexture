@@ -1,5 +1,5 @@
 # summary: git management: the gitignore strategy, the branch and worktree mechanics, and the boot ground check
-# version: 1.0.0
+# version: 1.1.0
 # description:
 # The git module carries the adopter's git management as its own law
 # fragment: the gitignore strategy, the branch and worktree mechanics, and

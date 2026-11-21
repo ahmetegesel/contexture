@@ -1,202 +1,139 @@
 # contexture
 
-contexture is a zero-dependency workspace convention that gives AI coding agents persistent memory. Instead of relying on lossy chat compaction that forgets why code was written, agents maintain structured, append-only records directly in your repository.
+contexture is an AI workspace convention that lives inside your repository so coding agents keep exact working continuity across context compactions, session resets, and harness or model switches.
 
-| Dimension | Traditional LLM Compaction | contexture Disk Memory |
-|:---|:---|:---|
-| **Storage** | Ephemeral chat window (lost on reset) | Authoritative storage backend (.contexture/) |
-| **When context fills** | Model writes a lossy prose summary | Append-only event log; zero information loss |
-| **What survives** | Vague intentions ("Refactor auth middleware") | Exact decisions, why alternatives failed, test proof |
-| **Resuming work** | Model acts confidently wrong from missing facts | Fresh agent queries active slice; resumes in seconds |
-| **Dependencies** | Proprietary agent cloud or vector databases | Zero dependencies; uses standard POSIX tools |
+- **Never repeat yourself**: Context windows compact into lossy summaries and fresh chats start cold. contexture preserves the decisions, constraints, open work, and verification proof from earlier turns so your agent picks up right where you left off, even across different harnesses or models.
+- **Built for agents, zero friction for you**: You talk to your coding agent naturally in plain English while the agent drives `.contexture/ctx` under the hood. You never have to memorize CLI flags or maintain notes by hand, though power users can inspect, query, or script the record anytime.
+- **Pluggable by design, lightweight out of the box**: Bring your own storage drivers, workflow rhythms, command output filters, or modules under one shared convention, or start immediately with the simple zero-dependency POSIX driver shipped by default. No background servers, no API keys, no harness lock-in.
 
-contexture is a convention, not a tool: lightweight, abstracted, extensible. Plain files, any harness, one commit, no dependencies.
+**How a session feels**
 
-- [Why contexture](#why-contexture)
-- [Installation](#installation)
-- [The module catalog](#the-module-catalog)
-- [Architecture](#architecture)
-- [Core concepts](#core-concepts)
-- [Docs](#docs)
-- [Maintaining contexture](#maintaining-contexture)
+1. **Start**: Tell your agent what you want to build or fix. It checks in on your goal and opens a dedicated work track inside the repo.
+2. **Build**: Think out loud, approve the plan, and iterate normally. Behind the scenes, your agent tracks open work, logs decisions, and keeps command proof current.
+3. **Reset or switch**: Hit compaction, close the tab, or switch to another AI tool or model.
+4. **Resume**: Open a fresh chat and say continue. Your agent reloads the live state in one step and picks up right where you left off.
 
-## Why contexture
+## Quickstart
 
-- **Lightweight by construction**: Plain files and POSIX awk baseline, no mandatory background services, no required databases, no external dependencies. The system awk is enough: the shipped scripts keep to the common subset of BWK awk (the macOS awk), mawk (the Debian default), gawk, and busybox awk (Alpine's build and Debian's), and the test suite runs the product on whatever awk the host carries, with a static census guarding the known portability trap.
-- **Abstracted by design**: The schema governs shapes and the laws govern mechanisms, carrying zero workflow policies your workspace cannot override.
-- **Extensible without forks**: Add custom rhythms, amend rules through overlays, configure storage drivers, and delegate work through subagents while the core stays untouched.
+### With an AI agent (one prompt)
 
-## Installation
+Paste this prompt into your coding agent at your repository root:
 
-Adopt contexture into an existing git repository in three steps:
+> "Install contexture in this workspace by running `curl -fsSL https://raw.githubusercontent.com/ahmetegesel/contexture/main/install.sh | sh -s -- --non-interactive`, then read `.contexture/ONBOARDING.md` and prepare the adoption proposal."
 
-### 1. Fetch the files
+`install.sh` requires no git and preserves any existing `AGENTS.md` untouched (staging contexture's loader at `.contexture/tmp/AGENTS.loader.md`). The onboarding agent inspects your workspace, pauses twice for your confirmation before editing files, and removes `.contexture/ONBOARDING.md` once adoption closes; start a fresh session afterwards so the loader boots on turn 1.
 
-Run in your repository root (`<tag>` is the latest release tag; the fetch lists them with `git tag -l`):
+### Manual terminal install (one line)
 
-```bash
-git fetch https://github.com/ahmetegesel/contexture.git --tags
-mkdir .adopt-contexture
-git archive <tag> base/ plugins/ | tar -x -C .adopt-contexture
-cp -R .adopt-contexture/base/. .
-cp -R .adopt-contexture/plugins .
-rm -rf .adopt-contexture
-chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/* 2>/dev/null || true
+Run in your workspace root:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/ahmetegesel/contexture/main/install.sh | sh
 ```
 
-`base/` mirrors the target tree, so its content copies into place: `AGENTS.md` at the root, the drawer beside it; `plugins/` lands at the root as the catalog `.contexture/ctx package install <name>` installs from, only on the human's explicit go at the act (the verb itself checks no go). `AGENTS.md` is the loader: run `.contexture/ctx compose` after the copy, and the loader verifies or recomposes the generated law layer `AGENTS.generated.md`, beside it at the root, at every boot. Its second instruction names the layer's generic core sections and says every module adds its own sections, clauses, and duties, followed as steps in the framed order, gates included; the laws bind.
+The interactive installer displays catalog plugins with live host readiness checks via `ctx package catalog`, installs only what you select, and supports `--tag`, `--plugins`, `--dir`, `--dry-run`, and `--from` for pinned, targeted, or offline installs. For manual extraction, installer flag details, or multi-repo parent workspaces, see [docs/adoption.md](docs/adoption.md).
 
-### 2. Run the onboarding wizard
+### Start your first unit
 
-Prompt your AI agent:
+Once adoption closes, prompt your AI agent:
 
-> "Read `.contexture/ONBOARDING.md` and prepare the adoption proposal."
+> "Bootstrap a new unit of work to `<your goal>`."
 
-The agent inspects your workspace topology, drafts gitignore rules, the git package choice, and harness symlinks, and pauses for your confirmation before writing changes.
+1. Your agent opens a scoped work track for your goal and prepares the initial plan.
+2. You steer and review in plain prose while the agent tracks open tasks, records decisions, and logs verification proof.
+3. When context compacts or a fresh session starts, your agent reloads the live unclosed record and continues without repeating context.
 
-### 3. Start your first session
+### Under the hood: what your agent runs
 
-Once confirmed, start your first unit of work:
+You do not need to memorize commands to use contexture. Your agent drives `.contexture/ctx` automatically on every turn, while power users can run, inspect, or script the same commands directly anytime:
 
-> "Bootstrap a new unit of work to <your goal>."
-
-### What happens next?
-
-1. **The agent creates the unit:** It runs `ctx unit bootstrap`, which initializes `.contexture/units/<your-task>/` with active tasks (`backlog.md`) and an append-only event log (`journal.md`).
-2. **You talk in plain prose:** You prompt and review as you normally do. Behind the scenes, the agent updates tasks, logs test proofs, and records decisions through semantic CLI verbs. You never manage the files manually.
-3. **When the context window compacts or resets:** A fresh agent boots in milliseconds. It runs `ctx unit load`, reads only the live record, and immediately resumes work without repeating ruled-out ideas.
-
-For manual installation, custom topology setups (parent workspaces vs standalone repos), or upgrading an existing installation, see [docs/adoption.md](docs/adoption.md).
-
-## The module catalog
-
-The builtins ship with the base and need no install. The packages in `plugins/` install through `.contexture/ctx package install <name>` on the human's explicit go at the act; the install lands the package's extension-root files, recomposes the law layer, and writes the package's `package.<name>: <source>` line into the workspace configuration (`.contexture/config`), which `ctx package uninstall` removes; a first docs-discipline install also seeds the corpus conventions when none exists. Two packages may carry a module of one name: `ctx package install <name> --as=<module>=<alias>` installs the second under another name, and `ctx help` reads it as `<alias> (alias of <module> from package <name>)`. A bare `ctx package install` installs every declared package not yet installed (the act a fresh clone runs once, on the same go; boot never installs), and `ctx package list` shows the declared packages against the installed ones, their versions, modules, and aliases, and the drift between them, read only. You choose the packages from this catalog, and the agent reads the installed surfaces through `ctx help --all`; the module files and the package manifests under `plugins/<name>/manifest` carry the summaries and versions, and the module preambles and package READMEs carry the descriptions the catalog restates.
-
-- **`unit` (builtin)**: the record's 35 operations over the storage layer, one value per artifact; it keeps the state, backlog, journal, knowledge, and lane artifacts across compaction. No install.
-- **`run` (builtin)**: the base filter pack for `ctx run`: diff, directory listing, and log filters selected by command identity or stream signature; filter-only, so it stays silent in `ctx help`. No install.
-- **`lane` (builtin)**: the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's recipe, journal, and report kept as lane artifacts within the unit's record. No install.
-- **`rhythm` (builtin)**: the process surface: `ctx rhythm` lists the rhythms with their triggers and activations, shows one whole, and names the rhythm in force with its next gate. No install.
-- **`store` (builtin)**: the free container module: `ctx store` declares a container as one record of its `containers` container (a one-line description, a minting, and field lines), and its get, list, put, set, delete, check, and search verbs keep the container's records, each write checked against the declaration (`check --leftovers` names what the store's own storage holds beyond its keys, such as an empty folder an older release left after a container drop, since a drop now removes its folder with its last record; `check --leftovers --sweep [--dry-run] [--delete]` clears it into a stamped backup under `.contexture/backups/`, or deletes it). No install.
-- **`docs-discipline`**: the corpus-first documentation discipline: the docs module's read verbs (query, get, search, audit, check, gate, nudge, changes), schema-checked write verbs, and close gate over a typed-block corpus. Install it when agents should consult a corpus before code; its change-aware checks need git.
-- **`ast-doc-graph`**: the AST and documentation graph: index the workspace's TypeScript code and documentation corpus into one queryable graph, then query symbols, call graphs, rules, and pitfalls. Install it when the workspace holds TypeScript sources or a corpus to link.
-- **`toolchain-filters`**: the toolchain filter pack: pytest, vitest and jest, cargo test, go test, and compiler error filters for `ctx run`. Install it when the workspace runs those toolchains, and adopt only the filters its streams match.
-- **`starter-rhythms`**: the starter work and debug rhythms, to copy and edit into the workspace's own. Install it when no team rhythm emerged from the instruction stack.
-- **`storage-fts5`**: the SQLite FTS5 storage driver, holding the record and the corpus in one store with dual full-text indexing and exact, hybrid, and trigram search. Install it when the workspace wants that store; it needs `sqlite3` 3.44 or later with FTS5.
-- **`git`**: the git management discipline: the gitignore strategy, the branch and worktree mechanics, and the boot ground check, as a module with laws and no verbs. A choice with no default: install it when the workspace is a git repository and wants those mechanics; the docs-discipline change-aware checks need git the tool either way.
-
-## Architecture
-
-The workspace couples root governance with a dedicated convention drawer:
-
-```text
-.
-├── AGENTS.md             The loader: compose, then load the generated law layer whole; the core generic sections plus each module's; delivered every turn
-├── AGENTS.workspace.md   Shared workspace overlay, tracked in git for team-wide rules
-├── AGENTS.local.md       Personal developer amendments, uncommitted local overrides
-├── AGENTS.generated.md   The composed law layer: the core generic sections plus every module's sections, clauses, and duties; composed at install and boot, gitignored, never edited
-└── .contexture/          The convention drawer, isolating machinery from project code
-    ├── ctx               The runtime: discovery, help assembly, dispatch, the run engine, and hooks
-    ├── config            Optional workspace configuration (storage.driver: posix)
-    ├── storage/          The storage core: the driver resolver, the store contract and search, the library, and the posix driver
-    ├── laws/             The law sources: core.md the core source, and the composer, private behind ctx compose
-    ├── modules/          The standard module folders: unit (the record engine), run (stream filters), lane (the subagent lanes), rhythm (the process surface), store (the free containers), and workspace additions
-    ├── extensions/       The package overlay root: modules/ for package feature modules, storage/drivers/ for package drivers, rhythms/ for package rhythms
-    ├── rhythms/          Reusable workflow patterns governing task progression
-    └── units/<unit>/     Isolated unit of work bounding context and lifecycle history
-        ├── state.md      Where the unit stands: status, current anchor, objective, repos, and mounts
-        ├── backlog.md    Living task queue with acceptance criteria and execution blueprints
-        ├── journal.md    Append-only event stream rebuilding working context from scratch
-        ├── knowledge.md  Settled decisions and durable findings, grounded by exact references
-        └── lanes/<lane>/ Subagent dispatch sandbox holding isolated brief, trace, and report
+```sh
+.contexture/ctx help --all            # Discover core commands and every installed module's contract
+.contexture/ctx unit list             # List active units and each unit's derived next task
+.contexture/ctx unit load <unit>      # Cold-boot a fresh session onto the unit's live working record
+.contexture/ctx run <command>         # Run a shell command through stream compaction, preserving exit code
 ```
 
-## Core concepts
+Run `.contexture/ctx <module> help` for any module's full verb table, or read [The engine](docs/the-engine.md) and [The record](docs/the-record.md) for complete CLI documentation.
 
-### Units
-A dedicated scope for your task (`.contexture/units/<name>/`; a unit an older release wrote under `.contexture/sessions/` still reads from there and moves at its next write, or with `ctx unit migrate --all`, the emptied old folder removed). Gives the agent persistent memory so that when chat resets or compacts, it resumes without losing decisions or test proofs. Deep dive: [The record](docs/the-record.md).
+## Updating
 
-### Subagents
-An isolated subagent sandbox (`lanes/<name>/`). Delegates heavy tasks in the background, keeping verbose tool logs out of your main conversation context. Managed via the top-level `ctx lane` module. Deep dive: [Units and subagents](docs/units-and-lanes.md).
+Upgrades stay painless because `AGENTS.md` remains a small untouched loader, team rules live in `AGENTS.workspace.md`, personal preferences live in `AGENTS.local.md`, and unit records live in workspace-owned folders that payload updates never touch. `install.sh` handles fresh installs only; to update an existing workspace:
 
-### Storage abstraction
-Pluggable backend architecture via the storage contract (contract 3): the store-only driver card (the seven store functions plus the store search, capability, and health), with the record's rules in the unit module's data script over the storage layer. Decouples agents from physical disk files or database schemas. The unit module composes the record from the storage layer's get, list, batch, and search; the driver owns how bytes are stored and enforces the store contract's rules; every verb reaches the storage layer alone, free-text fields travel on stdin, never argv, and no markdown crosses the interface. The zero-dependency baseline POSIX driver manages store files (a delete, alone or in a batch, removes the folders it empties, never the root), and its read only leftovers probe names what a namespace's roots hold beyond their documents by kind, with counts and bytes and no path (`ctx unit diagnose --leftovers` for the record, `ctx store check --leftovers` for the store; a key outside the module's document rules, such as old lane scratch under a unit, counts as a leftover, the unit state being a document its data file declares `unsearched`), and its sweep clears it, moving every leftover into `.contexture/backups/sweep-<stamp>/<namespace>/<root|fallback>/` with its layout kept, or with `--delete` removing it, never a document, never a folder it cannot read, and never a name holding a newline, which it refuses (`ctx unit migrate --sweep [--dry-run] [--delete] <unit>... | --all`, `ctx store check --leftovers --sweep`), while a storage plugin such as `storage-fts5` keeps its own store (see its README); no command moves a record between drivers, so a record reaches another backend through the agent re-entering it with the ordinary verbs. Deep dive: [The record](docs/the-record.md) and [The engine](docs/the-engine.md).
+1. Check [CHANGELOG.md](CHANGELOG.md) from your installed version to the target release tag.
+2. Apply `base/` class-aware without touching workspace-owned state, remove deleted payload paths, and refresh any updated catalog plugins on explicit human confirmation.
+3. Run `.contexture/ctx compose` and follow the full checklist and payload verification steps in [docs/adoption.md#updating](docs/adoption.md#updating).
 
-### Rhythms
-A plain text workflow checklist in `.contexture/rhythms/`. Enforces process discipline, requiring the agent to discuss, test, and verify before claiming work is done. Deep dive: [Rhythms](docs/rhythms.md).
+## Core model
 
-### Overlays
-Custom workspace rule files (`AGENTS.workspace.md` for teams, `AGENTS.local.md` for local machine). Lets you add repository policies or git rules without modifying contexture's base. Deep dive: [Overlays](docs/overlays.md).
+contexture separates what stays human from what stays structured. You think, converse, and iterate freely in plain prose while the `ctx` CLI validates shapes at write time, enforces state transitions, and keeps agents decoupled from whichever storage driver backs the workspace.
 
-### Stream compaction
-Universal stream reduction runner and filter (`ctx run`). All shell commands execute through it (runner mode prefix: `.contexture/ctx run <cmd>`) or pipe into it (`<cmd> | .contexture/ctx run`). Runner mode selects the filter by the wrapped command's identity and stdin mode by the stream signature, strips ANSI escape sequences before matching, and collapses unchanged Git diff context lines (`diff.awk`), verbose directory listings (`list.awk`), passing test runs, and repetitive logs (`log.awk`) by 40 to 90 percent without installs or diagnostic loss. Preserves exact exit codes, keeps command stderr visible (whole on failure or empty stdout, tail-capped with its own notice otherwise), falls back to raw when a shrinking filter carries no notice, and honors `COMPACT_DISABLE=1` (bypass) and `COMPACT_DEBUG=1` (selection report). Capture scratch prefers the workspace's gitignored `.contexture/tmp/` drawer; the capture files are unlinked before the command runs, so a recursive command cannot find or read its own output. Deep dive: [The engine](docs/the-engine.md).
+### Write-time structure and subtractive liveness
+
+Most continuity problems begin at write time through unstructured notes that drift and bloat until nothing can be trusted on reload. contexture records work as typed, append-only events and settled findings grounded by exact references, then relies on subtractive liveness: as tasks finish, threads resolve, or decisions supersede earlier ones, the agent closes resolved entries by reference during the work itself so a fresh session boots onto only the unclosed working record. Mechanical integrity checks (`ctx unit audit`) enforce record structure, while unusually long units can consolidate history via `ctx unit fold` without losing the underlying trail.
+
+### Convention-enforced extensibility and role separation
+
+contexture grows without forks by composing every module, storage driver, workflow rhythm, and stream filter under one shared boot sequence, one generated law layer (`AGENTS.generated.md`), one `ctx` CLI doorway, and one pluggable storage contract. Standing repository policies live in overlays (`AGENTS.workspace.md` and `AGENTS.local.md`), repeatable workflows live in `.contexture/rhythms/`, and optional capabilities live in catalog plugins.
+
+### Five core pillars
+
+- **Units**: Scoped working memory for a task or deliverable: current state, living backlog queue with acceptance criteria, append-only event journal, and settled findings grounded by exact references. See [The record](docs/the-record.md).
+- **Rhythms**: Plain-text workflow checklists that govern outcomes and verification gates without imposing rigid bureaucracy. See [Rhythms](docs/rhythms.md).
+- **Subagent lanes**: Isolated dispatch sandboxes managed through `ctx lane` that keep subagent traces out of the main journal and return self-sufficient reports. See [Units and subagents](docs/units-and-lanes.md).
+- **Overlays**: Team-shared rules (`AGENTS.workspace.md`) and personal machine preferences (`AGENTS.local.md`) that amend the composed law layer without editing or forking the base convention. See [Overlays](docs/overlays.md).
+- **Stream compaction (`ctx run`)**: Shell commands run through `.contexture/ctx run <cmd>` (or pipe into it), collapsing verbose diffs, listings, and logs while preserving exact exit codes and full diagnostic detail on failure. See [The engine](docs/the-engine.md).
+
+### Human habits and non-AI teammates
+
+Day-to-day ceremony stays slim: confirm the unit and rhythm at boot, approve plans before workspace writes, and run a handoff before resets. Teammates who never prompt an AI still benefit from explicit rules in `AGENTS.workspace.md`, recorded verification proof on pull requests, and optional documentation freshness checks.
+
+For the full `.contexture/` drawer layout and file ownership classes, see [The engine](docs/the-engine.md#the-drawer-layout).
+
+## Builtins and catalog plugins
+
+### Shipped builtins
+
+Five modules ship inside `base/.contexture/modules/` and work out of the box with no installation:
+
+- **`unit`**: Owns the unit record (state, backlog, journal, knowledge, audit, fold, search, and lifecycle operations) over the storage layer.
+- **`lane`**: Manages isolated subagent dispatch lanes (`create`, `record`, `report`, `show`).
+- **`rhythm`**: Lists workspace and installed rhythms, displays a rhythm whole, and reports the rhythm in force with its next gate.
+- **`store`**: Declares and manages schema-checked generic data containers through `ctx store`.
+- **`run`**: Provides the baseline diff, directory listing, and log compaction filters for `ctx run`.
+
+### Optional catalog plugins
+
+Optional packages live in `.contexture/plugins/` (with `./plugins/` as fallback) and install into `.contexture/extensions/` via `.contexture/ctx package install <name>` (and uninstall via `.contexture/ctx package uninstall <name>`). Inspect available packages, versions, and live host readiness read-only via `.contexture/ctx package catalog`, `.contexture/ctx package info <name>`, and `.contexture/ctx package list`. Package installation runs **only on the human's explicit go at the act** (boot never installs packages, and the verb itself checks no go).
+
+| Plugin | Kind | What it adds | Guide |
+| :--- | :--- | :--- | :--- |
+| `docs-discipline` | feature | Corpus-first documentation discipline with read/write verbs, freshness checks, and a close gate (change-aware checks require `git`) | [plugins/docs-discipline/README.md](plugins/docs-discipline/README.md) |
+| `ast-doc-graph` | feature | TypeScript AST and documentation graph for symbol, call-graph, rule, and pitfall queries | [plugins/ast-doc-graph/README.md](plugins/ast-doc-graph/README.md) |
+| `toolchain-filters` | feature | Test runner and compiler output filters (pytest, vitest, jest, cargo test, go test) for `ctx run` | [plugins/toolchain-filters/README.md](plugins/toolchain-filters/README.md) |
+| `starter-rhythms` | feature | Starter work and debug rhythms to copy and edit into your team's own | [plugins/starter-rhythms/README.md](plugins/starter-rhythms/README.md) |
+| `storage-fts5` | driver | Optional SQLite FTS5 storage driver with dual full-text indexing and exact, hybrid, and trigram search (requires `sqlite3` with FTS5) | [plugins/storage-fts5/README.md](plugins/storage-fts5/README.md) |
+| `git` | feature | Gitignore strategy, branch and worktree mechanics, and boot ground checks as a law-only module (explicit choice, never a default) | [plugins/git/README.md](plugins/git/README.md) |
+
+For full catalog notes, module aliasing, and reproducing declared packages on a fresh clone, see [docs/adoption.md#the-module-catalog](docs/adoption.md#the-module-catalog) and [docs/plugins.md](docs/plugins.md). To author your own module or package under the same contract, read [docs/modules.md](docs/modules.md).
 
 ## Docs
 
-- [The record](docs/the-record.md): Artifacts, liveness, and closure
-- [The engine](docs/the-engine.md): AGENTS.md, shape grammars, and awk scripts
-- [Modules](docs/modules.md): The module contract: the standard folder, the module manifest, the package manifest, laws, data, part hooks, verbs, hooks, and filters
-- [Worked package example](tests/fixtures/worked-package/README.md): The notes module from the module authoring guide, from its manifests through its test
-- [Plugins](docs/plugins.md): Packaging, the feature and storage-driver package kinds, adoption, and the plugin test convention
-- [Units and subagents](docs/units-and-lanes.md): Folder lifecycles and delegated subagent work
-- [Rhythms](docs/rhythms.md): Procedure grammar, activation, and the default loop
-- [Overlays](docs/overlays.md): Amendment grammar and precedence rules
-- [Adoption](docs/adoption.md): Onboarding flows, topology choices, and upgrading
-- [Starter rhythms](plugins/starter-rhythms/): The work and debug rhythms to start from
-- [Toolchain filters](plugins/toolchain-filters/): Test runner and compiler filters
-- [Docs discipline](plugins/docs-discipline/): A corpus-first documentation discipline
-- [AST doc graph](plugins/ast-doc-graph/): An AST symbol graph linked with centralized documentation
-- [Storage FTS5](plugins/storage-fts5/): SQLite FTS5 storage driver with dual full-text indexing, RRF search, and the generic storage layer with its change log and search schema
-- [Git management](plugins/git/): The gitignore strategy, the branch and worktree mechanics, and the boot ground check
-- [Tests](tests/): The test suite (vitest projects that run the shipped product as child processes), upstream only; see [tests/README.md](tests/README.md)
-- [Maintaining contexture](#maintaining-contexture): The `base/` dev loop: edit, ship, apply
+### Core architecture and concepts
 
-| command | what it returns |
-|---|---|
-| ctx help | The runtime summary: `ctx run`, `ctx unit` with its verbs, and every discovered module with its summary line |
-| ctx unit help | The full command table: every contract, printed to stdout; help, --help, and -h are the same table; every other dash-leading argument refuses at the entry point |
-| ctx unit list [--active\|--all] [--repo=<repo>] | The field: with no flag or --active each ACTIVE unit bytewise by name, with its slug, anchor, the derived next line (the first IN_PROGRESS task, else the first open task, every status but DONE; `next: <slug> (<status>)`, or an explicit none form), and objective, then the closed count; --all one line per unit, ACTIVE and CLOSED (slug, status as stored, anchor); --repo keeps the units touching the repo and refuses rc 1 naming the known repos when none does; the view reads no journal; the first listing of the day measures the record's storage beyond its documents once and, when it holds any, prints after the answer one NUDGE line naming the items and bytes, the dry run `ctx unit migrate --sweep --dry-run --all` as the next step, and the human's word before any sweep |
-| ctx unit bootstrap <slug> "<objective>" [<repos>] | A new unit: state at A1 with its first anchor (the folded receipt naming the objective and the git state), an empty backlog and knowledge; prints the state and the first-task reminder |
-| ctx unit load <unit> | The load: the map plus one page (state, backlog, knowledge, the live journal, reference units read-only); the backlog renders DONE task blocks compactly (open blocks whole; the file never edited); each call says `LOAD INCOMPLETE` until the last, which reads `LOAD COMPLETE` |
-| ctx unit load refs <ref_1> ... <ref_N> [<page>] | The refs load: those units alone, read-only (the notice, the knowledge, the live journal), locally paged with its own banner and tail; a missing ref is fatal |
-| ctx unit stamp <unit> | Stamps the new period: derives the next anchor from state, rewrites current_anchor, and appends the anchor line with its number and date (@anchor A<N> <date>), no receipt text; a text argument refuses rc 1 |
-| ctx unit board <unit> | The live board: every unclosed entry with its body whole, then the open task slugs with their nudge, ending with the rhythm in force line `ctx rhythm current` prints |
-| ctx unit audit <unit> | Mechanical defect verification (malformed entries, dangling closures, unharvested flags, tasks done without their event) and the open-thread tail; exits nonzero on any defect |
-| ctx unit fold <unit> [--lane=<lane> \| --check \| --finish] | The consolidation fold: the first no-lane call plans the live scope, records the fold start, and prints the plan (the carried open threads included), the first lane's ctx lane create command and its manual, and the first act; a lane call fetches the next unclosed chunk, its entries, and the lane's remaining chunks; the lane writes an ordinary entry whose REFs name the batch and whose CLOSES fold its non-thread constituents, while open threads stay live and are carried; --check proves the closed receipts are the scope minus the carried threads and the audit is clean; --finish writes the receipt and closes the fold start (docs/the-record.md) |
-| ctx rhythm list | One line per rhythm: name, origin (workspace, the workspace copy shadowing an installed one, or extension), use when, activation; then the select line that says what to do with them; a grammar defect warns on stderr |
-| ctx rhythm show <name> | One rhythm whole, then the stamp line that advances it |
-| ctx rhythm current <unit> | The rhythm in force in the unit and its next gate, read from the unit's last stamp (in force, completed, stale, or none in force) |
-| ctx unit task <verb> [args] | Task operations: add, update, start, complete, reopen, drop, list, show with typed flags; the unit module enforces the status moves (start from TODO, complete from TODO or IN_PROGRESS, reopen from IN_PROGRESS or DONE, drop refused for an IN_PROGRESS task; reopen it first) and writes the completion or drop receipt in the same write; show prints the canonical block |
-| ctx unit record <unit> --what="..." [--flags] | Append an immutable journal event (--group, --thread, --rhythm, --knowledge, --slug, and the repeatable --ref, --closes, --supersedes); the unit module injects the active anchor and composes the slug from the local date and time; a stamped write (--rhythm) prints the next gate line and refuses a rhythm whose @rhythm line names another |
-| ctx unit entry show <unit> <slug> | The entry's canonical block (the last occurrence of a repeated legacy slug) |
-| ctx unit entry list <unit> [--anchor=A<N>] [--group=<token>] | One line per entry occurrence (anchor, slug, WHAT), open or closed; `--group` is the topic thread, `--anchor` one period |
-| ctx unit entry closure <unit> <slug> | Open, or closed with the verdict of the first closer, then every later closer naming it with its line |
-| ctx unit finding <verb> [args] | Finding lifecycle CRUD: add, show, update, supersede, drop, list; `--ref` repeats |
-| ctx search "<query>" [--type=<type>] [--mode=<mode>] [--limit=N] [--json] [--module=<name>] | Every module that carries a search verb, one group per module in discovery order (rows with type, address, snippet, read, label; failed with its reason; or not searched), no ranking across modules, each module bounded by search.timeout (default 10 s); ctx search --modes lists the search modes; exit 0, 2 when a module failed, 1 for a bad argument |
-| ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json] | The record entities in the shared search syntax: the active units by default, --all every unit, --unit any one; rows in one shape on every driver (module, container, type, id, address, snippet, read, label closed on a closed unit), the limit applied once over the merged rows; --mode defaults to exact; the unit state is never searched; zero hits is rc 0 |
-| ctx unit get <unit>/<kind>/<id> [--json] | One record entity whole by its path (task, entry, finding, a lane recipe or report or one section of it, the whole lane journal or one entry of it), a task with its REFS; never a listing or the state; a missing entity is rc 1 named not found; `ctx unit resolve` is retired into it |
-| ctx unit list --all --repo=<repo> | Each unit touching the repo: slug, status, anchor |
-| ctx unit refs-to <unit>\|<address> [--all] | Every REF and REFS value naming a unit or an address, one row each (unit, kind, id, ref), and the units whose ref_sessions name it; the active units by default, --all every unit |
-| ctx lane <verb> <unit> <lane-slug> [args] | Subagent lane management isolated from the unit's main journal: create (the dispatcher's act: the brief as flags, from which it composes the recipe and prints the dispatch prompt), record, report, show |
-| ctx unit refs <unit> [<unit> ...] | Set the read-only reference units; zero units clears them |
-| ctx unit close <unit> | Mark the unit CLOSED; warns on open tasks and audit findings rather than refusing |
-| ctx unit reopen <unit> | Mark a CLOSED unit ACTIVE again; refuses for a unit that is not CLOSED |
-| ctx unit migrate [--dry-run] [--forward=<old prefix>=<new prefix>] <unit>... \| --all | The record's migrations, closed units included: the root move (the named units, or every unit, from the deprecated root to the current one; every landing write already moves its own unit), then the pointer rewrite (every pointer in every field into its full address, whatever a REF held beside or instead of a full address moved to a NOTE line); prints the census before and after, the residual scan (every token still holding an old form, tallied by its census class), one line per unit, and migrated: <n>, a second run migrated: 0; --dry-run prints the same census and writes nothing; --forward, once per run, forwards the addresses of entities that moved to a new owner (each prefix ending in a slash or a hash; every pointer starting with the old prefix becomes the new prefix plus the same rest, each distinct forwarded address checked once through its new owner's get before any lock, one that does not answer kept as written under a class naming why; a prefix holding a placeholder character or ending in neither a slash nor a hash, a file# new prefix outside the workspace, or overlapping prefixes refuse before anything is read); the first refusal stops it naming the unit |
-| ctx unit migrate --sweep [--dry-run] [--delete] <unit>... \| --all | The sweep alone, no other migration and no ref rewritten: what the record's storage holds beyond its documents (each unit's state, backlog, knowledge, journal, and lane recipes, journals, and reports), every kind `ctx unit diagnose --leftovers` names and the keys outside the document rules among them, moved into `.contexture/backups/sweep-<stamp>/unit/<root\|fallback>/` with its layout kept, or with `--delete` removed with no backup kept, a folder holding no document as one item; a folder it cannot read or enter left untouched and named, a name holding a newline or a symbolic link at a document's path refusing the run; batches release the storage lock between them; refused before any walk when the installed unit declaration does not declare the state unsearched, and for a unit whose keys the storage layer holds in both roots; each unit under its unit lock, closed units included, then with `--all` the top of the roots outside every unit folder; one line per unit (a key segment holding no unit labelled outside the units) and one for the top of the roots, then the closing line naming the items, the bytes, and the backup's stamp; a refusal midway prints the lines swept before it and the run total with the stamp first; a hangup, an interrupt, or a termination stops the sweep and its children; `--dry-run` writes nothing and prints what the run would do; a second run moves nothing; a run holds back the listing's leftovers nudge while it sweeps (its mark carrying the verb's pid) and lets the next listing measure again, a stop by a signal included; the human's word comes first |
-| ctx run | Universal discoverable stream compaction: direct runner prefix (.contexture/ctx run <cmd>) or pipe; selects by command identity in runner mode and by signature on stdin, strips ANSI, and collapses diffs, directory listings, test passes, or logs; COMPACT_DISABLE=1 bypasses, COMPACT_DEBUG=1 reports the selection; fail-safe and recovery fallbacks to raw; capture files are unlinked before the command runs |
+- [The record](docs/the-record.md): Unit artifacts, liveness, closure, folding, and query syntax
+- [The engine](docs/the-engine.md): Law composition, CLI dispatch, storage contract, drawer layout, and `ctx run` compaction
+- [Units and subagents](docs/units-and-lanes.md): Unit lifecycles and isolated subagent lanes
+- [Rhythms](docs/rhythms.md): Workflow grammar, activation modes, and the default design loop
+- [Overlays](docs/overlays.md): Amendment grammar and workspace/local precedence rules
 
-The named looks (`entry show`, `entry closure`, `list --repo=<repo>`, `refs-to`, `get`) and search answer questions over the record, so agents never improvise greps that over-read: a look that misses is loud, rc=1 with a named error, never an empty success; search prints its zero count. The lists (`entry list` with `--group` or `--anchor`, `task list`, `finding list`) print nothing with rc 0 when nothing matches.
+### Adoption, extensibility, and testing
 
-The interaction toolbox is the typed semantic verbs (`task`, `record`, `entry`, `finding`, `search`, `get`) and `ctx lane`, ensuring atomic state transitions and eliminating format guessing; they are the only write inputs, so no markdown crosses the command interface. The earlier verbs that carried raw blocks or duplicated a typed verb (`append`, `amend`, `flip`, `drop`, and the `query` family) retired in v0.55.0, and `next` retired when the pointer became a derivation: each name stays reserved and prints its replacement with rc 1.
+- [Adoption](docs/adoption.md): Agentic onboarding, installer flags, gitignore topologies, and upgrading
+- [Modules](docs/modules.md): Standard module folder, manifests, laws, verbs, hooks, and stream filters
+- [Plugins](docs/plugins.md): Package manifests, feature and storage-driver kinds, installation, and plugin tests
+- [Tests](tests/README.md): Upstream vitest test suite running the shipped product as child processes
 
 ## Maintaining contexture
 
-This repository builds the convention; workspaces consume it from tags. The shippable core is tracked mirrored under `base/`: `base/AGENTS.md` and `base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/store,modules/unit,ONBOARDING.md}`. The live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus are never committed: the live root is untracked working state, this repository's own running installation, and the agent-facing corpus is untracked working state served by the configured storage driver (under the files driver its files stay untracked, under a store driver it lives in the storage layer alone), addressed as `docs/<repo>/<slug>.md`; both keep working through every change, and the guides (`docs/*.md`) stay tracked.
-
-The dev loop:
-
-1. Edit `base/` directly: it is the shipping copy.
-2. Run the tests of the change from `tests/` (they stage the base runtime; `bun install --frozen-lockfile` once): `bun run test:changed`, or the area's project with `bun run test:<project>`; see [tests/README.md](tests/README.md).
-3. Ship: the release gate green (`bun run test:prerelease` from `tests/`), docs sync, commit, push, and the annotated tag in one breath. A plugin whose payload the release changes carries its manifest version bump (see [docs/plugins.md](docs/plugins.md)); the governance `plugin-versions` check reads red until it does.
-4. Apply the payload onto the live drawer, class-aware: `cp -R base/. .` from the repository root, then compose the law layer (`.contexture/ctx compose`). The copy carries only payload paths, so the record (units, and the deprecated sessions folder while units remain in it), rhythms, tmp, and workspace modules are never touched; it never removes a file either, so a payload path the release removed is deleted from the live drawer by hand, with each folder the deletes leave empty, from a listing that keeps git's rename detection off, since a moved file otherwise lists as a rename and stays behind (see [Adoption](docs/adoption.md)).
-
-`plugins/` is the tracked catalog of packaged overlays, installed into a workspace when wanted (see [docs/plugins.md](docs/plugins.md)); `docs/adoption.md` carries the same loop beside the adopter's view.
+This repository builds the convention; the shippable core is tracked under `base/` and catalog packages under `plugins/`, while the live root (`AGENTS.md`, `.contexture/`) and the agent-facing corpus stay untracked working state. Edit `base/` and `plugins/` directly, run targeted tests from `tests/` (`bun run test:changed` or `bun run test:<project>`, plus `bun run test:prerelease` and plugin manifest version bumps before tagging; see [tests/README.md](tests/README.md) and [docs/plugins.md](docs/plugins.md)), and apply `base/` class-aware onto your live drawer following [docs/adoption.md#payload-classes-and-syncing](docs/adoption.md#payload-classes-and-syncing).

@@ -1,5 +1,12 @@
 # summary: the corpus-first documentation discipline: the docs module, its private grammar, and its rhythms
-# version: 1.9.0
+# version: 1.10.0
 # kind: feature
 # part: module modules/docs
 # part: rhythms rhythms
+# category: documentation
+# pitch: keep architecture docs synced with code changes via typed blocks and a close gate
+# when: agents should consult living architecture docs before reading code
+# needs: POSIX sh and awk; git optional (required for check, gate, and drift)
+# tags: docs corpus gate audit
+# description:
+# Typed-block documentation corpus with read verbs (query, get, search, audit, check, gate, nudge, changes), schema-checked write verbs, unit task-landing and load-end nudges, and authoring/drift rhythms over any configured storage driver.

@@ -117,13 +117,21 @@ if [ -n "${CTX_ROOT:-}" ]; then
   [ -d "$CTX_ROOT" ] || die 2 "CTX_ROOT names no directory: $CTX_ROOT"
   ws_root=$(CDPATH= cd -- "$CTX_ROOT" 2>/dev/null && pwd) || die 2 "cannot resolve CTX_ROOT"
 else
-  ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run .contexture/ctx package install <package> or set CTX_ROOT)"
+  case "$pkg_root" in
+    */.contexture/plugins/*)
+      ws_root=$(CDPATH= cd -- "${pkg_root%/.contexture/plugins/*}" 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run .contexture/ctx package install <package> or set CTX_ROOT)"
+      ;;
+    *)
+      ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run .contexture/ctx package install <package> or set CTX_ROOT)"
+      ;;
+  esac
 fi
 ctx_bin=$ws_root/.contexture/ctx
 [ -x "$ctx_bin" ] || die 2 "no engine at $ctx_bin (adopt the base first)"
 ext_root=$ws_root/.contexture/extensions
 state_root=$ext_root/.state
 state_file=$state_root/$pkg_name.files
+stash_uninstall=$state_root/$pkg_name.uninstall
 
 if [ -e "$pkg_root/.contexture" ] && [ ! -d "$pkg_root/.contexture" ]; then
   die 1 "malformed package: .contexture is not a directory"
@@ -143,6 +151,11 @@ if [ -d "$pkg_root/.contexture" ]; then
 fi
 payload_root=$pkg_root/.contexture/extensions
 [ -d "$payload_root" ] || die 1 "no .contexture/extensions payload in $pkg_root"
+for _phk in probe install uninstall; do
+  if [ -e "$pkg_root/hooks/$_phk" ] && [ ! -f "$pkg_root/hooks/$_phk" ]; then
+    die 1 "malformed package hook: hooks/$_phk is not a regular file"
+  fi
+done
 
 if [ -d "$ext_root" ]; then
   [ -w "$ext_root" ] && [ -x "$ext_root" ] || die 2 "the extension root is not writable: .contexture/extensions (nothing written)"
@@ -467,6 +480,7 @@ make_dir() {
 
 stage=$state_root/.stage.$$
 record_phase=0
+uninstall_phase=0
 rollback() {
   _rb=$1
   if [ -f "$scratch/moved" ]; then
@@ -492,6 +506,13 @@ rollback() {
       rm -f "$state_file" 2>/dev/null
     fi
   fi
+  if [ "$uninstall_phase" -eq 1 ]; then
+    if [ -f "$stage/.backup/.uninstall" ]; then
+      mv -f "$stage/.backup/.uninstall" "$stash_uninstall" 2>/dev/null
+    else
+      rm -f "$stash_uninstall" 2>/dev/null
+    fi
+  fi
   rm -rf "$stage" 2>/dev/null
   LC_ALL=C sort -ru "$scratch/made" | while IFS= read -r _d; do
     rmdir "$_d" 2>/dev/null
@@ -514,6 +535,9 @@ while IFS='	' read -r src rel; do
   fi
   printf '%s %s %s\n' "$rel" "$m" "$c" >> "$scratch/plan"
 done < "$scratch/map"
+if [ -f "$pkg_root/hooks/uninstall" ]; then
+  cp -p "$pkg_root/hooks/uninstall" "$stage/.uninstall" || rollback "cannot stage hooks/uninstall"
+fi
 
 : > "$scratch/stale"
 if [ "$have_record" -eq 1 ]; then
@@ -615,6 +639,15 @@ record_phase=1
   done < "$scratch/stale_keep"
 } > "$stage/.record" || rollback "cannot write the install record"
 mv -f "$stage/.record" "$state_file" || rollback "cannot write the install record"
+if [ -f "$stash_uninstall" ]; then
+  cp -p "$stash_uninstall" "$stage/.backup/.uninstall" || rollback "cannot back up the uninstall hook"
+fi
+uninstall_phase=1
+if [ -f "$stage/.uninstall" ]; then
+  mv -f "$stage/.uninstall" "$stash_uninstall" || rollback "cannot stash the uninstall hook"
+elif [ -e "$stash_uninstall" ]; then
+  rm -f "$stash_uninstall" || rollback "cannot remove the dropped uninstall hook"
+fi
 rm -rf "$stage"
 
 # prune the folders the stale removals emptied (bottom-up), stopping at the extension
@@ -641,10 +674,16 @@ done < "$scratch/stale_keep"
 while read -r mname_o mname; do
   hook=$ext_root/modules/$mname/install
   [ -f "$hook" ] || continue
-  ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=$pkg_root CTX_BIN=$ctx_bin sh "$hook" )
+  ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=$pkg_root CTX_BIN=$ctx_bin CTX_PACKAGE_NAME=$pkg_name CTX_PACKAGE_VERSION=$pkg_version LC_ALL=C export CTX_ROOT CTX_PACKAGE_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_VERSION LC_ALL && exec sh "$hook" < /dev/null )
   _hr=$?
   [ "$_hr" -eq 0 ] || die 2 "the '$mname' module's install hook failed (rc $_hr); the overlay and its record are in place"
 done < "$scratch/inames"
+
+if [ -f "$pkg_root/hooks/install" ]; then
+  ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=$pkg_root CTX_BIN=$ctx_bin CTX_PACKAGE_NAME=$pkg_name CTX_PACKAGE_VERSION=$pkg_version LC_ALL=C export CTX_ROOT CTX_PACKAGE_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_VERSION LC_ALL && if [ -x "$pkg_root/hooks/install" ]; then exec "$pkg_root/hooks/install" < /dev/null; else exec sh "$pkg_root/hooks/install" < /dev/null; fi )
+  _hr=$?
+  [ "$_hr" -eq 0 ] || die 2 "the '$pkg_name' package's install hook failed (rc $_hr); the overlay and its record are in place"
+fi
 
 # the law layer: every package version and law fragment feeds the generated layer's
 # sources hash, so recompose through ctx compose after the record lands and the hooks

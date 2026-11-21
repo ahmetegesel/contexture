@@ -1,0 +1,39 @@
+#!/bin/sh
+# readiness probe for toolchain-filters (read-only; POSIX sh)
+set -u
+
+ws=${CTX_ROOT:-.}
+stacks=""
+add_stack() {
+  case " $stacks " in
+    *" $1 "*) ;;
+    *) stacks="${stacks:+$stacks, }$1" ;;
+  esac
+}
+
+[ -f "$ws/Cargo.toml" ] && add_stack "cargo-test"
+[ -f "$ws/go.mod" ] && add_stack "go-test"
+if [ -f "$ws/pyproject.toml" ] || [ -f "$ws/pytest.ini" ] || [ -f "$ws/setup.py" ] || [ -f "$ws/requirements.txt" ]; then
+  add_stack "pytest"
+fi
+has_js_test=0
+[ -f "$ws/package.json" ] && has_js_test=1
+if [ "$has_js_test" -eq 0 ]; then
+  for _cfg in "$ws"/vitest.config.* "$ws"/jest.config.*; do
+    if [ -e "$_cfg" ]; then
+      has_js_test=1
+      break
+    fi
+  done
+fi
+[ "$has_js_test" -eq 1 ] && add_stack "vitest"
+if [ -f "$ws/tsconfig.json" ] || [ -f "$ws/Makefile" ] || [ -f "$ws/CMakeLists.txt" ]; then
+  add_stack "compiler-errors"
+fi
+
+if [ -n "$stacks" ]; then
+  printf 'ready; detected stacks: %s\n' "$stacks"
+else
+  printf 'ready; no matching toolchain markers at workspace root (filters are optional)\n'
+fi
+exit 0

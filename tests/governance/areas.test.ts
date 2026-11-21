@@ -51,4 +51,8 @@ describe.concurrent('the changed-files map selects a project for every tracked p
     expect([...named].filter((p) => p !== EVERY && !projects.includes(p))).toEqual([]);
     expect(projects.filter((p) => !named.has(p))).toEqual([]);
   });
+
+  it('the root installer maps to base and governance', () => {
+    expect(projectsOf('install.sh')).toEqual(['base', 'governance']);
+  });
 });

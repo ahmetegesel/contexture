@@ -1,5 +1,5 @@
 # summary: the corpus-first documentation discipline: read (query, get, search, audit, check, gate, nudge, changes) and schema-checked write verbs over a typed-block corpus
-# version: 1.9.0
+# version: 1.10.0
 # description:
 # The docs module owns the corpus discipline: the typed-block grammar, the read and
 # write verbs, the audit, and the close gate; the corpus data lives in the storage layer

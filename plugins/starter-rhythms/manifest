@@ -2,3 +2,10 @@
 # version: 1.1.1
 # kind: feature
 # part: rhythms rhythms
+# category: workflow
+# pitch: starter work and debug rhythms with clear gates for planning, execution, and root-cause debugging
+# when: your team has no custom workflow rhythms yet and wants a proven starting pair
+# needs: none
+# tags: rhythms workflow work debug
+# description:
+# Two ready-to-use workflow rhythms (work as an auto-triggered multi-gate build loop and debug as a proposed root-cause loop) to adopt as-is or copy into .contexture/rhythms/ to customize.

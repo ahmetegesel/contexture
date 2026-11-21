@@ -1,5 +1,12 @@
 # summary: the SQLite FTS5 storage driver
-# version: 1.3.0
+# version: 1.4.0
 # kind: driver
 # driver: fts5
 # part: driver storage/drivers/fts5
+# category: storage
+# pitch: fast ranked full-text search across units and docs in one SQLite FTS5 database
+# when: you want indexed hybrid and trigram search on a single machine instead of plain files
+# needs: sqlite3 3.44 or later with FTS5 and trigram support
+# tags: storage sqlite fts5 search driver
+# description:
+# Contract 3 store-only SQLite driver using WAL mode, dual FTS5 virtual tables (unicode61 porter preserving diacritics plus trigram), and pure SQL Reciprocal Rank Fusion for hybrid and trigram search across units and docs.

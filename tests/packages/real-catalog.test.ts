@@ -136,6 +136,46 @@ describe.concurrent('the real package manifests', () => {
     expect(cap).toContain('"contract":"3"');
   });
 
+  it('[plugins-r9, modules-r16] every real catalog plugin carries rich optional metadata and passes ctx package catalog and info', async () => {
+    const sb = sandbox();
+    for (const p of PLUGINS) {
+      catalogCopy(sb, p);
+      expect(await pkgv(p, 'category')).not.toBe('');
+      expect(await pkgv(p, 'pitch')).not.toBe('');
+      expect(await pkgv(p, 'when')).not.toBe('');
+      expect(await pkgv(p, 'needs')).not.toBe('');
+      expect(await pkgv(p, 'tags')).not.toBe('');
+      expect(await pkgv(p, 'description')).not.toBe('');
+    }
+    const names = await ctx(sb, 'package', 'catalog', '--names');
+    expect([names.code, names.stderr]).toEqual([0, '']);
+    expect(out(names).split('\n')).toEqual([...PLUGINS].sort());
+
+    const catNoProbe = await ctx(sb, 'package', 'catalog', '--no-probe', '--json');
+    expect([catNoProbe.code, catNoProbe.stderr]).toEqual([0, '']);
+    const parsedCat = JSON.parse(catNoProbe.stdout);
+    expect(parsedCat.packages.map((p: any) => p.name)).toEqual([...PLUGINS].sort());
+    expect(parsedCat.packages.every((p: any) => p.probe.status === 'skipped')).toBe(true);
+
+    const catLive = await ctx(sb, 'package', 'catalog', '--json');
+    expect([catLive.code, catLive.stderr]).toEqual([0, '']);
+    const parsedLive = JSON.parse(catLive.stdout);
+    const starter = parsedLive.packages.find((p: any) => p.name === 'starter-rhythms');
+    expect(starter.version).toBe('1.1.1');
+    expect(starter.probe).toEqual({ status: 'ready', code: 0, detail: '' });
+
+    for (const p of PLUGINS) {
+      const info = await ctx(sb, 'package', 'info', p, '--json');
+      expect([info.code, info.stderr]).toEqual([0, '']);
+      const obj = JSON.parse(info.stdout);
+      expect(obj.name).toBe(p);
+      expect(obj.category).toBeTruthy();
+      expect(obj.tags.length).toBeGreaterThan(0);
+      expect(obj.description).toBeTruthy();
+      expect(obj.lifecycle).toEqual(p === 'starter-rhythms' ? [] : ['probe']);
+    }
+  });
+
   it('[plugins-r9, modules-r12] the lane-isolation package is retired into the lane module laws', () => {
     expect(existsSync(join(ROOT, 'plugins/lane-isolation'))).toBe(false);
     expect(readFileSync(join(ROOT, 'base/.contexture/modules/lane/laws'), 'utf8')).toContain('branch/worktree');

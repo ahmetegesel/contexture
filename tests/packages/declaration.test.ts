@@ -2,7 +2,7 @@ import { chmodSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { exec, type Run } from '../support/exec';
-import { addModule, extPath, newPkg, recordPath, writeManifest } from '../support/packages';
+import { addModule, extPath, newPkg, recordPath, recordText, writeManifest } from '../support/packages';
 import { stage } from '../support/stage';
 import { put, treeState } from '../support/tree';
 
@@ -206,5 +206,28 @@ describe.concurrent('ctx package list: the declared packages against the install
       chmodSync(recordPath(sb, 'pkg-ok'), 0o644);
     }
     expect((await ctx(sb, ['package', 'list'])).code).toBe(0);
+  });
+
+  it('[the-engine-r22] .contexture/plugins/<name> takes precedence over ./plugins/<name> for bare declared install and list drift detection', async () => {
+    const sb = sandbox();
+    put(join(sb, 'plugins/pkg-shadow/README.md'), '# fallback\n');
+    addModule(join(sb, 'plugins/pkg-shadow'), 'fb');
+    writeManifest(join(sb, 'plugins/pkg-shadow'), '1.0.0');
+
+    put(join(sb, '.contexture/plugins/pkg-shadow/README.md'), '# primary\n');
+    addModule(join(sb, '.contexture/plugins/pkg-shadow'), 'pri');
+    writeManifest(join(sb, '.contexture/plugins/pkg-shadow'), '1.2.0');
+
+    writeFileSync(conf(sb), 'package.pkg-shadow: pkg-shadow\n');
+    const bare = await ctx(sb, ['package', 'install']);
+    expect(bare.code).toBe(0);
+    expect(existsSync(extPath(sb, 'modules/pri/module'))).toBe(true);
+    expect(existsSync(extPath(sb, 'modules/fb/module'))).toBe(false);
+    expect(recordText(sb, 'pkg-shadow')).toContain('version 1.2.0');
+
+    writeManifest(join(sb, '.contexture/plugins/pkg-shadow'), '1.3.0');
+    const listed = await ctx(sb, ['package', 'list']);
+    expect(listed.code).toBe(0);
+    expect(listed.stdout).toContain('pkg-shadow: installed 1.2.0, declared, the declared source holds 1.3.0 (drift)');
   });
 });

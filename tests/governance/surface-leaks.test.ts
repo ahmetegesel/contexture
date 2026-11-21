@@ -19,7 +19,6 @@ interface Hit {
 }
 
 const ALLOW: readonly Hit[] = [
-  { key: ONBOARDING, line: '    set script permissions: `chmod +x .contexture/ctx .contexture/modules/*/scripts/* .contexture/modules/*/filters/*.awk .contexture/extensions/modules/*/scripts/*`' },
   { key: ONBOARDING, line: `      per confirmed plan: ignore or track ${RECORD_ROOT}/ (and the deprecated ${FALLBACK_ROOT}/ while units remain in it) and .contexture/rhythms/ based on team choice` },
 ];
 
@@ -171,7 +170,7 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(help.empty).toEqual([]);
     expect(help.errors).toEqual([]);
     const keys = help.forms.map((f) => f.join(' '));
-    for (const must of ['help --all', 'unit help list', 'unit help get', 'lane help create', 'rhythm help show', 'store help put', 'store get --help', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'search --help', 'package --help', 'package install --help', 'package uninstall --help', 'package list --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
+    for (const must of ['help --all', 'unit help list', 'unit help get', 'lane help create', 'rhythm help show', 'store help put', 'store get --help', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'search --help', 'package --help', 'package install --help', 'package uninstall --help', 'package list --help', 'package catalog --help', 'package info --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
     expect(keys).not.toContain('lane show recipe --help');
   });
 

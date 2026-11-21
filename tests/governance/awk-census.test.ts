@@ -1,4 +1,4 @@
-import { readdirSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, RECORD_ROOT } from '../support/drawer';
@@ -14,13 +14,15 @@ const escaped = (s: string): string => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&')
 const SKIPPED = new RegExp(`/(node_modules|fixtures)(/|$)|/(\\.contexture/tmp|${escaped(RECORD_ROOT)}|${escaped(FALLBACK_ROOT)})(/|$)`);
 
 function censusFiles(root = ROOT): string[] {
+  const plugins = readdirSync(join(root, 'plugins')).sort();
   const roots = [
     join(root, 'base/.contexture'),
-    ...readdirSync(join(root, 'plugins')).sort().map((p) => join(root, 'plugins', p, '.contexture')),
+    ...plugins.flatMap((p) => [join(root, 'plugins', p, '.contexture'), join(root, 'plugins', p, 'hooks')]),
     join(root, 'tests'),
   ];
   const skip = (p: string) => SKIPPED.test(`/${relative(root, p)}`) || PROSE.test(p);
-  return roots.flatMap((r) => walk(r, skip));
+  const installer = join(root, 'install.sh');
+  return [...roots.flatMap((r) => walk(r, skip)), ...(existsSync(installer) ? [installer] : [])];
 }
 
 const census = (files: readonly string[]) => exec('awk', ['-f', AWKREPL, ...files], { cwd: sandbox('awk-census'), input: '' });

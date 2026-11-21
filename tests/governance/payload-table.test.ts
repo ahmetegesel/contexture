@@ -135,11 +135,11 @@ describe.concurrent('the Updating path', () => {
     expect(deleteListings(planted).filter((c) => !c.includes('--no-renames'))).toHaveLength(1);
   });
 
-  it('the payload compare prints a leftover module folder and the retired templates folder, and drops only the workspace-owned top folders and files', () => {
+  it('the payload compare prints a leftover module folder and the retired templates folder, and drops only the workspace-owned top folders, catalog plugins, and files', () => {
     const leftovers = ['Only in .contexture/modules: session', 'Only in .contexture/modules: lane', 'Only in .contexture: templates'];
     const owned = OWNED_FOLDERS.map((f) => `Only in .contexture: ${f}`);
     const db = basename(FTS5_DB);
-    const files = ['config', 'storage.conf', db, `${db}-wal`, `${db}-shm`, '.DS_Store'].map((f) => `Only in .contexture: ${f}`);
+    const files = ['plugins', 'config', 'storage.conf', db, `${db}-wal`, `${db}-shm`, '.DS_Store'].map((f) => `Only in .contexture: ${f}`);
     expect(compareFilter()).not.toBe('');
     expect(throughFilter(compareFilter(), [...leftovers, ...owned, ...files])).toEqual(leftovers);
   });

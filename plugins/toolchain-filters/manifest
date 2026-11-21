@@ -1,4 +1,11 @@
 # summary: the test runner and compiler filter pack
-# version: 1.0.0
+# version: 1.1.0
 # kind: feature
 # part: filters modules/toolchain-filters/filters
+# category: filters
+# pitch: compact noisy test runner and compiler output (vitest, jest, pytest, cargo, go, tsc, gcc)
+# when: your workspace runs those test runners or compilers through ctx run
+# needs: none beyond base POSIX awk and sh
+# tags: filters compaction testing compiler
+# description:
+# Modular awk stream filters for cargo test, go test, pytest, vitest/jest, and tsc/gcc/clang compiler errors discovered automatically by ctx run.

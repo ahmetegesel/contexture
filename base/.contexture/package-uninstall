@@ -43,7 +43,14 @@ if [ -n "${CTX_ROOT:-}" ]; then
   [ -d "$CTX_ROOT" ] || die 2 "CTX_ROOT names no directory: $CTX_ROOT"
   ws_root=$(CDPATH= cd -- "$CTX_ROOT" 2>/dev/null && pwd) || die 2 "cannot resolve CTX_ROOT"
 elif [ -n "$pkg_root" ]; then
-  ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run .contexture/ctx package uninstall <package> or set CTX_ROOT)"
+  case "$pkg_root" in
+    */.contexture/plugins/*)
+      ws_root=$(CDPATH= cd -- "${pkg_root%/.contexture/plugins/*}" 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run .contexture/ctx package uninstall <package> or set CTX_ROOT)"
+      ;;
+    *)
+      ws_root=$(CDPATH= cd -- "$pkg_root/../.." 2>/dev/null && pwd) || die 2 "cannot locate the workspace root (run .contexture/ctx package uninstall <package> or set CTX_ROOT)"
+      ;;
+  esac
 else
   ws_root=$(pwd) || die 2 "cannot resolve the workspace root"
 fi
@@ -52,6 +59,7 @@ ctx_bin=$ws_root/.contexture/ctx
 ext_root=$ws_root/.contexture/extensions
 state_root=$ext_root/.state
 state_file=$state_root/$pkg_name.files
+stash_uninstall=$state_root/$pkg_name.uninstall
 
 [ -f "$state_file" ] || die 1 "package '$pkg_name' is not installed (no record at .contexture/extensions/.state/$pkg_name.files)"
 [ -w "$state_root" ] && [ -x "$state_root" ] || die 2 "the install record area is not writable: .contexture/extensions/.state (nothing removed)"
@@ -66,6 +74,14 @@ trap 'rm -rf "$scratch"' EXIT
 trap 'rm -rf "$scratch"; exit 130' INT
 trap 'rm -rf "$scratch"; exit 143' TERM
 
+pkg_version=$(awk '$1 == "version" { print $2; exit }' "$state_file" 2>/dev/null)
+
+if [ -f "$stash_uninstall" ]; then
+  ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=${pkg_root:-} CTX_BIN=$ctx_bin CTX_PACKAGE_NAME=$pkg_name CTX_PACKAGE_VERSION=${pkg_version:-} LC_ALL=C export CTX_ROOT CTX_PACKAGE_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_VERSION LC_ALL && if [ -x "$stash_uninstall" ]; then exec "$stash_uninstall" < /dev/null; else exec sh "$stash_uninstall" < /dev/null; fi )
+  _hr=$?
+  [ "$_hr" -eq 0 ] || die 2 "the '$pkg_name' package's uninstall hook failed (rc $_hr); nothing removed"
+fi
+
 awk '$1 == "file" {
   p = $4
   n = split(p, a, "/")
@@ -77,7 +93,7 @@ while IFS= read -r mname; do
   [ -n "$mname" ] || continue
   hook=$ext_root/modules/$mname/uninstall
   [ -f "$hook" ] || continue
-  ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=${pkg_root:-} CTX_BIN=$ctx_bin sh "$hook" )
+  ( cd "$ws_root" && CTX_ROOT=$ws_root CTX_PACKAGE_ROOT=${pkg_root:-} CTX_BIN=$ctx_bin CTX_PACKAGE_NAME=$pkg_name CTX_PACKAGE_VERSION=${pkg_version:-} LC_ALL=C export CTX_ROOT CTX_PACKAGE_ROOT CTX_BIN CTX_PACKAGE_NAME CTX_PACKAGE_VERSION LC_ALL && exec sh "$hook" < /dev/null )
   _hr=$?
   [ "$_hr" -eq 0 ] || die 2 "the '$mname' module's uninstall hook failed (rc $_hr); nothing removed"
 done < "$scratch/hooks"
@@ -149,6 +165,7 @@ if [ -s "$scratch/dirs" ]; then
 fi
 
 rm -f "$state_file" || die 2 "cannot remove the install record"
+rm -f "$stash_uninstall" 2>/dev/null || true
 rmdir "$state_root" 2>/dev/null || true
 
 # the law layer: the removed package's version and law fragments leave the generated

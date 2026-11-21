@@ -1,0 +1,17 @@
+#!/bin/sh
+# readiness probe for git (read-only; POSIX sh)
+set -u
+
+if ! command -v git >/dev/null 2>&1; then
+  printf 'git not found on PATH\n'
+  exit 1
+fi
+
+ws=${CTX_ROOT:-.}
+if git -C "$ws" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  printf 'git repository detected\n'
+  exit 0
+fi
+
+printf 'git installed, workspace is not a git repository yet\n'
+exit 3

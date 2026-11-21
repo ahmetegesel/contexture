@@ -29,6 +29,7 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['.contexture/modules/ideas/**', ['engine']],
   ['plugins/*/manifest', ['packages', 'governance']],
   ['plugins/*/.contexture/**', ['governance']],
+  ['plugins/*/hooks/**', ['packages', 'governance']],
   ['plugins/*/README.md', ['governance']],
   ['plugins/storage-fts5/**', ['storage-fts5', 'drivers', 'sqlite-smoke']],
   ['plugins/docs-discipline/**', ['docs-discipline', 'packages', 'governance']],
@@ -38,6 +39,7 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['plugins/starter-rhythms/**', ['packages']],
   ['docs/**', ['governance']],
   ['README.md', ['governance']],
+  ['install.sh', ['base', 'governance']],
   ['AGENTS.workspace.md', ['governance']],
 ];
 

@@ -23,7 +23,7 @@ const lines = (r: Run) => ({ code: r.code, stdout: r.stdout, stderr: r.stderr })
 const GO = /on the human's explicit go at the act$/;
 
 describe.concurrent('ctx package: the group and its help', () => {
-  it('[the-engine-r22] ctx package bare, help, --help, and -h each list the three sub-verbs, install and uninstall with the go clause, list read only, rc 0', async () => {
+  it('[the-engine-r22] ctx package bare, help, --help, and -h each list the five sub-verbs, install and uninstall with the go clause, list, catalog, and info read only, rc 0', async () => {
     const sb = sandbox('group');
     for (const args of [[], ['help'], ['--help'], ['-h']]) {
       const r = await verb(sb, args);
@@ -32,17 +32,19 @@ describe.concurrent('ctx package: the group and its help', () => {
       expect(r.stdout).toMatch(/^ {2}ctx package install \[<package>\] +\S.*on the human's explicit go at the act$/m);
       expect(r.stdout).toMatch(/^ {2}ctx package uninstall <package> +\S.*on the human's explicit go at the act$/m);
       expect(r.stdout).toMatch(/^ {2}ctx package list +\S.*read only$/m);
+      expect(r.stdout).toMatch(/^ {2}ctx package catalog .*read only$/m);
+      expect(r.stdout).toMatch(/^ {2}ctx package info <package> .*read only$/m);
     }
   });
 
-  it('[the-engine-r22] an unknown sub-verb refuses rc 1 with one line naming the three', async () => {
+  it('[the-engine-r22] an unknown sub-verb refuses rc 1 with one line naming the five', async () => {
     const r = await verb(sandbox('unknown'), ['nosuch']);
     expect(r.code).toBe(1);
     expect(r.stdout).toBe('');
-    expect(r.stderr).toBe('ctx: package: unknown sub-verb: nosuch (ctx package install, ctx package uninstall, or ctx package list)\n');
+    expect(r.stderr).toBe('ctx: package: unknown sub-verb: nosuch (ctx package install, ctx package uninstall, ctx package list, ctx package catalog, or ctx package info)\n');
   });
 
-  it('[the-engine-r22] ctx help prints one usage line per sub-verb, install and uninstall carrying the go clause, list read only', async () => {
+  it('[the-engine-r22] ctx help prints one usage line per sub-verb, install and uninstall carrying the go clause, list, catalog, and info read only', async () => {
     const r = await exec('./.contexture/ctx', ['help'], { cwd: sandbox('tophelp') });
     expect(r.code).toBe(0);
     for (const prefix of ['  ctx package install [<package>] ', '  ctx package uninstall <package> ']) {
@@ -50,9 +52,11 @@ describe.concurrent('ctx package: the group and its help', () => {
       expect(hits).toHaveLength(1);
       expect(hits[0]).toMatch(GO);
     }
-    const list = r.stdout.split('\n').filter((l) => l.startsWith('  ctx package list '));
-    expect(list).toHaveLength(1);
-    expect(list[0]).toMatch(/read only$/);
+    for (const prefix of ['  ctx package list ', '  ctx package catalog ', '  ctx package info ']) {
+      const hits = r.stdout.split('\n').filter((l) => l.startsWith(prefix));
+      expect(hits).toHaveLength(1);
+      expect(hits[0]).toMatch(/read only$/);
+    }
   });
 
   it.each([
@@ -68,7 +72,7 @@ describe.concurrent('ctx package: the group and its help', () => {
     expect(r.stderr).toBe('');
     expect(r.stdout.split('\n')[0]).toBe(sub === 'install' ? 'usage: ctx package install [<package>] [--as=<module>=<alias>]...' : `usage: ctx package ${sub} <package>`);
     expect(r.stdout).toContain('a value holding a slash is a package root path');
-    expect(r.stdout).toMatch(sub === 'install' ? /a catalog name .* names plugins\/<name> at the workspace root/ : /the installed package's name/);
+    expect(r.stdout).toMatch(sub === 'install' ? /a catalog name .*\.contexture\/plugins\/<name>.*plugins\/<name>/ : /the installed package's name/);
     expect(r.stdout).toMatch(/^an (un)?install runs only on the human's explicit go at the act; this verb checks no go/m);
     expect(r.stdout).toMatch(/^exit codes: 0 /m);
   });
@@ -99,7 +103,7 @@ describe.concurrent('ctx package: the refusals before the exec', () => {
     ['uninstall', [], 1, 'ctx: package uninstall: usage: ctx package uninstall <package>'],
     ['install', ['.hidden'], 1, "ctx: package install: malformed package name '.hidden' (letters, digits, dot, underscore, hyphen; not starting with a dot)"],
     ['uninstall', ['bad name'], 1, "ctx: package uninstall: malformed package name 'bad name' (letters, digits, dot, underscore, hyphen; not starting with a dot)"],
-    ['install', ['nosuch'], 1, 'ctx: package install: no package at plugins/nosuch (name a package root path, a value holding a slash, instead)'],
+    ['install', ['nosuch'], 1, 'ctx: package install: no package at .contexture/plugins/nosuch or plugins/nosuch (name a package root path, a value holding a slash, instead)'],
     ['install', ['catalog/absent'], 1, 'ctx: package install: no package root at catalog/absent'],
   ] as const)('[the-engine-r22] ctx package %s %j refuses rc %i with one line, writing nothing', async (sub, args, rc, line) => {
     const sb = sandbox('refuse');
@@ -116,7 +120,7 @@ describe.concurrent('ctx package: the refusals before the exec', () => {
     mkdirSync(join(sb, '.contexture/modules/orphan/scripts'), { recursive: true });
     const refusal = await verb(sb, ['install', 'nosuch']);
     expect(refusal.code).toBe(1);
-    expect(refusal.stderr).toBe('ctx: package install: no package at plugins/nosuch (name a package root path, a value holding a slash, instead)\n');
+    expect(refusal.stderr).toBe('ctx: package install: no package at .contexture/plugins/nosuch or plugins/nosuch (name a package root path, a value holding a slash, instead)\n');
     const help = await verb(sb, ['--help']);
     expect(help.code).toBe(0);
     expect(help.stderr).toBe('');
@@ -203,5 +207,28 @@ describe.concurrent('ctx package: the exec into the private installers', () => {
     expect(nullCheck.code).toBe(0);
     expect(existsSync(recordPath(other, 'pkgout2'))).toBe(true);
     expect(existsSync(recordPath(sb, 'pkgout2'))).toBe(false);
+  });
+
+  it('[the-engine-r22] .contexture/plugins/<name> resolves ahead of ./plugins/<name> on install and uninstall, and direct script fallback handles .contexture/plugins/<name> without CTX_ROOT', async () => {
+    const sb = sandbox('ctxplugins-precedence');
+    fixture(sb, 'pkgprec', join(sb, 'plugins'));
+    const shadow = join(sb, '.contexture/plugins/pkgprec');
+    mkdirSync(join(shadow, '.contexture/extensions'), { recursive: true });
+    addModule(shadow, 'mprec-shadow');
+    writeManifest(shadow, '2.0.0');
+    const r = await verb(sb, ['install', 'pkgprec']);
+    expect(r.code).toBe(0);
+    expect(recordText(sb, 'pkgprec')).toContain('version 2.0.0');
+    expect(existsSync(extPath(sb, 'modules/mprec-shadow/module'))).toBe(true);
+    expect(existsSync(extPath(sb, 'modules/mprec/module'))).toBe(false);
+    expect((await verb(sb, ['uninstall', 'pkgprec'])).code).toBe(0);
+    expect(existsSync(recordPath(sb, 'pkgprec'))).toBe(false);
+
+    const directInst = await direct(sb, 'install', shadow, {});
+    expect(directInst.code).toBe(0);
+    expect(existsSync(recordPath(sb, 'pkgprec'))).toBe(true);
+    const directUninst = await direct(sb, 'uninstall', shadow, {});
+    expect(directUninst.code).toBe(0);
+    expect(existsSync(recordPath(sb, 'pkgprec'))).toBe(false);
   });
 });

@@ -1,4 +1,11 @@
 # summary: the AST symbol graph linked with centralized documentation
-# version: 1.3.0
+# version: 1.4.0
 # kind: feature
 # part: module modules/ast-doc-graph
+# category: analysis
+# pitch: link TypeScript AST call graphs with docs rules and pitfalls in a queryable SQLite graph
+# when: your workspace holds TypeScript sources or a docs corpus you want to navigate by symbol and caller
+# needs: bash, sqlite3 with FTS5, Node 22.6+ or tsx, and TypeScript 5 or 6 compiler API (for TypeScript indexing)
+# tags: typescript ast graph sqlite code-intel
+# description:
+# Compiles TypeScript AST symbols and call graphs alongside docs-discipline rules and pitfalls into a local SQLite FTS5 graph with zero-daemon JIT micro-sync and sub-millisecond symbol, caller, callee, and governance queries.

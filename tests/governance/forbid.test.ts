@@ -8,6 +8,7 @@ import { text } from './walk';
 const FORBID = /session\.sh|compact\.sh|session-[a-z]+\.awk|\.contexture\/scripts\/|laws\/compose(?![\w.-])|\.contexture\/package-(un)?install\b|plugins\/[^\s\/`'"]+\/(un)?install(?![\w.-])/;
 
 const SURFACES = [
+  'install.sh',
   'base/AGENTS.md',
   'base/.contexture/ONBOARDING.md',
   'AGENTS.workspace.md',
