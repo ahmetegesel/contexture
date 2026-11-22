@@ -24,7 +24,7 @@ The standard module folder is a directory under `.contexture/modules/` (the work
 
 - The directory name is the module name, and its namespace: lowercase letters, digits, dot, underscore, and dash, starting with a letter or digit (a name outside the rule warns at discovery and is skipped, the installer refuses it, and the compose leaves it out).
 - The manifest is the engine's declaration: the summary lists the module in `ctx help`, and a malformed manifest (no summary, a `# requires:` line, a duplicate field, an unknown field, or a description block that does not run to the end of the file) warns and is skipped. A `scripts/` directory without a module file warns and is skipped.
-- A directory with neither a module file nor `scripts/` — a filter-only or hook-only module — is legal: silent and unlisted.
+- A directory with neither a module file nor `scripts/` (a filter-only or hook-only module) is legal: silent and unlisted.
 - The `laws`, `data`, `config`, `install`, and `uninstall` files are read by the compose, the storage core, the configuration library (`base/.contexture/config-lib`), and the package installer, never by the engine dispatch itself; a module that uses none of them is complete with the manifest and its scripts.
 - Declarations are `# key: value` comment lines in the file they govern, placed in the file's header.
 - `scripts/`, `hooks/`, `install`, and `uninstall` are executable (`chmod +x`). The engine execs a verb file directly; a hook file without the bit still runs through `sh`, but the executable bit is the expectation.
@@ -59,7 +59,7 @@ The module file is the standard folder's manifest. Its fields and their readers:
 
 - The block order is summary, version, description; the description stands last because its block runs to the end of the file.
 - The module name is the directory name; the summary is the only field the engine reads.
-- A plain `# comment` never opens with `# <token>:` — that shape is a field, and an unknown field refuses.
+- A plain `# comment` never opens with `# <token>:`: that shape is a field, and an unknown field refuses.
 - The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose calls the field reads and the package installer validates every module part, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid, and a manifest may carry a description with no version line: the ast-doc-graph module carries a summary and a description, and its package manifest carries the install version.
 
 ### The laws file
@@ -119,8 +119,8 @@ database: optional path
   SQLite database path for the driver.
 ```
 
-- **Namespace derivation**: a `config` file never declares `namespace:` (an explicit `namespace:` line refuses rc 2 as a malformed schema). A module's namespace is its installed directory name, so installing a module under `--as=<module>=<alias>` automatically scopes both its schema and its effective keys to `<alias>.*` without colliding with another install of the same module. Core builtins (`storage` and `search`) reserve their namespaces (`storage` schema merges `base/.contexture/storage/config` with installed driver `config` files).
-- **Schema grammar**: each key header stands at column 0 as `<local_key>: <required|optional> <type> [constraints] [default <value>]`, followed by one or more 2-space indented description lines (an optional leading `description: ` prefix is stripped). Local keys match `^[a-z][a-z0-9_-]*$` (never `package.*` or dotted keys), and duplicate keys refuse rc 2.
+- **Namespace derivation**: a `config` file never declares `namespace:` (an explicit `namespace:` line refuses rc 1 as a malformed schema; an unreadable schema file refuses rc 2). A module's namespace is its installed directory name, so installing a module under `--as=<module>=<alias>` automatically scopes both its schema and its effective keys to `<alias>.*` without colliding with another install of the same module. Core builtins (`storage` and `search`) reserve their namespaces (`storage` schema merges `base/.contexture/storage/config` with installed driver `config` files).
+- **Schema grammar**: each key header stands at column 0 as `<local_key>: <required|optional> <type> [constraints] [default <value>]`, followed by one or more 2-space indented description lines (an optional leading `description: ` prefix is stripped). Local keys match `^[a-z][a-z0-9_-]*$` (never `package.*` or dotted keys), and duplicate keys refuse rc 1 (an unreadable schema file refuses rc 2).
 - **Types and constraints**: `string` (optional `one-of a|b|...`), `integer` (optional `min <N>` and/or `max <N>`), `boolean` (`true` or `false`), and `path` (non-empty path string). A `required` key cannot carry `default`; a `default` value must satisfy its type, bounds, and `one-of` set.
 - **Read-only inspection and owner mutation**: `ctx config` (`load`, `get`, `schema`) is read-only and assembles effective values across core and discovered modules (`load` omits unset keys without defaults and excludes `package.*`). Modules expose mutations through an owner verb (`ctx <module> config`, e.g., `ctx store config` and `ctx search config`) backed by `config_owner_verb` in `base/.contexture/config-lib`, which validates against the effective schema and writes `.contexture/config` atomically under `.contexture/tmp/locks/config.lock`.
 
@@ -173,7 +173,7 @@ A file in `scripts/` is a verb when its header carries a `# summary:` line; the 
 | `# usage: <line>` | one usage line in `ctx <module> help <verb>`; repeatable |
 | `# help: <line>` | one detail line in `ctx <module> help <verb>`; repeatable |
 
-A file without a `# summary:` is private: discovery ignores it and it never appears in help. Private files are how a module hides its implementation — see Wrappers. `help` is engine-owned: a `scripts/help` file carrying a summary is ignored with a warning.
+A file without a `# summary:` is private: discovery ignores it and it never appears in help. Private files are how a module hides its implementation (see Wrappers). `help` is engine-owned: a `scripts/help` file carrying a summary is ignored with a warning.
 
 ### Hook files
 
@@ -221,7 +221,7 @@ ctx <module> <verb> [args...]
 
 ## Hooks
 
-A hook is a file under `<root>/<name>/hooks/` declaring `# ctx-hook: <point>`, where `<root>` is `.contexture/modules/` or `.contexture/extensions/modules/`. The engine runs the declared hooks implicitly when that point fires — there is no `ctx hooks` verb to call, and `hooks` is a reserved name. The workspace modules' hooks run first (name order), then the extension modules' (name order).
+A hook is a file under `<root>/<name>/hooks/` declaring `# ctx-hook: <point>`, where `<root>` is `.contexture/modules/` or `.contexture/extensions/modules/`. The engine runs the declared hooks implicitly when that point fires (there is no `ctx hooks` verb to call, and `hooks` is a reserved name). The workspace modules' hooks run first (name order), then the extension modules' (name order).
 
 Seven points ship:
 
@@ -297,7 +297,7 @@ A filter declares itself in its header:
 
 A match on an already-claimed command line or signature warns as a shadow; the first match wins. `ctx run --filter=<name>` resolves the run module first, then the other modules in name order.
 
-A filter-only module — no module file, no `scripts/` — is legal and unlisted; the run module is exactly that shape.
+A filter-only module (no module file, no `scripts/`) is legal and unlisted; the run module is exactly that shape.
 
 To test a filter without touching the live drawer, stage a sandbox workspace whose `.contexture/ctx` and `.contexture/modules/<name>/filters/` mirror the real layout: the engine resolves its root from its own path, so the sandbox is self-contained. The upstream precedent is the vitest `filters` project (`tests/filters/`) and the plugin's `toolchain-filters` project, which stage `base/` as shipped into a sandbox and pipe each pair through its `ctx run --filter`.
 
@@ -424,7 +424,7 @@ The builtin record engine, `.contexture/modules/unit/`. Its `module` carries one
 
 ### run: a filter-only module
 
-The builtin run module, `.contexture/modules/run/`. It has no module file and no `scripts/` — `filters/` only (`diff.awk`, `list.awk`, `log.awk`) — so it is silent and unlisted in `ctx help`, yet its filters scan first. This is the shape to copy for an ecosystem filter pack.
+The builtin run module, `.contexture/modules/run/`. It has no module file and no `scripts/` (`filters/` only: `diff.awk`, `list.awk`, `log.awk`), so it is silent and unlisted in `ctx help`, yet its filters scan first. This is the shape to copy for an ecosystem filter pack.
 
 ## Payload
 

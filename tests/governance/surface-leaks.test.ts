@@ -2,7 +2,7 @@ import { appendFileSync, cpSync, existsSync, mkdirSync, readFileSync, renameSync
 import { basename, dirname, join, relative } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { ctx } from '../support/ctx';
-import { FALLBACK_ROOT, FTS5_DB, leaks, lockPath, namespaceLock, RECORD_ROOT, unitLock } from '../support/drawer';
+import { configLock, FALLBACK_ROOT, FTS5_DB, leaks, lockPath, namespaceLock, RECORD_ROOT, unitLock } from '../support/drawer';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { stage } from '../support/stage';
@@ -81,7 +81,25 @@ async function helpForms(sb: string): Promise<{ checked: string[][]; own: string
     }
   }
   checked.push(...builtins(top));
-  for (const [b] of builtins(top).filter((f) => f.length === 2)) if (/\[--diagnose\]/.test((await ctx(sb, b!, '--help')).stdout)) checked.push([b!, '--diagnose']);
+  for (const [b] of builtins(top).filter((f) => f.length === 2)) {
+    const bHelp = (await ctx(sb, b!, '--help')).stdout;
+    if (/\[--diagnose\]/.test(bHelp)) checked.push([b!, '--diagnose']);
+    const usage = (bHelp.split(/^usage:/m)[1] ?? '').split(/\n\n/)[0] ?? '';
+    for (const l of usage.split('\n')) {
+      const subCmd = new RegExp(`^ *ctx ${b} ([a-z][a-z-]*) <subcommand>`).exec(l);
+      if (subCmd?.[1]) {
+        checked.push([b!, subCmd[1], '--help']);
+        const subHelp = (await ctx(sb, b!, subCmd[1], '--help')).stdout;
+        for (const [s] of table(subHelp, 'subcommands')) checked.push([b!, subCmd[1], s, '--help']);
+      }
+      if (new RegExp(`^ *ctx ${b} help \\[<sub-verb>\\]`).test(l)) {
+        for (const ul of usage.split('\n')) {
+          const sv = new RegExp(`^ *ctx ${b} ([a-z][a-z-]*)(?: |$)`).exec(ul);
+          if (sv?.[1]) checked.push([b!, 'help', sv[1]]);
+        }
+      }
+    }
+  }
   return { checked, own };
 }
 
@@ -147,10 +165,14 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
       '.contexture\\/extensions/modules/docs/README',
       '.contexture/config',
       "'.contexture/'config",
+      '.contexture/storage.conf',
+      "'.contexture/'storage.conf",
+      configLock(),
+      "'config.'lock",
       `"${RECORD_ROOT}"`,
     ];
     expect(planted.filter((l) => !leaks(l))).toEqual([]);
-    expect(['ctx unit load u', 'ctx lane show u l report', 'lane#l/report#VERDICT', '.contexture/ctx compose', '.contexture/ctx config load', 'ctx config schema', 'ctx store config get driver', '.contexture/tmp/lane/', 'ctx docs help check', 'the lanes/x/ folder', 'units/x', 'sessions/x', 'the session', '.contexture/modulesx'].filter(leaks)).toEqual([]);
+    expect(['ctx unit load u', 'ctx lane show u l report', 'lane#l/report#VERDICT', '.contexture/ctx compose', '.contexture/ctx config load', 'ctx config schema', 'ctx config help load', 'ctx search config --help', 'ctx search config load --help', 'ctx store config get driver', '.contexture/tmp/lane/', 'ctx docs help check', 'the lanes/x/ folder', 'units/x', 'sessions/x', 'the session', '.contexture/modulesx'].filter(leaks)).toEqual([]);
   });
 
   it('the file walk reads the loader, ONBOARDING, the core law source, every laws and module file, and every shipped rhythm, by directory, above its floor', () => {
@@ -173,7 +195,7 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(help.empty).toEqual([]);
     expect(help.errors).toEqual([]);
     const keys = help.forms.map((f) => f.join(' '));
-    for (const must of ['help --all', 'unit help list', 'unit help get', 'lane help create', 'rhythm help show', 'store help put', 'store get --help', 'store help config', 'store config --help', 'store config load --help', 'store config get --help', 'store config set --help', 'store config unset --help', 'store config schema --help', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'config --help', 'config load --help', 'config get --help', 'config schema --help', 'search --help', 'package --help', 'package install --help', 'package uninstall --help', 'package list --help', 'package catalog --help', 'package info --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
+    for (const must of ['help --all', 'unit help list', 'unit help get', 'lane help create', 'rhythm help show', 'store help put', 'store get --help', 'store help config', 'store config --help', 'store config load --help', 'store config get --help', 'store config set --help', 'store config unset --help', 'store config schema --help', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'config --help', 'config load --help', 'config get --help', 'config schema --help', 'config help load', 'config help get', 'config help schema', 'config help help', 'search --help', 'search config --help', 'search config load --help', 'search config get --help', 'search config set --help', 'search config unset --help', 'search config schema --help', 'search config help --help', 'package --help', 'package install --help', 'package uninstall --help', 'package list --help', 'package catalog --help', 'package info --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
     expect(keys).not.toContain('lane show recipe --help');
   });
 

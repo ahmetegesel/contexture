@@ -61,7 +61,7 @@ const NAMESPACE_LOCK = namespaceLock('\0').split('\0').map(escRe).join('[^ ]*');
 export const RECORD_LEAK = new RegExp(
   [RECORD_ROOT, FALLBACK_ROOT, FTS5_DB.split('/').pop() ?? '', LOCK_SEGMENTS.slice(1, 3).join('/'), LOCK_SEGMENTS.slice(2, 4).join('/')]
     .map(escRe)
-    .concat([NAMESPACE_LOCK, 'lanes\\/[^ ]*\\/(recipe|journal|report)', '(state|backlog|journal|knowledge|recipe|report)\\.md', 'sessions? (folder|drawer|directory)', '\\.contexture\\/(extensions\\/)?modules\\b', '\\.contexture\\/config\\b'])
+    .concat([NAMESPACE_LOCK, 'lanes\\/[^ ]*\\/(recipe|journal|report)', '(state|backlog|journal|knowledge|recipe|report)\\.md', 'sessions? (folder|drawer|directory)', '\\.contexture\\/(extensions\\/)?modules\\b', '\\.contexture\\/config\\b', '\\.contexture\\/storage\\.conf\\b', 'config\\.lock'])
     .join('|'),
 );
 
