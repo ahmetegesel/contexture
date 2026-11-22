@@ -245,6 +245,33 @@ describe('the resolver', { concurrent: true }, () => {
       writeFileSync(join(sb, '.contexture/storage.conf'), 'storage.driver.foo=five\nsession.storage.driver = six # legacy conf\n');
       expect(await resolved(sb, [])).toBe(at('six'));
     });
+
+    it('[the-engine-r25] resolves configured driver from a nested subdirectory and via inline fallback when config-lib is absent', async () => {
+      const sb = fresh(posix);
+      const target = driverPath(sb, 'posix');
+      wrap(join(sb, '.contexture/drivers/nested/driver'), target);
+      wrap(join(sb, '.contexture/drivers/fallback/driver'), target);
+      writeFileSync(join(sb, '.contexture/config'), 'storage.driver = "nested" # from subdir\n');
+
+      const deep = join(sb, 'sub/deep/folder');
+      mkdirSync(deep, { recursive: true });
+      const subRes = await exec('sh', ['-c', 'cd sub/deep/folder && exec "$0" resolve', resolver(sb)], { cwd: sb });
+      expect([subRes.code, subRes.stderr]).toEqual([0, '']);
+      expect(subRes.stdout.trim()).toBe(join(sb, '.contexture/drivers/nested/driver'));
+
+      // Remove config-lib so read_conf_driver executes its inline fallback
+      rmSync(join(sb, '.contexture/config-lib'));
+      writeFileSync(join(sb, '.contexture/config'), "storage.driver = 'fallback' # inline fallback\n");
+      const fbRes = await rsv(sb, ['resolve']);
+      expect([fbRes.code, fbRes.stderr]).toEqual([0, '']);
+      expect(fbRes.stdout.trim()).toBe(join(sb, '.contexture/drivers/fallback/driver'));
+
+      writeFileSync(join(sb, '.contexture/config'), '');
+      writeFileSync(join(sb, '.contexture/storage.conf'), 'session.storage.driver: "nested" # legacy fallback\n');
+      const confRes = await rsv(sb, ['resolve']);
+      expect([confRes.code, confRes.stderr]).toEqual([0, '']);
+      expect(confRes.stdout.trim()).toBe(join(sb, '.contexture/drivers/nested/driver'));
+    });
   });
 });
 

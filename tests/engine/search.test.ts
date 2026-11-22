@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec, launch } from '../support/exec';
@@ -172,6 +172,9 @@ describe.concurrent('the ctx search builtin', () => {
     writeFileSync(join(sb, '.contexture/config'), 'search.timeout: ten # a=5\n');
     const colon = await run(sb, ['search', 'needle']);
     expect([colon.code, colon.stdout, colon.stderr]).toEqual([1, '', "ctx search: search.timeout takes a positive whole number of seconds: 'ten'\n"]);
+    writeFileSync(join(sb, '.contexture/config'), 'search.timeout: 05\n');
+    const leadingZero = await run(sb, ['search', 'needle']);
+    expect([leadingZero.code, leadingZero.stdout, leadingZero.stderr]).toEqual([1, '', "ctx search: search.timeout takes a positive whole number of seconds: '05'\n"]);
   });
 
   it('[the-engine-r-ha7uc] the query word help reaches every module as its query, and the --json answer encodes every control character of the query', async () => {
@@ -235,7 +238,7 @@ describe.concurrent('the ctx search builtin', () => {
     expect([schema.code, schema.stderr]).toEqual([0, '']);
     expect(JSON.parse(schema.stdout).schemas[0].keys[0]).toMatchObject({ key: 'timeout', type: 'integer', min: 1, default: '10' });
 
-    for (const bad of ['0', '-1', 'ten']) {
+    for (const bad of ['0', '-1', '05', 'ten']) {
       const r = await run(sb, ['search', 'config', 'set', 'timeout', bad]);
       expect(r.code).toBe(1);
       expect(r.stderr).toContain('ERR_SCHEMA_VIOLATION');
@@ -260,6 +263,46 @@ describe.concurrent('the ctx search builtin', () => {
     const unsetRes = await run(sb, ['search', 'config', 'unset', 'timeout']);
     expect([unsetRes.code, unsetRes.stdout, unsetRes.stderr]).toEqual([0, '', '']);
     expect((await run(sb, ['search', 'config', 'get', 'timeout'])).stdout).toBe('10\n');
+  });
+
+  it('[the-engine-r-ha7uc] searches literal config via flag-first form, documents it in --help, covers search config sub-helps, and exits rc 2 cleanly without config-lib', async () => {
+    const sb = fresh(base);
+    const help = await run(sb, ['search', '--help']);
+    expect([help.code, help.stderr]).toEqual([0, '']);
+    expect(help.stdout).toContain('ctx search --mode=exact config');
+
+    for (const args of [
+      ['search', 'config', 'help'],
+      ['search', 'config', 'help', 'set'],
+      ['search', 'config', 'load', '--help'],
+      ['search', 'config', 'get', '--help'],
+      ['search', 'config', 'set', '--help'],
+      ['search', 'config', 'unset', '--help'],
+      ['search', 'config', 'schema', '--help'],
+    ]) {
+      const h = await run(sb, args);
+      expect([h.code, h.stderr], args.join(' ')).toEqual([0, '']);
+      expect(h.stdout.trim().length).toBeGreaterThan(0);
+    }
+
+    const literalConfig = await run(sb, ['search', '--mode=exact', 'config', '--json']);
+    expect([literalConfig.code, literalConfig.stderr]).toEqual([0, '']);
+    expect(JSON.parse(literalConfig.stdout).query).toBe('config');
+
+    // Bare 'config' as first arg dispatches to config_owner_verb, refusing search flags
+    const bareConfigFlag = await run(sb, ['search', 'config', '--module=unit']);
+    expect([bareConfigFlag.code, bareConfigFlag.stdout]).toEqual([1, '']);
+    expect(bareConfigFlag.stderr).toContain("unknown subcommand '--module=unit'");
+
+    // Missing config-lib exits rc 2 cleanly for both search config and search
+    rmSync(join(sb, '.contexture/config-lib'));
+    const noLibCfg = await run(sb, ['search', 'config', 'get', 'timeout']);
+    expect([noLibCfg.code, noLibCfg.stdout]).toEqual([2, '']);
+    expect(noLibCfg.stderr).toContain('missing internal config library');
+
+    const noLibSearch = await run(sb, ['search', 'needle']);
+    expect([noLibSearch.code, noLibSearch.stdout]).toEqual([2, '']);
+    expect(noLibSearch.stderr).toContain('missing internal config library');
   });
 });
 

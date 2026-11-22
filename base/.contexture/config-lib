@@ -290,6 +290,10 @@ cfg_get_file() {
     printf 'config: error: the workspace configuration contains a NUL byte (ERR_STORAGE_READ)\n' >&2
     return 2
   fi
+  if ! cfg_utf8_file_ok "$cgf_file"; then
+    printf 'config: error: the workspace configuration is not valid UTF-8 (ERR_STORAGE_READ)\n' >&2
+    return 2
+  fi
   CFG_TARGET=$cgf_key LC_ALL=C awk "$CFG_PARSE_VAL_AWK"'
     BEGIN { target = ENVIRON["CFG_TARGET"]; found = 0; bad = 0 }
     {
@@ -342,6 +346,10 @@ cfg_list_file() {
   fi
   if cfg_has_nul_file "$clf_file"; then
     printf 'config: error: the workspace configuration contains a NUL byte (ERR_STORAGE_READ)\n' >&2
+    return 2
+  fi
+  if ! cfg_utf8_file_ok "$clf_file"; then
+    printf 'config: error: the workspace configuration is not valid UTF-8 (ERR_STORAGE_READ)\n' >&2
     return 2
   fi
   LC_ALL=C awk "$CFG_PARSE_VAL_AWK"'
@@ -412,6 +420,7 @@ cfg_write_locked() {
   fi
 
   (
+    cwl_pid=$$
     cwl_lock_held=""
     cwl_tmp=""
     cwl_cleanup() {
@@ -434,10 +443,14 @@ cfg_write_locked() {
     while [ "$cwl_n" -lt 600 ]; do
       if mkdir "$cwl_lock" 2>/dev/null; then
         cwl_lock_held=$cwl_lock
-        { printf '%s\n' "$$" > "$cwl_lock/pid"; } 2>/dev/null || {
+        { sh -c 'printf "%s\n" "$PPID"' > "$cwl_lock/pid" 2>/dev/null || printf '%s\n' "$$" > "$cwl_lock/pid"; } 2>/dev/null || {
           printf 'config.lock: error: cannot write the configuration lock holder pid (ERR_STORAGE_WRITE)\n' >&2
           exit 2
         }
+        cwl_pid=$(cat "$cwl_lock/pid" 2>/dev/null)
+        case "$cwl_pid" in
+          ""|*[!0-9]*) cwl_pid=$$ ;;
+        esac
         break
       fi
       cwl_p=$(cat "$cwl_lock/pid" 2>/dev/null)
@@ -445,17 +458,19 @@ cfg_write_locked() {
         ""|*[!0-9]*)
           cwl_m=$((cwl_m + 1))
           if [ "$cwl_m" -ge 10 ]; then
-            rm -rf "$cwl_lock" 2>/dev/null
             cwl_m=0
-            continue
+            if rm -rf "$cwl_lock" 2>/dev/null; then
+              continue
+            fi
           fi
           ;;
         *)
           if kill -0 "$cwl_p" 2>/dev/null; then
             cwl_m=0
           else
-            rm -rf "$cwl_lock" 2>/dev/null
-            continue
+            if rm -rf "$cwl_lock" 2>/dev/null; then
+              continue
+            fi
           fi
           ;;
       esac
@@ -480,6 +495,10 @@ cfg_write_locked() {
         printf 'config: error: the workspace configuration contains a NUL byte (ERR_STORAGE_READ)\n' >&2
         exit 2
       fi
+      if ! cfg_utf8_file_ok "$cwl_conf"; then
+        printf 'config: error: the workspace configuration is not valid UTF-8 (ERR_STORAGE_READ)\n' >&2
+        exit 2
+      fi
       cwl_no_nl=0
       if [ -s "$cwl_conf" ] && [ -n "$(tail -c 1 "$cwl_conf" 2>/dev/null)" ]; then
         cwl_no_nl=1
@@ -488,7 +507,7 @@ cfg_write_locked() {
       cwl_no_nl=0
     fi
 
-    cwl_tmp="$cwl_ctx/config.tmp.$$"
+    cwl_tmp="$cwl_ctx/config.tmp.$cwl_pid"
     : > "$cwl_tmp" 2>/dev/null || {
       cwl_tmp=""
       printf 'config: error: cannot stage the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
@@ -669,7 +688,7 @@ function val_check(typ, has_oneof, oneof_raw, has_min, min_v, has_max, max_v, va
     return 1
   }
   if (typ == "integer") {
-    if (val !~ /^-?[0-9]+$/) {
+    if (val !~ /^-?(0|[1-9][0-9]*)$/) {
       CFG_VAL_ERR = "takes an integer, not '"'"'" val "'"'"'"
       return 0
     }
@@ -767,11 +786,11 @@ cfg_schema_parse_stream() {
           def_raw = ltrim(substr(rest, 8))
           if (def_raw == "") s_fail("key '\''" key "'\'': default clause requires a value")
           fq = substr(def_raw, 1, 1)
-          if (fq == "\"" || fq == "'"'"'") {
-            def_v = cfg_parse_val(def_raw)
-            if (!CFG_PV_OK) s_fail("key '\''" key "'\'': malformed quoted default value")
-          } else {
-            def_v = def_raw
+          def_v = cfg_parse_val(def_raw)
+          if (!CFG_PV_OK) s_fail("key '\''" key "'\'': malformed quoted default value")
+          if (def_v == "") s_fail("key '\''" key "'\'': default clause requires a value")
+          if (fq != "\"" && fq != "'"'"'" && def_v ~ /[ \t]/) {
+            s_fail("key '\''" key "'\'': default must be the final clause")
           }
           has_def = 1
           rest = ""
@@ -779,23 +798,24 @@ cfg_schema_parse_stream() {
         } else if (typ == "string" && cl == "one-of") {
           if (has_oneof) s_fail("key '\''" key "'\'': duplicate one-of clause")
           after = ltrim(substr(rest, 7))
-          dp = index(" " after " ", " default ")
-          if (dp) {
-            oneof_raw = rtrim(substr(after, 1, dp - 1))
-            rest = ltrim(substr(after, dp))
+          if (match(after, /[ \t]+default([ \t]|$)/)) {
+            oneof_raw = rtrim(substr(after, 1, RSTART - 1))
+            rest = ltrim(substr(after, RSTART))
           } else {
             oneof_raw = after
             rest = ""
           }
           if (oneof_raw == "") s_fail("key '\''" key "'\'': one-of clause requires values")
+          if (oneof_raw ~ /[\001-\037\177]/) s_fail("key '\''" key "'\'': one-of set holds a control character")
           nv = split(oneof_raw, OV, /\|/)
           for (k = 1; k <= nv; k++) {
             if (OV[k] == "") s_fail("key '\''" key "'\'': one-of set '\''" oneof_raw "'\'' holds an empty value")
-            nw = split(OV[k], OW, /[ \t]+/)
-            for (wi = 2; wi <= nw; wi++) {
-              if (OW[wi] == "one-of" || OW[wi] == "min" || OW[wi] == "max") {
-                s_fail("key '\''" key "'\'': unexpected clause '\''" OW[wi] "'\'' after one-of")
+            if (OV[k] ~ /[ \t]/) {
+              nw = split(OV[k], OW, /[ \t]+/)
+              if (nw >= 2 && OW[2] != "") {
+                s_fail("key '\''" key "'\'': unexpected clause '\''" OW[2] "'\'' after one-of")
               }
+              s_fail("key '\''" key "'\'': one-of value '\''" OV[k] "'\'' cannot contain whitespace")
             }
           }
           has_oneof = 1
@@ -803,14 +823,14 @@ cfg_schema_parse_stream() {
           if (has_min) s_fail("key '\''" key "'\'': duplicate min clause")
           rest = ltrim(substr(rest, 4))
           mv = word(rest)
-          if (mv !~ /^-?[0-9]+$/) s_fail("key '\''" key "'\'': min takes an integer, not '\''" mv "'\''")
+          if (mv !~ /^-?(0|[1-9][0-9]*)$/) s_fail("key '\''" key "'\'': min takes an integer, not '\''" mv "'\''")
           has_min = 1; min_v = mv
           rest = ltrim(substr(rest, length(mv) + 1))
         } else if (typ == "integer" && cl == "max") {
           if (has_max) s_fail("key '\''" key "'\'': duplicate max clause")
           rest = ltrim(substr(rest, 4))
           mv = word(rest)
-          if (mv !~ /^-?[0-9]+$/) s_fail("key '\''" key "'\'': max takes an integer, not '\''" mv "'\''")
+          if (mv !~ /^-?(0|[1-9][0-9]*)$/) s_fail("key '\''" key "'\'': max takes an integer, not '\''" mv "'\''")
           has_max = 1; max_v = mv
           rest = ltrim(substr(rest, length(mv) + 1))
         } else {
@@ -843,7 +863,7 @@ cfg_schema_parse_stream() {
       if (S_ERR) exit 1
       for (i = 1; i <= nk; i++) {
         k = ORDER[i]
-        printf "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", k, PRES[k], TYP[k], ONEOF[k], MINV[k], MAXV[k], HASDEF[k], cfg_esc(DEF[k]), cfg_esc(DESC[k])
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", k, PRES[k], TYP[k], cfg_esc(ONEOF[k]), MINV[k], MAXV[k], HASDEF[k], cfg_esc(DEF[k]), cfg_esc(DESC[k])
       }
     }'
 }
@@ -904,7 +924,7 @@ cfg_load_unit_verbs() {
   cluv_ctx=$1
   [ "${CFG_UNIT_VERBS_CTX:-}" = "$cluv_ctx" ] && return 0
   CFG_UNIT_VERBS_CTX=$cluv_ctx
-  CFG_UNIT_VERBS=" "
+  CFG_UNIT_VERBS=" help "
   cluv_root=$(cfg_root_dir "$cluv_ctx")
   cluv_sd="$cluv_ctx/modules/unit/scripts"
   [ -d "$cluv_sd" ] || cluv_sd="$cluv_root/base/.contexture/modules/unit/scripts"
@@ -916,9 +936,13 @@ cfg_load_unit_verbs() {
       set -- "$@" "$cluv_f"
     done
     if [ $# -gt 0 ]; then
-      for cluv_hit in $(grep -l '^# summary: ' "$@" 2>/dev/null); do
+      cluv_hits=$(grep -l '^# summary: ' "$@" 2>/dev/null || true)
+      while IFS= read -r cluv_hit; do
+        [ -n "$cluv_hit" ] || continue
         CFG_UNIT_VERBS="$CFG_UNIT_VERBS${cluv_hit##*/} "
-      done
+      done <<EOF
+$cluv_hits
+EOF
     fi
   fi
 }
@@ -928,7 +952,7 @@ cfg_is_reserved() {
   cir_ctx=$1
   cir_name=$2
   case "$cir_name" in
-    refresh|run|hooks|compose|package|search|config|storage|append|amend|query|flip|drop|next|resolve)
+    help|refresh|run|hooks|compose|package|search|config|storage|append|amend|query|flip|drop|next|resolve)
       return 0
       ;;
   esac
@@ -1062,6 +1086,7 @@ EOF
     fi
   fi
 
+  cssr_drivers=" "
   for cssr_glob in \
     "$cssr_ctx"/storage/drivers/*/config \
     "$cssr_ctx"/extensions/storage/drivers/*/config \
@@ -1069,6 +1094,10 @@ EOF
     [ -f "$cssr_glob" ] || continue
     cssr_drv_dir=${cssr_glob%/config}
     cssr_drv=${cssr_drv_dir##*/}
+    case "$cssr_drivers" in
+      *" $cssr_drv "*) continue ;;
+    esac
+    cssr_drivers="$cssr_drivers$cssr_drv "
     cssr_dparsed=$(cfg_schema_parse "$cssr_glob" "$cssr_lbl ($cssr_drv)") || return $?
     [ -n "$cssr_dparsed" ] || continue
     while IFS='	' read -r cssr_k cssr_rest; do
@@ -1132,9 +1161,11 @@ cfg_discover_schemas() {
           cds_ap=""
         elif [ ! -d "$cds_ctx/modules/$cds_ns" ] && [ -f "$cds_ctx/extensions/modules/$cds_ns/config" ]; then
           cds_mconf="$cds_ctx/extensions/modules/$cds_ns/config"
-          set -- $(cfg_alias_of "$cds_ctx" "$cds_ns")
-          cds_ao=${1:-}
-          cds_ap=${2:-}
+          cds_ao=""
+          cds_ap=""
+          IFS=' ' read -r cds_ao cds_ap <<EOF
+$(cfg_alias_of "$cds_ctx" "$cds_ns")
+EOF
         fi
         [ -n "$cds_mconf" ] || return 0
         cds_r=$(cfg_schema_parse "$cds_mconf" "$cds_lbl ($cds_ns)") || return $?
@@ -1164,9 +1195,9 @@ cfg_discover_schemas() {
       cds_ap=""
       case "$cds_mf" in
         "$cds_ctx"/extensions/modules/*)
-          set -- $(cfg_alias_of "$cds_ctx" "$cds_m")
-          cds_ao=${1:-}
-          cds_ap=${2:-}
+          IFS=' ' read -r cds_ao cds_ap <<EOF
+$(cfg_alias_of "$cds_ctx" "$cds_m")
+EOF
           ;;
       esac
       cds_mr=$(cfg_schema_parse "$cds_mf" "$cds_lbl ($cds_m)") || return $?
@@ -1274,6 +1305,10 @@ cfg_assembly_load() {
   cal_owner=0
   while [ $# -gt 0 ]; do
     case "$1" in
+      --module=)
+        printf '%s: error: --module= names no namespace (ERR_INVALID_ARGUMENT)\n' "$cal_lbl" >&2
+        return 1
+        ;;
       --module=*) cal_mod=${1#--module=} ;;
       --json) cal_json=1 ;;
       --owner) cal_owner=1 ;;
@@ -1330,8 +1365,14 @@ cfg_assembly_load() {
         CVAL[ek] = ev
         CHAS[ek] = 1
         if (owner || mod != "") {
-          if (mod != "" && index(ek, mod ".") == 1 && !(ek in DECL)) {
-            printf "%s: warning: undeclared configuration key '\''%s'\''\n", lbl, ek > "/dev/stderr"
+          if (mod != "") {
+            ns_of = ""
+            for (di = length(ek); di >= 1; di--) {
+              if (substr(ek, di, 1) == ".") { ns_of = substr(ek, 1, di - 1); break }
+            }
+            if (ns_of == mod && !(ek in DECL)) {
+              printf "%s: warning: undeclared configuration key '\''%s'\''\n", lbl, ek > "/dev/stderr"
+            }
           }
           if (!owner && mod == "storage" && index(ek, "session.storage.") == 1) {
             printf "%s: warning: legacy key '\''%s'\'' is deprecated; use '\''storage.%s'\''\n", lbl, ek, substr(ek, 17) > "/dev/stderr"
@@ -1459,6 +1500,21 @@ cfg_assembly_schema() {
 
   cas_schemas=$(cfg_discover_schemas "$cas_ctx" "$cas_ns" "$cas_lbl") || return $?
   CAS_SCHEMAS=$cas_schemas CAS_JSON=$cas_json LC_ALL=C awk "$CFG_ESC_AWK$CFG_JQ_AWK"'
+    function cfg_schema_val(v,   need, i, n, c, o) {
+      if (v == "") return "\"\""
+      need = 0
+      n = length(v)
+      if (index(v, " ") || index(v, "\t") || index(v, "\"") || index(v, "'"'"'") || index(v, "\\") || index(v, "#")) need = 1
+      if (!need) return v
+      o = "\""
+      for (i = 1; i <= n; i++) {
+        c = substr(v, i, 1)
+        if (c == "\\") o = o "\\" "\\"
+        else if (c == "\"") o = o "\\" "\""
+        else o = o c
+      }
+      return o "\""
+    }
     BEGIN {
       json = ENVIRON["CAS_JSON"] + 0
       n = split(ENVIRON["CAS_SCHEMAS"], SL, /\n/)
@@ -1478,7 +1534,7 @@ cfg_assembly_schema() {
         K_NAME[ns, idx] = F[2]
         K_PRES[ns, idx] = F[3]
         K_TYP[ns, idx] = F[4]
-        K_ONE[ns, idx] = F[5]
+        K_ONE[ns, idx] = cfg_unesc(F[5])
         K_MIN[ns, idx] = F[6]
         K_MAX[ns, idx] = F[7]
         K_HDEF[ns, idx] = F[8] + 0
@@ -1521,7 +1577,7 @@ cfg_assembly_schema() {
             if (K_ONE[ns, j] != "") line = line " one-of " K_ONE[ns, j]
             if (K_MIN[ns, j] != "") line = line " min " K_MIN[ns, j]
             if (K_MAX[ns, j] != "") line = line " max " K_MAX[ns, j]
-            if (K_HDEF[ns, j]) line = line " default " K_DEF[ns, j]
+            if (K_HDEF[ns, j]) line = line " default " cfg_schema_val(K_DEF[ns, j])
             printf "  %s\n", line
             if (K_DESC[ns, j] != "") {
               nd = split(K_DESC[ns, j], DL, /\n/)
@@ -1687,7 +1743,7 @@ config_owner_verb() {
         return 1
       fi
       cov_typ=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $4 }')
-      cov_one=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $5 }')
+      cov_one=$(printf '%s\n' "$cov_row" | LC_ALL=C awk "$CFG_ESC_AWK"'BEGIN { FS = "\t" } { print cfg_unesc($5) }')
       cov_min=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $6 }')
       cov_max=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $7 }')
       cfg_schema_validate_value "$cov_typ" "$cov_one" "$cov_min" "$cov_max" "$cov_v" "$cov_lbl" "$cov_k" || return $?

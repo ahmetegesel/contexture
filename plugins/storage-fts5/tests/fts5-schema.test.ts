@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync, writeSync } from 'node:fs';
+import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, writeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { ctx } from '@support/ctx';
@@ -253,5 +253,29 @@ describe.skipIf(!fts5Available())('the fts5 store location', { concurrent: true 
     expect([unsetRes.code, unsetRes.stderr]).toEqual([0, '']);
     const getAfter = await ctx(sb, 'store', 'config', 'get', 'database');
     expect(getAfter.code).toBe(1);
+  });
+
+  it('[plugins-r12] resolves relative MODULE_DIR/../../../../config-lib when workspace lacks config-lib, and falls back inline when config-lib is absent', async () => {
+    // 1. Sub-workspace has .contexture/config without config-lib, while driver's MODULE_DIR/../../../../config-lib exists
+    const sb = stage('fts5');
+    const subWs = join(sb, 'sub/ws');
+    mkdirSync(join(subWs, '.contexture/modules'), { recursive: true });
+    symlinkSync(join(sb, '.contexture/storage'), join(subWs, '.contexture/storage'));
+    dataFile(subWs, 'extensions', 'docs', DOCS_SHAPED);
+    // Use an escaped quote that cfg_get_file decodes properly (distinguishing config-lib from the simple inline fallback)
+    writeFileSync(join(subWs, '.contexture/config'), 'storage.database: ".contexture/sub \\"q\\".db"\n');
+    const viaModLib = await exec(driverPath(sb, 'fts5'), ['store.put', 'docs', 'workspace/modlib'], { cwd: subWs, input: 'modlib\n' });
+    answer(viaModLib, 'store.put');
+    expect(sqlite(join(subWs, '.contexture/sub "q".db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/modlib');
+
+    // 2. When config-lib is absent everywhere, the inline fallback still reads storage.database and storage.conf
+    const sbNoLib = stage('fts5');
+    dataFile(sbNoLib, 'extensions', 'docs', DOCS_SHAPED);
+    rmSync(join(sbNoLib, '.contexture/config-lib'));
+    appendFileSync(join(sbNoLib, '.contexture/config'), 'storage.database: ".contexture/inline.db" # comment\n');
+    const s = store(sbNoLib, 'fts5');
+    answer(await s.put('docs', 'workspace/inline', 'inline\n'), 'store.put');
+    expect(sqlite(join(sbNoLib, '.contexture/inline.db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/inline');
+    expect(existsSync(join(sbNoLib, FTS5_DB))).toBe(false);
   });
 });

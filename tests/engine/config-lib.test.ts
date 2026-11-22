@@ -1,11 +1,11 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
-import { beforeAll, describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { configLock, leaks, lockPath } from '../support/drawer';
 import { exec, type Run } from '../support/exec';
 import { holdLock, sleepShim } from '../support/locks';
-import { pathPlant } from '../support/plants';
+import { chmodPlant, pathPlant, ROOT_USER } from '../support/plants';
 import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { stage } from '../support/stage';
@@ -114,7 +114,7 @@ describe.concurrent('config-lib: core storage schema and unified config reader',
     );
   });
 
-  it('refuses unreadable, NUL-containing, or malformed quoted config files', async () => {
+  it('refuses unreadable, NUL-containing, invalid UTF-8, or malformed quoted config files, and warns on malformed lines in list', async () => {
     const sb = sandbox('cfg-reader-refuse');
     const conf = join(sb, 'config');
     writeFileSync(conf, Buffer.from('storage.driver: posix\0\n'));
@@ -122,10 +122,26 @@ describe.concurrent('config-lib: core storage schema and unified config reader',
     expect(nul.code).toBe(2);
     expect(nul.stderr).toContain('ERR_STORAGE_READ');
 
+    writeFileSync(conf, Buffer.concat([Buffer.from('storage.driver: '), Buffer.from([0xff, 0x0a])]));
+    const badUtfGet = await runLib(sb, 'cfg_get_file', [conf, 'storage.driver']);
+    expect(badUtfGet.code).toBe(2);
+    expect(badUtfGet.stderr).toContain('ERR_STORAGE_READ');
+    const badUtfList = await runLib(sb, 'cfg_list_file', [conf]);
+    expect(badUtfList.code).toBe(2);
+    expect(badUtfList.stderr).toContain('ERR_STORAGE_READ');
+
     writeFileSync(conf, 'storage.driver: "unclosed\n');
     const bad = await runLib(sb, 'cfg_get_file', [conf, 'storage.driver']);
     expect(bad.code).toBe(2);
     expect(bad.stderr).toContain('ERR_INVALID_ARGUMENT');
+
+    writeFileSync(conf, 'badline\n: emptykey\nbad.q: "unclosed\nstorage.driver: posix\n');
+    const listWarn = await runLib(sb, 'cfg_list_file', [conf]);
+    expect(listWarn.code).toBe(0);
+    expect(listWarn.stdout).toBe('storage.driver\tposix\n');
+    expect(listWarn.stderr).toContain('ignoring malformed line 1');
+    expect(listWarn.stderr).toContain('ignoring empty key at line 2');
+    expect(listWarn.stderr).toContain("ignoring malformed quoted value for 'bad.q' at line 3");
   });
 });
 
@@ -221,33 +237,61 @@ describe.concurrent('config-lib: locked atomic writer and preservation', () => {
     expect(badUtf8.code).toBe(1);
     expect(badUtf8.stderr).toContain('ERR_INVALID_ARGUMENT');
 
+    // Invalid UTF-8 byte 0xff in existing config refuses cfg_set rc 2 without modifying config
+    const badConfSb = stage('posix', 'cfg-write-bad-utf8');
+    const badConfDir = join(badConfSb, '.contexture');
+    const badConf = join(badConfDir, 'config');
+    const badBytes = Buffer.concat([Buffer.from('storage.driver: '), Buffer.from([0xff, 0x0a])]);
+    writeFileSync(badConf, badBytes);
+    const badConfWrite = await runLib(badConfSb, 'cfg_set', ['search.timeout', '15', badConfDir]);
+    expect(badConfWrite.code).toBe(2);
+    expect(badConfWrite.stderr).toContain('ERR_STORAGE_READ');
+    expect(readFileSync(badConf).equals(badBytes)).toBe(true);
+
     expect(readFileSync(conf, 'utf8')).toBe('storage.driver: posix\n');
   });
 });
 
 describe.concurrent('config-lib: locking concurrency, stale recovery, and subshell trap isolation', () => {
-  let snap: string;
-  beforeAll(() => {
-    snap = stage('posix', 'cfg-lock-base');
-  });
-
-  it.for(['sh', 'dash'])('preserves caller EXIT/INT/TERM traps under %s while cleaning lock and temp files', async (shell, { skip }) => {
+  it.for(['sh', 'dash'])('preserves caller EXIT/INT/TERM traps under %s and cleans lock and temp files on INT/TERM', async (shell, { skip }) => {
     if (shell === 'dash' && !existsSync('/bin/dash')) skip();
     const sb = join(sandbox(`cfg-traps-${shell}`), 'ws');
     mkdirSync(join(sb, '.contexture'), { recursive: true });
     const ctxDir = join(sb, '.contexture');
     const r = await runScript(
       sb,
-      `caller_ran=0; trap 'caller_ran=1; echo CALLER_EXIT' EXIT; cfg_set storage.driver posix "${ctxDir}"; echo AFTER_SET`,
+      `trap 'echo CALLER_EXIT' EXIT; trap 'echo CALLER_INT; exit 130' INT; trap 'echo CALLER_TERM; exit 143' TERM; cfg_set storage.driver posix "${ctxDir}"; echo AFTER_SET; trap`,
       { shell },
     );
     expect([r.code, r.stderr]).toEqual([0, '']);
-    expect(r.stdout).toBe('AFTER_SET\nCALLER_EXIT\n');
+    expect(r.stdout).toContain('AFTER_SET\n');
+    expect(r.stdout).toContain('CALLER_INT');
+    expect(r.stdout).toContain('CALLER_TERM');
+    expect(r.stdout.trimEnd().endsWith('CALLER_EXIT')).toBe(true);
     expect(existsSync(lockPath(sb, configLock()))).toBe(false);
     expect(existsSync(join(ctxDir, 'config'))).toBe(true);
+
+    // Subshell signal delivery mid-write cleans config.lock and config.tmp.* without altering config
+    const realAwk = ['/usr/bin/awk', '/bin/awk'].find((p) => existsSync(p));
+    if (!realAwk) throw new Error('no awk binary');
+    for (const [sig, code] of [['INT', 130], ['TERM', 143]] as const) {
+      const sigSb = join(sandbox(`cfg-sig-${sig}-${shell}`), 'ws');
+      const sigCtx = join(sigSb, '.contexture');
+      mkdirSync(sigCtx, { recursive: true });
+      writeFileSync(join(sigCtx, 'config'), 'storage.driver: posix\n');
+      const awkEnv = pathPlant(
+        'awk',
+        `for f in "${sigCtx}"/config.tmp.*; do if [ -e "$f" ]; then kill -${sig} "$PPID"; exit 1; fi; done\nexec "${realAwk}" "$@"`,
+      );
+      const sigRes = await runLib(sigSb, 'cfg_set', ['search.timeout', '25', sigCtx], { shell, env: awkEnv });
+      expect(sigRes.code).toBe(code);
+      expect(existsSync(lockPath(sigSb, configLock()))).toBe(false);
+      expect(readdirSync(sigCtx).filter((n) => n.startsWith('config.tmp.'))).toEqual([]);
+      expect(readFileSync(join(sigCtx, 'config'), 'utf8')).toBe('storage.driver: posix\n');
+    }
   });
 
-  it('serializes concurrent writers without losing keys', async () => {
+  it('serializes concurrent writers (including backgrounded subshells from one parent) without losing keys', async () => {
     const sb = stage('posix', 'cfg-lock-concurrent');
     const ctxDir = join(sb, '.contexture');
     const keys = Array.from({ length: 8 }, (_, i) => `mod.k${i}`);
@@ -257,6 +301,16 @@ describe.concurrent('config-lib: locking concurrency, stale recovery, and subshe
       const got = await runLib(sb, 'cfg_get', [k, ctxDir]);
       expect([got.code, got.stdout]).toEqual([0, `v${i}\n`]);
     }
+    expect(existsSync(lockPath(sb, configLock()))).toBe(false);
+
+    // Concurrent backgrounded calls in the same shell get distinct subshell PIDs
+    const bg = await runScript(
+      sb,
+      `cfg_set bg.a 1 "${ctxDir}" & cfg_set bg.b 2 "${ctxDir}" & wait`,
+    );
+    expect([bg.code, bg.stderr]).toEqual([0, '']);
+    expect((await runLib(sb, 'cfg_get', ['bg.a', ctxDir])).stdout).toBe('1\n');
+    expect((await runLib(sb, 'cfg_get', ['bg.b', ctxDir])).stdout).toBe('2\n');
     expect(existsSync(lockPath(sb, configLock()))).toBe(false);
   });
 
@@ -284,7 +338,7 @@ describe.concurrent('config-lib: locking concurrency, stale recovery, and subshe
   it(`live holder times out after ${WAIT_S} s under sleep shim with rc 2 ERR_STORAGE_LOCKED`, async () => {
     const sb = stage('posix', 'cfg-lock-timeout');
     const ctxDir = join(sb, '.contexture');
-    const release = holdLock(sb, 'config.lock', 'live');
+    const release = holdLock(sb, configLock(), 'live');
     const t0 = performance.now();
     const r = await runLib(sb, 'cfg_set', ['storage.driver', 'posix', ctxDir], { env: sleepShim() });
     expect(performance.now() - t0).toBeLessThan(SHIMMED_MS);
@@ -321,24 +375,40 @@ describe.concurrent('config-lib: locking concurrency, stale recovery, and subshe
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('ERR_STORAGE_WRITE');
   });
+
+  it.skipIf(ROOT_USER)('does not spin infinitely when stale lock removal fails, timing out cleanly rc 2 ERR_STORAGE_LOCKED', async ({ onTestFinished }) => {
+    const sb = stage('posix', 'cfg-lock-rm-fail');
+    const ctxDir = join(sb, '.contexture');
+    holdLock(sb, configLock(), 'dead');
+    chmodPlant(dirname(lockPath(sb, configLock())), 0o555, 0o755, onTestFinished);
+    const t0 = performance.now();
+    const r = await runLib(sb, 'cfg_set', ['storage.driver', 'posix', ctxDir], { env: sleepShim() });
+    expect(performance.now() - t0).toBeLessThan(SHIMMED_MS);
+    expect(r.code).toBe(2);
+    expect(r.stderr).toContain('ERR_STORAGE_LOCKED');
+  });
 });
 
 describe.concurrent('config-lib: schema parsing and value validation', () => {
-  it('parses all four types, optional/required, modifiers, defaults, and 2-space descriptions', async () => {
+  it('[modules-r-cwijk] parses all four types, optional/required, modifiers, defaults (with comments, quotes, and tabs), and 2-space descriptions', async () => {
     const sb = sandbox('cfg-schema-ok');
     const schema = join(sb, 'config');
     writeFileSync(
       schema,
       [
         '# module config',
-        'mode: optional string one-of fast|balanced|thorough default balanced',
+        'mode: optional string one-of fast|balanced|thorough default balanced # comment',
         '  Selects execution mode.',
-        'retries: optional integer min -1 max 10 default 3',
+        'tab_mode: optional string one-of a|b\tdefault a',
+        '  Tab before default.',
+        'retries: optional integer min -1 max 10 default 3 # retry count',
         '  Retry budget.',
         'enabled: required boolean',
         '  Whether module is active.',
         'db_path: optional path default .data/local.db',
         '  Storage file location.',
+        'note: optional string default "hello # world" # quoted default',
+        '  Quoted default with hash.',
         '',
       ].join('\n'),
     );
@@ -347,9 +417,11 @@ describe.concurrent('config-lib: schema parsing and value validation', () => {
     expect(r.stdout).toBe(
       [
         'mode\toptional\tstring\tfast|balanced|thorough\t\t\t1\tbalanced\tSelects execution mode.',
+        'tab_mode\toptional\tstring\ta|b\t\t\t1\ta\tTab before default.',
         'retries\toptional\tinteger\t\t-1\t10\t1\t3\tRetry budget.',
         'enabled\trequired\tboolean\t\t\t\t0\t\tWhether module is active.',
         'db_path\toptional\tpath\t\t\t\t1\t.data/local.db\tStorage file location.',
+        'note\toptional\tstring\t\t\t\t1\thello # world\tQuoted default with hash.',
         '',
       ].join('\n'),
     );
@@ -364,8 +436,17 @@ describe.concurrent('config-lib: schema parsing and value validation', () => {
     ['k: required string default abc\n', 'required key cannot declare a default'],
     ['k: optional string one-of a|b default c\n', 'invalid default'],
     ['k: optional string one-of a||b\n', 'empty value'],
+    ['k: optional string one-of a\tb|c\n', 'control character'],
+    ['k: optional string one-of a|b bogus\n', 'unexpected clause'],
+    ['k: optional string default foo one-of bar|baz\n', 'final clause'],
+    ['k: optional string default "foo" one-of bar|baz\n', 'malformed quoted default'],
+    ['k: optional integer default 10 min 1\n', 'final clause'],
+    ['k: optional string default # only comment\n', 'requires a value'],
     ['k: optional integer min 10 max 5\n', 'exceeds max'],
     ['k: optional integer min abc\n', 'integer'],
+    ['k: optional integer min 007\n', 'integer'],
+    ['k: optional integer max 05\n', 'integer'],
+    ['k: optional integer default 05\n', 'invalid default'],
     ['k: optional integer min 5 default 2\n', 'invalid default'],
     ['k: optional integer max 5 default 9\n', 'invalid default'],
     ['k: optional boolean default yes\n', 'invalid default'],
@@ -374,7 +455,7 @@ describe.concurrent('config-lib: schema parsing and value validation', () => {
     ['  orphaned description\nk: optional string\n', 'orphaned description'],
     ['k: optional string\n\n  orphaned after blank\n', 'orphaned description'],
     [' badindent: optional string\n', 'unexpected indentation'],
-  ])('refuses invalid schema (%s)', async (body, expected) => {
+  ])('[modules-r-cwijk] refuses invalid schema (%s)', async (body, expected) => {
     const sb = sandbox('cfg-schema-bad');
     const schema = join(sb, 'config');
     writeFileSync(schema, body);
@@ -384,11 +465,15 @@ describe.concurrent('config-lib: schema parsing and value validation', () => {
     expect(r.stderr).toContain(expected);
   });
 
-  it('validates runtime values against type and constraints', async () => {
+  it('validates runtime values against type and constraints including leading-zero rejection', async () => {
     const sb = sandbox('cfg-val-check');
     expect((await runLib(sb, 'cfg_schema_validate_value', ['string', 'a|b', '', '', 'a'])).code).toBe(0);
     expect((await runLib(sb, 'cfg_schema_validate_value', ['string', 'a|b', '', '', 'c'])).code).toBe(1);
     expect((await runLib(sb, 'cfg_schema_validate_value', ['integer', '', '1', '10', '1'])).code).toBe(0);
+    expect((await runLib(sb, 'cfg_schema_validate_value', ['integer', '', '0', '10', '0'])).code).toBe(0);
+    expect((await runLib(sb, 'cfg_schema_validate_value', ['integer', '', '-5', '10', '-1'])).code).toBe(0);
+    expect((await runLib(sb, 'cfg_schema_validate_value', ['integer', '', '1', '10', '05'])).code).toBe(1);
+    expect((await runLib(sb, 'cfg_schema_validate_value', ['integer', '', '-10', '10', '-05'])).code).toBe(1);
     expect((await runLib(sb, 'cfg_schema_validate_value', ['integer', '', '1', '10', '0'])).code).toBe(1);
     expect((await runLib(sb, 'cfg_schema_validate_value', ['integer', '', '1', '10', '11'])).code).toBe(1);
     expect((await runLib(sb, 'cfg_schema_validate_value', ['integer', '', '1', '10', 'ten'])).code).toBe(1);
@@ -452,13 +537,49 @@ describe.concurrent('config-lib: schema discovery, driver collisions, and --as a
     }
   });
 
-  it('refuses driver schema key colliding with core storage.driver', async () => {
+  it('refuses driver schema key colliding with core storage.driver or another driver, while earlier tiers shadow later tiers', async () => {
     const sb = stage('posix', 'cfg-driver-collision');
     const ctxDir = join(sb, '.contexture');
     put(join(ctxDir, 'extensions/storage/drivers/bad/config'), 'driver: optional string\n');
     const r = await runLib(sb, 'cfg_discover_schemas', [ctxDir, 'storage']);
     expect(r.code).toBe(1);
-    expect(r.stderr).toContain("collides with an existing storage key");
+    expect(r.stderr).toContain('collides with an existing storage key');
+
+    // Two distinct drivers declaring the same key refuse collision
+    const sb2 = stage('posix', 'cfg-driver-dup');
+    const ctx2 = join(sb2, '.contexture');
+    put(join(ctx2, 'extensions/storage/drivers/drv1/config'), 'shared: optional string\n');
+    put(join(ctx2, 'extensions/storage/drivers/drv2/config'), 'shared: optional string\n');
+    const dup = await runLib(sb2, 'cfg_discover_schemas', [ctx2, 'storage']);
+    expect(dup.code).toBe(1);
+    expect(dup.stderr).toContain('collides with an existing storage key');
+
+    // Core tier driver shadows extension tier driver of the same name without collision
+    const sb3 = stage('posix', 'cfg-driver-shadow');
+    const ctx3 = join(sb3, '.contexture');
+    put(join(ctx3, 'storage/drivers/alt/config'), 'core_opt: optional string default one\n');
+    put(join(ctx3, 'extensions/storage/drivers/alt/config'), 'ext_opt: optional string default two\n');
+    const shd = await runLib(sb3, 'cfg_discover_schemas', [ctx3, 'storage']);
+    expect([shd.code, shd.stderr]).toEqual([0, '']);
+    expect(shd.stdout).toContain('storage\tcore_opt\t');
+    expect(shd.stdout).not.toContain('ext_opt');
+  });
+
+  it('treats help as reserved, handles spaces in workspace paths, and preserves --as aliases under modified IFS', async () => {
+    const ws = join(sandbox('cfg-spaces'), 'ws with spaces');
+    const ctxDir = join(ws, '.contexture');
+    put(join(ctxDir, 'modules/unit/scripts/list'), '#!/bin/sh\n# summary: list units\n');
+    put(join(ctxDir, 'modules/with/config'), 'opt: optional string default ok\n');
+    put(join(ctxDir, 'extensions/modules/memo2/config'), 'retention: optional integer default 30\n');
+    put(join(ctxDir, 'extensions/.state/pkg-memo.files'), 'package pkg-memo\nmodule memo2 memo\n');
+
+    expect((await runLib(ws, 'cfg_is_reserved', [ctxDir, 'help'])).code).toBe(0);
+    // 'with' from 'ws with spaces' must not become reserved due to unquoted grep -l splitting
+    expect((await runLib(ws, 'cfg_is_reserved', [ctxDir, 'with'])).code).toBe(1);
+
+    const ifsRes = await runScript(ws, `IFS=:; cfg_discover_schemas "${ctxDir}" memo2`);
+    expect([ifsRes.code, ifsRes.stderr]).toEqual([0, '']);
+    expect(ifsRes.stdout.trim().split('\t').slice(10)).toEqual(['memo', 'pkg-memo']);
   });
 });
 
@@ -609,5 +730,61 @@ describe.concurrent('config-lib: assembly, owner config-verb helper, and storage
     // Second unset (already posix) emits no notice
     const rev2 = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'unset', 'driver'], { env });
     expect([rev2.code, rev2.stdout, rev2.stderr]).toEqual([0, '', '']);
+
+    // Transitioning from legacy storage.conf or session.storage.driver detects old driver
+    writeFileSync(join(ctxDir, 'storage.conf'), 'storage.driver: alt\n');
+    const fromConf = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'posix'], { env });
+    expect([fromConf.code, fromConf.stdout]).toEqual([0, '']);
+    expect(fromConf.stderr).toContain("changed from 'alt' to 'posix'");
+
+    writeFileSync(join(ctxDir, 'config'), 'session.storage.driver: alt\n');
+    const fromLegacy = await runLib(sb, 'config_owner_verb', ['storage', 'ctx store config', 'cfg_validate_storage_driver', 'set', 'driver', 'posix'], { env });
+    expect([fromLegacy.code, fromLegacy.stdout]).toEqual([0, '']);
+    expect(fromLegacy.stderr).toContain("changed from 'alt' to 'posix'");
+  });
+
+  it('rejects empty --module=, avoids dotted-module false warnings, formats text schemas with quoted defaults, covers owner load --json/schema/help, and passes set -u', async () => {
+    const sb = stage('posix', 'cfg-edge-cases');
+    const ctxDir = join(sb, '.contexture');
+    put(join(ctxDir, 'modules/foo/config'), 'opt: optional string default "hello # world"\n  Line 1.\n  Line 2.\n');
+    put(join(ctxDir, 'modules/foo.bar/config'), 'opt: optional string default yes\n  Dotted module.\n');
+    put(join(ctxDir, 'extensions/modules/memo2/config'), 'retention: optional integer min 0 default 7\n  Days.\n');
+    put(join(ctxDir, 'extensions/.state/pkg-memo.files'), 'package pkg-memo\nmodule memo2 memo\n');
+    writeFileSync(join(ctxDir, 'config'), 'foo.bar.opt: custom\n');
+
+    const emptyMod = await runLib(sb, 'cfg_assembly_load', ['ctx config', ctxDir, '--module=']);
+    expect(emptyMod.code).toBe(1);
+    expect(emptyMod.stderr).toContain('--module=');
+
+    const dotted = await runLib(sb, 'cfg_assembly_load', ['ctx config', ctxDir, '--module=foo']);
+    expect([dotted.code, dotted.stderr]).toEqual([0, '']);
+    expect(dotted.stdout).toBe('foo.opt: hello # world (default)\n');
+
+    const textSchema = await runLib(sb, 'cfg_assembly_schema', ['ctx config', ctxDir]);
+    expect([textSchema.code, textSchema.stderr]).toEqual([0, '']);
+    expect(textSchema.stdout).toContain('default "hello # world"');
+    expect(textSchema.stdout).toContain('    Line 1.\n    Line 2.\n');
+    expect(textSchema.stdout).toContain('memo2 (alias of memo from package pkg-memo):\n');
+
+    const env = { CTX_DIR: ctxDir, CTX_ROOT: sb };
+    const ownLoad = await runLib(sb, 'config_owner_verb', ['foo', 'ctx foo config', '', 'load', '--json'], { env });
+    expect([ownLoad.code, ownLoad.stderr]).toEqual([0, '']);
+    expect(JSON.parse(ownLoad.stdout).entries).toHaveLength(1);
+    const ownSchema = await runLib(sb, 'config_owner_verb', ['foo', 'ctx foo config', '', 'schema'], { env });
+    expect([ownSchema.code, ownSchema.stderr]).toEqual([0, '']);
+    expect(ownSchema.stdout).toContain('foo:\n');
+    const ownHelp = await runLib(sb, 'config_owner_verb', ['foo', 'ctx foo config', '', 'help', 'set'], { env });
+    expect([ownHelp.code, ownHelp.stderr]).toEqual([0, '']);
+    expect(ownHelp.stdout).toContain('usage: ctx foo config set <key> <value>');
+
+    for (const shell of ['sh', 'dash']) {
+      if (shell === 'dash' && !existsSync('/bin/dash')) continue;
+      const u = await exec(
+        shell,
+        ['-uc', '. "$1"; CTX_DIR=$2; CTX_ROOT=$3; cfg_discover_schemas "$2" >/dev/null && cfg_assembly_load test "$2" >/dev/null && cfg_is_reserved "$2" help', 'sh', CONFIG_LIB, ctxDir, sb],
+        { cwd: sb },
+      );
+      expect([u.code, u.stderr], `set -u under ${shell}`).toEqual([0, '']);
+    }
   });
 });

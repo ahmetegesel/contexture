@@ -52,7 +52,7 @@ read_conf_db() {
   rcd_root=$1
   rcd_lib=""
   for rcd_c in \
-    "$MODULE_DIR/../../../config-lib" \
+    "$MODULE_DIR/../../../../config-lib" \
     "$rcd_root/.contexture/config-lib" \
     "$rcd_root/base/.contexture/config-lib"; do
     if [ -f "$rcd_c" ]; then

@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { FALLBACK_ROOT, RECORD_ROOT, leaks, namespaceLock } from '../support/drawer';
+import { exec } from '../support/exec';
 import { holdLock } from '../support/locks';
 import { ROOT_USER, chmodPlant } from '../support/plants';
 import { fresh, seed } from '../support/snapshot';
@@ -149,6 +150,29 @@ describe.concurrent('ctx unit diagnose', () => {
     json = await unit(sb, 'diagnose', '--json');
     expect([json.code, json.stderr]).toEqual([0, '']);
     expect(JSON.parse(json.stdout)).toMatchObject({
+      config: { status: 'present', driver: 'posix' },
+      driver: { name: 'posix', source: 'config', status: 'ok' },
+    });
+  });
+
+  it('[the-engine-r24] handles malformed quoted storage.driver gracefully and resolves workspace configuration from a nested subdirectory', async () => {
+    const sb = fresh(sb0);
+    writeFileSync(join(sb, '.contexture/config'), 'storage.driver: "unclosed\n');
+    const bad = await unit(sb, 'diagnose', '--json');
+    expect(bad.code).toBe(0);
+    expect(JSON.parse(bad.stdout)).toMatchObject({
+      config: { status: 'present', driver: 'none' },
+      driver: { name: 'posix', source: 'default (posix)', status: 'ok' },
+    });
+    expect(bad.stdout + bad.stderr).not.toContain('.contexture/config');
+
+    writeFileSync(join(sb, '.contexture/config'), 'storage.driver: posix\n');
+    const sub = join(sb, 'sub/folder');
+    mkdirSync(sub, { recursive: true });
+    const nested = await exec('sh', ['-c', 'cd sub/folder && exec "$0" unit diagnose --json', join(sb, '.contexture/ctx')], { cwd: sb });
+    expect([nested.code, nested.stderr]).toEqual([0, '']);
+    expect(JSON.parse(nested.stdout)).toMatchObject({
+      workspace_root: sb,
       config: { status: 'present', driver: 'posix' },
       driver: { name: 'posix', source: 'config', status: 'ok' },
     });

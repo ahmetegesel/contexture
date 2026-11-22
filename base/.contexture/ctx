@@ -1874,6 +1874,10 @@ pkg_decl_lines() {
 # file made when absent and replaced whole, never half written; a removal the file holds no
 # line for writes nothing, so an absent file stays absent
 pkg_decl_write() {
+  if ! command -v cfg_set_raw >/dev/null 2>&1; then
+    ctx_err "package: missing internal config library"
+    return 2
+  fi
   if [ $# -gt 1 ]; then
     cfg_set_raw "package.$1" "$2" "$dir"
   else
@@ -2696,7 +2700,7 @@ usage: ctx search "<query>" [--type=<type>] [--mode=<mode>] [--limit=N] [--json]
 runs every module that carries a verb named search, in discovery order, with the shared flags only (a module's own scope flags are never forwarded), and prints one group per module: its rows (type, address, snippet, read, label), failed with its reason, or not searched; no ranking crosses modules, and zero hits is an answer; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
 --limit= is a positive whole number per module (default 20); --mode= defaults to exact and takes a registered mode (ctx search --modes lists them), a module that cannot answer it falling back to exact, which its group says; --type= passes to every module; --module=<name> searches one module; only the --flag=value form is taken
 each module runs bounded by search.timeout in the workspace configuration (a positive whole number of seconds, default 10); a module past it is stopped with every descendant one process snapshot finds, and reads failed (a process forked after the snapshot, or reparented before it by a double fork, may escape, a stated limit)
-ctx search config manages search settings (load, get, set, unset, schema) in the workspace configuration
+ctx search config manages search settings (load, get, set, unset, schema) in the workspace configuration; to search for the literal word 'config', put a flag first (for example, ctx search --mode=exact config)
 exit codes: 0 every searched module answered (zero hits included, or no module carries a search verb); 1 a bad argument; 2 a module failed, the other groups still printed
 EOF
 }
@@ -2709,6 +2713,10 @@ search_refuse() {
 # search_timeout: the bound in seconds from the search.timeout line of the workspace
 # configuration via config-lib; 10 when absent or empty
 search_timeout() {
+  if ! command -v cfg_get >/dev/null 2>&1; then
+    printf 'ctx search: missing internal config library\n' >&2
+    return 2
+  fi
   st_v=$(cfg_get search.timeout "$dir")
   st_rc=$?
   if [ "$st_rc" -eq 2 ]; then
@@ -2872,6 +2880,10 @@ search_builtin() {
   fi
   if [ "${1:-}" = "config" ]; then
     shift
+    if ! command -v config_owner_verb >/dev/null 2>&1; then
+      ctx_err "search config: missing internal config library"
+      exit 2
+    fi
     CTX_DIR=$dir CTX_ROOT=$root config_owner_verb search "ctx search config" "" "$@"
     exit $?
   fi
@@ -3043,7 +3055,7 @@ usage: ctx config load [--module=<ns>] [--json]
 assembles effective workspace configuration from declared schemas and the workspace configuration; unset keys without defaults are omitted and package declarations are excluded
 --module=<ns>: limit output to one configuration namespace
 --json: emit one compact JSON object on stdout
-exit codes: 0 assembled (warnings for undeclared or legacy keys print on stderr without failing); 1 bad flag or unknown namespace; 2 unreadable configuration or malformed schema
+exit codes: 0 assembled (warnings for undeclared or legacy keys print on stderr without failing); 1 bad flag, unknown namespace, or malformed schema; 2 unreadable configuration or schema
 EOF
       ;;
     get)
@@ -3058,7 +3070,7 @@ EOF
 usage: ctx config schema [<namespace>] [--json]
 shows declared configuration schemas, types, bounds, defaults, and descriptions across core and discovered modules
 --json: emit one compact JSON object on stdout
-exit codes: 0 schemas printed; 1 bad flag or unknown namespace; 2 malformed or unreadable schema
+exit codes: 0 schemas printed; 1 bad flag, unknown namespace, or malformed schema; 2 unreadable schema
 EOF
       ;;
     help)

@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { leaks } from '../support/drawer';
@@ -70,7 +70,7 @@ describe.concurrent('the ctx config builtin', () => {
     expect(top.stdout).toContain('ctx config schema');
   });
 
-  it('load omits unset keys without defaults, excludes package.* silently, filters by --module, and warns on undeclared and legacy config without failing', async () => {
+  it('[the-engine-r-08d1g] load omits unset keys without defaults, excludes package.* silently, filters by --module, and warns on undeclared and legacy config without failing', async () => {
     const sb = stage('posix', 'config-load');
     writeModule(sb, 'modules', 'demo', {
       manifest: '# summary: demo module\n',
@@ -133,7 +133,7 @@ describe.concurrent('the ctx config builtin', () => {
     expect(emptyMod.stderr).toContain('--module=');
   });
 
-  it('get reads set values and defaults, refuses package.<name> pointing to ctx package list, and refuses unset/unknown keys rc 1', async () => {
+  it('[the-engine-r-08d1g] get reads set values and defaults, refuses package.<name> pointing to ctx package list, and refuses unset/unknown keys rc 1', async () => {
     const sb = stage('posix', 'config-get');
     writeModule(sb, 'modules', 'demo', {
       manifest: '# summary: demo module\n',
@@ -199,7 +199,7 @@ describe.concurrent('the ctx config builtin', () => {
     expect(miss.stderr).toContain('ERR_ENTITY_NOT_FOUND');
   });
 
-  it('set and unset refuse rc 1 pointing to owning domain verbs and write nothing', async () => {
+  it('[the-engine-r-08d1g] set and unset refuse rc 1 pointing to owning domain verbs and write nothing', async () => {
     const sb = stage('posix', 'config-refuse-mutate');
     writeFileSync(conf(sb), 'storage.driver: posix\n');
     const before = treeState(sb);
@@ -218,6 +218,58 @@ describe.concurrent('the ctx config builtin', () => {
       expect(r.stderr).toContain('ctx <module> config');
     }
     expect(treeState(sb)).toBe(before);
+  });
+
+  it('[the-engine-r-08d1g] supports load/get on --as aliases, --module=storage legacy warnings, --module without config, malformed schemas rc 1, malformed keys, and missing config-lib rc 2', async () => {
+    const sb = stage('posix', 'config-edges');
+    const pkg = plantPkg(sb, 'pkg-memo', 'memo');
+    put(join(pkg, '.contexture/extensions/modules/memo/config'), 'limit: optional integer min 1 default 20\n  Max memos.\n');
+    writeManifest(pkg);
+    expect((await exec('./.contexture/ctx', ['package', 'install', '--as=memo=memo2', 'catalog/pkg-memo'], { cwd: sb })).code).toBe(0);
+
+    writeFileSync(conf(sb), 'session.storage.driver: posix\nmemo2.limit: 42\n');
+    writeFileSync(join(sb, '.contexture/storage.conf'), 'storage.driver: posix\n');
+
+    const loadAlias = await run(sb, ['config', 'load', '--module=memo2', '--json']);
+    expect([loadAlias.code, loadAlias.stderr]).toEqual([0, '']);
+    expect(JSON.parse(loadAlias.stdout).entries).toEqual([
+      { namespace: 'memo2', key: 'limit', full_key: 'memo2.limit', alias_of: 'memo', value: '42', type: 'integer', source: 'config' },
+    ]);
+    expect((await run(sb, ['config', 'get', 'memo2.limit'])).stdout).toBe('42\n');
+
+    const loadStorage = await run(sb, ['config', 'load', '--module=storage']);
+    expect(loadStorage.code).toBe(0);
+    expect(loadStorage.stderr).toContain('legacy storage configuration is deprecated');
+    expect(loadStorage.stderr).toContain("legacy key 'session.storage.driver' is deprecated");
+
+    const loadUnit = await run(sb, ['config', 'load', '--module=unit', '--json']);
+    expect([loadUnit.code, loadUnit.stderr]).toEqual([0, '']);
+    expect(JSON.parse(loadUnit.stdout)).toEqual({ entries: [] });
+
+    for (const badKey of ['.key', 'ns.', 'ns.BadKey']) {
+      const r = await run(sb, ['config', 'get', badKey]);
+      expect([r.code, r.stdout]).toEqual([1, '']);
+      expect(r.stderr).toContain('ERR_INVALID_ARGUMENT');
+    }
+
+    // Malformed module schema exits rc 1 (not rc 2) and help documents exit 1
+    const helpLoad = await run(sb, ['config', 'help', 'load']);
+    expect(helpLoad.stdout).toContain('1 bad flag, unknown namespace, or malformed schema; 2 unreadable configuration or schema');
+    const helpSchema = await run(sb, ['config', 'help', 'schema']);
+    expect(helpSchema.stdout).toContain('1 bad flag, unknown namespace, or malformed schema; 2 unreadable schema');
+
+    writeModule(sb, 'modules', 'broken', {
+      manifest: '# summary: broken schema\n',
+      files: { config: 'broken line without colon\n' },
+    });
+    expect((await run(sb, ['config', 'load'])).code).toBe(1);
+    expect((await run(sb, ['config', 'schema'])).code).toBe(1);
+
+    // Missing config-lib refuses cleanly rc 2
+    rmSync(join(sb, '.contexture/config-lib'));
+    const noLib = await run(sb, ['config', 'load']);
+    expect([noLib.code, noLib.stdout]).toEqual([2, '']);
+    expect(noLib.stderr).toContain('missing internal config library');
   });
 });
 

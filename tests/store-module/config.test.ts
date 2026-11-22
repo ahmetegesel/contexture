@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, utimesSync, writeFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { leaks } from '../support/drawer';
@@ -16,7 +16,7 @@ function writeFakeDriver(sb: string, name: string, valid = true, schema = ''): v
         '  capability)',
         '    printf \'%s\\n\' \'{"version":"3.0.0","contract":"3","store":["list","get","put","delete","changes","batch","scan"],"search_modes":[{"name":"exact","description":"exact match"}]}\'',
         '    exit 0 ;;',
-        '  store.list) exit 0 ;;',
+        '  store.list) printf \'{"namespace":"unit","keys":[]}\\n\'; exit 0 ;;',
         '  *) exit 0 ;;',
         'esac',
       ].join('\n')
@@ -50,7 +50,7 @@ describe.concurrent('ctx store config', () => {
     }
   });
 
-  it('supports load, get, set, unset, and schema across core driver and installed driver schema keys', async () => {
+  it('[store-r-0s40c] supports load, get, set, unset, and schema across core driver and installed driver schema keys', async () => {
     const sb = stage('posix', 'store-config-crud');
     writeFakeDriver(
       sb,
@@ -106,7 +106,7 @@ describe.concurrent('ctx store config', () => {
     expect((await run(sb, ['store', 'config', 'get', 'cache_mb'])).stdout).toBe('64\n');
   });
 
-  it('validates driver via Contract 3 handshake before writing, discards resolver stdout, and emits migration notice only when effective driver changes', async () => {
+  it('[store-r-0s40c] validates driver via Contract 3 handshake before writing, discards resolver stdout, and emits migration notice only when effective driver changes', async () => {
     const sb = stage('posix', 'store-config-driver');
     writeFakeDriver(sb, 'alt', true);
     writeFakeDriver(sb, 'broken', false);
@@ -162,18 +162,25 @@ describe.concurrent('ctx store config', () => {
     expect([backAgain.code, backAgain.stdout, backAgain.stderr]).toEqual([0, '', '']);
   });
 
-  it('refuses unsetting a required driver key and updates config mtime so resolver verdict cache invalidates', async () => {
+  it('[store-r-0s40c] refuses unsetting a required driver key and updates config mtime so resolver verdict cache invalidates', async () => {
     const sb = stage('posix', 'store-config-verdict');
+    writeFakeDriver(sb, 'alt', true);
     writeFakeDriver(sb, 'reqdrv', true, 'endpoint: required string\n  Required endpoint.\n');
 
-    // Seed an older config and a verdict cache stamped slightly in the future? No, verify config write advances mtime cleanly
-    writeFileSync(join(sb, '.contexture/config'), 'storage.driver: posix\n');
-    const oldTime = new Date(Date.now() - 10_000);
+    writeFileSync(join(sb, '.contexture/config'), 'storage.driver: alt\n');
+    const baseSec = Math.floor(Date.now() / 1000) * 1000;
+    const oldTime = new Date(baseSec - 20_000);
     utimesSync(join(sb, '.contexture/config'), oldTime, oldTime);
 
-    const resolveBefore = await exec('.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb });
-    expect(resolveBefore.code).toBe(0);
-    expect(resolveBefore.stdout.trim()).toMatch(/\/posix\/driver$/);
+    // Populate dispatch and require verdict caches for alt
+    const execBefore = await exec('.contexture/storage/scripts/driver-resolver', ['exec', 'store.list', 'unit'], { cwd: sb });
+    expect(execBefore.code, execBefore.stderr).toBe(0);
+    const reqBefore = await exec('.contexture/storage/scripts/driver-resolver', ['require', 'store'], { cwd: sb });
+    expect(reqBefore.code, reqBefore.stderr).toBe(0);
+
+    const verdictsDir = join(sb, '.contexture/tmp/driver-verdicts');
+    const altFiles = readdirSync(verdictsDir).filter((n) => n.includes('alt'));
+    expect(altFiles.length).toBeGreaterThanOrEqual(2);
 
     // Cannot unset required driver key
     const reqUnset = await run(sb, ['store', 'config', 'unset', 'endpoint']);
@@ -183,10 +190,63 @@ describe.concurrent('ctx store config', () => {
     const beforeTree = treeState(sb);
     const sw = await run(sb, ['store', 'config', 'set', 'driver', 'reqdrv']);
     expect(sw.code, sw.stderr).toBe(0);
+    expect(sw.stderr).toContain("changed from 'alt' to 'reqdrv'");
     expect(treeState(sb)).not.toBe(beforeTree);
 
-    const resolveAfter = await exec('.contexture/storage/scripts/driver-resolver', ['resolve'], { cwd: sb });
-    expect(resolveAfter.code).toBe(0);
-    expect(resolveAfter.stdout.trim()).toMatch(/\/reqdrv\/driver$/);
+    // Populate verdict caches for reqdrv, backdate verdicts to MID, and prove cache hit while config is older
+    const execReq = await exec('.contexture/storage/scripts/driver-resolver', ['exec', 'store.list', 'unit'], { cwd: sb });
+    expect(execReq.code, execReq.stderr).toBe(0);
+    const reqReq = await exec('.contexture/storage/scripts/driver-resolver', ['require', 'store'], { cwd: sb });
+    expect(reqReq.code, reqReq.stderr).toBe(0);
+    const reqFiles = readdirSync(verdictsDir).filter((n) => n.includes('reqdrv'));
+    expect(reqFiles.length).toBeGreaterThanOrEqual(2);
+
+    const midTime = new Date(baseSec - 10_000);
+    utimesSync(join(sb, '.contexture/extensions/storage/drivers/reqdrv/driver'), oldTime, oldTime);
+    utimesSync(join(sb, '.contexture/config'), oldTime, oldTime);
+    for (const f of reqFiles) utimesSync(join(verdictsDir, f), midTime, midTime);
+
+    expect((await exec('.contexture/storage/scripts/driver-resolver', ['exec', 'store.list', 'unit'], { cwd: sb })).code).toBe(0);
+    for (const f of reqFiles) expect(statSync(join(verdictsDir, f)).mtimeMs).toBe(midTime.getTime());
+
+    // Mutating a driver setting via ctx store config set advances config mtime and invalidates cached verdicts
+    const setOpt = await run(sb, ['store', 'config', 'set', 'endpoint', 'https://local']);
+    expect([setOpt.code, setOpt.stderr]).toEqual([0, '']);
+    expect((await exec('.contexture/storage/scripts/driver-resolver', ['exec', 'store.list', 'unit'], { cwd: sb })).code).toBe(0);
+    expect((await exec('.contexture/storage/scripts/driver-resolver', ['require', 'store'], { cwd: sb })).code).toBe(0);
+    for (const f of reqFiles) expect(statSync(join(verdictsDir, f)).mtimeMs).toBeGreaterThan(midTime.getTime());
+  });
+
+  it('[store-r-0s40c] refuses missing CTX_ROOT, invalid subcommand flags, and emits migration notice from legacy storage.conf or session.storage.driver', async () => {
+    const sb = stage('posix', 'store-config-edges');
+    writeFakeDriver(sb, 'alt', true);
+
+    const emptyRoot = await exec(join(sb, '.contexture/modules/store/scripts/config'), ['load'], { cwd: sb, env: { CTX_ROOT: '' } });
+    expect(emptyRoot.code).toBe(2);
+    expect(emptyRoot.stderr).toContain('ERR_INVALID_ARGUMENT');
+
+    const noRoot = await exec(join(sb, '.contexture/modules/store/scripts/config'), ['load'], { cwd: sb, env: { CTX_ROOT: join(sb, 'missing-root') } });
+    expect(noRoot.code).toBe(2);
+    expect(noRoot.stderr).toContain('ERR_DRIVER_NOT_FOUND');
+
+    for (const args of [
+      ['store', 'config', 'load', '--bad'],
+      ['store', 'config', 'schema', '--bad'],
+      ['store', 'config', 'help', 'load', 'extra'],
+    ]) {
+      const r = await run(sb, args);
+      expect([r.code, r.stdout], args.join(' ')).toEqual([1, '']);
+      expect(r.stderr).toContain('ERR_INVALID_ARGUMENT');
+    }
+
+    writeFileSync(join(sb, '.contexture/storage.conf'), 'storage.driver: alt\n');
+    const fromConf = await run(sb, ['store', 'config', 'set', 'driver', 'posix']);
+    expect([fromConf.code, fromConf.stdout]).toEqual([0, '']);
+    expect(fromConf.stderr).toContain("changed from 'alt' to 'posix'");
+
+    writeFileSync(join(sb, '.contexture/config'), 'session.storage.driver: alt\n');
+    const fromLegacy = await run(sb, ['store', 'config', 'set', 'driver', 'posix']);
+    expect([fromLegacy.code, fromLegacy.stdout]).toEqual([0, '']);
+    expect(fromLegacy.stderr).toContain("changed from 'alt' to 'posix'");
   });
 });
