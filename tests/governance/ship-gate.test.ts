@@ -29,8 +29,11 @@ describe.concurrent('the ship-gate lines live on their declared surfaces', () =>
     expect(read('docs/plugins.md')).toContain(RELEASE);
   });
 
-  it('the AGENTS.workspace.md ship breath names the run green on the release command', () => {
-    expect(read('AGENTS.workspace.md')).toContain(`the run green (${RELEASE} from tests/)`);
+  it('the AGENTS.workspace.md ship breath names the run green on the release command and onboarding/installer checks', () => {
+    const ws = read('AGENTS.workspace.md');
+    expect(ws).toContain(`the run green (${RELEASE} from tests/)`);
+    expect(ws).toContain('base/.contexture/ONBOARDING.md');
+    expect(ws).toContain('install.sh');
   });
 
   it('no guide names a retired shell runner, and the runners are gone', () => {
