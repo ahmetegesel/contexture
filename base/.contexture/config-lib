@@ -1,0 +1,1751 @@
+#!/bin/sh
+# config-lib: unified workspace configuration reader, locked atomic writer,
+# schema parser and validator, schema discovery, and owner config-verb helpers.
+# Sourceable POSIX /bin/sh + LC_ALL=C awk library (no summary line, so engine
+# discovery ignores it). Never overwrites caller shell traps.
+
+# ---------------------------------------------------------------------------
+# Context and string helpers
+
+# cfg_ctx_dir [<ctx_dir>]: print the resolved .contexture directory path.
+cfg_ctx_dir() {
+  if [ -n "${1:-}" ]; then
+    printf '%s\n' "$1"
+    return 0
+  fi
+  if [ -n "${CTX_DIR:-}" ]; then
+    printf '%s\n' "$CTX_DIR"
+    return 0
+  fi
+  if [ -n "${CTX_ROOT:-}" ]; then
+    printf '%s/.contexture\n' "$CTX_ROOT"
+    return 0
+  fi
+  ccd_cur=$PWD
+  while [ -n "$ccd_cur" ] && [ "$ccd_cur" != "/" ]; do
+    if [ -d "$ccd_cur/.contexture" ]; then
+      printf '%s/.contexture\n' "$ccd_cur"
+      return 0
+    fi
+    ccd_cur=$(dirname "$ccd_cur")
+  done
+  printf '%s/.contexture\n' "$PWD"
+}
+
+# cfg_root_dir [<ctx_dir>]: print the workspace root corresponding to <ctx_dir>.
+cfg_root_dir() {
+  crd_ctx=$(cfg_ctx_dir "${1:-}")
+  case "$crd_ctx" in
+    /.contexture) printf '/\n' ;;
+    */.contexture) printf '%s\n' "${crd_ctx%/.contexture}" ;;
+    *)
+      (CDPATH= cd -- "$crd_ctx/.." 2>/dev/null && pwd) || printf '%s\n' "${CTX_ROOT:-$PWD}"
+      ;;
+  esac
+}
+
+# CFG_UTF8_AWK: RFC 3629 UTF-8 byte validator (same logic as storage/scripts/library).
+CFG_UTF8_AWK='
+function utf8_ok(s,   n, i, j, c, need, lo, hi) {
+  if (s ~ /^[\001-\177]*$/) return 1
+  if (!U8_T) { for (i = 1; i < 256; i++) U8_ORD[sprintf("%c", i)] = i; U8_T = 1 }
+  n = length(s); i = 1
+  while (i <= n) {
+    c = U8_ORD[substr(s, i, 1)]
+    if (c < 128) { i++; continue }
+    if (c >= 194 && c <= 223) { need = 1; lo = 128; hi = 191 }
+    else if (c == 224) { need = 2; lo = 160; hi = 191 }
+    else if (c >= 225 && c <= 236) { need = 2; lo = 128; hi = 191 }
+    else if (c == 237) { need = 2; lo = 128; hi = 159 }
+    else if (c == 238 || c == 239) { need = 2; lo = 128; hi = 191 }
+    else if (c == 240) { need = 3; lo = 144; hi = 191 }
+    else if (c >= 241 && c <= 243) { need = 3; lo = 128; hi = 191 }
+    else if (c == 244) { need = 3; lo = 128; hi = 143 }
+    else return 0
+    if (i + need > n) return 0
+    c = U8_ORD[substr(s, i + 1, 1)]
+    if (c < lo || c > hi) return 0
+    for (j = 2; j <= need; j++) { c = U8_ORD[substr(s, i + j, 1)]; if (c < 128 || c > 191) return 0 }
+    i += need + 1
+  }
+  return 1
+}
+'
+
+# CFG_JQ_AWK: portable JSON string quoting (no sub/gsub backslash escapes).
+CFG_JQ_AWK='
+function cfg_jq(s,   i, n, c, o) {
+  if (!CFG_JQ_INIT) {
+    for (i = 1; i < 32; i++) CFG_ORD[sprintf("%c", i)] = i
+    CFG_ORD[sprintf("%c", 127)] = 127
+    CFG_JQ_INIT = 1
+  }
+  o = ""
+  n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c == "\\") o = o "\\" "\\"
+    else if (c == "\"") o = o "\\" "\""
+    else if (c == "\n") o = o "\\" "n"
+    else if (c == "\t") o = o "\\" "t"
+    else if (c == "\r") o = o "\\" "r"
+    else if (c in CFG_ORD) o = o sprintf("\\u%04x", CFG_ORD[c])
+    else o = o c
+  }
+  return "\"" o "\""
+}
+'
+
+# CFG_ESC_AWK: escape/unescape for internal tab-separated transport.
+CFG_ESC_AWK='
+function cfg_esc(s,   i, n, c, o) {
+  o = ""
+  n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c == "\\") o = o "\\" "\\"
+    else if (c == "\n") o = o "\\" "n"
+    else if (c == "\t") o = o "\\" "t"
+    else if (c == "\r") o = o "\\" "r"
+    else o = o c
+  }
+  return o
+}
+function cfg_unesc(s,   i, n, c, d, o) {
+  o = ""
+  n = length(s)
+  for (i = 1; i <= n; i++) {
+    c = substr(s, i, 1)
+    if (c == "\\" && i < n) {
+      d = substr(s, i + 1, 1)
+      if (d == "\\") { o = o "\\"; i++; continue }
+      if (d == "n") { o = o "\n"; i++; continue }
+      if (d == "t") { o = o "\t"; i++; continue }
+      if (d == "r") { o = o "\r"; i++; continue }
+    }
+    o = o c
+  }
+  return o
+}
+'
+
+# cfg_utf8_ok <string>: rc 0 valid UTF-8, 1 invalid, 2 error.
+cfg_utf8_ok() {
+  CFG_V=$1 LC_ALL=C awk "$CFG_UTF8_AWK"'BEGIN { if (utf8_ok(ENVIRON["CFG_V"])) exit 0; exit 3 }' < /dev/null
+  case $? in
+    0) return 0 ;;
+    3) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+# cfg_has_nul_file <file>: rc 0 if <file> contains a NUL byte, rc 1 if clean, rc 2 unreadable.
+cfg_has_nul_file() {
+  [ -f "$1" ] && [ -r "$1" ] || return 2
+  chn_raw=$(wc -c < "$1" 2>/dev/null | tr -d ' \t\r\n') || return 2
+  chn_clean=$(LC_ALL=C tr -d '\0' < "$1" 2>/dev/null | wc -c | tr -d ' \t\r\n') || return 2
+  [ "$chn_raw" != "$chn_clean" ]
+}
+
+# cfg_utf8_file_ok <file>: rc 0 if <file> has no NUL bytes and valid UTF-8 lines, 1 invalid, 2 unreadable.
+cfg_utf8_file_ok() {
+  [ -f "$1" ] && [ -r "$1" ] || return 2
+  if cfg_has_nul_file "$1"; then
+    return 1
+  fi
+  LC_ALL=C awk "$CFG_UTF8_AWK"'{ if (!utf8_ok($0)) exit 3 }' "$1"
+  case $? in
+    0) return 0 ;;
+    3) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+# cfg_json_quote <string>: emit JSON double-quoted string.
+cfg_json_quote() {
+  CFG_JQ_S=${1:-} LC_ALL=C awk "$CFG_JQ_AWK"'BEGIN { printf "%s", cfg_jq(ENVIRON["CFG_JQ_S"]) }' < /dev/null
+}
+
+# cfg_validate_str <label> <what> <value>: check no CR/LF and valid UTF-8.
+cfg_validate_str() {
+  cvs_lbl=$1
+  cvs_what=$2
+  cvs_val=$3
+  cvs_cr=$(printf '\r')
+  case "$cvs_val" in
+    *"$cvs_cr"*)
+      printf '%s: error: %s holds a carriage return (ERR_INVALID_ARGUMENT)\n' "$cvs_lbl" "$cvs_what" >&2
+      return 1
+      ;;
+    *"
+"*)
+      printf '%s: error: %s holds a newline (ERR_INVALID_ARGUMENT)\n' "$cvs_lbl" "$cvs_what" >&2
+      return 1
+      ;;
+  esac
+  if ! cfg_utf8_ok "$cvs_val"; then
+    printf '%s: error: %s is not valid UTF-8 (ERR_INVALID_ARGUMENT)\n' "$cvs_lbl" "$cvs_what" >&2
+    return 1
+  fi
+  return 0
+}
+
+# cfg_write_key_ok <label> <key>: check key is safe for config write/unset.
+cfg_write_key_ok() {
+  cwk_lbl=$1
+  cwk_key=$2
+  if [ -z "$cwk_key" ]; then
+    printf '%s: error: configuration key cannot be empty (ERR_INVALID_ARGUMENT)\n' "$cwk_lbl" >&2
+    return 1
+  fi
+  cfg_validate_str "$cwk_lbl" "key '$cwk_key'" "$cwk_key" || return 1
+  case "$cwk_key" in
+    *[[:space:]]*|*:*|*=*|*#*)
+      printf "%s: error: malformed configuration key '%s' (ERR_INVALID_ARGUMENT)\n" "$cwk_lbl" "$cwk_key" >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+# cfg_local_key_ok <key>: rc 0 if <key> matches ^[a-z][a-z0-9_-]*$.
+cfg_local_key_ok() {
+  case "${1:-}" in
+    [abcdefghijklmnopqrstuvwxyz]*)
+      case "$1" in
+        *[!abcdefghijklmnopqrstuvwxyz0123456789_-]*) return 1 ;;
+      esac
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# cfg_module_name_ok <name>: rc 0 if <name> matches ^[a-z0-9][a-z0-9._-]*$.
+cfg_module_name_ok() {
+  case "${1:-}" in
+    [abcdefghijklmnopqrstuvwxyz0123456789]*)
+      case "$1" in
+        *[!abcdefghijklmnopqrstuvwxyz0123456789._-]*) return 1 ;;
+      esac
+      return 0
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
+# 1. Unified config reader
+
+# CFG_PARSE_VAL_AWK: shared config line/value parser.
+# First non-empty wins; supports ':' or '=', exact key match, trimmed horizontal
+# whitespace, single/double quote unquoting, unquoted inline # comment stripping,
+# and CRLF lines.
+CFG_PARSE_VAL_AWK='
+function cfg_parse_val(rv,   q, i, n, c, d, out, closed, rest) {
+  CFG_PV_OK = 1
+  sub(/^[ \t]+/, "", rv)
+  if (rv == "") return ""
+  q = substr(rv, 1, 1)
+  if (q == "\"" || q == "'"'"'") {
+    out = ""
+    closed = 0
+    n = length(rv)
+    for (i = 2; i <= n; i++) {
+      c = substr(rv, i, 1)
+      if (q == "\"" && c == "\\" && i < n) {
+        d = substr(rv, i + 1, 1)
+        if (d == "\"" || d == "\\") { out = out d; i++; continue }
+      }
+      if (c == q) {
+        closed = 1
+        rest = substr(rv, i + 1)
+        break
+      }
+      out = out c
+    }
+    if (!closed) { CFG_PV_OK = 0; return "" }
+    sub(/^[ \t]+/, "", rest)
+    if (rest != "" && substr(rest, 1, 1) != "#") { CFG_PV_OK = 0; return "" }
+    return out
+  }
+  i = index(rv, "#")
+  if (i > 0) rv = substr(rv, 1, i - 1)
+  sub(/[ \t]+$/, "", rv)
+  return rv
+}
+'
+
+# cfg_get_file <file> <key>: read exact <key> from <file>.
+# rc 0 prints value; rc 1 absent/empty (silent); rc 2 unreadable, NUL, or bad quote.
+cfg_get_file() {
+  cgf_file=$1
+  cgf_key=$2
+  [ -f "$cgf_file" ] || return 1
+  if [ ! -r "$cgf_file" ]; then
+    printf 'config: error: cannot read the workspace configuration (ERR_STORAGE_READ)\n' >&2
+    return 2
+  fi
+  if cfg_has_nul_file "$cgf_file"; then
+    printf 'config: error: the workspace configuration contains a NUL byte (ERR_STORAGE_READ)\n' >&2
+    return 2
+  fi
+  CFG_TARGET=$cgf_key LC_ALL=C awk "$CFG_PARSE_VAL_AWK"'
+    BEGIN { target = ENVIRON["CFG_TARGET"]; found = 0; bad = 0 }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line ~ /^[ \t]*$/ || line ~ /^[ \t]*#/) next
+      if (!match(line, /[:=]/)) next
+      k = substr(line, 1, RSTART - 1)
+      gsub(/^[ \t]+|[ \t]+$/, "", k)
+      if (k != target) next
+      rv = substr(line, RSTART + 1)
+      v = cfg_parse_val(rv)
+      if (!CFG_PV_OK) {
+        printf "config: error: malformed quoted value for key '\''%s'\'' at line %d (ERR_INVALID_ARGUMENT)\n", k, NR > "/dev/stderr"
+        bad = 1
+        exit 4
+      }
+      if (v != "") {
+        print v
+        found = 1
+        exit 0
+      }
+    }
+    END {
+      if (bad) exit 4
+      if (!found) exit 3
+    }' "$cgf_file"
+  cgf_rc=$?
+  case "$cgf_rc" in
+    0) return 0 ;;
+    3) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+# cfg_get <key> [<ctx_dir>]: read <key> from <ctx_dir>/config.
+cfg_get() {
+  cg_ctx=$(cfg_ctx_dir "${2:-}")
+  cfg_get_file "$cg_ctx/config" "$1"
+}
+
+# cfg_list_file <file>: emit "<key>\t<value>" lines for every non-empty key
+# (first non-empty wins per key, in file order). Warns on malformed lines.
+cfg_list_file() {
+  clf_file=$1
+  [ -f "$clf_file" ] || return 0
+  if [ ! -r "$clf_file" ]; then
+    printf 'config: error: cannot read the workspace configuration (ERR_STORAGE_READ)\n' >&2
+    return 2
+  fi
+  if cfg_has_nul_file "$clf_file"; then
+    printf 'config: error: the workspace configuration contains a NUL byte (ERR_STORAGE_READ)\n' >&2
+    return 2
+  fi
+  LC_ALL=C awk "$CFG_PARSE_VAL_AWK"'
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (line ~ /^[ \t]*$/ || line ~ /^[ \t]*#/) next
+      if (!match(line, /[:=]/)) {
+        printf "config: warning: ignoring malformed line %d in the workspace configuration\n", NR > "/dev/stderr"
+        next
+      }
+      k = substr(line, 1, RSTART - 1)
+      gsub(/^[ \t]+|[ \t]+$/, "", k)
+      if (k == "") {
+        printf "config: warning: ignoring empty key at line %d in the workspace configuration\n", NR > "/dev/stderr"
+        next
+      }
+      rv = substr(line, RSTART + 1)
+      v = cfg_parse_val(rv)
+      if (!CFG_PV_OK) {
+        printf "config: warning: ignoring malformed quoted value for '\''%s'\'' at line %d\n", k, NR > "/dev/stderr"
+        next
+      }
+      if (v == "" || (k in SEEN)) next
+      SEEN[k] = 1
+      ORDER[++n] = k
+      VAL[k] = v
+    }
+    END {
+      for (i = 1; i <= n; i++) {
+        k = ORDER[i]
+        printf "%s\t%s\n", k, VAL[k]
+      }
+    }' "$clf_file"
+}
+
+# cfg_list [<ctx_dir>]: emit "<key>\t<value>" lines from <ctx_dir>/config.
+cfg_list() {
+  cl_ctx=$(cfg_ctx_dir "${1:-}")
+  cfg_list_file "$cl_ctx/config"
+}
+
+# ---------------------------------------------------------------------------
+# 2. Locked atomic writer
+
+# cfg_write_locked <mode: set|raw|unset> <ctx_dir> <key> [<value>]
+# Acquires <ctx_dir>/tmp/locks/config.lock inside a subshell with EXIT/HUP/INT/TERM
+# cleanup traps (preserving caller traps), stages <ctx_dir>/config.tmp.<pid>,
+# and atomically mv -f into <ctx_dir>/config.
+cfg_write_locked() {
+  cwl_mode=$1
+  cwl_ctx=$2
+  cwl_key=$3
+  cwl_val=${4:-}
+
+  cfg_write_key_ok config "$cwl_key" || return 1
+  if [ "$cwl_mode" != "unset" ]; then
+    if [ -z "$cwl_val" ]; then
+      printf "config: error: empty value for key '%s' (use unset to remove a key) (ERR_INVALID_ARGUMENT)\n" "$cwl_key" >&2
+      return 1
+    fi
+    cfg_validate_str config "value for '$cwl_key'" "$cwl_val" || return 1
+  fi
+
+  cwl_conf="$cwl_ctx/config"
+  if [ "$cwl_mode" = "unset" ] && [ ! -f "$cwl_conf" ]; then
+    return 0
+  fi
+
+  (
+    cwl_lock_held=""
+    cwl_tmp=""
+    cwl_cleanup() {
+      [ -z "$cwl_tmp" ] || rm -f "$cwl_tmp" 2>/dev/null
+      [ -z "$cwl_lock_held" ] || rm -rf "$cwl_lock_held" 2>/dev/null
+    }
+    trap 'cwl_cleanup' EXIT
+    trap 'cwl_cleanup; trap - EXIT; exit 129' HUP
+    trap 'cwl_cleanup; trap - EXIT; exit 130' INT
+    trap 'cwl_cleanup; trap - EXIT; exit 143' TERM
+
+    cwl_lock_dir="$cwl_ctx/tmp/locks"
+    mkdir -p "$cwl_lock_dir" 2>/dev/null || {
+      printf 'config.lock: error: cannot create the configuration lock folder (ERR_STORAGE_WRITE)\n' >&2
+      exit 2
+    }
+    cwl_lock="$cwl_lock_dir/config.lock"
+    cwl_n=0
+    cwl_m=0
+    while [ "$cwl_n" -lt 600 ]; do
+      if mkdir "$cwl_lock" 2>/dev/null; then
+        cwl_lock_held=$cwl_lock
+        { printf '%s\n' "$$" > "$cwl_lock/pid"; } 2>/dev/null || {
+          printf 'config.lock: error: cannot write the configuration lock holder pid (ERR_STORAGE_WRITE)\n' >&2
+          exit 2
+        }
+        break
+      fi
+      cwl_p=$(cat "$cwl_lock/pid" 2>/dev/null)
+      case "$cwl_p" in
+        ""|*[!0-9]*)
+          cwl_m=$((cwl_m + 1))
+          if [ "$cwl_m" -ge 10 ]; then
+            rm -rf "$cwl_lock" 2>/dev/null
+            cwl_m=0
+            continue
+          fi
+          ;;
+        *)
+          if kill -0 "$cwl_p" 2>/dev/null; then
+            cwl_m=0
+          else
+            rm -rf "$cwl_lock" 2>/dev/null
+            continue
+          fi
+          ;;
+      esac
+      cwl_n=$((cwl_n + 1))
+      sleep 0.1 2>/dev/null || { sleep 1; cwl_n=$((cwl_n + 9)); }
+    done
+    if [ -z "$cwl_lock_held" ]; then
+      printf 'config.lock: error: the configuration lock is held (60 s timeout) (ERR_STORAGE_LOCKED)\n' >&2
+      exit 2
+    fi
+
+    if [ "$cwl_mode" = "unset" ] && [ ! -f "$cwl_conf" ]; then
+      exit 0
+    fi
+
+    if [ -f "$cwl_conf" ]; then
+      if [ ! -r "$cwl_conf" ]; then
+        printf 'config: error: cannot read the workspace configuration (ERR_STORAGE_READ)\n' >&2
+        exit 2
+      fi
+      if cfg_has_nul_file "$cwl_conf"; then
+        printf 'config: error: the workspace configuration contains a NUL byte (ERR_STORAGE_READ)\n' >&2
+        exit 2
+      fi
+      cwl_no_nl=0
+      if [ -s "$cwl_conf" ] && [ -n "$(tail -c 1 "$cwl_conf" 2>/dev/null)" ]; then
+        cwl_no_nl=1
+      fi
+    else
+      cwl_no_nl=0
+    fi
+
+    cwl_tmp="$cwl_ctx/config.tmp.$$"
+    : > "$cwl_tmp" 2>/dev/null || {
+      cwl_tmp=""
+      printf 'config: error: cannot stage the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
+      exit 2
+    }
+
+    if [ -f "$cwl_conf" ]; then
+      CWL_MODE=$cwl_mode CWL_KEY=$cwl_key CWL_VAL=$cwl_val CWL_NONL=$cwl_no_nl LC_ALL=C awk '
+        function cfg_format_val(v,   need, i, n, c, o) {
+          if (v == "") return "\"\""
+          need = 0
+          n = length(v)
+          if (substr(v, 1, 1) ~ /[ \t]/ || substr(v, n, 1) ~ /[ \t]/) need = 1
+          if (!need && (index(v, "\"") || index(v, "'"'"'") || index(v, "\\") || index(v, "#"))) need = 1
+          if (!need) return v
+          o = "\""
+          for (i = 1; i <= n; i++) {
+            c = substr(v, i, 1)
+            if (c == "\\") o = o "\\" "\\"
+            else if (c == "\"") o = o "\\" "\""
+            else o = o c
+          }
+          return o "\""
+        }
+        BEGIN {
+          mode = ENVIRON["CWL_MODE"]
+          target = ENVIRON["CWL_KEY"]
+          val = ENVIRON["CWL_VAL"]
+          no_nl = ENVIRON["CWL_NONL"] + 0
+          out_val = (mode == "raw" ? val : cfg_format_val(val))
+          is_set = (mode != "unset")
+          found = 0; done = 0; m = 0; last_mod = 0
+        }
+        {
+          raw = $0
+          clean = raw
+          sub(/\r$/, "", clean)
+          if (clean !~ /^[ \t]*$/ && clean !~ /^[ \t]*#/ && match(clean, /[:=]/)) {
+            k = substr(clean, 1, RSTART - 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", k)
+            if (k == target) {
+              found = 1
+              if (is_set && !done) {
+                OUT[++m] = target ": " out_val
+                MOD[m] = 1
+                done = 1
+              }
+              next
+            }
+          }
+          OUT[++m] = raw
+          MOD[m] = 0
+        }
+        END {
+          if (!is_set && !found) exit 3
+          if (is_set && !done) {
+            OUT[++m] = target ": " out_val
+            MOD[m] = 1
+          }
+          for (j = 1; j <= m; j++) {
+            if (j == m && no_nl == 1 && MOD[j] == 0) printf "%s", OUT[j]
+            else printf "%s\n", OUT[j]
+          }
+        }' "$cwl_conf" > "$cwl_tmp"
+      cwl_rc=$?
+      if [ "$cwl_rc" -eq 3 ]; then
+        exit 0
+      elif [ "$cwl_rc" -ne 0 ]; then
+        printf 'config: error: cannot stage the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
+        exit 2
+      fi
+    else
+      if [ "$cwl_mode" = "raw" ]; then
+        printf '%s: %s\n' "$cwl_key" "$cwl_val" > "$cwl_tmp" 2>/dev/null || {
+          printf 'config: error: cannot write the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
+          exit 2
+        }
+      else
+        CWL_KEY=$cwl_key CWL_VAL=$cwl_val LC_ALL=C awk '
+          function cfg_format_val(v,   need, i, n, c, o) {
+            if (v == "") return "\"\""
+            need = 0
+            n = length(v)
+            if (substr(v, 1, 1) ~ /[ \t]/ || substr(v, n, 1) ~ /[ \t]/) need = 1
+            if (!need && (index(v, "\"") || index(v, "'"'"'") || index(v, "\\") || index(v, "#"))) need = 1
+            if (!need) return v
+            o = "\""
+            for (i = 1; i <= n; i++) {
+              c = substr(v, i, 1)
+              if (c == "\\") o = o "\\" "\\"
+              else if (c == "\"") o = o "\\" "\""
+              else o = o c
+            }
+            return o "\""
+          }
+          BEGIN {
+            printf "%s: %s\n", ENVIRON["CWL_KEY"], cfg_format_val(ENVIRON["CWL_VAL"])
+          }' < /dev/null > "$cwl_tmp" 2>/dev/null || {
+          printf 'config: error: cannot write the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
+          exit 2
+        }
+      fi
+    fi
+
+    mv -f "$cwl_tmp" "$cwl_conf" 2>/dev/null || {
+      printf 'config: error: cannot write the workspace configuration (ERR_STORAGE_WRITE)\n' >&2
+      exit 2
+    }
+    cwl_tmp=""
+    exit 0
+  )
+}
+
+# cfg_set <key> <value> [<ctx_dir>]: write canonical quoted entry under lock.
+cfg_set() {
+  cfg_write_locked set "$(cfg_ctx_dir "${3:-}")" "$1" "$2"
+}
+
+# cfg_set_raw <key> <value> [<ctx_dir>]: write raw unquoted entry under lock (for pkg_decl_write).
+cfg_set_raw() {
+  cfg_write_locked raw "$(cfg_ctx_dir "${3:-}")" "$1" "$2"
+}
+
+# cfg_unset <key> [<ctx_dir>]: remove all entries for <key> under lock (no-op if absent).
+cfg_unset() {
+  cfg_write_locked unset "$(cfg_ctx_dir "${2:-}")" "$1"
+}
+
+# ---------------------------------------------------------------------------
+# 3. Schema parser and validator
+
+# Core search schema (declared internally; never stored as a separate module).
+CFG_SEARCH_SCHEMA='timeout: optional integer min 1 default 10
+  Maximum seconds per module during fan-out search.'
+
+# CFG_SCHEMA_AWK: schema line parser + value validator.
+CFG_SCHEMA_AWK="$CFG_UTF8_AWK$CFG_ESC_AWK$CFG_PARSE_VAL_AWK"'
+function word(s,   i) {
+  i = index(s, " ")
+  if (i == 0) i = index(s, "\t")
+  return i ? substr(s, 1, i - 1) : s
+}
+function ltrim(s) {
+  sub(/^[ \t]+/, "", s)
+  return s
+}
+function rtrim(s) {
+  sub(/[ \t]+$/, "", s)
+  return s
+}
+function val_check(typ, has_oneof, oneof_raw, has_min, min_v, has_max, max_v, val,   nv, ov, k, ok) {
+  CFG_VAL_ERR = ""
+  CFG_VAL_CODE = "ERR_SCHEMA_VIOLATION"
+  if (index(val, "\r") || index(val, "\n")) {
+    CFG_VAL_CODE = "ERR_INVALID_ARGUMENT"
+    CFG_VAL_ERR = "holds a newline or carriage return"
+    return 0
+  }
+  if (!utf8_ok(val)) {
+    CFG_VAL_CODE = "ERR_INVALID_ARGUMENT"
+    CFG_VAL_ERR = "is not valid UTF-8"
+    return 0
+  }
+  if (typ == "string") {
+    if (val == "") {
+      CFG_VAL_ERR = "cannot be empty"
+      return 0
+    }
+    if (has_oneof) {
+      nv = split(oneof_raw, ov, /\|/)
+      ok = 0
+      for (k = 1; k <= nv; k++) if (ov[k] == val) { ok = 1; break }
+      if (!ok) {
+        CFG_VAL_ERR = "'"'"'" val "'"'"' is not one of " oneof_raw
+        return 0
+      }
+    }
+    return 1
+  }
+  if (typ == "integer") {
+    if (val !~ /^-?[0-9]+$/) {
+      CFG_VAL_ERR = "takes an integer, not '"'"'" val "'"'"'"
+      return 0
+    }
+    if (has_min && (val + 0) < (min_v + 0)) {
+      CFG_VAL_ERR = val " is less than minimum " min_v
+      return 0
+    }
+    if (has_max && (val + 0) > (max_v + 0)) {
+      CFG_VAL_ERR = val " exceeds maximum " max_v
+      return 0
+    }
+    return 1
+  }
+  if (typ == "boolean") {
+    if (val != "true" && val != "false") {
+      CFG_VAL_ERR = "takes true or false, not '"'"'" val "'"'"'"
+      return 0
+    }
+    return 1
+  }
+  if (typ == "path") {
+    if (val == "") {
+      CFG_VAL_ERR = "path cannot be empty"
+      return 0
+    }
+    if (val ~ /[\001-\037\177]/) {
+      CFG_VAL_CODE = "ERR_INVALID_ARGUMENT"
+      CFG_VAL_ERR = "path holds a control character"
+      return 0
+    }
+    return 1
+  }
+  CFG_VAL_ERR = "unknown type " typ
+  return 0
+}
+function s_fail(msg) {
+  printf "%s: error: %s (ERR_INVALID_ARGUMENT)\n", S_LABEL, msg > "/dev/stderr"
+  S_ERR = 1
+  exit 1
+}
+'
+
+# cfg_schema_parse_stream <label>: parse schema on stdin, emit 9-column tab lines:
+# <key>\t<presence>\t<type>\t<one_of>\t<min>\t<max>\t<has_default>\t<default>\t<description>
+cfg_schema_parse_stream() {
+  CFG_S_LABEL=${1:-schema} LC_ALL=C awk "$CFG_SCHEMA_AWK"'
+    BEGIN {
+      S_LABEL = ENVIRON["CFG_S_LABEL"]
+      S_ERR = 0
+      nk = 0
+      last_key = ""
+    }
+    {
+      line = $0
+      sub(/\r$/, "", line)
+      if (index(line, "\r")) s_fail("line " NR " holds a carriage return")
+      if (!utf8_ok(line)) s_fail("line " NR " is not valid UTF-8")
+      if (line ~ /^[ \t]*$/) { last_key = ""; next }
+      if (line ~ /^[ \t]*#/) { last_key = ""; next }
+      if (substr(line, 1, 2) == "  ") {
+        if (last_key == "") s_fail("line " NR ": orphaned description line with no preceding key")
+        d = substr(line, 3)
+        if (DESC[last_key] == "") sub(/^description:[ \t]+/, "", d)
+        if (d ~ /^[ \t]*$/) s_fail("line " NR ": empty description line for key '"'"'" last_key "'"'"'")
+        DESC[last_key] = (DESC[last_key] == "" ? d : DESC[last_key] "\n" d)
+        next
+      }
+      if (substr(line, 1, 1) ~ /[ \t]/) s_fail("line " NR ": unexpected indentation (descriptions use 2 spaces)")
+      c = index(line, ":")
+      if (c < 2) s_fail("line " NR ": expected <key>: <required|optional> <type> ...")
+      key = substr(line, 1, c - 1)
+      if (key == "namespace") s_fail("line " NR ": '\''namespace:'\'' is not allowed in a config schema")
+      if (key !~ /^[a-z][a-z0-9_-]*$/) s_fail("line " NR ": invalid key '\''" key "'\'' (expected ^[a-z][a-z0-9_-]*$)")
+      if (key in SEEN) s_fail("line " NR ": key '\''" key "'\'' declared twice")
+      rest = substr(line, c + 1)
+      if (rest == "" || substr(rest, 1, 1) !~ /[ \t]/) s_fail("key '\''" key "'\'': expected space after '\'':'\''")
+      rest = rtrim(ltrim(rest))
+      pres = word(rest)
+      rest = ltrim(substr(rest, length(pres) + 1))
+      if (pres != "required" && pres != "optional") s_fail("key '\''" key "'\'': presence must be required or optional, not '\''" pres "'\''")
+      typ = word(rest)
+      rest = ltrim(substr(rest, length(typ) + 1))
+      if (typ != "string" && typ != "integer" && typ != "boolean" && typ != "path") s_fail("key '\''" key "'\'': type must be string, integer, boolean, or path, not '\''" typ "'\''")
+
+      has_oneof = 0; oneof_raw = ""
+      has_min = 0; min_v = ""
+      has_max = 0; max_v = ""
+      has_def = 0; def_v = ""
+
+      while (rest != "") {
+        cl = word(rest)
+        if (cl == "default") {
+          if (has_def) s_fail("key '\''" key "'\'': duplicate default clause")
+          if (pres == "required") s_fail("key '\''" key "'\'': required key cannot declare a default")
+          def_raw = ltrim(substr(rest, 8))
+          if (def_raw == "") s_fail("key '\''" key "'\'': default clause requires a value")
+          fq = substr(def_raw, 1, 1)
+          if (fq == "\"" || fq == "'"'"'") {
+            def_v = cfg_parse_val(def_raw)
+            if (!CFG_PV_OK) s_fail("key '\''" key "'\'': malformed quoted default value")
+          } else {
+            def_v = def_raw
+          }
+          has_def = 1
+          rest = ""
+          break
+        } else if (typ == "string" && cl == "one-of") {
+          if (has_oneof) s_fail("key '\''" key "'\'': duplicate one-of clause")
+          after = ltrim(substr(rest, 7))
+          dp = index(" " after " ", " default ")
+          if (dp) {
+            oneof_raw = rtrim(substr(after, 1, dp - 1))
+            rest = ltrim(substr(after, dp))
+          } else {
+            oneof_raw = after
+            rest = ""
+          }
+          if (oneof_raw == "") s_fail("key '\''" key "'\'': one-of clause requires values")
+          nv = split(oneof_raw, OV, /\|/)
+          for (k = 1; k <= nv; k++) {
+            if (OV[k] == "") s_fail("key '\''" key "'\'': one-of set '\''" oneof_raw "'\'' holds an empty value")
+            nw = split(OV[k], OW, /[ \t]+/)
+            for (wi = 2; wi <= nw; wi++) {
+              if (OW[wi] == "one-of" || OW[wi] == "min" || OW[wi] == "max") {
+                s_fail("key '\''" key "'\'': unexpected clause '\''" OW[wi] "'\'' after one-of")
+              }
+            }
+          }
+          has_oneof = 1
+        } else if (typ == "integer" && cl == "min") {
+          if (has_min) s_fail("key '\''" key "'\'': duplicate min clause")
+          rest = ltrim(substr(rest, 4))
+          mv = word(rest)
+          if (mv !~ /^-?[0-9]+$/) s_fail("key '\''" key "'\'': min takes an integer, not '\''" mv "'\''")
+          has_min = 1; min_v = mv
+          rest = ltrim(substr(rest, length(mv) + 1))
+        } else if (typ == "integer" && cl == "max") {
+          if (has_max) s_fail("key '\''" key "'\'': duplicate max clause")
+          rest = ltrim(substr(rest, 4))
+          mv = word(rest)
+          if (mv !~ /^-?[0-9]+$/) s_fail("key '\''" key "'\'': max takes an integer, not '\''" mv "'\''")
+          has_max = 1; max_v = mv
+          rest = ltrim(substr(rest, length(mv) + 1))
+        } else {
+          s_fail("key '\''" key "'\'': unsupported clause '\''" cl "'\'' for type " typ)
+        }
+      }
+
+      if (has_min && has_max && (min_v + 0) > (max_v + 0)) {
+        s_fail("key '\''" key "'\'': min (" min_v ") exceeds max (" max_v ")")
+      }
+      if (has_def) {
+        if (!val_check(typ, has_oneof, oneof_raw, has_min, min_v, has_max, max_v, def_v)) {
+          s_fail("key '\''" key "'\'': invalid default '\''" def_v "'\'': " CFG_VAL_ERR)
+        }
+      }
+
+      SEEN[key] = 1
+      ORDER[++nk] = key
+      PRES[key] = pres
+      TYP[key] = typ
+      ONEOF[key] = oneof_raw
+      MINV[key] = min_v
+      MAXV[key] = max_v
+      HASDEF[key] = has_def
+      DEF[key] = def_v
+      DESC[key] = ""
+      last_key = key
+    }
+    END {
+      if (S_ERR) exit 1
+      for (i = 1; i <= nk; i++) {
+        k = ORDER[i]
+        printf "%s\t%s\t%s\t%s\t%s\t%s\t%d\t%s\t%s\n", k, PRES[k], TYP[k], ONEOF[k], MINV[k], MAXV[k], HASDEF[k], cfg_esc(DEF[k]), cfg_esc(DESC[k])
+      }
+    }'
+}
+
+# cfg_schema_parse <file> [<label>]: parse schema file, emit 9-column tab lines.
+cfg_schema_parse() {
+  csp_file=$1
+  csp_lbl=${2:-schema}
+  if [ ! -f "$csp_file" ] || [ ! -r "$csp_file" ]; then
+    printf '%s: error: cannot read schema file (ERR_STORAGE_READ)\n' "$csp_lbl" >&2
+    return 2
+  fi
+  if cfg_has_nul_file "$csp_file"; then
+    printf '%s: error: schema file contains a NUL byte (ERR_INVALID_ARGUMENT)\n' "$csp_lbl" >&2
+    return 1
+  fi
+  cfg_schema_parse_stream "$csp_lbl" < "$csp_file"
+}
+
+# cfg_schema_check <file> [<label>]: validate schema file silently on stdout.
+cfg_schema_check() {
+  cfg_schema_parse "$1" "${2:-schema}" > /dev/null
+}
+
+# cfg_schema_validate_value <type> <one_of> <min> <max> <value> [<label>] [<key>]
+cfg_schema_validate_value() {
+  CSV_TYP=$1 CSV_ONEOF=$2 CSV_MIN=$3 CSV_MAX=$4 CSV_VAL=$5 \
+  CSV_LBL=${6:-config} CSV_KEY=${7:-value} LC_ALL=C awk "$CFG_SCHEMA_AWK"'
+    BEGIN {
+      typ = ENVIRON["CSV_TYP"]
+      oneof = ENVIRON["CSV_ONEOF"]
+      min_v = ENVIRON["CSV_MIN"]
+      max_v = ENVIRON["CSV_MAX"]
+      val = ENVIRON["CSV_VAL"]
+      lbl = ENVIRON["CSV_LBL"]
+      key = ENVIRON["CSV_KEY"]
+      if (!val_check(typ, (oneof != ""), oneof, (min_v != ""), min_v, (max_v != ""), max_v, val)) {
+        printf "%s: error: key '\''%s'\'': %s (%s)\n", lbl, key, CFG_VAL_ERR, CFG_VAL_CODE > "/dev/stderr"
+        exit 1
+      }
+      exit 0
+    }' < /dev/null
+}
+
+# ---------------------------------------------------------------------------
+# 4. Schema discovery and alias resolution
+
+# cfg_is_builtin <name>: rc 0 for shipped builtin module names.
+cfg_is_builtin() {
+  case "${1:-}" in
+    unit|run|lane|rhythm|store) return 0 ;;
+  esac
+  return 1
+}
+
+# cfg_load_unit_verbs <ctx_dir>: cache unit module verb names once per <ctx_dir>.
+cfg_load_unit_verbs() {
+  cluv_ctx=$1
+  [ "${CFG_UNIT_VERBS_CTX:-}" = "$cluv_ctx" ] && return 0
+  CFG_UNIT_VERBS_CTX=$cluv_ctx
+  CFG_UNIT_VERBS=" "
+  cluv_root=$(cfg_root_dir "$cluv_ctx")
+  cluv_sd="$cluv_ctx/modules/unit/scripts"
+  [ -d "$cluv_sd" ] || cluv_sd="$cluv_root/base/.contexture/modules/unit/scripts"
+  if [ -d "$cluv_sd" ]; then
+    set --
+    for cluv_f in "$cluv_sd"/*; do
+      [ -f "$cluv_f" ] || continue
+      case "${cluv_f##*/}" in *.*) continue ;; esac
+      set -- "$@" "$cluv_f"
+    done
+    if [ $# -gt 0 ]; then
+      for cluv_hit in $(grep -l '^# summary: ' "$@" 2>/dev/null); do
+        CFG_UNIT_VERBS="$CFG_UNIT_VERBS${cluv_hit##*/} "
+      done
+    fi
+  fi
+}
+
+# cfg_is_reserved <ctx_dir> <name>: rc 0 for engine-reserved names and unit verbs.
+cfg_is_reserved() {
+  cir_ctx=$1
+  cir_name=$2
+  case "$cir_name" in
+    refresh|run|hooks|compose|package|search|config|storage|append|amend|query|flip|drop|next|resolve)
+      return 0
+      ;;
+  esac
+  cfg_load_unit_verbs "$cir_ctx"
+  case "$CFG_UNIT_VERBS" in
+    *" $cir_name "*) return 0 ;;
+  esac
+  return 1
+}
+
+# cfg_alias_of <ctx_dir> <installed_name>: emit "<original> <package>" when aliased;
+# silent on absent or unreadable extensions/.state.
+cfg_alias_of() {
+  cao_ctx=$1
+  cao_name=$2
+  [ -d "$cao_ctx/extensions/.state" ] || return 0
+  for cao_f in "$cao_ctx"/extensions/.state/*.files; do
+    [ -f "$cao_f" ] && [ -r "$cao_f" ] || continue
+    cao_orig=$(LC_ALL=C awk -v n="$cao_name" '$1 == "module" && NF == 3 && $2 == n && $3 != n { print $3; exit }' "$cao_f" 2>/dev/null)
+    [ -n "$cao_orig" ] || continue
+    cao_pkg=$(LC_ALL=C awk '$1 == "package" { print $2; exit }' "$cao_f" 2>/dev/null)
+    if [ -z "$cao_pkg" ]; then
+      cao_pkg=${cao_f##*/}
+      cao_pkg=${cao_pkg%.files}
+    fi
+    printf '%s %s\n' "$cao_orig" "$cao_pkg"
+    return 0
+  done
+  return 0
+}
+
+# cfg_module_dir_valid <ctx_dir> <name>: rc 0 if <name> is a valid module directory
+# (workspace or extension, including manifestless filter/hook dirs).
+cfg_module_dir_valid() {
+  cmdv_ctx=$1
+  cmdv_name=$2
+  case "$cmdv_name" in
+    ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin) return 1 ;;
+  esac
+  cfg_module_name_ok "$cmdv_name" || return 1
+  if [ -d "$cmdv_ctx/modules/$cmdv_name" ]; then
+    if cfg_is_reserved "$cmdv_ctx" "$cmdv_name" && ! cfg_is_builtin "$cmdv_name"; then
+      return 1
+    fi
+    return 0
+  fi
+  if [ -d "$cmdv_ctx/extensions/modules/$cmdv_name" ]; then
+    cfg_is_builtin "$cmdv_name" && return 1
+    cfg_is_reserved "$cmdv_ctx" "$cmdv_name" && return 1
+    return 0
+  fi
+  return 1
+}
+
+# cfg_discover_module_configs <ctx_dir>: emit "<namespace>\t<config_file>" sorted by namespace.
+# Workspace modules shadow extension modules even if workspace module has no config file.
+cfg_discover_module_configs() {
+  cdmc_ctx=$1
+  cdmc_ws=""
+  cdmc_out=""
+  if [ -d "$cdmc_ctx/modules" ]; then
+    for cdmc_d in "$cdmc_ctx/modules"/*/; do
+      [ -d "$cdmc_d" ] || continue
+      cdmc_bn=${cdmc_d%/}
+      cdmc_bn=${cdmc_bn##*/}
+      case "$cdmc_bn" in
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin) continue ;;
+      esac
+      cfg_module_name_ok "$cdmc_bn" || continue
+      if cfg_is_reserved "$cdmc_ctx" "$cdmc_bn" && ! cfg_is_builtin "$cdmc_bn"; then
+        continue
+      fi
+      cdmc_ws="$cdmc_ws $cdmc_bn"
+      if [ -f "${cdmc_d}config" ]; then
+        cdmc_out="${cdmc_out}${cdmc_bn}	${cdmc_d}config
+"
+      fi
+    done
+  fi
+  if [ -d "$cdmc_ctx/extensions/modules" ]; then
+    for cdmc_d in "$cdmc_ctx/extensions/modules"/*/; do
+      [ -d "$cdmc_d" ] || continue
+      cdmc_bn=${cdmc_d%/}
+      cdmc_bn=${cdmc_bn##*/}
+      case "$cdmc_bn" in
+        ""|.*|*[[:space:]]*|_hooks|_module|_package|_reserved|_builtin) continue ;;
+      esac
+      cfg_module_name_ok "$cdmc_bn" || continue
+      case " $cdmc_ws " in
+        *" $cdmc_bn "*) continue ;;
+      esac
+      cfg_is_builtin "$cdmc_bn" && continue
+      cfg_is_reserved "$cdmc_ctx" "$cdmc_bn" && continue
+      if [ -f "${cdmc_d}config" ]; then
+        cdmc_out="${cdmc_out}${cdmc_bn}	${cdmc_d}config
+"
+      fi
+    done
+  fi
+  [ -z "$cdmc_out" ] || printf '%s' "$cdmc_out" | LC_ALL=C sort -t '	' -k1,1
+}
+
+# cfg_storage_schema_rows <ctx_dir> <label>: parse core storage/config plus installed
+# driver configs under storage/drivers/*/config, extensions/storage/drivers/*/config,
+# and drivers/*/config. Refuses collisions with core driver or other drivers.
+cfg_storage_schema_rows() {
+  cssr_ctx=$1
+  cssr_lbl=$2
+  cssr_root=$(cfg_root_dir "$cssr_ctx")
+
+  cssr_core=""
+  if [ -f "$cssr_ctx/storage/config" ]; then
+    cssr_core="$cssr_ctx/storage/config"
+  elif [ -f "$cssr_root/base/.contexture/storage/config" ]; then
+    cssr_core="$cssr_root/base/.contexture/storage/config"
+  fi
+
+  cssr_rows=""
+  cssr_keys=" "
+  if [ -n "$cssr_core" ]; then
+    cssr_parsed=$(cfg_schema_parse "$cssr_core" "$cssr_lbl") || return $?
+    if [ -n "$cssr_parsed" ]; then
+      cssr_rows="$cssr_parsed
+"
+      while IFS='	' read -r cssr_k cssr_rest; do
+        [ -n "$cssr_k" ] || continue
+        cssr_keys="$cssr_keys$cssr_k "
+      done <<EOF
+$cssr_parsed
+EOF
+    fi
+  fi
+
+  for cssr_glob in \
+    "$cssr_ctx"/storage/drivers/*/config \
+    "$cssr_ctx"/extensions/storage/drivers/*/config \
+    "$cssr_ctx"/drivers/*/config; do
+    [ -f "$cssr_glob" ] || continue
+    cssr_drv_dir=${cssr_glob%/config}
+    cssr_drv=${cssr_drv_dir##*/}
+    cssr_dparsed=$(cfg_schema_parse "$cssr_glob" "$cssr_lbl ($cssr_drv)") || return $?
+    [ -n "$cssr_dparsed" ] || continue
+    while IFS='	' read -r cssr_k cssr_rest; do
+      [ -n "$cssr_k" ] || continue
+      case "$cssr_keys" in
+        *" $cssr_k "*)
+          printf "%s: error: driver '%s' config key 'storage.%s' collides with an existing storage key (ERR_INVALID_ARGUMENT)\n" "$cssr_lbl" "$cssr_drv" "$cssr_k" >&2
+          return 1
+          ;;
+      esac
+      cssr_keys="$cssr_keys$cssr_k "
+    done <<EOF
+$cssr_dparsed
+EOF
+    cssr_rows="${cssr_rows}${cssr_dparsed}
+"
+  done
+
+  printf '%s' "$cssr_rows"
+}
+
+# cfg_append_ns_rows <ns> <alias_orig> <alias_pkg> <9col_rows>: prefix 3 namespace/alias
+# columns to each parsed schema row.
+cfg_emit_ns_rows() {
+  printf '%s\n' "$4" | CEN_NS=$1 CEN_AO=$2 CEN_AP=$3 LC_ALL=C awk '
+    NF > 0 {
+      printf "%s\t%s\t%s\t%s\n", ENVIRON["CEN_NS"], $0, ENVIRON["CEN_AO"], ENVIRON["CEN_AP"]
+    }'
+}
+
+# cfg_discover_schemas [<ctx_dir>] [<filter_ns>] [<label>]:
+# Emit 12-column tab rows:
+# <ns>\t<key>\t<presence>\t<type>\t<one_of>\t<min>\t<max>\t<has_default>\t<default>\t<description>\t<alias_orig>\t<alias_pkg>
+# If <filter_ns> is given and unknown, refuses rc 1.
+cfg_discover_schemas() {
+  cds_ctx=$(cfg_ctx_dir "${1:-}")
+  cds_ns=${2:-}
+  cds_lbl=${3:-config}
+
+  if [ -n "$cds_ns" ]; then
+    case "$cds_ns" in
+      search)
+        cds_r=$(printf '%s\n' "$CFG_SEARCH_SCHEMA" | cfg_schema_parse_stream "$cds_lbl (search)") || return $?
+        [ -z "$cds_r" ] || cfg_emit_ns_rows search "" "" "$cds_r"
+        return 0
+        ;;
+      storage)
+        cds_r=$(cfg_storage_schema_rows "$cds_ctx" "$cds_lbl") || return $?
+        [ -z "$cds_r" ] || cfg_emit_ns_rows storage "" "" "$cds_r"
+        return 0
+        ;;
+      *)
+        if ! cfg_module_dir_valid "$cds_ctx" "$cds_ns"; then
+          printf "%s: error: unknown configuration namespace '%s' (ERR_ENTITY_NOT_FOUND)\n" "$cds_lbl" "$cds_ns" >&2
+          return 1
+        fi
+        cds_mconf=""
+        if [ -f "$cds_ctx/modules/$cds_ns/config" ]; then
+          cds_mconf="$cds_ctx/modules/$cds_ns/config"
+          cds_ao=""
+          cds_ap=""
+        elif [ ! -d "$cds_ctx/modules/$cds_ns" ] && [ -f "$cds_ctx/extensions/modules/$cds_ns/config" ]; then
+          cds_mconf="$cds_ctx/extensions/modules/$cds_ns/config"
+          set -- $(cfg_alias_of "$cds_ctx" "$cds_ns")
+          cds_ao=${1:-}
+          cds_ap=${2:-}
+        fi
+        [ -n "$cds_mconf" ] || return 0
+        cds_r=$(cfg_schema_parse "$cds_mconf" "$cds_lbl ($cds_ns)") || return $?
+        [ -z "$cds_r" ] || cfg_emit_ns_rows "$cds_ns" "$cds_ao" "$cds_ap" "$cds_r"
+        return 0
+        ;;
+    esac
+  fi
+
+  cds_all=""
+  cds_sr=$(printf '%s\n' "$CFG_SEARCH_SCHEMA" | cfg_schema_parse_stream "$cds_lbl (search)") || return $?
+  if [ -n "$cds_sr" ]; then
+    cds_all="${cds_all}$(cfg_emit_ns_rows search "" "" "$cds_sr")
+"
+  fi
+  cds_str=$(cfg_storage_schema_rows "$cds_ctx" "$cds_lbl") || return $?
+  if [ -n "$cds_str" ]; then
+    cds_all="${cds_all}$(cfg_emit_ns_rows storage "" "" "$cds_str")
+"
+  fi
+
+  cds_mods=$(cfg_discover_module_configs "$cds_ctx")
+  if [ -n "$cds_mods" ]; then
+    while IFS='	' read -r cds_m cds_mf; do
+      [ -n "$cds_m" ] || continue
+      cds_ao=""
+      cds_ap=""
+      case "$cds_mf" in
+        "$cds_ctx"/extensions/modules/*)
+          set -- $(cfg_alias_of "$cds_ctx" "$cds_m")
+          cds_ao=${1:-}
+          cds_ap=${2:-}
+          ;;
+      esac
+      cds_mr=$(cfg_schema_parse "$cds_mf" "$cds_lbl ($cds_m)") || return $?
+      if [ -n "$cds_mr" ]; then
+        cds_all="${cds_all}$(cfg_emit_ns_rows "$cds_m" "$cds_ao" "$cds_ap" "$cds_mr")
+"
+      fi
+    done <<EOF
+$cds_mods
+EOF
+  fi
+
+  printf '%s' "$cds_all"
+}
+
+# ---------------------------------------------------------------------------
+# 5. Assembly, storage driver validator, and shared owner config-verb helper
+
+# cfg_effective_driver [<ctx_dir>]: effective configured storage driver name
+# (reading workspace configuration, then legacy storage.conf, else posix).
+cfg_effective_driver() {
+  ced_ctx=$(cfg_ctx_dir "${1:-}")
+  ced_v=$(cfg_get_file "$ced_ctx/config" storage.driver 2>/dev/null) && [ -n "$ced_v" ] && { printf '%s\n' "$ced_v"; return 0; }
+  ced_v=$(cfg_get_file "$ced_ctx/config" session.storage.driver 2>/dev/null) && [ -n "$ced_v" ] && { printf '%s\n' "$ced_v"; return 0; }
+  ced_v=$(cfg_get_file "$ced_ctx/storage.conf" storage.driver 2>/dev/null) && [ -n "$ced_v" ] && { printf '%s\n' "$ced_v"; return 0; }
+  ced_v=$(cfg_get_file "$ced_ctx/storage.conf" session.storage.driver 2>/dev/null) && [ -n "$ced_v" ] && { printf '%s\n' "$ced_v"; return 0; }
+  printf 'posix\n'
+}
+
+# cfg_find_resolver <ctx_dir>: locate driver-resolver executable.
+cfg_find_resolver() {
+  cfr_ctx=$1
+  cfr_root=$(cfg_root_dir "$cfr_ctx")
+  if [ -n "${CTX_STORE_RESOLVER:-}" ] && [ -x "$CTX_STORE_RESOLVER" ]; then
+    printf '%s\n' "$CTX_STORE_RESOLVER"
+    return 0
+  fi
+  for cfr_c in \
+    "$cfr_ctx/storage/scripts/driver-resolver" \
+    "$cfr_root/base/.contexture/storage/scripts/driver-resolver"; do
+    if [ -x "$cfr_c" ]; then
+      printf '%s\n' "$cfr_c"
+      return 0
+    fi
+  done
+  return 1
+}
+
+# cfg_storage_driver_post: emit non-blocking stderr migration notice when effective
+# driver changed across set or unset.
+cfg_storage_driver_post() {
+  csdp_new=$(cfg_effective_driver "$CFG_DRV_CTX")
+  if [ "$CFG_DRV_OLD" != "$csdp_new" ]; then
+    printf "notice: active storage driver changed from '%s' to '%s'; existing data is not migrated automatically between storage drivers\n" "$CFG_DRV_OLD" "$csdp_new" >&2
+  fi
+  return 0
+}
+
+# cfg_validate_storage_driver <op> <key> <value> <ctx_dir>:
+# Pre-write validator hook for storage config writes. When <key> is 'driver':
+# on set, verifies driver via driver-resolver check >/dev/null before writing;
+# on both set and unset, arms CFG_POST_HOOK=cfg_storage_driver_post so a non-blocking
+# migration notice prints if the effective driver changes.
+cfg_validate_storage_driver() {
+  cvsd_op=$1
+  cvsd_key=$2
+  cvsd_val=$3
+  cvsd_ctx=$4
+  [ "$cvsd_key" = "driver" ] || return 0
+
+  if [ "$cvsd_op" = "set" ]; then
+    case "$cvsd_val" in
+      ""|-*|*[[:space:]]*)
+        printf "store config: error: malformed storage driver '%s' (ERR_INVALID_ARGUMENT)\n" "$cvsd_val" >&2
+        return 1
+        ;;
+    esac
+    cvsd_rsv=$(cfg_find_resolver "$cvsd_ctx") || {
+      printf 'store config: error: the storage core resolver is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+      return 2
+    }
+    cvsd_root=$(cfg_root_dir "$cvsd_ctx")
+    (
+      unset CTX_DIR
+      CTX_ROOT=$cvsd_root
+      export CTX_ROOT
+      cd "$cvsd_root" || exit 2
+      exec "$cvsd_rsv" check "$cvsd_val" >/dev/null
+    ) || return $?
+  fi
+
+  CFG_DRV_OLD=$(cfg_effective_driver "$cvsd_ctx")
+  CFG_DRV_CTX=$cvsd_ctx
+  CFG_POST_HOOK=cfg_storage_driver_post
+  return 0
+}
+
+# cfg_assembly_load <caller_label> <ctx_dir> [--module=<ns>] [--json] [--owner]
+cfg_assembly_load() {
+  cal_lbl=$1
+  cal_ctx=$2
+  shift 2
+  cal_mod=""
+  cal_json=0
+  cal_owner=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --module=*) cal_mod=${1#--module=} ;;
+      --json) cal_json=1 ;;
+      --owner) cal_owner=1 ;;
+      *)
+        printf "%s: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$cal_lbl" "$1" >&2
+        return 1
+        ;;
+    esac
+    shift
+  done
+
+  cal_schemas=$(cfg_discover_schemas "$cal_ctx" "$cal_mod" "$cal_lbl") || return $?
+  cal_entries=$(cfg_list_file "$cal_ctx/config") || return $?
+
+  if [ "$cal_owner" -eq 0 ]; then
+    if [ -f "$cal_ctx/storage.conf" ]; then
+      printf '%s: warning: legacy storage configuration is deprecated; move settings into the workspace configuration\n' "$cal_lbl" >&2
+    fi
+  fi
+
+  CAL_SCHEMAS=$cal_schemas CAL_ENTRIES=$cal_entries CAL_JSON=$cal_json \
+  CAL_LBL=$cal_lbl CAL_OWNER=$cal_owner CAL_MOD=$cal_mod \
+  LC_ALL=C awk "$CFG_ESC_AWK$CFG_JQ_AWK"'
+    BEGIN {
+      json = ENVIRON["CAL_JSON"] + 0
+      lbl = ENVIRON["CAL_LBL"]
+      owner = ENVIRON["CAL_OWNER"] + 0
+      mod = ENVIRON["CAL_MOD"]
+
+      nsch = split(ENVIRON["CAL_SCHEMAS"], SL, /\n/)
+      nkeys = 0
+      for (i = 1; i <= nsch; i++) {
+        if (SL[i] == "") continue
+        split(SL[i], F, /\t/)
+        ns = F[1]; k = F[2]; full = ns "." k
+        DECL[full] = 1
+        ORDER[++nkeys] = full
+        SNS[full] = ns
+        SK[full] = k
+        STYP[full] = F[4]
+        SHASDEF[full] = F[8] + 0
+        SDEF[full] = cfg_unesc(F[9])
+        SAO[full] = F[11]
+      }
+
+      nent = split(ENVIRON["CAL_ENTRIES"], EL, /\n/)
+      for (i = 1; i <= nent; i++) {
+        if (EL[i] == "") continue
+        t = index(EL[i], "\t")
+        if (t < 2) continue
+        ek = substr(EL[i], 1, t - 1)
+        ev = substr(EL[i], t + 1)
+        if (substr(ek, 1, 8) == "package.") continue
+        CVAL[ek] = ev
+        CHAS[ek] = 1
+        if (owner) {
+          if (mod != "" && index(ek, mod ".") == 1 && !(ek in DECL)) {
+            printf "%s: warning: undeclared configuration key '\''%s'\''\n", lbl, ek > "/dev/stderr"
+          }
+          continue
+        }
+        if (index(ek, "session.storage.") == 1) {
+          printf "%s: warning: legacy key '\''%s'\'' is deprecated; use '\''storage.%s'\''\n", lbl, ek, substr(ek, 17) > "/dev/stderr"
+          continue
+        }
+        if (!(ek in DECL)) {
+          printf "%s: warning: undeclared configuration key '\''%s'\''\n", lbl, ek > "/dev/stderr"
+        }
+      }
+
+      out_n = 0
+      for (i = 1; i <= nkeys; i++) {
+        full = ORDER[i]
+        if (full in CHAS) {
+          val = CVAL[full]; src = "config"
+        } else if (SHASDEF[full]) {
+          val = SDEF[full]; src = "default"
+        } else {
+          continue
+        }
+        OUT[++out_n] = full
+        OVAL[full] = val
+        OSRC[full] = src
+      }
+
+      if (json) {
+        printf "{\"entries\":["
+        for (i = 1; i <= out_n; i++) {
+          full = OUT[i]
+          printf "%s{\"namespace\":%s,\"key\":%s,\"full_key\":%s", (i > 1 ? "," : ""), cfg_jq(SNS[full]), cfg_jq(SK[full]), cfg_jq(full)
+          if (SAO[full] != "") printf ",\"alias_of\":%s", cfg_jq(SAO[full])
+          printf ",\"value\":%s,\"type\":%s,\"source\":%s}", cfg_jq(OVAL[full]), cfg_jq(STYP[full]), cfg_jq(OSRC[full])
+        }
+        printf "]}\n"
+      } else {
+        for (i = 1; i <= out_n; i++) {
+          full = OUT[i]
+          if (OSRC[full] == "default") printf "%s: %s (default)\n", full, OVAL[full]
+          else printf "%s: %s\n", full, OVAL[full]
+        }
+      }
+    }' < /dev/null
+}
+
+# cfg_assembly_get <caller_label> <ctx_dir> <ns.key>
+cfg_assembly_get() {
+  cag_lbl=$1
+  cag_ctx=$2
+  cag_full=$3
+
+  case "$cag_full" in
+    package.*)
+      printf "%s: error: package declarations are managed by 'ctx package list' (ERR_INVALID_ARGUMENT)\n" "$cag_lbl" >&2
+      return 1
+      ;;
+    *.*) ;;
+    *)
+      printf "%s: error: expected <namespace>.<key>, got '%s' (ERR_INVALID_ARGUMENT)\n" "$cag_lbl" "$cag_full" >&2
+      return 1
+      ;;
+  esac
+
+  cag_ns=${cag_full%.*}
+  cag_k=${cag_full##*.}
+  if [ -z "$cag_ns" ] || ! cfg_local_key_ok "$cag_k"; then
+    printf "%s: error: malformed configuration key '%s' (ERR_INVALID_ARGUMENT)\n" "$cag_lbl" "$cag_full" >&2
+    return 1
+  fi
+
+  cag_schemas=$(cfg_discover_schemas "$cag_ctx" "$cag_ns" "$cag_lbl") || return $?
+  cag_row=$(printf '%s\n' "$cag_schemas" | LC_ALL=C awk -F '\t' -v k="$cag_k" '$2 == k { print; exit }')
+  if [ -z "$cag_row" ]; then
+    printf "%s: error: unknown configuration key '%s' (ERR_SCHEMA_VIOLATION)\n" "$cag_lbl" "$cag_full" >&2
+    return 1
+  fi
+
+  cag_val=$(cfg_get_file "$cag_ctx/config" "$cag_full")
+  cag_rc=$?
+  if [ "$cag_rc" -eq 0 ]; then
+    printf '%s\n' "$cag_val"
+    return 0
+  elif [ "$cag_rc" -eq 2 ]; then
+    return 2
+  fi
+
+  cag_has_def=$(printf '%s\n' "$cag_row" | LC_ALL=C awk -F '\t' '{ print $8 }')
+  if [ "$cag_has_def" = "1" ]; then
+    printf '%s\n' "$cag_row" | LC_ALL=C awk "$CFG_ESC_AWK"'BEGIN { FS = "\t" } { print cfg_unesc($9) }'
+    return 0
+  fi
+
+  printf "%s: error: configuration key '%s' is not set (ERR_ENTITY_NOT_FOUND)\n" "$cag_lbl" "$cag_full" >&2
+  return 1
+}
+
+# cfg_assembly_schema <caller_label> <ctx_dir> [<ns>] [--json]
+cfg_assembly_schema() {
+  cas_lbl=$1
+  cas_ctx=$2
+  shift 2
+  cas_ns=""
+  cas_json=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) cas_json=1 ;;
+      -*)
+        printf "%s: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$cas_lbl" "$1" >&2
+        return 1
+        ;;
+      *)
+        if [ -n "$cas_ns" ]; then
+          printf "%s: error: unexpected argument '%s' (ERR_INVALID_ARGUMENT)\n" "$cas_lbl" "$1" >&2
+          return 1
+        fi
+        cas_ns=$1
+        ;;
+    esac
+    shift
+  done
+
+  cas_schemas=$(cfg_discover_schemas "$cas_ctx" "$cas_ns" "$cas_lbl") || return $?
+  CAS_SCHEMAS=$cas_schemas CAS_JSON=$cas_json LC_ALL=C awk "$CFG_ESC_AWK$CFG_JQ_AWK"'
+    BEGIN {
+      json = ENVIRON["CAS_JSON"] + 0
+      n = split(ENVIRON["CAS_SCHEMAS"], SL, /\n/)
+      nns = 0
+      for (i = 1; i <= n; i++) {
+        if (SL[i] == "") continue
+        split(SL[i], F, /\t/)
+        ns = F[1]
+        if (!(ns in NS_SEEN)) {
+          NS_SEEN[ns] = 1
+          NS_ORD[++nns] = ns
+          NS_AO[ns] = F[11]
+          NS_AP[ns] = F[12]
+          NS_CNT[ns] = 0
+        }
+        idx = ++NS_CNT[ns]
+        K_NAME[ns, idx] = F[2]
+        K_PRES[ns, idx] = F[3]
+        K_TYP[ns, idx] = F[4]
+        K_ONE[ns, idx] = F[5]
+        K_MIN[ns, idx] = F[6]
+        K_MAX[ns, idx] = F[7]
+        K_HDEF[ns, idx] = F[8] + 0
+        K_DEF[ns, idx] = cfg_unesc(F[9])
+        K_DESC[ns, idx] = cfg_unesc(F[10])
+      }
+      if (json) {
+        printf "{\"schemas\":["
+        for (i = 1; i <= nns; i++) {
+          ns = NS_ORD[i]
+          printf "%s{\"namespace\":%s", (i > 1 ? "," : ""), cfg_jq(ns)
+          if (NS_AO[ns] != "") printf ",\"alias_of\":%s", cfg_jq(NS_AO[ns])
+          if (NS_AP[ns] != "") printf ",\"package\":%s", cfg_jq(NS_AP[ns])
+          printf ",\"keys\":["
+          for (j = 1; j <= NS_CNT[ns]; j++) {
+            k = K_NAME[ns, j]
+            printf "%s{\"key\":%s,\"full_key\":%s,\"presence\":%s,\"type\":%s", (j > 1 ? "," : ""), cfg_jq(k), cfg_jq(ns "." k), cfg_jq(K_PRES[ns, j]), cfg_jq(K_TYP[ns, j])
+            if (K_ONE[ns, j] != "") {
+              no = split(K_ONE[ns, j], OV, /\|/)
+              printf ",\"one_of\":["
+              for (oi = 1; oi <= no; oi++) printf "%s%s", (oi > 1 ? "," : ""), cfg_jq(OV[oi])
+              printf "]"
+            }
+            if (K_MIN[ns, j] != "") printf ",\"min\":%s", K_MIN[ns, j]
+            if (K_MAX[ns, j] != "") printf ",\"max\":%s", K_MAX[ns, j]
+            if (K_HDEF[ns, j]) printf ",\"default\":%s", cfg_jq(K_DEF[ns, j])
+            if (K_DESC[ns, j] != "") printf ",\"description\":%s", cfg_jq(K_DESC[ns, j])
+            printf "}"
+          }
+          printf "]}"
+        }
+        printf "]}\n"
+      } else {
+        for (i = 1; i <= nns; i++) {
+          ns = NS_ORD[i]
+          if (NS_AO[ns] != "") printf "%s (alias of %s from package %s):\n", ns, NS_AO[ns], NS_AP[ns]
+          else printf "%s:\n", ns
+          for (j = 1; j <= NS_CNT[ns]; j++) {
+            line = K_NAME[ns, j] ": " K_PRES[ns, j] " " K_TYP[ns, j]
+            if (K_ONE[ns, j] != "") line = line " one-of " K_ONE[ns, j]
+            if (K_MIN[ns, j] != "") line = line " min " K_MIN[ns, j]
+            if (K_MAX[ns, j] != "") line = line " max " K_MAX[ns, j]
+            if (K_HDEF[ns, j]) line = line " default " K_DEF[ns, j]
+            printf "  %s\n", line
+            if (K_DESC[ns, j] != "") {
+              nd = split(K_DESC[ns, j], DL, /\n/)
+              for (di = 1; di <= nd; di++) printf "    %s\n", DL[di]
+            }
+          }
+        }
+      }
+    }' < /dev/null
+}
+
+# cfg_owner_help <ns> <caller_label> [<subcommand>]: print owner config help.
+cfg_owner_help() {
+  coh_ns=$1
+  coh_lbl=$2
+  coh_sub=${3:-}
+  case "$coh_sub" in
+    "")
+      cat <<EOF
+usage: $coh_lbl <subcommand> [args...]
+subcommands:
+  load [--json]         show effective configuration for $coh_ns
+  get <key>             read one configuration value for $coh_ns
+  set <key> <value>     validate and write one configuration value for $coh_ns
+  unset <key>           remove one configuration value for $coh_ns
+  schema [--json]       show configuration schema for $coh_ns
+  help [<subcommand>]   show help for a configuration subcommand
+EOF
+      ;;
+    load)
+      printf 'usage: %s load [--json]\nshow effective configuration entries for %s (workspace configuration overrides schema defaults)\n' "$coh_lbl" "$coh_ns"
+      ;;
+    get)
+      printf 'usage: %s get <key>\nread one configuration value for %s using its local key name\n' "$coh_lbl" "$coh_ns"
+      ;;
+    set)
+      printf 'usage: %s set <key> <value>\nvalidate and write one configuration value for %s to the workspace configuration\n' "$coh_lbl" "$coh_ns"
+      ;;
+    unset)
+      printf 'usage: %s unset <key>\nremove one configuration value for %s from the workspace configuration\n' "$coh_lbl" "$coh_ns"
+      ;;
+    schema)
+      printf 'usage: %s schema [--json]\nshow declared configuration schema keys, types, defaults, and descriptions for %s\n' "$coh_lbl" "$coh_ns"
+      ;;
+    help)
+      printf 'usage: %s help [<subcommand>]\nshow configuration command help for %s\n' "$coh_lbl" "$coh_ns"
+      ;;
+    *)
+      printf "%s: error: unknown subcommand '%s' (ERR_INVALID_ARGUMENT)\n" "$coh_lbl" "$coh_sub" >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+# config_owner_verb <ns> <caller_label> <validator_fn> [args...]:
+# Shared owner config-verb implementation (load [--json], get, set, unset,
+# schema [--json], help, --help/-h) over local key names.
+config_owner_verb() {
+  cov_ns=$1
+  cov_lbl=$2
+  cov_hook=$3
+  shift 3
+
+  if [ $# -eq 0 ]; then
+    cfg_owner_help "$cov_ns" "$cov_lbl"
+    return 0
+  fi
+
+  cov_sub=$1
+  shift
+  case "$cov_sub" in
+    --help|-h)
+      if [ $# -ne 0 ]; then
+        printf "%s: error: unexpected argument '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$1" >&2
+        return 1
+      fi
+      cfg_owner_help "$cov_ns" "$cov_lbl"
+      return 0
+      ;;
+    help)
+      if [ $# -gt 1 ]; then
+        printf '%s: error: help takes at most one subcommand name (ERR_INVALID_ARGUMENT)\n' "$cov_lbl" >&2
+        return 1
+      fi
+      cfg_owner_help "$cov_ns" "$cov_lbl" "${1:-}"
+      return $?
+      ;;
+  esac
+
+  case "${1:-}" in
+    --help|-h)
+      if [ $# -eq 1 ]; then
+        cfg_owner_help "$cov_ns" "$cov_lbl" "$cov_sub"
+        return $?
+      fi
+      ;;
+  esac
+
+  cov_ctx=$(cfg_ctx_dir)
+  case "$cov_sub" in
+    load)
+      cov_json=0
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --json) cov_json=1 ;;
+          *)
+            printf "%s: error: unknown argument '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$1" >&2
+            return 1
+            ;;
+        esac
+        shift
+      done
+      if [ "$cov_json" -eq 1 ]; then
+        cfg_assembly_load "$cov_lbl" "$cov_ctx" "--module=$cov_ns" --owner --json
+      else
+        cfg_assembly_load "$cov_lbl" "$cov_ctx" "--module=$cov_ns" --owner
+      fi
+      ;;
+    get)
+      if [ $# -ne 1 ]; then
+        printf '%s: error: get takes one local key name (ERR_INVALID_ARGUMENT)\n' "$cov_lbl" >&2
+        return 1
+      fi
+      cov_k=$1
+      case "$cov_k" in
+        -*) printf "%s: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2; return 1 ;;
+        *.*) printf "%s: error: use local key name without namespace prefix: '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2; return 1 ;;
+      esac
+      if ! cfg_local_key_ok "$cov_k"; then
+        printf "%s: error: malformed key '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2
+        return 1
+      fi
+      cfg_assembly_get "$cov_lbl" "$cov_ctx" "$cov_ns.$cov_k"
+      ;;
+    set)
+      if [ $# -ne 2 ]; then
+        printf '%s: error: set takes <key> and <value> (ERR_INVALID_ARGUMENT)\n' "$cov_lbl" >&2
+        return 1
+      fi
+      cov_k=$1
+      cov_v=$2
+      case "$cov_k" in
+        -*) printf "%s: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2; return 1 ;;
+        *.*) printf "%s: error: use local key name without namespace prefix: '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2; return 1 ;;
+      esac
+      if ! cfg_local_key_ok "$cov_k"; then
+        printf "%s: error: malformed key '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2
+        return 1
+      fi
+      cov_schemas=$(cfg_discover_schemas "$cov_ctx" "$cov_ns" "$cov_lbl") || return $?
+      cov_row=$(printf '%s\n' "$cov_schemas" | LC_ALL=C awk -F '\t' -v k="$cov_k" '$2 == k { print; exit }')
+      if [ -z "$cov_row" ]; then
+        printf "%s: error: unknown configuration key '%s' (ERR_SCHEMA_VIOLATION)\n" "$cov_lbl" "$cov_k" >&2
+        return 1
+      fi
+      cov_typ=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $4 }')
+      cov_one=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $5 }')
+      cov_min=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $6 }')
+      cov_max=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $7 }')
+      cfg_schema_validate_value "$cov_typ" "$cov_one" "$cov_min" "$cov_max" "$cov_v" "$cov_lbl" "$cov_k" || return $?
+      CFG_POST_HOOK=""
+      if [ -n "$cov_hook" ]; then
+        "$cov_hook" set "$cov_k" "$cov_v" "$cov_ctx" || return $?
+      fi
+      cfg_set "$cov_ns.$cov_k" "$cov_v" "$cov_ctx" || return $?
+      if [ -n "$CFG_POST_HOOK" ]; then
+        "$CFG_POST_HOOK"
+      fi
+      return 0
+      ;;
+    unset)
+      if [ $# -ne 1 ]; then
+        printf '%s: error: unset takes one local key name (ERR_INVALID_ARGUMENT)\n' "$cov_lbl" >&2
+        return 1
+      fi
+      cov_k=$1
+      case "$cov_k" in
+        -*) printf "%s: error: unknown option '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2; return 1 ;;
+        *.*) printf "%s: error: use local key name without namespace prefix: '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2; return 1 ;;
+      esac
+      if ! cfg_local_key_ok "$cov_k"; then
+        printf "%s: error: malformed key '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_k" >&2
+        return 1
+      fi
+      cov_schemas=$(cfg_discover_schemas "$cov_ctx" "$cov_ns" "$cov_lbl") || return $?
+      cov_row=$(printf '%s\n' "$cov_schemas" | LC_ALL=C awk -F '\t' -v k="$cov_k" '$2 == k { print; exit }')
+      if [ -z "$cov_row" ]; then
+        printf "%s: error: unknown configuration key '%s' (ERR_SCHEMA_VIOLATION)\n" "$cov_lbl" "$cov_k" >&2
+        return 1
+      fi
+      cov_pres=$(printf '%s\n' "$cov_row" | LC_ALL=C awk -F '\t' '{ print $3 }')
+      if [ "$cov_pres" = "required" ]; then
+        printf "%s: error: cannot unset required configuration key '%s' (ERR_SCHEMA_VIOLATION)\n" "$cov_lbl" "$cov_k" >&2
+        return 1
+      fi
+      CFG_POST_HOOK=""
+      if [ -n "$cov_hook" ]; then
+        "$cov_hook" unset "$cov_k" "" "$cov_ctx" || return $?
+      fi
+      cfg_unset "$cov_ns.$cov_k" "$cov_ctx" || return $?
+      if [ -n "$CFG_POST_HOOK" ]; then
+        "$CFG_POST_HOOK"
+      fi
+      return 0
+      ;;
+    schema)
+      cov_json=0
+      while [ $# -gt 0 ]; do
+        case "$1" in
+          --json) cov_json=1 ;;
+          *)
+            printf "%s: error: unknown argument '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$1" >&2
+            return 1
+            ;;
+        esac
+        shift
+      done
+      if [ "$cov_json" -eq 1 ]; then
+        cfg_assembly_schema "$cov_lbl" "$cov_ctx" "$cov_ns" --json
+      else
+        cfg_assembly_schema "$cov_lbl" "$cov_ctx" "$cov_ns"
+      fi
+      ;;
+    *)
+      printf "%s: error: unknown subcommand '%s' (ERR_INVALID_ARGUMENT)\n" "$cov_lbl" "$cov_sub" >&2
+      return 1
+      ;;
+  esac
+}
