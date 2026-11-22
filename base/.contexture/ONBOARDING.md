@@ -52,13 +52,13 @@
 
 @propose
   the flow collapses into ONE confirmation pause before any workspace configuration write or package install; every verdict journals into the adoption record
-  1. write the internal working `@proposal` draft to `.contexture/tmp/proposal.md` (never paste raw `@proposal` grammar to the human in `guided` mode)
+  1. write the internal working `@proposal` draft to `.contexture/tmp/proposal.md` (never paste raw `@proposal` grammar to the human in `guided` mode), and record the pre-pause proposal entry on `adopt-contexture` with `--thread` awaiting human confirmation
   2. ephemeral files guard: `.contexture/tmp/proposal.md` and `.contexture/ONBOARDING.md` are ephemeral adoption files deleted at close, so never bind permanent `--ref` targets on unit entries, tasks, or findings to them; record settled summaries directly in the journal and findings
   3. legacy turn-end pause: legacy turn-end workspace file rules (status files, session notes, changelogs) pause until the confirmation verdict: before that verdict, onboarding progress lives only in `.contexture/tmp/proposal.md` and the adoption unit record
-  4. single confirmation pause (by active mode):
-     - in `guided` mode: present ONE plain-English message containing (a) a 2 to 3 sentence brief of what contexture brings to this workspace, (b) what files are added or changed vs preserved, (c) any real habit conflicts discovered, (d) plain-word plugin recommendations and host readiness (presenting independent candidate packages via multi-select when the harness question tool supports it, never grouping compatible plugins into a single radio choice), and (e) any open questions beside the choices they affect; keep internal `ctx` CLI commands, `.contexture/tmp/` paths, `@append`/`@replace` mechanics, and record slugs out of chat; end the turn and wait for confirmation
-     - in `familiar` mode: skip the brief and present a crisp plan summary (topology, files touched or preserved, candidate plugins via multi-select where supported, gitignore, symlinks, open questions) and pause once for go
-  5. once confirmed, update `.contexture/tmp/proposal.md` if answers refined any detail and journal the settled proposal summary and the human's verdict directly into `adopt-contexture` (no workspace write before confirmation; an approval ask for an unseen or stale plan is never valid)
+  4. single confirmation pause (by active mode): actually invoke the harness question tool (using multi-select for independent choices such as candidate plugins and symlinks, never grouping compatible plugins into a single radio choice) or, if no question tool exists, end the chat message with explicit choices and a direct go/confirm ask; never end the turn on passive summary text or parenthetical notes without a question-tool call or explicit confirmation prompt; include any discovered multi-step workflows or checklists (proposed as `.contexture/rhythms/<name>.md` files per `@rhythms#placement`, never `@append @laws`) and any real rule conflicts with base `@laws` in the choices so the human settles each one:
+     - in `guided` mode: present ONE plain-English message containing (a) a 2 to 3 sentence brief of what contexture brings to this workspace, (b) what files are added or changed vs preserved, (c) any real habit conflicts discovered, (d) plain-word plugin recommendations and host readiness, and (e) any open questions beside the choices they affect; keep internal `ctx` CLI commands, `.contexture/tmp/` paths, `@append`/`@replace` mechanics, and record slugs out of chat; end the turn with the active question tool or explicit confirmation ask
+     - in `familiar` mode: skip the brief and present a crisp plan summary (topology, files touched or preserved, candidate plugins, rhythms, gitignore, symlinks, open questions) paired with the question tool or an explicit go/choice ask at the end of the message
+  5. once confirmed, update `.contexture/tmp/proposal.md` if answers refined any detail and journal the settled proposal summary and the human's verdict directly into `adopt-contexture`, closing the confirmation `--thread` with `--closes` (no workspace write before confirmation, and never widen exceptions beyond what the human confirmed; an approval ask for an unseen or stale plan is never valid)
 
 @proposal
   @brief
@@ -114,8 +114,9 @@
       when docs-discipline is installed under the files driver, keep docs/workspace/ un-whitelisted (ignored working state) while whitelisting any docs/*.md guides
   migration:
     if existing AGENTS.md, CLAUDE.md, or other instruction files exist:
-      extract project-specific guidelines (architecture, test/build commands, code style)
-      place into AGENTS.workspace.md under appropriate @append blocks (@append @laws, etc.)
+      extract discovered multi-step workflows and checklists into `.contexture/rhythms/<name>.md` per `@rhythms#placement` (`use when:` trigger and numbered `N. GATE: outcome` steps), never placing workflows or checklists in `@append @laws`
+      extract project-specific invariants (architecture, test/build commands, code style) into `AGENTS.workspace.md` under appropriate `@append` blocks (`@append @laws`, `@append @layout`, `@append @interact`)
+      resolve conflicts with base `@laws` cleanly per the confirmed plan: never append rules that contradict base `@laws` (such as `@laws#compact-streams`) or widen exceptions beyond what the human confirmed
     initialize AGENTS.workspace.md with workspace versioning rules
     initialize AGENTS.local.md with local preferences (plain hyphens, etc.)
 
@@ -128,11 +129,12 @@
   if filesystem or OS forbids symlinks: duplicate AGENTS.md or reference it
 
 @verify
-  1. complete execution tasks, land durable findings (`.contexture/ctx unit finding add`), and record the closing event on `adopt-contexture` FIRST (with settled prose, never `--ref` to ephemeral onboarding files)
+  never create a self-referential `verify-and-close` backlog task (verification and closing run here and in `@close`, not as a backlog task)
+  1. complete all execution tasks (`.contexture/ctx unit task complete`), land durable findings (`.contexture/ctx unit finding add`), and record the closing event on `adopt-contexture` FIRST (with settled prose, never `--ref` to ephemeral onboarding files), strictly before running `ctx unit load` and `ctx unit audit`
   2. verify the law layer: `.contexture/ctx compose --check` and confirm root `AGENTS.md` is now the contexture loader with no leftover `.contexture/tmp/AGENTS.loader.md`
-  3. run boot load and audit: `.contexture/ctx unit load adopt-contexture` (read every page the map reports) and `.contexture/ctx unit audit adopt-contexture` (must exit 0)
+  3. run boot load and audit: `.contexture/ctx unit load adopt-contexture` (read every page the map reports) and `.contexture/ctx unit audit adopt-contexture` (must exit 0); make zero record writes (no tasks, findings, or journal entries) after that `ctx unit load` (if any check flags a gap, fix it and re-run `ctx unit load` and `ctx unit audit`)
   4. when `docs-discipline` is installed inside a git repository, run `.contexture/ctx docs gate`
-  5. review with human: `.contexture/ctx run git status`, `.contexture/ctx run git diff`, and the adoption record when in a git repository (else summarize changed files)
+  5. before `.contexture/ctx unit close adopt-contexture`, run `.contexture/ctx run git status` and `.contexture/ctx run git diff` when in a git repository (else summarize changed files) and review them alongside the adoption record with the human
 
 @close
   1. once `@verify` passes on the final record, close `adopt-contexture` (`.contexture/ctx unit close adopt-contexture`)
