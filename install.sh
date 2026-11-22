@@ -748,6 +748,11 @@ printf '  catalog: .contexture/plugins/\n'
 printf '  law layer: AGENTS.generated.md (composed)\n'
 if [ -n "$installed_plugins" ]; then
   printf '  plugins installed: %s\n' "$installed_plugins"
+  case " $installed_plugins " in
+    *" storage-fts5 "*)
+      printf '  storage-fts5 installed: activate with .contexture/ctx store config set driver fts5\n'
+      ;;
+  esac
 else
   printf '  plugins installed: none (core only; run .contexture/ctx package catalog to inspect)\n'
 fi

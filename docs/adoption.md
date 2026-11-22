@@ -130,12 +130,12 @@ The builtins ship with the base and need no install. The packages install throug
 | `run` (builtin) | the base filter pack: diff, directory listing, and log filters selected by command identity or stream signature for `ctx run`; filter-only and silent in `ctx help` | ships with the base; no install |
 | `lane` (builtin) | the subagent dispatch surface: `ctx lane` create, record, report, and show, each lane's artifacts within the unit's record | ships with the base; no install |
 | `rhythm` (builtin) | the process surface: list the rhythms with their triggers and activations, show one whole, and name the rhythm in force with its next gate | ships with the base; no install |
-| `store` (builtin) | the free container module: declare a container as one record of the `containers` container, then get, list, put, set, delete, check, and search its schema-checked records | ships with the base; no install |
+| `store` (builtin) | the free container module: declare a container as one record of the `containers` container, then get, list, put, set, delete, check, search, and config its schema-checked records and workspace storage settings | ships with the base; no install |
 | `docs-discipline` (package) | the corpus-first documentation discipline: the docs module's read and schema-checked write verbs, and its close gate over a typed-block corpus | install when agents should consult a corpus before code; its change-aware checks need git |
 | `ast-doc-graph` (package) | the AST and documentation graph: index the workspace's TypeScript code and documentation corpus into one queryable graph, then query symbols, call graphs, rules, and pitfalls | install when the workspace holds TypeScript sources or a corpus to link |
 | `toolchain-filters` (package) | the toolchain filter pack: pytest, vitest and jest, cargo test, go test, and compiler error filters for `ctx run` | install when the workspace runs those toolchains; adopt only the filters its streams match |
 | `starter-rhythms` (package) | the starter work and debug rhythms, to copy and edit into the workspace's own | install when no team rhythm emerged from the instruction stack |
-| `storage-fts5` (package) | the SQLite FTS5 storage driver: the record and the corpus in one store with dual full-text indexing and exact, hybrid, and trigram search | install when the workspace wants that store; needs `sqlite3` 3.44 or later with FTS5 |
+| `storage-fts5` (package) | the SQLite FTS5 storage driver: the record and the corpus in one store with dual full-text indexing and exact, hybrid, and trigram search | install when the workspace wants that store and activate with `.contexture/ctx store config set driver fts5`; needs `sqlite3` 3.44 or later with FTS5 |
 | `git` (package) | the git management discipline: the gitignore strategy, the branch and worktree mechanics, and the boot ground check, as a module with laws and no verbs | a choice with no default; install when the workspace is a git repository and wants those mechanics; the docs-discipline change-aware checks need git the tool either way |
 
 ## Migration, overlays, symlinks
@@ -160,6 +160,7 @@ Checks after completing execution tasks, landing durable findings, and recording
 
 ```
 .contexture/ctx compose --check
+.contexture/ctx config load
 .contexture/ctx unit load adopt-contexture
 .contexture/ctx unit audit adopt-contexture
 .contexture/ctx docs gate   # when docs-discipline is installed in a git repository
@@ -167,7 +168,7 @@ Checks after completing execution tasks, landing durable findings, and recording
 .contexture/ctx run git diff
 ```
 
-The first verifies the composed law layer and confirms root `AGENTS.md` is now the contexture loader; the second loads the adoption unit (the map plus every page); the third must exit 0; `ctx docs gate` verifies corpus coverage and freshness when `docs-discipline` is installed in git; and the last two are the review surface you read alongside the adoption record.
+The first two verify the composed law layer (confirming root `AGENTS.md` is now the contexture loader) and effective workspace configuration; the third loads the adoption unit (the map plus every page); the fourth must exit 0; `ctx docs gate` verifies corpus coverage and freshness when `docs-discipline` is installed in git; and the last two are the review surface you read alongside the adoption record.
 
 Then `adopt-contexture` closes and the adoption procedure goes away. Delete `.contexture/ONBOARDING.md`, `.contexture/tmp/proposal.md`, and any leftover `.contexture/tmp/AGENTS.loader.md`: they are temporary adoption material, not the convention; remove any gitignore whitelist line naming `ONBOARDING.md`. The `.contexture/plugins/` folder stays (or `plugins/` in earlier workspaces): it is the catalog, installable into an existing setup whenever the workspace wants one of its overlays. In `guided` mode, the agent ends with a 10 to 15 line plain-English orientation (what changes next chat, 3 tiny habits, 1 line per installed add-on, and a workspace-tailored starter prompt) plus an optional Q&A or tour offer; in `familiar` mode, it ends with a terse 3-line verification receipt. Start a fresh agent session once onboarding closes so your harness boots cleanly on the new `AGENTS.md` loader from turn 1.
 
