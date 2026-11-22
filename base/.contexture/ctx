@@ -62,6 +62,7 @@ root=$(CDPATH= cd -- "$dir/.." && pwd)
 modules_root="$dir/modules"
 extension_modules_root="$dir/extensions/modules"
 ctx_bin="$dir/ctx"
+[ -f "$dir/config-lib" ] && . "$dir/config-lib"
 
 ctx_err() {
   printf 'ctx: %s\n' "$*" >&2
@@ -687,7 +688,7 @@ EOF
 
 is_reserved() {
   case "$1" in
-    refresh|run|hooks|compose|package|search|append|amend|query|flip|drop|next|resolve)
+    refresh|run|hooks|compose|package|search|config|append|amend|query|flip|drop|next|resolve)
       return 0
       ;;
   esac
@@ -993,7 +994,9 @@ usage:
   cmd | ctx run                    pipe form: compact a stream
   ctx compose [--check]            compose the generated law layer, or verify it current; --check writes nothing
 EOF
-  printf '%s\n%s\n%s\n%s\n%s\n%s\n' "$package_install_line" "$package_uninstall_line" "$package_list_line" "$package_catalog_line" "$package_info_line" "$search_line"
+  printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n' \
+    "$config_load_line" "$config_get_line" "$config_schema_line" \
+    "$package_install_line" "$package_uninstall_line" "$package_list_line" "$package_catalog_line" "$package_info_line" "$search_line"
   cat <<'EOF'
   ctx <module> [args...]           dispatch to a module: arguments, streams, and exit code pass through
   ctx <module> help [<verb>]       the module's verb table; one verb's detail with <verb>
@@ -1871,35 +1874,11 @@ pkg_decl_lines() {
 # file made when absent and replaced whole, never half written; a removal the file holds no
 # line for writes nothing, so an absent file stays absent
 pkg_decl_write() {
-  pdw_tmp="$pkg_conf.package.$$"
-  if [ -f "$pkg_conf" ]; then
-    PDW_K="package.$1" PDW_V="${2:-}" PDW_SET=$# LC_ALL=C awk '
-      BEGIN { k = ENVIRON["PDW_K"]; v = ENVIRON["PDW_V"]; set = (ENVIRON["PDW_SET"] > 1) }
-      {
-        line = $0
-        sub(/\r$/, "", line)
-        c = index(line, ":")
-        key = (c > 0) ? substr(line, 1, c - 1) : ""
-        gsub(/^[ \t]+|[ \t]+$/, "", key)
-        if (key == k) {
-          found = 1
-          if (set && !done) { print k ": " v; done = 1 }
-          next
-        }
-        print
-      }
-      END { if (set && !done) print k ": " v; if (!set && !found) exit 3 }' "$pkg_conf" > "$pdw_tmp" 2>/dev/null
-    pdw_rc=$?
-  elif [ $# -gt 1 ]; then
-    printf 'package.%s: %s\n' "$1" "$2" > "$pdw_tmp" 2>/dev/null
-    pdw_rc=$?
+  if [ $# -gt 1 ]; then
+    cfg_set_raw "package.$1" "$2" "$dir"
   else
-    return 0
+    cfg_unset "package.$1" "$dir"
   fi
-  [ "$pdw_rc" -ne 3 ] || { rm -f "$pdw_tmp" 2>/dev/null; return 0; }
-  [ "$pdw_rc" -eq 0 ] && mv -f "$pdw_tmp" "$pkg_conf" 2>/dev/null && return 0
-  rm -f "$pdw_tmp" 2>/dev/null
-  return 1
 }
 
 # package_as_ok <flag>: rc 0 for one --as=<module>=<alias> flag, both sides module names;
@@ -2707,15 +2686,17 @@ package_builtin() {
 # each module's search runs as a child with the shared flags only, bounded in time, and
 # its answer is checked before it is trusted; one group per module, no ranking across them
 
-search_line="  ctx search \"<query>\" [flags]     search every module that carries a search verb, one group per module; ctx search --modes lists the search modes"
+search_line="  ctx search \"<query>\" [flags]     search every module that carries a search verb, one group per module; ctx search --modes lists modes; ctx search config manages search settings"
 
 search_help() {
   cat <<'EOF'
 usage: ctx search "<query>" [--type=<type>] [--mode=<mode>] [--limit=N] [--json] [--module=<name>]
        ctx search --modes [--json]
+       ctx search config <subcommand> [args...]
 runs every module that carries a verb named search, in discovery order, with the shared flags only (a module's own scope flags are never forwarded), and prints one group per module: its rows (type, address, snippet, read, label), failed with its reason, or not searched; no ranking crosses modules, and zero hits is an answer; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
 --limit= is a positive whole number per module (default 20); --mode= defaults to exact and takes a registered mode (ctx search --modes lists them), a module that cannot answer it falling back to exact, which its group says; --type= passes to every module; --module=<name> searches one module; only the --flag=value form is taken
 each module runs bounded by search.timeout in the workspace configuration (a positive whole number of seconds, default 10); a module past it is stopped with every descendant one process snapshot finds, and reads failed (a process forked after the snapshot, or reparented before it by a double fork, may escape, a stated limit)
+ctx search config manages search settings (load, get, set, unset, schema) in the workspace configuration
 exit codes: 0 every searched module answered (zero hits included, or no module carries a search verb); 1 a bad argument; 2 a module failed, the other groups still printed
 EOF
 }
@@ -2726,28 +2707,15 @@ search_refuse() {
 }
 
 # search_timeout: the bound in seconds from the search.timeout line of the workspace
-# configuration, in its grammar (the key, then = or :, the value after the first separator,
-# a trailing # comment dropped, blanks and quotes removed, an empty value passed over, the
-# first value winning); 10 when no line holds one
+# configuration via config-lib; 10 when absent or empty
 search_timeout() {
-  st_v=""
-  if [ -f "$dir/config" ]; then
-    while IFS= read -r st_line || [ -n "$st_line" ]; do
-      case "$st_line" in
-        search.timeout*=*|search.timeout*:*)
-          st_kraw=${st_line%%[=:]*}
-          st_k=$(printf '%s' "$st_kraw" | tr -d ' \t')
-          [ "$st_k" = search.timeout ] || continue
-          st_val=${st_line#"$st_kraw"}
-          st_val=${st_val#?}
-          st_val=${st_val%%#*}
-          st_val=$(printf '%s' "$st_val" | tr -d " \t\r\"'")
-          if [ -n "$st_val" ]; then st_v=$st_val; break; fi
-          ;;
-      esac
-    done < "$dir/config"
+  st_v=$(cfg_get search.timeout "$dir")
+  st_rc=$?
+  if [ "$st_rc" -eq 2 ]; then
+    exit 2
+  elif [ "$st_rc" -ne 0 ] || [ -z "$st_v" ]; then
+    st_v=10
   fi
-  [ -n "$st_v" ] || st_v=10
   case "$st_v" in
     *[!0-9]*|0*) search_refuse "search.timeout takes a positive whole number of seconds: '$st_v'" ;;
   esac
@@ -2902,6 +2870,11 @@ search_builtin() {
   if [ $# -eq 1 ]; then
     case "$1" in --help|-h) search_help; exit 0 ;; esac
   fi
+  if [ "${1:-}" = "config" ]; then
+    shift
+    CTX_DIR=$dir CTX_ROOT=$root config_owner_verb search "ctx search config" "" "$@"
+    exit $?
+  fi
   sb_q=""; sb_qset=0; sb_type=""; sb_mode=exact; sb_limit=20; sb_json=0; sb_module=""; sb_modset=0; sb_modes=0; sb_flags=0
   for sb_a in "$@"; do
     case "$sb_a" in
@@ -2945,7 +2918,7 @@ search_builtin() {
     printf '%s\n' "$sb_reg" | awk -F '\t' -v m="$sb_mode" '$1 == m { f = 1 } END { exit !f }' ||
       search_refuse "mode '$sb_mode' is not registered; registered modes: $(printf '%s\n' "$sb_reg" | awk -F '\t' '$1 != "" { o = o (o == "" ? "" : ", ") $1 } END { print o }')"
   fi
-  sb_timeout=$(search_timeout) || exit 1
+  sb_timeout=$(search_timeout) || exit $?
   if sleep 0.1 2>/dev/null; then search_tick=0.1; search_ticks=$((sb_timeout * 10)); else search_tick=1; search_ticks=$sb_timeout; fi
   sb_json_awk="$dir/storage/scripts/json.awk"
   [ -f "$sb_json_awk" ] || { printf 'ctx search: the storage core flattener is missing\n' >&2; exit 2; }
@@ -3037,6 +3010,185 @@ search_builtin() {
 }
 
 # ---------------------------------------------------------------------------
+# config: read-only workspace configuration assembly, answered before discovery
+# so a broken module never blocks inspecting configuration. Mutations belong
+# to each owning domain verb (ctx store config, ctx search config, ctx package,
+# and each module's ctx <module> config).
+
+config_load_line="  ctx config load [--module=<ns>] [--json]  assemble effective workspace configuration; read only"
+config_get_line="  ctx config get <ns>.<key>        read one effective configuration value; read only"
+config_schema_line="  ctx config schema [<ns>] [--json]  show declared configuration schemas; read only"
+
+show_config_help() {
+  cat <<'EOF'
+ctx config: inspect effective workspace configuration and declared schemas (read only)
+
+usage:
+  ctx config load [--module=<ns>] [--json]  assemble effective workspace configuration; unset keys without defaults are omitted
+  ctx config get <ns>.<key>                 read one effective configuration value by <namespace>.<key>
+  ctx config schema [<ns>] [--json]         show declared configuration schemas across core and modules
+  ctx config help [<sub-verb>]              show this summary or one sub-verb's detail
+
+notes:
+  ctx config is read only; change settings through their owning verbs:
+  ctx store config, ctx search config, ctx package, or ctx <module> config
+EOF
+}
+
+show_config_verb_help() {
+  case "$1" in
+    load)
+      cat <<'EOF'
+usage: ctx config load [--module=<ns>] [--json]
+assembles effective workspace configuration from declared schemas and the workspace configuration; unset keys without defaults are omitted and package declarations are excluded
+--module=<ns>: limit output to one configuration namespace
+--json: emit one compact JSON object on stdout
+exit codes: 0 assembled (warnings for undeclared or legacy keys print on stderr without failing); 1 bad flag or unknown namespace; 2 unreadable configuration or malformed schema
+EOF
+      ;;
+    get)
+      cat <<'EOF'
+usage: ctx config get <namespace>.<key>
+reads one effective configuration value from the workspace configuration or its schema default; package declarations are managed by ctx package list
+exit codes: 0 value printed; 1 unknown namespace, unknown key, unset key without default, or package.* query; 2 unreadable configuration
+EOF
+      ;;
+    schema)
+      cat <<'EOF'
+usage: ctx config schema [<namespace>] [--json]
+shows declared configuration schemas, types, bounds, defaults, and descriptions across core and discovered modules
+--json: emit one compact JSON object on stdout
+exit codes: 0 schemas printed; 1 bad flag or unknown namespace; 2 malformed or unreadable schema
+EOF
+      ;;
+    help)
+      cat <<'EOF'
+usage: ctx config help [<sub-verb>]
+prints the ctx config command summary or detail for one sub-verb (load, get, schema, help)
+exit codes: 0 help printed; 1 unknown sub-verb or extra argument
+EOF
+      ;;
+    *)
+      ctx_err "config help: unknown sub-verb '$1' (load, get, schema, or help)"
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+config_builtin() {
+  case "${1:-}" in
+    ""|--help|-h)
+      if [ $# -gt 1 ]; then
+        ctx_err "config: $1 takes no argument; ctx config help <sub-verb> prints one sub-verb's detail"
+        exit 1
+      fi
+      show_config_help
+      exit 0
+      ;;
+    help)
+      shift
+      if [ $# -eq 1 ]; then
+        case "$1" in
+          --help|-h)
+            show_config_verb_help help
+            exit 0
+            ;;
+        esac
+      fi
+      if [ $# -eq 0 ]; then
+        show_config_help
+        exit 0
+      fi
+      if [ $# -gt 1 ]; then
+        ctx_err "config help: takes at most one sub-verb name"
+        exit 1
+      fi
+      show_config_verb_help "$1" || exit 1
+      exit 0
+      ;;
+    set|unset)
+      ctx_err "config $1: ctx config is read only; use the owning domain verb: ctx store config, ctx search config, ctx package, or ctx <module> config"
+      exit 1
+      ;;
+    load|get|schema)
+      ;;
+    *)
+      ctx_err "config: unknown sub-verb: $1 (ctx config load, ctx config get, ctx config schema, or ctx config help)"
+      exit 1
+      ;;
+  esac
+
+  if ! command -v cfg_assembly_load >/dev/null 2>&1; then
+    ctx_err "config: missing internal config library"
+    exit 2
+  fi
+
+  cb_verb=$1
+  shift
+  if [ $# -eq 1 ]; then
+    case "$1" in
+      --help|-h)
+        show_config_verb_help "$cb_verb"
+        exit 0
+        ;;
+    esac
+  fi
+
+  case "$cb_verb" in
+    load)
+      cb_mod=""
+      cb_json=0
+      for cb_a in "$@"; do
+        case "$cb_a" in
+          --module=)
+            ctx_err "config load: --module= names no namespace"
+            exit 1
+            ;;
+          --module=*)
+            cb_mod=$cb_a
+            ;;
+          --json)
+            cb_json=1
+            ;;
+          -*)
+            ctx_err "config load: unknown option '$cb_a' (ctx config load [--module=<ns>] [--json])"
+            exit 1
+            ;;
+          *)
+            ctx_err "config load: unexpected argument '$cb_a' (ctx config load [--module=<ns>] [--json])"
+            exit 1
+            ;;
+        esac
+      done
+      set -- "ctx config" "$dir"
+      [ -z "$cb_mod" ] || set -- "$@" "$cb_mod"
+      [ "$cb_json" -eq 0 ] || set -- "$@" --json
+      cfg_assembly_load "$@"
+      exit $?
+      ;;
+    get)
+      if [ $# -ne 1 ]; then
+        ctx_err "config get: usage: ctx config get <namespace>.<key>"
+        exit 1
+      fi
+      case "$1" in
+        -*)
+          ctx_err "config get: unknown option '$1' (ctx config get <namespace>.<key>)"
+          exit 1
+          ;;
+      esac
+      cfg_assembly_get "ctx config" "$dir" "$1"
+      exit $?
+      ;;
+    schema)
+      cfg_assembly_schema "ctx config" "$dir" "$@"
+      exit $?
+      ;;
+  esac
+}
+
+# ---------------------------------------------------------------------------
 # top-level dispatch
 
 if [ $# -eq 0 ]; then
@@ -3084,6 +3236,10 @@ case "$1" in
   search)
     shift
     search_builtin "$@"
+    ;;
+  config)
+    shift
+    config_builtin "$@"
     ;;
   _hooks)
     shift

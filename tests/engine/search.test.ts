@@ -221,6 +221,46 @@ describe.concurrent('the ctx search builtin', () => {
     expect(r.code).toBe(0);
     expect(r.stdout).toMatch(/^searched 0, failed 0, not searched \d+ \(.*\): no module carries a search verb$/m);
   });
+
+  it('[the-engine-r-ha7uc] ctx search config manages search.timeout (load, get, set, unset, schema, --help) and ctx search honors the updated bound', async () => {
+    const sb = fresh(base);
+    const help = await run(sb, ['search', 'config', '--help']);
+    expect([help.code, help.stderr]).toEqual([0, '']);
+    expect(help.stdout).toContain('usage: ctx search config <subcommand>');
+
+    const defGet = await run(sb, ['search', 'config', 'get', 'timeout']);
+    expect([defGet.code, defGet.stdout, defGet.stderr]).toEqual([0, '10\n', '']);
+
+    const schema = await run(sb, ['search', 'config', 'schema', '--json']);
+    expect([schema.code, schema.stderr]).toEqual([0, '']);
+    expect(JSON.parse(schema.stdout).schemas[0].keys[0]).toMatchObject({ key: 'timeout', type: 'integer', min: 1, default: '10' });
+
+    for (const bad of ['0', '-1', 'ten']) {
+      const r = await run(sb, ['search', 'config', 'set', 'timeout', bad]);
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain('ERR_SCHEMA_VIOLATION');
+    }
+
+    const setRes = await run(sb, ['search', 'config', 'set', 'timeout', '2']);
+    expect([setRes.code, setRes.stdout, setRes.stderr]).toEqual([0, '', '']);
+    expect((await run(sb, ['search', 'config', 'get', 'timeout'])).stdout).toBe('2\n');
+
+    const loadJson = await run(sb, ['search', 'config', 'load', '--json']);
+    expect([loadJson.code, loadJson.stderr]).toEqual([0, '']);
+    expect(JSON.parse(loadJson.stdout).entries).toEqual([
+      { namespace: 'search', key: 'timeout', full_key: 'search.timeout', value: '2', type: 'integer', source: 'config' },
+    ]);
+
+    // Verify ctx search honors the updated search.timeout written via ctx search config set
+    plant(sb, 'tbound', 'sleep 10 & sleep 10');
+    const bounded = await run(sb, ['search', 'needle', '--module=tbound', '--json']);
+    expect(bounded.code).toBe(2);
+    expect(JSON.parse(bounded.stdout).groups).toEqual([{ module: 'tbound', status: 'failed', error: 'no answer within the bound of 2 s (search.timeout)' }]);
+
+    const unsetRes = await run(sb, ['search', 'config', 'unset', 'timeout']);
+    expect([unsetRes.code, unsetRes.stdout, unsetRes.stderr]).toEqual([0, '', '']);
+    expect((await run(sb, ['search', 'config', 'get', 'timeout'])).stdout).toBe('10\n');
+  });
 });
 
 describe.skipIf(!fts5Available())('the ctx search builtin over the fts5 registry', () => {

@@ -17,7 +17,9 @@ describe.concurrent('discovery over both module roots', () => {
     expect(help.code).toBe(0);
     expect(help.stdout).toContain('ctx: the workspace command binder');
     expect(help.stdout).toMatch(/^ {2}good +a good fixture module$/m);
-    for (const hidden of ['nosummary', 'scriptsonly', 'filteronly', 'hookonly', 'load ', 'shadow-help']) expect(help.stdout).not.toContain(hidden);
+    for (const hidden of ['nosummary', 'scriptsonly', 'filteronly', 'hookonly', 'shadow-help']) expect(help.stdout).not.toContain(hidden);
+    expect(listed(help.stdout)).not.toContain('load');
+    expect(help.stdout).not.toContain('should never list');
   });
 
   it('CT-D1 [the-engine-r1, the-engine-r2, modules-r1, modules-r6]: the broken shapes and the reserved name warn on stderr; the legal shapes stay silent', () => {
@@ -73,7 +75,7 @@ describe.concurrent('discovery over both module roots', () => {
     expect(generated).not.toContain('dash-law');
   });
 
-  it.each(['compose', 'package', 'search'])('CT-XR1 [the-engine-r2, modules-r6]: a valid module named %s warns in each root and never lists, since the engine builtin holds the name', async (name) => {
+  it.each(['compose', 'package', 'search', 'config'])('CT-XR1 [the-engine-r2, modules-r6]: a valid module named %s warns in each root and never lists, since the engine builtin holds the name', async (name) => {
     const sb = engineSandbox(`discovery-${name}`);
     for (const root of ['modules', 'extensions'] as const) {
       writeModule(sb, root, name, { manifest: `# summary: a ${name} fixture module\n`, files: { 'scripts/hi': shVerb('say hi', 'echo hi') } });

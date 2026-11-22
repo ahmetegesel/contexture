@@ -1,0 +1,26 @@
+#!/bin/sh
+# summary: inspect and update storage configuration (load, get, set, unset, schema)
+# usage: ctx store config <subcommand> [args...]
+# help: subcommands:
+# help:   load [--json]         show effective storage configuration
+# help:   get <key>             read one storage setting by local key name
+# help:   set <key> <value>     validate and write one storage setting to the workspace configuration
+# help:   unset <key>           remove one storage setting from the workspace configuration
+# help:   schema [--json]       show declared storage schema keys, types, defaults, and descriptions
+# help:   help [<subcommand>]   show help for a storage configuration subcommand
+# help: validates storage driver selection against the storage core before writing; emits a non-blocking notice on stderr when the active storage driver changes (existing data is not migrated automatically)
+# help: example: ctx store config get driver
+
+if [ -z "${CTX_ROOT:-}" ]; then
+  printf 'store config: error: run this module through ctx (CTX_ROOT is not set) (ERR_INVALID_ARGUMENT)\n' >&2
+  exit 2
+fi
+
+CFG_LIB="$CTX_ROOT/.contexture/config-lib"
+if [ ! -f "$CFG_LIB" ]; then
+  printf 'store config: error: the internal config library is not installed (ERR_DRIVER_NOT_FOUND)\n' >&2
+  exit 2
+fi
+. "$CFG_LIB"
+
+config_owner_verb storage 'ctx store config' cfg_validate_storage_driver "$@"

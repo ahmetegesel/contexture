@@ -1288,7 +1288,7 @@ cfg_assembly_load() {
   cal_schemas=$(cfg_discover_schemas "$cal_ctx" "$cal_mod" "$cal_lbl") || return $?
   cal_entries=$(cfg_list_file "$cal_ctx/config") || return $?
 
-  if [ "$cal_owner" -eq 0 ]; then
+  if [ "$cal_owner" -eq 0 ] && { [ -z "$cal_mod" ] || [ "$cal_mod" = "storage" ]; }; then
     if [ -f "$cal_ctx/storage.conf" ]; then
       printf '%s: warning: legacy storage configuration is deprecated; move settings into the workspace configuration\n' "$cal_lbl" >&2
     fi
@@ -1329,9 +1329,12 @@ cfg_assembly_load() {
         if (substr(ek, 1, 8) == "package.") continue
         CVAL[ek] = ev
         CHAS[ek] = 1
-        if (owner) {
+        if (owner || mod != "") {
           if (mod != "" && index(ek, mod ".") == 1 && !(ek in DECL)) {
             printf "%s: warning: undeclared configuration key '\''%s'\''\n", lbl, ek > "/dev/stderr"
+          }
+          if (!owner && mod == "storage" && index(ek, "session.storage.") == 1) {
+            printf "%s: warning: legacy key '\''%s'\'' is deprecated; use '\''storage.%s'\''\n", lbl, ek, substr(ek, 17) > "/dev/stderr"
           }
           continue
         }
@@ -1600,6 +1603,14 @@ config_owner_verb() {
       return 0
       ;;
     help)
+      if [ $# -eq 1 ]; then
+        case "$1" in
+          --help|-h)
+            cfg_owner_help "$cov_ns" "$cov_lbl" help
+            return $?
+            ;;
+        esac
+      fi
       if [ $# -gt 1 ]; then
         printf '%s: error: help takes at most one subcommand name (ERR_INVALID_ARGUMENT)\n' "$cov_lbl" >&2
         return 1

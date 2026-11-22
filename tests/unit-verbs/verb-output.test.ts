@@ -120,6 +120,7 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
         R('a missing container', ['store', 'get', 'containers/nope']),
         R('a write to a missing container', ['store', 'put', 'nope/x', '--what=w']),
         R('a missing record', ['store', 'set', 'nope/x', '--what=w']),
+        R('an unknown store config key', ['store', 'config', 'get', 'nope']),
       ]);
       const shim = sleepShim();
       for (const [why, lock] of [['a held unit lock', unitLock('ru')], ['a held namespace lock', namespaceLock('unit')]] as const) {
@@ -183,6 +184,9 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await take(['store', 'put', 'containers/cd', '--description=the dropped census container', '--minting=generated']);
       await take(['store', 'delete', 'containers/cd']);
       await take(['store', 'list', 'containers', '--dropped']);
+      await together([['store', 'config', 'load'], ['store', 'config', 'get', 'driver'], ['store', 'config', 'schema']]);
+      await take(['store', 'config', 'set', 'driver', 'posix']);
+      await take(['store', 'config', 'unset', 'driver']);
 
       const [first, listing] = await together([U('load', 'cu'), ['rhythm', 'list']]);
       const pages = Number(/(\d+) pages?/.exec(first!.stdout)?.[1] ?? '1');
