@@ -116,4 +116,41 @@ describe.concurrent('ctx unit diagnose', () => {
     expect(json).toContain('"descriptor":{"driver":"');
     expect((await unit(sb, '--diagnose')).code).toBe(0);
   });
+
+  it('[the-engine-r24] reads quoted and inline-commented storage.driver with first-match wins and reports source as config without leaking config path', async () => {
+    const sb = fresh(sb0);
+    writeFileSync(
+      join(sb, '.contexture/config'),
+      'storage.driver.foo: bogus\nstorage.driver: ""\nstorage.driver = "posix" # primary\nstorage.driver: bogus\n',
+    );
+    const text = await unit(sb, 'diagnose');
+    expect([text.code, text.stderr]).toEqual([0, '']);
+    expect(text.stdout).toContain('configuration:   present (storage.driver = posix)');
+    expect(text.stdout).toContain('storage driver:  posix (source: config)');
+    expect(text.stdout).not.toContain('.contexture/config');
+    const json = await unit(sb, 'diagnose', '--json');
+    expect([json.code, json.stderr]).toEqual([0, '']);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      config: { status: 'present', driver: 'posix' },
+      driver: { name: 'posix', source: 'config', status: 'ok' },
+    });
+  });
+
+  it('[the-engine-r24] falls back to legacy session.storage.driver in config and ignores storage.driver subkeys', async () => {
+    const sb = fresh(sb0);
+    writeFileSync(join(sb, '.contexture/config'), 'storage.driver.foo: bogus\n');
+    let json = await unit(sb, 'diagnose', '--json');
+    expect([json.code, json.stderr]).toEqual([0, '']);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      config: { status: 'present', driver: 'none' },
+      driver: { name: 'posix', source: 'default (posix)', status: 'ok' },
+    });
+    writeFileSync(join(sb, '.contexture/config'), "session.storage.driver: 'posix' # legacy\n");
+    json = await unit(sb, 'diagnose', '--json');
+    expect([json.code, json.stderr]).toEqual([0, '']);
+    expect(JSON.parse(json.stdout)).toMatchObject({
+      config: { status: 'present', driver: 'posix' },
+      driver: { name: 'posix', source: 'config', status: 'ok' },
+    });
+  });
 });

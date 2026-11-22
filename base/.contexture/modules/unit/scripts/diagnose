@@ -58,16 +58,13 @@ config_status="absent"
 config_driver=""
 if [ -f "$config_file" ]; then
   config_status="present"
-  while IFS= read -r line || [ -n "$line" ]; do
-    case "$line" in
-      session.storage.driver*=*|session.storage.driver*:*|storage.driver*=*|storage.driver*:*)
-        val=${line#*=}
-        [ "$val" = "$line" ] && val=${line#*:}
-        val=${val%%#*}
-        config_driver=$(printf '%s\n' "$val" | tr -d '[:space:]')
-        ;;
-    esac
-  done < "$config_file"
+  if [ -n "${VB_CONFIG_LIB:-}" ] && [ -f "$VB_CONFIG_LIB" ]; then
+    . "$VB_CONFIG_LIB"
+    config_driver=$(cfg_get_file "$config_file" storage.driver 2>/dev/null) || config_driver=""
+    if [ -z "$config_driver" ]; then
+      config_driver=$(cfg_get_file "$config_file" session.storage.driver 2>/dev/null) || config_driver=""
+    fi
+  fi
 fi
 
 # 2. Driver resolution
@@ -76,7 +73,7 @@ if [ -n "${CTX_STORAGE_DRIVER:-}" ]; then
   driver_source="environment (CTX_STORAGE_DRIVER)"
 elif [ -n "$config_driver" ]; then
   driver_name="$config_driver"
-  driver_source="config (.contexture/config)"
+  driver_source="config"
 else
   driver_name="posix"
   driver_source="default (posix)"

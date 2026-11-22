@@ -229,6 +229,22 @@ describe('the resolver', { concurrent: true }, () => {
       expect((await rsv(sb, ['-d', 'two', 'resolve'], '', { CTX_STORAGE_DRIVER: 'three' })).stdout.trim()).toBe(at('two'));
       expect((await rsv(sb, ['--driver=one', 'resolve'], '', { CTX_STORAGE_DRIVER: 'three' })).stdout.trim()).toBe(at('one'));
     });
+
+    it('[the-engine-r25] ignores storage.driver subkeys and reads quoted, commented, = or : separated keys with first non-empty match precedence', async () => {
+      const sb = fresh(posix);
+      const target = driverPath(sb, 'posix');
+      for (const n of ['four', 'five', 'six']) wrap(join(sb, `.contexture/drivers/${n}/driver`), target);
+      const at = (n: string) => join(sb, `.contexture/drivers/${n}/driver`);
+      writeFileSync(join(sb, '.contexture/config'), 'storage.driver.foo: six\nsession.storage.driver.bar = six\n');
+      expect(await resolved(sb, [])).toBe(target);
+      writeFileSync(join(sb, '.contexture/config'), 'storage.driver: ""\nstorage.driver = "four" # inline comment\nstorage.driver: five\n');
+      expect(await resolved(sb, [])).toBe(at('four'));
+      writeFileSync(join(sb, '.contexture/config'), "session.storage.driver: 'five' # legacy\nstorage.driver = four\n");
+      expect(await resolved(sb, [])).toBe(at('four'));
+      writeFileSync(join(sb, '.contexture/config'), 'storage.driver.foo: five\n');
+      writeFileSync(join(sb, '.contexture/storage.conf'), 'storage.driver.foo=five\nsession.storage.driver = six # legacy conf\n');
+      expect(await resolved(sb, [])).toBe(at('six'));
+    });
   });
 });
 

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readdirSync, writeFileSync, writeSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { ctx } from '@support/ctx';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
 import { driverPath } from '@support/driver';
 import { exec } from '@support/exec';
@@ -188,5 +189,69 @@ describe.skipIf(!fts5Available())('the fts5 store location', { concurrent: true 
     answer(await exec('sh', ['-c', 'cd sub/folder && exec "$0" store.put docs workspace/nested', driverPath(sb, 'fts5')], { cwd: sb, input: 'nested\n' }), 'store.put');
     expect(sqlite(join(sb, '.contexture/elsewhere.db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/nested');
     expect(existsSync(join(sb, 'sub/folder/.contexture'))).toBe(false);
+  });
+
+  it('[plugins-r12] reads quoted and commented storage.database, legacy session.storage.database, and storage.conf fallback while ignoring subkeys', async () => {
+    const sb1 = stage('fts5');
+    dataFile(sb1, 'extensions', 'docs', DOCS_SHAPED);
+    appendFileSync(
+      join(sb1, '.contexture/config'),
+      'storage.database.extra: .contexture/wrong.db\nstorage.database = ".contexture/my custom.db" # inline comment\n',
+    );
+    const s1 = store(sb1, 'fts5');
+    answer(await s1.put('docs', 'workspace/q', 'quoted\n'), 'store.put');
+    expect(sqlite(join(sb1, '.contexture/my custom.db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/q');
+    expect(existsSync(join(sb1, FTS5_DB))).toBe(false);
+
+    const sb2 = stage('fts5');
+    dataFile(sb2, 'extensions', 'docs', DOCS_SHAPED);
+    appendFileSync(join(sb2, '.contexture/config'), "session.storage.database: '.contexture/legacy-cfg.db' # legacy\n");
+    const s2 = store(sb2, 'fts5');
+    answer(await s2.put('docs', 'workspace/leg', 'legacy\n'), 'store.put');
+    expect(sqlite(join(sb2, '.contexture/legacy-cfg.db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/leg');
+    expect(existsSync(join(sb2, FTS5_DB))).toBe(false);
+
+    const sb3 = stage('fts5');
+    dataFile(sb3, 'extensions', 'docs', DOCS_SHAPED);
+    writeFileSync(join(sb3, '.contexture/storage.conf'), 'session.storage.database = ".contexture/conf-fallback.db" # fallback\n');
+    const s3 = store(sb3, 'fts5');
+    answer(await s3.put('docs', 'workspace/fb', 'fallback\n'), 'store.put');
+    expect(sqlite(join(sb3, '.contexture/conf-fallback.db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/fb');
+    expect(existsSync(join(sb3, FTS5_DB))).toBe(false);
+  });
+
+  it('[plugins-r12] ctx store config declares database without default path leak and drives storage.database set/get/unset', async () => {
+    const sb = stage('fts5');
+    dataFile(sb, 'extensions', 'docs', DOCS_SHAPED);
+    const dbFileName = FTS5_DB.split('/').pop()!;
+
+    const schemaText = await ctx(sb, 'store', 'config', 'schema');
+    expect([schemaText.code, schemaText.stderr]).toEqual([0, '']);
+    expect(schemaText.stdout).toContain('database: optional path');
+    expect(schemaText.stdout).not.toContain(FTS5_DB);
+    expect(schemaText.stdout).not.toContain(dbFileName);
+
+    const schemaJson = await ctx(sb, 'store', 'config', 'schema', '--json');
+    expect([schemaJson.code, schemaJson.stderr]).toEqual([0, '']);
+    const parsedSchema = JSON.parse(schemaJson.stdout);
+    const dbEntry = parsedSchema.schemas[0].keys.find((k: { key: string }) => k.key === 'database');
+    expect(dbEntry).toMatchObject({ key: 'database', full_key: 'storage.database', presence: 'optional', type: 'path' });
+    expect(dbEntry).not.toHaveProperty('default');
+    expect(schemaJson.stdout).not.toContain(dbFileName);
+
+    const setRes = await ctx(sb, 'store', 'config', 'set', 'database', '.contexture/configured.db');
+    expect([setRes.code, setRes.stderr]).toEqual([0, '']);
+    const getRes = await ctx(sb, 'store', 'config', 'get', 'database');
+    expect([getRes.code, getRes.stdout, getRes.stderr]).toEqual([0, '.contexture/configured.db\n', '']);
+
+    const s = store(sb, 'fts5');
+    answer(await s.put('docs', 'workspace/cfg', 'via config\n'), 'store.put');
+    expect(sqlite(join(sb, '.contexture/configured.db'), "SELECT key FROM store WHERE namespace = 'docs';").trim()).toBe('workspace/cfg');
+    expect(existsSync(join(sb, FTS5_DB))).toBe(false);
+
+    const unsetRes = await ctx(sb, 'store', 'config', 'unset', 'database');
+    expect([unsetRes.code, unsetRes.stderr]).toEqual([0, '']);
+    const getAfter = await ctx(sb, 'store', 'config', 'get', 'database');
+    expect(getAfter.code).toBe(1);
   });
 });

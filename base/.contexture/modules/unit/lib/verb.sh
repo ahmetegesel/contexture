@@ -59,6 +59,14 @@ for vb_lb in "$VB_LIB/../../../storage/scripts/library" \
   if [ -f "$vb_lb" ]; then VB_LIBRARY=$vb_lb; break; fi
 done
 [ -z "$VB_LIBRARY" ] || . "$VB_LIBRARY"
+# the internal config library: the drawer beside the module wins, then the workspace
+# drawer, then the base mirror; verbs that read workspace configuration source it on demand
+VB_CONFIG_LIB=""
+for vb_cl in "$VB_LIB/../../../config-lib" \
+             "${CTX_ROOT:-$PWD}/.contexture/config-lib" \
+             "${CTX_ROOT:-$PWD}/base/.contexture/config-lib"; do
+  if [ -f "$vb_cl" ]; then VB_CONFIG_LIB=$vb_cl; break; fi
+done
 VB_RENDER="$VB_LIB/render.awk"
 VB_DIR=""
 VB_PAY=""
