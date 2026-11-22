@@ -24,6 +24,7 @@ const OWNERS: readonly [file: string, line: string, why: string][] = [
   [FTS5, '  sl_lock="$LOCK_BASE/locks/store-$1.lock"', 'the fts5 namespace lock (store_lock)'],
   [FTS5, '  lh_lock="$LOCK_BASE/locks/store-$1.lock"', 'the fts5 namespace lock probe (store_lock_held)'],
   [LIBRARY, '  ll_dir="$(store_lib_root)/.contexture/tmp/locks/lib"', 'the library lock folder, its own family (lib_lock)'],
+  ['base/.contexture/config-lib', '    cwl_lock_dir="$cwl_ctx/tmp/locks"', 'the config lock folder (cfg_write_locked)'],
 ];
 
 const owned = new Set(OWNERS.map(([file, line]) => `${file}\n${line}`));
@@ -34,6 +35,7 @@ const SCAN_ROOTS: readonly [name: string, files: (root: string) => string[], flo
   ['the storage core', (root) => walk(join(root, 'base/.contexture/storage')), 7],
   ['the plugin storage drivers', (root) => kids(join(root, 'plugins')).flatMap((p) => walk(join(p, '.contexture/extensions/storage/drivers'))), 3],
   ['the engine', (root) => one(join(root, 'base/.contexture/ctx')), 1],
+  ['the config library', (root) => one(join(root, 'base/.contexture/config-lib')), 1],
   ['the composer', (root) => one(join(root, 'base/.contexture/laws/compose')), 1],
   ['the package installer', (root) => one(join(root, 'base/.contexture/package-install')), 1],
   ['the package uninstaller', (root) => one(join(root, 'base/.contexture/package-uninstall')), 1],

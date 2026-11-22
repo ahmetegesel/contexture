@@ -19,13 +19,13 @@
   AGENTS.workspace.md = the workspace's shared overlay, tracked: @replace | @append per section; survives every sync untouched; wins over local
   AGENTS.local.md = your amendments; amend, never contradict: the laws stand; survives every sync untouched
   .contexture/laws/ = the law sources: core.md the core law source
-  .contexture/config = workspace configuration: module-scoped key: value declarations, loaded alongside overlays at boot
+  workspace configuration = module-scoped settings, loaded at boot via .contexture/ctx config load (schemas via ctx config schema)
   .contexture/ctx             = the runtime (run .contexture/ctx help; --help and -h are the same table): ctx unit <verb>, ctx run <cmd>, ctx compose [--check], ctx package install|uninstall|list|catalog|info (install and uninstall only on the human's explicit go at the act; the verb checks no go), ctx <module>
   .contexture/rhythms/        = workflow patterns; the contract and the default live in @rhythms
   .contexture/storage/: the storage core, not a module: the driver resolver, the store-data reader, the module-facing library, the store contract, and the built-in posix driver; a driver serves only the store contract (contract 3), and the record's 35 operations are the unit module's (ctx unit help)
 
 @boot
-  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments) and .contexture/config (workspace configuration) if present; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
+  1. read AGENTS.workspace.md (the shared overlay) then AGENTS.local.md (tiny personal amendments), and load workspace configuration via .contexture/ctx config load; then run .contexture/ctx help --all (--help and -h are the base table; --all prints every module's contracts); may amend this order; an overlay address names a base section: replaced or appended; where workspace and local conflict, the workspace wins
   2. boot is unconditional at a fresh context: the first message is the move signal whatever its shape: a boot request, a task dump, a question; nothing loads and nothing works before the boot reads it
   3. get the field: .contexture/ctx unit list and .contexture/ctx rhythm list; read the message against the candidates: a close unit match proposes continuing that unit, no match proposes bootstrapping a new one; the request read against each rhythm's use when names the rhythm that serves it, or none
   4. propose the move and wait for the answer before anything works: the proposal names the unit and the rhythm: a propose match is asked, an auto match is stated as applying, no match names the design loop (@rhythms default); the message naming its unit explicitly still gets the proposal stated as a confirmation; the human's reply settles the unit and the rhythm (@laws#process-free): an active unit continues at 5, a new unit bootstraps at 10

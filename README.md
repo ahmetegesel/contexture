@@ -55,6 +55,8 @@ You do not need to memorize commands to use contexture. Your agent drives `.cont
 
 ```sh
 .contexture/ctx help --all            # Discover core commands and every installed module's contract
+.contexture/ctx config load           # Assemble effective workspace configuration (read only)
+.contexture/ctx config schema         # Show declared configuration schemas across core and modules
 .contexture/ctx unit list             # List active units and each unit's derived next task
 .contexture/ctx unit load <unit>      # Cold-boot a fresh session onto the unit's live working record
 .contexture/ctx run <command>         # Run a shell command through stream compaction, preserving exit code
@@ -105,7 +107,7 @@ Five modules ship inside `base/.contexture/modules/` and work out of the box wit
 - **`unit`**: Owns the unit record (state, backlog, journal, knowledge, audit, fold, search, and lifecycle operations) over the storage layer.
 - **`lane`**: Manages isolated subagent dispatch lanes (`create`, `record`, `report`, `show`).
 - **`rhythm`**: Lists workspace and installed rhythms, displays a rhythm whole, and reports the rhythm in force with its next gate.
-- **`store`**: Declares and manages schema-checked generic data containers through `ctx store`.
+- **`store`**: Declares and manages schema-checked generic data containers through `ctx store`, and manages `storage.*` settings via `ctx store config`.
 - **`run`**: Provides the baseline diff, directory listing, and log compaction filters for `ctx run`.
 
 ### Optional catalog plugins

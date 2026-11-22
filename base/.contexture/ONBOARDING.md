@@ -87,7 +87,7 @@
   base assets:
     verify staged payload: confirm `.contexture/ctx` is present and executable (already staged with preserved executable modes by `install.sh`, or extracted manually)
     compose the law layer: `.contexture/ctx compose`; it builds `AGENTS.generated.md` at the root from the core source and the installed modules, and the loader verifies or recomposes it at every boot
-    install newly confirmed packages on the human's go: check `.contexture/ctx package list` for any already installed during `install.sh`, then run `.contexture/ctx package install <name>` for each remaining confirmed package (`git` lands `@git` and its boot ground clause); each install writes its `package.<name>:` line into `.contexture/config`, the declaration a fresh clone installs from with one bare `.contexture/ctx package install` on the human's go (boot never installs from it)
+    install newly confirmed packages on the human's go: check `.contexture/ctx package list` for any already installed during `install.sh`, then run `.contexture/ctx package install <name>` for each remaining confirmed package (`git` lands `@git` and its boot ground clause); each install writes its `package.<name>:` line into the workspace configuration, the declaration a fresh clone installs from with one bare `.contexture/ctx package install` on the human's go (boot never installs from it)
     loader swap: when `install.sh` preserved a pre-existing `AGENTS.md`, move `.contexture/tmp/AGENTS.loader.md` to `AGENTS.md` only after migrating the existing rules into `AGENTS.workspace.md`
   gitignore:
     standalone repo:

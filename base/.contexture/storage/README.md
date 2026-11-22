@@ -18,6 +18,7 @@ storage/
   scripts/json.awk          the one JSON flattener: a storage answer to path=value lines, read
                             by the unit, rhythm, and docs modules
   scripts/library           the module-facing interface, sourced by a module's scripts
+  config                    the core storage configuration schema (driver: optional string default posix)
   drivers/posix/            the zero-dependency baseline driver (sh and awk)
   README.md                 this contract
 ```
@@ -384,10 +385,13 @@ listing for the whole (rc 0 when nothing is left out, rc 2 with no module drawer
 
 ## Discovery and selection
 
-`storage.driver` in `.contexture/config` selects the driver; `CTX_STORAGE_DRIVER`
-overrides it, and the baseline is `posix`. The legacy `.contexture/storage.conf` and the
-`session.storage.driver` key stay readable as transitional compatibility. The resolver
-searches, in order:
+`storage.driver` in `.contexture/config` selects the driver (declared in
+`base/.contexture/storage/config` and managed via `ctx store config`); `CTX_STORAGE_DRIVER`
+overrides it, and the baseline is `posix`. `driver-resolver` reads configuration through the
+shared internal config library (`base/.contexture/config-lib`, unified `:` / `=` grammar, exact
+key matching, quote unwrapping, inline `#` comment stripping, first non-empty value wins). The
+legacy `.contexture/storage.conf` and the `session.storage.driver` key stay readable as
+transitional compatibility. The resolver searches, in order:
 
 1. the workspace custom drivers, `.contexture/drivers/<name>/driver` (transitional);
 2. the storage core's drivers, `.contexture/storage/drivers/<name>/driver`;

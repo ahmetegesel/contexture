@@ -10,8 +10,8 @@ plugins/<name>/
   hooks/                 optional non-interactive package-level lifecycle scripts: probe, install, uninstall
   .contexture/
     extensions/          the overlay: the extension-root tree the package installs
-      modules/<name>/    a standard module folder: manifest, laws, data, part hooks, verbs, hooks, filters, and its private assets
-      storage/drivers/<name>/  a storage driver (the driver kind)
+      modules/<name>/    a standard module folder: manifest, laws, data, config, part hooks, verbs, hooks, filters, and its private assets
+      storage/drivers/<name>/  a storage driver (the driver kind, with optional config schema)
       rhythms/           rhythm files
   README.md              plugin-meta: adoption, the plugin's needs, contribution
   tests/                 plugin-meta: the plugin's own vitest project, never installed
@@ -32,7 +32,7 @@ Every package carries the package manifest `manifest` at its root: required `# s
 The two kinds:
 
 - A **feature package** carries no driver. It may bring any non-driver parts, including none of the module kind: `toolchain-filters` is filters-only, `starter-rhythms` rhythms-only, `git` a module with its laws and no verbs, and a law-fragment-only package is the same shape. A feature package with a module is a module package; a feature package with no module file is module-less.
-- A **storage-driver package** declares and installs its driver: exactly one `driver` part at `storage/drivers/<name>` and a `# driver: <name>` line. The driver package ships no module file, so the engine never lists the driver as a module; its package name may differ from the driver name: `storage-fts5` declares `fts5`. `storage.driver: fts5` resolves the installed driver through the extension tier.
+- A **storage-driver package** declares and installs its driver: exactly one `driver` part at `storage/drivers/<name>` and a `# driver: <name>` line. The driver package ships no module file, so the engine never lists the driver as a module; its package name may differ from the driver name: `storage-fts5` declares `fts5`. A driver may include an optional `config` schema file inside `storage/drivers/<name>/` (covered by the `driver` part), whose keys merge into the `storage` schema namespace (`ctx store config` and `ctx config`). Activate an installed driver through `ctx store config set driver <name>`; `storage.driver: fts5` resolves the installed driver through the extension tier.
 
 The three version lines are distinct: the package version (the manifest; install, upgrade, the generated law hash), the driver descriptor version (the driver's `capability`, `3.0.0` at the storage core's split descriptor), and the storage contract (`3` today): the store-only card, with the record's rules in the unit module over the storage layer. A `# requires:` line is reserved and refused, as in the module file.
 

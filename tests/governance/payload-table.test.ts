@@ -7,7 +7,7 @@ import { ROOT } from '../support/root';
 import { sandbox } from '../support/sandbox';
 import { atTop, git, kids, text } from './walk';
 
-const SHIPPED = 'base/.contexture/{ctx,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/store,modules/unit,ONBOARDING.md}';
+const SHIPPED = 'base/.contexture/{ctx,config-lib,package-install,package-uninstall,storage,laws,modules/lane,modules/rhythm,modules/run,modules/store,modules/unit,ONBOARDING.md}';
 
 const rooted = atTop();
 

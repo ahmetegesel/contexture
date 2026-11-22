@@ -25,7 +25,8 @@ The storage-fts5 plugin serves as an indexed storage backend: the single store o
 |---|---|---|
 | `manifest` | the package manifest at the plugin root: summary, version, kind driver, driver fts5, and the driver part | reference (the module file retired; a driver is not a module) |
 | `.contexture/extensions/storage/drivers/fts5/schema.sql` | the schema version 5 DDL: the generic store, its change log, and the derived store documents with the dual FTS5 virtual tables and their triggers | install (driver part) |
-| `.contexture/extensions/storage/drivers/fts5/driver` | the driver executable: the contract 3 store-only entry point (capability, storage.health, the seven store functions, the store search) | install (driver part) |
+| `.contexture/extensions/storage/drivers/fts5/driver` | the driver executable: the contract 3 store-only entry point (capability, storage.health, the seven store functions, the store search); reads `storage.database` and legacy `session.storage.database` via the shared `config-lib` reader | install (driver part) |
+| `.contexture/extensions/storage/drivers/fts5/config` | the driver configuration schema (`database: optional path`, omitting the default database path so schema views stay path-free) | install (driver part) |
 | `.contexture/extensions/storage/drivers/fts5/db-init.sh` | the database open path: the sqlite3 3.44 minimum, the fresh schema 5 in a new or empty file, the version 5 open, the refusal of any other version, the unreadable and the unwritable open refusals naming no folder, the per-connection busy timeout | install (driver part) |
 | `tests/fts5-schema.test.ts` | the schema (vitest project `storage-fts5`): schema 5 laid in an absent or empty file with no backup, a read leaving a version 5 store byte for byte, a version 4, 0, or 6 file refusing get, list, and put naming its version with the file untouched and no backup, `storage.health <namespace>` reporting error at version 4, its other database branches (a file holding no table reads `degraded` with the store absent; a database holding no key of the namespace, its last key deleted or only another namespace's keys stored, reads `ok` with the store absent; a held lock of the namespace reads `locked` with the store absent over a store holding only another namespace's keys; a file that is not a database reads `error` with the store absent; a database file the driver cannot write reads `error` with the namespace's true presence, ahead of a held lock; a failed integrity check reads `error`), every detail free of a folder, the open refusals naming no folder (a database file the driver cannot read refusing get and list `cannot read the storage layer's database`, an empty one it cannot write refusing the first put `cannot create the storage layer's database`), and the `storage.database` key in `.contexture/config` placing the store at a workspace-relative and an absolute path, never the default file, a relative value resolved against the workspace root even for a call from a folder under it | reference |
 | `tests/fts5-version.test.ts` | the sqlite3 3.44 guard under a fake sqlite3 (itself null-checked): below it a store function refuses rc 2 naming the version and `storage.health` reports `error` naming it; at 3.44 both serve | reference |
@@ -87,7 +88,7 @@ Before adopting `storage-fts5` in a repository, verify:
 
 * SQLite CLI availability: verify that `/usr/bin/sqlite3` or `sqlite3` is on PATH with FTS5 support, version 3.44 or later (below it every function refuses rc 2 `ERR_DRIVER_NOT_FOUND` naming the version found, and `storage.health`, which `ctx unit diagnose` prints, reports `error` naming it).
 * An older store: a database written by an earlier release of this plugin is refused naming its schema version (item 7); move it aside, since the driver lays a fresh store in its place only once the path holds no file or an empty one.
-* Workspace storage configuration: determine whether the database lives at default `.contexture/sessions.db` or a custom path configured in `.contexture/config` (`storage.database`) or `.contexture/storage.conf`.
+* Workspace storage configuration: determine whether the database lives at default `.contexture/sessions.db` or a custom path configured via `ctx store config set database <path>` (stored as `storage.database` in `.contexture/config`; inspect declared keys via `ctx store config schema` and current values via `ctx store config get database`, with transitional read-only fallback for `session.storage.database` and `.contexture/storage.conf`).
 * The cutover: once `storage.driver: fts5` is configured, every verb reads and writes the database alone, so a unit or a doc left in files is invisible to it; the units carried forward and the corpus are re-entered through the verbs (Step 3). A corpus tracked in git moves only from a committed state, and fts5 is a single-machine store: a team sharing its corpus through git keeps the posix driver.
 
 ## Propose
@@ -132,10 +133,10 @@ Add the database files to `.gitignore`:
 
 ### Step 3: Re-enter the Record
 
-The maintainer sets the driver; then the agent re-enters each unit worth carrying forward through the ordinary verbs under fts5, reading it under posix (`CTX_STORAGE_DRIVER=posix ctx unit load <unit>`) and judging each legacy shape as it goes, and writes each doc of the corpus through the docs write verb:
+The maintainer sets the driver via `ctx store config set driver fts5` (which runs the Contract 3 capability handshake before writing `.contexture/config` and prints a non-blocking migration notice when the effective driver changes); then the agent re-enters each unit worth carrying forward through the ordinary verbs under fts5, reading it under posix (`CTX_STORAGE_DRIVER=posix ctx unit load <unit>`) and judging each legacy shape as it goes, and writes each doc of the corpus through the docs write verb:
 
 ```sh
-printf 'storage.driver: fts5\n' >> <repo-root>/.contexture/config
+.contexture/ctx store config set driver fts5     # or set database <path> for a custom store path
 ctx unit bootstrap <unit> "<objective>"          # then task add, finding add, record, lane create, ...
 ctx docs write <repo> <slug> < docs/<repo>/<slug>.md
 ```

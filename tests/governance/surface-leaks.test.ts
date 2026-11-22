@@ -20,6 +20,7 @@ interface Hit {
 
 const ALLOW: readonly Hit[] = [
   { key: ONBOARDING, line: `      per confirmed plan: ignore or track ${RECORD_ROOT}/ (and the deprecated ${FALLBACK_ROOT}/ while units remain in it) and .contexture/rhythms/ based on team choice` },
+  { key: ONBOARDING, line: '      track .contexture/config (its package lines declare the installs a clone reproduces) and .contexture/plugins/ (the workspace catalog copy) unless the team explicitly chooses not to vendor the catalog' },
 ];
 
 function surfaceFiles(root: string): string[] {
@@ -144,10 +145,12 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
       'or .contexture/extensions/modules.',
       "'.contexture/'modules/unit/data",
       '.contexture\\/extensions/modules/docs/README',
+      '.contexture/config',
+      "'.contexture/'config",
       `"${RECORD_ROOT}"`,
     ];
     expect(planted.filter((l) => !leaks(l))).toEqual([]);
-    expect(['ctx unit load u', 'ctx lane show u l report', 'lane#l/report#VERDICT', '.contexture/ctx compose', '.contexture/tmp/lane/', 'ctx docs help check', 'the lanes/x/ folder', 'units/x', 'sessions/x', 'the session', '.contexture/modulesx'].filter(leaks)).toEqual([]);
+    expect(['ctx unit load u', 'ctx lane show u l report', 'lane#l/report#VERDICT', '.contexture/ctx compose', '.contexture/ctx config load', 'ctx config schema', 'ctx store config get driver', '.contexture/tmp/lane/', 'ctx docs help check', 'the lanes/x/ folder', 'units/x', 'sessions/x', 'the session', '.contexture/modulesx'].filter(leaks)).toEqual([]);
   });
 
   it('the file walk reads the loader, ONBOARDING, the core law source, every laws and module file, and every shipped rhythm, by directory, above its floor', () => {
@@ -170,7 +173,7 @@ describe.concurrent('the agent surface census: no shipped law, rhythm, or help n
     expect(help.empty).toEqual([]);
     expect(help.errors).toEqual([]);
     const keys = help.forms.map((f) => f.join(' '));
-    for (const must of ['help --all', 'unit help list', 'unit help get', 'lane help create', 'rhythm help show', 'store help put', 'store get --help', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'search --help', 'package --help', 'package install --help', 'package uninstall --help', 'package list --help', 'package catalog --help', 'package info --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
+    for (const must of ['help --all', 'unit help list', 'unit help get', 'lane help create', 'rhythm help show', 'store help put', 'store get --help', 'store help config', 'store config --help', 'store config load --help', 'store config get --help', 'store config set --help', 'store config unset --help', 'store config schema --help', 'docs help nudge', 'docs help check', 'run --help', 'compose --help', 'config --help', 'config load --help', 'config get --help', 'config schema --help', 'search --help', 'package --help', 'package install --help', 'package uninstall --help', 'package list --help', 'package catalog --help', 'package info --help', 'unit fold --help', 'unit task --help', 'unit task add --help', 'unit entry closure --help', 'lane show --help', 'docs nudge --help', 'run --diagnose', 'unit --diagnose']) expect(keys).toContain(must);
     expect(keys).not.toContain('lane show recipe --help');
   });
 

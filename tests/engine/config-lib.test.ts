@@ -1,8 +1,8 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, statSync, utimesSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { performance } from 'node:perf_hooks';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { leaks } from '../support/drawer';
+import { configLock, leaks, lockPath } from '../support/drawer';
 import { exec, type Run } from '../support/exec';
 import { holdLock, sleepShim } from '../support/locks';
 import { pathPlant } from '../support/plants';
@@ -163,7 +163,7 @@ describe.concurrent('config-lib: locked atomic writer and preservation', () => {
     // Unset when absent creates nothing (not even lock dir)
     expect((await runLib(sb, 'cfg_unset', ['storage.driver', ctxDir])).code).toBe(0);
     expect(existsSync(conf)).toBe(false);
-    expect(existsSync(join(ctxDir, 'tmp/locks'))).toBe(false);
+    expect(existsSync(dirname(lockPath(sb, configLock())))).toBe(false);
 
     // 0-byte file untouched by unset, mtime unchanged
     writeFileSync(conf, '');
@@ -243,7 +243,7 @@ describe.concurrent('config-lib: locking concurrency, stale recovery, and subshe
     );
     expect([r.code, r.stderr]).toEqual([0, '']);
     expect(r.stdout).toBe('AFTER_SET\nCALLER_EXIT\n');
-    expect(existsSync(join(ctxDir, 'tmp/locks/config.lock'))).toBe(false);
+    expect(existsSync(lockPath(sb, configLock()))).toBe(false);
     expect(existsSync(join(ctxDir, 'config'))).toBe(true);
   });
 
@@ -257,13 +257,13 @@ describe.concurrent('config-lib: locking concurrency, stale recovery, and subshe
       const got = await runLib(sb, 'cfg_get', [k, ctxDir]);
       expect([got.code, got.stdout]).toEqual([0, `v${i}\n`]);
     }
-    expect(existsSync(join(ctxDir, 'tmp/locks/config.lock'))).toBe(false);
+    expect(existsSync(lockPath(sb, configLock()))).toBe(false);
   });
 
   it('second writer waits until first lock holder releases', async ({ onTestFinished }) => {
     const sb = stage('posix', 'cfg-lock-wait');
     const ctxDir = join(sb, '.contexture');
-    const lockDir = join(ctxDir, 'tmp/locks/config.lock');
+    const lockDir = lockPath(sb, configLock());
     const go = join(sb, 'go');
     const waiting = join(sb, 'waiting');
     onTestFinished(() => writeFileSync(go, ''));
@@ -293,22 +293,22 @@ describe.concurrent('config-lib: locking concurrency, stale recovery, and subshe
       '',
       `config.lock: error: the configuration lock is held (${WAIT_S} s timeout) (ERR_STORAGE_LOCKED)\n`,
     ]);
-    expect(existsSync(join(ctxDir, 'tmp/locks/config.lock'))).toBe(true);
+    expect(existsSync(lockPath(sb, configLock()))).toBe(true);
     release();
   });
 
   it('breaks dead-pid lock immediately and pidless lock after grace', async () => {
     const sb = stage('posix', 'cfg-lock-stale');
     const ctxDir = join(sb, '.contexture');
-    holdLock(sb, 'config.lock', 'dead');
+    holdLock(sb, configLock(), 'dead');
     const r1 = await runLib(sb, 'cfg_set', ['storage.driver', 'posix', ctxDir]);
     expect([r1.code, r1.stderr]).toEqual([0, '']);
-    expect(existsSync(join(ctxDir, 'tmp/locks/config.lock'))).toBe(false);
+    expect(existsSync(lockPath(sb, configLock()))).toBe(false);
 
-    holdLock(sb, 'config.lock', 'pidless');
+    holdLock(sb, configLock(), 'pidless');
     const r2 = await runLib(sb, 'cfg_set', ['search.timeout', '20', ctxDir], { env: sleepShim() });
     expect([r2.code, r2.stderr]).toEqual([0, '']);
-    expect(existsSync(join(ctxDir, 'tmp/locks/config.lock'))).toBe(false);
+    expect(existsSync(lockPath(sb, configLock()))).toBe(false);
     expect(readFileSync(join(ctxDir, 'config'), 'utf8')).toBe('storage.driver: posix\nsearch.timeout: 20\n');
   });
 
@@ -316,7 +316,7 @@ describe.concurrent('config-lib: locking concurrency, stale recovery, and subshe
     const sb = stage('posix', 'cfg-lock-unwritable');
     const ctxDir = join(sb, '.contexture');
     mkdirSync(join(ctxDir, 'tmp'), { recursive: true });
-    writeFileSync(join(ctxDir, 'tmp/locks'), 'not a directory\n');
+    writeFileSync(dirname(lockPath(sb, configLock())), 'not a directory\n');
     const r = await runLib(sb, 'cfg_set', ['storage.driver', 'posix', ctxDir]);
     expect(r.code).toBe(2);
     expect(r.stderr).toContain('ERR_STORAGE_WRITE');
