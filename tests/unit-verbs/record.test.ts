@@ -5,8 +5,13 @@ import { fresh, seed } from '../support/snapshot';
 import { must, plantRhythms, rhythm, run, seedUnit, unit } from '../support/unit';
 
 const D = '2026-09-27';
-const FORM = 'takes <slug> (<verdict>: <reason>) with a verdict of done, superseded, dropped, or folded and a non-empty reason';
+const FORM = 'takes <slug> (<verdict>: <reason>) with a verdict of done, superseded, dropped, folded, harvested, or discarded and a non-empty reason';
 const closesLine = async (sb: string, slug: string): Promise<string | undefined> => (await unit(sb, 'entry', 'show', 'cl-unit', slug)).stdout.split('\n').find((l) => l.startsWith('  CLOSES: '));
+const LANDED = 'unit#kv-unit/finding/KV_LANDED';
+const flagRefusal = (slug: string, verdict: string): string =>
+  `entry.record: error: closer target ${slug} carries KNOWLEDGE: true; close it harvested (with a --ref to the finding it landed) or discarded, not ${verdict} (ERR_INVALID_ARGUMENT)\n`;
+const HARVEST_REFUSAL = 'entry.record: error: a harvested closer needs a --ref naming the finding it landed, unit#<unit>/finding/<NAME> (ERR_INVALID_ARGUMENT)\n';
+const closeReason = async (sb: string, slug: string): Promise<string | null> => JSON.parse((await unit(sb, 'entry', 'show', 'kv-unit', slug, '--json')).stdout).entry.close_reason;
 
 describe.concurrent('ctx unit record and the entry reads', () => {
   let sb0: string;
@@ -22,6 +27,10 @@ describe.concurrent('ctx unit record and the entry reads', () => {
       await must(unit(sb, 'record', 'n-unit', '--what=closure target', `--slug=${D}-n-t`));
       await must(unit(sb, 'record', 'n-unit', '--what=open entry', `--slug=${D}-n-o`));
       await must(unit(sb, 'record', 'n-unit', '--what=closes the target', `--slug=${D}-n-c`, `--closes=${D}-n-t (folded: into the closer)`));
+      await seedUnit(sb, 'kv-unit', 'knowledge verdict unit');
+      for (const t of ['f1', 'f2']) await must(unit(sb, 'record', 'kv-unit', `--what=flagged ${t}`, '--knowledge', `--slug=${D}-kv-${t}`));
+      await must(unit(sb, 'record', 'kv-unit', '--what=plain entry', `--slug=${D}-kv-p`));
+      await must(unit(sb, 'finding', 'add', 'kv-unit', 'KV_LANDED', '--summary=the landed harvest'));
     }, 'posix', 'record');
   });
 
@@ -95,6 +104,75 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect(await closesLine(sb, `${D}-cl-e`)).toBe(`  CLOSES: ${D}-cl-c (done: the resolution)`);
   });
 
+  it('C E3-5 [the-record-r4, the-record-r5]: harvested and discarded land on --closes and --supersedes and read back as close_reason <verdict>: <reason>; an empty reason refuses naming the explicit form', async () => {
+    const sb = fresh(sb0);
+    await must(unit(sb, 'record', 'kv-unit', '--what=discards a flag', `--closes=${D}-kv-f1 (discarded: fails the bar)`));
+    await must(unit(sb, 'record', 'kv-unit', '--what=harvests a flag', `--ref=${LANDED}`, `--supersedes=${D}-kv-f2 (harvested: landed as KV_LANDED)`));
+    expect(await closeReason(sb, `${D}-kv-f1`)).toBe('discarded: fails the bar');
+    expect(await closeReason(sb, `${D}-kv-f2`)).toBe('harvested: landed as KV_LANDED');
+    for (const flag of [`--closes=${D}-kv-p (harvested: )`, `--supersedes=${D}-kv-p (discarded: )`]) {
+      const r = await unit(sb, 'record', 'kv-unit', '--what=an empty reason', `--ref=${LANDED}`, flag);
+      expect(r.code).toBe(1);
+      expect(r.stderr).toContain(FORM);
+    }
+  });
+
+  it.for([
+    { kind: 'closes', closer: `${D}-kv-f1 (done: resolved)`, target: `${D}-kv-f1`, verdict: 'done' },
+    { kind: 'supersedes', closer: `${D}-kv-f1 (superseded: replaced)`, target: `${D}-kv-f1`, verdict: 'superseded' },
+    { kind: 'closes', closer: `${D}-kv-p ${D}-kv-f2 (dropped: both at once)`, target: `${D}-kv-f2`, verdict: 'dropped' },
+    { kind: 'supersedes', closer: `${D}-kv-f2 ${D}-kv-p (folded: both at once)`, target: `${D}-kv-f2`, verdict: 'folded' },
+  ])('C E3-5 [the-record-r-9rk9q]: --$kind=$closer on a live KNOWLEDGE-flagged target refuses rc 1 in the entry.record form naming the target and the verdict, stdout empty, nothing written', async ({ kind, closer, target, verdict }) => {
+    const sb = fresh(sb0);
+    const before = (await unit(sb, 'entry', 'list', 'kv-unit', '--json')).stdout;
+    const r = await unit(sb, 'record', 'kv-unit', '--what=closes a flag', `--${kind}=${closer}`);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', flagRefusal(target, verdict)]);
+    expect((await unit(sb, 'entry', 'list', 'kv-unit', '--json')).stdout).toBe(before);
+  });
+
+  it('C E3-5 [the-record-r-9rk9q]: a later closer line naming a live flagged target refuses the whole entry, the earlier line unwritten', async () => {
+    const sb = fresh(sb0);
+    const before = (await unit(sb, 'entry', 'list', 'kv-unit', '--json')).stdout;
+    const r = await unit(sb, 'record', 'kv-unit', '--what=two closer lines', `--closes=${D}-kv-p (done: fine)`, `--supersedes=${D}-kv-f1 (done: gone)`);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', flagRefusal(`${D}-kv-f1`, 'done')]);
+    expect((await unit(sb, 'entry', 'list', 'kv-unit', '--json')).stdout).toBe(before);
+    expect(await closeReason(sb, `${D}-kv-p`)).toBeNull();
+  });
+
+  it('C E3-5 [the-record-r-9rk9q]: a flagged occurrence already closed harvested or discarded takes any later verdict', async () => {
+    const sb = fresh(sb0);
+    await must(unit(sb, 'record', 'kv-unit', '--what=harvests a flag', `--ref=${LANDED}`, `--closes=${D}-kv-f1 (harvested: landed as KV_LANDED)`));
+    await must(unit(sb, 'record', 'kv-unit', '--what=supersedes it later', `--supersedes=${D}-kv-f1 (done: a later word)`));
+    await must(unit(sb, 'record', 'kv-unit', '--what=discards a flag', `--closes=${D}-kv-f2 (discarded: fails the bar)`));
+    await must(unit(sb, 'record', 'kv-unit', '--what=drops it later', `--closes=${D}-kv-f2 (dropped: a later word)`));
+    expect(await closeReason(sb, `${D}-kv-f1`)).toBe('harvested: landed as KV_LANDED');
+  });
+
+  it.for([
+    { label: 'no REF', closer: `${D}-kv-f1 (harvested: landed)`, refs: [] as string[] },
+    { label: 'no REF on an unflagged target', closer: `${D}-kv-p (harvested: landed)`, refs: [] as string[] },
+    { label: 'an entry REF alone', closer: `${D}-kv-f1 (harvested: landed)`, refs: [`--ref=unit#kv-unit/entry/${D}-kv-p`] },
+  ])('C E3-5 [the-record-r-9rk9q]: a harvested closer with $label refuses rc 1 in the entry.record form naming the finding REF need, nothing written', async ({ closer, refs }) => {
+    const sb = fresh(sb0);
+    const before = (await unit(sb, 'entry', 'list', 'kv-unit', '--json')).stdout;
+    const r = await unit(sb, 'record', 'kv-unit', '--what=harvests', ...refs, `--closes=${closer}`);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', HARVEST_REFUSAL]);
+    expect((await unit(sb, 'entry', 'list', 'kv-unit', '--json')).stdout).toBe(before);
+  });
+
+  it.for(['done', 'superseded', 'dropped', 'folded', 'harvested', 'discarded'])('C E3-5 [the-record-r5]: an unflagged target takes the verdict %s', async (verdict) => {
+    const sb = fresh(sb0);
+    await must(unit(sb, 'record', 'kv-unit', '--what=closes the plain entry', `--ref=${LANDED}`, `--closes=${D}-kv-p (${verdict}: a ${verdict} word)`));
+    expect(await closeReason(sb, `${D}-kv-p`)).toBe(`${verdict}: a ${verdict} word`);
+  });
+
+  it('C E3-5 [the-record-r5, the-record-r-9rk9q]: the record help lists the six verdicts and states the flagged rule and the finding REF rule', async () => {
+    const help = (await unit(fresh(sb0), 'record', '--help')).stdout;
+    expect(help).toContain('the verdict done, superseded, dropped, folded, harvested, or discarded');
+    expect(help).toContain('a closer naming a target whose live (unclosed) occurrence carries KNOWLEDGE: true takes only the verdict harvested or discarded');
+    expect(help).toContain('a harvested closer needs a --ref naming the finding it landed, unit#<unit>/finding/<NAME>');
+  });
+
   it('E-9: record takes the typed flags and injects the date prefix and the active anchor', async () => {
     const sb = fresh(sb0);
     expect((await unit(sb, 'record', 'x-unit', '--what=event recorded via flags', '--group=dev', '--thread=review')).code).toBe(0);
@@ -166,6 +244,15 @@ describe.concurrent('ctx unit record and the entry reads', () => {
     expect(open.stdout + open.stderr).toBe(`closure n-unit ${D}-n-o: open\n`);
     expect((await unit(sb, 'entry', 'closure', 'n-unit', `${D}-n-missing`)).code).toBe(1);
     expect((await unit(sb, 'entry', 'closure', 'n-unit', `${D}-n-t`, '--json')).stdout).toContain(`"closed":true,"closers":[{"by":"${D}-n-c","by_anchor":"A1","closer":{"kind":"CLOSES"`);
+  });
+
+  it('N-a [the-record-r4]: entry closure prints closed (harvested) and closed (discarded) with the closer line', async () => {
+    const sb = fresh(sb0);
+    await must(unit(sb, 'record', 'kv-unit', '--what=harvests a flag', `--slug=${D}-kv-h`, `--ref=${LANDED}`, `--closes=${D}-kv-f1 (harvested: landed as KV_LANDED)`));
+    const lines = (await unit(sb, 'entry', 'closure', 'kv-unit', `${D}-kv-f1`)).stdout.split('\n');
+    expect([lines[0], lines[2], lines[3]]).toEqual([`closure kv-unit ${D}-kv-f1: closed (harvested)`, `closer ${D}-kv-h (A1)`, `  CLOSES: ${D}-kv-f1 (harvested: landed as KV_LANDED)`]);
+    await must(unit(sb, 'record', 'kv-unit', '--what=discards a flag', `--supersedes=${D}-kv-f2 (discarded: fails the bar)`));
+    expect((await unit(sb, 'entry', 'closure', 'kv-unit', `${D}-kv-f2`)).stdout.split('\n')[0]).toBe(`closure kv-unit ${D}-kv-f2: closed (discarded)`);
   });
 
   it.for(['', 'true', 'false'])('[the-record-r7] ctx unit record --thread="%s" refuses rc 1 before any write', async (thread) => {

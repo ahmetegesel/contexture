@@ -333,7 +333,7 @@ function p_closer(k, i, kind, v, lno,   cut, tpart, rest, n, parts, j, T, nt, ve
   verdict = NULLV; reason = NULLV
   if (substr(rest, 1, 1) == "(") {
     inner = lastparen(substr(rest, 2))
-    if (inner ~ /^(done|superseded|dropped|folded): /) {
+    if (inner ~ /^(done|superseded|dropped|folded|harvested|discarded): /) {
       verdict = inner; sub(/: .*$/, "", verdict)
       reason = substr(inner, length(verdict) + 3)
     } else if (inner != "") reason = inner

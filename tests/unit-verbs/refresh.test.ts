@@ -37,7 +37,8 @@ describe.concurrent('ctx unit refresh: the audit rc wins over the hook rc', () =
     expect(await refresh(sb)).toBe(1);
     rmSync(join(sb, '.contexture/modules/blockmod'), { recursive: true });
     expect(await refresh(sb)).toBe(1);
-    await must(unit(sb, 'record', 'refresh-unit', '--what=sandbox harvest', '--closes=2026-09-22-broken (done: harvested)'));
+    await must(unit(sb, 'finding', 'add', 'refresh-unit', 'SANDBOX_HARVEST', '--summary=the sandbox harvest landed'));
+    await must(unit(sb, 'record', 'refresh-unit', '--what=sandbox harvest', '--ref=unit#refresh-unit/finding/SANDBOX_HARVEST', '--closes=2026-09-22-broken (harvested: landed as SANDBOX_HARVEST)'));
     expect((await unit(sb, 'audit', 'refresh-unit')).code).toBe(0);
     expect(await refresh(sb)).toBe(0);
   });

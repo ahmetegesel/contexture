@@ -8,11 +8,13 @@
 # help:   --thread=...         what the unit awaits (default: none)
 # help:   --rhythm="..."       the process in force: <name> <N> <GATE>, a step and gate of the named rhythm (ctx rhythm list names them, ctx rhythm show <name> prints one); a stamped write prints the next gate
 # help:   --ref="..."          grounding reference: a full address <owner>#<path> (unit#<unit>/entry/<slug>, unit#<unit>/task/<slug>, unit#<unit>/finding/<NAME>, unit#<unit>/lane/<lane>/<artifact>[/<SECTION or slug>], file#<path>[#<symbol>], store#<container>/<id>, docs#<repo>/<slug>/<id>), one token without blanks, control characters, or double quotes, its target checked through its owner's get before any write (a short or legacy form refuses naming its full address); repeatable, one REF line each
-# help:   --closes="<slug> (<verdict>: <reason>)"   closes journal entry targets (one or more slugs before the parenthesis); the verdict done, superseded, dropped, or folded; repeatable, one CLOSES line each
+# help:   --closes="<slug> (<verdict>: <reason>)"   closes journal entry targets (one or more slugs before the parenthesis); the verdict done, superseded, dropped, folded, harvested, or discarded; repeatable, one CLOSES line each
 # help:   --supersedes="<slug> (<verdict>: <reason>)"   supersedes journal entry targets, the same form; repeatable, one SUPERSEDES line each
 # help:   --knowledge          flag for harvest
 # help:   --slug=...           override entry slug (today's date prefixed when it carries none)
 # help: a closer takes only the explicit form: a bare target list, a missing or unknown verdict, an empty reason, or a reason holding a parenthesis refuses rc 1 (ERR_INVALID_ARGUMENT) naming the form; every closer target must name an entry the journal holds; a CLOSED unit and a slug the journal holds refuse rc 1
+# help: a closer naming a target whose live (unclosed) occurrence carries KNOWLEDGE: true takes only the verdict harvested or discarded: any other verdict refuses rc 1 (ERR_INVALID_ARGUMENT) naming the target, nothing written; an occurrence already closed takes any verdict
+# help: a harvested closer needs a --ref naming the finding it landed, unit#<unit>/finding/<NAME> (any unit): without one it refuses rc 1 (ERR_INVALID_ARGUMENT), nothing written
 # help: every flag value is one line: an embedded newline or carriage return refuses before any write
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
@@ -127,10 +129,10 @@ fi
 
 # the closers (B10, end review item 5): only the explicit form <slug> (<verdict>: <reason>),
 # one or more date-slug targets before the parenthesis, a verdict of done, superseded,
-# dropped, or folded, and a non-empty reason holding no parenthesis; a bare target list
-# refuses (the law puts the resolution in the closer, never a copy of the WHAT)
+# dropped, folded, harvested, or discarded, and a non-empty reason holding no parenthesis;
+# a bare target list refuses (the law puts the resolution in the closer, never a copy of the WHAT)
 closer_fail() {
-  fail "record: error: --$(printf '%s' "$1" | tr 'A-Z' 'a-z') takes <slug> (<verdict>: <reason>) with a verdict of done, superseded, dropped, or folded and a non-empty reason; $3: '$2' (ERR_INVALID_ARGUMENT)"
+  fail "record: error: --$(printf '%s' "$1" | tr 'A-Z' 'a-z') takes <slug> (<verdict>: <reason>) with a verdict of done, superseded, dropped, folded, harvested, or discarded and a non-empty reason; $3: '$2' (ERR_INVALID_ARGUMENT)"
 }
 i=0
 while [ "$i" -lt "$ncl" ]; do
@@ -154,7 +156,7 @@ while [ "$i" -lt "$ncl" ]; do
   verdict=$(printf '%s' "${inner%%:*}" | sed 's/^[ 	]*//; s/[ 	]*$//')
   reason=$(printf '%s' "${inner#*:}" | sed 's/^[ 	]*//; s/[ 	]*$//')
   case "$verdict" in
-    done|superseded|dropped|folded) ;;
+    done|superseded|dropped|folded|harvested|discarded) ;;
     *) closer_fail "$k" "$val" "unknown verdict '$verdict'" ;;
   esac
   [ -n "$reason" ] || closer_fail "$k" "$val" "an empty reason"

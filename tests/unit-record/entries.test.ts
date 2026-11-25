@@ -2,12 +2,23 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
-import { COMPLIANCE, DATE, entryJson, mk, ok, plantUnit, readArtifact, rec } from '../support/record';
-import { answer, answerLine, payload, refused } from '../support/wire';
+import { appendArtifact, COMPLIANCE, DATE, entryJson, mk, ok, plantUnit, readArtifact, rec } from '../support/record';
+import { answer, answerLine, payload, refused, type Payload } from '../support/wire';
 import { ALPHA, at, BETA, DELTA, EPS, GAMMA, OTHER, RECIPE, TUNIT } from './chain';
 
 const slugs = (items: { slug: string }[]): string[] => items.map((i) => i.slug);
 const closersOf = (kind: string, verdict: string, reason: string, ...targets: string[]) => payload().kv('closers.count', '1').kcl(1, kind, verdict, reason, ...targets);
+const flagRefusal = (slug: string, verdict: string): string => `closer target ${slug} carries KNOWLEDGE: true; close it harvested (with a --ref to the finding it landed) or discarded, not ${verdict}`;
+const HARVEST_REF = 'a harvested closer needs a --ref naming the finding it landed, unit#<unit>/finding/<NAME>';
+const entries = async (sb: string, u: string): Promise<string> => (await data(sb, 'entry.list', [u])).stdout;
+
+async function flaggedUnit(u: string, epoch: number): Promise<{ sb: string; F: string; P: string }> {
+  const sb = await at('empty');
+  answer(await mk(sb, u), 'session.create');
+  answer(await rec(sb, u, epoch, 'a flagged entry', { with: payload().kv('knowledge', 'true') }), 'entry.record');
+  answer(await rec(sb, u, epoch + 1, 'a plain entry'), 'entry.record');
+  return { sb, F: `${DATE}-event-${epoch}`, P: `${DATE}-event-${epoch + 1}` };
+}
 
 describe.concurrent('the journal entries through the unit data script', () => {
   it('TC10: entry.record answers the entry with the composed slug and the current anchor', async () => {
@@ -103,6 +114,98 @@ describe.concurrent('the journal entries through the unit data script', () => {
     const before = (await data(sb, 'entry.list', ['tc58-u'])).stdout;
     refused(await rec(sb, 'tc58-u', 1790000581, 'closes nothing', { with: closersOf('CLOSES', 'done', 'gone', '2026-01-01-absent') }), 'entry.record', 1, 'ERR_ENTITY_NOT_FOUND', "entry '2026-01-01-absent' not found in unit 'tc58-u'");
     expect((await data(sb, 'entry.list', ['tc58-u'])).stdout).toBe(before);
+  });
+
+  it('TC81 [the-record-r-9rk9q]: a closer naming a live KNOWLEDGE-flagged target refuses rc1 ERR_INVALID_ARGUMENT unless harvested or discarded, a bare closer named none, on CLOSES and SUPERSEDES, multi-target, and a later line; the journal unchanged', async () => {
+    const { sb, F, P } = await flaggedUnit('tc81-u', 1790000810);
+    const before = await entries(sb, 'tc81-u');
+    const cases: [Payload, string][] = [
+      [closersOf('CLOSES', 'done', 'resolved', F), 'done'],
+      [closersOf('SUPERSEDES', 'superseded', 'replaced', F), 'superseded'],
+      [closersOf('CLOSES', 'dropped', 'both at once', P, F), 'dropped'],
+      [closersOf('SUPERSEDES', 'folded', 'both at once', F, P), 'folded'],
+      [payload().kv('closers.count', '1').kv('closers.1.kind', 'CLOSES').kl('closers.1.targets', F), 'none'],
+      [payload().kv('closers.count', '2').kcl(1, 'CLOSES', 'done', 'fine', P).kcl(2, 'SUPERSEDES', 'done', 'gone', F), 'done'],
+    ];
+    for (const [i, [closers, verdict]] of cases.entries()) {
+      refused(await rec(sb, 'tc81-u', 1790000812 + i, 'closes the flag', { with: closers }), 'entry.record', 1, 'ERR_INVALID_ARGUMENT', flagRefusal(F, verdict));
+      expect(await entries(sb, 'tc81-u')).toBe(before);
+    }
+  });
+
+  it('TC82 [the-record-r4, the-record-r-9rk9q]: harvested and discarded close a flagged target and read back as close_reason <verdict>: <reason>; an occurrence already closed takes any later verdict; a verdict without a reason refuses', async () => {
+    const { sb, F, P } = await flaggedUnit('tc82-u', 1790000820);
+    const H = `${DATE}-event-1790000822`;
+    answer(await rec(sb, 'tc82-u', 1790000822, 'harvests the flag', { with: closersOf('CLOSES', 'harvested', 'landed', F).kl('refs', 'unit#tc82-u/finding/TC82_LANDED') }), 'entry.record');
+    const harvested = (await ok(sb, 'entry.get', ['tc82-u', F])).entry;
+    expect([harvested.closed, harvested.closed_by, harvested.close_reason]).toEqual([true, H, 'harvested: landed']);
+    answer(await rec(sb, 'tc82-u', 1790000823, 'supersedes the harvested flag', { with: closersOf('SUPERSEDES', 'done', 'a later word', F) }), 'entry.record');
+    expect((await ok(sb, 'entry.closure', ['tc82-u', F])).closers.map((c: { closer: { verdict: string } }) => c.closer.verdict)).toEqual(['harvested', 'done']);
+    answer(await rec(sb, 'tc82-u', 1790000824, 'a second flag', { with: payload().kv('knowledge', 'true') }), 'entry.record');
+    const F2 = `${DATE}-event-1790000824`;
+    answer(await rec(sb, 'tc82-u', 1790000825, 'discards it', { with: closersOf('SUPERSEDES', 'discarded', 'fails the bar', F2) }), 'entry.record');
+    expect((await ok(sb, 'entry.get', ['tc82-u', F2])).entry.close_reason).toBe('discarded: fails the bar');
+    answer(await rec(sb, 'tc82-u', 1790000826, 'drops it later', { with: closersOf('CLOSES', 'dropped', 'a later word', F2) }), 'entry.record');
+    const bare = payload().kv('closers.count', '1').kv('closers.1.kind', 'CLOSES').kl('closers.1.targets', P).kv('closers.1.verdict', 'discarded');
+    refused(await rec(sb, 'tc82-u', 1790000827, 'a verdict without a reason', { with: bare }), 'entry.record', 1, 'ERR_INVALID_ARGUMENT', 'closers.1 carries a verdict without a reason');
+  });
+
+  it('TC83 [the-record-r-9rk9q]: a legacy repeated slug refuses a done closer while any live occurrence is flagged, the first or a later one; a flagged occurrence closed by a legacy closer takes any verdict (posix plant)', async () => {
+    const sb = await at('empty');
+    const X = '2026-09-20-repeat';
+    const occ = (what: string, flag: boolean): string => `\n@entry ${X}\n  ANCHOR: A1\n  WHAT: "${what}"\n${flag ? '  KNOWLEDGE: true\n' : ''}  THREAD: none\n`;
+    answer(await mk(sb, 'tc83-live'), 'session.create');
+    appendArtifact(sb, 'tc83-live', 'journal', occ('flagged first occurrence', true) + occ('plain second occurrence', false));
+    const before = await entries(sb, 'tc83-live');
+    refused(await rec(sb, 'tc83-live', 1790000830, 'closes the repeat', { with: closersOf('CLOSES', 'done', 'resolved', X) }), 'entry.record', 1, 'ERR_INVALID_ARGUMENT', flagRefusal(X, 'done'));
+    expect(await entries(sb, 'tc83-live')).toBe(before);
+    answer(await mk(sb, 'tc83-closed'), 'session.create');
+    const legacy = `\n@entry 2026-09-20-legacy\n  ANCHOR: A1\n  WHAT: "a closer written before the rule"\n  THREAD: none\n  CLOSES: ${X} (done: closed before the rule)\n`;
+    appendArtifact(sb, 'tc83-closed', 'journal', occ('flagged first occurrence', true) + legacy + occ('plain second occurrence', false));
+    answer(await rec(sb, 'tc83-closed', 1790000831, 'closes the repeat', { with: closersOf('CLOSES', 'done', 'resolved', X) }), 'entry.record');
+    answer(await mk(sb, 'tc83-later'), 'session.create');
+    appendArtifact(sb, 'tc83-later', 'journal', occ('plain first occurrence', false) + legacy + occ('flagged second occurrence', true));
+    const later = await entries(sb, 'tc83-later');
+    refused(await rec(sb, 'tc83-later', 1790000832, 'closes the repeat', { with: closersOf('CLOSES', 'done', 'resolved', X) }), 'entry.record', 1, 'ERR_INVALID_ARGUMENT', flagRefusal(X, 'done'));
+    expect(await entries(sb, 'tc83-later')).toBe(later);
+  });
+
+  it('TC84 [the-record-r-9rk9q]: a harvested closer without a unit#<unit>/finding/<NAME> REF refuses rc1 ERR_INVALID_ARGUMENT whatever its targets, the journal unchanged, a REF holding /finding/ under another shape counting for none; a finding address of any unit satisfies it', async () => {
+    const { sb, F, P } = await flaggedUnit('tc84-u', 1790000840);
+    const before = await entries(sb, 'tc84-u');
+    const cases: Payload[] = [
+      closersOf('CLOSES', 'harvested', 'landed', F),
+      closersOf('CLOSES', 'harvested', 'landed', P),
+      closersOf('SUPERSEDES', 'harvested', 'landed', F).kl('refs', `unit#tc84-u/entry/${P}`, 'file#.contexture/ctx'),
+      closersOf('CLOSES', 'harvested', 'landed', F).kl('refs', 'file#docs/finding/NAME.md', 'unit#tc84-u/finding/NAME/extra'),
+    ];
+    for (const [i, closers] of cases.entries()) {
+      refused(await rec(sb, 'tc84-u', 1790000842 + i, 'harvests', { with: closers }), 'entry.record', 1, 'ERR_INVALID_ARGUMENT', HARVEST_REF);
+      expect(await entries(sb, 'tc84-u')).toBe(before);
+    }
+    answer(await rec(sb, 'tc84-u', 1790000846, 'harvests into another unit', { with: closersOf('CLOSES', 'harvested', 'landed elsewhere', F).kl('refs', 'unit#other-unit/finding/ELSEWHERE') }), 'entry.record');
+  });
+
+  it('TC85 [the-record-r4, the-record-r5]: an unflagged target takes each of the six verdicts', async () => {
+    const sb = await at('empty');
+    answer(await mk(sb, 'tc85-u'), 'session.create');
+    for (const [i, verdict] of ['done', 'superseded', 'dropped', 'folded', 'harvested', 'discarded'].entries()) {
+      const target = 1790000850 + 2 * i;
+      answer(await rec(sb, 'tc85-u', target, `target ${verdict}`), 'entry.record');
+      const closers = closersOf('CLOSES', verdict, `a ${verdict} word`, `${DATE}-event-${target}`).kl('refs', 'unit#tc85-u/finding/TC85_LANDED');
+      expect(answer(await rec(sb, 'tc85-u', target + 1, `closes ${verdict}`, { with: closers }), 'entry.record').entry.closers[0].verdict).toBe(verdict);
+      expect((await ok(sb, 'entry.get', ['tc85-u', `${DATE}-event-${target}`])).entry.close_reason).toBe(`${verdict}: a ${verdict} word`);
+    }
+  });
+
+  it('TC86 [the-record-r-9rk9q]: the closing entry carrying KNOWLEDGE: true binds nothing of its own: it closes an unflagged target done, and a flagged target still only harvested or discarded', async () => {
+    const { sb, F, P } = await flaggedUnit('tc86-u', 1790000860);
+    const flagged = (closers: Payload): Payload => closers.kv('knowledge', 'true');
+    answer(await rec(sb, 'tc86-u', 1790000862, 'a flagged entry closes a plain one', { with: flagged(closersOf('CLOSES', 'done', 'resolved', P)) }), 'entry.record');
+    const before = await entries(sb, 'tc86-u');
+    refused(await rec(sb, 'tc86-u', 1790000863, 'a flagged entry closes a flag', { with: flagged(closersOf('CLOSES', 'done', 'resolved', F)) }), 'entry.record', 1, 'ERR_INVALID_ARGUMENT', flagRefusal(F, 'done'));
+    expect(await entries(sb, 'tc86-u')).toBe(before);
+    answer(await rec(sb, 'tc86-u', 1790000864, 'a flagged entry discards a flag', { with: flagged(closersOf('CLOSES', 'discarded', 'fails the bar', F)) }), 'entry.record');
   });
 
   it('TC59 [the-record-r6, the-record-r11]: generated slugs take -1 while held; a held given slug refuses', async () => {

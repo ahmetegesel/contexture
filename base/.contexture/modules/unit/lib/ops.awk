@@ -85,6 +85,7 @@ function ex(kind, x) { die(1, "ERR_ENTITY_EXISTS", kind " '" x "' already exists
 function find_task(k, s,   i) { for (i = 1; i <= NI[k]; i++) if (IK[k, i] == "task" && X[k, i, "slug"] == s) return i; return 0 }
 function find_finding(k, n,   i) { for (i = 1; i <= NI[k]; i++) if (IK[k, i] == "finding" && X[k, i, "name"] == n) return i; return 0 }
 function held(k, s) { return ((k, s) in LASTOCC) }
+function live_flag(k, s,   i) { for (i = 1; i <= NI[k]; i++) if (IK[k, i] == "entry" && X[k, i, "slug"] == s && X[k, i, "know"] && !CLBY[k, i]) return 1; return 0 }
 
 # gen_slug(k, base): the base, suffixed -1 while the journal holds it
 function gen_slug(k, s) { while (held(k, s)) s = s "-1"; return s }
@@ -554,7 +555,7 @@ function f_task_get(   kb, s, i) {
 }
 
 # ---- journal entries ----
-function f_entry_record(   kj, what, grp, th, rh, kn, R, nr, nc, c, kind, T, nt, t, vd, rs, cls, slug, d, ep) {
+function f_entry_record(   kj, what, grp, th, rh, kn, R, nr, r, fr, nc, c, kind, T, nt, t, vd, rs, cls, slug, d, ep) {
   parse_unit(U, "journal")
   not_closed()
   want_anchor()
@@ -571,6 +572,8 @@ function f_entry_record(   kj, what, grp, th, rh, kn, R, nr, nc, c, kind, T, nt,
   kn = (pv("knowledge") == "true") ? 1 : 0
   if (has("knowledge") && pv("knowledge") != "true" && pv("knowledge") != "false") die(1, "ERR_INVALID_ARGUMENT", "knowledge takes true or false")
   nr = recs_refs("refs", R)
+  fr = 0
+  for (r = 1; r <= nr; r++) if (R[r] ~ /^unit#[A-Za-z0-9][A-Za-z0-9_-]*\/finding\/[A-Za-z0-9_][A-Za-z0-9_.-]*$/) fr = 1
   nc = has("closers.count") ? PAY["closers.count"] : 0
   if (nc !~ /^[0-9]+$/) die(1, "ERR_INVALID_ARGUMENT", "malformed closers.count")
   cls = ""
@@ -580,14 +583,16 @@ function f_entry_record(   kj, what, grp, th, rh, kn, R, nr, nc, c, kind, T, nt,
     nt = plist("closers." c ".targets", T)
     if (nt < 1) die(1, "ERR_INVALID_ARGUMENT", "closers." c " names no target")
     vd = pv("closers." c ".verdict"); rs = pv("closers." c ".reason")
-    if (vd != NULLV && vd !~ /^(done|superseded|dropped|folded)$/) die(1, "ERR_INVALID_ARGUMENT", "closers." c ".verdict takes done, superseded, dropped, or folded")
+    if (vd != NULLV && vd !~ /^(done|superseded|dropped|folded|harvested|discarded)$/) die(1, "ERR_INVALID_ARGUMENT", "closers." c ".verdict takes done, superseded, dropped, folded, harvested, or discarded")
     oneline("closers." c ".reason", rs)
     if (rs != NULLV && (index(rs, "(") || index(rs, ")"))) die(1, "ERR_INVALID_ARGUMENT", "closers." c ".reason holds a parenthesis")
     if (vd != NULLV && rs == NULLV) die(1, "ERR_INVALID_ARGUMENT", "closers." c " carries a verdict without a reason")
     for (t = 1; t <= nt; t++) {
       if (!isdateslug(T[t])) die(1, "ERR_INVALID_ARGUMENT", "closers." c " target '" T[t] "' is not a date-slug")
       if (!held(kj, T[t])) nf("entry", T[t])
+      if (vd != "harvested" && vd != "discarded" && live_flag(kj, T[t])) die(1, "ERR_INVALID_ARGUMENT", "closer target " T[t] " carries KNOWLEDGE: true; close it harvested (with a --ref to the finding it landed) or discarded, not " (vd == NULLV ? "none" : vd))
     }
+    if (vd == "harvested" && !fr) die(1, "ERR_INVALID_ARGUMENT", "a harvested closer needs a --ref naming the finding it landed, unit#<unit>/finding/<NAME>")
     cls = cls c_closer(kind, T, nt, vd, rs, NULLV) "\n"
   }
   if (!has("slug")) {
