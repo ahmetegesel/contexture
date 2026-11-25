@@ -67,7 +67,7 @@ BEGIN {
         # a code path that merely ends in docs/<x>/<y>.md (a seed, a sample, a child
         # repository's own guide under its prefix) is no doc touch
         if (line ~ /^docs\/[^\/]+\/[^\/]+\.md$/) {
-            split(line, dparts, "/")
+            split(line, dparts, /\//)
             d_repo = dparts[2]
             d_slug = dparts[3]
             sub(/\.md$/, "", d_slug)
@@ -424,7 +424,7 @@ END {
     if (num_dead_sources > 0) {
         print "--- DEAD SOURCES AUDIT ---"
         for (k in dead_sources) {
-            split(k, parts, SUBSEP)
+            split(k, parts, "[" SUBSEP "]")
             print "DEAD SOURCE: " parts[2] "/" parts[3] " still explicitly lists deleted file '" parts[1] "' in sources: (cleanup required)"
         }
         for (c = 1; c <= n_cand; c++) {

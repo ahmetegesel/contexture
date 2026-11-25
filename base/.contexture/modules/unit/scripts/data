@@ -963,7 +963,7 @@ u_mig_residual() {
       return t
     }
     BEGIN {
-      while ((getline m < ENVIRON["RS_MAP"]) > 0) { split(m, P, "\t"); K[P[1]] = P[2]; L[P[1]] = P[5] }
+      while ((getline m < ENVIRON["RS_MAP"]) > 0) { split(m, P, /\t/); K[P[1]] = P[2]; L[P[1]] = P[5] }
       u = ENVIRON["RS_UNIT"]
       out = ENVIRON["RS_OUT"]
       fp = ENVIRON["RS_FWD"]

@@ -90,7 +90,7 @@ function load_manifest(path, sizes,   line, f, n, k, sz, p, t, tot, SZ, nsz, nf)
   }
   nf = 0
   while ((getline line < path) > 0) {
-    n = split(line, f, "\t")
+    n = split(line, f, /\t/)
     if (f[1] == "U") { UNITS[f[2]] = 1; continue }
     if (f[1] == "L") {
       NLANE[f[2]]++

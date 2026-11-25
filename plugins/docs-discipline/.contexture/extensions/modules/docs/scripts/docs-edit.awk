@@ -135,7 +135,7 @@ function schema_line(s,    a, m, i, j, k, b, nb, bl, kv, v) {
         NBL++
         BLN[NBL] = b
     } else if (a[1] == "field") {
-        nb = split(a[2], bl, "|")
+        nb = split(a[2], bl, /\|/)
         for (j = 1; j <= nb; j++) {
             b = bl[j]
             FN[b]++

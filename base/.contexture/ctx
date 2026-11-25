@@ -646,7 +646,7 @@ summary_files() {
   done
   [ $# -gt 0 ] || return 0
   LC_ALL=C awk '
-    function base(p,   n, a) { n = split(p, a, "/"); return a[n] }
+    function base(p,   n, a) { n = split(p, a, /\//); return a[n] }
     FNR == 1 {
       if (NR > 1 && ok) print prev
       prev = base(FILENAME)
@@ -2123,7 +2123,7 @@ package_list() {
     pl_ver=$(awk '$1 == "version" { print $2; exit }' "$pl_rec" 2>/dev/null)
     pl_mods=$(awk '
       $1 == "module" && NF == 3 { m[++n] = ($2 == $3) ? $2 : $2 " (alias of " $3 ")"; any = 1; next }
-      $1 == "file" { k = split($4, a, "/"); if (k >= 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && !(a[4] in seen)) { seen[a[4]] = 1; f[++nf] = a[4] } }
+      $1 == "file" { k = split($4, a, /\//); if (k >= 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && !(a[4] in seen)) { seen[a[4]] = 1; f[++nf] = a[4] } }
       END {
         if (any) { for (i = 1; i <= n; i++) o = o (i > 1 ? ", " : "") m[i] }
         else { for (i = 1; i <= nf; i++) o = o (i > 1 ? ", " : "") f[i] }
@@ -2838,7 +2838,7 @@ BEGIN { for (i = 1; i < 32; i++) ORD[sprintf("%c", i)] = i; ORD[sprintf("%c", 12
   if (eq == 0) next
   path = substr($0, 1, eq - 1)
   if (path !~ /^rows\.[0-9]+\.[a-z_]+$/) next
-  split(path, P, ".")
+  split(path, P, /\./)
   V[P[2] + 0, P[3]] = substr($0, eq + 1)
   HAS[P[2] + 0, P[3]] = 1
 }

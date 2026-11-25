@@ -136,7 +136,7 @@ function fwd(t,   a, s) {
 # yields a corrupt address
 function addr_ok(a,   o, S, n, i) {
   o = substr(a, 1, index(a, "#") - 1)
-  n = split(substr(a, index(a, "#") + 1), S, "/")
+  n = split(substr(a, index(a, "#") + 1), S, /\//)
   for (i = 1; i <= n; i++) if (S[i] !~ /^[A-Za-z0-9._-]+$/) return 0
   if (o == "store") return n == 2
   if (o == "docs") return n == 3

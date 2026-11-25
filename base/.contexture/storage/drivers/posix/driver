@@ -341,7 +341,7 @@ store_key_ok() {
     if (s == "") exit 1
     if (substr(s, 1, 1) == "/" || substr(s, length(s), 1) == "/") exit 1
     if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
-    n = split(s, p, "/")
+    n = split(s, p, /\//)
     for (i = 1; i <= n; i++) if (p[i] == "" || p[i] == "." || p[i] == "..") exit 1
     exit 0
   }'
@@ -353,8 +353,8 @@ store_key_ok() {
 # key that lets a module's main files and its deeper lane files share one pattern)
 store_key_shape() {
   SSP_P="$1" SSP_K="$2" LC_ALL=C awk 'BEGIN {
-    m = split(ENVIRON["SSP_P"], p, "/")
-    n = split(ENVIRON["SSP_K"], k, "/")
+    m = split(ENVIRON["SSP_P"], p, /\//)
+    n = split(ENVIRON["SSP_K"], k, /\//)
     if (m < 1) exit 1
     multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
     if (multi) { if (n < m) exit 1 } else { if (n != m) exit 1 }
@@ -381,7 +381,7 @@ store_prefix_ok() {
     if (s == "") exit 1
     if (substr(s, 1, 1) == "/") exit 1
     if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
-    n = split(s, p, "/")
+    n = split(s, p, /\//)
     for (i = 1; i <= n; i++) if (p[i] == "." || p[i] == "..") exit 1
     exit 0
   }'
@@ -395,9 +395,9 @@ store_key_for() {
   sk_bad=$(SK_KEY="$sk_key" SSP_P="$SD_KEYPAT" LC_ALL=C awk 'BEGIN {
     s = ENVIRON["SK_KEY"]
     if (s == "" || substr(s, 1, 1) == "/" || substr(s, length(s), 1) == "/" || s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) { print "malformed"; exit }
-    n = split(s, k, "/")
+    n = split(s, k, /\//)
     for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") { print "malformed"; exit }
-    m = split(ENVIRON["SSP_P"], p, "/")
+    m = split(ENVIRON["SSP_P"], p, /\//)
     if (m < 1) { print "pattern"; exit }
     multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
     if (multi) { if (n < m) { print "pattern"; exit } } else if (n != m) { print "pattern"; exit }
@@ -480,7 +480,7 @@ store_list_root() {
   find "$sl_scan" -type f -print 2>/dev/null | SL_DIR="$sl_dir" SL_SUFFIX="$SD_SUFFIX" SL_KEYPAT="$SD_KEYPAT" SL_PREFIX="$sl_prefix" SL_FIRST="$sl_first" LC_ALL=C awk '
     BEGIN {
       dir = ENVIRON["SL_DIR"]; sfx = ENVIRON["SL_SUFFIX"]; pre = ENVIRON["SL_PREFIX"]; first = (ENVIRON["SL_FIRST"] != "")
-      m = split(ENVIRON["SL_KEYPAT"], p, "/")
+      m = split(ENVIRON["SL_KEYPAT"], p, /\//)
       for (i = 1; i <= m; i++) multi[i] = (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
     }
     {
@@ -494,7 +494,7 @@ store_list_root() {
       if (key == "") next
       if (substr(key, 1, 1) == "/" || substr(key, length(key), 1) == "/") next
       if (key ~ /[[:cntrl:]]/ || index(key, " ") || index(key, "\\")) next
-      n = split(key, k, "/")
+      n = split(key, k, /\//)
       ok = 1
       for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") { ok = 0; break }
       if (!ok) next
@@ -534,7 +534,7 @@ store_list_asked() {
   fi
   [ ! -h "$la_scan" ] || return 0
   la_ops=$(LA_PRE="$la_pre" LC_ALL=C awk '{
-      n = split(substr($0, length(ENVIRON["LA_PRE"]) + 1), s, "/")
+      n = split(substr($0, length(ENVIRON["LA_PRE"]) + 1), s, /\//)
       f = "."
       for (i = 1; i < n; i++) { f = f "/" s[i]; if (!(f in seen)) { seen[f] = 1; print f "/." } }
     }' "$la_keys") || return 1
@@ -559,7 +559,7 @@ store_list_asked() {
     FILENAME == ARGV[1] { e = entry($0); if (e != "") D[e] = 1; next }
     FILENAME == ARGV[2] { e = entry($0); if (e != "") F[e] = 1; next }
     {
-      n = split(substr($0, length(ENVIRON["LA_PRE"]) + 1), s, "/")
+      n = split(substr($0, length(ENVIRON["LA_PRE"]) + 1), s, /\//)
       f = ""
       ok = 1
       for (i = 1; i < n; i++) {
@@ -724,12 +724,12 @@ store_get_many() {
   shift
   store_data store.get "$gm_ns"
   gm_bad=$(GM_PAT="$SD_KEYPAT" LC_ALL=C awk 'BEGIN {
-    m = split(ENVIRON["GM_PAT"], p, "/")
+    m = split(ENVIRON["GM_PAT"], p, /\//)
     multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
     for (a = 1; a < ARGC; a++) {
       s = ARGV[a]
       ok = (s != "" && substr(s, 1, 1) != "/" && substr(s, length(s), 1) != "/" && s !~ /[[:cntrl:]]/ && !index(s, " ") && !index(s, "\\"))
-      if (ok) { n = split(s, k, "/"); for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") ok = 0 }
+      if (ok) { n = split(s, k, /\//); for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") ok = 0 }
       if (!ok) { printf "malformed\t%s", s; exit }
       shape = (m >= 1)
       if (shape) { if (multi) { if (n < m) shape = 0 } else if (n != m) shape = 0 }
@@ -1463,7 +1463,7 @@ function admit(p,   key, n, k, i) {
   }
   if (key == "" || substr(key, 1, 1) == "/" || substr(key, length(key), 1) == "/") return 0
   if (key ~ /[[:cntrl:]]/ || index(key, " ") || index(key, "\\")) return 0
-  n = split(key, k, "/")
+  n = split(key, k, /\//)
   for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") return 0
   if (m < 1) return 0
   if (multi) { if (n < m) return 0 } else if (n != m) return 0
@@ -1474,7 +1474,7 @@ function admit(p,   key, n, k, i) {
 }
 function isdoc(key,   n, ks, j, i, ok) {
   if (ndp == 0) return 1
-  n = split(key, ks, "/")
+  n = split(key, ks, /\//)
   for (j = 1; j <= ndp; j++) {
     if (DM[j]) { if (n < DN[j]) continue } else if (n != DN[j]) continue
     ok = 1
@@ -1489,14 +1489,14 @@ function isdoc(key,   n, ks, j, i, ok) {
 }
 function lo_init(   j, i, nd0, D0, T) {
   sfx = ENVIRON["LO_SFX"]
-  m = split(ENVIRON["LO_KEYPAT"], pp, "/")
+  m = split(ENVIRON["LO_KEYPAT"], pp, /\//)
   multi = (m >= 1 && pp[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
   nd0 = split(ENVIRON["LO_DOCS"], D0, "\n")
   ndp = 0
   for (j = 1; j <= nd0; j++) {
     if (D0[j] == "") continue
     ndp++
-    DN[ndp] = split(D0[j], T, "/")
+    DN[ndp] = split(D0[j], T, /\//)
     for (i = 1; i <= DN[ndp]; i++) DS[ndp, i] = T[i]
     DM[ndp] = (T[DN[ndp]] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
   }
@@ -1827,7 +1827,7 @@ function dec(s,   o, i, n, c, d) {
   }
   return o
 }
-function q(s,   n, P, o, i) { n = split(s, P, SQ); o = P[1]; for (i = 2; i <= n; i++) o = o SQ "\\" SQ SQ P[i]; return SQ o SQ }
+function q(s,   n, P, o, i) { n = split(s, P, "[" SQ "]"); o = P[1]; for (i = 2; i <= n; i++) o = o SQ "\\" SQ SQ P[i]; return SQ o SQ }
 function flush() {
   if (!nb) return
   if (G != "") M = M G "\n"

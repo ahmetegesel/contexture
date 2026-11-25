@@ -16,7 +16,7 @@
     path = substr($0, 1, co - 1); val = substr($0, co + 1); isstr = 0
   } else next
   if (path !~ /^results\.[0-9]+\.[a-z_]+$/) next
-  split(path, P, ".")
+  split(path, P, /\./)
   i = P[2] + 0
   f = P[3]
   if (f == "key") KEY[i] = (isstr ? pdec(val) : val)
@@ -43,7 +43,7 @@ function admit(i,   unit, key, rel, np, P, lane, art, sec, ty) {
   else if (rel == "knowledge") sec = "knowledge"
   else if (rel == "journal") sec = "journal"
   else {
-    np = split(rel, P, "/")
+    np = split(rel, P, /\//)
     if (np != 3 || P[1] != "lanes" || P[2] == "") return 0
     lane = P[2]; art = P[3]
     if (art == "recipe") sec = "lane_recipe"

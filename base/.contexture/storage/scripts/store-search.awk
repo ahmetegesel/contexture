@@ -144,7 +144,7 @@ function parse_data(file,    line, k, v, n, a, seen_format, seen_fields, seen_ti
     if (seen_title == 0) title = "head"
   }
   if (seen_fields) {
-    n = split(fs, a, ",")
+    n = split(fs, a, /,/)
     for (i = 1; i <= n; i++) {
       t = trim(a[i])
       if (t != "") { nfields++; fields[nfields] = t }
@@ -155,8 +155,8 @@ function parse_data(file,    line, k, v, n, a, seen_format, seen_fields, seen_ti
 # pat_match(pat, key): a document key pattern against a key; a <name> placeholder per
 # segment, a final <name...> admitting one or more segments, a literal segment exact
 function pat_match(pat, key,    m, n, p, k, i, multi) {
-  m = split(pat, p, "/")
-  n = split(key, k, "/")
+  m = split(pat, p, /\//)
+  n = split(key, k, /\//)
   if (m < 1) return 0
   multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
   if (multi) { if (n < m) return 0 } else { if (n != m) return 0 }

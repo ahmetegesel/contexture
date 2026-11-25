@@ -126,7 +126,7 @@ date_ok() {
     *) return 1 ;;
   esac
   DT=$1 awk 'BEGIN {
-    split(ENVIRON["DT"], P, "-"); y = P[1] + 0; m = P[2] + 0; d = P[3] + 0
+    split(ENVIRON["DT"], P, /-/); y = P[1] + 0; m = P[2] + 0; d = P[3] + 0
     split("31 28 31 30 31 30 31 31 30 31 30 31", L, " ")
     if (y % 4 == 0 && (y % 100 != 0 || y % 400 == 0)) L[2] = 29
     exit !(m >= 1 && m <= 12 && d >= 1 && d <= L[m])

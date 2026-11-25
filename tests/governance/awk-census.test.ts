@@ -9,6 +9,8 @@ import { put } from '../support/tree';
 import { text, walk } from './walk';
 
 const AWKREPL = join(ROOT, 'tests/governance/awkrepl.awk');
+const AWKSPLIT = join(ROOT, 'tests/governance/awksplit.awk');
+const IDEAS = join(ROOT, '.contexture/modules/ideas');
 const PROSE = /\.(ts|js|json|md|py|sql)$/;
 const escaped = (s: string): string => s.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 const SKIPPED = new RegExp(`/(node_modules|fixtures)(/|$)|/(\\.contexture/tmp|${escaped(RECORD_ROOT)}|${escaped(FALLBACK_ROOT)})(/|$)`);
@@ -17,6 +19,7 @@ function censusFiles(root = ROOT): string[] {
   const plugins = readdirSync(join(root, 'plugins')).sort();
   const roots = [
     join(root, 'base/.contexture'),
+    join(root, '.contexture/modules/ideas'),
     ...plugins.flatMap((p) => [join(root, 'plugins', p, '.contexture'), join(root, 'plugins', p, 'hooks')]),
     join(root, 'tests'),
   ];
@@ -26,6 +29,7 @@ function censusFiles(root = ROOT): string[] {
 }
 
 const census = (files: readonly string[]) => exec('awk', ['-f', AWKREPL, ...files], { cwd: sandbox('awk-census'), input: '' });
+const splitCensus = (files: readonly string[]) => exec('awk', ['-f', AWKSPLIT, ...files], { cwd: sandbox('split-census'), input: '' });
 
 describe.concurrent('the awk replacement census: no sub or gsub replacement carries a backslash before another character', () => {
   it('[modules-r8] the shipped awk and sh files, the plugin module copies, and the suites read clean', async () => {
@@ -63,5 +67,49 @@ describe.concurrent('the awk replacement census: no sub or gsub replacement carr
     );
     const r = await census([plant]);
     expect(r.stdout.split('\n').filter(Boolean).map((l) => l.split(':')[1])).toEqual(['1', '2', '3']);
+  });
+});
+
+describe.concurrent('the awk split census: no split separator is a one character string other than a single space or a newline', () => {
+  it('[modules-r8] the shipped awk and sh files, the plugin module copies, the ideas module, and the suites read clean', async () => {
+    const files = censusFiles();
+    const withSplit = files.filter((f) => text(f).includes('split('));
+    expect(files.length).toBeGreaterThan(100);
+    expect(withSplit.length).toBeGreaterThan(30);
+    const r = await splitCensus(withSplit);
+    expect(r.code).toBe(0);
+    expect(r.stdout).toBe('');
+  });
+
+  it.skipIf(!existsSync(IDEAS))('[modules-r8] the scanned set holds the ideas module, so a widening that walks nothing reads red', () => {
+    expect(censusFiles()).toContain(join(IDEAS, 'scripts/ideas'));
+  });
+
+  it('[modules-r8] the census reads the nine planted one character separators and none of the eight portable ones', async () => {
+    const plant = put(
+      join(sandbox('split-plant'), 'plant.awk'),
+      [
+        String.raw`  n = split(substr(s, 2, 3), a, "/")`,
+        String.raw`  n = split(s, a, "\t")`,
+        String.raw`  n = split(s, a, ".")`,
+        String.raw`  n = split(s, a, ","); x = 1`,
+        String.raw`  n = split(s, a, "-")`,
+        String.raw`  n = split(s, a, "|")`,
+        String.raw`  n = split(s, a, "\\")`,
+        String.raw`  n = split(s, a, "\"")`,
+        String.raw`  n = split(s, a, "'\''")`,
+        String.raw`  n = split(s, a, " ")`,
+        String.raw`  n = split(s, a, "\n")`,
+        String.raw`  n = split(s, a, /\//)`,
+        String.raw`  split("", a)`,
+        String.raw`  n = split(s, a)`,
+        String.raw`  n = split(s, a, sep)`,
+        String.raw`  n = split(s, a, "::")`,
+        String.raw`  n = split(s, a, "[" SQ "]")`,
+        '',
+      ].join('\n'),
+    );
+    const r = await splitCensus([plant]);
+    expect(r.stdout.split('\n').filter(Boolean).map((l) => l.split(':')[1])).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
   });
 });

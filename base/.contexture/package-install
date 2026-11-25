@@ -264,7 +264,7 @@ _dup=$(awk '{ print $2 }' "$scratch/inames" | LC_ALL=C sort | uniq -d | head -n 
 [ -z "$_dup" ] || die 1 "two modules of the package would install as '$_dup' (name each with its own --as=<module>=<name>)"
 # the destination of every payload path: modules/<original>/... lands at modules/<installed>/...
 awk 'FILENAME == ARGV[1] { n[$1] = $2; next }
-  { split($0, a, "/"); d = $0
+  { split($0, a, /\//); d = $0
     if (a[1] == "modules" && (a[2] in n)) d = "modules/" n[a[2]] substr($0, length(a[2]) + 9)
     print $0 "\t" d }' "$scratch/inames" "$scratch/files" > "$scratch/map"
 
@@ -339,7 +339,7 @@ if [ -x "$sd_bin" ] && grep -q '^modules/[^/]*/data$' "$scratch/files"; then
   fi
   : > "$scratch/own"
   if [ "$have_record" -eq 1 ]; then
-    awk '$1 == "file" { n = split($4, a, "/"); if (n >= 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules") print a[4] }' "$state_file" > "$scratch/own"
+    awk '$1 == "file" { n = split($4, a, /\//); if (n >= 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules") print a[4] }' "$state_file" > "$scratch/own"
   fi
   CTX_STORE_WORKSPACE=$ws_root "$sd_bin" --list > "$scratch/roots.old" 2> "$scratch/roots.old.err"
   sd_rc=$?

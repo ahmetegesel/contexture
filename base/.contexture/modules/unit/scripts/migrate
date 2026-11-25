@@ -339,7 +339,7 @@ LC_ALL=C awk -F '\t' -v dry="$dry" -v dir="${mg_dir#"$mg_root"/}" '
     return t
   }
   function table(n, K, C,   i, p) {
-    for (i = 1; i <= n; i++) { split(K[i], p, "\t"); printf "  %7d  %-9s  %s\n", C[K[i]], p[2], p[1] }
+    for (i = 1; i <= n; i++) { split(K[i], p, /\t/); printf "  %7d  %-9s  %s\n", C[K[i]], p[2], p[1] }
   }
   END {
     printf "census before: %d pointer tokens in %d units\n", nb, nu

@@ -40,9 +40,9 @@ function ctl_init(   i, c) {
     CTL_DEC[sprintf("u%04x", i)] = c
   }
 }
-function enc(s,   n, i, o, c) {
-  s = sjoin(s, "\\", "\\" "\\")
-  s = sjoin(s, "\"", "\\" "\"")
+function enc(s,   n, i, o, c, p) {
+  n = split(s, p, /\\/); s = (n ? p[1] : ""); for (i = 2; i <= n; i++) s = s "\\" "\\" p[i]
+  s = sjoin(s, "[\"]", "\\" "\"")
   if (s !~ /[\001-\037]/) return s
   o = ""; n = length(s)
   for (i = 1; i <= n; i++) { c = substr(s, i, 1); o = o ((c in CTL_ENC) ? CTL_ENC[c] : c) }
@@ -109,7 +109,7 @@ sp_pack() {
     fi
   fi
   SP_NS="$pk_ns" SP_B64="$SP_DIR/store-b64" awk -F '\t' "$SP_LIB"'
-    function sq(s) { return "'\''" sjoin(s, "'\''", "'\''\\'\'''\''") "'\''" }
+    function sq(s) { return "'\''" sjoin(s, "['\'']", "'\''\\'\'''\''") "'\''" }
     BEGIN { ORS = ""; ctl_init(); nf = 0 }
     FILENAME == ARGV[1] { SZ[++nz] = $1 + 0; next }
     FILENAME == ARGV[2] { NUL[$1 + 0] = 1; next }

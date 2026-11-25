@@ -26,8 +26,8 @@ export const AREAS: ReadonlyArray<readonly [string, readonly string[]]> = [
   ['base/.contexture/modules/store/**', ['store-module', 'base', 'engine', 'laws', 'governance']],
   ['base/.contexture/modules/rhythm/**', ['unit-verbs', 'base', 'packages', 'laws', 'engine', 'integration', 'governance']],
   ['base/.contexture/storage/**', ['drivers', 'storage-fts5', 'unit-record', 'base', 'store-module', 'integration', 'sqlite-smoke', 'docs-discipline', 'governance']],
-  // the workspace's own ideas module, tracked in the live drawer and never shipped: its suite is the engine project's
-  ['.contexture/modules/ideas/**', ['engine']],
+  // the workspace's own ideas module, tracked in the live drawer and never shipped: its suite is the engine project's, and the governance split census reads it
+  ['.contexture/modules/ideas/**', ['engine', 'governance']],
   ['plugins/*/manifest', ['packages', 'governance']],
   ['plugins/*/.contexture/**', ['governance']],
   ['plugins/*/hooks/**', ['packages', 'governance']],

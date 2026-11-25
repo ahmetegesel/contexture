@@ -19,7 +19,7 @@
 BEGIN {
   SRNRULE = split(ENVIRON["SR_RULES"], SRRL, "\n")
   for (i = 1; i <= SRNRULE; i++) {
-    split(SRRL[i], SRF, "\t")
+    split(SRRL[i], SRF, /\t/)
     SRRPAT[i] = SRF[1]; SRRSEC[i] = SRF[2]; SRRENT[i] = SRF[3]
   }
   SRTYPE = ENVIRON["SR_TYPE"]
@@ -31,7 +31,7 @@ BEGIN {
 
 /^@unit\t/ {
   flush()
-  split($0, SRH, "\t")
+  split($0, SRH, /\t/)
   SRUNIT = SRH[2]; SRSTATUS = SRH[3]
   split("", SRTY); split("", SREID); split("", SRSEC); split("", SRSNIP)
   SRN = 0
@@ -43,7 +43,7 @@ BEGIN {
   if (eq == 0) next
   path = substr($0, 1, eq - 1)
   if (path !~ /^results\.[0-9]+\.[a-z_]+$/) next
-  split(path, SRP, ".")
+  split(path, SRP, /\./)
   i = SRP[2] + 0
   if (i > SRN) SRN = i
   v = pdec(substr($0, eq + 1))

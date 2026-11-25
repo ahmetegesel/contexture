@@ -84,7 +84,7 @@ fi
 
 awk '$1 == "file" {
   p = $4
-  n = split(p, a, "/")
+  n = split(p, a, /\//)
   if (n == 5 && a[1] == ".contexture" && a[2] == "extensions" && a[3] == "modules" && a[5] == "uninstall")
     print a[4]
 }' "$state_file" | LC_ALL=C sort -u > "$scratch/hooks"

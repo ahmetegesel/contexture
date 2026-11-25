@@ -21,7 +21,7 @@ BEGIN {
   }
   while ((getline ln < (dir "/carried_plan.txt")) > 0) PC[ln] = 1
   while ((getline ln < (dir "/chunks.tsv")) > 0) {
-    split(ln, Q, "\t")
+    split(ln, Q, /\t/)
     c = Q[1] + 0
     C_LANE[c] = Q[3]; C_FIRST[c] = Q[5] + 0; C_LAST[c] = Q[6] + 0
     C_FROM[c] = Q[7]; C_TO[c] = Q[8]; C_ANCHOR[c] = Q[2]; C_KIND[c] = Q[4]
