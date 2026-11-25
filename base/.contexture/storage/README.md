@@ -216,7 +216,9 @@ cannot hold it), a batch payload without its NUL bytes (an awk may cut a line at
 shell read drops it, so the gate checks the lines the driver reads), checks it there, and
 hands the staged file to the driver as its stdin, unlinked before the exec, so nothing stays
 behind; a hangup, interrupt, or termination while it stages removes the file and exits 129,
-130, or 143. A batch value's decoded size is read with its trailing padding run aside, so no
+130, or 143 at once, even while the caller still holds stdin open (under bash 3.2 alone, a
+signal landing just as the gate starts waiting on its copy of stdin is held until stdin
+ends, the one window left). A batch value's decoded size is read with its trailing padding run aside, so no
 decoder yields more, and a line outside the wire's shape (an unknown or repeated line, a line
 outside an action, an unknown action, an action with no key) ends the gate's batch check,
 so the driver names it. The suffix clause reads the namespace's suffix and key pattern
