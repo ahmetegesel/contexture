@@ -1,14 +1,18 @@
 #!/bin/sh
 # summary: inspect and update storage configuration (load, get, set, unset, schema)
 # usage: ctx store config <subcommand> [args...]
-# help: subcommands:
-# help:   load [--json]         show effective storage configuration
-# help:   get <key>             read one storage setting by local key name
-# help:   set <key> <value>     validate and write one storage setting to the workspace configuration
-# help:   unset <key>           remove one storage setting from the workspace configuration
-# help:   schema [--json]       show declared storage schema keys, types, defaults, and descriptions
-# help: validates storage driver selection against the storage core before writing; emits a non-blocking notice on stderr when the active storage driver changes (existing data is not migrated automatically)
 # help: example: ctx store config get driver
+# subcommand: load show effective storage configuration
+# usage: ctx store config load [--json]
+# subcommand: get read one storage setting by local key name
+# usage: ctx store config get <key>
+# subcommand: set validate and write one storage setting to the workspace configuration
+# usage: ctx store config set <key> <value>
+# help: validates storage driver selection against the storage core before writing; emits a non-blocking notice on stderr when the active storage driver changes (existing data is not migrated automatically)
+# subcommand: unset remove one storage setting from the workspace configuration
+# usage: ctx store config unset <key>
+# subcommand: schema show declared storage schema keys, types, defaults, and descriptions
+# usage: ctx store config schema [--json]
 
 if [ -z "${CTX_ROOT:-}" ]; then
   printf 'store config: error: run this module through ctx (CTX_ROOT is not set) (ERR_INVALID_ARGUMENT)\n' >&2

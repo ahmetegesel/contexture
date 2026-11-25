@@ -24,13 +24,17 @@ do not live under `scripts/`):
 - `spec.md` the JSONL data contract specification.
 
 The two verbs are thin wrappers: they exec their engine with the arguments
-untouched. `query`'s seven subcommands (`symbol`, `search`, `callers`,
-`callees`, `rules`, `pitfalls`, `stats`) ride as arguments to the query verb;
-words that name none (a mistyped `symbols`) refuse rc 1 naming the known ones,
-while no word at all prints the usage rc 0, and `help` is no subcommand: it
-refuses as an unknown word. `ctx ast-doc-graph query -h` prints the verb's
-table; run directly, the engine programs keep `--help` and `-h` for their
-own manual, and `ctx ast-doc-graph index help` reads `help` as a file.
+untouched. `query` declares its seven subcommands (`symbol`, `search`,
+`callers`, `callees`, `rules`, `pitfalls`, `stats`) as sections of its header,
+so `ctx ast-doc-graph help query <subcommand>` and `ctx ast-doc-graph query
+<subcommand> -h` print that subcommand's table; under ctx a word that names
+none (a mistyped `symbols`, or `help`, which is no subcommand) is refused rc 1
+by the engine before the program runs, the verb table on stderr, while flags
+before the subcommand pass through, and no word at all prints the usage rc 0.
+`ctx ast-doc-graph query -h` prints the verb's table; run directly, the engine
+programs keep `--help` and `-h` for their own manual and graph-query refuses an
+unknown word naming the known ones, and `ctx ast-doc-graph index help` reads
+`help` as a file.
 
 ## Pipeline
 

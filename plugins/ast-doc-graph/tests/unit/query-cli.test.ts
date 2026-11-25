@@ -1,6 +1,9 @@
-import { dirname } from 'node:path';
+import { cpSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { graphQuery, seededDb, sqliteFts5 } from '../support/graph';
+import { exec } from '@support/exec';
+import { stage } from '@support/stage';
+import { graphQuery, PLUGIN, seededDb, sqliteFts5 } from '../support/graph';
 
 const ranks = (out: string): string[] => out.split('\n').filter((l) => /^ {2}\[\d+\] /.test(l)).map((l) => l.trim().replace(/ \(.*\)$/, ''));
 
@@ -94,5 +97,38 @@ describe.skipIf(!sqliteFts5)('graph-query over the seeded database', { concurren
     const r = await q('stats');
     expect(r.code).toBe(0);
     for (const line of ['  SYMBOLS: 4', '  EDGES: 7', '    CALLS: 4', '    COVERS: 1', '    GOVERNS: 1', '    WARNS: 1', '  DOCS: 1', '  RULES: 1', '  PITFALLS: 1']) expect(r.stdout.split('\n')).toContain(line);
+  });
+});
+
+describe.skipIf(!sqliteFts5)('ctx ast-doc-graph query: the subcommand sections the engine reads', { concurrent: true }, () => {
+  let ws: string;
+  let db: string;
+  const ctx = (...args: string[]) => exec('./.contexture/ctx', args, { cwd: ws, input: '' });
+  beforeAll(() => {
+    ws = stage('posix', 'query-sections');
+    cpSync(join(PLUGIN, '.contexture'), join(ws, '.contexture'), { recursive: true });
+    db = seededDb('query-sections-db');
+  });
+
+  it.for(['-h', '--help'])('[ast-doc-graph-r14, the-engine-r7] ctx ast-doc-graph query symbol %s prints the symbol section, the bytes ctx ast-doc-graph help query symbol prints, and the query never runs; null check: the query with a name runs', async (flag) => {
+    const section = await ctx('ast-doc-graph', 'help', 'query', 'symbol');
+    expect([section.code, section.stderr]).toEqual([0, '']);
+    expect(section.stdout).toMatch(/^ctx ast-doc-graph query symbol: display a symbol's definition/);
+    expect(section.stdout).toMatch(/^ {2}ctx ast-doc-graph query symbol <name> \[--depth N\] \[--db <path>\] \[--no-sync\]$/m);
+    expect(await ctx('ast-doc-graph', 'query', 'symbol', flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, section.stdout, '']);
+    const ran = await ctx('ast-doc-graph', 'query', 'symbol', 'OrderCore.startOrder', '--db', db, '--no-sync');
+    expect([ran.code, ran.stdout.split('\n')[0]]).toEqual([0, '@symbol OrderCore.startOrder']);
+  });
+
+  it('[ast-doc-graph-r14, the-engine-r5] under ctx the engine refuses an unknown subcommand, help among them, before graph-query runs, with the verb table on stderr; a flag before the subcommand reaches graph-query', async () => {
+    const table = (await ctx('ast-doc-graph', 'help', 'query')).stdout;
+    expect(table.split(/^subcommands:$/m)[1]?.split('\n\n')[0]?.trim().split('\n').map((l) => l.trim().split(/ +/)[0])).toEqual(['symbol', 'search', 'callers', 'callees', 'rules', 'pitfalls', 'stats']);
+    for (const word of ['symbols', 'help']) {
+      const r = await ctx('ast-doc-graph', 'query', word, 'OrderCore.startOrder', '--db', db);
+      expect([r.code, r.stdout, r.stderr]).toEqual([1, '', `ctx: ast-doc-graph query: unknown subcommand: ${word}\n${table}`]);
+    }
+    const flagFirst = await ctx('ast-doc-graph', 'query', '--db', db, 'stats', '--no-sync');
+    expect([flagFirst.code, flagFirst.stderr]).toEqual([0, '']);
+    expect(flagFirst.stdout.split('\n')).toContain('  SYMBOLS: 4');
   });
 });

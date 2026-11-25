@@ -32,7 +32,9 @@
 # discovery validates every
 # manifest and skips a malformed one with a warning. scripts/<verb> files are verbs named by file name,
 # marked by their own "# summary:" header, with repeatable "# usage:" and
-# "# help:" detail lines. A scripts file without a summary is private and
+# "# help:" detail lines; a "# subcommand: <name> [text]" line opens a section whose
+# usage and help lines follow it, every header line read from the leading comment
+# block alone. A scripts file without a summary is private and
 # ignored. A module file without a summary warns and skips; a scripts/
 # directory without a module file warns and skips; a directory with neither
 # (a filter-only or hook-only module) is legal, silent, and unlisted.
@@ -40,10 +42,11 @@
 # retired record verbs (append, amend, query, flip, drop, next, resolve, which print
 # their replacement); the builtin unit, run, lane, rhythm, and store are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
-# ctx help --all, ctx <module> help, ctx <module> help <verb>, a sole -h or --help
-# directly after any verb (the verb's "# help-from: code" header line appends its help
-# mode's output), and bare ctx <module> (module table, rc0). Dispatch validates the verb engine-side
-# (unknown rc1, module help on stderr), chdirs to the workspace root, and
+# ctx help --all, ctx <module> help, ctx <module> help <verb> [<sub>], a sole -h or --help
+# directly after any verb or declared subcommand (the verb's "# help-from: code" header line
+# appends its help mode's output), and bare ctx <module> (module table, rc0). Dispatch validates
+# the verb engine-side (unknown rc1, module help on stderr) and a declared subcommand (unknown
+# rc1, verb help on stderr), chdirs to the workspace root, and
 # execs scripts/<verb> with the remaining argv, exporting CTX_ROOT,
 # CTX_MODULE_DIR, CTX_BIN, CTX_SCRATCH_ROOT (one per-verb scratch root under
 # the drawer; a dead root is swept on the next dispatch), and LC_ALL=C. Hooks are files under
@@ -118,8 +121,11 @@ child_stop() {
   wait "$1"
 }
 
+# the leading header block: the run from line 1 of comment lines (the shebang included) and
+# blank lines, ending at the first other line; every header reader reads it alone
+
 header_field() {
-  # first value of a header line, trimmed of surrounding whitespace
+  # first value of a header line in the leading block, trimmed of surrounding whitespace
   hf_prefix="# $2: "
   while IFS= read -r hf_line || [ -n "$hf_line" ]; do
     case "$hf_line" in
@@ -130,24 +136,11 @@ header_field() {
         printf '%s\n' "$hf_value"
         return 0
         ;;
+      "#"*) ;;
+      *[![:space:]]*) return 0 ;;
     esac
   done < "$1"
   return 0
-}
-
-header_values() {
-  # every value of a header line, in file order, trimmed
-  hv_prefix="# $2: "
-  while IFS= read -r hv_line || [ -n "$hv_line" ]; do
-    case "$hv_line" in
-      "$hv_prefix"*)
-        hv_value=${hv_line#"$hv_prefix"}
-        hv_value=${hv_value#"${hv_value%%[![:space:]]*}"}
-        hv_value=${hv_value%"${hv_value##*[![:space:]]}"}
-        printf '%s\n' "$hv_value"
-        ;;
-    esac
-  done < "$1"
 }
 
 # ---------------------------------------------------------------------------
@@ -659,7 +652,8 @@ retired_replacement() {
 }
 
 # summary_files <scripts-dir>: extension-less, non-hidden script names carrying a
-# "# summary: " header, one per line in glob order; private files are left out
+# "# summary: " line in the leading header block, one per line in glob order; private files
+# are left out
 summary_files() {
   sf_dir=$1
   [ -d "$sf_dir" ] || return 0
@@ -680,8 +674,10 @@ summary_files() {
       prev = base(FILENAME)
       ok = 0
       seen_summary = 0
+      past = 0
     }
-    !seen_summary && /^# summary: / {
+    !/^#/ && /[^[:space:]]/ { past = 1 }
+    !past && !seen_summary && /^# summary: / {
       seen_summary = 1
       v = $0
       sub(/^# summary: /, "", v)
@@ -958,9 +954,70 @@ verb_summary() {
   header_field "$1/scripts/$2" summary
 }
 
-verb_detail() {
-  header_values "$1/scripts/$2" "$3"
+# verb_head <mode> <module> <module dir> <verb> <quiet> [<sub>]: one read of the verb's leading
+# header block, its lines before the first "# subcommand: <name> [text]" line the verb's and
+# the usage and help lines after one that section's until the next. Modes: table prints the
+# verb's usage and help and its subcommands table; sub prints the section's table, rc 1 for
+# a name no section declares; names prints the declared names; from prints the verb's
+# help-from value. A section named help, one breaking the slug rule, a duplicate (the first
+# wins), and a help-from line inside a section are ignored with one stderr line each unless
+# <quiet> is 1
+verb_head() {
+  LC_ALL=C awk -v mode="$1" -v m="$2" -v v="$4" -v quiet="$5" -v s="${6-}" '
+    function trim(x) { sub(/^[[:space:]]+/, "", x); sub(/[[:space:]]+$/, "", x); return x }
+    function warn(x) { if (quiet != 1) printf "ctx: %s %s: %s\n", m, v, x > "/dev/stderr" }
+    function keep(k, x) { if (x == "") return; N[sec, k]++; L[sec, k, N[sec, k]] = x }
+    function block(z, k, head,   i) {
+      if (!N[z, k]) return
+      printf "\n%s:\n", head
+      for (i = 1; i <= N[z, k]; i++) printf "  %s\n", L[z, k, i]
+    }
+    !/^#/ && /[^[:space:]]/ { exit }
+    /^# subcommand: / {
+      x = trim(substr($0, 15)); name = x; sub(/[[:space:]].*$/, "", name)
+      text = trim(substr(x, length(name) + 1))
+      skip = 1
+      if (name !~ /^[A-Za-z0-9][A-Za-z0-9_-]*$/) warn("subcommand '\''" name "'\'' breaks the slug rule (letters, digits, underscore, and dash, starting with a letter or digit); its section is ignored")
+      else if (name == "help") warn("help is never a subcommand; its section is ignored")
+      else if (name in T) warn("duplicate subcommand shadowed: " name " (the first section wins)")
+      else { skip = 0; sec = name; T[name] = text; O[++ns] = name }
+      next
+    }
+    skip { next }
+    /^# usage: / { keep("u", trim(substr($0, 10))); next }
+    /^# help: / { keep("h", trim(substr($0, 9))); next }
+    /^# help-from: / {
+      if (sec != "") warn("help-from in subcommand '\''" sec "'\'' is ignored; the verb'\''s declaration serves every section")
+      else if (!from) { from = 1; F = trim(substr($0, 14)) }
+      next
+    }
+    END {
+      if (mode == "names") { for (i = 1; i <= ns; i++) print O[i]; exit 0 }
+      if (mode == "from") { if (from) print F; exit 0 }
+      if (mode == "sub") {
+        if (s == "" || !(s in T)) exit 1
+        if (T[s] != "") printf "ctx %s %s %s: %s\n", m, v, s, T[s]
+        else printf "ctx %s %s %s\n", m, v, s
+        block(s, "u", "usage"); block(s, "h", "help")
+        exit 0
+      }
+      block("", "u", "usage"); block("", "h", "help")
+      if (!ns) exit 0
+      printf "\nsubcommands:\n"
+      for (i = 1; i <= ns; i++) {
+        d = T[O[i]]
+        if (d == "") d = L[O[i], "u", 1]
+        if (d == "") printf "  %s\n", O[i]
+        else printf "  %-10s %s\n", O[i], d
+      }
+      printf "\ndetail: ctx %s help %s <subcommand>\n", m, v
+    }
+  ' "$3/scripts/$4"
 }
+
+# the verb whose section warnings already printed in this run, as <module dir>/<verb>: a
+# second read of it passes quiet 1; set outside any command substitution
+vh_said=""
 
 verb_exists() {
   case "${1##*/}" in
@@ -1069,22 +1126,91 @@ EOF
 show_verb_help() {
   m=$(module_dir "$1") || m="$modules_root/$1"
   printf 'ctx %s %s: %s\n' "$1" "$2" "$(verb_summary "$m" "$2")"
-  usages=$(verb_detail "$m" "$2" usage)
-  if [ -n "$usages" ]; then
-    printf '\nusage:\n'
-    printf '%s\n' "$usages" | while IFS= read -r l; do
-      [ -n "$l" ] && printf '  %s\n' "$l"
-    done
-  fi
-  helps=$(verb_detail "$m" "$2" help)
-  if [ -n "$helps" ]; then
-    printf '\nhelp:\n'
-    printf '%s\n' "$helps" | while IFS= read -r l; do
-      [ -n "$l" ] && printf '  %s\n' "$l"
-    done
-  fi
+  vh_q=0; [ "$vh_said" = "$m/$2" ] && vh_q=1
+  verb_head table "$1" "$m" "$2" "$vh_q"
+  vh_said="$m/$2"
   verb_help_hook "$1" "$m" "$2" ""
   return 0
+}
+
+# show_sub_help <module> <verb> <sub>: a declared subcommand's section table, then the verb's
+# help hook run for that subcommand
+show_sub_help() {
+  m=$(module_dir "$1") || m="$modules_root/$1"
+  vh_q=0; [ "$vh_said" = "$m/$2" ] && vh_q=1
+  verb_head sub "$1" "$m" "$2" "$vh_q" "$3"
+  vh_said="$m/$2"
+  verb_help_hook "$1" "$m" "$2" "$3"
+  return 0
+}
+
+# verb_subs <module> <module dir> <verb>: the verb's declared subcommand names, one per line,
+# its section warnings printed once in this run; the caller marks them printed
+verb_subs() {
+  vh_q=0; [ "$vh_said" = "$2/$3" ] && vh_q=1
+  verb_head names "$1" "$2" "$3" "$vh_q"
+}
+
+# sub_declared <name> <names>: rc 0 when the name is one of the declared names
+sub_declared() {
+  for sd_n in $2; do
+    [ "$sd_n" = "$1" ] && return 0
+  done
+  return 1
+}
+
+# verb_sub_first <module> <module dir> <verb> [args...]: for a verb that declares subcommands,
+# a first argument not starting with a dash is its subcommand slot: an unknown word refuses
+# rc 1 with the verb table on stderr; after a declared one, a sole -h or --help prints the
+# section table rc 0 and the verb never runs in its normal mode, followed by anything it
+# refuses rc 1; an absent subcommand or a dash first argument returns
+verb_sub_first() {
+  vu_m=$1; vu_md=$2; vu_v=$3
+  shift 3
+  [ $# -gt 0 ] || return 0
+  case "$1" in
+    -*) return 0 ;;
+  esac
+  vu_names=$(verb_subs "$vu_m" "$vu_md" "$vu_v")
+  vh_said="$vu_md/$vu_v"
+  [ -n "$vu_names" ] || return 0
+  if ! sub_declared "$1" "$vu_names"; then
+    ctx_err "$vu_m $vu_v: unknown subcommand: $1"
+    show_verb_help "$vu_m" "$vu_v" >&2
+    exit 1
+  fi
+  case "${2:-}" in
+    --help|-h)
+      if [ $# -eq 2 ]; then
+        show_sub_help "$vu_m" "$vu_v" "$1"
+        exit 0
+      fi
+      ctx_err "$vu_m $vu_v $1: $2 takes no further argument; help is ctx $vu_m $vu_v $1 $2 alone"
+      exit 1
+      ;;
+  esac
+  return 0
+}
+
+# verb_help_sub <module> <module dir> <verb> <sub> [more...]: ctx <module> help <verb> <sub>
+# prints the section table rc 0; a name no section declares refuses rc 1 with the verb table
+# on stderr; a further argument refuses rc 1
+verb_help_sub() {
+  vu_m=$1; vu_md=$2; vu_v=$3
+  shift 3
+  vu_names=$(verb_subs "$vu_m" "$vu_md" "$vu_v")
+  vh_said="$vu_md/$vu_v"
+  if ! sub_declared "$1" "$vu_names"; then
+    ctx_err "$vu_m $vu_v: unknown subcommand: $1"
+    show_verb_help "$vu_m" "$vu_v" >&2
+    exit 1
+  fi
+  if [ $# -gt 1 ]; then
+    ctx_err "$vu_m $vu_v $1: help takes no further argument; help is ctx $vu_m help $vu_v $1"
+    exit 1
+  fi
+  show_sub_help "$vu_m" "$vu_v" "$1"
+  exit 0
 }
 
 # verb_help_hook <module> <module dir> <verb> <sub>: a verb whose header declares
@@ -1092,10 +1218,11 @@ show_verb_help() {
 # names, no argument, stdin from /dev/null, the dispatch exports, its own scratch root) bounded
 # at 5 s; exit 0 appends one empty line and its stdout below the header table; a nonzero exit,
 # no exit status, or the bound keeps the table alone with one stderr line; its stderr is
-# discarded; any other help-from value is ignored with one stderr line
+# discarded; any other help-from value is ignored with one stderr line; the verb's
+# declaration serves every section
 verb_help_hook() {
   hh_f="$2/scripts/$3"
-  hh_from=$(header_field "$hh_f" help-from)
+  hh_from=$(verb_head from "$1" "$2" "$3" 1)
   [ -n "$hh_from" ] || return 0
   if [ "$hh_from" != code ]; then
     ctx_err "$1 $3: help-from '$hh_from' is not code; the header table stands"
@@ -3442,9 +3569,12 @@ case "$1" in
       show_module_help "$found_target"
       exit 0
     fi
-    if [ $# -eq 1 ] && verb_exists "$md" "$1"; then
-      show_verb_help "$found_target" "$1"
-      exit 0
+    if verb_exists "$md" "$1"; then
+      if [ $# -eq 1 ]; then
+        show_verb_help "$found_target" "$1"
+        exit 0
+      fi
+      verb_help_sub "$found_target" "$md" "$@"
     fi
     if [ $# -eq 1 ] && [ "$found_target" = unit ] && repl=$(retired_replacement "$1"); then
       printf 'ctx unit %s retired: %s\n' "$1" "$repl" >&2
@@ -3484,8 +3614,10 @@ fi
 shift
 
 # the first argument after every verb belongs to the engine when it is -h or --help, awk
-# and shell verbs alike: the verb never sees a sole help flag
+# and shell verbs alike: the verb never sees a sole help flag; for a verb that declares
+# subcommands the engine checks the subcommand slot and owns a sole help flag after it
 verb_help_first "$found_target" "$verb" "$@"
+verb_sub_first "$found_target" "$md" "$verb" "$@"
 
 CTX_ROOT="$root"
 CTX_MODULE_DIR="$md"

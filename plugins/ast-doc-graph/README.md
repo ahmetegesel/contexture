@@ -32,7 +32,7 @@ Two ctx verbs drive it: `ctx ast-doc-graph index` runs the pipeline, and
 |---|---|---|
 | `.contexture/extensions/modules/ast-doc-graph/module` | the module summary line | copy |
 | `.contexture/extensions/modules/ast-doc-graph/scripts/index` | the indexing verb: a thin wrapper over `bin/ast-doc-index` | copy |
-| `.contexture/extensions/modules/ast-doc-graph/scripts/query` | the retrieval verb: a thin wrapper over `bin/graph-query`, the seven subcommands ride as arguments | copy |
+| `.contexture/extensions/modules/ast-doc-graph/scripts/query` | the retrieval verb: a thin wrapper over `bin/graph-query`, its header declaring the seven subcommands as sections, which ride as arguments | copy |
 | `.contexture/extensions/modules/ast-doc-graph/bin/ast-doc-index` | the unified pipeline driver: multi-directory discovery, full and --delta incremental indexing, SQLite compilation | copy |
 | `.contexture/extensions/modules/ast-doc-graph/bin/graph-query` | the retrieval CLI: zero-daemon JIT micro-sync, symbols, callers, callees, dual FTS5 search, rules, pitfalls, stats | copy |
 | `.contexture/extensions/modules/ast-doc-graph/extractors/ts/extract-ts.sh` | the TypeScript AST extractor launcher: dynamically locates `tsx` or `node`, executes parser | copy |
@@ -239,7 +239,7 @@ ranks matching doc rules and symbols with highlighted match snippets.
 * Fast bypass flag (`--no-sync`): Pass `--no-sync` in tight loops or automated test pipelines to skip the filesystem freshness scan entirely.
 * Concurrency protection: All queries execute with `PRAGMA busy_timeout = 5000` via `sqlite_exec`, ensuring multiple concurrent agents and editors can query the database safely even while an inline delta sync writes to SQLite WAL.
 
-`ctx ast-doc-graph query` provides seven primary subcommands designed for compact agent inspection; a word that names none (a mistyped `symbols`, or `help`, which is no subcommand) refuses rc 1 naming the known ones, no word at all prints the usage rc 0, and `ctx ast-doc-graph query -h` prints the verb table the engine renders:
+`ctx ast-doc-graph query` provides seven primary subcommands designed for compact agent inspection, declared as sections of the verb's header, so `ctx ast-doc-graph help query <subcommand>` and `ctx ast-doc-graph query <subcommand> -h` print one subcommand's table; a word that names none (a mistyped `symbols`, or `help`, which is no subcommand) is refused rc 1 by the engine before the program runs, with the verb table on stderr, no word at all prints the usage rc 0, and `ctx ast-doc-graph query -h` prints the verb table the engine renders:
 
 ### 1. Symbol Inspection (`symbol`)
 

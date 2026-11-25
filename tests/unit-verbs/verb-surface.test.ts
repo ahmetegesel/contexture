@@ -69,17 +69,35 @@ describe.concurrent('the unit and lane verb surface', () => {
   });
 
   it.for([
-    ['finding', 'list', /^ {2}list <unit>/m],
-    ['finding', 'add', /^ {2}add <unit>/m],
-    ['task', 'start', /^ {2}start <unit>/m],
-    ['entry', 'show', /^ {2}show <unit>/m],
-  ] as const)('E-11b [the-engine-r7]: ctx unit %s %s --help and -h print its usage rc 0, never taken for a unit', async ([verb, sub, usage]) => {
+    ['finding', 'list'],
+    ['finding', 'add'],
+    ['task', 'start'],
+    ['entry', 'show'],
+  ] as const)('E-11b [the-engine-r4, the-engine-r7]: ctx unit %s %s --help and -h print its section table, the bytes ctx unit help <verb> <sub> prints, rc 0, never taken for a unit', async ([verb, sub]) => {
+    const section = await unit(sb, 'help', verb, sub);
+    expect([section.code, section.stderr]).toEqual([0, '']);
+    expect(section.stdout).toMatch(new RegExp(`^ctx unit ${verb} ${sub}: \\S`));
+    expect(section.stdout).toMatch(new RegExp(`^ {2}ctx unit ${verb} ${sub} <unit>`, 'm'));
     for (const flag of ['--help', '-h']) {
-      const r = await unit(sb, verb, sub, flag);
-      expect(r.code).toBe(0);
-      expect(r.stdout + r.stderr).toMatch(usage);
-      expect(r.stdout + r.stderr).not.toContain('not found');
+      expect(await unit(sb, verb, sub, flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, section.stdout, '']);
+      expect((await unit(sb, '-h', verb, sub)).stdout).toBe(section.stdout);
     }
+  });
+
+  it.for(['entry', 'finding', 'task'])('E-11b [the-engine-r5]: the engine refuses an unknown subcommand of ctx unit %s before the verb runs: one stderr line and the verb table, rc 1; help is no subcommand', async (verb) => {
+    const table = (await unit(sb, 'help', verb)).stdout;
+    for (const args of [['bogus', '-h'], ['bogus'], ['help'], ['help', 'u1'], ['u1']]) {
+      const r = await unit(sb, verb, ...args);
+      expect([r.code, r.stdout], args.join(' ')).toEqual([1, '']);
+      expect(r.stderr, args.join(' ')).toBe(`ctx: unit ${verb}: unknown subcommand: ${args[0]}\n${table}`);
+    }
+    const help = await unit(sb, 'help', verb, 'bogus');
+    expect([help.code, help.stdout, help.stderr]).toEqual([1, '', `ctx: unit ${verb}: unknown subcommand: bogus\n${table}`]);
+    const more = await unit(sb, verb, 'show', '-h', 'x');
+    expect([more.code, more.stdout, more.stderr]).toEqual([1, '', `ctx: unit ${verb} show: -h takes no further argument; help is ctx unit ${verb} show -h alone\n`]);
+    const dash = await unit(sb, verb, '--bogus');
+    expect([dash.code, dash.stdout]).toEqual([1, '']);
+    expect(dash.stderr).toMatch(new RegExp(`^${verb}: error: unknown subcommand '--bogus' \\(`));
   });
 
   it('X-h [the-engine-r7]: record and reopen --help and -h print the table ctx unit help <verb> prints on stdout rc 0', async () => {
@@ -132,11 +150,12 @@ describe.concurrent('the unit and lane verb surface', () => {
     for (const flag of ['--help', '-h']) expect(await unit(sb, 'refresh', flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, table.stdout, '']);
   });
 
-  it('UP-e [the-engine-r4, the-engine-r7]: finding update --help and the unit help table show --summary and --ref as optional', async () => {
+  it('UP-e [the-engine-r4, the-engine-r7]: finding update --help and its section table show --summary and --ref as optional; the verb table lists update by its text', async () => {
     const optional = /update <unit> <NAME> \[--summary="\.\.\."\] \[--ref=\.\.\.\]/;
     const verbHelp = await unit(sb, 'finding', 'update', '--help');
-    expect(verbHelp.stdout + verbHelp.stderr).toMatch(optional);
+    expect(verbHelp.stdout).toMatch(optional);
+    expect((await unit(sb, 'help', 'finding', 'update')).stdout).toBe(verbHelp.stdout);
     const table = await unit(sb, 'help', 'finding');
-    expect(table.stdout + table.stderr).toMatch(optional);
+    expect(table.stdout).toMatch(/^ {2}update +rewrite a finding's summary or refs$/m);
   });
 });

@@ -241,6 +241,143 @@ describe.concurrent('the help hook: a verb declaring # help-from: code appends i
   });
 });
 
+describe.concurrent('the subcommand grammar: # subcommand: sections in the leading header block', () => {
+  let sb: string;
+  const goTable = [
+    'ctx sx go: a verb with sections',
+    '',
+    'usage:',
+    '  ctx sx go <subcommand> [args...]',
+    '',
+    'help:',
+    '  the verb line',
+    '',
+    'subcommands:',
+    '  one        the first subcommand',
+    '  two        ctx sx go two [--y]',
+    '  three',
+    '',
+    'detail: ctx sx help go <subcommand>',
+    '',
+    'hook sub=[]',
+    '',
+  ].join('\n');
+  const sections: Record<string, string> = {
+    one: 'ctx sx go one: the first subcommand\n\nusage:\n  ctx sx go one <x>\n\nhelp:\n  one\'s help\n\nhook sub=[one]\n',
+    two: 'ctx sx go two\n\nusage:\n  ctx sx go two [--y]\n\nhook sub=[two]\n',
+    three: 'ctx sx go three\n\nhelp:\n  three\'s help\n\nhook sub=[three]\n',
+  };
+  const warnings = [
+    'ctx: sx bad: duplicate subcommand shadowed: one (the first section wins)',
+    'ctx: sx bad: help is never a subcommand; its section is ignored',
+    "ctx: sx bad: subcommand 'Bad.name' breaks the slug rule (letters, digits, underscore, and dash, starting with a letter or digit); its section is ignored",
+    "ctx: sx bad: help-from in subcommand 'two' is ignored; the verb's declaration serves every section",
+    '',
+  ].join('\n');
+  beforeAll(() => {
+    sb = stage('posix', 'help-sections');
+    writeModule(sb, 'modules', 'sx', {
+      manifest: '# summary: the subcommand grammar fixture\n',
+      files: {
+        'scripts/go': [
+          '#!/bin/sh',
+          '# summary: a verb with sections',
+          '# usage: ctx sx go <subcommand> [args...]',
+          '# help: the verb line',
+          '# help-from: code',
+          '',
+          '# subcommand: one the first subcommand',
+          '# usage: ctx sx go one <x>',
+          "# help: one's help",
+          '# subcommand: two',
+          '# usage: ctx sx go two [--y]',
+          '# subcommand: three',
+          "# help: three's help",
+          'if [ "${CTX_HELP:-}" = 1 ]; then printf "hook sub=[%s]\\n" "$CTX_HELP_SUB"; exit 0; fi',
+          'printf "RAN %s\\n" "$*"',
+          '',
+        ].join('\n'),
+        'scripts/bad': [
+          '#!/bin/sh',
+          '# summary: a verb with section defects',
+          '# usage: ctx sx bad <subcommand>',
+          '# subcommand: one the first',
+          '# usage: ctx sx bad one',
+          '# subcommand: one a duplicate',
+          '# usage: ctx sx bad one DUP',
+          '# subcommand: help a help section',
+          '# usage: ctx sx bad help HELP',
+          '# subcommand: Bad.name x',
+          '# usage: ctx sx bad Bad.name BAD',
+          '# subcommand: two',
+          '# help-from: code',
+          "# help: two's help",
+          'printf "RAN %s\\n" "$*"',
+          '',
+        ].join('\n'),
+        'scripts/late': ['#!/bin/sh', '# summary: a verb with a late header', '# usage: ctx sx late', 'printf "RAN %s\\n" "$*"', '# usage: LATE usage', '# subcommand: latesub', '# help-from: code', ''].join('\n'),
+        'scripts/priv': ['#!/bin/sh', 'printf "RAN\\n"', '# summary: a late summary', ''].join('\n'),
+      },
+    });
+  });
+
+  it('[the-engine-r3, modules-r2]: every header line is read from the leading block alone: a late usage, subcommand, and help-from are read nowhere, and a late summary makes no verb; null check: the same lines in the block read', async () => {
+    const listing = await run(sb, ['sx', 'help']);
+    expect([listing.code, listing.stderr]).toEqual([0, '']);
+    expect(listing.stdout.split(/^verbs:$/m)[1]?.split('\n\n')[0]?.trim().split('\n').map((l) => l.trim().split(/ +/)[0])).toEqual(['bad', 'go', 'late']);
+    expect(await run(sb, ['sx', 'help', 'late']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'ctx sx late: a verb with a late header\n\nusage:\n  ctx sx late\n', '']);
+    expect(await run(sb, ['sx', 'late', 'latesub', '-h']).then((r) => [r.code, r.stdout])).toEqual([0, 'RAN latesub -h\n']);
+    const priv = await run(sb, ['sx', 'priv']);
+    expect([priv.code, priv.stdout, priv.stderr.split('\n')[0]]).toEqual([1, '', 'ctx: unknown verb: priv']);
+    expect((await run(sb, ['sx', 'help', 'go'])).stdout).toContain('hook sub=[]');
+  });
+
+  it('[the-engine-r4]: ctx <module> help <verb> prints the verb table, then the subcommands table (the section text, else its first usage line, else the name) and the detail line, then the hook output', async () => {
+    for (const args of [['sx', 'help', 'go'], ['sx', '-h', 'go'], ['sx', 'go', '-h'], ['sx', 'go', '--help']]) {
+      expect(await run(sb, args).then((r) => [r.code, r.stdout, r.stderr]), args.join(' ')).toEqual([0, goTable, '']);
+    }
+  });
+
+  it.for(['one', 'two', 'three'])('[the-engine-r4, the-engine-r7]: ctx sx help go %s, ctx sx -h go %s, and a sole -h or --help after it print the section table, the hook run with CTX_HELP_SUB, rc 0', async (s) => {
+    for (const args of [['sx', 'help', 'go', s], ['sx', '--help', 'go', s], ['sx', 'go', s, '-h'], ['sx', 'go', s, '--help']]) {
+      expect(await run(sb, args).then((r) => [r.code, r.stdout, r.stderr]), args.join(' ')).toEqual([0, sections[s], '']);
+    }
+  });
+
+  it('[the-engine-r5]: an unknown word in the subcommand slot, help among them, refuses rc 1 with one stderr line and the verb table on stderr, and the verb never runs', async () => {
+    for (const args of [['four'], ['four', '-h'], ['help'], ['help', 'one'], ['Bad.name']]) {
+      const r = await run(sb, ['sx', 'go', ...args]);
+      expect([r.code, r.stdout, r.stderr], args.join(' ')).toEqual([1, '', `ctx: sx go: unknown subcommand: ${args[0]}\n${goTable}`]);
+    }
+    expect(await run(sb, ['sx', 'help', 'go', 'four']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([1, '', `ctx: sx go: unknown subcommand: four\n${goTable}`]);
+    expect(await run(sb, ['sx', 'help', 'late', 'x']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([1, '', 'ctx: sx late: unknown subcommand: x\nctx sx late: a verb with a late header\n\nusage:\n  ctx sx late\n']);
+  });
+
+  it('[the-engine-r5, the-engine-r7]: an absent subcommand, a dash first argument, a declared one with arguments, and a help flag further along reach the verb; a verb without sections takes any first word', async () => {
+    const ran = async (...args: string[]): Promise<[number, string, string]> => run(sb, ['sx', 'go', ...args]).then((r) => [r.code, r.stdout, r.stderr]);
+    expect(await ran()).toEqual([0, 'RAN \n', '']);
+    expect(await ran('--y', 'four')).toEqual([0, 'RAN --y four\n', '']);
+    expect(await ran('one', 'a', 'b')).toEqual([0, 'RAN one a b\n', '']);
+    expect(await ran('one', 'x', '-h')).toEqual([0, 'RAN one x -h\n', '']);
+    expect(await run(sb, ['sx', 'late', 'anything']).then((r) => [r.code, r.stdout])).toEqual([0, 'RAN anything\n']);
+  });
+
+  it.for(['-h', '--help'])('[the-engine-r7]: %s after a declared subcommand followed by more refuses rc 1 with one stderr line, and help <verb> <sub> takes no further argument', async (flag) => {
+    expect(await run(sb, ['sx', 'go', 'one', flag, 'x']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([1, '', `ctx: sx go one: ${flag} takes no further argument; help is ctx sx go one ${flag} alone\n`]);
+    expect(await run(sb, ['sx', flag, 'go', 'one', 'x']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([1, '', 'ctx: sx go one: help takes no further argument; help is ctx sx help go one\n']);
+  });
+
+  it('[the-engine-r2, modules-r2]: a duplicate section (the first wins), a section named help, a name breaking the slug rule, and a help-from inside a section are ignored with one stderr line each, once per run, at help render and at validation, never at discovery', async () => {
+    const table = 'ctx sx bad: a verb with section defects\n\nusage:\n  ctx sx bad <subcommand>\n\nsubcommands:\n  one        the first\n  two\n\ndetail: ctx sx help bad <subcommand>\n';
+    expect(await run(sb, ['sx', 'help', 'bad']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, table, warnings]);
+    expect(await run(sb, ['sx', 'bad', 'one', '-h']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'ctx sx bad one: the first\n\nusage:\n  ctx sx bad one\n', warnings]);
+    expect(await run(sb, ['sx', 'bad', 'two', '-h']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, "ctx sx bad two\n\nhelp:\n  two's help\n", warnings]);
+    expect(await run(sb, ['sx', 'bad', 'one', 'x']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'RAN one x\n', warnings]);
+    expect(await run(sb, ['sx', 'bad', 'help']).then((r) => [r.code, r.stdout, r.stderr])).toEqual([1, '', `${warnings}ctx: sx bad: unknown subcommand: help\n${table}`]);
+    for (const args of [['sx'], ['sx', 'help'], ['help', '--all'], ['sx', 'bad']]) expect((await run(sb, args)).stderr, args.join(' ')).toBe('');
+  });
+});
+
 describe.concurrent('the help surface hides the hook runner', () => {
   let sb: string;
   beforeAll(() => {

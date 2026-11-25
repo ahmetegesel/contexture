@@ -13,10 +13,7 @@ const AWKHELP = join(ROOT, 'tests/governance/awkhelp.awk');
 const IDEAS = join(ROOT, '.contexture/modules/ideas');
 const FILE_FLOOR = 67;
 const VERB_FLOOR = 62;
-const SUB_ARM = `  --help|-h) help_table | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;`;
-
-// the subcommand position arms the subcommand grammar retires; until then the only help arms
-const ALLOW: readonly string[] = ['entry', 'finding', 'task'].map((v) => `base/.contexture/modules/unit/scripts/${v}: ${SUB_ARM}`);
+const SUB_COUNT = 29;
 
 const isFile = (f: string): boolean => statSync(f).isFile();
 const scripts = (module: string): string[] => kids(join(module, 'scripts')).filter(isFile);
@@ -61,6 +58,12 @@ async function verbs(sb: string): Promise<[string, string][]> {
   return out;
 }
 
+async function subcommands(sb: string, shipped: readonly [string, string][]): Promise<[string, string, string][]> {
+  const out: [string, string, string][] = [];
+  for (const [m, v] of shipped) for (const s of table((await ctx(sb, m, 'help', v)).stdout, 'subcommands')) out.push([m, v, s]);
+  return out;
+}
+
 // every shipped verb declaring the help hook, as <module> <module dir> <verb>
 function hooked(sb: string): [string, string, string][] {
   const roots = [join(sb, '.contexture/modules'), join(sb, '.contexture/extensions/modules')];
@@ -80,15 +83,17 @@ const direct = (sb: string, m: string, md: string, v: string) =>
     env: { CTX_ROOT: sb, CTX_MODULE_DIR: md, CTX_BIN: join(sb, '.contexture/ctx'), CTX_SCRATCH_ROOT: sandbox('help-mode'), LC_ALL: 'C', CTX_HELP: '1', CTX_HELP_MODULE: m, CTX_HELP_VERB: v, CTX_HELP_SUB: '' },
   });
 
-describe.concurrent('the verb help census: the engine owns a sole -h or --help after every verb, so no verb script carries a help arm', () => {
+describe.concurrent('the verb help census: the engine owns a sole -h or --help after every verb and every declared subcommand, so no verb script carries a help arm', () => {
   let sb: string;
   let shipped: [string, string][];
+  let subs: [string, string, string][];
   beforeAll(async () => {
     sb = staged('help-census');
     shipped = await verbs(sb);
+    subs = await subcommands(sb, shipped);
   });
 
-  it('[the-engine-r7] over the census roots, private engines included, above the file and verb floors, the only help arms are the allow list, the flagged count equal to the list', async () => {
+  it('[the-engine-r7] over the census roots, private engines included, above the file and verb floors, no script carries a help arm', async () => {
     const files = censusFiles();
     expect(files.length).toBeGreaterThanOrEqual(FILE_FLOOR);
     expect(files.filter((f) => /^# summary: /m.test(readFileSync(f, 'utf8'))).length).toBeGreaterThanOrEqual(VERB_FLOOR);
@@ -96,8 +101,24 @@ describe.concurrent('the verb help census: the engine owns a sole -h or --help a
     expect(files).toContain(join(ROOT, 'base/.contexture/modules/store/scripts/store'));
     const r = await census(files);
     expect(r.code).toBe(0);
-    expect(arms(r.stdout)).toEqual(ALLOW);
-    expect(r.stdout.trimEnd().split('\n').pop()).toBe(`files ${files.length} arms ${ALLOW.length}`);
+    expect(arms(r.stdout)).toEqual([]);
+    expect(r.stdout.trimEnd().split('\n').pop()).toBe(`files ${files.length} arms 0`);
+  });
+
+  it('[the-engine-r7, the-engine-r4] every declared subcommand\'s sole -h and --help print ctx <module> help <verb> <sub> byte for byte on stdout rc 0 with an empty stderr, its first line naming the subcommand', async () => {
+    const per = (m: string, v: string): number => subs.filter(([a, b]) => a === m && b === v).length;
+    expect([per('unit', 'entry'), per('unit', 'finding'), per('unit', 'task'), per('store', 'config'), per('ast-doc-graph', 'query')]).toEqual([3, 6, 8, 5, 7]);
+    expect(subs).toHaveLength(SUB_COUNT);
+    const bad = (
+      await Promise.all(
+        subs.map(async ([m, v, s]) => {
+          const [t, h, help] = await Promise.all([ctx(sb, m, 'help', v, s), ctx(sb, m, v, s, '-h'), ctx(sb, m, v, s, '--help')]);
+          const head = t.code === 0 && t.stderr === '' && t.stdout.startsWith(`ctx ${m} ${v} ${s}`) ? [] : [`ctx ${m} help ${v} ${s}: rc ${t.code}: ${t.stderr.split('\n')[0]}`];
+          return [...head, ...[h, help].flatMap((r, i) => (r.code === 0 && r.stderr === '' && r.stdout === t.stdout ? [] : [`ctx ${m} ${v} ${s} ${i ? '--help' : '-h'}: rc ${r.code}: ${r.stderr.split('\n')[0]}`]))];
+        }),
+      )
+    ).flat();
+    expect(bad).toEqual([]);
   });
 
   it('[the-engine-r7] the census reads the five planted help arms and none of the five non help arms', async () => {

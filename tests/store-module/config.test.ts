@@ -38,6 +38,7 @@ describe.concurrent('ctx store config', () => {
       ['store', 'config', 'unset', '--help'],
       ['store', 'config', 'schema', '--help'],
       ['store', 'help', 'config'],
+      ['store', 'help', 'config', 'set'],
     ];
     for (const args of forms) {
       const r = await run(sb, args);
@@ -47,11 +48,21 @@ describe.concurrent('ctx store config', () => {
       expect(r.stdout).not.toMatch(/\.contexture\/config|\.contexture\/modules/);
     }
     expect((await run(sb, ['store', 'config', '--help'])).stdout).toBe((await run(sb, ['store', 'help', 'config'])).stdout);
+    const table = (await run(sb, ['store', 'help', 'config'])).stdout;
+    expect(table.split(/^subcommands:$/m)[1]?.split('\n\n')[0]?.trim().split('\n').map((l) => l.trim().split(/ +/)[0])).toEqual(['load', 'get', 'set', 'unset', 'schema']);
+    for (const s of ['load', 'get', 'set', 'unset', 'schema']) {
+      const section = (await run(sb, ['store', 'help', 'config', s])).stdout;
+      expect(section).toMatch(new RegExp(`^ctx store config ${s}: `));
+      expect(section).toMatch(new RegExp(`^ {2}ctx store config ${s}( |$)`, 'm'));
+      for (const flag of ['--help', '-h']) expect((await run(sb, ['store', 'config', s, flag])).stdout).toBe(section);
+    }
+    expect((await run(sb, ['store', 'help', 'config', 'set'])).stdout).toContain('validates storage driver selection');
     expect((await run(sb, ['store', 'config'])).stdout).not.toMatch(/^ {2}help /m);
-    for (const args of [['store', 'config', 'help'], ['store', 'config', 'help', '--help']]) {
+    for (const args of [['store', 'config', 'help'], ['store', 'config', 'help', '--help'], ['store', 'help', 'config', 'help']]) {
       const r = await run(sb, args);
       expect([r.code, r.stdout], args.join(' ')).toEqual([1, '']);
-      expect(r.stderr).toContain("unknown subcommand 'help'");
+      expect(r.stderr.split('\n')[0]).toBe('ctx: store config: unknown subcommand: help');
+      expect(r.stderr).toContain(table);
     }
   });
 
@@ -237,12 +248,13 @@ describe.concurrent('ctx store config', () => {
     for (const args of [
       ['store', 'config', 'load', '--bad'],
       ['store', 'config', 'schema', '--bad'],
-      ['store', 'config', 'help', 'load', 'extra'],
     ]) {
       const r = await run(sb, args);
       expect([r.code, r.stdout], args.join(' ')).toEqual([1, '']);
       expect(r.stderr).toContain('ERR_INVALID_ARGUMENT');
     }
+    const helpWord = await run(sb, ['store', 'config', 'help', 'load', 'extra']);
+    expect([helpWord.code, helpWord.stdout, helpWord.stderr.split('\n')[0]]).toEqual([1, '', 'ctx: store config: unknown subcommand: help']);
 
     writeFileSync(join(sb, '.contexture/storage.conf'), 'storage.driver: alt\n');
     const fromConf = await run(sb, ['store', 'config', 'set', 'driver', 'posix']);

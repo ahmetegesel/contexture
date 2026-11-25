@@ -40,20 +40,17 @@ function toFallback(sb: string, slug: string): void {
 
 const hitsOf = (rows: readonly Row[]): string[] => rows.flatMap((r) => r.out.split('\n').filter(leaks).map((l) => `${r.key}: ${l}`));
 
-const listed = (help: string): [string, string][] =>
-  ((help.split(/^verbs:$/m)[1] ?? '').split(/\n\n/)[0] ?? '')
+const listed = (help: string, head: string): string[] =>
+  ((help.split(new RegExp(`^${head}:$`, 'm'))[1] ?? '').split(/\n\n/)[0] ?? '')
     .split('\n')
     .filter((l) => /^ {2}[a-z]/.test(l))
-    .map((l) => {
-      const m = /^ {2}(\S+) +(.*)$/.exec(l);
-      return [m?.[1] ?? '', m?.[2] ?? ''];
-    });
+    .map((l) => l.trim().split(/ +/)[0]!);
 
 async function readTables(sb: string): Promise<Tables> {
   const tables: Tables = new Map();
   for (const module of MODULES) {
     const verbs = new Map<string, string[]>();
-    for (const [verb, summary] of listed((await run(sb, [module, 'help'])).stdout)) verbs.set(verb, /\(([a-z, ]+)\)$/.exec(summary)?.[1]?.split(/, */) ?? []);
+    for (const verb of listed((await run(sb, [module, 'help'])).stdout, 'verbs')) verbs.set(verb, listed((await run(sb, [module, 'help', verb])).stdout, 'subcommands'));
     tables.set(module, verbs);
   }
   return tables;
@@ -241,8 +238,10 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
     const keys = new Set(rows.map((r) => r.key));
     expect(want.filter((k) => !keys.has(k))).toEqual([]);
     expect(rows.filter((r) => r.key === 'unit fold').length).toBe(3);
-    expect(keyOf(tables, ['lane', 'show', 'cu', 'cl', 'journal'])).toBe('lane show journal');
+    expect(keyOf(tables, ['lane', 'show', 'cu', 'cl', 'journal'])).toBe('lane show');
     expect(keyOf(tables, ['unit', 'task', 'add', 'cu', 't1'])).toBe('unit task add');
+    expect(keyOf(tables, ['store', 'config', 'get', 'driver'])).toBe('store config get');
+    expect([...tables.get('unit')!].filter(([, subs]) => subs.length).map(([v, subs]) => `${v} ${subs.length}`)).toEqual(['entry 3', 'finding 6', 'task 8']);
   });
 
   it('[the-record-r14, the-record-r-4gj4k] every row answers rc 0, the legacy unit read before its first landing write, the store swept after', () => {

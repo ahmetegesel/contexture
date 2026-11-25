@@ -1,36 +1,29 @@
 #!/bin/sh
 # summary: task operations (add, update, start, complete, reopen, drop, list, show)
 # usage: ctx unit task <subcommand> <unit> [args...]
-# help: subcommands:
-# help:   add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
-# help:   update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
-# help:   start <unit> <slug>
-# help:   complete <unit> <slug> --evidence="..."
-# help:   reopen <unit> <slug>
-# help:   drop <unit> <slug> [--reason="..."]
-# help:   list <unit> [--status=todo|progress|done|all] [--json]
-# help:   show <unit> <slug> [--json]
 # help: --refs takes the references blank or comma separated (brackets optional), each a full address <owner>#<path> (unit#<unit>/task/<slug> and the other record addresses, file#<path>[#<symbol>], store#<container>/<id>, docs#<repo>/<slug>/<id>), without control characters or double quotes, its target checked through its owner's get before any write (a short or legacy form refuses naming its full address); an update with --refs replaces the list, --refs="" clears it
-# help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --objective, --desc, --criteria, or --details carrying no field
 # help: the unit module holds the record rules: a CLOSED unit refuses every write; start moves only a TODO task, complete a TODO or IN_PROGRESS task, reopen an IN_PROGRESS or DONE task; drop refuses an IN_PROGRESS task (reopen it first); complete and drop write their receipt entry (backlog/<slug>: DONE (<evidence>), DROPPED (<reason>)) in the same write
 # help: add, start, complete, reopen, and drop fire the task-landing hooks (CTX_ACT add, start, complete, reopen, or drop; CTX_SLUGS the task)
 # help: a malformed slug (letters, digits, underscore, dash; starts alphanumeric) refuses rc 1 before any driver call
+# subcommand: add declare a task in the backlog
+# usage: ctx unit task add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
+# subcommand: update rewrite a task's fields
+# usage: ctx unit task update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]
+# help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --objective, --desc, --criteria, or --details carrying no field
+# subcommand: start move a TODO task to IN_PROGRESS
+# usage: ctx unit task start <unit> <slug>
+# subcommand: complete move a task to DONE with its receipt entry
+# usage: ctx unit task complete <unit> <slug> --evidence="..."
+# subcommand: reopen move an IN_PROGRESS or DONE task back to TODO
+# usage: ctx unit task reopen <unit> <slug>
+# subcommand: drop remove a task with its receipt entry
+# usage: ctx unit task drop <unit> <slug> [--reason="..."]
+# subcommand: list list the backlog's tasks
+# usage: ctx unit task list <unit> [--status=todo|progress|done|all] [--json]
+# subcommand: show print one task
+# usage: ctx unit task show <unit> <slug> [--json]
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
-
-help_table() {
-  printf 'usage: ctx unit task <subcommand> <unit> [args...]\n'
-  printf 'subcommands:\n'
-  printf '  add <unit> <slug> --objective="..." [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
-  printf '  update <unit> <slug> [--objective="..."] [--desc="..."] [--criteria="..."] [--details="..."] [--refs="..."]\n'
-  printf '  update reads no stdin; an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT)\n'
-  printf '  start <unit> <slug>\n'
-  printf '  complete <unit> <slug> --evidence="..."\n'
-  printf '  reopen <unit> <slug>\n'
-  printf '  drop <unit> <slug> [--reason="..."]\n'
-  printf '  list <unit> [--status=todo|progress|done|all] [--json]\n'
-  printf '  show <unit> <slug> [--json]\n'
-}
 
 require_slug() {
   if ! vb_slug_ok "$1"; then
@@ -83,9 +76,6 @@ fi
 
 subcmd="$1"
 shift
-case "${1:-}" in
-  --help|-h) help_table | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
-esac
 
 unit=""
 slug=""

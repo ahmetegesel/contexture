@@ -1,21 +1,17 @@
 #!/bin/sh
 # summary: journal entry operations (show, list, closure)
 # usage: ctx unit entry <subcommand> <unit> [args...]
-# help: subcommands:
-# help:   show <unit> <slug> [--json]
-# help:   list <unit> [--anchor=A<N>] [--group=...] [--json]
-# help:   closure <unit> <slug> [--json]
-# help: show prints the entry's canonical block (the last occurrence of a repeated legacy slug); list prints one line per entry occurrence; closure prints whether the entry is closed and every later closer naming it (positional: a closer closes the occurrences before it)
+# subcommand: show print one entry's canonical block
+# usage: ctx unit entry show <unit> <slug> [--json]
+# help: prints the entry's canonical block, the last occurrence of a repeated legacy slug
+# subcommand: list list the journal's entries
+# usage: ctx unit entry list <unit> [--anchor=A<N>] [--group=...] [--json]
+# help: prints one line per entry occurrence, filtered by anchor or group
+# subcommand: closure tell whether an entry is closed
+# usage: ctx unit entry closure <unit> <slug> [--json]
+# help: prints whether the entry is closed and every later closer naming it (positional: a closer closes the occurrences before it)
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
-
-help_table() {
-  printf 'usage: ctx unit entry <subcommand> <unit> [args...]\n'
-  printf 'subcommands:\n'
-  printf '  show <unit> <slug> [--json]\n'
-  printf '  list <unit> [--anchor=A<N>] [--group=...] [--json]\n'
-  printf '  closure <unit> <slug> [--json]\n'
-}
 
 if [ $# -eq 0 ]; then
   printf 'usage: ctx unit entry <subcommand> <unit> [args...]\n' >&2
@@ -25,9 +21,6 @@ fi
 
 subcmd="$1"
 shift
-case "${1:-}" in
-  --help|-h) help_table | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
-esac
 
 case "$subcmd" in
   show|closure)
@@ -78,11 +71,7 @@ case "$subcmd" in
     ;;
 
   *)
-    unit="$subcmd"
-    if [ $# -eq 0 ]; then
-      exec sh "$0" list "$unit"
-    else
-      exec sh "$0" show "$unit" "$@"
-    fi
+    printf "entry: error: unknown subcommand '%s' (show, list, closure) (ERR_INVALID_ARGUMENT)\n" "$subcmd" >&2
+    exit 1
     ;;
 esac

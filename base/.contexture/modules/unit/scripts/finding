@@ -1,30 +1,23 @@
 #!/bin/sh
 # summary: finding operations (add, show, update, supersede, drop, list)
 # usage: ctx unit finding <subcommand> <unit> [args...]
-# help: subcommands:
-# help:   add <unit> <NAME> --summary="..." [--ref=...]... [--supersedes=...]
-# help:   show <unit> <NAME> [--json]
-# help:   update <unit> <NAME> [--summary="..."] [--ref=...]...
-# help:   supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]...
-# help:   drop <unit> <NAME>
-# help:   list <unit> [--active-only] [--json]
 # help: --ref repeats (one REF line each), each a full address <owner>#<path> (unit#<unit>/entry/<slug>, unit#<unit>/task/<slug>, unit#<unit>/finding/<NAME>, unit#<unit>/lane/<lane>/<artifact>[/<SECTION or slug>], file#<path>[#<symbol>], store#<container>/<id>, docs#<repo>/<slug>/<id>), one token without blanks, control characters, or double quotes, its target checked through its owner's get before any write (a short or legacy form refuses naming its full address); an update with --ref replaces the list
-# help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --summary carrying no field
 # help: the unit module holds the record rules: a CLOSED unit refuses every write; a NAME the knowledge already carries is refused (rc 1, ERR_ENTITY_EXISTS), a missing predecessor too (ERR_ENTITY_NOT_FOUND); a new NAME is upper case letters, digits, and underscores
+# subcommand: add add a finding to the knowledge
+# usage: ctx unit finding add <unit> <NAME> --summary="..." [--ref=...]... [--supersedes=...]
+# subcommand: show print one finding
+# usage: ctx unit finding show <unit> <NAME> [--json]
+# subcommand: update rewrite a finding's summary or refs
+# usage: ctx unit finding update <unit> <NAME> [--summary="..."] [--ref=...]...
+# help: update takes its fields from the flags alone (stdin is not read); an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT), an empty --summary carrying no field
+# subcommand: supersede replace a finding with its successor
+# usage: ctx unit finding supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]...
+# subcommand: drop remove a finding
+# usage: ctx unit finding drop <unit> <NAME>
+# subcommand: list list the knowledge's findings
+# usage: ctx unit finding list <unit> [--active-only] [--json]
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
-
-help_table() {
-  printf 'usage: ctx unit finding <subcommand> <unit> [args...]\n'
-  printf 'subcommands:\n'
-  printf '  add <unit> <NAME> --summary="..." [--ref=...] [--supersedes=...]\n'
-  printf '  show <unit> <NAME> [--json]\n'
-  printf '  update <unit> <NAME> [--summary="..."] [--ref=...]\n'
-  printf '  update reads no stdin; an update with no field refuses rc 1 (ERR_INVALID_ARGUMENT)\n'
-  printf '  supersede <unit> <old-name> <new-name> --summary="..." [--ref=...]\n'
-  printf '  drop <unit> <NAME>\n'
-  printf '  list <unit> [--active-only] [--json]\n'
-}
 
 validate_finding_name() {
   case "$1" in
@@ -54,9 +47,6 @@ fi
 
 subcmd="$1"
 shift
-case "${1:-}" in
-  --help|-h) help_table | awk -v s="$subcmd" 'NR == 1 || $1 == s'; exit 0 ;;
-esac
 
 summary=""; has_summary=0
 supersedes=""
@@ -257,11 +247,7 @@ case "$subcmd" in
     ;;
 
   *)
-    unit="$subcmd"
-    if [ $# -eq 0 ]; then
-      exec sh "$0" list "$unit"
-    else
-      exec sh "$0" show "$unit" "$@"
-    fi
+    printf "finding: error: unknown subcommand '%s' (add, show, update, supersede, drop, list) (ERR_INVALID_ARGUMENT)\n" "$subcmd" >&2
+    exit 1
     ;;
 esac
