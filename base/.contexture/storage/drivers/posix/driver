@@ -153,8 +153,10 @@ SCRATCH_FAILED="cannot write the driver's scratch file"
 # script; the posix mapping is <root>/<key><suffix> under the workspace root, the root
 # store-data answers (the declared one, or the namespace when none is declared or the
 # module is installed under an alias).
-# Keys are exact, ASCII-case-fold twins never coexist, list is bytewise
-# and filtered by the module pattern, put is a same-directory temp moved over the key
+# Keys are exact and meet the storage core's one key rule (store-key.awk), no two keys'
+# leading runs of segments fold onto each other under ASCII case, list is bytewise and
+# filtered by the key rule and the module pattern, put is a same-directory temp (a dot, the
+# key file name, then the mktemp tail, a name the key rule refuses) moved over the key
 # under one namespace scope lock, and the change log belongs to a store driver (posix
 # keeps none). The batch holds that same namespace lock once, validates its whole action
 # list, stages a put value per action, and commits every key under one store-scope undo
@@ -331,59 +333,48 @@ store_data() {
   done
   SD_DOCS=${sd_rest%"$SD_NL"}
   STORE_WS=$sd_ws
+  kr_load
 }
 
-# store_key_ok <key>: the generic key rule: no blanks, control characters, leading slash,
-# backslash, or . or .. segment, and every segment non-empty (exact, not folded)
-store_key_ok() {
-  SK_KEY="$1" LC_ALL=C awk 'BEGIN {
-    s = ENVIRON["SK_KEY"]
-    if (s == "") exit 1
-    if (substr(s, 1, 1) == "/" || substr(s, length(s), 1) == "/") exit 1
-    if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
-    n = split(s, p, "/")
-    for (i = 1; i <= n; i++) if (p[i] == "" || p[i] == "." || p[i] == "..") exit 1
-    exit 0
-  }'
+# kr_load: the storage core's one key rule (store-key.awk) in KR, read once per call; every
+# key check, the listing walk, and the leftovers classification run its functions
+KR=""
+kr_load() {
+  [ -z "$KR" ] || return 0
+  kr_ws=$(find_workspace_root)
+  for kr_c in "$SCRIPT_DIR/../../scripts/store-key.awk" "$kr_ws/.contexture/storage/scripts/store-key.awk" \
+              "$kr_ws/base/.contexture/storage/scripts/store-key.awk"; do
+    [ -f "$kr_c" ] && [ -r "$kr_c" ] || continue
+    while IFS= read -r kr_l || [ -n "$kr_l" ]; do KR="$KR$kr_l$SD_NL"; done < "$kr_c"
+    return 0
+  done
+  refuse 2 ERR_STORAGE_READ "the storage core key rule is not installed"
 }
 
-# store_key_shape <pattern> <key>: the key's segments match the module's pattern; every
-# pattern segment is a <name> placeholder and the key's segment count equals the pattern's,
-# except that a final <name...> placeholder admits one or more segments (the variable-depth
-# key that lets a module's main files and its deeper lane files share one pattern)
-store_key_shape() {
-  SSP_P="$1" SSP_K="$2" LC_ALL=C awk 'BEGIN {
-    m = split(ENVIRON["SSP_P"], p, "/")
-    n = split(ENVIRON["SSP_K"], k, "/")
-    if (m < 1) exit 1
-    multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
-    if (multi) { if (n < m) exit 1 } else { if (n != m) exit 1 }
-    for (i = 1; i < m; i++) {
-      if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
-      if (k[i] == "") exit 1
-    }
-    if (multi) {
-      for (i = m; i <= n; i++) if (k[i] == "") exit 1
-    } else {
-      if (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
-      if (k[m] == "") exit 1
-    }
-    exit 0
-  }'
-}
-
-# store_prefix_ok <prefix>: the optional store.list prefix: one literal bytewise key
-# prefix, possibly ending mid-segment or on a slash; no blank, control character,
-# backslash, leading slash, or . or .. segment (a prefix is a filter, not a stored key)
+# store_prefix_ok <list|whole> <prefix>: a store.list prefix (whole segments, then a part of
+# one, or a slash) or a whole segment prefix ending in a slash (promote, sweep), under the key rule
 store_prefix_ok() {
-  SP_PREFIX="$1" LC_ALL=C awk 'BEGIN {
+  kr_load
+  SP_MODE=$1 SP_PREFIX=$2 LC_ALL=C awk "$KR"'BEGIN {
     s = ENVIRON["SP_PREFIX"]
-    if (s == "") exit 1
-    if (substr(s, 1, 1) == "/") exit 1
-    if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
-    n = split(s, p, "/")
-    for (i = 1; i <= n; i++) if (p[i] == "." || p[i] == "..") exit 1
-    exit 0
+    exit !(ENVIRON["SP_MODE"] == "list" ? kr_list_prefix(s, "", 0) : kr_whole_prefix(s, "", 0))
+  }'
+}
+
+# store_key_check <key>: malformed when the key rule refuses the key (the namespace's suffix
+# clause included), pattern when the module pattern does not admit it, else nothing
+store_key_check() {
+  kr_load
+  SK_KEY="$1" SSP_P="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" LC_ALL=C awk "$KR"'BEGIN {
+    s = ENVIRON["SK_KEY"]
+    if (!kr_key(s, ENVIRON["SK_SFX"], kr_multi(ENVIRON["SSP_P"]))) { print "malformed"; exit }
+    n = split(s, k, /\//)
+    m = split(ENVIRON["SSP_P"], p, /\//)
+    if (m < 1) { print "pattern"; exit }
+    multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    if (multi) { if (n < m) { print "pattern"; exit } } else if (n != m) { print "pattern"; exit }
+    for (i = 1; i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) { print "pattern"; exit }
+    if (!multi && p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) print "pattern"
   }'
 }
 
@@ -392,18 +383,8 @@ store_prefix_ok() {
 store_key_for() {
   FN=$1
   sk_key=$3
-  sk_bad=$(SK_KEY="$sk_key" SSP_P="$SD_KEYPAT" LC_ALL=C awk 'BEGIN {
-    s = ENVIRON["SK_KEY"]
-    if (s == "" || substr(s, 1, 1) == "/" || substr(s, length(s), 1) == "/" || s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) { print "malformed"; exit }
-    n = split(s, k, "/")
-    for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") { print "malformed"; exit }
-    m = split(ENVIRON["SSP_P"], p, "/")
-    if (m < 1) { print "pattern"; exit }
-    multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
-    if (multi) { if (n < m) { print "pattern"; exit } } else if (n != m) { print "pattern"; exit }
-    for (i = 1; i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) { print "pattern"; exit }
-    if (!multi && p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) print "pattern"
-  }')
+  kr_load
+  sk_bad=$(store_key_check "$sk_key")
   case "$sk_bad" in
     malformed) refuse 1 ERR_INVALID_ARGUMENT "malformed key '$sk_key'" ;;
     pattern) refuse 1 ERR_INVALID_ARGUMENT "key '$sk_key' does not match the namespace pattern '$SD_KEYPAT'" ;;
@@ -477,11 +458,12 @@ store_list_root() {
         ;;
     esac
   fi
-  find "$sl_scan" -type f -print 2>/dev/null | SL_DIR="$sl_dir" SL_SUFFIX="$SD_SUFFIX" SL_KEYPAT="$SD_KEYPAT" SL_PREFIX="$sl_prefix" SL_FIRST="$sl_first" LC_ALL=C awk '
+  kr_load
+  find "$sl_scan" -type f -print 2>/dev/null | SL_DIR="$sl_dir" SL_SUFFIX="$SD_SUFFIX" SL_KEYPAT="$SD_KEYPAT" SL_PREFIX="$sl_prefix" SL_FIRST="$sl_first" LC_ALL=C awk "$KR"'
     BEGIN {
       dir = ENVIRON["SL_DIR"]; sfx = ENVIRON["SL_SUFFIX"]; pre = ENVIRON["SL_PREFIX"]; first = (ENVIRON["SL_FIRST"] != "")
-      m = split(ENVIRON["SL_KEYPAT"], p, "/")
-      for (i = 1; i <= m; i++) multi[i] = (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+      m = split(ENVIRON["SL_KEYPAT"], p, /\//)
+      for (i = 1; i <= m; i++) mul[i] = (p[i] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
     }
     {
       f = $0
@@ -491,20 +473,14 @@ store_list_root() {
         if (length(key) < length(sfx) || substr(key, length(key) - length(sfx) + 1) != sfx) next
         key = substr(key, 1, length(key) - length(sfx))
       }
-      if (key == "") next
-      if (substr(key, 1, 1) == "/" || substr(key, length(key), 1) == "/") next
-      if (key ~ /[[:cntrl:]]/ || index(key, " ") || index(key, "\\")) next
-      n = split(key, k, "/")
-      ok = 1
-      for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") { ok = 0; break }
-      if (!ok) next
-      if (m < 1) next
-      if (multi[m]) { if (n < m) next } else { if (n != m) next }
+      if (m < 1 || !kr_key(key, sfx, mul[m])) next
+      n = split(key, k, /\//)
+      if (mul[m]) { if (n < m) next } else { if (n != m) next }
       for (i = 1; i < m; i++) {
         if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) next
         if (k[i] == "") next
       }
-      if (multi[m]) {
+      if (mul[m]) {
         for (i = m; i <= n; i++) if (k[i] == "") next
       } else {
         if (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) next
@@ -623,10 +599,45 @@ store_key_exists_in() {
   done
 }
 
-# store_twin <key>: a stored key that folds onto <key> under ASCII case without matching it
+# store_twin <key>: the twin pass's line for one put of <key> against the live key list
 store_twin() {
-  store_list_keys | ST_TARGET="$1" LC_ALL=C awk '
-    { t = ENVIRON["ST_TARGET"]; if ($0 != t && tolower($0) == tolower(t)) { print; exit } }'
+  store_list_keys | ST_KEY="$1" LC_ALL=C awk "$KR"'
+    { if ($0 != "") kr_fold_add($0) }
+    END { k = ENVIRON["ST_KEY"]; if (kr_twin(k)) printf "twin\t1\t%s\t%s\t%s\t%s\n", k, KR_TWIN, KR_AT, KR_WHOLE }'
+}
+
+# store_twin_pass <live keys file> <actions file>: the leading run twin pass of the key rule
+# (kr_pass_line) over the live key list, folded once, and the actions in order: nothing, or
+# the first failure's line (twin or missing)
+store_twin_pass() {
+  LC_ALL=C awk "$KR"'{ if (kr_pass_line($0)) exit }' "$1" "$2"
+}
+
+# store_twin_refuse <line> [<action n>]: the refusal of a twin pass failure, ERR_ENTITY_EXISTS
+# for a put whose leading run of segments folds onto a stored run of another spelling (the
+# whole key's line kept when the run is the whole key), ERR_ENTITY_NOT_FOUND for a delete of
+# an absent key; a batch frames it with its action line
+store_twin_refuse() {
+  stf_r=$1
+  stf_kind=${stf_r%%	*}; stf_r=${stf_r#*	}
+  stf_n=${stf_r%%	*}; stf_r=${stf_r#*	}
+  stf_key=${stf_r%%	*}; stf_r=${stf_r#*	}
+  if [ "$stf_kind" = missing ]; then
+    stf_code=ERR_ENTITY_NOT_FOUND; stf_op=delete
+    stf_msg="key '$stf_key' not found in namespace '$SD_NS'"
+  else
+    stf_code=ERR_ENTITY_EXISTS; stf_op=put
+    stf_twin=${stf_r%%	*}; stf_r=${stf_r#*	}
+    stf_at=${stf_r%%	*}; stf_whole=${stf_r#*	}
+    if [ "$stf_whole" = 1 ]; then
+      stf_msg="key '$stf_key' folds onto '$stf_twin' under ASCII case; keys differing only by case never coexist in namespace '$SD_NS'"
+    else
+      stf_msg="key '$stf_key' folds onto '$stf_twin' under ASCII case at its leading segments '$stf_at'; keys whose leading segments differ only by case never coexist in namespace '$SD_NS'"
+    fi
+  fi
+  [ "$FN" = store.batch ] && batch_refuse 1 "$stf_n" "$stf_op" "$stf_key" "$stf_code" "$stf_msg"
+  store_unlock
+  refuse 1 "$stf_code" "$stf_msg"
 }
 
 # store_fold_twin <key> <path>: a stored key whose file the path resolves to while the exact
@@ -684,7 +695,7 @@ store_list() {
   sn_ns=$1
   sn_prefix=${2:-}
   if [ -n "$sn_prefix" ]; then
-    store_prefix_ok "$sn_prefix" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sn_prefix'"
+    store_prefix_ok list "$sn_prefix" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sn_prefix'"
   fi
   store_data store.list "$sn_ns"
   sn_tmp=$(mktemp "$(scratch_dir)/store-keys.XXXXXX" 2>/dev/null) || refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"
@@ -723,14 +734,13 @@ store_get_many() {
   gm_ns=$1
   shift
   store_data store.get "$gm_ns"
-  gm_bad=$(GM_PAT="$SD_KEYPAT" LC_ALL=C awk 'BEGIN {
-    m = split(ENVIRON["GM_PAT"], p, "/")
+  gm_bad=$(GM_PAT="$SD_KEYPAT" GM_SFX="$SD_SUFFIX" LC_ALL=C awk "$KR"'BEGIN {
+    m = split(ENVIRON["GM_PAT"], p, /\//)
     multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
     for (a = 1; a < ARGC; a++) {
       s = ARGV[a]
-      ok = (s != "" && substr(s, 1, 1) != "/" && substr(s, length(s), 1) != "/" && s !~ /[[:cntrl:]]/ && !index(s, " ") && !index(s, "\\"))
-      if (ok) { n = split(s, k, "/"); for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") ok = 0 }
-      if (!ok) { printf "malformed\t%s", s; exit }
+      if (!kr_key(s, ENVIRON["GM_SFX"], multi)) { printf "malformed\t%s", s; exit }
+      n = split(s, k, /\//)
       shape = (m >= 1)
       if (shape) { if (multi) { if (n < m) shape = 0 } else if (n != m) shape = 0 }
       for (i = 1; shape && i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[i] == "") shape = 0
@@ -854,10 +864,7 @@ store_put() {
   trap 'store_cleanup; exit 143' TERM
   store_lock "$sp_ns"
   sp_twin=$(store_twin "$sp_key")
-  if [ -n "$sp_twin" ]; then
-    store_unlock
-    refuse 1 ERR_ENTITY_EXISTS "key '$sp_key' folds onto '$sp_twin' under ASCII case; keys differing only by case never coexist in namespace '$sp_ns'"
-  fi
+  [ -z "$sp_twin" ] || store_twin_refuse "$sp_twin"
   sp_path=$(store_path "$sp_key")
   sp_fold=$(store_fold_twin "$sp_key" "$sp_path")
   if [ -n "$sp_fold" ]; then
@@ -869,7 +876,7 @@ store_put() {
     store_unlock
     refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
   }
-  STORE_TMP=$(mktemp "$sp_path.XXXXXX" 2>/dev/null) || {
+  STORE_TMP=$(mktemp "${sp_path%/*}/.${sp_path##*/}XXXXXX" 2>/dev/null) || {
     store_unlock
     refuse 2 ERR_STORAGE_WRITE "the storage write of key '$sp_key' failed"
   }
@@ -983,8 +990,10 @@ batch_refuse() {
 # batch_key_for <n> <op> <key>: the key rule and the module pattern, framed by the action
 batch_key_for() {
   bk_key=$3
-  store_key_ok "$bk_key" || batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "malformed key '$bk_key'"
-  store_key_shape "$SD_KEYPAT" "$bk_key" || batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "key '$bk_key' does not match the namespace pattern '$SD_KEYPAT'"
+  case "$(store_key_check "$bk_key")" in
+    malformed) batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "malformed key '$bk_key'" ;;
+    pattern) batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "key '$bk_key' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
 }
 
 # batch_close_action: validate the action being parsed and append it to the staging
@@ -1066,29 +1075,15 @@ batch_parse() {
   [ "$SB_N" -gt 0 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "the batch carries no actions"
 }
 
-# batch_validate: the whole action list against the live key set, under the namespace lock;
-# a delete must find the key present at its place in the order, and a put never coexists
-# with an ASCII case twin
+# batch_validate: the whole action list against the live key set in one pass, under the
+# namespace lock: the live list folded once into its leading runs, a delete finding its key
+# live at its place in the order, a put never beside a leading run twin (both checked and
+# applied in action order, the first failing action named)
 batch_validate() {
   SB_LIVE="$STORE_BATCH_STAGE/live"
   { store_list_keys > "$SB_LIVE"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
-  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
-    case "$sb_op" in
-      put)
-        sb_twin=$(SB_T="$sb_key" LC_ALL=C awk 'BEGIN { t = ENVIRON["SB_T"] } { if ($0 != t && tolower($0) == tolower(t)) { print; exit } }' "$SB_LIVE")
-        [ -z "$sb_twin" ] || batch_refuse 1 "$sb_i" put "$sb_key" ERR_ENTITY_EXISTS "key '$sb_key' folds onto '$sb_twin' under ASCII case; keys differing only by case never coexist in namespace '$SB_NS'"
-        scratch_add "$SB_LIVE" '%s\n' "$sb_key" && LC_ALL=C sort -u "$SB_LIVE" -o "$SB_LIVE" 2>/dev/null \
-          || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
-        ;;
-      delete)
-        grep -F -q -x -e "$sb_key" "$SB_LIVE" || batch_refuse 1 "$sb_i" delete "$sb_key" ERR_ENTITY_NOT_FOUND "key '$sb_key' not found in namespace '$SB_NS'"
-        scratch_new "$SB_LIVE.next" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
-        { grep -F -v -x -e "$sb_key" "$SB_LIVE" > "$SB_LIVE.next"; } 2>/dev/null
-        [ $? -le 1 ] && mv -f "$SB_LIVE.next" "$SB_LIVE" 2>/dev/null \
-          || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
-        ;;
-    esac
-  done < "$STORE_BATCH_STAGE/man"
+  sb_fail=$(store_twin_pass "$SB_LIVE" "$STORE_BATCH_STAGE/man") || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  [ -z "$sb_fail" ] || store_twin_refuse "$sb_fail"
 }
 
 # batch_lift: each action's top key segment folder moved from the fallback root to the root
@@ -1379,7 +1374,7 @@ store_promote() {
   [ $# -eq 2 ] || refuse 1 ERR_INVALID_ARGUMENT "store.promote takes the namespace and a key prefix ending in a slash"
   pm_ns=$1; pm_prefix=$2
   case "$pm_prefix" in
-    */) store_key_ok "${pm_prefix%/}" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$pm_prefix' (whole key segments ending in a slash)" ;;
+    */) store_prefix_ok whole "$pm_prefix" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$pm_prefix' (whole key segments ending in a slash)" ;;
     *) refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$pm_prefix' (whole key segments ending in a slash)" ;;
   esac
   store_data store.promote "$pm_ns"
@@ -1461,16 +1456,26 @@ function admit(p,   key, n, k, i) {
     if (length(key) < length(sfx) || substr(key, length(key) - length(sfx) + 1) != sfx) return 0
     key = substr(key, 1, length(key) - length(sfx))
   }
-  if (key == "" || substr(key, 1, 1) == "/" || substr(key, length(key), 1) == "/") return 0
-  if (key ~ /[[:cntrl:]]/ || index(key, " ") || index(key, "\\")) return 0
-  n = split(key, k, "/")
-  for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") return 0
+  if (!kr_key(key, sfx, multi)) return 0
+  n = split(key, k, /\//)
   if (m < 1) return 0
   if (multi) { if (n < m) return 0 } else if (n != m) return 0
   for (i = 1; i < m; i++) if (pp[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) return 0
   if (!multi && pp[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) return 0
   KEY_OF = key
   return 1
+}
+function refused(p,   key, n, k, i) {
+  key = p
+  if (sfx != "") {
+    if (length(key) < length(sfx) || substr(key, length(key) - length(sfx) + 1) != sfx) return 0
+    key = substr(key, 1, length(key) - length(sfx))
+  }
+  if (key == "" || m < 1) return 0
+  n = split(key, k, /\//)
+  if (multi) { if (n < m) return 0 } else if (n != m) return 0
+  for (i = 1; i <= n; i++) if (k[i] == "" || substr(k[i], 1, 1) == ".") return 0
+  return !kr_key(key, sfx, multi)
 }
 function isdoc(key,   n, ks, j, i, ok) {
   if (ndp == 0) return 1
@@ -1512,15 +1517,19 @@ function lo_init(   j, i, nd0, D0, T) {
 # holding a newline was found; LO_PASS=walk (the probe) and LO_PASS=sweep (the sweep's plan)
 # classify: a regular file the pattern admits is a key (written to LO_KEYS when set; in the
 # fallback a key LO_SHADOW names is a shadowed key), a document or a key outside the document
-# rules (LO_FUNCS); each folder above a key is a key folder (and every folder LO_CTX names, the
+# rules (LO_FUNCS); a regular file whose suffix and segment count the pattern admits while the
+# key rule refuses its name (refused, a name opening with a dot aside) is a refused key; each
+# folder above a key, or above a refused key outside the loose sweep, is a key folder (and
+# every folder LO_CTX names, the
 # ancestors of a sweep's prefix folder, which the walk does not list), and each folder above a
 # folder the walk cannot read or enter (named in LO_UNREAD) or above a name holding a newline
 # is an open folder; the entries of the root, of a key folder, and of an open folder are
 # classified one by one, every other entry belongs to the folder above it that holds no key.
 # Such a folder: unreadable, a lock remnant (.lock or *.lock), a non-key folder (it holds a
 # file, link, or special file), else empty; its bytes the regular files below it. A file: a
-# key outside the document rules, a shadowed key, a lock or write remnant (a lock name, or
-# <key file name>.XXXXXX, a killed writer's temp), else a stray file; a link and a special file
+# key outside the document rules, a shadowed key, a lock or write remnant (a lock name, or a
+# killed writer's temp: .<key file name>XXXXXX, or the older <key file name>.XXXXXX), a
+# refused key, else a stray file; a link and a special file
 # count apart; the names holding a newline count as their own kind, their bytes LO_NLBYTES.
 # The probe prints one JSON object {state, entries, keys, documents, kinds}, never a path.
 # The sweep never plans an unreadable folder (it counts them as left) and moves a key folder
@@ -1550,6 +1559,7 @@ function tempname(nm,   L, ls) {
   L = length(nm); ls = length(sfx)
   if (L < ls + 8) return 0
   if (substr(nm, L - 5) !~ /^[A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9][A-Za-z0-9]$/) return 0
+  if (substr(nm, 1, 1) == ".") return substr(nm, L - 5 - ls, ls) == sfx
   if (substr(nm, L - 6, 1) != ".") return 0
   return substr(nm, L - 6 - ls, ls) == sfx
 }
@@ -1627,7 +1637,10 @@ END {
     for (q = pa; q != ""; q = parent(q)) HOLD[q] = 1
     if (t != "f") continue
     for (q = pa; q != ""; q = parent(q)) BY[q] += SZ[p]
-    if (!admit(p)) continue
+    if (!admit(p)) {
+      if (!loose && refused(p)) { RK[p] = 1; for (q = pa; q != ""; q = parent(q)) HK[q] = 1 }
+      continue
+    }
     for (q = pa; q != ""; q = parent(q)) HK[q] = 1
     if (KEY_OF in SHADOW) { SH[p] = 1; continue }
     KEY[p] = 1; nk++
@@ -1657,6 +1670,7 @@ END {
     else if (p in KEY) continue
     else if (p in SH) { k = "shadowed_keys"; b = SZ[p] }
     else if (lockname(nm) || tempname(nm)) { k = "remnants"; b = SZ[p] }
+    else if (p in RK) { k = "refused_keys"; b = SZ[p] }
     else { k = "stray_files"; b = SZ[p] }
     if (sweep && k == "unreadable_folders") { left++; continue }
     tally(k, b)
@@ -1676,7 +1690,7 @@ END {
   else printf "{\"state\":\"walked\",\"entries\":%.0f,\"keys\":%.0f,\"documents\":%.0f,\"kinds\":{", nt + nn, nk + 0, nd + 0
   kind("stray_files"); kind("nonkey_folders"); kind("empty_folders"); kind("links")
   kind("special_files"); kind("unreadable_folders"); kind("remnants"); kind("shadowed_keys")
-  kind("outside_keys"); kind("newline_names", 1)
+  kind("outside_keys"); kind("refused_keys"); kind("newline_names", 1)
   if (sweep) printf "},\"emptied\":%.0f,\"left\":%.0f}", ne + 0, left + 0
   else printf "}}"
 }'
@@ -1732,7 +1746,7 @@ lo_root() {
       exit 0
     ) > "$lr_walk" 2>/dev/null || return 1
   fi
-  LO_PASS=empty LC_ALL=C awk "$LO_AWK" "$lr_walk" > "$lr_walk.e" 2>/dev/null
+  LO_PASS=empty LC_ALL=C awk "$KR$LO_AWK" "$lr_walk" > "$lr_walk.e" 2>/dev/null
   case $? in 0) ;; 3) return 3 ;; *) return 1 ;; esac
   lr_nl=0
   while IFS= read -r lr_e; do
@@ -1752,7 +1766,7 @@ lo_root() {
   [ -z "$lr_items" ] || lr_pass=sweep
   LO_PASS=$lr_pass LO_SFX="$SD_SUFFIX" LO_KEYPAT="$SD_KEYPAT" LO_DOCS="$LO_DOCS" LO_UNREAD="$lr_walk.u" LO_KEYS="$lr_keys" \
     LO_SHADOW="$lr_shadow" LO_ITEMS="$lr_items" LO_CTX="$lr_ctx" LO_LOOSE="$lr_loose" LO_NLBYTES="$lr_nlb" \
-    LC_ALL=C awk "$LO_AWK" "$lr_walk" 2>/dev/null
+    LC_ALL=C awk "$KR$LO_AWK" "$lr_walk" 2>/dev/null
   case $? in 0) return 0 ;; 3) return 3 ;; 4) return 4 ;; *) return 1 ;; esac
 }
 
@@ -1774,10 +1788,11 @@ lo_fail() {
 # root, fallback}, each root {state} for absent, link, unreadable, or none (the namespace
 # declares no fallback root), else {state: walked, entries, keys, documents, kinds}, the
 # kinds stray_files, nonkey_folders, empty_folders, links, special_files, unreadable_folders,
-# remnants, shadowed_keys, outside_keys, and newline_names, each {count, bytes}, in that
-# order; a fallback key the root also holds is a shadowed key, never a key, and keys splits
-# into documents and the outside_keys count. It prints no fallback notice, since it serves no
-# key.
+# remnants, shadowed_keys, outside_keys, refused_keys, and newline_names, each {count, bytes},
+# in that order; a fallback key the root also holds is a shadowed key, never a key, keys
+# splits into documents and the outside_keys count, and a refused key (a file the suffix and
+# segment count admit whose name the key rule refuses) is never a key. It prints no fallback
+# notice, since it serves no key.
 storage_leftovers() {
   store_data storage.leftovers "$1"
   LO_DOCS=$(lo_docs)
@@ -1923,7 +1938,7 @@ sw_guard() {
       -o -exec printf 'o\t%s\n' {} +
     exit 0
   ) < /dev/null > "$sg_f.g" 2>/dev/null || sw_refuse "$SCRATCH_FAILED"
-  LO_SFX="$SD_SUFFIX" LO_KEYPAT="$SD_KEYPAT" LO_DOCS="$LO_DOCS" LC_ALL=C awk "$LO_FUNCS$SW_GUARD_AWK" "$sg_f.g" > "$sg_f.o" 2>/dev/null \
+  LO_SFX="$SD_SUFFIX" LO_KEYPAT="$SD_KEYPAT" LO_DOCS="$LO_DOCS" LC_ALL=C awk "$KR$LO_FUNCS$SW_GUARD_AWK" "$sg_f.g" > "$sg_f.o" 2>/dev/null \
     || sw_refuse "$SCRATCH_FAILED"
   while IFS= read -r sg_l; do
     case "$sg_l" in
@@ -2092,7 +2107,7 @@ storage_sweep() {
       --prefix=*)
         sw_prefix=${sw_a#--prefix=}
         case "$sw_prefix" in
-          */) store_key_ok "${sw_prefix%/}" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sw_prefix' (whole key segments ending in a slash)" ;;
+          */) store_prefix_ok whole "$sw_prefix" || refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sw_prefix' (whole key segments ending in a slash)" ;;
           *) refuse 1 ERR_INVALID_ARGUMENT "malformed key prefix '$sw_prefix' (whole key segments ending in a slash)" ;;
         esac
         ;;

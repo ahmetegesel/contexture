@@ -189,7 +189,7 @@ describe('the posix fallback root: reads after the root, writes to the root afte
   it('[the-engine-r-b3r6t] store.promote answers none when the fallback holds nothing for the prefix or the namespace declares no fallback', async () => {
     const sb = fresh(snap);
     plant(sb, 'new-root/a/state.md', 'new a\n');
-    dataFile(sb, 'modules', 'plain', 'key: <u>/<path...>\n');
+    dataFile(sb, 'modules', 'plain', 'key: <u>/<path...>\nsuffix: .md\n');
     const s = store(sb, 'posix');
     expect(answer(await s.op('store.promote', ['legacy', 'a/']), 'store.promote')).toEqual({ namespace: 'legacy', prefix: 'a/', state: 'none' });
     expect(answer(await s.op('store.promote', ['plain', 'a/']), 'store.promote')).toEqual({ namespace: 'plain', prefix: 'a/', state: 'none' });

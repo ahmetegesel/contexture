@@ -39,8 +39,8 @@ export const DOCS_KEYS: [string, Buffer][] = [
   ['workspace/a', Buffer.from('a\n')],
   ['workspace/aa', Buffer.from('aa\n')],
   ['workspace/binary', Buffer.from([0x61, 0x00, 0x62, 0xff])],
-  ['workspace/q"uote', Buffer.from('quote\n')],
-  ['workspace/türkçe', Buffer.from('turkce\n')],
+  ['workspace/q.uote', Buffer.from('quote\n')],
+  ['workspace/u_n-1', Buffer.from('turkce\n')],
 ];
 
 export const listAnswer = (ns: string, keys: readonly string[]) => `${JSON.stringify({ namespace: ns, keys })}\n`;

@@ -12,7 +12,7 @@ import { DRIVERS, fts5Available, stage } from '../support/stage';
 import { store } from '../support/store';
 import { answer, refused } from '../support/wire';
 
-const KINDS = ['stray_files', 'nonkey_folders', 'empty_folders', 'links', 'special_files', 'unreadable_folders', 'remnants', 'shadowed_keys', 'outside_keys', 'newline_names'] as const;
+const KINDS = ['stray_files', 'nonkey_folders', 'empty_folders', 'links', 'special_files', 'unreadable_folders', 'remnants', 'shadowed_keys', 'outside_keys', 'refused_keys', 'newline_names'] as const;
 type Kind = (typeof KINDS)[number];
 type Swept = { state: string; kinds?: Record<Kind, { count: number; bytes: number }>; emptied?: number; left?: number };
 type Answer = { driver: string; namespace: string; mode: string; dry_run: boolean; stamp: string | null; root: Swept; fallback: Swept };
@@ -98,7 +98,7 @@ async function planted(label: string): Promise<string> {
   return sb;
 }
 
-const ROOT_KINDS = kinds({ stray_files: [3, 11], nonkey_folders: [2, 6], empty_folders: [2, 0], links: [1, 0], special_files: [1, 0], remnants: [2, 6], outside_keys: [2, 13] });
+const ROOT_KINDS = kinds({ stray_files: [2, 9], nonkey_folders: [2, 6], empty_folders: [2, 0], links: [1, 0], special_files: [1, 0], remnants: [2, 6], outside_keys: [2, 13], refused_keys: [1, 2] });
 const FALLBACK_KINDS = kinds({ nonkey_folders: [1, 4], remnants: [1, 0], shadowed_keys: [1, 7] });
 const MOVED_ROOT = [
   'gone/', 'gone/a/', 'gone/a/b/', 'top.md=top\n', 'u1/', 'u1/.lock/', 'u1/.lock/pid=123', 'u1/bad name.md=bl', 'u1/dangling -> nowhere', 'u1/empty/', 'u1/fifo (fifo)',
@@ -153,7 +153,7 @@ describe('the sweep on posix', { concurrent: true }, () => {
     expect(counts(run)).toEqual({ root: { state: 'walked', kinds: kinds({ outside_keys: [1, 5] }), emptied: 1, left: 0 }, fallback: { state: 'walked', kinds: kinds(), emptied: 0, left: 0 } });
     expect(existsSync(join(sb, RECORD_ROOT, 'u2'))).toBe(false);
     const u1 = await sweep(sb, 'unit', '--prefix=u1/');
-    expect(u1.root.kinds).toEqual(kinds({ stray_files: [2, 7], nonkey_folders: [2, 6], empty_folders: [1, 0], links: [1, 0], special_files: [1, 0], remnants: [2, 6], outside_keys: [1, 8] }));
+    expect(u1.root.kinds).toEqual(kinds({ stray_files: [1, 5], nonkey_folders: [2, 6], empty_folders: [1, 0], links: [1, 0], special_files: [1, 0], remnants: [2, 6], outside_keys: [1, 8], refused_keys: [1, 2] }));
     expect(u1.fallback).toEqual({ state: 'walked', kinds: kinds({ shadowed_keys: [1, 7] }), emptied: 1, left: 0 });
     expect(tree(join(sb, RECORD_ROOT))).toEqual(['gone/', 'gone/a/', 'gone/a/b/', 'top.md=top\n', ...LEFT_ROOT]);
     expect(tree(join(sb, FALLBACK_ROOT))).toEqual(['.lock/', 'fb-old/', 'fb-old/x/', 'fb-old/x/y.txt=old\n']);

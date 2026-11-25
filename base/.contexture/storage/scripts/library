@@ -337,12 +337,13 @@ store_sweep() { store_lib_own storage.sweep "$@"; }
 # one table the probe's and the sweep's text forms read (kinds_init fills KIND, NK, and NAME)
 STORE_KINDS_AWK='
 function kinds_init() {
-  NK = split("stray_files nonkey_folders empty_folders links special_files unreadable_folders remnants shadowed_keys outside_keys newline_names", KIND, " ")
+  NK = split("stray_files nonkey_folders empty_folders links special_files unreadable_folders remnants shadowed_keys outside_keys refused_keys newline_names", KIND, " ")
   NAME["stray_files"] = "stray files"; NAME["nonkey_folders"] = "folders outside the key shape"
   NAME["empty_folders"] = "empty folders"; NAME["links"] = "symbolic links"
   NAME["special_files"] = "special files"; NAME["unreadable_folders"] = "unreadable folders"
   NAME["remnants"] = "lock or write remnants"; NAME["shadowed_keys"] = "keys the root shadows"
-  NAME["outside_keys"] = "keys outside the document rules"; NAME["newline_names"] = "names holding a newline"
+  NAME["outside_keys"] = "keys outside the document rules"; NAME["refused_keys"] = "keys the key rule refuses"
+  NAME["newline_names"] = "names holding a newline"
 }
 function ld(line,   p) {
   if (!match(line, /[=:#]/)) return

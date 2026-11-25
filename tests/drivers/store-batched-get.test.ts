@@ -12,8 +12,8 @@ import { answer, refused } from '../support/wire';
 const LIBRARY = '.contexture/storage/scripts/library';
 const RICH = Buffer.from('say "hi" \\ back\\n\ttab\rcr\u0001one\u001fus\u007fdel çay\nnext line');
 const RICH_JSON = 'say \\"hi\\" \\\\ back\\\\n\\ttab\\rcr\\u0001one\\u001fus\u007fdel çay\\nnext line';
-const ASKED = ['workspace/türkçe', 'workspace/a', 'workspace/missing', 'workspace/binary', 'workspace/q"uote', 'workspace/a'];
-const ASKED_ANSWER = '{"namespace":"docs","items":[{"key":"workspace/türkçe","value":"turkce\\n"},{"key":"workspace/a","value":"a\\n"},{"key":"workspace/missing","missing":true},{"key":"workspace/binary","value_b64":"YQBi/w=="},{"key":"workspace/q\\"uote","value":"quote\\n"},{"key":"workspace/a","value":"a\\n"}]}\n';
+const ASKED = ['workspace/u_n-1', 'workspace/a', 'workspace/missing', 'workspace/binary', 'workspace/q.uote', 'workspace/a'];
+const ASKED_ANSWER = '{"namespace":"docs","items":[{"key":"workspace/u_n-1","value":"turkce\\n"},{"key":"workspace/a","value":"a\\n"},{"key":"workspace/missing","missing":true},{"key":"workspace/binary","value_b64":"YQBi/w=="},{"key":"workspace/q.uote","value":"quote\\n"},{"key":"workspace/a","value":"a\\n"}]}\n';
 
 const lib = (sb: string, fn: string, args: string[] = []) => moduleCall(sb, 'docs', join(sb, LIBRARY), fn, args, { input: '', env: { CTX_STORE_ROOT: sb }, root: 'extensions' });
 
@@ -88,10 +88,10 @@ for (const driver of DRIVERS) {
       const sb = fresh(keyed);
       const s = store(sb, driver);
       answer(await s.put('docs', 'workspace/rich', RICH), 'store.put');
-      const keys = ['workspace/rich', 'workspace/gone', 'workspace/binary', 'workspace/q"uote'];
+      const keys = ['workspace/rich', 'workspace/gone', 'workspace/binary', 'workspace/q.uote'];
       const t = targets(sb, 'many', keys);
       const r = await lib(sb, 'store_get_into', [t.file]);
-      expect([r.code, r.stdout, r.stderr]).toEqual([0, '1\tworkspace/rich\n0\tworkspace/gone\n1\tworkspace/binary\n1\tworkspace/q"uote\n', '']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, '1\tworkspace/rich\n0\tworkspace/gone\n1\tworkspace/binary\n1\tworkspace/q.uote\n', '']);
       expect(readFileSync(t.paths[0]!).equals(RICH)).toBe(true);
       expect(readFileSync(t.paths[2]!).equals(Buffer.from([0x61, 0x00, 0x62, 0xff]))).toBe(true);
       expect(readFileSync(t.paths[3]!, 'utf8')).toBe('quote\n');

@@ -13,7 +13,10 @@
 # escaped key=value payload lines (or raw bytes for a put), staged in a per-call scratch
 # folder under the workspace's .contexture/tmp. The answer is one compact JSON line in the
 # contract key order; a refusal is one stderr line "<function>: error: <message> (<CODE>)"
-# with nothing on stdout. Exit tiers: 0 ok, 1 semantic, 2 storage or driver.
+# with nothing on stdout. Exit tiers: 0 ok, 1 semantic, 2 storage or driver. Every key
+# meets the storage core's one key rule (store-key.awk), read for the argument checks and
+# the list and scan filter, and no two keys' leading runs of segments fold onto each other
+# under ASCII case.
 #
 # Writes: one transaction each (BEGIN IMMEDIATE to COMMIT, whole or nothing) under the
 # namespace store lock (.contexture/tmp/locks/store-<namespace>.lock); the answer prints
@@ -371,60 +374,66 @@ store_data() {
   SD_SNIPPET=$(printf '%s\n' "$sd_out" | sed -n '11p')
   SD_DOCS=$(printf '%s\n' "$sd_out" | sed -n '12,$p')
   SD_SIG=$(printf '%s\n' "$SD_FORM" "$SD_FORMAT" "$SD_FIELDS" "$SD_TITLE" "$SD_SNIPPET" "$SD_DOCS" | cksum | awk '{ print $1 "-" $2 }')
+  kr_load
 }
 
-# store_key_ok <key>: the generic key rule: no blanks, control characters, leading slash,
-# backslash, or . or .. segment, and every segment non-empty (exact, not folded)
-store_key_ok() {
-  SK_KEY="$1" LC_ALL=C awk 'BEGIN {
-    s = ENVIRON["SK_KEY"]
-    if (s == "") exit 1
-    if (substr(s, 1, 1) == "/" || substr(s, length(s), 1) == "/") exit 1
-    if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
-    n = split(s, p, "/")
-    for (i = 1; i <= n; i++) if (p[i] == "" || p[i] == "." || p[i] == "..") exit 1
-    exit 0
-  }'
+# kr_load: the storage core's one key rule (store-key.awk) in KR, read once per call; every
+# key check and the list and scan filter run its functions
+KR=""
+KR_NL='
+'
+kr_load() {
+  [ -z "$KR" ] || return 0
+  for kr_c in "$MODULE_DIR/../../storage/scripts/store-key.awk" \
+              "$ROOT/.contexture/storage/scripts/store-key.awk" \
+              "$ROOT/base/.contexture/storage/scripts/store-key.awk"; do
+    [ -f "$kr_c" ] && [ -r "$kr_c" ] || continue
+    while IFS= read -r kr_l || [ -n "$kr_l" ]; do KR="$KR$kr_l$KR_NL"; done < "$kr_c"
+    return 0
+  done
+  refuse 2 ERR_STORAGE_READ "the storage core key rule is not installed"
 }
 
-# store_key_shape <pattern> <key>: the key's segments match the module's pattern; every
-# pattern segment is a <name> placeholder and the key's segment count equals the pattern's,
-# except that a final <name...> placeholder admits one or more segments (the variable-depth
-# key that lets a module's main files and its deeper lane files share one pattern)
-store_key_shape() {
-  SSP_P="$1" SSP_K="$2" LC_ALL=C awk 'BEGIN {
-    m = split(ENVIRON["SSP_P"], p, "/")
-    n = split(ENVIRON["SSP_K"], k, "/")
-    if (m < 1) exit 1
-    multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
-    if (multi) { if (n < m) exit 1 } else { if (n != m) exit 1 }
-    for (i = 1; i < m; i++) {
-      if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
-      if (k[i] == "") exit 1
-    }
-    if (multi) {
-      for (i = m; i <= n; i++) if (k[i] == "") exit 1
-    } else {
-      if (p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) exit 1
-      if (k[m] == "") exit 1
-    }
-    exit 0
-  }'
-}
-
-# store_prefix_ok <prefix>: the optional store.list prefix: one literal bytewise key
-# prefix, possibly ending mid-segment or on a slash; no blank, control character,
-# backslash, leading slash, or . or .. segment (a prefix is a filter, not a stored key)
+# store_prefix_ok <prefix>: the optional store.list prefix (whole segments, then a part of
+# one, or a slash) under the key rule (a prefix is a filter, not a stored key)
 store_prefix_ok() {
-  SP_PREFIX="$1" LC_ALL=C awk 'BEGIN {
-    s = ENVIRON["SP_PREFIX"]
-    if (s == "") exit 1
-    if (substr(s, 1, 1) == "/") exit 1
-    if (s ~ /[[:cntrl:]]/ || index(s, " ") || index(s, "\\")) exit 1
-    n = split(s, p, "/")
-    for (i = 1; i <= n; i++) if (p[i] == "." || p[i] == "..") exit 1
-    exit 0
+  kr_load
+  SP_PREFIX="$1" LC_ALL=C awk "$KR"'BEGIN { exit !kr_list_prefix(ENVIRON["SP_PREFIX"], "", 0) }'
+}
+
+# store_key_check <key>: malformed when the key rule refuses the key (the namespace's suffix
+# clause included), pattern when the module pattern does not admit it, else nothing
+store_key_check() {
+  kr_load
+  SK_KEY="$1" SSP_P="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" LC_ALL=C awk "$KR"'BEGIN {
+    s = ENVIRON["SK_KEY"]
+    if (!kr_key(s, ENVIRON["SK_SFX"], kr_multi(ENVIRON["SSP_P"]))) { print "malformed"; exit }
+    n = split(s, k, /\//)
+    m = split(ENVIRON["SSP_P"], p, /\//)
+    if (m < 1) { print "pattern"; exit }
+    multi = (p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    if (multi) { if (n < m) { print "pattern"; exit } } else if (n != m) { print "pattern"; exit }
+    for (i = 1; i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) { print "pattern"; exit }
+    if (!multi && p[m] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/) print "pattern"
   }'
+}
+
+# store_keys_admit <keys file> [<prefix>]: the stored keys the key rule and the module
+# pattern admit (and that start with the prefix), in one pass, so a listing never names a
+# key a read refuses
+store_keys_admit() {
+  SK_PAT="$SD_KEYPAT" SK_SFX="$SD_SUFFIX" SK_PRE="${2:-}" LC_ALL=C awk "$KR"'
+    BEGIN {
+      m = split(ENVIRON["SK_PAT"], p, /\//); sfx = ENVIRON["SK_SFX"]; pre = ENVIRON["SK_PRE"]
+      multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
+    }
+    {
+      if (m < 1 || !kr_key($0, sfx, multi)) next
+      n = split($0, k, /\//)
+      if (multi) { if (n < m) next } else if (n != m) next
+      if (pre != "" && substr($0, 1, length(pre)) != pre) next
+      print
+    }' "$1"
 }
 
 # store_key_for <function> <namespace> <key>: the key rule and the module pattern before a
@@ -432,8 +441,11 @@ store_prefix_ok() {
 store_key_for() {
   FN=$1
   sk_key=$3
-  store_key_ok "$sk_key" || refuse 1 ERR_INVALID_ARGUMENT "malformed key '$sk_key'"
-  store_key_shape "$SD_KEYPAT" "$sk_key" || refuse 1 ERR_INVALID_ARGUMENT "key '$sk_key' does not match the namespace pattern '$SD_KEYPAT'"
+  kr_load
+  case "$(store_key_check "$sk_key")" in
+    malformed) refuse 1 ERR_INVALID_ARGUMENT "malformed key '$sk_key'" ;;
+    pattern) refuse 1 ERR_INVALID_ARGUMENT "key '$sk_key' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
 }
 
 # store_flags <function> <default op> [flags]: --op=<op> and --head=<sha|none>, bounded
@@ -462,10 +474,43 @@ store_exists() {
   [ "$(sq "$DB_PATH" "SELECT count(*) FROM store WHERE namespace = '$(sql_escape "$1")' AND key = '$(sql_escape "$2")';" 2>/dev/null)" = "1" ]
 }
 
-# store_twin <namespace> <key>: a stored key that folds onto <key> under ASCII case without
-# matching it, else nothing; SQLite's lower() folds ASCII only, as the posix rule does
-store_twin() {
-  sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = '$(sql_escape "$1")' AND lower(key) = lower('$(sql_escape "$2")') AND key <> '$(sql_escape "$2")' ORDER BY key COLLATE BINARY LIMIT 1;" 2>/dev/null
+# store_live <namespace> <file>: the namespace's stored keys, bytewise, one per line
+store_live() {
+  { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$1") ORDER BY key COLLATE BINARY;" > "$2"; } 2>/dev/null
+}
+
+# store_twin_pass <live keys file> <actions file>: the leading run twin pass of the key rule
+# (kr_pass_line) over the live key list, folded once, and the actions in order: nothing, or
+# the first failure's line (twin or missing)
+store_twin_pass() {
+  LC_ALL=C awk "$KR"'{ if (kr_pass_line($0)) exit }' "$1" "$2"
+}
+
+# store_twin_refuse <namespace> <line>: the refusal of a twin pass failure, ERR_ENTITY_EXISTS
+# for a put whose leading run of segments folds onto a stored run of another spelling (the
+# whole key's line kept when the run is the whole key), ERR_ENTITY_NOT_FOUND for a delete of
+# an absent key; a batch frames it with its action line
+store_twin_refuse() {
+  stf_ns=$1; stf_r=$2
+  stf_kind=${stf_r%%	*}; stf_r=${stf_r#*	}
+  stf_n=${stf_r%%	*}; stf_r=${stf_r#*	}
+  stf_key=${stf_r%%	*}; stf_r=${stf_r#*	}
+  if [ "$stf_kind" = missing ]; then
+    stf_code=ERR_ENTITY_NOT_FOUND; stf_op=delete
+    stf_msg="key '$stf_key' not found in namespace '$stf_ns'"
+  else
+    stf_code=ERR_ENTITY_EXISTS; stf_op=put
+    stf_twin=${stf_r%%	*}; stf_r=${stf_r#*	}
+    stf_at=${stf_r%%	*}; stf_whole=${stf_r#*	}
+    if [ "$stf_whole" = 1 ]; then
+      stf_msg="key '$stf_key' folds onto '$stf_twin' under ASCII case; keys differing only by case never coexist in namespace '$stf_ns'"
+    else
+      stf_msg="key '$stf_key' folds onto '$stf_twin' under ASCII case at its leading segments '$stf_at'; keys whose leading segments differ only by case never coexist in namespace '$stf_ns'"
+    fi
+  fi
+  [ "$FN" = store.batch ] && batch_refuse 1 "$stf_n" "$stf_op" "$stf_key" "$stf_code" "$stf_msg"
+  store_cleanup
+  refuse 1 "$stf_code" "$stf_msg"
 }
 
 # store_json <value>: a JSON string body for the bounded store identifiers (a key may hold
@@ -512,13 +557,7 @@ store_list() {
   fi
   sn_filtered=$(mktemp "$(scratch_base)/store-keys-out.XXXXXX" 2>/dev/null) || { rm -f "$sn_tmp"; refuse 2 ERR_STORAGE_WRITE "cannot create the driver's scratch file"; }
   store_temp "$sn_filtered"
-  while IFS= read -r sn_key; do
-    [ -n "$sn_key" ] || continue
-    store_key_ok "$sn_key" || continue
-    store_key_shape "$SD_KEYPAT" "$sn_key" || continue
-    [ -z "$sn_prefix" ] || [ "${sn_key#"$sn_prefix"}" != "$sn_key" ] || continue
-    scratch_add "$sn_filtered" '%s\n' "$sn_key" || { rm -f "$sn_tmp" "$sn_filtered"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
-  done < "$sn_tmp"
+  { store_keys_admit "$sn_tmp" "$sn_prefix" > "$sn_filtered"; } 2>/dev/null || { rm -f "$sn_tmp" "$sn_filtered"; refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"; }
   printf '{"namespace":"%s","keys":[' "$(store_json "$sn_ns")"
   store_json_lines "$sn_filtered"
   rm -f "$sn_tmp" "$sn_filtered"
@@ -535,14 +574,13 @@ store_get_many() {
   gm_ns=$1
   shift
   store_data store.get "$gm_ns"
-  gm_bad=$(GM_PAT="$SD_KEYPAT" LC_ALL=C awk 'BEGIN {
-    m = split(ENVIRON["GM_PAT"], p, "/")
+  gm_bad=$(GM_PAT="$SD_KEYPAT" GM_SFX="$SD_SUFFIX" LC_ALL=C awk "$KR"'BEGIN {
+    m = split(ENVIRON["GM_PAT"], p, /\//)
     multi = (m >= 1 && p[m] ~ /^<[A-Za-z][A-Za-z0-9_]*\.\.\.>$/)
     for (a = 1; a < ARGC; a++) {
       s = ARGV[a]
-      ok = (s != "" && substr(s, 1, 1) != "/" && substr(s, length(s), 1) != "/" && s !~ /[[:cntrl:]]/ && !index(s, " ") && !index(s, "\\"))
-      if (ok) { n = split(s, k, "/"); for (i = 1; i <= n; i++) if (k[i] == "" || k[i] == "." || k[i] == "..") ok = 0 }
-      if (!ok) { printf "malformed\t%s", s; exit }
+      if (!kr_key(s, ENVIRON["GM_SFX"], multi)) { printf "malformed\t%s", s; exit }
+      n = split(s, k, /\//)
       shape = (m >= 1)
       if (shape) { if (multi) { if (n < m) shape = 0 } else if (n != m) shape = 0 }
       for (i = 1; shape && i < m; i++) if (p[i] !~ /^<[A-Za-z][A-Za-z0-9_]*>$/ || k[i] == "") shape = 0
@@ -630,14 +668,15 @@ store_put() {
   }
   db_init
   store_docs_ensure "$sp_ns" "$SD_SIG"
-  if ! sp_twin=$(store_twin "$sp_ns" "$sp_key"); then
+  if ! store_live "$sp_ns" "$SCRATCH/live"; then
     store_cleanup
     refuse 2 ERR_STORAGE_READ "the storage read failed"
   fi
-  if [ -n "$sp_twin" ]; then
+  if ! scratch_new "$SCRATCH/act" || ! scratch_add "$SCRATCH/act" '1\tput\t%s\n' "$sp_key" || ! sp_twin=$(store_twin_pass "$SCRATCH/live" "$SCRATCH/act"); then
     store_cleanup
-    refuse 1 ERR_ENTITY_EXISTS "key '$sp_key' folds onto '$sp_twin' under ASCII case; keys differing only by case never coexist in namespace '$sp_ns'"
+    refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   fi
+  [ -z "$sp_twin" ] || store_twin_refuse "$sp_ns" "$sp_twin"
   sp_core=$(store_search_core) || {
     store_cleanup
     refuse 2 ERR_STORAGE_READ "the storage core search engine is not installed"
@@ -806,8 +845,10 @@ batch_refuse() {
 # batch_key_for <n> <op> <key>: the key rule and the module pattern, framed by the action
 batch_key_for() {
   bk_key=$3
-  store_key_ok "$bk_key" || batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "malformed key '$bk_key'"
-  store_key_shape "$SD_KEYPAT" "$bk_key" || batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "key '$bk_key' does not match the namespace pattern '$SD_KEYPAT'"
+  case "$(store_key_check "$bk_key")" in
+    malformed) batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "malformed key '$bk_key'" ;;
+    pattern) batch_refuse 1 "$1" "$2" "$bk_key" ERR_INVALID_ARGUMENT "key '$bk_key' does not match the namespace pattern '$SD_KEYPAT'" ;;
+  esac
 }
 
 # batch_close_action: validate the action being parsed and append it to the manifest
@@ -889,34 +930,18 @@ batch_parse() {
   [ "$sb_n" -gt 0 ] || batch_refuse 1 1 "?" "?" ERR_INVALID_ARGUMENT "the batch carries no actions"
 }
 
-# batch_validate: the whole action list against the live key set, under the namespace lock;
-# a delete must find the key present at its place in the order, and a put never coexists
-# with an ASCII case twin
+# batch_validate: the whole action list against the live key set in one pass, under the
+# namespace lock: the live list folded once into its leading runs, a delete finding its key
+# live at its place in the order, a put never beside a leading run twin (both checked and
+# applied in action order, the first failing action named)
 batch_validate() {
   scratch_new "$SCRATCH/live" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   if [ -f "$DB_PATH" ]; then
     db_init
-    if ! { sq -bail "$DB_PATH" "SELECT key FROM store WHERE namespace = $(store_sqlq "$sb_ns") ORDER BY key COLLATE BINARY;" > "$SCRATCH/live"; } 2>/dev/null; then
-      refuse 2 ERR_STORAGE_READ "the storage read failed"
-    fi
+    store_live "$sb_ns" "$SCRATCH/live" || refuse 2 ERR_STORAGE_READ "the storage read failed"
   fi
-  while IFS='	' read -r sb_i sb_op sb_key sb_head sb_val; do
-    case "$sb_op" in
-      put)
-        sb_twin=$(SB_T="$sb_key" LC_ALL=C awk 'BEGIN { t = ENVIRON["SB_T"] } { if ($0 != t && tolower($0) == tolower(t)) { print; exit } }' "$SCRATCH/live")
-        [ -z "$sb_twin" ] || batch_refuse 1 "$sb_i" put "$sb_key" ERR_ENTITY_EXISTS "key '$sb_key' folds onto '$sb_twin' under ASCII case; keys differing only by case never coexist in namespace '$sb_ns'"
-        scratch_add "$SCRATCH/live" '%s\n' "$sb_key" && LC_ALL=C sort -u "$SCRATCH/live" -o "$SCRATCH/live" 2>/dev/null \
-          || batch_refuse 2 "$sb_i" put "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
-        ;;
-      delete)
-        grep -F -q -x -e "$sb_key" "$SCRATCH/live" || batch_refuse 1 "$sb_i" delete "$sb_key" ERR_ENTITY_NOT_FOUND "key '$sb_key' not found in namespace '$sb_ns'"
-        scratch_new "$SCRATCH/live.next" || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
-        { grep -F -v -x -e "$sb_key" "$SCRATCH/live" > "$SCRATCH/live.next"; } 2>/dev/null
-        [ $? -le 1 ] && mv -f "$SCRATCH/live.next" "$SCRATCH/live" 2>/dev/null \
-          || batch_refuse 2 "$sb_i" delete "$sb_key" ERR_STORAGE_WRITE "cannot stage the action"
-        ;;
-    esac
-  done < "$SCRATCH/man"
+  sb_fail=$(store_twin_pass "$SCRATCH/live" "$SCRATCH/man") || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
+  [ -z "$sb_fail" ] || store_twin_refuse "$sb_ns" "$sb_fail"
 }
 
 # batch_sql: the one transaction script; each action's first statement line is recorded so
@@ -1011,13 +1036,12 @@ store_scan() {
   else
     scratch_new "$SCRATCH/keys" || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   fi
+  { store_keys_admit "$SCRATCH/keys" > "$SCRATCH/keys-admitted"; } 2>/dev/null || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   scratch_new "$SCRATCH/scan-out" && scratch_add "$SCRATCH/scan-out" '{"namespace":"%s","items":[' "$(store_json "$sns_ns")" \
     || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   sns_first=1
   while IFS= read -r sns_key || [ -n "$sns_key" ]; do
     [ -n "$sns_key" ] || continue
-    store_key_ok "$sns_key" || continue
-    store_key_shape "$SD_KEYPAT" "$sns_key" || continue
     if ! sq -bail "$DB_PATH" "SELECT writefile($(store_sqlq "$SCRATCH/value"), value) FROM store WHERE namespace = $(store_sqlq "$sns_ns") AND key = $(store_sqlq "$sns_key");" > /dev/null 2>&1; then
       refuse 2 ERR_STORAGE_READ "cannot read key '$sns_key' in namespace '$sns_ns'"
     fi
@@ -1026,7 +1050,7 @@ store_scan() {
     if [ "$sns_first" -eq 1 ]; then sns_first=0; sns_sep=''; fi
     scratch_add "$SCRATCH/scan-out" '%s{"key":"%s","value_b64":"%s"}' "$sns_sep" "$(store_json "$sns_key")" "$sns_v" \
       || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
-  done < "$SCRATCH/keys"
+  done < "$SCRATCH/keys-admitted"
   scratch_add "$SCRATCH/scan-out" ']}\n' || refuse 2 ERR_STORAGE_WRITE "$SCRATCH_FAILED"
   cat "$SCRATCH/scan-out"
   exit 0

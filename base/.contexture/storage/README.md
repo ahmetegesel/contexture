@@ -9,6 +9,8 @@ library, and the posix driver.
 storage/
   scripts/driver-resolver   the resolver: selection, the capability handshake, dispatch
   scripts/store-data        the private reader and validator of a module's data file, and its listing
+  scripts/store-key.awk     the one key rule: the awk functions the dispatch gate and every bundled
+                            driver read (the key, the prefixes, the leading run fold set)
   scripts/store-search      the private exact and document-derivation search engine
   scripts/store-search.awk  the engine's parser, extractor, matcher, and SQL deriver
   scripts/store-b64         the private base64 encoder of a stored value
@@ -57,7 +59,8 @@ probe rc 2 `ERR_STORAGE_READ`, a name never continued across lines. A regular fi
 pattern admits is a key (the storage layer's own list rule: the suffix, the key rule, the
 pattern), a document when a document rule or an `unsearched` line of the declaration
 names it (every key a document when the namespace declares neither), else a key outside
-the document rules, which is a leftover; each folder above a key is a key folder, each
+the document rules, which is a leftover; each folder above a key, or above a refused key
+(below), is a key folder, each
 folder above an unreadable folder or a name holding a newline is opened, and every other
 entry belongs to the topmost folder above it that holds no key, or stands loose in a key
 folder, an opened folder, or the root. A loose folder is an unreadable folder (one with no
@@ -65,9 +68,13 @@ listed entry that cannot be read or entered), a lock remnant (named `.lock` or `
 as an older release's lock folder inside the deprecated root), a folder outside the key
 shape (it holds a file, a link, or a special file), or an empty folder (as `ctx store
 delete containers/<name>` left a dropped container's folder before the delete pruned the
-folders it empties); a loose file is a lock or write remnant (a lock name, or a key file's
-name with a six character `mktemp` tail, a killed put's temp), else a stray file (a wrong
-suffix, outside the pattern, or a name the key rule refuses); a link and a fifo, socket,
+folders it empties); a loose file is a lock or write remnant (a lock name, or a killed
+put's temp: a dot, the key file's name, and a six character `mktemp` tail, or the older
+shape of the key file's name, a dot, and the tail), a refused key (a regular file whose
+suffix and segment count the pattern admits while the key rule refuses its name, a name
+opening with a dot aside; each folder above one is opened like a key folder, outside the
+sweep's `--loose` scope, which takes a top folder holding only refused keys whole), else a
+stray file (a wrong suffix, outside the pattern, or a name opening with a dot); a link and a fifo, socket,
 or device count apart; a name holding a newline counts as its own kind, its bytes the
 regular files at or below it; in the fallback root a key the root also holds is a shadowed
 key, never a key. The answer is one compact object `{"driver","namespace",
@@ -75,9 +82,9 @@ key, never a key. The answer is one compact object `{"driver","namespace",
 link, which the storage layer never walks), `unreadable`, or `none` (the namespace declares no
 fallback root), else `{"state":"walked","entries","keys","documents","kinds"}`, the
 kinds `stray_files`, `nonkey_folders`, `empty_folders`, `links`, `special_files`,
-`unreadable_folders`, `remnants`, `shadowed_keys`, `outside_keys`, and `newline_names` in
-that order, each `{"count","bytes"}` (`keys` is `documents` plus the `outside_keys`
-count; `entries` counts each name holding a newline once) (a leftover folder counts once,
+`unreadable_folders`, `remnants`, `shadowed_keys`, `outside_keys`, `refused_keys`, and
+`newline_names` in that order, each `{"count","bytes"}` (`keys` is `documents` plus the
+`outside_keys` count, a refused key never a key; `entries` counts each name holding a newline once) (a leftover folder counts once,
 its regular files' bytes rolled in; a file `wc` cannot read and an unreadable folder count
 0 bytes). The fts5 driver keeps one database and no key file tree, so
 it answers its unknown function line rc 2 `ERR_CAPABILITY_UNSUPPORTED`. A walk costs what
@@ -160,8 +167,8 @@ Seven data functions and the optional promotion, called through the resolver:
 | `store.promote` | `<namespace> <prefix>` | none | `{"namespace","prefix","state"}`: optional (the `store.promote` token); moves the prefix (whole key segments ending in a slash) from the fallback root to the root; `moved`, or `none` when the fallback holds nothing for it or none is declared; a move that empties the fallback root, or a `none` answer over an empty one, removes that root; the root already holding it refuses rc 1 `ERR_ENTITY_EXISTS` |
 
 The batched `store.get` is the one key read made once for many keys: every key passes the
-key rule and the pattern first, and the first that fails refuses the whole call rc 1 with
-the one key form's line; an absent key is an item marked missing, never a refusal; a present
+key rule (at the dispatch gate, then again in the driver) and the pattern first, and the
+first that fails refuses the whole call rc 1 with the one key form's line; an absent key is an item marked missing, never a refusal; a present
 key that cannot be read refuses the whole call rc 2 with the one key form's line; a key read
 from a deprecated fallback root prints the one notice. The value travels as a JSON string:
 the backslash, the double quote, the tab, the carriage return, and the newline between
@@ -175,14 +182,51 @@ walk of their common folder would list them (the exact stored spelling, the root
 first), so a read across many units never walks the namespace, and fts5 writes them in one
 `sqlite3` call.
 
-Keys are exact: a key that ASCII-case-folds onto another in the namespace refuses, a
-read or delete acts on the exact key alone, list is bytewise, and no key holds a blank, a
-control character, a leading slash, a backslash, or a `.` or `..` segment. The module
+Keys are exact and meet one key and value rule, the text of `scripts/store-key.awk`, so
+every key any caller can write is one every driver, posix included, can hold on any
+volume. A key is one or more segments joined by a slash; each segment opens with a letter
+or a digit and holds only letters, digits, dot, underscore, and dash, at most 200 bytes; the
+whole key is at most 512 bytes (so a posix path stays inside a 1024 byte `PATH_MAX`); and in
+a namespace whose key pattern ends in a `<name...>` placeholder no segment but the last ends
+with the namespace's suffix (`u/a` beside `u/a.md/x` under `.md` would make one key's folder
+another key's file). A value is any bytes, empty allowed, at most 16 MiB (16777216 bytes).
+The resolver checks the rule at its dispatch, one function (`kv_gate`) in the `exec` and
+the dotted arm, before it resolves or runs any driver: every key of `store.get`, the key of
+`store.put` and `store.delete`, the prefix of `store.list`, `store.promote`, and
+`storage.sweep --prefix=`, and every `key=` and `value_b64=` line of a `store.batch`
+payload. A list prefix may end inside a segment or on a slash, its whole segments under the
+rule and its trailing part from the same alphabet opening with a letter or a digit; a
+promote or sweep prefix is whole segments ending in a slash. A refusal is rc 1
+`ERR_INVALID_ARGUMENT` with the dispatched function's own line, `<function>: error:
+malformed key '<key>'`, `malformed key prefix '<prefix>'`, a batch action as `store.batch:
+error: action <n> (<op> '<key>'): malformed key '<key>'`, or a value past the cap naming
+the key, its size, and the cap, the key written with the payload escape (a backslash, a
+newline, a tab, or a carriage return as `\\`, `\n`, `\t`, `\r`) so the line stays one;
+nothing reaches stdout and no driver runs. The gate stages a put's and a batch's stdin in
+the per verb scratch root (else the drawer's scratch), checks it there, and hands the staged
+file to the driver as its stdin, unlinked before the exec, so nothing stays behind; a
+hangup, interrupt, or termination while it stages removes the file and exits 129, 130, or
+143. The suffix clause reads the namespace's suffix and key pattern through `store-data`
+only when a checked key or prefix has a non final segment; a declaration it cannot read
+leaves the refusal to the driver. The gate's refusals come before the driver's argument
+count, bounded flags, declaration, and pattern refusals. A direct driver call skips the
+gate (the one bypass), and every bundled driver reads the same text for its own argument
+checks and for its list, scan, and leftovers classification, so a listing never names a key
+a read refuses. A put whose leading run of segments, the whole key included, folds under
+ASCII case onto the same length run of a stored key with another spelling refuses rc 1
+`ERR_ENTITY_EXISTS` on every driver and volume (`A/x` beside `a/y`); the driver checks it
+under the namespace lock in one pass per call, the live key list folded once into its
+leading runs and each put of a batch checked and added in action order, the first failing
+action named. A read or delete acts on the exact key alone, and list is bytewise. The module
 pattern filters list and scan and refuses a key outside it; `store.list` takes an optional
 literal bytewise key prefix (possibly ending on a slash) so a module reads its own keys
 without walking the namespace. The posix mapping is
-`<root>/<key><suffix>` under the workspace root, written by a same-directory temp moved
-over the key under one namespace scope lock, so a put lands whole or not at all. A
+`<root>/<key><suffix>` under the workspace root, written by a same-directory temp (a dot,
+the key file's name, and the `mktemp` tail, a name the key rule refuses, so a killed put
+leaves a remnant and never a key) moved over the key under one namespace scope lock, so a
+put lands whole or not at all. A file a posix root holds whose name the key rule refuses is
+never listed, read, or written: the leftovers probe counts it as a refused key, and the
+sweep moves it into a backup on the human's word. A
 namespace that declares a `fallback_root` is read from its root first, then from the
 fallback: `store.get`, `store.list` (the union, each key once, the root's copy
 shadowing), `store.scan`, `store.search`, and the key probe; `store.put` and
@@ -268,7 +312,8 @@ caller's input or the module's rules) or rc 2 (storage or driver failure), nothi
 stdout, and exactly one stderr line `<function>: error: <message> (<CODE>)` over the
 existing core codes. The batch names its 1-based failing action:
 `store.batch: error: action <n> (<op> '<key>'): <message> (<CODE>)`; only the first failure
-prints, and nothing is written. The scan uses the storage layer's codes (a malformed namespace or
+prints, and nothing is written. The resolver's key and value gate refuses in that same
+shape, under the dispatched function's own name, before any driver runs. The scan uses the storage layer's codes (a malformed namespace or
 data declaration is `ERR_INVALID_ARGUMENT`, an undeclared namespace
 `ERR_ENTITY_NOT_FOUND`, an unreadable key or store `ERR_STORAGE_READ`) and stages its
 answer, so a read failure midway prints no partial line. The library's caller lookup
@@ -346,7 +391,11 @@ module's own name: an extension module an install record names as installed unde
 alias (its `module <installed name> <original name>` line holding two names) answers its
 namespace as the root and no fallback root, so two installs of one module never share a
 store, and an install record area that exists but cannot be read refuses such a module
-rc 2. The suffix defaults to empty; `changes` is `true` or `false`
+rc 2. The suffix defaults to empty, holds at most 48 bytes, and is empty only beside a
+fixed depth key pattern: the reader refuses rc 1 naming the key line a data file whose
+suffix is empty while its pattern ends in a `<name...>` placeholder (one key could be
+another key's folder) and naming the suffix line a suffix past 48 bytes (a 200 byte
+segment, the suffix, and the put temp's 7 bytes fit a 255 byte file name); `changes` is `true` or `false`
 and defaults to `false`. The search form is `flat` (one document per key, section `body`;
 `format`, `fields`, and `title` shape the ranked document) or `documents` (the repeated
 `document` rule names the key pattern, the section, the entity type, and the optional

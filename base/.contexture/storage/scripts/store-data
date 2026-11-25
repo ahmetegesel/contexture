@@ -19,8 +19,8 @@
 #   fallback_root: <workspace-relative folder, inside the workspace, neither (optional;
 #         the root nor nested with it; a deprecated root a file store reads   no default)
 #         after the root and never writes>
-#   suffix: <suffix; may be empty>                                           (optional;
-#         default empty)
+#   suffix: <suffix, at most 48 bytes; empty only beside a fixed depth key    (optional;
+#         pattern, one with no <name...> placeholder>                       default empty)
 #   changes: true|false                                                      (optional;
 #         default false)
 #   search: flat|documents                                                   (optional)
@@ -366,10 +366,10 @@ FILENAME != path {
     seen_fb = 1; fb = value
   } else if (field == "suffix") {
     if (seen_suffix) fail("duplicate field '\''suffix'\'' in the data file")
-    seen_suffix = 1; suffix = value
+    seen_suffix = 1; suffix = value; suffix_line = lineno
   } else if (field == "key") {
     if (seen_key) fail("duplicate field '\''key'\'' in the data file")
-    seen_key = 1; key = value
+    seen_key = 1; key = value; key_line = lineno
   } else if (field == "changes") {
     if (seen_changes) fail("duplicate field '\''changes'\'' in the data file")
     seen_changes = 1; changes = value
@@ -434,6 +434,8 @@ END {
   if (aliased) { root = ns; fb = "" }
   if (!suffix_ok(suffix)) fail("malformed suffix '\''" suffix "'\''")
   if (!key_pattern_ok(key)) fail("malformed key pattern '\''" key "'\'' (a <name> placeholder per slash-separated segment, the last optionally <name...>)")
+  if (length(suffix) > 48) fail("line " suffix_line ": the suffix '\''" suffix "'\'' is longer than 48 bytes (a 200 byte key segment, the suffix, and the write temp'\''s 7 bytes fit a 255 byte file name)")
+  if (suffix == "" && key ~ /\.\.\.>$/) fail("line " key_line ": the key pattern '\''" key "'\'' ends in a <name...> placeholder while the suffix is empty, so one key could be another key'\''s folder (declare a suffix, or a fixed depth pattern)")
   if (changes != "true" && changes != "false") fail("malformed changes flag '\''" changes "'\'' (true or false)")
 
   form = ""

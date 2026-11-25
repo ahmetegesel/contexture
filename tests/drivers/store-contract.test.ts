@@ -30,17 +30,6 @@ async function healthOf(s: ReturnType<typeof store>, namespace: string): Promise
   return a;
 }
 
-function folds(): boolean {
-  const dir = sandbox('fold-probe');
-  writeFileSync(join(dir, 'Σ'), '');
-  try {
-    writeFileSync(join(dir, 'σ'), '', { flag: 'wx' });
-    return false;
-  } catch {
-    return true;
-  }
-}
-
 for (const driver of DRIVERS) {
   describe.skipIf(driver === 'fts5' && !fts5Available())(`the store contract on ${driver}`, { concurrent: true }, () => {
     let empty: string;
@@ -101,11 +90,11 @@ for (const driver of DRIVERS) {
         }
       });
 
-      it('[the-engine-r9, the-engine-r19] echoes the op, escapes the key, and keeps quotes, tabs, and backslashes', async () => {
+      it('[the-engine-r9, the-engine-r19] echoes the op and keeps quotes, tabs, and backslashes in the value', async () => {
         const s = store(fresh(empty), driver);
         const rich = 'with quotes " and a tab\tand a backslash \\ and a newline\n';
-        expect((await s.put('docs', 'workspace/q"uote', rich, '--op=replace', '--head=0123abcd')).stdout).toBe('{"namespace":"docs","key":"workspace/q\\"uote","op":"replace"}\n');
-        expect((await s.get('docs', 'workspace/q"uote')).stdout).toBe(rich);
+        expect((await s.put('docs', 'workspace/q.uote', rich, '--op=replace', '--head=0123abcd')).stdout).toBe('{"namespace":"docs","key":"workspace/q.uote","op":"replace"}\n');
+        expect((await s.get('docs', 'workspace/q.uote')).stdout).toBe(rich);
       });
 
       it('[the-engine-r19, the-engine-r21] deletes with the default remove op, then get and delete refuse not found', async () => {
@@ -125,19 +114,32 @@ for (const driver of DRIVERS) {
         answer(await s.del('docs', 'workspace/Alpha'), 'store.delete');
       });
 
-      it('[the-engine-r19] holds a non-ASCII case pair exactly, or refuses the second where the filesystem folds it (posix)', async () => {
+      it('[the-engine-r19, the-engine-r-kvr01] a key outside the ASCII alphabet refuses as malformed, so no non-ASCII fold or normalization twin can be stored', async () => {
         const s = store(fresh(empty), driver);
-        answer(await s.put('docs', 'workspace/Σ', 'Sigma\n'), 'store.put');
-        const second = await s.put('docs', 'workspace/σ', 'sigma\n');
-        if (driver === 'posix' && folds()) {
-          refused(second, 'store.put', 1, 'ERR_ENTITY_EXISTS',
-            "key 'workspace/σ' cannot be represented exactly beside 'workspace/Σ' under the filesystem's case folding; the two keys never coexist in namespace 'docs'");
-          refused(await s.get('docs', 'workspace/σ'), 'store.get', 1, 'ERR_ENTITY_NOT_FOUND', "key 'workspace/σ' not found in namespace 'docs'");
-        } else {
-          answer(second, 'store.put');
-          expect((await s.get('docs', 'workspace/σ')).stdout).toBe('sigma\n');
+        for (const key of ['workspace/Σ', 'workspace/türkçe', 'workspace/q"uote']) {
+          refused(await s.put('docs', key, 'v\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `malformed key '${key}'`);
         }
-        expect((await s.get('docs', 'workspace/Σ')).stdout).toBe('Sigma\n');
+        expect((await s.list('docs')).stdout).toBe(listAnswer('docs', []));
+      });
+
+      it('[the-engine-r19, the-engine-r-kvr01] refuses a put whose leading run of segments folds onto a stored run of another spelling, alone and in a batch, against stored keys and within one batch', async () => {
+        const sb = stage(driver, 'run-twin');
+        dataFile(sb, 'modules', 'runs', 'key: <p...>\nsuffix: .md\n');
+        const s = store(sb, driver);
+        answer(await s.put('runs', 'a/x', 'x\n'), 'store.put');
+        answer(await s.put('runs', 'k', 'k\n'), 'store.put');
+        refused(await s.put('runs', 'A/y', 'y\n'), 'store.put', 1, 'ERR_ENTITY_EXISTS',
+          "key 'A/y' folds onto 'a' under ASCII case at its leading segments 'A'; keys whose leading segments differ only by case never coexist in namespace 'runs'");
+        refused(await s.put('runs', 'a/X/z', 'z\n'), 'store.put', 1, 'ERR_ENTITY_EXISTS',
+          "key 'a/X/z' folds onto 'a/x' under ASCII case at its leading segments 'a/X'; keys whose leading segments differ only by case never coexist in namespace 'runs'");
+        refused(await s.put('runs', 'a/X', 'X\n'), 'store.put', 1, 'ERR_ENTITY_EXISTS',
+          "key 'a/X' folds onto 'a/x' under ASCII case; keys differing only by case never coexist in namespace 'runs'");
+        refused(await s.batch('runs', [{ action: 'put', key: 'b/1', value: '1' }, { action: 'put', key: 'A/q', value: 'q' }]), 'store.batch', 1, 'ERR_ENTITY_EXISTS',
+          "action 2 (put 'A/q'): key 'A/q' folds onto 'a' under ASCII case at its leading segments 'A'; keys whose leading segments differ only by case never coexist in namespace 'runs'");
+        refused(await s.batch('runs', [{ action: 'put', key: 'c/1', value: '1' }, { action: 'put', key: 'C/2', value: '2' }]), 'store.batch', 1, 'ERR_ENTITY_EXISTS',
+          "action 2 (put 'C/2'): key 'C/2' folds onto 'c' under ASCII case at its leading segments 'C'; keys whose leading segments differ only by case never coexist in namespace 'runs'");
+        answer(await s.batch('runs', [{ action: 'delete', key: 'k' }, { action: 'put', key: 'K', value: 'K' }]), 'store.batch');
+        expect((await s.list('runs')).stdout).toBe(listAnswer('runs', ['K', 'a/x']));
       });
 
       it('[the-engine-r9, the-engine-r19] keeps an empty value as zero bytes and a value past 1 MB byte for byte', async () => {
@@ -154,10 +156,19 @@ for (const driver of DRIVERS) {
     });
 
     describe('the key rule and the wire refusals', () => {
-      it.each(['/workspace/x', 'workspace/../x', 'workspace/./x', 'workspace/a b', 'workspace/a\tb', 'workspace/x/', 'workspace/x\\y'])(
-        '[the-engine-r21] refuses the malformed key %j', async (key) => {
+      it.each(['/workspace/x', 'workspace/../x', 'workspace/./x', 'workspace/a b', 'workspace/a\tb', 'workspace/x/', 'workspace/x\\y',
+        'workspace/.x', 'workspace/_x', 'workspace/-x', 'workspace/x:y', 'workspace/x+y', 'workspace//x', `workspace/${'a'.repeat(201)}`])(
+        '[the-engine-r21, the-engine-r-kvr01] refuses the malformed key %j', async (key) => {
           refused(await store(fresh(empty), driver).put('docs', key, 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `malformed key '${key}'`);
         });
+
+      it('[the-engine-r-kvr01] holds every allowed byte, a segment opening with a digit, and a 200 byte segment, each listed and read back', async () => {
+        const s = store(fresh(empty), driver);
+        const keys = ['0pen/x', 'workspace/A.Z_a-z.09', `workspace/${'b'.repeat(200)}`];
+        for (const key of keys) answer(await s.put('docs', key, `${key}\n`), 'store.put');
+        expect((await s.list('docs')).stdout).toBe(listAnswer('docs', keys));
+        for (const key of keys) expect((await s.get('docs', key)).stdout).toBe(`${key}\n`);
+      });
 
       it.each(['workspace', 'a/b/c', 'workspace/x/y'])('[modules-r10, the-engine-p4] refuses %j outside the module pattern before touching the store', async (key) => {
         refused(await store(fresh(empty), driver).put('docs', key, 'x\n'), 'store.put', 1, 'ERR_INVALID_ARGUMENT', `key '${key}' does not match the namespace pattern '<repo>/<slug>'`);

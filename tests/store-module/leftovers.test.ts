@@ -122,7 +122,7 @@ describe.concurrent('the store check --leftovers: what the store\'s storage hold
     const r = await store(sandbox(), ['help', 'check']);
     expect(r.code).toBe(0);
     for (const part of [
-      'lock or write remnants, and names holding a newline (counted with their bytes, never parsed)',
+      'lock or write remnants, keys the key rule refuses (a file named as a record whose name the key rule refuses), and names holding a newline (counted with their bytes, never parsed)',
       'a folder holding no record below it moved or removed whole as one item and counted as emptied',
       'a folder it cannot read or enter is never moved or removed, in either form, nor any folder above it, but left untouched and named',
       'a name holding a newline in its reach refuses the sweep rc 2, the dry run too',

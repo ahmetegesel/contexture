@@ -1,4 +1,4 @@
-import { chmodSync, mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile, moduleDir } from '../support/data-file';
@@ -177,6 +177,34 @@ describe.concurrent('store-data, the data file reader', () => {
     await refusal(sb, 'variable', 1, "malformed key pattern '<unit...>/<path>' (a <name> placeholder per slash-separated segment, the last optionally <name...>)");
   });
 
+  it('[modules-r10, the-engine-r-cj0ey, the-engine-r-kvr01] an empty suffix beside a <name...> pattern and a suffix past 48 bytes refuse rc 1 naming the data file line; an empty suffix with a fixed pattern and a 48 byte suffix read', async () => {
+    const sb = workspace();
+    const sfx48 = `.${'s'.repeat(47)}`;
+    dataFile(sb, 'modules', 'deep', `# no suffix\nkey: <p...>\n`);
+    await refusal(sb, 'deep', 1, "line 2: the key pattern '<p...>' ends in a <name...> placeholder while the suffix is empty, so one key could be another key's folder (declare a suffix, or a fixed depth pattern)");
+    dataFile(sb, 'modules', 'deep', `key: <u>/<p...>\nsuffix:\n`);
+    await refusal(sb, 'deep', 1, "line 1: the key pattern '<u>/<p...>' ends in a <name...> placeholder while the suffix is empty, so one key could be another key's folder (declare a suffix, or a fixed depth pattern)");
+    dataFile(sb, 'modules', 'deep', `key: <p...>\nsuffix: ${sfx48}s\n`);
+    await refusal(sb, 'deep', 1, `line 2: the suffix '${sfx48}s' is longer than 48 bytes (a 200 byte key segment, the suffix, and the write temp's 7 bytes fit a 255 byte file name)`);
+    dataFile(sb, 'modules', 'deep', `key: <p...>\nsuffix: ${sfx48}\n`);
+    expect((await answerLines(sb, 'deep')).slice(2, 4)).toEqual([sfx48, '<p...>']);
+    dataFile(sb, 'modules', 'flat', 'key: <c>/<id>\n');
+    expect((await answerLines(sb, 'flat')).slice(2, 4)).toEqual(['', '<c>/<id>']);
+    expect((await listing(sb)).stderr).toBe('');
+  });
+
+  it('[modules-r10, the-engine-r-cj0ey] the shipped unit, store, ideas, and docs declarations and the notes worked example still read under the suffix rules', async () => {
+    for (const [cwd, ns] of [['base', 'unit'], ['base', 'store'], ['.', 'ideas']] as const) {
+      const r = await exec(STORE_DATA, [ns], { cwd: join(ROOT, cwd), env: { CTX_STORE_WORKSPACE: join(ROOT, cwd) } });
+      expect([ns, r.code, r.stderr]).toEqual([ns, 0, '']);
+    }
+    for (const [module, file] of [['docs', 'plugins/docs-discipline/.contexture/extensions/modules/docs/data'], ['notes', 'tests/fixtures/worked-package/.contexture/extensions/modules/notes/data']] as const) {
+      const sb = workspace();
+      dataFile(sb, 'extensions', module, readFileSync(join(ROOT, file), 'utf8'));
+      expect([module, (await answerLines(sb, module)).length > 10]).toEqual([module, true]);
+    }
+  });
+
   it('[modules-r10] the optional flat search keys are accepted and answered on the schema lines', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'searchy', probe('changes: false\nformat: text\nfields: title, body\ntitle: title\nsnippet: line\n'));
@@ -290,7 +318,7 @@ describe.concurrent('store-data, the data file reader', () => {
   it('[modules-r10] the document-set form answers its rules after the eleven lines, one tab-separated rule per line', async () => {
     const sb = workspace();
     dataFile(sb, 'modules', 'unitlike', [
-      'key: <unit>/<path...>', 'search: documents',
+      'key: <unit>/<path...>', 'suffix: .md', 'search: documents',
       'document: <unit>/state state session -', 'document: <unit>/journal journal entry @entry', '',
     ].join('\n'));
     const lines = await answerLines(sb, 'unitlike');
@@ -335,13 +363,13 @@ describe.concurrent('store-data, the data file reader', () => {
     expect(await listing(withFields)).toMatchObject({ code: 0, stdout: 'docs\tdocs\nideas\tidea-root\n', stderr: '' });
   });
 
-  const UNSEARCHED = ['key: <unit>/<path...>', 'search: documents', 'document: <unit>/journal journal entry @entry', 'unsearched: <unit>/state', 'unsearched:   <unit>/lanes/<lane>/notes', 'field: what: optional line', ''].join('\n');
+  const UNSEARCHED = ['key: <unit>/<path...>', 'suffix: .md', 'search: documents', 'document: <unit>/journal journal entry @entry', 'unsearched: <unit>/state', 'unsearched:   <unit>/lanes/<lane>/notes', 'field: what: optional line', ''].join('\n');
   const UNLISTED = UNSEARCHED.split('\n').filter((l) => !l.startsWith('unsearched:')).join('\n');
 
   it('[modules-r10, the-engine-r-cj0ey] an unsearched line is answered under --with-unsearched alone: after the document rules and before any field line, one @unsearched line per line in declaration order', async () => {
     const sb = workspace();
     const file = dataFile(sb, 'modules', 'unitlike', UNSEARCHED);
-    const fixed = ['unitlike', 'unitlike', '', '<unit>/<path...>', 'false', file, 'documents', '', '', 'head', 'line'];
+    const fixed = ['unitlike', 'unitlike', '.md', '<unit>/<path...>', 'false', file, 'documents', '', '', 'head', 'line'];
     const rule = '<unit>/journal\tjournal\tentry\t@entry';
     const uns = ['@unsearched\t<unit>/state', '@unsearched\t<unit>/lanes/<lane>/notes'];
     expect((await okLines(sb, 'unitlike', '--with-unsearched')).split('\n')).toEqual([...fixed, rule, ...uns, '']);
@@ -369,7 +397,7 @@ describe.concurrent('store-data, the data file reader', () => {
     ['a non-final multi-segment placeholder', 'unsearched: <unit...>/state', "malformed unsearched key pattern '<unit...>/state'"],
   ])('[modules-r10, the-engine-r-cj0ey] an unsearched line holding %s refuses rc 1 naming its line', async (_, line, reason) => {
     const sb = workspace();
-    dataFile(sb, 'modules', 'unitlike', `key: <unit>/<path...>\n${line}\n`);
+    dataFile(sb, 'modules', 'unitlike', `key: <unit>/<path...>\n${line}\nsuffix: .md\n`);
     await refusal(sb, 'unitlike', 1, `line 2: ${reason}`);
   });
 
