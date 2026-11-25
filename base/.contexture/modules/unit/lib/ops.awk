@@ -1031,6 +1031,7 @@ function f_unit_transfer(   src, tgt, dry, kbS, kkS, kjS, kbT, kkT, kjT, TS, nts
   ed_append(kjS, c_entry(slug, ST[src, "anchor"], "moved to unit " tgt ": " c_join(P, np, "; "), NULLV, NULLV, "none", R, nr, cls, 0, NULLV, NULLV, "", ""), 0)
   reparse(kjS)
   CHG[kjS] = 1
+  if (!(kjS in KSEEN)) { KSEEN[kjS] = 1; KEYS[++nk] = kjS }
   for (j = 1; j <= nk; j++) if (KEYS[j] in CHG) stage(KEYS[j])
   for (j = 1; j <= NFWD; j++) MV[FWO[j]] = 1
   o = ""; first = 1

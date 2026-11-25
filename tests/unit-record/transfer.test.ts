@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { data } from '../support/data';
@@ -6,7 +6,7 @@ import { lockPath, unitLock } from '../support/drawer';
 import type { Run } from '../support/exec';
 import { holdLock, sleepShim } from '../support/locks';
 import { ROOT_USER } from '../support/plants';
-import { appendArtifact, DATE, mk, ok, readArtifact, rec } from '../support/record';
+import { appendArtifact, artifactPath, DATE, mk, ok, readArtifact, rec } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
 import { plantArtifact, unitChecksum } from '../support/unit';
 import { answer, payload, refused, type Payload } from '../support/wire';
@@ -185,6 +185,15 @@ describe.concurrent('ctx unit transfer through the data function unit.transfer',
     const r = answer(await transfer(sb, [S, T], move(payload().kl('tasks', 't10'))), 'unit.transfer');
     expect([r.pointer, r.entries, r.tasks]).toEqual([`${PTR}-1`, [], ['t10']]);
     expect(text(sb, S, 'journal').endsWith([`@entry ${PTR}-1`, '  ANCHOR: A1', '  WHAT: "moved to unit xb: tasks t10"', '  THREAD: none', '  REF: "unit#xb/task/t10"', ''].join('\n'))).toBe(true);
+  });
+
+  it('[the-record-r-xfer1] a source whose journal document is absent gains the pointer as its journal, so the move keeps its one receipt', async () => {
+    const sb = fresh(sb0);
+    rmSync(artifactPath(sb, S, 'journal'));
+    const r = answer(await transfer(sb, [S, T], move(payload().kl('tasks', 't10'))), 'unit.transfer');
+    expect([r.pointer, r.tasks]).toEqual([PTR, ['t10']]);
+    expect(existsSync(artifactPath(sb, S, 'journal'))).toBe(true);
+    expect(text(sb, S, 'journal')).toBe([`@entry ${PTR}`, '  ANCHOR: A1', '  WHAT: "moved to unit xb: tasks t10"', '  THREAD: none', '  REF: "unit#xb/task/t10"', ''].join('\n'));
   });
 
   it('[the-record-r-xfer1] --dry-run takes no lock, writes nothing, and answers the same plan', async () => {
