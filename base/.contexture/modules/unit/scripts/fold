@@ -6,6 +6,7 @@
 # help: --check reads the batches from the live post-plan entries' closers and refs, proves the closed receipts are the scope minus the carried open threads (whole consecutive chunks in one lane), no non-thread scoped entry remains live, and the audit is clean; it writes nothing
 # help: --finish re-runs the check and, when clean, writes the receipt FOLD FINISH v4 with the covered and carried counts and closes the fold start done; a live receipt refuses a second one
 # help: rules: the consolidated entry is an ordinary entry (the WHAT is the synthesis, the REFs name the batch, the CLOSES fold the batch's non-thread constituents); a fold compacts history, never obligations: open threads stay live and are carried; the lane may merge consecutive chunks inside its anchor; no digest, no checkpoint, no marker; the record is the state
+# help-from: code
 
 . "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
 
@@ -97,27 +98,20 @@ the state; there is no digest, no checkpoint, and no marker.
 EOF
 }
 
-help_table() {
-  printf 'usage: ctx unit fold <unit> [--lane=<lane> [--merge] | --check | --finish]\n'
-  printf '\n'
-  manual_text '<unit>' '<lane>'
-  printf '\nThe plan and each lane boundary print this manual with the actual lane name, below the one line ctx lane create command with which the orchestrator creates the next lane.\n'
-}
-
 lane_command() {
   printf '  .contexture/ctx run .contexture/ctx lane create %s %s --goal="consolidate the fold chunks the plan assigns to lane %s of unit %s, one ordinary journal entry per batch; stop at the lane boundary the fetch returns" --branch="the workspace checkout on its current branch; no file edit" --writes="no file edit and no commit; record writes: one consolidated entry per batch through ctx unit record %s, and a superseding entry when the check names a defect; the consolidated and superseding entries are granted to this lane over the general rule that a subagent never writes the unit'"'"'s record" --scope="read the loop and the rules: ctx unit fold --help, its <unit> and <lane> standing for %s and %s" --scope="fetch the next batch: ctx unit fold %s --lane=%s; a fetch never advances" --scope="write one ordinary entry per batch as the loop'"'"'s step 3 shows: the one line synthesis, one REF per constituent, one folded closer per constituent that carries no open thread, THREAD none" --scope="fetch again after each entry; when the fetch returns the lane boundary, stop and report" --report="BATCHES :: each consolidated entry slug, the chunks it covers, and its constituent count" --report="OPEN :: any refusal or defect met, with its command and output"\n' "$unit" "$1" "$1" "$unit" "$unit" "$unit" "$1" "$unit" "$1"
 }
 
+if [ "${CTX_HELP:-}" = 1 ]; then
+  manual_text '<unit>' '<lane>'
+  printf '\nThe plan and each lane boundary print this manual with the actual lane name, below the one line ctx lane create command with which the orchestrator creates the next lane.\n'
+  exit 0
+fi
+
 case "${1:-}" in
   "")
-    help_table >&2
+    printf 'usage: ctx unit fold <unit> [--lane=<lane> [--merge] | --check | --finish]\nhelp: ctx unit fold --help\n' >&2
     exit 1
-    ;;
-  --help|-h)
-    [ $# -eq 1 ] && { help_table; exit 0; }
-    ;;
-  help)
-    [ $# -eq 1 ] && { help_table; exit 0; }
     ;;
 esac
 

@@ -75,14 +75,18 @@ describe.skipIf(!sqliteFts5)('graph-query over the seeded database', { concurren
     expect(bare.stderr).toContain('rules requires a target symbol name or qname');
   });
 
-  it('[ast-doc-graph-r14] an unknown subcommand refuses rc 1 naming the known ones, while help and no arguments print the usage rc 0', async () => {
+  it('[ast-doc-graph-r14] an unknown subcommand refuses rc 1 naming the known ones, help among the unknown, while --help, -h, and no arguments print the usage rc 0', async () => {
     const r = await q('symbols', 'OrderCore.startOrder');
     expect([r.code, r.stdout]).toEqual([1, '']);
-    expect(r.stderr).toBe('Error: unknown subcommand: symbols (known: symbol, search, callers, callees, rules, pitfalls, stats, help)\n');
-    for (const args of [['help'], ['--help'], []]) {
+    expect(r.stderr).toBe('Error: unknown subcommand: symbols (known: symbol, search, callers, callees, rules, pitfalls, stats)\n');
+    const word = await graphQuery(cwd, db, 'help');
+    expect([word.code, word.stdout, word.stderr]).toEqual([1, '', 'Error: unknown subcommand: help (known: symbol, search, callers, callees, rules, pitfalls, stats)\n']);
+    for (const args of [['--help'], ['-h'], []]) {
       const usage = await graphQuery(cwd, db, ...args);
       expect([usage.code, usage.stderr], args.join(' ')).toEqual([0, '']);
       expect(usage.stdout).toContain('Usage:');
+      expect(usage.stdout).toContain('  --help, -h     Display this usage manual');
+      expect(usage.stdout).not.toMatch(/^ {2}(graph-query )?help\b/m);
     }
   });
 

@@ -130,18 +130,20 @@ describe.concurrent('ctx unit search on posix', () => {
     const sb = fresh(sb0);
     const help = await search(sb, '--help');
     expect([help.code, help.stderr]).toEqual([0, '']);
-    expect(help.stdout).toContain('usage: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]');
+    expect(help.stdout).toContain('  ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]');
     expect(help.stdout).not.toMatch(/hybrid|trigram/);
     const table = await unit(sb, 'help', 'search');
-    expect(table.stdout).not.toMatch(/hybrid|trigram/);
+    expect(table.stdout).toBe(help.stdout);
     expect((await unit(sb, 'diagnose')).stdout).toMatch(/^ {2}search modes: {4}exact$/m);
   });
 
-  it('X-m [the-record-r13]: a sole help prints the usage, while help with arguments after it is the query, as ctx search hands it', async () => {
+  it('X-m [the-record-r13]: the word help is the query, alone or with arguments after it, as ctx search hands it', async () => {
     const sb = fresh(sb0);
     await must(unit(sb, 'task', 'add', 'y-unit', 'y-help', '--objective=Ask for help early'));
     const sole = await search(sb, 'help');
-    expect([sole.code, sole.stderr, sole.stdout.split('\n')[0]]).toEqual([0, '', 'usage: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]']);
+    expect([sole.code, sole.stderr]).toEqual([0, '']);
+    expect(sole.stdout).toMatch(/^search "help": /);
+    expect(sole.stdout).toContain('y-unit/task/y-help');
     const a = await json(sb, 'help', '--type=task');
     expect(a.query).toBe('help');
     expect(a.rows.map((r: Row) => r.address)).toEqual(['unit#y-unit/task/y-help']);

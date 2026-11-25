@@ -27,17 +27,6 @@
 
 set -e
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs gate: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help gate" >&2
-    exit 1
-    ;;
-esac
-
 case "$0" in
     */*) dir="$(cd "${0%/*}" && pwd)" ;;
     *) dir="$(pwd)" ;;

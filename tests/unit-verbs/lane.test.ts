@@ -257,13 +257,18 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(recipe).not.toContain('a stdin recipe');
   });
 
-  it('[the-engine-r4, the-engine-r7]: ctx lane help create and ctx lane create --help, -h, and help, alone, after the unit, or after the unit and lane, print the same table rc 0', async () => {
+  it('[the-engine-r4, the-engine-r7]: ctx lane help create and a sole ctx lane create --help or -h print the same table rc 0; a help flag after the unit or the lane reaches the verb and refuses, nothing written', async () => {
     const sb = fresh(sb0);
     const table = await lane(sb, 'help', 'create');
     expect(table.code).toBe(0);
-    for (const args of [['--help'], ['-h'], ['help'], ['sem-unit', '--help'], ['sem-unit', '-h'], ['sem-unit', 'help'], ['sem-unit', 'h-lane', '--help'], ['sem-unit', 'h-lane', '-h'], ['sem-unit', 'h-lane', 'help']]) {
+    for (const args of [['--help'], ['-h']]) {
       const r = await lane(sb, 'create', ...args);
       expect([r.code, r.stdout, r.stderr]).toEqual([0, table.stdout, '']);
+    }
+    for (const args of [['help'], ['sem-unit', '--help'], ['sem-unit', '-h'], ['sem-unit', 'h-lane', '--help'], ['sem-unit', 'h-lane', '-h'], ['sem-unit', 'h-lane', 'help']]) {
+      const r = await lane(sb, 'create', ...args);
+      expect([r.code, r.stdout], args.join(' ')).toEqual([1, '']);
+      expect(r.stderr).not.toBe('');
     }
     expect(table.stdout).toMatch(/^ctx lane create: create a subagent lane from its brief parameters$/m);
     expect(table.stdout).toMatch(/^ {2}ctx lane create <unit> <lane-slug> --goal="\.\.\." --branch="\.\.\." --writes="\.\.\." --scope="\.\.\."\.\.\. --report="\.\.\."\.\.\. \[--ref=/m);

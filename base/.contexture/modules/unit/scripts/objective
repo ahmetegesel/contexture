@@ -14,9 +14,6 @@ usage() {
   exit 1
 }
 
-case "${1:-}" in
-  --help|-h) printf 'usage: ctx unit objective <unit> "<objective>"\n'; exit 0 ;;
-esac
 [ $# -eq 2 ] || usage
 slug=$1
 vb_slug_ok "$slug" || usage

@@ -8,17 +8,6 @@
 # help: exit codes: 0 the lines printed (none when nothing changed); 1 a driver without store.changelog, an unknown revision, or a bad argument; 2 a storage driver failure
 # help: example: { git diff --name-status; ctx docs changes; } | ctx docs check workspace
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs changes: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help changes" >&2
-    exit 1
-    ;;
-esac
-
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$dir/docs-io.sh"
 docs_io_init "$dir" changes

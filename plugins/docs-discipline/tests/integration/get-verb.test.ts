@@ -97,12 +97,14 @@ describe('ctx docs get', { concurrent: true }, () => {
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', line]);
   });
 
-  it('[docs-module-r4] a sole --help points to ctx docs help get rc 1, and the help table names the path forms', async () => {
+  it('[docs-module-r4] a sole --help or -h prints the table ctx docs help get prints rc 0, and the table names the path forms', async () => {
     const sb = fresh(staged);
-    const r = await docs(sb, ['get', '--help']);
-    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'help: ctx docs help get\n']);
     const help = await docs(sb, ['help', 'get']);
     expect(help.code).toBe(0);
+    for (const flag of ['--help', '-h']) {
+      const r = await docs(sb, ['get', flag]);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, help.stdout, '']);
+    }
     expect(help.stdout).toContain('ctx docs get <repo>/<slug>/<key>');
     expect(help.stdout).toContain('every ASCII byte outside letters, digits, and - _ . / : , + @ is written %XX in uppercase hex');
     expect(help.stdout).toContain('(workspace/system-map/components/store%20module)');

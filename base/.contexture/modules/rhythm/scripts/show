@@ -7,11 +7,7 @@
 # help: example: ctx rhythm show work
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-root=$(CDPATH= cd -- "$dir/../../../.." && pwd)
 
-case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && exec "${CTX_BIN:-$root/.contexture/ctx}" rhythm help show ;;
-esac
 if [ $# -ne 1 ]; then
   printf 'Usage: ctx rhythm show <name>\n' >&2
   printf 'help: ctx rhythm help\n' >&2

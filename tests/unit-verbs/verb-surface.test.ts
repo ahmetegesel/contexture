@@ -82,14 +82,48 @@ describe.concurrent('the unit and lane verb surface', () => {
     }
   });
 
-  it('X-h [the-engine-r7]: record and reopen --help and -h print the usage rc 0', async () => {
-    const record = await unit(sb, 'record', '--help');
-    expect(record.code).toBe(0);
-    expect(record.stdout + record.stderr).toContain('ctx unit record <unit> --what=');
-    expect((await unit(sb, 'record', '-h')).code).toBe(0);
-    const reopen = await unit(sb, 'reopen', '--help');
-    expect(reopen.code).toBe(0);
-    expect(reopen.stdout + reopen.stderr).toMatch(/^usage: ctx unit reopen/m);
+  it('X-h [the-engine-r7]: record and reopen --help and -h print the table ctx unit help <verb> prints on stdout rc 0', async () => {
+    for (const verb of ['record', 'reopen']) {
+      const table = await unit(sb, 'help', verb);
+      expect(table.code).toBe(0);
+      for (const flag of ['--help', '-h']) expect(await unit(sb, verb, flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, table.stdout, '']);
+    }
+    expect((await unit(sb, 'help', 'record')).stdout).toContain('ctx unit record <unit> --what=');
+    expect((await unit(sb, 'help', 'reopen')).stdout).toMatch(/^ {2}ctx unit reopen <slug>$/m);
+  });
+
+  it('X-h [the-engine-r7]: a unit and a lane named help work with every unit and lane verb that takes one, the word never read as a help request', async () => {
+    const w = stage('posix', 'verb-surface-help-unit');
+    const ok = async (r: Promise<{ code: number; stdout: string; stderr: string }>, what: string, stderr = ''): Promise<string> => {
+      const done = await r;
+      expect([done.code, done.stderr], what).toEqual([0, stderr]);
+      return done.stdout;
+    };
+    await ok(unit(w, 'bootstrap', 'help', 'a unit named help'), 'bootstrap');
+    const slug = /^recorded entry: (\S+)$/m.exec(await ok(unit(w, 'record', 'help', '--what=an event of the unit named help', '--slug=help-ev'), 'record'))?.[1] ?? '';
+    expect(slug).toMatch(/-help-ev$/);
+    expect(await ok(unit(w, 'board', 'help'), 'board')).toContain('an event of the unit named help');
+    expect(await ok(unit(w, 'load', 'help'), 'load')).toContain('unit-load help:');
+    await ok(unit(w, 'audit', 'help'), 'audit');
+    await ok(unit(w, 'refresh', 'help'), 'refresh');
+    await ok(unit(w, 'stamp', 'help'), 'stamp');
+    await ok(unit(w, 'task', 'add', 'help', 'h-task', '--objective=a task of the unit named help'), 'task add');
+    expect(await ok(unit(w, 'entry', 'list', 'help'), 'entry list')).toContain(slug);
+    await ok(unit(w, 'finding', 'add', 'help', 'HELP_FINDING', '--summary=a finding', `--ref=unit#help/entry/${slug}`), 'finding add');
+    expect(await ok(unit(w, 'get', 'help/task/h-task'), 'get')).toContain('@task h-task');
+    expect(await ok(unit(w, 'search', 'named help', '--unit=help'), 'search')).toContain('named help');
+    await ok(unit(w, 'objective', 'help', 'the reworded objective'), 'objective');
+    expect(await ok(unit(w, 'refs', 'help'), 'refs')).toContain('ref_sessions');
+    expect(await ok(unit(w, 'refs-to', 'help'), 'refs-to')).toContain(`unit#help/entry/${slug}`);
+    expect(await ok(run(w, ['lane', 'create', 'help', 'help', '--goal=g', '--branch=b', '--writes=w', '--scope=s', '--report=R :: r']), 'lane create')).toContain('lane help of unit help');
+    await ok(lane(w, 'record', 'help', 'help', '--what=a lane event'), 'lane record');
+    await ok(run(w, ['lane', 'report', 'help', 'help', '--body=@report help']), 'lane report');
+    expect(await ok(lane(w, 'show', 'help', 'help', 'journal'), 'lane show')).toContain('a lane event');
+    const fold = await unit(w, 'fold', 'help', '--lane=x');
+    expect([fold.code, fold.stdout]).toEqual([1, '']);
+    expect(fold.stderr).toContain("no active fold for unit 'help'");
+    await ok(unit(w, 'close', 'help'), 'close', 'WARNING: open tasks: h-task\n');
+    await ok(unit(w, 'reopen', 'help'), 'reopen');
   });
 
   it('X-h [the-engine-r7]: refresh --help and -h print its help table on stdout rc 0, the table ctx unit help refresh prints, never taken for a slug', async () => {

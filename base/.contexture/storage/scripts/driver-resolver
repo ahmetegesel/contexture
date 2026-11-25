@@ -633,6 +633,19 @@ while [ $# -gt 0 ]; do
   esac
 done
 
+# a verb in help mode (CTX_HELP=1, set by the engine for a help hook and its process tree)
+# writes nothing: every mutating store method refuses before the driver runs
+if [ "${CTX_HELP:-}" = 1 ]; then
+  hm_m=$COMMAND
+  case "$hm_m" in exec|dispatch) hm_m=${1:-} ;; esac
+  case "$hm_m" in
+    store.put|store.delete|store.batch|store.promote|storage.sweep)
+      printf 'driver-resolver: ERROR: %s refused in help mode: help writes nothing (ERR_INVALID_ARGUMENT)\n' "$hm_m" >&2
+      exit 1
+      ;;
+  esac
+fi
+
 TARGET_DRIVER=$(determine_driver_name "$CTX_DIR" "$CLI_DRIVER")
 
 # contract 3: no backend delegates to another, so the resolver exports no reference

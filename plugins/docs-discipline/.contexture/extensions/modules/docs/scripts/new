@@ -7,17 +7,6 @@
 # help: exit codes: 0 created (or the dry run printed); 1 a refusal (a missing or bad field, an existing doc, a grammar defect), nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs new workspace billing --kind=capability --description="Billing runs" --sources=src/billing/** --keywords=billing,invoices
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs new: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help new" >&2
-    exit 1
-    ;;
-esac
-
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$dir/docs-io.sh"
 docs_io_init "$dir" new

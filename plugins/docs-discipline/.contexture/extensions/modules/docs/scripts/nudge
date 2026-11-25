@@ -8,17 +8,6 @@
 # help: exit codes: 0 the nudge printed (matched docs may be none; nothing when the unit has no in-progress task and none is named); 1 a unit, task, repo, doc, or backlog path refused; 2 unreadable input (the awk engine's own failure), a storage driver without a corpus, or the storage layer's roots not listed whole (no storage core, or a module data file it cannot read)
 # help: example: ctx docs nudge storage
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs nudge: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help nudge" >&2
-    exit 1
-    ;;
-esac
-
 if [ "$#" -eq 0 ]; then
   echo "Usage: ctx docs nudge <unit> [--task=<slug>]... [<repo>...] (or: ctx docs nudge <backlog-file> <repo>...)" >&2
   echo "help: ctx docs help nudge" >&2

@@ -28,9 +28,6 @@ is_num() {
   return 0
 }
 
-case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
-esac
 [ $# -ge 1 ] || usage
 
 page=1

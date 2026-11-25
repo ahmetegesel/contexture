@@ -8,17 +8,6 @@
 # help: exit codes: 0 the corpus is clean; 1 defects found, or an argument naming no doc or repo; 2 unreadable input (the awk engine's own failure) or a storage driver that does not serve the store contract
 # help: example: ctx docs audit (silence on a clean corpus)
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs audit: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help audit" >&2
-    exit 1
-    ;;
-esac
-
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$dir/docs-io.sh"
 docs_io_init "$dir" audit

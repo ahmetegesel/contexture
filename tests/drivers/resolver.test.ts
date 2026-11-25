@@ -186,6 +186,27 @@ describe('the resolver', { concurrent: true }, () => {
     expect(r.stderr).toBe("driver-resolver: ERROR: storage driver 'no-such-driver' not found in the core drivers, the extension drivers, workspace drivers, module drivers, or PATH (ERR_DRIVER_NOT_FOUND)\n");
   });
 
+  it.for(['store.put', 'store.delete', 'store.batch', 'store.promote', 'storage.sweep'])('[the-engine-r-helpm] in help mode (CTX_HELP=1) %s refuses rc 1 with one line before the driver runs, in the direct and the exec form', async (method) => {
+    const sb = fresh(posix);
+    const line = `driver-resolver: ERROR: ${method} refused in help mode: help writes nothing (ERR_INVALID_ARGUMENT)\n`;
+    for (const args of [[method, 'unit', 'unit/probe/x'], ['exec', method, 'unit', 'unit/probe/x']]) {
+      const r = await rsv(sb, args, 'help mode probe\n', { CTX_HELP: '1' });
+      expect([r.code, r.stdout, r.stderr], args.join(' ')).toEqual([1, '', line]);
+    }
+  });
+
+  it('[the-engine-r-helpm] in help mode a read passes and nothing is written; null check: the same put lands outside help mode', async () => {
+    const sb = fresh(posix);
+    expect((await rsv(sb, ['store.put', 'unit', 'unit/probe/x'], 'help mode probe\n', { CTX_HELP: '1' })).code).toBe(1);
+    const absent = await rsv(sb, ['store.get', 'unit', 'unit/probe/x'], '', { CTX_HELP: '1' });
+    expect(absent.stderr).not.toContain('help mode');
+    expect(absent.stdout).not.toContain('help mode probe');
+    answer(await rsv(sb, ['store.put', 'unit', 'unit/probe/x'], 'help mode probe\n'), 'store.put');
+    const landed = await rsv(sb, ['store.get', 'unit', 'unit/probe/x'], '', { CTX_HELP: '1' });
+    expect([landed.code, landed.stderr]).toEqual([0, '']);
+    expect(landed.stdout).toContain('help mode probe');
+  });
+
   describe('the tiers and the name precedence', () => {
     const resolved = async (sb: string, args: string[], env: Record<string, string> = {}) => {
       const r = await rsv(sb, ['resolve', ...args], '', env);

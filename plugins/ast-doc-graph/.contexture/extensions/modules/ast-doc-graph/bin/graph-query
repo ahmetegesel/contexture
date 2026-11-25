@@ -35,7 +35,6 @@ Usage:
   graph-query rules <name> [--db <path>] [--no-sync]
   graph-query pitfalls <name> [--db <path>] [--no-sync]
   graph-query stats [--db <path>] [--no-sync]
-  graph-query help
 
 Subcommands:
   symbol    Display symbol definition, callers, callees, docs, rules, and pitfalls
@@ -45,12 +44,12 @@ Subcommands:
   rules     Display contract rules governing the symbol
   pitfalls  Display documented pitfalls and anti-patterns for the symbol
   stats     Display aggregate database entity and relationship counts
-  help      Display this usage manual
 
 Options:
   --db <path>    Path to SQLite database (default: $GRAPH_DB or ./graph.db)
   --depth N      Traversal depth limit for recursive queries (default: 5)
   --no-sync      Bypass JIT freshness check and delta sync
+  --help, -h     Display this usage manual
 EOF
 }
 
@@ -64,7 +63,7 @@ TARGET=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    symbol|search|callers|callees|rules|pitfalls|stats|help|--help|-h)
+    symbol|search|callers|callees|rules|pitfalls|stats|--help|-h)
       if [[ -z "$COMMAND" ]]; then
         COMMAND="$1"
       else
@@ -110,7 +109,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$COMMAND" && -n "$TARGET" ]]; then
-  echo "Error: unknown subcommand: $TARGET (known: symbol, search, callers, callees, rules, pitfalls, stats, help)" >&2
+  echo "Error: unknown subcommand: $TARGET (known: symbol, search, callers, callees, rules, pitfalls, stats)" >&2
   exit 1
 fi
 
@@ -119,7 +118,7 @@ if ! [[ "$DEPTH" =~ ^[1-9][0-9]*$ ]]; then
   exit 1
 fi
 
-if [[ -z "$COMMAND" || "$COMMAND" == "help" || "$COMMAND" == "--help" || "$COMMAND" == "-h" ]]; then
+if [[ -z "$COMMAND" || "$COMMAND" == "--help" || "$COMMAND" == "-h" ]]; then
   print_help
   exit 0
 fi

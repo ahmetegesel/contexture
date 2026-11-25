@@ -172,8 +172,11 @@ A file in `scripts/` is a verb when its header carries a `# summary:` line; the 
 | `# summary: <line>` | marks the file as a verb and describes it in the verb table |
 | `# usage: <line>` | one usage line in `ctx <module> help <verb>`; repeatable |
 | `# help: <line>` | one detail line in `ctx <module> help <verb>`; repeatable |
+| `# help-from: code` | optional: the verb computes more help in help mode, appended below the table |
 
-A file without a `# summary:` is private: discovery ignores it and it never appears in help. Private files are how a module hides its implementation (see Wrappers). `help` is engine-owned: a `scripts/help` file carrying a summary is ignored with a warning.
+A file without a `# summary:` is private: discovery ignores it and it never appears in help. Private files are how a module hides its implementation (see Wrappers). `help` is engine-owned: a `scripts/help` file carrying a summary is ignored with a warning, and a verb carries no help handler of its own, since the engine answers a sole `--help` or `-h` after it.
+
+A verb whose help is not fixed (a manual with the caller's names, a table read from its data) declares `# help-from: code` and guards its help mode as its first statement after its function definitions, before any argument parsing or write. The engine runs the verb file itself, by its shebang, with no argument, stdin from `/dev/null`, the workspace root as working folder, the dispatch exports, its own scratch root, and `CTX_HELP=1` with `CTX_HELP_MODULE`, `CTX_HELP_VERB`, and `CTX_HELP_SUB` (empty at the verb level). The contract of help mode: read no argument and no stdin, print the help on stdout only, write nothing (no record, store, corpus, or file write outside the scratch root, no hook point fired), leave no process behind, and return within 5 s. The storage core enforces the write half: every mutating store method refuses while `CTX_HELP=1`. A shell verb guards with `if [ "${CTX_HELP:-}" = 1 ]; then <print>; exit 0; fi`; an awk verb with `BEGIN { if (ENVIRON["CTX_HELP"] == "1") { print ...; help = 1; exit 0 } }` and `END { if (help) exit 0; ... }`, since an exit in `BEGIN` still runs `END`. Keep the summary, usage, and help lines: they head the output and stand alone when the hook fails (a nonzero exit, no exit status, or the bound warns once on stderr; an exit 0 with empty stdout adds nothing). Any other `help-from` value is ignored with a warning at help time, never at discovery. `ctx unit fold` prints its lane manual this way.
 
 ### Hook files
 
@@ -193,7 +196,8 @@ Filters declare themselves with their own header vocabulary; see Filters.
 - Discovery roots: `.contexture/modules/` and `.contexture/extensions/modules/`. The workspace modules list first, then the extension modules, each root in byte order; an absent extension root is silent. The engine resolves the workspace root from its own location, so `ctx` works from any directory.
 - An extension module whose name collides with a workspace module, a builtin (`unit`, `run`), or a reserved name is warned and skipped: the engine never shadows silently. The package installer refuses the same collision at install.
 - `ctx help` lists every module with its summary.
-- `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines.
+- `ctx <module>` prints the module's help at rc0. `ctx <module> help` prints the verb table; `ctx <module> help <verb>` prints that verb's summary, usage lines, and help lines, then a declared hook's help mode output after one empty line.
+- After any verb, awk or shell, a sole `--help` or `-h` prints the same bytes as `ctx <module> help <verb>` on stdout rc 0, and the verb never runs in its normal mode; `--help` or `-h` followed by anything refuses rc 1 with one line naming the sole form; a help flag further along reaches the verb, and a bare `help` after a verb is its slot's value. A verb whose header carries only its summary prints that line; nothing is refused or warned at discovery.
 - `ctx help --all` prints the top summary plus every module's block.
 - A duplicate verb name inside one module shadows: the engine warns and the first file name in byte order wins.
 - Reserved names cannot be module names: the unit verb set (its twenty-one verbs plus `help`, so twenty-two names), plus `run`, `hooks`, `compose`, `package`, `search`, and `config`, plus the retired record verbs (`append`, `amend`, `query`, `flip`, `drop`, `next`, and `resolve`), a static list in the engine so a retired name stays unclaimed and a call to it prints its replacement. A directory carrying one is refused at discovery with a warning and never listed; the builtin `unit`, `run`, `lane`, `rhythm`, and `store` directories are exempt.
@@ -329,7 +333,7 @@ The steps below use the workspace modules root; a package installs its feature m
    - Spell a tab inside a dynamic regex string as `"\t"` (the string then holds a real tab), never `"\\t"`: busybox awk reads the escaped form inside a bracket expression as a backslash and a `t`.
 
 3. `chmod +x scripts/<verb>`.
-4. Prove it: `ctx help` lists the module; `ctx <name> help <verb>` renders the detail; `ctx <name> <verb> ...` runs it.
+4. Prove it: `ctx help` lists the module; `ctx <name> help <verb>` renders the detail; `ctx <name> <verb> -h` prints the same bytes rc 0 with an empty stderr (a verb declaring `# help-from: code` shows its help mode output below the table); `ctx <name> <verb> ...` runs it.
 
 ### Add a hook
 
@@ -367,6 +371,7 @@ The steps below use the workspace modules root; a package installs its feature m
 | module listed | `ctx help` | the module name with its summary |
 | module help | `ctx <module>` and `ctx <module> help` | rc0; the verb table |
 | verb detail | `ctx <module> help <verb>` | the usage and help lines |
+| verb help flag | `ctx <module> <verb> -h` and `--help` | rc0, empty stderr, the bytes `ctx <module> help <verb>` prints |
 | dispatch | `ctx <module> <verb> ...` | argv, streams, rc pass through |
 | unknown verb | `ctx <module> <unknown>; echo $?` | `1`, module help on stderr |
 | bare module | `ctx <module>; echo $?` | `0` |

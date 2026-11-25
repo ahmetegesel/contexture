@@ -18,9 +18,6 @@ fail() {
   exit 1
 }
 
-case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
-esac
 [ $# -ge 1 ] || usage
 slug=$1
 vb_slug_ok "$slug" || usage

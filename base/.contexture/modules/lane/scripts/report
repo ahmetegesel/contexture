@@ -15,16 +15,6 @@ VB_SELF="$unit_lib"
 . "$unit_lib"
 
 if [ $# -lt 2 ]; then
-  if [ $# -gt 0 ]; then
-    case "$1" in
-      --help|-h|help)
-        printf 'usage: ctx lane report <unit> <lane-slug> [--body="..." | stdin] [--json]\n'
-        printf 'reads or writes the subagent lane report\n'
-        printf 'scripted reads: ctx lane show <unit> <lane-slug> report (never reads stdin); report with no --body reads stdin whenever stdin is not a terminal\n'
-        exit 0
-        ;;
-    esac
-  fi
   printf 'usage: ctx lane report <unit> <lane-slug> [--body="..." | stdin] [--json]\n' >&2
   exit 1
 fi

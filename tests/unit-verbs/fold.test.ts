@@ -10,17 +10,23 @@ describe.concurrent('ctx unit fold: the surface, the handoff, and the input rule
     empty = await seed((sb) => seedUnit(sb, 'fc-empty', 'empty fold unit'), 'posix', 'fold-empty');
   });
 
-  it('FC1 [the-engine-r7]: fold with no argument prints the usage rc 1; --help, -h, and help print the lane manual rc 0', async () => {
+  it('FC1 [the-engine-r7, the-record-r-foldm]: fold with no argument prints the usage and the help pointer rc 1; --help and -h print the header table, one empty line, and the lane manual rc 0, equal to ctx unit help fold; help is the unit', async () => {
     const sb = fresh(empty);
     const bare = await unit(sb, 'fold');
-    expect(bare.code).toBe(1);
-    expect(bare.stdout + bare.stderr).toMatch(/^usage: ctx unit fold <unit>/m);
-    for (const h of ['--help', '-h', 'help']) expect((await unit(sb, 'fold', h)).code).toBe(0);
-    const help = (await unit(sb, 'fold', '--help')).stdout;
-    for (const line of ['# Consolidation fold lane', 'one ordinary journal entry', 'ctx run .contexture/ctx unit record', 'thread=none', 'supersedes=', 'no digest', 'Every step through the runner']) expect(help).toContain(line);
-    expect(help).not.toContain('CHAPTER FOLD: <Title>');
-    const table = (await unit(sb, 'help', 'fold')).stdout;
-    expect(table).toContain("prints the plan (the carried open threads included), the first lane's ctx lane create command and its manual, and the first act");
+    expect([bare.code, bare.stdout, bare.stderr]).toEqual([1, '', 'usage: ctx unit fold <unit> [--lane=<lane> [--merge] | --check | --finish]\nhelp: ctx unit fold --help\n']);
+    const [help, h, table] = await Promise.all([unit(sb, 'fold', '--help'), unit(sb, 'fold', '-h'), unit(sb, 'help', 'fold')]);
+    expect([help.code, help.stderr, h.code, h.stderr, table.code]).toEqual([0, '', 0, '', 0]);
+    expect(h.stdout).toBe(help.stdout);
+    expect(table.stdout).toBe(help.stdout);
+    expect(help.stdout).toMatch(/^ctx unit fold: the consolidation fold: plan, fetch, check, finish, progress\n\nusage:\n {2}ctx unit fold <unit> /);
+    expect(help.stdout).toContain("prints the plan (the carried open threads included), the first lane's ctx lane create command and its manual, and the first act");
+    expect(help.stdout).toMatch(/\n\n# Consolidation fold lane: <lane>\n\nYou are the consolidation lane for unit <unit>\./);
+    for (const line of ['one ordinary journal entry', 'ctx run .contexture/ctx unit record', 'thread=none', 'supersedes=', 'no digest', 'Every step through the runner']) expect(help.stdout).toContain(line);
+    expect(help.stdout).toMatch(/\nThe plan and each lane boundary print this manual with the actual lane name, below the one line ctx lane create command with which the orchestrator creates the next lane\.\n$/);
+    expect(help.stdout).not.toContain('CHAPTER FOLD: <Title>');
+    const word = await unit(sb, 'fold', 'help');
+    expect([word.code, word.stdout]).toEqual([1, '']);
+    expect(word.stderr).toContain("unit 'help' not found");
   });
 
   it('FC1: fold refuses a malformed or absent unit, a lane call with no active fold, a payload, a NUL payload, and an unknown option', async () => {

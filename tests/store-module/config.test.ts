@@ -26,11 +26,10 @@ function writeFakeDriver(sb: string, name: string, valid = true, schema = ''): v
 }
 
 describe.concurrent('ctx store config', () => {
-  it('answers bare, help, --help, -h, and <subcommand> --help/-h with rc 0, empty stderr, and zero leaks', async () => {
+  it('[store-r-0s40c] answers bare, --help, -h, and <subcommand> --help/-h with rc 0, empty stderr, and zero leaks; help is no subcommand', async () => {
     const sb = stage('posix', 'store-config-help');
     const forms: string[][] = [
       ['store', 'config'],
-      ['store', 'config', 'help'],
       ['store', 'config', '--help'],
       ['store', 'config', '-h'],
       ['store', 'config', 'load', '--help'],
@@ -38,7 +37,6 @@ describe.concurrent('ctx store config', () => {
       ['store', 'config', 'set', '--help'],
       ['store', 'config', 'unset', '--help'],
       ['store', 'config', 'schema', '--help'],
-      ['store', 'config', 'help', '--help'],
       ['store', 'help', 'config'],
     ];
     for (const args of forms) {
@@ -47,6 +45,13 @@ describe.concurrent('ctx store config', () => {
       expect(r.stdout.trim().length, `args=${args.join(' ')}`).toBeGreaterThan(0);
       for (const line of r.stdout.split('\n')) expect(leaks(line)).toBe(false);
       expect(r.stdout).not.toMatch(/\.contexture\/config|\.contexture\/modules/);
+    }
+    expect((await run(sb, ['store', 'config', '--help'])).stdout).toBe((await run(sb, ['store', 'help', 'config'])).stdout);
+    expect((await run(sb, ['store', 'config'])).stdout).not.toMatch(/^ {2}help /m);
+    for (const args of [['store', 'config', 'help'], ['store', 'config', 'help', '--help']]) {
+      const r = await run(sb, args);
+      expect([r.code, r.stdout], args.join(' ')).toEqual([1, '']);
+      expect(r.stderr).toContain("unknown subcommand 'help'");
     }
   });
 

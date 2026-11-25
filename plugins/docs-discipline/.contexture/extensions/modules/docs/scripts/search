@@ -5,22 +5,9 @@
 # help: an entity is an entry with a stable key: an id keyed entry (a responsibility, a contract rule, a pitfall, a caveat) by its id, a conventions rule by rule/<category>/<rule-slug>, another keyed entry by <block>/<key>, the key encoded as ctx docs get takes it (every ASCII byte outside letters, digits, and - _ . / : , + @ as %XX, so stages/Cart%20assembly); every other line (the header block, an entry known only by its place, a map block) belongs to the doc's header entity
 # help: each row carries module (the installed name, docs unless installed under an alias), container (<repo>/<slug>), type, id (the key), address (<module>#<repo>/<slug>/<key>), snippet, and read (ctx <module> get <repo>/<slug>/<key>); --json answers {query, mode, total, rows}, total counting every match before the limit
 # help: --repo=<repo> keeps one repo; --type= keeps rule, responsibility, contract, pitfall, caveat, entry, or doc; --mode= takes exact, the one mode the docs search answers; --limit= is a positive whole number, default 20; only the --flag=value form is taken
-# help: a sole help, --help, or -h points here; the word help with arguments after it is the query; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
+# help: the word help is a query like any other; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
 # help: exit codes: 0 answered, zero hits included; 1 a bad argument or a repo the corpus lacks; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs search "store.search" --type=contract
-
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -eq 1 ]; then
-      echo "help: ctx docs help search" >&2
-      exit 1
-    fi
-    if [ "$1" != help ]; then
-      echo "ctx docs search: help takes no further arguments" >&2
-      exit 1
-    fi
-    ;;
-esac
 
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$dir/docs-io.sh"

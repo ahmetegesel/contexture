@@ -282,6 +282,12 @@ written. A module may still mint its own tier 1 code; core codes are
 never redefined. The resolver's `driver-resolver: ERROR: ...` line is the one shape exception,
 and the library passes it through unchanged.
 
+Help mode writes nothing: while `CTX_HELP=1` (the engine sets it for a verb's help hook and its
+whole process tree), the resolver refuses `store.put`, `store.delete`, `store.batch`,
+`store.promote`, and `storage.sweep`, in the direct and the `exec` form, rc 1 with its one
+line `driver-resolver: ERROR: <function> refused in help mode: help writes nothing
+(ERR_INVALID_ARGUMENT)`, before the driver runs; every read passes.
+
 The interrupt rule: rc 0 means the write landed; after an interrupt any other exit means
 check with a read before writing again.
 

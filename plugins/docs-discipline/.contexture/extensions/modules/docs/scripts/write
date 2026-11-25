@@ -7,17 +7,6 @@
 # help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (a slug or repo mismatch, an existing or absent doc, a grammar defect, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs write workspace billing < billing.md
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs write: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help write" >&2
-    exit 1
-    ;;
-esac
-
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$dir/docs-io.sh"
 docs_io_init "$dir" write

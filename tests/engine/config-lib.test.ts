@@ -653,12 +653,17 @@ describe.concurrent('config-lib: assembly, owner config-verb helper, and storage
     const env = { CTX_DIR: ctxDir };
 
     // Help forms exit 0 with empty stderr and zero leaks
-    for (const args of [[], ['help'], ['--help'], ['-h'], ['load', '--help'], ['get', '--help'], ['set', '--help'], ['unset', '--help'], ['schema', '--help']]) {
+    for (const args of [[], ['--help'], ['-h'], ['load', '--help'], ['get', '--help'], ['set', '--help'], ['unset', '--help'], ['schema', '--help']]) {
       const h = await runLib(sb, 'config_owner_verb', ['sample', 'ctx sample config', '', ...args], { env });
       expect([h.code, h.stderr]).toEqual([0, '']);
       expect(h.stdout.length).toBeGreaterThan(0);
       for (const line of h.stdout.split('\n')) expect(leaks(line)).toBe(false);
     }
+    // help is never a subcommand: the word refuses as an unknown one and the table names no help row
+    const helpWord = await runLib(sb, 'config_owner_verb', ['sample', 'ctx sample config', '', 'help'], { env });
+    expect([helpWord.code, helpWord.stdout]).toEqual([1, '']);
+    expect(helpWord.stderr).toContain("unknown subcommand 'help'");
+    expect((await runLib(sb, 'config_owner_verb', ['sample', 'ctx sample config', ''], { env })).stdout).not.toMatch(/^ {2}help /m);
 
     // Set, get, load, schema, unset, and refusals
     expect((await runLib(sb, 'config_owner_verb', ['sample', 'ctx sample config', '', 'set', 'count', '4'], { env })).code).toBe(0);
@@ -773,7 +778,7 @@ describe.concurrent('config-lib: assembly, owner config-verb helper, and storage
     const ownSchema = await runLib(sb, 'config_owner_verb', ['foo', 'ctx foo config', '', 'schema'], { env });
     expect([ownSchema.code, ownSchema.stderr]).toEqual([0, '']);
     expect(ownSchema.stdout).toContain('foo:\n');
-    const ownHelp = await runLib(sb, 'config_owner_verb', ['foo', 'ctx foo config', '', 'help', 'set'], { env });
+    const ownHelp = await runLib(sb, 'config_owner_verb', ['foo', 'ctx foo config', '', 'set', '--help'], { env });
     expect([ownHelp.code, ownHelp.stderr]).toEqual([0, '']);
     expect(ownHelp.stdout).toContain('usage: ctx foo config set <key> <value>');
 

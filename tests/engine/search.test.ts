@@ -272,8 +272,8 @@ describe.concurrent('the ctx search builtin', () => {
     expect(help.stdout).toContain('ctx search --mode=exact config');
 
     for (const args of [
-      ['search', 'config', 'help'],
-      ['search', 'config', 'help', 'set'],
+      ['search', 'config', '--help'],
+      ['search', 'config', '-h'],
       ['search', 'config', 'load', '--help'],
       ['search', 'config', 'get', '--help'],
       ['search', 'config', 'set', '--help'],
@@ -283,6 +283,12 @@ describe.concurrent('the ctx search builtin', () => {
       const h = await run(sb, args);
       expect([h.code, h.stderr], args.join(' ')).toEqual([0, '']);
       expect(h.stdout.trim().length).toBeGreaterThan(0);
+    }
+    expect((await run(sb, ['search', 'config', '--help'])).stdout).not.toMatch(/^ {2}help /m);
+    for (const args of [['search', 'config', 'help'], ['search', 'config', 'help', 'set']]) {
+      const retired = await run(sb, args);
+      expect([retired.code, retired.stdout], args.join(' ')).toEqual([1, '']);
+      expect(retired.stderr).toContain("unknown subcommand 'help'");
     }
 
     const literalConfig = await run(sb, ['search', '--mode=exact', 'config', '--json']);

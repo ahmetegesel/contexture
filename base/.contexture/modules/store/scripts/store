@@ -29,9 +29,6 @@ if [ -z "${CTX_ROOT:-}" ]; then
   printf '%s: error: run this module through ctx (CTX_ROOT is not set) (ERR_INVALID_ARGUMENT)\n' "$FN" >&2
   exit 2
 fi
-case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && exec "${CTX_BIN:-$CTX_ROOT/.contexture/ctx}" store help "$verb" ;;
-esac
 
 MOD=${0%/scripts/*}
 REC_AWK=$MOD/lib/record.awk

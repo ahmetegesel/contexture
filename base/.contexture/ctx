@@ -40,8 +40,9 @@
 # retired record verbs (append, amend, query, flip, drop, next, resolve, which print
 # their replacement); the builtin unit, run, lane, rhythm, and store are allowed. A duplicate verb shadows: first file name
 # wins with a warning. Help is engine-owned (no help script): ctx help,
-# ctx help --all, ctx <module> help, ctx <module> help <verb>, and bare
-# ctx <module> (module table, rc0). Dispatch validates the verb engine-side
+# ctx help --all, ctx <module> help, ctx <module> help <verb>, a sole -h or --help
+# directly after any verb (the verb's "# help-from: code" header line appends its help
+# mode's output), and bare ctx <module> (module table, rc0). Dispatch validates the verb engine-side
 # (unknown rc1, module help on stderr), chdirs to the workspace root, and
 # execs scripts/<verb> with the remaining argv, exporting CTX_ROOT,
 # CTX_MODULE_DIR, CTX_BIN, CTX_SCRATCH_ROOT (one per-verb scratch root under
@@ -88,6 +89,33 @@ verb_scratch() {
   done
   CTX_SCRATCH_ROOT="$vs_base/verb.$$.$(date +%s 2>/dev/null || printf '%s' "$$")"
   export CTX_SCRATCH_ROOT
+}
+
+# ---------------------------------------------------------------------------
+# bounded children: the search fan-out and the help hook run a verb as a child and stop it
+# with every descendant past its bound
+
+# child_tree <pid>: the pid and every descendant, from one ps snapshot
+child_tree() {
+  ps -A -o pid= -o ppid= 2>/dev/null | awk -v r="$1" '
+    { P[$1] = $2 }
+    END {
+      S[r] = 1
+      do { c = 0; for (p in P) if (!(p in S) && (P[p] in S)) { S[p] = 1; c = 1 } } while (c)
+      for (p in S) printf "%s ", p
+    }'
+}
+
+# child_stop <pid>: the pid and every descendant from one snapshot, TERM then KILL 0.2 s
+# later, then reaped; the caller discards stderr, where a shell reports a signalled job
+child_stop() {
+  cs_set=$(child_tree "$1")
+  # shellcheck disable=SC2086
+  kill -TERM $cs_set 2>/dev/null
+  sleep 0.2 2>/dev/null || sleep 1
+  # shellcheck disable=SC2086
+  kill -KILL $cs_set 2>/dev/null
+  wait "$1"
 }
 
 header_field() {
@@ -1055,6 +1083,99 @@ show_verb_help() {
       [ -n "$l" ] && printf '  %s\n' "$l"
     done
   fi
+  verb_help_hook "$1" "$m" "$2" ""
+  return 0
+}
+
+# verb_help_hook <module> <module dir> <verb> <sub>: a verb whose header declares
+# "# help-from: code" runs once in help mode (CTX_HELP=1 with the module, verb, and sub
+# names, no argument, stdin from /dev/null, the dispatch exports, its own scratch root) bounded
+# at 5 s; exit 0 appends one empty line and its stdout below the header table; a nonzero exit,
+# no exit status, or the bound keeps the table alone with one stderr line; its stderr is
+# discarded; any other help-from value is ignored with one stderr line
+verb_help_hook() {
+  hh_f="$2/scripts/$3"
+  hh_from=$(header_field "$hh_f" help-from)
+  [ -n "$hh_from" ] || return 0
+  if [ "$hh_from" != code ]; then
+    ctx_err "$1 $3: help-from '$hh_from' is not code; the header table stands"
+    return 0
+  fi
+  hh_io="$root/.contexture/tmp/verb.$$.help.io"
+  hh_scratch="$root/.contexture/tmp/verb.$$.help"
+  hh_pid=""
+  rm -rf "$hh_io" "$hh_scratch" 2>/dev/null
+  if ! mkdir -p "$hh_io" "$hh_scratch" 2>/dev/null; then
+    ctx_err "$1 $3: the help hook has no scratch root; the header table stands"
+    return 0
+  fi
+  if sleep 0.02 2>/dev/null; then hh_tick=0.02; hh_ticks=250; else hh_tick=1; hh_ticks=5; fi
+  trap 'verb_help_abort 129' HUP
+  trap 'verb_help_abort 130' INT
+  trap 'verb_help_abort 143' TERM
+  (
+    cd "$root" || exit 2
+    CTX_ROOT=$root CTX_MODULE_DIR=$2 CTX_BIN=$ctx_bin CTX_SCRATCH_ROOT=$hh_scratch LC_ALL=C
+    CTX_HELP=1 CTX_HELP_MODULE=$1 CTX_HELP_VERB=$3 CTX_HELP_SUB=$4
+    export CTX_ROOT CTX_MODULE_DIR CTX_BIN CTX_SCRATCH_ROOT LC_ALL CTX_HELP CTX_HELP_MODULE CTX_HELP_VERB CTX_HELP_SUB
+    "$hh_f"
+    printf '%s\n' "$?" > "$hh_io/rc"
+  ) < /dev/null > "$hh_io/out" 2> "$hh_io/err" &
+  hh_pid=$!
+  hh_t=0
+  while [ ! -f "$hh_io/rc" ] && kill -0 "$hh_pid" 2>/dev/null && [ "$hh_t" -lt "$hh_ticks" ]; do
+    sleep "$hh_tick" 2>/dev/null || sleep 1
+    hh_t=$((hh_t + 1))
+  done
+  hh_over=0
+  if [ ! -f "$hh_io/rc" ] && kill -0 "$hh_pid" 2>/dev/null; then
+    hh_over=1
+    { child_stop "$hh_pid"; } 2>/dev/null
+  else
+    wait "$hh_pid" 2>/dev/null
+  fi
+  hh_pid=""
+  trap - HUP INT TERM
+  hh_rc=""
+  [ -f "$hh_io/rc" ] && hh_rc=$(cat "$hh_io/rc")
+  if [ "$hh_rc" = 0 ]; then
+    if [ -s "$hh_io/out" ]; then printf '\n'; cat "$hh_io/out"; fi
+  elif [ "$hh_over" = 1 ]; then
+    ctx_err "$1 $3: the help hook passed its 5 s bound; the header table stands"
+  elif [ -z "$hh_rc" ]; then
+    ctx_err "$1 $3: the help hook gave no exit status; the header table stands"
+  else
+    ctx_err "$1 $3: the help hook exited $hh_rc; the header table stands"
+  fi
+  rm -rf "$hh_io" "$hh_scratch" 2>/dev/null
+  return 0
+}
+
+# verb_help_abort <rc>: a hangup, interrupt, or termination during a help hook run stops the
+# hook with every descendant and removes its folders before the engine exits
+verb_help_abort() {
+  trap - HUP INT TERM
+  [ -z "$hh_pid" ] || { child_stop "$hh_pid"; } 2>/dev/null
+  rm -rf "$hh_io" "$hh_scratch" 2>/dev/null
+  exit "$1"
+}
+
+# verb_help_first <module> <verb> [args...]: the first argument after a verb belongs to the
+# engine when it is -h or --help: alone it prints the verb's help rc 0 and the verb never runs
+# in its normal mode; followed by anything it refuses rc 1; any other first argument returns
+verb_help_first() {
+  vf_m=$1; vf_v=$2
+  shift 2
+  case "${1:-}" in
+    --help|-h)
+      if [ $# -eq 1 ]; then
+        show_verb_help "$vf_m" "$vf_v"
+        exit 0
+      fi
+      ctx_err "$vf_m $vf_v: $1 takes no further argument; help is ctx $vf_m $vf_v $1 alone"
+      exit 1
+      ;;
+  esac
   return 0
 }
 
@@ -2741,35 +2862,12 @@ search_modes_list() {
   ( cd "$root" && CTX_ROOT=$root && export CTX_ROOT && exec "$sm_r" modes < /dev/null )
 }
 
-# search_tree <pid>: the pid and every descendant, from one ps snapshot
-search_tree() {
-  ps -A -o pid= -o ppid= 2>/dev/null | awk -v r="$1" '
-    { P[$1] = $2 }
-    END {
-      S[r] = 1
-      do { c = 0; for (p in P) if (!(p in S) && (P[p] in S)) { S[p] = 1; c = 1 } } while (c)
-      for (p in S) printf "%s ", p
-    }'
-}
-
-# search_stop <pid>: the pid and every descendant from one snapshot, TERM then KILL 0.2 s
-# later, then reaped; the caller discards stderr, where a shell reports a signalled job
-search_stop() {
-  ss_set=$(search_tree "$1")
-  # shellcheck disable=SC2086
-  kill -TERM $ss_set 2>/dev/null
-  sleep 0.2 2>/dev/null || sleep 1
-  # shellcheck disable=SC2086
-  kill -KILL $ss_set 2>/dev/null
-  wait "$1"
-}
-
 # search_abort <rc>: a hangup, interrupt, or termination of the run stops the running child
 # with every descendant (a background child ignores an interrupt) and removes the run's
 # scratch before the engine exits
 search_abort() {
   trap - HUP INT TERM
-  [ -z "$sc_pid" ] || { search_stop "$sc_pid"; } 2>/dev/null
+  [ -z "$sc_pid" ] || { child_stop "$sc_pid"; } 2>/dev/null
   rm -rf "$root/.contexture/tmp/verb.$$.search-"* "$CTX_SCRATCH_ROOT" 2>/dev/null
   exit "$1"
 }
@@ -2804,7 +2902,7 @@ search_child() {
     sc_t=$((sc_t + 1))
   done
   if [ ! -f "$SC_ROOT/rc" ] && kill -0 "$sc_pid" 2>/dev/null; then
-    { search_stop "$sc_pid"; } 2>/dev/null
+    { child_stop "$sc_pid"; } 2>/dev/null
   else
     wait "$sc_pid" 2>/dev/null
   fi
@@ -3359,6 +3457,7 @@ case "$1" in
   --diagnose)
     shift
     if verb_exists "$md" "diagnose"; then
+      verb_help_first "$found_target" diagnose "$@"
       CTX_ROOT="$root"
       CTX_MODULE_DIR="$md"
       CTX_BIN="$ctx_bin"
@@ -3384,17 +3483,9 @@ if ! verb_exists "$md" "$verb"; then
 fi
 shift
 
-# --help and -h after an awk verb print the verb's help table (the table ctx <module>
-# help <verb> prints): an awk interpreter reads a leading dash argument as its own option,
-# so the verb itself would never see it; shell verbs answer their own --help
-case "${1:-}" in
-  --help|-h)
-    if [ $# -eq 1 ] && head -n 1 "$md/scripts/$verb" | grep -q '^#!.*awk'; then
-      show_verb_help "$found_target" "$verb"
-      exit 0
-    fi
-    ;;
-esac
+# the first argument after every verb belongs to the engine when it is -h or --help, awk
+# and shell verbs alike: the verb never sees a sole help flag
+verb_help_first "$found_target" "$verb" "$@"
 
 CTX_ROOT="$root"
 CTX_MODULE_DIR="$md"

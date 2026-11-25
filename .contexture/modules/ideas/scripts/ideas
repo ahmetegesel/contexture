@@ -29,9 +29,6 @@ MOD=${0%/scripts/*}
 ME=${MOD##*/}
 FN="$ME $verb"
 CTXB=${CTX_BIN:-$CTX_ROOT/.contexture/ctx}
-case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && exec "$CTXB" "$ME" help "$verb" ;;
-esac
 
 REC_AWK=$MOD/lib/idea.awk
 LIB=$CTX_ROOT/.contexture/storage/scripts/library

@@ -7,7 +7,6 @@
 # help:   set <key> <value>     validate and write one storage setting to the workspace configuration
 # help:   unset <key>           remove one storage setting from the workspace configuration
 # help:   schema [--json]       show declared storage schema keys, types, defaults, and descriptions
-# help:   help [<subcommand>]   show help for a storage configuration subcommand
 # help: validates storage driver selection against the storage core before writing; emits a non-blocking notice on stderr when the active storage driver changes (existing data is not migrated automatically)
 # help: example: ctx store config get driver
 

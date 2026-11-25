@@ -7,17 +7,6 @@
 # help: exit codes: 0 printed; 1 a malformed path, no such doc, or no such entity (ERR_ENTITY_NOT_FOUND); 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs get workspace/the-engine/the-engine-r8
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs get: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help get" >&2
-    exit 1
-    ;;
-esac
-
 if [ "$#" -ne 1 ]; then
   echo "Usage: ctx docs get <repo>/<slug>/<key>" >&2
   exit 1

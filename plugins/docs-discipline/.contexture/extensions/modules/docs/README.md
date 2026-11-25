@@ -154,8 +154,8 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   byte, and a doc without a final newline keeps it so.
 - The verb scripts carry the `# summary:`/`# usage:`/`# help:` declarations;
   `ctx docs help` and `ctx docs help <verb>` render them. Help is
-  engine-owned: a sole `help` argument refuses with a pointer, never prints
-  help text.
+  engine-owned: a sole `--help` or `-h` after a verb prints that table rc 0,
+  and a bare `help` is the verb's slot value (`ctx docs search help` searches it).
 - A bare `check` or `nudge` refuses loudly instead of reading standard input
   as an empty corpus; a bare `audit` reads the whole corpus through the
   driver.

@@ -1604,7 +1604,6 @@ subcommands:
   set <key> <value>     validate and write one configuration value for $coh_ns
   unset <key>           remove one configuration value for $coh_ns
   schema [--json]       show configuration schema for $coh_ns
-  help [<subcommand>]   show help for a configuration subcommand
 EOF
       ;;
     load)
@@ -1622,9 +1621,6 @@ EOF
     schema)
       printf 'usage: %s schema [--json]\nshow declared configuration schema keys, types, defaults, and descriptions for %s\n' "$coh_lbl" "$coh_ns"
       ;;
-    help)
-      printf 'usage: %s help [<subcommand>]\nshow configuration command help for %s\n' "$coh_lbl" "$coh_ns"
-      ;;
     *)
       printf "%s: error: unknown subcommand '%s' (ERR_INVALID_ARGUMENT)\n" "$coh_lbl" "$coh_sub" >&2
       return 1
@@ -1635,7 +1631,7 @@ EOF
 
 # config_owner_verb <ns> <caller_label> <validator_fn> [args...]:
 # Shared owner config-verb implementation (load [--json], get, set, unset,
-# schema [--json], help, --help/-h) over local key names.
+# schema [--json], --help/-h) over local key names.
 config_owner_verb() {
   cov_ns=$1
   cov_lbl=$2
@@ -1657,22 +1653,6 @@ config_owner_verb() {
       fi
       cfg_owner_help "$cov_ns" "$cov_lbl"
       return 0
-      ;;
-    help)
-      if [ $# -eq 1 ]; then
-        case "$1" in
-          --help|-h)
-            cfg_owner_help "$cov_ns" "$cov_lbl" help
-            return $?
-            ;;
-        esac
-      fi
-      if [ $# -gt 1 ]; then
-        printf '%s: error: help takes at most one subcommand name (ERR_INVALID_ARGUMENT)\n' "$cov_lbl" >&2
-        return 1
-      fi
-      cfg_owner_help "$cov_ns" "$cov_lbl" "${1:-}"
-      return $?
       ;;
   esac
 

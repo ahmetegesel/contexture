@@ -100,7 +100,7 @@ describe.concurrent('ctx unit get', () => {
     },
   );
 
-  it('[the-record-r-l81i1] a missing unit refuses rc 1 in the verb\'s own not found line, whatever the kind; an unknown flag refuses; --help prints the usage rc 0', async () => {
+  it('[the-record-r-l81i1] a missing unit refuses rc 1 in the verb\'s own not found line, whatever the kind; an unknown flag refuses; --help prints the engine table rc 0 and a bare help is the path', async () => {
     const sb = fresh(sb0);
     for (const path of ['nounit/task/g-task', 'nounit/entry/x', 'nounit/finding/X', 'nounit/lane/g-lane/report', 'nounit/lane/g-lane/journal/x']) {
       for (const argv of [[path], [path, '--json']]) {
@@ -110,10 +110,16 @@ describe.concurrent('ctx unit get', () => {
     }
     const flag = await unit(sb, 'get', 'g-unit/task/g-task', '--bogus');
     expect([flag.code, flag.stderr]).toEqual([1, "get: error: unknown option '--bogus' (ERR_INVALID_ARGUMENT)\n"]);
-    const help = await unit(sb, 'get', '--help');
+    const [help, table] = await Promise.all([unit(sb, 'get', '--help'), unit(sb, 'help', 'get')]);
     expect([help.code, help.stderr]).toEqual([0, '']);
-    expect(help.stdout).toMatch(/^usage: ctx unit get <unit>\/<kind>\/<id> \[--json\]$/m);
-    expect((await unit(sb, 'get')).code).toBe(1);
+    expect(help.stdout).toBe(table.stdout);
+    expect(help.stdout).toMatch(/^ {2}ctx unit get <unit>\/<kind>\/<id> \[--json\]$/m);
+    const bare = await unit(sb, 'get');
+    expect(bare.code).toBe(1);
+    expect(bare.stderr).toMatch(/^usage: ctx unit get <unit>\/<kind>\/<id> \[--json\]$/m);
+    const word = await unit(sb, 'get', 'help');
+    expect([word.code, word.stdout]).toEqual([1, '']);
+    expect(word.stderr).toContain("malformed path 'help'");
   });
 
   it('[the-record-r-l81i1] get takes no lock: it answers while a live writer holds the unit lock', async () => {

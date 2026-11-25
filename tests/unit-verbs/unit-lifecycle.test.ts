@@ -151,11 +151,11 @@ describe.concurrent('the objective verb', () => {
     expect((await unit(sb, 'load', 'ob-new')).code).toBe(1);
   });
 
-  it('OB-d [the-engine-r7]: objective --help and -h print the one usage line rc 0; unit help objective prints its usage, the function, the exit codes with rc 2 for a malformed stored anchor, and an example', async () => {
+  it('OB-d [the-engine-r7]: objective --help and -h print the table unit help objective prints rc 0: its usage, the function, the exit codes with rc 2 for a malformed stored anchor, and an example', async () => {
     const sb = fresh(sb0);
-    for (const flag of ['--help', '-h']) expect(await unit(sb, 'objective', flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, 'usage: ctx unit objective <unit> "<objective>"\n', '']);
     const table = await unit(sb, 'help', 'objective');
     expect(table.code).toBe(0);
+    for (const flag of ['--help', '-h']) expect(await unit(sb, 'objective', flag).then((r) => [r.code, r.stdout, r.stderr])).toEqual([0, table.stdout, '']);
     expect(table.stdout).toMatch(/^ctx unit objective: /);
     expect(table.stdout).toMatch(/^ {2}ctx unit objective <slug> "<objective>"$/m);
     expect(table.stdout).toContain('(session.objective)');

@@ -152,7 +152,7 @@ while [[ $# -gt 0 ]]; do
       CLEAN=true
       shift
       ;;
-    help|--help|-h)
+    --help|-h)
       print_help
       exit 0
       ;;

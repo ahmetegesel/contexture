@@ -21,10 +21,6 @@ usage() {
   exit 1
 }
 
-case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
-esac
-
 form=""
 repo=""
 has_repo=0

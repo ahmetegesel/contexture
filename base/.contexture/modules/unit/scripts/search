@@ -2,7 +2,7 @@
 # summary: search the record entities of the active units, one unit, or every unit, in the shared search syntax
 # usage: ctx unit search "<query>" [--unit=<unit>] [--all] [--type=<type>] [--mode=<mode>] [--limit=N] [--json]
 # help: the query comes first; the active units by default, --all every unit, --unit=<unit> any one unit, closed ones included; the rows of a CLOSED unit carry the label closed
-# help: a sole --help, -h, or help prints the usage; the word help with arguments after it is the query; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
+# help: the word help is a query like any other; a query cannot begin with a dash, which reads as a flag and refuses (no end of options marker, a stated limit)
 # help: --type= keeps one entity type (task, entry, finding, lane, lane_entry, session, all); --mode= defaults to exact (a case-insensitive ASCII substring of one line, a column-0 comment never matching, one row per matching entity and section, the first matching line as the snippet), or a ranked mode the configured driver registers (ctx search --modes lists them); --limit= is a positive whole number, default 20, applied once to the rows merged in the board's unit order; only the --flag=value form is taken
 # help: each row carries module, container, type, id, address (unit#<unit>/<kind>/<id>), snippet, read (ctx unit get <path>), and label when the unit is closed; an artifact preamble or an anchor line carries no address, its read the unit's load; --json answers {query, mode, total, rows}, total counting every merged row before the limit; zero hits is rc 0
 # help: the unit state is never searched; an empty query, an unknown flag, a bare value form, --all beside --unit, the retired positional unit, --entity, and -l refuse rc 1 (ERR_INVALID_ARGUMENT), a mode the unit's records cannot answer rc 1 naming the answerable modes, a --unit no store holds rc 1 (ERR_ENTITY_NOT_FOUND)
@@ -30,9 +30,6 @@ if [ $# -eq 0 ]; then
   usage >&2
   exit 1
 fi
-case "$1" in
-  --help|-h|help) [ $# -eq 1 ] && { usage; exit 0; } ;;
-esac
 
 query=""
 qset=0

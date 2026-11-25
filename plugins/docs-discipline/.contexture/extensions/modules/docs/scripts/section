@@ -7,17 +7,6 @@
 # help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (a header mismatch, a second block, a missing address, a block the doc kind does not carry, a grammar defect, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
 # help: example: ctx docs section demo-web cart-ui see_also < see-also.block
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs section: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help section" >&2
-    exit 1
-    ;;
-esac
-
 dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 . "$dir/docs-io.sh"
 docs_io_init "$dir" section

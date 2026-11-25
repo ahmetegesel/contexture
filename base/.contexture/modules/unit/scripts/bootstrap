@@ -30,9 +30,6 @@ gitstate() {
   printf '%s\n' "$gs"
 }
 
-case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
-esac
 [ $# -ge 2 ] && [ $# -le 3 ] || usage
 slug=$1
 objective=$2

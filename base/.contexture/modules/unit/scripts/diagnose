@@ -32,11 +32,6 @@ for arg in "$@"; do
     --leftovers)
       leftovers=1
       ;;
-    --help|-h)
-      printf 'usage: ctx unit diagnose [--leftovers] [--json]\n'
-      printf 'inspect the workspace configuration, resolved storage driver, capabilities, and health\n'
-      exit 0
-      ;;
     *)
       printf 'ctx unit diagnose: unrecognized option: %s\n' "$arg" >&2
       exit 1

@@ -19,9 +19,6 @@ fail() {
   exit 1
 }
 
-case "${1:-}" in
-  --help|-h|help) printf 'usage: ctx unit refs <unit> [<unit> ...]\n'; exit 0 ;;
-esac
 [ $# -ge 1 ] || usage
 unit=$1
 vb_slug_ok "$unit" || usage

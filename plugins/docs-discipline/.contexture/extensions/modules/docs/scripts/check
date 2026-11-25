@@ -13,17 +13,6 @@
 # help: exit codes: 0 the delta is covered and fresh; 1 a completeness, freshness, or dead-sources violation, or an argument naming no doc or repo; 2 unreadable input (the awk engine's own failure) or a storage driver that does not serve the store contract
 # help: example: printf 'M\tprojects/demo/src/x.ts\ndocs/demo/x.md\n' | ctx docs check demo workspace
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs check: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help check" >&2
-    exit 1
-    ;;
-esac
-
 if [ "$#" -eq 0 ]; then
   echo "Usage: git diff --name-status | ctx docs check <repo>..." >&2
   echo "help: ctx docs help check" >&2

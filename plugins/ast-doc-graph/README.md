@@ -239,7 +239,7 @@ ranks matching doc rules and symbols with highlighted match snippets.
 * Fast bypass flag (`--no-sync`): Pass `--no-sync` in tight loops or automated test pipelines to skip the filesystem freshness scan entirely.
 * Concurrency protection: All queries execute with `PRAGMA busy_timeout = 5000` via `sqlite_exec`, ensuring multiple concurrent agents and editors can query the database safely even while an inline delta sync writes to SQLite WAL.
 
-`ctx ast-doc-graph query` provides seven primary subcommands designed for compact agent inspection; a word that names none (a mistyped `symbols`) refuses rc 1 naming the known ones, and `help` or no word at all prints the usage rc 0:
+`ctx ast-doc-graph query` provides seven primary subcommands designed for compact agent inspection; a word that names none (a mistyped `symbols`, or `help`, which is no subcommand) refuses rc 1 naming the known ones, no word at all prints the usage rc 0, and `ctx ast-doc-graph query -h` prints the verb table the engine renders:
 
 ### 1. Symbol Inspection (`symbol`)
 

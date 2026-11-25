@@ -13,9 +13,6 @@ usage() {
   exit 1
 }
 
-case "${1:-}" in
-  --help|-h|help) printf 'usage: ctx unit reopen <unit>\n'; exit 0 ;;
-esac
 [ $# -eq 1 ] || usage
 vb_slug_ok "$1" || usage
 vb_call session.reopen "$1"

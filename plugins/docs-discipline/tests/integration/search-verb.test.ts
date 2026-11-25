@@ -81,24 +81,27 @@ describe('ctx docs search', { concurrent: true }, () => {
     expect([type.code, type.stdout]).toEqual([0, '{"query":"checkout","mode":"exact","total":0,"rows":[]}\n']);
   });
 
-  it('[docs-module-r4] a sole --help points to ctx docs help search rc 1; a bare search refuses with its usage', async () => {
+  it('[docs-module-r4] a sole --help prints the table ctx docs help search prints rc 0; a bare search refuses with its usage', async () => {
     const sb = fresh(staged);
+    const table = await docs(sb, ['help', 'search']);
     const r = await docs(sb, ['search', '--help']);
-    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', 'help: ctx docs help search\n']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, table.stdout, '']);
+    expect(r.stdout).toMatch(/^ctx docs search: /);
     const bare = await docs(sb, ['search']);
     expect([bare.code, bare.stderr]).toEqual([1, 'Usage: ctx docs search "<term>" [--repo=<repo>] [--type=<type>] [--mode=exact] [--limit=N] [--json]\n']);
   });
 
-  it('[docs-module-r4, docs-module-r-yyfxd] the word help with arguments after it is the query, as ctx search hands it, while --help with arguments still refuses', async () => {
+  it('[docs-module-r4, docs-module-r-yyfxd] the word help is the query, alone or with arguments after it, as ctx search hands it, while --help with arguments refuses at the engine', async () => {
     const sb = fresh(staged);
     const sole = await docs(sb, ['search', 'help']);
-    expect([sole.code, sole.stdout, sole.stderr]).toEqual([1, '', 'help: ctx docs help search\n']);
+    expect([sole.code, sole.stderr]).toEqual([0, '']);
+    expect(sole.stdout).not.toContain('ctx docs help search');
     const r = await docs(sb, ['search', 'help', '--limit=100', '--json']);
     expect([r.code, r.stderr]).toEqual([0, '']);
     const a = JSON.parse(r.stdout);
     expect(a.query).toBe('help');
     expect(a.rows.every((x: { snippet: string }) => /help/i.test(x.snippet))).toBe(true);
     const flag = await docs(sb, ['search', '--help', '--json']);
-    expect([flag.code, flag.stdout, flag.stderr]).toEqual([1, '', 'ctx docs search: help takes no further arguments\n']);
+    expect([flag.code, flag.stdout, flag.stderr]).toEqual([1, '', 'ctx: docs search: --help takes no further argument; help is ctx docs search --help alone\n']);
   });
 });

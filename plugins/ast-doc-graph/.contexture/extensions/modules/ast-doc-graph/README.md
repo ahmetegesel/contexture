@@ -27,7 +27,10 @@ The two verbs are thin wrappers: they exec their engine with the arguments
 untouched. `query`'s seven subcommands (`symbol`, `search`, `callers`,
 `callees`, `rules`, `pitfalls`, `stats`) ride as arguments to the query verb;
 words that name none (a mistyped `symbols`) refuse rc 1 naming the known ones,
-while `help` or no word at all prints the usage rc 0.
+while no word at all prints the usage rc 0, and `help` is no subcommand: it
+refuses as an unknown word. `ctx ast-doc-graph query -h` prints the verb's
+table; run directly, the engine programs keep `--help` and `-h` for their
+own manual, and `ctx ast-doc-graph index help` reads `help` as a file.
 
 ## Pipeline
 

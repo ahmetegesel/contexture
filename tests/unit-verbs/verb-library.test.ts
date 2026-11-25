@@ -2,7 +2,7 @@ import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { stage } from '../support/stage';
-import { execBytes } from '../support/unit';
+import { execBytes, run } from '../support/unit';
 import { BAD_REFS, GOOD_REFS, latin1, NOT_UTF8, SHAPES, UTF8_OK } from './inputs';
 
 describe.concurrent('the verb library lib/verb.sh, one function at a time', () => {
@@ -80,9 +80,13 @@ describe.concurrent('the verb library lib/verb.sh, one function at a time', () =
     expect([extra.code, extra.stderr]).toEqual([1, "task add: error: unexpected argument 'extra' (ERR_INVALID_ARGUMENT)\n"]);
   });
 
-  it('vb_verb_help prints the verb header table: summary, usage, help', async () => {
-    const r = await call('vb_verb_help unit .contexture/modules/unit/scripts/stamp');
-    expect(r.stdout).toMatch(/^ctx unit stamp: \S/);
-    expect(r.stdout).toMatch(/\n\nusage:\n {2}\S/);
+  it('[the-engine-r7] the library carries no verb help renderer: the engine renders the header table, so ctx unit stamp -h prints summary, usage, and help as ctx unit help stamp does', async () => {
+    expect((await call('command -v vb_verb_help || echo absent')).stdout).toBe('absent\n');
+    const [own, table] = await Promise.all([run(sb, ['unit', 'stamp', '-h']), run(sb, ['unit', 'help', 'stamp'])]);
+    expect([own.code, own.stderr]).toEqual([0, '']);
+    expect(own.stdout).toBe(table.stdout);
+    expect(own.stdout).toMatch(/^ctx unit stamp: \S/);
+    expect(own.stdout).toMatch(/\n\nusage:\n {2}\S/);
+    expect(own.stdout).toMatch(/\n\nhelp:\n {2}\S/);
   });
 });

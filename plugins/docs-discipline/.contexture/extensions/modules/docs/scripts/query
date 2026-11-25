@@ -14,17 +14,6 @@
 # help: example: ctx docs query --index (the full overview, never truncated (no head/tail); ends with an entry count)
 # help: the "index complete" marker proves the read was whole; a missing marker means the read was truncated, re-read it whole
 
-case "$1" in
-  help|--help|-h)
-    if [ "$#" -ne 1 ]; then
-      echo "ctx docs query: help takes no further arguments" >&2
-      exit 1
-    fi
-    echo "help: ctx docs help query" >&2
-    exit 1
-    ;;
-esac
-
 if [ "$#" -eq 0 ]; then
   echo "Usage: ctx docs query <repo> <slug> | --file <path> | --rules | --pitfalls | --index" >&2
   echo "help: ctx docs help query" >&2

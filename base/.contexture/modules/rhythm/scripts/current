@@ -13,9 +13,6 @@ drawer=$(CDPATH= cd -- "$dir/../../.." && pwd)
 root=$(CDPATH= cd -- "$drawer/.." && pwd)
 bin="${CTX_BIN:-$root/.contexture/ctx}"
 
-case "${1:-}" in
-  --help|-h) [ $# -eq 1 ] && exec "$bin" rhythm help current ;;
-esac
 if [ $# -ne 1 ]; then
   printf 'Usage: ctx rhythm current <unit>\n' >&2
   printf 'help: ctx rhythm help\n' >&2

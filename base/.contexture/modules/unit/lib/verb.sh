@@ -515,25 +515,6 @@ vb_leftovers_nudge() {
     "$vln_items" "$vln_w" "$vln_bytes" >> "$VB_DIR/relay"
 }
 
-# vb_verb_help <module label> <script path>: the verb's help table, as ctx <module> help
-# <verb> prints it (the header's summary, usage, and help lines)
-vb_verb_help() {
-  vh_f=$2
-  vh_v=${vh_f##*/}
-  printf 'ctx %s %s: %s\n' "$1" "$vh_v" "$(sed -n 's/^# summary: //p' "$vh_f" | head -n 1 | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')"
-  vh_u=$(sed -n 's/^# usage: //p' "$vh_f" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-  if [ -n "$vh_u" ]; then
-    printf '\nusage:\n'
-    printf '%s\n' "$vh_u" | while IFS= read -r vh_l; do [ -n "$vh_l" ] && printf '  %s\n' "$vh_l"; done
-  fi
-  vh_h=$(sed -n 's/^# help: //p' "$vh_f" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
-  if [ -n "$vh_h" ]; then
-    printf '\nhelp:\n'
-    printf '%s\n' "$vh_h" | while IFS= read -r vh_l; do [ -n "$vh_l" ] && printf '  %s\n' "$vh_l"; done
-  fi
-  return 0
-}
-
 # vb_rhythm_ok <rhythm>: a RHYTHM value is <name> <N> <GATE>, a step and its gate of the named
 # rhythm as the rhythm module's resolve answers it, the rhythm's @rhythm line naming its file:
 # the one rule of every verb taking a RHYTHM value; a refusal is one stderr line, rc 1. On
