@@ -64,7 +64,7 @@ BEGIN {
         touched_count++
 
         # a corpus doc rides the delta only at its logical address, the start of a delta path;
-        # a code path that merely ends in docs/<x>/<y>.md (a seed, a sample, a child
+        # a code path that merely ends in docs/<x>/<y>.md (a package path, a sample, a child
         # repository's own guide under its prefix) is no doc touch
         if (line ~ /^docs\/[^\/]+\/[^\/]+\.md$/) {
             split(line, dparts, /\//)

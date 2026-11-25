@@ -5,7 +5,7 @@
 # help: --remove deletes the block (the rule slug is never recycled); evidence refuses a line-number shape; a text value with a newline renders as a block scalar; --stdin=<field> reads that field's value raw from stdin
 # help: the result is grammar-checked by the audit over its repo (a duplicate rule id in the repo refuses) before it reaches the storage layer
 # help: exit codes: 0 written, unchanged, or the dry run printed; 1 a refusal (an unknown field, an enum value outside its set, a missing required field, a missing address, a grammar defect, a newline in a one-line field, a carriage return), nothing written; 2 a storage driver failure or a driver without a corpus
-# help: example: ctx docs rule workspace conventions api/versioned-routes --caution="An unversioned route breaks older clients"
+# help: example: ctx docs rule workspace conventions git/conventional-commits --caution="A free form subject breaks the changelog grouping"
 
 case "$1" in
   help|--help|-h)

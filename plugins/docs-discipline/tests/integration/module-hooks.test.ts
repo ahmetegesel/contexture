@@ -24,7 +24,7 @@ describe('the docs module part hooks, in order on one workspace', { concurrent: 
     expect((await docs(ws, ['query', 'workspace', 'conventions'])).code).toBe(1);
   });
 
-  it('RS3b [modules-r13] a conventions doc the workspace writes reads back through ctx docs query', async () => {
+  it('RS3b a conventions doc the workspace writes reads back through ctx docs query', async () => {
     const w = await docs(ws, ['write', 'workspace', 'conventions'], { input: readFileSync(join(SAMPLE, 'docs/workspace/conventions.md')) });
     expect(w.code, w.stderr).toBe(0);
     expect((await docs(ws, ['header', 'workspace', 'conventions', '--description=A locally kept description'])).code).toBe(0);

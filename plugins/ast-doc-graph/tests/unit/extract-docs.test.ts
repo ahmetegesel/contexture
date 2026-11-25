@@ -5,17 +5,16 @@ import { ROOT } from '@support/root';
 import { extractEvidenceSymbols, parseArray, parseDocMarkdown, slugify, unquote } from '../../.contexture/extensions/modules/ast-doc-graph/extractors/docs/extract-docs';
 
 const DOCS_PLUGIN = join(ROOT, 'plugins/docs-discipline');
+const SAMPLE_DOCS = join(DOCS_PLUGIN, 'tests/sample/docs');
 const corpus = (): [string, string][] =>
-  [join(DOCS_PLUGIN, 'docs'), join(DOCS_PLUGIN, 'tests/sample/docs')].flatMap((root) =>
-    readdirSync(root, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .flatMap((d) => readdirSync(join(root, d.name)).filter((f) => f.endsWith('.md')).map((f): [string, string] => [`docs/${d.name}/${f}`, join(root, d.name, f)])),
-  );
+  readdirSync(SAMPLE_DOCS, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .flatMap((d) => readdirSync(join(SAMPLE_DOCS, d.name)).filter((f) => f.endsWith('.md')).map((f): [string, string] => [`docs/${d.name}/${f}`, join(SAMPLE_DOCS, d.name, f)]));
 
 const parsed = () => corpus().map(([rel, path]) => parseDocMarkdown(readFileSync(path, 'utf8'), rel));
 
 describe('the docs extractor in process', { concurrent: true }, () => {
-  it('[ast-doc-graph-r7] reads the docs-discipline sample and seed: 5 docs, 17 rules, 3 pitfalls', () => {
+  it('[ast-doc-graph-r7] reads the docs-discipline sample: 5 docs, 17 rules, 3 pitfalls', () => {
     const all = parsed();
     expect(all.filter((p) => p.doc).length).toBe(5);
     expect(all.flatMap((p) => p.rules).length).toBe(17);

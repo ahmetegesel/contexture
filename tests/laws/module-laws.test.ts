@@ -31,6 +31,10 @@ describe.concurrent('the module law fragments', () => {
     expect(count(text, /^@append @/)).toBe(4);
     expect(text).toMatch(/^@append @layout$/m);
     expect(text).toContain("the workspace's own rules when it keeps one, read through ctx docs query workspace conventions");
+    expect(text).toContain("the general-level docs (the workspace's own conventions when it keeps one, the repo's overview");
+    expect(text).toContain("then the general-level docs: the workspace's own conventions when it keeps one and the entering repo's");
+    expect(text).not.toContain('(workspace conventions, the repo');
+    expect(text).not.toContain('the workspace conventions and the entering');
     expect(text).not.toContain('extensions/modules/docs/README.md');
     expect(text).toMatch(/^@append @boot$/m);
     expect(text).toContain('ctx docs query --index');
