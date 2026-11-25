@@ -1,6 +1,6 @@
 #!/bin/sh
 # summary: create a subagent lane from its brief parameters
-# usage: ctx lane create <unit> <lane-slug> --goal="..." --branch="..." --writes="..." --scope="..."... --report="..."... [--ref=...]... [--task=unit#<unit>/task/<slug>]... [--decision=unit#<unit>/entry/<slug>]... [--rhythm="<name> <N> <GATE>"] [--fact="..."]... [--substrate="..."]
+# usage: ctx lane create <unit> <lane-slug> --goal="..." --branch="..." --writes="..." --scope="..."... --report="..."... [--ref=...]... [--task=unit#<unit>/task/<slug>]... [--decision=unit#<unit>/entry/<slug>]... [--rhythm="<name> <N> <GATE>"] [--fact="..."]... [--substrate="..."] [--replace]
 # help: the dispatcher's act: the verb composes the lane's recipe from the brief parameters, stores it with an empty lane journal (lane.create), and prints the dispatch prompt; each flag takes --name=value or --name value
 # help: options:
 # help:   --goal="..."         required: the deliverable or decision the lane feeds, and where it stops; the one aim every step serves
@@ -14,9 +14,10 @@
 # help:   --rhythm="<name> <N> <GATE>"   the process in force, checked by the rule ctx unit record checks a rhythm by
 # help:   --fact="..."         repeatable: one isolated constraint from the dispatcher's context, kept one per line
 # help:   --substrate="..."    where code, tests, and commits land, and what stays untouched (a worktree lane)
+# help:   --replace            rewrite an unstarted lane's recipe whole from the flags, every check rerun, its journal and report kept; it takes no value; a started lane (its journal holding an item or a non empty preamble) refuses rc 1 (ERR_INVALID_TRANSITION), a started lane taking a new lane; a lane that does not exist refuses rc 1 (ERR_ENTITY_NOT_FOUND); given twice refuses
 # help: stdin is never read: the brief comes only as flags, and the verb writes the fixed blocks itself (the boundary, the boot, the journal, and the report), so no dispatcher forgets them
 # help: every value is one line of valid UTF-8 (a newline, a carriage return, or another byte refuses naming the flag); an empty value counts as missing, while an empty --ref, --task, or --decision refuses as malformed, as every REF write does; a flag that is not repeatable given twice refuses; a missing required flag refuses naming each with its purpose; a refusal writes nothing
-# help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged; a CLOSED unit refuses rc 1; every ref, task, and decision is looked up through its owner's get before the write, a missing one refusing rc 1 (ERR_ENTITY_NOT_FOUND)
+# help: an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged unless --replace is given for an unstarted lane; a CLOSED unit refuses rc 1; every ref, task, and decision is looked up through its owner's get before the write, a missing one refusing rc 1 (ERR_ENTITY_NOT_FOUND)
 # help: example: ctx lane create my-unit gather-cache --goal="map the cache callers for the cache task; stop at the report" --branch="the workspace checkout on main at abc1234" --writes="read only" --scope="list every caller of the cache; done when each names its file and symbol" --report="CALLERS :: each caller with its file and symbol"
 # help: the dispatch prompt it prints, its three lines quoted (a re-dispatch fills <unit> and <lane>): "You are a dispatched subagent working lane <lane> of unit <unit>. Your full brief is the lane recipe: read it first and follow it exactly: .contexture/ctx lane show <unit> <lane> recipe" "Hard rules: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp/<lane>/; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach. Every shell command runs through .contexture/ctx run; never leave a background process running when you finish; a command that hangs is stopped, never abandoned. The record only through ctx: your record writes are your lane journal and your report, plus only what the recipe's write scope adds." "Return a short summary only; the report carries the substance."
 
@@ -46,6 +47,7 @@ for f in goal branch writes rhythm substrate scope report ref task decision fact
   eval "n_$f=0; v_$f="
 done
 nval=0
+n_replace=0
 keep() { nval=$((nval + 1)); eval "VALF_$nval=\$1; VAL_$nval=\$2"; }
 once() {
   [ -n "$2" ] || return 0
@@ -68,6 +70,7 @@ while [ $# -gt 0 ]; do
     --goal|--branch|--writes|--rhythm|--substrate) need "$@"; f=${1#--}; shift; once "$f" "$1" ;;
     --scope=*|--report=*|--ref=*|--task=*|--decision=*|--fact=*) f=${1%%=*}; many "${f#--}" "${1#*=}" ;;
     --scope|--report|--ref|--task|--decision|--fact) need "$@"; f=${1#--}; shift; many "$f" "$1" ;;
+    --replace) [ "$n_replace" -eq 0 ] || fail "--replace given twice"; n_replace=1 ;;
     *) vb_unknown "lane create" "$1" ;;
   esac
   shift
@@ -193,9 +196,15 @@ EOF
   printf '  The report and the journal land no matter the outcome; return a short summary only.\n'
 } > "$VB_DIR/doc" || { printf 'lane create: error: cannot stage the recipe\n' >&2; exit 2; }
 
-vb_call_doc "$VB_DIR/doc" lane.create "$unit" "$lane"
+if [ "$n_replace" -eq 1 ]; then
+  vb_call_doc "$VB_DIR/doc" lane.create "$unit" "$lane" replace
+  act=replaced
+else
+  vb_call_doc "$VB_DIR/doc" lane.create "$unit" "$lane"
+  act=created
+fi
 vb_ok
-printf 'lane created: %s in %s\n\n' "$lane" "$unit"
+printf 'lane %s: %s in %s\n\n' "$act" "$lane" "$unit"
 printf "dispatch prompt (the subagent's launch message; never stored):\n"
 fill <<'EOF'
 You are a dispatched subagent working lane @LANE@ of unit @UNIT@. Your full brief is the lane recipe: read it first and follow it exactly: .contexture/ctx lane show @UNIT@ @LANE@ recipe

@@ -66,9 +66,9 @@ function artifacts(sb: string): Record<string, string> {
   return out;
 }
 
-async function both(op: Op, engineInput = op[2]): Promise<{ engine: Run; script: Run; engineStore: Record<string, string>; scriptStore: Record<string, string> }> {
+async function both(op: Op, engineInput = op[2], from = 'T37'): Promise<{ engine: Run; script: Run; engineStore: Record<string, string>; scriptStore: Record<string, string> }> {
   const [fn, argv, input = ''] = op;
-  const snapshot = await at('T37');
+  const snapshot = await at(from);
   const a = fresh(snapshot);
   const b = fresh(snapshot);
   const engine = await engineCall(a, fn, argv, engineInput ?? '');
@@ -91,6 +91,18 @@ describe.concurrent('the engine against the data script on the same fresh snapsh
       expect(engineStore).toEqual(scriptStore);
     });
   }
+
+  it.for([
+    ['an unstarted lane, landing', 'T16', 0],
+    ['a started lane, refusing', 'T37', 1],
+  ] as const)('lane.create replace, a mode of lane.create outside the 35 rows, over %s: the same answer and the same landed artifacts', async ([, from, code]) => {
+    const op: Op = ['lane.create', [TUNIT, 'lane-worker', 'replace'], '# a replaced differential recipe\n'];
+    const { engine, script, engineStore, scriptStore } = await both(op, op[2], from);
+    expect(script.code, `lane.create replace through the data script [${script.stderr}]`).toBe(code);
+    expect([engine.code, engine.stderr]).toEqual([script.code, script.stderr]);
+    expect(engine.stdout).toBe(script.stdout);
+    expect(engineStore).toEqual(scriptStore);
+  });
 
   it('null check: a planted payload difference reads unequal in the answer and the landed artifacts', async () => {
     const op = OPS.find(([fn]) => fn === 'task.add') as Op;

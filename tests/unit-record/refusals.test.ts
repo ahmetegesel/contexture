@@ -70,6 +70,7 @@ describe.concurrent('the refusals through the unit data script', () => {
       ['finding.supersede', [u, 'F52', 'F52C'], payload().kv('summary', 'successor').toString()],
       ['finding.drop', [u, 'F52'], ''],
       ['lane.create', [u, 'l52b'], RECIPE],
+      ['lane.create', [u, 'l52', 'replace'], RECIPE],
       ['lane.record', [u, 'l52'], payload().kv('what', 'closed').kv('thread', 'none').kv('date', DATE).kv('epoch', '1790000522').toString()],
       ['lane.write_report', [u, 'l52'], REPORT],
     ];

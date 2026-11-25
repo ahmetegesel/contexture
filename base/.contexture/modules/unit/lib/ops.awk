@@ -760,10 +760,21 @@ function f_finding_list(   kk, i, first, act) {
 # ---- lanes ----
 function lane_needed(l) { if (!((U, l) in HASLANE)) nf("lane", l) }
 
+# lane.create replace (PX_A2): an unstarted lane, its journal holding no item and an empty or
+# absent preamble, takes the new recipe alone; its journal and report stay as they are
 function f_lane_create(   l, k) {
   parse_state(U)
   not_closed()
   l = ENVIRON["PX_A1"]
+  if (ENVIRON["PX_A2"] == "replace") {
+    lane_needed(l)
+    k = U "|lane/" l "/journal"
+    parse_art(k, "lanejournal")
+    if (NI[k] > 0 || (PRE[k] != NULLV && PRE[k] != "")) transition("lane", l, "started", "lane.create replace", "an unstarted lane; a started lane takes a new lane")
+    stage_doc("lanes/" l "/recipe.md")
+    answer("{\"unit\":" jstr(U) ",\"lane\":" jstr(l) "}")
+    return
+  }
   if ((U, l) in HASLANE) ex("lane", l)
   stage_doc("lanes/" l "/recipe.md")
   k = U "|lane/" l "/journal"; PRES[k] = 1; NL[k] = 0; EOFNL[k] = 1

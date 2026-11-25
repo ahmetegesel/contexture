@@ -5,8 +5,8 @@ import { RECORD_LEAK, RECORD_ROOT } from '../support/drawer';
 import { launch } from '../support/exec';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
-import { createLane, LANE_BRIEF, lane, laneFlags, must, plantRhythms, rhythm, run, seedUnit, unit } from '../support/unit';
-import { SHAPES } from './inputs';
+import { createLane, execBytes, LANE_BRIEF, lane, laneFlags, must, plantArtifact, plantRhythms, rhythm, run, seedUnit, unit } from '../support/unit';
+import { latin1, SHAPES } from './inputs';
 
 const D = '2026-09-27';
 const FIDELITY = '# fidelity\n\nA1 :: printf \'@task x\\n  STATUS: TODO\\n\' | ctx x\ncols\tsplit by a tab\n"a", "b" quote-comma\nends in a backslash \\\nlast line\n';
@@ -35,6 +35,15 @@ const prompt = (u: string, l: string): string[] => [
   `Hard rules: never use /tmp or any path outside the workspace; scratch only under .contexture/tmp/${l}/; a harness permission prompt for a path outside the workspace is the signal to stop and report, never an ask to reach. Every shell command runs through .contexture/ctx run; never leave a background process running when you finish; a command that hangs is stopped, never abandoned. The record only through ctx: your record writes are your lane journal and your report, plus only what the recipe's write scope adds.`,
   'Return a short summary only; the report carries the substance.',
 ];
+const replaced = (u: string, l: string): string => [`lane replaced: ${l} in ${u}`, '', "dispatch prompt (the subagent's launch message; never stored):", ...prompt(u, l), ''].join('\n');
+const started = (l: string): string => `lane.create: error: lane '${l}' is started; lane.create replace moves only from an unstarted lane; a started lane takes a new lane (ERR_INVALID_TRANSITION)\n`;
+const files = (sb: string, u: string, l: string): string[] => ['recipe', 'journal', 'report'].map((a) => {
+  try {
+    return readFileSync(artifactPath(sb, u, `lane/${l}/${a}`), 'latin1');
+  } catch {
+    return `absent ${a}`;
+  }
+});
 
 const FULL = [
   '--goal=map the probe callers for the probe task; stop at the report',
@@ -105,6 +114,27 @@ const FULL_RECIPE = [
   '  The report and the journal land no matter the outcome; return a short summary only.',
   '',
 ].join('\n');
+const REFUSALS = [
+  ['with no flag and a recipe on stdin', ['sem-unit', 'r-lane'], missing('goal', 'branch', 'writes', 'scope', 'report')],
+  ['missing two flags', ['sem-unit', 'r-lane', '--goal=g', '--branch=b', '--writes=w'], missing('scope', 'report')],
+  ['with an empty value', ['sem-unit', 'r-lane', ...laneFlags(['--goal='])], missing('goal')],
+  ['given a single flag twice', ['sem-unit', 'r-lane', ...laneFlags(), '--writes=again'], refusal('--writes given twice; it takes one value')],
+  ['ending in a flag with no value', ['sem-unit', 'r-lane', ...laneFlags(), '--fact'], refusal('--fact needs a value')],
+  ['with an unknown flag', ['sem-unit', 'r-lane', ...laneFlags(), '--bogus=1'], refusal("unknown option '--bogus=1'")],
+  ['with an extra argument', ['sem-unit', 'r-lane', 'extra', ...laneFlags()], refusal("unexpected argument 'extra'")],
+  ['with a malformed unit', ['bad.unit', 'r-lane', ...laneFlags()], refusal("malformed unit 'bad.unit'")],
+  ['with a malformed lane', ['sem-unit', 'bad.lane', ...laneFlags()], refusal("malformed lane 'bad.lane'")],
+  ['with a malformed ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref=bare word'])], `lane create: error: malformed ref 'bare word': ${SHAPES}\n`],
+  ['with a retired ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref=lanes/x-lane/report'])], "lane create: error: malformed ref 'lanes/x-lane/report': a reference is a full address <owner>#<path>; write unit#sem-unit/lane/x-lane/report (ERR_INVALID_ARGUMENT)\n"],
+  ['with an empty ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref='])], `lane create: error: malformed ref '': ${SHAPES}\n`],
+  ['with an empty ref in the spaced form', ['sem-unit', 'r-lane', ...laneFlags(['--ref', ''])], `lane create: error: malformed ref '': ${SHAPES}\n`],
+  ['with a malformed task', ['sem-unit', 'r-lane', ...laneFlags(['--task=probe-task'])], refusal("malformed task 'probe-task': a task is unit#<unit>/task/<slug>")],
+  ['with an empty task', ['sem-unit', 'r-lane', ...laneFlags(['--task='])], refusal("malformed task '': a task is unit#<unit>/task/<slug>")],
+  ['with a malformed decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision=unit#x-unit/entry/bad slug'])], refusal("malformed decision 'unit#x-unit/entry/bad slug': a decision is unit#<unit>/entry/<slug>")],
+  ['with an empty decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision='])], refusal("malformed decision '': a decision is unit#<unit>/entry/<slug>")],
+  ['with a malformed rhythm', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe one OPEN'])], 'ERROR: RHYTHM step malformed: one\n'],
+  ['with a rhythm gate its step does not read, as ctx unit record refuses it', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe 1 WRONG'])], 'ERROR: RHYTHM step 1 of probe reads OPEN, not WRONG\n'],
+] as const;
 
 describe.concurrent('ctx lane: create, record, report, show', () => {
   let sb0: string;
@@ -195,33 +225,93 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     for (const line of [...lines, 'dispatch prompt']) expect(recipe).not.toContain(line);
   });
 
-  it.for([
-    ['with no flag and a recipe on stdin', ['sem-unit', 'r-lane'], missing('goal', 'branch', 'writes', 'scope', 'report')],
-    ['missing two flags', ['sem-unit', 'r-lane', '--goal=g', '--branch=b', '--writes=w'], missing('scope', 'report')],
-    ['with an empty value', ['sem-unit', 'r-lane', ...laneFlags(['--goal='])], missing('goal')],
-    ['given a single flag twice', ['sem-unit', 'r-lane', ...laneFlags(), '--writes=again'], refusal('--writes given twice; it takes one value')],
-    ['ending in a flag with no value', ['sem-unit', 'r-lane', ...laneFlags(), '--fact'], refusal('--fact needs a value')],
-    ['with an unknown flag', ['sem-unit', 'r-lane', ...laneFlags(), '--bogus=1'], refusal("unknown option '--bogus=1'")],
-    ['with an extra argument', ['sem-unit', 'r-lane', 'extra', ...laneFlags()], refusal("unexpected argument 'extra'")],
-    ['with a malformed unit', ['bad.unit', 'r-lane', ...laneFlags()], refusal("malformed unit 'bad.unit'")],
-    ['with a malformed lane', ['sem-unit', 'bad.lane', ...laneFlags()], refusal("malformed lane 'bad.lane'")],
-    ['with a malformed ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref=bare word'])], `lane create: error: malformed ref 'bare word': ${SHAPES}\n`],
-    ['with a retired ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref=lanes/x-lane/report'])], "lane create: error: malformed ref 'lanes/x-lane/report': a reference is a full address <owner>#<path>; write unit#sem-unit/lane/x-lane/report (ERR_INVALID_ARGUMENT)\n"],
-    ['with an empty ref', ['sem-unit', 'r-lane', ...laneFlags(['--ref='])], `lane create: error: malformed ref '': ${SHAPES}\n`],
-    ['with an empty ref in the spaced form', ['sem-unit', 'r-lane', ...laneFlags(['--ref', ''])], `lane create: error: malformed ref '': ${SHAPES}\n`],
-    ['with a malformed task', ['sem-unit', 'r-lane', ...laneFlags(['--task=probe-task'])], refusal("malformed task 'probe-task': a task is unit#<unit>/task/<slug>")],
-    ['with an empty task', ['sem-unit', 'r-lane', ...laneFlags(['--task='])], refusal("malformed task '': a task is unit#<unit>/task/<slug>")],
-    ['with a malformed decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision=unit#x-unit/entry/bad slug'])], refusal("malformed decision 'unit#x-unit/entry/bad slug': a decision is unit#<unit>/entry/<slug>")],
-    ['with an empty decision', ['sem-unit', 'r-lane', ...laneFlags(['--decision='])], refusal("malformed decision '': a decision is unit#<unit>/entry/<slug>")],
-    ['with a malformed rhythm', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe one OPEN'])], 'ERROR: RHYTHM step malformed: one\n'],
-    ['with a rhythm gate its step does not read, as ctx unit record refuses it', ['sem-unit', 'r-lane', ...laneFlags(['--rhythm=probe 1 WRONG'])], 'ERROR: RHYTHM step 1 of probe reads OPEN, not WRONG\n'],
-  ] as const)('[the-record-r9, the-record-r-xbt3g]: lane create %s refuses rc 1 with its one stderr line, nothing written', async ([, argv, line]) => {
+  it.for(REFUSALS)('[the-record-r9, the-record-r-xbt3g]: lane create %s refuses rc 1 with its one stderr line, nothing written', async ([, argv, line]) => {
     const sb = fresh(sb0);
     const r = await run(sb, ['lane', 'create', ...argv], fed);
     expect([r.code, r.stdout, r.stderr]).toEqual([1, '', line]);
     const shown = await lane(sb, 'show', 'sem-unit', 'r-lane', 'recipe');
     expect(shown.code).toBe(1);
     expect(shown.stderr).toContain('ERR_ENTITY_NOT_FOUND');
+  });
+
+  it('[the-record-r15, the-record-r11]: lane create --replace rewrites an unstarted lane\'s recipe whole from its flags in either position, the journal and a report kept byte for byte, printing the replaced line and the dispatch prompt exactly as create does; without --replace the existing lane still refuses ERR_ENTITY_EXISTS', async () => {
+    const sb = fresh(sb0);
+    await must(createLane(sb, 'sem-unit', 'full-lane'));
+    await must(report(sb, 'sem-unit', 'full-lane', FIDELITY));
+    const plain = await createLane(sb, 'sem-unit', 'full-lane', ['--goal=a twin brief']);
+    expect([plain.code, plain.stdout, plain.stderr]).toEqual([1, '', "lane.create: error: lane 'full-lane' already exists in unit 'sem-unit' (ERR_ENTITY_EXISTS)\n"]);
+    const [, journal, kept] = files(sb, 'sem-unit', 'full-lane');
+    expect(kept).toBe(FIDELITY);
+    const shown = await lane(sb, 'show', 'sem-unit', 'full-lane', 'journal');
+    const r = await run(sb, ['lane', 'create', 'sem-unit', 'full-lane', ...FULL, '--replace']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, replaced('sem-unit', 'full-lane'), '']);
+    expect(await recipeOf(sb, 'full-lane')).toBe(FULL_RECIPE);
+    expect(files(sb, 'sem-unit', 'full-lane')).toEqual([FULL_RECIPE, journal, FIDELITY]);
+    expect(await lane(sb, 'show', 'sem-unit', 'full-lane', 'journal')).toEqual(shown);
+    await must(run(sb, ['lane', 'create', 'sem-unit', 'full-lane', '--replace', ...laneFlags(['--goal=the second brief'])]));
+    expect(await recipeOf(sb, 'full-lane')).toContain('\nGOAL ::\n  the second brief\n');
+    expect(files(sb, 'sem-unit', 'full-lane').slice(1)).toEqual([journal, FIDELITY]);
+  });
+
+  it.for([
+    ...REFUSALS,
+    ['with a carriage return in a value', ['sem-unit', 'r-lane', ...laneFlags(['--goal=a carriage\rreturn'])], refusal('--goal holds a carriage return; the dialect is LF')],
+    ['with a newline in a value', ['sem-unit', 'r-lane', ...laneFlags(['--scope=first line\nsecond line'])], refusal('--scope holds a newline; each value is one line')],
+    ['with a ref no owner holds', ['sem-unit', 'r-lane', ...laneFlags([`--ref=unit#x-unit/entry/${D}-nope`])], `lane create: error: ref 'unit#x-unit/entry/${D}-nope': target not found (ERR_ENTITY_NOT_FOUND)\n`],
+    ['with a task no backlog holds', ['sem-unit', 'r-lane', ...laneFlags(['--task=unit#x-unit/task/no-task'])], "lane create: error: ref 'unit#x-unit/task/no-task': target not found (ERR_ENTITY_NOT_FOUND)\n"],
+    ['with a decision no journal holds', ['sem-unit', 'r-lane', ...laneFlags([`--decision=unit#x-unit/entry/${D}-no-d`])], `lane create: error: ref 'unit#x-unit/entry/${D}-no-d': target not found (ERR_ENTITY_NOT_FOUND)\n`],
+    ['given --replace twice', ['sem-unit', 'r-lane', ...laneFlags(), '--replace'], refusal('--replace given twice')],
+    ['with --replace given a value', ['sem-unit', 'r-lane', ...laneFlags(), '--replace=x'], refusal("unknown option '--replace=x'")],
+  ] as const)('[the-record-r-xbt3g]: lane create --replace over an existing lane %s reruns the create check and refuses with its one stderr line, the recipe, journal, and report byte equal', async ([, argv, line]) => {
+    const sb = fresh(sb0);
+    const before = files(sb, 'sem-unit', 'sub-lane');
+    const [u, , ...flags] = argv;
+    const target = argv[1] === 'r-lane' ? 'sub-lane' : argv[1];
+    const r = await run(sb, ['lane', 'create', u, target, '--replace', ...flags], fed);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', line]);
+    expect(files(sb, 'sem-unit', 'sub-lane')).toEqual(before);
+  });
+
+  it('[the-record-r-xbt3g]: lane create --replace refuses a value that is not UTF-8 naming its flag, the recipe byte equal', async () => {
+    const sb = fresh(sb0);
+    const before = files(sb, 'sem-unit', 'sub-lane');
+    const r = await execBytes(sb, ['./.contexture/ctx', 'lane', 'create', 'sem-unit', 'sub-lane', '--replace', Buffer.concat([Buffer.from('--goal='), latin1('bad \xff byte')]), ...laneFlags(['--goal=']).slice(0, -1)]);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', refusal('goal is not valid UTF-8')]);
+    expect(files(sb, 'sem-unit', 'sub-lane')).toEqual(before);
+  });
+
+  it.for([
+    ['after a lane record entry', 'x-unit', 'x-lane', ''],
+    ['over a planted journal preamble', 'sem-unit', 'pre-lane', 'a legacy prose preamble, no entry\n'],
+    ['over a journal holding an anchor alone', 'sem-unit', 'anc-lane', '@anchor A1\n'],
+  ] as const)('[the-record-r15]: lane create --replace %s refuses rc 1 ERR_INVALID_TRANSITION, a started lane taking a new lane, every artifact byte equal', async ([, u, l, journal]) => {
+    const sb = fresh(sb0);
+    if (journal) {
+      await must(createLane(sb, u, l));
+      plantArtifact(sb, u, `lane/${l}/journal`, journal);
+    }
+    const before = files(sb, u, l);
+    const r = await createLane(sb, u, l, ['--goal=a changed brief', '--replace']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', started(l)]);
+    expect(files(sb, u, l)).toEqual(before);
+  });
+
+  it('[the-record-r15]: lane create --replace on a lane that does not exist refuses rc 1 ERR_ENTITY_NOT_FOUND and creates nothing', async () => {
+    const sb = fresh(sb0);
+    const r = await createLane(sb, 'sem-unit', 'no-lane', ['--replace']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', "lane.create: error: lane 'no-lane' not found in unit 'sem-unit' (ERR_ENTITY_NOT_FOUND)\n"]);
+    expect(files(sb, 'sem-unit', 'no-lane')).toEqual(['absent recipe', 'absent journal', 'absent report']);
+  });
+
+  it('[the-record-r11, the-record-r15]: lane create --replace in a CLOSED unit refuses rc 1 ERR_UNIT_CLOSED, the recipe byte equal', async () => {
+    const sb = fresh(sb0);
+    await seedUnit(sb, 'cl-unit', 'the closed lane unit');
+    await must(createLane(sb, 'cl-unit', 'cl-lane'));
+    await must(unit(sb, 'close', 'cl-unit'));
+    const before = files(sb, 'cl-unit', 'cl-lane');
+    const r = await createLane(sb, 'cl-unit', 'cl-lane', ['--goal=a changed brief', '--replace']);
+    expect([r.code, r.stdout, r.stderr]).toEqual([1, '', "lane.create: error: unit 'cl-unit' is CLOSED; a closed unit takes no writes (ERR_UNIT_CLOSED)\n"]);
+    expect(files(sb, 'cl-unit', 'cl-lane')).toEqual(before);
   });
 
   it('[the-record-r-xbt3g, the-record-r-ep8la]: lane create refuses a rhythm whose @rhythm line names another with the exact line ctx unit record prints, nothing written', async () => {
@@ -274,6 +364,9 @@ describe.concurrent('ctx lane: create, record, report, show', () => {
     expect(table.stdout).toMatch(/^ {2}ctx lane create <unit> <lane-slug> --goal="\.\.\." --branch="\.\.\." --writes="\.\.\." --scope="\.\.\."\.\.\. --report="\.\.\."\.\.\. \[--ref=/m);
     for (const flag of ['goal', 'branch', 'writes', 'scope', 'report']) expect(table.stdout).toMatch(new RegExp(`^ {2}--${flag}="\\.\\.\\." +required`, 'm'));
     for (const flag of ['ref', 'task', 'decision', 'rhythm', 'fact', 'substrate']) expect(table.stdout).toMatch(new RegExp(`^ {2}--${flag}=`, 'm'));
+    expect(table.stdout).toMatch(/^ {2}ctx lane create <unit> <lane-slug> .* \[--substrate="\.\.\."\] \[--replace\]$/m);
+    expect(table.stdout).toMatch(/^ {2}--replace +rewrite an unstarted lane's recipe whole from the flags.*\(ERR_INVALID_TRANSITION\).*\(ERR_ENTITY_NOT_FOUND\).*given twice refuses/m);
+    expect(table.stdout).toContain('an existing lane refuses rc 1 (ERR_ENTITY_EXISTS) with its recipe unchanged unless --replace is given for an unstarted lane');
     expect(table.stdout).toContain('stdin is never read');
     expect(table.stdout).toContain(' --report="CALLERS :: each caller with its file and symbol"');
     for (const line of prompt('<unit>', '<lane>')) expect(table.stdout).toContain(line);

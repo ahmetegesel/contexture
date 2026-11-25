@@ -167,6 +167,8 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await u('finding', 'add', 'cu', 'F_DROP', '--summary=the finding to drop');
       await u('finding', 'drop', 'cu', 'F_DROP');
       await take(['lane', 'create', 'cu', 'cl', ...laneFlags(['--ref=unit#cu/task/t1', '--task=unit#cu/task/t1', '--rhythm=debug 2 TRACE'])]);
+      await take(['lane', 'create', 'cu', 'cr', ...laneFlags()]);
+      await take(['lane', 'create', 'cu', 'cr', ...laneFlags(['--fact=the replaced census brief', '--replace'])]);
       await take(['lane', 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=unit#cu/task/t1']);
       await take(['lane', 'report', 'cu', 'cl'], REPORT);
       await u('refs', 'cu', 'lg');

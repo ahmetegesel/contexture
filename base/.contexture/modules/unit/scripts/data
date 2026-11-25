@@ -1148,12 +1148,14 @@ u_recipe_refs() {
   u_refs_check "$U_SCR/refs"
 }
 
-# u_lane_doc <function> <unit> <lane>: lane.create or lane.write_report, the document raw, read
-# before the unit lock; a recipe's REFS block items pass the shape backstop there
+# u_lane_doc <function> <unit> <lane> [replace]: lane.create or lane.write_report, the document
+# raw, read before the unit lock; a recipe's REFS block items pass the shape backstop there; the
+# replace mode of lane.create fetches the lane itself, whose journal the op reads
 u_lane_doc() {
   FN=$1
   U_UNIT=$2
   U_LANE=$3
+  U_MODE=${4:-}
   u_scratch
   u_manifest_reset
   U_PAY=""
@@ -1165,8 +1167,13 @@ u_lane_doc() {
   fi
   u_lock "$U_UNIT"
   PX_DOCSIZE=$(wc -c < "$U_STAGE/doc" | tr -d ' ')
-  u_fetch_unit "$U_UNIT" "__lanes__" 1
-  u_args "$U_LANE"
+  if [ "$U_MODE" = replace ]; then
+    u_fetch_unit "$U_UNIT" "lane:$U_LANE" 1
+    u_args "$U_LANE" replace
+  else
+    u_fetch_unit "$U_UNIT" "__lanes__" 1
+    u_args "$U_LANE"
+  fi
   u_awk
   u_commit
 }
@@ -1533,12 +1540,18 @@ case "$cmd" in
     u_unit_call "$cmd" "$1" "knowledge" 0 "$2"
     ;;
   lane.create|lane.write_report)
-    u_extra 2 "$@"
+    case "$cmd" in
+      lane.create) u_extra 3 "$@" ;;
+      *) u_extra 2 "$@" ;;
+    esac
     FN=$cmd
     u_want_unit "${1:-}"
     [ -n "${2:-}" ] || u_refuse 1 ERR_INVALID_ARGUMENT "missing the lane"
     u_ident_valid "$2" || u_refuse 1 ERR_INVALID_ARGUMENT "malformed lane '$2'"
-    u_lane_doc "$cmd" "$1" "$2"
+    if [ $# -ge 3 ] && [ "$3" != replace ]; then
+      u_refuse 1 ERR_INVALID_ARGUMENT "lane.create takes the mode replace: '$3'"
+    fi
+    u_lane_doc "$cmd" "$1" "$2" "${3:-}"
     ;;
   lane.record)
     u_extra 2 "$@"

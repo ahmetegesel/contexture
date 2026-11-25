@@ -163,6 +163,7 @@ function plan(fn: string, argv: readonly string[]): Plan {
     case 'finding.supersede':
       return unitParts('knowledge', true);
     case 'lane.create':
+      return { ...unitParts(rest[1] === 'replace' ? `lane:${rest[0]}` : '__lanes__', true), doc: true };
     case 'lane.write_report':
       return { ...unitParts('__lanes__', true), doc: true };
     case 'lane.record':

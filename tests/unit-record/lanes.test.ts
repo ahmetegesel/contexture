@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { data } from '../support/data';
@@ -10,6 +10,14 @@ import { ALPHA, at, RECIPE, REPORT, SUNIT, TUNIT } from './chain';
 const LE = `{"kind":"entry","lane":"lane-worker","slug":"2026-09-27-event-1790000020","occurrence":1,"seq":1,"anchor":null,"what":"Subagent action trace WHAT","group":null,"rhythm":null,"knowledge":false,"thread":"none","legacy_status":null,"refs":["unit#u1/entry/${ALPHA}"],"closers":[],"extra_fields":[],"head_text":null,"extra_lines":[],"next":null}`;
 const RECIPE_JSON = '"# recipe grammar\\nMISSION\\n  GOAL: \\"Subagent goal description\\"\\n"';
 const laneEntry = (what: string, epoch: string) => payload().kv('what', what).kv('thread', 'none').kv('date', DATE).kv('epoch', epoch);
+const NEW = '# the replaced recipe\nMISSION\n  GOAL: "the second brief"\n';
+const STARTED = "lane 'lane-worker' is started; lane.create replace moves only from an unstarted lane; a started lane takes a new lane";
+const plant = (sb: string, artifact: string, text: string): void => {
+  const path = artifactPath(sb, TUNIT, artifact);
+  mkdirSync(join(path, '..'), { recursive: true });
+  writeFileSync(path, text);
+};
+const recipeOf = async (sb: string, l = 'lane-worker'): Promise<string> => answer(await data(sb, 'lane.get', [TUNIT, l, 'recipe']), 'lane.get').content;
 
 describe.concurrent('the lanes through the unit data script', () => {
   it('TC16 [the-record-r15]: lane.create stores the recipe byte for byte with an empty journal and no report', async () => {
@@ -58,6 +66,55 @@ describe.concurrent('the lanes through the unit data script', () => {
     expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'bare-lane', 'journal']), 'lane.get')).toBe('{"unit":"compliance-tasks","lane":"bare-lane","artifact":"journal","preamble":"","items":[]}');
     expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'bare-lane', 'report']), 'lane.get')).toBe('{"unit":"compliance-tasks","lane":"bare-lane","artifact":"report","content":null}');
     refused(await data(sb, 'lane.get', [TUNIT, 'no-such-lane', 'recipe']), 'lane.get', 1, 'ERR_ENTITY_NOT_FOUND', "lane 'no-such-lane' not found in unit 'compliance-tasks'");
+  });
+
+  it('[the-record-r15]: lane.create replace over an unstarted lane stores the new recipe byte for byte with the journal and the report untouched, answering as create', async () => {
+    const sb = await at('T16');
+    await ok(sb, 'lane.write_report', [TUNIT, 'lane-worker'], REPORT);
+    const journal = readFileSync(artifactPath(sb, TUNIT, 'lane/lane-worker/journal'));
+    expect(answerLine(await data(sb, 'lane.create', [TUNIT, 'lane-worker', 'replace'], NEW), 'lane.create')).toBe('{"unit":"compliance-tasks","lane":"lane-worker"}');
+    expect(await recipeOf(sb)).toBe(NEW);
+    expect(readFileSync(artifactPath(sb, TUNIT, 'lane/lane-worker/journal'))).toEqual(journal);
+    expect(readFileSync(artifactPath(sb, TUNIT, 'lane/lane-worker/report'), 'utf8')).toBe(REPORT);
+  });
+
+  it.for([
+    ['a journal holding an entry', 'T17', ''],
+    ['a journal holding an anchor alone', 'T16', '@anchor A1\n'],
+    ['a journal holding a non empty preamble', 'T16', 'a legacy prose preamble, no item\n'],
+  ] as const)('[the-record-r15]: lane.create replace over %s refuses rc1 ERR_INVALID_TRANSITION, every lane artifact unchanged', async ([, from, journal]) => {
+    const sb = await at(from);
+    if (journal) plant(sb, 'lane/lane-worker/journal', journal);
+    const before = await reads(sb, TUNIT);
+    const lanes = await Promise.all(['recipe', 'journal', 'report'].map((a) => data(sb, 'lane.get', [TUNIT, 'lane-worker', a]).then((r) => r.stdout)));
+    refused(await data(sb, 'lane.create', [TUNIT, 'lane-worker', 'replace'], NEW), 'lane.create', 1, 'ERR_INVALID_TRANSITION', STARTED);
+    expect(await recipeOf(sb)).toBe(RECIPE);
+    expect(await Promise.all(['recipe', 'journal', 'report'].map((a) => data(sb, 'lane.get', [TUNIT, 'lane-worker', a]).then((r) => r.stdout)))).toEqual(lanes);
+    expect(await reads(sb, TUNIT)).toBe(before);
+  });
+
+  it('[the-record-r15]: lane.create replace on a lane that does not exist refuses rc1 ERR_ENTITY_NOT_FOUND and creates nothing', async () => {
+    const sb = await at('T16');
+    refused(await data(sb, 'lane.create', [TUNIT, 'no-lane', 'replace'], NEW), 'lane.create', 1, 'ERR_ENTITY_NOT_FOUND', "lane 'no-lane' not found in unit 'compliance-tasks'");
+    refused(await data(sb, 'lane.get', [TUNIT, 'no-lane', 'recipe']), 'lane.get', 1, 'ERR_ENTITY_NOT_FOUND', "lane 'no-lane' not found in unit 'compliance-tasks'");
+  });
+
+  it('[the-record-r15, the-record-r19]: lane.create replace over a lane with no journal document stores the recipe and leaves the journal absent (posix plant)', async () => {
+    const sb = await at('T16');
+    plant(sb, 'lane/doc-lane/recipe', '# a recipe with no journal\n');
+    expect(answerLine(await data(sb, 'lane.create', [TUNIT, 'doc-lane', 'replace'], NEW), 'lane.create')).toBe('{"unit":"compliance-tasks","lane":"doc-lane"}');
+    expect(await recipeOf(sb, 'doc-lane')).toBe(NEW);
+    expect(existsSync(artifactPath(sb, TUNIT, 'lane/doc-lane/journal'))).toBe(false);
+    expect(answerLine(await data(sb, 'lane.get', [TUNIT, 'doc-lane', 'journal']), 'lane.get')).toBe('{"unit":"compliance-tasks","lane":"doc-lane","artifact":"journal","preamble":null,"items":[]}');
+  });
+
+  it('[the-record-r15, the-engine-r9]: lane.create takes replace alone as its optional third argv; any other third value or a fourth refuses rc1 ERR_INVALID_ARGUMENT, and lane.write_report still takes two', async () => {
+    const sb = await at('T16');
+    refused(await data(sb, 'lane.create', [TUNIT, 'lane-worker', 'bogus'], NEW), 'lane.create', 1, 'ERR_INVALID_ARGUMENT', "lane.create takes the mode replace: 'bogus'");
+    refused(await data(sb, 'lane.create', [TUNIT, 'lane-worker', ''], NEW), 'lane.create', 1, 'ERR_INVALID_ARGUMENT', "lane.create takes the mode replace: ''");
+    refused(await data(sb, 'lane.create', [TUNIT, 'lane-worker', 'replace', 'x'], NEW), 'lane.create', 1, 'ERR_INVALID_ARGUMENT', "unexpected argument 'x'");
+    refused(await data(sb, 'lane.write_report', [TUNIT, 'lane-worker', 'replace'], REPORT), 'lane.write_report', 1, 'ERR_INVALID_ARGUMENT', "unexpected argument 'replace'");
+    expect(await recipeOf(sb)).toBe(RECIPE);
   });
 
   it('TC79 [the-record-r19]: a lane folder without an artifact is no lane: lane.get refuses it, the reads skip it, lane.create lands beside its files (posix plant)', async () => {
