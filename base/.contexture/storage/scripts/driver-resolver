@@ -603,9 +603,11 @@ require_caps() {
 # scratch (the system temp only when the drawer cannot hold it), a batch's without its NUL
 # bytes, checked there (a value at most KV_CAP bytes, a batch value's decoded size
 # likewise), and handed to the driver as its stdin from the staged file, which kv_handoff
-# unlinks before the exec; a hangup, interrupt, or termination before it removes the file.
+# unlinks before the exec; a hangup, interrupt, or termination before it ends the copy still
+# reading stdin and removes the file.
 KV_CAP=16777216
 KV_STAGE=""
+KV_COPY=""
 KV_RULE=""
 KV_SFX=""
 KV_MULTI=0
@@ -614,6 +616,12 @@ KV_NL='
 case "$0" in */*) KV_HOME=${0%/*} ;; *) KV_HOME=. ;; esac
 
 kv_drop() {
+  if [ -n "$KV_COPY" ]; then
+    KV_COPY=""
+    set +u
+    [ -z "$!" ] || { kill -KILL "$!"; wait "$!"; } 2>/dev/null
+    set -u
+  fi
   [ -n "$KV_STAGE" ] && rm -f "$KV_STAGE" 2>/dev/null
   KV_STAGE=""
   return 0
@@ -688,7 +696,11 @@ kv_check() {
 
 # kv_stage [wire]: stdin staged in a file of the per verb scratch root, else the drawer's
 # scratch; a batch payload (wire) is staged without its NUL bytes, which an awk may cut a
-# line at while a shell read drops them, so the gate checks the very lines the driver reads
+# line at while a shell read drops them, so the gate checks the very lines the driver reads.
+# The copy runs in the background under the wait builtin, which a trapped signal interrupts at
+# once, and the trap kills it (KV_COPY marks it from before its fork, so $! names it): a
+# foreground copy holds the trap until the caller's stdin ends, and a signal reaching the
+# shell around that fork never reaches the copy
 kv_stage() {
   trap 'kv_drop' EXIT
   trap 'kv_drop; exit 129' HUP
@@ -704,11 +716,16 @@ kv_stage() {
     mkdir -p "$ks_dir" 2>/dev/null
   fi
   KV_STAGE=$(mktemp "$ks_dir/store-gate.XXXXXX" 2>/dev/null) || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  KV_COPY=1
   if [ "${1:-}" = wire ]; then
-    { LC_ALL=C tr -d '\000' > "$KV_STAGE"; } 2>/dev/null || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+    LC_ALL=C tr -d '\000' <&3 > "$KV_STAGE" 3<&- &
   else
-    { cat > "$KV_STAGE"; } 2>/dev/null || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
-  fi
+    cat <&3 > "$KV_STAGE" 3<&- &
+  fi 2>/dev/null 3<&0 || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  wait "$!"
+  ks_rc=$?
+  KV_COPY=""
+  [ "$ks_rc" -eq 0 ] || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
 }
 
 kv_value() {

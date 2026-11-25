@@ -4,10 +4,12 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { dataFile } from '../support/data-file';
 import { driverOp } from '../support/driver';
 import { exec, launch } from '../support/exec';
+import { alive } from '../support/procs';
 import { sandbox } from '../support/sandbox';
 import { moduleCall } from '../support/sh';
 import { DRIVERS, fts5Available, stage } from '../support/stage';
 import { batchPayload, listAnswer, store } from '../support/store';
+import { waitFor } from '../support/unit';
 import { answer, refused } from '../support/wire';
 
 const CAP = 16 * 1024 * 1024;
@@ -39,6 +41,21 @@ function recorder(label: string): { sb: string; log: () => string[]; stdin: () =
   const log = () => (existsSync(join(sb, 'rec.log')) ? readFileSync(join(sb, 'rec.log'), 'utf8').split('\n').filter(Boolean) : []);
   const stdin = () => readFileSync(join(sb, 'rec.stdin'));
   return { sb, log, stdin };
+}
+
+// a put whose stdin stays open, signalled (its whole group, or the resolver alone) once its copy
+// holds the bytes written so far: the code, stdout, the staged files, the driver calls, and
+// whether its group emptied
+async function signalStaging(label: string, sig: NodeJS.Signals, group: boolean): Promise<unknown[]> {
+  const r = recorder(label);
+  const run = launch(resolver(r.sb), ['store.put', 'deep', 'u/a'], { cwd: r.sb, input: null, group, timeout: 30_000, env: { CTX_ROOT: r.sb } });
+  run.child.stdin?.write('partial');
+  const tmp = join(r.sb, '.contexture/tmp');
+  const copied = () => staged(tmp).some((n) => statSync(join(tmp, n)).size === 'partial'.length);
+  expect(await waitFor(copied, 20_000, 25), 'the copy holds the bytes written so far').toBe(true);
+  run.signal(sig);
+  const done = await run.result;
+  return [done.code, done.stdout, staged(tmp), r.log(), await waitFor(() => !alive(-(run.child.pid as number)), 5_000)];
 }
 
 describe('the key and value gate at the resolver\'s dispatch', { concurrent: true }, () => {
@@ -123,16 +140,12 @@ describe('the key and value gate at the resolver\'s dispatch', { concurrent: tru
     expect(staged(join(r.sb, '.contexture/tmp'))).toEqual([]);
   });
 
-  it.each([['SIGHUP', 129], ['SIGINT', 130], ['SIGTERM', 143]] as const)('[the-engine-r-kvr01, the-engine-r28] a %s while the gate stages a put removes the staged file and exits %d, no driver run', async (sig, rc) => {
-    const r = recorder('gate-signal');
-    const run = launch(resolver(r.sb), ['store.put', 'deep', 'u/a'], { cwd: r.sb, input: null, group: true, env: { CTX_ROOT: r.sb } });
-    run.child.stdin?.write('partial');
-    const tmp = join(r.sb, '.contexture/tmp');
-    for (let i = 0; i < 200 && staged(tmp).length === 0; i++) await new Promise((done) => setTimeout(done, 25));
-    expect(staged(tmp).length, 'the payload is being staged').toBe(1);
-    run.signal(sig);
-    const done = await run.result;
-    expect([done.code, done.stdout, staged(tmp), r.log()]).toEqual([rc, '', [], []]);
+  it.each([['SIGHUP', 129], ['SIGINT', 130], ['SIGTERM', 143]] as const)('[the-engine-r-kvr01, the-engine-r28] a %s while the gate stages a put removes the staged file and exits %d, no driver run and nothing left in its group', async (sig, rc) => {
+    expect(await signalStaging('gate-signal', sig, true)).toEqual([rc, '', [], [], true]);
+  });
+
+  it.each([['SIGHUP', 129], ['SIGINT', 130], ['SIGTERM', 143]] as const)('[the-engine-r-kvr01, the-engine-r28] a %s to the resolver alone while its copy waits on an open stdin ends the copy, removes the staged file, and exits %d', async (sig, rc) => {
+    expect(await signalStaging('gate-signal-alone', sig, false)).toEqual([rc, '', [], [], true]);
   });
 
   it('[the-engine-r-kvr01, the-engine-r26] a module call through the library meets the same line, and no driver runs', async () => {
