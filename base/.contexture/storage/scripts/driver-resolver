@@ -595,13 +595,13 @@ require_caps() {
 # every driver meet one rule. A refusal is the dispatched function's own line, rc 1
 # ERR_INVALID_ARGUMENT, a key named with the batch payload escape so the line stays one;
 # nothing reaches stdout and no driver runs. The suffix clause reads the namespace's suffix
-# and key pattern through store-data only when a checked key or prefix has a non final
-# segment; a declaration it cannot read leaves the refusal to the driver. A put's and a
-# batch's stdin are staged in the per verb scratch root, else the drawer's scratch (the
-# system temp only when the drawer cannot hold it), checked there (a value at most
-# KV_CAP bytes, a batch value's decoded size likewise), and handed to the driver as its
-# stdin from the staged file, which kv_handoff unlinks before the exec; a hangup,
-# interrupt, or termination before it removes the file.
+# and key pattern through store-data when a checked key or prefix has a non final segment,
+# and once for every batch; a declaration it cannot read leaves the refusal to the driver.
+# A put's and a batch's stdin are staged in the per verb scratch root, else the drawer's
+# scratch (the system temp only when the drawer cannot hold it), a batch's without its NUL
+# bytes, checked there (a value at most KV_CAP bytes, a batch value's decoded size
+# likewise), and handed to the driver as its stdin from the staged file, which kv_handoff
+# unlinks before the exec; a hangup, interrupt, or termination before it removes the file.
 KV_CAP=16777216
 KV_STAGE=""
 KV_RULE=""
@@ -684,7 +684,9 @@ kv_check() {
   esac
 }
 
-# kv_stage: stdin staged in a file of the per verb scratch root, else the drawer's scratch
+# kv_stage [wire]: stdin staged in a file of the per verb scratch root, else the drawer's
+# scratch; a batch payload (wire) is staged without its NUL bytes, which an awk may cut a
+# line at while a shell read drops them, so the gate checks the very lines the driver reads
 kv_stage() {
   trap 'kv_drop' EXIT
   trap 'kv_drop; exit 129' HUP
@@ -700,7 +702,11 @@ kv_stage() {
     mkdir -p "$ks_dir" 2>/dev/null
   fi
   KV_STAGE=$(mktemp "$ks_dir/store-gate.XXXXXX" 2>/dev/null) || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
-  { cat > "$KV_STAGE"; } 2>/dev/null || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  if [ "${1:-}" = wire ]; then
+    { LC_ALL=C tr -d '\000' > "$KV_STAGE"; } 2>/dev/null || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  else
+    { cat > "$KV_STAGE"; } 2>/dev/null || kv_fail 2 ERR_STORAGE_WRITE "cannot stage the payload"
+  fi
 }
 
 kv_value() {
@@ -711,10 +717,12 @@ kv_value() {
 }
 
 # kv_batch <namespace>: the batch payload staged, then every action's key and decoded value
-# size checked in action order as the driver parses them; a payload line the driver would
-# refuse ends the check there, so the driver names it
+# size (the trailing padding run aside, so no decoder yields more) checked in action order
+# as the driver parses them; a line outside the wire's shape (an unknown or repeated line, a
+# line outside an action, an unknown action, an action with no key) ends the check there,
+# so the driver names it
 kv_batch() {
-  kv_stage
+  kv_stage wire
   kv_rule
   kv_decl "$1"
   kb_bad=$(KC_SFX=$KV_SFX KC_MULTI=$KV_MULTI KC_CAP=$KV_CAP LC_ALL=C awk "$KV_RULE"'
@@ -736,9 +744,9 @@ kv_batch() {
       if (!seen_key || key == "") stop()
       if (!kr_key(key, sfx, multi)) { printf "malformed\t%s\t%s\t%s", n, op, kr_esc(key); rc = 3; exit 3 }
       if (op == "put" && seen_val) {
-        L = length(val); size = int(L * 3 / 4)
-        if (L >= 1 && substr(val, L, 1) == "=") size--
-        if (L >= 2 && substr(val, L - 1, 1) == "=") size--
+        L = length(val)
+        while (L > 0 && substr(val, L, 1) == "=") L--
+        size = int(L * 3 / 4)
         if (size > cap) { printf "cap\t%s\t%s\t%s\t%.0f", n, op, kr_esc(key), size; rc = 3; exit 3 }
       }
     }

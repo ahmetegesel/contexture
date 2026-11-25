@@ -72,7 +72,7 @@ describe('the key and value gate at the resolver\'s dispatch', { concurrent: tru
     expect(staged(join(r.sb, '.contexture/tmp'))).toEqual([]);
   });
 
-  it('[the-engine-r-kvr01] a payload line the driver refuses ends the gate\'s check there, so the driver names it first', async () => {
+  it('[the-engine-r-kvr01] a line outside the wire\'s shape ends the gate\'s check there, so the driver names it first', async () => {
     const r = recorder('gate-structure');
     answer(await rsv(r.sb, ['store.batch', 'deep'], 'action=put\nkey=a/b\nbogus=1\naction=put\nkey=.z\nvalue_b64=eA==\n'), 'store.batch');
     expect(r.log()).toEqual(['store.batch deep']);
@@ -106,6 +106,19 @@ describe('the key and value gate at the resolver\'s dispatch', { concurrent: tru
     answer(await rsv(r.sb, ['store.put', 'deep', 'u/big'], Buffer.alloc(CAP, 0x61)), 'store.put');
     expect(r.stdin().length).toBe(CAP);
     answer(await rsv(r.sb, ['store.batch', 'deep'], batchPayload([{ action: 'put', key: 'u/big', value: Buffer.alloc(CAP, 0x62) }])), 'store.batch');
+    expect(staged(join(r.sb, '.contexture/tmp'))).toEqual([]);
+  });
+
+  it('[the-engine-r-kvr01] a batch value past the cap refuses at the gate under an extra padding character or a NUL byte in its line, and a NUL never reaches the driver', async () => {
+    const r = recorder('gate-cap-wire');
+    const b64 = Buffer.alloc(CAP + 1, 0x63).toString('base64');
+    const over = "action 1 (put 'u/big'): the value of key 'u/big' is 16777217 bytes, past the 16 MiB cap (16777216 bytes)";
+    const nul = (...parts: string[]) => Buffer.concat(parts.flatMap((p, i) => (i ? [Buffer.from([0]), Buffer.from(p)] : [Buffer.from(p)])));
+    refused(await rsv(r.sb, ['store.batch', 'deep'], `action=put\nkey=u/big\nvalue_b64=${b64}=\n`), 'store.batch', 1, 'ERR_INVALID_ARGUMENT', over);
+    refused(await rsv(r.sb, ['store.batch', 'deep'], nul('action=put\nkey=u/big\nvalue_b64=', `${b64}\n`)), 'store.batch', 1, 'ERR_INVALID_ARGUMENT', over);
+    expect(r.log()).toEqual([]);
+    answer(await rsv(r.sb, ['store.batch', 'deep'], nul('action=put\nkey=u/a', 'b\nvalue_b64=eA==\n')), 'store.batch');
+    expect(r.stdin().toString()).toBe('action=put\nkey=u/ab\nvalue_b64=eA==\n');
     expect(staged(join(r.sb, '.contexture/tmp'))).toEqual([]);
   });
 

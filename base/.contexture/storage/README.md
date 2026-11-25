@@ -136,7 +136,7 @@ the entries at the top of each root that hold no key; neither sweeps both roots 
 refusals included. The answer is one compact object `{"driver","namespace","mode",
 "dry_run","stamp","root","fallback"}`, `mode` `move` or `delete`, `stamp` the backup's
 (`null` for `--delete`, a dry run, and a run that moved nothing), each root `{"state"}`
-as the probe's or `{"state":"walked","kinds","emptied","left"}`, the ten kinds of what it
+as the probe's or `{"state":"walked","kinds","emptied","left"}`, the eleven kinds of what it
 swept, the key folders holding no document it cleared, and the unreadable folders it left
 untouched; it names no folder. The first item it cannot move or remove, a backup place
 already taken, an item gone or changed since the plan, or the guard stops it rc 2
@@ -203,12 +203,17 @@ error: action <n> (<op> '<key>'): malformed key '<key>'`, or a value past the ca
 the key, its size, and the cap, the key written with the payload escape (a backslash, a
 newline, a tab, or a carriage return as `\\`, `\n`, `\t`, `\r`) so the line stays one;
 nothing reaches stdout and no driver runs. The gate stages a put's and a batch's stdin in
-the per verb scratch root (else the drawer's scratch), checks it there, and hands the staged
-file to the driver as its stdin, unlinked before the exec, so nothing stays behind; a
-hangup, interrupt, or termination while it stages removes the file and exits 129, 130, or
-143. The suffix clause reads the namespace's suffix and key pattern through `store-data`
-only when a checked key or prefix has a non final segment; a declaration it cannot read
-leaves the refusal to the driver. The gate's refusals come before the driver's argument
+the per verb scratch root (else the drawer's scratch, the system temp only when the drawer
+cannot hold it), a batch payload without its NUL bytes (an awk may cut a line at one while a
+shell read drops it, so the gate checks the lines the driver reads), checks it there, and
+hands the staged file to the driver as its stdin, unlinked before the exec, so nothing stays
+behind; a hangup, interrupt, or termination while it stages removes the file and exits 129,
+130, or 143. A batch value's decoded size is read with its trailing padding run aside, so no
+decoder yields more, and a line outside the wire's shape (an unknown or repeated line, a line
+outside an action, an unknown action, an action with no key) ends the gate's batch check,
+so the driver names it. The suffix clause reads the namespace's suffix and key pattern
+through `store-data` when a checked key or prefix has a non final segment, and once for
+every batch; a declaration it cannot read leaves the refusal to the driver. The gate's refusals come before the driver's argument
 count, bounded flags, declaration, and pattern refusals. A direct driver call skips the
 gate (the one bypass), and every bundled driver reads the same text for its own argument
 checks and for its list, scan, and leftovers classification, so a listing never names a key
