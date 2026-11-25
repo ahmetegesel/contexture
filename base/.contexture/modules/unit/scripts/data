@@ -29,7 +29,9 @@
 # unit.migrate, outside the record's operations, moves the named units or every unit for
 # ctx unit migrate through the store's optional store.promote, then rewrites their pointers;
 # unit.sweep, outside them too, sweeps what the record's storage holds beyond its documents
-# for ctx unit migrate --sweep through the storage layer's sweep. A run
+# for ctx unit migrate --sweep through the storage layer's sweep; unit.transfer, outside them
+# too, moves open tasks, findings, and open entries from one unit to another for ctx unit
+# transfer, both unit locks taken in bytewise name order and one store.batch over both. A run
 # whose reads came from the fallback and that ends rc 0 prints one warning line after its
 # answer.
 #
@@ -60,6 +62,7 @@ fi
 
 U_SCR=""
 U_LOCK=""
+U_LOCK2=""
 U_STAGE=""
 U_PAY=""
 U_UNIT=""
@@ -71,6 +74,7 @@ U_MISS=" "
 
 u_cleanup() {
   [ -n "$U_LOCK" ] && rm -rf "$U_LOCK" 2>/dev/null
+  [ -n "$U_LOCK2" ] && rm -rf "$U_LOCK2" 2>/dev/null
   [ -n "$U_SCR" ] && rm -rf "$U_SCR" 2>/dev/null
   return 0
 }
@@ -996,18 +1000,19 @@ u_warn() {
   printf 'WARNING: the record was read from its deprecated root; each unit moves at its next write, and ctx unit migrate --all moves the rest when the human chooses\n' >&2
 }
 
-# u_commit: one store.batch, every staged artifact all or none, then the answer
+# u_commit: one store.batch, every staged artifact all or none, then the answer; a stage line
+# names its artifact's unit in a third column (a document line carries none, so U_UNIT)
 u_commit() {
   if [ ! -f "$U_STAGE/manifest" ]; then
     cat "$U_SCR/answer"
     return 0
   fi
   u_new "$U_SCR/batch" "$U_SCR/batch.out" "$U_SCR/batch.err"
-  while IFS='	' read -r uc_n uc_rel; do
+  while IFS='	' read -r uc_n uc_rel uc_unit; do
     [ -n "$uc_n" ] || continue
     uc_src="$U_STAGE/$uc_n"
     [ -f "$uc_src" ] || u_refuse 2 ERR_STORAGE_WRITE "the staged write of $uc_rel is missing"
-    uc_key="$U_UNIT/${uc_rel%.md}"
+    uc_key="${uc_unit:-$U_UNIT}/${uc_rel%.md}"
     uc_b64=$("$ULIB/b64" "$uc_src") || u_refuse 2 ERR_STORAGE_WRITE "cannot encode $uc_rel"
     { {
       printf 'action=put\n' &&
@@ -1099,17 +1104,73 @@ u_refs_to() {
   esac
   while IFS= read -r ur_u; do
     [ -n "$ur_u" ] || continue
-    u_manifest_reset
-    u_fetch_unit "$ur_u" all 0
-    u_new "$U_SCR/rt.map" "$U_SCR/rt.files"
-    LC_ALL=C awk -F '\t' '$1 == "F" { p = $2; sub(/^[^|]*\|/, "", p); print $3 "\t" p }' "$U_SCR/man" > "$U_SCR/rt.map" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
-    cut -f 1 "$U_SCR/rt.map" > "$U_SCR/rt.files"
-    [ -s "$U_SCR/rt.files" ] || continue
-    # shellcheck disable=SC2046
-    RT_UNIT=$ur_u RT_TARGET=$ur_t RT_MAP="$U_SCR/rt.map" LC_ALL=C awk -f "$ULIB/refs-to.awk" $(cat "$U_SCR/rt.files") >> "$U_SCR/rows" \
-      || u_refuse 2 ERR_STORAGE_READ "cannot read the refs of unit '$ur_u'"
+    u_rt_rows "$ur_u" "$ur_t" "$U_SCR/rows"
   done < "$U_SCR/scope"
   RA_TARGET=$ur_t LC_ALL=C awk -f "$ULIB/refs-to-answer.awk" "$U_SCR/sessions" "$U_SCR/rows"
+}
+
+# u_rt_rows <unit> <target> <rows file>: the REF and REFS values of one unit's artifacts that
+# name the target (lib/refs-to.awk), one row each appended to the rows file; reads only, no
+# lock, the manifest reset to the unit
+u_rt_rows() {
+  u_manifest_reset
+  u_fetch_unit "$1" all 0
+  u_new "$U_SCR/rt.map" "$U_SCR/rt.files"
+  LC_ALL=C awk -F '\t' '$1 == "F" { p = $2; sub(/^[^|]*\|/, "", p); print $3 "\t" p }' "$U_SCR/man" > "$U_SCR/rt.map" || u_refuse 2 ERR_STORAGE_WRITE "cannot write the data script's scratch"
+  cut -f 1 "$U_SCR/rt.map" > "$U_SCR/rt.files"
+  [ -s "$U_SCR/rt.files" ] || return 0
+  # shellcheck disable=SC2046
+  RT_UNIT=$1 RT_TARGET=$2 RT_MAP="$U_SCR/rt.map" LC_ALL=C awk -f "$ULIB/refs-to.awk" $(cat "$U_SCR/rt.files") >> "$3" \
+    || u_refuse 2 ERR_STORAGE_READ "cannot read the refs of unit '$1'"
+}
+
+# u_unit_transfer [--dry-run] <source> <target>: outside the record's 35 operations, the move
+# of the open tasks, findings, and open journal entries the payload selects from the source
+# to the target in one write (lib/ops.awk f_unit_transfer). Both units are held; the
+# referrers of the source in every other active unit are read first, lock free (u_rt_rows,
+# the rows the op keeps for the moved addresses), so a dry run lists them too; a run then
+# takes both unit locks in bytewise name order, the first one's path kept in U_LOCK2 (u_lock
+# stays one slot, u_cleanup frees both on every exit), fetches both units whole into one
+# manifest, and lands every changed artifact of both, each stage line naming its unit,
+# through one store.batch, all or none. --dry-run takes no lock and writes nothing
+u_unit_transfer() {
+  FN=unit.transfer
+  ut_dry=""
+  if [ "${1:-}" = --dry-run ]; then ut_dry=dry; shift; fi
+  u_extra 2 "$@"
+  [ $# -eq 2 ] || u_refuse 1 ERR_INVALID_ARGUMENT "unit.transfer takes the source and the target units"
+  u_want_unit "$1"
+  u_want_unit "$2"
+  [ "$1" != "$2" ] || u_refuse 1 ERR_INVALID_ARGUMENT "the source and the target are the same unit '$1'"
+  u_want_held "$1"
+  u_want_held "$2"
+  u_payload
+  u_manifest_reset
+  u_fetch_all 0
+  u_active_units
+  u_new "$U_SCR/xf.rows"
+  while IFS= read -r ut_u; do
+    case "$ut_u" in ""|"$1"|"$2") continue ;; esac
+    u_rt_rows "$ut_u" "$1" "$U_SCR/xf.rows"
+  done < "$U_SCR/active"
+  if [ -z "$ut_dry" ]; then
+    ut_first=$(printf '%s\n%s\n' "$1" "$2" | LC_ALL=C sort | head -n 1)
+    if [ "$ut_first" = "$1" ]; then ut_second=$2; else ut_second=$1; fi
+    u_lock "$ut_first"
+    U_LOCK2=$U_LOCK
+    U_LOCK=""
+    u_lock "$ut_second"
+  fi
+  u_stage_start
+  u_manifest_reset
+  u_fetch_unit "$1" all 1
+  u_fetch_unit "$2" all 1
+  U_UNIT=$1
+  PX_ROWS="$U_SCR/xf.rows"
+  export PX_ROWS
+  u_args "$2" "$ut_dry"
+  u_awk
+  if [ -z "$ut_dry" ]; then u_commit; else cat "$U_SCR/answer"; fi
 }
 
 # u_unit_call <function> <unit> <parts> <write> [<args>...]
@@ -1580,6 +1641,9 @@ case "$cmd" in
     ;;
   unit.sweep)
     u_unit_sweep "$@"
+    ;;
+  unit.transfer)
+    u_unit_transfer "$@"
     ;;
   *)
     printf '%s: error: unknown function '\''%s'\'' (ERR_CAPABILITY_UNSUPPORTED)\n' "$FN" "$cmd" >&2

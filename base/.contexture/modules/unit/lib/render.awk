@@ -15,7 +15,7 @@
 # prints for the same data, so every backend's answer renders the same text; no item
 # carries stored bytes.
 #
-# Views: board, load, refload, audit, close, active, list_all, refs_to, closure, task_list,
+# Views: board, load, refload, audit, close, active, list_all, refs_to, transfer, closure, task_list,
 # task_show, entry_show, entry_list, finding_show, finding_list, search, resolve,
 # lane_doc, lane_journal, diagnose, state, field. The load views print tagged lines
 # ("<section> TAB <line>") the load verb pages; every other view prints its text. A
@@ -608,6 +608,28 @@ function v_refs_to(   n, m, i) {
   for (i = 1; i <= m; i++) line("  " sv("rows." i ".unit") " " sv("rows." i ".kind") " " sv("rows." i ".id") " " sv("rows." i ".ref"))
 }
 
+# transfer: the plan (each moved task, finding, and entry with its new address, the pointer,
+# the refs forwarded in place), the census of a run, the outside referrers one row each or
+# none, and a dry run's closing line
+function v_transfer(   s, t, ntk, nfd, nen, m, i, c) {
+  s = sv("source"); t = sv("target")
+  ntk = nn("tasks"); nfd = nn("findings"); nen = nn("entries"); m = nn("outside")
+  line("transfer plan: from " s " to " t)
+  for (i = 1; i <= ntk; i++) line("  task " sv("tasks." i) " to unit#" t "/task/" sv("tasks." i))
+  for (i = 1; i <= nfd; i++) line("  finding " sv("findings." i) " to unit#" t "/finding/" sv("findings." i))
+  for (i = 1; i <= nen; i++) line("  entry " sv("entries." i) " copied to unit#" t "/entry/" sv("entries." i))
+  line("  pointer unit#" s "/entry/" sv("pointer"))
+  line("  refs forwarded in place: " (V["forwarded"] + 0))
+  c = ntk " tasks, " nfd " findings, " nen " entries from " s " to " t
+  if (!bv("dry_run")) line("transferred: " c)
+  if (m == 0) line("outside referrers: none")
+  else {
+    line("outside referrers, listed and never rewritten: " m)
+    for (i = 1; i <= m; i++) line("  " sv("outside." i ".unit") " " sv("outside." i ".kind") " " sv("outside." i ".id") " " sv("outside." i ".ref"))
+  }
+  if (bv("dry_run")) line("dry run: would transfer " c "; nothing written")
+}
+
 # closure (new): open or closed with the first closer's verdict, then every later closer
 function v_closure(   n, i, p, v) {
   n = nn("closers")
@@ -822,6 +844,7 @@ BEGIN {
   else if (view == "active") v_active()
   else if (view == "list_all") v_list_all()
   else if (view == "refs_to") v_refs_to()
+  else if (view == "transfer") v_transfer()
   else if (view == "closure") v_closure()
   else if (view == "task_list") v_task_list()
   else if (view == "task_show") v_task_show()

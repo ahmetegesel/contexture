@@ -14,7 +14,7 @@ top README.
 
 The engine discovers `.contexture/modules/unit/`, reads the summary for `ctx help`, and
 builds the verb table from `scripts/*`: an extension-less file with a `# summary:` header
-is a verb. `scripts/data` carries no summary and is private; the 21 verbs are the record's
+is a verb. `scripts/data` carries no summary and is private; the 22 verbs are the record's
 public surface, and `ctx session` is retired (a line naming `ctx unit`).
 
 ## Layout
@@ -28,9 +28,11 @@ laws              the sweep-consent law under @laws (no sweep that writes withou
 data              the storage declaration (the namespace is the folder name, unit):
                   root .contexture/units, fallback_root .contexture/sessions, suffix .md,
                   key <unit>/<path...>, changes false, the document rules
-scripts/<verb>    the 21 record verbs (sh), each sourcing lib/verb.sh
+scripts/<verb>    the 22 record verbs (sh), each sourcing lib/verb.sh
 scripts/data      the record operations over the storage layer (sh, private), and
-                  unit.migrate, the record's migrations behind migrate, outside them
+                  outside them unit.migrate (the migrations behind migrate),
+                  unit.sweep (the sweep behind migrate --sweep), and unit.transfer
+                  (the move behind transfer)
 lib/migrate.awk   the pointer rewrite: the tokenizer, the class table, the census, NOTE
 lib/verb.sh       the shared verb shell: the payload wire, the call, the rendering
 lib/render.awk    the one renderer of every text view
@@ -105,7 +107,8 @@ the four fresh artifacts, `task.start` the backlog alone (the state no longer ho
 next action), `task.complete` and
 `task.drop` the backlog and the journal, `session.stamp` and `session.objective` the state
 and the journal,
-`lane.create` the recipe and the lane journal, `lane.record` the lane journal. The driver's
+`lane.create` the recipe and the lane journal, `lane.record` the lane journal, and
+`unit.transfer` every artifact it changes in two units under both unit locks. The driver's
 namespace-scope batch lock (`store-unit.lock`, taken inside the unit lock at the commit)
 serializes the batches; the unit lock serializes the read to the commit, the single-user
 trade named. The unit locks keep their own folder (`locks/unit/`) beside the drivers' flat
@@ -250,6 +253,28 @@ snapshot a termination (a background child ignores an interrupt), wait for each 
 its next step with its locks released, and kill any still running after 10 s, then prints
 `migrate: stopped by a signal; ...` naming the run's stamp in the move form and exits 129,
 130, or 143. Like the migrations, it prints no deprecated root warning.
+
+`unit.transfer [--dry-run] <source> <target>`, outside the record's operations too, is the move
+behind `ctx unit transfer`: the payload carries the selector lists `tasks`, `findings`,
+`entries`, and `groups` and the pointer's `date` and `epoch`. It checks both units are held,
+then reads every other ACTIVE unit lock free through `u_rt_rows` (the per unit body of
+`session.refs_to`, `lib/refs-to.awk` with the source as its target) into the rows the
+engine keeps for the moved addresses, so the dry run lists the same outside referrers. A run
+then takes both unit locks in bytewise name order (`LC_ALL=C sort`): `u_lock` keeps its one
+slot and body, the first lock's path moves to `U_LOCK2`, and `u_cleanup` frees both on every
+exit, the timeout of the second while the first is held included. One manifest holds both
+units whole (lanes too, since the forward reaches them), and `lib/ops.awk`
+`f_unit_transfer` refuses (a CLOSED unit, an anchor that is not `A<N>`, a selection the source
+does not hold or whose state forbids the move, a slug or NAME the target holds) or copies
+each open entry to the target journal from its typed fields, moves each task and finding
+(`item_lines` appended, `item_drop` from the source), forwards the exact moved addresses in
+place over every artifact of both units (`fwd_art`, `fwd_line`: the exclusions of the
+migration, an address character before or a slug character after never matching), and
+appends the pointer entry to the source. `stage()` writes each artifact's unit as a third
+stage manifest column and `u_commit` keys each put by it (a document line, which carries
+none, keys by `U_UNIT`), so both units land in one `store.batch`, all or none. The answer is
+`{"source","target","dry_run","tasks","findings","entries","pointer","forwarded","outside"}`;
+`--dry-run` takes no lock and writes nothing.
 
 The leftovers nudge tells the agent the sweep is due, at the boot read where it speaks to
 the human: `ctx unit list` (every form, after a rendered answer; a refusing render exits

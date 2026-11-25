@@ -187,6 +187,26 @@ A REF names its target exactly by its full address (@record references; the REF 
 
 `ctx unit resolve`, the earlier resolution verb over the short and legacy forms, is retired into `get`: a call refuses rc 1 naming its replacement. A record written before the full addresses keeps its old forms (`journal#slug`, `knowledge#NAME`, `lane#<lane>/report#<claim>`, `lanes/<lane>/...`, `journal.md#slug`) until `ctx unit migrate` rewrites them; the load warns while a unit still holds one.
 
+## Moving work between units
+
+A topic that outgrows its unit moves out in one write, never by replaying entries by hand:
+
+```bash
+.contexture/ctx unit transfer <source> <target> [--task=<slug>]... [--finding=<NAME>]... [--entry=<slug>]... [--group=<token>]... [--dry-run]
+```
+
+A split is `ctx unit bootstrap <new unit> "<objective>"`, then `ctx unit transfer <unit> <new unit>` with the selection. Both units are ACTIVE. `--task` names an open task (any status but DONE, a legacy status as stored), `--finding` a finding outside every supersession chain, `--entry` an open journal entry, and `--group` every open entry of that GROUP; a value given twice, or an entry named by `--entry` and by a `--group`, is selected once, at least one selector is required, and every `--group` must select an open entry.
+
+The transfer moves only what the target works from, and the source journal stays append only:
+
+- Each selected entry is copied to the end of the target journal in source order, rendered canonical from its typed fields (slug, head text, extra lines, extra fields with `NOTE`, a legacy `STATUS`, `WHAT`, `GROUP`, `RHYTHM`, `THREAD`, `REF` lines, `KNOWLEDGE`), its `ANCHOR` set to the target's current anchor, one `REF: "unit#<source>/entry/<slug>"` to its original added after its own, its `CLOSES` and `SUPERSEDES` lines left off. The original stays where it is.
+- Each selected task, its status kept, and each selected finding lands in the target whole and leaves the source.
+- The source gains one pointer entry, appended last (`<date>-event-<epoch>`, the source's anchor, `THREAD: none`): its `WHAT` names what moved to which unit, its `REF` lines name every copy and every moved task and finding at the target address, and when entries moved one `CLOSES` line closes every moved original as `superseded` with the reason `moved to unit <target>`, so an open thread stays open only on the copy. The pointer is the one receipt; closed history stays in the source behind it.
+- Every pointer naming a moved task or finding exactly is rewritten in place in both units, as `ctx unit migrate --forward` reaches (REF and REFS values, lane recipe items, the state objective, task text, entry `WHAT`, finding `SUMMARY`, lane journals, recipes, and reports), a longer slug never matched; `CLOSES`, `SUPERSEDES`, and `NOTE` lines, column 0 head and heading lines, and the state's `ref_sessions`, `repos`, `status`, and `current_anchor` lines keep their bytes, and a ref to a moved entry keeps the source address, which still resolves.
+- The referrers in the other active units (REF and REFS values, lane recipe REFS, TASKS, and DECISIONS, never free text) are listed, never rewritten.
+
+The write takes both unit locks in bytewise name order, so two crossing transfers never deadlock, and lands both units in one store batch, all or none. It prints the plan (each task, finding, and entry with its new address, the pointer, the refs forwarded in place), then `transferred: <t> tasks, <f> findings, <e> entries from <source> to <target>`, then the outside referrers one row each (`<unit> <kind> <id> <ref>`) or `outside referrers: none`. `--dry-run` takes no lock, writes nothing, and prints the same plan and rows, closing with `dry run: would transfer ...; nothing written`. A closed entry, a DONE task, a finding in a supersession chain, a selection the source does not hold, a slug or NAME the target already holds, and a CLOSED or missing unit each refuse with one line, nothing written. Closed entries, DONE tasks, and lanes stay in the source.
+
 ## Search and snippet consumption
 
 The record's search speaks the shared search syntax: the query first (a query cannot begin with a dash, which reads as a flag, a stated limit), the active units by default, `--all` every unit, `--unit=<unit>` any one (closed ones included, their rows labelled `closed`), and `--mode` defaulting to `exact`:

@@ -3,7 +3,7 @@
 # the writes add items by the append rule and rewrite a touched item canonical in place
 # (every other line of the artifact keeps its bytes), parse the result again, stage every
 # changed artifact under PX_STAGE with one manifest line "<staged name><TAB><path in the
-# unit folder>", and write the answer to PX_OUT, which the data script prints only after
+# unit folder><TAB><unit>", and write the answer to PX_OUT, which the data script prints only after
 # every staged value has landed through the store. A refusal writes one line to PX_ERR and
 # exits 1 or 2 with nothing staged.
 #
@@ -53,14 +53,15 @@ function relpath(k,   a) {
   return a ".md"
 }
 
-# stage(k): the artifact's new bytes into the stage, one manifest line
+# stage(k): the artifact's new bytes into the stage, one manifest line naming its unit (the
+# key's text before the bar), so a write over two units lands each under its own
 function stage(k,   f, i, o) {
   NSTAGED++
   f = STAGE "/" NSTAGED
   printf "" > f
   for (i = 1; i <= NL[k]; i++) printf "%s%s%s", L[k, i], (((k, i) in CRL) ? "\r" : ""), ((i < NL[k] || EOFNL[k]) ? "\n" : "") > f
   close(f)
-  printf "%s\t%s\n", NSTAGED, relpath(k) > (STAGE "/manifest")
+  printf "%s\t%s\t%s\n", NSTAGED, relpath(k), substr(k, 1, index(k, "|") - 1) > (STAGE "/manifest")
 }
 
 function stage_doc(rel) { printf "doc\t%s\n", rel > (STAGE "/manifest") }
@@ -75,12 +76,14 @@ function oneline(name, v) {
 function nocr(name, v) { if (v != NULLV && index(v, "\r") > 0) die(1, "ERR_INVALID_ARGUMENT", name " holds a carriage return") }
 function need(k) { if (!has(k)) die(1, "ERR_INVALID_ARGUMENT", "missing payload key " k) }
 
-function not_closed() {
-  if (ST[U, "status"] == "CLOSED") die(1, "ERR_UNIT_CLOSED", "unit '" U "' is CLOSED; a closed unit takes no writes")
+# not_closed, nf, and ex check and name the unit U, or the unit given (a write over two units)
+function not_closed(u) {
+  if (u == "") u = U
+  if (ST[u, "status"] == "CLOSED") die(1, "ERR_UNIT_CLOSED", "unit '" u "' is CLOSED; a closed unit takes no writes")
 }
 
-function nf(kind, x) { die(1, "ERR_ENTITY_NOT_FOUND", kind " '" x "' not found in unit '" U "'") }
-function ex(kind, x) { die(1, "ERR_ENTITY_EXISTS", kind " '" x "' already exists in unit '" U "'") }
+function nf(kind, x, u) { die(1, "ERR_ENTITY_NOT_FOUND", kind " '" x "' not found in unit '" (u == "" ? U : u) "'") }
+function ex(kind, x, u) { die(1, "ERR_ENTITY_EXISTS", kind " '" x "' already exists in unit '" (u == "" ? U : u) "'") }
 
 function find_task(k, s,   i) { for (i = 1; i <= NI[k]; i++) if (IK[k, i] == "task" && X[k, i, "slug"] == s) return i; return 0 }
 function find_finding(k, n,   i) { for (i = 1; i <= NI[k]; i++) if (IK[k, i] == "finding" && X[k, i, "name"] == n) return i; return 0 }
@@ -496,11 +499,14 @@ function f_task_start(   kb, s, i) {
   answer("{\"unit\":" jstr(U) ",\"task\":" taskitem_json(kb, find_task(kb, s)) "}")
 }
 
-# want_anchor: the state's current_anchor is A<N>, else the store is corrupt (the rule of
-# session.stamp, D43): an entry never takes a malformed or missing anchor
-function want_anchor(   ca) {
-  ca = ST[U, "anchor"]
-  if (ca !~ /^A[0-9]+$/ || !((U, "current_anchor") in SLINE)) die(2, "ERR_STORAGE_CORRUPT", "the state's current_anchor '" ca "' is not A<N>")
+# want_anchor([u]): the state's current_anchor is A<N>, else the store is corrupt (the rule of
+# session.stamp, D43): an entry never takes a malformed or missing anchor; a unit given is
+# named in the refusal
+function want_anchor(u,   ca, w) {
+  w = (u == "") ? "" : "unit '" u "': "
+  if (u == "") u = U
+  ca = ST[u, "anchor"]
+  if (ca !~ /^A[0-9]+$/ || !((u, "current_anchor") in SLINE)) die(2, "ERR_STORAGE_CORRUPT", w "the state's current_anchor '" ca "' is not A<N>")
 }
 
 # receipt(what, base slug): the receipt entry appended to the journal; returns its index
@@ -847,6 +853,199 @@ function f_lane_get(   l, a, k) {
   answer("}")
 }
 
+# ---- the transfer (unit.transfer, outside the record's 35 operations) ----
+# xf_list(key, arr, re, what): a selector list of the payload into arr, each value matching
+# re, a value given twice kept once in its first place; returns the count
+function xf_list(key, arr, re, what,   n, i, A, m, SEEN) {
+  split("", arr); split("", SEEN)
+  n = plist(key, A)
+  m = 0
+  for (i = 1; i <= n; i++) {
+    if (A[i] !~ re) die(1, "ERR_INVALID_ARGUMENT", "malformed " what " '" A[i] "'")
+    if (A[i] in SEEN) continue
+    SEEN[A[i]] = 1
+    arr[++m] = A[i]
+  }
+  return m
+}
+
+function xf_sort(A, n,   i, j, t) { for (i = 2; i <= n; i++) { t = A[i]; for (j = i - 1; j >= 1 && A[j] > t; j--) A[j + 1] = A[j]; A[j + 1] = t } }
+
+# fwd_line(s): s with every exact moved address (FWO, a source address) written as its target
+# address (FWN): an occurrence counts when no address character stands before it and no slug
+# character after it, a trailing period cut as the migration cuts it, so a longer slug never
+# matches; FWDN counts the rewrites
+function fwd_line(s,   j, old, n, o, pos, p, b, c, q, hit) {
+  for (j = 1; j <= NFWD; j++) {
+    old = FWO[j]
+    n = length(old)
+    if (index(s, old) == 0) continue
+    o = ""
+    pos = 1
+    while ((p = index(substr(s, pos), old)) > 0) {
+      p += pos - 1
+      b = (p > 1) ? substr(s, p - 1, 1) : ""
+      c = substr(s, p + n, 1)
+      q = substr(s, p + n + 1, 1)
+      hit = (b == "" || index(XADDR, b) == 0)
+      if (hit && c != "") {
+        if (c == ".") hit = (q == "" || index(XSLUG, q) == 0)
+        else hit = (index(XADDR, c) == 0)
+      }
+      o = o substr(s, pos, p - pos) (hit ? FWN[j] : old)
+      if (hit) FWDN++
+      pos = p + n
+    }
+    s = o substr(s, pos)
+  }
+  return s
+}
+
+# fwd_art(k): the forward over every line of artifact k but the lines it never rewrites, the
+# exclusions of ctx unit migrate: column 0 head and heading lines, a block artifact's NOTE,
+# CLOSES, and SUPERSEDES lines, and the state's ref_sessions, repos, status, and
+# current_anchor lines; a line is edited in place, its carriage return mark kept; returns
+# whether a line changed
+function fwd_art(k,   part, kind, i, s, t, ch) {
+  part = substr(k, index(k, "|") + 1)
+  if (part == "state") kind = "state"
+  else if (part ~ /^lane\/[^\/]+\/(recipe|report)$/) kind = "doc"
+  else kind = "block"
+  ch = 0
+  for (i = 1; i <= NL[k]; i++) {
+    s = L[k, i]
+    if (s ~ /^[@#]/) continue
+    if (kind == "state" && s ~ /^(ref_sessions|repos|status|current_anchor)[ \t]*:/) continue
+    if (kind == "block" && s ~ /^  (NOTE:[ \t]|CLOSES:|SUPERSEDES:)/) continue
+    t = fwd_line(s)
+    if (t != s) { L[k, i] = t; ch = 1 }
+  }
+  return ch
+}
+
+# unit.transfer (PX_UNIT the source, PX_A1 the target, PX_A2 dry for a dry run): the open
+# tasks, findings, and open entries the payload selects move from the source to the target
+# in one write. Each entry is copied to the target journal in source order from its typed
+# fields (the target anchor, a provenance REF after its own, no closer line) while the
+# original stays; each task and finding lands in the target whole and leaves the source; the
+# exact addresses of the moved tasks and findings are forwarded in place over every artifact
+# of both units; one pointer entry lands last in the source, closing the moved originals as
+# superseded. PX_ROWS holds the outside referrer rows read before the locks, kept here for
+# the moved addresses
+function f_unit_transfer(   src, tgt, dry, kbS, kkS, kjS, kbT, kkT, kjT, TS, nts, FS, nfs, ES, nes, GS, ngs, i, j, n, SEL, E, nen, TI, ntk, FI, nfd, ESL, ETX, TSL, TTX, FSL, FTX, R, nr, d, ep, slug, P, np, cls, k, KEYS, nk, KSEEN, line, CHG, MV, o, first) {
+  src = U; tgt = ENVIRON["PX_A1"]; dry = (ENVIRON["PX_A2"] == "dry")
+  kbS = src "|backlog"; kkS = src "|knowledge"; kjS = src "|journal"
+  kbT = tgt "|backlog"; kkT = tgt "|knowledge"; kjT = tgt "|journal"
+  parse_unit(src, "backlog knowledge journal")
+  parse_unit(tgt, "backlog knowledge journal")
+  not_closed(src); not_closed(tgt)
+  want_anchor(src); want_anchor(tgt)
+  nts = xf_list("tasks", TS, "^[A-Za-z0-9][A-Za-z0-9_-]*$", "task slug")
+  nfs = xf_list("findings", FS, "^[A-Za-z0-9_][A-Za-z0-9_-]*$", "finding NAME")
+  nes = xf_list("entries", ES, "^[A-Za-z0-9][A-Za-z0-9_-]*$", "entry slug")
+  ngs = xf_list("groups", GS, "^[A-Za-z0-9][A-Za-z0-9_-]*$", "group")
+  if (nts + nfs + nes + ngs == 0) die(1, "ERR_INVALID_ARGUMENT", "unit.transfer takes at least one selector: a task, a finding, an entry, or a group")
+  need("date"); need("epoch")
+  d = pv("date"); ep = pv("epoch"); want_date(d); want_epoch(ep)
+  ntk = 0
+  for (j = 1; j <= nts; j++) {
+    if (!(i = find_task(kbS, TS[j]))) nf("task", TS[j], src)
+    if (X[kbS, i, "status"] == "DONE") transition("task", TS[j], "DONE", "unit.transfer", "an open status, every status but DONE")
+    TI[++ntk] = i
+  }
+  nfd = 0
+  for (j = 1; j <= nfs; j++) {
+    if (!(i = find_finding(kkS, FS[j]))) nf("finding", FS[j], src)
+    if (X[kkS, i, "supn"] != NULLV || ((kkS, FS[j]) in SUPBY)) die(1, "ERR_INVALID_TRANSITION", "finding '" FS[j] "' is in a supersession chain in unit '" src "'; unit.transfer moves only a finding that neither supersedes nor is superseded")
+    FI[++nfd] = i
+  }
+  split("", SEL)
+  for (j = 1; j <= nes; j++) {
+    if (!held(kjS, ES[j])) nf("entry", ES[j], src)
+    i = LASTOCC[kjS, ES[j]]
+    if (CLBY[kjS, i] != 0) die(1, "ERR_INVALID_TRANSITION", "entry '" ES[j] "' is closed in unit '" src "'; unit.transfer moves only open entries")
+    SEL[i] = 1
+  }
+  for (j = 1; j <= ngs; j++) {
+    n = 0
+    for (i = 1; i <= NI[kjS]; i++) if (IK[kjS, i] == "entry" && X[kjS, i, "group"] == GS[j] && CLBY[kjS, i] == 0) { SEL[i] = 1; n++ }
+    if (n == 0) die(1, "ERR_ENTITY_NOT_FOUND", "group '" GS[j] "' selects no open entry in unit '" src "'")
+  }
+  nen = 0
+  for (i = 1; i <= NI[kjS]; i++) if (i in SEL) E[++nen] = i
+  xf_sort(TI, ntk); xf_sort(FI, nfd)
+  for (j = 1; j <= nen; j++) if (held(kjT, X[kjS, E[j], "slug"])) ex("entry", X[kjS, E[j], "slug"], tgt)
+  for (j = 1; j <= ntk; j++) if (find_task(kbT, X[kbS, TI[j], "slug"])) ex("task", X[kbS, TI[j], "slug"], tgt)
+  for (j = 1; j <= nfd; j++) if (find_finding(kkT, X[kkS, FI[j], "name"])) ex("finding", X[kkS, FI[j], "name"], tgt)
+  for (j = 1; j <= nen; j++) {
+    i = E[j]
+    ESL[j] = X[kjS, i, "slug"]
+    nr = xr(kjS, i, R)
+    R[++nr] = "unit#" src "/entry/" ESL[j]
+    ETX[j] = c_entry(ESL[j], ST[tgt, "anchor"], X[kjS, i, "what"], X[kjS, i, "group"], X[kjS, i, "rhythm"], X[kjS, i, "thread"], R, nr, "", X[kjS, i, "know"], X[kjS, i, "lst"], X[kjS, i, "ht"], xl_text(kjS, i), xf_text(kjS, i))
+  }
+  for (j = 1; j <= ntk; j++) { TSL[j] = X[kbS, TI[j], "slug"]; TTX[j] = item_lines(kbS, TI[j]) }
+  for (j = 1; j <= nfd; j++) { FSL[j] = X[kkS, FI[j], "name"]; FTX[j] = item_lines(kkS, FI[j]) }
+  if (nen > 0) {
+    if (!(kjT in PRES)) TYPE[kjT] = "journal"
+    for (j = 1; j <= nen; j++) ed_append(kjT, ETX[j], 0)
+    CHG[kjT] = 1
+  }
+  if (ntk > 0) {
+    if (!(kbT in PRES)) TYPE[kbT] = "backlog"
+    for (j = 1; j <= ntk; j++) ed_append(kbT, TTX[j], 0)
+    for (j = 1; j <= ntk; j++) item_drop(kbS, find_task(kbS, TSL[j]))
+    CHG[kbT] = 1; CHG[kbS] = 1
+  }
+  if (nfd > 0) {
+    if (!(kkT in PRES)) TYPE[kkT] = "knowledge"
+    for (j = 1; j <= nfd; j++) ed_append(kkT, FTX[j], 0)
+    for (j = 1; j <= nfd; j++) item_drop(kkS, find_finding(kkS, FSL[j]))
+    CHG[kkT] = 1; CHG[kkS] = 1
+  }
+  nk = 0
+  while ((getline line < ENVIRON["PX_MAN"]) > 0) {
+    if (line !~ /^F\t/) continue
+    split(line, P, "\t")
+    if (!(P[2] in KSEEN)) { KSEEN[P[2]] = 1; KEYS[++nk] = P[2] }
+  }
+  close(ENVIRON["PX_MAN"])
+  for (k in PRES) if (!(k in KSEEN) && (index(k, src "|") == 1 || index(k, tgt "|") == 1)) { KSEEN[k] = 1; KEYS[++nk] = k }
+  XSLUG = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-"
+  XADDR = XSLUG ".#/"
+  NFWD = 0; FWDN = 0
+  for (j = 1; j <= ntk; j++) { FWO[++NFWD] = "unit#" src "/task/" TSL[j]; FWN[NFWD] = "unit#" tgt "/task/" TSL[j] }
+  for (j = 1; j <= nfd; j++) { FWO[++NFWD] = "unit#" src "/finding/" FSL[j]; FWN[NFWD] = "unit#" tgt "/finding/" FSL[j] }
+  for (j = 1; j <= nk; j++) if (fwd_art(KEYS[j])) CHG[KEYS[j]] = 1
+  reparse(kjS)
+  slug = gen_slug(kjS, d "-event-" ep)
+  np = 0
+  if (ntk > 0) P[++np] = "tasks " c_join(TSL, ntk, ", ")
+  if (nfd > 0) P[++np] = "findings " c_join(FSL, nfd, ", ")
+  if (nen > 0) P[++np] = "entries " c_join(ESL, nen, ", ")
+  split("", R); nr = 0
+  for (j = 1; j <= nen; j++) R[++nr] = "unit#" tgt "/entry/" ESL[j]
+  for (j = 1; j <= ntk; j++) R[++nr] = "unit#" tgt "/task/" TSL[j]
+  for (j = 1; j <= nfd; j++) R[++nr] = "unit#" tgt "/finding/" FSL[j]
+  cls = (nen > 0) ? c_closer("CLOSES", ESL, nen, "superseded", "moved to unit " tgt, NULLV) "\n" : ""
+  ed_append(kjS, c_entry(slug, ST[src, "anchor"], "moved to unit " tgt ": " c_join(P, np, "; "), NULLV, NULLV, "none", R, nr, cls, 0, NULLV, NULLV, "", ""), 0)
+  reparse(kjS)
+  CHG[kjS] = 1
+  for (j = 1; j <= nk; j++) if (KEYS[j] in CHG) stage(KEYS[j])
+  for (j = 1; j <= NFWD; j++) MV[FWO[j]] = 1
+  o = ""; first = 1
+  if (ENVIRON["PX_ROWS"] != "") {
+    while ((getline line < ENVIRON["PX_ROWS"]) > 0) {
+      split(line, P, "\t")
+      if (!(P[4] in MV)) continue
+      o = o (first ? "" : ",") "{\"unit\":" jstr(P[1]) ",\"kind\":" jstr(P[2]) ",\"id\":" jstr(P[3]) ",\"ref\":" jstr(P[4]) "}"
+      first = 0
+    }
+    close(ENVIRON["PX_ROWS"])
+  }
+  answer("{\"source\":" jstr(src) ",\"target\":" jstr(tgt) ",\"dry_run\":" jbool(dry) ",\"tasks\":" jlist(TSL, ntk) ",\"findings\":" jlist(FSL, nfd) ",\"entries\":" jlist(ESL, nen) ",\"pointer\":" jstr(slug) ",\"forwarded\":" FWDN ",\"outside\":[" o "]}")
+}
+
 # ---- the dispatch ----
 BEGIN {
   FN = ENVIRON["PX_FN"]; U = ENVIRON["PX_UNIT"]; ERRF = ENVIRON["PX_ERR"]; OUTF = ENVIRON["PX_OUT"]
@@ -896,6 +1095,7 @@ BEGIN {
   else if (FN == "lane.record") f_lane_record()
   else if (FN == "lane.write_report") f_lane_write_report()
   else if (FN == "lane.get") f_lane_get()
+  else if (FN == "unit.transfer") f_unit_transfer()
   else die(2, "ERR_CAPABILITY_UNSUPPORTED", "unknown function '" FN "'")
   if (STAGE != "") stage_close()
   if (OUTF != "") close(OUTF)

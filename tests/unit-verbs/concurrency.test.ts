@@ -5,7 +5,7 @@ import { RECORD_ROOT } from '../support/drawer';
 import { artifactPath } from '../support/record';
 import { fresh, seed } from '../support/snapshot';
 import { stage } from '../support/stage';
-import { seedUnit, unit } from '../support/unit';
+import { must, seedUnit, unit } from '../support/unit';
 
 const D = '2026-09-27';
 const P2 = join(RECORD_ROOT, 'p2');
@@ -70,6 +70,21 @@ describe.concurrent('concurrent writers of one unit serialize: no refusal, no re
     expect(residueHits(sb)).toBe(1);
     expect(oneLsProbe(sb)).toBe(false);
     rmSync(path);
+  });
+
+  it('[the-record-r-xfer1] two crossing transfers at once, a to b and b to a, both land rc 0 with no deadlock, no lock timeout, and no residue', async () => {
+    const sb = stage('posix', 'concurrency-crossing');
+    await seedUnit(sb, 'xa', 'crossing source');
+    await seedUnit(sb, 'xb', 'crossing target');
+    await must(unit(sb, 'task', 'add', 'xa', 'ta', '--objective=moves to xb'));
+    await must(unit(sb, 'task', 'add', 'xb', 'tb', '--objective=moves to xa'));
+    const started = Date.now();
+    const [ab, ba] = await Promise.all([unit(sb, 'transfer', 'xa', 'xb', '--task=ta'), unit(sb, 'transfer', 'xb', 'xa', '--task=tb')]);
+    expect([ab.code, ab.stderr, ba.code, ba.stderr]).toEqual([0, '', 0, '']);
+    expect(Date.now() - started).toBeLessThan(30_000);
+    expect((await unit(sb, 'task', 'show', 'xb', 'ta')).code).toBe(0);
+    expect((await unit(sb, 'task', 'show', 'xa', 'tb')).code).toBe(0);
+    expect(residueHits(sb)).toBe(0);
   });
 
   it('L-c [the-record-r9]: the torn-block instrument reads an entry without its THREAD line as torn', () => {

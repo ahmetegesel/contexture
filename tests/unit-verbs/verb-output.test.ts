@@ -172,6 +172,10 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
       await take(['lane', 'record', 'cu', 'cl', '--what=the census lane event', `--slug=${D}-cl-l1`, '--ref=unit#cu/task/t1']);
       await take(['lane', 'report', 'cu', 'cl'], REPORT);
       await u('refs', 'cu', 'lg');
+      await u('bootstrap', 'ct', 'the transfer target', REPO);
+      await u('task', 'add', 'cu', 't4', '--objective=the census task that moves', `--refs=unit#cu/entry/${D}-cu-e1`);
+      await u('transfer', 'cu', 'ct', '--task=t4', '--dry-run');
+      await u('transfer', 'cu', 'ct', '--task=t4');
       await take(['store', 'put', 'containers/cn', '--description=the census container', '--minting=given', '--add-fields=what: required line']);
       await together([['store', 'get', 'containers/cn'], ['store', 'get', 'containers/cn', '--json'], ['store', 'list', 'containers'], ['store', 'list', 'containers', '--json']]);
       await take(['store', 'put', 'cn/c1', '--what=one', '--add-ref=unit#cu/task/t1']);

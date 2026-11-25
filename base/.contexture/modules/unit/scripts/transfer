@@ -1,0 +1,82 @@
+#!/bin/sh
+# summary: move open tasks, findings, and open journal entries from one unit to another in one write
+# usage: ctx unit transfer <source> <target> [--task=<slug>]... [--finding=<NAME>]... [--entry=<slug>]... [--group=<token>]... [--dry-run]
+# help: moves the selection from the source unit to the target unit, both ACTIVE, in one write under both unit locks: --task names an open task (any status but DONE), --finding a finding outside every supersession chain, --entry an open journal entry, --group every open entry of that GROUP; a value given twice, or an entry named by --entry and by a --group, is selected once; at least one selector is required and every --group must select an open entry
+# help: each selected entry is copied to the end of the target journal in source order, its slug and fields kept, ANCHOR set to the target's current anchor, one REF to its original added after its own, its CLOSES and SUPERSEDES lines left off; the original stays in the source journal, where one pointer entry appended last names what moved, REFs every copy and every moved task and finding at its new address, and closes each moved original (superseded: moved to unit <target>), so an open THREAD stays open only on the copy
+# help: each selected task, its status kept, and each selected finding moves whole: it lands in the target and leaves the source, the pointer its one receipt
+# help: every pointer naming a moved task or finding exactly, in the source and the target alike (REF and REFS values, lane recipe items, and free text), is rewritten in place to its new address, every other byte kept; CLOSES, SUPERSEDES, and NOTE lines, column 0 head and heading lines, and the state's ref_sessions, repos, status, and current_anchor lines are never rewritten; a ref to a moved entry keeps the source address, which still resolves; referrers in other active units (REF and REFS values, lane recipe REFS, TASKS, and DECISIONS) are listed, never rewritten
+# help: prints the plan (each task, finding, and entry with its new address, the pointer, the refs forwarded), then transferred: <t> tasks, <f> findings, <e> entries from <source> to <target>, then the outside referrers one row each (<unit> <kind> <id> <ref>), or that there are none
+# help: --dry-run takes no lock, writes nothing, and prints the same plan and outside rows, closing with dry run: would transfer <t> tasks, <f> findings, <e> entries from <source> to <target>; nothing written
+# help: a split is ctx unit bootstrap <new unit> "<objective>" then ctx unit transfer <unit> <new unit> with the selection
+# help: refusals, nothing written: no selector, the same unit twice, a malformed unit, slug, group, or NAME, or an unknown flag (before any read); a missing or CLOSED unit; a selected task, finding, or entry the source does not hold, or a group selecting no open entry; a closed entry, a DONE task, or a finding in a supersession chain; a slug or NAME the target already holds
+# help: exit codes: 0 transferred, or the dry run printed; 1 a refusal; 2 a storage failure, a target anchor that is not A<N>, or a unit lock held past its 60 s wait
+# help: example: ctx unit transfer my-unit my-split --group=topic --task=topic-task --dry-run
+
+. "$(CDPATH= cd -- "$(dirname -- "$0")/../lib" && pwd)/verb.sh"
+
+USAGE='ctx unit transfer <source> <target> [--task=<slug>]... [--finding=<NAME>]... [--entry=<slug>]... [--group=<token>]... [--dry-run]'
+
+usage() {
+  printf 'Usage: %s\n' "$USAGE" >&2
+  printf 'help: ctx unit help transfer\n' >&2
+  exit 1
+}
+
+xf_bad() {
+  printf 'transfer: error: %s (ERR_INVALID_ARGUMENT)\n' "$1" >&2
+  exit 1
+}
+
+# xf_add <list> <value>: a checked selector value appended to the named list once
+xf_add() {
+  eval "xa_l=\$$1"
+  case " $xa_l " in *" $2 "*) return 0 ;; esac
+  eval "$1=\"\$xa_l \$2\""
+}
+
+case "${1:-}" in
+  --help|-h|help) [ $# -eq 1 ] && { vb_verb_help unit "$0"; exit 0; } ;;
+esac
+src=""
+tgt=""
+npos=0
+dry=""
+tasks=""
+findings=""
+entries=""
+groups=""
+for a in "$@"; do
+  case "$a" in
+    --task=*) v=${a#--task=}; vb_slug_ok "$v" || xf_bad "malformed task slug '$v'"; xf_add tasks "$v" ;;
+    --entry=*) v=${a#--entry=}; vb_slug_ok "$v" || xf_bad "malformed entry slug '$v'"; xf_add entries "$v" ;;
+    --group=*) v=${a#--group=}; vb_slug_ok "$v" || xf_bad "malformed group '$v'"; xf_add groups "$v" ;;
+    --finding=*)
+      v=${a#--finding=}
+      case "$v" in ""|[!A-Za-z0-9_]*|*[!A-Za-z0-9_-]*) xf_bad "malformed finding NAME '$v'" ;; esac
+      xf_add findings "$v"
+      ;;
+    --dry-run) dry=--dry-run ;;
+    -*) vb_unknown transfer "$a" ;;
+    *)
+      npos=$((npos + 1))
+      case "$npos" in
+        1) src=$a ;;
+        2) tgt=$a ;;
+        *) vb_unknown transfer "$a" ;;
+      esac
+      ;;
+  esac
+done
+[ "$npos" -ge 2 ] || usage
+vb_unit transfer "$src"
+vb_unit transfer "$tgt"
+[ "$src" != "$tgt" ] || xf_bad "the source and the target are the same unit '$src'"
+[ -n "$tasks$findings$entries$groups" ] || xf_bad "no selector: name at least one --task, --finding, --entry, or --group; usage: $USAGE"
+# shellcheck disable=SC2086
+{ vb_list tasks $tasks; vb_list findings $findings; vb_list entries $entries; vb_list groups $groups; }
+vb_kv date "$(vb_today)"
+vb_kv epoch "$(vb_epoch)"
+# shellcheck disable=SC2086
+vb_call unit.transfer $dry "$src" "$tgt"
+vb_ok
+vb_render transfer

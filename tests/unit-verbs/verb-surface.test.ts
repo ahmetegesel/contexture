@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { stage } from '../support/stage';
 import { lane, run, unit } from '../support/unit';
 
-export const DECLARED = ['audit', 'board', 'bootstrap', 'close', 'diagnose', 'entry', 'finding', 'fold', 'get', 'list', 'load', 'migrate', 'objective', 'record', 'refresh', 'refs', 'refs-to', 'reopen', 'search', 'stamp', 'task'];
+export const DECLARED = ['audit', 'board', 'bootstrap', 'close', 'diagnose', 'entry', 'finding', 'fold', 'get', 'list', 'load', 'migrate', 'objective', 'record', 'refresh', 'refs', 'refs-to', 'reopen', 'search', 'stamp', 'task', 'transfer'];
 const NO_ARG_OK = new Set(['diagnose', 'list']);
 const verbsIn = (help: string): string[] => (help.split(/^verbs:$/m)[1] ?? '').split(/\n\n/)[0]!.split('\n').filter((l) => /^ {2}[a-z]/.test(l));
 
@@ -14,11 +14,11 @@ describe.concurrent('the unit and lane verb surface', () => {
     sb = stage('posix', 'verb-surface');
   });
 
-  it('V-b [modules-r2]: the verb scripts on disk are the declared 21', () => {
+  it('V-b [modules-r2]: the verb scripts on disk are the declared 22', () => {
     const dir = join(sb, '.contexture/modules/unit/scripts');
     const verbs = readdirSync(dir).filter((f) => !f.startsWith('.') && /^# summary: /m.test(readFileSync(join(dir, f), 'utf8'))).sort();
     expect(verbs).toEqual(DECLARED);
-    expect(DECLARED).toHaveLength(21);
+    expect(DECLARED).toHaveLength(22);
   });
 
   it('V-b [the-engine-r5]: the retired index verb of the unit module refuses rc 1 as an unknown verb, the module help on stderr', async () => {
@@ -60,11 +60,11 @@ describe.concurrent('the unit and lane verb surface', () => {
     expect(r.stderr).toContain('reserved name refused (shadow): flip');
   });
 
-  it('V-c [the-engine-r2, the-engine-r4]: unit help of a retired verb prints its replacement; the help tables list 21 unit and 4 lane verbs', async () => {
+  it('V-c [the-engine-r2, the-engine-r4]: unit help of a retired verb prints its replacement; the help tables list 22 unit and 4 lane verbs', async () => {
     const r = await unit(sb, 'help', 'query');
     expect(r.code).toBe(1);
     expect(r.stderr).toMatch(/^ctx unit query retired: use entry show/m);
-    expect(verbsIn((await unit(sb, 'help')).stdout)).toHaveLength(21);
+    expect(verbsIn((await unit(sb, 'help')).stdout)).toHaveLength(22);
     expect(verbsIn((await lane(sb, 'help')).stdout)).toHaveLength(4);
   });
 
