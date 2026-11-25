@@ -121,6 +121,18 @@ describe.concurrent('the verb help census: the engine owns a sole -h or --help a
     expect(bad).toEqual([]);
   });
 
+  it('[the-engine-r4] a sectioned verb whose summary ends in a parenthesised list names its declared subcommands there in order, so the module table never drifts from the sections', async () => {
+    const lists: [string, string, string][] = [];
+    for (const mv of [...new Set(subs.map(([m, v]) => `${m} ${v}`))].sort()) {
+      const [m = '', v = ''] = mv.split(' ');
+      const summary = (await ctx(sb, m, 'help', v)).stdout.split('\n')[0] ?? '';
+      const list = /\(([a-z][a-z0-9_-]*(?:, [a-z][a-z0-9_-]*)*)\)$/.exec(summary)?.[1];
+      if (list !== undefined) lists.push([mv, list, subs.filter(([a, b]) => a === m && b === v).map(([, , s]) => s).join(', ')]);
+    }
+    expect(lists.map(([mv]) => mv)).toEqual(['store config', 'unit entry', 'unit finding', 'unit task']);
+    expect(lists.filter(([, list, declared]) => list !== declared)).toEqual([]);
+  });
+
   it('[the-engine-r7] the census reads the seven planted help arms, blanks around a bar or before the paren included, and none of the five non help arms', async () => {
     const plant = put(
       join(sandbox('help-census-plant'), 'plant.sh'),

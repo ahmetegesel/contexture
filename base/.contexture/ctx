@@ -186,6 +186,10 @@ module_file_parse() {
       continue
     fi
     case "$mf_line" in
+      [[:space:]]*[![:space:]]*)
+        MF_ERROR="line $mf_lineno: not a # header line"
+        return 1
+        ;;
       ''|[[:space:]]*)
         continue
         ;;
@@ -1084,7 +1088,7 @@ EOF
     "$package_install_line" "$package_uninstall_line" "$package_list_line" "$package_catalog_line" "$package_info_line" "$search_line"
   cat <<'EOF'
   ctx <module> [args...]           dispatch to a module: arguments, streams, and exit code pass through
-  ctx <module> help [<verb>]       the module's verb table; one verb's detail with <verb>
+  ctx <module> help [<verb> [<sub>]]  the module's verb table; one verb's detail with <verb>, one subcommand's with <sub>
 EOF
   printf '\nmodules:\n'
   mods=$(module_names)
@@ -1106,7 +1110,7 @@ show_module_help() {
   printf 'ctx %s: %s%s\n\n' "$1" "$(module_summary "$m")" "$(module_alias_note "$1")"
   printf 'usage:\n'
   printf '  ctx %s <verb> [args...]\n' "$1"
-  printf '  ctx %s help [<verb>]\n' "$1"
+  printf '  ctx %s help [<verb> [<sub>]]\n' "$1"
   verbs=$(verb_names "$m")
   printf '\nverbs:\n'
   if [ -z "$verbs" ]; then
@@ -3594,6 +3598,7 @@ case "$1" in
     shift
     if verb_exists "$md" "diagnose"; then
       verb_help_first "$found_target" diagnose "$@"
+      verb_sub_first "$found_target" "$md" diagnose "$@"
       CTX_ROOT="$root"
       CTX_MODULE_DIR="$md"
       CTX_BIN="$ctx_bin"

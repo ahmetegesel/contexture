@@ -34,6 +34,19 @@ describe.concurrent('the hook runner, called directly through ctx _hooks', () =>
     expect(marker(sb)).toEqual(['ma-a', 'ma-b', 'ma-plain', 'mb-c'].map((l) => `${l} point=pt x=val pwd=${root}`));
   });
 
+  it('[the-engine-r3]: a ctx-hook line after a hook file\'s first code line is no header line, so that hook never fires; null check: the same line in the leading block, after a comment and a blank line, fires', async () => {
+    const sb = stage('posix', 'hooks-late');
+    writeModule(sb, 'modules', 'ma', {
+      files: {
+        'hooks/10-late.sh': ['#!/bin/sh', record('ma-late'), '# ctx-hook: pt', ''].join('\n'),
+        'hooks/20-block.sh': ['#!/bin/sh', '# a comment', '', '# ctx-hook: pt', record('ma-block'), ''].join('\n'),
+      },
+    });
+    const r = await run(sb, ['_hooks', 'pt']);
+    expect([r.code, r.stderr]).toEqual([0, '']);
+    expect(marker(sb)).toEqual([`ma-block point=pt x=none pwd=${realpathSync(sb)}`]);
+  });
+
   it('[the-engine-r12]: a point no hook declares runs nothing, silent rc 0', async () => {
     const sb = hookSandbox('hooks-zero');
     const r = await run(sb, ['_hooks', 'no-such-point', 'CTX_UNIT', 'u']);

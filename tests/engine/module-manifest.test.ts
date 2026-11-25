@@ -1,4 +1,5 @@
 import { beforeAll, describe, expect, it } from 'vitest';
+import { writeModule } from '../support/modules';
 import { run } from '../support/unit';
 import { engineSandbox, writeManifests } from './fixture';
 
@@ -7,6 +8,8 @@ describe.concurrent('the ctx _module reader', () => {
   beforeAll(() => {
     sb = engineSandbox('module-manifest');
     writeManifests(sb);
+    writeModule(sb, 'modules', 'blankledmod', { manifest: '  an indented note\n# summary: a blank led text line\n' });
+    writeModule(sb, 'modules', 'blankokmod', { manifest: '\n  \n# summary: blank lines around\n\t\n' });
   });
   const read = (name: string, word?: string) => run(sb, ['_module', `.contexture/modules/${name}/module`, ...(word ? [word] : [])]);
 
@@ -23,6 +26,11 @@ describe.concurrent('the ctx _module reader', () => {
     expect((await read('sumonly', 'description')).stdout.trim()).toBe('');
   });
 
+  it('CT-MF1 [modules-r11, the-engine-r3]: a line of blanks alone or an empty line validates wherever it stands, the null check of the blank led text refusal', async () => {
+    expect((await read('blankokmod', 'validate')).code).toBe(0);
+    expect((await read('blankokmod', 'summary')).stdout).toBe('blank lines around\n');
+  });
+
   it('CT-MF1 [modules-r11, the-engine-p5]: a requires line refuses validate and every field read rc 1', async () => {
     for (const word of ['validate', 'summary']) {
       const r = await read('reqmod', word);
@@ -36,6 +44,7 @@ describe.concurrent('the ctx _module reader', () => {
     ['unkmod', "unknown field 'parts'"],
     ['badvermod', 'malformed version'],
     ['baddescmod', 'description block takes only # lines'],
+    ['blankledmod', 'line 1: not a # header line'],
   ] as const)('CT-MF1 [modules-r11]: %s refuses validate rc 1 naming its rule', async ([name, message]) => {
     const r = await read(name, 'validate');
     expect(r.code).toBe(1);

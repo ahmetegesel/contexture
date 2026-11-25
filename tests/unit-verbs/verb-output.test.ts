@@ -238,6 +238,7 @@ describe('the verb output census: no unit, lane, rhythm, or store verb prints th
     const keys = new Set(rows.map((r) => r.key));
     expect(want.filter((k) => !keys.has(k))).toEqual([]);
     expect(rows.filter((r) => r.key === 'unit fold').length).toBe(3);
+    expect(rows.filter((r) => r.key === 'lane show').length).toBe(3);
     expect(keyOf(tables, ['lane', 'show', 'cu', 'cl', 'journal'])).toBe('lane show');
     expect(keyOf(tables, ['unit', 'task', 'add', 'cu', 't1'])).toBe('unit task add');
     expect(keyOf(tables, ['store', 'config', 'get', 'driver'])).toBe('store config get');

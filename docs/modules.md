@@ -60,6 +60,7 @@ The module file is the standard folder's manifest. Its fields and their readers:
 - The block order is summary, version, description; the description stands last because its block runs to the end of the file.
 - The module name is the directory name; the summary is the only field the engine reads.
 - A plain `# comment` never opens with `# <token>:`: that shape is a field, and an unknown field refuses.
+- A line is a `#` line or blank (empty, or blanks alone); any other line refuses (`not a # header line`), a text line opening with a blank included, so `ctx _module` and the engine's leading header block (Verb scripts) read the same summary.
 - The private reader `ctx _module <file> validate|summary|version|description` is the one parser. Discovery calls `validate` on every manifest and skips a malformed one with a warning; the compose calls the field reads and the package installer validates every module part, so a `# requires:` line refuses wherever the manifest is read. A summary-only manifest stays valid, and a manifest may carry a description with no version line: the ast-doc-graph module carries a summary and a description, and its package manifest carries the install version.
 
 ### The laws file
@@ -384,7 +385,7 @@ The steps below use the workspace modules root; a package installs its feature m
 | shell syntax | `sh -n <file>` on every sh verb and hook | silent rc0 |
 | awk syntax smoke | `awk -f <filter> </dev/null` | parses and runs its BEGIN block |
 | executable bits | `chmod +x <script> <hook> <install> <uninstall>` | the engine and the installer exec directly |
-| manifest grammar | `ctx _module <module> validate` | silent rc0; a `# requires:` line, a duplicate field, an unknown field, or a description not last refuses rc1 |
+| manifest grammar | `ctx _module <module> validate` | silent rc0; a `# requires:` line, a duplicate field, an unknown field, a description not last, or a text line (one opening with a blank included) refuses rc1 |
 | manifest fields | `ctx _module <module> summary` / `version` / `description` | the values the engine and the compose read |
 | package manifest grammar | `ctx _package <package>/manifest validate` | silent rc0; a missing summary, version, kind, or part, a bad kind, part, driver, category, or tags, a duplicate or empty field, a malformed description block not last, or a `# requires:` line refuses rc1 |
 | package manifest fields | `ctx _package <package>/manifest summary` / `version` / `kind` / `parts` / `driver` / `category` / `pitch` / `when` / `needs` / `tags` / `description` | the values the installer and catalog readers read (optional fields print empty when absent) |

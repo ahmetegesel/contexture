@@ -322,6 +322,12 @@ describe.concurrent('the subcommand grammar: # subcommand: sections in the leadi
         'scripts/priv': ['#!/bin/sh', 'printf "RAN\\n"', '# summary: a late summary', ''].join('\n'),
       },
     });
+    writeModule(sb, 'modules', 'sd', {
+      manifest: '# summary: the diagnose route fixture\n',
+      files: {
+        'scripts/diagnose': ['#!/bin/sh', '# summary: a diagnose verb with a section', '# usage: ctx sd diagnose <subcommand>', '# subcommand: one the first', '# usage: ctx sd diagnose one', 'printf "RAN %s\\n" "$*"', ''].join('\n'),
+      },
+    });
   });
 
   it('[the-engine-r3, modules-r2]: every header line is read from the leading block alone: a late usage, subcommand, and help-from are read nowhere, and a late summary makes no verb; null check: the same lines in the block read', async () => {
@@ -335,13 +341,18 @@ describe.concurrent('the subcommand grammar: # subcommand: sections in the leadi
     expect((await run(sb, ['sx', 'help', 'go'])).stdout).toContain('hook sub=[]');
   });
 
+  it('[the-engine-r4]: the usage lines of ctx help and of the module table name the subcommand form help [<verb> [<sub>]]', async () => {
+    expect((await run(sb, ['help'])).stdout).toContain("\n  ctx <module> help [<verb> [<sub>]]  the module's verb table; one verb's detail with <verb>, one subcommand's with <sub>\n");
+    expect((await run(sb, ['sx', 'help'])).stdout).toContain('\nusage:\n  ctx sx <verb> [args...]\n  ctx sx help [<verb> [<sub>]]\n');
+  });
+
   it('[the-engine-r4]: ctx <module> help <verb> prints the verb table, then the subcommands table (the section text, else its first usage line, else the name) and the detail line, then the hook output', async () => {
     for (const args of [['sx', 'help', 'go'], ['sx', '-h', 'go'], ['sx', 'go', '-h'], ['sx', 'go', '--help']]) {
       expect(await run(sb, args).then((r) => [r.code, r.stdout, r.stderr]), args.join(' ')).toEqual([0, goTable, '']);
     }
   });
 
-  it.for(['one', 'two', 'three'])('[the-engine-r4, the-engine-r7]: ctx sx help go %s, ctx sx -h go %s, and a sole -h or --help after it print the section table, the hook run with CTX_HELP_SUB, rc 0', async (s) => {
+  it.for(['one', 'two', 'three'])('[the-engine-r4, the-engine-r7]: section %s: ctx sx help go <sub>, ctx sx --help go <sub>, and a sole -h or --help after it print the section table, the hook run with CTX_HELP_SUB, rc 0', async (s) => {
     for (const args of [['sx', 'help', 'go', s], ['sx', '--help', 'go', s], ['sx', 'go', s, '-h'], ['sx', 'go', s, '--help']]) {
       expect(await run(sb, args).then((r) => [r.code, r.stdout, r.stderr]), args.join(' ')).toEqual([0, sections[s], '']);
     }
@@ -363,6 +374,17 @@ describe.concurrent('the subcommand grammar: # subcommand: sections in the leadi
     expect(await ran('one', 'a', 'b')).toEqual([0, 'RAN one a b\n', '']);
     expect(await ran('one', 'x', '-h')).toEqual([0, 'RAN one x -h\n', '']);
     expect(await run(sb, ['sx', 'late', 'anything']).then((r) => [r.code, r.stdout])).toEqual([0, 'RAN anything\n']);
+  });
+
+  it('[the-engine-r5, the-engine-r7]: ctx <module> --diagnose checks a declared subcommand as ctx <module> diagnose does: an unknown word refuses with the verb table on stderr, a sole -h after a declared one prints its section, a declared one with arguments runs', async () => {
+    const table = (await run(sb, ['sd', 'help', 'diagnose'])).stdout;
+    const section = (await run(sb, ['sd', 'help', 'diagnose', 'one'])).stdout;
+    expect(section).toMatch(/^ctx sd diagnose one: the first\n/);
+    for (const route of [['sd', 'diagnose'], ['sd', '--diagnose']]) {
+      expect(await run(sb, [...route, 'bogus']).then((r) => [r.code, r.stdout, r.stderr]), route.join(' ')).toEqual([1, '', `ctx: sd diagnose: unknown subcommand: bogus\n${table}`]);
+      expect(await run(sb, [...route, 'one', '-h']).then((r) => [r.code, r.stdout, r.stderr]), route.join(' ')).toEqual([0, section, '']);
+      expect(await run(sb, [...route, 'one', 'x']).then((r) => [r.code, r.stdout, r.stderr]), route.join(' ')).toEqual([0, 'RAN one x\n', '']);
+    }
   });
 
   it.for(['-h', '--help'])('[the-engine-r7]: %s after a declared subcommand followed by more refuses rc 1 with one stderr line, and help <verb> <sub> takes no further argument', async (flag) => {
