@@ -62,10 +62,15 @@ export interface CheckOptions {
   log?: boolean;
   files?: readonly string[];
   shebangs?: string;
+  universe?: string;
 }
 
-export function check(dir: string, delta: string, { log = false, files = docFiles(dir), shebangs }: CheckOptions = {}): Promise<Run> {
-  const env = { ...ceiling(dir), ...(shebangs ? { DOCS_SHEBANG_LIST: shebangs } : {}) };
+export function check(dir: string, delta: string, { log = false, files = docFiles(dir), shebangs, universe }: CheckOptions = {}): Promise<Run> {
+  const env = {
+    ...ceiling(dir),
+    ...(shebangs ? { DOCS_SHEBANG_LIST: shebangs } : {}),
+    ...(universe ? { DOCS_UNIVERSE_LIST: universe, DOCS_UNIVERSE_LABEL: '[CHECK NOTICE]' } : {}),
+  };
   return awk(dir, [engine('docs-glob.awk'), engine('docs-check.awk')], { input: delta, args: files, env, vars: log ? { delta_source: 'log' } : {} });
 }
 

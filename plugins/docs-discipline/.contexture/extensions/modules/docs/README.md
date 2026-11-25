@@ -216,6 +216,36 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   first line is the working tree's copy, so an incoming new script reads
   ungoverned until it lands; the gate's `--test-matrix` keeps the extension
   rule alone.
+- The dead sources: a deleted file a header source lists exactly, and a glob
+  source that claimed a deleted path (by the glob rule, never by equality,
+  even when the same doc lists the path exactly) and no longer matches any
+  file. `process_doc_sources` keeps testing every source of a deleted path and
+  records each such glob once per doc (`claim_glob`); `judge_globs` reads the
+  scratch list `universe` by name from `DOCS_UNIVERSE_LIST` (one `listed` or
+  `unlisted` line per repository, `.` the workspace root, and one `path` line
+  per path), beside the shebang list, so no engine line lists a tree. The
+  verb draws it (`docs_delta_universe`, called beside `docs_delta_shebangs` by
+  `check` and every gate form) only when the staged delta holds a `D` or `R`
+  line, and always sets the variable, empty when nothing is drawn, so an
+  inherited value never reaches the engine; an absent or empty list skips
+  the test, which keeps the engine tests and the gate's matrix as they were.
+  Each repository's listing (`docs_universe_repo`: the root, then the
+  children `docs_children` lists, the same discovery the gate's three loops
+  read) is `git ls-files -co --exclude-standard` minus `git ls-files -d`, both
+  with `core.quotePath=false` and decoded by `docs_delta_decode`, relative to
+  the repository and under its prefix, a nested repository's or worktree's
+  `<dir>/` line dropped; a repository git lists nothing for reads `unlisted`.
+  The delta's deleted and renamed-away paths leave the list and its added and
+  renamed-to paths join it, so the universe is always the working tree. A
+  child repository's doc reads the paths under its `projects/<repo>/` or
+  `<repo>/` prefix, stripped; a workspace doc reads every path. A candidate's
+  repository is the child its deleted path lies in (a child's doc) or the
+  child its glob's literal head lies in (a workspace doc), else the root; an
+  unlisted one is named on stderr under `DOCS_UNIVERSE_LABEL` (`[CHECK
+  NOTICE]` or `[GATE NOTICE]`), a listed one with no surviving match prints
+  one `DEAD SOURCE` line per doc and glob and counts once. The prefilter
+  `source_prefix` (in `docs-glob.awk`) never rejects a path the glob rule
+  accepts. `--drift` sets `GATE_DRIFT` and skips the test with a notice.
 - The doc touch: a corpus doc rides a delta only at its logical address,
   `docs/<repo>/<slug>.md` at the start of a delta path (the workspace root's
   corpus under the files driver, the `ctx docs changes` lines under a store).
@@ -253,7 +283,8 @@ alike; the grammar asset is the one path resolved beside the module. The gate's 
 aggregation reads from that root; the corpus reads go through the driver
 (under the files driver the corpus is `<root>/docs/<repo>/<slug>.md`).
 `DOCS_PRODUCT_REPOS_DIR` (default `projects/`) selects the multi-repo product
-directory.
+directory, read by `docs_children` for the gate's scans and the check's dead
+glob universe alike.
 
 ## Grammar and sample
 
@@ -298,8 +329,15 @@ the doc touch at the logical address alone, and the governed set over a
 planted shebang list (the shebang script, the `.awk` engine, the plain file,
 the exclusions first, a claimed script's `STALE DOC`, a deleted path listed
 exactly, after a broader glob of the same doc too, the folder and `<dir>/`
-lines),
-and the pure helpers of `docs-io.sh`. `static/` runs the single-door census
+lines), and the dead glob test over a planted universe list (one line per doc
+and glob with its count, the glob beside the exact line of the same doc, a
+listed survivor, an unrelated glob never tested, an absent or empty list
+skipped, the prefilter's optional character, a child doc's stripped prefix,
+a workspace doc's union, and the unlisted root and child named in the
+notice),
+and the pure helpers of `docs-io.sh` (`docs_children` over the product folder,
+the flat form, `DOCS_PRODUCT_REPOS_DIR`, and the gate reading it in its three
+loops). `static/` runs the single-door census
 (`tests/census.awk` over `tests/census-allow.txt`, with three planted
 bypasses), the grammar agreement check (`tests/grammar-agreement.awk`, with
 two plants), the flag collision check (`tests/flag-collision.awk`: every
@@ -334,7 +372,15 @@ over a committed range: STALE for a code-only commit, FRESH with the doc in
 the commit, a rename's dead source and uncovered new path, an ignored
 corpus's untracked claimant with its notice, an unignored untracked corpus
 read the same way, a committed non-ASCII change's STALE, an empty range, a
-child repository's working delta with its notice, and the refusals). `fault/` configures a planted driver that declares no store, so
+child repository's working delta with its notice, and the refusals), and the
+dead glob test end to end in git sandboxes (`integration/dead-globs`: the
+check verb's verdict and its survivors, tracked, untracked, added, and
+renamed to, never an ignored file or a deletion still in the index, quoted
+survivors, an inherited list never reaching the engine, a parent workspace
+whose root is no work tree with a listed child and a broken one, a custom
+product folder the check and the gate share, a nested repository's `<dir>/`
+line, and the gate's default, `--since`, `--stdin`, notice, and `--drift`
+skip). `fault/` configures a planted driver that declares no store, so
 every read verb refuses rc 2 naming the capability. `store/` keeps the cases
 where the fts5 driver adds value: the corpus written through `ctx docs write`
 with the docs folder removed and read back unchanged through `ctx docs write

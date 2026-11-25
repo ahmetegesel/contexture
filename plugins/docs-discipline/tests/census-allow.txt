@@ -5,13 +5,13 @@
 # write-side parser; every corpus read and write of a write verb runs inside the helper);
 # usage-text (a refusal message naming a
 # form); delta-read (the check's stdin delta); scratch-list (the check's read of a list the
-# verb staged in its scratch, the governed set's shebang list, never a corpus or code path);
+# verb staged in its scratch, the governed set's shebang list or the dead glob universe list,
+# never a corpus or code path);
 # claimant-probe (the check's git trackedness
 # probe of a claimant doc path, turned off under a store's change log in B4); engine-output
 # (an engine prints; the edit engine's one stderr line carries its note or refusal);
 # engine-path-logic (an engine reads FILENAME or matches the address
-# shape, no IO); git-delta (the gate's code half from git); topology-probe (the gate's
-# product repository and .git probes, never the corpus); matrix-fixture (the gate's
+# shape, no IO); git-delta (the gate's code half from git); matrix-fixture (the gate's
 # self-planted matrix, files by construction); false-positive (an instrument B pattern
 # inside a word or a string). A new corpus read or path print outside the helper lands here only by an
 # explicit edit, which is the point: it stays visible.
@@ -20,6 +20,7 @@ claimant-probe	docs-check.awk	    else cmd = "git ls-files --error-unmatch -- \"
 claimant-probe	docs-check.awk	    rc = system(cmd)
 delta-read	docs-check.awk	    while ((getline raw_line < input_src) > 0) {
 scratch-list	docs-check.awk	        while ((getline sb_line < shebang_src) > 0) {
+scratch-list	docs-check.awk	    while ((getline line < src) > 0) {
 engine-output	docs-audit.awk	    print file ":" line ": error: " msg > "/dev/stderr"
 engine-output	docs-audit.awk	        print "docs-audit: FAILED with " errors " error(s)" > "/dev/stderr"
 engine-output	docs-check.awk	            print "AFFECTED: " s " [" slug_repo[s] "] -> " slug_doc[s]
@@ -27,7 +28,8 @@ engine-output	docs-check.awk	                    print "FRESH (BLANKET): " slug_
 engine-output	docs-check.awk	                    print "FRESH: " slug_repo[s] " > " s " (doc updated in change delta)"
 engine-output	docs-check.awk	            print "docs-check: FAILED: " uncovered_count " code file(s) are uncovered by any documentation." > "/dev/stderr"
 engine-output	docs-check.awk	            print "docs-check: FAILED: " stale_count " file(s) are stale (changed without a doc update)." > "/dev/stderr"
-engine-output	docs-check.awk	            print "docs-check: FAILED: " num_dead_sources " deleted file(s) still explicitly listed in doc sources." > "/dev/stderr"
+engine-output	docs-check.awk	            print "docs-check: FAILED: " num_dead_sources " dead source(s): a deleted file still explicitly listed in doc sources, or a glob source no file matches after the delta." > "/dev/stderr"
+engine-output	docs-check.awk	        print ENVIRON["DOCS_UNIVERSE_LABEL"] " " skipped " glob source(s) claimed a deleted path in a repository git lists nothing for (" homes "); the check does not judge them: " skip_list > "/dev/stderr"
 engine-output	docs-query.awk	                print "[" curr_repo " > " curr_slug " (" curr_kind ")]"
 engine-output	docs-query.awk	                print "[" curr_repo " > " curr_slug "]"
 engine-output	docs-query.awk	    print "! [" sev_tag "] " p_id ": " p_sum " (" curr_slug ".md)"
@@ -64,16 +66,16 @@ git-delta	gate	            git -c core.quotePath=false diff --name-status "$DOCS
 git-delta	gate	            git -c core.quotePath=false diff --name-status 2>/dev/null || true
 git-delta	gate	            git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
 git-delta	gate	        git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | docs_untracked_half
-git-delta	gate	                    git -c core.quotePath=false diff --name-status 2>/dev/null || true
-git-delta	gate	                    git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
-git-delta	gate	                    git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
+git-delta	gate	                git -c core.quotePath=false diff --name-status 2>/dev/null || true
+git-delta	gate	                git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
+git-delta	gate	                git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
 git-delta	gate	            if ! git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
 git-delta	gate	            if git rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
 git-delta	gate	                git -c core.quotePath=false diff --name-status "HEAD...$remote_ref" 2>/dev/null || true
-git-delta	gate	            branch=$(git -C "$pdir" branch --show-current 2>/dev/null || echo "")
-git-delta	gate	            if ! git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
-git-delta	gate	            if git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
-git-delta	gate	                behind=$(git -C "$pdir" rev-list --count "HEAD..$remote_ref" 2>/dev/null || echo 0)
+git-delta	gate	        branch=$(git -C "$pdir" branch --show-current 2>/dev/null || echo "")
+git-delta	gate	        if ! git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+git-delta	gate	        if git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+git-delta	gate	            behind=$(git -C "$pdir" rev-list --count "HEAD..$remote_ref" 2>/dev/null || echo 0)
 helper-output	audit	docs_args 1 0 "$@" || exit $?
 helper-output	audit	docs_exec "$dir/docs-audit.awk"
 helper-output	check	docs_args 0 0 "$@" || exit $?
@@ -117,14 +119,6 @@ matrix-fixture	gate	        out="$(printf '%s' "$input" | (cd "$FIXTURE_DIR" && 
 matrix-fixture	gate	docs/demo/widgets.md"
 matrix-fixture	gate	docs/demo/platform.md"
 matrix-fixture	gate	docs/demo/widgets.md"
-topology-probe	gate	    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
-topology-probe	gate	        if [ -d "$pdir/.git" ] && [ "$pdir" != "$WORKSPACE_ROOT" ]; then
-topology-probe	gate	    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
-topology-probe	gate	        if [ -e "$WORKSPACE_ROOT/.git" ]; then
-topology-probe	gate	        elif [ -d "$pdir/.git" ]; then
-topology-probe	gate	    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
-topology-probe	gate	        if [ -e "$WORKSPACE_ROOT/.git" ]; then
-topology-probe	gate	        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.git" ]; then
 usage-text	check	  echo "Usage: git diff --name-status | ctx docs check <repo>..." >&2
 usage-text	nudge	  echo "Usage: ctx docs nudge <unit> [--task=<slug>]... [<repo>...] (or: ctx docs nudge <backlog-file> <repo>...)" >&2
 usage-text	nudge	        echo "ctx docs nudge: --task is the unit form's; the backlog-file form names repos alone" >&2

@@ -142,6 +142,92 @@ function claimant_paths_joined(t_file,   s) {
     return s
 }
 
+# a glob source (a match by the rule, never by equality) that claimed a deleted path: one
+# candidate per doc and glob, holding the least deleted path it claimed and their count
+function claim_glob(g, path,    k, c) {
+    k = curr_repo SUBSEP curr_slug SUBSEP g
+    if ((k, path) in claim_seen) return
+    claim_seen[k, path] = 1
+    if (!(k in cand_at)) {
+        cand_at[k] = ++n_cand
+        cand_repo[n_cand] = curr_repo
+        cand_slug[n_cand] = curr_slug
+        cand_glob[n_cand] = g
+        cand_path[n_cand] = path
+    }
+    c = cand_at[k]
+    if (path < cand_path[c]) cand_path[c] = path
+    cand_count[c]++
+}
+
+# the repository a candidate belongs to: for a child repository's doc the child whose prefix
+# its deleted path carries, for a workspace doc the child its glob's head lies in, else the
+# workspace root (.)
+function cand_home(c,    s, r) {
+    s = (cand_repo[c] == "workspace") ? source_prefix(cand_glob[c]) : cand_path[c]
+    for (r in repo_listed) if (r != "." && index(s, r "/") == 1) return r
+    return "."
+}
+
+# a universe path the candidate's glob still claims: a child repository's doc reads the paths
+# under its projects/<repo>/ or <repo>/ prefix with the prefix stripped, a workspace doc every
+# path; the head source_prefix names filters before the glob rule
+function glob_survives(c,    repo, g, lit, pp, rp, i, p) {
+    repo = cand_repo[c]
+    g = cand_glob[c]
+    lit = source_prefix(g)
+    pp = "projects/" repo "/"
+    rp = repo "/"
+    for (i = 1; i <= n_universe; i++) {
+        p = universe[i]
+        if (repo != "workspace") {
+            if (index(p, pp) == 1) p = substr(p, length(pp) + 1)
+            else if (index(p, rp) == 1) p = substr(p, length(rp) + 1)
+            else continue
+        }
+        if (index(p, lit) == 1 && source_matches(p, g)) return 1
+    }
+    return 0
+}
+
+# the dead glob test over the verb's universe list (DOCS_UNIVERSE_LIST, one <kind> TAB
+# <value> line each: listed or unlisted <prefix> per repository, path <path> per path),
+# skipped when the list is absent or empty: a candidate no universe path matches is a dead
+# source; one of a repository the list marks unlisted is left unjudged and named in a notice
+# on stderr under DOCS_UNIVERSE_LABEL
+function judge_globs(    src, line, tab, kind, n, c, home, skipped, skip_list, homes, seen_home) {
+    src = ENVIRON["DOCS_UNIVERSE_LIST"]
+    if (n_cand == 0 || src == "") return
+    n = 0
+    while ((getline line < src) > 0) {
+        n++
+        tab = index(line, "\t")
+        kind = substr(line, 1, tab - 1)
+        if (kind == "path") universe[++n_universe] = substr(line, tab + 1)
+        else if (kind == "listed" || kind == "unlisted") repo_listed[substr(line, tab + 1)] = (kind == "listed")
+    }
+    close(src)
+    if (n == 0) return
+    skipped = 0
+    for (c = 1; c <= n_cand; c++) {
+        home = cand_home(c)
+        if (!repo_listed[home]) {
+            skipped++
+            skip_list = skip_list (skipped > 1 ? ", " : "") cand_repo[c] "/" cand_slug[c] " '" cand_glob[c] "'"
+            if (!(home in seen_home)) {
+                seen_home[home] = 1
+                homes = homes (homes != "" ? ", " : "") (home == "." ? "the workspace root" : home)
+            }
+        } else if (!glob_survives(c)) {
+            dead_glob[c] = 1
+            num_dead_sources++
+        }
+    }
+    if (skipped > 0) {
+        print ENVIRON["DOCS_UNIVERSE_LABEL"] " " skipped " glob source(s) claimed a deleted path in a repository git lists nothing for (" homes "); the check does not judge them: " skip_list > "/dev/stderr"
+    }
+}
+
 function process_doc_sources() {
     if (curr_sources == "" || checked_doc[curr_file]) return
     checked_doc[curr_file] = 1
@@ -163,11 +249,17 @@ function process_doc_sources() {
             }
         }
 
+        # a deleted path is tested against every source, so each glob that claimed it is
+        # recorded for the dead glob test, the doc listing it exactly or not
         matched = 0
         exact_matched = 0
         for (i = 1; i <= n_globs; i++) {
-            if (norm_file == globs[i]) exact_matched = 1
-            if (!matched && source_matches(norm_file, globs[i])) matched = 1
+            if (norm_file == globs[i]) {
+                matched = exact_matched = 1
+            } else if ((!matched || deleted[t_file]) && source_matches(norm_file, globs[i])) {
+                matched = 1
+                if (deleted[t_file]) claim_glob(globs[i], t_file)
+            }
         }
 
         if (matched) {
@@ -326,12 +418,19 @@ END {
     }
     print ""
 
-    # 3. Dead Sources Audit (for deleted files still explicitly in doc sources)
+    # 3. Dead Sources Audit (for deleted files still explicitly in doc sources, and for glob
+    # sources that claimed a deleted path and no longer match any file)
+    judge_globs()
     if (num_dead_sources > 0) {
         print "--- DEAD SOURCES AUDIT ---"
         for (k in dead_sources) {
             split(k, parts, SUBSEP)
             print "DEAD SOURCE: " parts[2] "/" parts[3] " still explicitly lists deleted file '" parts[1] "' in sources: (cleanup required)"
+        }
+        for (c = 1; c <= n_cand; c++) {
+            if (!dead_glob[c]) continue
+            more = (cand_count[c] > 1) ? " and " (cand_count[c] - 1) " more" : ""
+            print "DEAD SOURCE: " cand_repo[c] "/" cand_slug[c] " lists glob '" cand_glob[c] "' that no longer matches any file after deleting '" cand_path[c] "'" more " (cleanup required)"
         }
         print ""
     }
@@ -345,7 +444,7 @@ END {
             print "docs-check: FAILED: " stale_count " file(s) are stale (changed without a doc update)." > "/dev/stderr"
         }
         if (num_dead_sources > 0) {
-            print "docs-check: FAILED: " num_dead_sources " deleted file(s) still explicitly listed in doc sources." > "/dev/stderr"
+            print "docs-check: FAILED: " num_dead_sources " dead source(s): a deleted file still explicitly listed in doc sources, or a glob source no file matches after the delta." > "/dev/stderr"
         }
         exit 1
     } else if (untracked_claimant_count > 0) {

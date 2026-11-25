@@ -2,7 +2,8 @@
 # summary: the coverage, freshness, and dead-sources check over a change delta
 # usage: git diff --name-status | ctx docs check <repo>...
 # usage: git diff --name-status | ctx docs check docs/<repo>/<slug>.md...
-# help: reads a status-prefixed change delta on stdin together with the corpus and reports the touched code files that no doc claims (coverage), the changed code files whose docs did not ride the change (freshness), and the deleted files still listed as doc sources
+# help: reads a status-prefixed change delta on stdin together with the corpus and reports the touched code files that no doc claims (coverage), the changed code files whose docs did not ride the change (freshness), and the dead sources: a deleted file a header source still lists exactly, or a glob source that claimed a deleted path and no longer matches any file
+# help: the dead glob test runs only when the delta deletes a path (a D line or a rename's old path) and judges each glob source that claimed one (by the glob rule, never by equality, even when the doc also lists the path exactly) against the working tree, whatever delta was staged: the files git tracks or leaves untracked without ignoring (git ls-files -co --exclude-standard, its deleted files left out) in the workspace root and in each child repository (a folder holding a .git folder under DOCS_PRODUCT_REPOS_DIR, default projects, else directly under the root), the delta's deleted paths removed and its added paths added; a child repository's doc reads its child's paths under the prefix, a workspace doc every path; a glob no path still matches reads one DEAD SOURCE line per doc and glob, naming one deleted path it claimed and how many more; an ignored file never keeps a glob alive; a repository git lists nothing for (no work tree) has its globs named in a [CHECK NOTICE] and left unjudged; a glob dead on a quiet tree, or one that never matched, is never tested
 # help: the governed set: the code extensions (awk among them) and every extensionless file (a non-empty basename with no dot after its first character) whose first line, read under the workspace root, starts with #!, plus a depth-1 docs/*.md a doc claims; the test and generated exclusions apply first; an extensionless file without a shebang stays out, and a path that is not a readable regular file (deleted, absent, a folder, a symbolic link) counts only when a header source lists it exactly; a doc rides the delta only at its logical address docs/<repo>/<slug>.md, the start of a delta path
 # help: a path git quotes (core.quotePath: a non-ASCII byte, a quote, a backslash) is read as its bytes, so a plain git diff --name-status reads as its unquoted twin; a path holding a control character (a tab, a newline) cannot ride a status line, so it is left out and named in a [CHECK NOTICE] on stderr, and a rename keeps its other side
 # help: the corpus comes from the storage layer through the configured storage driver: a repo name checks against that repo's docs, a doc path names one doc by its logical address docs/<repo>/<slug>.md and the verb reads the stored doc, never a file at the caller's spelling; the corpus argument is required, so the delta on stdin is never read as a corpus
@@ -35,11 +36,12 @@ docs_io_init "$dir" check
 docs_args 0 0 "$@" || exit $?
 # a store driver's change log feeds the corpus half: the engine's log mode (no blanket, no
 # trackedness probe); the files driver keeps today's git mode. The delta is staged and read
-# by name, so the shebang list can be drawn from its paths first
+# by name, so the shebang list and the dead glob universe can be drawn from it first
 docs_delta_source
 docs_delta_decode | docs_delta_stage || exit $?
 docs_delta_unread "[CHECK NOTICE]"
 docs_delta_shebangs
+docs_delta_universe "[CHECK NOTICE]"
 if [ "$DOCS_DELTA" = log ]; then
   docs_exec awk -f "$dir/docs-glob.awk" -f "$dir/docs-check.awk" -v "$DOCS_DELTA_ARG" -v delta_source=log
 fi

@@ -544,15 +544,16 @@ docs_delta_empty() {
   awk 'NF { n = 1; exit } END { exit n }' "$DOCS_SCRATCH/delta"
 }
 
-# docs_delta_decode [<prefix>]: a status-prefixed delta on stdin, every path git quoted (a
-# "..." field: a non-ASCII byte as an octal escape under core.quotePath, a quote or a
-# backslash escaped) decoded to its bytes, so the check reads it as its plain twin; a plain
-# line passes byte for byte. A field whose escapes name a control character (a tab, a
+# docs_delta_decode [<prefix> [<left-out list>]]: a status-prefixed delta on stdin, every path
+# git quoted (a "..." field: a non-ASCII byte as an octal escape under core.quotePath, a quote
+# or a backslash escaped) decoded to its bytes, so the check reads it as its plain twin; a
+# plain line passes byte for byte. A field whose escapes name a control character (a tab, a
 # newline, a byte below 040 or 0177) cannot ride a status line: it is left out and its
-# spelling, after <prefix>, lands in the scratch list docs_delta_unread names; a rename with
-# one such side keeps its other side (A for the new path, D for the old), a copy its new one
+# spelling, after <prefix>, lands in the scratch list docs_delta_unread names (or the
+# left-out list given); a rename with one such side keeps its other side (A for the new path,
+# D for the old), a copy its new one
 docs_delta_decode() {
-  DOCS_DECODE_PFX="${1:-}" DOCS_UNREAD="$DOCS_SCRATCH/unread" LC_ALL=C awk '
+  DOCS_DECODE_PFX="${1:-}" DOCS_UNREAD="${2:-$DOCS_SCRATCH/unread}" LC_ALL=C awk '
     BEGIN {
       BS = sprintf("%c", 92); DQ = sprintf("%c", 34)
       PFX = ENVIRON["DOCS_DECODE_PFX"]; UNREAD = ENVIRON["DOCS_UNREAD"]
@@ -655,6 +656,105 @@ docs_delta_shebangs() {
       *) printf 'plain\t%s\n' "$ds_p" ;;
     esac
   done > "$DOCS_SHEBANG_LIST"
+}
+
+# docs_children [root]: the child repositories the gate scans and the dead glob universe
+# lists, one prefix per line: the folders under DOCS_PRODUCT_REPOS_DIR (default projects)
+# when that folder exists and is not the root itself, else the root's direct children (a
+# shell glob, so a dot folder is never scanned); a child is a folder holding a .git folder
+# (a linked worktree or a submodule, whose .git is a file, is none), its prefix
+# <product folder>/<name> or <name>. With root, the flat form (no product folder) lists the
+# workspace root first as . when it is a repository
+docs_children() {
+  dc_dir="${DOCS_PRODUCT_REPOS_DIR:-projects}"
+  dc_base=""
+  if [ -d "$DOCS_ROOT/$dc_dir" ] && [ "$dc_dir" != "." ]; then
+    dc_base="$dc_dir/"
+  elif [ "${1:-}" = root ] && [ -e "$DOCS_ROOT/.git" ]; then
+    printf '.\n'
+  fi
+  for dc_p in "$DOCS_ROOT/$dc_base"*; do
+    if [ -d "$dc_p/.git" ]; then
+      printf '%s\n' "$dc_base${dc_p##*/}"
+    fi
+  done
+  return 0
+}
+
+# docs_universe_repo <prefix>: one repository's lines of the dead glob universe (. names the
+# workspace root): listed<TAB><prefix> and a path<TAB><path> line per path of git's
+# non-ignored working tree (ls-files -co --exclude-standard minus ls-files -d, both with
+# core.quotePath=false and decoded as the delta is, so a path holding a control character is
+# left out), relative to the repository and under its prefix, a nested repository's or
+# worktree's <dir>/ line dropped; unlisted<TAB><prefix> alone when git lists nothing there
+# (no work tree)
+docs_universe_repo() {
+  du_dir="$DOCS_ROOT/$1"
+  du_pfx="$1/"
+  if [ "$1" = . ]; then
+    du_dir=$DOCS_ROOT
+    du_pfx=""
+  fi
+  if ! git -C "$du_dir" -c core.quotePath=false ls-files -co --exclude-standard > "$DOCS_SCRATCH/universe.co" 2>/dev/null ||
+    ! git -C "$du_dir" -c core.quotePath=false ls-files -d > "$DOCS_SCRATCH/universe.d" 2>/dev/null; then
+    printf 'unlisted\t%s\n' "$1"
+    return 0
+  fi
+  printf 'listed\t%s\n' "$1"
+  docs_delta_decode "" /dev/null < "$DOCS_SCRATCH/universe.d" > "$DOCS_SCRATCH/universe.gone"
+  docs_delta_decode "" /dev/null < "$DOCS_SCRATCH/universe.co" |
+    DOCS_UNIVERSE_GONE="$DOCS_SCRATCH/universe.gone" DOCS_UNIVERSE_PFX=$du_pfx awk '
+      BEGIN { f = ENVIRON["DOCS_UNIVERSE_GONE"]; while ((getline l < f) > 0) gone[l] = 1; close(f) }
+      $0 != "" && $0 !~ /\/$/ && !($0 in gone) { print "path\t" ENVIRON["DOCS_UNIVERSE_PFX"] $0 }'
+}
+
+# docs_delta_universe <label> [skip]: the path universe the check judges a glob source
+# against, drawn only when the staged delta deletes a path (a D line or a rename): the
+# workspace root's and each child repository's lines (docs_universe_repo, the children
+# docs_children lists), then the delta's deleted and renamed-away paths removed and its
+# added and renamed-to paths added (an added path stays even when the delta also deletes
+# it). The universe is always the working tree, whatever delta was staged. DOCS_UNIVERSE_LIST
+# names the scratch list, empty when none is drawn, so an inherited value never reaches the
+# engine; DOCS_UNIVERSE_LABEL carries <label>, the engine's notice label for the candidates
+# of a repository git lists nothing for. skip (the gate's --drift, whose incoming tree is not
+# listed) draws none and names the skip in a notice under <label>
+docs_delta_universe() {
+  DOCS_UNIVERSE_LIST=""
+  DOCS_UNIVERSE_LABEL=$1
+  export DOCS_UNIVERSE_LIST DOCS_UNIVERSE_LABEL
+  awk '{ sub(/^[[:space:]]+/, "") } /^[DR][0-9]*[[:space:]]/ { n = 1; exit } END { exit !n }' "$DOCS_SCRATCH/delta" || return 0
+  if [ "${2:-}" = skip ]; then
+    printf '%s --drift skips the dead glob test: the incoming tree is not listed, so a glob source that claimed a deleted path is not judged\n' "$1" >&2
+    return 0
+  fi
+  {
+    docs_universe_repo .
+    docs_children | while IFS= read -r du_child; do
+      docs_universe_repo "$du_child"
+    done
+  } > "$DOCS_SCRATCH/universe.raw"
+  DOCS_UNIVERSE_LIST="$DOCS_SCRATCH/universe"
+  DOCS_UNIVERSE_DELTA="$DOCS_SCRATCH/delta" awk '
+    BEGIN {
+      f = ENVIRON["DOCS_UNIVERSE_DELTA"]
+      while ((getline l < f) > 0) {
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", l)
+        if (!match(l, /^[MADRCU?!][0-9]*[[:space:]]+/)) continue
+        st = substr(l, 1, 1)
+        l = substr(l, RLENGTH + 1)
+        if (st == "R") { split(l, rp, /[[:space:]]+/); gone[rp[1]] = 1; added[rp[2]] = 1 }
+        else if (st == "D") gone[l] = 1
+        else if (st == "A") added[l] = 1
+      }
+      close(f)
+    }
+    substr($0, 1, 5) == "path\t" {
+      p = substr($0, 6)
+      if ((p in gone) && !(p in added)) next
+      seen[p] = 1
+    }
+    { print }
+    END { for (p in added) if (!(p in seen)) print "path\t" p }' "$DOCS_SCRATCH/universe.raw" > "$DOCS_UNIVERSE_LIST"
 }
 
 # docs_corpus_untracked: under the files driver, where a doc's logical address is its file

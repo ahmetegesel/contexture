@@ -14,7 +14,23 @@ let eng: string;
 let tools: string;
 let dead: string;
 let drawer: string;
+let globs: string;
+let spans: string;
+const WGLOB = '@doc capability wglob\n  repo: workspace\n  description: "The glob unit."\n  sources: [lib/*.sh, lib/old.sh, bin/*]\n';
+const API_CORE = '@doc capability core\n  repo: api\n  description: "The api core."\n  sources: [src/*.ts]\n';
 beforeAll(async () => {
+  globs = sandbox('check-globs');
+  mkdirSync(join(globs, 'docs/workspace'), { recursive: true });
+  mkdirSync(join(globs, 'docs/api'), { recursive: true });
+  writeFileSync(join(globs, 'docs/workspace/wglob.md'), WGLOB);
+  writeFileSync(join(globs, 'docs/workspace/opt.md'), '@doc capability opt\n  repo: workspace\n  description: "The optional unit."\n  sources: [opt/ab?.sh]\n');
+  writeFileSync(join(globs, 'docs/api/core.md'), API_CORE);
+  spans = sandbox('check-spans');
+  mkdirSync(join(spans, 'docs/workspace'), { recursive: true });
+  mkdirSync(join(spans, 'docs/api'), { recursive: true });
+  writeFileSync(join(spans, 'docs/workspace/wglob.md'), WGLOB);
+  writeFileSync(join(spans, 'docs/workspace/map.md'), '@doc capability map\n  repo: workspace\n  description: "The api map."\n  sources: [projects/api/src/**]\n');
+  writeFileSync(join(spans, 'docs/api/core.md'), API_CORE);
   dead = sandbox('check-dead');
   mkdirSync(join(dead, 'docs/workspace'), { recursive: true });
   writeFileSync(join(dead, 'docs/workspace/dead.md'), '@doc capability dead\n  repo: workspace\n  description: "The dead-source unit."\n  sources: [src/**, src/old.sh, bin/*, bin/tool]\n');
@@ -248,5 +264,105 @@ describe('the check engine: the governed set, the code extensions with awk plus 
     expect(r.code, r.stdout + r.stderr).toBe(1);
     expect(r.stdout).toContain('FRESH: workspace > drawer');
     expect(r.stdout).toContain("DEAD SOURCE: workspace/drawer still explicitly lists deleted file '.contexture/modules/custom/exact.sh'");
+  });
+});
+
+const universe = (name: string, ...lines: string[]): string => {
+  const path = join(globs, `${name}.universe`);
+  writeFileSync(path, lines.map((l) => `${l}\n`).join(''));
+  return path;
+};
+const deadLines = (out: string): string[] => (out.match(/^DEAD SOURCE: .*$/gm) ?? []).sort();
+const W_RIDES = 'M\tdocs/workspace/wglob.md\n';
+const API_RIDES = 'M\tdocs/api/core.md\n';
+
+describe('the check engine: the dead glob test over a planted universe list', { concurrent: true }, () => {
+  it('[docs-module-r8, docs-module-r9] a glob no universe path matches reads one DEAD SOURCE line per doc and glob, counted once, rc 1', async () => {
+    const r = await check(globs, `D\tlib/a.sh\nD\tlib/b.sh\n${W_RIDES}`, { universe: universe('dead', 'listed\t.', 'path\tREADME.txt') });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(deadLines(r.stdout)).toEqual(["DEAD SOURCE: workspace/wglob lists glob 'lib/*.sh' that no longer matches any file after deleting 'lib/a.sh' and 1 more (cleanup required)"]);
+    expect(r.stderr).toBe('docs-check: FAILED: 1 dead source(s): a deleted file still explicitly listed in doc sources, or a glob source no file matches after the delta.\n');
+  });
+
+  it('[docs-module-r8, docs-module-r9] one deleted path names no count', async () => {
+    const r = await check(globs, `D\tlib/a.sh\n${W_RIDES}`, { universe: universe('dead-one', 'listed\t.') });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(deadLines(r.stdout)).toEqual(["DEAD SOURCE: workspace/wglob lists glob 'lib/*.sh' that no longer matches any file after deleting 'lib/a.sh' (cleanup required)"]);
+  });
+
+  it('[docs-module-r9] a glob of a doc that also lists the deleted path exactly is still a candidate, beside the exact line', async () => {
+    const r = await check(globs, `D\tlib/old.sh\n${W_RIDES}`, { universe: universe('both', 'listed\t.') });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(deadLines(r.stdout)).toEqual([
+      "DEAD SOURCE: workspace/wglob lists glob 'lib/*.sh' that no longer matches any file after deleting 'lib/old.sh' (cleanup required)",
+      "DEAD SOURCE: workspace/wglob still explicitly lists deleted file 'lib/old.sh' in sources: (cleanup required)",
+    ]);
+    expect(r.stderr).toContain('docs-check: FAILED: 2 dead source(s)');
+  });
+
+  it('[docs-module-r9] a listed path keeps the glob alive, and the exact dead source keeps its line and its count', async () => {
+    const alive = await check(globs, `D\tlib/a.sh\n${W_RIDES}`, { universe: universe('alive', 'listed\t.', 'path\tlib/c.sh') });
+    expect(alive.code, alive.stdout + alive.stderr).toBe(0);
+    expect(deadLines(alive.stdout)).toEqual([]);
+    const exact = await check(globs, `D\tlib/old.sh\n${W_RIDES}`, { universe: universe('exact', 'listed\t.', 'path\tlib/c.sh') });
+    expect(exact.code, exact.stdout + exact.stderr).toBe(1);
+    expect(deadLines(exact.stdout)).toEqual(["DEAD SOURCE: workspace/wglob still explicitly lists deleted file 'lib/old.sh' in sources: (cleanup required)"]);
+    expect(exact.stderr).toContain('docs-check: FAILED: 1 dead source(s)');
+  });
+
+  it('[docs-module-r9] a glob that claimed no deleted path is never tested: a dead unrelated glob of the same doc reads nothing', async () => {
+    const r = await check(globs, `D\tlib/a.sh\n${W_RIDES}`, { universe: universe('unrelated', 'listed\t.', 'path\tlib/c.sh') });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain("'bin/*'");
+  });
+
+  it.each([
+    ['absent', undefined],
+    ['empty', 'empty'],
+  ])('[docs-module-r10] with the universe list %s the glob test is skipped', async (_, name) => {
+    const r = await check(globs, `D\tlib/a.sh\n${W_RIDES}`, name ? { universe: universe(name) } : {});
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).not.toContain('DEAD SOURCE');
+    expect(r.stderr).toBe('');
+  });
+
+  it('[docs-module-r6, docs-module-r9] the prefilter never rejects a path the glob rule accepts: an optional character ahead of a ?', async () => {
+    const r = await check(globs, 'D\topt/ab.sh\nM\tdocs/workspace/opt.md\n', { universe: universe('optional', 'listed\t.', 'path\topt/a.sh') });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(deadLines(r.stdout)).toEqual([]);
+  });
+
+  it.each([
+    ['projects/api/src/b.ts', 0],
+    ['api/src/b.ts', 0],
+    ['src/b.ts', 1],
+  ])("[docs-module-r6, docs-module-r9] a child repository's doc reads the paths under its prefix, stripped: survivor %s is rc %i", async (survivor, rc) => {
+    const r = await check(globs, `D\tprojects/api/src/a.ts\n${API_RIDES}`, { universe: universe(`child-${rc}-${survivor.length}`, 'listed\t.', 'listed\tprojects/api', `path\t${survivor}`) });
+    expect(r.code, r.stdout + r.stderr).toBe(rc);
+    expect(deadLines(r.stdout)).toEqual(rc ? ["DEAD SOURCE: api/core lists glob 'src/*.ts' that no longer matches any file after deleting 'projects/api/src/a.ts' (cleanup required)"] : []);
+  });
+
+  it("[docs-module-r9] a workspace doc reads every path, a child repository's prefixed paths among them", async () => {
+    const delta = 'D\tprojects/api/src/a.ts\nM\tdocs/workspace/map.md\nM\tdocs/api/core.md\n';
+    const r = await check(spans, delta, { universe: universe('union', 'listed\t.', 'listed\tprojects/api', 'path\tprojects/api/src/b.ts') });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(deadLines(r.stdout)).toEqual([]);
+  });
+
+  it('[docs-module-r17] a candidate of an unlisted repository is named in the notice and left unjudged while a listed one is judged', async () => {
+    const delta = `D\tlib/a.sh\nD\tprojects/api/src/a.ts\nD\tprojects/api/src/x/a.ts\n${W_RIDES}${API_RIDES}M\tdocs/workspace/map.md\n`;
+    const r = await check(spans, delta, { universe: universe('root-unlisted', 'unlisted\t.', 'listed\tprojects/api') });
+    expect(r.code, r.stdout + r.stderr).toBe(1);
+    expect(deadLines(r.stdout)).toEqual([
+      "DEAD SOURCE: api/core lists glob 'src/*.ts' that no longer matches any file after deleting 'projects/api/src/a.ts' (cleanup required)",
+      "DEAD SOURCE: workspace/map lists glob 'projects/api/src/**' that no longer matches any file after deleting 'projects/api/src/a.ts' and 1 more (cleanup required)",
+    ]);
+    expect(r.stderr).toContain("[CHECK NOTICE] 1 glob source(s) claimed a deleted path in a repository git lists nothing for (the workspace root); the check does not judge them: workspace/wglob 'lib/*.sh'\n");
+  });
+
+  it('[docs-module-r17] an unlisted child repository leaves its docs unjudged, named with its prefix', async () => {
+    const r = await check(globs, `D\tprojects/api/src/a.ts\n${API_RIDES}`, { universe: universe('child-unlisted', 'listed\t.', 'unlisted\tprojects/api') });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stderr).toBe("[CHECK NOTICE] 1 glob source(s) claimed a deleted path in a repository git lists nothing for (projects/api); the check does not judge them: api/core 'src/*.ts'\n");
   });
 });

@@ -1,4 +1,4 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { DOCS_SHAPED, dataFile } from '@support/data-file';
@@ -84,6 +84,45 @@ describe('the pure helpers', { concurrent: true }, () => {
     expect((await sourced('docs_file_form "$1"', arg)).code).toBe(rc);
   });
 
+});
+
+describe('docs_children: the one child repository discovery the gate and the dead glob universe share', { concurrent: true }, () => {
+  const layout = (label: string, dirs: string[], files: string[] = []): string => {
+    const root = sandbox(label);
+    for (const d of dirs) mkdirSync(join(root, d), { recursive: true });
+    for (const f of files) writeFileSync(join(root, f), 'gitdir: elsewhere\n');
+    return root;
+  };
+  const children = async (root: string, arg = '', env = ''): Promise<string[]> => {
+    const r = await sourced(`${env} DOCS_ROOT="$1"; docs_children ${arg}`, root);
+    expect(r.code, r.stderr).toBe(0);
+    return r.stdout.split('\n').filter(Boolean);
+  };
+
+  it('[docs-module-r16] lists the folders under the product folder holding a .git folder, never one whose .git is a file, the root never', async () => {
+    const root = layout('children-projects', ['.git', 'projects/a/.git', 'projects/b', 'projects/c', 'flat/.git'], ['projects/c/.git']);
+    expect(await children(root)).toEqual(['projects/a']);
+    expect(await children(root, 'root')).toEqual(['projects/a']);
+  });
+
+  it('[docs-module-r16] without a product folder lists the root\'s direct children, no dot folder, and with root the workspace root first as .', async () => {
+    const root = layout('children-flat', ['.git', 'x/.git', 'y', '.hidden/.git', 'x/z/.git']);
+    expect(await children(root)).toEqual(['x']);
+    expect(await children(root, 'root')).toEqual(['.', 'x']);
+  });
+
+  it('[docs-module-r16] reads DOCS_PRODUCT_REPOS_DIR, and . names the flat form', async () => {
+    const root = layout('children-env', ['apps/a/.git', 'projects/p/.git', 'q/.git']);
+    expect(await children(root, '', 'DOCS_PRODUCT_REPOS_DIR=apps;')).toEqual(['apps/a']);
+    expect(await children(root, '', 'DOCS_PRODUCT_REPOS_DIR=.;')).toEqual(['q']);
+  });
+
+  it("[docs-module-r16] the gate's three child loops and the universe read docs_children, and no gate line probes a .git", () => {
+    const gate = readFileSync(join(SCRIPTS, 'gate'), 'utf8');
+    expect(gate.match(/\$\(docs_children( root)?\)/g)).toEqual(['$(docs_children)', '$(docs_children root)', '$(docs_children root)']);
+    expect(gate).not.toMatch(/\/\.git"/);
+    expect(readFileSync(join(SCRIPTS, 'docs-io.sh'), 'utf8')).toMatch(/docs_children \| while IFS= read -r du_child; do\n\s+docs_universe_repo "\$du_child"/);
+  });
 });
 
 describe('docs_record_file: a path inside another module\'s storage root, read through store_roots', { concurrent: true }, () => {

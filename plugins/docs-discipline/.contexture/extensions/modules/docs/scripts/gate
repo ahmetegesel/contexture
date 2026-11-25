@@ -9,6 +9,7 @@
 # help: the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus: the untracked files leave the corpus docs out, so an untracked doc never rides, ignored or not, and an untracked corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
 # help: git runs with core.quotePath=false, so a non-ASCII path arrives as its bytes; a path git still quotes is decoded (a quote, a backslash), and one holding a control character (a tab, a newline) cannot ride a status line, so it is left out and named in a notice; --stdin decodes the caller's delta the same way
 # help: under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the storage layer (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together, or since <rev> under --since); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
+# help: the check's dead glob test (ctx docs help check) judges a glob source that claimed a deleted path against the working tree in every form, a --stdin delta's too: the workspace root's and each child repository's non-ignored files, the child repositories the default form scans; it runs only when the staged delta holds a D or R line, a repository git lists nothing for (no work tree) has its globs named in a [GATE NOTICE] and left unjudged, and --drift, whose incoming tree is not listed, skips it with a [GATE NOTICE]
 # help: the notices and warnings go to stderr with a bracketed prefix; stdout and the exit code stay the check's
 # help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
 # help: example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
@@ -49,7 +50,9 @@ AWK_CHECK="$dir/docs-check.awk"
 . "$dir/docs-io.sh"
 docs_io_init "$dir" gate
 WORKSPACE_ROOT="$DOCS_ROOT"
-PRODUCT_REPOS_DIR="${DOCS_PRODUCT_REPOS_DIR:-projects}"
+
+# GATE_DRIFT marks the --drift form, whose check skips the dead glob test
+GATE_DRIFT=""
 
 # --since=<rev>: the default form's committed range; DOCS_SINCE_REV names its base commit
 GATE_SINCE=""
@@ -90,55 +93,47 @@ aggregate_git_changes() {
         git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | docs_untracked_half
     ) | docs_delta_decode
 
-    # 2. Product repositories changes ($PRODUCT_REPOS_DIR/* or workspace root child repos)
-    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
-        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
-        prefix_base="$PRODUCT_REPOS_DIR"
-    else
-        scan_dirs="$WORKSPACE_ROOT"/*
-        prefix_base=""
-    fi
-
+    # 2. The child repositories docs_children lists, each under its prefix
     children=""
-    for pdir in $scan_dirs; do
-        if [ -d "$pdir/.git" ] && [ "$pdir" != "$WORKSPACE_ROOT" ]; then
-            repo_name="${pdir##*/}"
-            pfx="${prefix_base:+$prefix_base/}$repo_name"
-            children="${children:+$children, }$pfx"
-            (
-                cd "$pdir"
-                {
-                    git -c core.quotePath=false diff --name-status 2>/dev/null || true
-                    git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
-                    git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
-                        [ -n "$f" ] && printf "A\t%s\n" "$f"
-                    done
-                } | docs_delta_decode "$pfx/" | while IFS= read -r line; do
-                    [ -z "$line" ] && continue
-                    case "$line" in
-                        R[0-9]*[[:space:]]*)
-                            stat="${line%%[[:space:]]*}"
-                            rest="${line#*[[:space:]]}"
-                            rest="${rest#"${rest%%[! ]*}"}"
-                            old_f="${rest%%[[:space:]]*}"
-                            new_f="${rest#*[[:space:]]}"
-                            new_f="${new_f#"${new_f%%[! ]*}"}"
-                            printf "%s\t%s/%s\t%s/%s\n" "$stat" "$pfx" "$old_f" "$pfx" "$new_f"
-                            ;;
-                        [A-Z\?]*[[:space:]]*)
-                            stat="${line%%[[:space:]]*}"
-                            f="${line#*[[:space:]]}"
-                            f="${f#"${f%%[! ]*}"}"
-                            printf "%s\t%s/%s\n" "$stat" "$pfx" "$f"
-                            ;;
-                        *)
-                            printf "M\t%s/%s\n" "$pfx" "$line"
-                            ;;
-                    esac
+    gate_children=$(docs_children)
+    while IFS= read -r pfx; do
+        [ -n "$pfx" ] || continue
+        children="${children:+$children, }$pfx"
+        (
+            cd "$WORKSPACE_ROOT/$pfx"
+            {
+                git -c core.quotePath=false diff --name-status 2>/dev/null || true
+                git -c core.quotePath=false diff --name-status --cached 2>/dev/null || true
+                git -c core.quotePath=false ls-files --others --exclude-standard 2>/dev/null | while IFS= read -r f; do
+                    [ -n "$f" ] && printf "A\t%s\n" "$f"
                 done
-            )
-        fi
-    done
+            } | docs_delta_decode "$pfx/" | while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                case "$line" in
+                    R[0-9]*[[:space:]]*)
+                        stat="${line%%[[:space:]]*}"
+                        rest="${line#*[[:space:]]}"
+                        rest="${rest#"${rest%%[! ]*}"}"
+                        old_f="${rest%%[[:space:]]*}"
+                        new_f="${rest#*[[:space:]]}"
+                        new_f="${new_f#"${new_f%%[! ]*}"}"
+                        printf "%s\t%s/%s\t%s/%s\n" "$stat" "$pfx" "$old_f" "$pfx" "$new_f"
+                        ;;
+                    [A-Z\?]*[[:space:]]*)
+                        stat="${line%%[[:space:]]*}"
+                        f="${line#*[[:space:]]}"
+                        f="${f#"${f%%[! ]*}"}"
+                        printf "%s\t%s/%s\n" "$stat" "$pfx" "$f"
+                        ;;
+                    *)
+                        printf "M\t%s/%s\n" "$pfx" "$line"
+                        ;;
+                esac
+            done
+        )
+    done <<EOF
+$gate_children
+EOF
     if [ -n "$DOCS_SINCE_REV" ] && [ -n "$children" ]; then
         printf "[GATE NOTICE] --since=%s reaches the workspace root's repository only; the child repositories (%s) keep their working delta\n" "$GATE_SINCE" "$children" >&2
     fi
@@ -167,30 +162,17 @@ gate_notices() {
 }
 
 # Function to aggregate remote drift changes (HEAD...origin/main, the
-# merge-base incoming delta) across product repos
+# merge-base incoming delta) across product repos; the flat topologies (single
+# repository, standalone, monorepo) carry the product repository at the
+# workspace root itself, which docs_children root lists as .
 aggregate_remote_drift_changes() {
-    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
-        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
-        prefix_base="$PRODUCT_REPOS_DIR"
-    else
-        scan_dirs="$WORKSPACE_ROOT"/*
-        prefix_base=""
-        # The flat topologies (single repository, standalone, monorepo) carry
-        # the product repository at the workspace root itself: scan it too.
-        if [ -e "$WORKSPACE_ROOT/.git" ]; then
-            scan_dirs="$WORKSPACE_ROOT $scan_dirs"
-        fi
-    fi
-
-    for pdir in $scan_dirs; do
-        if [ "$pdir" = "$WORKSPACE_ROOT" ]; then
-            repo_name="${pdir##*/}"
+    gate_children=$(docs_children root)
+    while IFS= read -r pfx; do
+        [ -n "$pfx" ] || continue
+        pdir="$WORKSPACE_ROOT/$pfx"
+        if [ "$pfx" = . ]; then
+            pdir="$WORKSPACE_ROOT"
             pfx=""
-        elif [ -d "$pdir/.git" ]; then
-            repo_name="${pdir##*/}"
-            pfx="${prefix_base:+$prefix_base/}$repo_name"
-        else
-            continue
         fi
         (
             cd "$pdir"
@@ -224,44 +206,43 @@ aggregate_remote_drift_changes() {
                     ;;
             esac
         done
-    done
+    done <<EOF
+$gate_children
+EOF
 }
 
-# Function to check and print branch and remote drift warnings to stderr
+# Function to check and print branch and remote drift warnings to stderr; the flat
+# topologies carry the product repository at the workspace root itself, which
+# docs_children root lists as ., so it is warned about too
 check_drift_warnings() {
-    if [ -d "$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR" ] && [ "$PRODUCT_REPOS_DIR" != "." ]; then
-        scan_dirs="$WORKSPACE_ROOT/$PRODUCT_REPOS_DIR"/*
-    else
-        scan_dirs="$WORKSPACE_ROOT"/*
-        # The flat topologies carry the product repository at the workspace
-        # root itself: warn about it too.
-        if [ -e "$WORKSPACE_ROOT/.git" ]; then
-            scan_dirs="$WORKSPACE_ROOT $scan_dirs"
-        fi
-    fi
-
     drift_found=0
-    for pdir in $scan_dirs; do
-        if [ "$pdir" = "$WORKSPACE_ROOT" ] || [ -d "$pdir/.git" ]; then
-            repo_name="${pdir##*/}"
-            branch=$(git -C "$pdir" branch --show-current 2>/dev/null || echo "")
-            if [ -n "$branch" ] && [ "$branch" != "main" ] && [ "$branch" != "master" ]; then
-                printf "[DRIFT WARNING] %s is on branch '%s' (not main)\n" "$repo_name" "$branch" >&2
+    gate_children=$(docs_children root)
+    while IFS= read -r pfx; do
+        [ -n "$pfx" ] || continue
+        pdir="$WORKSPACE_ROOT/$pfx"
+        if [ "$pfx" = . ]; then
+            pdir="$WORKSPACE_ROOT"
+        fi
+        repo_name="${pdir##*/}"
+        branch=$(git -C "$pdir" branch --show-current 2>/dev/null || echo "")
+        if [ -n "$branch" ] && [ "$branch" != "main" ] && [ "$branch" != "master" ]; then
+            printf "[DRIFT WARNING] %s is on branch '%s' (not main)\n" "$repo_name" "$branch" >&2
+            drift_found=1
+        fi
+        remote_ref="origin/main"
+        if ! git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+            remote_ref="origin/master"
+        fi
+        if git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
+            behind=$(git -C "$pdir" rev-list --count "HEAD..$remote_ref" 2>/dev/null || echo 0)
+            if [ "$behind" -gt 0 ]; then
+                printf "[DRIFT WARNING] %s is %s commit(s) behind %s\n" "$repo_name" "$behind" "$remote_ref" >&2
                 drift_found=1
             fi
-            remote_ref="origin/main"
-            if ! git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
-                remote_ref="origin/master"
-            fi
-            if git -C "$pdir" rev-parse --verify "$remote_ref" >/dev/null 2>&1; then
-                behind=$(git -C "$pdir" rev-list --count "HEAD..$remote_ref" 2>/dev/null || echo 0)
-                if [ "$behind" -gt 0 ]; then
-                    printf "[DRIFT WARNING] %s is %s commit(s) behind %s\n" "$repo_name" "$behind" "$remote_ref" >&2
-                    drift_found=1
-                fi
-            fi
         fi
-    done
+    done <<EOF
+$gate_children
+EOF
     if [ "$drift_found" -eq 1 ]; then
         printf "[DRIFT NOTICE] Run 'ctx docs gate --drift' to evaluate remote incoming changes against docs.\n\n" >&2
     fi
@@ -298,10 +279,12 @@ run_audit() {
 }
 
 # Run coverage, freshness, and dead sources check on the staged delta (docs_delta_stage),
-# read by name with the shebang list drawn from its paths; under a store's change log the
-# engine runs in its log mode (no blanket, no trackedness probe)
+# read by name with the shebang list and the dead glob universe drawn from it (--drift,
+# whose incoming tree is not listed, skips the universe with a notice); under a store's
+# change log the engine runs in its log mode (no blanket, no trackedness probe)
 run_gate_check() {
     docs_delta_shebangs
+    docs_delta_universe "[GATE NOTICE]" ${GATE_DRIFT:+skip}
     if [ "$DOCS_DELTA" = log ]; then
         run_engine_over_corpus -f "$AWK_GLOB" -f "$AWK_CHECK" -v "$DOCS_DELTA_ARG" -v delta_source=log
     else
@@ -411,6 +394,7 @@ if [ "$1" = "-" ] || [ "$1" = "--stdin" ]; then
     docs_delta_unread "[GATE NOTICE]"
     run_gate_check
 elif [ "$1" = "--drift" ]; then
+    GATE_DRIFT=1
     prepare_corpus
     run_audit
     if [ "$DOCS_DELTA" = log ]; then

@@ -2,7 +2,8 @@
 # check, gate, and query verbs load it ahead of their engine with a second awk -f)
 # A source claims a path when the path equals it or matches glob_to_regex of it; among several
 # claiming sources the more specific has the longer literal part before its first wildcard
-# (* or {; a source without one counts its whole length), then the fewer wildcards.
+# (* or {; a source without one counts its whole length), then the fewer wildcards; the
+# check's dead glob test prefilters the paths by the head source_prefix names.
 
 function split_sources(str, arr,    len, i, ch, depth, current, count) {
     len = length(str)
@@ -53,6 +54,17 @@ function source_matches(path, g) {
 function source_literal(g,    at) {
     at = match(g, /[*{]/)
     return at ? at - 1 : length(g)
+}
+
+# the head every path a source claims starts with: the literal part cut before the character
+# ahead of the first one glob_to_regex leaves live (+ ( [ ? ^ $ or a backslash; a ? makes the
+# character ahead of it optional), none when the source holds a | (an alternation across the
+# whole regex)
+function source_prefix(g,    lit) {
+    if (index(g, "|")) return ""
+    lit = substr(g, 1, source_literal(g))
+    if (match(lit, /[+([?^$\\]/)) lit = substr(lit, 1, RSTART > 2 ? RSTART - 2 : 0)
+    return lit
 }
 
 function source_wildcards(g,    copy) {
