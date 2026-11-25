@@ -196,15 +196,16 @@ describe.concurrent('ctx unit transfer through the data function unit.transfer',
     expect(text(sb, S, 'journal')).toBe([`@entry ${PTR}`, '  ANCHOR: A1', '  WHAT: "moved to unit xb: tasks t10"', '  THREAD: none', '  REF: "unit#xb/task/t10"', ''].join('\n'));
   });
 
-  it('[the-record-r-xfer1] a legacy duplicate slug its group selects twice is copied once, from its last selected occurrence, so the target never holds a repeated slug', async () => {
+  it('[the-record-r-xfer1] a selection reaching an entry slug the source journal holds more than once (a legacy duplicate) refuses by --entry and by --group, naming the slug and the unit, nothing written', async () => {
     const sb = fresh(sb0);
     const dup = `${DATE}-event-1790000106`;
     const occ = (what: string): string => `\n@entry ${dup}\n  ANCHOR: A1\n  WHAT: "${what}"\n  GROUP: g4\n  THREAD: none\n`;
     appendArtifact(sb, S, 'journal', occ('the first occurrence') + occ('the second occurrence'));
-    const r = answer(await transfer(sb, [S, T], move(payload().kl('groups', 'g4').kl('entries', dup))), 'unit.transfer');
-    expect(r.entries).toEqual([dup]);
-    expect(text(sb, T, 'journal')).toBe(`${before[`${T}/journal`]}\n${[`@entry ${dup}`, '  ANCHOR: A2', '  WHAT: "the second occurrence"', '  GROUP: g4', '  THREAD: none', `  REF: "unit#xa/entry/${dup}"`, ''].join('\n')}`);
-    expect(text(sb, S, 'journal')).toContain(`  CLOSES: ${dup} (superseded: moved to unit xb)\n`);
+    const was = await both(sb);
+    for (const p of [payload().kl('entries', dup), payload().kl('groups', 'g4'), payload().kl('tasks', 't10').kl('groups', 'g1', 'g4')]) {
+      refused(await transfer(sb, [S, T], move(p)), 'unit.transfer', 1, 'ERR_INVALID_TRANSITION', `entry '${dup}' is a legacy duplicate in unit 'xa'; unit.transfer moves only an entry whose slug the journal holds once`);
+      expect(await both(sb)).toBe(was);
+    }
   });
 
   it('[the-record-r-xfer1] --dry-run takes no lock, writes nothing, and answers the same plan', async () => {

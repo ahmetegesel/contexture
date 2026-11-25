@@ -871,6 +871,10 @@ function xf_list(key, arr, re, what,   n, i, A, m, SEEN) {
 
 function xf_sort(A, n,   i, j, t) { for (i = 2; i <= n; i++) { t = A[i]; for (j = i - 1; j >= 1 && A[j] > t; j--) A[j + 1] = A[j]; A[j + 1] = t } }
 
+# xf_once(k, s, u): an entry slug journal k holds more than once (a legacy duplicate) refuses,
+# since the pointer's closer would close every occurrence while one is copied
+function xf_once(k, s, u) { if (OCC[k, LASTOCC[k, s]] > 1) die(1, "ERR_INVALID_TRANSITION", "entry '" s "' is a legacy duplicate in unit '" u "'; unit.transfer moves only an entry whose slug the journal holds once") }
+
 # fwd_line(s): s with every exact moved address (FWO, a source address) written as its target
 # address (FWN): an occurrence counts when no address character stands before it and no slug
 # character after it, a trailing period cut as the migration cuts it, so a longer slug never
@@ -964,16 +968,17 @@ function f_unit_transfer(   src, tgt, dry, kbS, kkS, kjS, kbT, kkT, kjT, TS, nts
     if (!held(kjS, ES[j])) nf("entry", ES[j], src)
     i = LASTOCC[kjS, ES[j]]
     if (CLBY[kjS, i] != 0) die(1, "ERR_INVALID_TRANSITION", "entry '" ES[j] "' is closed in unit '" src "'; unit.transfer moves only open entries")
+    xf_once(kjS, ES[j], src)
     SEL[i] = 1
   }
   for (j = 1; j <= ngs; j++) {
     n = 0
-    for (i = 1; i <= NI[kjS]; i++) if (IK[kjS, i] == "entry" && X[kjS, i, "group"] == GS[j] && CLBY[kjS, i] == 0) { SEL[i] = 1; n++ }
+    for (i = 1; i <= NI[kjS]; i++) if (IK[kjS, i] == "entry" && X[kjS, i, "group"] == GS[j] && CLBY[kjS, i] == 0) { xf_once(kjS, X[kjS, i, "slug"], src); SEL[i] = 1; n++ }
     if (n == 0) die(1, "ERR_ENTITY_NOT_FOUND", "group '" GS[j] "' selects no open entry in unit '" src "'")
   }
-  nen = 0; split("", XSEEN)
-  for (i = NI[kjS]; i >= 1; i--) if ((i in SEL) && !(X[kjS, i, "slug"] in XSEEN)) { XSEEN[X[kjS, i, "slug"]] = 1; E[++nen] = i }
-  xf_sort(E, nen); xf_sort(TI, ntk); xf_sort(FI, nfd)
+  nen = 0
+  for (i = 1; i <= NI[kjS]; i++) if (i in SEL) E[++nen] = i
+  xf_sort(TI, ntk); xf_sort(FI, nfd)
   for (j = 1; j <= nen; j++) if (held(kjT, X[kjS, E[j], "slug"])) ex("entry", X[kjS, E[j], "slug"], tgt)
   for (j = 1; j <= ntk; j++) if (find_task(kbT, X[kbS, TI[j], "slug"])) ex("task", X[kbS, TI[j], "slug"], tgt)
   for (j = 1; j <= nfd; j++) if (find_finding(kkT, X[kkS, FI[j], "name"])) ex("finding", X[kkS, FI[j], "name"], tgt)
