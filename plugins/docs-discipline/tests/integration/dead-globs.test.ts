@@ -1,5 +1,5 @@
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { cpSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sandbox } from '@support/sandbox';
 import { fresh, seed } from '@support/snapshot';
@@ -67,6 +67,12 @@ beforeAll(async () => {
 const deadLines = (out: string): string[] => (out.match(/^DEAD SOURCE: .*$/gm) ?? []).sort();
 const LIBS_DEAD = "DEAD SOURCE: workspace/libs lists glob 'lib/*.sh' that no longer matches any file after deleting 'lib/a.sh' (cleanup required)";
 const checkWs = (sb: string, input: string, env: Record<string, string> = {}) => docs(sb, ['check', 'workspace'], { input, env });
+const inherited = (): Record<string, string> => {
+  const dir = sandbox('globs-inherited-lists');
+  writeFileSync(join(dir, 'universe'), 'listed\t.\n');
+  writeFileSync(join(dir, 'shebangs'), 'shebang\tlib/a.sh\n');
+  return { DOCS_UNIVERSE_LIST: join(dir, 'universe'), DOCS_SHEBANG_LIST: join(dir, 'shebangs') };
+};
 
 describe('the check verb judges a glob that claimed a deleted path against the working tree', { concurrent: true }, () => {
   it('[docs-module-r8, docs-module-r9] deleting the only file a glob claims reads DEAD SOURCE rc 1 with the widened FAILED line', async () => {
@@ -186,6 +192,25 @@ describe('the check verb in a parent workspace whose root is no work tree: each 
     expect(notice![3]!.split(', ').sort()).toEqual(["broken/unit 'src/*.ts'", "workspace/tools 'tools/*.sh'", "workspace/wide '**/*.sh'"]);
   });
 
+  it('[docs-module-r10, docs-module-r17] a root with no .git of its own inside an enclosing repository that ignores it reads unlisted, its globs named in the notice, never judged against the empty listing', async () => {
+    const outer = sandbox('globs-enclosing');
+    writeFileSync(join(outer, '.gitignore'), 'ws/\n');
+    await gitInit(outer, '.gitignore');
+    await gitCommit(outer, 'c0');
+    const sb = join(outer, 'ws');
+    cpSync(parent, sb, { recursive: true });
+    put(sb, 'tools/y.sh');
+    rmSync(join(sb, 'tools/x.sh'));
+    await git(outer, 'check-ignore', '-q', 'ws/tools/y.sh');
+    const r = await checkWs(sb, 'D\ttools/x.sh\n', { GIT_CEILING_DIRECTORIES: dirname(outer) });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(deadLines(r.stdout)).toEqual([]);
+    const notice = r.stderr.match(/^\[CHECK NOTICE\] (\d+) glob source\(s\) claimed a deleted path in a repository git lists nothing for \(([^)]*)\); the check does not judge them: (.*)$/m);
+    expect(notice, r.stderr).not.toBeNull();
+    expect(notice!.slice(1, 3)).toEqual(['2', 'the workspace root']);
+    expect(notice![3]!.split(', ').sort()).toEqual(["workspace/tools 'tools/*.sh'", "workspace/wide '**/*.sh'"]);
+  });
+
   it('[docs-module-r17] a delta without a D or R line prints no glob notice', async () => {
     const sb = fresh(parent);
     const r = await docs(sb, ['check', 'workspace', 'api', 'broken'], { input: 'M\tapi/lib/a.sh\nM\ttools/x.sh\nM\tbroken/src/a.ts\n' });
@@ -267,7 +292,7 @@ describe('the gate judges a dead glob in every form but --drift', { concurrent: 
     expect(deadLines(dead.stdout)).toEqual(["DEAD SOURCE: api/core lists glob 'lib/*.sh' that no longer matches any file after deleting 'api/lib/a.sh' and 1 more (cleanup required)"]);
   });
 
-  it('[docs-module-r16, docs-module-r17] --drift skips the glob test with a [GATE NOTICE] only when its incoming delta deletes a path', async () => {
+  it('[docs-module-r10, docs-module-r16, docs-module-r17] --drift skips the glob test with a [GATE NOTICE] only when its incoming delta deletes a path, an inherited universe list never judged', async () => {
     const sb = fresh(ws);
     const remote = sandbox('globs-remote');
     await git(remote, 'init', '-q', '--bare', '-b', 'main');
@@ -285,9 +310,15 @@ describe('the gate judges a dead glob in every form but --drift', { concurrent: 
     await gitCommit(other, 'deleted');
     await git(other, 'push', '-q', 'origin', 'main');
     await git(sb, 'fetch', '-q', 'origin');
-    const deleted = await docs(sb, ['gate', '--drift']);
+    const deleted = await docs(sb, ['gate', '--drift'], { env: inherited() });
     expect(deleted.code, deleted.stdout + deleted.stderr).toBe(0);
     expect(deadLines(deleted.stdout)).toEqual([]);
     expect(deleted.stderr).toContain('[GATE NOTICE] --drift skips the dead glob test: the incoming tree is not listed, so a glob source that claimed a deleted path is not judged\n');
+  });
+
+  it('[docs-module-r10, docs-module-r16] --test-matrix clears the inherited shebang and universe lists, so all eight scenarios pass', async () => {
+    const r = await docs(fresh(ws), ['gate', '--test-matrix'], { env: inherited() });
+    expect(r.code, r.stdout + r.stderr).toBe(0);
+    expect(r.stdout).toContain('TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED');
   });
 });

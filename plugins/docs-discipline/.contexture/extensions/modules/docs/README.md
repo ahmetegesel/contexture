@@ -225,16 +225,19 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
   `unlisted` line per repository, `.` the workspace root, and one `path` line
   per path), beside the shebang list, so no engine line lists a tree. The
   verb draws it (`docs_delta_universe`, called beside `docs_delta_shebangs` by
-  `check` and every gate form) only when the staged delta holds a `D` or `R`
-  line, and always sets the variable, empty when nothing is drawn, so an
-  inherited value never reaches the engine; an absent or empty list skips
-  the test, which keeps the engine tests and the gate's matrix as they were.
+  `check` and every gate form but the matrix) only when the staged delta holds
+  a `D` or `R` line, and always sets the variable, empty when nothing is
+  drawn, so an inherited value never reaches the engine; the matrix clears
+  both scratch lists; an absent or empty list skips the test, which keeps the
+  engine tests and the gate's matrix as they were.
   Each repository's listing (`docs_universe_repo`: the root, then the
   children `docs_children` lists, the same discovery the gate's three loops
   read) is `git ls-files -co --exclude-standard` minus `git ls-files -d`, both
-  with `core.quotePath=false` and decoded by `docs_delta_decode`, relative to
-  the repository and under its prefix, a nested repository's or worktree's
-  `<dir>/` line dropped; a repository git lists nothing for reads `unlisted`.
+  with `core.quotePath=false`, under `GIT_CEILING_DIRECTORIES` set to the
+  folder's parent, and decoded by `docs_delta_decode`, relative to the
+  repository and under its prefix, a nested repository's or worktree's
+  `<dir>/` line dropped; a repository git lists nothing for (a folder with no
+  `.git` of its own, even inside an enclosing repository) reads `unlisted`.
   The delta's deleted and renamed-away paths leave the list and its added and
   renamed-to paths join it, so the universe is always the working tree. A
   child repository's doc reads the paths under its `projects/<repo>/` or
@@ -331,7 +334,8 @@ planted shebang list (the shebang script, the `.awk` engine, the plain file,
 the exclusions first, a claimed script's `STALE DOC`, a deleted path listed
 exactly, after a broader glob of the same doc too, the folder and `<dir>/`
 lines), and the dead glob test over a planted universe list (one line per doc
-and glob with its count, the glob beside the exact line of the same doc, a
+and glob with its count, the glob beside the exact line of the same doc in
+either source order, a
 listed survivor, an unrelated glob never tested, an absent or empty list
 skipped, the prefilter's optional character, a child doc's stripped prefix,
 a workspace doc's union, and the unlisted root and child named in the
@@ -378,10 +382,11 @@ dead glob test end to end in git sandboxes (`integration/dead-globs`: the
 check verb's verdict and its survivors, tracked, untracked, added, and
 renamed to, never an ignored file or a deletion still in the index, quoted
 survivors, an inherited list never reaching the engine, a parent workspace
-whose root is no work tree with a listed child and a broken one, a custom
+whose root is no work tree with a listed child and a broken one, a root
+inside an enclosing repository that ignores it read unlisted, a custom
 product folder the check and the gate share, a nested repository's `<dir>/`
 line, and the gate's default, `--since`, `--stdin`, notice, and `--drift`
-skip). `fault/` configures a planted driver that declares no store, so
+skip, an inherited list reaching neither `--drift` nor the matrix). `fault/` configures a planted driver that declares no store, so
 every read verb refuses rc 2 naming the capability. `store/` keeps the cases
 where the fts5 driver adds value: the corpus written through `ctx docs write`
 with the docs folder removed and read back unchanged through `ctx docs write

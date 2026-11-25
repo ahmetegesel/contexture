@@ -16,6 +16,7 @@ let dead: string;
 let drawer: string;
 let globs: string;
 let spans: string;
+let exactFirst: string;
 const WGLOB = '@doc capability wglob\n  repo: workspace\n  description: "The glob unit."\n  sources: [lib/*.sh, lib/old.sh, bin/*]\n';
 const API_CORE = '@doc capability core\n  repo: api\n  description: "The api core."\n  sources: [src/*.ts]\n';
 beforeAll(async () => {
@@ -31,6 +32,9 @@ beforeAll(async () => {
   writeFileSync(join(spans, 'docs/workspace/wglob.md'), WGLOB);
   writeFileSync(join(spans, 'docs/workspace/map.md'), '@doc capability map\n  repo: workspace\n  description: "The api map."\n  sources: [projects/api/src/**]\n');
   writeFileSync(join(spans, 'docs/api/core.md'), API_CORE);
+  exactFirst = sandbox('check-exact-first');
+  mkdirSync(join(exactFirst, 'docs/workspace'), { recursive: true });
+  writeFileSync(join(exactFirst, 'docs/workspace/wglob.md'), WGLOB.replace('[lib/*.sh, lib/old.sh, bin/*]', '[lib/old.sh, lib/*.sh, bin/*]'));
   dead = sandbox('check-dead');
   mkdirSync(join(dead, 'docs/workspace'), { recursive: true });
   writeFileSync(join(dead, 'docs/workspace/dead.md'), '@doc capability dead\n  repo: workspace\n  description: "The dead-source unit."\n  sources: [src/**, src/old.sh, bin/*, bin/tool]\n');
@@ -290,8 +294,11 @@ describe('the check engine: the dead glob test over a planted universe list', { 
     expect(deadLines(r.stdout)).toEqual(["DEAD SOURCE: workspace/wglob lists glob 'lib/*.sh' that no longer matches any file after deleting 'lib/a.sh' (cleanup required)"]);
   });
 
-  it('[docs-module-r9] a glob of a doc that also lists the deleted path exactly is still a candidate, beside the exact line', async () => {
-    const r = await check(globs, `D\tlib/old.sh\n${W_RIDES}`, { universe: universe('both', 'listed\t.') });
+  it.each([
+    ['the glob listed first', 'both', () => globs],
+    ['the exact path listed first', 'both-exact-first', () => exactFirst],
+  ])('[docs-module-r9] a glob of a doc that also lists the deleted path exactly is still a candidate, beside the exact line: %s', async (_, name, dir) => {
+    const r = await check(dir(), `D\tlib/old.sh\n${W_RIDES}`, { universe: universe(name, 'listed\t.') });
     expect(r.code, r.stdout + r.stderr).toBe(1);
     expect(deadLines(r.stdout)).toEqual([
       "DEAD SOURCE: workspace/wglob lists glob 'lib/*.sh' that no longer matches any file after deleting 'lib/old.sh' (cleanup required)",

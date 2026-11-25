@@ -513,15 +513,19 @@ it walk below runs every one of these.
   prefix, a workspace doc every path, so an ignored file never keeps a glob
   alive while an uncommitted replacement does. The listing is drawn only when
   the delta deletes a path. A repository git lists nothing for (a parent
-  workspace root, or a child that is no work tree) has its candidates named in
-  a `[CHECK NOTICE]` or `[GATE NOTICE]` and left unjudged; a workspace doc's
-  glob belongs to the child its literal head lies in, else to the root.
-  `ctx docs gate --drift` skips the test with a notice, since the incoming
-  tree is not listed. The limits: a glob already dead on a quiet tree, or one
-  that never matched, is never tested; a file whose name holds a control
-  character is left out of the listing as the delta leaves it out; and a
-  nested repository that is no child (deeper than one level, or a linked
-  worktree) contributes no files.
+  workspace root, or a child that is no work tree, each judged by its own
+  `.git` alone, so a folder inside an enclosing repository is none) has its
+  candidates named in a `[CHECK NOTICE]` or `[GATE NOTICE]` and left unjudged;
+  a workspace doc's glob belongs to the child its literal head lies in, else
+  to the root. `ctx docs gate --drift` skips the test with a notice, since the
+  incoming tree is not listed. The limits: a glob already dead on a quiet
+  tree, or one that never matched, stays silent, since only a deletion in the
+  delta makes a glob a candidate; and a glob reads dead while a match survives
+  where the listing cannot see it: a file whose name holds a control character
+  (left out like the delta's), a file inside a nested repository that is no
+  child (deeper than one level, or one whose `.git` is a file, a linked
+  worktree or a submodule), and, under a listed root, a file inside a child
+  that is no work tree.
 - A script without an extension is governed by its first line: an
   extensionless file (a non-empty basename with no dot after its first
   character) counts when its first line starts with `#!`, read by the verb on
@@ -940,7 +944,7 @@ help:
   the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus: the untracked files leave the corpus docs out, so an untracked doc never rides, ignored or not, and an untracked corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
   git runs with core.quotePath=false, so a non-ASCII path arrives as its bytes; a path git still quotes is decoded (a quote, a backslash), and one holding a control character (a tab, a newline) cannot ride a status line, so it is left out and named in a notice; --stdin decodes the caller's delta the same way
   under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the storage layer (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together, or since <rev> under --since); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
-  the check's dead glob test (ctx docs help check) judges a glob source that claimed a deleted path against the working tree in every form, a --stdin delta's too: the workspace root's and each child repository's non-ignored files, the child repositories the default form scans; it runs only when the staged delta holds a D or R line, a repository git lists nothing for (no work tree) has its globs named in a [GATE NOTICE] and left unjudged, and --drift, whose incoming tree is not listed, skips it with a [GATE NOTICE]
+  the check's dead glob test (ctx docs help check) judges a glob source that claimed a deleted path against the working tree in every form, a --stdin delta's too: the workspace root's and each child repository's non-ignored files, the child repositories the default form scans; it runs only when the staged delta holds a D or R line, a repository git lists nothing for (no work tree of its own, even inside an enclosing repository) has its globs named in a [GATE NOTICE] and left unjudged, and --drift, whose incoming tree is not listed, skips it with a [GATE NOTICE]
   the notices and warnings go to stderr with a bracketed prefix; stdout and the exit code stay the check's
   exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
   example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)

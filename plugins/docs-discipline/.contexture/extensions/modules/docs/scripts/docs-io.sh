@@ -687,7 +687,8 @@ docs_children() {
 # core.quotePath=false and decoded as the delta is, so a path holding a control character is
 # left out), relative to the repository and under its prefix, a nested repository's or
 # worktree's <dir>/ line dropped; unlisted<TAB><prefix> alone when git lists nothing there
-# (no work tree)
+# (no work tree of its own: git's discovery stops at the folder, so an enclosing repository
+# never lists it)
 docs_universe_repo() {
   du_dir="$DOCS_ROOT/$1"
   du_pfx="$1/"
@@ -695,8 +696,10 @@ docs_universe_repo() {
     du_dir=$DOCS_ROOT
     du_pfx=""
   fi
-  if ! git -C "$du_dir" -c core.quotePath=false ls-files -co --exclude-standard > "$DOCS_SCRATCH/universe.co" 2>/dev/null ||
-    ! git -C "$du_dir" -c core.quotePath=false ls-files -d > "$DOCS_SCRATCH/universe.d" 2>/dev/null; then
+  du_ceil=$(CDPATH= cd -- "$du_dir/.." 2>/dev/null && pwd) || du_ceil=""
+  if [ -z "$du_ceil" ] ||
+    ! GIT_CEILING_DIRECTORIES=$du_ceil git -C "$du_dir" -c core.quotePath=false ls-files -co --exclude-standard > "$DOCS_SCRATCH/universe.co" 2>/dev/null ||
+    ! GIT_CEILING_DIRECTORIES=$du_ceil git -C "$du_dir" -c core.quotePath=false ls-files -d > "$DOCS_SCRATCH/universe.d" 2>/dev/null; then
     printf 'unlisted\t%s\n' "$1"
     return 0
   fi

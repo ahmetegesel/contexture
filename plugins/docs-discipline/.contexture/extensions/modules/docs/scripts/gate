@@ -9,7 +9,7 @@
 # help: the default delta is the working tree's (git diff, git diff --cached, the untracked files), so a clean tree hands the check nothing and a notice on stderr says so; --since=<rev> proves a committed range instead: the workspace root's repository from <rev> to the working tree (git diff <rev> plus the untracked files), the child repositories keeping their working delta (a notice names them); under the files driver git carries the corpus half only where the workspace tracks the corpus: the untracked files leave the corpus docs out, so an untracked doc never rides, ignored or not, and an untracked corpus under --since gets a notice naming the process-owned limit; --since joins the default form alone, and an unknown revision or a root outside a repository refuses rc 1
 # help: git runs with core.quotePath=false, so a non-ASCII path arrives as its bytes; a path git still quotes is decoded (a quote, a backslash), and one holding a control character (a tab, a newline) cannot ride a status line, so it is left out and named in a notice; --stdin decodes the caller's delta the same way
 # help: under a store driver with a change log (store.changelog) the delta has two halves: the code from git (the workspace root's docs/<repo>/<slug>.md paths dropped, since those files are not the corpus) and the corpus from the storage layer (ctx docs changes: the docs written since the current HEAD, so a commit empties both halves together, or since <rev> under --since); the check runs in its store mode; --stdin takes the caller's delta as given, and --drift prints a deferral notice and checks the incoming code delta alone
-# help: the check's dead glob test (ctx docs help check) judges a glob source that claimed a deleted path against the working tree in every form, a --stdin delta's too: the workspace root's and each child repository's non-ignored files, the child repositories the default form scans; it runs only when the staged delta holds a D or R line, a repository git lists nothing for (no work tree) has its globs named in a [GATE NOTICE] and left unjudged, and --drift, whose incoming tree is not listed, skips it with a [GATE NOTICE]
+# help: the check's dead glob test (ctx docs help check) judges a glob source that claimed a deleted path against the working tree in every form, a --stdin delta's too: the workspace root's and each child repository's non-ignored files, the child repositories the default form scans; it runs only when the staged delta holds a D or R line, a repository git lists nothing for (no work tree of its own, even inside an enclosing repository) has its globs named in a [GATE NOTICE] and left unjudged, and --drift, whose incoming tree is not listed, skips it with a [GATE NOTICE]
 # help: the notices and warnings go to stderr with a bracketed prefix; stdout and the exit code stay the check's
 # help: exit codes: 0 the audit and the check are clean; 1 a violation or a bad argument; 2 unreadable input (an awk engine's own failure)
 # help: example: ctx docs gate --test-matrix (ends: TEST MATRIX VERDICT: ALL 8 SCENARIOS PASSED)
@@ -295,10 +295,14 @@ run_gate_check() {
 # Self-planted test matrix: builds its own fixture corpus in the verb's scratch
 # (docs_scratch: inside the per-verb root when dispatched, removed on exit),
 # plants a local repository inside it for the claimant trackedness probe, then
-# exercises the check over the eight scenarios. No external paths, no writes
-# outside the fixture directory.
+# exercises the check over the eight scenarios with the shebang and universe
+# lists cleared, so an inherited one never reaches the engine. No external
+# paths, no writes outside the fixture directory.
 run_test_matrix() {
     docs_scratch || return 1
+    DOCS_SHEBANG_LIST=""
+    DOCS_UNIVERSE_LIST=""
+    export DOCS_SHEBANG_LIST DOCS_UNIVERSE_LIST
     FIXTURE_DIR="$DOCS_SCRATCH/matrix"
     mkdir -p "$FIXTURE_DIR/docs/demo"
 
