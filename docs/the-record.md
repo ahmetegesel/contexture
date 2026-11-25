@@ -229,7 +229,7 @@ Two kinds of open entries:
 - An entry whose `THREAD` names an outside act awaits completion and closes the moment it arrives.
 - A `THREAD: none` entry is a receipt: the final word on a completed fact. It stays open as the boot trail and folds only at chapter turns or unit close.
 
-Closers must resolve: every `CLOSES` or `SUPERSEDES` slug must name a real entry. A dangling closer is flagged as an error by `ctx unit audit`.
+Closers must resolve: every `CLOSES` or `SUPERSEDES` slug must name a real entry standing before the closing entry, since a closer closes only the occurrences before it. A dangling closer is flagged as an error by `ctx unit audit`, and the audit counts a target only when an entry before the closer carries it: a target only a later entry carries (an entry minted afterwards to quiet the audit, which would load forever) and a closer naming its own entry both read as dangling.
 
 ## Chapter folding
 

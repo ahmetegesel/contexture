@@ -113,6 +113,26 @@ const PLANTS: Plant[] = [
     detail: 'null',
     view: 'MISSING THREAD at line 3: 2026-09-19-plant-nothread (declare THREAD: <what it awaits> | none)',
   },
+  {
+    id: 'RA-10 [the-record-r-ftait, the-record-p1] a closer whose target only an entry after it carries (an entry minted to quiet the audit)',
+    artifact: 'journal',
+    text: '\n@entry 2026-09-19-plant-early-closer\n  ANCHOR: A2\n  WHAT: "planted closer before its target"\n  THREAD: none\n  CLOSES: 2026-09-19-plant-minted (done: minted later)\n\n@entry 2026-09-19-plant-minted\n  ANCHOR: A2\n  WHAT: "an entry minted after the closer"\n  THREAD: none\n',
+    code: 'DANGLING_CLOSER',
+    slug: '2026-09-19-plant-early-closer',
+    line: '7',
+    detail: '"2026-09-19-plant-minted"',
+    view: 'DANGLING CLOSER at line 7: 2026-09-19-plant-minted',
+  },
+  {
+    id: 'RA-11 [the-record-r-ftait, the-record-p1] a closer naming its own entry',
+    artifact: 'journal',
+    text: '\n@entry 2026-09-19-plant-self\n  ANCHOR: A2\n  WHAT: "planted self closer"\n  THREAD: none\n  CLOSES: 2026-09-19-plant-self (done: itself)\n',
+    code: 'DANGLING_CLOSER',
+    slug: '2026-09-19-plant-self',
+    line: '7',
+    detail: '"2026-09-19-plant-self"',
+    view: 'DANGLING CLOSER at line 7: 2026-09-19-plant-self',
+  },
 ];
 
 describe.concurrent('the record audit', () => {
@@ -169,6 +189,14 @@ describe.concurrent('the record audit', () => {
       expect([view.code, view.stdout, view.stderr]).toEqual([1, `${plant.view}\n`, '']);
     });
   }
+
+  it('RA-12 [the-record-r-ftait, the-record-p1]: a target counts only from the entry that holds it on, one finding per distinct target: two closers before it name one finding on the first, a closer after it passes', async () => {
+    const sb = fresh(await audited('unit'));
+    const entry = (slug: string, closes?: string) => `\n@entry ${slug}\n  ANCHOR: A2\n  WHAT: "planted ${slug}"\n  THREAD: none\n${closes ? `  CLOSES: ${closes} (done: planted)\n` : ''}`;
+    appendArtifact(sb, AUD, 'journal', [entry('2026-09-19-plant-a', '2026-09-19-plant-t'), entry('2026-09-19-plant-b', '2026-09-19-plant-t'), entry('2026-09-19-plant-t'), entry('2026-09-19-plant-c', '2026-09-19-plant-t')].join(''));
+    expect(answerLine(await engineCall(sb, 'session.audit', [AUD]), 'session.audit')).toBe(dirty(AUD, 'DANGLING_CLOSER', '2026-09-19-plant-a', '7', '"2026-09-19-plant-t"'));
+    expect(answerLine(await data(sb, 'session.audit', [AUD]), 'session.audit')).toBe(dirty(AUD, 'DANGLING_CLOSER', '2026-09-19-plant-a', '7', '"2026-09-19-plant-t"'));
+  });
 
   it('RA-8 [the-record-r11]: an IN_PROGRESS task audits clean without a state pointer; the retired absence check never fires', async () => {
     const sb = fresh(await audited('unit'));

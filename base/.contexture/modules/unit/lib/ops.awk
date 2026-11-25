@@ -277,11 +277,10 @@ function af(code, sev, slug, line, detail, first, occ) {
   if (sev == "error") ADIRTY = 1
 }
 
-function audit_json(u,   kj, kb, i, j, c, t, s, owner, head, line, val, n, words, found, w, HELD, SEEN, DONEW, first, o, FIRSTLINE, e) {
+function audit_json(u,   kj, kb, i, j, c, t, s, owner, head, line, val, n, words, found, w, PRIOR, SEEN, DONEW, first, o, FIRSTLINE, e) {
   kj = u "|journal"; kb = u "|backlog"
   NAF = 0; ADIRTY = 0
-  split("", HELD); split("", SEEN); split("", DONEW); split("", FIRSTLINE)
-  for (i = 1; i <= NI[kj]; i++) if (IK[kj, i] == "entry") HELD[X[kj, i, "slug"]] = 1
+  split("", SEEN); split("", DONEW); split("", FIRSTLINE)
   # group 1, in journal position order
   owner = NULLV
   for (line = 1; line <= NL[kj]; line++) {
@@ -309,14 +308,16 @@ function audit_json(u,   kj, kb, i, j, c, t, s, owner, head, line, val, n, words
       if (!found) af("SLUGLESS_CLOSER", "error", owner, line, NULLV, NULLV, NULLV)
     }
   }
-  # group 2: the record checks
-  split("", SEEN)
+  # group 2: the record checks; a closer target counts only when an entry before the closing
+  # entry holds it, the order derive_journal closes by, so a self closer reads dangling
+  split("", SEEN); split("", PRIOR)
   for (i = 1; i <= NI[kj]; i++) {
     if (IK[kj, i] != "entry") continue
     for (c = 1; c <= X[kj, i, "c#"]; c++) for (t = 1; t <= X[kj, i, "c", c, "t#"]; t++) {
       s = X[kj, i, "c", c, "t", t]
-      if (!(s in HELD) && !(s in SEEN)) { SEEN[s] = 1; af("DANGLING_CLOSER", "error", X[kj, i, "slug"], X[kj, i, "c", c, "line"], s, NULLV, NULLV) }
+      if (!(s in PRIOR) && !(s in SEEN)) { SEEN[s] = 1; af("DANGLING_CLOSER", "error", X[kj, i, "slug"], X[kj, i, "c", c, "line"], s, NULLV, NULLV) }
     }
+    PRIOR[X[kj, i, "slug"]] = 1
   }
   for (i = 1; i <= NI[kj]; i++) if (IK[kj, i] == "entry" && X[kj, i, "know"] && CLBY[kj, i] == 0) af("UNHARVESTED_KNOWLEDGE", "error", X[kj, i, "slug"], IH[kj, i], NULLV, NULLV, NULLV)
   for (i = 1; i <= NI[kj]; i++) {

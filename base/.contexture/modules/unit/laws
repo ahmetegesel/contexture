@@ -75,7 +75,7 @@
   period end (turn ends; unit continues):
     1. refresh (@refresh): the harvest runs inside it; then close the period's done events by reference
     2. stray audit: the thread tail printed by ctx unit audit is the checklist: every open THREAD that resolved this period closes now, same breath, verdict word + resolution in the WHAT; a resolved thread on a KNOWLEDGE-flagged entry closes harvested or discarded, its harvest settled in the same closer; receipts never close here: they fold only at a human-called chapter turn or at unit close
-    3. unit audit: .contexture/ctx unit audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event) with line numbers, and warns on a legacy duplicate slug without failing; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note; a grammar finding no verb can repair goes to the human, never to a hand edit
+    3. unit audit: .contexture/ctx unit audit <unit> must exit 0; it flags the broken entries (dangling or slugless closers, dateless slugs, inline markers, bracketed field lines, a missing THREAD, unharvested KNOWLEDGE flags, STATUS: DONE tasks without their backlog/<slug>: DONE event) with line numbers, and warns on a legacy duplicate slug without failing; the audit is a repair instrument: fix what it flags and fill what is missing before the period ends, never a note; a grammar finding no verb can repair goes to the human, never to a hand edit
     4. unit stays ACTIVE
   unit close (backlog completes, or the human ends the unit):
     1. append closing events + next-move decision
