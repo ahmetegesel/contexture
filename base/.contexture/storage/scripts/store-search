@@ -2,7 +2,8 @@
 # store-search: the storage core's private search engine (no summary line, so discovery
 # ignores it). It answers the store's two search paths over a module's declared data
 # file: exact, the record rule over the raw stored value on every driver, and the
-# write-time document derivation the fts5 driver indexes for its ranked modes. It reads
+# write-time document derivation the interim fts5 driver keeps for the sqlite rebuild,
+# read by no search since contract 4. It reads
 # the data file itself; the driver has already validated it with store-data.
 #
 # Usage:

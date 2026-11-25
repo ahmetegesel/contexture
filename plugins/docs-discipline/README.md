@@ -477,8 +477,9 @@ it walk below runs every one of these.
   verdict, though the verdict line and the exit code still read as a real
   clean; coverage counts only the listed extensions (`awk` among them)
   and the extensionless scripts whose first line is a shebang; deleting a
-  unit doc does not red the check. A doc rides only at its logical address,
-  `docs/<repo>/<slug>.md` at the start of a delta path, so a code path that
+  unit doc does not red the check. A doc rides only at the start of a delta
+  path, at its path under the corpus's declared folder (and at its logical
+  address `docs/<repo>/<slug>.md` in a caller's list), so a code path that
   merely ends in that shape (a package seed, a test sample, a child
   repository's own guides under its prefix) freshens nothing. The gate stays
   scoped to the change delta, never the corpus's truth.
@@ -688,7 +689,7 @@ MUST docs/drift (universal, workspace)
   Drift is reconciled from the change delta, never from memory: the status-prefixed delta feeds ctx docs check with BOTH halves in one stream (the code delta from git and the corpus delta: the corpus paths of the same git delta for a corpus git tracks, else the docs the reconciliation updated); every affected doc is updated through the ctx docs write verbs in the same change, uncovered paths widen a unit's sources or open a new unit, and the audit and the check re-run clean before the doc change lands.
   evidence: .contexture/extensions/modules/docs/scripts/docs-check.awk
   anti: Shipping a code change and deferring its doc update to a later commit; or verifying with a pipeline that feeds the check the code delta alone: it reads every claimed file stale where a claimant is tracked, and CLEAN (PROCESS-OWNED) where none is, so its verdict says nothing about the docs
-  good: Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in ctx docs help check); for an uncommitted working tree, ctx docs gate composes both halves by itself on every driver and needs no pipeline
+  good: Both halves in one stream, records split so a rename's old path surfaces as a dead source (the working command is in ctx docs help check); for a tracked corpus, ctx docs gate composes both halves by itself and needs no pipeline
 ```
 
 ```sh

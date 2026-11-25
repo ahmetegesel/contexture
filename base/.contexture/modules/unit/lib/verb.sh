@@ -1,4 +1,4 @@
-# verb.sh: the shared shell of the unit and lane verbs (contract 3, docs/the-engine.md,
+# verb.sh: the shared shell of the unit and lane verbs (contract 4, docs/the-engine.md,
 # The descriptor and the handshake). A verb sources this file, checks its input shape, calls
 # exactly one function per record act, and renders the answer with the storage core's
 # json.awk (the one flattener) and lib/render.awk (the one renderer). No verb reads or writes a record

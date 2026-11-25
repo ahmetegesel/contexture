@@ -90,11 +90,18 @@ vb_tmp
 # the query's bytes are checked before any call (the payload is staged per unit below)
 vb_kv query "$query"
 VB_PAY=""
-# under the fan-out a mode the configured driver does not register falls back to exact,
-# which the answer's mode says; a direct call lets the record's search refuse it
-if [ "$mode" != exact ] && [ "${CTX_SEARCH_FANOUT:-}" = 1 ]; then
-  "$VB_RESOLVER" modes < /dev/null > "$VB_DIR/modes" 2>/dev/null || : > "$VB_DIR/modes"
-  awk -F '\t' -v m="$mode" '$1 == m { f = 1 } END { exit !f }' "$VB_DIR/modes" || mode=exact
+# exact is the storage contract's one mode: a direct call naming another refuses here with
+# the record's search line, whatever its scope holds (no unit included); under the fan-out a
+# mode the configured driver does not register falls back to exact, which the answer's mode
+# says
+if [ "$mode" != exact ]; then
+  if [ "${CTX_SEARCH_FANOUT:-}" = 1 ]; then
+    "$VB_RESOLVER" modes < /dev/null > "$VB_DIR/modes" 2>/dev/null || : > "$VB_DIR/modes"
+    awk -F '\t' -v m="$mode" '$1 == m { f = 1 } END { exit !f }' "$VB_DIR/modes" || mode=exact
+  else
+    printf "search.query: error: mode '%s' is not supported; answerable modes: exact (ERR_CAPABILITY_UNSUPPORTED)\n" "$mode" >&2
+    exit 1
+  fi
 fi
 
 # the units in the board's order, each with its status: the active listing's one call,
