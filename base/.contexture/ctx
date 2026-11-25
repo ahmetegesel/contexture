@@ -1413,7 +1413,7 @@ run_body() {
     if [ -z "$stderr_input" ]; then
       return 0
     fi
-    if [ "$cmd_status" -ne 0 ] || [ -z "$raw_input" ]; then
+    if [ "$cmd_status" -ne 0 ] || [ -z "$head_hex" ]; then
       printf "%s\n" "$stderr_input" >&2
       return 0
     fi
@@ -1423,6 +1423,22 @@ run_body() {
     else
       printf "[ctx: stderr capped: showing the last 10 of %s lines; COMPACT_DISABLE=1 for the full stream]\n" "$stderr_lines" >&2
       printf "%s\n" "$stderr_input" | tail -n 10 >&2
+    fi
+  }
+
+  emit_raw() {
+    if [ "$merged" -eq 1 ]; then
+      printf "%s\n" "$raw_input"
+    else
+      cat <&7 || :
+    fi
+  }
+
+  emit_filtered() {
+    if [ "$filtered_output" = "$raw_input" ]; then
+      emit_raw
+    else
+      printf "%s\n" "$filtered_output"
     fi
   }
 
@@ -1561,6 +1577,9 @@ run_body() {
   stderr_input=""
   stdout_tmp=""
   stderr_tmp=""
+  raw_input=""
+  head_hex=""
+  merged=0
 
   # The capture files live in the sanctioned scratch dir but their names are
   # removed before the command runs. The open handles keep them alive; with no
@@ -1583,27 +1602,57 @@ run_body() {
       printf '%s: cannot create a capture file in %s\n' "$run_label" "$compact_tmpdir" >&2
       exit 2
     }
-    exec 3>"$stdout_tmp" 4<"$stdout_tmp" 5>"$stderr_tmp" 6<"$stderr_tmp"
+    exec 3>"$stdout_tmp" 4<"$stdout_tmp" 7<"$stdout_tmp" 8<"$stdout_tmp" 5>"$stderr_tmp" 6<"$stderr_tmp"
     rm -f "$stdout_tmp" "$stderr_tmp"
     stdout_tmp=""
     stderr_tmp=""
     trap - EXIT
     rc=0
-    ( exec 4<&- 6<&-; "$@" >&3 ) 2>&5 || rc=$?
+    ( exec 4<&- 6<&- 7<&- 8<&-; "$@" >&3 ) 2>&5 || rc=$?
     cmd_status=$rc
     exec 3>&- 5>&-
-    raw_input=$(cat <&4)
     stderr_input=$(cat <&6)
-    exec 4<&- 6<&-
+    exec 6<&-
   else
     # Stdin pipe mode
-    raw_input=$(cat)
+    trap cleanup_capture EXIT
+    stdout_tmp=$(mktemp "$compact_tmpdir/compact-stdout.XXXXXX") || {
+      printf '%s: cannot create a capture file in %s\n' "$run_label" "$compact_tmpdir" >&2
+      cat
+      exit 0
+    }
+    exec 3>"$stdout_tmp" 4<"$stdout_tmp" 7<"$stdout_tmp" 8<"$stdout_tmp"
+    rm -f "$stdout_tmp"
+    stdout_tmp=""
+    trap - EXIT
+    cat >&3
+    exec 3>&-
   fi
 
+  head_hex=$(od -An -tx1 -N 8000 <&8) || head_hex=" 00"
+  exec 8<&-
+
   # If both streams are empty, exit cleanly preserving command exit code
-  if [ -z "$raw_input" ] && [ -z "$stderr_input" ]; then
+  if [ -z "$head_hex" ] && [ -z "$stderr_input" ]; then
     exit "$cmd_status"
   fi
+
+  case "$head_hex" in
+    *" 00"*)
+      cat <&7 || :
+      if [ "$stats" -eq 1 ]; then
+        printf "[ctx: binary stream passed through unchanged]\n" >&2
+      fi
+      if [ "$debug" -eq 1 ]; then
+        printf "[ctx: debug: binary stream passed through unchanged]\n" >&2
+      fi
+      emit_stderr
+      exit "$cmd_status"
+      ;;
+  esac
+
+  raw_input=$(cat <&4)
+  exec 4<&-
 
   # Step 1b: Strip ANSI escape sequences before selection and filtering;
   # raw bytes stay untouched for the fail-safe comparison
@@ -1611,7 +1660,7 @@ run_body() {
   clean_input="$raw_input"
   case "$raw_input" in
     *"$esc"*)
-      clean_input=$(printf "%s\n" "$raw_input" | awk '{gsub(/\033\[[0-9;]*[a-zA-Z]/, ""); print}')
+      clean_input=$(printf "%s\n" "$raw_input" | LC_ALL=C awk '{gsub(/\033\[[0-9;]*[a-zA-Z]/, ""); print}') || clean_input="$raw_input"
       ;;
   esac
 
@@ -1625,8 +1674,8 @@ run_body() {
       selected_filter="$candidate"
     else
       printf '%s: filter not found: %s in %s\n' "$run_label" "$explicit_filter" "$FILTERS_DIR" >&2
-      if [ -n "$raw_input" ]; then
-        printf "%s\n" "$raw_input"
+      if [ -n "$head_hex" ]; then
+        emit_raw
       fi
       emit_stderr
       exit "$cmd_status"
@@ -1702,7 +1751,7 @@ run_body() {
 
     if [ -z "$selected_filter" ]; then
       # Zero-parameter auto-discovery: sample stream head and check signatures
-      sample=$(printf "%s\n" "$clean_input" | sed 40q)
+      sample=$(printf "%s\n" "$clean_input" 2>/dev/null | sed 40q)
 
       if [ -d "$FILTERS_DIR" ]; then
         for f in "$FILTERS_DIR"/*.awk; do
@@ -1789,6 +1838,7 @@ run_body() {
     stream_mode=$(directive_value stream "$selected_filter")
   fi
   if [ "$stream_mode" = "merged" ] && [ -n "$stderr_input" ]; then
+    merged=1
     if [ -n "$raw_input" ]; then
       raw_input=$(printf "%s\n%s" "$raw_input" "$stderr_input")
     else
@@ -1798,28 +1848,28 @@ run_body() {
     clean_input="$raw_input"
     case "$raw_input" in
       *"$esc"*)
-        clean_input=$(printf "%s\n" "$raw_input" | awk '{gsub(/\033\[[0-9;]*[a-zA-Z]/, ""); print}')
+        clean_input=$(printf "%s\n" "$raw_input" | LC_ALL=C awk '{gsub(/\033\[[0-9;]*[a-zA-Z]/, ""); print}') || clean_input="$raw_input"
         ;;
     esac
   fi
 
   # If still no filter found, fallback to raw input
   if [ -z "$selected_filter" ] || [ ! -f "$selected_filter" ]; then
-    if [ -n "$raw_input" ]; then
-      printf "%s\n" "$raw_input"
+    if [ -n "$head_hex" ]; then
+      emit_raw
     fi
     emit_stderr
     exit "$cmd_status"
   fi
 
   # Empty stdout with no merged filter: stderr is the whole output
-  if [ -z "$raw_input" ]; then
+  if [ "$merged" -eq 0 ] && [ -z "$head_hex" ]; then
     emit_stderr
     exit "$cmd_status"
   fi
 
   # Step 3: Execute filter and apply fail-safe and recovery guards
-  filtered_output=$(printf "%s\n" "$clean_input" | awk -v COMPACT_EXIT="$cmd_status" -f "$selected_filter" 2>/dev/null) || true
+  filtered_output=$(printf "%s\n" "$clean_input" | awk -v COMPACT_EXIT="$cmd_status" -f "$selected_filter" 7<&- 2>/dev/null) || true
 
   raw_bytes=$(printf "%s\n" "$raw_input" | wc -c | tr -d ' ')
   clean_bytes=$(printf "%s\n" "$clean_input" | wc -c | tr -d ' ')
@@ -1828,13 +1878,13 @@ run_body() {
 
   # A notice is a marker line: an elision, collapse, or recovery pointer; the
   # marker vocabulary keeps bracketed data lines from reading as notices
-  notice_state=$(printf "%s\n" "$filtered_output" | awk '
+  notice_state=$(printf "%s\n" "$filtered_output" | LC_ALL=C awk '
     /^[ \t]*\.\.\. \(/ { notice = 1; next }
     /^[ \t]*\[[^]]*(collapsed|elided|repeated|capped|COMPACT_DISABLE)[^]]*\]/ { notice = 1; next }
     /^[ \t]*$/ { next }
     { other = 1 }
     END { printf "%d %d\n", notice + 0, (other ? 0 : 1) }
-  ')
+  ') || notice_state="0 0"
   has_notice=${notice_state% *}
   notice_only=${notice_state#* }
 
@@ -1847,7 +1897,7 @@ run_body() {
 
   # Universal fail-safe: pass raw input if the filter produced empty output
   if [ -z "$filtered_output" ]; then
-    printf "%s\n" "$raw_input"
+    emit_raw
     if [ "$stats" -eq 1 ]; then
       printf "[ctx: %s (fail-safe passthrough: %d bytes)]\n" "$filter_name" "$raw_bytes" >&2
     fi
@@ -1858,7 +1908,7 @@ run_body() {
   # Notice-only output: the filter is signaling (a false-green guard, for
   # example); pass it through, never revert the signal to raw
   if [ "$notice_only" -eq 1 ]; then
-    printf "%s\n" "$filtered_output"
+    emit_filtered
     if [ "$stats" -eq 1 ]; then
       printf "[ctx: %s (notice-only output passed through)]\n" "$filter_name" >&2
     fi
@@ -1868,7 +1918,7 @@ run_body() {
 
   # Byte fail-safe: pass raw input if the filter grew the stream
   if [ "$out_bytes" -gt "$raw_bytes" ]; then
-    printf "%s\n" "$raw_input"
+    emit_raw
     if [ "$stats" -eq 1 ]; then
       printf "[ctx: %s (fail-safe passthrough: %d bytes)]\n" "$filter_name" "$raw_bytes" >&2
     fi
@@ -1879,7 +1929,7 @@ run_body() {
   # Recovery: a shrinking filter without a notice either truncated silently or
   # only reformatted; format-only filters declare that, everything else goes raw
   if [ "$out_bytes" -lt "$clean_bytes" ] && [ "$has_notice" -eq 0 ] && [ -z "$format_only" ]; then
-    printf "%s\n" "$raw_input"
+    emit_raw
     if [ "$stats" -eq 1 ]; then
       printf "[ctx: %s (recovery fallback: %d -> %d bytes, no notice)]\n" "$filter_name" "$clean_bytes" "$out_bytes" >&2
     fi
@@ -1887,7 +1937,7 @@ run_body() {
     exit "$cmd_status"
   fi
 
-  printf "%s\n" "$filtered_output"
+  emit_filtered
 
   if [ "$stats" -eq 1 ]; then
     pct=0

@@ -90,7 +90,7 @@ contexture grows without forks by composing every module, storage driver, workfl
 - **Rhythms**: Plain-text workflow checklists that govern outcomes and verification gates without imposing rigid bureaucracy. See [Rhythms](docs/rhythms.md).
 - **Subagent lanes**: Isolated dispatch sandboxes managed through `ctx lane` that keep subagent traces out of the main journal and return self-sufficient reports. See [Units and subagents](docs/units-and-lanes.md).
 - **Overlays**: Team-shared rules (`AGENTS.workspace.md`) and personal machine preferences (`AGENTS.local.md`) that amend the composed law layer without editing or forking the base convention. See [Overlays](docs/overlays.md).
-- **Stream compaction (`ctx run`)**: Shell commands run through `.contexture/ctx run <cmd>` (or pipe into it), collapsing verbose diffs, listings, and logs while preserving exact exit codes and full diagnostic detail on failure. See [The engine](docs/the-engine.md).
+- **Stream compaction (`ctx run`)**: Shell commands run through `.contexture/ctx run <cmd>` (or pipe into it), collapsing verbose diffs, listings, and logs while preserving exact exit codes and full diagnostic detail on failure; binary output and anything it does not shorten pass through byte for byte. See [The engine](docs/the-engine.md).
 
 ### Human habits and non-AI teammates
 

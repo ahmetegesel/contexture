@@ -20,9 +20,10 @@ The investigation that produced this menu is the worked example: a multi-project
 
 - Runner mode (`ctx run <cmd>`) selects by command identity: the `# command: <regex>` header is matched against the reconstructed command line (the basename of the command plus its arguments). First match wins, and two filters claiming one command raise a shadow warning.
 - Stdin mode (`<cmd> | ctx run`) selects by stream signature: the `# match: <regex>` header is tested against a sample of the first 40 lines. `# default` marks the fallback, `log.awk`.
-- ANSI escape sequences are stripped before selection and filtering, so colored output matches its plain shapes; the raw bytes stay untouched for the fail-safe comparison.
-- Guards: empty or grown output falls back to raw; a shrinking filter with no notice line falls back to raw unless it declares `# format-only`; a notice-only output passes through so a false-green signal is never hidden; command stderr stays visible, whole on failure or empty stdout and tail-capped with its own notice otherwise.
-- `COMPACT_DISABLE=1` bypasses compaction and passes the stream through raw; `COMPACT_DEBUG=1` reports the selection, the filter name and the match line, on stderr.
+- A stream holding a NUL byte in its first 8000 bytes is binary and passes through byte for byte, before the ANSI strip and selection, so no filter sees it, an explicit `--filter` included.
+- ANSI escape sequences are stripped from text before selection and filtering, so colored output matches its plain shapes; the captured bytes stay untouched for the fail-safe comparison and every exact copy.
+- Guards: empty or grown output falls back to the exact copy of the command's stdout (the joined stdout and stderr text under a `# stream: merged` filter); a shrinking filter with no notice line falls back to the exact copy unless it declares `# format-only`; a filter output identical to the captured stdout hands back the exact bytes too; a notice-only output passes through so a false-green signal is never hidden; command stderr stays visible, whole on failure or empty stdout and tail-capped with its own notice otherwise.
+- `COMPACT_DISABLE=1` bypasses compaction and passes the stream through byte for byte; `COMPACT_DEBUG=1` reports the selection, the filter name and the match line, on stderr.
 
 ```sh
 cargo test | .contexture/ctx run
@@ -31,7 +32,7 @@ npx vitest run | .contexture/ctx run
 go test ./... | .contexture/ctx run
 ```
 
-When no specialized filter matches, `ctx run` falls back to `log.awk` or passes raw output through unaltered.
+When no specialized filter matches, `ctx run` falls back to `log.awk` or passes the command's exact output through unaltered.
 
 ## The Filter Menu
 
@@ -93,7 +94,7 @@ Each test pipes an input through the runner (`ctx run --filter=<filter>`) of a s
 2. Add `# match: <regex>` for the stdin signature and `# command: <regex>` for runner identity.
 3. Add the optional headers: `# default` (the fallback filter), `# stream: merged` (merge the command's stderr into the filtered stream, for compiler-style tools whose diagnostics land on stderr), `# format-only: <why>` (declare marker-less reductions as layout, not lost content).
 4. Buffer lines and process them in the `END` block.
-5. Keep the fail-safe fallback: if output is empty or larger than raw input, print the raw lines.
+5. Keep the fail-safe fallback: if output would be empty or larger than the input, print the input lines unchanged; the engine treats an output identical to the captured stdout like an empty or grown one and hands back the exact copy.
 6. Emit a notice when truncating: a marker line carrying one of `collapsed`, `elided`, `repeated`, `capped`, or a `COMPACT_DISABLE` recovery pointer; a shrink with no notice falls back to raw.
 7. Add a fixture pair under the matching tests folder (`tests/filters/pairs/` for a core filter, `plugins/toolchain-filters/tests/` for a plugin filter) and run the tests.
 

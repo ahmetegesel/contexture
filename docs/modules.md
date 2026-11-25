@@ -321,13 +321,13 @@ A filter declares itself in its header:
 | `# format-only: <reason>` | marker-less reductions are layout, not lost content |
 | `# ctx-filter-priority: over` | a later match replaces an earlier one instead of warning |
 
-A match on an already-claimed command line or signature warns as a shadow; the first match wins. `ctx run --filter=<name>` resolves the run module first, then the other modules in name order.
+A match on an already-claimed command line or signature warns as a shadow; the first match wins. `ctx run --filter=<name>` resolves the run module first, then the other modules in name order. A binary stream (a NUL byte in its first 8000 bytes) bypasses every filter, `--filter` included, so a filter never receives one.
 
 A filter-only module (no module file, no `scripts/`) is legal and unlisted; the run module is exactly that shape.
 
 To test a filter without touching the live drawer, stage a sandbox workspace whose `.contexture/ctx` and `.contexture/modules/<name>/filters/` mirror the real layout: the engine resolves its root from its own path, so the sandbox is self-contained. The upstream precedent is the vitest `filters` project (`tests/filters/`) and the plugin's `toolchain-filters` project, which stage `base/` as shipped into a sandbox and pipe each pair through its `ctx run --filter`.
 
-The filter guards (fail-safe passthrough, notice-only, format-only recovery) belong to the engine: see `docs/the-engine.md`.
+The filter guards (the binary gate, fail-safe passthrough of the exact bytes, notice-only, format-only recovery) belong to the engine: see `docs/the-engine.md`.
 
 ## Walkthrough
 
