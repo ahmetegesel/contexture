@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { sandbox } from '@support/sandbox';
 import { fresh, seed } from '@support/snapshot';
-import { addModule, docs, gwWorkspace, PLUGIN, stageSeed } from '../support/corpus';
+import { addModule, docs, gwWorkspace, SAMPLE, stageSeed } from '../support/corpus';
 import { git, gitCommit, gitInit } from '../support/git';
 
 let staged: string;
@@ -26,7 +26,7 @@ beforeAll(async () => {
       await gitInit(sb);
       await git(sb, 'add', '-A');
       await gitCommit(sb, 'h0');
-      const c = await docs(sb, ['write', 'workspace', 'conventions'], { input: readFileSync(join(PLUGIN, 'docs/workspace/conventions.md')) });
+      const c = await docs(sb, ['write', 'workspace', 'conventions'], { input: readFileSync(join(SAMPLE, 'docs/workspace/conventions.md')) });
       if (c.code !== 0) throw new Error(`trackedDrawer conventions: rc ${c.code}: ${c.stderr}`);
       const w = await docs(sb, ['new', 'workspace', 'gw-unit', '--kind=capability', "--description=the suite's own unit", '--sources=src/gw.sh', '--keywords=gw']);
       if (w.code !== 0) throw new Error(`trackedDrawer gw-unit: rc ${w.code}: ${w.stderr}`);
@@ -295,13 +295,13 @@ describe('the gate --since=<rev> on posix: the root repository from <rev> to the
 });
 
 describe('the gate when .contexture/ is tracked (adopting repository layout)', { concurrent: true }, () => {
-  it('[docs-module-r10] untracked .contexture/ runtime, extensions, and seeded conventions pass clean', async () => {
+  it('[docs-module-r10] untracked .contexture/ runtime, extensions, and a written conventions doc pass clean', async () => {
     const sb = fresh(gw);
     writeFileSync(join(sb, '.gitignore'), '.contexture/tmp/\n');
     writeFileSync(join(sb, 'AGENTS.workspace.md'), '# overlay\n');
     mkdirSync(join(sb, '.contexture/plugins/demo'), { recursive: true });
     writeFileSync(join(sb, '.contexture/plugins/demo/hook.sh'), 'echo hook\n');
-    expect((await docs(sb, ['write', 'workspace', 'conventions'], { input: readFileSync(join(PLUGIN, 'docs/workspace/conventions.md')) })).code).toBe(0);
+    expect((await docs(sb, ['write', 'workspace', 'conventions'], { input: readFileSync(join(SAMPLE, 'docs/workspace/conventions.md')) })).code).toBe(0);
     const r = await docs(sb, ['gate']);
     expect(r.code, r.stdout + r.stderr).toBe(0);
     expect(r.stdout).not.toContain('UNCOVERED:');

@@ -2,14 +2,14 @@
   use when: a workspace, repository, or unit has no docs yet, or a doc set needs writing from scratch
   activation: propose
   1. SYNC: checkout current with remote; clean working tree
-  2. MAP: recon subagent maps units; workspace scope seeds the workspace system map (workspace/system-map, @components) as the accumulating roadmap; component scope inventories code packages, datastores (tables/topics/buckets), auxiliary tools (utils/scripts), and cross-boundary exports; slices target into units with scoped sources globs; output lands in the MAP lane's report (ctx lane show <unit> <lane> report)
+  2. MAP: recon subagent maps units; workspace scope seeds the workspace system map (workspace/system-map, @components) as the accumulating roadmap; component scope inventories code packages, datastores (tables/topics/buckets), auxiliary tools (utils/scripts), and cross-boundary exports; slices target into coherent units by domain and intent with scoped sources globs, never a folder by folder mirror (one doc per folder hides the units readers need); output lands in the MAP lane's report (ctx lane show <unit> <lane> report)
   3. BACKLOG: the MAP subagent report drives the declaration of work in the backlog (ctx unit task add); one @task per mapped unit or component, referencing the subagent report; drafting never begins without a declared backlog
   4. DRAFT: one subagent per unit, or per repo when units share context, parallel on independence; tasks advance through IN_PROGRESS as subagents dispatch; drafted per the docs module's grammar (the write verbs enforce it) and written through ctx docs write (a whole first extraction) or ctx docs new and the block verbs, establishing structural baseline (layers, stages, deployables, core responsibilities)
   5. INTERROGATE: adversarial deep-dive of the drafted units against the code per the grammar's method comments; drafts updated with grounded evidence, no unverified claims
   6. AUDIT: ctx docs audit over the drafts; zero errors
   7. COVERAGE: ctx docs check over the repository's tracked files; uncovered paths widen a unit's sources or insert a new @task into the backlog
   8. RECONCILE: semantic depth and boundary audit in subagents; thin docs return to INTERROGATE; merges, splits, and cross-unit edges settle in the backlog; audit and coverage re-verified
-  9. PROJECT: ctx docs query for the new units and their file owners; the projection reads clean
+  9. PROJECT: ctx docs query for the new units and their file owners; the projection reads clean; no draft counts as landed before the audit, the check, and the query read clean
   10. TRACE+ACCUMULATE: a cross-repository boundary trace subagent verifies the system map's claims against code, traces new boundaries, and links connected unit docs with reciprocal @see_also pointers
   11. REFRESH: run @refresh
-  ground: the procedure lives in the workspace conventions, @rule docs/authoring (ctx docs query workspace --rules docs/authoring)
+  ground: the procedure lives in these steps; the shape lives in the docs module's grammar, which the ctx docs write verbs enforce; the output rules in the docs laws (@laws#greppable-evidence, @laws#fixed-pitfalls, @laws#section-refs)

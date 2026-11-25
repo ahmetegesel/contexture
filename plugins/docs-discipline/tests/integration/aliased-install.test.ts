@@ -1,14 +1,15 @@
-import { cpSync, existsSync, writeFileSync } from 'node:fs';
+import { cpSync, existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec, type Run } from '@support/exec';
 import { stage } from '@support/stage';
-import { MODULE, PLUGIN } from '../support/corpus';
+import { MODULE, PLUGIN, SAMPLE } from '../support/corpus';
 
-// the docs module installed under the alias corpus: its part hook, its unit hooks, and its
+// the docs module installed under the alias corpus: its writes, its unit hooks, and its
 // search rows reach the module by its installed name, so the alias needs no change in its code
 let ws: string;
-const ctx = (args: readonly string[]): Promise<Run> => exec('./.contexture/ctx', args, { cwd: ws, env: { GIT_CEILING_DIRECTORIES: dirname(ws) } });
+const ctx = (args: readonly string[], input = ''): Promise<Run> => exec('./.contexture/ctx', args, { cwd: ws, input, env: { GIT_CEILING_DIRECTORIES: dirname(ws) } });
+const conventions = (): string => readFileSync(join(SAMPLE, 'docs/workspace/conventions.md'), 'utf8');
 
 let installed: Run;
 beforeAll(async () => {
@@ -17,9 +18,13 @@ beforeAll(async () => {
 });
 
 describe('the docs module installed under an alias', { concurrent: false }, () => {
-  it('[modules-r13, modules-r15] the install hook seeds the corpus conventions through the alias', async () => {
+  it('[modules-r15] the install under the alias writes no corpus doc, and a doc written through the alias lands in its own store and reads back through it', async () => {
     expect(installed.code, installed.stderr).toBe(0);
-    expect(installed.stdout).toContain('docs install: seeded workspace conventions');
+    expect(installed.stdout).not.toContain('docs install');
+    expect((await ctx(['corpus', 'query', 'workspace', 'conventions'])).code).toBe(1);
+    const w = await ctx(['corpus', 'write', 'workspace', 'conventions'], conventions());
+    expect([w.code, w.stderr]).toEqual([0, '']);
+    expect(existsSync(join(ws, 'corpus/workspace/conventions.md'))).toBe(true);
     expect((await ctx(['corpus', 'query', 'workspace', 'conventions'])).stdout).toContain('Universal workspace conventions');
   });
 
@@ -56,15 +61,15 @@ describe('the docs module installed under an alias', { concurrent: false }, () =
     expect(last?.stdout).toContain("[CONTEXT NUDGE: Task 'alias-task']");
   });
 
-  it('[modules-r10, modules-r15] a plain docs installed beside the alias keeps its own store: its install seeds its own conventions, and a removal through it never reaches the alias', async () => {
+  it('[modules-r10, modules-r15] a plain docs installed beside the alias keeps its own store: a doc written through it lands in its own store, and a removal through it never reaches the alias', async () => {
     const copy = join(ws, 'catalog/docs-copy');
     cpSync(MODULE, join(copy, '.contexture/extensions/modules/docs'), { recursive: true, filter: (src) => src !== join(MODULE, 'laws') });
-    cpSync(join(PLUGIN, 'docs/workspace/conventions.md'), join(copy, 'docs/workspace/conventions.md'));
     writeFileSync(join(copy, 'manifest'), '# summary: a module only copy of the docs module\n# version: 1.0.0\n# kind: feature\n# part: module modules/docs\n');
     const plain = await ctx(['package', 'install', copy]);
     expect(plain.code, plain.stderr).toBe(0);
-    expect(plain.stdout).toContain('docs install: seeded workspace conventions');
-    expect(plain.stdout).not.toContain('already present');
+    expect((await ctx(['docs', 'query', 'workspace', 'conventions'])).code).toBe(1);
+    const w = await ctx(['docs', 'write', 'workspace', 'conventions'], conventions());
+    expect([w.code, w.stderr]).toEqual([0, '']);
     expect(existsSync(join(ws, 'corpus/workspace/conventions.md'))).toBe(true);
     expect(existsSync(join(ws, 'docs/workspace/conventions.md'))).toBe(true);
     expect((await ctx(['docs', 'remove', 'workspace', 'conventions'])).code).toBe(0);

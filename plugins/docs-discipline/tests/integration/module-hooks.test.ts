@@ -1,60 +1,57 @@
-import { mkdirSync, renameSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readFileSync, renameSync } from 'node:fs';
+import { dirname, join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { exec, type Run } from '@support/exec';
 import { stage } from '@support/stage';
 import { unit } from '@support/unit';
-import { addModule, docs, PLUGIN, stageSeed } from '../support/corpus';
+import { docs, MODULE, PLUGIN, SAMPLE, stageSeed } from '../support/corpus';
 
 let ws: string;
-const hook = (name: string, env: Record<string, string>): Promise<Run> => exec(join(ws, '.contexture/extensions/modules/docs', name), [], { cwd: ws, env });
-const context = (): Record<string, string> => ({ CTX_ROOT: ws, CTX_PACKAGE_ROOT: PLUGIN });
+const ctx = (args: readonly string[]): Promise<Run> => exec('./.contexture/ctx', args, { cwd: ws, env: { GIT_CEILING_DIRECTORIES: dirname(ws) } });
+const stored = (): string => readFileSync(join(ws, 'docs/workspace/conventions.md'), 'utf8');
 
 beforeAll(() => {
   ws = stage('posix', 'hooks');
-  addModule(ws);
-  mkdirSync(join(ws, 'docs/workspace'), { recursive: true });
 });
 
 describe('the docs module part hooks, in order on one workspace', { concurrent: false }, () => {
-  it('RS3a [plugins-r1, plugins-r2, modules-r13] install seeds the corpus conventions once', async () => {
-    const r = await hook('install', context());
+  it('RS3a [plugins-r1, plugins-r2, modules-r13] a package install runs no install part hook and writes no conventions doc', async () => {
+    const r = await ctx(['package', 'install', PLUGIN]);
     expect(r.code, r.stderr).toBe(0);
-    expect(r.stdout + r.stderr).toContain('seeded workspace conventions');
+    expect(existsSync(join(ws, '.contexture/extensions/modules/docs/uninstall'))).toBe(true);
+    expect(existsSync(join(ws, '.contexture/extensions/modules/docs/install'))).toBe(false);
+    expect(r.stdout + r.stderr).not.toContain('docs install');
+    expect((await docs(ws, ['query', 'workspace', 'conventions'])).code).toBe(1);
   });
 
-  it('RS3b [modules-r13] the seeded doc reads back through ctx docs query', async () => {
+  it('RS3b [modules-r13] a conventions doc the workspace writes reads back through ctx docs query', async () => {
+    const w = await docs(ws, ['write', 'workspace', 'conventions'], { input: readFileSync(join(SAMPLE, 'docs/workspace/conventions.md')) });
+    expect(w.code, w.stderr).toBe(0);
+    expect((await docs(ws, ['header', 'workspace', 'conventions', '--description=A locally kept description'])).code).toBe(0);
     const r = await docs(ws, ['query', 'workspace', 'conventions']);
     expect(r.code).toBe(0);
-    expect(r.stdout).toContain('Universal workspace conventions');
+    expect(r.stdout).toContain('A locally kept description');
   });
 
-  it('RS3c [plugins-r2, modules-r13] a second install leaves a present doc byte for byte', async () => {
-    expect((await docs(ws, ['header', 'workspace', 'conventions', '--description=A locally kept description'])).code).toBe(0);
-    const before = (await docs(ws, ['query', 'workspace', 'conventions'])).stdout;
-    const r = await hook('install', context());
-    expect(r.code).toBe(0);
-    expect(r.stdout + r.stderr).toContain('already present; left unchanged');
-    const after = (await docs(ws, ['query', 'workspace', 'conventions'])).stdout;
-    expect(after).toContain('A locally kept description');
-    expect(after).toBe(before);
+  it('RS3c [plugins-r2, modules-r13] a re-install leaves a present conventions doc byte for byte', async () => {
+    const before = stored();
+    const r = await ctx(['package', 'install', PLUGIN]);
+    expect(r.code, r.stderr).toBe(0);
+    expect(stored()).toBe(before);
   });
 
-  it('RS3d [plugins-r2, modules-r13] uninstall leaves the corpus readable', async () => {
-    const r = await hook('uninstall', context());
-    expect(r.code).toBe(0);
+  it('RS3d [plugins-r2, modules-r13] uninstall leaves the corpus whole', async () => {
+    const before = stored();
+    const r = await ctx(['package', 'uninstall', 'docs-discipline']);
+    expect(r.code, r.stderr).toBe(0);
     expect(r.stdout + r.stderr).toContain('the corpus data stays in the storage layer');
-    expect((await docs(ws, ['query', 'workspace', 'conventions'])).stdout).toContain('A locally kept description');
-  });
-
-  it('RS3e install refuses rc 2 without the package root context', async () => {
-    const r = await hook('install', { CTX_ROOT: ws });
-    expect(r.code).toBe(2);
-    expect(r.stdout + r.stderr).toContain('CTX_PACKAGE_ROOT is not set');
+    expect(existsSync(join(ws, '.contexture/extensions/modules/docs'))).toBe(false);
+    expect(stored()).toBe(before);
+    expect(before).toContain('A locally kept description');
   });
 
   it('RS3f uninstall refuses rc 2 without the workspace root context', async () => {
-    const r = await hook('uninstall', {});
+    const r = await exec(join(MODULE, 'uninstall'), [], { cwd: ws, env: {} });
     expect(r.code).toBe(2);
     expect(r.stdout + r.stderr).toContain('CTX_ROOT is not set');
   });

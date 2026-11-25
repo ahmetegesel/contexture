@@ -24,18 +24,25 @@ function lawSlugs(text: string): string[] {
 }
 
 describe.concurrent('the module law fragments', () => {
-  it('[modules-r12, plugins-r2] keeps the eight docs laws and the layout, boot, and close clauses in the docs module', () => {
+  it('[modules-r12, plugins-r2] keeps the eleven docs laws and the layout, boot, and close clauses in the docs module, the conventions read as the workspace\'s own rules when it keeps one, the new laws path free', () => {
     expect(existsSync(DOCS_LAWS)).toBe(true);
     const text = readFileSync(DOCS_LAWS, 'utf8');
-    expect(lawSlugs(text)).toEqual(['docs-first', 'docs-are-code', 'git-dependency', 'corpus-untracked', 'corpus-reconcile', 'gap', 'harness-free', 'docs-audience-separation']);
+    expect(lawSlugs(text)).toEqual(['docs-first', 'docs-are-code', 'git-dependency', 'corpus-untracked', 'corpus-reconcile', 'gap', 'harness-free', 'docs-audience-separation', 'greppable-evidence', 'fixed-pitfalls', 'section-refs']);
     expect(count(text, /^@append @/)).toBe(4);
     expect(text).toMatch(/^@append @layout$/m);
-    expect(text).toContain('ctx docs query workspace conventions');
+    expect(text).toContain("the workspace's own rules when it keeps one, read through ctx docs query workspace conventions");
     expect(text).not.toContain('extensions/modules/docs/README.md');
     expect(text).toMatch(/^@append @boot$/m);
     expect(text).toContain('ctx docs query --index');
     expect(text).toMatch(/^@append @close$/m);
     expect(text).toContain('ctx docs gate');
+    expect(text).toContain('a guide edit reconciles the corpus docs that claim it in the same change');
+    for (const slug of ['greppable-evidence', 'fixed-pitfalls', 'section-refs']) {
+      const law = text.split('\n').filter((l) => l.startsWith(`  ${slug}: `));
+      expect(law).toHaveLength(1);
+      expect(leaks(law[0]!), `${slug} names no record storage path`).toBe(false);
+      expect(law[0]).not.toMatch(/ - |—|–|\.contexture\/|docs\/workspace/);
+    }
   });
 
   it('[modules-r12] keeps the lane subagent clauses in the lane module', () => {

@@ -7,7 +7,7 @@ map: it is not linked from the workspace's boot, laws, or help.
 
 ## Layout
 
-The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the storage declaration; `install` and `uninstall` are the optional part hooks (install seeds the corpus conventions through `ctx docs write` once, and uninstall leaves the store data); `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; `hooks/` holds the two handler files the unit module's points run: `task-landing` nudges a task that starts, `load-end` nudges the unit's in-progress tasks; both call `ctx docs nudge` and carry no block mode; this README is off-path.
+The folder is the standard module folder (`docs/modules.md`): `module` carries the summary, the version, and the description block the compose reads; `laws` carries the docs laws, its layout clauses, its boot clause, and its close clause; `data` is the storage declaration; `uninstall` is the optional part hook (it leaves the store data), and the module ships no install hook, so an install writes no corpus doc; `scripts/` holds the verbs, their private engines, and the private grammar asset `doc.grammar`; `hooks/` holds the two handler files the unit module's points run: `task-landing` nudges a task that starts, `load-end` nudges the unit's in-progress tasks; both call `ctx docs nudge` and carry no block mode; this README is off-path.
 
 | verb | engine |
 |---|---|
@@ -23,8 +23,8 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 | `remove` | none: `store.delete` through `docs-io.sh` (`--dry-run` prints the stored doc whole and writes nothing) |
 | (every verb) | `scripts/docs-io.sh`, sourced: the one door to the corpus |
 
-- The `.awk` engines, `docs-io.sh`, `doc.grammar`, `install`, and `uninstall`
-  carry no `# summary:` line: discovery ignores them, they are private files,
+- The `.awk` engines, `docs-io.sh`, `doc.grammar`, and `uninstall` carry no
+  `# summary:` line: discovery ignores them, they are private files,
   and they never appear in help. `doc.grammar` is the corpus grammar asset the
   write verbs and the audit enforce; it rides inside the module and is never a
   shared drawer file.
@@ -249,9 +249,8 @@ The folder is the standard module folder (`docs/modules.md`): `module` carries t
 - The doc touch: a corpus doc rides a delta only at its logical address,
   `docs/<repo>/<slug>.md` at the start of a delta path (the workspace root's
   corpus under the files driver, the `ctx docs changes` lines under a store).
-  A path that merely ends in that shape (a package's conventions seed, a test
-  sample, a child repository's own guides under its `projects/<repo>/` or
-  `<repo>/` prefix) is code to the check, never a doc touch: it freshens no
+  A path that merely ends in that shape (a test sample, a child repository's
+  own guides under its `projects/<repo>/` or `<repo>/` prefix) is code to the check, never a doc touch: it freshens no
   claimant and triggers no blanket.
 - What a clean verdict cannot see: coverage is glob membership over the
   header sources, so a broad glob (`plugins/**`, `tests/**`) covers every path
@@ -291,12 +290,14 @@ glob universe alike.
 - The corpus grammar: `scripts/doc.grammar`, a private asset inside the module;
   the write verbs and the audit enforce it, and no agent-facing surface points
   at a shared template. The suite stages the module whole, carrying the asset.
-- The seed conventions: the plugin's `docs/workspace/conventions.md`, written
-  into the corpus by adoption through `ctx docs write workspace conventions`
-  (under the files driver the doc lands at that same path).
+- The docs discipline's own rules ride the module's `laws` (the output rules)
+  and the two rhythms (the authoring and drift procedures); the module seeds
+  no conventions doc, and a workspace that keeps rules of its own writes them
+  through `ctx docs new` and `ctx docs rule`.
 - The plugin's `tests/sample/` corpus is reference data only: five fictional
-  docs plus a demo backlog used by the nudge walk and the tests. It is never
-  copied into a workspace.
+  docs (a workspace conventions doc among them, which the rule cases read)
+  plus a demo backlog used by the nudge walk and the tests. It is never copied
+  into a workspace.
 
 ## Tests
 

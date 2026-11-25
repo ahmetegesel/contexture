@@ -16,7 +16,7 @@ const FTS5 = join(ROOT, 'plugins/storage-fts5/.contexture/extensions/storage/dri
 const SELECT = "select: match the request against each use when; a propose match is proposed and waits for the human's confirm, an auto match applies and says so; no match runs the design loop (@rhythms default); read a rhythm with ctx rhythm show <name>";
 
 describe.concurrent('the real catalog installs by catalog name through ctx package', () => {
-  it('[plugins-r1, plugins-r2, plugins-r6, modules-r13, modules-r10] docs-discipline lands its module, grammar, and rhythms under the extension root, seeds the corpus, and serves its store; starter-rhythms owns work.md', async () => {
+  it('[plugins-r1, plugins-r2, plugins-r6, modules-r13, modules-r10] docs-discipline lands its module, grammar, and rhythms under the extension root, writes no conventions doc, and serves its store; starter-rhythms owns work.md', async () => {
     const sb = sandbox();
     const docs = catalogCopy(sb, 'docs-discipline');
     expect((await install(sb, docs)).code).toBe(0);
@@ -27,11 +27,11 @@ describe.concurrent('the real catalog installs by catalog name through ctx packa
     expect(existsSync(extPath(sb, 'rhythms/docs-authoring.md'))).toBe(true);
     expect(existsSync(extPath(sb, 'rhythms/docs-drift.md'))).toBe(true);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(false);
-    expect(existsSync(join(sb, 'docs/workspace/conventions.md'))).toBe(true);
+    expect(existsSync(join(sb, 'docs/workspace/conventions.md'))).toBe(false);
     const sd = (await exec('./.contexture/storage/scripts/store-data', ['docs'], { cwd: sb })).stdout.split('\n');
     expect(sd.slice(0, 5)).toEqual(['docs', 'docs', '.md', '<repo>/<slug>', 'true']);
     expect(sd[5]).toBe(join(realpathSync(sb), '.contexture/extensions/modules/docs/data'));
-    expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).stdout).toContain('conventions: conventions');
+    expect((await ctx(sb, 'docs', 'query', 'workspace', 'conventions')).code).toBe(1);
     const starter = catalogCopy(sb, 'starter-rhythms');
     expect((await install(sb, starter)).code).toBe(0);
     expect(existsSync(extPath(sb, 'rhythms/work.md'))).toBe(true);

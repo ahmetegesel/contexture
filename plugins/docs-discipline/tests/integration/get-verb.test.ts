@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { exec } from '@support/exec';
 import { fresh } from '@support/snapshot';
 import { must, unit } from '@support/unit';
-import { docs, PLUGIN, SAMPLE, stageSeed } from '../support/corpus';
+import { docs, SAMPLE, stageSeed } from '../support/corpus';
 
 const ORDER_FLOW = readFileSync(join(SAMPLE, 'docs/demo-orders/order-flow.md'), 'utf8').split('\n');
 const OPERATIONAL = readFileSync(join(SAMPLE, 'docs/demo-orders/operational.md'), 'utf8').split('\n');
@@ -63,8 +63,8 @@ describe('ctx docs get', { concurrent: true }, () => {
   });
 
   it('[docs-module-r-98mvk] prints a conventions rule by rule/<category>/<rule-slug>, the @rule block whole', async () => {
-    const seeded = readFileSync(join(PLUGIN, 'docs/workspace/conventions.md'), 'utf8');
-    const slug = /^@rule (\S+)$/m.exec(seeded)?.[1];
+    const conventions = readFileSync(join(SAMPLE, 'docs/workspace/conventions.md'), 'utf8');
+    const slug = /^@rule (\S+)$/m.exec(conventions)?.[1];
     expect(slug).toBeTruthy();
     const r = await docs(fresh(staged), ['get', `workspace/conventions/rule/${slug}`]);
     expect([r.code, r.stderr]).toEqual([0, '']);

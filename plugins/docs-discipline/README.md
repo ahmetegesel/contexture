@@ -16,7 +16,7 @@ grep.
 The mechanism in one paragraph: every repository gets unit docs addressed
 `docs/<repo>/<slug>.md` written per the docs module's grammar (a private
 asset inside the module, enforced by the write verbs), and the workspace gets its own docs addressed
-`docs/workspace/<slug>.md` (the conventions and the map); the configured
+`docs/workspace/<slug>.md` (the map, and the workspace's own conventions when it keeps one); the configured
 storage driver holds them (the files driver as those very files, a store
 driver such as the storage-fts5 plugin's in its store) and every verb reaches
 them through it; the write verbs change a doc block by block; `ctx docs search` finds the entities a term names and `ctx docs get` prints one; `ctx docs query` serves the index, the projections, the lookups, and the
@@ -57,12 +57,11 @@ What lands where:
 
 | piece | what it is | lands as |
 |---|---|---|
-| `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the install and uninstall part hooks, the two handler files on the unit module's points, the eighteen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
-| `docs/workspace/conventions.md` | the ruleset: docs discipline, git, security, typography | seed (ctx docs write) |
+| `.contexture/extensions/modules/docs/` | the standard module folder: the manifest, the laws, the data declaration, the uninstall part hook, the two handler files on the unit module's points, the eighteen verbs and their private engines, and the corpus grammar as the private asset `scripts/doc.grammar` (eight kinds, the block shapes, the block scalar rules, and at its foot the machine-readable schema, section 6, the `#%` lines) | install (module part) |
 | `AGENTS.workspace.md` | retired: no root overlay fragment ships; the laws, layout, boot, and close live in the module's laws file | retired |
 | `.contexture/extensions/rhythms/docs-authoring.md`, `.contexture/extensions/rhythms/docs-drift.md` | the two procedure rhythms | install (rhythms part) |
 | `docs/work.md` | the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at EXECUTE and REVIEW | reference (copy it into the workspace's own `.contexture/rhythms/` to own it; the starter-rhythms plugin owns the installed generic `work`) |
-| `tests/sample/` | the fictional two-repo demo corpus plus a demo backlog | reference (never copied) |
+| `tests/sample/` | the fictional two-repo demo corpus (a workspace conventions doc among it) plus a demo backlog | reference (never copied) |
 | `tests/` | the plugin's vitest project `docs-discipline`: the engines and helpers alone (`unit/`), the census, the grammar agreement, the flag collision check, the glob rule's one home, and the package shape (`static/`), the verbs end to end on posix (`integration/`), the read refusal on a driver without a store (`fault/`), and the store mode on fts5 (`store/`) | reference (never copied) |
 | `tests/write/` | the edit engine's seeds, payloads, and goldens: every write verb's result byte for byte | reference (never copied) |
 | `tests/census.awk`, `tests/census-allow.txt` | the single-door census of the module and its classified allow-list | reference (never copied) |
@@ -146,8 +145,8 @@ Render the findings to the human and ask for the go. Cover:
 
 - the topology and the docs mapping this implies;
 - the copy list (the module, its grammar riding inside it), the merge list (the
-  gitignore lines), and the seed list (the
-  conventions plus the first unit docs);
+  gitignore lines), and the seed list (the first unit docs, plus a conventions
+  doc when the workspace keeps rules of its own);
 - who owns the close gate: the gate runs when a unit closes, manually or via
   the adopter's own trigger;
 - whether the work rhythm should become the standing default (an
@@ -169,9 +168,9 @@ into an existing file; `seed` means it is starting content to adapt; and
    The installer overlays `.contexture/extensions/modules/docs` (the grammar
    rides inside the module as `scripts/doc.grammar`) and the two procedure
    rhythms under `.contexture/extensions/rhythms/`; it records every installed
-   path and runs the module's install hook, which seeds the workspace
-   conventions through `ctx docs write` once and never overwrites a present
-   doc. The docs-shaped work rhythm stays reference material at `docs/work.md`.
+   path and writes no corpus doc: the docs discipline's own rules ride the
+   module's laws (the output rules) and the two rhythms (the authoring and
+   drift procedures). The docs-shaped work rhythm stays reference material at `docs/work.md`.
    The verbs run through the workspace's `ctx` (the base runtime ships at `.contexture/ctx`).
    The module resolves the workspace root from the engine's `CTX_ROOT`
    (override with `DOCS_WORKSPACE_ROOT`), so an adopted copy always reads the
@@ -216,13 +215,14 @@ into an existing file; `seed` means it is starting content to adapt; and
    ```
 
 4. Seed the corpus through the write verbs, which check each doc against the
-   grammar and audit it before the configured driver stores it: the
-   conventions first (`ctx docs write workspace conventions <
-   .contexture/plugins/docs-discipline/docs/workspace/conventions.md`), then a workspace map for the tree
-   (`ctx docs write` for a whole draft, or `ctx docs new` and the block verbs,
-   per the module's grammar), then one unit doc per repository, then the
-   operational doc for the repository whose setup targets the nudge should
-   force. Under the files driver each write lands as `docs/<repo>/<slug>.md`.
+   grammar and audit it before the configured driver stores it: a workspace
+   map for the tree (`ctx docs write` for a whole draft, or `ctx docs new` and
+   the block verbs, per the module's grammar), then one unit doc per
+   repository, then the operational doc for the repository whose setup
+   targets the nudge should force. A workspace that keeps rules of its own
+   (commit style, secrets, typography) writes them as a conventions doc
+   through `ctx docs new` and `ctx docs rule`; the docs discipline's own rules
+   need no doc, since the composed docs laws and the rhythms carry them. Under the files driver each write lands as `docs/<repo>/<slug>.md`.
 
 5. Keep `tests/sample/` and this README as references: the sample is
    fictional and never part of the adopted corpus; `tests/` holds the
@@ -486,8 +486,8 @@ it walk below runs every one of these.
   and the extensionless scripts whose first line is a shebang; deleting a
   unit doc does not red the check. A doc rides only at its logical address,
   `docs/<repo>/<slug>.md` at the start of a delta path, so a code path that
-  merely ends in that shape (a package seed, a test sample, a child
-  repository's own guides under its prefix) freshens nothing. The gate stays
+  merely ends in that shape (a test sample, a child repository's own guides
+  under its prefix) freshens nothing. The gate stays
   scoped to the change delta, never the corpus's truth.
 - Coverage is glob membership, not ownership: a path is covered when any
   header source glob matches it, so a broad glob (`plugins/**`, `tests/**`)
@@ -612,8 +612,7 @@ naming, and the test convention are in `docs/plugins.md`; the module shape is
 Every command below runs from the plugin root, in the repository that ships
 this plugin beside `base/`, and was run as written; the outputs are verbatim
 from that run (long ones abbreviated with `...` where the full output repeats
-the shown shape; `<scratch>` in an output line stands for the absolute path of
-the scratch workspace; a nonzero exit shows as `(exit N)`). The staging builds
+the shown shape; a nonzero exit shows as `(exit N)`). The staging builds
 a scratch workspace from the shipped copies: the base runtime, the storage
 core, its unit module (the record and storage driver the verbs reach the
 corpus through), and this plugin's module (its grammar rides inside); it commits the corpus in a repository of its own,
@@ -625,12 +624,11 @@ part runs on the files driver, the second on the fts5 store.
 ```sh
 scratch="../../.contexture/tmp/docs-walk"
 rm -rf "$scratch"
-mkdir -p "$scratch/.contexture/modules" "$scratch/.contexture/extensions/modules" "$scratch/docs/workspace"
+mkdir -p "$scratch/.contexture/modules" "$scratch/.contexture/extensions/modules" "$scratch/docs"
 cp ../../base/.contexture/ctx "$scratch/.contexture/ctx"
 cp -R ../../base/.contexture/storage "$scratch/.contexture/"
 cp -R ../../base/.contexture/modules/unit "$scratch/.contexture/modules/"
 cp -R .contexture/extensions/modules/docs "$scratch/.contexture/extensions/modules/"
-cp -R docs/workspace/. "$scratch/docs/workspace/"
 cp -R tests/sample/docs/. "$scratch/docs/"
 cp tests/sample/backlog.md "$scratch/backlog.md"
 cd "$scratch"
@@ -711,7 +709,7 @@ The owner lookup, a rule view, and the pitfall view:
 ```text
 OWNER: order-flow (capability) [demo-orders]
 SUMMARY: Cart validation, pricing, and order persistence for the demo storefront
-DOC: <scratch>/docs/demo-orders/order-flow.md
+DOC: docs/demo-orders/order-flow.md
 ```
 
 ```sh
@@ -892,7 +890,7 @@ rm docs/demo-orders/broken.md
 ```
 
 ```text
-<scratch>/docs/demo-orders/broken.md:1: error: missing required 'description:' field in @doc
+docs/demo-orders/broken.md:1: error: missing required 'description:' field in @doc
 docs-audit: FAILED with 1 error(s)
 (exit 1)
 ```
@@ -1088,7 +1086,7 @@ printf 'M\tprojects/demo-orders/src/order/validate.ts\n' | ./.contexture/ctx doc
 ```text
 docs-check: FAILED: 1 file(s) are stale (changed without a doc update).
 --- TOUCHED DOCUMENTATION ---
-AFFECTED: order-flow [demo-orders] -> <scratch>/docs/demo-orders/order-flow.md
+AFFECTED: order-flow [demo-orders] -> docs/demo-orders/order-flow.md
   files: src/order/validate.ts
 ...
 STALE DOC: demo-orders/order-flow (code modified without doc update)
@@ -1103,7 +1101,7 @@ STALE DOC: demo-orders/order-flow (code modified without doc update)
 
 ```text
 --- TOUCHED DOCUMENTATION ---
-AFFECTED: order-flow [demo-orders] -> <scratch>/docs/demo-orders/order-flow.md
+AFFECTED: order-flow [demo-orders] -> docs/demo-orders/order-flow.md
   files: src/order/validate.ts
 ...
 FRESH: demo-orders > order-flow (doc updated in change delta)
@@ -1138,10 +1136,10 @@ docs-check: CLEAN: all touched code files are covered and fresh.
 | `.contexture/extensions/modules/docs/README.md` | authored fresh: the off-path module map (layout, workspace root, tests) |
 | `.contexture/extensions/modules/docs/scripts/doc.grammar` | corrected from the source grammar: the operational sub-shapes use the corpus's `- step:` form, the architecture detail fields use scalar blocks, the keywords optionality is stated, and the section separators are plain ASCII; the contract and responsibilities shapes show their id lines, and the machine-readable schema (section 6, the `#%` lines) restates every shape for the write verbs; it is private to the module, never a shared template |
 | `docs/work.md` | authored as the docs-shaped work rhythm: the canonical 10 steps with the docs discipline at EXECUTE and REVIEW; reference material, copied into the workspace's own `.contexture/rhythms/` to own it |
-| `.contexture/extensions/rhythms/docs-authoring.md` | authored from the source authoring procedure; the steps name outcomes, the method detail lives in the grammar's comments |
-| `.contexture/extensions/rhythms/docs-drift.md` | authored from the source drift procedure; the method lives in `@rule docs/drift` |
-| `docs/workspace/conventions.md` | neutralized from the source ruleset: the docs, git, security, and typography rules kept; the authoring and drift procedure rules added; the sources header narrowed to `[AGENTS.workspace.md]` and evidence fields pointed at the module |
+| `.contexture/extensions/rhythms/docs-authoring.md` | authored from the source authoring procedure; the steps name outcomes (the map-first units, the draft through the write verbs, the audit, check, and query before a draft counts as landed), the method detail lives in the grammar's comments |
+| `.contexture/extensions/rhythms/docs-drift.md` | authored from the source drift procedure; the procedure and its two failure modes live in its steps |
 | `tests/sample/docs/...` | authored fresh: a fictional two-repo demo (a map, two unit docs, one operational doc) |
+| `tests/sample/docs/workspace/conventions.md` | the former install seed, moved verbatim: neutralized from the source ruleset (the docs, git, security, and typography rules, the authoring and drift procedure rules), now sample data the query, store, and rule cases read; the docs rules it holds ride the module's laws and rhythms |
 | `tests/sample/backlog.md` | authored fresh: a demo backlog used by the nudge walk |
 | `tests/` (the vitest project) | authored fresh: the engines alone over the sample, the write goldens, and committed expected output; the verbs end to end on posix; the read refusal on a planted driver; the store mode on fts5 |
 | `tests/write/` | authored fresh: the write verbs' seeds, payloads, and expected docs |

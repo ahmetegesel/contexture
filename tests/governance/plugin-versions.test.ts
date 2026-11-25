@@ -124,7 +124,7 @@ describe.skipIf(real.need !== undefined && !PRERELEASE)(`the plugin versions on 
     const mentions = readers(ROOT).flatMap((f) => census(run(ROOT, 'show', `:${f}`)));
     expect(mentions.length).toBeGreaterThan(0);
     expect(mentions.filter((m) => m.kind === 'unread').map((m) => m.line)).toEqual([]);
-    expect(extras(ROOT, 'docs-discipline')).toEqual(['plugins/docs-discipline/docs/workspace/conventions.md']);
+    expect(extras(ROOT, 'docs-discipline')).toEqual([]);
   });
 });
 

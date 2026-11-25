@@ -23,7 +23,6 @@ export function addModule(sb: string): void {
 
 function addDocs(sb: string): void {
   addModule(sb);
-  cpSync(join(PLUGIN, 'docs'), join(sb, 'docs'), { recursive: true });
   cpSync(join(SAMPLE, 'docs'), join(sb, 'docs'), { recursive: true });
   copyFileSync(join(SAMPLE, 'backlog.md'), join(sb, 'backlog.md'));
 }
@@ -58,7 +57,7 @@ export const OWNER_FIXTURES = join(TESTS, 'fixtures/owner');
 
 export function corpusDir(label: string, ...roots: string[]): string {
   const dir = sandbox(label);
-  for (const root of roots.length ? roots : [PLUGIN, SAMPLE]) cpSync(join(root, 'docs'), join(dir, 'docs'), { recursive: true });
+  for (const root of roots.length ? roots : [SAMPLE]) cpSync(join(root, 'docs'), join(dir, 'docs'), { recursive: true });
   return dir;
 }
 
@@ -85,11 +84,9 @@ export async function gwWorkspace(driver: Driver, label: string, { ignoreCorpus 
 }
 
 export function stagedDocs(): [string, string][] {
-  return [PLUGIN, SAMPLE].flatMap((root) =>
-    readdirSync(join(root, 'docs'), { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .flatMap((d) => readdirSync(join(root, 'docs', d.name)).filter((f) => f.endsWith('.md')).map((f): [string, string] => [`${d.name}/${f.slice(0, -3)}`, join(root, 'docs', d.name, f)])),
-  );
+  return readdirSync(join(SAMPLE, 'docs'), { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .flatMap((d) => readdirSync(join(SAMPLE, 'docs', d.name)).filter((f) => f.endsWith('.md')).map((f): [string, string] => [`${d.name}/${f.slice(0, -3)}`, join(SAMPLE, 'docs', d.name, f)]));
 }
 
 async function writeCorpus(sb: string): Promise<void> {

@@ -144,7 +144,7 @@ describe('the check engine: a doc touch only at the corpus logical address docs/
     expect(r.code, r.stdout + r.stderr).toBe(0);
     expect(r.stdout).toContain('FRESH: workspace > eng (doc updated in change delta)');
   });
-  it('[docs-module-r12] git mode: a package seed of a workspace doc triggers no blanket', async () => {
+  it('[docs-module-r12] git mode: a package path ending in the shape of a workspace doc triggers no blanket', async () => {
     const r = await check(matrix, `M\t${WIDGET}\nM\tplugins/p/docs/workspace/conventions.md\n`);
     expect(r.code, r.stdout + r.stderr).toBe(1);
     expect(r.stdout).toContain('STALE DOC: demo/platform');
