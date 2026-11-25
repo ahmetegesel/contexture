@@ -10,7 +10,7 @@ import { fresh, seed } from '../support/snapshot';
 import { must, run, unit, waitFor } from '../support/unit';
 
 const LIVE = join(ROOT, '.contexture/modules/ideas');
-const VERBS = ['add', 'drop', 'get', 'list', 'pick', 'search'];
+const VERBS = ['add', 'drop', 'get', 'list', 'pick', 'search', 'set'];
 const FIELD_LINES = [
   'field: what: required block',
   'field: why: optional block',
@@ -25,6 +25,10 @@ const SV = 'ERR_SCHEMA_VIOLATION';
 const EXISTS = 'ERR_ENTITY_EXISTS';
 const MISSING = 'ERR_ENTITY_NOT_FOUND';
 const MOVE = 'ERR_INVALID_TRANSITION';
+const FIELDS = ['what', 'why', 'status', 'dumped', 'picked_by', 'reason', 'note'];
+const SET_USAGE = 'set <id> [--<field>=<line>]... [--stdin=<field>] [--unset=<field>]... [--add-ref=<full address>]... [--remove-ref=<address>]...';
+const SET_UNKNOWN = (a: string): string =>
+  `unknown flag '${a}' (set takes --<field>=<line>, --stdin=<field>, and --unset=<field> for the fields what, why, status, dumped, picked_by, reason, and note, then --unset=ref, --add-ref=<full address>, and --remove-ref=<address>)`;
 
 const today = (): string => spawnSync('date', ['+%Y-%m-%d'], { encoding: 'utf8' }).stdout.trim();
 const ideas = (sb: string, args: readonly string[], input: string | Buffer = '', env?: Record<string, string>): Promise<Run> => run(sb, ['ideas', ...args], { input, env });
@@ -75,7 +79,7 @@ describe.skipIf(!existsSync(LIVE))('the ideas workspace module (needs its tracke
     sandbox = () => fresh(snap);
   });
 
-  it('[modules-r3] the verb table is add, drop, get, list, pick, and search, no verb deletes, and the worker stays private', async () => {
+  it('[modules-r3] the verb table is add, drop, get, list, pick, search, and set, no verb deletes, and the worker stays private', async () => {
     const sb = sandbox();
     expect((await run(sb, ['help'])).stdout).toMatch(/^ {2}ideas {2,}the idea dump/m);
     const verbs = await tableVerbs(sb);
@@ -87,6 +91,7 @@ describe.skipIf(!existsSync(LIVE))('the ideas workspace module (needs its tracke
     const unknown = await ideas(sb, ['delete', 'x']);
     expect(unknown.code).toBe(1);
     expect((await ideas(sb, ['add', '--help'])).stdout).toContain('ctx ideas add <id> --what=<line>|--stdin=what');
+    expect((await ideas(sb, ['set', '--help'])).stdout).toContain(`ctx ideas ${SET_USAGE}`);
     writeFileSync(join(sb, '.contexture/modules/ideas/scripts/delete'), '#!/bin/sh\n# summary: a planted delete verb\nexit 0\n', { mode: 0o755 });
     const planted = await tableVerbs(sb);
     expect(planted.filter((v) => DELETING.test(v))).toEqual(['delete']);
@@ -309,6 +314,189 @@ describe.skipIf(!existsSync(LIVE))('the ideas workspace module (needs its tracke
     await must(ideas(sb, ['drop', 'stray-reason', '--reason=fresh reason']));
     expect((await ideas(sb, ['get', 'stray-reason'])).stdout).toBe('what ::\n  w\nstatus: "DROPPED"\nreason: "fresh reason"\n');
   });
+
+  it('[the-engine-r-mrwga] set changes what on an OPEN, a PICKED, and a DROPPED idea alike, prints the id, and get prints the new value', async () => {
+    const sb = sandbox();
+    await must(ideas(sb, ['add', 'open-one', '--what=o', '--dumped=2026-02-03']));
+    await must(ideas(sb, ['add', 'picked-one', '--what=p', '--dumped=2026-02-03']));
+    await must(ideas(sb, ['pick', 'picked-one', '--by=demo']));
+    await must(ideas(sb, ['add', 'dropped-one', '--what=d', '--dumped=2026-02-03']));
+    await must(ideas(sb, ['drop', 'dropped-one', '--reason=gone']));
+    const tails: [id: string, tail: string[]][] = [
+      ['open-one', ['status: "OPEN"', 'dumped: "2026-02-03"']],
+      ['picked-one', ['status: "PICKED"', 'dumped: "2026-02-03"', 'picked_by: "demo"']],
+      ['dropped-one', ['status: "DROPPED"', 'dumped: "2026-02-03"', 'reason: "gone"']],
+    ];
+    for (const [id, tail] of tails) {
+      const r = await ideas(sb, ['set', id, '--what=the new what']);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, `${id}\n`, '']);
+      expect((await ideas(sb, ['get', id])).stdout).toBe(['what ::', '  the new what', ...tail, ''].join('\n'));
+    }
+    expect(state(sb).match(/^[a-z-]+(?==)/gm)).toEqual(['dropped-one', 'open-one', 'picked-one']);
+  });
+
+  it('set sets each declared field by its flag or by one stdin block, and unsets each optional field', async () => {
+    const sb = sandbox();
+    await must(ideas(sb, ['add', 'full', '--what=w', '--dumped=2026-02-03']));
+    const all = await ideas(sb, ['set', 'full', '--what=new what', '--why=a why', '--status=PICKED', '--dumped=2024-02-29', '--picked_by=demo', '--reason=a reason', '--note=a note']);
+    expect([all.code, all.stdout, all.stderr]).toEqual([0, 'full\n', '']);
+    expect(state(sb)).toBe(`full=${['what ::', '  new what', 'why ::', '  a why', 'status: "PICKED"', 'dumped: "2024-02-29"', 'picked_by: "demo"', 'reason: "a reason"', 'note ::', '  a note', ''].join('\n')}`);
+    for (const f of ['what', 'why', 'note']) {
+      const r = await ideas(sb, ['set', 'full', `--stdin=${f}`], `a ${f} block\n\nits second line\n`);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, 'full\n', '']);
+      expect((await ideas(sb, ['get', 'full'])).stdout).toContain(`${f} ::\n  a ${f} block\n  \n  its second line\n`);
+    }
+    await must(ideas(sb, ['set', 'full', '--unset=why', '--unset=status', '--unset=dumped', '--unset=picked_by', '--unset=reason', '--unset=note']));
+    expect(state(sb)).toBe('full=what ::\n  a what block\n  \n  its second line\n');
+    await must(ideas(sb, ['set', 'full', '--status=DROPPED']));
+    expect((await ideas(sb, ['get', 'full'])).stdout).toBe('what ::\n  a what block\n  \n  its second line\nstatus: "DROPPED"\n');
+  });
+
+  it('set refuses an empty or blank value of every field exactly as add and drop refuse the empty value, and the write path keeps what required, status one of its set, and dumped a date', async () => {
+    const sb = sandbox();
+    await must(ideas(sb, ['add', 'open-one', '--what=o']));
+    const before = state(sb);
+    for (const f of FIELDS) {
+      for (const v of ['', ' ', '\t \t']) refused(await ideas(sb, ['set', 'open-one', `--${f}=${v}`]), 'set', INV, `field '${f}': an empty value`);
+    }
+    for (const f of ['what', 'why', 'note']) {
+      for (const input of ['', '\n', '  \n\t\n\n']) refused(await ideas(sb, ['set', 'open-one', `--stdin=${f}`], input), 'set', INV, `field '${f}': an empty value (unset removes a field)`);
+    }
+    const pairs: [set: string[], other: string, otherArgs: string[]][] = [
+      [['open-one', '--what= '], 'add', ['fresh', '--what=']],
+      [['open-one', '--why=  '], 'add', ['fresh', '--what=x', '--why=']],
+      [['open-one', '--reason=\t'], 'drop', ['open-one', '--reason=']],
+    ];
+    for (const [setArgs, verb, otherArgs] of pairs) {
+      const s = await ideas(sb, ['set', ...setArgs]);
+      const o = await ideas(sb, [verb, ...otherArgs]);
+      expect([s.code, s.stdout, s.stderr.replace('ideas set:', '')]).toEqual([o.code, o.stdout, o.stderr.replace(`ideas ${verb}:`, '')]);
+    }
+    refused(await ideas(sb, ['set', 'open-one', '--unset=what']), 'set', SV, "field 'what' is required: unset would leave it absent");
+    for (const v of ['BOGUS', 'open', 'OPEN|PICKED']) refused(await ideas(sb, ['set', 'open-one', `--status=${v}`]), 'set', SV, `field 'status': '${v}' is not one of OPEN|PICKED|DROPPED`);
+    for (const d of ['2025-02-29', '2026-13-01', 'yesterday']) refused(await ideas(sb, ['set', 'open-one', `--dumped=${d}`]), 'set', INV, `field 'dumped': '${d}' is no calendar date YYYY-MM-DD (the month 01 to 12, the day within its month)`);
+    expect(state(sb)).toBe(before);
+  });
+
+  it('set refuses no flag, an unknown id, an unknown flag, a field given twice, two stdin flags, a newline, and invalid UTF-8, writing nothing; the id never changes and no rename flag exists', async () => {
+    const sb = sandbox();
+    await must(ideas(sb, ['add', 'open-one', '--what=o']));
+    const before = state(sb);
+    const cases: [args: string[], input: string | Buffer, code: string, message: string][] = [
+      [[], '', INV, `usage: ctx ideas ${SET_USAGE}`],
+      [['open-one'], '', INV, 'set takes at least one field flag'],
+      [['-x'], '', INV, 'set takes the id first (usage: ctx ideas set <id> [flags])'],
+      [['open-one', 'extra', '--what=x'], '', INV, 'set takes one id (usage: ctx ideas set <id> [flags])'],
+      [['bad id', '--what=x'], '', INV, "malformed id 'bad id' (letters, digits, underscore, and dash, starting with a letter or digit)"],
+      [['nope', '--what=x'], '', MISSING, "idea 'nope' not found"],
+      [['nope', '--add-ref=ideas#open-one'], '', MISSING, "idea 'nope' not found"],
+      [['open-one', '--id=renamed'], '', INV, SET_UNKNOWN('--id=renamed')],
+      [['open-one', '--bogus=x'], '', INV, SET_UNKNOWN('--bogus=x')],
+      [['open-one', '--ref=ideas#open-one'], '', INV, SET_UNKNOWN('--ref=ideas#open-one')],
+      [['open-one', '--what'], '', INV, SET_UNKNOWN('--what')],
+      [['open-one', '--unset=bogus'], '', INV, SET_UNKNOWN('--unset=bogus')],
+      [['open-one', '--unset=id'], '', INV, SET_UNKNOWN('--unset=id')],
+      [['open-one', '--add-what=x'], '', INV, SET_UNKNOWN('--add-what=x')],
+      [['open-one', '--what=x', '--what=y'], '', INV, "field 'what' is given twice"],
+      [['open-one', '--what=x', '--stdin=what'], 'y\n', INV, "field 'what' is given twice"],
+      [['open-one', '--why=x', '--unset=why'], '', INV, "field 'why' is given twice"],
+      [['open-one', '--unset=note', '--unset=note'], '', INV, "field 'note' is given twice"],
+      [['open-one', '--stdin=what', '--stdin=why'], 'x\n', INV, "one block per call: --stdin names 'what' already"],
+      [['open-one', '--stdin=status'], 'x\n', INV, "set reads one block of what, why, or note on stdin, not 'status'"],
+      [['open-one', '--stdin=ref'], 'x\n', INV, "set reads one block of what, why, or note on stdin, not 'ref'"],
+      [['open-one', '--what=two\nlines'], '', INV, '--what takes one line (a block comes on stdin: --stdin=what)'],
+      [['open-one', '--note=a\rb'], '', INV, '--note takes one line (a block comes on stdin: --stdin=note)'],
+      [['open-one', '--reason=two\nlines'], '', INV, '--reason takes one line'],
+      [['open-one', '--picked_by=a\rb'], '', INV, '--picked_by takes one line'],
+      [['open-one', '--remove-ref=a\nb'], '', INV, '--remove-ref takes one line'],
+      [['open-one', '--stdin=why'], Buffer.from([0x62, 0x61, 0x64, 0xff, 0x0a]), INV, "field 'why': the value is not valid UTF-8"],
+      [['open-one', '--stdin=note'], Buffer.from([0xc3, 0x28, 0x0a]), INV, "field 'note': the value is not valid UTF-8"],
+    ];
+    for (const [args, input, code, message] of cases) refused(await ideas(sb, ['set', ...args], input), 'set', code, message);
+    expect(state(sb)).toBe(before);
+  });
+
+  it('set gates nothing: a status with no pair, a pair beside the wrong status, and any one line picked_by each land', async () => {
+    const sb = sandbox();
+    for (const id of ['o1', 'o2', 'd1', 'p1']) await must(ideas(sb, ['add', id, `--what=${id}`, '--dumped=2026-02-03']));
+    await must(ideas(sb, ['drop', 'd1', '--reason=gone']));
+    const runs: [args: string[], record: string][] = [
+      [['o1', '--status=PICKED'], 'what ::\n  o1\nstatus: "PICKED"\ndumped: "2026-02-03"\n'],
+      [['o2', '--reason=a reason on an OPEN idea'], 'what ::\n  o2\nstatus: "OPEN"\ndumped: "2026-02-03"\nreason: "a reason on an OPEN idea"\n'],
+      [['d1', '--picked_by=demo'], 'what ::\n  d1\nstatus: "DROPPED"\ndumped: "2026-02-03"\npicked_by: "demo"\nreason: "gone"\n'],
+      [['p1', '--status=PICKED', '--picked_by=not a unit, (any line)'], 'what ::\n  p1\nstatus: "PICKED"\ndumped: "2026-02-03"\npicked_by: "not a unit, (any line)"\n'],
+    ];
+    for (const [args, record] of runs) {
+      const r = await ideas(sb, ['set', ...args]);
+      expect([r.code, r.stdout, r.stderr]).toEqual([0, `${args[0]}\n`, '']);
+      expect(readFileSync(join(dataRoot(sb), args[0]), 'utf8')).toBe(record);
+    }
+  });
+
+  it('[the-engine-r-sx11j] set checks an added ref before the lock as add does, removes a held ref with no target check, and applies the ref actions in flag order', async () => {
+    const sb = sandbox();
+    await must(ideas(sb, ['add', 'target', '--what=the idea pointed at']));
+    plant(sb, 'refs', 'what ::\n  r\nstatus: "OPEN"\nref: "ideas#target"\nref: "unit#demo/task/gone"\nref: "file#AGENTS.md"\n');
+    const refsOf = async (): Promise<string[]> => JSON.parse((await ideas(sb, ['get', 'refs', '--json'])).stdout).record.ref ?? [];
+    const before = state(sb);
+    const cases: [args: string[], code: string, message: string][] = [
+      [['--add-ref=bad ref'], INV, "malformed ref 'bad ref': a reference is <owner>#<path>, one token without blanks, control characters, or double quotes"],
+      [['--add-ref='], INV, "malformed ref '': a reference is <owner>#<path>, one token without blanks, control characters, or double quotes"],
+      [['--add-ref=unit#demo/task/none'], MISSING, "ref 'unit#demo/task/none': target not found"],
+      [['--add-ref=file#no/such/file.md'], MISSING, "ref 'file#no/such/file.md': target not found"],
+      [['--add-ref=nomodule#x'], MISSING, "ref 'nomodule#x': owner 'nomodule' is not installed"],
+      [['--add-ref=run#x'], MISSING, "ref 'run#x': owner 'run' has no get verb"],
+      [['--add-ref=ideas#missing'], MISSING, "ref 'ideas#missing': target not found"],
+      [['--add-ref=ideas#target'], INV, "field 'ref' already holds 'ideas#target'"],
+      [['--add-ref=unit#demo/task/t1', '--add-ref=unit#demo/task/t1'], INV, "field 'ref' already holds 'unit#demo/task/t1'"],
+      [['--remove-ref=ideas#absent'], INV, "field 'ref' holds no item 'ideas#absent'"],
+      [['--unset=ref', '--remove-ref=ideas#target'], INV, "field 'ref' holds no item 'ideas#target'"],
+      [['--remove-ref=ideas#target', '--remove-ref=ideas#target'], INV, "field 'ref' holds no item 'ideas#target'"],
+      [['--remove-ref='], INV, "field 'ref': an empty value (unset removes a field)"],
+      [['--why=w', '--add-ref=ideas#target'], INV, "field 'ref' already holds 'ideas#target'"],
+    ];
+    for (const [args, code, message] of cases) refused(await ideas(sb, ['set', 'refs', ...args]), 'set', code, message);
+    expect(state(sb)).toBe(before);
+    const removed = await ideas(sb, ['set', 'refs', '--remove-ref=unit#demo/task/gone', '--add-ref=unit#demo/task/t1']);
+    expect([removed.code, removed.stdout, removed.stderr]).toEqual([0, 'refs\n', '']);
+    expect(await refsOf()).toEqual(['ideas#target', 'file#AGENTS.md', 'unit#demo/task/t1']);
+    await must(ideas(sb, ['set', 'refs', '--remove-ref=ideas#target', '--add-ref=ideas#target']));
+    expect(await refsOf()).toEqual(['file#AGENTS.md', 'unit#demo/task/t1', 'ideas#target']);
+    await must(ideas(sb, ['set', 'refs', '--add-ref=file#/nowhere/outside/the/workspace', '--remove-ref=file#/nowhere/outside/the/workspace']));
+    expect(await refsOf()).toEqual(['file#AGENTS.md', 'unit#demo/task/t1', 'ideas#target']);
+    await must(ideas(sb, ['set', 'refs', '--reason=kept refs', '--why=a why']));
+    expect((await ideas(sb, ['get', 'refs'])).stdout).toBe(['what ::', '  r', 'why ::', '  a why', 'status: "OPEN"', 'reason: "kept refs"', 'ref: "file#AGENTS.md"', 'ref: "unit#demo/task/t1"', 'ref: "ideas#target"', ''].join('\n'));
+    await must(ideas(sb, ['set', 'refs', '--unset=reason', '--unset=ref', '--add-ref=ideas#target', '--add-ref=file#AGENTS.md']));
+    expect(state(sb)).toContain('refs=what ::\n  r\nwhy ::\n  a why\nstatus: "OPEN"\nref: "ideas#target"\nref: "file#AGENTS.md"\n');
+    await must(ideas(sb, ['set', 'refs', '--unset=ref']));
+    expect(readFileSync(join(dataRoot(sb), 'refs'), 'utf8')).toBe('what ::\n  r\nwhy ::\n  a why\nstatus: "OPEN"\n');
+    await must(ideas(sb, ['set', 'refs', '--unset=ref']));
+    expect(readFileSync(join(dataRoot(sb), 'refs'), 'utf8')).toBe('what ::\n  r\nwhy ::\n  a why\nstatus: "OPEN"\n');
+  });
+
+  it('[modules-r10] set writes the raw record: an idea stored with no status keeps no status line through a field change and through a ref change', async () => {
+    const sb = sandbox();
+    plant(sb, 'bare', 'what ::\n  stored with no status\n');
+    await must(ideas(sb, ['set', 'bare', '--why=a why']));
+    expect(readFileSync(join(dataRoot(sb), 'bare'), 'utf8')).toBe('what ::\n  stored with no status\nwhy ::\n  a why\n');
+    await must(ideas(sb, ['set', 'bare', '--add-ref=ideas#bare']));
+    expect(readFileSync(join(dataRoot(sb), 'bare'), 'utf8')).toBe('what ::\n  stored with no status\nwhy ::\n  a why\nref: "ideas#bare"\n');
+    expect((await ideas(sb, ['get', 'bare'])).stdout).toBe('what ::\n  stored with no status\nwhy ::\n  a why\nstatus: "OPEN"\nref: "ideas#bare"\n');
+  });
+
+  it('[the-engine-r-uv5a3] set waits on a held ideas library lock and lands once it is released', async () => {
+    const sb = sandbox();
+    await must(ideas(sb, ['add', 'locked', '--what=w']));
+    const release = holdLock(sb, libraryLock('ideas'), 'live');
+    const pending = ideas(sb, ['set', 'locked', '--why=written after the release', '--add-ref=ideas#locked']);
+    expect(await waitFor(() => false, 1500)).toBe(false);
+    expect(readFileSync(join(dataRoot(sb), 'locked'), 'utf8')).not.toContain('why ::');
+    release();
+    const r = await pending;
+    expect([r.code, r.stdout, r.stderr]).toEqual([0, 'locked\n', '']);
+    expect(readFileSync(join(dataRoot(sb), 'locked'), 'utf8')).toContain('why ::\n  written after the release\n');
+    expect(existsSync(lockPath(sb, libraryLock('ideas')))).toBe(false);
+  }, 30_000);
 
   it('list is complete and uncapped in id order, --json answers every record whole, and a bad filter refuses naming it', async () => {
     const sb = sandbox();

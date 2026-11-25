@@ -1,0 +1,10 @@
+#!/bin/sh
+# summary: change any field of one idea, whatever its status, in one checked write
+# usage: ctx ideas set <id> [--<field>=<line>]... [--stdin=<field>] [--unset=<field>]... [--add-ref=<full address>]... [--remove-ref=<address>]...
+# help: any idea, any field, any time: the fields are what, why, status, dumped, picked_by, reason, and note, and set holds no status gate and no pairing check, so it may leave PICKED with no picked_by or a reason beside OPEN; the moves with their pairings stay pick and drop; the id never changes
+# help: --<field>=<line> sets one line (the block fields what, why, and note take it as a one line block); --stdin=<field> reads one block of what, why, or note on stdin (one per call); --unset=<field> removes a field, what excepted since it is required; status takes OPEN, PICKED, or DROPPED; dumped takes a calendar date YYYY-MM-DD
+# help: --add-ref appends a full address <owner>#<path>, its shape and its target checked through its owner's get before the write as add checks them; --remove-ref drops a held item and checks no target, so a dangling ref can always leave; --unset=ref empties the list; the ref actions repeat and apply in flag order, kept refs in their order and adds last
+# help: prints the id; a refusal writes nothing: no flag, a malformed id, an unknown flag, a field given twice, two --stdin flags, an empty or blank value, a newline in a line value, invalid UTF-8, a dumped that is no calendar date, a malformed ref, an added ref already held, or a removed ref not held rc 1 (ERR_INVALID_ARGUMENT); a missing idea, or a ref whose target or owner is missing, rc 1 (ERR_ENTITY_NOT_FOUND); an unset of what or a status outside its set rc 1 (ERR_SCHEMA_VIOLATION)
+# help: example: ctx ideas set rust-driver --stdin=why < why.txt
+dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$dir/ideas" set "$@"

@@ -5,7 +5,8 @@
 # namespace alone and checks every write against the field lines of the module's data file.
 # The module keeps what the library does not: the ref field (the reserved built in list of
 # full addresses, each checked here), the pairings of picked_by with PICKED and reason with
-# DROPPED, the OPEN only moves, and no delete.
+# DROPPED and the OPEN only moves (pick and drop alone; set edits any field free of them),
+# and no delete.
 #
 # Every refusal is rc 1 or 2 with one stderr line, ideas <verb>: error: <message> (<CODE>),
 # a library refusal re-framed under the verb's name; a write refusal writes nothing.
@@ -400,6 +401,110 @@ case "$verb" in
       blank "$mval" && die 1 ERR_INVALID_ARGUMENT "field '$mf': an empty value"
     fi
     move "$mid" "$mto" "$mf" "$mval"
+    exit 0
+    ;;
+  set)
+    set_usage="ctx $ME set <id> [--<field>=<line>]... [--stdin=<field>] [--unset=<field>]... [--add-ref=<full address>]... [--remove-ref=<address>]..."
+    [ $# -ge 1 ] || die 1 ERR_INVALID_ARGUMENT "usage: $set_usage"
+    sid=$1
+    shift
+    case "$sid" in -*) die 1 ERR_INVALID_ARGUMENT "set takes the id first (usage: ctx $ME set <id> [flags])" ;; esac
+    : > "$SCR/acts"
+    : > "$SCR/refs"
+    : > "$SCR/refacts"
+    given=" "
+    for a in "$@"; do
+      case "$a" in
+        --add-ref=*)
+          sv=${a#--add-ref=}
+          lib_utf8_ok "$sv" || die 1 ERR_INVALID_ARGUMENT "field 'ref': the value is not valid UTF-8"
+          lib_ref_ok "$FN" "$sv" || exit $?
+          grep -Fqx -- "$sv" "$SCR/refs" || printf '%s\n' "$sv" >> "$SCR/refs"
+          printf 'add\t%s\n' "$sv" >> "$SCR/refacts"
+          continue
+          ;;
+        --remove-ref=*)
+          sv=${a#--remove-ref=}
+          one_line --remove-ref "$sv" ""
+          [ -n "$sv" ] || die 1 ERR_INVALID_ARGUMENT "field 'ref': an empty value (unset removes a field)"
+          printf 'remove\t%s\n' "$sv" >> "$SCR/refacts"
+          continue
+          ;;
+        --unset=ref) printf 'unset\n' >> "$SCR/refacts"; continue ;;
+        --what=*|--why=*|--status=*|--dumped=*|--picked_by=*|--reason=*|--note=*) sop=set; sf=${a#--}; sv=${sf#*=}; sf=${sf%%=*} ;;
+        --unset=what|--unset=why|--unset=status|--unset=dumped|--unset=picked_by|--unset=reason|--unset=note) sop=unset; sf=${a#--unset=} ;;
+        --stdin=what|--stdin=why|--stdin=note) sop=stdin; sf=${a#--stdin=} ;;
+        --stdin=*) die 1 ERR_INVALID_ARGUMENT "set reads one block of what, why, or note on stdin, not '$(store_lib_escape "${a#--stdin=}")'" ;;
+        -*) die 1 ERR_INVALID_ARGUMENT "unknown flag '$(store_lib_escape "$a")' (set takes --<field>=<line>, --stdin=<field>, and --unset=<field> for the fields what, why, status, dumped, picked_by, reason, and note, then --unset=ref, --add-ref=<full address>, and --remove-ref=<address>)" ;;
+        *) die 1 ERR_INVALID_ARGUMENT "set takes one id (usage: ctx $ME set <id> [flags])" ;;
+      esac
+      case "$given" in *" $sf "*) die 1 ERR_INVALID_ARGUMENT "field '$sf' is given twice" ;; esac
+      given="$given$sf "
+      case "$sop" in
+        unset) printf 'unset\t%s\n' "$sf" >> "$SCR/acts" ;;
+        stdin)
+          [ ! -s "$SCR/stdin.used" ] || die 1 ERR_INVALID_ARGUMENT "one block per call: --stdin names '$(cat "$SCR/stdin.used")' already"
+          printf '%s' "$sf" > "$SCR/stdin.used"
+          cat > "$SCR/block"
+          [ "$(tr -d ' \t\n' < "$SCR/block" | wc -c)" -eq 0 ] && : > "$SCR/block"
+          block_act "$sf" "$SCR/block"
+          ;;
+        set)
+          case "$sf" in
+            what|why|note) one_line "--$sf" "$sv" " (a block comes on stdin: --stdin=$sf)" ;;
+            *) one_line "--$sf" "$sv" "" ;;
+          esac
+          blank "$sv" && die 1 ERR_INVALID_ARGUMENT "field '$sf': an empty value"
+          case "$sf" in
+            what|why|note)
+              printf '%s' "$sv" > "$SCR/val"
+              block_act "$sf" "$SCR/val"
+              ;;
+            *)
+              if [ "$sf" = dumped ] && ! date_ok "$sv"; then
+                die 1 ERR_INVALID_ARGUMENT "field 'dumped': '$(store_lib_escape "$sv")' is no calendar date YYYY-MM-DD (the month 01 to 12, the day within its month)"
+              fi
+              printf 'set\t%s\t%s\n' "$sf" "$(store_lib_escape "$sv")" >> "$SCR/acts"
+              ;;
+          esac
+          ;;
+      esac
+    done
+    [ -s "$SCR/acts" ] || [ -s "$SCR/refacts" ] || die 1 ERR_INVALID_ARGUMENT 'set takes at least one field flag'
+    id_arg "$sid"
+    refs_exist
+    lib_or_die lib_lock
+    printf '%s\t%s\n' "$sid" "$SCR/raw" > "$SCR/raw.t"
+    lib_or_die store_get_into "$SCR/raw.t" > "$SCR/raw.got"
+    [ "$(cat "$SCR/raw.got")" = "1	$sid" ] || die 1 ERR_ENTITY_NOT_FOUND "idea '$sid' not found"
+    if [ ! -s "$SCR/refacts" ]; then
+      lib_or_die fields_set "$sid" "$SCR/acts" "$SCR/new"
+      printf '%s\n' "$sid"
+      exit 0
+    fi
+    rec values ref < "$SCR/raw" > "$SCR/held"
+    while IFS= read -r sl; do
+      so=${sl%%"	"*}
+      sv=${sl#*"	"}
+      case "$so" in
+        unset) : > "$SCR/held" ;;
+        add)
+          HH=$sv awk '$0 == ENVIRON["HH"] { f = 1 } END { exit !f }' "$SCR/held" && die 1 ERR_INVALID_ARGUMENT "field 'ref' already holds '$sv'"
+          printf '%s\n' "$sv" >> "$SCR/held"
+          ;;
+        remove)
+          HH=$sv awk '$0 == ENVIRON["HH"] { f = 1 } END { exit !f }' "$SCR/held" || die 1 ERR_INVALID_ARGUMENT "field 'ref' holds no item '$(store_lib_escape "$sv")'"
+          HH=$sv awk '$0 != ENVIRON["HH"]' "$SCR/held" > "$SCR/held.next"
+          mv "$SCR/held.next" "$SCR/held"
+          ;;
+      esac
+    done < "$SCR/refacts"
+    grep -q '^ref: "' "$SCR/raw" && printf 'unset\tref\n' >> "$SCR/acts"
+    lib_or_die fields_own "$SCR/decl"
+    lib_or_die fields_apply "$SCR/decl" "$SCR/raw" "$SCR/acts" "$SCR/new"
+    while IFS= read -r r; do printf 'ref: "%s"\n' "$(store_lib_escape "$r")"; done < "$SCR/held" >> "$SCR/new"
+    lib_or_die store_put "$sid" < "$SCR/new" > /dev/null
+    printf '%s\n' "$sid"
     exit 0
     ;;
   search)

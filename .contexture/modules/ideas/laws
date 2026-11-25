@@ -1,6 +1,6 @@
 # the ideas module's law fragment: the idea dump's rules, composed into the generated layer
 @append @ideas
-  dump: the upstream idea and need dump is managed through the ctx ideas verbs: ctx ideas list (--status=OPEN, PICKED, or DROPPED, OPEN by default), ctx ideas get <id>, ctx ideas add <id>, ctx ideas pick <id> --by=<unit>, ctx ideas drop <id> --reason=<text>, and ctx ideas search "<query>"; dump freely: the agent adds an idea on the human's word and proposes a dump when a discovery would otherwise die in conversation
+  dump: the upstream idea and need dump is managed through the ctx ideas verbs: ctx ideas list (--status=OPEN, PICKED, or DROPPED, OPEN by default), ctx ideas get <id>, ctx ideas add <id>, ctx ideas pick <id> --by=<unit>, ctx ideas drop <id> --reason=<text>, ctx ideas set <id> (the free edit: any field of any idea at any time, no status gate and no pairing check), and ctx ideas search "<query>"; dump freely: the agent adds an idea on the human's word and proposes a dump when a discovery would otherwise die in conversation
   light-entries: ideas land as light entries (an id, what, why, and optional refs) and are picked up from there; one is loaded on demand only through ctx ideas get <id>, never at boot
   pick-up: picking an idea up means bootstrapping the unit and picking the idea with that unit (ctx ideas pick <id> --by=<unit>); dropping one takes its reason (ctx ideas drop <id> --reason=<text>); only an OPEN idea is picked or dropped
   never-delete: an idea is never deleted, so the module carries no delete verb

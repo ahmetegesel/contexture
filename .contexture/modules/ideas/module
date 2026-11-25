@@ -1,8 +1,10 @@
-# summary: the idea dump: ideas kept until a unit picks one up or the human drops one; list, get, add, pick, drop, and search, never delete
-# version: 1.0.0
+# summary: the idea dump: ideas kept until a unit picks one up or the human drops one; list, get, add, pick, drop, set, and search, never delete
+# version: 1.1.0
 # description:
 # The ideas module is the workspace's own idea module: each idea is one record of its
 # ideas container, the fields declared by its data file and every write checked by the
 # storage layer's field validator. An idea is added OPEN, then picked by a unit or
-# dropped with a reason, and never deleted: the module has no delete verb, and its
-# pairings (picked_by only with PICKED, reason only with DROPPED) are its own rules.
+# dropped with a reason, and never deleted: the module has no delete verb. Pick and drop
+# move only an OPEN idea and keep the pairings (picked_by only with PICKED, reason only
+# with DROPPED) as their own rules; set is the free edit, any field of any idea at any
+# time, with no status gate and no pairing check.
