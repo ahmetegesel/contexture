@@ -85,7 +85,7 @@ describe.concurrent('the awk split census: no split separator is a one character
     expect(censusFiles()).toContain(join(IDEAS, 'scripts/ideas'));
   });
 
-  it('[modules-r8] the census reads the nine planted one character separators and none of the eight portable ones', async () => {
+  it('[modules-r8] the census reads the ten planted one character separators and none of the nine portable ones', async () => {
     const plant = put(
       join(sandbox('split-plant'), 'plant.awk'),
       [
@@ -98,8 +98,10 @@ describe.concurrent('the awk split census: no split separator is a one character
         String.raw`  n = split(s, a, "\\")`,
         String.raw`  n = split(s, a, "\"")`,
         String.raw`  n = split(s, a, "'\''")`,
+        String.raw`  n = split(s, a, "\057")`,
         String.raw`  n = split(s, a, " ")`,
         String.raw`  n = split(s, a, "\n")`,
+        String.raw`  n = split(s, a, "\012")`,
         String.raw`  n = split(s, a, /\//)`,
         String.raw`  split("", a)`,
         String.raw`  n = split(s, a)`,
@@ -110,6 +112,6 @@ describe.concurrent('the awk split census: no split separator is a one character
       ].join('\n'),
     );
     const r = await splitCensus([plant]);
-    expect(r.stdout.split('\n').filter(Boolean).map((l) => l.split(':')[1])).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9']);
+    expect(r.stdout.split('\n').filter(Boolean).map((l) => l.split(':')[1])).toEqual(['1', '2', '3', '4', '5', '6', '7', '8', '9', '10']);
   });
 });
